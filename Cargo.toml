@@ -1,0 +1,10 @@
+[workspace]
+members = ["crates/mnemonic-toolkit"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "CC0-1.0"
+repository = "https://github.com/bg002h/mnemonic-toolkit"
+homepage = "https://github.com/bg002h/mnemonic-toolkit"
+rust-version = "1.85"
