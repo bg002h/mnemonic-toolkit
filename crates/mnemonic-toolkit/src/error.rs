@@ -193,7 +193,7 @@ impl ToolkitError {
                 xpub_network, expected,
             ),
             ToolkitError::BundleMismatch { card, message } => {
-                format!("bundle mismatch on {}: {}; v0.1 hardcodes account=0; if the engraved bundle was produced with a non-zero account, mismatch is expected — re-run with v0.2's --account flag once available",
+                format!("bundle mismatch on {}: {}; if the engraved bundle was produced at a non-zero BIP-32 account, pass --account <N> to match (default 0)",
                     card, message)
             }
             ToolkitError::FutureFormat { source, detail } => format!(

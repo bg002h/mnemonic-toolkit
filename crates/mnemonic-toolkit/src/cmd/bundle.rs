@@ -247,18 +247,25 @@ fn bundle_watch_only<W: Write, E: Write>(
         .ok();
     }
 
-    // §4.8 watch-only account-index hazard (always emitted in watch-only).
-    writeln!(
-        stderr,
-        "warning: watch-only mode hardcodes account=0; if your xpub was derived"
-    )
-    .ok();
-    writeln!(
-        stderr,
-        "warning: at a non-zero account, the bundle's path will not match. Use"
-    )
-    .ok();
-    writeln!(stderr, "warning: v0.2's --account flag once available.").ok();
+    // §4.8 watch-only account-index hazard (emitted only when --account is at its
+    // default 0; user may not realize the default). v0.2 makes --account user-tunable.
+    if args.account == 0 {
+        writeln!(
+            stderr,
+            "warning: --account defaults to 0; if your xpub was derived at a non-zero"
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "warning: account, pass --account <N> to match. Default may not align with"
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "warning: the supplied xpub's actual derivation account."
+        )
+        .ok();
+    }
 
     let bundle = synthesize_watch_only(fp, xpub, args.template, args.network, args.account)?;
 
