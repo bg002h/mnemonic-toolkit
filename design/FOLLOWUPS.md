@@ -106,11 +106,10 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ### `bundle-mismatch-card-static-str-constraint` — `BundleMismatch.card: &'static str` constrains future runtime-id callers
 
-- **Surfaced:** Phase 4 review r1 (L-2).
+- **Surfaced:** Phase 4 review r1 (L-2). Confirmed as Phase 0 mandatory fixup by 2026-05-05 v0.1 audit (`design/audit-v0_1-for-v0_2-extension.md` IMP-1).
 - **Where:** `crates/mnemonic-toolkit/src/error.rs::ToolkitError::BundleMismatch`.
-- **What:** Field type is `&'static str`. Current callers pass literal `"mk1"` / `"md1"`; future callers wanting to construct a runtime card identifier (e.g., `format!("mk1[{idx}]")` for K-of-N share enumeration in v0.2) would hit a lifetime error and need to switch to `String`. Cosmetic for v0.1.
-- **Why deferred:** no current runtime-id consumer; v0.2 multisig may force the change.
-- **Status:** `open`
+- **What:** Field type was `&'static str`. v0.2 multisig emits per-cosigner card identifiers like `"mk1[0]"` that are runtime-formatted; `&'static str` would force a breaking field-type change mid-v0.2-cycle. Resolved as part of v0.2 Phase 0.
+- **Status:** `resolved <PHASE_0_SHA> — field changed to String; test construction sites updated to .into(); doc-comment clarified.`
 - **Tier:** `v0.2`
 
 ### `verify-bundle-text-mode-trailing-space` — `"{}: {} {}"` produces trailing space when `detail` is empty
@@ -124,11 +123,10 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ### `error-allow-comments-staleness` — `error::Result<T>` and `BundleMismatch` doc-comments will rot
 
-- **Surfaced:** Phase 4 review r1 (N-1, N-2) + Phase 5 review r1 (N-2).
+- **Surfaced:** Phase 4 review r1 (N-1, N-2) + Phase 5 review r1 (N-2). Bundled into Phase 0 fixup by 2026-05-05 v0.1 audit (`design/audit-v0_1-for-v0_2-extension.md` IMP-2).
 - **Where:** `crates/mnemonic-toolkit/src/error.rs` `Result` alias + `BundleMismatch` variant doc.
-- **What:** `error::Result<T>` allow-comment says "in-crate use" but the type is `pub type` (exported). `BundleMismatch` doc-comment says "Constructed by integration tests in Phase 5" — staleness risk once Phase 5 is just history. One pass to revise both for accuracy.
-- **Why deferred:** doc-only.
-- **Status:** `open`
+- **What:** `Result<T>` allow-comment said "reserved for in-crate use" but the type is `pub type` (exported). `BundleMismatch` doc-comment said "Constructed by integration tests in Phase 5" — stale once v0.2 wires the variant as a live runtime error.
+- **Status:** `resolved <PHASE_0_SHA> — Result<T> comment now reads "Convenience alias; exported for downstream-crate use." BundleMismatch comment now reads "Exit-4 verify-bundle mismatch variant; card identifies the mismatching card (e.g., mk1, md1, or mk1[N] for multisig cosigner N)."`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `cli-watch-only-test-hardcodes-fingerprint` — `cli_bundle_watch_only.rs` hardcodes `5436d724` rather than reading from decoded mk1
@@ -175,3 +173,39 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** mk1 BIP is a sibling-repo asset; toolkit's fix landed first.
 - **Status:** `resolved 87bbc11 (mnemonic-key@main) — mk1 BIP §"String-layer header" updated 2026-05-04 with deterministic-encoder guidance + decoder-acceptance clarification. Pushed to bg002h/mnemonic-key.`
 - **Tier:** `cross-repo`
+
+### `dead-assert-tautological` — `synthesize.rs` invariant 1 debug-assert is tautological by construction
+
+- **Surfaced:** v0.1 audit 2026-05-05 (LOW-1).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:99` (`debug_assert_eq!(&card.policy_id_stubs[0], &stub)`).
+- **What:** `stub` is computed from `policy_id.as_bytes()[..4]` and immediately passed as `policy_id_stubs[0]`. The assertion can never fail at the construction site. Phase 2 r1 originally flagged this as L-4. Pre-existing; meaningful assertion is invariant 2 (`is_wallet_policy()`).
+- **Why deferred:** v0.2 multisig will need a meaningful assertion that loops over all per-cosigner stubs; resolve as part of v0.2 Phase C.
+- **Status:** `open`
+- **Tier:** `v0.2`
+
+### `dead-inner-guard-bundle-watch-only` — redundant `--xpub`-needs-`--master-fingerprint` guard inside `bundle_watch_only`
+
+- **Surfaced:** v0.1 audit 2026-05-05 (LOW-2).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs:200` (inside `bundle_watch_only`).
+- **What:** A redundant guard exists that would emit `BadInput` (exit 1) if `--master-fingerprint` is missing. Unreachable in practice — the mode-violation pre-check at `cmd/bundle.rs:93` rejects the same condition earlier with exit 2 + byte-exact §6.6 text. Future-refactor inconsistency risk.
+- **Why deferred:** not currently triggered; v0.2 will refactor mode dispatch and naturally clean this up.
+- **Status:** `open`
+- **Tier:** `v0.2`
+
+### `friendly-mapper-unit-test-gaps` — friendly-mapper unit tests cover only 3 of ~70 match arms
+
+- **Surfaced:** v0.1 audit 2026-05-05 (LOW-3).
+- **Where:** `crates/mnemonic-toolkit/src/friendly.rs::tests`.
+- **What:** Unit tests cover `friendly_bip39::UnknownWord`, `friendly_ms_codec::WrongHrp`, `friendly_mk_codec::PathTooDeep`. Untested at unit level: 4 of 5 `friendly_bip39`, all 3 `friendly_bitcoin`, 8 of 9 `friendly_ms_codec`, 21 of 22 `friendly_mk_codec`, all 41 `friendly_md_codec`. Integration tests likely exercise some paths end-to-end but unit isolation is thin.
+- **Why deferred:** v0.2 will add new error paths through these mappers; expand the tests in lockstep with v0.2 Phase E.
+- **Status:** `open`
+- **Tier:** `v0.2-nice-to-have`
+
+### `hex-dep-unused` — `hex = "0.4"` declared in Cargo.toml but unused in non-test source
+
+- **Surfaced:** v0.1 audit 2026-05-05 (LOW-4).
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml:27`.
+- **What:** No `use hex` statement in any source module. Inert dependency carried from ms-cli precedent or SPEC §10.3 dep list.
+- **Why deferred:** user's `feedback_dont_drop_reserved_deps` rule applies — confirm with user before removal. v0.2 may use `hex` for new error-message formatting (e.g., printing fingerprints in mode-violation output), in which case the dep activates naturally.
+- **Status:** `open`
+- **Tier:** `v0.1-nice-to-have`

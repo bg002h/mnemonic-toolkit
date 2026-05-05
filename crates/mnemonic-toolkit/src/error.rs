@@ -22,11 +22,11 @@ pub enum ToolkitError {
         flag: &'static str,
         message: &'static str,
     },
-    /// SPEC §6.1 exit-4 variant. Constructed by integration tests in Phase 5; reserved
-    /// for runtime emission once verify-bundle's optional-mismatch reporter wires up.
+    /// SPEC §6.1 exit-4 verify-bundle mismatch variant. `card` identifies the
+    /// mismatching card (e.g., "mk1", "md1", or "mk1[N]" for multisig cosigner N).
     #[allow(dead_code)]
     BundleMismatch {
-        card: &'static str,
+        card: String,
         message: String,
     },
     NetworkMismatch {
@@ -288,7 +288,7 @@ impl From<md_codec::Error> for ToolkitError {
     }
 }
 
-/// Convenience alias; reserved for in-crate use.
+/// Convenience alias; exported for downstream-crate use.
 #[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, ToolkitError>;
 
@@ -326,7 +326,7 @@ mod tests {
         );
         assert_eq!(
             ToolkitError::BundleMismatch {
-                card: "mk1",
+                card: "mk1".into(),
                 message: "x".into()
             }
             .exit_code(),
@@ -414,7 +414,7 @@ mod tests {
         assert_eq!(ToolkitError::BadInput("x".into()).kind(), "BadInput");
         assert_eq!(
             ToolkitError::BundleMismatch {
-                card: "ms1",
+                card: "ms1".into(),
                 message: "".into()
             }
             .kind(),
