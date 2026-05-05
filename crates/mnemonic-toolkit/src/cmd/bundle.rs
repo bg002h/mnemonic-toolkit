@@ -453,15 +453,17 @@ fn emit<W: Write, E: Write>(
     if args.json {
         // v0.2: schema_version "2"; bundle.mk1 already typed as MkField (Single
         // for single-sig matches v0.1 flat shape via #[serde(untagged)]; Multi
-        // for multisig). multisig: None for single-sig.
+        // for multisig). multisig: None for single-sig. origin_path populated;
+        // origin_paths: None (single-sig is always shared-with-itself).
         let json = BundleJson {
             schema_version: "2",
             mode,
             network: args.network.human_name(),
             template: args.template.human_name(),
             account: args.account,
-            origin_path,
-            master_fingerprint: master_fp.to_string(),
+            origin_path: Some(origin_path),
+            origin_paths: None,
+            master_fingerprint: Some(master_fp.to_string()),
             ms1: bundle.ms1.clone(),
             mk1: bundle.mk1.clone(),
             md1: bundle.md1.clone(),
@@ -806,19 +808,34 @@ fn emit_multisig<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     if args.json {
-        // TODO(Phase D): populate origin_path with the shared cosigner path when paths are
-        // identical, OR add origin_paths: Vec<String> for divergent. Per SPEC §5.3 the v0.2
-        // BundleJson exposes either origin_path (shared) or origin_paths (divergent); the
-        // multisig_info.cosigners[*].origin_path already carries per-cosigner paths.
-        // Top-level master_fingerprint is also empty for multisig — Phase D consumer-shape audit.
+        // SPEC §5.3 multisig envelope shape:
+        //   - origin_path / origin_paths discriminated by path-decl shape.
+        //   - master_fingerprint = null for multisig OR --privacy-preserving.
+        let (origin_path, origin_paths) = if let Some(info) = multisig_info.as_ref() {
+            let paths: Vec<String> = info
+                .cosigners
+                .iter()
+                .map(|c| c.origin_path.clone())
+                .collect();
+            let all_same = paths.windows(2).all(|w| w[0] == w[1]);
+            if all_same {
+                (paths.first().cloned(), None)
+            } else {
+                (None, Some(paths))
+            }
+        } else {
+            (None, None)
+        };
         let json = BundleJson {
             schema_version: "2",
             mode,
             network: args.network.human_name(),
             template: args.template.human_name(),
             account: args.account,
-            origin_path: String::new(),
-            master_fingerprint: String::new(),
+            origin_path,
+            origin_paths,
+            // Multisig OR privacy: top-level master_fingerprint is null per SPEC §5.3.
+            master_fingerprint: None,
             ms1: bundle.ms1.clone(),
             mk1: bundle.mk1.clone(),
             md1: bundle.md1.clone(),

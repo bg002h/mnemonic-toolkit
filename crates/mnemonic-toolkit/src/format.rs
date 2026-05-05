@@ -98,7 +98,10 @@ pub struct MultisigInfo {
 
 /// Bundle JSON output schema (SPEC §5.3). Field order is part of the schema.
 /// v0.2: schema_version "2"; ownership of mk1 moved from borrowed slice to
-/// owned `MkField` to support the discriminated-union shape.
+/// owned `MkField` to support the discriminated-union shape. `origin_path`
+/// (single-sig OR shared-path multisig) and `origin_paths` (divergent-path
+/// multisig) are mutually exclusive per SPEC §5.3. `master_fingerprint` is
+/// `null` for multisig OR `--privacy-preserving`.
 #[derive(Debug, Serialize)]
 pub struct BundleJson {
     pub schema_version: &'static str,
@@ -106,8 +109,12 @@ pub struct BundleJson {
     pub network: &'static str,
     pub template: &'static str,
     pub account: u32,
-    pub origin_path: String,
-    pub master_fingerprint: String,
+    /// Single-sig OR shared-path multisig. `None` for divergent-path multisig.
+    pub origin_path: Option<String>,
+    /// Divergent-path multisig. `None` otherwise.
+    pub origin_paths: Option<Vec<String>>,
+    /// `None` for multisig OR `--privacy-preserving`.
+    pub master_fingerprint: Option<String>,
     pub ms1: Option<String>, // null in watch-only
     pub mk1: MkField,
     pub md1: Vec<String>,
