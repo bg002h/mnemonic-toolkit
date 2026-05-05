@@ -819,6 +819,97 @@ mod tests {
         assert!(tree.is_none());
     }
 
+    // ---- A.5: dedicated Layer 2 carry tests (5 tests) ----
+
+    #[test]
+    fn walk_pk_in_tap_collapses_to_pkk() {
+        // pk(K) in tap-leaf desugars to c:pk_k(K); the walker collapses Check(PkK)
+        // → PkK in tap context per md-cli precedent. Architect L-4 mid-phase ask.
+        let root = parse_and_walk("tr(@0/<0;1>/*,pk(@1/<0;1>/*))", ScriptCtx::MultiSig);
+        assert_eq!(root.tag, Tag::Tr);
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr");
+        };
+        let leaf = tree.as_ref().unwrap();
+        assert_eq!(
+            leaf.tag,
+            Tag::PkK,
+            "tap-context Check should collapse to PkK"
+        );
+    }
+
+    #[test]
+    fn walk_multi_direct_in_wsh() {
+        // Hits Terminal::Multi (not SortedMulti) directly; A.4 only covered SortedMulti.
+        let root = parse_and_walk("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))", ScriptCtx::MultiSig);
+        assert_eq!(root.tag, Tag::Wsh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Wsh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::Multi);
+        let Body::Variable { k, children: subs } = &children[0].body else {
+            panic!("expected Multi Variable");
+        };
+        assert_eq!(*k, 2);
+        assert_eq!(subs.len(), 2);
+    }
+
+    #[test]
+    fn walk_check_kept_in_non_tap_context() {
+        // Verify wsh(pk(@0)) emits Wsh→Check→PkK (NOT collapsed in non-tap).
+        let root = parse_and_walk("wsh(pk(@0/<0;1>/*))", ScriptCtx::MultiSig);
+        let Body::Children(wsh_kids) = &root.body else {
+            panic!("expected Wsh+Children");
+        };
+        assert_eq!(wsh_kids[0].tag, Tag::Check);
+        let Body::Children(check_kids) = &wsh_kids[0].body else {
+            panic!("expected Check+Children");
+        };
+        assert_eq!(check_kids[0].tag, Tag::PkK);
+    }
+
+    #[test]
+    fn walk_pk_h_via_wsh_andor() {
+        // PkH appears as a Layer 2 fragment via `pkh()` inside miniscript,
+        // which desugars to c:pk_h(K). Use `and_v(v:pkh(@0), older(144))`-style
+        // composition to hit it; rust-miniscript will route to Terminal::PkH.
+        // Note: A.6 lands the and_v/older arms so this exact shape errors here;
+        // simpler form: wsh(c:pk_h(@0)) — typecheck-permitting.
+        let result = substitute_synthetic("wsh(c:pk_h(@0/<0;1>/*))", ScriptCtx::MultiSig);
+        let (s, km) = result.unwrap();
+        let d = MsDescriptor::<DescriptorPublicKey>::from_str(&s)
+            .expect("c:pk_h should parse as a wsh-inner miniscript");
+        let root = walk_root(&d, &km).unwrap();
+        let Body::Children(wsh_kids) = &root.body else {
+            panic!("expected Wsh+Children");
+        };
+        assert_eq!(wsh_kids[0].tag, Tag::Check);
+        let Body::Children(check_kids) = &wsh_kids[0].body else {
+            panic!("expected Check+Children");
+        };
+        assert_eq!(check_kids[0].tag, Tag::PkH);
+    }
+
+    #[test]
+    fn walk_multi_a_direct_via_tap() {
+        // Layer 2 MultiA via tap-leaf, distinct from A.4's tr_singleleaf_multi_a_root
+        // (which asserted Tr-level shape only). Here we assert the leaf's Variable body.
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,multi_a(3,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+            ScriptCtx::MultiSig,
+        );
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr");
+        };
+        let leaf = tree.as_ref().unwrap();
+        assert_eq!(leaf.tag, Tag::MultiA);
+        let Body::Variable { k, children } = &leaf.body else {
+            panic!("expected MultiA Variable body");
+        };
+        assert_eq!(*k, 3);
+        assert_eq!(children.len(), 3);
+    }
+
     #[test]
     fn walk_tr_singleleaf_multi_a_root() {
         let root = parse_and_walk(
