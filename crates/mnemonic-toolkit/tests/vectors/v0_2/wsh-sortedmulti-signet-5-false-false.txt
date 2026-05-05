@@ -1,0 +1,60 @@
+# ms1 (entropy, BCH-checksummed)
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w
+
+ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq
+qqqqq qqqqq qqcwu gpdxt fme2w
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qpcs40zqqspug2h3f0zz4u2tcs40zj65xmtjflsr67qgpqqgsxqgpqqgskqgpqqgqs6c0n70rd0gg5lwuxaj3q64dgr063xy7s28dpfgdskz
+mk1qpcs40zpja98pjmxx93tkygjmf59wefeltemd989kv8q9sut58n36a2mqvqmc4fta2jz3l957uumfdmls8uhu0a8m3v6kjpan9y5qd9znx7g
+mk1qpcs40zz0fengemfhgnk5prf3udyya0
+
+mk1qp cs40z qqspu g2h3f 0zz4u 2tcs4 0zj65 xmtjf lsr67 qgpqq
+gsxqg pqqgs kqgpq qgqs6 c0n70 rd0gg 5lwux aj3q6 4dgr0 63xy7
+s28dp fgdsk z
+mk1qp cs40z pja98 pjmxx 93tky gjmf5 9wefe ltemd 989kv 8q9su
+t58n3 6a2mq vqmc4 fta2j z3l95 7uumf dmls8 uhu0a 8m3v6 kjpan
+9y5qd 9znx7 g
+mk1qp cs40z z0fen gemfh gnk5p rf3ud yya0
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qpcs40zqqspug2h3f0zz4u2tcs40zj65xmtjflsr67qgpqqgsxqgpqqgskqgpqqgqs6c0n70rd0gg5lwuxaj3q64dgr063xy7s28dpfgdskz
+mk1qpcs40zpja98pjmxx93tkygjmf59wefeltemd989kv8q9sut58n36a2mqvqmc4fta2jz3l957uumfdmls8uhu0a8m3v6kjpan9y5qd9znx7g
+mk1qpcs40zz0fengemfhgnk5prf3udyya0
+
+mk1qp cs40z qqspu g2h3f 0zz4u 2tcs4 0zj65 xmtjf lsr67 qgpqq
+gsxqg pqqgs kqgpq qgqs6 c0n70 rd0gg 5lwux aj3q6 4dgr0 63xy7
+s28dp fgdsk z
+mk1qp cs40z pja98 pjmxx 93tky gjmf5 9wefe ltemd 989kv 8q9su
+t58n3 6a2mq vqmc4 fta2j z3l95 7uumf dmls8 uhu0a 8m3v6 kjpan
+9y5qd 9znx7 g
+mk1qp cs40z z0fen gemfh gnk5p rf3ud yya0
+
+# mk1[2] (cosigner 2 xpub + origin)
+mk1qpcs40zqqspug2h3f0zz4u2tcs40zj65xmtjflsr67qgpqqgsxqgpqqgskqgpqqgqs6c0n70rd0gg5lwuxaj3q64dgr063xy7s28dpfgdskz
+mk1qpcs40zpja98pjmxx93tkygjmf59wefeltemd989kv8q9sut58n36a2mqvqmc4fta2jz3l957uumfdmls8uhu0a8m3v6kjpan9y5qd9znx7g
+mk1qpcs40zz0fengemfhgnk5prf3udyya0
+
+mk1qp cs40z qqspu g2h3f 0zz4u 2tcs4 0zj65 xmtjf lsr67 qgpqq
+gsxqg pqqgs kqgpq qgqs6 c0n70 rd0gg 5lwux aj3q6 4dgr0 63xy7
+s28dp fgdsk z
+mk1qp cs40z pja98 pjmxx 93tky gjmf5 9wefe ltemd 989kv 8q9su
+t58n3 6a2mq vqmc4 fta2j z3l95 7uumf dmls8 uhu0a 8m3v6 kjpan
+9y5qd 9znx7 g
+mk1qp cs40z z0fen gemfh gnk5p rf3ud yya0
+
+# md1 (multisig wallet policy)
+md1z58ugzsqq3m6788vqqcguyfg225zlxz5xmtjg4gdkhyj2smdwfq4u8s5lwuxaj3q64dgqs8rmj8w9wcaal
+md1z58ugzsfhaja98pjmxx93tkygjmf59wefeltemd989kv8q9sut58n36a2mqvqmc4fta2spf230qmxfwh80
+md1z58ugzs3pglj60wwd5kalcr7t787nackdt0fe4f7acdm9zp426sxlkt55uxtvcck9wc3qjnhhr50ztph2r
+md1z58ugzse9kng2ajnn7hnk62wtvcwqtpchg08r464kqcph32jh64y9r7tfaeekjmhlq0eq3nn2gna83e3xv
+md1z58ugz38u0a8m3v6k7nnjnamsmk2yr244qdlvhffcvke33v2a3zyk6dptk2w067wmffeql6ulm5kz48njy
+md1z58ugz3wesuqkr3ws7w8t4tvpsr0z49042g28uknmnnd9h07qljl3l5lw9n2m6wvqnw2k082yvxc52
+
+md1z5-8ugzs-qq3m6-788vq-qcguy-fg225-zlxz5-xmtjg-4gdkh-yj2sm-dwfq4-u8s5l-wuxaj-3q64d-gqs8r-mj8w9-wcaal
+md1z5-8ugzs-fhaja-98pjm-xx93t-kygjm-f59we-felte-md989-kv8q9-sut58-n36a2-mqvqm-c4fta-2spf2-30qmx-fwh80
+md1z5-8ugzs-3pglj-60wwd-5kalc-r7t78-7nack-dt0fe-4f7ac-dm9zp-426sx-lkt55-uxtvc-ck9wc-3qjnh-hr50z-tph2r
+md1z5-8ugzs-e9kng-2ajnn-7hnk6-2wtvc-wqtpc-hg08r-464kq-cph32-jh64y-9r7tf-aeekj-mhlq0-eq3nn-2gna8-3e3xv
+md1z5-8ugz3-8u0a8-m3v6k-7nnjn-amsmk-2yr24-4qdlv-hffcv-ke33v-2a3zy-k6dpt-k2w06-7wmff-eql6u-lm5kz-48njy
+md1z5-8ugz3-wesuq-kr3ws-7w8t4-tvpsr-0z490-42g28-uknmn-nd9h0-7qljl-3l5lw-9n2m6-wvqnw-2k082-yvxc5-2
+

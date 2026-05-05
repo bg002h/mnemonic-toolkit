@@ -1,0 +1,51 @@
+# ms1 (entropy, BCH-checksummed)
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w
+
+ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq
+qqqqq qqqqq qqcwu gpdxt fme2w
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qp3vgxpqqspckyrrtw93qc6m3vgxxk65xmtjgpcy3zepuga9dymxtm85extpj6vr0eywa3kau0877xtnwy88y2ecc844qssw8xaxv2yehdpc
+mk1qp3vgxppqlhmpglkpcp56awj4af8qzg4denyzkevx0kzvznstvlxz92phfs5c8dl3yyaxz66f7c27tahafwzhcp70c
+
+mk1qp 3vgxp qqspc kyrrt w93qc 6m3vg xxk65 xmtjg pcy3z epuga
+9dymx tm85e xtpj6 vr0ey wa3ka u0877 xtnwy 88y2e cc844 qssw8
+xaxv2 yehdp c
+mk1qp 3vgxp pqlhm pglkp cp56a wj4af 8qzg4 denyz kevx0 kzvzn
+stvlx z92ph fs5c8 dl3yy axz66 f7c27 tahaf wzhcp 70c
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qp3vgxpqqspckyrrtw93qc6m3vgxxk65xmtjgpcy3zepuga9dymxtm85extpj6vr0eywa3kau0877xtnwy88y2ecc844qssw8xaxv2yehdpc
+mk1qp3vgxppqlhmpglkpcp56awj4af8qzg4denyzkevx0kzvznstvlxz92phfs5c8dl3yyaxz66f7c27tahafwzhcp70c
+
+mk1qp 3vgxp qqspc kyrrt w93qc 6m3vg xxk65 xmtjg pcy3z epuga
+9dymx tm85e xtpj6 vr0ey wa3ka u0877 xtnwy 88y2e cc844 qssw8
+xaxv2 yehdp c
+mk1qp 3vgxp pqlhm pglkp cp56a wj4af 8qzg4 denyz kevx0 kzvzn
+stvlx z92ph fs5c8 dl3yy axz66 f7c27 tahaf wzhcp 70c
+
+# mk1[2] (cosigner 2 xpub + origin)
+mk1qp3vgxpqqspckyrrtw93qc6m3vgxxk65xmtjgpcy3zepuga9dymxtm85extpj6vr0eywa3kau0877xtnwy88y2ecc844qssw8xaxv2yehdpc
+mk1qp3vgxppqlhmpglkpcp56awj4af8qzg4denyzkevx0kzvznstvlxz92phfs5c8dl3yyaxz66f7c27tahafwzhcp70c
+
+mk1qp 3vgxp qqspc kyrrt w93qc 6m3vg xxk65 xmtjg pcy3z epuga
+9dymx tm85e xtpj6 vr0ey wa3ka u0877 xtnwy 88y2e cc844 qssw8
+xaxv2 yehdp c
+mk1qp 3vgxp pqlhm pglkp cp56a wj4af 8qzg4 denyz kevx0 kzvzn
+stvlx z92ph fs5c8 dl3yy axz66 f7c27 tahaf wzhcp 70c
+
+# md1 (multisig wallet policy)
+md1z64ntzsqq3m67zzqqvyvzy5992p0np2rd4ey25xmtjf9gdkhys27rcvhk0fjvkr95cxlsganxeut9z9xw4
+md1z64ntzsfywa3kau0877xtnwy88y2ecc844qpl0kz3lvrsrf46a9t6jwqy32mnxg9djcvsy8tsz8sj5e8f6
+md1z64ntzshkzvznstvlxz92phfs5c8dl3yyaxz6e0v7nyevxtfsdly3mkxmh3ulmcewdcssp29a3wslgrk5x
+md1z64ntzs7wg4n3s0t2qr7lv9r7c8qxnt462h4yuqfz4hxvs2m9se7cfs2wpdnucg4gxaxq9qxuwaueunj9q
+md1z64ntz3pfswmlzgf6v9ej7eaxfjcvknqm7frhvdh0relh3jum3peezkwxpadgq0mas50syr79txzpyddf9
+md1z64ntz3dswqdxht5402fcqj9twveq4ktpnasnq5uzm8es32sd6v9xpm0ufp8fskqkmp6zrqzk5yut
+
+md1z6-4ntzs-qq3m6-7zzqq-vyvzy-5992p-0np2r-d4ey2-5xmtj-f9gdk-hys27-rcvhk-0fjvk-r95cx-lsgan-xeut9-z9xw4
+md1z6-4ntzs-fywa3-kau08-77xtn-wy88y-2ecc8-44qpl-0kz3l-vrsrf-46a9t-6jwqy-32mnx-g9djc-vsy8t-sz8sj-5e8f6
+md1z6-4ntzs-hkzvz-nstvl-xz92p-hfs5c-8dl3y-yaxz6-e0v7n-yevxt-fsdly-3mkxm-h3ulm-cewdc-ssp29-a3wsl-grk5x
+md1z6-4ntzs-7wg4n-3s0t2-qr7lv-9r7c8-qxnt4-62h4y-uqfz4-hxvs2-m9se7-cfs2w-pdnuc-g4gxa-xq9qx-uwaue-unj9q
+md1z6-4ntz3-pfswm-lzgf6-v9ej7-eaxfj-cvknq-m7frh-vdh0r-elh3j-um3pe-ezkwx-padgq-0mas5-0syr7-9txzp-yddf9
+md1z6-4ntz3-dswqd-xht54-02fcq-j9twv-eq4kt-pnasn-q5uzm-8es32-sd6v9-xpm0u-fp8fs-kqkmp-6zrqz-k5yut
+

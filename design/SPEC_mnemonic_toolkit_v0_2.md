@@ -596,13 +596,29 @@ Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`) signing-side support is nas
 
 ### §9.3 r2 architect findings (carried from v0.1)
 
-### §9.4 v0.2 architect closures (NEW — to be filled by SPEC review rounds)
+### §9.4 v0.2 architect closures (back-filled from §11 revision history)
 
-This section will be populated by the SPEC architect-review iterations. Pre-population (placeholders to be filled with concrete findings + resolutions):
+Concrete findings + resolutions from the SPEC r1 / r2 / r3 architect-review iterations. Verbatim summary distilled from §11 history (cross-reference §11 for the full bullet list); each row below points at the SPEC location where the resolution lives.
 
-- **r1 critical findings:** *(none yet — pending review)*
-- **r1 important findings:** *(none yet — pending review)*
-- **r2 critical/important findings:** *(populated after r2)*
+- **r1 critical findings:** none. r1 verdict: 0C/3I/4L/3N.
+- **r1 important findings (3) — all integrated in r2:**
+  - **I1 — multisig `--mk1` grouping syntax:** §2.2.1 clarified that the user passes flat `--mk1` repetitions; the toolkit groups by `chunk_set_id` internally before calling mk-codec decode. Mismatch in chunk-set-id count produces exit 4 BundleMismatch.
+  - **I2 — SELF-MULTISIG WARNING text + ordering:** §4.1 + §5.2 added a non-suppressible SELF-MULTISIG WARNING for `--cosigner-count > 1` in full mode (acknowledges all N xpubs are byte-identical; advises watch-only multisig for production). Byte-exact text pinned. r3 N-1 then specified emission ordering (stderr advisory fires BEFORE the bundle stdout block).
+  - **I3 — `mk1` JSON discriminated-union shape:** §5.3 added explicit `oneOf` description and Rust serde guidance for the flat-vs-nested mk1 field.
+- **r1 low findings integrated in r2:**
+  - **L2 — `<fp>` REQUIRED in --cosigner spec:** §2.1.2 — empty fingerprint rejected as exit 1 `CosignerSpec`. Privacy mode suppresses fingerprints from output but the user still supplies them for cross-binding.
+  - **L3 — path/xpub depth consistency:** §4.5 — emit exit 1 `CosignerSpec` on depth mismatch in watch-only mode (mirrors Phase 1.5 spike Errata 2).
+  - L1, L4 deferred (cosmetic; do not block advancing).
+- **r2 critical findings:** none. r2 verdict: 0C/2I/2L/1N.
+- **r2 important findings (2) — all integrated in r3:**
+  - **I-A — stub-list mismatch across cards:** §2.2.1 step 5b — emit exit 4 `BundleMismatch` when N decoded mk1 cards expose mismatched stub-lists (catches mixed-bundle transcription errors).
+  - **I-B — chunk_set_id extraction order:** §2.2.1 step 1 — `mk_codec::decode_string` + `StringLayerHeader::from_5bit_symbols` (BCH-correction first, header parse second); `SingleString`-headed cards each form their own group with synthetic group-key.
+- **r2 low findings integrated in r3:**
+  - **L-A — `--cosigners-file` REQUIRED fields:** §2.1.2.1 — explicit `master_fingerprint` + `xpub` REQUIRED bullet; missing/empty → exit 1 `CosignersFile`.
+  - **L-B — `--privacy-preserving` + `--xpub` advice:** §6.6 — drops the contradictory "drop --master-fingerprint" advice; now correctly says "drop --privacy-preserving or switch to multisig watch-only mode."
+- **r2 nit integrated in r3:**
+  - **N-1 — SELF-MULTISIG WARNING ordering:** §4.1 — stderr advisory fires BEFORE the bundle stdout block.
+- **r3 verdict:** 0C/0I/0L/0N — SPEC frozen for implementation.
 - **Brainstorm Q1–Q12 closure proofs:** every brainstorm question's lock has a SPEC location implementing it. Cross-reference table:
 
 | Q | Brainstorm lock | SPEC location |
