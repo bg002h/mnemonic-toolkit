@@ -24,6 +24,10 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **`v0.1-blocker`**: must fix before tagging `mnemonic-toolkit-v0.1.0`. (Empty after release.)
 - **`v0.1-nice-to-have`**: should fix before v0.1 if time permits, but won't block release. Documented in v0.1's CHANGELOG if shipped.
 - **`v0.2`**: explicitly deferred to v0.2 (multisig templates, non-zero account, K-of-N share bundles).
+- **`v0.2-nice-to-have`**: surfaced during v0.2 review; non-blocking. Documented in v0.2's CHANGELOG if shipped.
+- **`v0.3`**: explicitly deferred to v0.3 (user-supplied descriptor passthrough; resolve during v0.3 cycle).
+- **`v0.3-nice-to-have`**: surfaced during v0.3 review; non-blocking.
+- **`v0.4-cross-repo`**: deferred to v0.4 AND requires coordination with sibling repos.
 - **`cross-repo`**: depends on coordination with sibling repos (`descriptor-mnemonic`, `mnemonic-key`, `mnemonic-secret`). Mirrored by a companion entry in the affected sibling's tracker; both cite each other.
 - **`v1+`**: deferred indefinitely.
 - **`external`**: depends on upstream work (e.g., a sibling crate exposing a helper).
@@ -209,3 +213,57 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** user's `feedback_dont_drop_reserved_deps` rule applies — confirm with user before removal. v0.2 may use `hex` for new error-message formatting (e.g., printing fingerprints in mode-violation output), in which case the dep activates naturally.
 - **Status:** `open`
 - **Tier:** `v0.1-nice-to-have`
+
+### `parse_template-regex-line-ref` — SPEC v0.3 §4.9 step 2 cites wrong line range
+
+- **Surfaced:** v0.3 SPEC architect review r2 2026-05-05.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §4.9 step 2.
+- **What:** Step 2 cites `descriptor-mnemonic/crates/md-cli/src/parse/template.rs:19-27` for the placeholder regex; the actual `Regex::new` call is at `:25-27` (line 19-24 are imports/doc-comments). Docs-only nit — implementation will read the actual regex from the source.
+- **Why deferred:** non-blocking; can be patched alongside any v0.3 SPEC revision.
+- **Status:** `open`
+- **Tier:** `v0.3-nice-to-have`
+
+### `unsupported-fragment-error-style` — SPEC v0.3 §6.8 error message text is verbose
+
+- **Surfaced:** v0.3 SPEC architect review r2 2026-05-05.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §6.8 (error message wording).
+- **What:** The message reads `unsupported miniscript fragment: <fragment-string>; v0.3 walker covers BIP-388 surface modulo multi-leaf tap trees (deferred to v0.4)`. This is verbose for a CLI error; a tighter form (e.g. drop the parenthetical) would be friendlier.
+- **Why deferred:** SPEC pins the message for byte-exactness; can be revisited at impl time if friendlier wording surfaces. Not blocking.
+- **Status:** `open`
+- **Tier:** `v0.3-nice-to-have`
+
+### `walker-backport-to-md-cli` — toolkit's expanded walker should be backported to md-cli
+
+- **Surfaced:** v0.3 SPEC architect review r2 2026-05-05.
+- **Where:** cross-repo: `mnemonic-toolkit/crates/mnemonic-toolkit/src/parse_descriptor.rs` ↔ `descriptor-mnemonic/crates/md-cli/src/parse/template.rs`.
+- **What:** v0.3 toolkit ships an expanded `walk_miniscript_node` covering all 24 v0.3-NEW `Terminal` arms (hash terminals, timelocks, wrappers, AND/OR/Thresh). md-cli's walker is the inspiration but currently rejects all of these. Backporting (or extracting both into a shared crate `descriptor-walker`) avoids divergence.
+- **Why deferred:** scope of v0.3 is toolkit-only by user direction. Cross-repo coordination cycle in v0.4.
+- **Status:** `open`
+- **Tier:** `v0.4-cross-repo`
+
+### `spike-report-citation` — v0.3 SPEC §9 Q2 closure should cite SPIKE report
+
+- **Surfaced:** v0.3 SPEC architect review r2 2026-05-05.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §9 Q2 closure.
+- **What:** §9 Q2 declares "moot — v0.3 implements its own walker arms for hash terminals." Once the pre-Phase-A SPIKE produces `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` with a sub-goal-2 finding (hash-terminal round-trip), the closure becomes citable. Update §9 Q2 to reference the SPIKE report's specific page/section.
+- **Why deferred:** SPIKE runs in the implementation conversation; this update happens after.
+- **Status:** `open`
+- **Tier:** `v0.3`
+
+### `synthesize-descriptor-fn-naming` — single-vs-split synthesize entry-point decision
+
+- **Surfaced:** v0.3 SPEC § resolved at IMPLEMENTATION_PLAN drafting 2026-05-05.
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs` (Phase C of v0.3 plan).
+- **What:** v0.3 SPEC §10 originally named `synthesize_descriptor_full` / `synthesize_descriptor_watch_only` (mirroring v0.2's two-function shape). v0.3 plan resolves to a single `synthesize_descriptor` entry point that dispatches single-sig vs multisig internally. This is slightly asymmetric with v0.2's pattern.
+- **Why deferred:** flagged for Phase C reviewer to confirm the single-entry-point shape doesn't regress code clarity. Not a blocker.
+- **Status:** `resolved by IMPLEMENTATION_PLAN_v0_3 Phase C.1` (single entry point chosen)
+- **Tier:** `v0.3`
+
+### `v0.2-spec-§8-tier-citation` — v0.3 SPEC §8 citation against v0.2 SPEC §8
+
+- **Surfaced:** v0.3 SPEC architect review r3 2026-05-05.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §8 deferred-items table (K-of-N row).
+- **What:** §8 cites v0.2 tier of K-of-N share encoding as "v0.3 (gates on ms-codec v0.2)". Verify against v0.2 SPEC §8 verbatim language at impl time for citation accuracy.
+- **Why deferred:** non-blocking; doc-only.
+- **Status:** `open`
+- **Tier:** `v0.3-nice-to-have`
