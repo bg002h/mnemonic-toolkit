@@ -592,7 +592,7 @@ fn run_watch_only<E: Write>(
 /// are `skipped` per SPEC §2.2.2 (no master seed in watch-only). Decode
 /// failures cascade: mk1 fail skips its 3 mk1_*_match deps; md1 fail
 /// skips wallet_policy + md1_xpub_match + stub_linkage.
-fn watch_only_checks(
+pub(crate) fn watch_only_checks(
     supplied_xpub: &Xpub,
     supplied_fp: bitcoin::bip32::Fingerprint,
     mk_decode: Result<&mk_codec::KeyCard, &String>,

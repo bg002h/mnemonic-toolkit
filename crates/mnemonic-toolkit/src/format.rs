@@ -213,11 +213,16 @@ pub fn engraving_card(
         }
         EngravingMode::FullMultisig {
             language,
+            passphrase_used,
             multisig_info,
             ..
         } => {
             s.push_str(&format!("language: {} (BIP-39 checksum valid)\n", language));
-            s.push_str("passphrase: not used\n");
+            if passphrase_used {
+                s.push_str("passphrase: USED — not engraved on any card; record separately and never lose it.\n");
+            } else {
+                s.push_str("passphrase: not used\n");
+            }
             if multisig_info.cosigner_count > 1 {
                 s.push_str(
                     "SELF-MULTISIG WARNING: all N cosigner xpubs are derived from one seed at one path and\n  are byte-identical interchangeable copies. For production multi-device multisig, use\n  --cosigner watch-only mode with distinct cosigner xpubs from distinct seeds.\n",
@@ -257,6 +262,7 @@ pub enum EngravingMode<'a> {
     WatchOnly,
     FullMultisig {
         language: &'a str,
+        passphrase_used: bool,
         multisig_info: &'a MultisigInfo,
         #[allow(dead_code)]
         account: u32,

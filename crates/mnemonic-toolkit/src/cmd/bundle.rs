@@ -645,6 +645,7 @@ fn bundle_multisig_full<W: Write, E: Write>(
             args.account,
             EngravingMode::FullMultisig {
                 language: language.human_name(),
+                passphrase_used: !passphrase.is_empty(),
                 multisig_info: &multisig_info,
                 account: args.account,
                 paths_shared: true,
@@ -805,6 +806,11 @@ fn emit_multisig<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     if args.json {
+        // TODO(Phase D): populate origin_path with the shared cosigner path when paths are
+        // identical, OR add origin_paths: Vec<String> for divergent. Per SPEC §5.3 the v0.2
+        // BundleJson exposes either origin_path (shared) or origin_paths (divergent); the
+        // multisig_info.cosigners[*].origin_path already carries per-cosigner paths.
+        // Top-level master_fingerprint is also empty for multisig — Phase D consumer-shape audit.
         let json = BundleJson {
             schema_version: "2",
             mode,
