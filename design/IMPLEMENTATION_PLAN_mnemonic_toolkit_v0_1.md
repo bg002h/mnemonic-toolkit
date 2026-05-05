@@ -2159,15 +2159,23 @@ use clap::Args;
 use std::io::Write;
 use std::str::FromStr;
 
+// SPEC §6.6 requires byte-exact rejection text + exit code 2 for the
+// xpub-mode-incompatible flag set. clap's `conflicts_with` would exit 64
+// with clap's default usage error and overwrite the SPEC text. So we
+// declare ONLY `--phrase` ↔ `--xpub` as mutually-exclusive at the clap
+// level (which is the intent — pick a mode); --passphrase / --language /
+// --master-fingerprint compatibility is enforced at runtime in `run()`
+// with the exact §6.6 text and exit code 2 via ToolkitError::ModeViolation.
+
 #[derive(Args, Debug)]
 pub struct BundleArgs {
-    #[arg(long, conflicts_with_all = ["xpub", "master_fingerprint"])]
+    #[arg(long, conflicts_with = "xpub")]
     pub phrase: Option<String>,
 
     #[arg(long, conflicts_with = "phrase")]
     pub xpub: Option<String>,
 
-    #[arg(long = "master-fingerprint", conflicts_with = "phrase", requires = "xpub")]
+    #[arg(long = "master-fingerprint")]
     pub master_fingerprint: Option<String>,
 
     #[arg(long)]
@@ -2176,10 +2184,10 @@ pub struct BundleArgs {
     #[arg(long)]
     pub template: CliTemplate,
 
-    #[arg(long, conflicts_with = "xpub")]
+    #[arg(long)]
     pub language: Option<CliLanguage>,
 
-    #[arg(long, conflicts_with = "xpub")]
+    #[arg(long)]
     pub passphrase: Option<String>,
 
     #[arg(long)]
@@ -2189,24 +2197,58 @@ pub struct BundleArgs {
     pub no_engraving_card: bool,
 }
 
+/// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
+pub mod mode_text {
+    pub const PASSPHRASE_WITH_XPUB: &str = "--passphrase is incompatible with --xpub: the xpub is already a post-passphrase derivation product (the passphrase is baked into the xpub at engrave time).";
+    pub const LANGUAGE_WITH_XPUB: &str = "--language is meaningful only with --phrase; xpub-only mode does not consult any wordlist";
+    pub const XPUB_NEEDS_FINGERPRINT: &str = "--xpub requires --master-fingerprint (xpub mode needs the master fingerprint to populate mk1's origin)";
+    pub const FINGERPRINT_WITHOUT_XPUB: &str = "--master-fingerprint is meaningful only with --xpub";
+    pub const XPUB_STDIN: &str = "--xpub does not accept stdin (-); pass the xpub literally on argv";
+}
+
 pub fn run<W: Write, E: Write>(
     args: &BundleArgs,
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // Mode dispatch.
     let phrase_arg = args.phrase.as_deref();
     let xpub_arg = args.xpub.as_deref();
 
+    // SPEC §6.6 mode-violation pre-checks (BEFORE mode dispatch so the
+    // exit code is 2 + byte-exact text, not clap's 64 + default text).
+    if xpub_arg.is_some() && args.passphrase.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--passphrase",
+            message: mode_text::PASSPHRASE_WITH_XPUB.to_string(),
+        });
+    }
+    if xpub_arg.is_some() && args.language.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--language",
+            message: mode_text::LANGUAGE_WITH_XPUB.to_string(),
+        });
+    }
+    if xpub_arg.is_some() && args.master_fingerprint.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--xpub",
+            message: mode_text::XPUB_NEEDS_FINGERPRINT.to_string(),
+        });
+    }
+    if xpub_arg.is_none() && args.master_fingerprint.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "full", flag: "--master-fingerprint",
+            message: mode_text::FINGERPRINT_WITHOUT_XPUB.to_string(),
+        });
+    }
+
+    // Mode dispatch.
     if let Some(xpub_str) = xpub_arg {
         if xpub_str == "-" {
-            return Err(ToolkitError::BadInput(
-                "--xpub does not accept stdin (-); pass the xpub literally on argv".into(),
-            ));
+            return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
         }
         bundle_watch_only(args, xpub_str, stdout, stderr)
-    } else if let Some(_) = phrase_arg {
+    } else if phrase_arg.is_some() {
         check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
         bundle_full(args, stdin, stdout, stderr)
     } else {
@@ -2411,15 +2453,20 @@ use clap::Args;
 use std::io::Write;
 use std::str::FromStr;
 
+// SPEC §6.6 mode-violation symmetry mirrored from bundle.rs:
+// clap-level mutual exclusion is ONLY --phrase ↔ --xpub; all other
+// xpub-mode-incompatible flag rejections are runtime checks emitting
+// byte-exact §6.6 strings via ToolkitError::ModeViolation (exit 2).
+
 #[derive(Args, Debug)]
 pub struct VerifyBundleArgs {
-    #[arg(long, conflicts_with_all = ["xpub", "master_fingerprint"])]
+    #[arg(long, conflicts_with = "xpub")]
     pub phrase: Option<String>,
 
     #[arg(long, conflicts_with = "phrase")]
     pub xpub: Option<String>,
 
-    #[arg(long = "master-fingerprint", conflicts_with = "phrase", requires = "xpub")]
+    #[arg(long = "master-fingerprint")]
     pub master_fingerprint: Option<String>,
 
     #[arg(long)]
@@ -2428,10 +2475,10 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub template: CliTemplate,
 
-    #[arg(long, conflicts_with = "xpub")]
+    #[arg(long)]
     pub language: Option<CliLanguage>,
 
-    #[arg(long, conflicts_with = "xpub")]
+    #[arg(long)]
     pub passphrase: Option<String>,
 
     #[arg(long)]
@@ -2452,14 +2499,38 @@ pub fn run<W: Write>(
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
 ) -> Result<u8, ToolkitError> {
-    // Pre-decode validation (route to §5.5 on failure per SPEC §5.4 rule).
+    use crate::cmd::bundle::mode_text;
+
     let xpub_arg = args.xpub.as_deref();
     let phrase_arg = args.phrase.as_deref();
 
+    // SPEC §6.6 mode-violation pre-checks (mirror bundle.rs).
+    if xpub_arg.is_some() && args.passphrase.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--passphrase",
+            message: mode_text::PASSPHRASE_WITH_XPUB.to_string(),
+        });
+    }
+    if xpub_arg.is_some() && args.language.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--language",
+            message: mode_text::LANGUAGE_WITH_XPUB.to_string(),
+        });
+    }
+    if xpub_arg.is_some() && args.master_fingerprint.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only", flag: "--xpub",
+            message: mode_text::XPUB_NEEDS_FINGERPRINT.to_string(),
+        });
+    }
+    if xpub_arg.is_none() && args.master_fingerprint.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "full", flag: "--master-fingerprint",
+            message: mode_text::FINGERPRINT_WITHOUT_XPUB.to_string(),
+        });
+    }
     if xpub_arg == Some("-") {
-        return Err(ToolkitError::BadInput(
-            "--xpub does not accept stdin (-); pass the xpub literally on argv".into(),
-        ));
+        return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
     }
 
     let mut checks: Vec<VerifyCheck> = Vec::new();
@@ -2808,9 +2879,9 @@ mod parse;
 mod synthesize;
 mod template;
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use error::ToolkitError;
-use std::io;
+use std::io::{self, Write};
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -2855,18 +2926,11 @@ fn main() -> ExitCode {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
             // Emit error per SPEC §6.5 + §5.5.
-            let _ = writeln!(stderr_handle(), "{}", e);
+            let _ = writeln!(io::stderr(), "{}", e);
             ExitCode::from(e.exit_code())
         }
     }
 }
-
-fn stderr_handle() -> std::io::Stderr {
-    io::stderr()
-}
-
-#[allow(unused_imports)]
-use std::io::Write;
 ```
 
 - [ ] **Step 2: Build + smoke test.**
@@ -3054,6 +3118,44 @@ fn fingerprint_short_rejected_byte_exact() {
             "--master-fingerprint must be 8 hex chars (e.g., deadbeef)"
         ));
 }
+
+#[test]
+fn xpub_without_fingerprint_byte_exact() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(&["bundle", "--xpub", "xpub6...", "--network", "mainnet", "--template", "bip84"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "--xpub requires --master-fingerprint (xpub mode needs the master fingerprint to populate mk1's origin)"
+        ));
+}
+
+#[test]
+fn fingerprint_without_xpub_byte_exact() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(&["bundle", "--phrase", "x", "--master-fingerprint", "deadbeef",
+                "--network", "mainnet", "--template", "bip84"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "--master-fingerprint is meaningful only with --xpub"
+        ));
+}
+
+#[test]
+fn verify_bundle_no_engraving_card_flag_rejected() {
+    // verify-bundle does not emit an engraving card; the flag should not exist.
+    // clap-derive auto-rejects unknown flags; main.rs maps that to exit 64.
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(&["verify-bundle", "--no-engraving-card",
+                "--network", "mainnet", "--template", "bip84",
+                "--mk1", "x", "--md1", "x"])
+        .assert()
+        .failure()
+        .code(64);
+}
 ```
 
 (Continue covering each row of SPEC §6.6.)
@@ -3208,4 +3310,5 @@ Final commit count expected: ~7-10 commits across Phase 1-5 (one per phase + one
 
 ## Revision history
 
-- **r1** (2026-05-04, this commit) — initial plan, mirroring ms-cli plan structure (5 phases, ~12 modules + integration tests). Pending plan-review reviewer-loop.
+- **r1** (2026-05-04) — initial plan, mirroring ms-cli plan structure (5 phases, ~12 modules + integration tests).
+- **r2** (2026-05-04, this commit) — plan-architect-r1 fixes: 0 critical / 2 important / 9 nits. Folded I-1 (clap `conflicts_with` violates SPEC §6.6 byte-exact-text contract → switched to runtime mode-violation pre-checks emitting ToolkitError::ModeViolation with byte-exact §6.6 strings via `cmd::bundle::mode_text` constants; mirrored into verify-bundle), I-2 (`--master-fingerprint` requires-direction was one-way clap; added bidirectional runtime checks with byte-exact text), L1 (dropped `stderr_handle()` trampoline + dead `use std::io::Write` in main.rs; consolidated `use std::io::{self, Write}`), L8 (added `xpub_without_fingerprint`, `fingerprint_without_xpub`, `verify_bundle_no_engraving_card_flag_rejected` integration tests). Other nits (L2 elided sibling test stubs, L3 byte-exact bip84 mainnet xpub, L4 vestigial `cd`s, L5 main.rs replacement notes, L6 TDD-mechanical exception, L7 cargo-publish-dry-run gate, L9 magic test count) deferred to executor or design/FOLLOWUPS.md. Pending plan architect r2 review.
