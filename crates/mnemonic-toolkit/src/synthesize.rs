@@ -163,8 +163,95 @@ pub fn synthesize_watch_only(
     })
 }
 
+/// Per-`@N` key + fingerprint + path triple for descriptor-mode synthesis.
+/// Length matches the parsed descriptor's `n`. Caller (Phase C.2/C.3) does
+/// the `@0` seed-derivation / `--xpub` binding / `@N≥1` cosigner binding
+/// before passing to `synthesize_descriptor`.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Wired into descriptor_mode_run in Phase C.2/C.3.
+pub struct CosignerKeyInfo {
+    pub xpub: Xpub,
+    pub fingerprint: Fingerprint,
+    pub path: DerivationPath,
+}
+
+/// Phase C.1: produce a `Bundle` from a pre-parsed `md_codec::Descriptor` +
+/// per-`@N` cosigner key info. Dispatches to single-card mk1 (n=1) or n-card
+/// mk1 (n≥2) per SPEC §4.10. Annotation cross-checks + SELF-MULTISIG WARNING
+/// land in C.2/C.3/C.4 inside `descriptor_mode_run`.
+#[allow(dead_code)] // Wired into descriptor_mode_run in Phase C.2/C.3.
+pub fn synthesize_descriptor(
+    descriptor: &Descriptor,
+    cosigners: &[CosignerKeyInfo],
+    entropy: Option<&[u8]>,
+    privacy_preserving: bool,
+) -> Result<Bundle, ToolkitError> {
+    let n = descriptor.n as usize;
+    if cosigners.len() != n {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "synthesize_descriptor: descriptor n={n} but {} cosigner key triples provided",
+            cosigners.len()
+        )));
+    }
+
+    let policy_id = md_codec::compute_wallet_policy_id(descriptor).map_err(ToolkitError::from)?;
+    let mut stub = [0u8; 4];
+    stub.copy_from_slice(&policy_id.as_bytes()[..4]);
+
+    let md1 = md_codec::chunk::split(descriptor).map_err(ToolkitError::from)?;
+
+    let mk1 = if n == 1 {
+        let c = &cosigners[0];
+        let card = mk_codec::KeyCard::new(
+            vec![stub],
+            if privacy_preserving {
+                None
+            } else {
+                Some(c.fingerprint)
+            },
+            c.path.clone(),
+            c.xpub,
+        );
+        let csi = derive_mk1_chunk_set_id(&stub);
+        let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+        MkField::Single(chunks)
+    } else {
+        let stubs: Vec<[u8; 4]> = vec![stub; n];
+        let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(n);
+        for c in cosigners {
+            let card = mk_codec::KeyCard::new(
+                stubs.clone(),
+                if privacy_preserving {
+                    None
+                } else {
+                    Some(c.fingerprint)
+                },
+                c.path.clone(),
+                c.xpub,
+            );
+            let csi = derive_mk1_chunk_set_id(&stubs[0]);
+            let chunks =
+                mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+            per_cosigner.push(chunks);
+        }
+        MkField::Multi(per_cosigner)
+    };
+
+    let ms1 = match entropy {
+        Some(e) => Some(
+            ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.to_vec()))
+                .map_err(ToolkitError::from)?,
+        ),
+        None => None,
+    };
+
+    debug_assert!(descriptor.is_wallet_policy());
+
+    Ok(Bundle { ms1, mk1, md1 })
+}
+
 /// SPEC §4.1 multisig: derive xpub at a path string from the master xpriv.
-fn derive_xpub_at_path(
+pub(crate) fn derive_xpub_at_path(
     master: &Xpriv,
     secp: &Secp256k1<bitcoin::secp256k1::All>,
     path_str: &str,
@@ -706,6 +793,127 @@ mod tests {
                 "privacy-preserving mode should omit origin_fingerprint"
             );
         }
+    }
+
+    // ---- C.1: synthesize_descriptor (4 shape tests) ----
+
+    /// Build a `Descriptor` + `CosignerKeyInfo` array for testing. Uses the
+    /// TREZOR_24 fixture to derive the @0 xpub at a real BIP-32 path; for
+    /// multisig tests, derives N xpubs at successive child indices.
+    fn descriptor_fixture(
+        descriptor_str: &str,
+        ctx: crate::parse_descriptor::ScriptCtx,
+        n: u8,
+    ) -> (Descriptor, Vec<CosignerKeyInfo>, Vec<u8>) {
+        use crate::parse_descriptor::{parse_descriptor, ParsedFingerprint, ParsedKey};
+
+        let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let entropy = mnemonic.to_entropy();
+        let seed = mnemonic.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        let master_fp = master.fingerprint(&secp);
+        let _ = ctx;
+
+        // Derive N xpubs at distinct paths (m/48'/0'/0'/2', then bumping account index).
+        let base = "48'/0'/0'/2'";
+        let mut cosigners = Vec::with_capacity(n as usize);
+        let mut keys = Vec::with_capacity(n as usize);
+        let mut fps = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let path_str = if i == 0 {
+                base.to_string()
+            } else {
+                format!("48'/0'/{}/2'", i)
+            };
+            let path = DerivationPath::from_str(&path_str).unwrap();
+            let xpriv = master.derive_priv(&secp, &path).unwrap();
+            let xpub = Xpub::from_priv(&secp, &xpriv);
+            cosigners.push(CosignerKeyInfo {
+                xpub,
+                fingerprint: master_fp,
+                path,
+            });
+
+            let mut payload = [0u8; 65];
+            payload[0..32].copy_from_slice(&xpub.chain_code.to_bytes());
+            payload[32..65].copy_from_slice(&xpub.public_key.serialize());
+            keys.push(ParsedKey { i, payload });
+            fps.push(ParsedFingerprint {
+                i,
+                fp: master_fp.to_bytes(),
+            });
+        }
+
+        let descriptor = parse_descriptor(descriptor_str, &keys, &fps).unwrap();
+        (descriptor, cosigners, entropy)
+    }
+
+    #[test]
+    fn synthesize_descriptor_full_singlesig_shape() {
+        let (descriptor, cosigners, entropy) = descriptor_fixture(
+            "wpkh(@0/<0;1>/*)",
+            crate::parse_descriptor::ScriptCtx::SingleSig,
+            1,
+        );
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
+        assert!(bundle.ms1.is_some(), "full mode emits ms1");
+        let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
+        assert!(!mk1.is_empty());
+        assert!(mk1.iter().all(|s| s.starts_with("mk1")));
+        assert!(!bundle.md1.is_empty());
+    }
+
+    #[test]
+    fn synthesize_descriptor_watch_only_singlesig_shape() {
+        let (descriptor, cosigners, _entropy) = descriptor_fixture(
+            "wpkh(@0/<0;1>/*)",
+            crate::parse_descriptor::ScriptCtx::SingleSig,
+            1,
+        );
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
+        assert!(bundle.ms1.is_none(), "watch-only mode omits ms1");
+        let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
+        assert!(!mk1.is_empty());
+    }
+
+    #[test]
+    fn synthesize_descriptor_full_multisig_shape() {
+        let (descriptor, cosigners, entropy) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
+        assert!(bundle.ms1.is_some());
+        let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
+        assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
+    }
+
+    #[test]
+    fn synthesize_descriptor_watch_only_multisig_shape() {
+        let (descriptor, cosigners, _) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
+        assert!(bundle.ms1.is_none());
+        let multi = bundle.mk1.as_multi().unwrap();
+        assert_eq!(multi.len(), 2);
+    }
+
+    #[test]
+    fn synthesize_descriptor_validates_cosigner_count() {
+        let (descriptor, cosigners, _) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        // descriptor has n=2 but we only pass 1 cosigner → error
+        let one = vec![cosigners[0].clone()];
+        let err = synthesize_descriptor(&descriptor, &one, None, false).unwrap_err();
+        assert!(matches!(err, ToolkitError::DescriptorParse(_)));
     }
 
     #[test]
