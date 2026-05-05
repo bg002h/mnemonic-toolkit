@@ -55,6 +55,10 @@ pub enum ToolkitError {
     CosignersFile {
         message: String,
     },
+    /// SPEC §6.7 descriptor parse error (lex/resolve/walk failure). Exit 2.
+    /// Distinct from `ModeViolation` (SPEC §6.9, flag-combination errors):
+    /// `DescriptorParse` covers descriptor *content* failures.
+    DescriptorParse(String),
 }
 
 #[derive(Debug)]
@@ -168,7 +172,9 @@ impl ToolkitError {
             ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
             ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
             ToolkitError::MdCodec(e) => md_codec_exit_code(e),
-            ToolkitError::ModeViolation { .. } | ToolkitError::NetworkMismatch { .. } => 2,
+            ToolkitError::ModeViolation { .. }
+            | ToolkitError::NetworkMismatch { .. }
+            | ToolkitError::DescriptorParse(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. } => 4,
             ToolkitError::MultisigConfig { .. }
@@ -195,6 +201,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::CosignerSpec { .. } => "CosignerSpec",
             ToolkitError::CosignersFile { .. } => "CosignersFile",
+            ToolkitError::DescriptorParse(_) => "DescriptorParse",
         }
     }
 
@@ -232,6 +239,7 @@ impl ToolkitError {
             ToolkitError::CosignersFile { message } => {
                 format!("--cosigners-file: {}", message)
             }
+            ToolkitError::DescriptorParse(m) => m.clone(),
         }
     }
 
@@ -334,6 +342,10 @@ mod tests {
     #[test]
     fn exit_code_table_per_variant() {
         assert_eq!(ToolkitError::BadInput("x".into()).exit_code(), 1);
+        assert_eq!(
+            ToolkitError::DescriptorParse("descriptor parse failed: ...".into()).exit_code(),
+            2,
+        );
         assert_eq!(
             ToolkitError::ModeViolation {
                 mode: "watch-only",

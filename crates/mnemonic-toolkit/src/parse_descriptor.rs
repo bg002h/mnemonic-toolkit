@@ -41,8 +41,8 @@ impl ScriptCtx {
 }
 
 /// One occurrence of `@N[fp/path]/<multipath>/*` in the raw descriptor.
-/// Exit-code mapping for `lex_placeholders` errors is revisited in Phase B
-/// (currently routes through `BadInput` → exit 1; SPEC §6.7/§6.9 wants exit 2).
+/// Lex/resolve/walk errors route through `ToolkitError::DescriptorParse`
+/// (exit 2) per SPEC §6.7 (Phase B.0 migrated from `BadInput`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceholderOccurrence {
     pub i: u8,
@@ -70,14 +70,14 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
     });
     let mut out = Vec::new();
     for caps in re.captures_iter(descriptor) {
-        let i: u8 = caps[1]
-            .parse()
-            .map_err(|_| ToolkitError::BadInput(format!("@i index out of range: @{}", &caps[1])))?;
+        let i: u8 = caps[1].parse().map_err(|_| {
+            ToolkitError::DescriptorParse(format!("@i index out of range: @{}", &caps[1]))
+        })?;
         let fingerprint_anno = caps
             .get(2)
             .map(|m| {
                 Fingerprint::from_str(m.as_str()).map_err(|e| {
-                    ToolkitError::BadInput(format!(
+                    ToolkitError::DescriptorParse(format!(
                         "@{i} fingerprint annotation `{}`: {e}",
                         m.as_str()
                     ))
@@ -96,7 +96,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
             })
             .map(|s| {
                 DerivationPath::from_str(&s).map_err(|e| {
-                    ToolkitError::BadInput(format!("@{i} origin path annotation `{s}`: {e}"))
+                    ToolkitError::DescriptorParse(format!("@{i} origin path annotation `{s}`: {e}"))
                 })
             })
             .transpose()?;
@@ -107,7 +107,9 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                     .split(';')
                     .map(|n| {
                         n.parse::<u32>().map_err(|_| {
-                            ToolkitError::BadInput(format!("@{i} multipath alt `{n}` is not u32"))
+                            ToolkitError::DescriptorParse(format!(
+                                "@{i} multipath alt `{n}` is not u32"
+                            ))
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -127,7 +129,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         });
     }
     if out.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::DescriptorParse(
             "descriptor must contain at least one @N placeholder.".into(),
         ));
     }
@@ -152,7 +154,7 @@ pub fn resolve_placeholders(
     occs: &[PlaceholderOccurrence],
 ) -> Result<ResolvedPlaceholders, ToolkitError> {
     if occs.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::DescriptorParse(
             "descriptor must contain at least one @N placeholder.".into(),
         ));
     }
@@ -164,7 +166,7 @@ pub fn resolve_placeholders(
                 || prev.origin_path_anno != occ.origin_path_anno
                 || prev.fingerprint_anno != occ.fingerprint_anno
             {
-                return Err(ToolkitError::BadInput(format!(
+                return Err(ToolkitError::DescriptorParse(format!(
                     "@{} appears with inconsistent path/multipath/hardening/fingerprint",
                     occ.i
                 )));
@@ -176,10 +178,10 @@ pub fn resolve_placeholders(
     let max_i = *by_i.keys().max().expect("non-empty after early return");
     let n = max_i
         .checked_add(1)
-        .ok_or_else(|| ToolkitError::BadInput("@N index range exceeds u8".into()))?;
+        .ok_or_else(|| ToolkitError::DescriptorParse("@N index range exceeds u8".into()))?;
     for i in 0..n {
         if !by_i.contains_key(&i) {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::DescriptorParse(format!(
                 "@{i} not present; placeholders must be dense 0..n"
             )));
         }
@@ -281,7 +283,7 @@ pub fn substitute_synthetic(
                     xpub
                 }
                 Err(_) => {
-                    bad = Some(ToolkitError::BadInput(format!(
+                    bad = Some(ToolkitError::DescriptorParse(format!(
                         "@i index out of range: @{}",
                         &caps[1]
                     )));
@@ -306,7 +308,7 @@ fn lookup_key(key_str: &str, km: &BTreeMap<String, u8>) -> Result<u8, ToolkitErr
     let after_bracket = key_str.find(']').map_or(key_str, |pos| &key_str[pos + 1..]);
     let base = after_bracket.split('/').next().unwrap_or(after_bracket);
     km.get(base).copied().ok_or_else(|| {
-        ToolkitError::BadInput(format!(
+        ToolkitError::DescriptorParse(format!(
             "internal: synthetic key {base} not found in key map (rendered: {key_str})"
         ))
     })
@@ -366,7 +368,7 @@ pub fn walk_root(
         Wsh(w) => walk_wsh(w, km),
         Sh(s) => walk_sh(s, km),
         Tr(t) => walk_tr(t, km),
-        Bare(_) => Err(ToolkitError::BadInput(
+        Bare(_) => Err(ToolkitError::DescriptorParse(
             "bare scripts are outside BIP-388 wallet-policy surface".into(),
         )),
     }
@@ -446,11 +448,11 @@ fn walk_tap_tree_singleleaf(
 ) -> Result<Node, ToolkitError> {
     let leaves: Vec<_> = tt.leaves().collect();
     match leaves.len() {
-        0 => Err(ToolkitError::BadInput(
+        0 => Err(ToolkitError::DescriptorParse(
             "tap tree present but contains no leaves".into(),
         )),
         1 => walk_miniscript_node(leaves[0].miniscript(), km, /*tap=*/ true),
-        n => Err(ToolkitError::BadInput(format!(
+        n => Err(ToolkitError::DescriptorParse(format!(
             "tap tree with {n} leaves not supported in v0.3 (single-leaf only; multi-leaf deferred to v0.4)"
         ))),
     }
@@ -648,7 +650,7 @@ pub fn parse_descriptor(
 
     let (substituted, key_map) = substitute_synthetic(input, ctx)?;
     let ms_desc = MsDescriptor::<DescriptorPublicKey>::from_str(&substituted)
-        .map_err(|e| ToolkitError::BadInput(format!("descriptor parse failed: {e}")))?;
+        .map_err(|e| ToolkitError::DescriptorParse(format!("descriptor parse failed: {e}")))?;
     let tree = walk_root(&ms_desc, &key_map)?;
 
     let pubkeys = if keys.is_empty() {
