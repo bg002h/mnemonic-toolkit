@@ -130,9 +130,11 @@ mnemonic verify-bundle --phrase <words>           --network <net> --template <t>
 mnemonic verify-bundle --xpub <xpub> --master-fingerprint <fp> --network <net> --template <t>                          --mk1 <s>... --md1 <s>...
 ```
 
-The `--mk1` and `--md1` flags are **repeatable** (Vec<String> accepted). Each appearance contributes one chunk; mk-codec's `decode(&[&str])` and md-codec's chunked-decode handle multi-chunk reassembly. v0.1 single-sig is typically single-chunk per card, so the common case is one `--mk1` and one `--md1` flag, but the SPEC accepts N. (Resolves r2-I3.)
+The `--mk1` and `--md1` flags are **repeatable** (clap `num_args = 1..` ; ≥ 1 required, otherwise exit 64 clap usage error). Each appearance contributes one chunk; mk-codec's `decode(&[&str])` and md-codec's `chunk::reassemble(&[&str])` handle multi-chunk reassembly. v0.1 single-sig is typically single-chunk per card, so the common case is one `--mk1` and one `--md1` flag, but the SPEC accepts N. (Resolves SPEC r1-L9.)
 
 `--ms1` is **single-string** in v0.1 (ms-codec v0.1 emits one string total per card; multi-string K-of-N share encoding lands in v0.2 and the SPEC then reframes `--ms1` as repeatable).
+
+`verify-bundle` does NOT emit an engraving card; `--no-engraving-card` is not a flag of this command (rejected with exit 64 clap usage error if supplied).
 
 #### §2.2.1 Full-mode verify-bundle (`--phrase`)
 
@@ -140,8 +142,8 @@ Five checks, in order. Each runs to completion before the next; failures are rep
 
 1. **Re-derive xpub** from `--phrase` + `--passphrase` + `--network` + `--template` (§4 derivation rules).
 2. **Decode `--ms1`** via `ms_codec::decode`; assert decoded entropy equals the entropy derived from `--phrase` and `--language`.
-3. **Decode `--mk1...`** via `mk_codec::decode`; assert decoded `xpub == derived_xpub` AND `origin_fingerprint == Some(--master-fingerprint-derived-from-master-seed)` AND `origin_path` matches the template's BIP path.
-4. **Decode `--md1...`** via `md_codec::decode`; assert the descriptor is in **wallet-policy mode** (`tlv.pubkeys.is_some() && !.is_empty()`) AND the policy's bound xpub equals `derived_xpub` AND the descriptor's wrapper shape matches the template (e.g., `pkh` for bip44).
+3. **Decode `--mk1...`** via `mk_codec::decode(&[&str])`; assert decoded `xpub == derived_xpub` AND `origin_fingerprint == Some(derived_master_fingerprint)` AND `origin_path` matches the template's BIP path.
+4. **Decode `--md1...`** via `md_codec::chunk::reassemble(&[&str])`; assert the descriptor is in **wallet-policy mode** (`tlv.pubkeys.is_some() && !.is_empty()`) AND the policy's bound xpub (after re-extracting 65 bytes per §4.6.1) equals `derived_xpub` AND the descriptor's wrapper shape matches the template (e.g., `Tag::Pkh` for bip44).
 5. **Cross-binding:** `compute_wallet_policy_id(&decoded_md1).as_bytes()[0..4] == decoded_mk1.policy_id_stubs[0]`.
 
 On full mismatch: exit 4 `BundleMismatch{card}`, message includes the offending card identifier and the v0.2 forward-pointer hint (`"v0.1 hardcodes account=0; if the engraved bundle was produced with a non-zero account, mismatch is expected — re-run with v0.2's --account flag once available"`). (Resolves r1-I5.)
@@ -158,8 +160,8 @@ warning: for re-derivation). Use --phrase mode for end-to-end verification.
 
 The four checks (resolves r1-I3):
 
-1. **mk1 parses + BCH valid** (`mk_codec::decode` succeeds).
-2. **md1 parses + BCH valid** (`md_codec::decode` succeeds).
+1. **mk1 parses + BCH valid** (`mk_codec::decode(&[&str])` succeeds).
+2. **md1 parses + BCH valid** (`md_codec::chunk::reassemble(&[&str])` succeeds).
 3. **Cross-binding stub linkage:** `compute_wallet_policy_id(&decoded_md1).as_bytes()[0..4] == decoded_mk1.policy_id_stubs[0]`.
 4. **Optional xpub/fingerprint match:** if `--xpub` matches `decoded_mk1.xpub` AND `--master-fingerprint` matches `decoded_mk1.origin_fingerprint`. (Always reported; failure surfaces via exit 4.)
 
@@ -219,7 +221,7 @@ This section specifies how a single (`phrase` OR (`xpub` + `master_fingerprint`)
 
 1. `mnemonic = bip39::Mnemonic::parse_in(language, phrase)?` — validates the BIP-39 4-bit checksum.
 2. `entropy = mnemonic.to_entropy()` — 16/20/24/28/32 bytes.
-3. `seed = mnemonic.to_seed(passphrase.unwrap_or(""))` — 64-byte BIP-32 master seed via PBKDF2.
+3. `seed = mnemonic.to_seed(passphrase.unwrap_or(""))` — 64-byte BIP-32 master seed via PBKDF2. Note: `--passphrase ""` (empty string) and an absent `--passphrase` produce the same master seed (BIP-39 PBKDF2 with empty-passphrase suffix); the toolkit treats the two as equivalent and emits no passphrase warning when `--passphrase` is unset OR explicitly empty.
 4. `master = bitcoin::bip32::Xpriv::new_master(network_kind, &seed)?`.
 5. `master_fingerprint = master.fingerprint(&secp)` — 4 bytes.
 6. `origin_path = template.origin_path(network)` (table in §4.2).
@@ -272,8 +274,8 @@ KeyCard {
 The `policy_id_stubs[0]` is computed AFTER the md1 descriptor is constructed (§4.6) — toolkit builds md1 first, then hashes it for the stub, then assembles mk1.
 
 `origin_fingerprint`:
-- Full mode: `Some(master_fingerprint)` from §4.1 step 5.
-- Watch-only mode: `Some(--master-fingerprint)` parsed from the user flag.
+- Full mode: `Some(master_fingerprint)` from §4.1 step 5 (computed from the master xpriv).
+- Watch-only mode: `Some(--master-fingerprint)` parsed from the user flag — **authoritative**: the user-supplied `--master-fingerprint` value is used verbatim in BOTH `mk1.origin_fingerprint` AND `md1.tlv.fingerprints[0]`. The toolkit does NOT attempt to derive a fingerprint from the xpub (xpubs identify the parent's fingerprint via `Xpub::parent_fingerprint`, not the master); deriving the master fingerprint from an xpub is generally impossible. Watch-only verify-bundle's check 4 cross-checks `--master-fingerprint` against `decoded_mk1.origin_fingerprint`. (Resolves SPEC r1-I1.)
 
 Encoding:
 
@@ -365,11 +367,18 @@ Phase 1 spike validates `Tag::Sh` / `Tag::Pkh` / `Tag::Wpkh` / `Tag::Tr` exist w
 
 #### §4.6.4 md1 encoding
 
+md-codec exposes two string-layer encoders (verified against `crates/md-codec/src/lib.rs:36-38`):
+
+- `encode_md1_string(&Descriptor) -> Result<String, Error>` — single canonical-form string (codex32-wrapped). Suitable when the descriptor fits a single codex32 length bracket.
+- `chunk::split(&Descriptor) -> Result<Vec<String>, Error>` — produces a chunked form (`Vec<String>` of length ≥ 1) for any descriptor; v0.1 single-sig is expected to be a single-element vec but the API returns `Vec<String>` symmetrically with mk-codec's `encode`.
+
+v0.1 toolkit uses `chunk::split` for symmetry with mk1 + forward-compat with v0.2 multisig (which may produce longer descriptors that overflow single-string brackets):
+
 ```rust
-let md1_strings: Vec<String> = md_codec::encode_string(&descriptor)?;  // exact fn name to be confirmed in Phase 1 spike
+let md1_strings: Vec<String> = md_codec::chunk::split(&descriptor)?;
 ```
 
-(Note: md-codec's `encode_payload` returns `(Vec<u8>, usize)` for the bit-packed payload. The string-layer wrapper that produces `md1...` codex32-derived strings is a separate function; Phase 1 spike confirms its exact name and signature.)
+Decode side uses `chunk::reassemble(&[&str]) -> Result<Descriptor, Error>` accordingly. Phase 1 spike validates the single-element-Vec assumption for all 8 (template × network) v0.1 cells.
 
 ### §4.7 Cross-binding invariants
 
@@ -377,7 +386,8 @@ After §4.4–§4.6 produce the three cards, the toolkit asserts internal consis
 
 1. `compute_wallet_policy_id(&descriptor).as_bytes()[0..4] == keycard.policy_id_stubs[0]` (consequence of how `policy_id_stubs[0]` was computed in §4.5).
 2. `descriptor.is_wallet_policy()` is true.
-3. (Full mode only) Re-decoding `ms1_string`, `mk1_strings`, `md1_strings` and re-running §2.2.1's checks 1–5 returns success. (This is the v0.1 internal smoke test; not user-visible unless `--self-check` is set, which is a v0.2+ flag.)
+
+(A `--self-check` flag that immediately re-decodes the just-emitted bundle and re-runs §2.2.1's full check suite is deferred to v0.2; see §8.)
 
 ### §4.8 Xpub depth advisory (resolves r2-L3)
 
@@ -478,9 +488,18 @@ ms1 card omitted; recover entropy from the original wallet's other backup.
 engrave each card on its own plate. record this card alongside.
 ```
 
-The non-suppressible `--language` warning (when defaulting to english) lands BEFORE the engraving card on stderr.
+**Stderr emission order** (locked; integration fixtures depend on this):
+
+1. `--language` defaulting warning (if applicable; full mode only).
+2. `--passphrase` set warning (if applicable; full mode only).
+3. Watch-only mode warning (if applicable; watch-only mode only).
+4. The engraving card (suppressed by `--no-engraving-card`).
+
+Errors print before any of the above and short-circuit the run.
 
 ### §5.3 `bundle --json` schema
+
+**Field order is part of the schema** (serde_json preserves struct insertion order; integration fixtures assert byte-exact JSON):
 
 ```json
 {
@@ -493,7 +512,7 @@ The non-suppressible `--language` warning (when defaulting to english) lands BEF
   "master_fingerprint": "deadbeef",
   "ms1": "ms1...",                 // null in watch-only mode
   "mk1": ["mk10..."],              // Vec<String> per mk_codec::encode
-  "md1": ["md10..."],              // Vec<String>
+  "md1": ["md10..."],              // Vec<String> per md_codec::chunk::split
   "engraving_card": "network: ...\ntemplate: ...\n..."
 }
 ```
@@ -501,6 +520,8 @@ The non-suppressible `--language` warning (when defaulting to english) lands BEF
 `--json` and `--no-engraving-card` are independent. With `--json` alone, `engraving_card` is populated. With both, `engraving_card` is `null`.
 
 ### §5.4 `verify-bundle --json` schema
+
+**Field order is part of the schema** (same rule as §5.3):
 
 ```json
 {
@@ -585,6 +606,17 @@ Per-sibling format-violation routing is enumerated in §6.4 below.
 
 ### §6.4 Friendly mappers + dispatch tables
 
+#### §6.4.0 Exit-code routing principle (locked)
+
+Across all five friendly mappers below, exit-code routing follows two rules:
+
+- **Exit 1 (user-input):** length-bracket violations, hex-parse failures, BIP-39 word-set violations, BIP-32 derivation-input errors. These are typo-correctable: the user can re-engrave or re-type and try again.
+- **Exit 2 (format violation):** structural / wire-format violations (wrong HRP, malformed payload padding, BCH uncorrectable, reserved bits set, mode-violation flag combinations, network/xpub mismatch). The string is the right shape but its bits are wrong.
+- **Exit 3 (future format):** any sibling-codec "reserved-not-emitted" variant (e.g., `ms_codec::Error::ReservedTagNotEmittedInV01`, `mk_codec::Error::UnsupportedVersion`, `md_codec::Error::UnsupportedVersion`). Routes to `ToolkitError::FutureFormat`.
+- **Exit 4 (verify mismatch):** only `ToolkitError::BundleMismatch{card}` from `verify-bundle`.
+
+When a new sibling-codec variant lands in v0.X+, place it in the bucket whose principle it most closely matches. The fallthrough `_` arm for `#[non_exhaustive]` enums routes to exit 1 with `format!("unhandled <crate>::Error variant: {:?}", e)` — explicitly worse-message than a curated mapping, motivating mapper-table updates.
+
 Five friendly mappers, one per error source:
 
 #### §6.4.1 `friendly_bip39(&bip39::Error) -> String`
@@ -615,7 +647,7 @@ mk_codec::Error variant set (verified against `crates/mk-codec/src/error.rs`):
 |---|---|---|
 | `InvalidHrp(s)` | exit 2 | "wrong HRP: got `{s:?}`, expected \"mk\"" |
 | `MixedCase` | exit 2 | "mixed case in mk1 input string" |
-| `InvalidStringLength(n)` | exit 1 | "mk1 data-part length `n` not valid (need 14-93 short or 95-108 long)" |
+| `InvalidStringLength(n)` | exit 1 | "mk1 data-part length `n` not valid (regular code: 14-93; long code: 95-108; the gap at 94 is reserved-invalid)" |
 | `InvalidChar { ch, position }` | exit 1 | "invalid character `ch` at position `position` (not in bech32 alphabet)" |
 | `BchUncorrectable(s)` | exit 1 | "mk1 BCH uncorrectable: `s` (engraving error or transcription typo)" |
 | `UnsupportedCardType(b)` | exit 2 | "mk1 unsupported card type: 0x`{b:02x}`" |
@@ -639,14 +671,15 @@ mk_codec::Error variant set (verified against `crates/mk-codec/src/error.rs`):
 
 #### §6.4.5 `friendly_md_codec(&md_codec::Error) -> String`
 
-md_codec::Error is NOT `#[non_exhaustive]` (verified in `crates/md-codec/src/error.rs`). Phase 1 spike enumerates the full variant set (~35 variants) and maps each. Routing buckets:
+md_codec::Error is NOT `#[non_exhaustive]` (verified at `crates/md-codec/src/error.rs:6`); the variant set is closed and exhaustive matching is required (no `_` wildcard arm). Routing per §6.4.0 principle:
 
-- Bit-stream / wire-format violations → exit 2 (most variants).
-- Path-depth, key-count, threshold-out-of-range → exit 1 (user-input).
-- `UnsupportedVersion` → exit 3.
-- Codex32-layer errors (`Codex32DecodeError`, `Codex32EncodeError`) → exit 1.
+| Routing bucket | Variants (per `crates/md-codec/src/error.rs`) |
+|---|---|
+| **Exit 1 (user-input)** | `Codex32DecodeError`, `Codex32EncodeError` (codex32-layer typos / BCH-correction edge cases that the user can re-engrave) |
+| **Exit 2 (format violation)** | `BitStreamTruncated`, `ReservedHeaderBitSet`, `PathDepthExceeded`, `KeyCountOutOfRange`, `DivergentPathCountMismatch`, `AltCountOutOfRange`, `UnknownPrimaryTag`, `UnknownExtensionTag`, `ThresholdOutOfRange`, `ChildCountOutOfRange`, `KGreaterThanN`, `TlvOrderingViolation`, `PlaceholderIndexOutOfRange`, `OverrideOrderViolation`, `EmptyTlvEntry`, `TlvLengthExceedsRemaining`, `PlaceholderNotReferenced`, `PlaceholderFirstOccurrenceOutOfOrder`, `MultipathAltCountMismatch`, `ForbiddenTapTreeLeaf`, `ChunkCountOutOfRange`, `ChunkIndexOutOfRange`, `ChunkSetIdOutOfRange`, `ChunkHeaderChunkedFlagMissing`, `ChunkCountExceedsMax`, `ChunkSetEmpty`, `ChunkSetInconsistent`, `ChunkSetIncomplete`, `ChunkIndexGap`, `ChunkSetIdMismatch`, `VarintOverflow`, `MissingExplicitOrigin`, `InvalidPresenceByte`, `InvalidXpubBytes`, `MissingPubkey`, `ChainIndexOutOfRange`, `HardenedPublicDerivation`, `UnsupportedDerivationShape` |
+| **Exit 3 (future format)** | `UnsupportedVersion` |
 
-(Detailed dispatch table to be filled in Phase 1 task 1.1, parallel to ms-cli's SPEC §6.1.1 lock.)
+Per-variant message text is locked in Phase 1 task 1.1 (parallel to ms-cli's `crates/ms-cli/src/codex32_friendly.rs` shape). Routing above is the SPEC contract; messages may be refined for clarity without re-opening this SPEC.
 
 ### §6.5 Display rules
 
@@ -666,6 +699,8 @@ Pinned for integration tests (resolves r1-I6 + r2-I5):
 | `--phrase` with `--xpub` | (clap-level mutually-exclusive group; exits 64) |
 | `--xpub` without `--master-fingerprint` | "`--xpub` requires `--master-fingerprint` (xpub mode needs the master fingerprint to populate mk1's origin)" |
 | `--xpub -` | "`--xpub` does not accept stdin (`-`); pass the xpub literally on argv" |
+| `verify-bundle --xpub --passphrase` | (same byte-exact text as `bundle --xpub --passphrase`; mirror the rule onto verify-bundle for symmetry) |
+| `verify-bundle --xpub --language` | (same byte-exact text as `bundle --xpub --language`; mirror onto verify-bundle) |
 
 ---
 
@@ -705,7 +740,7 @@ ms1 v0.1 does NOT carry the BIP-39 wordlist language on the wire (per ms-codec S
 | Recovery flow (3 strings → wallet artifact / xpriv) | v0.3+ | toolkit FOLLOWUPS |
 | `--privacy-preserving` (mk1 with `origin_fingerprint = None`) | v0.2+ | toolkit FOLLOWUPS |
 | K-of-N share encoding (ms1 multi-string) | v0.2 lockstep with ms-codec v0.2 | cross-repo |
-| `--self-check` flag (toolkit emits + immediately verifies internally) | v0.2 | toolkit FOLLOWUPS |
+| `--self-check` flag (toolkit emits + immediately verifies internally; replaces v0.1's removed §4.7 invariant 3) | v0.2 | toolkit FOLLOWUPS |
 | Color / interactive prompts | never | — |
 
 ---
@@ -767,7 +802,7 @@ ms1 v0.1 does NOT carry the BIP-39 wordlist language on the wire (per ms-codec S
 - `format.rs` — chunked-form rendering (delegates to each sibling codec's renderer).
 - `parse.rs` — stdin/argv input helpers (`read_phrase_input`, `read_input`, fingerprint parsing).
 
-Phase 1 task 1.1 is a **verification spike** (no code lands): read `bitcoin = "0.32"` (`bip32::Xpub` field/method names, `bip32::Error` variant set, `Xpub::chain_code.to_bytes()`, `Xpub::public_key.serialize()`), `mk_codec::*` (`KeyCard` struct shape, `encode/decode` signatures, `Error` variant set), `md_codec::*` (`Descriptor` field shape, `Tag` variants, `Body` variants, `encode_string` exact signature, `Error` variant set). Output: a memo confirming each SPEC §4 + §6 claim against actual source, OR a list of SPEC patches needed before code lands.
+Phase 1 task 1.1 is a **verification spike** (no code lands): read `bitcoin = "0.32"` (`bip32::Xpub` field/method names, `bip32::Error` variant set, `Xpub::chain_code.to_bytes()`, `Xpub::public_key.serialize()`), `mk_codec::*` (`KeyCard` struct shape, `encode/decode` signatures, `Error` variant set), `md_codec::*` (`Descriptor` field shape, `Tag` variants, `Body` variants, `chunk::split` / `chunk::reassemble` signatures, `Error` variant set). Output: a memo at `design/agent-reports/spike-toolkit-v0_1-phase-1.md` confirming each SPEC §4 + §6 claim against actual source, OR a list of SPEC patches needed before code lands. The memo blocks Phase 2 from starting.
 
 **Phase 2 — synthesis:**
 
@@ -796,6 +831,7 @@ Phase 1 task 1.1 is a **verification spike** (no code lands): read `bitcoin = "0
 - Phase 2 synthesize: round-trip property test — fix template + network + entropy, derive xpub, build all three cards, decode each, assert §4.7 invariants hold.
 - Phase 3 commands: `assert_cmd` integration test per (subcommand × mode × outcome) cell.
 - Phase 4 main: `--help` byte-exact fixtures (one per subcommand). `--version` ground-truth check.
+- **Reference test vector (v0.1):** Trezor's canonical 24-word all-zero entropy mnemonic ("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art") drives at least one bundle fixture per (template × network) cell — 4 templates × 4 networks = 16 fixtures locked in `crates/mnemonic-toolkit/tests/vectors/v0_1/*.txt`. The byte-exact ms1 / mk1 / md1 outputs become the SHA-pinned regression corpus for v0.1.0.
 - Per-phase opus reviewer-loop until 0 critical / 0 important findings; reports persist to `design/agent-reports/phase-X-<name>-review-rN.md`. Low/nit deferred to `design/FOLLOWUPS.md`.
 
 ### §10.2 CI gates
@@ -883,4 +919,5 @@ This SPEC was authored 2026-05-04 by the maintainer (bg002h) with Opus 4.7 via t
 
 ## Revision history
 
-- **r1** (2026-05-04, this commit) — initial SPEC integrating brainstorm Q1–Q5 + r1 architect (C1/C2/C3/I1-I6/4nits) + r2 architect (5 important + 4 nits). Pending SPEC architect review.
+- **r1** (2026-05-04) — initial SPEC integrating brainstorm Q1–Q5 + brainstorm-r1 architect (C1/C2/C3/I1-I6/4nits) + brainstorm-r2 architect (5 important + 4 nits).
+- **r2** (2026-05-04) — SPEC-architect-r1 fixes integrated inline: C1 (md_codec API rename `encode_md1_string`→`chunk::split` for symmetry), I1 (`--master-fingerprint` authoritative in watch-only), I2 (exit-routing principle locked in §6.4.0), L1 (drop §4.7 invariant 3 → §8 forward-pointer), L2 (md_codec routing buckets inlined), L3 (spike memo path locked), L4 (JSON field-order pinned), L5 (stderr ordering locked), L6 (--passphrase "" ≡ unset), L7 (verify-bundle mode-violation symmetry), L8 (verify-bundle no engraving card), L9 (--mk1/--md1 num_args=1..), L10 (Trezor 24-word vector pinned). Pending SPEC architect r2 review.
