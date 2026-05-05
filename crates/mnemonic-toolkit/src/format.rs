@@ -27,6 +27,9 @@ pub fn chunk_5char(s: &str) -> String {
 
 /// Render an `mk1` string in mk-codec's chunked form. v0.1: defer to mk-codec
 /// internal chunked-form when available; fallback to chunk_5char for v0.1.
+/// Reserved: mk1 currently uses `chunk_5char` directly; mk-specific helper retained
+/// for the eventual mk-codec chunked-form swap.
+#[allow(dead_code)]
 pub fn chunk_mk1(s: &str) -> String {
     chunk_5char(s)
 }

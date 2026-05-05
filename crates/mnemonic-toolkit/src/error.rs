@@ -15,10 +15,16 @@ pub enum ToolkitError {
     MkCodec(mk_codec::Error),
     MdCodec(md_codec::Error),
     ModeViolation {
+        // mode/flag are read by `details()` for SPEC §5.5 JSON output (wired in v0.1+ JSON path).
+        #[allow(dead_code)]
         mode: &'static str,
+        #[allow(dead_code)]
         flag: &'static str,
         message: &'static str,
     },
+    /// SPEC §6.1 exit-4 variant. Constructed by integration tests in Phase 5; reserved
+    /// for runtime emission once verify-bundle's optional-mismatch reporter wires up.
+    #[allow(dead_code)]
     BundleMismatch {
         card: &'static str,
         message: String,
@@ -151,6 +157,8 @@ impl ToolkitError {
     }
 
     /// Stable discriminant for JSON `kind` field (SPEC §5.5).
+    /// Reserved for the §5.5 JSON-error envelope path (covered by tests in v0.1).
+    #[allow(dead_code)]
     pub fn kind(&self) -> &'static str {
         match self {
             ToolkitError::BadInput(_) => "BadInput",
@@ -196,6 +204,8 @@ impl ToolkitError {
     }
 
     /// JSON `details` field (SPEC §5.5).
+    /// Reserved for the §5.5 JSON-error envelope path.
+    #[allow(dead_code)]
     pub fn details(&self) -> Option<serde_json::Value> {
         match self {
             ToolkitError::ModeViolation { mode, flag, .. } => Some(json!({
@@ -278,6 +288,8 @@ impl From<md_codec::Error> for ToolkitError {
     }
 }
 
+/// Convenience alias; reserved for in-crate use.
+#[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, ToolkitError>;
 
 #[cfg(test)]
