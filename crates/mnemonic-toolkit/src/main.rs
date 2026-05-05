@@ -8,6 +8,7 @@ mod friendly;
 mod language;
 mod network;
 mod parse;
+mod parse_descriptor;
 mod synthesize;
 mod template;
 
