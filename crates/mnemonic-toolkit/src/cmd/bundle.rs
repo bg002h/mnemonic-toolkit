@@ -47,8 +47,20 @@ pub struct BundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
 
-    #[arg(long)]
-    pub template: CliTemplate,
+    /// Pre-built template name (single-sig or multisig). Mutually-required-one-of
+    /// with --descriptor / --descriptor-file (clap-level + runtime pre-check).
+    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file"])]
+    pub template: Option<CliTemplate>,
+
+    /// User-supplied BIP-388 descriptor (v0.3 §2.1.10). Mutually-required-one-of
+    /// with --template / --descriptor-file. XOR with --descriptor-file (clap conflicts).
+    #[arg(long, conflicts_with = "descriptor_file")]
+    pub descriptor: Option<String>,
+
+    /// User-supplied BIP-388 descriptor file (v0.3 §2.1.10). Single-line UTF-8;
+    /// trailing newline tolerated. XOR with --descriptor (clap conflicts).
+    #[arg(long = "descriptor-file")]
+    pub descriptor_file: Option<PathBuf>,
 
     #[arg(long)]
     pub language: Option<CliLanguage>,
@@ -96,6 +108,16 @@ pub struct BundleArgs {
     pub cosigner_count: Option<usize>,
 }
 
+impl BundleArgs {
+    /// Template-mode contract: callers MUST be on the template-mode dispatch
+    /// branch. Descriptor-mode escapes earlier in `run()` before any
+    /// template-only helper is invoked. Panics if the contract is violated.
+    fn template_unchecked(&self) -> CliTemplate {
+        self.template
+            .expect("template-mode dispatch contract — descriptor-mode escapes earlier")
+    }
+}
+
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
 pub mod mode_text {
     pub const PASSPHRASE_WITH_XPUB: &str = "--passphrase is incompatible with --xpub: the xpub is already a post-passphrase derivation product (the passphrase is baked into the xpub at engrave time).";
@@ -121,6 +143,14 @@ pub mod mode_text {
     // an account position).
     #[allow(dead_code)]
     pub const ACCOUNT_INCOMPATIBLE_TEMPLATE: &str = "--account is incompatible with the selected --template (template lacks an account-position in its standard path).";
+
+    // v0.3 NEW rows (SPEC §6.9). Byte-exact.
+    pub const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --template are mutually exclusive; pick descriptor passthrough or template, not both.";
+    pub const DESCRIPTOR_AND_DESCRIPTOR_FILE: &str = "--descriptor and --descriptor-file are mutually exclusive; supply the descriptor inline or via file, not both.";
+    pub const DESCRIPTOR_WITH_THRESHOLD: &str = "--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.";
+    pub const DESCRIPTOR_WITH_COSIGNER_COUNT: &str = "--cosigner-count is meaningful only with --template; descriptor mode encodes N from @i placeholder count.";
+    pub const DESCRIPTOR_WITH_PATH_FAMILY: &str = "--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.";
+    pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.";
 }
 
 pub fn run<W: Write, E: Write>(
@@ -129,9 +159,63 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // SPEC §6.9 v0.3 mode-violation pre-check ladder, rows 1-6 (flag-combination
+    // checks; rows 7-15 fire after descriptor parse, inside descriptor_mode_run).
+    // Evaluated TOP-TO-BOTTOM; first triggered row fires.
+    let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
+    if descriptor_mode && args.template.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--template",
+            message: mode_text::DESCRIPTOR_AND_TEMPLATE,
+        });
+    }
+    if args.descriptor.is_some() && args.descriptor_file.is_some() {
+        // clap conflicts_with usually rejects this; runtime backstop for
+        // direct API callers that bypass clap.
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--descriptor-file",
+            message: mode_text::DESCRIPTOR_AND_DESCRIPTOR_FILE,
+        });
+    }
+    if descriptor_mode && args.threshold.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--threshold",
+            message: mode_text::DESCRIPTOR_WITH_THRESHOLD,
+        });
+    }
+    if descriptor_mode && args.cosigner_count.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--cosigner-count",
+            message: mode_text::DESCRIPTOR_WITH_COSIGNER_COUNT,
+        });
+    }
+    if descriptor_mode && args.multisig_path_family.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--multisig-path-family",
+            message: mode_text::DESCRIPTOR_WITH_PATH_FAMILY,
+        });
+    }
+    if descriptor_mode && args.account != 0 {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--account",
+            message: mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT,
+        });
+    }
+
+    // Descriptor-mode dispatch (Phase B stub; Phase C lands synthesis).
+    if descriptor_mode {
+        return descriptor_mode_run(args, stdin, stdout, stderr);
+    }
+
     let phrase_arg = args.phrase.as_deref();
     let xpub_arg = args.xpub.as_deref();
-    let multisig = args.template.is_multisig();
+    let multisig = args.template_unchecked().is_multisig();
     let cosigner_present = !args.cosigner.is_empty();
     let cosigners_file_present = args.cosigners_file.is_some();
 
@@ -293,14 +377,14 @@ fn bundle_full<W: Write, E: Write>(
         &passphrase,
         language,
         args.network,
-        args.template,
+        args.template_unchecked(),
         args.account,
     )?;
     let bundle = synthesize_full(
         &acc.entropy,
         acc.master_fingerprint,
         acc.account_xpub,
-        args.template,
+        args.template_unchecked(),
         args.network,
         args.account,
     )?;
@@ -319,8 +403,10 @@ fn bundle_full<W: Write, E: Write>(
         };
         Some(engraving_card(
             args.network.human_name(),
-            args.template.human_name(),
-            &args.template.origin_path_str(args.network, args.account),
+            args.template_unchecked().human_name(),
+            &args
+                .template_unchecked()
+                .origin_path_str(args.network, args.account),
             &acc.master_fingerprint.to_string().to_lowercase(),
             args.account,
             mode,
@@ -335,7 +421,8 @@ fn bundle_full<W: Write, E: Write>(
         "full",
         stdout,
         stderr,
-        args.template.origin_path_str(args.network, args.account),
+        args.template_unchecked()
+            .origin_path_str(args.network, args.account),
     )?;
 
     if args.self_check {
@@ -407,15 +494,23 @@ fn bundle_watch_only<W: Write, E: Write>(
         .ok();
     }
 
-    let bundle = synthesize_watch_only(fp, xpub, args.template, args.network, args.account)?;
+    let bundle = synthesize_watch_only(
+        fp,
+        xpub,
+        args.template_unchecked(),
+        args.network,
+        args.account,
+    )?;
 
     let card_text = if args.no_engraving_card {
         None
     } else {
         Some(engraving_card(
             args.network.human_name(),
-            args.template.human_name(),
-            &args.template.origin_path_str(args.network, args.account),
+            args.template_unchecked().human_name(),
+            &args
+                .template_unchecked()
+                .origin_path_str(args.network, args.account),
             &fp.to_string().to_lowercase(),
             args.account,
             EngravingMode::WatchOnly,
@@ -430,7 +525,8 @@ fn bundle_watch_only<W: Write, E: Write>(
         "watch-only",
         stdout,
         stderr,
-        args.template.origin_path_str(args.network, args.account),
+        args.template_unchecked()
+            .origin_path_str(args.network, args.account),
     )?;
 
     if args.self_check {
@@ -459,7 +555,7 @@ fn emit<W: Write, E: Write>(
             schema_version: "2",
             mode,
             network: args.network.human_name(),
-            template: args.template.human_name(),
+            template: args.template_unchecked().human_name(),
             account: args.account,
             origin_path: Some(origin_path),
             origin_paths: None,
@@ -589,7 +685,7 @@ fn bundle_multisig_full<W: Write, E: Write>(
         &mnemonic,
         &passphrase,
         args.network,
-        args.template,
+        args.template_unchecked(),
         threshold,
         cosigner_count,
         args.account,
@@ -598,7 +694,7 @@ fn bundle_multisig_full<W: Write, E: Write>(
     )?;
 
     // Build MultisigInfo for JSON + engraving card.
-    let script_type = args.template.bip48_script_type().unwrap_or(0);
+    let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
     let path_str = path_family.default_origin_path(args.network, args.account, script_type);
     use bitcoin::bip32::Xpriv;
     use bitcoin::secp256k1::Secp256k1;
@@ -629,7 +725,7 @@ fn bundle_multisig_full<W: Write, E: Write>(
         })
         .collect();
     let multisig_info = MultisigInfo {
-        template: args.template.human_name(),
+        template: args.template_unchecked().human_name(),
         threshold,
         cosigner_count,
         path_family: path_family.human_name(),
@@ -641,7 +737,7 @@ fn bundle_multisig_full<W: Write, E: Write>(
     } else {
         Some(engraving_card(
             args.network.human_name(),
-            args.template.human_name(),
+            args.template_unchecked().human_name(),
             &path_str,
             &master_fp_str,
             args.account,
@@ -697,7 +793,7 @@ fn bundle_multisig_watch_only<W: Write, E: Write>(
 
     // Resolve per-cosigner paths so we can emit them into MultisigInfo even
     // when they were defaulted from the path family.
-    let script_type = args.template.bip48_script_type().unwrap_or(0);
+    let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
     let default_path_str = path_family.default_origin_path(args.network, args.account, script_type);
     let default_path = bitcoin::bip32::DerivationPath::from_str(&default_path_str)
         .map_err(|e| ToolkitError::BadInput(format!("default path parse: {}", e)))?;
@@ -730,7 +826,7 @@ fn bundle_multisig_watch_only<W: Write, E: Write>(
     let bundle = synthesize_multisig_watch_only(
         &cosigners,
         args.network,
-        args.template,
+        args.template_unchecked(),
         threshold,
         args.account,
         path_family,
@@ -755,7 +851,7 @@ fn bundle_multisig_watch_only<W: Write, E: Write>(
         })
         .collect();
     let multisig_info = MultisigInfo {
-        template: args.template.human_name(),
+        template: args.template_unchecked().human_name(),
         threshold,
         cosigner_count,
         path_family: path_family.human_name(),
@@ -769,7 +865,7 @@ fn bundle_multisig_watch_only<W: Write, E: Write>(
     } else {
         Some(engraving_card(
             args.network.human_name(),
-            args.template.human_name(),
+            args.template_unchecked().human_name(),
             &default_path_str,
             "(per-cosigner)",
             args.account,
@@ -830,7 +926,7 @@ fn emit_multisig<W: Write, E: Write>(
             schema_version: "2",
             mode,
             network: args.network.human_name(),
-            template: args.template.human_name(),
+            template: args.template_unchecked().human_name(),
             account: args.account,
             origin_path,
             origin_paths,
@@ -968,4 +1064,32 @@ pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), Toolk
         }
     }
     Ok(())
+}
+
+/// Phase B stub for descriptor-mode dispatch. Lex's the descriptor (so SPEC §6.9
+/// row 8 — empty / no @N — fires as a DescriptorParse error from lex_placeholders),
+/// then errors out indicating Phase C lands the synthesis. Phase C will replace
+/// this stub with full pipeline: parse_descriptor → key sourcing → synthesize_descriptor.
+fn descriptor_mode_run<W: Write, E: Write>(
+    args: &BundleArgs,
+    _stdin: &mut dyn std::io::Read,
+    _stdout: &mut W,
+    _stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let descriptor = match (&args.descriptor, &args.descriptor_file) {
+        (Some(s), None) => s.clone(),
+        (None, Some(p)) => std::fs::read_to_string(p)
+            .map_err(|e| {
+                ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+            })?
+            .trim_end()
+            .to_string(),
+        _ => unreachable!("pre-check ladder rejects all other combos"),
+    };
+    // Row 8: SPEC §6.9 "descriptor must contain at least one @N placeholder."
+    let _ = crate::parse_descriptor::lex_placeholders(&descriptor)?;
+    Err(ToolkitError::DescriptorParse(
+        "descriptor mode is not yet wired in v0.3 Phase B; Phase C will land the synthesis path"
+            .into(),
+    ))
 }
