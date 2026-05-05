@@ -400,6 +400,14 @@ warning: Bundle will still be emitted; verify your wallet uses a non-standard pa
 
 Some users may intentionally supply non-standard xpubs (e.g., a sub-account xpub for testing). The toolkit warns but does not reject.
 
+**Watch-only account-index hazard:** the xpub bytes do not encode the account index used during derivation; v0.1 hardcodes `account = 0` in the bundle's mk1 origin path and md1 path declaration. If the user's xpub was actually derived at a non-zero account (e.g., `m/84'/0'/5'`), the bundle silently misrepresents the wallet's restoration path. The toolkit emits an additional non-suppressible stderr warning in watch-only mode:
+
+```text
+warning: watch-only mode hardcodes account=0; if your xpub was derived
+warning: at a non-zero account, the bundle's path will not match. Use
+warning: v0.2's --account flag once available.
+```
+
 ---
 
 ## §5. Output format
@@ -541,7 +549,9 @@ Errors print before any of the above and short-circuit the run.
 }
 ```
 
-`skipped` covers checks not applicable in watch-only mode (entropy/path-rederivation).
+`skipped` covers checks not applicable in watch-only mode (entropy/path-rederivation). **Exit code is 4 when `result == "mismatch"` and 0 when `result == "ok"`** — consumers must check both stdout JSON and exit code.
+
+**Sibling-codec decode failures inside `verify-bundle`** (e.g., `--mk1` BCH uncorrectable) surface as `checks[i].result = "fail"` with diagnostic detail; the run still emits the §5.4 envelope with `result: "mismatch"`. Only pre-decode failures (mode violations, `--master-fingerprint` parse error, network / xpub mismatch in watch-only) route to the §5.5 error envelope.
 
 ### §5.5 Error JSON envelope
 
@@ -883,7 +893,7 @@ crates/mnemonic-toolkit/src/
 └── error.rs               — ToolkitError enum + exit-code mapping
 ```
 
-(Mirrors ms-cli's module layout; new files: `derive.rs`, `synthesize.rs`, `template.rs`, `network.rs`, plus `friendly.rs` consolidating the five sibling mappers.)
+(Mirrors ms-cli's module layout; new files: `derive.rs`, `synthesize.rs`, `template.rs`, `network.rs`, plus `friendly.rs` consolidating the five sibling mappers — chosen over per-mapper files because each mapper is shorter than ms-cli's per-source mappers and keeping them adjacent makes routing-principle compliance auditable in one place.)
 
 ---
 
@@ -920,4 +930,5 @@ This SPEC was authored 2026-05-04 by the maintainer (bg002h) with Opus 4.7 via t
 ## Revision history
 
 - **r1** (2026-05-04) — initial SPEC integrating brainstorm Q1–Q5 + brainstorm-r1 architect (C1/C2/C3/I1-I6/4nits) + brainstorm-r2 architect (5 important + 4 nits).
-- **r2** (2026-05-04) — SPEC-architect-r1 fixes integrated inline: C1 (md_codec API rename `encode_md1_string`→`chunk::split` for symmetry), I1 (`--master-fingerprint` authoritative in watch-only), I2 (exit-routing principle locked in §6.4.0), L1 (drop §4.7 invariant 3 → §8 forward-pointer), L2 (md_codec routing buckets inlined), L3 (spike memo path locked), L4 (JSON field-order pinned), L5 (stderr ordering locked), L6 (--passphrase "" ≡ unset), L7 (verify-bundle mode-violation symmetry), L8 (verify-bundle no engraving card), L9 (--mk1/--md1 num_args=1..), L10 (Trezor 24-word vector pinned). Pending SPEC architect r2 review.
+- **r2** (2026-05-04) — SPEC-architect-r1 fixes integrated inline: C1 (md_codec API rename `encode_md1_string`→`chunk::split` for symmetry), I1 (`--master-fingerprint` authoritative in watch-only), I2 (exit-routing principle locked in §6.4.0), L1 (drop §4.7 invariant 3 → §8 forward-pointer), L2 (md_codec routing buckets inlined), L3 (spike memo path locked), L4 (JSON field-order pinned), L5 (stderr ordering locked), L6 (--passphrase "" ≡ unset), L7 (verify-bundle mode-violation symmetry), L8 (verify-bundle no engraving card), L9 (--mk1/--md1 num_args=1..), L10 (Trezor 24-word vector pinned).
+- **r3** (2026-05-04, this commit) — SPEC-architect-r2 polish: 0 critical / 0 important. Verbose r2-nit-5 (verify-bundle JSON exit-code semantics + sibling-decode-failure routing in §5.4), r2-nit-8 (watch-only account-index hazard in §4.8), r2-nit-10 (friendly.rs consolidation rationale in §10.4). Architect r2 explicitly authorized transition to plan-writing.
