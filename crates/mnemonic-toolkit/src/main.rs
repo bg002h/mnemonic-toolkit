@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
+mod derive;
 mod error;
 mod format;
 mod language;
 mod network;
 mod parse;
+mod synthesize;
 mod template;
 
 mod friendly {
