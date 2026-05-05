@@ -20,6 +20,8 @@ path = "src/main.rs"
 ms-codec = { git = "https://github.com/bg002h/mnemonic-secret",      tag = "ms-codec-v0.1.0" }
 mk-codec = { git = "https://github.com/bg002h/mnemonic-key",         tag = "mk-codec-v0.2.1" }
 md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic",  tag = "md-codec-v0.16.1" }
+miniscript = { version = "13", default-features = false, features = ["std"] }
+regex = "1"
 bip39 = { version = "2", features = ["all-languages"] }
 bitcoin = "0.32"
 clap = { version = "4", features = ["derive"] }

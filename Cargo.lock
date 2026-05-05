@@ -127,7 +127,7 @@ dependencies = [
  "bitcoin-io",
  "bitcoin-units",
  "bitcoin_hashes",
- "hex-conservative",
+ "hex-conservative 0.2.2",
  "hex_lit",
  "secp256k1",
 ]
@@ -160,7 +160,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26ec84b80c482df901772e931a9a681e26a1b9ee2302edeff23cb30328745c8b"
 dependencies = [
  "bitcoin-io",
- "hex-conservative",
+ "hex-conservative 0.2.2",
 ]
 
 [[package]]
@@ -296,6 +296,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-conservative"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "366fa3443ac84474447710ec17bb00b05dfbd096137817981e86f992f21a2793"
+
+[[package]]
 name = "hex_lit"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,6 +342,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "miniscript"
+version = "13.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "867b1f11e0545ad5ebbddd8a9f18756d9657a6758bf10d96cf15ddd0b726b650"
+dependencies = [
+ "bech32",
+ "bitcoin",
+ "hex-conservative 1.0.1",
+]
+
+[[package]]
 name = "mk-codec"
 version = "0.2.1"
 source = "git+https://github.com/bg002h/mnemonic-key?tag=mk-codec-v0.2.1#9ee7e558535fa24d7b745cabd245e29e36f2697c"
@@ -356,9 +373,11 @@ dependencies = [
  "clap",
  "hex",
  "md-codec",
+ "miniscript",
  "mk-codec",
  "ms-codec",
  "predicates",
+ "regex",
  "serde",
  "serde_json",
 ]
