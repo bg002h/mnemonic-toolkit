@@ -1,12 +1,16 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.0.0"
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish = false
+description = "Engraving-bundle CLI for the m-format Bitcoin self-custody backup star (ms1 + mk1 + md1)."
+documentation = "https://docs.rs/mnemonic-toolkit"
+readme = "README.md"
+keywords = ["bitcoin", "bip39", "bip93", "engraving", "self-custody"]
+categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
 
 [[bin]]
 name = "mnemonic"

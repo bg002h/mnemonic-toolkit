@@ -18,6 +18,14 @@ pub struct Bundle {
     pub md1: Vec<String>,
 }
 
+/// Derive a deterministic 20-bit `chunk_set_id` for mk1 from the 4-byte
+/// `policy_id_stub`. Top 20 bits, MSB-first. Mirrors md-codec's
+/// `derive_chunk_set_id` shape so mk1 byte-output is reproducible across runs
+/// (toolkit fixture regeneration relies on this; v0.1 byte-determinism contract).
+fn derive_mk1_chunk_set_id(stub: &[u8; 4]) -> u32 {
+    ((stub[0] as u32) << 12) | ((stub[1] as u32) << 4) | ((stub[2] as u32) >> 4)
+}
+
 /// Convert a `bitcoin::bip32::Xpub` to md-codec's 65-byte form:
 ///   [0..32]  = chain_code
 ///   [32..65] = compressed pubkey
@@ -85,7 +93,8 @@ pub fn synthesize_full(
 
     let path = template.derivation_path(network);
     let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
-    let mk1 = mk_codec::encode(&card).map_err(ToolkitError::from)?;
+    let csi = derive_mk1_chunk_set_id(&stub);
+    let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
     debug_assert_eq!(&card.policy_id_stubs[0], &stub);
     debug_assert!(descriptor.is_wallet_policy());
@@ -114,7 +123,8 @@ pub fn synthesize_watch_only(
 
     let path = template.derivation_path(network);
     let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
-    let mk1 = mk_codec::encode(&card).map_err(ToolkitError::from)?;
+    let csi = derive_mk1_chunk_set_id(&stub);
+    let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
     debug_assert_eq!(&card.policy_id_stubs[0], &stub);
     debug_assert!(descriptor.is_wallet_policy());
@@ -171,6 +181,18 @@ mod tests {
         assert!(bundle.mk1.iter().all(|s| s.starts_with("mk1")));
         assert!(!bundle.md1.is_empty());
         assert!(bundle.md1.iter().all(|s| s.starts_with("md1")));
+    }
+
+    #[test]
+    fn mk1_chunk_set_id_is_deterministic_across_runs() {
+        let (entropy, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
+        let a =
+            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+        let b =
+            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+        assert_eq!(a.mk1, b.mk1, "mk1 must be byte-deterministic across runs");
+        assert_eq!(a.md1, b.md1, "md1 must be byte-deterministic across runs");
+        assert_eq!(a.ms1, b.ms1, "ms1 must be byte-deterministic across runs");
     }
 
     #[test]
