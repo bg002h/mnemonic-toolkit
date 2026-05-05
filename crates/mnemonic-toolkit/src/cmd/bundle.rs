@@ -46,6 +46,11 @@ pub struct BundleArgs {
     #[arg(long)]
     pub passphrase: Option<String>,
 
+    /// BIP-32 account index (default 0). Non-zero values produce md1 with
+    /// PathDeclPaths::Divergent per SPEC §4.2.
+    #[arg(long, default_value = "0")]
+    pub account: u32,
+
     #[arg(long)]
     pub json: bool,
 
@@ -148,14 +153,21 @@ fn bundle_full<W: Write, E: Write>(
         writeln!(stderr, "warning: the engraved bundle.").ok();
     }
 
-    let acc =
-        crate::derive::derive_full(&phrase, &passphrase, language, args.network, args.template)?;
+    let acc = crate::derive::derive_full(
+        &phrase,
+        &passphrase,
+        language,
+        args.network,
+        args.template,
+        args.account,
+    )?;
     let bundle = synthesize_full(
         &acc.entropy,
         acc.master_fingerprint,
         acc.account_xpub,
         args.template,
         args.network,
+        args.account,
     )?;
 
     let card_text = if args.no_engraving_card {
@@ -173,8 +185,9 @@ fn bundle_full<W: Write, E: Write>(
         Some(engraving_card(
             args.network.human_name(),
             args.template.human_name(),
-            &args.template.origin_path_str(args.network),
+            &args.template.origin_path_str(args.network, args.account),
             &acc.master_fingerprint.to_string().to_lowercase(),
+            args.account,
             mode,
         ))
     };
@@ -187,7 +200,7 @@ fn bundle_full<W: Write, E: Write>(
         "full",
         stdout,
         stderr,
-        args.template.origin_path_str(args.network),
+        args.template.origin_path_str(args.network, args.account),
     )
 }
 
@@ -247,7 +260,7 @@ fn bundle_watch_only<W: Write, E: Write>(
     .ok();
     writeln!(stderr, "warning: v0.2's --account flag once available.").ok();
 
-    let bundle = synthesize_watch_only(fp, xpub, args.template, args.network)?;
+    let bundle = synthesize_watch_only(fp, xpub, args.template, args.network, args.account)?;
 
     let card_text = if args.no_engraving_card {
         None
@@ -255,8 +268,9 @@ fn bundle_watch_only<W: Write, E: Write>(
         Some(engraving_card(
             args.network.human_name(),
             args.template.human_name(),
-            &args.template.origin_path_str(args.network),
+            &args.template.origin_path_str(args.network, args.account),
             &fp.to_string().to_lowercase(),
+            args.account,
             EngravingMode::WatchOnly,
         ))
     };
@@ -269,7 +283,7 @@ fn bundle_watch_only<W: Write, E: Write>(
         "watch-only",
         stdout,
         stderr,
-        args.template.origin_path_str(args.network),
+        args.template.origin_path_str(args.network, args.account),
     )
 }
 
@@ -290,7 +304,7 @@ fn emit<W: Write, E: Write>(
             mode,
             network: args.network.human_name(),
             template: args.template.human_name(),
-            account: 0,
+            account: args.account,
             origin_path,
             master_fingerprint: master_fp.to_string(),
             ms1: bundle.ms1.as_deref(),

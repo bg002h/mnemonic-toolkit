@@ -21,27 +21,26 @@ pub enum CliTemplate {
 }
 
 impl CliTemplate {
-    /// BIP-32 origin path for this (template, network) cell.
-    /// Account is hardcoded 0 in v0.1 (SPEC §1).
-    pub fn origin_path_str(&self, network: CliNetwork) -> String {
+    /// BIP-32 origin path for this (template, network, account) cell.
+    pub fn origin_path_str(&self, network: CliNetwork, account: u32) -> String {
         let purpose = match self {
             CliTemplate::Bip44 => 44,
             CliTemplate::Bip49 => 49,
             CliTemplate::Bip84 => 84,
             CliTemplate::Bip86 => 86,
         };
-        format!("m/{purpose}'/{}'/0'", network.coin_type())
+        format!("m/{purpose}'/{}'/{}'", network.coin_type(), account)
     }
 
     /// Parsed BIP-32 derivation path for use with `bitcoin::bip32`.
-    pub fn derivation_path(&self, network: CliNetwork) -> DerivationPath {
-        DerivationPath::from_str(&self.origin_path_str(network))
+    pub fn derivation_path(&self, network: CliNetwork, account: u32) -> DerivationPath {
+        DerivationPath::from_str(&self.origin_path_str(network, account))
             .expect("template paths are well-formed by construction")
     }
 
-    /// md-codec OriginPath for this (template, network) cell.
+    /// md-codec OriginPath for this (template, network, account) cell.
     /// Used in PathDeclPaths::Shared(...) for Phase 2 synthesize.rs.
-    pub fn md_origin_path(&self, network: CliNetwork) -> OriginPath {
+    pub fn md_origin_path(&self, network: CliNetwork, account: u32) -> OriginPath {
         let purpose: u32 = match self {
             CliTemplate::Bip44 => 44,
             CliTemplate::Bip49 => 49,
@@ -60,8 +59,8 @@ impl CliTemplate {
                 },
                 PathComponent {
                     hardened: true,
-                    value: 0,
-                }, // account
+                    value: account,
+                },
             ],
         }
     }
@@ -112,31 +111,42 @@ mod tests {
     #[test]
     fn origin_path_strings() {
         assert_eq!(
-            CliTemplate::Bip44.origin_path_str(CliNetwork::Mainnet),
+            CliTemplate::Bip44.origin_path_str(CliNetwork::Mainnet, 0),
             "m/44'/0'/0'"
         );
         assert_eq!(
-            CliTemplate::Bip49.origin_path_str(CliNetwork::Testnet),
+            CliTemplate::Bip49.origin_path_str(CliNetwork::Testnet, 0),
             "m/49'/1'/0'"
         );
         assert_eq!(
-            CliTemplate::Bip84.origin_path_str(CliNetwork::Signet),
+            CliTemplate::Bip84.origin_path_str(CliNetwork::Signet, 0),
             "m/84'/1'/0'"
         );
         assert_eq!(
-            CliTemplate::Bip86.origin_path_str(CliNetwork::Regtest),
+            CliTemplate::Bip86.origin_path_str(CliNetwork::Regtest, 0),
             "m/86'/1'/0'"
         );
     }
 
     #[test]
     fn md_origin_path_components() {
-        let op = CliTemplate::Bip84.md_origin_path(CliNetwork::Mainnet);
+        let op = CliTemplate::Bip84.md_origin_path(CliNetwork::Mainnet, 0);
         assert_eq!(op.components.len(), 3);
         assert_eq!(op.components[0].value, 84);
         assert!(op.components[0].hardened);
         assert_eq!(op.components[1].value, 0); // mainnet coin
         assert_eq!(op.components[2].value, 0); // account
+    }
+
+    #[test]
+    fn origin_path_with_nonzero_account() {
+        assert_eq!(
+            CliTemplate::Bip84.origin_path_str(CliNetwork::Mainnet, 5),
+            "m/84'/0'/5'"
+        );
+        let op = CliTemplate::Bip84.md_origin_path(CliNetwork::Mainnet, 5);
+        assert_eq!(op.components[2].value, 5);
+        assert!(op.components[2].hardened);
     }
 
     #[test]

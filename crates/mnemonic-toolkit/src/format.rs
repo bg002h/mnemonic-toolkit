@@ -76,12 +76,13 @@ pub fn engraving_card(
     template: &str,
     origin_path: &str,
     master_fingerprint: &str,
+    account: u32,
     mode: EngravingMode<'_>,
 ) -> String {
     let mut s = String::new();
     s.push_str(&format!("network: {}\n", network));
     s.push_str(&format!("template: {}\n", template));
-    s.push_str("account: 0\n");
+    s.push_str(&format!("account: {}\n", account));
     s.push_str(&format!("origin path: {}\n", origin_path));
     s.push_str(&format!("master fingerprint: {}\n", master_fingerprint));
     match mode {
@@ -143,6 +144,7 @@ mod tests {
             "bip84",
             "m/84'/0'/0'",
             "deadbeef",
+            0,
             EngravingMode::FullNoPassphrase {
                 language: "english",
             },
@@ -168,6 +170,7 @@ engrave each card on its own plate. record this card alongside.
             "bip84",
             "m/84'/0'/0'",
             "deadbeef",
+            0,
             EngravingMode::FullWithPassphrase {
                 language: "english",
             },
@@ -184,6 +187,7 @@ engrave each card on its own plate. record this card alongside.
             "bip84",
             "m/84'/0'/0'",
             "deadbeef",
+            0,
             EngravingMode::WatchOnly,
         );
         assert!(card.contains("mode: watch-only"));

@@ -37,7 +37,7 @@ pub fn xpub_to_65(xpub: &Xpub) -> [u8; 65] {
     out
 }
 
-/// Build the typed Descriptor for a (template, network, xpub, fingerprint).
+/// Build the typed Descriptor for a (template, network, xpub, fingerprint, account).
 /// Caller's xpub MUST already be at the template's BIP path; not rederived.
 /// SPEC §4.6.
 pub fn build_descriptor(
@@ -45,10 +45,11 @@ pub fn build_descriptor(
     network: CliNetwork,
     xpub: &Xpub,
     fingerprint: Fingerprint,
+    account: u32,
 ) -> Descriptor {
     let xpub_65 = xpub_to_65(xpub);
     let fp_bytes: [u8; 4] = fingerprint.to_bytes();
-    let origin_path = template.md_origin_path(network);
+    let origin_path = template.md_origin_path(network, account);
     let tree = template.wrapper_node();
 
     Descriptor {
@@ -77,6 +78,7 @@ pub fn synthesize_full(
     xpub: Xpub,
     template: CliTemplate,
     network: CliNetwork,
+    account: u32,
 ) -> Result<Bundle, ToolkitError> {
     let ms1 = ms_codec::encode(
         ms_codec::Tag::ENTR,
@@ -84,14 +86,14 @@ pub fn synthesize_full(
     )
     .map_err(ToolkitError::from)?;
 
-    let descriptor = build_descriptor(template, network, &xpub, fingerprint);
+    let descriptor = build_descriptor(template, network, &xpub, fingerprint, account);
     let policy_id = md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)?;
     let mut stub = [0u8; 4];
     stub.copy_from_slice(&policy_id.as_bytes()[..4]);
 
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
-    let path = template.derivation_path(network);
+    let path = template.derivation_path(network, account);
     let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
@@ -113,15 +115,16 @@ pub fn synthesize_watch_only(
     xpub: Xpub,
     template: CliTemplate,
     network: CliNetwork,
+    account: u32,
 ) -> Result<Bundle, ToolkitError> {
-    let descriptor = build_descriptor(template, network, &xpub, fingerprint);
+    let descriptor = build_descriptor(template, network, &xpub, fingerprint, account);
     let policy_id = md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)?;
     let mut stub = [0u8; 4];
     stub.copy_from_slice(&policy_id.as_bytes()[..4]);
 
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
-    let path = template.derivation_path(network);
+    let path = template.derivation_path(network, account);
     let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
@@ -145,7 +148,7 @@ mod tests {
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
     fn fixture_full(template: CliTemplate, network: CliNetwork) -> (Vec<u8>, Fingerprint, Xpub) {
-        let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template).unwrap();
+        let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
         (acc.entropy, acc.master_fingerprint, acc.account_xpub)
     }
 
@@ -160,8 +163,15 @@ mod tests {
     #[test]
     fn full_bundle_emits_three_cards() {
         let (entropy, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
-        let bundle =
-            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+        let bundle = synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
         assert!(bundle.ms1.is_some());
         let ms1 = bundle.ms1.as_ref().unwrap();
         assert!(ms1.starts_with("ms1"));
@@ -175,7 +185,7 @@ mod tests {
     fn watch_only_bundle_omits_ms1() {
         let (_, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
         let bundle =
-            synthesize_watch_only(fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+            synthesize_watch_only(fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet, 0).unwrap();
         assert!(bundle.ms1.is_none());
         assert!(!bundle.mk1.is_empty());
         assert!(bundle.mk1.iter().all(|s| s.starts_with("mk1")));
@@ -186,10 +196,24 @@ mod tests {
     #[test]
     fn mk1_chunk_set_id_is_deterministic_across_runs() {
         let (entropy, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
-        let a =
-            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
-        let b =
-            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+        let a = synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
+        let b = synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
         assert_eq!(a.mk1, b.mk1, "mk1 must be byte-deterministic across runs");
         assert_eq!(a.md1, b.md1, "md1 must be byte-deterministic across runs");
         assert_eq!(a.ms1, b.ms1, "ms1 must be byte-deterministic across runs");
@@ -198,8 +222,15 @@ mod tests {
     #[test]
     fn cross_binding_holds_round_trip() {
         let (entropy, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
-        let bundle =
-            synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet).unwrap();
+        let bundle = synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
 
         let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
         let decoded_mk1 = mk_codec::decode(&mk1_strs).unwrap();
@@ -232,7 +263,7 @@ mod tests {
         for &t in &templates {
             for &n in &networks {
                 let (entropy, fp, xpub) = fixture_full(t, n);
-                let bundle = synthesize_full(&entropy, fp, xpub, t, n).unwrap();
+                let bundle = synthesize_full(&entropy, fp, xpub, t, n, 0).unwrap();
                 let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
                 let decoded_mk1 = mk_codec::decode(&mk1_strs).unwrap();
                 let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();

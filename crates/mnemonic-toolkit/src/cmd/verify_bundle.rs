@@ -47,6 +47,11 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub passphrase: Option<String>,
 
+    /// BIP-32 account index (default 0). Non-zero values produce md1 with
+    /// PathDeclPaths::Divergent per SPEC §4.2.
+    #[arg(long, default_value = "0")]
+    pub account: u32,
+
     #[arg(long)]
     pub ms1: Option<String>,
 
@@ -148,8 +153,14 @@ fn run_full(
     let passphrase = args.passphrase.clone().unwrap_or_default();
     let language = args.language.unwrap_or_default();
 
-    let acc =
-        crate::derive::derive_full(&phrase, &passphrase, language, args.network, args.template)?;
+    let acc = crate::derive::derive_full(
+        &phrase,
+        &passphrase,
+        language,
+        args.network,
+        args.template,
+        args.account,
+    )?;
 
     // Check 1: ms1 entropy match.
     if let Some(ms1) = args.ms1.as_deref() {
@@ -222,7 +233,7 @@ fn run_full(
                     "master fingerprint does not match".into()
                 },
             });
-            let expected_path = args.template.derivation_path(args.network);
+            let expected_path = args.template.derivation_path(args.network, args.account);
             let path_match = card.origin_path == expected_path;
             checks.push(VerifyCheck {
                 name: "mk1_path_match",
@@ -689,13 +700,14 @@ mod watch_only_tests {
     fn fixture_bundle() -> (Bundle, Xpub, bitcoin::bip32::Fingerprint) {
         let net = CliNetwork::Mainnet;
         let tpl = CliTemplate::Bip84;
-        let acc = derive_full(TREZOR_24, "", CliLanguage::English, net, tpl).unwrap();
+        let acc = derive_full(TREZOR_24, "", CliLanguage::English, net, tpl, 0).unwrap();
         let bundle = synthesize_full(
             &acc.entropy,
             acc.master_fingerprint,
             acc.account_xpub,
             tpl,
             net,
+            0,
         )
         .unwrap();
         (bundle, acc.account_xpub, acc.master_fingerprint)
@@ -792,6 +804,7 @@ mod watch_only_tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip44,
+            0,
         )
         .unwrap();
         let wrong_xpub = other_acc.account_xpub;
@@ -837,6 +850,7 @@ mod watch_only_tests {
             template: CliTemplate::Bip84,
             language: None,
             passphrase: None,
+            account: 0,
             ms1: None,
             mk1: vec!["mk1placeholder".into()],
             md1: vec!["md1placeholder".into()],

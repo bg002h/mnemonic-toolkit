@@ -24,6 +24,7 @@ pub fn derive_full(
     language: CliLanguage,
     network: CliNetwork,
     template: CliTemplate,
+    account: u32,
 ) -> Result<DerivedAccount, ToolkitError> {
     let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
     let entropy = mnemonic.to_entropy();
@@ -34,7 +35,7 @@ pub fn derive_full(
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 
-    let path = template.derivation_path(network);
+    let path = template.derivation_path(network, account);
     let account_xpriv = master
         .derive_priv(&secp, &path)
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
@@ -71,6 +72,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         assert_eq!(acc.entropy, vec![0u8; 32]);
@@ -84,6 +86,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         // Master fingerprint for "abandon × 23 art" (24-word, 32-zero entropy)
@@ -104,6 +107,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         // Phase 1 spike + ground-truth: this is the canonical bip84 m/84'/0'/0' xpub
@@ -126,6 +130,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Testnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         let s = acc.account_xpub.to_string();
@@ -144,6 +149,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         let b = derive_full(
@@ -152,6 +158,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         assert_ne!(a.account_xpub, b.account_xpub);
@@ -169,6 +176,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         let b = derive_full(
@@ -177,6 +185,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap();
         assert_eq!(a.account_xpub, b.account_xpub);
@@ -191,6 +200,7 @@ mod tests {
             CliLanguage::English,
             CliNetwork::Mainnet,
             CliTemplate::Bip84,
+            0,
         )
         .unwrap_err();
         assert!(matches!(e, ToolkitError::Bip39(_)));
