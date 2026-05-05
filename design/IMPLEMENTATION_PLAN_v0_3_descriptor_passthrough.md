@@ -87,7 +87,7 @@ B.5. Update `BundleArgs` struct doc-comment to enumerate the new flags. Emit-cal
 
 **Architect-review:** end-of-phase review only (single round); persist as `design/agent-reports/phase-B-cli-review-r1.md`. Iterate to 0C/0I.
 
-**Phase B exit criterion:** all 15 mode-violation tests pass; v0.2 fixture matrix runs unchanged (34/34 card-string-byte-identical, JSON envelope still schema_version "2" since C.6 has not yet bumped it) under the v0.3 binary; clippy + fmt clean; r0C/r0I. (The cross-phase invariant runs the v0.2 regression at every phase exit; Phase B's listing here is for emphasis since this is the first phase that touches `BundleArgs` structure.)
+**Phase B exit criterion:** rows 1-6 + row 8 mode-violation tests pass (9 tests in `tests/cli_mode_violations_v0_3.rs`); rows 7 and 9-15 are descriptor-content-aware and ship with Phase C's `descriptor_mode_run` synthesis path (additional 6 tests). v0.2 fixture matrix runs unchanged (34/34 card-string-byte-identical, JSON envelope still schema_version "2" since C.6 has not yet bumped it) under the v0.3 binary; clippy + fmt clean; r0C/r0I. (The cross-phase invariant runs the v0.2 regression at every phase exit; Phase B's listing here is for emphasis since this is the first phase that touches `BundleArgs` structure.) — Updated 2026-05-05 per Phase B end-of-phase architect L-1 (the 9/15 split is correct given content-aware rows can't fire without parsed descriptor).
 
 ## Phase C: synthesis path for descriptor mode + BundleJson struct migration
 

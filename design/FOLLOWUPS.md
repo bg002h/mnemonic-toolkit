@@ -281,8 +281,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 - **Surfaced:** v0.3 Phase A end-of-phase architect review L-1 (2026-05-05).
 - **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs` line 5.
-- **What:** Module-level `#![allow(dead_code)]` was added in A.1 because items were used only by tests until A.7 wired the public API. Once Phase B.3 wires `parse_descriptor` into bundle command dispatch, audit and remove or narrow the attribute. Goal: legitimate dead-code warnings should fire if items become unused after Phase B.
-- **Why deferred:** Phase B is the natural time to audit reachability.
+- **What:** Module-level `#![allow(dead_code)]` was added in A.1 because items were used only by tests until A.7 wired the public API. Phase B.3 wired only `lex_placeholders` (via `descriptor_mode_run` stub); `parse_descriptor` itself is not yet called from main.rs's compilation graph. Audit + lift the attribute at Phase C.3 once `descriptor_mode_run` calls `parse_descriptor` directly.
+- **Why deferred:** Phase C.3 is the natural time to audit reachability (per Phase B end-of-phase L-2; B.3 timing was optimistic).
 - **Status:** `open`
 - **Tier:** `v0.3`
 
