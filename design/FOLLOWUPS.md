@@ -245,9 +245,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 - **Surfaced:** v0.3 SPEC architect review r2 2026-05-05.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §9 Q2 closure.
-- **What:** §9 Q2 declares "moot — v0.3 implements its own walker arms for hash terminals." Once the pre-Phase-A SPIKE produces `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` with a sub-goal-2 finding (hash-terminal round-trip), the closure becomes citable. Update §9 Q2 to reference the SPIKE report's specific page/section.
-- **Why deferred:** SPIKE runs in the implementation conversation; this update happens after.
-- **Status:** `open`
+- **What:** §9 Q2 declared "moot — v0.3 implements its own walker arms for hash terminals." Pre-Phase-A SPIKE produced `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §2 confirming hash-terminal round-trip. §9 Q2 updated to cite the report.
+- **Status:** `resolved 2026-05-05` (closed inline with SPIKE report patches).
 - **Tier:** `v0.3`
 
 ### `synthesize-descriptor-fn-naming` — single-vs-split synthesize entry-point decision
@@ -267,3 +266,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** non-blocking; doc-only.
 - **Status:** `open`
 - **Tier:** `v0.3-nice-to-have`
+
+### `tr-sortedmulti-a-via-upstream` — `tr(@0, sortedmulti_a(...))` deferred to v0.4 pending upstream parser
+
+- **Surfaced:** v0.3 pre-Phase-A SPIKE 2026-05-05 (`design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1).
+- **Where:** cross-repo: `mnemonic-toolkit` (`crates/mnemonic-toolkit/src/parse_descriptor.rs`) ↔ `descriptor-mnemonic` (`crates/md-cli/src/parse/template.rs`) ↔ upstream (`github.com/rust-bitcoin/rust-miniscript`).
+- **What:** rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves (no `Terminal::SortedMultiA`; no Layer-1 routing in `descriptor/tr.rs`). Toolkit + md-cli both unable to ingest `tr(@0, sortedmulti_a(...))`. Wire-format opcode `Tag::SortedMultiA` reserved in md-codec.
+- **Action items (two distinct):**
+  1. **Upstream issue (file ASAP):** open an issue at `github.com/rust-bitcoin/rust-miniscript` with the minimal repro (the `.spike-v0.3/` crate has it: a single `MsDescriptor::<DescriptorPublicKey>::from_str(...)` call with `tr(KEY, sortedmulti_a(K1, K2))` returns "unrecognized name"). Request `sortedmulti_a` parser support per BIP-387. Link the SPIKE report and md-cli's `walk_tap_tree_v0_15` for context.
+  2. **v0.4 kickoff gate-decision:** before v0.4 design starts, check whether upstream has a tagged release containing the parser. If yes → bump dep, drop the workaround in toolkit + md-cli (one cross-repo cycle). If no → re-evaluate option (b) `[patch]`-fork with v0.4's appetite (was rejected for v0.3 because of maintenance burden + cross-repo drift).
+- **Workaround in v0.3:** users can pre-sort cosigner keys lexicographically and use plain `multi_a(...)` — script-equivalent for newly-constructed wallets, **lossy** for backing up an existing `sortedmulti_a` wallet whose keys aren't already sorted (the SPEC §6.8 unsupported-fragment error catches the attempt).
+- **Why deferred from v0.3:** SPIKE 2026-05-05 found upstream gap; user approved option (c) "scope sortedmulti_a out of v0.3" to avoid unbounded delay (option a) or fork-maintenance burden (option b).
+- **Status:** `open`
+- **Tier:** `v0.4-cross-repo`

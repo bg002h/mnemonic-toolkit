@@ -120,7 +120,7 @@ These are routed by the wrapper-level walker and never appear as `miniscript::mi
 - `Sh(ShInner::Ms(...))` → `Tag::Sh` wrapping `walk_miniscript_node` result. (NEW — md-cli currently rejects.)
 - `Tr(t)` with 0 leaves → `Tag::Tr` keypath-only (already in md-cli; carried).
 - `Tr(t)` with single-leaf miniscript → `Tag::Tr` + `Tag::TapTree` wrapping `walk_miniscript_node` result (already in md-cli for limited subset; carried).
-- `Tr(t)` with single-leaf `sortedmulti_a(k, @0, @1, ...)` → `Tag::Tr` + `Tag::TapTree` wrapping `Tag::SortedMultiA` (k preserved). **SPIKE-dependent routing**: rust-miniscript v13's `Terminal` enum has `Terminal::MultiA` but no separate `Terminal::SortedMultiA` variant. Whether `sortedmulti_a` tap-leaves arrive at the walker as a distinct construct (handled at Layer 1) OR as `Terminal::MultiA` (handled at Layer 2 with sortedness inferred from the descriptor parser's `is_sorted` flag, if exposed) is SPIKE-resolved before Phase A. If the latter, this bullet moves to a Layer 2 note in `walk_miniscript_node` and the implementation MUST detect sortedness from rust-miniscript's API (e.g. `descriptor::SortedMultiVec` or equivalent flag) rather than collapsing to plain `Tag::MultiA` (which would lose wire-format fidelity vs md-codec's distinct opcodes).
+- `Tr(t)` with single-leaf `sortedmulti_a(k, @0, @1, ...)` → **deferred to v0.4 pending upstream parser support**; rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves (no `Terminal::SortedMultiA` arm; no Layer-1 routing in `descriptor/tr.rs`). The wire-format opcode `Tag::SortedMultiA` remains reserved in md-codec and is reachable in v0.4 once upstream lands the fragment. Pre-Phase-A SPIKE resolved this; see `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1 and FOLLOWUP `tr-sortedmulti-a-via-upstream`. Users wanting sorted-key tap multisig in v0.3 can pre-sort cosigner keys lexicographically and use plain `multi_a(...)` (script-equivalent for new wallets; lossy for backing up an existing `sortedmulti_a` wallet whose keys are not already sorted).
 - `Tr(t)` with ≥2 leaves → exit 2 per §6.8 (deferred to v0.4).
 
 **Layer 2 — `Terminal` arms inside `walk_miniscript_node` (rust-miniscript v13's `miniscript::miniscript::decode::Terminal` enum):**
@@ -129,7 +129,7 @@ Already handled by md-cli's walker (carried verbatim):
 - `Terminal::PkK(pk)` → `Tag::PkK`
 - `Terminal::PkH(pk)` → `Tag::PkH`
 - `Terminal::Multi(thresh)` → `Tag::Multi` (via `build_multi_node`)
-- `Terminal::MultiA(thresh)` → `Tag::MultiA` OR `Tag::SortedMultiA` (via `build_multi_node`). The MultiA arm dispatches based on a sortedness flag that the SPIKE phase MUST extract from the rust-miniscript v13 descriptor surface (likely a `is_sorted` field on `SortedMultiVec` or analogous; if not directly accessible from `Terminal::MultiA`, the Layer 1 dispatch in `walk_tap_tree` resolves sortedness before recursing into `walk_miniscript_node` and passes the discriminator down). Implementation MUST emit `Tag::SortedMultiA` (extension space) when sortedmulti_a was the source syntax and `Tag::MultiA` (primary) when multi_a was. Collapsing both to `Tag::MultiA` is a wire-format-fidelity bug.
+- `Terminal::MultiA(thresh)` → `Tag::MultiA` (via `build_multi_node`). In v0.3 the walker emits `Tag::MultiA` unconditionally because rust-miniscript v13.0.0 has no `sortedmulti_a` parser (sortedness disambiguation is moot until v0.4; see Layer 1 above and FOLLOWUP `tr-sortedmulti-a-via-upstream`).
 - `Terminal::Check(inner)` → `Tag::Check` (with tap-context collapse to `PkK`/`PkH`)
 
 v0.3-NEW arms:
@@ -157,7 +157,7 @@ v0.3-NEW arms:
 - `Terminal::OrI(a, b)` → `Tag::OrI`
 - `Terminal::Thresh(k, subs)` → `Tag::Thresh`
 
-`SortedMulti` / `SortedMultiA` do NOT appear as `Terminal` arms; they live as `WshInner::SortedMulti` / `ShInner::SortedMulti` / `TapTree` sortedmulti_a per BIP-388 grammar — handled at Layer 1 above.
+`SortedMulti` does not appear as a `Terminal` arm; it lives as `WshInner::SortedMulti` / `ShInner::SortedMulti` and is handled at Layer 1 above. `SortedMultiA` is BIP-388 grammar but unreachable in v0.3 (deferred to v0.4 — see Layer 1 above).
 
 **Out-of-scope (rejected with mode-violation per §6.8):**
 - Multi-leaf taproot trees (`tr(@0, { leaf1, leaf2 })` with ≥2 leaves) — Merkle-root logic deferred to v0.4.
@@ -166,7 +166,7 @@ v0.3-NEW arms:
 
 After parsing yields `Descriptor { n, .. }`:
 - **`n == 1` (descriptor has only `@0`) → single-sig mode**, regardless of outer wrapper. This rule is uniform: `wpkh(@0/...)`, `pkh(@0/...)`, `tr(@0)`, AND `wsh(pk(@0))` / `wsh(multi(1,@0))` / `wsh(and_v(v:pk(@0),sha256(...)))` / `sh(wpkh(@0/...))` are ALL single-sig. Rationale: a 1-of-1 multisig is degenerate; tooling matches the user's likely mental model (`@0` = my key) over the wrapper-implied script context. Verify-bundle's check schema for n=1 reduces to the 9-element single-sig form irrespective of outer wrapper.
-- **`n ≥ 2` → multisig mode.** Always. Includes wrappers like `tr(@0, { sortedmulti_a(...) })`, `wsh(multi(2,@0,@1,@2))`, etc.
+- **`n ≥ 2` → multisig mode.** Always. Includes wrappers like `tr(@0, sortedmulti_a(...))` (deferred to v0.4 — see §4.9.a), `wsh(multi(2,@0,@1,@2))`, etc.
 
 **Tree-faithfulness invariant (load-bearing):** the "mode" label (single-sig vs multisig) controls (a) key-sourcing — which flags supply `@0` vs `@N≥1` xpubs, (b) the number of mk1 cards emitted (one for single-sig, n for multisig), and (c) the verify-bundle check schema's element count (9 vs 3+6N). It does NOT control the `Descriptor.tree` structure: the parsed tree is ALWAYS faithful to the user-supplied descriptor. For a degenerate `wsh(multi(1,@0))`, the tree is `Tag::Wsh → Tag::Multi(k=1, n_keys=1)` and the encoder emits exactly that — implementations MUST NOT collapse `multi(1,@0)` to `pk(@0)` in the tree.
 
@@ -321,7 +321,7 @@ The engraving card emits metadata only (md1 not embedded; per format.rs analysis
 ## §9. Closures from brainstorm
 
 - **Q1 (parser source-of-truth):** rust-miniscript v13 + extended AST walker in toolkit-local `parse_descriptor.rs`. Inline BIP-388 parser path rejected (much larger effort, no benefit).
-- **Q2 (PR #935 contingency):** moot — v0.3 implements its own walker arms for hash terminals; does not depend on rust-miniscript's `WalletPolicy::translate_pk` fix. Hash-terminal handling is local to toolkit's walker.
+- **Q2 (PR #935 contingency):** moot — v0.3 implements its own walker arms for hash terminals; does not depend on rust-miniscript's `WalletPolicy::translate_pk` fix. Hash-terminal handling is local to toolkit's walker. Pre-Phase-A SPIKE confirmed all four hash terminals (`sha256`/`hash256`/`hash160`/`ripemd160`) round-trip via `MsDescriptor::<DescriptorPublicKey>::from_str()` against rust-miniscript v13.0.0; see `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §2.
 - **Q3 (flag shape):** both `--descriptor "<string>"` and `--descriptor-file <path>` shipped; mutually exclusive (clap `conflicts_with`).
 - **Q4 (cosigner xpub source for @N):** reuse `--cosigner` / `--cosigners-file` from v0.2 verbatim.
 - **Q5 (mode coexistence):** `--descriptor` is mutually-required-one-of with `--template`; `--threshold`/`--cosigner-count`/`--multisig-path-family`/`--account` are mode-violation errors when `--descriptor` is set.
@@ -383,6 +383,7 @@ Total target: ≥40 v0.3-mode fixtures (covering A.1 + A.2 + C above plus mode-v
 - 2026-05-05: Round 4 — addressed architect r3 verdict (0C / 1I / 4L); §1 item 6 narrowed to allow `--account 0` (NF-3); §4.9.a Layer 1 now explicitly names the `Tr(t) single-leaf sortedmulti_a → Tag::SortedMultiA` mapping (NF-1); §4.11 cosigner-list size invariants rewritten with explicit per-mode counts (NF-2); NF-4 / NF-5 routed to §12 follow-ups.
 - 2026-05-05: Round 5 — addressed architect r4 verdict (0C / 1I / 2L); §6.9 row 14 split into two mode-specific rows with corrected user-facing messages (NF-R4-1 — "seed-self" eliminated from byte-exact error text); §4.9.a Layer 1 sortedmulti_a routing claim hedged as SPIKE-dependent with both branches described (NF-R4-2); Layer 2 `Terminal::MultiA` arm clarified to dispatch on sortedness flag with explicit warning against collapsing to `Tag::MultiA` (NF-R4-3).
 - 2026-05-05: Round 6 — final cleanup. §10 category B mode-violation test count corrected from 13 to 15 (architect r5 NF-R5-1). SPEC at 0C / 0I.
+- 2026-05-05: Round 7 (post-SPIKE) — pre-Phase-A SPIKE found rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves; user approved option (c) "scope sortedmulti_a out of v0.3" with soft-deferral framing. Patches: §4.9.a Layer 1 `Tr-singleleaf-sortedmulti_a` bullet softened to "deferred to v0.4 pending upstream parser"; §4.9.a Layer 2 `Terminal::MultiA` paragraph narrowed to "emit `Tag::MultiA` unconditionally"; §4.9.a Layer 2 final note updated; §4.10 multisig-mode example keeps `tr(@0, sortedmulti_a(...))` with `(deferred to v0.4)` parenthetical (per user direction); §9 Q2 cites SPIKE report (closes FOLLOWUP `spike-report-citation`); §12 marks `spike-report-citation` resolved. New FOLLOWUP `tr-sortedmulti-a-via-upstream` at v0.4-cross-repo tier with two action items (file upstream issue + v0.4 kickoff gate). Plan A.4 round-trip count `≥11` → `≥10`; total exit subcount `≥58` → `≥57`. Architect r1 review of SPIKE report verdict 0C/2I/3L; all patches applied.
 
 ## §12. v0.3-tier FOLLOWUPS (open)
 
@@ -391,6 +392,6 @@ The following Low/nit items from architect review are filed in `mnemonic-toolkit
 - `parse_template-regex-line-ref` (`v0.3-nice-to-have`): §4.9 step 2 cites `parse/template.rs:19-27` for the placeholder regex; the actual `Regex::new` call is at `:25-27`. Docs-only nit.
 - `unsupported-fragment-error-style` (`v0.3-nice-to-have`): §6.8 error message text is a bit long for a CLI error; consider tightening at implementation time.
 - `walker-backport-to-md-cli` (`v0.4-cross-repo`): toolkit's expanded walker should be backported to `md-cli` (or both should consume a shared crate).
-- `spike-report-citation` (`v0.3`): §9 Q2 closure should cite a SPIKE report once the SPIKE phase runs. Resolve during Phase A or pre-impl SPIKE.
+- `spike-report-citation` (`v0.3`): RESOLVED — §9 Q2 now cites `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §2 (closed pre-Phase-A 2026-05-05).
 - `synthesize-descriptor-fn-naming` (`v0.3`): the implementation plan resolved this to a single `synthesize_descriptor` entry point that dispatches single-sig vs multisig internally; see IMPLEMENTATION_PLAN_v0_3 Phase C.1.
 - `v0.2-spec-§8-tier-citation` (`v0.3-nice-to-have`): §8 K-of-N tier citation against v0.2 SPEC §8 should be verified at implementation time for citation accuracy.

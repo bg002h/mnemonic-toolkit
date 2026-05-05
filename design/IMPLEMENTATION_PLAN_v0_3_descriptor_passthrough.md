@@ -42,7 +42,7 @@ A.2. Placeholder lexer (§4.9 step 2). Test: regex parses `@0`, `@0/<0;1>/*`, `@
 
 A.3. `resolve_placeholders` (§4.9 step 3). Test: dense `0..n` enforced; gaps error; `PathDecl::Shared` vs `Divergent` correctly identified.
 
-A.4. `walk_root` Layer 1 dispatch (§4.9.a Layer 1). Test: round-trip for each Layer 1 wrapper (Wpkh, Pkh, Wsh+Ms, Wsh+SortedMulti, Sh+Wpkh, Sh+Wsh, Sh+SortedMulti, Sh+Ms, Tr-keypath, Tr-singleleaf-miniscript, Tr-singleleaf-sortedmulti_a per SPIKE outcome) — 11 round-trip tests minimum. **A.4 implementation MUST cite the pre-phase SPIKE report's sub-goal-1 conclusion** (sortedmulti_a Layer-1-vs-Layer-2 routing); the mid-phase A reviewer MUST confirm the implementation matches the cited finding.
+A.4. `walk_root` Layer 1 dispatch (§4.9.a Layer 1). Test: round-trip for each Layer 1 wrapper (Wpkh, Pkh, Wsh+Ms, Wsh+SortedMulti, Sh+Wpkh, Sh+Wsh, Sh+SortedMulti, Sh+Ms, Tr-keypath, Tr-singleleaf-miniscript) — 10 round-trip tests minimum. `Tr-singleleaf-sortedmulti_a` is deferred to v0.4 per pre-phase SPIKE (no upstream parser); see `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1 and FOLLOWUP `tr-sortedmulti-a-via-upstream`. The mid-phase A reviewer MUST confirm the implementation matches the SPIKE conclusion (walker emits `Tag::MultiA` unconditionally for `multi_a`; never emits `Tag::SortedMultiA` in v0.3).
 
 A.5. `walk_miniscript_node` Layer 2 — already-supported arms (PkK, PkH, Multi, MultiA, Check). Test: round-trip each (5 tests).
 
@@ -54,7 +54,7 @@ A.8. Mode-determination function (§4.10). Test: `n==1` cases (wpkh, pkh, tr-key
 
 **Architect-review:** at least one mid-phase r1 review (after A.4) and one end-of-phase review covering A.1–A.8. Persist both as `design/agent-reports/phase-A-parser-review-r{1,2}.md`. Iterate to 0C/0I; max r4.
 
-**Phase A exit criterion:** all unit tests pass — enumerated subcounts: A.1 (≥2) + A.2 (≥4) + A.3 (≥3) + A.4 (≥11) + A.5 (≥5) + A.6 (≥23) + A.7 (≥4) + A.8 (≥6) = ≥58 unit tests; clippy clean; fmt clean; r0C/r0I from architect.
+**Phase A exit criterion:** all unit tests pass — enumerated subcounts: A.1 (≥2) + A.2 (≥4) + A.3 (≥3) + A.4 (≥10) + A.5 (≥5) + A.6 (≥23) + A.7 (≥4) + A.8 (≥6) = ≥57 unit tests; clippy clean; fmt clean; r0C/r0I from architect.
 
 ## Phase B: CLI flag wiring + mode-dispatch refactor
 
@@ -197,3 +197,4 @@ After Phase E ships, the repo state is:
 - 2026-05-05: Round 1 draft.
 - 2026-05-05: Round 2 — addressed architect r1 verdict (2C / 4I / 3L); Phase D.1 (BundleJson struct migration) and D.2 (MultisigInfo descriptor-mode population) MOVED to Phase C as C.6 / C.7 (C-1: keeps codebase compile-and-emit-clean at every phase boundary); Phase B.3 expanded to enumerate the `bundle.rs::run()` dispatch refactor that handles `args.template: Option<CliTemplate>` without cascading internal call-site changes (C-2); Phase A.4 now requires SPIKE-citation in implementation + reviewer cross-check (I-1); Phase A exit criterion enumerates subcounts ≥58 (I-2); Pre-phase SPIKE section adds historical note that no pre-spec SPIKE ran in the design cycle (I-3); Phase D.3 inputs corrected to "from Phase C.1 + C.2 (the 8 integration scenarios)" (I-4); Phase E.3 SHA-pin command made explicit (L-1); Phase B exit criterion notes cross-phase invariant covers the v0.2 regression (L-2); `synthesize-descriptor-fn-naming` resolution noted as slightly asymmetric with v0.2 (L-3 — flagged for Phase C reviewer).
 - 2026-05-05: Round 3 — addressed architect r2 verdict (0C / 2I / 0L); Phase D TDD step ordering reworked to define `DescriptorReparseFailed` error variant in D.1 BEFORE D.3 (which uses it for the failure-path test); D.3 now combines success+failure paths in one TDD step (NF-2); Cycle exit criterion item 4 corrected to attribute `BundleJson`/`MultisigInfo` work to Phase C (C.6, C.7) — was stale "Phase D" reference (NF-1).
+- 2026-05-05: Round 4 (post-SPIKE) — pre-Phase-A SPIKE resolved §4.9.a hedged claims; rust-miniscript v13.0.0 cannot parse `sortedmulti_a` in tap-leaves. User approved option (c) "scope sortedmulti_a out of v0.3" with soft-deferral framing. Phase A.4 — `Tr-singleleaf-sortedmulti_a` test dropped; round-trip subcount `≥11` → `≥10`; A.4 implementation cites SPIKE report §1 (not the SPIKE-dependent SPEC paragraph that no longer exists). Phase A exit criterion subcount total `≥58` → `≥57`. SPEC §4.9.a / §4.10 / §9 Q2 patched in lockstep (see SPEC revision Round 7). New FOLLOWUP `tr-sortedmulti-a-via-upstream` at v0.4-cross-repo tier.
