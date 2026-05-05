@@ -17,7 +17,7 @@ pub enum ToolkitError {
     ModeViolation {
         mode: &'static str,
         flag: &'static str,
-        message: String,
+        message: &'static str,
     },
     BundleMismatch {
         card: &'static str,
@@ -40,16 +40,110 @@ pub enum BitcoinErrorKind {
     FingerprintParse(String),
 }
 
+/// SPEC §6.4.3 routing (delegates to ms-cli's §6.1.1 dispatch table).
+/// `ReservedTagNotEmittedInV01` is intercepted by `From` to `FutureFormat` (exit 3).
+fn ms_codec_exit_code(e: &ms_codec::Error) -> u8 {
+    match e {
+        ms_codec::Error::Codex32(_)
+        | ms_codec::Error::UnexpectedStringLength { .. }
+        | ms_codec::Error::PayloadLengthMismatch { .. } => 1,
+        ms_codec::Error::WrongHrp { .. }
+        | ms_codec::Error::ThresholdNotZero { .. }
+        | ms_codec::Error::ShareIndexNotSecret { .. }
+        | ms_codec::Error::TagInvalidAlphabet { .. }
+        | ms_codec::Error::UnknownTag { .. }
+        | ms_codec::Error::ReservedPrefixViolation { .. } => 2,
+        // ReservedTagNotEmittedInV01 is intercepted by From → FutureFormat.
+        _ => 1,
+    }
+}
+
+/// SPEC §6.4.4 routing. `UnsupportedVersion` is intercepted by `From` to `FutureFormat`.
+fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
+    match e {
+        mk_codec::Error::InvalidStringLength(_)
+        | mk_codec::Error::InvalidChar { .. }
+        | mk_codec::Error::BchUncorrectable(_) => 1,
+        mk_codec::Error::InvalidHrp(_)
+        | mk_codec::Error::MixedCase
+        | mk_codec::Error::UnsupportedCardType(_)
+        | mk_codec::Error::MalformedPayloadPadding
+        | mk_codec::Error::ChunkSetIdMismatch
+        | mk_codec::Error::ChunkedHeaderMalformed(_)
+        | mk_codec::Error::MixedHeaderTypes
+        | mk_codec::Error::CrossChunkHashMismatch
+        | mk_codec::Error::ReservedBitsSet
+        | mk_codec::Error::InvalidPolicyIdStubCount
+        | mk_codec::Error::InvalidPathIndicator(_)
+        | mk_codec::Error::PathTooDeep(_)
+        | mk_codec::Error::InvalidPathComponent(_)
+        | mk_codec::Error::InvalidXpubVersion(_)
+        | mk_codec::Error::InvalidXpubPublicKey(_)
+        | mk_codec::Error::UnexpectedEnd
+        | mk_codec::Error::TrailingBytes
+        | mk_codec::Error::CardPayloadTooLarge { .. } => 2,
+        // UnsupportedVersion is intercepted by From → FutureFormat.
+        _ => 1,
+    }
+}
+
+/// SPEC §6.4.5 routing. md_codec::Error is NOT `#[non_exhaustive]`; match is exhaustive.
+/// `UnsupportedVersion` is intercepted by `From` to `FutureFormat` (exit 3).
+fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
+    match e {
+        md_codec::Error::Codex32DecodeError(_) | md_codec::Error::Codex32EncodeError(_) => 1,
+        md_codec::Error::BitStreamTruncated { .. }
+        | md_codec::Error::ReservedHeaderBitSet
+        | md_codec::Error::PathDepthExceeded { .. }
+        | md_codec::Error::KeyCountOutOfRange { .. }
+        | md_codec::Error::DivergentPathCountMismatch { .. }
+        | md_codec::Error::AltCountOutOfRange { .. }
+        | md_codec::Error::UnknownPrimaryTag(_)
+        | md_codec::Error::UnknownExtensionTag(_)
+        | md_codec::Error::ThresholdOutOfRange { .. }
+        | md_codec::Error::ChildCountOutOfRange { .. }
+        | md_codec::Error::KGreaterThanN { .. }
+        | md_codec::Error::TlvOrderingViolation { .. }
+        | md_codec::Error::PlaceholderIndexOutOfRange { .. }
+        | md_codec::Error::OverrideOrderViolation { .. }
+        | md_codec::Error::EmptyTlvEntry { .. }
+        | md_codec::Error::TlvLengthExceedsRemaining { .. }
+        | md_codec::Error::PlaceholderNotReferenced { .. }
+        | md_codec::Error::PlaceholderFirstOccurrenceOutOfOrder { .. }
+        | md_codec::Error::MultipathAltCountMismatch { .. }
+        | md_codec::Error::ForbiddenTapTreeLeaf { .. }
+        | md_codec::Error::ChunkCountOutOfRange { .. }
+        | md_codec::Error::ChunkIndexOutOfRange { .. }
+        | md_codec::Error::ChunkSetIdOutOfRange { .. }
+        | md_codec::Error::ChunkHeaderChunkedFlagMissing
+        | md_codec::Error::ChunkCountExceedsMax { .. }
+        | md_codec::Error::ChunkSetEmpty
+        | md_codec::Error::ChunkSetInconsistent
+        | md_codec::Error::ChunkSetIncomplete { .. }
+        | md_codec::Error::ChunkIndexGap { .. }
+        | md_codec::Error::ChunkSetIdMismatch { .. }
+        | md_codec::Error::VarintOverflow { .. }
+        | md_codec::Error::MissingExplicitOrigin { .. }
+        | md_codec::Error::InvalidPresenceByte { .. }
+        | md_codec::Error::InvalidXpubBytes { .. }
+        | md_codec::Error::MissingPubkey { .. }
+        | md_codec::Error::ChainIndexOutOfRange { .. }
+        | md_codec::Error::HardenedPublicDerivation
+        | md_codec::Error::UnsupportedDerivationShape => 2,
+        // UnsupportedVersion is intercepted by From → FutureFormat.
+        md_codec::Error::UnsupportedVersion { .. } => 3,
+    }
+}
+
 impl ToolkitError {
-    /// SPEC §6.1 exit-code mapping.
+    /// SPEC §6.1 exit-code mapping; sibling-codec wrappers dispatch to per-variant
+    /// helpers per SPEC §6.4.3 / §6.4.4 / §6.4.5 routing tables.
     pub fn exit_code(&self) -> u8 {
         match self {
-            ToolkitError::BadInput(_)
-            | ToolkitError::Bip39(_)
-            | ToolkitError::Bitcoin(_)
-            | ToolkitError::MsCodec(_)
-            | ToolkitError::MkCodec(_)
-            | ToolkitError::MdCodec(_) => 1,
+            ToolkitError::BadInput(_) | ToolkitError::Bip39(_) | ToolkitError::Bitcoin(_) => 1,
+            ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
+            ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
+            ToolkitError::MdCodec(e) => md_codec_exit_code(e),
             ToolkitError::ModeViolation { .. } | ToolkitError::NetworkMismatch { .. } => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. } => 4,
@@ -82,7 +176,7 @@ impl ToolkitError {
             ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
             ToolkitError::MkCodec(e) => crate::friendly::friendly_mk_codec(e),
             ToolkitError::MdCodec(e) => crate::friendly::friendly_md_codec(e),
-            ToolkitError::ModeViolation { message, .. } => message.clone(),
+            ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
             ToolkitError::NetworkMismatch {
                 xpub_network,
                 expected,
@@ -197,7 +291,7 @@ mod tests {
             ToolkitError::ModeViolation {
                 mode: "watch-only",
                 flag: "--passphrase",
-                message: "x".into(),
+                message: "x",
             }
             .exit_code(),
             2,
@@ -225,6 +319,81 @@ mod tests {
             }
             .exit_code(),
             4,
+        );
+    }
+
+    #[test]
+    fn ms_codec_inner_variant_routing() {
+        // Exit-2 (format-violation) variants per SPEC §6.4.3.
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::WrongHrp { got: "mq".into() }).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::ReservedPrefixViolation { got: 0x01 })
+                .exit_code(),
+            2,
+        );
+        // Exit-1 (user-input) variants.
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::UnexpectedStringLength {
+                got: 51,
+                allowed: &[],
+            })
+            .exit_code(),
+            1,
+        );
+    }
+
+    #[test]
+    fn mk_codec_inner_variant_routing() {
+        // Exit-2 (format-violation) variants per SPEC §6.4.4.
+        assert_eq!(
+            ToolkitError::MkCodec(mk_codec::Error::InvalidHrp("foo".into())).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MkCodec(mk_codec::Error::ReservedBitsSet).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MkCodec(mk_codec::Error::MalformedPayloadPadding).exit_code(),
+            2,
+        );
+        // Exit-1 (user-input) variants.
+        assert_eq!(
+            ToolkitError::MkCodec(mk_codec::Error::InvalidStringLength(50)).exit_code(),
+            1,
+        );
+        assert_eq!(
+            ToolkitError::MkCodec(mk_codec::Error::BchUncorrectable("foo".into())).exit_code(),
+            1,
+        );
+    }
+
+    #[test]
+    fn md_codec_inner_variant_routing() {
+        // Exit-2 (format-violation) variants per SPEC §6.4.5.
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::ReservedHeaderBitSet).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::ChunkSetEmpty).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::HardenedPublicDerivation).exit_code(),
+            2,
+        );
+        // Exit-1 (user-input) variants.
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::Codex32DecodeError("foo".into())).exit_code(),
+            1,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::Codex32EncodeError("bar".into())).exit_code(),
+            1,
         );
     }
 
