@@ -35,7 +35,7 @@ shasum -a 256 crates/mnemonic-toolkit/tests/vectors/v0_2/*.txt | sort | shasum -
 
 ### Tests
 
-76 unit + 54 integration = 130 total. New v0.2 integration tests:
+76 unit + 31 integration test functions = 107 total (`cargo test --workspace`). The 31 integration functions cover ~54 parametric cells across 13 test binaries. New v0.2 integration tests:
 - `cli_bundle_multisig_full.rs` — 24-cell multisig fixture parametric (6 templates × 4 networks).
 - `cli_account_flag.rs` — 4-cell `--account 5` parametric.
 - `cli_privacy_preserving.rs` — 4-cell `--privacy-preserving` parametric.
