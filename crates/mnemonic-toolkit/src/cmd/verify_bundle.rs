@@ -60,10 +60,11 @@ pub struct VerifyBundleArgs {
     pub json: bool,
 }
 
-pub fn run<W: Write>(
+pub fn run<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
 
@@ -108,7 +109,7 @@ pub fn run<W: Write>(
     if xpub_arg.is_some() {
         // Watch-only mode (SPEC §2.2.2): emits the §5.4 9-element array
         // with entropy + path-rederivation marked `skipped`.
-        run_watch_only(args, &mut checks)?;
+        run_watch_only(args, &mut checks, stderr)?;
     } else if phrase_arg.is_some() {
         // Full mode (SPEC §2.2.1): emits the §5.4 9-element array.
         check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
@@ -415,10 +416,29 @@ fn verify_md1_only(args: &VerifyBundleArgs, checks: &mut Vec<VerifyCheck>) {
     }
 }
 
-fn run_watch_only(
+fn run_watch_only<E: Write>(
     args: &VerifyBundleArgs,
     checks: &mut Vec<VerifyCheck>,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // SPEC §2.2.2 watch-only-cannot-verify-path warning. Emitted before any
+    // parse error so the user always sees it, even if --xpub fails to parse.
+    writeln!(
+        stderr,
+        "warning: watch-only verify-bundle does not verify --xpub is actually at the"
+    )
+    .ok();
+    writeln!(
+        stderr,
+        "warning: claimed BIP path m/<purpose>'/<coin>'/0' (no master seed available"
+    )
+    .ok();
+    writeln!(
+        stderr,
+        "warning: for re-derivation). Use --phrase mode for end-to-end verification."
+    )
+    .ok();
+
     let xpub_str = args.xpub.as_deref().expect("xpub set in watch-only mode");
     let fp_str = args
         .master_fingerprint
@@ -798,5 +818,45 @@ mod watch_only_tests {
         assert_eq!(checks[3].result, "fail"); // mk1_fingerprint_match
         assert_eq!(checks[2].result, "ok");
         assert_eq!(checks[7].result, "ok");
+    }
+
+    /// SPEC §2.2.2: watch-only verify-bundle MUST emit the 3-line
+    /// path-rederivation warning to stderr. The warning is emitted at the
+    /// top of `run_watch_only` BEFORE any parse error so the user always
+    /// sees it, even when --xpub fails to parse.
+    #[test]
+    fn watch_only_emits_spec_2_2_2_warning_to_stderr() {
+        let mut stdin = std::io::empty();
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let args = VerifyBundleArgs {
+            phrase: None,
+            xpub: Some("xpub6BadInvalidShortString".into()),
+            master_fingerprint: Some("deadbeef".into()),
+            network: CliNetwork::Mainnet,
+            template: CliTemplate::Bip84,
+            language: None,
+            passphrase: None,
+            ms1: None,
+            mk1: vec!["mk1placeholder".into()],
+            md1: vec!["md1placeholder".into()],
+            json: false,
+        };
+        // run() will fail at xpub parse, but the §2.2.2 warning should
+        // already be on stderr.
+        let _ = run(&args, &mut stdin, &mut stdout, &mut stderr);
+        let stderr_text = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_text.contains("watch-only verify-bundle does not verify"),
+            "missing line 1 of §2.2.2 warning; got: {stderr_text:?}"
+        );
+        assert!(
+            stderr_text.contains("BIP path m/<purpose>'/<coin>'/0'"),
+            "missing line 2 of §2.2.2 warning; got: {stderr_text:?}"
+        );
+        assert!(
+            stderr_text.contains("Use --phrase mode for end-to-end verification."),
+            "missing line 3 of §2.2.2 warning; got: {stderr_text:?}"
+        );
     }
 }

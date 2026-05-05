@@ -51,7 +51,7 @@ fn main() -> ExitCode {
 
     let result: Result<u8, ToolkitError> = match &cli.command {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
-        Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout),
+        Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr),
     };
 
     match result {
