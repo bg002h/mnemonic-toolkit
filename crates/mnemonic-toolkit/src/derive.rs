@@ -158,7 +158,11 @@ mod tests {
     }
 
     #[test]
-    fn derive_passphrase_empty_string_equals_unset() {
+    fn derive_passphrase_empty_string_is_stable() {
+        // The SPEC §4.1 step 3 invariant ("--passphrase \"\" ≡ unset") is enforced
+        // at the CLI boundary in Phase 3; derive_full receives a `&str` and `""`
+        // is the canonical representation of "no passphrase". This test pins
+        // determinism of the empty-string path.
         let a = derive_full(
             TREZOR_24,
             "",
@@ -167,7 +171,6 @@ mod tests {
             CliTemplate::Bip84,
         )
         .unwrap();
-        // SPEC §4.1 step 3: --passphrase "" ≡ unset
         let b = derive_full(
             TREZOR_24,
             "",
