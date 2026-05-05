@@ -1,9 +1,11 @@
 //! `mnemonic verify-bundle` subcommand.
 //!
-//! Realizes SPEC §2.2 + §5.4. Full mode runs 5 checks; watch-only
-//! runs 4 checks; check failures stay in §5.4 with result:mismatch
-//! per SPEC §5.4 routing rule (only pre-decode failures escape to
-//! the §5.5 error envelope).
+//! Realizes SPEC §2.2 + §5.4. Both full and watch-only emit the
+//! fixed 9-element `checks` array in SPEC §5.4 order; watch-only
+//! marks entropy + path-rederivation `skipped` (SPEC §2.2.2). Check
+//! failures stay in §5.4 with `result: "mismatch"` per the §5.4
+//! routing rule (only pre-decode failures escape to the §5.5 error
+//! envelope).
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::format::{VerifyBundleJson, VerifyCheck};
@@ -104,10 +106,11 @@ pub fn run<W: Write>(
     let mut checks: Vec<VerifyCheck> = Vec::new();
 
     if xpub_arg.is_some() {
-        // Watch-only mode (SPEC §2.2.2): 4 checks.
+        // Watch-only mode (SPEC §2.2.2): emits the §5.4 9-element array
+        // with entropy + path-rederivation marked `skipped`.
         run_watch_only(args, &mut checks)?;
     } else if phrase_arg.is_some() {
-        // Full mode (SPEC §2.2.1): 5 checks.
+        // Full mode (SPEC §2.2.1): emits the §5.4 9-element array.
         check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
         run_full(args, stdin, &mut checks)?;
     } else {
@@ -436,55 +439,185 @@ fn run_watch_only(
         });
     }
 
-    // Check 1: mk1 parses + BCH valid.
     let mk1_strs: Vec<&str> = args.mk1.iter().map(|s| s.as_str()).collect();
-    let mk_card = match mk_codec::decode(&mk1_strs) {
-        Ok(c) => {
-            checks.push(VerifyCheck {
-                name: "mk1_decode",
-                result: "ok",
-                detail: "decoded successfully".into(),
-            });
-            Some(c)
-        }
-        Err(e) => {
-            checks.push(VerifyCheck {
-                name: "mk1_decode",
-                result: "fail",
-                detail: format!("{:?}", e),
-            });
-            None
-        }
-    };
+    let mk_decode = mk_codec::decode(&mk1_strs).map_err(|e| format!("{:?}", e));
 
-    // Check 2: md1 parses + BCH valid.
     let md1_strs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
-    let md_desc = match md_codec::chunk::reassemble(&md1_strs) {
-        Ok(d) => {
-            checks.push(VerifyCheck {
-                name: "md1_decode",
-                result: "ok",
-                detail: "decoded successfully".into(),
-            });
-            Some(d)
-        }
-        Err(e) => {
-            checks.push(VerifyCheck {
-                name: "md1_decode",
-                result: "fail",
-                detail: format!("{:?}", e),
-            });
-            None
-        }
-    };
+    let md_decode = md_codec::chunk::reassemble(&md1_strs).map_err(|e| format!("{:?}", e));
 
-    // Check 3: stub linkage.
-    if let (Some(card), Some(desc)) = (mk_card.as_ref(), md_desc.as_ref()) {
-        match md_codec::compute_wallet_policy_id(desc) {
+    let emitted = watch_only_checks(
+        &supplied_xpub,
+        supplied_fp,
+        mk_decode.as_ref(),
+        md_decode.as_ref(),
+    );
+    checks.extend(emitted);
+    Ok(())
+}
+
+/// Emit the SPEC §5.4 9-element checks array for watch-only mode.
+///
+/// Order is fixed (SPEC §5.4 lines 538-548); entropy and path-rederivation
+/// are `skipped` per SPEC §2.2.2 (no master seed in watch-only). Decode
+/// failures cascade: mk1 fail skips its 3 mk1_*_match deps; md1 fail
+/// skips wallet_policy + md1_xpub_match + stub_linkage.
+fn watch_only_checks(
+    supplied_xpub: &Xpub,
+    supplied_fp: bitcoin::bip32::Fingerprint,
+    mk_decode: Result<&mk_codec::KeyCard, &String>,
+    md_decode: Result<&md_codec::Descriptor, &String>,
+) -> Vec<VerifyCheck> {
+    let mut out: Vec<VerifyCheck> = Vec::with_capacity(9);
+
+    // 1. ms1_entropy_match — always skipped (no entropy in watch-only).
+    out.push(VerifyCheck {
+        name: "ms1_entropy_match",
+        result: "skipped",
+        detail: "watch-only mode: no entropy known to toolkit".into(),
+    });
+
+    // 2. mk1_decode.
+    match mk_decode {
+        Ok(_) => out.push(VerifyCheck {
+            name: "mk1_decode",
+            result: "ok",
+            detail: "decoded successfully".into(),
+        }),
+        Err(e) => out.push(VerifyCheck {
+            name: "mk1_decode",
+            result: "fail",
+            detail: e.clone(),
+        }),
+    }
+
+    // 3. mk1_xpub_match.
+    match mk_decode {
+        Ok(card) => {
+            let m = &card.xpub == supplied_xpub;
+            out.push(VerifyCheck {
+                name: "mk1_xpub_match",
+                result: if m { "ok" } else { "fail" },
+                detail: if m {
+                    "matches --xpub".into()
+                } else {
+                    "differs from --xpub".into()
+                },
+            });
+        }
+        Err(_) => out.push(VerifyCheck {
+            name: "mk1_xpub_match",
+            result: "skipped",
+            detail: "mk1 decode failed".into(),
+        }),
+    }
+
+    // 4. mk1_fingerprint_match.
+    match mk_decode {
+        Ok(card) => {
+            let m = card.origin_fingerprint == Some(supplied_fp);
+            out.push(VerifyCheck {
+                name: "mk1_fingerprint_match",
+                result: if m { "ok" } else { "fail" },
+                detail: if m {
+                    "matches --master-fingerprint".into()
+                } else {
+                    "differs from --master-fingerprint".into()
+                },
+            });
+        }
+        Err(_) => out.push(VerifyCheck {
+            name: "mk1_fingerprint_match",
+            result: "skipped",
+            detail: "mk1 decode failed".into(),
+        }),
+    }
+
+    // 5. mk1_path_match — always skipped in watch-only (SPEC §2.2.2).
+    out.push(VerifyCheck {
+        name: "mk1_path_match",
+        result: "skipped",
+        detail: "watch-only mode: path verification requires master seed (SPEC §2.2.2)".into(),
+    });
+
+    // 6. md1_decode.
+    match md_decode {
+        Ok(_) => out.push(VerifyCheck {
+            name: "md1_decode",
+            result: "ok",
+            detail: "decoded successfully".into(),
+        }),
+        Err(e) => out.push(VerifyCheck {
+            name: "md1_decode",
+            result: "fail",
+            detail: e.clone(),
+        }),
+    }
+
+    // 7. md1_wallet_policy.
+    match md_decode {
+        Ok(desc) => {
+            let wp = desc.is_wallet_policy();
+            out.push(VerifyCheck {
+                name: "md1_wallet_policy",
+                result: if wp { "ok" } else { "fail" },
+                detail: if wp {
+                    "wallet-policy mode confirmed".into()
+                } else {
+                    "descriptor is template-only (no pubkeys TLV)".into()
+                },
+            });
+        }
+        Err(_) => out.push(VerifyCheck {
+            name: "md1_wallet_policy",
+            result: "skipped",
+            detail: "md1 decode failed".into(),
+        }),
+    }
+
+    // 8. md1_xpub_match — substantive in watch-only: compare 65-byte
+    // form of supplied --xpub against md1's pubkeys[0].
+    match md_decode {
+        Ok(desc) => {
+            if desc.is_wallet_policy() {
+                let xpub_65 = xpub_to_65(supplied_xpub);
+                let m = desc
+                    .tlv
+                    .pubkeys
+                    .as_ref()
+                    .and_then(|v| v.first())
+                    .map(|(_, b)| b == &xpub_65)
+                    .unwrap_or(false);
+                out.push(VerifyCheck {
+                    name: "md1_xpub_match",
+                    result: if m { "ok" } else { "fail" },
+                    detail: if m {
+                        "65-byte xpub matches --xpub".into()
+                    } else {
+                        "md1 xpub differs from --xpub".into()
+                    },
+                });
+            } else {
+                out.push(VerifyCheck {
+                    name: "md1_xpub_match",
+                    result: "skipped",
+                    detail: "not in wallet-policy mode".into(),
+                });
+            }
+        }
+        Err(_) => out.push(VerifyCheck {
+            name: "md1_xpub_match",
+            result: "skipped",
+            detail: "md1 decode failed".into(),
+        }),
+    }
+
+    // 9. stub_linkage.
+    match (mk_decode, md_decode) {
+        (Ok(card), Ok(desc)) => match md_codec::compute_wallet_policy_id(desc) {
             Ok(pid) => {
                 let stub_match = card.policy_id_stubs.first().copied().unwrap_or([0u8; 4])[..]
                     == pid.as_bytes()[..4];
-                checks.push(VerifyCheck {
+                out.push(VerifyCheck {
                     name: "stub_linkage",
                     result: if stub_match { "ok" } else { "fail" },
                     detail: if stub_match {
@@ -494,56 +627,176 @@ fn run_watch_only(
                     },
                 });
             }
-            Err(e) => {
-                checks.push(VerifyCheck {
-                    name: "stub_linkage",
-                    result: "fail",
-                    detail: format!("policy_id: {:?}", e),
-                });
-            }
-        }
-    } else {
-        checks.push(VerifyCheck {
+            Err(e) => out.push(VerifyCheck {
+                name: "stub_linkage",
+                result: "fail",
+                detail: format!("policy_id compute: {:?}", e),
+            }),
+        },
+        _ => out.push(VerifyCheck {
             name: "stub_linkage",
             result: "skipped",
             detail: "decode failed".into(),
-        });
+        }),
     }
 
-    // Check 4: optional xpub/fp match.
-    if let Some(card) = mk_card.as_ref() {
-        let xpub_match = card.xpub == supplied_xpub;
-        checks.push(VerifyCheck {
-            name: "mk1_xpub_match",
-            result: if xpub_match { "ok" } else { "fail" },
-            detail: if xpub_match {
-                "matches --xpub".into()
-            } else {
-                "differs from --xpub".into()
-            },
-        });
-        let fp_match = card.origin_fingerprint == Some(supplied_fp);
-        checks.push(VerifyCheck {
-            name: "mk1_fingerprint_match",
-            result: if fp_match { "ok" } else { "fail" },
-            detail: if fp_match {
-                "matches --master-fingerprint".into()
-            } else {
-                "differs from --master-fingerprint".into()
-            },
-        });
-    } else {
-        checks.push(VerifyCheck {
-            name: "mk1_xpub_match",
-            result: "skipped",
-            detail: "mk1 decode failed".into(),
-        });
-        checks.push(VerifyCheck {
-            name: "mk1_fingerprint_match",
-            result: "skipped",
-            detail: "mk1 decode failed".into(),
-        });
+    out
+}
+
+#[cfg(test)]
+mod watch_only_tests {
+    use super::*;
+    use crate::derive::derive_full;
+    use crate::language::CliLanguage;
+    use crate::synthesize::{synthesize_full, Bundle};
+    use crate::template::CliTemplate;
+
+    const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    /// SPEC §5.4 fixed name order, asserted by every emitted-array test.
+    const SPEC_NAMES: [&str; 9] = [
+        "ms1_entropy_match",
+        "mk1_decode",
+        "mk1_xpub_match",
+        "mk1_fingerprint_match",
+        "mk1_path_match",
+        "md1_decode",
+        "md1_wallet_policy",
+        "md1_xpub_match",
+        "stub_linkage",
+    ];
+
+    fn fixture_bundle() -> (Bundle, Xpub, bitcoin::bip32::Fingerprint) {
+        let net = CliNetwork::Mainnet;
+        let tpl = CliTemplate::Bip84;
+        let acc = derive_full(TREZOR_24, "", CliLanguage::English, net, tpl).unwrap();
+        let bundle = synthesize_full(
+            &acc.entropy,
+            acc.master_fingerprint,
+            acc.account_xpub,
+            tpl,
+            net,
+        )
+        .unwrap();
+        (bundle, acc.account_xpub, acc.master_fingerprint)
     }
 
-    Ok(())
+    fn assert_spec_order(checks: &[VerifyCheck]) {
+        assert_eq!(
+            checks.len(),
+            9,
+            "watch-only must emit exactly 9 checks per SPEC §5.4"
+        );
+        for (i, c) in checks.iter().enumerate() {
+            assert_eq!(
+                c.name, SPEC_NAMES[i],
+                "check[{i}] name out of SPEC §5.4 order"
+            );
+        }
+    }
+
+    #[test]
+    fn happy_path_emits_9_checks_in_spec_order() {
+        let (bundle, xpub, fp) = fixture_bundle();
+        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let card = mk_codec::decode(&mk1_strs).unwrap();
+        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
+
+        let checks = watch_only_checks(&xpub, fp, Ok(&card), Ok(&desc));
+        assert_spec_order(&checks);
+
+        // Watch-only-skipped entries:
+        assert_eq!(checks[0].result, "skipped"); // ms1_entropy_match
+        assert_eq!(checks[4].result, "skipped"); // mk1_path_match
+
+        // Substantive checks all pass:
+        assert_eq!(checks[1].result, "ok"); // mk1_decode
+        assert_eq!(checks[2].result, "ok"); // mk1_xpub_match
+        assert_eq!(checks[3].result, "ok"); // mk1_fingerprint_match
+        assert_eq!(checks[5].result, "ok"); // md1_decode
+        assert_eq!(checks[6].result, "ok"); // md1_wallet_policy
+        assert_eq!(checks[7].result, "ok"); // md1_xpub_match
+        assert_eq!(checks[8].result, "ok"); // stub_linkage
+    }
+
+    #[test]
+    fn mk1_decode_fail_cascades_to_three_skipped() {
+        let (bundle, xpub, fp) = fixture_bundle();
+        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
+        let err = "synthetic mk decode error".to_string();
+
+        let checks = watch_only_checks(&xpub, fp, Err(&err), Ok(&desc));
+        assert_spec_order(&checks);
+        assert_eq!(checks[1].result, "fail"); // mk1_decode
+        assert_eq!(checks[2].result, "skipped"); // mk1_xpub_match
+        assert_eq!(checks[3].result, "skipped"); // mk1_fingerprint_match
+        assert_eq!(checks[4].result, "skipped"); // mk1_path_match (always skipped anyway)
+        assert_eq!(checks[5].result, "ok"); // md1_decode still ok
+        assert_eq!(checks[6].result, "ok"); // md1_wallet_policy
+        assert_eq!(checks[7].result, "ok"); // md1_xpub_match (compares against supplied xpub)
+        assert_eq!(checks[8].result, "skipped"); // stub_linkage needs both
+    }
+
+    #[test]
+    fn md1_decode_fail_cascades_to_three_skipped() {
+        let (bundle, xpub, fp) = fixture_bundle();
+        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let card = mk_codec::decode(&mk1_strs).unwrap();
+        let err = "synthetic md decode error".to_string();
+
+        let checks = watch_only_checks(&xpub, fp, Ok(&card), Err(&err));
+        assert_spec_order(&checks);
+        assert_eq!(checks[1].result, "ok"); // mk1_decode
+        assert_eq!(checks[2].result, "ok"); // mk1_xpub_match
+        assert_eq!(checks[3].result, "ok"); // mk1_fingerprint_match
+        assert_eq!(checks[5].result, "fail"); // md1_decode
+        assert_eq!(checks[6].result, "skipped"); // md1_wallet_policy
+        assert_eq!(checks[7].result, "skipped"); // md1_xpub_match
+        assert_eq!(checks[8].result, "skipped"); // stub_linkage
+    }
+
+    #[test]
+    fn xpub_mismatch_fails_both_xpub_checks() {
+        let (bundle, _correct_xpub, fp) = fixture_bundle();
+        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let card = mk_codec::decode(&mk1_strs).unwrap();
+        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
+
+        // Substitute a different xpub: derive bip44 instead of bip84.
+        let other_acc = derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip44,
+        )
+        .unwrap();
+        let wrong_xpub = other_acc.account_xpub;
+
+        let checks = watch_only_checks(&wrong_xpub, fp, Ok(&card), Ok(&desc));
+        assert_spec_order(&checks);
+        assert_eq!(checks[2].result, "fail"); // mk1_xpub_match
+        assert_eq!(checks[7].result, "fail"); // md1_xpub_match
+        assert_eq!(checks[3].result, "ok"); // fingerprint still matches (master_fingerprint is path-independent)
+        assert_eq!(checks[8].result, "ok"); // stub_linkage still holds (mk's stub binds md, not xpub)
+    }
+
+    #[test]
+    fn fingerprint_mismatch_fails_only_fingerprint_check() {
+        let (bundle, xpub, _correct_fp) = fixture_bundle();
+        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let card = mk_codec::decode(&mk1_strs).unwrap();
+        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
+        let wrong_fp = bitcoin::bip32::Fingerprint::from([0xDE, 0xAD, 0xBE, 0xEF]);
+
+        let checks = watch_only_checks(&xpub, wrong_fp, Ok(&card), Ok(&desc));
+        assert_spec_order(&checks);
+        assert_eq!(checks[3].result, "fail"); // mk1_fingerprint_match
+        assert_eq!(checks[2].result, "ok");
+        assert_eq!(checks[7].result, "ok");
+    }
 }
