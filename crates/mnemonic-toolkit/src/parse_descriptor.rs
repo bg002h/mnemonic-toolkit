@@ -10,9 +10,12 @@ use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::{Secp256k1, SecretKey};
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
+use md_codec::tag::Tag;
+use md_codec::tree::{Body, Node};
 use md_codec::use_site_path::{Alternative, UseSitePath};
+use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use regex::Regex;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -244,6 +247,273 @@ fn to_origin_path(p: Option<&DerivationPath>) -> OriginPath {
     OriginPath { components }
 }
 
+/// Substitute every `@i[fp/path]/<multi>/*` token with a bare synthetic xpub.
+/// The annotation/multipath/wildcard suffix is dropped — the structural walker
+/// only needs the xpub identity. Annotations + use-site paths flow through
+/// `ResolvedPlaceholders` separately. Returns `(substituted, key_map)` where
+/// `key_map` maps synthetic-xpub-string → placeholder index `i`.
+pub fn substitute_synthetic(
+    descriptor: &str,
+    ctx: ScriptCtx,
+) -> Result<(String, BTreeMap<String, u8>), ToolkitError> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;]+>)?(?:/\*(?:'|h)?)?")
+            .expect("static regex compiles")
+    });
+    let mut key_map: BTreeMap<String, u8> = BTreeMap::new();
+    let mut keys_seen: HashSet<u8> = HashSet::new();
+    let mut bad: Option<ToolkitError> = None;
+    let out = re
+        .replace_all(descriptor, |caps: &regex::Captures| {
+            if bad.is_some() {
+                return String::new();
+            }
+            match caps[1].parse::<u8>() {
+                Ok(i) => {
+                    let xpub = synthetic_xpub_for(i, ctx);
+                    if keys_seen.insert(i) {
+                        key_map.insert(xpub.clone(), i);
+                    }
+                    xpub
+                }
+                Err(_) => {
+                    bad = Some(ToolkitError::BadInput(format!(
+                        "@i index out of range: @{}",
+                        &caps[1]
+                    )));
+                    String::new()
+                }
+            }
+        })
+        .into_owned();
+    if let Some(err) = bad {
+        return Err(err);
+    }
+    Ok((out, key_map))
+}
+
+/// Strip optional `[fp/path]` prefix and `/derivation` suffix to recover the
+/// bare xpub key as substituted.
+fn lookup_key(key_str: &str, km: &BTreeMap<String, u8>) -> Result<u8, ToolkitError> {
+    let after_bracket = key_str.find(']').map_or(key_str, |pos| &key_str[pos + 1..]);
+    let base = after_bracket.split('/').next().unwrap_or(after_bracket);
+    km.get(base).copied().ok_or_else(|| {
+        ToolkitError::BadInput(format!(
+            "internal: synthetic key {base} not found in key map (rendered: {key_str})"
+        ))
+    })
+}
+
+fn wrap_children(tag: Tag, inner: Node) -> Node {
+    Node {
+        tag,
+        body: Body::Children(vec![inner]),
+    }
+}
+
+fn build_multi_node(
+    tag: Tag,
+    k: usize,
+    keys: &[&DescriptorPublicKey],
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    let children: Vec<Node> = keys
+        .iter()
+        .map(|kk| {
+            let index = lookup_key(&kk.to_string(), km)?;
+            Ok(Node {
+                tag: Tag::PkK,
+                body: Body::KeyArg { index },
+            })
+        })
+        .collect::<Result<_, ToolkitError>>()?;
+    Ok(Node {
+        tag,
+        body: Body::Variable {
+            k: k as u8,
+            children,
+        },
+    })
+}
+
+/// Walk the miniscript Descriptor's outermost wrapper into an `md_codec::Node`.
+pub fn walk_root(
+    desc: &MsDescriptor<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    use miniscript::Descriptor::*;
+    match desc {
+        Wpkh(w) => Ok(Node {
+            tag: Tag::Wpkh,
+            body: Body::KeyArg {
+                index: lookup_key(&w.as_inner().to_string(), km)?,
+            },
+        }),
+        Pkh(p) => Ok(Node {
+            tag: Tag::Pkh,
+            body: Body::KeyArg {
+                index: lookup_key(&p.as_inner().to_string(), km)?,
+            },
+        }),
+        Wsh(w) => walk_wsh(w, km),
+        Sh(s) => walk_sh(s, km),
+        Tr(t) => walk_tr(t, km),
+        Bare(_) => Err(ToolkitError::BadInput(
+            "bare scripts are outside BIP-388 wallet-policy surface".into(),
+        )),
+    }
+}
+
+fn walk_wsh(
+    w: &miniscript::descriptor::Wsh<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    let inner = walk_wsh_inner(w, km)?;
+    Ok(wrap_children(Tag::Wsh, inner))
+}
+
+fn walk_wsh_inner(
+    w: &miniscript::descriptor::Wsh<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    use miniscript::descriptor::WshInner;
+    match w.as_inner() {
+        WshInner::Ms(ms) => walk_miniscript_node(ms, km, /*tap=*/ false),
+        WshInner::SortedMulti(sm) => build_multi_node(
+            Tag::SortedMulti,
+            sm.k(),
+            &sm.pks().iter().collect::<Vec<_>>(),
+            km,
+        ),
+    }
+}
+
+fn walk_sh(
+    s: &miniscript::descriptor::Sh<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    use miniscript::descriptor::ShInner;
+    let inner = match s.as_inner() {
+        ShInner::Wsh(w) => Node {
+            tag: Tag::Wsh,
+            body: Body::Children(vec![walk_wsh_inner(w, km)?]),
+        },
+        ShInner::Wpkh(wp) => Node {
+            tag: Tag::Wpkh,
+            body: Body::KeyArg {
+                index: lookup_key(&wp.as_inner().to_string(), km)?,
+            },
+        },
+        ShInner::Ms(ms) => walk_miniscript_node(ms, km, /*tap=*/ false)?,
+        ShInner::SortedMulti(sm) => build_multi_node(
+            Tag::SortedMulti,
+            sm.k(),
+            &sm.pks().iter().collect::<Vec<_>>(),
+            km,
+        )?,
+    };
+    Ok(wrap_children(Tag::Sh, inner))
+}
+
+fn walk_tr(
+    t: &miniscript::descriptor::Tr<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    let key_index = lookup_key(&t.internal_key().to_string(), km)?;
+    let tree: Option<Box<Node>> = match t.tap_tree() {
+        None => None,
+        Some(tt) => Some(Box::new(walk_tap_tree_singleleaf(tt, km)?)),
+    };
+    Ok(Node {
+        tag: Tag::Tr,
+        body: Body::Tr { key_index, tree },
+    })
+}
+
+/// v0.3 supports 0 or 1 leaves. Multi-leaf taproot trees are deferred to v0.4
+/// per SPEC §6.8.
+fn walk_tap_tree_singleleaf(
+    tt: &miniscript::descriptor::TapTree<DescriptorPublicKey>,
+    km: &BTreeMap<String, u8>,
+) -> Result<Node, ToolkitError> {
+    let leaves: Vec<_> = tt.leaves().collect();
+    match leaves.len() {
+        0 => Err(ToolkitError::BadInput(
+            "tap tree present but contains no leaves".into(),
+        )),
+        1 => walk_miniscript_node(leaves[0].miniscript(), km, /*tap=*/ true),
+        n => Err(ToolkitError::BadInput(format!(
+            "tap tree with {n} leaves not supported in v0.3 (single-leaf only; multi-leaf deferred to v0.4)"
+        ))),
+    }
+}
+
+/// Walk a miniscript AST node into `md_codec::Node`. v0.3 covers the BIP-388
+/// surface modulo deferred items (sortedmulti_a in tap leaves, multi-leaf tap).
+/// A.4 ships PkK/PkH/Multi/MultiA/Check (carries from md-cli); A.6 lands the
+/// 23 v0.3-NEW Layer 2 arms.
+fn walk_miniscript_node<C: miniscript::ScriptContext>(
+    ms: &miniscript::Miniscript<DescriptorPublicKey, C>,
+    km: &BTreeMap<String, u8>,
+    tap_context: bool,
+) -> Result<Node, ToolkitError> {
+    use miniscript::miniscript::decode::Terminal;
+    match &ms.node {
+        Terminal::PkK(k) => Ok(Node {
+            tag: Tag::PkK,
+            body: Body::KeyArg {
+                index: lookup_key(&k.to_string(), km)?,
+            },
+        }),
+        Terminal::PkH(k) => Ok(Node {
+            tag: Tag::PkH,
+            body: Body::KeyArg {
+                index: lookup_key(&k.to_string(), km)?,
+            },
+        }),
+        Terminal::Multi(thresh) => build_multi_node(
+            Tag::Multi,
+            thresh.k(),
+            &thresh.data().iter().collect::<Vec<_>>(),
+            km,
+        ),
+        Terminal::MultiA(thresh) => build_multi_node(
+            Tag::MultiA,
+            thresh.k(),
+            &thresh.data().iter().collect::<Vec<_>>(),
+            km,
+        ),
+        Terminal::Check(inner) => {
+            if tap_context {
+                if let Terminal::PkK(k) = &inner.node {
+                    return Ok(Node {
+                        tag: Tag::PkK,
+                        body: Body::KeyArg {
+                            index: lookup_key(&k.to_string(), km)?,
+                        },
+                    });
+                }
+                if let Terminal::PkH(k) = &inner.node {
+                    return Ok(Node {
+                        tag: Tag::PkH,
+                        body: Body::KeyArg {
+                            index: lookup_key(&k.to_string(), km)?,
+                        },
+                    });
+                }
+            }
+            Ok(Node {
+                tag: Tag::Check,
+                body: Body::Children(vec![walk_miniscript_node(inner, km, tap_context)?]),
+            })
+        }
+        _ => Err(ToolkitError::BadInput(format!(
+            "unsupported miniscript fragment: {ms}; v0.3 walker covers BIP-388 surface modulo multi-leaf tap trees (deferred to v0.4)"
+        ))),
+    }
+}
+
 /// Synthetic xpub for placeholder `@i` under `ctx`. Deterministic; never wire-emitted.
 /// Seed prefix `b"toolkit-v0.3"` is normative — fixture stability depends on it.
 pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String {
@@ -437,6 +707,126 @@ mod tests {
         };
         let r = resolve_placeholders(&[occ.clone(), occ]).unwrap();
         assert_eq!(r.n, 1);
+    }
+
+    // ---- A.4: walk_root Layer 1 dispatch (10 round-trips) ----
+
+    fn parse_and_walk(template: &str, ctx: ScriptCtx) -> Node {
+        let (s, km) = substitute_synthetic(template, ctx).unwrap();
+        let d = MsDescriptor::<DescriptorPublicKey>::from_str(&s).unwrap();
+        walk_root(&d, &km).unwrap()
+    }
+
+    #[test]
+    fn walk_wpkh_root() {
+        let root = parse_and_walk("wpkh(@0/<0;1>/*)", ScriptCtx::SingleSig);
+        assert_eq!(root.tag, Tag::Wpkh);
+        assert!(matches!(root.body, Body::KeyArg { index: 0 }));
+    }
+
+    #[test]
+    fn walk_pkh_root() {
+        let root = parse_and_walk("pkh(@0/<0;1>/*)", ScriptCtx::SingleSig);
+        assert_eq!(root.tag, Tag::Pkh);
+        assert!(matches!(root.body, Body::KeyArg { index: 0 }));
+    }
+
+    #[test]
+    fn walk_wsh_pk_root() {
+        // `pk(K)` desugars to `c:pk_k(K)` in non-tap context → Wsh wrapping Check wrapping PkK.
+        let root = parse_and_walk("wsh(pk(@0/<0;1>/*))", ScriptCtx::MultiSig);
+        assert_eq!(root.tag, Tag::Wsh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Wsh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::Check);
+    }
+
+    #[test]
+    fn walk_wsh_sortedmulti_root() {
+        let root = parse_and_walk(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            ScriptCtx::MultiSig,
+        );
+        assert_eq!(root.tag, Tag::Wsh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Wsh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::SortedMulti);
+        let Body::Variable { k, children: subs } = &children[0].body else {
+            panic!("expected SortedMulti Variable body");
+        };
+        assert_eq!(*k, 2);
+        assert_eq!(subs.len(), 2);
+    }
+
+    #[test]
+    fn walk_sh_wpkh_root() {
+        let root = parse_and_walk("sh(wpkh(@0/<0;1>/*))", ScriptCtx::SingleSig);
+        assert_eq!(root.tag, Tag::Sh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Sh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::Wpkh);
+    }
+
+    #[test]
+    fn walk_sh_wsh_pk_root() {
+        let root = parse_and_walk("sh(wsh(pk(@0/<0;1>/*)))", ScriptCtx::MultiSig);
+        assert_eq!(root.tag, Tag::Sh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Sh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::Wsh);
+    }
+
+    #[test]
+    fn walk_sh_sortedmulti_root() {
+        let root = parse_and_walk(
+            "sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            ScriptCtx::MultiSig,
+        );
+        assert_eq!(root.tag, Tag::Sh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Sh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::SortedMulti);
+    }
+
+    #[test]
+    fn walk_sh_ms_pk_root() {
+        // sh wrapping bare miniscript (not via wsh) — tests the ShInner::Ms branch.
+        let root = parse_and_walk("sh(pk(@0/<0;1>/*))", ScriptCtx::SingleSig);
+        assert_eq!(root.tag, Tag::Sh);
+        let Body::Children(children) = &root.body else {
+            panic!("expected Sh+Children");
+        };
+        assert_eq!(children[0].tag, Tag::Check);
+    }
+
+    #[test]
+    fn walk_tr_keypath_root() {
+        let root = parse_and_walk("tr(@0/<0;1>/*)", ScriptCtx::SingleSig);
+        assert_eq!(root.tag, Tag::Tr);
+        let Body::Tr { key_index, tree } = &root.body else {
+            panic!("expected Tr body");
+        };
+        assert_eq!(*key_index, 0);
+        assert!(tree.is_none());
+    }
+
+    #[test]
+    fn walk_tr_singleleaf_multi_a_root() {
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            ScriptCtx::MultiSig,
+        );
+        assert_eq!(root.tag, Tag::Tr);
+        let Body::Tr { key_index: _, tree } = &root.body else {
+            panic!("expected Tr body");
+        };
+        let leaf = tree.as_ref().expect("expected single tap leaf");
+        assert_eq!(leaf.tag, Tag::MultiA);
     }
 
     #[test]
