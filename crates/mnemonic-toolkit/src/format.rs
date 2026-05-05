@@ -47,14 +47,32 @@ pub fn chunk_md1(s: &str) -> String {
 /// `#[serde(untagged)]` makes the JSON output a bare array (or array-of-arrays)
 /// — no `Single`/`Multi` discriminator wrapper. Consumers branch on
 /// `BundleJson.multisig` (None → flat, Some → nested) before deserializing.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum MkField {
     Single(Vec<String>),
-    /// Reserved for Phase C multisig synthesis — emitted when
-    /// `BundleJson.multisig` is `Some(_)`.
-    #[allow(dead_code)]
+    /// Per-cosigner mk1 chunks for multisig synthesis (Phase C).
     Multi(Vec<Vec<String>>),
+}
+
+impl MkField {
+    /// Read out the single-sig payload. Panics if `Multi`.
+    #[allow(dead_code)]
+    pub fn as_single(&self) -> Option<&Vec<String>> {
+        match self {
+            MkField::Single(v) => Some(v),
+            MkField::Multi(_) => None,
+        }
+    }
+
+    /// Read out the multisig per-cosigner payload. Panics if `Single`.
+    #[allow(dead_code)]
+    pub fn as_multi(&self) -> Option<&Vec<Vec<String>>> {
+        match self {
+            MkField::Multi(v) => Some(v),
+            MkField::Single(_) => None,
+        }
+    }
 }
 
 /// Per-cosigner descriptor entry for `MultisigInfo.cosigners` (SPEC §5.3 v0.2).
@@ -113,9 +131,12 @@ pub struct VerifyCheck {
     pub detail: String,
 }
 
-/// Compose the engraving-card stderr text (SPEC §5.2). Pinned byte-exact for
-/// single-sig modes; multisig modes are scaffolded in Phase B with TODOs for
-/// Phase C byte-exact pinning per SPEC §5.2 multisig stanzas.
+/// Returns true for taproot-multisig templates that need the HARDWARE WALLET CAVEAT.
+fn is_tr_multisig(template: &str) -> bool {
+    matches!(template, "tr-multi-a" | "tr-sortedmulti-a")
+}
+
+/// Compose the engraving-card stderr text (SPEC §5.2). Byte-exact for all modes.
 pub fn engraving_card(
     network: &str,
     template: &str,
@@ -129,11 +150,16 @@ pub fn engraving_card(
     s.push_str(&format!("template: {}\n", template));
     s.push_str(&format!("account: {}\n", account));
     match &mode {
-        EngravingMode::FullMultisig { multisig_info, .. }
-        | EngravingMode::WatchOnlyMultisig { multisig_info, .. } => {
-            // TODO Phase C: pin byte-exact text per SPEC §5.2 multisig stanzas
-            // (`threshold: K of N`, `cosigner_count: N`, `multisig_path_family`,
-            // origin-paths block, SELF-MULTISIG WARNING, HARDWARE WALLET CAVEAT).
+        EngravingMode::FullMultisig {
+            multisig_info,
+            paths_shared,
+            ..
+        }
+        | EngravingMode::WatchOnlyMultisig {
+            multisig_info,
+            paths_shared,
+            ..
+        } => {
             s.push_str(&format!(
                 "threshold: {} of {}\n",
                 multisig_info.threshold, multisig_info.cosigner_count,
@@ -146,6 +172,24 @@ pub fn engraving_card(
                 "multisig_path_family: {}\n",
                 multisig_info.path_family
             ));
+            // Paths block: collapse to single line if all paths shared.
+            if *paths_shared {
+                if let Some(c0) = multisig_info.cosigners.first() {
+                    s.push_str(&format!("origin paths: shared {}\n", c0.origin_path));
+                }
+            } else {
+                s.push_str("origin paths:\n");
+                for c in &multisig_info.cosigners {
+                    let fp_disp = match &c.master_fingerprint {
+                        Some(fp) => format!("(fp {})", fp),
+                        None => "(fp suppressed)".into(),
+                    };
+                    s.push_str(&format!(
+                        "  cosigner {}: {} {}\n",
+                        c.index, c.origin_path, fp_disp
+                    ));
+                }
+            }
         }
         _ => {
             s.push_str(&format!("origin path: {}\n", origin_path));
@@ -167,18 +211,36 @@ pub fn engraving_card(
                 "ms1 card omitted; recover entropy from the original wallet's other backup.\n",
             );
         }
-        EngravingMode::FullMultisig { language, .. } => {
-            // TODO Phase C: pin byte-exact text per SPEC §5.2 full-multisig stanza.
+        EngravingMode::FullMultisig {
+            language,
+            multisig_info,
+            ..
+        } => {
             s.push_str(&format!("language: {} (BIP-39 checksum valid)\n", language));
+            s.push_str("passphrase: not used\n");
+            if multisig_info.cosigner_count > 1 {
+                s.push_str(
+                    "SELF-MULTISIG WARNING: all N cosigner xpubs are derived from one seed at one path and\n  are byte-identical interchangeable copies. For production multi-device multisig, use\n  --cosigner watch-only mode with distinct cosigner xpubs from distinct seeds.\n",
+                );
+            }
+            if is_tr_multisig(template) {
+                s.push_str(
+                    "HARDWARE WALLET CAVEAT: taproot multisig (multi_a / sortedmulti_a) signing-side support\n  is nascent as of v0.2; verify your signing device supports it before engraving.\n",
+                );
+            }
         }
         EngravingMode::WatchOnlyMultisig { .. } => {
-            // TODO Phase C: pin byte-exact text per SPEC §5.2 watch-only-multisig stanza.
             s.push_str(
                 "mode: watch-only multisig (xpub-supplied per cosigner; no entropy known to toolkit)\n",
             );
             s.push_str(
                 "ms1 card omitted; recover entropy from each cosigner's individual seed backup.\n",
             );
+            if is_tr_multisig(template) {
+                s.push_str(
+                    "HARDWARE WALLET CAVEAT: taproot multisig (multi_a / sortedmulti_a) signing-side support\n  is nascent as of v0.2; verify your signing device supports it before engraving.\n",
+                );
+            }
         }
     }
     s.push_str("engrave each card on its own plate. record this card alongside.\n");
@@ -193,18 +255,16 @@ pub enum EngravingMode<'a> {
         language: &'a str,
     },
     WatchOnly,
-    /// Phase B scaffolding — Phase C will pin byte-exact text per SPEC §5.2.
-    #[allow(dead_code)]
     FullMultisig {
         language: &'a str,
         multisig_info: &'a MultisigInfo,
+        #[allow(dead_code)]
         account: u32,
         paths_shared: bool,
     },
-    /// Phase B scaffolding — Phase C will pin byte-exact text per SPEC §5.2.
-    #[allow(dead_code)]
     WatchOnlyMultisig {
         multisig_info: &'a MultisigInfo,
+        #[allow(dead_code)]
         account: u32,
         paths_shared: bool,
     },

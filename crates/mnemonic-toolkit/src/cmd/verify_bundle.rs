@@ -8,11 +8,12 @@
 //! envelope).
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
-use crate::format::{VerifyBundleJson, VerifyCheck};
+use crate::format::{chunk_set_id_extract, VerifyBundleJson, VerifyCheck};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::{
-    check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input, MultisigPathFamily,
+    check_no_concurrent_stdin, parse_cosigner_spec, parse_cosigners_file, parse_master_fingerprint,
+    read_phrase_input, CosignerSpec, MultisigPathFamily,
 };
 use crate::synthesize::xpub_to_65;
 use crate::template::CliTemplate;
@@ -183,11 +184,27 @@ pub fn run<W: Write, E: Write>(
         return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
     }
 
-    // v0.2 multisig dispatch — Phase B stubs the synthesis path.
+    // v0.2 multisig verify dispatch.
     if multisig {
-        return Err(ToolkitError::MultisigConfig {
-            message: "v0.2 multisig synthesis pending Phase C".into(),
-        });
+        let mut checks: Vec<VerifyCheck> = Vec::new();
+        run_multisig(args, &mut checks, stderr)?;
+        let any_fail = checks.iter().any(|c| c.result == "fail");
+        let result = if any_fail { "mismatch" } else { "ok" };
+        if args.json {
+            let json = VerifyBundleJson {
+                schema_version: "2",
+                result,
+                checks,
+            };
+            serde_json::to_writer(&mut *stdout, &json).ok();
+            writeln!(stdout).ok();
+        } else {
+            for c in &checks {
+                writeln!(stdout, "{}: {} {}", c.name, c.result, c.detail).ok();
+            }
+            writeln!(stdout, "result: {}", result).ok();
+        }
+        return Ok(if any_fail { 4 } else { 0 });
     }
 
     let mut checks: Vec<VerifyCheck> = Vec::new();
@@ -757,6 +774,189 @@ fn watch_only_checks(
     out
 }
 
+/// Multisig verify-bundle entry. Implements SPEC §2.2.1 multisig grouping +
+/// stub-list mismatch detection. Phase C scope: happy path + stub-list mismatch.
+/// Per-cosigner check enumeration (3 + 6N) and watch-only-vs-full split detail
+/// are deferred to Phase D.
+fn run_multisig<E: Write>(
+    args: &VerifyBundleArgs,
+    checks: &mut Vec<VerifyCheck>,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let xpub_arg = args.xpub.as_deref();
+    let phrase_arg = args.phrase.as_deref();
+    let cosigner_present = !args.cosigner.is_empty();
+    let cosigners_file_present = args.cosigners_file.is_some();
+    let watch_only_multi = cosigner_present || cosigners_file_present;
+
+    if watch_only_multi {
+        // SPEC §2.2.2 multisig watch-only stderr warning.
+        writeln!(
+            stderr,
+            "warning: watch-only multisig verify-bundle does not verify --cosigner xpubs are at the"
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "warning: claimed BIP path (no per-cosigner master seed available for re-derivation)."
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "warning: Use --phrase mode for end-to-end verification of self-multisig backups."
+        )
+        .ok();
+    }
+    let _ = xpub_arg;
+    let _ = phrase_arg;
+
+    // SPEC §2.2.1 step 1: group --mk1 chunks by chunk_set_id (Chunked) or per-string (SingleString).
+    // Build groups: Vec<Vec<&str>>, where each group is a per-cosigner card-set.
+    use std::collections::BTreeMap;
+    let mut chunked_groups: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
+    let mut single_groups: Vec<Vec<&str>> = Vec::new();
+    for s in &args.mk1 {
+        match chunk_set_id_extract(s) {
+            Some(csi) => chunked_groups.entry(csi).or_default().push(s.as_str()),
+            None => single_groups.push(vec![s.as_str()]),
+        }
+    }
+    let groups: Vec<Vec<&str>> = chunked_groups.into_values().chain(single_groups).collect();
+
+    // Decode each group.
+    let mut decoded: Vec<mk_codec::KeyCard> = Vec::with_capacity(groups.len());
+    let mut decode_errors: Vec<String> = Vec::with_capacity(groups.len());
+    for g in &groups {
+        match mk_codec::decode(g) {
+            Ok(c) => {
+                checks.push(VerifyCheck {
+                    name: "mk1_decode",
+                    result: "ok",
+                    detail: format!("group of {} chunks decoded", g.len()),
+                });
+                decoded.push(c);
+                decode_errors.push(String::new());
+            }
+            Err(e) => {
+                checks.push(VerifyCheck {
+                    name: "mk1_decode",
+                    result: "fail",
+                    detail: format!("{:?}", e),
+                });
+                decode_errors.push(format!("{:?}", e));
+            }
+        }
+    }
+
+    // Per SPEC §2.2.1 step 5b: stub-list consistency across all decoded cards.
+    if decoded.len() >= 2 {
+        let first = &decoded[0].policy_id_stubs;
+        let all_match = decoded[1..].iter().all(|c| &c.policy_id_stubs == first);
+        checks.push(VerifyCheck {
+            name: "mk1_stub_list_consistent",
+            result: if all_match { "ok" } else { "fail" },
+            detail: if all_match {
+                "all decoded cards share the same policy_id_stubs list".into()
+            } else {
+                "policy_id_stubs lists differ across cards; mixed bundle".into()
+            },
+        });
+    }
+
+    // SPEC §2.2.1 step 5: group-count vs expected-N (when known).
+    let expected_n = if watch_only_multi {
+        // Resolve cosigner specs solely to learn expected N.
+        let cosigners: Vec<CosignerSpec> = if let Some(file) = &args.cosigners_file {
+            parse_cosigners_file(file)?
+        } else {
+            let mut out = Vec::with_capacity(args.cosigner.len());
+            for (i, s) in args.cosigner.iter().enumerate() {
+                out.push(parse_cosigner_spec(s, i)?);
+            }
+            out
+        };
+        Some(cosigners.len())
+    } else {
+        args.cosigner_count
+    };
+    if let Some(n) = expected_n {
+        let m = groups.len();
+        checks.push(VerifyCheck {
+            name: "mk1_group_count",
+            result: if m == n { "ok" } else { "fail" },
+            detail: if m == n {
+                format!("{} cosigner card-sets (matches N={})", m, n)
+            } else {
+                format!("expected {} cosigner card-sets; got {}", n, m)
+            },
+        });
+    }
+
+    // md1 decode.
+    let md1_strs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
+    match md_codec::chunk::reassemble(&md1_strs) {
+        Ok(desc) => {
+            checks.push(VerifyCheck {
+                name: "md1_decode",
+                result: "ok",
+                detail: "decoded successfully".into(),
+            });
+            let wp = desc.is_wallet_policy();
+            checks.push(VerifyCheck {
+                name: "md1_wallet_policy",
+                result: if wp { "ok" } else { "fail" },
+                detail: if wp {
+                    "wallet-policy mode confirmed".into()
+                } else {
+                    "descriptor is template-only (no pubkeys TLV)".into()
+                },
+            });
+            if let Ok(pid) = md_codec::compute_wallet_policy_id(&desc) {
+                let expected_stub: [u8; 4] = pid.as_bytes()[..4].try_into().unwrap();
+                let stub_match = if let Some(first) = decoded.first() {
+                    first.policy_id_stubs.iter().any(|s| *s == expected_stub)
+                } else {
+                    false
+                };
+                checks.push(VerifyCheck {
+                    name: "stub_linkage",
+                    result: if stub_match { "ok" } else { "fail" },
+                    detail: if stub_match {
+                        "descriptor's policy_id stub appears in mk1 stubs list".into()
+                    } else {
+                        "descriptor's policy_id stub not in mk1 stubs list".into()
+                    },
+                });
+            } else {
+                checks.push(VerifyCheck {
+                    name: "stub_linkage",
+                    result: "fail",
+                    detail: "policy_id compute failed".into(),
+                });
+            }
+        }
+        Err(e) => {
+            checks.push(VerifyCheck {
+                name: "md1_decode",
+                result: "fail",
+                detail: format!("{:?}", e),
+            });
+            checks.push(VerifyCheck {
+                name: "md1_wallet_policy",
+                result: "skipped",
+                detail: "md1 decode failed".into(),
+            });
+            checks.push(VerifyCheck {
+                name: "stub_linkage",
+                result: "skipped",
+                detail: "md1 decode failed".into(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod watch_only_tests {
     use super::*;
@@ -813,7 +1013,8 @@ mod watch_only_tests {
     #[test]
     fn happy_path_emits_9_checks_in_spec_order() {
         let (bundle, xpub, fp) = fixture_bundle();
-        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let mk1_v = bundle.mk1.as_single().unwrap();
+        let mk1_strs: Vec<&str> = mk1_v.iter().map(|s| s.as_str()).collect();
         let card = mk_codec::decode(&mk1_strs).unwrap();
         let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
@@ -857,7 +1058,8 @@ mod watch_only_tests {
     #[test]
     fn md1_decode_fail_cascades_to_three_skipped() {
         let (bundle, xpub, fp) = fixture_bundle();
-        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let mk1_v = bundle.mk1.as_single().unwrap();
+        let mk1_strs: Vec<&str> = mk1_v.iter().map(|s| s.as_str()).collect();
         let card = mk_codec::decode(&mk1_strs).unwrap();
         let err = "synthetic md decode error".to_string();
 
@@ -875,7 +1077,8 @@ mod watch_only_tests {
     #[test]
     fn xpub_mismatch_fails_both_xpub_checks() {
         let (bundle, _correct_xpub, fp) = fixture_bundle();
-        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let mk1_v = bundle.mk1.as_single().unwrap();
+        let mk1_strs: Vec<&str> = mk1_v.iter().map(|s| s.as_str()).collect();
         let card = mk_codec::decode(&mk1_strs).unwrap();
         let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
@@ -903,7 +1106,8 @@ mod watch_only_tests {
     #[test]
     fn fingerprint_mismatch_fails_only_fingerprint_check() {
         let (bundle, xpub, _correct_fp) = fixture_bundle();
-        let mk1_strs: Vec<&str> = bundle.mk1.iter().map(|s| s.as_str()).collect();
+        let mk1_v = bundle.mk1.as_single().unwrap();
+        let mk1_strs: Vec<&str> = mk1_v.iter().map(|s| s.as_str()).collect();
         let card = mk_codec::decode(&mk1_strs).unwrap();
         let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();

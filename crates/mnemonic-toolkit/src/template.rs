@@ -214,6 +214,17 @@ impl CliTemplate {
         }
     }
 
+    /// BIP-48 script_type component (1=sh-wsh, 2=wsh, 3=tr-multi-a). `None` for
+    /// non-multisig templates. SPEC §4.1 multisig path derivation.
+    pub fn bip48_script_type(&self) -> Option<u32> {
+        match self {
+            CliTemplate::ShWshMulti | CliTemplate::ShWshSortedMulti => Some(1),
+            CliTemplate::WshMulti | CliTemplate::WshSortedMulti => Some(2),
+            CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => Some(3),
+            _ => None,
+        }
+    }
+
     pub fn human_name(&self) -> &'static str {
         match self {
             CliTemplate::Bip44 => "bip44",

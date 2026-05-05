@@ -4,13 +4,20 @@
 //! stdout), §5.2 (engraving card stderr), §5.3 (JSON schema).
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
-use crate::format::{chunk_5char, chunk_md1, engraving_card, BundleJson, EngravingMode, MkField};
+use crate::format::{
+    chunk_5char, chunk_md1, engraving_card, BundleJson, CosignerEntry, EngravingMode, MkField,
+    MultisigInfo,
+};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::{
-    check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input, MultisigPathFamily,
+    check_no_concurrent_stdin, parse_cosigner_spec, parse_cosigners_file, parse_master_fingerprint,
+    read_phrase_input, CosignerSpec, MultisigPathFamily,
 };
-use crate::synthesize::{synthesize_full, synthesize_watch_only, Bundle};
+use crate::synthesize::{
+    synthesize_full, synthesize_multisig_full, synthesize_multisig_watch_only,
+    synthesize_watch_only, Bundle,
+};
 use crate::template::CliTemplate;
 use bitcoin::bip32::Xpub;
 use clap::Args;
@@ -206,12 +213,36 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
-    // v0.2 multisig mode dispatch — Phase B stubs the synthesis path.
-    // Phase C wires multisig synthesis logic.
+    // v0.2 multisig mode dispatch.
     if multisig {
-        return Err(ToolkitError::MultisigConfig {
-            message: "v0.2 multisig synthesis pending Phase C".into(),
-        });
+        let threshold = args.threshold.ok_or_else(|| ToolkitError::MultisigConfig {
+            message: "--threshold required for multisig templates".into(),
+        })?;
+        let path_family = args.multisig_path_family.unwrap_or_default();
+
+        if cosigner_present || cosigners_file_present {
+            return bundle_multisig_watch_only(args, threshold, path_family, stdout, stderr);
+        }
+        if phrase_arg.is_some() {
+            check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
+            let cosigner_count =
+                args.cosigner_count
+                    .ok_or_else(|| ToolkitError::MultisigConfig {
+                        message: "--cosigner-count required for full-mode multisig".into(),
+                    })?;
+            return bundle_multisig_full(
+                args,
+                threshold,
+                cosigner_count,
+                path_family,
+                stdin,
+                stdout,
+                stderr,
+            );
+        }
+        return Err(ToolkitError::BadInput(
+            "multisig bundle requires --phrase (full mode) or --cosigner/--cosigners-file (watch-only)".into(),
+        ));
     }
 
     // Single-sig mode dispatch.
@@ -305,7 +336,12 @@ fn bundle_full<W: Write, E: Write>(
         stdout,
         stderr,
         args.template.origin_path_str(args.network, args.account),
-    )
+    )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
 }
 
 fn bundle_watch_only<W: Write, E: Write>(
@@ -395,7 +431,12 @@ fn bundle_watch_only<W: Write, E: Write>(
         stdout,
         stderr,
         args.template.origin_path_str(args.network, args.account),
-    )
+    )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -410,10 +451,9 @@ fn emit<W: Write, E: Write>(
     origin_path: String,
 ) -> Result<(), ToolkitError> {
     if args.json {
-        // v0.2: schema_version "2", MkField::Single for single-sig (matches
-        // v0.1 flat shape via #[serde(untagged)]), multisig: None, plus the
-        // privacy_preserving flag. Phase C will populate `multisig` for
-        // multisig invocations.
+        // v0.2: schema_version "2"; bundle.mk1 already typed as MkField (Single
+        // for single-sig matches v0.1 flat shape via #[serde(untagged)]; Multi
+        // for multisig). multisig: None for single-sig.
         let json = BundleJson {
             schema_version: "2",
             mode,
@@ -423,7 +463,7 @@ fn emit<W: Write, E: Write>(
             origin_path,
             master_fingerprint: master_fp.to_string(),
             ms1: bundle.ms1.clone(),
-            mk1: MkField::Single(bundle.mk1.clone()),
+            mk1: bundle.mk1.clone(),
             md1: bundle.md1.clone(),
             engraving_card: engraving_text.map(|s| s.to_string()),
             multisig: None,
@@ -444,17 +484,40 @@ fn emit<W: Write, E: Write>(
             writeln!(stdout).ok();
         }
 
-        writeln!(stdout, "# mk1 (xpub + origin)").ok();
-        for s in &bundle.mk1 {
-            writeln!(stdout, "{}", s).ok();
+        match &bundle.mk1 {
+            MkField::Single(mk1) => {
+                writeln!(stdout, "# mk1 (xpub + origin)").ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", s).ok();
+                }
+                writeln!(stdout).ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", chunk_5char(s)).ok();
+                }
+                writeln!(stdout).ok();
+            }
+            MkField::Multi(per_cosigner) => {
+                // SPEC §5.1 multisig: per-cosigner `# mk1[<i>]` headers.
+                for (i, chunks) in per_cosigner.iter().enumerate() {
+                    writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", s).ok();
+                    }
+                    writeln!(stdout).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", chunk_5char(s)).ok();
+                    }
+                    writeln!(stdout).ok();
+                }
+            }
         }
-        writeln!(stdout).ok();
-        for s in &bundle.mk1 {
-            writeln!(stdout, "{}", chunk_5char(s)).ok();
-        }
-        writeln!(stdout).ok();
 
-        writeln!(stdout, "# md1 (wallet policy)").ok();
+        let md1_label = if matches!(bundle.mk1, MkField::Multi(_)) {
+            "# md1 (multisig wallet policy)"
+        } else {
+            "# md1 (wallet policy)"
+        };
+        writeln!(stdout, "{}", md1_label).ok();
         for s in &bundle.md1 {
             writeln!(stdout, "{}", s).ok();
         }
@@ -467,6 +530,418 @@ fn emit<W: Write, E: Write>(
         if let Some(text) = engraving_text {
             // Stderr ordering: warnings already emitted; engraving card last.
             write!(stderr, "{}", text).ok();
+        }
+    }
+    Ok(())
+}
+
+/// SPEC §4.1 SELF-MULTISIG WARNING (byte-exact, non-suppressible).
+/// Emitted BEFORE the bundle stdout block per SPEC §4.1 ordering rule.
+pub const SELF_MULTISIG_WARNING: &str = "\
+warning: full-mode multisig (--cosigner-count > 1) derives all N cosigner xpubs from one
+warning: seed at one path; all N cosigner cards are byte-identical interchangeable copies.
+warning: For production multi-device multisig, use --cosigner watch-only mode with distinct
+warning: cosigner xpubs from distinct seeds.
+";
+
+#[allow(clippy::too_many_arguments)]
+fn bundle_multisig_full<W: Write, E: Write>(
+    args: &BundleArgs,
+    threshold: u8,
+    cosigner_count: usize,
+    path_family: MultisigPathFamily,
+    stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let phrase = read_phrase_input(args.phrase.as_deref(), stdin)?;
+    let passphrase = args.passphrase.clone().unwrap_or_default();
+    let language = args.language.unwrap_or_default();
+
+    // Stderr ordering (SPEC §4.1 + §5.2): SELF-MULTISIG WARNING FIRST when N>1
+    // (BEFORE language/passphrase warnings to satisfy "before bundle stdout block").
+    if cosigner_count > 1 {
+        write!(stderr, "{}", SELF_MULTISIG_WARNING).ok();
+    }
+    if args.language.is_none() {
+        writeln!(stderr, "warning: --language defaulting to english; record the wordlist language alongside the engraved cards.").ok();
+    }
+    if !passphrase.is_empty() {
+        writeln!(
+            stderr,
+            "warning: --passphrase set; the passphrase is NOT engraved on any card and must"
+        )
+        .ok();
+        writeln!(
+            stderr,
+            "warning: be remembered separately. A forgotten passphrase is unrecoverable from"
+        )
+        .ok();
+        writeln!(stderr, "warning: the engraved bundle.").ok();
+    }
+
+    let mnemonic =
+        bip39::Mnemonic::parse_in(language.into(), &phrase).map_err(ToolkitError::Bip39)?;
+
+    let bundle = synthesize_multisig_full(
+        &mnemonic,
+        &passphrase,
+        args.network,
+        args.template,
+        threshold,
+        cosigner_count,
+        args.account,
+        path_family,
+        args.privacy_preserving,
+    )?;
+
+    // Build MultisigInfo for JSON + engraving card.
+    let script_type = args.template.bip48_script_type().unwrap_or(0);
+    let path_str = path_family.default_origin_path(args.network, args.account, script_type);
+    use bitcoin::bip32::Xpriv;
+    use bitcoin::secp256k1::Secp256k1;
+    let secp = Secp256k1::new();
+    let seed = mnemonic.to_seed(&passphrase);
+    let master = Xpriv::new_master(args.network.network_kind(), &seed)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    let master_fp = master.fingerprint(&secp);
+    let master_fp_str = master_fp.to_string().to_lowercase();
+    let derive_path = bitcoin::bip32::DerivationPath::from_str(&path_str)
+        .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+    let xpriv = master
+        .derive_priv(&secp, &derive_path)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &xpriv);
+    let xpub_str = xpub.to_string();
+
+    let cosigners_meta: Vec<CosignerEntry> = (0..cosigner_count)
+        .map(|i| CosignerEntry {
+            index: i,
+            master_fingerprint: if args.privacy_preserving {
+                None
+            } else {
+                Some(master_fp_str.clone())
+            },
+            origin_path: path_str.clone(),
+            xpub: xpub_str.clone(),
+        })
+        .collect();
+    let multisig_info = MultisigInfo {
+        template: args.template.human_name(),
+        threshold,
+        cosigner_count,
+        path_family: path_family.human_name(),
+        cosigners: cosigners_meta,
+    };
+
+    let card_text = if args.no_engraving_card {
+        None
+    } else {
+        Some(engraving_card(
+            args.network.human_name(),
+            args.template.human_name(),
+            &path_str,
+            &master_fp_str,
+            args.account,
+            EngravingMode::FullMultisig {
+                language: language.human_name(),
+                multisig_info: &multisig_info,
+                account: args.account,
+                paths_shared: true,
+            },
+        ))
+    };
+
+    emit_multisig(
+        args,
+        &bundle,
+        card_text.as_deref(),
+        "full",
+        Some(multisig_info),
+        stdout,
+        stderr,
+    )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bundle_multisig_watch_only<W: Write, E: Write>(
+    args: &BundleArgs,
+    threshold: u8,
+    path_family: MultisigPathFamily,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    // Parse cosigner specs.
+    let mut cosigners: Vec<CosignerSpec> = if let Some(file) = &args.cosigners_file {
+        parse_cosigners_file(file)?
+    } else {
+        let mut out = Vec::with_capacity(args.cosigner.len());
+        for (i, s) in args.cosigner.iter().enumerate() {
+            out.push(parse_cosigner_spec(s, i)?);
+        }
+        out
+    };
+    if cosigners.is_empty() {
+        return Err(ToolkitError::MultisigConfig {
+            message: "no cosigners supplied".into(),
+        });
+    }
+
+    // Resolve per-cosigner paths so we can emit them into MultisigInfo even
+    // when they were defaulted from the path family.
+    let script_type = args.template.bip48_script_type().unwrap_or(0);
+    let default_path_str = path_family.default_origin_path(args.network, args.account, script_type);
+    let default_path = bitcoin::bip32::DerivationPath::from_str(&default_path_str)
+        .map_err(|e| ToolkitError::BadInput(format!("default path parse: {}", e)))?;
+
+    let resolved_paths: Vec<bitcoin::bip32::DerivationPath> = cosigners
+        .iter()
+        .map(|c| c.path.clone().unwrap_or_else(|| default_path.clone()))
+        .collect();
+
+    // §4.8 per-cosigner depth advisory.
+    let expected_depth = match path_family {
+        MultisigPathFamily::Bip48 => 4u8,
+        MultisigPathFamily::Bip87 => 3u8,
+    };
+    for (i, c) in cosigners.iter().enumerate() {
+        if c.xpub.depth != expected_depth {
+            writeln!(
+                stderr,
+                "warning: cosigner @{} xpub depth is {}; expected {} for {} paths.",
+                i,
+                c.xpub.depth,
+                expected_depth,
+                path_family.human_name(),
+            )
+            .ok();
+        }
+    }
+
+    // Synthesize.
+    let bundle = synthesize_multisig_watch_only(
+        &cosigners,
+        args.network,
+        args.template,
+        threshold,
+        args.account,
+        path_family,
+        args.privacy_preserving,
+    )?;
+
+    // Build MultisigInfo.
+    let cosigner_count = cosigners.len();
+    let cosigners_meta: Vec<CosignerEntry> = cosigners
+        .iter_mut()
+        .zip(resolved_paths.iter())
+        .enumerate()
+        .map(|(i, (c, p))| CosignerEntry {
+            index: i,
+            master_fingerprint: if args.privacy_preserving {
+                None
+            } else {
+                Some(c.master_fingerprint.to_string().to_lowercase())
+            },
+            origin_path: p.to_string(),
+            xpub: c.xpub.to_string(),
+        })
+        .collect();
+    let multisig_info = MultisigInfo {
+        template: args.template.human_name(),
+        threshold,
+        cosigner_count,
+        path_family: path_family.human_name(),
+        cosigners: cosigners_meta,
+    };
+
+    let paths_shared = resolved_paths.windows(2).all(|w| w[0] == w[1]);
+
+    let card_text = if args.no_engraving_card {
+        None
+    } else {
+        Some(engraving_card(
+            args.network.human_name(),
+            args.template.human_name(),
+            &default_path_str,
+            "(per-cosigner)",
+            args.account,
+            EngravingMode::WatchOnlyMultisig {
+                multisig_info: &multisig_info,
+                account: args.account,
+                paths_shared,
+            },
+        ))
+    };
+
+    emit_multisig(
+        args,
+        &bundle,
+        card_text.as_deref(),
+        "watch-only",
+        Some(multisig_info),
+        stdout,
+        stderr,
+    )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_multisig<W: Write, E: Write>(
+    args: &BundleArgs,
+    bundle: &Bundle,
+    engraving_text: Option<&str>,
+    mode: &'static str,
+    multisig_info: Option<MultisigInfo>,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    if args.json {
+        let json = BundleJson {
+            schema_version: "2",
+            mode,
+            network: args.network.human_name(),
+            template: args.template.human_name(),
+            account: args.account,
+            origin_path: String::new(),
+            master_fingerprint: String::new(),
+            ms1: bundle.ms1.clone(),
+            mk1: bundle.mk1.clone(),
+            md1: bundle.md1.clone(),
+            engraving_card: engraving_text.map(|s| s.to_string()),
+            multisig: multisig_info,
+            privacy_preserving: args.privacy_preserving,
+        };
+        serde_json::to_writer(&mut *stdout, &json).ok();
+        writeln!(stdout).ok();
+    } else {
+        if let Some(ms1) = bundle.ms1.as_deref() {
+            writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
+            writeln!(stdout, "{}", ms1).ok();
+            writeln!(stdout).ok();
+            writeln!(stdout, "{}", chunk_5char(ms1)).ok();
+            writeln!(stdout).ok();
+        } else {
+            writeln!(stdout, "# ms1 (omitted — multisig watch-only mode)").ok();
+            writeln!(stdout).ok();
+        }
+
+        if let MkField::Multi(per_cosigner) = &bundle.mk1 {
+            for (i, chunks) in per_cosigner.iter().enumerate() {
+                writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
+                for s in chunks {
+                    writeln!(stdout, "{}", s).ok();
+                }
+                writeln!(stdout).ok();
+                for s in chunks {
+                    writeln!(stdout, "{}", chunk_5char(s)).ok();
+                }
+                writeln!(stdout).ok();
+            }
+        }
+
+        writeln!(stdout, "# md1 (multisig wallet policy)").ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", s).ok();
+        }
+        writeln!(stdout).ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", chunk_md1(s)).ok();
+        }
+        writeln!(stdout).ok();
+
+        if let Some(text) = engraving_text {
+            write!(stderr, "{}", text).ok();
+        }
+    }
+    Ok(())
+}
+
+/// Self-check (SPEC §2.1.9): re-decode the emitted bundle and verify cross-binding.
+/// Used by `--self-check`. Emits exit 4 BundleMismatch with `card =
+/// "self-check[<failed>]"` per SPEC §2.1.9.
+pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), ToolkitError> {
+    // md1 decode.
+    let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+    let desc =
+        md_codec::chunk::reassemble(&md1_strs).map_err(|e| ToolkitError::BundleMismatch {
+            card: "self-check[md1_decode]".into(),
+            message: format!("{:?}", e),
+        })?;
+    if !desc.is_wallet_policy() {
+        return Err(ToolkitError::BundleMismatch {
+            card: "self-check[md1_wallet_policy]".into(),
+            message: "descriptor is not in wallet-policy mode".into(),
+        });
+    }
+    let pid =
+        md_codec::compute_wallet_policy_id(&desc).map_err(|e| ToolkitError::BundleMismatch {
+            card: "self-check[stub_linkage]".into(),
+            message: format!("policy_id compute: {:?}", e),
+        })?;
+    let expected_stub: [u8; 4] = pid.as_bytes()[..4].try_into().unwrap();
+
+    match &bundle.mk1 {
+        MkField::Single(mk1) => {
+            let mk1_strs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
+            let card = mk_codec::decode(&mk1_strs).map_err(|e| ToolkitError::BundleMismatch {
+                card: "self-check[mk1_decode]".into(),
+                message: format!("{:?}", e),
+            })?;
+            if !card.policy_id_stubs.iter().any(|s| *s == expected_stub) {
+                return Err(ToolkitError::BundleMismatch {
+                    card: "self-check[stub_linkage]".into(),
+                    message: "mk1 policy_id_stubs do not include descriptor's stub".into(),
+                });
+            }
+            if !args.privacy_preserving && card.origin_fingerprint.is_none() {
+                return Err(ToolkitError::BundleMismatch {
+                    card: "self-check[mk1_fingerprint_match]".into(),
+                    message: "mk1 missing origin_fingerprint but --privacy-preserving not set"
+                        .into(),
+                });
+            }
+            if args.privacy_preserving && card.origin_fingerprint.is_some() {
+                return Err(ToolkitError::BundleMismatch {
+                    card: "self-check[mk1_fingerprint_match]".into(),
+                    message: "mk1 has origin_fingerprint but --privacy-preserving was set".into(),
+                });
+            }
+        }
+        MkField::Multi(per_cosigner) => {
+            // Decode each card-set; verify all share the same stubs list.
+            let mut decoded_cards: Vec<mk_codec::KeyCard> = Vec::with_capacity(per_cosigner.len());
+            for (i, chunks) in per_cosigner.iter().enumerate() {
+                let strs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+                let card = mk_codec::decode(&strs).map_err(|e| ToolkitError::BundleMismatch {
+                    card: format!("self-check[mk1_decode[{}]]", i),
+                    message: format!("{:?}", e),
+                })?;
+                decoded_cards.push(card);
+            }
+            let first_stubs = &decoded_cards[0].policy_id_stubs;
+            for (i, c) in decoded_cards.iter().enumerate().skip(1) {
+                if &c.policy_id_stubs != first_stubs {
+                    return Err(ToolkitError::BundleMismatch {
+                        card: format!("self-check[stub_linkage[{}]]", i),
+                        message: "policy_id_stubs differ across cosigner cards".into(),
+                    });
+                }
+            }
+            if !first_stubs.iter().any(|s| *s == expected_stub) {
+                return Err(ToolkitError::BundleMismatch {
+                    card: "self-check[stub_linkage]".into(),
+                    message: "mk1 policy_id_stubs do not include descriptor's stub".into(),
+                });
+            }
         }
     }
     Ok(())
