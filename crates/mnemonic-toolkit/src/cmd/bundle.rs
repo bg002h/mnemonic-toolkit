@@ -4,15 +4,18 @@
 //! stdout), §5.2 (engraving card stderr), §5.3 (JSON schema).
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
-use crate::format::{chunk_5char, chunk_md1, engraving_card, BundleJson, EngravingMode};
+use crate::format::{chunk_5char, chunk_md1, engraving_card, BundleJson, EngravingMode, MkField};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::parse::{check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input};
+use crate::parse::{
+    check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input, MultisigPathFamily,
+};
 use crate::synthesize::{synthesize_full, synthesize_watch_only, Bundle};
 use crate::template::CliTemplate;
 use bitcoin::bip32::Xpub;
 use clap::Args;
 use std::io::Write;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 // SPEC §6.6 requires byte-exact rejection text + exit code 2 for the
@@ -56,6 +59,34 @@ pub struct BundleArgs {
 
     #[arg(long = "no-engraving-card")]
     pub no_engraving_card: bool,
+
+    /// v0.2 multisig watch-only: per-cosigner spec `<xpub>:<fp>:<path>`. Repeatable.
+    #[arg(long, action = clap::ArgAction::Append)]
+    pub cosigner: Vec<String>,
+
+    /// v0.2 multisig watch-only: bulk cosigners via JSON file.
+    #[arg(long = "cosigners-file")]
+    pub cosigners_file: Option<PathBuf>,
+
+    /// v0.2 multisig path family (default: bip87).
+    #[arg(long = "multisig-path-family", value_enum)]
+    pub multisig_path_family: Option<MultisigPathFamily>,
+
+    /// v0.2 privacy mode: suppress master fingerprint from mk1 + engraving card.
+    #[arg(long, default_value = "false")]
+    pub privacy_preserving: bool,
+
+    /// v0.2 self-check: re-parse the emitted bundle and verify it round-trips.
+    #[arg(long, default_value = "false")]
+    pub self_check: bool,
+
+    /// v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16).
+    #[arg(long)]
+    pub threshold: Option<u8>,
+
+    /// v0.2 multisig cosigner count N (1 ≤ K ≤ N ≤ 16).
+    #[arg(long = "cosigner-count")]
+    pub cosigner_count: Option<usize>,
 }
 
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
@@ -68,6 +99,21 @@ pub mod mode_text {
         "--master-fingerprint is meaningful only with --xpub";
     pub const XPUB_STDIN: &str =
         "--xpub does not accept stdin (-); pass the xpub literally on argv";
+
+    // v0.2 NEW rows (SPEC §6.6 v0.2 NEW table). Byte-exact.
+    pub const XPUB_AND_COSIGNER: &str = "--xpub cannot be combined with --cosigner or --cosigners-file; pick single-sig (--xpub) or multisig (--cosigner/--cosigners-file) but not both.";
+    pub const COSIGNER_AND_COSIGNERS_FILE: &str = "--cosigner cannot be combined with --cosigners-file; supply cosigners via flag-repetition or file, not both.";
+    pub const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
+    pub const COSIGNER_COUNT_WITHOUT_MULTISIG: &str =
+        "--cosigner-count is meaningful only with a multisig --template.";
+    pub const PATH_FAMILY_WITHOUT_MULTISIG: &str =
+        "--multisig-path-family is meaningful only with a multisig --template.";
+    pub const PRIVACY_WITH_XPUB: &str = "--privacy-preserving with --xpub (single-sig watch-only) has no useful effect: --xpub mode requires --master-fingerprint and the bundle's md1 binds that fingerprint into tlv.fingerprints; suppressing it from mk1 only would produce an inconsistent bundle. Drop --privacy-preserving or switch to multisig watch-only mode.";
+    // §6.6 row 7 — reserved for Phase C+ when v0.3+ templates may lack
+    // an account-position. Currently never emitted (all v0.2 templates have
+    // an account position).
+    #[allow(dead_code)]
+    pub const ACCOUNT_INCOMPATIBLE_TEMPLATE: &str = "--account is incompatible with the selected --template (template lacks an account-position in its standard path).";
 }
 
 pub fn run<W: Write, E: Write>(
@@ -78,8 +124,58 @@ pub fn run<W: Write, E: Write>(
 ) -> Result<(), ToolkitError> {
     let phrase_arg = args.phrase.as_deref();
     let xpub_arg = args.xpub.as_deref();
+    let multisig = args.template.is_multisig();
+    let cosigner_present = !args.cosigner.is_empty();
+    let cosigners_file_present = args.cosigners_file.is_some();
 
-    // SPEC §6.6 mode-violation pre-checks (BEFORE mode dispatch so the
+    // SPEC §6.6 v0.2 NEW mode-violation pre-checks (BEFORE single-sig checks).
+    if xpub_arg.is_some() && (cosigner_present || cosigners_file_present) {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only",
+            flag: "--cosigner/--cosigners-file",
+            message: mode_text::XPUB_AND_COSIGNER,
+        });
+    }
+    if cosigner_present && cosigners_file_present {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only-multisig",
+            flag: "--cosigners-file",
+            message: mode_text::COSIGNER_AND_COSIGNERS_FILE,
+        });
+    }
+    if args.threshold.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--threshold",
+            message: mode_text::THRESHOLD_WITHOUT_MULTISIG,
+        });
+    }
+    if args.cosigner_count.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--cosigner-count",
+            message: mode_text::COSIGNER_COUNT_WITHOUT_MULTISIG,
+        });
+    }
+    if args.multisig_path_family.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--multisig-path-family",
+            message: mode_text::PATH_FAMILY_WITHOUT_MULTISIG,
+        });
+    }
+    if args.privacy_preserving && xpub_arg.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only",
+            flag: "--privacy-preserving",
+            message: mode_text::PRIVACY_WITH_XPUB,
+        });
+    }
+    // §6.6 row "ACCOUNT_INCOMPATIBLE_TEMPLATE": never fires for v0.2's
+    // templates (all have an account-position in their standard path).
+    // TODO: revisit when v0.3+ adds template families that lack one.
+
+    // SPEC §6.6 single-sig mode-violation pre-checks (BEFORE mode dispatch so the
     // exit code is 2 + byte-exact text, not clap's 64 + default text).
     if xpub_arg.is_some() && args.passphrase.is_some() {
         return Err(ToolkitError::ModeViolation {
@@ -110,7 +206,15 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
-    // Mode dispatch.
+    // v0.2 multisig mode dispatch — Phase B stubs the synthesis path.
+    // Phase C wires multisig synthesis logic.
+    if multisig {
+        return Err(ToolkitError::MultisigConfig {
+            message: "v0.2 multisig synthesis pending Phase C".into(),
+        });
+    }
+
+    // Single-sig mode dispatch.
     if let Some(xpub_str) = xpub_arg {
         if xpub_str == "-" {
             return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
@@ -306,18 +410,24 @@ fn emit<W: Write, E: Write>(
     origin_path: String,
 ) -> Result<(), ToolkitError> {
     if args.json {
+        // v0.2: schema_version "2", MkField::Single for single-sig (matches
+        // v0.1 flat shape via #[serde(untagged)]), multisig: None, plus the
+        // privacy_preserving flag. Phase C will populate `multisig` for
+        // multisig invocations.
         let json = BundleJson {
-            schema_version: "1",
+            schema_version: "2",
             mode,
             network: args.network.human_name(),
             template: args.template.human_name(),
             account: args.account,
             origin_path,
             master_fingerprint: master_fp.to_string(),
-            ms1: bundle.ms1.as_deref(),
-            mk1: &bundle.mk1,
-            md1: &bundle.md1,
+            ms1: bundle.ms1.clone(),
+            mk1: MkField::Single(bundle.mk1.clone()),
+            md1: bundle.md1.clone(),
             engraving_card: engraving_text.map(|s| s.to_string()),
+            multisig: None,
+            privacy_preserving: args.privacy_preserving,
         };
         serde_json::to_writer(&mut *stdout, &json).ok();
         writeln!(stdout).ok();

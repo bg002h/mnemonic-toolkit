@@ -37,6 +37,24 @@ pub enum ToolkitError {
         source: &'static str,
         detail: String,
     },
+    /// SPEC §6.2 v0.2 multisig configuration error (threshold/cosigner-count
+    /// out of range, k > n, etc.). Exit 1 (user-input).
+    #[allow(dead_code)]
+    MultisigConfig {
+        message: String,
+    },
+    /// SPEC §6.2 v0.2 cosigner-spec parse error
+    /// (`--cosigner=<xpub>:<fp>:<path>`). Exit 1.
+    #[allow(dead_code)]
+    CosignerSpec {
+        cosigner_idx: usize,
+        message: String,
+    },
+    /// SPEC §6.2 v0.2 cosigners-file (JSON) parse error. Exit 1.
+    #[allow(dead_code)]
+    CosignersFile {
+        message: String,
+    },
 }
 
 #[derive(Debug)]
@@ -153,6 +171,9 @@ impl ToolkitError {
             ToolkitError::ModeViolation { .. } | ToolkitError::NetworkMismatch { .. } => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. } => 4,
+            ToolkitError::MultisigConfig { .. }
+            | ToolkitError::CosignerSpec { .. }
+            | ToolkitError::CosignersFile { .. } => 1,
         }
     }
 
@@ -171,6 +192,9 @@ impl ToolkitError {
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::BundleMismatch { .. } => "BundleMismatch",
             ToolkitError::FutureFormat { .. } => "FutureFormat",
+            ToolkitError::MultisigConfig { .. } => "MultisigConfig",
+            ToolkitError::CosignerSpec { .. } => "CosignerSpec",
+            ToolkitError::CosignersFile { .. } => "CosignersFile",
         }
     }
 
@@ -200,6 +224,14 @@ impl ToolkitError {
                 "{} reserved-not-emitted: {}; deferred to v0.2+",
                 source, detail,
             ),
+            ToolkitError::MultisigConfig { message } => message.clone(),
+            ToolkitError::CosignerSpec {
+                cosigner_idx,
+                message,
+            } => format!("--cosigner[{}]: {}", cosigner_idx, message),
+            ToolkitError::CosignersFile { message } => {
+                format!("--cosigners-file: {}", message)
+            }
         }
     }
 
@@ -223,6 +255,9 @@ impl ToolkitError {
             ToolkitError::FutureFormat { source, detail } => Some(json!({
                 "source": source,
                 "detail": detail,
+            })),
+            ToolkitError::CosignerSpec { cosigner_idx, .. } => Some(json!({
+                "cosigner_idx": cosigner_idx,
             })),
             _ => None,
         }
@@ -407,6 +442,30 @@ mod tests {
             ToolkitError::MdCodec(md_codec::Error::Codex32EncodeError("bar".into())).exit_code(),
             1,
         );
+    }
+
+    #[test]
+    fn v0_2_multisig_variants_exit_code_kind() {
+        let e = ToolkitError::MultisigConfig {
+            message: "k > n".into(),
+        };
+        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.kind(), "MultisigConfig");
+
+        let e = ToolkitError::CosignerSpec {
+            cosigner_idx: 2,
+            message: "fingerprint required".into(),
+        };
+        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.kind(), "CosignerSpec");
+        let det = e.details().unwrap();
+        assert_eq!(det["cosigner_idx"], 2);
+
+        let e = ToolkitError::CosignersFile {
+            message: "json parse error".into(),
+        };
+        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.kind(), "CosignersFile");
     }
 
     #[test]

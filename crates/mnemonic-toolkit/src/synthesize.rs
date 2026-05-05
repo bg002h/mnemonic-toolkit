@@ -50,7 +50,7 @@ pub fn build_descriptor(
     let xpub_65 = xpub_to_65(xpub);
     let fp_bytes: [u8; 4] = fingerprint.to_bytes();
     let origin_path = template.md_origin_path(network, account);
-    let tree = template.wrapper_node();
+    let tree = template.wrapper_node(1, 1);
 
     Descriptor {
         n: 1,

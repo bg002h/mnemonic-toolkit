@@ -11,12 +11,15 @@ use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::format::{VerifyBundleJson, VerifyCheck};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::parse::{check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input};
+use crate::parse::{
+    check_no_concurrent_stdin, parse_master_fingerprint, read_phrase_input, MultisigPathFamily,
+};
 use crate::synthesize::xpub_to_65;
 use crate::template::CliTemplate;
 use bitcoin::bip32::Xpub;
 use clap::Args;
 use std::io::Write;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 // SPEC §6.6 mode-violation symmetry mirrored from bundle.rs:
@@ -63,6 +66,30 @@ pub struct VerifyBundleArgs {
 
     #[arg(long)]
     pub json: bool,
+
+    /// v0.2 multisig watch-only: per-cosigner spec `<xpub>:<fp>:<path>`. Repeatable.
+    #[arg(long, action = clap::ArgAction::Append)]
+    pub cosigner: Vec<String>,
+
+    /// v0.2 multisig watch-only: bulk cosigners via JSON file.
+    #[arg(long = "cosigners-file")]
+    pub cosigners_file: Option<PathBuf>,
+
+    /// v0.2 multisig path family (default: bip87).
+    #[arg(long = "multisig-path-family", value_enum)]
+    pub multisig_path_family: Option<MultisigPathFamily>,
+
+    /// v0.2 privacy mode: expect mk1 omits master fingerprint.
+    #[arg(long, default_value = "false")]
+    pub privacy_preserving: bool,
+
+    /// v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16).
+    #[arg(long)]
+    pub threshold: Option<u8>,
+
+    /// v0.2 multisig cosigner count N.
+    #[arg(long = "cosigner-count")]
+    pub cosigner_count: Option<usize>,
 }
 
 pub fn run<W: Write, E: Write>(
@@ -75,8 +102,55 @@ pub fn run<W: Write, E: Write>(
 
     let xpub_arg = args.xpub.as_deref();
     let phrase_arg = args.phrase.as_deref();
+    let multisig = args.template.is_multisig();
+    let cosigner_present = !args.cosigner.is_empty();
+    let cosigners_file_present = args.cosigners_file.is_some();
 
-    // SPEC §6.6 mode-violation pre-checks (mirror bundle.rs).
+    // SPEC §6.6 v0.2 NEW mode-violation pre-checks (mirror bundle.rs).
+    if xpub_arg.is_some() && (cosigner_present || cosigners_file_present) {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only",
+            flag: "--cosigner/--cosigners-file",
+            message: mode_text::XPUB_AND_COSIGNER,
+        });
+    }
+    if cosigner_present && cosigners_file_present {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only-multisig",
+            flag: "--cosigners-file",
+            message: mode_text::COSIGNER_AND_COSIGNERS_FILE,
+        });
+    }
+    if args.threshold.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--threshold",
+            message: mode_text::THRESHOLD_WITHOUT_MULTISIG,
+        });
+    }
+    if args.cosigner_count.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--cosigner-count",
+            message: mode_text::COSIGNER_COUNT_WITHOUT_MULTISIG,
+        });
+    }
+    if args.multisig_path_family.is_some() && !multisig {
+        return Err(ToolkitError::ModeViolation {
+            mode: "single-sig",
+            flag: "--multisig-path-family",
+            message: mode_text::PATH_FAMILY_WITHOUT_MULTISIG,
+        });
+    }
+    if args.privacy_preserving && xpub_arg.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only",
+            flag: "--privacy-preserving",
+            message: mode_text::PRIVACY_WITH_XPUB,
+        });
+    }
+
+    // SPEC §6.6 single-sig mode-violation pre-checks (mirror bundle.rs).
     if xpub_arg.is_some() && args.passphrase.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "watch-only",
@@ -109,6 +183,13 @@ pub fn run<W: Write, E: Write>(
         return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
     }
 
+    // v0.2 multisig dispatch — Phase B stubs the synthesis path.
+    if multisig {
+        return Err(ToolkitError::MultisigConfig {
+            message: "v0.2 multisig synthesis pending Phase C".into(),
+        });
+    }
+
     let mut checks: Vec<VerifyCheck> = Vec::new();
 
     if xpub_arg.is_some() {
@@ -127,8 +208,10 @@ pub fn run<W: Write, E: Write>(
     let result = if any_fail { "mismatch" } else { "ok" };
 
     if args.json {
+        // v0.2: schema_version "2"; single-sig checks shape unchanged from v0.1
+        // (multisig array shape comes in Phase C).
         let json = VerifyBundleJson {
-            schema_version: "1",
+            schema_version: "2",
             result,
             checks,
         };
@@ -855,6 +938,12 @@ mod watch_only_tests {
             mk1: vec!["mk1placeholder".into()],
             md1: vec!["md1placeholder".into()],
             json: false,
+            cosigner: Vec::new(),
+            cosigners_file: None,
+            multisig_path_family: None,
+            privacy_preserving: false,
+            threshold: None,
+            cosigner_count: None,
         };
         // run() will fail at xpub parse, but the §2.2.2 warning should
         // already be on stderr.

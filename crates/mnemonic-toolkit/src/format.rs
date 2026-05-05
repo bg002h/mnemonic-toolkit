@@ -39,9 +39,50 @@ pub fn chunk_md1(s: &str) -> String {
     md_codec::encode::render_codex32_grouped(s, 5)
 }
 
-/// Bundle JSON output schema (SPEC §5.3). Field order is part of the schema.
+/// Discriminated union for `BundleJson.mk1` (SPEC §5.3 v0.2 + Q9 closure).
+///
+/// - `Single`: flat `Vec<String>` for single-sig invocations (matches v0.1 shape).
+/// - `Multi`: nested `Vec<Vec<String>>` for multisig (outer = per-cosigner).
+///
+/// `#[serde(untagged)]` makes the JSON output a bare array (or array-of-arrays)
+/// — no `Single`/`Multi` discriminator wrapper. Consumers branch on
+/// `BundleJson.multisig` (None → flat, Some → nested) before deserializing.
 #[derive(Debug, Serialize)]
-pub struct BundleJson<'a> {
+#[serde(untagged)]
+pub enum MkField {
+    Single(Vec<String>),
+    /// Reserved for Phase C multisig synthesis — emitted when
+    /// `BundleJson.multisig` is `Some(_)`.
+    #[allow(dead_code)]
+    Multi(Vec<Vec<String>>),
+}
+
+/// Per-cosigner descriptor entry for `MultisigInfo.cosigners` (SPEC §5.3 v0.2).
+#[derive(Debug, Serialize)]
+pub struct CosignerEntry {
+    pub index: usize,
+    /// `None` when `--privacy-preserving` (mk1 omits origin_fingerprint).
+    pub master_fingerprint: Option<String>,
+    pub origin_path: String,
+    pub xpub: String,
+}
+
+/// Multisig metadata block emitted into `BundleJson.multisig` (SPEC §5.3 v0.2).
+#[derive(Debug, Serialize)]
+pub struct MultisigInfo {
+    pub template: &'static str,
+    pub threshold: u8,
+    pub cosigner_count: usize,
+    /// `"bip48"` | `"bip87"`.
+    pub path_family: &'static str,
+    pub cosigners: Vec<CosignerEntry>,
+}
+
+/// Bundle JSON output schema (SPEC §5.3). Field order is part of the schema.
+/// v0.2: schema_version "2"; ownership of mk1 moved from borrowed slice to
+/// owned `MkField` to support the discriminated-union shape.
+#[derive(Debug, Serialize)]
+pub struct BundleJson {
     pub schema_version: &'static str,
     pub mode: &'static str, // "full" | "watch-only"
     pub network: &'static str,
@@ -49,10 +90,12 @@ pub struct BundleJson<'a> {
     pub account: u32,
     pub origin_path: String,
     pub master_fingerprint: String,
-    pub ms1: Option<&'a str>, // null in watch-only
-    pub mk1: &'a [String],
-    pub md1: &'a [String],
+    pub ms1: Option<String>, // null in watch-only
+    pub mk1: MkField,
+    pub md1: Vec<String>,
     pub engraving_card: Option<String>,
+    pub multisig: Option<MultisigInfo>,
+    pub privacy_preserving: bool,
 }
 
 /// Verify-bundle JSON output schema (SPEC §5.4). Field order is part of the schema.
@@ -70,7 +113,9 @@ pub struct VerifyCheck {
     pub detail: String,
 }
 
-/// Compose the engraving-card stderr text (SPEC §5.2). Pinned byte-exact.
+/// Compose the engraving-card stderr text (SPEC §5.2). Pinned byte-exact for
+/// single-sig modes; multisig modes are scaffolded in Phase B with TODOs for
+/// Phase C byte-exact pinning per SPEC §5.2 multisig stanzas.
 pub fn engraving_card(
     network: &str,
     template: &str,
@@ -83,8 +128,30 @@ pub fn engraving_card(
     s.push_str(&format!("network: {}\n", network));
     s.push_str(&format!("template: {}\n", template));
     s.push_str(&format!("account: {}\n", account));
-    s.push_str(&format!("origin path: {}\n", origin_path));
-    s.push_str(&format!("master fingerprint: {}\n", master_fingerprint));
+    match &mode {
+        EngravingMode::FullMultisig { multisig_info, .. }
+        | EngravingMode::WatchOnlyMultisig { multisig_info, .. } => {
+            // TODO Phase C: pin byte-exact text per SPEC §5.2 multisig stanzas
+            // (`threshold: K of N`, `cosigner_count: N`, `multisig_path_family`,
+            // origin-paths block, SELF-MULTISIG WARNING, HARDWARE WALLET CAVEAT).
+            s.push_str(&format!(
+                "threshold: {} of {}\n",
+                multisig_info.threshold, multisig_info.cosigner_count,
+            ));
+            s.push_str(&format!(
+                "cosigner_count: {}\n",
+                multisig_info.cosigner_count
+            ));
+            s.push_str(&format!(
+                "multisig_path_family: {}\n",
+                multisig_info.path_family
+            ));
+        }
+        _ => {
+            s.push_str(&format!("origin path: {}\n", origin_path));
+            s.push_str(&format!("master fingerprint: {}\n", master_fingerprint));
+        }
+    }
     match mode {
         EngravingMode::FullNoPassphrase { language } => {
             s.push_str(&format!("language: {} (BIP-39 checksum valid)\n", language));
@@ -100,15 +167,65 @@ pub fn engraving_card(
                 "ms1 card omitted; recover entropy from the original wallet's other backup.\n",
             );
         }
+        EngravingMode::FullMultisig { language, .. } => {
+            // TODO Phase C: pin byte-exact text per SPEC §5.2 full-multisig stanza.
+            s.push_str(&format!("language: {} (BIP-39 checksum valid)\n", language));
+        }
+        EngravingMode::WatchOnlyMultisig { .. } => {
+            // TODO Phase C: pin byte-exact text per SPEC §5.2 watch-only-multisig stanza.
+            s.push_str(
+                "mode: watch-only multisig (xpub-supplied per cosigner; no entropy known to toolkit)\n",
+            );
+            s.push_str(
+                "ms1 card omitted; recover entropy from each cosigner's individual seed backup.\n",
+            );
+        }
     }
     s.push_str("engrave each card on its own plate. record this card alongside.\n");
     s
 }
 
 pub enum EngravingMode<'a> {
-    FullNoPassphrase { language: &'a str },
-    FullWithPassphrase { language: &'a str },
+    FullNoPassphrase {
+        language: &'a str,
+    },
+    FullWithPassphrase {
+        language: &'a str,
+    },
     WatchOnly,
+    /// Phase B scaffolding — Phase C will pin byte-exact text per SPEC §5.2.
+    #[allow(dead_code)]
+    FullMultisig {
+        language: &'a str,
+        multisig_info: &'a MultisigInfo,
+        account: u32,
+        paths_shared: bool,
+    },
+    /// Phase B scaffolding — Phase C will pin byte-exact text per SPEC §5.2.
+    #[allow(dead_code)]
+    WatchOnlyMultisig {
+        multisig_info: &'a MultisigInfo,
+        account: u32,
+        paths_shared: bool,
+    },
+}
+
+/// Extract a chunk_set_id from an mk1 chunked-header string per SPEC §2.2.1
+/// step 1. Returns `None` for SingleString-headered strings or decode failures.
+///
+/// Used by verify-bundle multisig grouping: cosigners' mk1 chunks are grouped
+/// by `chunk_set_id` to recover per-cosigner card sets from a flat input list.
+#[allow(dead_code)]
+pub fn chunk_set_id_extract(s: &str) -> Option<u32> {
+    use mk_codec::string_layer::{decode_string, StringLayerHeader};
+    let decoded = decode_string(s).ok()?;
+    let (header, _consumed) = StringLayerHeader::from_5bit_symbols(decoded.data()).ok()?;
+    match header {
+        StringLayerHeader::Chunked { chunk_set_id, .. } => Some(chunk_set_id),
+        StringLayerHeader::SingleString { .. } => None,
+        // StringLayerHeader is #[non_exhaustive]; future variants → None.
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -178,6 +295,32 @@ engrave each card on its own plate. record this card alongside.
         assert!(card.contains(
             "passphrase: USED — not engraved on any card; record separately and never lose it.\n"
         ));
+    }
+
+    /// Phase B.3 unit test (resolves I-1 from PLAN r1 review): MkField::Single
+    /// serializes byte-identically to v0.1's flat `Vec<String>` shape via
+    /// #[serde(untagged)] — no Single discriminator wrapper in the JSON output.
+    #[test]
+    fn mk_field_single_serde_byte_identical_to_v0_1() {
+        let mk = MkField::Single(vec!["mk1qfoo".to_string()]);
+        let json = serde_json::to_string(&mk).unwrap();
+        assert_eq!(json, "[\"mk1qfoo\"]");
+    }
+
+    #[test]
+    fn mk_field_multi_serializes_as_nested_array() {
+        let mk = MkField::Multi(vec![
+            vec!["mk1qa".to_string()],
+            vec!["mk1qb".to_string(), "mk1qc".to_string()],
+        ]);
+        let json = serde_json::to_string(&mk).unwrap();
+        assert_eq!(json, "[[\"mk1qa\"],[\"mk1qb\",\"mk1qc\"]]");
+    }
+
+    #[test]
+    fn chunk_set_id_extract_returns_none_for_garbage() {
+        assert_eq!(chunk_set_id_extract("not-an-mk1-string"), None);
+        assert_eq!(chunk_set_id_extract(""), None);
     }
 
     #[test]
