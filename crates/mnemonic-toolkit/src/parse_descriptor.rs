@@ -293,8 +293,12 @@ pub fn substitute_synthetic(
     Ok((out, key_map))
 }
 
-/// Strip optional `[fp/path]` prefix and `/derivation` suffix to recover the
-/// bare xpub key as substituted.
+/// Strip `/derivation` suffix to recover the bare xpub key as substituted.
+/// The `[fp/path]` bracket-strip is defensive: `substitute_synthetic` already
+/// removes annotations before passing to `Descriptor::from_str`, so
+/// rust-miniscript never re-annotates the bare xpubs and `key_str` arrives
+/// without brackets in normal flow. The strip stays for safety in case a
+/// caller bypasses substitute_synthetic.
 fn lookup_key(key_str: &str, km: &BTreeMap<String, u8>) -> Result<u8, ToolkitError> {
     let after_bracket = key_str.find(']').map_or(key_str, |pos| &key_str[pos + 1..]);
     let base = after_bracket.split('/').next().unwrap_or(after_bracket);

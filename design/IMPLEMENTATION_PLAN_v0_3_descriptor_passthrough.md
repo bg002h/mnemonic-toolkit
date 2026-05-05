@@ -48,7 +48,7 @@ A.5. `walk_miniscript_node` Layer 2 — already-supported arms (PkK, PkH, Multi,
 
 A.6. `walk_miniscript_node` Layer 2 — v0.3-NEW arms (After, Older, Sha256, Hash256, Hash160, Ripemd160, RawPkH, False, True, Verify, Swap, Alt, DupIf, NonZero, ZeroNotEqual, AndV, AndB, AndOr, OrB, OrC, OrD, OrI, Thresh — 23 arms). Test: round-trip each (23 tests).
 
-A.7. `parse_descriptor` top-level orchestration (§4.9 step 7). Test: full pipeline for representative inputs (hash-locked, timelock, hybrid, multisig with annotation).
+A.7. `parse_descriptor` top-level orchestration (§4.9 step 7). Test: full pipeline for representative inputs (hash-locked, timelock, hybrid, multisig with annotation). **Cleanup:** remove the module-level `#![allow(dead_code)]` from `parse_descriptor.rs` (added in A.1 for incremental compilation); confirm clippy clean without it once `parse_descriptor` is fully wired and called from the orchestration layer.
 
 A.8. Mode-determination function (§4.10). Test: `n==1` cases (wpkh, pkh, tr-keypath, wsh-pk, wsh-multi-1) all route single-sig; `n≥2` cases route multisig; `wsh(multi(1,@0))` does NOT collapse the tree (tree-faithfulness invariant).
 
@@ -63,6 +63,8 @@ A.8. Mode-determination function (§4.10). Test: `n==1` cases (wpkh, pkh, tr-key
 - MODIFIED: `crates/mnemonic-toolkit/src/main.rs` — wire-up the new flags' help text.
 
 **TDD steps:**
+
+B.0 (pre-requisite, surfaced by Phase A mid-phase review I-2). Add `DescriptorParse(String)` variant to `crates/mnemonic-toolkit/src/error.rs`, mapped to exit code 2 (joining `ModeViolation`/`NetworkMismatch` in the exit-2 group). Migrate the lex/resolve/walk error sites in `parse_descriptor.rs` from `BadInput` to `DescriptorParse` so SPEC §6.7 descriptor-parse failures actually exit 2. Note: `ModeViolation` (exit 2, distinct kind) covers SPEC §6.9 flag-combination violations; `DescriptorParse` covers SPEC §6.7 descriptor-content errors. Both are exit 2 but represent different SPEC categories — keep them separate variants.
 
 B.1. `BundleArgs::template: Option<CliTemplate>` with `required_unless_present_any = ["descriptor", "descriptor_file"]`. Test: clap-level rejection when none of three are present; clap-level acceptance when any one is.
 
