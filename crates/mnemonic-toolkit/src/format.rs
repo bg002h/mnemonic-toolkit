@@ -133,7 +133,7 @@ pub struct VerifyBundleJson {
 
 #[derive(Debug, Serialize)]
 pub struct VerifyCheck {
-    pub name: &'static str,
+    pub name: String,
     pub result: &'static str, // "ok" | "fail" | "skipped"
     pub detail: String,
 }
