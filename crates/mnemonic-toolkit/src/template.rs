@@ -33,10 +33,10 @@ pub enum CliTemplate {
     /// `sh(wsh(sortedmulti(K,...)))` — nested-segwit sorted multisig.
     #[value(name = "sh-wsh-sortedmulti")]
     ShWshSortedMulti,
-    /// `tr(@0,multi_a(K,@1,...,@N))` — taproot unsorted multisig (script-path leaf).
+    /// `tr(multi_a(K,@0,...,@N-1))` — taproot unsorted multisig (script-path leaf).
     #[value(name = "tr-multi-a")]
     TrMultiA,
-    /// `tr(@0,sortedmulti_a(K,@1,...,@N))` — taproot sorted multisig (script-path leaf).
+    /// `tr(sortedmulti_a(K,@0,...,@N-1))` — taproot sorted multisig (script-path leaf).
     #[value(name = "tr-sortedmulti-a")]
     TrSortedMultiA,
 }
@@ -192,11 +192,11 @@ impl CliTemplate {
                 } else {
                     Tag::SortedMultiA
                 };
-                // For tr-multi-a, all N keys are signing keys in the script-path
-                // leaf; key_index=0 designates the BIP-86 NUMS internal key
-                // emitted by md-codec when the tap-script-tree is non-empty.
-                // (md-codec's compute_wallet_policy_id resolves the NUMS key
-                // from the tlv.pubkeys at index 0; we match the convention.)
+                // tr(multi_a(K, @0, ..., @N-1)): all N placeholders are signing
+                // keys in the script-path leaf. key_index=0 here is the Body::Tr
+                // wrapper's internal-key reference; md-codec interprets it per
+                // BIP-388 wallet-policy semantics for taproot script-path-only
+                // wallets.
                 Node {
                     tag: Tag::Tr,
                     body: Body::Tr {
