@@ -182,4 +182,4 @@ After (c) is approved + SPEC patched:
 - `.spike-v0.3/src/main.rs` — five-section binary that exercises each sub-goal.
 - `.spike-v0.3/Cargo.lock` — generated; do NOT commit.
 
-`.spike-v0.3/` is not in `.gitignore`; the implementer must remember to NOT `git add` it. Per `feedback_avoid_git_add_all`, all stages in this repo are explicit-paths only — accidental staging is prevented by discipline, not config. (Optional: a one-line `.gitignore` patch could harden this; flagged for the next reviewer's discretion.)
+`.spike-v0.3/` was added to `.gitignore` 2026-05-05 (architect L-3 in this review's verdict was applied inline with the other patches); accidental staging is now blocked at the git level, not just by discipline.

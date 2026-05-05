@@ -1225,16 +1225,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "RawPkH is descriptor-unreachable in rust-miniscript v13 — appears only via raw-script decode (v0.4+ scope)"]
     fn arm_raw_pkh() {
-        // Terminal::RawPkH is a script-decode-only fragment: it appears when
-        // miniscript decodes a raw P2WSH script that uses OP_DUP+OP_HASH160
-        // with an unknown key (only the 20-byte hash visible). Descriptor-mode
-        // can't produce it directly. The walker arm is covered structurally —
-        // any future raw-script intake (out of v0.3 scope) routes here.
-        // This test pins the arm via match-arm coverage rather than runtime
-        // exercise: if the arm is removed, the v0.3-unsupported error fires
-        // for any decoded RawPkH, which would surface in v0.4+ raw-script work.
-        // No-op runtime assertion; semantic guarantee from the walker code.
+        // Walker arm exists for round-trip intake of pre-encoded bundles;
+        // not reachable from --descriptor parse path. Counted as 1 stub.
     }
 
     #[test]
@@ -1279,12 +1273,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "DupIf descriptor-unreachable in rust-miniscript v13 — every d: example in ms_tests.rs is invalid_ms"]
     fn arm_dup_if() {
-        // Terminal::DupIf (`d:` wrapper) has restrictive type constraints:
-        // every example in rust-miniscript v13.0.0's ms_tests.rs is `invalid_ms`.
-        // Practically descriptor-unreachable in v13. The walker arm exists for
-        // completeness; semantic guarantee from the match-arm code itself.
-        // Future v0.4 raw-script intake (out of v0.3 scope) may exercise it.
+        // Walker arm exists for completeness; counted as 1 stub.
     }
 
     #[test]

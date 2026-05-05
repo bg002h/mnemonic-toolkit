@@ -267,6 +267,25 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.3-nice-to-have`
 
+### `ctx-for-descriptor-heuristic-misroutes` — Phase A `ctx_for_descriptor` is string-prefix heuristic
+
+- **Surfaced:** v0.3 Phase A end-of-phase architect review I-2 (2026-05-05).
+- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs` `ctx_for_descriptor`.
+- **What:** ctx is classified by string prefix (`wpkh(` / `pkh(` / `sh(wpkh(` → SingleSig; else MultiSig). This determines synthetic xpub depth byte. Phase A uses the result only for test-fixture lookup — synthetic xpubs are never wire-emitted, so misrouting is benign in Phase A. But Phase B/C will use this result for real key-path derivation. `sh(pk(@0))` and `wsh(pk(@0))` (single-sig under §4.10's `n==1` rule) get classified MultiSig (depth 4), creating an inconsistency between synthetic xpub depth and expected real-derivation depth.
+- **Fix direction:** replace the string-prefix heuristic with a post-parse mode classifier that derives ScriptCtx from `n` (or from `DescriptorMode` after `determine_mode`). Apply in Phase B when wiring the bundle command's mode dispatch. Or expand the heuristic to cover `sh(pk` and `sh(wsh`.
+- **Why deferred:** non-blocking for Phase A (test-only impact); Phase B implementer must address before parse_descriptor is called from CLI dispatch.
+- **Status:** `open`
+- **Tier:** `v0.3`
+
+### `parse-descriptor-allow-dead-code-audit` — module-level `#![allow(dead_code)]` audit
+
+- **Surfaced:** v0.3 Phase A end-of-phase architect review L-1 (2026-05-05).
+- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs` line 5.
+- **What:** Module-level `#![allow(dead_code)]` was added in A.1 because items were used only by tests until A.7 wired the public API. Once Phase B.3 wires `parse_descriptor` into bundle command dispatch, audit and remove or narrow the attribute. Goal: legitimate dead-code warnings should fire if items become unused after Phase B.
+- **Why deferred:** Phase B is the natural time to audit reachability.
+- **Status:** `open`
+- **Tier:** `v0.3`
+
 ### `tr-sortedmulti-a-via-upstream` — `tr(@0, sortedmulti_a(...))` deferred to v0.4 pending upstream parser
 
 - **Surfaced:** v0.3 pre-Phase-A SPIKE 2026-05-05 (`design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1).
