@@ -1,7 +1,9 @@
 //! User-supplied BIP-388 descriptor parser (v0.3 §4.9).
 
-// Phase A is incremental; some items are reachable only via tests until A.7
-// wires the module into the bundle command. Lifted at end of Phase A.
+// Phase A ships the module's public API (parse_descriptor + supporting types).
+// Phase B wires the bundle command's --descriptor / --descriptor-file flags
+// to call parse_descriptor; until then, the module is exercised only by tests.
+// Items kept #[allow(dead_code)] individually if needed.
 #![allow(dead_code)]
 
 use crate::error::ToolkitError;
@@ -13,6 +15,7 @@ use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::tag::Tag;
 use md_codec::tree::{Body, Node};
 use md_codec::use_site_path::{Alternative, UseSitePath};
+use md_codec::{Descriptor as MdDescriptor, TlvSection};
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use regex::Regex;
 use std::collections::{BTreeMap, HashSet};
@@ -617,6 +620,99 @@ fn walk_two_children<C: miniscript::ScriptContext>(
     })
 }
 
+/// One xpub bound to a `@i` placeholder. `payload` is the 65-byte BIP-32 xpub
+/// raw form (4-byte version + depth + parent_fp + child + chain_code + pubkey).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedKey {
+    pub i: u8,
+    pub payload: [u8; 65],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedFingerprint {
+    pub i: u8,
+    pub fp: [u8; 4],
+}
+
+/// Top-level descriptor pipeline (SPEC §4.9 step 7). Orchestrates lex → resolve →
+/// substitute → miniscript parse → walk → md_codec::Descriptor with TLV-populated
+/// keys/fingerprints. Mirrors md-cli's `parse_template`.
+pub fn parse_descriptor(
+    input: &str,
+    keys: &[ParsedKey],
+    fingerprints: &[ParsedFingerprint],
+) -> Result<MdDescriptor, ToolkitError> {
+    let ctx = ctx_for_descriptor(input);
+    let occs = lex_placeholders(input)?;
+    let resolved = resolve_placeholders(&occs)?;
+
+    let (substituted, key_map) = substitute_synthetic(input, ctx)?;
+    let ms_desc = MsDescriptor::<DescriptorPublicKey>::from_str(&substituted)
+        .map_err(|e| ToolkitError::BadInput(format!("descriptor parse failed: {e}")))?;
+    let tree = walk_root(&ms_desc, &key_map)?;
+
+    let pubkeys = if keys.is_empty() {
+        None
+    } else {
+        let mut v: Vec<_> = keys.iter().map(|k| (k.i, k.payload)).collect();
+        v.sort_by_key(|(i, _)| *i);
+        Some(v)
+    };
+    let fp_vec = if fingerprints.is_empty() {
+        None
+    } else {
+        let mut v: Vec<_> = fingerprints.iter().map(|f| (f.i, f.fp)).collect();
+        v.sort_by_key(|(i, _)| *i);
+        Some(v)
+    };
+    let use_site_path_overrides = if resolved.use_site_path_overrides.is_empty() {
+        None
+    } else {
+        Some(resolved.use_site_path_overrides)
+    };
+
+    let mut tlv = TlvSection::new_empty();
+    tlv.use_site_path_overrides = use_site_path_overrides;
+    tlv.fingerprints = fp_vec;
+    tlv.pubkeys = pubkeys;
+
+    Ok(MdDescriptor {
+        n: resolved.n,
+        path_decl: resolved.path_decl,
+        use_site_path: resolved.use_site_path,
+        tree,
+        tlv,
+    })
+}
+
+/// SPEC §4.10 mode determination: `n == 1` → SingleSig regardless of outer
+/// wrapper; `n ≥ 2` → MultiSig. The mode controls key sourcing, mk1 cardinality,
+/// and verify-bundle's check-element count — NOT the descriptor's structural tree.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DescriptorMode {
+    SingleSig,
+    MultiSig,
+}
+
+pub fn determine_mode(d: &MdDescriptor) -> DescriptorMode {
+    if d.n == 1 {
+        DescriptorMode::SingleSig
+    } else {
+        DescriptorMode::MultiSig
+    }
+}
+
+/// Heuristic ScriptCtx for substitute_synthetic — depth 3 (SingleSig) for
+/// wpkh/pkh/sh-wpkh outer wrappers, depth 4 (MultiSig) otherwise.
+fn ctx_for_descriptor(descriptor: &str) -> ScriptCtx {
+    let head = descriptor.trim_start();
+    if head.starts_with("wpkh(") || head.starts_with("pkh(") || head.starts_with("sh(wpkh(") {
+        ScriptCtx::SingleSig
+    } else {
+        ScriptCtx::MultiSig
+    }
+}
+
 /// Synthetic xpub for placeholder `@i` under `ctx`. Deterministic; never wire-emitted.
 /// Seed prefix `b"toolkit-v0.3"` is normative — fixture stability depends on it.
 pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String {
@@ -916,6 +1012,143 @@ mod tests {
         };
         assert_eq!(*key_index, 0);
         assert!(tree.is_none());
+    }
+
+    // ---- A.8: mode-determination (6 tests) ----
+
+    fn parse_for_mode(template: &str, ctx: ScriptCtx, n: u8) -> MdDescriptor {
+        let (keys, fps) = keys_and_fps_for(n, ctx);
+        parse_descriptor(template, &keys, &fps).unwrap()
+    }
+
+    #[test]
+    fn mode_n1_wpkh_singlesig() {
+        let d = parse_for_mode("wpkh(@0/<0;1>/*)", ScriptCtx::SingleSig, 1);
+        assert_eq!(determine_mode(&d), DescriptorMode::SingleSig);
+    }
+
+    #[test]
+    fn mode_n1_pkh_singlesig() {
+        let d = parse_for_mode("pkh(@0/<0;1>/*)", ScriptCtx::SingleSig, 1);
+        assert_eq!(determine_mode(&d), DescriptorMode::SingleSig);
+    }
+
+    #[test]
+    fn mode_n1_tr_keypath_singlesig() {
+        let d = parse_for_mode("tr(@0/<0;1>/*)", ScriptCtx::SingleSig, 1);
+        assert_eq!(determine_mode(&d), DescriptorMode::SingleSig);
+    }
+
+    #[test]
+    fn mode_n1_wsh_pk_singlesig() {
+        // wsh(pk(@0)) has n=1; mode is SingleSig regardless of outer wrapper.
+        let d = parse_for_mode("wsh(pk(@0/<0;1>/*))", ScriptCtx::MultiSig, 1);
+        assert_eq!(determine_mode(&d), DescriptorMode::SingleSig);
+    }
+
+    #[test]
+    fn mode_n1_degenerate_wsh_multi_singlesig() {
+        // wsh(multi(1,@0)) is structurally multi but n=1 → SingleSig (degenerate).
+        // Tree-faithfulness invariant: tree shape is preserved (Multi node remains).
+        let d = parse_for_mode("wsh(multi(1,@0/<0;1>/*))", ScriptCtx::MultiSig, 1);
+        assert_eq!(determine_mode(&d), DescriptorMode::SingleSig);
+        // Verify tree faithfulness: tree still contains Multi(k=1, n=1), not collapsed to PkK.
+        let inner = match &d.tree.body {
+            Body::Children(kids) => &kids[0],
+            _ => panic!("expected Wsh+Children"),
+        };
+        assert_eq!(inner.tag, Tag::Multi);
+    }
+
+    #[test]
+    fn mode_n2_wsh_sortedmulti_multisig() {
+        let d = parse_for_mode(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            ScriptCtx::MultiSig,
+            2,
+        );
+        assert_eq!(determine_mode(&d), DescriptorMode::MultiSig);
+    }
+
+    // ---- A.7: parse_descriptor top-level orchestration (4 tests) ----
+
+    /// Build a deterministic ParsedKey for index `i` from the synthetic xpub.
+    /// Test-only — Phase B+ supplies real xpubs.
+    fn synthetic_parsed_key(i: u8, ctx: ScriptCtx) -> ParsedKey {
+        let xpub_str = synthetic_xpub_for(i, ctx);
+        let bytes = bitcoin::base58::decode_check(&xpub_str).unwrap();
+        // 78-byte BIP-32 xpub → 65-byte md-codec form (drop 4-byte version + 9 unused = 13 prefix bytes).
+        let mut payload = [0u8; 65];
+        payload.copy_from_slice(&bytes[13..78]);
+        ParsedKey { i, payload }
+    }
+
+    fn synthetic_parsed_fp(i: u8) -> ParsedFingerprint {
+        // Use a stable test-only fingerprint per index.
+        let fp = [0xde, 0xad, 0xbe, 0xef ^ i];
+        ParsedFingerprint { i, fp }
+    }
+
+    fn keys_and_fps_for(n: u8, ctx: ScriptCtx) -> (Vec<ParsedKey>, Vec<ParsedFingerprint>) {
+        (
+            (0..n).map(|i| synthetic_parsed_key(i, ctx)).collect(),
+            (0..n).map(synthetic_parsed_fp).collect(),
+        )
+    }
+
+    #[test]
+    fn parse_descriptor_hash_locked() {
+        let template = format!("wsh(and_v(v:pk(@0/<0;1>/*),sha256({H32})))");
+        let (keys, fps) = keys_and_fps_for(1, ScriptCtx::MultiSig);
+        let d = parse_descriptor(&template, &keys, &fps).unwrap();
+        assert_eq!(d.n, 1);
+        assert_eq!(d.tree.tag, Tag::Wsh);
+        assert!(d.tlv.pubkeys.as_ref().is_some_and(|v| v.len() == 1));
+        assert!(d.tlv.fingerprints.as_ref().is_some_and(|v| v.len() == 1));
+    }
+
+    #[test]
+    fn parse_descriptor_timelock() {
+        let template = "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))";
+        let (keys, fps) = keys_and_fps_for(1, ScriptCtx::MultiSig);
+        let d = parse_descriptor(template, &keys, &fps).unwrap();
+        assert_eq!(d.n, 1);
+        assert_eq!(d.tree.tag, Tag::Wsh);
+        let inner = match &d.tree.body {
+            Body::Children(kids) => &kids[0],
+            _ => panic!("expected Wsh+Children"),
+        };
+        assert_eq!(inner.tag, Tag::AndV);
+    }
+
+    #[test]
+    fn parse_descriptor_hybrid() {
+        // Combines hash + timelock via or_d.
+        let template = format!("wsh(or_d(pk(@0/<0;1>/*),and_v(v:sha256({H32}),older(144))))");
+        let (keys, fps) = keys_and_fps_for(1, ScriptCtx::MultiSig);
+        let d = parse_descriptor(&template, &keys, &fps).unwrap();
+        assert_eq!(d.n, 1);
+        let inner = match &d.tree.body {
+            Body::Children(kids) => &kids[0],
+            _ => panic!("expected Wsh+Children"),
+        };
+        assert_eq!(inner.tag, Tag::OrD);
+    }
+
+    #[test]
+    fn parse_descriptor_multisig_with_annotation() {
+        let template = "wsh(sortedmulti(2,@0[deadbeef/48'/0'/0'/2']/<0;1>/*,@1[cafef00d/48'/0'/0'/2']/<0;1>/*))";
+        let (keys, fps) = keys_and_fps_for(2, ScriptCtx::MultiSig);
+        let d = parse_descriptor(template, &keys, &fps).unwrap();
+        assert_eq!(d.n, 2);
+        assert_eq!(d.tree.tag, Tag::Wsh);
+        let inner = match &d.tree.body {
+            Body::Children(kids) => &kids[0],
+            _ => panic!("expected Wsh+Children"),
+        };
+        assert_eq!(inner.tag, Tag::SortedMulti);
+        // Origin paths are Shared (both annotations agree).
+        assert!(matches!(d.path_decl.paths, PathDeclPaths::Shared(_)));
     }
 
     // ---- A.6: v0.3-NEW Layer 2 arms (23 tests) ----
