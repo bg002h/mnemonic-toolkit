@@ -3145,6 +3145,20 @@ fn fingerprint_without_xpub_byte_exact() {
 }
 
 #[test]
+fn phrase_with_xpub_collision_clap_exit_64() {
+    // SPEC §6.6 leaves --phrase ↔ --xpub collision to clap's
+    // mutually-exclusive group → exit 64 with clap default text. This
+    // test locks the boundary so the byte-exact mode-violation rules
+    // never accidentally co-opt this row.
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(&["bundle", "--phrase", "x", "--xpub", "y", "--master-fingerprint", "deadbeef",
+                "--network", "mainnet", "--template", "bip84"])
+        .assert()
+        .failure()
+        .code(64);
+}
+
+#[test]
 fn verify_bundle_no_engraving_card_flag_rejected() {
     // verify-bundle does not emit an engraving card; the flag should not exist.
     // clap-derive auto-rejects unknown flags; main.rs maps that to exit 64.
@@ -3311,4 +3325,5 @@ Final commit count expected: ~7-10 commits across Phase 1-5 (one per phase + one
 ## Revision history
 
 - **r1** (2026-05-04) — initial plan, mirroring ms-cli plan structure (5 phases, ~12 modules + integration tests).
-- **r2** (2026-05-04, this commit) — plan-architect-r1 fixes: 0 critical / 2 important / 9 nits. Folded I-1 (clap `conflicts_with` violates SPEC §6.6 byte-exact-text contract → switched to runtime mode-violation pre-checks emitting ToolkitError::ModeViolation with byte-exact §6.6 strings via `cmd::bundle::mode_text` constants; mirrored into verify-bundle), I-2 (`--master-fingerprint` requires-direction was one-way clap; added bidirectional runtime checks with byte-exact text), L1 (dropped `stderr_handle()` trampoline + dead `use std::io::Write` in main.rs; consolidated `use std::io::{self, Write}`), L8 (added `xpub_without_fingerprint`, `fingerprint_without_xpub`, `verify_bundle_no_engraving_card_flag_rejected` integration tests). Other nits (L2 elided sibling test stubs, L3 byte-exact bip84 mainnet xpub, L4 vestigial `cd`s, L5 main.rs replacement notes, L6 TDD-mechanical exception, L7 cargo-publish-dry-run gate, L9 magic test count) deferred to executor or design/FOLLOWUPS.md. Pending plan architect r2 review.
+- **r2** (2026-05-04) — plan-architect-r1 fixes: 0 critical / 2 important / 9 nits. Folded I-1 (clap `conflicts_with` violates SPEC §6.6 byte-exact-text contract → switched to runtime mode-violation pre-checks emitting ToolkitError::ModeViolation with byte-exact §6.6 strings via `cmd::bundle::mode_text` constants; mirrored into verify-bundle), I-2 (`--master-fingerprint` requires-direction was one-way clap; added bidirectional runtime checks with byte-exact text), L1 (dropped `stderr_handle()` trampoline + dead `use std::io::Write` in main.rs; consolidated `use std::io::{self, Write}`), L8 (added `xpub_without_fingerprint`, `fingerprint_without_xpub`, `verify_bundle_no_engraving_card_flag_rejected` integration tests). Other nits (L2 elided sibling test stubs, L3 byte-exact bip84 mainnet xpub, L4 vestigial `cd`s, L5 main.rs replacement notes, L6 TDD-mechanical exception, L7 cargo-publish-dry-run gate, L9 magic test count) deferred to executor or design/FOLLOWUPS.md.
+- **r3** (2026-05-04, this commit) — plan-architect-r2 polish (0 critical / 0 important / 8 nits / 7 affirmations; explicit "execution-ready" verdict). Folded L-r2-1 (SPEC ↔ plan backtick canonicalization — dropped backticks from SPEC §6.6 messages to match plan's plain-text `mode_text` constants), L-r2-3 (SPEC §6.6 routing column added; `--xpub -` explicitly noted as the sole exit-1 row), L-r2-4 (§10.2 cargo-publish-dry-run gate explicitly annotated "skipped pre-crates.io"), L-r2-5 (added `phrase_with_xpub_collision_clap_exit_64` test). Plan execution-ready.

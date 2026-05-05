@@ -700,17 +700,19 @@ Same as ms-cli SPEC §6.3:
 
 ### §6.6 Mode-violation messages (byte-exact)
 
-Pinned for integration tests (resolves r1-I6 + r2-I5):
+Pinned byte-exact for integration tests (resolves r1-I6 + r2-I5). Mode-violation messages are **plain text without backticks** for ergonomic stderr rendering — backticks would appear literally in the terminal. The implementation pins these as `pub const` strings in `cmd/bundle::mode_text` (mirror imports for verify-bundle).
 
-| Trigger | Message |
-|---|---|
-| `--passphrase` with `--xpub` | "`--passphrase` is incompatible with `--xpub`: the xpub is already a post-passphrase derivation product (the passphrase is baked into the xpub at engrave time)." |
-| `--language` with `--xpub` | "`--language` is meaningful only with `--phrase`; xpub-only mode does not consult any wordlist" |
-| `--phrase` with `--xpub` | (clap-level mutually-exclusive group; exits 64) |
-| `--xpub` without `--master-fingerprint` | "`--xpub` requires `--master-fingerprint` (xpub mode needs the master fingerprint to populate mk1's origin)" |
-| `--xpub -` | "`--xpub` does not accept stdin (`-`); pass the xpub literally on argv" |
-| `verify-bundle --xpub --passphrase` | (same byte-exact text as `bundle --xpub --passphrase`; mirror the rule onto verify-bundle for symmetry) |
-| `verify-bundle --xpub --language` | (same byte-exact text as `bundle --xpub --language`; mirror onto verify-bundle) |
+| Trigger | Routing | Message (byte-exact) |
+|---|---|---|
+| `--passphrase` with `--xpub` | ModeViolation → exit 2 | `--passphrase is incompatible with --xpub: the xpub is already a post-passphrase derivation product (the passphrase is baked into the xpub at engrave time).` |
+| `--language` with `--xpub` | ModeViolation → exit 2 | `--language is meaningful only with --phrase; xpub-only mode does not consult any wordlist` |
+| `--xpub` without `--master-fingerprint` | ModeViolation → exit 2 | `--xpub requires --master-fingerprint (xpub mode needs the master fingerprint to populate mk1's origin)` |
+| `--master-fingerprint` without `--xpub` | ModeViolation → exit 2 | `--master-fingerprint is meaningful only with --xpub` |
+| `--xpub -` (stdin sentinel for xpub) | BadInput → **exit 1** | `--xpub does not accept stdin (-); pass the xpub literally on argv` |
+| `--phrase` with `--xpub` | clap mutual-exclusion → **exit 64** (clap default text) | (not byte-exact-pinned — usage error, not mode violation) |
+| `verify-bundle` mode-violations | (same as `bundle`; symmetric mirror) | imports `cmd::bundle::mode_text` constants |
+
+**Routing note:** `--xpub -` is exit 1 (BadInput) — it's a syntactic-input violation, not a mode mismatch, so it's the only row in this table that does NOT route through `ToolkitError::ModeViolation`. The message stays in `mode_text` for centralized pinning.
 
 ---
 
@@ -850,7 +852,7 @@ Phase 1 task 1.1 is a **verification spike** (no code lands): read `bitcoin = "0
 - `cargo clippy --all-targets -D warnings`
 - `cargo fmt --check`
 - `cargo test --workspace`
-- `cargo publish --dry-run -p mnemonic-toolkit` (Phase 5)
+- `cargo publish --dry-run -p mnemonic-toolkit` — **skipped pre-crates.io**: toolkit's git-deps to ms-codec / mk-codec / md-codec block dry-run packaging until the three siblings publish to crates.io. Phase 5 documents the expected failure; the gate becomes mandatory only when `[dependencies]` flips from git tags to crates.io versions.
 
 ### §10.3 Dependency model
 
