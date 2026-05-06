@@ -283,8 +283,7 @@ pub(crate) fn derive_xpub_at_path(
 
 /// Synthesize a full-mode multisig bundle (self-multisig: N cosigners derived
 /// from one seed at one path; all N xpubs are byte-identical).
-/// SPEC §4.1, §4.5 multisig, §4.6 multisig. Test-only helper after v0.4.2 Phase M.
-#[allow(dead_code)]
+/// SPEC §4.1, §4.5 multisig, §4.6 multisig.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_full(
     seed_mnemonic: &bip39::Mnemonic,
@@ -409,8 +408,7 @@ pub fn synthesize_multisig_full(
 }
 
 /// Synthesize a watch-only multisig bundle from cosigner xpubs.
-/// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig. Test-only helper after v0.4.2 Phase M.
-#[allow(dead_code)]
+/// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_watch_only(
     cosigners: &[CosignerSpec],

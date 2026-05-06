@@ -397,44 +397,30 @@ fn run_watch_only<E: Write>(
 }
 
 
-/// Per-cosigner expected value for multisig verify cross-checks. Source varies
-/// by mode (full = derived from --phrase; watch-only = supplied cosigner spec).
-struct ExpectedCosigner {
-    xpub: Xpub,
-    master_fingerprint: bitcoin::bip32::Fingerprint,
-    path: bitcoin::bip32::DerivationPath,
-}
-
-/// Multisig verify-bundle entry. Implements SPEC §2.2.1 multisig grouping +
-/// SPEC §5.4 `3 + 6N` per-cosigner check enumeration.
+/// Multisig verify-bundle entry. Synthesizes the expected Bundle (full or
+/// watch-only) and dispatches to `emit_verify_checks(... is_multisig: true)`,
+/// which emits the SPEC §5.7 `3 + 6N` schema in this order:
 ///
-/// Total checks emitted: `3 + 6N` for N cosigners, in this order:
-///   ms1_entropy_match (1)
-///   mk1_decode[i]            i ∈ 0..N (N)
-///   mk1_xpub_match[i]        i ∈ 0..N (N)
-///   mk1_fingerprint_match[i] i ∈ 0..N (N)
-///   mk1_path_match[i]        i ∈ 0..N (N)
-///   md1_decode (1)
-///   md1_wallet_policy (1)
-///   md1_xpub_match[i]        i ∈ 0..N (N)
-///   stub_linkage[i]          i ∈ 0..N (N)
+///   For each cosigner i ∈ 0..N (interleaved by slot):
+///     ms1_decode[i], ms1_entropy_match[i],
+///     mk1_decode[i], mk1_xpub_match[i],
+///     mk1_fingerprint_match[i], mk1_path_match[i].
+///   Then 3 shared md1 checks:
+///     md1_decode, md1_wallet_policy, md1_xpub_match.
 ///
-/// Cosigner association: per SPEC §2.2.1 step 6, decoded cards' xpubs are
-/// matched against md1's `tlv.pubkeys` to determine each card's cosigner index.
-/// In self-multisig (full mode) all N pubkeys are byte-identical and the mapping
-/// is positional in decode order. Cards whose xpub is absent from `tlv.pubkeys`
-/// fail their xpub_match check (other per-i checks remain `skipped`).
+/// Watch-only / wif slots (`expected.ms1[i] == ""`) short-circuit ms1_decode[i]
+/// and ms1_entropy_match[i] with `passed: true + decode_error: "skipped: watch-only slot"`.
 fn run_multisig<E: Write>(
     args: &VerifyBundleArgs,
     checks: &mut Vec<VerifyCheck>,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    let xpub_arg = args.xpub.as_deref();
+    use crate::synthesize::{synthesize_multisig_full, synthesize_multisig_watch_only};
+
     let phrase_arg = args.phrase.as_deref();
     let cosigner_present = !args.cosigner.is_empty();
     let cosigners_file_present = args.cosigners_file.is_some();
     let watch_only_multi = cosigner_present || cosigners_file_present;
-    let _ = xpub_arg;
 
     if watch_only_multi {
         // SPEC §2.2.2 multisig watch-only stderr warning.
@@ -455,8 +441,11 @@ fn run_multisig<E: Write>(
         .ok();
     }
 
-    // 1. Resolve expected cosigners (mode-dependent).
-    let expected: Vec<ExpectedCosigner> = if watch_only_multi {
+    let template = args.template_unchecked();
+    let path_family = args.multisig_path_family.unwrap_or_default();
+    let threshold = args.threshold.unwrap_or(1);
+
+    let expected = if watch_only_multi {
         let specs: Vec<CosignerSpec> = if let Some(file) = &args.cosigners_file {
             parse_cosigners_file(file)?
         } else {
@@ -466,412 +455,50 @@ fn run_multisig<E: Write>(
             }
             out
         };
-        let path_family = args.multisig_path_family.unwrap_or_default();
-        let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
-        let default_path_str =
-            path_family.default_origin_path(args.network, args.account, script_type);
-        let default_path = bitcoin::bip32::DerivationPath::from_str(&default_path_str)
-            .map_err(|e| ToolkitError::BadInput(format!("default path parse: {}", e)))?;
-        specs
-            .into_iter()
-            .map(|c| ExpectedCosigner {
-                xpub: c.xpub,
-                master_fingerprint: c.master_fingerprint,
-                path: c.path.unwrap_or_else(|| default_path.clone()),
-            })
-            .collect()
-    } else if phrase_arg.is_some() {
+        synthesize_multisig_watch_only(
+            &specs,
+            args.network,
+            template,
+            threshold,
+            args.account,
+            path_family,
+            args.privacy_preserving,
+        )?
+    } else if let Some(p) = phrase_arg {
         check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
         let cosigner_count = args
             .cosigner_count
             .ok_or_else(|| ToolkitError::MultisigConfig {
                 message: "--cosigner-count required for full-mode multisig verify".into(),
             })?;
-        let path_family = args.multisig_path_family.unwrap_or_default();
         let language = args.language.unwrap_or_default();
         let passphrase = args.passphrase.clone().unwrap_or_default();
-        let mnemonic = bip39::Mnemonic::parse_in(language.into(), phrase_arg.unwrap_or(""))
+        let mnemonic = bip39::Mnemonic::parse_in(language.into(), p)
             .map_err(ToolkitError::Bip39)?;
-        let seed = mnemonic.to_seed(&passphrase);
-        let secp = bitcoin::secp256k1::Secp256k1::new();
-        let master = bitcoin::bip32::Xpriv::new_master(args.network.network_kind(), &seed)
-            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-        let master_fp = master.fingerprint(&secp);
-        let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
-        let path_str = path_family.default_origin_path(args.network, args.account, script_type);
-        let path = bitcoin::bip32::DerivationPath::from_str(&path_str)
-            .map_err(|e| ToolkitError::BadInput(format!("path parse: {}", e)))?;
-        let xpriv = master
-            .derive_priv(&secp, &path)
-            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-        let xpub = Xpub::from_priv(&secp, &xpriv);
-        // Self-multisig: all N expected (xpub, fp, path) are identical.
-        (0..cosigner_count)
-            .map(|_| ExpectedCosigner {
-                xpub,
-                master_fingerprint: master_fp,
-                path: path.clone(),
-            })
-            .collect()
+        synthesize_multisig_full(
+            &mnemonic,
+            &passphrase,
+            args.network,
+            template,
+            threshold,
+            cosigner_count as usize,
+            args.account,
+            path_family,
+            args.privacy_preserving,
+        )?
     } else {
         return Err(ToolkitError::BadInput(
             "multisig verify-bundle requires --phrase (full) or --cosigner/--cosigners-file (watch-only)".into(),
         ));
     };
-    let n = expected.len();
 
-    // 2. SPEC §2.2.1 step 1: group --mk1 chunks by chunk_set_id (Chunked) or
-    //    per-string (SingleString).
-    use std::collections::BTreeMap;
-    let mut chunked_groups: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
-    let mut single_groups: Vec<Vec<&str>> = Vec::new();
-    for s in &args.mk1 {
-        match chunk_set_id_extract(s) {
-            Some(csi) => chunked_groups.entry(csi).or_default().push(s.as_str()),
-            None => single_groups.push(vec![s.as_str()]),
-        }
-    }
-    let groups: Vec<Vec<&str>> = chunked_groups.into_values().chain(single_groups).collect();
-
-    // 3. Decode each group; record per-group decode result.
-    let mut decoded_opts: Vec<Option<mk_codec::KeyCard>> = Vec::with_capacity(groups.len());
-    let mut decode_errors: Vec<Option<String>> = Vec::with_capacity(groups.len());
-    for g in &groups {
-        match mk_codec::decode(g) {
-            Ok(c) => {
-                decoded_opts.push(Some(c));
-                decode_errors.push(None);
-            }
-            Err(e) => {
-                decoded_opts.push(None);
-                decode_errors.push(Some(format!("{:?}", e)));
-            }
-        }
-    }
-
-    // 4. md1 decode (needed early for cosigner association).
-    let md1_strs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
-    let md_decoded = md_codec::chunk::reassemble(&md1_strs);
-
-    // 5. Build cosigner-index → decoded-card mapping by xpub-against-tlv.pubkeys.
-    //    SPEC §2.2.1 step 6. In self-multisig all N pubkeys are byte-identical;
-    //    fall back to positional mapping (group i → cosigner i) when the lookup
-    //    is ambiguous (multiple equal entries).
-    let mut card_for_cosigner: Vec<Option<&mk_codec::KeyCard>> = vec![None; n];
-    if let Ok(desc) = md_decoded.as_ref() {
-        if let Some(pubkeys) = desc.tlv.pubkeys.as_ref() {
-            // Build a quick lookup: 65-byte pubkey → cosigner index list.
-            for (i, card_opt) in decoded_opts.iter().enumerate() {
-                if let Some(card) = card_opt {
-                    let want = crate::synthesize::xpub_to_65(&card.xpub);
-                    // Prefer the i-th slot if it matches (covers self-multisig).
-                    if let Some((_, b)) = pubkeys.get(i) {
-                        if b == &want && card_for_cosigner[i].is_none() {
-                            card_for_cosigner[i] = Some(card);
-                            continue;
-                        }
-                    }
-                    // Otherwise scan for the first unfilled matching slot.
-                    if let Some((idx, _)) = pubkeys
-                        .iter()
-                        .find(|(slot, b)| b == &want && card_for_cosigner[*slot as usize].is_none())
-                    {
-                        card_for_cosigner[*idx as usize] = Some(card);
-                    }
-                }
-            }
-        }
-    }
-    // Fallback: when md1 decode failed OR pubkeys absent, use positional mapping.
-    if md_decoded.is_err()
-        || md_decoded
-            .as_ref()
-            .map(|d| d.tlv.pubkeys.is_none())
-            .unwrap_or(false)
-    {
-        for (i, slot) in card_for_cosigner.iter_mut().enumerate().take(n) {
-            if let Some(Some(c)) = decoded_opts.get(i) {
-                *slot = Some(c);
-            }
-        }
-    }
-
-    // 6. ms1_entropy_match — full-multisig substantive; watch-only skipped.
-    if watch_only_multi {
-        checks.push(VerifyCheck {
-            name: "ms1_entropy_match".into(),
-            passed: true,
-            detail: "watch-only multisig: no entropy known to toolkit".into(),
-            ..Default::default()
-        });
-    } else if let Some(ms1) = args.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
-        let language = args.language.unwrap_or_default();
-        // BIP-39 entropy is passphrase-independent; passphrase affects only seed derivation.
-        let mnemonic = bip39::Mnemonic::parse_in(language.into(), phrase_arg.unwrap_or(""))
-            .map_err(ToolkitError::Bip39)?;
-        let want_entropy = mnemonic.to_entropy();
-        match ms_codec::decode(ms1) {
-            Ok((_t, ms_codec::Payload::Entr(e))) => {
-                let ok = e == want_entropy;
-                checks.push(VerifyCheck {
-                    name: "ms1_entropy_match".into(),
-                    passed: ok,
-                    detail: if ok {
-                        "entropy bytes match".into()
-                    } else {
-                        format!("decoded {}-byte entropy != derived", e.len())
-                    },
-                    ..Default::default()
-                });
-            }
-            Ok((_t, _)) => checks.push(VerifyCheck {
-                name: "ms1_entropy_match".into(),
-                passed: false,
-                detail: "decoded ms1 payload is not Entr".into(),
-                ..Default::default()
-            }),
-            Err(e) => checks.push(VerifyCheck {
-                name: "ms1_entropy_match".into(),
-                passed: false,
-                detail: format!("ms1 decode: {:?}", e),
-                ..Default::default()
-            }),
-        }
-    } else {
-        checks.push(VerifyCheck {
-            name: "ms1_entropy_match".into(),
-            passed: true,
-            detail: "no --ms1 supplied".into(),
-            ..Default::default()
-        });
-    }
-
-    // 7. Per-cosigner mk1_decode[i].
-    for (i, slot) in card_for_cosigner.iter().enumerate().take(n) {
-        match slot {
-            Some(_) => checks.push(VerifyCheck {
-                name: format!("mk1_decode[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] decoded", i),
-                ..Default::default()
-            }),
-            None => {
-                // If we have a decode error at index i (positional), surface it.
-                let detail = decode_errors
-                    .get(i)
-                    .and_then(|e| e.clone())
-                    .unwrap_or_else(|| format!("no card associated with cosigner[{}]", i));
-                checks.push(VerifyCheck {
-                    name: format!("mk1_decode[{}]", i),
-                    passed: false,
-                    detail,
-                    ..Default::default()
-                });
-            }
-        }
-    }
-
-    // 8. Per-cosigner mk1_xpub_match[i].
-    for (i, slot) in card_for_cosigner.iter().enumerate().take(n) {
-        match slot {
-            Some(card) => {
-                let m = card.xpub == expected[i].xpub;
-                checks.push(VerifyCheck {
-                    name: format!("mk1_xpub_match[{}]", i),
-                    passed: m,
-                    detail: if m {
-                        format!("cosigner[{}] xpub matches", i)
-                    } else {
-                        format!("cosigner[{}] xpub does not match expected", i)
-                    },
-                    ..Default::default()
-                });
-            }
-            None => checks.push(VerifyCheck {
-                name: format!("mk1_xpub_match[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] mk1 decode failed", i),
-                ..Default::default()
-            }),
-        }
-    }
-
-    // 9. Per-cosigner mk1_fingerprint_match[i] (skipped under --privacy-preserving).
-    for (i, slot) in card_for_cosigner.iter().enumerate().take(n) {
-        if args.privacy_preserving {
-            checks.push(VerifyCheck {
-                name: format!("mk1_fingerprint_match[{}]", i),
-                passed: true,
-                detail: "privacy-preserving mode; fingerprint suppressed".into(),
-                ..Default::default()
-            });
-            continue;
-        }
-        match slot {
-            Some(card) => {
-                let m = card.origin_fingerprint == Some(expected[i].master_fingerprint);
-                checks.push(VerifyCheck {
-                    name: format!("mk1_fingerprint_match[{}]", i),
-                    passed: m,
-                    detail: if m {
-                        format!("cosigner[{}] fp matches", i)
-                    } else {
-                        format!("cosigner[{}] fp does not match expected", i)
-                    },
-                    ..Default::default()
-                });
-            }
-            None => checks.push(VerifyCheck {
-                name: format!("mk1_fingerprint_match[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] mk1 decode failed", i),
-                ..Default::default()
-            }),
-        }
-    }
-
-    // 10. Per-cosigner mk1_path_match[i].
-    //     Watch-only: substantive (compares card.origin_path against supplied/family path).
-    //     Full: substantive (compares against derived path from --phrase + family).
-    for (i, slot) in card_for_cosigner.iter().enumerate().take(n) {
-        match slot {
-            Some(card) => {
-                let m = card.origin_path == expected[i].path;
-                checks.push(VerifyCheck {
-                    name: format!("mk1_path_match[{}]", i),
-                    passed: m,
-                    detail: if m {
-                        format!("cosigner[{}] path matches", i)
-                    } else {
-                        format!(
-                            "cosigner[{}] expected {}, got {}",
-                            i, expected[i].path, card.origin_path
-                        )
-                    },
-                    ..Default::default()
-                });
-            }
-            None => checks.push(VerifyCheck {
-                name: format!("mk1_path_match[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] mk1 decode failed", i),
-                ..Default::default()
-            }),
-        }
-    }
-
-    // 11. md1_decode + md1_wallet_policy.
-    let (md_ok, wp_ok) = match md_decoded.as_ref() {
-        Ok(desc) => {
-            checks.push(VerifyCheck {
-                name: "md1_decode".into(),
-                passed: true,
-                detail: "decoded successfully".into(),
-                ..Default::default()
-            });
-            let wp = desc.is_wallet_policy();
-            checks.push(VerifyCheck {
-                name: "md1_wallet_policy".into(),
-                passed: wp,
-                detail: if wp {
-                    "wallet-policy mode confirmed".into()
-                } else {
-                    "descriptor is template-only (no pubkeys TLV)".into()
-                },
-                ..Default::default()
-            });
-            (true, wp)
-        }
-        Err(e) => {
-            checks.push(VerifyCheck {
-                name: "md1_decode".into(),
-                passed: false,
-                detail: format!("{:?}", e),
-                ..Default::default()
-            });
-            checks.push(VerifyCheck {
-                name: "md1_wallet_policy".into(),
-                passed: true,
-                detail: "md1 decode failed".into(),
-                ..Default::default()
-            });
-            (false, false)
-        }
+    let supplied = SuppliedCards {
+        ms1: &args.ms1,
+        mk1: &args.mk1,
+        md1: &args.md1,
     };
 
-    // 12. Per-cosigner md1_xpub_match[i] — compare expected xpub's 65-byte form
-    //     against md1's tlv.pubkeys[i].
-    for (i, exp) in expected.iter().enumerate().take(n) {
-        if !md_ok || !wp_ok {
-            checks.push(VerifyCheck {
-                name: format!("md1_xpub_match[{}]", i),
-                passed: true,
-                detail: if !md_ok {
-                    "md1 decode failed".into()
-                } else {
-                    "not in wallet-policy mode".into()
-                },
-                ..Default::default()
-            });
-            continue;
-        }
-        let desc = md_decoded.as_ref().unwrap();
-        let want = crate::synthesize::xpub_to_65(&exp.xpub);
-        let m = desc
-            .tlv
-            .pubkeys
-            .as_ref()
-            .and_then(|v| v.iter().find(|(slot, _)| *slot as usize == i))
-            .map(|(_, b)| b == &want)
-            .unwrap_or(false);
-        checks.push(VerifyCheck {
-            name: format!("md1_xpub_match[{}]", i),
-            passed: m,
-            detail: if m {
-                format!("cosigner[{}] md1 xpub matches expected", i)
-            } else {
-                format!("cosigner[{}] md1 xpub differs from expected", i)
-            },
-            ..Default::default()
-        });
-    }
-
-    // 13. Per-cosigner stub_linkage[i].
-    //     Each card's policy_id_stubs list must contain the descriptor's
-    //     computed policy_id stub. Failure → fail; missing decode → skipped.
-    let descriptor_stub: Option<[u8; 4]> = md_decoded
-        .as_ref()
-        .ok()
-        .and_then(|d| md_codec::compute_wallet_policy_id(d).ok())
-        .map(|pid| {
-            let mut s = [0u8; 4];
-            s.copy_from_slice(&pid.as_bytes()[..4]);
-            s
-        });
-    for (i, slot) in card_for_cosigner.iter().enumerate().take(n) {
-        match (slot, descriptor_stub) {
-            (Some(card), Some(want)) => {
-                let m = card.policy_id_stubs.iter().any(|s| *s == want);
-                checks.push(VerifyCheck {
-                    name: format!("stub_linkage[{}]", i),
-                    passed: m,
-                    detail: if m {
-                        format!("cosigner[{}] stub matches descriptor's policy_id", i)
-                    } else {
-                        format!("cosigner[{}] stub linkage broken", i)
-                    },
-                    ..Default::default()
-                });
-            }
-            _ => checks.push(VerifyCheck {
-                name: format!("stub_linkage[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] decode failed", i),
-                ..Default::default()
-            }),
-        }
-    }
-
+    checks.extend(emit_verify_checks(&expected, &supplied, true));
     Ok(())
 }
 
@@ -1224,22 +851,13 @@ pub struct SuppliedCards<'a> {
 /// `expected.ms1[i].is_empty()` discriminates watch-only slots per SPEC §5.8
 /// MsField sentinel. `is_multisig` selects the 9 vs 3+6N schema.
 ///
-/// v0.4.4 P.2: single-sig (`is_multisig: false`) implemented; multisig path
-/// returns a TODO error pending v0.4.5 P.4 (run_multisig refactor).
 pub fn emit_verify_checks(
     expected: &Bundle,
     supplied: &SuppliedCards,
     is_multisig: bool,
 ) -> Vec<VerifyCheck> {
     if is_multisig {
-        // Stub: v0.4.5 P.4 lands run_multisig + descriptor_mode_verify_run
-        // refactors. v0.4.4 P.3 wires single-sig only.
-        return vec![VerifyCheck {
-            name: "TODO_multisig_v0_4_5".into(),
-            passed: false,
-            detail: "multisig 3+6N helper path lands in v0.4.5 P.4".into(),
-            ..Default::default()
-        }];
+        return emit_multisig_checks(expected, supplied);
     }
 
     let mut checks = Vec::with_capacity(9);
@@ -1438,6 +1056,403 @@ pub fn emit_verify_checks(
 
     // 7+8+9: md1.
     emit_md1_checks(expected, supplied, &mut checks);
+
+    checks
+}
+
+/// SPEC §5.7 multisig 3+6N emission.
+///
+/// Output ordering: 6N per-cosigner first (interleaved by slot), then 3 shared
+/// md1 checks. For each cosigner i in 0..N:
+///   ms1_decode[i], ms1_entropy_match[i],
+///   mk1_decode[i], mk1_xpub_match[i], mk1_fingerprint_match[i], mk1_path_match[i].
+/// Then shared: md1_decode, md1_wallet_policy, md1_xpub_match.
+///
+/// Watch-only / wif slots (where `expected.ms1[i].is_empty()`): the two ms1
+/// checks short-circuit with `passed: true + decode_error: "skipped: watch-only slot"`.
+fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<VerifyCheck> {
+    let n = expected.ms1.len();
+    let mut checks: Vec<VerifyCheck> = Vec::with_capacity(6 * n + 3);
+
+    // Decode expected.mk1 per-cosigner. expected.mk1 is MkField::Multi(Vec<Vec<String>>)
+    // for multisig; on legacy single-element MkField::Single(v) self-multisig
+    // bundles, treat the single card as cosigner-0 and emit "missing card"
+    // failures for the remaining cosigners.
+    let expected_mk1_per_cos: Vec<Option<mk_codec::KeyCard>> = match &expected.mk1 {
+        crate::format::MkField::Multi(per_cosigner) => per_cosigner
+            .iter()
+            .map(|chunks| {
+                let strs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+                mk_codec::decode(&strs).ok()
+            })
+            .collect(),
+        crate::format::MkField::Single(v) => {
+            let strs: Vec<&str> = v.iter().map(|s| s.as_str()).collect();
+            let mut out = vec![mk_codec::decode(&strs).ok()];
+            out.resize_with(n, || None);
+            out
+        }
+    };
+
+    // Group supplied.mk1 by chunk_set_id; map to cosigner-i by xpub-vs-md1.tlv.pubkeys
+    // (with positional fallback).
+    use std::collections::BTreeMap;
+    let mut chunked: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
+    let mut singles: Vec<Vec<&str>> = Vec::new();
+    for s in supplied.mk1 {
+        match chunk_set_id_extract(s) {
+            Some(csi) => chunked.entry(csi).or_default().push(s.as_str()),
+            None => singles.push(vec![s.as_str()]),
+        }
+    }
+    let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
+    let supplied_decoded: Vec<Option<mk_codec::KeyCard>> = groups
+        .iter()
+        .map(|g| mk_codec::decode(g).ok())
+        .collect();
+
+    // Decode supplied.md1 once for cosigner-mapping by tlv.pubkeys.
+    let supplied_md1_strs: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
+    let supplied_md_decoded = md_codec::chunk::reassemble(&supplied_md1_strs);
+
+    // Map decoded supplied groups → cosigner positions.
+    let mut card_for_cosigner: Vec<Option<&mk_codec::KeyCard>> = vec![None; n];
+    if let Ok(desc) = supplied_md_decoded.as_ref() {
+        if let Some(pubkeys) = desc.tlv.pubkeys.as_ref() {
+            for (gi, opt) in supplied_decoded.iter().enumerate() {
+                if let Some(card) = opt {
+                    let want = crate::synthesize::xpub_to_65(&card.xpub);
+                    // Prefer slot gi if it matches (covers self-multisig where all xpubs are equal).
+                    if let Some((_, b)) = pubkeys.get(gi) {
+                        if b == &want && card_for_cosigner[gi].is_none() {
+                            card_for_cosigner[gi] = Some(card);
+                            continue;
+                        }
+                    }
+                    if let Some((idx, _)) = pubkeys.iter().find(|(slot, b)| {
+                        b == &want && card_for_cosigner[*slot as usize].is_none()
+                    }) {
+                        card_for_cosigner[*idx as usize] = Some(card);
+                    }
+                }
+            }
+        }
+    }
+    // Positional fallback if md1 decode failed or pubkeys absent.
+    if supplied_md_decoded.is_err()
+        || supplied_md_decoded
+            .as_ref()
+            .map(|d| d.tlv.pubkeys.is_none())
+            .unwrap_or(false)
+    {
+        for (i, slot) in card_for_cosigner.iter_mut().enumerate().take(n) {
+            if let Some(Some(c)) = supplied_decoded.get(i) {
+                *slot = Some(c);
+            }
+        }
+    }
+
+    // 6N per-cosigner emission.
+    for i in 0..n {
+        let exp_ms1 = expected.ms1.get(i).map(|s| s.as_str()).unwrap_or("");
+        let watch_only_slot = exp_ms1.is_empty();
+        let sup_ms1 = supplied.ms1.get(i).map(|s| s.as_str());
+
+        // ms1_decode[i] + ms1_entropy_match[i].
+        if watch_only_slot {
+            checks.push(VerifyCheck {
+                name: format!("ms1_decode[{}]", i),
+                passed: true,
+                detail: "skipped: watch-only slot".into(),
+                decode_error: Some("skipped: watch-only slot".into()),
+                ..Default::default()
+            });
+            checks.push(VerifyCheck {
+                name: format!("ms1_entropy_match[{}]", i),
+                passed: true,
+                detail: "skipped: watch-only slot".into(),
+                decode_error: Some("skipped: watch-only slot".into()),
+                ..Default::default()
+            });
+        } else if let Some(s) = sup_ms1.filter(|s| !s.is_empty()) {
+            match ms_codec::decode(s) {
+                Ok(_) => {
+                    checks.push(VerifyCheck {
+                        name: format!("ms1_decode[{}]", i),
+                        passed: true,
+                        detail: format!("cosigner[{}] ms1 decoded", i),
+                        ..Default::default()
+                    });
+                    if s == exp_ms1 {
+                        checks.push(VerifyCheck {
+                            name: format!("ms1_entropy_match[{}]", i),
+                            passed: true,
+                            detail: format!("cosigner[{}] ms1 byte-identical", i),
+                            ..Default::default()
+                        });
+                    } else {
+                        let diff = VerifyCheck::diff_offset(exp_ms1, s);
+                        checks.push(VerifyCheck {
+                            name: format!("ms1_entropy_match[{}]", i),
+                            passed: false,
+                            detail: format!("cosigner[{}] ms1 differs", i),
+                            expected: Some(exp_ms1.to_string()),
+                            actual: Some(s.to_string()),
+                            diff_byte_offset: Some(diff),
+                            decode_error: None,
+                        });
+                    }
+                }
+                Err(e) => {
+                    let err_msg = format!("{:?}", e);
+                    checks.push(VerifyCheck {
+                        name: format!("ms1_decode[{}]", i),
+                        passed: false,
+                        detail: err_msg.clone(),
+                        decode_error: Some(err_msg),
+                        ..Default::default()
+                    });
+                    checks.push(VerifyCheck {
+                        name: format!("ms1_entropy_match[{}]", i),
+                        passed: true,
+                        detail: format!("cosigner[{}] ms1 decode failed; entropy match cannot run", i),
+                        decode_error: Some("skipped: ms1 decode failed".into()),
+                        ..Default::default()
+                    });
+                }
+            }
+        } else {
+            // Expected substantive but supplied missing/empty.
+            checks.push(VerifyCheck {
+                name: format!("ms1_decode[{}]", i),
+                passed: true,
+                detail: format!("cosigner[{}] ms1 not supplied", i),
+                decode_error: Some(format!("skipped: ms1[{}] not supplied", i)),
+                ..Default::default()
+            });
+            checks.push(VerifyCheck {
+                name: format!("ms1_entropy_match[{}]", i),
+                passed: true,
+                detail: format!("cosigner[{}] ms1 not supplied", i),
+                decode_error: Some(format!("skipped: ms1[{}] not supplied", i)),
+                ..Default::default()
+            });
+        }
+
+        // mk1_decode[i] + mk1_xpub_match[i] + mk1_fingerprint_match[i] + mk1_path_match[i].
+        let sup_card = card_for_cosigner[i];
+        let exp_card = expected_mk1_per_cos.get(i).and_then(|o| o.as_ref());
+        match (sup_card, exp_card) {
+            (Some(sup), Some(exp)) => {
+                checks.push(VerifyCheck {
+                    name: format!("mk1_decode[{}]", i),
+                    passed: true,
+                    detail: format!("cosigner[{}] mk1 decoded", i),
+                    ..Default::default()
+                });
+                let exp_x = exp.xpub.to_string();
+                let act_x = sup.xpub.to_string();
+                if exp_x == act_x {
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_xpub_match[{}]", i),
+                        passed: true,
+                        detail: format!("cosigner[{}] xpub matches", i),
+                        ..Default::default()
+                    });
+                } else {
+                    let diff = VerifyCheck::diff_offset(&exp_x, &act_x);
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_xpub_match[{}]", i),
+                        passed: false,
+                        detail: format!("cosigner[{}] xpub mismatch", i),
+                        expected: Some(exp_x),
+                        actual: Some(act_x),
+                        diff_byte_offset: Some(diff),
+                        decode_error: None,
+                    });
+                }
+                let exp_fp = exp.origin_fingerprint.map(|f| f.to_string()).unwrap_or_default();
+                let act_fp = sup.origin_fingerprint.map(|f| f.to_string()).unwrap_or_default();
+                if exp_fp == act_fp {
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_fingerprint_match[{}]", i),
+                        passed: true,
+                        detail: format!("cosigner[{}] fingerprint matches", i),
+                        ..Default::default()
+                    });
+                } else {
+                    let diff = VerifyCheck::diff_offset(&exp_fp, &act_fp);
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_fingerprint_match[{}]", i),
+                        passed: false,
+                        detail: format!("cosigner[{}] fingerprint mismatch", i),
+                        expected: Some(exp_fp),
+                        actual: Some(act_fp),
+                        diff_byte_offset: Some(diff),
+                        decode_error: None,
+                    });
+                }
+                let exp_p = exp.origin_path.to_string();
+                let act_p = sup.origin_path.to_string();
+                if exp_p == act_p {
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_path_match[{}]", i),
+                        passed: true,
+                        detail: format!("cosigner[{}] path matches", i),
+                        ..Default::default()
+                    });
+                } else {
+                    let diff = VerifyCheck::diff_offset(&exp_p, &act_p);
+                    checks.push(VerifyCheck {
+                        name: format!("mk1_path_match[{}]", i),
+                        passed: false,
+                        detail: format!("cosigner[{}] path mismatch", i),
+                        expected: Some(exp_p),
+                        actual: Some(act_p),
+                        diff_byte_offset: Some(diff),
+                        decode_error: None,
+                    });
+                }
+            }
+            (None, _) => {
+                // Supplied mk1 missing/undecodable for this cosigner.
+                let err = format!("skipped: mk1[{}] not supplied or decode failed", i);
+                checks.push(VerifyCheck {
+                    name: format!("mk1_decode[{}]", i),
+                    passed: false,
+                    detail: err.clone(),
+                    decode_error: Some(err.clone()),
+                    ..Default::default()
+                });
+                for n in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
+                    checks.push(VerifyCheck {
+                        name: format!("{}[{}]", n, i),
+                        passed: true,
+                        detail: err.clone(),
+                        decode_error: Some(format!("skipped: mk1[{}] decode failed", i)),
+                        ..Default::default()
+                    });
+                }
+            }
+            (Some(_), None) => {
+                // Expected card unavailable (legacy MkField::Single beyond i=0): treat as
+                // unknown — supplied card decoded but no comparison oracle.
+                checks.push(VerifyCheck {
+                    name: format!("mk1_decode[{}]", i),
+                    passed: true,
+                    detail: format!("cosigner[{}] mk1 decoded; no expected oracle", i),
+                    ..Default::default()
+                });
+                for n in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
+                    checks.push(VerifyCheck {
+                        name: format!("{}[{}]", n, i),
+                        passed: true,
+                        detail: format!("cosigner[{}] no expected mk1 oracle", i),
+                        decode_error: Some(format!("skipped: expected mk1[{}] not available", i)),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+
+    // 3 shared md1 checks.
+    let expected_md1_strs: Vec<&str> = expected.md1.iter().map(|s| s.as_str()).collect();
+    let expected_md_decoded = md_codec::chunk::reassemble(&expected_md1_strs)
+        .expect("expected bundle is well-formed");
+
+    match supplied_md_decoded.as_ref() {
+        Ok(desc) => {
+            checks.push(VerifyCheck {
+                name: "md1_decode".into(),
+                passed: true,
+                detail: "decoded successfully".into(),
+                ..Default::default()
+            });
+            let wp = desc.is_wallet_policy();
+            if wp {
+                checks.push(VerifyCheck {
+                    name: "md1_wallet_policy".into(),
+                    passed: true,
+                    detail: "wallet-policy mode confirmed".into(),
+                    ..Default::default()
+                });
+                // md1_xpub_match (shared, set-equality across all N pubkeys).
+                let exp_pubs: Vec<[u8; 65]> = expected_md_decoded
+                    .tlv
+                    .pubkeys
+                    .as_ref()
+                    .map(|v| v.iter().map(|(_, b)| *b).collect())
+                    .unwrap_or_default();
+                let act_pubs: Vec<[u8; 65]> = desc
+                    .tlv
+                    .pubkeys
+                    .as_ref()
+                    .map(|v| v.iter().map(|(_, b)| *b).collect())
+                    .unwrap_or_default();
+                if exp_pubs == act_pubs {
+                    checks.push(VerifyCheck {
+                        name: "md1_xpub_match".into(),
+                        passed: true,
+                        detail: format!("all {} pubkeys match expected", exp_pubs.len()),
+                        ..Default::default()
+                    });
+                } else {
+                    let exp_hex = exp_pubs.iter().map(hex::encode).collect::<Vec<_>>().join(",");
+                    let act_hex = act_pubs.iter().map(hex::encode).collect::<Vec<_>>().join(",");
+                    let diff = VerifyCheck::diff_offset(&exp_hex, &act_hex);
+                    checks.push(VerifyCheck {
+                        name: "md1_xpub_match".into(),
+                        passed: false,
+                        detail: "md1 pubkeys differ from expected set".into(),
+                        expected: Some(exp_hex),
+                        actual: Some(act_hex),
+                        diff_byte_offset: Some(diff),
+                        decode_error: None,
+                    });
+                }
+            } else {
+                checks.push(VerifyCheck {
+                    name: "md1_wallet_policy".into(),
+                    passed: false,
+                    detail: "descriptor is template-only (no pubkeys TLV)".into(),
+                    decode_error: Some("not in wallet-policy mode".into()),
+                    ..Default::default()
+                });
+                checks.push(VerifyCheck {
+                    name: "md1_xpub_match".into(),
+                    passed: true,
+                    detail: "skipped: not in wallet-policy mode".into(),
+                    decode_error: Some("skipped: not in wallet-policy mode".into()),
+                    ..Default::default()
+                });
+            }
+        }
+        Err(e) => {
+            let err_msg = format!("{:?}", e);
+            checks.push(VerifyCheck {
+                name: "md1_decode".into(),
+                passed: false,
+                detail: err_msg.clone(),
+                decode_error: Some(err_msg),
+                ..Default::default()
+            });
+            checks.push(VerifyCheck {
+                name: "md1_wallet_policy".into(),
+                passed: true,
+                detail: "skipped: md1 decode failed".into(),
+                decode_error: Some("skipped: md1 decode failed".into()),
+                ..Default::default()
+            });
+            checks.push(VerifyCheck {
+                name: "md1_xpub_match".into(),
+                passed: true,
+                detail: "skipped: md1 decode failed".into(),
+                decode_error: Some("skipped: md1 decode failed".into()),
+                ..Default::default()
+            });
+        }
+    }
 
     checks
 }
@@ -1686,12 +1701,51 @@ mod helper_tests {
     }
 
     #[test]
-    fn helper_multisig_returns_todo_stub() {
-        let expected = synth_full_bundle();
+    fn helper_multisig_full_emits_3plus6n_checks_in_spec_order() {
+        use crate::parse::{CosignerSpec, MultisigPathFamily};
+        use crate::synthesize::synthesize_multisig_watch_only;
+        use bitcoin::bip32::DerivationPath;
+        // Derive 2 distinct cosigner xpubs at the canonical BIP-48 depth-4 path
+        // from 2 distinct mnemonic seeds. Distinct xpubs → distinct chunk_set_ids
+        // (avoids the legacy self-multisig csi-collision case which is out of
+        // scope for SPEC §5.7).
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();
+        let m_a = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let seed_a = m_a.to_seed("");
+        let master_a = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_a).unwrap();
+        let xpriv_a = master_a.derive_priv(&secp, &path).unwrap();
+        let xpub_a = Xpub::from_priv(&secp, &xpriv_a);
+        let fp_a = master_a.fingerprint(&secp);
+        let m_b = Mnemonic::parse_in(
+            bip39::Language::English,
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        )
+        .unwrap();
+        let seed_b = m_b.to_seed("");
+        let master_b = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_b).unwrap();
+        let xpriv_b = master_b.derive_priv(&secp, &path).unwrap();
+        let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
+        let fp_b = master_b.fingerprint(&secp);
+        let cosigners = vec![
+            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
+            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+        ];
+        let n: usize = 2;
+        let expected = synthesize_multisig_watch_only(
+            &cosigners,
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            0,
+            MultisigPathFamily::default(),
+            false,
+        )
+        .unwrap();
         let supplied_ms1 = expected.ms1.clone();
-        let supplied_mk1 = match &expected.mk1 {
-            MkField::Single(v) => v.clone(),
-            MkField::Multi(_) => panic!(""),
+        let supplied_mk1: Vec<String> = match &expected.mk1 {
+            MkField::Multi(per_cos) => per_cos.iter().flat_map(|v| v.iter().cloned()).collect(),
+            MkField::Single(_) => panic!("expected multisig"),
         };
         let supplied_md1 = expected.md1.clone();
         let supplied = SuppliedCards {
@@ -1700,7 +1754,38 @@ mod helper_tests {
             md1: &supplied_md1,
         };
         let checks = emit_verify_checks(&expected, &supplied, true);
-        assert_eq!(checks.len(), 1);
-        assert_eq!(checks[0].name, "TODO_multisig_v0_4_5");
+        assert_eq!(
+            checks.len(),
+            6 * n + 3,
+            "multisig must emit 3+6N checks per SPEC §5.7 (N={n})"
+        );
+        let names: Vec<&str> = checks.iter().map(|c| c.name.as_str()).collect();
+        // First 6N: per-cosigner [i]-indexed.
+        let mut expected_names: Vec<String> = Vec::new();
+        for i in 0..n {
+            expected_names.push(format!("ms1_decode[{i}]"));
+            expected_names.push(format!("ms1_entropy_match[{i}]"));
+            expected_names.push(format!("mk1_decode[{i}]"));
+            expected_names.push(format!("mk1_xpub_match[{i}]"));
+            expected_names.push(format!("mk1_fingerprint_match[{i}]"));
+            expected_names.push(format!("mk1_path_match[{i}]"));
+        }
+        // Last 3: shared md1.
+        expected_names.push("md1_decode".into());
+        expected_names.push("md1_wallet_policy".into());
+        expected_names.push("md1_xpub_match".into());
+        let expected_names_ref: Vec<&str> = expected_names.iter().map(String::as_str).collect();
+        assert_eq!(names, expected_names_ref, "SPEC §5.7 ordering");
+        // The fixture uses two distinct mnemonic seeds → two distinct cosigner
+        // xpubs → two distinct chunk_set_ids; mk_codec grouping works correctly.
+        // Per-cell forensic content on the chunked multi-card path is fully
+        // exercised by cli_bundle_multisig.rs / cli_verify_bundle_*.rs end-to-end.
+        // This unit test asserts the helper's structural contract (3+6N name
+        // vec + ms1_decode happy-path) only.
+        let ms1_decode_passed = checks
+            .iter()
+            .filter(|c| c.name.starts_with("ms1_decode"))
+            .all(|c| c.passed);
+        assert!(ms1_decode_passed, "ms1_decode[i] must pass on byte-identical happy path");
     }
 }
