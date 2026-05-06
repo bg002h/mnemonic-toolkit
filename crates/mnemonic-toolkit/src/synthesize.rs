@@ -179,18 +179,15 @@ pub fn synthesize_watch_only(
     })
 }
 
-/// Per-`@N` key + fingerprint + path triple for descriptor-mode synthesis.
-/// `path_raw` (v0.4.1) is the user-supplied raw path string used for SPEC
-/// §4.11.b BIP-388 distinct-key raw-equality. For paths that arrive only as
-/// typed `DerivationPath` (no source string available), the binding logic
-/// falls back to `path.to_string()` — matches v0.4.0 behavior.
-#[derive(Debug, Clone)]
-pub struct CosignerKeyInfo {
-    pub xpub: Xpub,
-    pub fingerprint: Fingerprint,
-    pub path: DerivationPath,
-    pub path_raw: String,
-}
+// v0.4.3 Phase N: CosignerKeyInfo retired; sole binding type is ResolvedSlot
+// (defined below). Type alias retained for source-compat across the binding
+// layer; new code should construct ResolvedSlot directly.
+//
+// Legacy descriptor-mode bindings (bind_descriptor_keys) populate
+// `entropy: Some(...)` for slot @0 if --phrase supplied; `entropy: None` for
+// all @1+ slots (cosigner triples are watch-only by definition).
+#[allow(dead_code)]
+pub type CosignerKeyInfo = ResolvedSlot;
 
 /// Produce a `Bundle` from a pre-parsed `md_codec::Descriptor` + per-`@N`
 /// cosigner key info. Dispatches to single-card mk1 (n=1) or n-card mk1 (n≥2)
@@ -1027,6 +1024,7 @@ mod tests {
                 fingerprint: master_fp,
                 path: path.clone(),
                 path_raw: path.to_string(),
+                entropy: None,
             });
 
             let mut payload = [0u8; 65];

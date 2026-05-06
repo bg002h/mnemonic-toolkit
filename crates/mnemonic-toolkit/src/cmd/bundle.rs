@@ -1053,11 +1053,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             )));
         };
 
+        // v0.4.3 Phase N: per-slot entropy goes on the ResolvedSlot directly.
         cosigners.push(CosignerKeyInfo {
             xpub,
             fingerprint,
             path,
             path_raw,
+            entropy: ent_opt.clone(),
         });
         if idx == 0 {
             entropy_at_0 = ent_opt;

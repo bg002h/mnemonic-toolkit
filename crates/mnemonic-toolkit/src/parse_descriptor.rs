@@ -1125,11 +1125,20 @@ fn push_binding(
     // canonical form is used. Phase B/D unified slot path supplies a
     // genuine raw string from `--slot @N.path=<value>` instead.
     let path_raw = path.to_string();
+    // Per v0.4.3 Phase N: per-slot entropy lives on ResolvedSlot. Legacy
+    // descriptor-mode binding sets entropy: None for all slots; @0's entropy
+    // (when --phrase is supplied) is set separately in bind_full_mode after
+    // this push (see entropy field assignment below) — no, actually this
+    // helper is shared across all binding modes and ALWAYS sets entropy: None.
+    // The bundle-level binding.entropy field carries the @0 entropy in the
+    // legacy v0.3 binding API; v0.4.3 N retires that field and sets
+    // cosigners[0].entropy directly in bind_full_mode after this push.
     cosigners.push(CosignerKeyInfo {
         xpub: *xpub,
         fingerprint: fp,
         path,
         path_raw,
+        entropy: None,
     });
 }
 
@@ -1693,6 +1702,7 @@ mod tests {
             path,
             // Default tests: path_raw == typed canonical form (legacy semantics).
             path_raw: p.to_string(),
+            entropy: None,
         }
     }
     /// Variant: explicitly set `path_raw` distinct from the typed path string
@@ -1704,6 +1714,7 @@ mod tests {
             fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
             path,
             path_raw: raw.to_string(),
+            entropy: None,
         }
     }
 
