@@ -381,24 +381,11 @@ fn walk_wsh(
     w: &miniscript::descriptor::Wsh<DescriptorPublicKey>,
     km: &BTreeMap<String, u8>,
 ) -> Result<Node, ToolkitError> {
-    let inner = walk_wsh_inner(w, km)?;
+    // Post-#915: Wsh::as_inner() returns &Miniscript directly; SortedMulti
+    // surfaces as Terminal::SortedMulti inside the inner Ms (handled by
+    // walk_miniscript_node). The pre-#915 WshInner enum is gone.
+    let inner = walk_miniscript_node(w.as_inner(), km, /*tap=*/ false)?;
     Ok(wrap_children(Tag::Wsh, inner))
-}
-
-fn walk_wsh_inner(
-    w: &miniscript::descriptor::Wsh<DescriptorPublicKey>,
-    km: &BTreeMap<String, u8>,
-) -> Result<Node, ToolkitError> {
-    use miniscript::descriptor::WshInner;
-    match w.as_inner() {
-        WshInner::Ms(ms) => walk_miniscript_node(ms, km, /*tap=*/ false),
-        WshInner::SortedMulti(sm) => build_multi_node(
-            Tag::SortedMulti,
-            sm.k(),
-            &sm.pks().iter().collect::<Vec<_>>(),
-            km,
-        ),
-    }
 }
 
 fn walk_sh(
@@ -409,7 +396,11 @@ fn walk_sh(
     let inner = match s.as_inner() {
         ShInner::Wsh(w) => Node {
             tag: Tag::Wsh,
-            body: Body::Children(vec![walk_wsh_inner(w, km)?]),
+            body: Body::Children(vec![walk_miniscript_node(
+                w.as_inner(),
+                km,
+                /*tap=*/ false,
+            )?]),
         },
         ShInner::Wpkh(wp) => Node {
             tag: Tag::Wpkh,
@@ -418,12 +409,8 @@ fn walk_sh(
             },
         },
         ShInner::Ms(ms) => walk_miniscript_node(ms, km, /*tap=*/ false)?,
-        ShInner::SortedMulti(sm) => build_multi_node(
-            Tag::SortedMulti,
-            sm.k(),
-            &sm.pks().iter().collect::<Vec<_>>(),
-            km,
-        )?,
+        // Post-#915: ShInner::SortedMulti variant removed; handled via
+        // Terminal::SortedMulti inside ShInner::Ms's inner Miniscript.
     };
     Ok(wrap_children(Tag::Sh, inner))
 }
@@ -490,8 +477,23 @@ fn walk_miniscript_node<C: miniscript::ScriptContext>(
             &thresh.data().iter().collect::<Vec<_>>(),
             km,
         ),
+        // Post-#915: SortedMulti is now Terminal::SortedMulti instead of
+        // WshInner::SortedMulti / ShInner::SortedMulti. Same wire output.
+        Terminal::SortedMulti(thresh) => build_multi_node(
+            Tag::SortedMulti,
+            thresh.k(),
+            &thresh.data().iter().collect::<Vec<_>>(),
+            km,
+        ),
         Terminal::MultiA(thresh) => build_multi_node(
             Tag::MultiA,
+            thresh.k(),
+            &thresh.data().iter().collect::<Vec<_>>(),
+            km,
+        ),
+        // Post-#910: sortedmulti_a in tap-leaves now parses; emit Tag::SortedMultiA.
+        Terminal::SortedMultiA(thresh) => build_multi_node(
+            Tag::SortedMultiA,
             thresh.k(),
             &thresh.data().iter().collect::<Vec<_>>(),
             km,
@@ -1791,6 +1793,135 @@ mod tests {
         assert_eq!(
             descriptor_bundle.md1, template_bundle.md1,
             "md1 must be byte-identical for descriptor expression of bip44 template"
+        );
+    }
+
+    // ---- v0.3.1: sortedmulti_a in tap-leaves (post-#910 + #915) ----
+
+    #[test]
+    fn arm_sorted_multi_via_wsh() {
+        // Post-#915: wsh(sortedmulti(2,A,B)) parses to a Wsh whose inner Ms
+        // has node = Terminal::SortedMulti(thresh). The walker emits Tag::SortedMulti
+        // via the Layer-2 arm rather than the (now-removed) WshInner::SortedMulti
+        // Layer-1 arm. Wire output unchanged from v0.3.0.
+        let inner = wsh_inner("wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))");
+        assert_eq!(inner.tag, Tag::SortedMulti);
+        let Body::Variable { k, children } = inner.body else {
+            panic!("expected SortedMulti Variable body");
+        };
+        assert_eq!(k, 2);
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn arm_sorted_multi_a_via_tap() {
+        // v0.3.1 unblock target: tr(@0, sortedmulti_a(2,@0,@1)) now parses
+        // (was deferred in v0.3.0 because rust-miniscript v13.0.0 had no
+        // sortedmulti_a parser; PR #910 added it on master).
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            ScriptCtx::MultiSig,
+        );
+        assert_eq!(root.tag, Tag::Tr);
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr body");
+        };
+        let leaf = tree.as_ref().expect("expected single tap leaf");
+        assert_eq!(leaf.tag, Tag::SortedMultiA);
+        let Body::Variable { k, children } = &leaf.body else {
+            panic!("expected SortedMultiA Variable body");
+        };
+        assert_eq!(*k, 2);
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn descriptor_tr_sortedmulti_a_matches_template_tr_sortedmulti_a_md1() {
+        // Wire-bit-identical regression: descriptor-mode tr(@0, sortedmulti_a(...))
+        // must produce md1 byte-identical to template-mode --template tr-sortedmulti-a
+        // for matching keys/cosigners. This confirms the new Terminal::SortedMultiA
+        // walker arm produces the same Tag::SortedMultiA tree the template encoder
+        // has been producing since v0.3.0 (template-mode bypasses rust-miniscript).
+        use crate::parse::{CosignerSpec, MultisigPathFamily};
+        use crate::synthesize::synthesize_multisig_full;
+        use crate::template::CliTemplate;
+
+        // Template-mode self-multisig bundle (v0.3.0 path: bypasses miniscript).
+        let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let template_bundle = synthesize_multisig_full(
+            &mnemonic,
+            "",
+            CliNetwork::Mainnet,
+            CliTemplate::TrSortedMultiA,
+            2, // threshold
+            2, // cosigner_count
+            0, // account
+            MultisigPathFamily::Bip48,
+            false, // privacy_preserving
+        )
+        .unwrap();
+
+        // Derive the same self-multisig xpub the template produced.
+        let script_type = CliTemplate::TrSortedMultiA.bip48_script_type().unwrap_or(0);
+        let path_str =
+            MultisigPathFamily::Bip48.default_origin_path(CliNetwork::Mainnet, 0, script_type);
+        let path = DerivationPath::from_str(&path_str).unwrap();
+        let seed = mnemonic.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        let master_fp = master.fingerprint(&secp);
+        let xpriv = master.derive_priv(&secp, &path).unwrap();
+        let xpub = Xpub::from_priv(&secp, &xpriv);
+        let cosigner = CosignerSpec {
+            xpub,
+            master_fingerprint: master_fp,
+            path: Some(path.clone()),
+        };
+
+        // Build descriptor with @0 + @1 each bound to the self-derived xpub at
+        // the BIP-48 self-multisig path (mirrors what the template produces).
+        let path_anno = path
+            .into_iter()
+            .map(|c| match c {
+                ChildNumber::Hardened { index } => format!("{}'", index),
+                ChildNumber::Normal { index } => format!("{}", index),
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        let fp_hex = hex_fp(&master_fp.to_bytes());
+        let descriptor = format!(
+            "tr(@0[{fp_hex}/{path_anno}]/<0;1>/*,\
+             sortedmulti_a(2,@0[{fp_hex}/{path_anno}]/<0;1>/*,\
+             @1[{fp_hex}/{path_anno}]/<0;1>/*))"
+        );
+
+        // Drive bind_descriptor_keys directly (descriptor n=2 → full multisig
+        // mode requires n-1 = 1 cosigner triple alongside --phrase for @0).
+        let resolved = lex_resolve(&descriptor);
+        let binding = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[cosigner],
+        )
+        .unwrap();
+        let parsed = parse_descriptor(&descriptor, &binding.keys, &binding.fingerprints).unwrap();
+        let descriptor_bundle = crate::synthesize::synthesize_descriptor(
+            &parsed,
+            &binding.cosigners,
+            binding.entropy.as_deref(),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            descriptor_bundle.md1, template_bundle.md1,
+            "md1 must be byte-identical between descriptor-mode and template-mode \
+             tr-sortedmulti-a synthesis"
         );
     }
 

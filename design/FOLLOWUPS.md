@@ -290,15 +290,21 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.4`
 
-### `tr-sortedmulti-a-via-upstream` — `tr(@0, sortedmulti_a(...))` deferred to v0.4 pending upstream parser
+### `tr-sortedmulti-a-via-upstream` — toolkit-side resolved in v0.3.1; v0.3.2 is the cleanup release
 
 - **Surfaced:** v0.3 pre-Phase-A SPIKE 2026-05-05 (`design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1).
-- **Where:** cross-repo: `mnemonic-toolkit` (`crates/mnemonic-toolkit/src/parse_descriptor.rs`) ↔ `descriptor-mnemonic` (`crates/md-cli/src/parse/template.rs`) ↔ upstream (`github.com/rust-bitcoin/rust-miniscript`).
-- **What:** rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves (no `Terminal::SortedMultiA`; no Layer-1 routing in `descriptor/tr.rs`). Toolkit + md-cli both unable to ingest `tr(@0, sortedmulti_a(...))`. Wire-format opcode `Tag::SortedMultiA` reserved in md-codec.
-- **Action items (two distinct):**
-  1. **Upstream issue (file ASAP):** open an issue at `github.com/rust-bitcoin/rust-miniscript` with the minimal repro (the `.spike-v0.3/` crate has it: a single `MsDescriptor::<DescriptorPublicKey>::from_str(...)` call with `tr(KEY, sortedmulti_a(K1, K2))` returns "unrecognized name"). Request `sortedmulti_a` parser support per BIP-387. Link the SPIKE report and md-cli's `walk_tap_tree_v0_15` for context.
-  2. **v0.4 kickoff gate-decision:** before v0.4 design starts, check whether upstream has a tagged release containing the parser. If yes → bump dep, drop the workaround in toolkit + md-cli (one cross-repo cycle). If no → re-evaluate option (b) `[patch]`-fork with v0.4's appetite (was rejected for v0.3 because of maintenance burden + cross-repo drift).
-- **Workaround in v0.3:** users can pre-sort cosigner keys lexicographically and use plain `multi_a(...)` — script-equivalent for newly-constructed wallets, **lossy** for backing up an existing `sortedmulti_a` wallet whose keys aren't already sorted (the SPEC §6.8 unsupported-fragment error catches the attempt).
-- **Why deferred from v0.3:** SPIKE 2026-05-05 found upstream gap; user approved option (c) "scope sortedmulti_a out of v0.3" to avoid unbounded delay (option a) or fork-maintenance burden (option b).
-- **Status:** `open`
-- **Tier:** `v0.4-cross-repo`
+- **Resolution timeline:**
+  - 2026-04-03: rust-miniscript PR #910 ("Add support for sortedmulti_a") merged; closed issue #320.
+  - 2026-04-04: PR #915 ("refactor: remove SortedMultiVec and use Terminal::SortedMulti") merged.
+  - 2026-05-05: upstream search confirmed both PRs on master rev `95fdd1c5773bd918c574d2225787973f63e16a66`; no published crate release contains them.
+  - 2026-05-05: v0.3.1 adopted via `[patch.crates-io] miniscript = { git = ..., rev = "95fdd1c..." }` after a read-only build experiment confirmed feasibility; walker refactored for the post-#915 API; SPEC §4.9.a Layer 1+2 patched; new `Terminal::SortedMulti` + `Terminal::SortedMultiA` arms added; wire-bit-identical regression test passes (descriptor-mode `tr(@0, sortedmulti_a(...))` md1 == template-mode `--template tr-sortedmulti-a` md1).
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml` (`[patch.crates-io]` entry); `crates/mnemonic-toolkit/src/parse_descriptor.rs` (walker arms); `descriptor-mnemonic/crates/md-cli/src/parse/template.rs` (md-cli still pre-#910 — separate FOLLOWUP `walker-backport-to-md-cli`).
+- **Toolkit-side status:** `partially resolved by v0.3.1` — `tr(K, sortedmulti_a(...))` works end-to-end via the master `[patch]`. md-cli divergence is the remaining cross-repo concern (FOLLOWUP `walker-backport-to-md-cli`).
+- **v0.3.2 cleanup release** (mechanical, when miniscript crates.io publishes a post-#910+#915 release):
+  1. Drop the `[patch.crates-io]` entry from `Cargo.toml`.
+  2. Bump `miniscript` version in `crates/mnemonic-toolkit/Cargo.toml` to the new release.
+  3. Update CHANGELOG; tag `mnemonic-toolkit-v0.3.2`.
+  4. No code, SPEC, or test changes expected — the patched master and the new published release should be wire-identical for the surface this toolkit uses.
+  5. Watch via `gh api repos/rust-bitcoin/rust-miniscript/tags --jq '.[].name' | grep -E 'miniscript-(13\.[1-9]|14|15)'`.
+- **Status:** `partially resolved by v0.3.1; v0.3.2 cleanup pending miniscript crates.io release`
+- **Tier:** `v0.3.2` (toolkit-side; was `v0.4-cross-repo` until v0.3.1 shipped)

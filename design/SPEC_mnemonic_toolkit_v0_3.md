@@ -112,15 +112,13 @@ These are routed by the wrapper-level walker and never appear as `miniscript::mi
 
 - `Wpkh(@0)` → `Tag::Wpkh` — already in md-cli; carried.
 - `Pkh(@0)` → `Tag::Pkh` — already in md-cli; carried.
-- `Wsh(WshInner::Ms(...))` → recurses into `walk_miniscript_node`.
-- `Wsh(WshInner::SortedMulti(sm))` → `Tag::SortedMulti` (already in md-cli; carried; reuses `build_multi_node`).
-- `Sh(ShInner::Wsh(...))` → `Tag::Sh` wrapping `Tag::Wsh`; recurses.
+- `Wsh(ms)` → recurses into `walk_miniscript_node(w.as_inner(), km, false)`. **v0.3.1 (post-#915):** `WshInner` enum removed upstream; `Wsh::as_inner()` now returns `&Miniscript<Pk, Segwitv0>` directly, and SortedMulti surfaces via `Terminal::SortedMulti` in Layer 2 rather than a Layer-1 enum variant.
+- `Sh(ShInner::Wsh(...))` → `Tag::Sh` wrapping `Tag::Wsh`; recurses through `walk_miniscript_node` on the Wsh's inner Ms.
 - `Sh(ShInner::Wpkh(...))` → `Tag::Sh` wrapping `Tag::Wpkh`.
-- `Sh(ShInner::SortedMulti(sm))` → `Tag::Sh` wrapping `Tag::SortedMulti`.
-- `Sh(ShInner::Ms(...))` → `Tag::Sh` wrapping `walk_miniscript_node` result. (NEW — md-cli currently rejects.)
+- `Sh(ShInner::Ms(...))` → `Tag::Sh` wrapping `walk_miniscript_node` result. **v0.3.1 (post-#915):** `ShInner::SortedMulti` variant removed upstream; covers what was formerly that case since SortedMulti now flows through `Terminal::SortedMulti` inside the inner Ms.
 - `Tr(t)` with 0 leaves → `Tag::Tr` keypath-only (already in md-cli; carried).
 - `Tr(t)` with single-leaf miniscript → `Tag::Tr` + `Tag::TapTree` wrapping `walk_miniscript_node` result (already in md-cli for limited subset; carried).
-- `Tr(t)` with single-leaf `sortedmulti_a(k, @0, @1, ...)` → **deferred to v0.4 pending upstream parser support**; rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves (no `Terminal::SortedMultiA` arm; no Layer-1 routing in `descriptor/tr.rs`). The wire-format opcode `Tag::SortedMultiA` remains reserved in md-codec and is reachable in v0.4 once upstream lands the fragment. Pre-Phase-A SPIKE resolved this; see `design/agent-reports/spike-toolkit-v0_3-pre-phaseA.md` §1 and FOLLOWUP `tr-sortedmulti-a-via-upstream`. Users wanting sorted-key tap multisig in v0.3 can pre-sort cosigner keys lexicographically and use plain `multi_a(...)` (script-equivalent for new wallets; lossy for backing up an existing `sortedmulti_a` wallet whose keys are not already sorted).
+- `Tr(t)` with single-leaf `sortedmulti_a(k, @0, @1, ...)` → **supported in v0.3.1** via the Layer 2 `Terminal::SortedMultiA(thresh)` arm. Walker emits `Tag::SortedMultiA` (extension space). v0.3.0 had deferred this pending rust-miniscript parser support; PR #910 ("Add support for sortedmulti_a") merged 2026-04-03 added the `Terminal::SortedMultiA` variant and v0.3.1 ships via `[patch.crates-io]` to a post-#910+#915 master rev (see CHANGELOG v0.3.1).
 - `Tr(t)` with ≥2 leaves → exit 2 per §6.8 (deferred to v0.4).
 
 **Layer 2 — `Terminal` arms inside `walk_miniscript_node` (rust-miniscript v13's `miniscript::miniscript::decode::Terminal` enum):**
@@ -128,8 +126,10 @@ These are routed by the wrapper-level walker and never appear as `miniscript::mi
 Already handled by md-cli's walker (carried verbatim):
 - `Terminal::PkK(pk)` → `Tag::PkK`
 - `Terminal::PkH(pk)` → `Tag::PkH`
-- `Terminal::Multi(thresh)` → `Tag::Multi` (via `build_multi_node`)
-- `Terminal::MultiA(thresh)` → `Tag::MultiA` (via `build_multi_node`). In v0.3 the walker emits `Tag::MultiA` unconditionally because rust-miniscript v13.0.0 has no `sortedmulti_a` parser (sortedness disambiguation is moot until v0.4; see Layer 1 above and FOLLOWUP `tr-sortedmulti-a-via-upstream`).
+- `Terminal::Multi(thresh)` → `Tag::Multi` (via `build_multi_node`). Carried from v0.2.
+- `Terminal::SortedMulti(thresh)` → `Tag::SortedMulti` (via `build_multi_node`). v0.3.1: post-rust-miniscript-#915, sortedmulti now surfaces as a Terminal arm rather than `WshInner::SortedMulti` / `ShInner::SortedMulti`. Wire output unchanged from v0.3.0 (still `Tag::SortedMulti`).
+- `Terminal::MultiA(thresh)` → `Tag::MultiA` (via `build_multi_node`). Carried from v0.2.
+- `Terminal::SortedMultiA(thresh)` → `Tag::SortedMultiA` (via `build_multi_node`). **v0.3.1 NEW arm** — enables `tr(K, sortedmulti_a(...))` in tap-leaves. Sortedness disambiguation is now done by rust-miniscript's parser at the Terminal level (`MultiA` vs `SortedMultiA`).
 - `Terminal::Check(inner)` → `Tag::Check` (with tap-context collapse to `PkK`/`PkH`)
 
 v0.3-NEW arms:
@@ -157,7 +157,7 @@ v0.3-NEW arms:
 - `Terminal::OrI(a, b)` → `Tag::OrI`
 - `Terminal::Thresh(k, subs)` → `Tag::Thresh`
 
-`SortedMulti` does not appear as a `Terminal` arm; it lives as `WshInner::SortedMulti` / `ShInner::SortedMulti` and is handled at Layer 1 above. `SortedMultiA` is BIP-388 grammar but unreachable in v0.3 (deferred to v0.4 — see Layer 1 above).
+**v0.3.0 historical note (retracted in v0.3.1):** v0.3.0 documented `SortedMulti` as living at `WshInner::SortedMulti` / `ShInner::SortedMulti` (rust-miniscript v13.0.0 API), and `SortedMultiA` as unreachable. Post-#915 + #910 these are now `Terminal::SortedMulti(thresh)` and `Terminal::SortedMultiA(thresh)` Layer 2 arms. The retraction is structural only; wire output is unchanged for the existing `Tag::SortedMulti` path, and the new `Tag::SortedMultiA` path is wire-bit-identical to template-mode `--template tr-sortedmulti-a` per the v0.3.1 regression test.
 
 **Out-of-scope (rejected with mode-violation per §6.8):**
 - Multi-leaf taproot trees (`tr(@0, { leaf1, leaf2 })` with ≥2 leaves) — Merkle-root logic deferred to v0.4.
@@ -166,7 +166,7 @@ v0.3-NEW arms:
 
 After parsing yields `Descriptor { n, .. }`:
 - **`n == 1` (descriptor has only `@0`) → single-sig mode**, regardless of outer wrapper. This rule is uniform: `wpkh(@0/...)`, `pkh(@0/...)`, `tr(@0)`, AND `wsh(pk(@0))` / `wsh(multi(1,@0))` / `wsh(and_v(v:pk(@0),sha256(...)))` / `sh(wpkh(@0/...))` are ALL single-sig. Rationale: a 1-of-1 multisig is degenerate; tooling matches the user's likely mental model (`@0` = my key) over the wrapper-implied script context. Verify-bundle's check schema for n=1 reduces to the 9-element single-sig form irrespective of outer wrapper.
-- **`n ≥ 2` → multisig mode.** Always. Includes wrappers like `tr(@0, sortedmulti_a(...))` (deferred to v0.4 — see §4.9.a), `wsh(multi(2,@0,@1,@2))`, etc.
+- **`n ≥ 2` → multisig mode.** Always. Includes wrappers like `tr(@0, sortedmulti_a(...))` (supported in v0.3.1 — see §4.9.a), `wsh(multi(2,@0,@1,@2))`, etc.
 
 **Tree-faithfulness invariant (load-bearing):** the "mode" label (single-sig vs multisig) controls (a) key-sourcing — which flags supply `@0` vs `@N≥1` xpubs, (b) the number of mk1 cards emitted (one for single-sig, n for multisig), and (c) the verify-bundle check schema's element count (9 vs 3+6N). It does NOT control the `Descriptor.tree` structure: the parsed tree is ALWAYS faithful to the user-supplied descriptor. For a degenerate `wsh(multi(1,@0))`, the tree is `Tag::Wsh → Tag::Multi(k=1, n_keys=1)` and the encoder emits exactly that — implementations MUST NOT collapse `multi(1,@0)` to `pk(@0)` in the tree.
 
@@ -315,6 +315,7 @@ The engraving card emits metadata only (md1 not embedded; per format.rs analysis
 | Recovery flow | v0.3+ | **v0.4+** | unchanged |
 | User-supplied descriptor | v0.3+ | **DELIVERED in v0.3** | — |
 | Hash-locked / hybrid-miniscript descriptors | v0.3+ | **DELIVERED in v0.3** (subset of user-supplied) | — |
+| `sortedmulti_a` in tap-leaves | implicit v0.3+ | v0.3 deferred (no upstream parser) → **DELIVERED in v0.3.1** via `[patch.crates-io]` to rust-miniscript master post-#910+#915 | v0.3.2 cleanup (drop `[patch]` when miniscript crates.io publishes a post-#910+#915 release) |
 | Multi-leaf taproot trees | implicit v0.3+ | **v0.4** (Merkle-root logic out of scope for v0.3) | — |
 | md-cli walker backport | n/a | **v0.4-cross-repo** (toolkit's expanded walker → md-cli or shared crate) | — |
 
@@ -384,6 +385,7 @@ Total target: ≥40 v0.3-mode fixtures (covering A.1 + A.2 + C above plus mode-v
 - 2026-05-05: Round 5 — addressed architect r4 verdict (0C / 1I / 2L); §6.9 row 14 split into two mode-specific rows with corrected user-facing messages (NF-R4-1 — "seed-self" eliminated from byte-exact error text); §4.9.a Layer 1 sortedmulti_a routing claim hedged as SPIKE-dependent with both branches described (NF-R4-2); Layer 2 `Terminal::MultiA` arm clarified to dispatch on sortedness flag with explicit warning against collapsing to `Tag::MultiA` (NF-R4-3).
 - 2026-05-05: Round 6 — final cleanup. §10 category B mode-violation test count corrected from 13 to 15 (architect r5 NF-R5-1). SPEC at 0C / 0I.
 - 2026-05-05: Round 7 (post-SPIKE) — pre-Phase-A SPIKE found rust-miniscript v13.0.0 has no parser for `sortedmulti_a` in tap-leaves; user approved option (c) "scope sortedmulti_a out of v0.3" with soft-deferral framing. Patches: §4.9.a Layer 1 `Tr-singleleaf-sortedmulti_a` bullet softened to "deferred to v0.4 pending upstream parser"; §4.9.a Layer 2 `Terminal::MultiA` paragraph narrowed to "emit `Tag::MultiA` unconditionally"; §4.9.a Layer 2 final note updated; §4.10 multisig-mode example keeps `tr(@0, sortedmulti_a(...))` with `(deferred to v0.4)` parenthetical (per user direction); §9 Q2 cites SPIKE report (closes FOLLOWUP `spike-report-citation`); §12 marks `spike-report-citation` resolved. New FOLLOWUP `tr-sortedmulti-a-via-upstream` at v0.4-cross-repo tier with two action items (file upstream issue + v0.4 kickoff gate). Plan A.4 round-trip count `≥11` → `≥10`; total exit subcount `≥58` → `≥57`. Architect r1 review of SPIKE report verdict 0C/2I/3L; all patches applied.
+- 2026-05-05: Round 8 (v0.3.1 sortedmulti_a unblock) — upstream search found rust-miniscript PR #910 ("Add support for sortedmulti_a") merged 2026-04-03, closing issue #320; PR #915 ("refactor: remove SortedMultiVec and use Terminal::SortedMulti") merged 2026-04-04. Master rev `95fdd1c5773bd918c574d2225787973f63e16a66` has both. v0.3.1 adopts via `[patch.crates-io]` to that rev; promotes `Tr-singleleaf-sortedmulti_a` from "deferred to v0.4" to "supported." §4.9.a Layer 1 retracted `WshInner::*` and `ShInner::SortedMulti` bullets (post-#915 API change: `WshInner` enum removed, `Wsh::as_inner()` returns `&Miniscript` directly; `ShInner::SortedMulti` variant removed, SortedMulti now flows through `Terminal::SortedMulti` in Layer 2). §4.9.a Layer 2 added `Terminal::SortedMulti` and `Terminal::SortedMultiA` arms. §4.10 example deferral parenthetical removed. FOLLOWUP `tr-sortedmulti-a-via-upstream` reframed: status `partially resolved by v0.3.1`; tier `v0.3.2` (mechanical drop-`[patch]`-and-bump when miniscript crates.io publishes a post-#910+#915 release). Plan in `design/IMPLEMENTATION_PLAN_v0_3_1_sortedmulti_a.md`; architect r1 + r2 review verdicts 0C/3I/4L and 0C/1I/2L respectively, all action items folded.
 
 ## §12. v0.3-tier FOLLOWUPS (open)
 
