@@ -197,3 +197,55 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
         .code(4)
         .stdout(predicate::str::contains(r#""result":"mismatch""#));
 }
+
+/// SPEC v0.6.1 §11 cross-cut at bundle.rs::bundle_run_unified_descriptor —
+/// `bundle --descriptor "wpkh(@0/<0;1>/*)" --slot @0.xpub=<zpub>` (descriptor
+/// mode) must produce a byte-identical bundle to the equivalent xpub
+/// invocation. Proves the SLIP-0132 input normalizer is wired in the
+/// descriptor-mode branch (bundle.rs:853), not just the template-mode branch.
+#[test]
+fn descriptor_watch_only_singlesig_accepts_zpub_input_via_slip0132_normalizer() {
+    let xpub = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V";
+    // Canonical zpub form per BIP-84 reference vector
+    // https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki
+    let zpub = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    let descriptor = "wpkh(@0/<0;1>/*)";
+
+    let from_xpub = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={xpub}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_FP_HEX}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let from_zpub = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={zpub}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_FP_HEX}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        from_xpub.get_output().stdout,
+        from_zpub.get_output().stdout,
+        "descriptor-mode bundle stdout must be byte-identical regardless of xpub vs. zpub input encoding"
+    );
+}

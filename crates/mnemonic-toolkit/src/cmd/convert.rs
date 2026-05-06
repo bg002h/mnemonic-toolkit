@@ -6,6 +6,9 @@ use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
+use crate::slip0132::{
+    apply_xpub_prefix, normalize_xpub_prefix, parse_xpub_prefix_arg, XpubPrefix,
+};
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
 use bitcoin::bip32 as bip32;
@@ -145,6 +148,11 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub fingerprint: Option<String>,
 
+    /// SPEC v0.6.1 §11.a — emit `xpub` targets with a SLIP-0132 prefix.
+    /// Requires explicit `--network` when non-default (`xpub`).
+    #[arg(long = "xpub-prefix", value_parser = parse_xpub_prefix_arg)]
+    pub xpub_prefix: Option<XpubPrefix>,
+
     #[arg(long)]
     pub json: bool,
 }
@@ -200,6 +208,12 @@ fn refusal_phrase_entropy_to_wif_no_path() -> ToolkitError {
     )
 }
 
+fn refusal_xpub_prefix_no_network() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).".into(),
+    )
+}
+
 fn refusal_wif_with_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "--from wif does not retain a chain code; --path-driven derivation is impossible.".into(),
@@ -228,6 +242,7 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Xprv, Xpub)
             | (Xprv, Fingerprint)
             | (Xpub, Fingerprint)
+            | (Xpub, Xpub)         // SPEC v0.6.1 §2 — encoding-only normalization (§11/§11.a primitive)
             | (Wif, Xpub)
             | (Wif, Fingerprint)
             | (Ms1, Entropy)
@@ -352,6 +367,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         return Err(refusal_wif_with_path());
     }
 
+    // 5.a) SPEC §11.a — `--xpub-prefix` (non-default) requires explicit `--network`.
+    if let Some(prefix) = args.xpub_prefix {
+        if !prefix.is_default() && args.network.is_none() {
+            return Err(refusal_xpub_prefix_no_network());
+        }
+    }
+
     // 6) §8 --passphrase warning when not on PBKDF2 edge.
     //    SPEC-A v0.6.1: `Wif` joins the PBKDF2-bearing target set so
     //    `--from phrase --to wif --passphrase x` does NOT spuriously
@@ -380,7 +402,24 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // 8) Compute outputs.
-    let outputs = compute_outputs(primary.node, &primary_value, &targets, args)?;
+    let mut outputs = compute_outputs(primary.node, &primary_value, &targets, args)?;
+
+    // 8.a) SPEC §11.a — apply --xpub-prefix to xpub-typed outputs. The flag
+    //      is silently ignored when no xpub target is present (per §11.a).
+    if let Some(prefix) = args.xpub_prefix {
+        if !prefix.is_default() {
+            // §5.a refusal already enforced --network presence above; safe to
+            // unwrap_or default for the swap-target lookup.
+            let network = args.network.unwrap_or(CliNetwork::Mainnet);
+            for (node, value) in outputs.iter_mut() {
+                if *node == NodeType::Xpub {
+                    let xpub = bip32::Xpub::from_str(value)
+                        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+                    *value = apply_xpub_prefix(&xpub, prefix, network);
+                }
+            }
+        }
+    }
 
     // 8) Emit.
     if args.json {
@@ -537,12 +576,18 @@ fn compute_outputs(
             Ok(out)
         }
         Xpub => {
-            let xpub = bip32::Xpub::from_str(value)
+            // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
+            let value = normalize_xpub_prefix(value)?;
+            let xpub = bip32::Xpub::from_str(&value)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
                     Fingerprint => xpub.fingerprint().to_string().to_lowercase(),
+                    // SPEC v0.6.1 §2 — encoding-only normalization. Default
+                    // emit is the neutral xpub/tpub; any --xpub-prefix swap
+                    // happens in run() after compute_outputs.
+                    Xpub => xpub.to_string(),
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
                             "--from xpub --to {} is not a defined edge",

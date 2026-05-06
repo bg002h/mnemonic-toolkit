@@ -324,7 +324,9 @@ pub(crate) fn resolve_slots(
                 .find(|s| s.subkey == SlotSubkey::Xpub)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let xpub = bitcoin::bip32::Xpub::from_str(xpub_str).map_err(|e| {
+            // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
+            let xpub_str = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let xpub = bitcoin::bip32::Xpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let fp_str = slot_inputs
@@ -850,7 +852,9 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Xpub)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let xpub = BipXpub::from_str(xpub_str).map_err(|e| {
+            // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
+            let xpub_str = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let fp = slot_inputs

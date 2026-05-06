@@ -11,6 +11,7 @@ mod language;
 mod network;
 mod parse;
 mod parse_descriptor;
+mod slip0132;
 mod slot_input;
 mod synthesize;
 mod template;
