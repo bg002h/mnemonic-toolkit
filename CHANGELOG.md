@@ -4,6 +4,44 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.4.4] — 2026-05-06
+
+### What's new (v0.4.4 verify-bundle helper foundation + DescriptorBinding cleanup)
+
+v0.4.4 closes the 2 v0.4.4-tier FOLLOWUPS from v0.4.3 deferral. Per the user's "no users yet → ignore migration" license, the DescriptorBinding.entropy field is deleted outright (no shim period). The Phase P scope was reduced from "helper + full ~78-site forensic rollout + descriptor-mode 9/3+6N parity" to "helper foundation only"; call-site rollout (P.3-P.7) deferred to v0.4.5.
+
+- **Phase P.1+P.2 — `emit_verify_checks` helper foundation.** New `#[allow(dead_code)]` helper in `cmd/verify_bundle.rs` with the canonical SPEC §5.7 9-check ordering for single-sig template-mode (ms1_decode, ms1_entropy_match, mk1_decode, mk1_xpub_match, mk1_fingerprint_match, mk1_path_match, md1_decode, md1_wallet_policy, md1_xpub_match). New `SuppliedCards<'a>` struct (`{ms1, mk1, md1}` slice triplet — mk1 indexed by cosigner position with placeholder strings for absent slots; documented). New `emit_md1_checks` shared helper. Multisig path returns a TODO stub: `[VerifyCheck { name: "TODO_multisig_v0_4_5", passed: false, decode_error: Some("multisig helper rollout deferred to v0.4.5") }]`. Watch-only short-circuit: ms1[i].is_empty() → `passed: true + decode_error: Some("skipped: watch-only slot")`. 4 unit tests pin: `helper_singlesig_full_emits_9_checks_in_spec_order`, `helper_singlesig_tampered_mk1_populates_forensics`, `helper_singlesig_watch_only_short_circuits_ms1`, `helper_multisig_returns_todo_stub`. Helper landed but not yet wired to run_full / run_multisig / descriptor_mode_verify_run; that consolidation deferred to v0.4.5 (FOLLOWUP `verify-bundle-helper-call-sites-rollout-v0.4.5`). Closes structural piece of FOLLOWUP `verify-bundle-helper-and-full-forensics-rollout-v0.4.4` (superseded by v0.4.5 successor).
+- **Phase S — `DescriptorBinding.entropy` field retired.** Bundle-level `entropy: Option<Vec<u8>>` field deleted from `parse_descriptor.rs::DescriptorBinding`; per-slot entropy lives on `binding.cosigners[i].entropy` (post v0.4.3 N's CosignerKeyInfo→ResolvedSlot type alias merge). New `entropy_at_0()` compatibility shim method returns `Option<&[u8]>` reading `cosigners[0].entropy`. `bind_full_mode` sets `cosigners[0].entropy = Some(entropy)` before constructing the binding. `bind_watch_only_singlesig` and `bind_watch_only_multisig` drop the field initializer. ~10 readers (parse_descriptor.rs tests, cmd/verify_bundle.rs, cmd/bundle.rs::bundle_run_unified_descriptor) migrated from `binding.entropy.as_deref()` / `binding.entropy.is_some()` / `binding.entropy.is_none()` to the helper. Closes FOLLOWUP `descriptor-binding-entropy-field-redundant`.
+
+### Deferred to v0.4.5
+
+- **`verify-bundle-helper-call-sites-rollout-v0.4.5`** — Phase P.3-P.7. Wire `emit_verify_checks` into run_full (P.3), run_multisig (P.4 — replace TODO stub with real 3-shared+6N-per-cosigner emission), descriptor_mode_verify_run (P.5 — closes `verify-bundle-9-3plus6n-descriptor-mode-parity` simultaneously), migrate watch_only_tests (P.6), add forensic-field integration tests (P.7).
+
+### Breaking changes
+
+None at the CLI surface or JSON envelope level. Internal Rust API broke: `DescriptorBinding.entropy: Option<Vec<u8>>` field deleted. Per "no users yet" license — no external Rust consumers to migrate. The `entropy_at_0()` helper method is the new accessor.
+
+### Wire-bit-identical guarantee
+
+v0.4.0 / v0.4.1 / v0.4.2 / v0.4.3 schema-4 bundles continue to emit byte-identically. The `bundle --json` and `verify-bundle --json` envelope shapes are unchanged from v0.4.3. The new `emit_verify_checks` helper is `#[allow(dead_code)]` in v0.4.4 — production code paths still emit the v0.4.3 P.0 shape (passed: bool with forensic fields populated only at the v0.4.1 J.7 proof-of-shape site).
+
+### Test corpus
+
+244 lib unit tests pass (was 240 in v0.4.3; +4 from new emit_verify_checks helper unit tests). Integration suites unchanged.
+
+### Cycle artifacts
+
+- Implementation plan: `design/IMPLEMENTATION_PLAN_v0_4_4_verify_bundle_finish_for_real.md` (r1 APPROVE WITH NITS; 2 LOW findings addressed inline before execution).
+
+### Architect-review history
+
+- v0.4.4 impl plan: 1 in-cycle round (r1 APPROVE WITH NITS — 2 LOW addressed: wif-slot handling clarified; SuppliedCards.mk1 indexing convention documented).
+- Phase P.1+P.2: scope-reduced to helper foundation only; 244 tests pass post-helper.
+- Phase S: scope-minimized field deletion; 244 tests pass post-migration.
+- Final cross-phase review: APPROVED 2026-05-06 (1 Important re: stale CHANGELOG check-names addressed inline; 2 Low/Nit deferred via FOLLOWUP `verify-bundle-helper-foundation-cleanup-v0.4.5`).
+
+---
+
 ## mnemonic-toolkit [0.4.3] — 2026-05-06
 
 ### What's new (v0.4.3 verify-bundle finish + unified-path edges)

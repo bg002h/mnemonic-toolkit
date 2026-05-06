@@ -335,14 +335,40 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.4-nice-to-have`
 
-### `verify-bundle-helper-and-full-forensics-rollout-v0.4.4` — Phase P.1-P.5 deferred from v0.4.3 to v0.4.4
+### `verify-bundle-helper-and-full-forensics-rollout-v0.4.4` — Phase P.1-P.5 deferred from v0.4.3 to v0.4.4 — SUPERSEDED
+
+- **Status:** `superseded by verify-bundle-helper-call-sites-rollout-v0.4.5 (2026-05-06)`. v0.4.4 P.1+P.2 landed the `emit_verify_checks` helper foundation (#[allow(dead_code)] with 4 unit tests + SuppliedCards struct + watch-only short-circuit + multisig TODO stub). The ~78-site call-site refactors (run_full / run_multisig / descriptor_mode_verify_run consolidation + descriptor-mode 9/3+6N parity + watch-only test migration) deferred again to v0.4.5 per the v0.4.4 plan scope reduction.
 
 - **Surfaced:** v0.4.3 Phase P scope decision 2026-05-06 (P.0 struct shape correction landed; P.1-P.5 deferred for scope safety).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (~78 VerifyCheck push sites + new `emit_verify_checks` helper + descriptor-mode 9/3+6N parity refactor).
 - **What:** v0.4.3 P.0 corrected the VerifyCheck struct shape per SPEC §5.7 (`result: &'static str` → `passed: bool`). The full SPEC §5.7 rollout — `emit_verify_checks` helper + refactor of run_full / run_multisig / descriptor_mode_verify_run + per-cell forensic field population at every push site + descriptor-mode 9/3+6N parity (closes `verify-bundle-9-3plus6n-descriptor-mode-parity` simultaneously) + skipped-check decode_error population — is deferred to v0.4.4. v0.4.3 ships passing checks with `passed: false` set on failures but forensic fields (expected/actual/diff_byte_offset/decode_error) only populated at the one v0.4.1 J.7 proof-of-shape site.
 - **Why deferred:** scope-safety in v0.4.3 release window. Full helper + refactor estimated at ~800-1000 lines deleted in verify_bundle.rs alongside ~70 push-site updates.
-- **Status:** `open`
 - **Tier:** `v0.4.4`
+
+### `verify-bundle-helper-foundation-cleanup-v0.4.5` — 2 Low/Nit cleanups from v0.4.4 final cross-phase review
+
+- **Surfaced:** v0.4.4 final cross-phase review 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_verify_checks` (and surrounding helper code).
+- **What:**
+  - **L-1** — Doc-comment in `emit_verify_checks` cites SPEC §5.8 for the watch-only sentinel discrimination (`expected.ms1[i].is_empty()`); the watch-only short-circuit logic actually lives in §5.7. §5.8 is the MsField wire-format definition. Fix: change `§5.8` → `§5.7` in the doc-comment near `verify_bundle.rs:1882`.
+  - **L-2** — `MkField::Multi` arm in single-sig branch returns early with potentially fewer than 9 checks; this path is unreachable in production (single-sig bundles always have `MkField::Single`) and is documented with a comment, but the early return is an implicit invariant assumption. Fix: replace early return with `unreachable!("single-sig branch reached MkField::Multi — invariant violation")` or `debug_assert!(false, ...)`. Land alongside P.3 wiring in v0.4.5.
+- **Why deferred:** non-blocking nits; helper is `#[allow(dead_code)]` so no runtime exposure. Bundle with the v0.4.5 P.3-P.7 call-site rollout.
+- **Status:** `open`
+- **Tier:** `v0.4.5`
+
+### `verify-bundle-helper-call-sites-rollout-v0.4.5` — Phase P.3-P.7 call-site rollout deferred from v0.4.4 to v0.4.5
+
+- **Surfaced:** v0.4.4 Phase P scope decision 2026-05-06 (P.1+P.2 helper foundation landed; P.3-P.7 deferred for scope safety).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run_full` + `run_multisig` + `descriptor_mode_verify_run` + `crates/mnemonic-toolkit/tests/watch_only_tests.rs` + new integration tests for full forensic rollout.
+- **What:** v0.4.4 P.1+P.2 shipped `emit_verify_checks` (single-sig 9-check shape per SPEC §5.7 ordering), `SuppliedCards<'a>` struct, `emit_md1_checks` shared md1 helper, watch-only short-circuit (passed=true + decode_error="skipped: watch-only slot"), multisig TODO stub returning `[VerifyCheck { name: "TODO_multisig_v0_4_5", passed: false, ... }]`, and 4 helper unit tests. The helper is `#[allow(dead_code)]`; v0.4.5 wires it up:
+  - **P.3** — `run_full` (single-sig template-mode) calls `emit_verify_checks(SuppliedCards::singlesig(...), false)` and replaces ~30 push sites.
+  - **P.4** — `run_multisig` (template-mode multisig) replaces TODO stub with the 3-shared-checks + 6N-per-cosigner pattern; emits real forensics.
+  - **P.5** — `descriptor_mode_verify_run` emits the 9 / 3+6N schema (closes `verify-bundle-9-3plus6n-descriptor-mode-parity`) via the helper.
+  - **P.6** — `watch_only_tests.rs` migrates to the new shape (`passed` + forensic field assertions).
+  - **P.7** — Add integration tests for full forensic field population: tampered-cell roundtrips that assert `expected`/`actual`/`diff_byte_offset` populated; skipped checks assert `decode_error` populated.
+- **Why deferred:** scope-safety in v0.4.4 release window. The helper-foundation pattern is the right shape; consolidating ~78 call sites at the same time was estimated at ~800-1000 lines deleted plus ~70 push-site updates and risked release timeline.
+- **Status:** `open`
+- **Tier:** `v0.4.5`
 
 ### `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase J.2 + J.3 + full forensic field rollout deferred from v0.4.1 to v0.4.2 — SUPERSEDED
 
@@ -415,7 +441,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs::DescriptorBinding`.
 - **What:** v0.4.3 N merged CosignerKeyInfo into ResolvedSlot via type alias; ResolvedSlot has per-slot `entropy: Option<Vec<u8>>`. The bundle-level `DescriptorBinding.entropy: Option<Vec<u8>>` field is now semantically redundant with `binding.cosigners[0].entropy`. v0.4.4 retires the field; ~10 call sites (parse_descriptor.rs tests, verify_bundle.rs, bundle.rs::bundle_run_unified_descriptor) update to read `binding.cosigners[0].entropy.as_deref()` instead.
 - **Why deferred:** non-blocking; harmless redundancy.
-- **Status:** `open`
+- **Status:** `resolved by v0.4.4 Phase S (commit c99a78b)` — DescriptorBinding.entropy field deleted; `entropy_at_0()` helper method (Option<&[u8]>) reads `cosigners[0].entropy`; bind_full_mode sets `cosigners[0].entropy` before construction; all readers migrated; 244 tests pass.
 - **Tier:** `v0.4.4`
 
 ### `bundle-json-cli-flag-and-dispatch` — `--bundle-json <file>` verify-bundle intake + schema-version dispatch
