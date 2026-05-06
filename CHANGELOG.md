@@ -4,6 +4,24 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.5.2] — 2026-05-06
+
+### What's new (v0.5.2 — derive_slot helper extraction)
+
+Pure refactor patch. Sets up a shared call site for the upcoming v0.6.0 `mnemonic convert` subcommand without conflating refactor risk with new-feature risk.
+
+- **`derive_slot.rs` (NEW).** `derive_bip32_from_entropy(entropy, passphrase, language, network, template, account) -> Result<DerivedAccount>` consolidates the BIP-39 + BIP-32 derivation spine that was duplicated between `bundle::resolve_slots`'s phrase and entropy branches.
+- **`derive::DerivedAccount` extended.** New field `account_path: DerivationPath` populated via the helper. `derive_full` is now a thin wrapper that parses the phrase to entropy and delegates.
+- **`bundle::resolve_slots` simplified.** Phrase + entropy branches each shrink from ~22 LOC to ~10 LOC, calling the shared helper. The xpub / wif / xprv-rejected branches stay unchanged.
+
+### Wire format
+
+Byte-identical to v0.5.1. 230 lib + 44 integration tests pass (2 lib ignored, pre-existing). The pre-shipped 16-cell parametric fixture in `cli_bundle_full.rs` continues to match.
+
+### Architect review report
+
+- `design/agent-reports/v0_5_2_phase_extract_r1.md` (0C/0I — APPROVED; 1 unused-import nit folded inline).
+
 ## mnemonic-toolkit [0.5.1] — 2026-05-06
 
 ### What's new (v0.5.1 — close the v0.5.0 partial-delivery deferrals)
