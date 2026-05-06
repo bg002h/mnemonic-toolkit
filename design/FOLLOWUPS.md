@@ -658,3 +658,31 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** Pre-existed Phase B; out of scope for the SPEC-A `phrase/entropy → wif` commit. Cleanly fixable in the next convert-touching patch.
 - **Status:** `open`
 - **Tier:** `v0.6.2-nice-to-have`
+
+### `slip0132-input-normalization-stderr-info` — emit a one-line stderr note when SLIP-0132 input is silently normalized
+
+- **Surfaced:** v0.6.1 post-release UX discussion 2026-05-06.
+- **Where:** new helper at `crates/mnemonic-toolkit/src/slip0132.rs`; emitter at the 3 production cross-cut sites (`convert.rs:515`, `bundle.rs:327`, `bundle.rs:853`).
+- **What:** v0.6.1 Phase C silently normalizes SLIP-0132 prefix variants (zpub/ypub/Zpub/Ypub mainnet + uvpub/UVpub testnet) to neutral xpub/tpub on input. The user gets correct math but loses the intent signal their prefix carried (BIP-49 vs BIP-84, single-sig vs multisig). Add a one-line stderr informational note when normalization actually fires — pattern:
+  ```
+  info: normalized <variant> input to neutral <xpub|tpub> (encoding-only; no key change). Re-emit with --xpub-prefix <variant> if you need the SLIP-0132 form.
+  ```
+  Suppressed when input is already neutral. Quiet for users who already understand the normalization; informative for users discovering the round-trip primitive. The emitter must thread `&mut dyn Write` for stderr to all 3 cross-cut sites OR be implemented as an out-parameter on `normalize_xpub_prefix` so the caller decides where to write. Implementation tip: if `normalize_xpub_prefix` returns `Result<(String, Option<&'static str> /* variant-name */), ToolkitError>`, callers can match on `Some(_)` and emit per their stderr convention.
+- **Why deferred:** v0.6.1 shipped the silent-normalization MVP intentionally (smaller blast radius; no new stderr bytes that could break byte-exact tests; Phase D's stderr-ordering invariant stays simple). UX-improvement work fits a v0.6.2 patch.
+- **Caveat:** new stderr lines at the 3 cross-cut sites must NOT break the Phase D §5.5.a "secret-on-stdout warning is the LAST stderr write" invariant. Either fire the info note BEFORE the engraving card / before the secret-on-stdout warning, or relax the §5.5.a SPEC clause. Spike before SPEC-amending.
+- **Status:** `open`
+- **Tier:** `v0.6.2`
+
+### `wallet-export-industry-formats` — `mnemonic export-wallet` (or `bundle --wallet-export <format>`) for Bitcoin Core / Sparrow / Specter / BIP-388 import
+
+- **Surfaced:** v0.6.1 post-release UX discussion 2026-05-06.
+- **Where:** new subcommand `mnemonic export-wallet` OR new flag on `bundle`; output formatters under `crates/mnemonic-toolkit/src/wallet_export.rs` (new module).
+- **What:** Today the canonical "all wallet info, no secret" representation IS `mnemonic bundle --json` in watch-only mode (per SPEC §5.8: ms1 omitted-or-empty-sentinel; mk1 carries xpub bindings; md1 carries the descriptor/template). It is correct and complete BUT only the toolkit can re-ingest it. Users who want to feed the watch-only artifact to another wallet (Bitcoin Core, Sparrow, Specter, hardware-wallet HWI flows) must hand-translate. Add an industry-format export layer with at least:
+  - **Bitcoin Core `importdescriptors` JSON** — `{"desc": "wpkh([fp/path]xpub.../{0,1}/*)#checksum", "active": true, "internal": false, "range": [0, 999], "timestamp": "now"}` per descriptor (one for receive, one for change; or `<0;1>` multipath split). Matches Bitcoin Core 25+ descriptor-wallet expectations.
+  - **BIP-388 wallet policy** — formal `wallet_policy` JSON with `name`, `description_template`, `keys_info` array. Matches Ledger / hardware-wallet vendors that follow BIP-388.
+  - **Sparrow / Specter wallet JSON** (optional; format is per-wallet). Lower priority — both can ingest output descriptors directly via the Bitcoin Core format.
+  - **HWI signer JSON** (optional) — for cosigner export.
+  Grammar lean: `mnemonic export-wallet --format <bitcoin-core|bip388|sparrow|specter> --output <path-or-->` with the same `--slot @N.<subkey>=<value>` input shape as `bundle`. Refuses if any slot supplies entropy/phrase (export-wallet is watch-only by definition). SPEC question to resolve at brainstorm: does this live as a new top-level subcommand OR a `bundle --wallet-export` flag? Lean: new subcommand because the input grammar is a strict subset of bundle (no entropy/phrase) and the output is a different wire format from `BundleJson`.
+- **Why deferred:** v0.6.1 was a polish patch for `convert` + `bundle` UX. New subcommand or new bundle flag is its own minor scope. Brainstorm should resolve the format priority list (Bitcoin Core first vs BIP-388 first), the subcommand-vs-flag fork, and whether `range`/`timestamp` defaults need to be configurable.
+- **Status:** `open`
+- **Tier:** `v0.6.2`
