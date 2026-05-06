@@ -31,33 +31,6 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
     assert_eq!(stdout, expected, "self-check single-sig fixture mismatch");
 }
 
-// deprecated v0.2 pattern; remove after v0.4 release. Uses --cosigner-count > 1
-// (BIP-388 violating self-multisig). v0.4 multi-source self-check fixture in Phase G.
-#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
-#[test]
-fn bundle_self_check_passes_for_canonical_seed_multisig() {
-    let expected =
-        std::fs::read_to_string("tests/vectors/v0_2/wsh-sortedmulti-mainnet-0-false-true.txt")
-            .expect("fixture");
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args([
-            "bundle",
-            "--phrase",
-            TREZOR_24,
-            "--network",
-            "mainnet",
-            "--template",
-            "wsh-sortedmulti",
-            "--threshold",
-            "2",
-            "--cosigner-count",
-            "3",
-            "--self-check",
-            "--no-engraving-card",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(stdout, expected, "self-check multisig fixture mismatch");
-}
+// Deleted v0.4.2 cleanup: bundle_self_check_passes_for_canonical_seed_multisig
+// exercised the v0.2 self-multisig pattern (--cosigner-count 3 with --phrase),
+// which was hard-rejected by BIP-388 in v0.4.0 and has no migration path.

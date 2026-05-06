@@ -6,50 +6,9 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
-// deprecated v0.2 pattern; remove after v0.4 release. Per SPEC §4.11.b the
-// `--cosigner-count > 1` self-multisig path now hard-rejects with exit 2 +
-// `BIP-388 distinct-key violation` stderr.
-#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
-#[test]
-fn self_multisig_full_emits_warning_and_n_card_sets() {
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args([
-            "bundle",
-            "--phrase",
-            TREZOR_24,
-            "--network",
-            "mainnet",
-            "--template",
-            "wsh-sortedmulti",
-            "--threshold",
-            "2",
-            "--cosigner-count",
-            "3",
-            "--no-engraving-card",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-
-    // SELF-MULTISIG WARNING emitted (SPEC §4.1 byte-exact).
-    assert!(
-        stderr.contains("warning: full-mode multisig (--cosigner-count > 1)"),
-        "missing self-multisig warning line 1; got: {}",
-        stderr
-    );
-    assert!(
-        stderr.contains("byte-identical interchangeable copies"),
-        "missing self-multisig warning line 2"
-    );
-
-    // Three mk1[i] sections.
-    assert!(stdout.contains("# mk1[0] (cosigner 0 xpub + origin)"));
-    assert!(stdout.contains("# mk1[1] (cosigner 1 xpub + origin)"));
-    assert!(stdout.contains("# mk1[2] (cosigner 2 xpub + origin)"));
-    assert!(stdout.contains("# md1 (multisig wallet policy)"));
-}
+// Deleted v0.4.2 cleanup: self_multisig_full_emits_warning_and_n_card_sets
+// exercised the v0.2 self-multisig pattern which was hard-rejected by BIP-388
+// in v0.4.0 and has no migration path.
 
 #[test]
 fn watch_only_multisig_distinct_cosigners_emits_distinct_cards() {

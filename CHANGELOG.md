@@ -4,6 +4,60 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.4.2] — 2026-05-06
+
+### What's new (v0.4.2 unified-path consolidation)
+
+v0.4.2 closes the v0.4 cycle's "delete the dual-path baggage" theme. Per the user's "no users yet → ignore migration work" license, this release deletes the legacy parallel CLI dispatch path and lands the unified `--slot @N.<subkey>=<value>` path as the sole architectural shape, plus extends slot-input support and removes deprecated test patterns.
+
+- **Phase K — additional slot subkey shapes.** `resolve_slots` (cmd/bundle.rs) now handles `{entropy}` (hex-decode → BIP-39 mnemonic → derive at template path), `{wif}` (degenerate single-key in single-sig contexts), and partial `{xpub}` shapes (`{xpub}` alone, `{xpub, fingerprint}`, `{xpub, path}`). `{xprv}` REJECTED with v0.5+ deferral pointer (FOLLOWUP `unified-slot-xprv-resolution-needs-ms-codec-extension`); `{wif}` in multisig contexts REJECTED with v0.4.3 deferral pointer (FOLLOWUP `wif-multisig-resolution`). Per-shape integration tests in `cli_unified_slot.rs`.
+- **Phase L — descriptor mode under unified `--slot`.** `bundle_run_unified_descriptor` resolves each `@i` slot against the per-`@i` annotation path from the parsed descriptor (NOT template's path). Cross-checks fingerprint annotation against phrase-derived master fingerprint. Constructs CosignerKeyInfo bridge + ParsedKey + ParsedFingerprint vecs → existing synthesize_descriptor pipeline. 3 new integration tests.
+- **Phase M — legacy flag deprecation (delete parallel dispatch).** `bundle::run` rewritten as a thin ~140-line wrapper holding only the SPEC §6.6 v0.2 + v0.3 mode-violation pre-checks (cli_mode_violations*.rs byte-exact pins). All synthesis and emit goes through `bundle_run_unified` regardless of whether `--slot` or legacy `--phrase` / `--xpub` / `--cosigner` was supplied. New `bundle_args_to_slots` helper folds ALL legacy flags into a unified `Vec<SlotInput>` with the locked cosigner offset rule (phrase present → cosigners @1+; phrase absent → cosigners @0+). Deleted ~990 lines: `bundle_full`, `bundle_watch_only`, `bundle_multisig_full`, `bundle_multisig_watch_only`, `emit`, `emit_multisig`, `descriptor_mode_run`, `descriptor_mode_emit`, `derive_threshold_from_descriptor_tree`, `BundleArgs::template_unchecked`. `emit_unified` text-mode preserves v0.3 UX (ms1-omitted markers, "multisig wallet policy" md1 header, "m/" prefix on origin_path).
+- **Phase O — engraving card legacy migration.** Deleted `format.rs::engraving_card` function + `EngravingMode` enum + 3 byte-exact unit tests. Sole engraving card surface is now `engraving_card_unified` (Phase I, v0.4.1). ~140 lines removed.
+- **Cleanup — deleted 5 v0.2 multisig-full integration tests.** `cli_account_flag.rs`, `cli_privacy_preserving.rs`, `cli_bundle_multisig_full.rs` (whole-file deletes); 2 `#[ignore]`-marked test functions inside `cli_self_check.rs` and `cli_bundle_multisig.rs` deleted in-place. These exercised the v0.2 self-multisig pattern (BIP-388 violating, no migration path).
+
+### Deferred to v0.4.3
+
+Three v0.4.2 FOLLOWUPS are deferred to v0.4.3 to keep the v0.4.2 release window scope-safe:
+
+- `cosigner-keyinfo-resolved-slot-merge` — Phase N. Retire `CosignerKeyInfo` into `ResolvedSlot`. Cleanup-only; no user-visible behavior change.
+- `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase P. `emit_verify_checks` helper + full ~78-site forensic field population + descriptor-mode 9/3+6N parity (FOLLOWUP `verify-bundle-9-3plus6n-descriptor-mode-parity`).
+- `bundle-json-cli-flag-and-dispatch` — Phase Q. `--bundle-json <file>` verify-bundle intake + schema-version dispatch.
+
+### Breaking changes
+
+None at the CLI level — legacy `--phrase` / `--xpub` / `--cosigner` flags continue to accept the same inputs (they're parsed and folded into `Vec<SlotInput>` internally). Some byte-exact stderr text shifted as a consequence of the dispatch consolidation:
+
+- `bundle --phrase X --template wsh-sortedmulti --threshold 2 --cosigner-count 3` (no actual cosigners) now emits `error: --cosigner-count deprecated and inconsistent with slot indices (declared N=3, derived N=1)` (SPEC §6.6 row 5) instead of v0.4.0's BIP-388 row-13 hard-reject. The architectural diagnosis is more accurate (no actual cosigners → declared/derived N mismatch).
+- `bundle --descriptor 'wsh(sortedmulti(2,@0/...,@1/...))' --phrase X` (descriptor with no cosigner specs) now emits `error: descriptor has n=2 placeholders but --slot vec covers 1 slots` instead of v0.3's "requires explicit [fp/path] origin annotation" — fires earlier in the pipeline.
+
+Both shifts are tracked by updated integration tests pinning the new byte-exact stderr.
+
+Promoted to v0.5: FOLLOWUP `legacy-cli-flag-deletion` covers eventually deleting `--phrase` / `--xpub` / `--cosigner` flags entirely (option (b) from the v0.4.2 brainstorm). v0.4.2 ships option (a): inputs preserved, dispatch unified.
+
+### Wire-bit-identical guarantee
+
+v0.4.0 / v0.4.1 schema-4 bundles continue to emit byte-identically. v0.2 watch-only multisig fixtures pass byte-identically (text-mode, no JSON envelope). v0.2 self-multisig fixtures remain BIP-388-rejected (no integration coverage now since the 5 ignored tests are deleted).
+
+### Test corpus
+
+240 lib unit tests + integration suites pass (was 246 in v0.4.1; net -6 after cleanup: -3 deleted EngravingMode unit tests, -3 deleted v0.2 multisig-full whole-file integration tests, +5 new K + L tests, ~- 5 net via direct delete).
+
+### Cycle artifacts
+
+- Implementation plan: `design/IMPLEMENTATION_PLAN_v0_4_2_unified_consolidation.md` (r2 APPROVE WITH NITS; nits applied).
+
+### Architect-review history
+
+- v0.4.2 impl plan: 2 in-cycle rounds (r1 BLOCK 2C/3I/2N → r2 APPROVE WITH NITS 0C/0I/1N; nits applied inline before execution).
+- Phase K: scope-minimized; per-shape integration tests directly validate.
+- Phase L: scope-minimized; descriptor-mode integration tests + fingerprint cross-check.
+- Phase M: substantive cleanup (~990 lines deleted); test reconciliation surfaced 6 regressions, all closed via 3 emit_unified UX-preserving fixes (ms1 omitted marker, md1 multisig header, "m/" path prefix) + 3 test updates (BIP-388 row-13 → row-5; new explicit row-13 test; descriptor missing-annotation → slot-count-gap).
+- Phase O: trivial deletion; 240 tests pass after.
+- Final cross-phase review: pending (this CHANGELOG entry is the gate).
+
+---
+
 ## mnemonic-toolkit [0.4.1] — 2026-05-05
 
 ### What's new (v0.4.1 schema-4 cutover + multi-source synthesis + foundations for unified card and forensics)
