@@ -56,11 +56,12 @@ fn verify_bundle_via_bundle_json_schema_4_round_trip() {
 }
 
 #[test]
-fn verify_bundle_via_bundle_json_unsupported_schema_rejected() {
+fn verify_bundle_via_bundle_json_schema3_envelope_fails_at_field_extraction_v0_5() {
+    // v0.5 deletes the schema_version peek-and-reject branch. A schema-3
+    // envelope (ms1 as flat string, not array) now fails at the underlying
+    // `ms1` field extraction since v0.5 expects an array.
     let tmpdir = tempfile::tempdir().unwrap();
     let path = tmpdir.path().join("schema3.json");
-    // Hand-crafted minimal schema-3 fixture (the v0.3 envelope shape with
-    // ms1 as flat string, schema_version "3"). v0.4.3 must reject.
     let schema3_json = r#"{"schema_version":"3","mode":"full","network":"mainnet","template":"bip84","ms1":"ms10entrsqqqq","mk1":["mk1qstub"],"md1":["md1zstub"]}"#;
     std::fs::File::create(&path)
         .unwrap()
@@ -84,9 +85,8 @@ fn verify_bundle_via_bundle_json_unsupported_schema_rejected() {
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("schema_version 3 not supported in v0.4.3")
-            && stderr.contains("bundle-json-schema-2-3-retro-compat"),
-        "stderr should reject schema-3 with v0.4.4+ FOLLOWUP pointer; got: {stderr}"
+        stderr.contains("ms1 field is not an array"),
+        "stderr should reject schema-3 envelope at ms1 array check; got: {stderr}"
     );
 }
 

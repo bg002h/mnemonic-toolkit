@@ -671,8 +671,9 @@ mod watch_only_tests {
 /// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize
 /// a VerifyBundleArgs with the extracted ms1/mk1/md1 vecs populated. Other
 /// args (re-derivation flags --slot/--phrase/etc) are preserved from the
-/// caller's args. Schema-4 only; other schema versions error out with a
-/// pointer to FOLLOWUP `bundle-json-schema-2-3-retro-compat`.
+/// caller's args. v0.5: schema-version peek-and-reject deleted; envelopes
+/// that don't match the v0.5 schema-4 shape fail at the underlying field
+/// extraction (serde-style errors).
 fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, ToolkitError> {
     let path = args.bundle_json.as_ref().expect("caller checked bundle_json.is_some()");
     let raw = std::fs::read_to_string(path).map_err(|e| {
@@ -687,17 +688,6 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
             path.display()
         ))
     })?;
-    let schema = v["schema_version"].as_str().ok_or_else(|| {
-        ToolkitError::BadInput(format!(
-            "--bundle-json {} missing or non-string schema_version field",
-            path.display()
-        ))
-    })?;
-    if schema != "4" {
-        return Err(ToolkitError::BadInput(format!(
-            "--bundle-json schema_version {schema} not supported in v0.4.3; this toolkit emits and reads schema_version \"4\" only. Schema-2/3 retro-compat intake tracked at FOLLOWUP `bundle-json-schema-2-3-retro-compat`."
-        )));
-    }
     // Extract ms1 (MsField = Vec<String>) + mk1 (MkField — flat or nested) + md1 (Vec<String>).
     let ms1: Vec<String> = v["ms1"]
         .as_array()
