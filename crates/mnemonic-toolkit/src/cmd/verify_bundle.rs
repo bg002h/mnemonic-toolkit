@@ -221,7 +221,7 @@ pub fn run<W: Write, E: Write>(
         let result = if any_fail { "mismatch" } else { "ok" };
         if args.json {
             let json = VerifyBundleJson {
-                schema_version: "3",
+                schema_version: "4",
                 result,
                 checks,
             };
@@ -257,7 +257,7 @@ pub fn run<W: Write, E: Write>(
         // v0.2: schema_version "2"; single-sig checks shape unchanged from v0.1
         // (multisig array shape comes in Phase C).
         let json = VerifyBundleJson {
-            schema_version: "3",
+            schema_version: "4",
             result,
             checks,
         };
@@ -1363,8 +1363,14 @@ fn descriptor_mode_verify_run<W: Write>(
     let mut checks: Vec<VerifyCheck> = Vec::new();
 
     // Check 1: ms1 entropy match (skipped if no --ms1 supplied or watch-only).
+    // v0.4.1 H.1 shim: Bundle.ms1 is now Vec<String> (schema-4); descriptor
+    // mode binds entropy at @0 only, so ms1[0] is the secret. The shim takes
+    // the first non-empty element. Behavior diverges from v0.4.0 for the
+    // impossible Some("") case (now routes to "skipped" rather than "fail";
+    // synthesis never produced Some("") under v0.4.0). Phase J supersedes
+    // this with the full per-slot ms1 check.
     if let Some(supplied_ms1) = args.ms1.as_deref() {
-        match expected.ms1.as_deref() {
+        match expected.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
             Some(exp) if exp == supplied_ms1 => checks.push(VerifyCheck {
                 name: "ms1_entropy_match".into(),
                 result: "ok",
@@ -1434,7 +1440,7 @@ fn descriptor_mode_verify_run<W: Write>(
     let result_str = if any_fail { "mismatch" } else { "ok" };
     if args.json {
         let json = VerifyBundleJson {
-            schema_version: "3",
+            schema_version: "4",
             result: result_str,
             checks,
         };

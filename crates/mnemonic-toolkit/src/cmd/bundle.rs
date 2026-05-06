@@ -560,7 +560,7 @@ fn emit<W: Write, E: Write>(
         // for multisig). multisig: None for single-sig. origin_path populated;
         // origin_paths: None (single-sig is always shared-with-itself).
         let json = BundleJson {
-            schema_version: "3",
+            schema_version: "4",
             mode,
             network: args.network.human_name(),
             template: Some(args.template_unchecked().human_name()),
@@ -579,8 +579,11 @@ fn emit<W: Write, E: Write>(
         serde_json::to_writer(&mut *stdout, &json).ok();
         writeln!(stdout).ok();
     } else {
-        // Multi-section text output (SPEC §5.1).
-        if let Some(ms1) = bundle.ms1.as_deref() {
+        // Multi-section text output (SPEC §5.1). Single-sig: ms1 vec is
+        // length-1 ([secret] or [""]). Print first non-empty element if any;
+        // else watch-only line.
+        let ms1_first = bundle.ms1.first().filter(|s| !s.is_empty());
+        if let Some(ms1) = ms1_first {
             writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
             writeln!(stdout, "{}", ms1).ok();
             writeln!(stdout).ok();
@@ -927,7 +930,7 @@ fn emit_multisig<W: Write, E: Write>(
             (None, None)
         };
         let json = BundleJson {
-            schema_version: "3",
+            schema_version: "4",
             mode,
             network: args.network.human_name(),
             template: Some(args.template_unchecked().human_name()),
@@ -947,7 +950,14 @@ fn emit_multisig<W: Write, E: Write>(
         serde_json::to_writer(&mut *stdout, &json).ok();
         writeln!(stdout).ok();
     } else {
-        if let Some(ms1) = bundle.ms1.as_deref() {
+        // Schema-4 ms1 vec; multisig legacy path produces length-N vec where
+        // either all entries are non-empty (legacy self-multisig N=1 only post-
+        // BIP-388 hard-reject) or all are "" (watch-only multisig). Multi-source
+        // multisig (Phase H.3) routes through the unified path, not here.
+        let any_non_empty = bundle.ms1.iter().any(|s| !s.is_empty());
+        if any_non_empty {
+            // Legacy single-cosigner self-multisig: print first ms1.
+            let ms1 = bundle.ms1.first().expect("any_non_empty implies non-empty vec");
             writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
             writeln!(stdout, "{}", ms1).ok();
             writeln!(stdout).ok();
@@ -1159,7 +1169,10 @@ fn descriptor_mode_emit<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let n = binding.cosigners.len();
-    let mode_str = if bundle.ms1.is_some() {
+    // Schema-4: any non-empty ms1 element marks the bundle as secret-bearing.
+    // Hybrid mode (some slots phrase, some xpub) reports "full" — SPEC §5.3
+    // does not define a third "hybrid" enum value for the JSON `mode` field.
+    let mode_str = if bundle.any_secret_bearing() {
         "full"
     } else {
         "watch-only"
@@ -1208,7 +1221,7 @@ fn descriptor_mode_emit<W: Write, E: Write>(
         };
 
         let json = BundleJson {
-            schema_version: "3",
+            schema_version: "4",
             mode: mode_str,
             network: args.network.human_name(),
             template: None,
@@ -1227,7 +1240,12 @@ fn descriptor_mode_emit<W: Write, E: Write>(
         serde_json::to_writer(&mut *stdout, &json).ok();
         writeln!(stdout).ok();
     } else {
-        if let Some(ms1) = bundle.ms1.as_deref() {
+        // Schema-4 ms1 vec; descriptor mode binds entropy ONLY at @0 (single
+        // secret-bearing slot per v0.3 contract). Use ms1[0] for the "primary"
+        // ms1 to render. v0.4.2+ multi-source descriptor mode would emit per-
+        // slot ms1 blocks here; not yet in scope.
+        let ms1_first = bundle.ms1.first().filter(|s| !s.is_empty());
+        if let Some(ms1) = ms1_first {
             writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
             writeln!(stdout, "{}", ms1).ok();
             writeln!(stdout).ok();

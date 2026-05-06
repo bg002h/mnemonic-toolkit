@@ -50,11 +50,7 @@ pub fn chunk_md1(s: &str) -> String {
 /// Verify-bundle skips ms1 checks for empty-string elements. The dense layout
 /// preserves slot-index correspondence `ms1[i] ↔ mk1[i] ↔ slot @i`.
 ///
-/// Phase D-foundation: type alias + structural helpers only. The
-/// `BundleJson.ms1` field migration from `Option<String>` → `MsField` is
-/// deferred to v0.4.1 — see `design/FOLLOWUPS.md` entry
-/// `bundle-json-schema-4-cutover` for the staged plan.
-#[allow(dead_code)] // Wired into BundleJson.ms1 in v0.4.1 cutover.
+/// Wired into `BundleJson.ms1` and `Bundle.ms1` in v0.4.1 (Phase H).
 pub type MsField = Vec<String>;
 
 /// Discriminated union for `BundleJson.mk1` (SPEC §5.3 v0.2 + Q9 closure).
@@ -137,7 +133,11 @@ pub struct BundleJson {
     pub origin_paths: Option<Vec<String>>,
     /// `None` for multisig OR `--privacy-preserving`.
     pub master_fingerprint: Option<String>,
-    pub ms1: Option<String>, // null in watch-only
+    /// SPEC §5.8 schema-4 ms1 field. Length-N invariant; `""` empty-string
+    /// sentinel marks watch-only slots; non-empty marks secret-bearing slots.
+    /// Single-sig watch-only: `[""]`; pure watch-only multisig N=3: `["", "", ""]`;
+    /// multi-source full multisig N=3: `["ms1...", "ms1...", "ms1..."]`.
+    pub ms1: MsField,
     pub mk1: MkField,
     pub md1: Vec<String>,
     pub engraving_card: Option<String>,

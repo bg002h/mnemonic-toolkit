@@ -5,7 +5,7 @@
 //! (cross-binding invariants).
 
 use crate::error::ToolkitError;
-use crate::format::MkField;
+use crate::format::{MkField, MsField};
 use crate::network::CliNetwork;
 use crate::parse::{CosignerSpec, MultisigPathFamily};
 use crate::template::CliTemplate;
@@ -18,9 +18,21 @@ use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Bundle {
-    pub ms1: Option<String>,
+    /// Per-slot ms1 cards. Schema-4 dense layout (SPEC §5.8): length-N invariant,
+    /// `""` sentinel marks watch-only slots, non-empty marks secret-bearing.
+    /// Single-sig watch-only is `[""]`; pure watch-only multisig N=3 is
+    /// `["", "", ""]`; multi-source full N=3 is `["ms1...", "ms1...", "ms1..."]`.
+    pub ms1: MsField,
     pub mk1: MkField,
     pub md1: Vec<String>,
+}
+
+impl Bundle {
+    /// SPEC §5.8: any slot with a non-empty ms1 marks the bundle as secret-bearing.
+    /// Used by `mode_str` derivation in JSON envelope serialization.
+    pub fn any_secret_bearing(&self) -> bool {
+        self.ms1.iter().any(|s| !s.is_empty())
+    }
 }
 
 /// Derive a deterministic 20-bit `chunk_set_id` for mk1 from the 4-byte
@@ -126,7 +138,7 @@ pub fn synthesize_full(
     debug_assert!(descriptor.is_wallet_policy());
 
     Ok(Bundle {
-        ms1: Some(ms1),
+        ms1: vec![ms1],
         mk1: MkField::Single(mk1),
         md1,
     })
@@ -156,19 +168,25 @@ pub fn synthesize_watch_only(
     debug_assert_eq!(&card.policy_id_stubs[0], &stub);
     debug_assert!(descriptor.is_wallet_policy());
 
+    // SPEC §5.8: single-sig watch-only ms1 = [""] (length-N invariant; empty-string sentinel).
     Ok(Bundle {
-        ms1: None,
+        ms1: vec![String::new()],
         mk1: MkField::Single(mk1),
         md1,
     })
 }
 
 /// Per-`@N` key + fingerprint + path triple for descriptor-mode synthesis.
+/// `path_raw` (v0.4.1) is the user-supplied raw path string used for SPEC
+/// §4.11.b BIP-388 distinct-key raw-equality. For paths that arrive only as
+/// typed `DerivationPath` (no source string available), the binding logic
+/// falls back to `path.to_string()` — matches v0.4.0 behavior.
 #[derive(Debug, Clone)]
 pub struct CosignerKeyInfo {
     pub xpub: Xpub,
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
+    pub path_raw: String,
 }
 
 /// Produce a `Bundle` from a pre-parsed `md_codec::Descriptor` + per-`@N`
@@ -232,13 +250,15 @@ pub fn synthesize_descriptor(
         MkField::Multi(per_cosigner)
     };
 
-    let ms1 = match entropy {
-        Some(e) => Some(
-            ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.to_vec()))
-                .map_err(ToolkitError::from)?,
-        ),
-        None => None,
-    };
+    // SPEC §5.8 schema-4 ms1 layout: dense Vec of length N, "" sentinel for
+    // watch-only slots. Descriptor mode binds entropy ONLY to @0 (single
+    // secret-bearing slot per the v0.3 descriptor mode contract). N-1
+    // remaining slots are watch-only cosigner xpubs → "".
+    let mut ms1: MsField = vec![String::new(); n];
+    if let Some(e) = entropy {
+        ms1[0] = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.to_vec()))
+            .map_err(ToolkitError::from)?;
+    }
 
     debug_assert!(descriptor.is_wallet_policy());
 
@@ -372,8 +392,14 @@ pub fn synthesize_multisig_full(
     let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy))
         .map_err(ToolkitError::from)?;
 
+    // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected
+    // for cosigner_count > 1 at bundle.rs entry (BIP-388); cosigner_count == 1
+    // produces vec![ms1]. The clone-N pattern is correct should the hard-reject
+    // ever be lifted (would still violate BIP-388 distinctness, but synthesis
+    // contract holds).
+    let ms1_field: MsField = vec![ms1; cosigner_count];
     Ok(Bundle {
-        ms1: Some(ms1),
+        ms1: ms1_field,
         mk1: MkField::Multi(per_cosigner),
         md1,
     })
@@ -524,8 +550,10 @@ pub fn synthesize_multisig_watch_only(
     // 9. md1.
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
+    // SPEC §5.8: pure watch-only multisig ms1 = ["", "", ...] of length N.
+    let cosigner_count = cosigners.len();
     Ok(Bundle {
-        ms1: None,
+        ms1: vec![String::new(); cosigner_count],
         mk1: MkField::Multi(per_cosigner),
         md1,
     })
@@ -564,8 +592,8 @@ mod tests {
             0,
         )
         .unwrap();
-        assert!(bundle.ms1.is_some());
-        let ms1 = bundle.ms1.as_ref().unwrap();
+        assert!(bundle.any_secret_bearing());
+        let ms1 = &bundle.ms1[0];
         assert!(ms1.starts_with("ms1"));
         let mk1 = bundle.mk1.as_single().unwrap();
         assert!(!mk1.is_empty());
@@ -579,7 +607,7 @@ mod tests {
         let (_, fp, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
         let bundle =
             synthesize_watch_only(fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet, 0).unwrap();
-        assert!(bundle.ms1.is_none());
+        assert!(!bundle.any_secret_bearing());
         let mk1 = bundle.mk1.as_single().unwrap();
         assert!(!mk1.is_empty());
         assert!(mk1.iter().all(|s| s.starts_with("mk1")));
@@ -827,7 +855,8 @@ mod tests {
             cosigners.push(CosignerKeyInfo {
                 xpub,
                 fingerprint: master_fp,
-                path,
+                path: path.clone(),
+                path_raw: path.to_string(),
             });
 
             let mut payload = [0u8; 65];
@@ -852,7 +881,7 @@ mod tests {
             1,
         );
         let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
-        assert!(bundle.ms1.is_some(), "full mode emits ms1");
+        assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
         assert!(mk1.iter().all(|s| s.starts_with("mk1")));
@@ -867,7 +896,7 @@ mod tests {
             1,
         );
         let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
-        assert!(bundle.ms1.is_none(), "watch-only mode omits ms1");
+        assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
     }
@@ -880,7 +909,7 @@ mod tests {
             2,
         );
         let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
-        assert!(bundle.ms1.is_some());
+        assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
         assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
     }
@@ -893,7 +922,7 @@ mod tests {
             2,
         );
         let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
-        assert!(bundle.ms1.is_none());
+        assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
         assert_eq!(multi.len(), 2);
     }

@@ -30,11 +30,13 @@ fn descriptor_full_singlesig_bip84_emits_valid_bundle() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
-    assert_eq!(v["schema_version"], "3");
+    assert_eq!(v["schema_version"], "4");
     assert_eq!(v["mode"], "full");
     assert_eq!(v["template"], Value::Null);
     assert_eq!(v["descriptor"].as_str().unwrap(), descriptor);
-    assert!(v["ms1"].as_str().unwrap().starts_with("ms1"));
+    // SPEC §5.8 schema-4: ms1 is MsField (length-N array); single-sig full = ["ms1..."].
+    assert!(v["ms1"].is_array());
+    assert!(v["ms1"][0].as_str().unwrap().starts_with("ms1"));
     assert!(v["mk1"].is_array() && !v["mk1"].as_array().unwrap().is_empty());
     assert!(v["md1"].is_array() && !v["md1"].as_array().unwrap().is_empty());
     assert_eq!(v["multisig"], Value::Null);
@@ -64,7 +66,8 @@ fn descriptor_watch_only_singlesig_emits_no_ms1() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
     assert_eq!(v["mode"], "watch-only");
-    assert_eq!(v["ms1"], Value::Null);
+    // SPEC §5.8 schema-4: single-sig watch-only ms1 = [""] (length-1 with sentinel).
+    assert_eq!(v["ms1"], serde_json::json!([""]));
     assert_eq!(v["descriptor"].as_str().unwrap(), descriptor);
 }
 
@@ -89,7 +92,7 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
         .success();
     let bundle_stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
     let bundle: Value = serde_json::from_str(&bundle_stdout).expect("valid JSON");
-    let ms1 = bundle["ms1"].as_str().unwrap();
+    let ms1 = bundle["ms1"][0].as_str().unwrap();
     let mk1: Vec<&str> = bundle["mk1"]
         .as_array()
         .unwrap()
@@ -131,7 +134,7 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
         .success();
     let verify_stdout = String::from_utf8(verify_out.get_output().stdout.clone()).unwrap();
     let verify: Value = serde_json::from_str(&verify_stdout).expect("valid JSON");
-    assert_eq!(verify["schema_version"], "3");
+    assert_eq!(verify["schema_version"], "4");
     assert_eq!(verify["result"], "ok");
     let checks = verify["checks"].as_array().unwrap();
     assert!(checks.iter().all(|c| c["result"] == "ok"));
@@ -159,7 +162,7 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
     let bundle: Value =
         serde_json::from_str(&String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap())
             .unwrap();
-    let ms1 = bundle["ms1"].as_str().unwrap();
+    let ms1 = bundle["ms1"][0].as_str().unwrap();
     // Use a clearly-different mk1 (truncated) that decodes-but-mismatches.
     let bad_mk1 = "mk1qpnd2wpqqsqek48ppe2rd4eyqvzg3vs7zfl2pe5jyqghcnaqxqq4gdatr9tn90ga6tg0purlfh9275f4pvjmck3usgpec7pzw3wvgsn9mwm0";
     let md1: Vec<&str> = bundle["md1"]

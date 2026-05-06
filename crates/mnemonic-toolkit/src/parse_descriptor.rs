@@ -1076,17 +1076,21 @@ fn check_anno_match(
 /// SPEC §4.11.b BIP-388 distinct-key conformance.
 ///
 /// Pairwise scan over `binding.cosigners`; returns `Err(Bip388Distinctness { i, j })`
-/// for the first colliding pair under raw-string `(xpub, derivation_path)` equality
-/// (i < j). No path canonicalization, no xpub network normalization. A slot with the
-/// degenerate empty path (`DerivationPath::master()`) renders as `"m"` for collision
-/// purposes. Symmetric across bundle creation (exit 2 via §6.6 row 13) and
-/// verify-bundle (caller re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
+/// for the first colliding pair under raw-string `(xpub, path_raw)` equality
+/// (i < j). No path canonicalization beyond what the binding source preserves: for
+/// legacy `--cosigner` / descriptor-placeholder paths the `h`-vs-`'` notation is
+/// already canonicalized by the parser before reaching CosignerKeyInfo (so
+/// `48h/0h` and `48'/0'` still compare equal under those paths); for v0.4.1
+/// slot-driven paths the `--slot @N.path=<literal>` value flows through
+/// unchanged (so the user's literal notation is preserved end-to-end). Symmetric
+/// across bundle creation (exit 2 via §6.6 row 13) and verify-bundle (caller
+/// re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
 pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), ToolkitError> {
     let cs = &binding.cosigners;
     for i in 0..cs.len() {
         for j in (i + 1)..cs.len() {
             if cs[i].xpub.to_string() == cs[j].xpub.to_string()
-                && cs[i].path.to_string() == cs[j].path.to_string()
+                && cs[i].path_raw == cs[j].path_raw
             {
                 return Err(ToolkitError::Bip388Distinctness {
                     i: i as u8,
@@ -1115,10 +1119,17 @@ fn push_binding(
         i,
         fp: fp.to_bytes(),
     });
+    // SPEC §4.11.b raw-string equality fallback: when the binding source has
+    // no separately-tracked raw path string (the descriptor placeholder
+    // resolver canonicalizes `h`→`'` during parse), the path's typed
+    // canonical form is used. Phase B/D unified slot path supplies a
+    // genuine raw string from `--slot @N.path=<value>` instead.
+    let path_raw = path.to_string();
     cosigners.push(CosignerKeyInfo {
         xpub: *xpub,
         fingerprint: fp,
         path,
+        path_raw,
     });
 }
 
@@ -1675,10 +1686,24 @@ mod tests {
         Xpub::from_str("xpub6BemYiVEULcbqF34sTQgz3c2MzCoNmz8ZJieEwjH6HwnZ54tYQmnFgEwRckq3hLJ9feTr4xUFx7XwJ3nraRrQcPnvEuYfddWQ8A4kwU4QMx").unwrap()
     }
     fn cinfo(x: Xpub, p: &str) -> CosignerKeyInfo {
+        let path = DerivationPath::from_str(p).unwrap();
         CosignerKeyInfo {
             xpub: x,
             fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
-            path: DerivationPath::from_str(p).unwrap(),
+            path,
+            // Default tests: path_raw == typed canonical form (legacy semantics).
+            path_raw: p.to_string(),
+        }
+    }
+    /// Variant: explicitly set `path_raw` distinct from the typed path string
+    /// (for testing v0.4.1 raw-string distinctness with `h`-vs-`'` notation).
+    fn cinfo_raw(x: Xpub, p: &str, raw: &str) -> CosignerKeyInfo {
+        let path = DerivationPath::from_str(p).unwrap();
+        CosignerKeyInfo {
+            xpub: x,
+            fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
+            path,
+            path_raw: raw.to_string(),
         }
     }
 
@@ -1758,6 +1783,33 @@ mod tests {
             ToolkitError::Bip388Distinctness { i, j } => assert_eq!((i, j), (0, 1)),
             other => panic!("unexpected variant {other:?}"),
         }
+    }
+
+    // v0.4.1 H.6 — raw-string path equality. Same xpub + paths that differ ONLY
+    // in `h` vs `'` notation must NOT collide under raw-string comparison.
+    #[test]
+    fn bip388_h_vs_apostrophe_paths_distinct_under_raw_string() {
+        let canonical = "48'/0'/0'/2'";
+        let h_form = "48h/0h/0h/2h";
+        // Under v0.4.1, same xpub at h-form vs apostrophe-form is distinct
+        // because path_raw differs character-for-character.
+        ckd(vec![
+            cinfo_raw(xpub_a(), canonical, canonical),
+            cinfo_raw(xpub_a(), canonical, h_form),
+        ])
+        .expect("raw-string equality treats h-form and apostrophe-form as distinct paths");
+    }
+
+    // v0.4.1 H.6 — raw-string equality: identical raw strings collide.
+    #[test]
+    fn bip388_identical_raw_paths_collide() {
+        let raw = "48'/0'/0'/2'";
+        let err = ckd(vec![
+            cinfo_raw(xpub_a(), raw, raw),
+            cinfo_raw(xpub_a(), raw, raw),
+        ])
+        .expect_err("identical xpub + identical raw path must collide");
+        assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
     }
 
     // ---- C.5: descriptor-mode wire-bit-identical to template-mode (3 fixtures) ----
