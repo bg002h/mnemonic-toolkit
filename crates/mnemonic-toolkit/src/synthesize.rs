@@ -75,7 +75,8 @@ pub fn xpub_to_65(xpub: &Xpub) -> [u8; 65] {
 
 /// Build the typed Descriptor for a (template, network, xpub, fingerprint, account).
 /// Caller's xpub MUST already be at the template's BIP path; not rederived.
-/// SPEC §4.6.
+/// SPEC §4.6. Test-only helper after v0.4.2 Phase M (binary uses synthesize_unified).
+#[allow(dead_code)]
 pub fn build_descriptor(
     template: CliTemplate,
     network: CliNetwork,
@@ -107,7 +108,8 @@ pub fn build_descriptor(
 }
 
 /// Synthesize a full-mode bundle (entropy known).
-/// SPEC §4.4-§4.7.
+/// SPEC §4.4-§4.7. Test-only helper after v0.4.2 Phase M.
+#[allow(dead_code)]
 pub fn synthesize_full(
     entropy: &[u8],
     fingerprint: Fingerprint,
@@ -145,7 +147,8 @@ pub fn synthesize_full(
 }
 
 /// Synthesize a watch-only bundle (no entropy known; ms1 omitted).
-/// SPEC §4 watch-only path.
+/// SPEC §4 watch-only path. Test-only helper after v0.4.2 Phase M.
+#[allow(dead_code)]
 pub fn synthesize_watch_only(
     fingerprint: Fingerprint,
     xpub: Xpub,
@@ -266,6 +269,8 @@ pub fn synthesize_descriptor(
 }
 
 /// SPEC §4.1 multisig: derive xpub at a path string from the master xpriv.
+/// Test-only helper after v0.4.2 Phase M.
+#[allow(dead_code)]
 pub(crate) fn derive_xpub_at_path(
     master: &Xpriv,
     secp: &Secp256k1<bitcoin::secp256k1::All>,
@@ -281,7 +286,8 @@ pub(crate) fn derive_xpub_at_path(
 
 /// Synthesize a full-mode multisig bundle (self-multisig: N cosigners derived
 /// from one seed at one path; all N xpubs are byte-identical).
-/// SPEC §4.1, §4.5 multisig, §4.6 multisig.
+/// SPEC §4.1, §4.5 multisig, §4.6 multisig. Test-only helper after v0.4.2 Phase M.
+#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_full(
     seed_mnemonic: &bip39::Mnemonic,
@@ -406,7 +412,8 @@ pub fn synthesize_multisig_full(
 }
 
 /// Synthesize a watch-only multisig bundle from cosigner xpubs.
-/// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig.
+/// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig. Test-only helper after v0.4.2 Phase M.
+#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_watch_only(
     cosigners: &[CosignerSpec],
