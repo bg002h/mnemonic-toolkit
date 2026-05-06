@@ -4,6 +4,43 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.6.1] — 2026-05-06
+
+### What's new (v0.6.1 — `convert` polish + `bundle` retrofit)
+
+A patch release bundling four small additive items consolidated under a single SPEC-amendment cycle (`SPEC_convert_v0_6.md` v0.6.1 + `SPEC_mnemonic_toolkit_v0_5.md` §5.5.a). All four items are additive — no breaking changes; no wire-format change to existing bundles or convert outputs.
+
+- **`phrase`/`entropy` → `wif` edge** (SPEC-A) — previously deferred-in-code (BadInput at `convert.rs:482-484`); now a fully supported edge that derives a leaf privkey at an explicit `--path` and serializes via `bitcoin::PrivateKey::to_wif()` with `compressed: true` (BIP-32 §4 mandate). `--path` is REQUIRED — the toolkit does NOT auto-default a path from `--template`/`--account`. Refusal exits 2 (`ToolkitError::ConvertRefusal`) when `--path` is absent. SPEC §8 invariant: `--passphrase` is meaningful for this edge (the PBKDF2 pipeline is traversed).
+- **SLIP-0132 prefix-tolerant input** (SPEC-B / new §11) — `convert --from xpub=...`, `bundle --slot @0.xpub=...`, and `verify-bundle --slot @0.xpub=...` accept SLIP-0132 prefix variants in addition to BIP-32 neutral `xpub`/`tpub`. 8 prefixes recognized: `ypub`/`Ypub`/`zpub`/`Zpub` (mainnet → swap to `xpub`); `upub`/`Upub`/`vpub`/`Vpub` (testnet → swap to `tpub`). Implementation in new `src/slip0132.rs` via base58check decode → version-byte swap → re-encode (key material is unchanged; encoding-only normalization). Unknown prefix exits 1 with byte-exact stderr. Spike: `design/agent-reports/spike-slip0132-v0_6_1-pre-spec.md`.
+- **`--xpub-prefix <variant>` output flag** (SPEC-C / new §11.a) — emit `xpub`-typed targets with a SLIP-0132 prefix. 5 flag values (`xpub` default / `ypub` / `Ypub` / `zpub` / `Zpub`); testnet variants are network-context-derived via `--network`, not separate flag values. **`--network` REQUIRED when `--xpub-prefix` is non-default** (refuses with byte-exact stderr; eliminates a "testnet user gets mainnet zpub" bug class). Silent no-op on non-xpub targets. New `(xpub, xpub)` edge in §2 supports the round-trip primitive cited in §11.a.
+- **`bundle` secret-on-stdout warning** (SPEC-D / new §5.5.a) — `bundle.rs::emit_unified` now emits the same byte-exact stderr warning as `convert` §7 when `Bundle::any_secret_bearing()` returns true. Watch-only invocations (all `ms1[i] == ""` sentinel per §5.8) suppress it. Wif-only-bundle limitation per SPEC: WIF slots produce empty-string ms1, so the warning is silently suppressed even when WIF is supplied as input — the warning's scope is BIP-39 entropy emission, not WIF.
+
+### Test corpus
+
+- **239 lib + 100 integration tests** at v0.6.1 (was 230 lib + 67 integration at v0.6.0). Net +9 lib unit tests (all in new `slip0132.rs`) + 33 integration tests:
+  - `cli_convert_slip0132.rs` (NEW, 15 tests).
+  - `cli_convert_round_trips.rs` (NEW, 3 tests).
+  - `cli_convert_happy_paths.rs` (+9: 3 from Phase B `phrase/entropy → wif`, 6 from Phase E coverage tightening).
+  - `cli_convert_refusals.rs` (+2: Phase B no-`--path` refusal for both phrase and entropy sources).
+  - `cli_bundle_full.rs` (+2: Phase D text-mode + JSON-mode positive warning assertions).
+  - `cli_bundle_watch_only.rs` (+1: Phase C zpub cross-cut, plus an in-place stderr negative assertion).
+  - `cli_descriptor_mode.rs` (+1: Phase C descriptor-mode zpub cross-cut).
+  - `cli_bundle_multisig.rs` (in-place stderr negative assertion only; no new test function).
+- 16-cell parametric `bundle_full_16_cells_byte_exact_against_pinned_vectors` continues to pass — the new bundle stderr warning does not perturb the wire-format byte-identity invariant.
+
+### FOLLOWUPS resolved
+
+- `secret-on-stdout-warning-bundle-retrofit` (resolved Phase D, commit `66ff7c0`).
+- `convert-phrase-to-leaf-wif` (resolved Phase B, commit `62b4f23`).
+- `convert-test-coverage-tightening` (resolved Phase E, commit `59140c5`).
+- `convert-slip0132-prefix-support` (resolved Phase C, commit `bb77164`).
+
+### Internal
+
+- New module `src/slip0132.rs` with `XpubPrefix` enum + `normalize_xpub_prefix` + `apply_xpub_prefix` + clap value-parser. 9 inline unit tests pin the byte-level swap mechanics against the BIP-84 reference vector.
+- `derive_slot::derive_bip32_at_path` — sibling helper to `derive_bip32_from_entropy` for path-driven leaf derivation (used by the `phrase/entropy → wif` edge).
+- `convert.rs::edge_uses_pbkdf2` extended to include `Wif` per SPEC §8 v0.6.1 invariant.
+
 ## mnemonic-toolkit [0.6.0] — 2026-05-06
 
 ### What's new (v0.6.0 — `mnemonic convert` subcommand)

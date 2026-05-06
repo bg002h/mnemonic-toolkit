@@ -585,7 +585,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` emit_unified ms1 emission paths.
 - **What:** v0.6.0 introduces a stderr warning `"warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"` when convert emits secret-bearing material to stdout (phrase/entropy/xprv/wif/ms1). The bundle subcommand also emits secret-bearing ms1 strings to stdout but does NOT have the warning. Retrofit for cross-tool consistency.
 - **Why deferred:** convert was the natural place to introduce the convention (ad-hoc one-shot operations where stdout-redirect-discipline is most likely overlooked); bundle retrofit is a separate scope-bounded change.
-- **Status:** `open`
+- **Status:** `resolved 66ff7c0` (v0.6.1 Phase D — `bundle.rs::emit_unified` emits the warning when `Bundle::any_secret_bearing()` returns true; SPEC §5.5.a; +1 positive (text mode) +1 positive (JSON mode) +2 negative (watch-only single + multisig) test assertions).
 - **Tier:** `v0.6.1`
 
 ### `convert-seed-and-raw-privkey-nodes` — add seed / raw_privkey / xprv-via-ms1 / seed-via-ms1 nodes to convert when ms-codec v0.2 ships
@@ -603,7 +603,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` Phrase|Entropy arm.
 - **What:** v0.6.0 SPEC §2 lists `phrase/entropy → wif` as not directly defined; impl returns `BadInput` with deferral message. Implementing requires a leaf-depth BIP-32 path (`m/<purpose>'/<coin>'/<account>'/<chain>/<index>`, depth 5) and serializing the leaf privkey to WIF. v0.6.1+ adds the missing edge.
 - **Why deferred:** scope-safety in v0.6.0; the headline conversion graph nodes were prioritized.
-- **Status:** `open`
+- **Status:** `resolved 62b4f23` (v0.6.1 Phase B — SPEC-A in `SPEC_convert_v0_6.md` §2 + §8; sibling helper `derive_slot::derive_bip32_at_path` for path-driven derivation; `bitcoin::PrivateKey { compressed: true, network, inner: leaf_xpriv.private_key }.to_wif()`; explicit `--path` REQUIRED with byte-exact `ConvertRefusal` stderr (exit 2) when absent; `edge_uses_pbkdf2` extended to include `Wif` so `--passphrase` does not spuriously fire the ignored-warning).
 - **Tier:** `v0.6.1`
 
 ### `convert-slip0132-prefix-support` — accept zpub/ypub on input + emit modes (consolidated v0.6.1)
@@ -623,7 +623,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
    Option (b) is grammar-lighter and preserves the convention that SLIP-0132 variants are *encodings of the same xpub*, not different artifact classes. Lock the choice before implementation begins.
 
 - **Why deferred:** v0.6.0 prioritized the headline single-format conversion graph; SLIP-0132 is a UX-convenience layer over BIP-32 + BIP-388 descriptors. Both directions ship together in v0.6.1 to close the SLIP-0132 story in one release cycle.
-- **Status:** `open`
+- **Status:** `resolved bb77164` (v0.6.1 Phase C — Option (b) selected per architect convergence: `--xpub-prefix <variant>` modifier flag with 5 case-sensitive values (`xpub`/`ypub`/`Ypub`/`zpub`/`Zpub`) per SPEC §11.a; testnet variants are network-context-derived via `--network` (no separate flag values); `--network` REQUIRED when `--xpub-prefix` is non-default. Input normalizer in new `src/slip0132.rs` handles all 8 SLIP-0132 prefixes (4 mainnet + 4 testnet); cross-cut wired at `convert.rs:515`, `bundle.rs:327`, `bundle.rs:853`. New `(xpub, xpub)` edge in §2 for the §11.a round-trip primitive).
 - **Tier:** `v0.6.1`
 
 ### `convert-test-coverage-tightening` — close convert subcommand test gaps (6 direct-edge + 2 deferral + 3 round-trip tests)
@@ -647,7 +647,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
      - `entropy ↔ ms1` — assert `entropy → ms1 → entropy` produces identical entropy bytes.
      - `phrase ↔ ms1` (via entropy intermediate) — assert `phrase → ms1 → phrase` produces the canonical phrase. v0.6.0 has one-direction tests on each leg but no full-loop assertion.
 - **Why deferred:** v0.6.0 prioritized headline-edge coverage and refusal-taxonomy correctness; the missing tests are tightening, not net-new functionality. The 6 uncovered edges are exercised indirectly through the JSON envelope test (#3 in `cli_convert_json.rs`) and the v0.5.2 16-cell parametric byte-identity test, but lack explicit asserts.
-- **Status:** `open`
+- **Status:** `resolved 59140c5` (v0.6.1 Phase E — 6 direct-edge tests added to `cli_convert_happy_paths.rs`; 3 round-trip loop tests added in new `cli_convert_round_trips.rs`. The 2 deferral-message tests are explicitly NOT written — Phase B (62b4f23) implemented `phrase/entropy → wif` so the deferrals no longer exist).
 - **Tier:** `v0.6.1`
 
 ### `convert-run-step-numbering-duplicate-8` — `cmd::convert::run` has duplicate `// 8)` step labels
