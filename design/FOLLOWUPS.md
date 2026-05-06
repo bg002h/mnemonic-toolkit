@@ -345,6 +345,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** scope-safety in v0.4.3 release window. Full helper + refactor estimated at ~800-1000 lines deleted in verify_bundle.rs alongside ~70 push-site updates.
 - **Tier:** `v0.4.4`
 
+### `verify-bundle-watch-only-spurious-ms1-handling` — watch-only with user-supplied --ms1 produces ms1_entropy_match: fail
+
+- **Surfaced:** v0.4.5 Phase P.3 review L-1 (2026-05-06).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run_watch_only` + `emit_verify_checks` watch-only short-circuit.
+- **What:** Pre-v0.4.5 `watch_only_checks` ignored `args.ms1` (always emitted "watch-only mode: no entropy known to toolkit" passing-vacuously). Post-v0.4.5 P.3 wire-up: run_watch_only synthesizes the watch-only Bundle (`ms1: vec![""]`) and the helper compares supplied vs expected. If user spuriously supplies `--ms1 <non-empty>` in watch-only mode, `ms1_decode` runs against the supplied string, then `ms1_entropy_match` fails because `expected="" ≠ supplied=non-empty`. Behavior change vs v0.4.4: arguably more useful (tool flags the user's mistake) but not formally specified.
+- **Why deferred:** non-blocking; SPEC §5.7 doesn't address this edge. Decide whether to short-circuit in run_watch_only (ignore args.ms1, force-empty SuppliedCards.ms1) or document the behavior in SPEC §2.2.2.
+- **Status:** `open`
+- **Tier:** `v0.4-nice-to-have`
+
 ### `verify-bundle-helper-foundation-cleanup-v0.4.5` — 2 Low/Nit cleanups from v0.4.4 final cross-phase review
 
 - **Surfaced:** v0.4.4 final cross-phase review 2026-05-06.

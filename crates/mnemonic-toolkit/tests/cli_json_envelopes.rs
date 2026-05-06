@@ -93,6 +93,7 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
     assert_eq!(
         names,
         vec![
+            "ms1_decode",
             "ms1_entropy_match",
             "mk1_decode",
             "mk1_xpub_match",
@@ -101,7 +102,6 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
             "md1_decode",
             "md1_wallet_policy",
             "md1_xpub_match",
-            "stub_linkage",
         ]
     );
 }
