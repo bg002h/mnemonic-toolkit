@@ -294,6 +294,168 @@ fn entropy_to_wif_bip84_leaf_mainnet() {
     );
 }
 
+// ============================================================================
+// Phase E — convert-test-coverage-tightening (FOLLOWUP closure)
+// 6 missing direct edges per the v0.6.0 post-release coverage audit.
+// ============================================================================
+
+const TREZOR_24_ZERO_ENTROPY_HEX_64: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const TREZOR_24_BIP84_MAINNET_XPRV: &str = "xprv9xoJSXoA4FrCpc2ufjps9Bwd7MHDCSLTbQxzdtDtxPv1Tx7KhF8riMNbQx1PqgUaTf2VjXLVBbw1WqZbeTRdmF4Di8o3Xz7t9LRizh5WxEP";
+const TREZOR_24_MASTER_FINGERPRINT: &str = "5436d724";
+const TREZOR_24_ZERO_MS1_24WORD: &str =
+    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w";
+/// hash160 of the WIF sentinel-xpub pubkey (depth=0, chain_code=0, the
+/// `bundle.rs::resolve_slots` Wif sentinel pattern shared by `convert`).
+const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
+const SAMPLE_WIF_SENTINEL_FINGERPRINT: &str = "751e76e8";
+
+#[test]
+fn phrase_to_ms1_composite_via_entropy() {
+    // Composite edge phrase → entropy → ms1; v0.6.0 covered entropy → ms1
+    // directly but had no phrase-source assertion.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={TREZOR_24}"),
+            "--to",
+            "ms1",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("ms1: {TREZOR_24_ZERO_MS1_24WORD}\n"));
+}
+
+#[test]
+fn entropy_to_xpub_bip84_mainnet() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("entropy={TREZOR_24_ZERO_ENTROPY_HEX_64}"),
+            "--to",
+            "xpub",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("xpub: {TREZOR_BIP84_MAINNET_XPUB}\n"));
+}
+
+#[test]
+fn entropy_to_xprv_bip84_mainnet() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("entropy={TREZOR_24_ZERO_ENTROPY_HEX_64}"),
+            "--to",
+            "xprv",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("xprv: {TREZOR_24_BIP84_MAINNET_XPRV}\n"));
+}
+
+#[test]
+fn entropy_to_fingerprint_bip84_mainnet() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("entropy={TREZOR_24_ZERO_ENTROPY_HEX_64}"),
+            "--to",
+            "fingerprint",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("fingerprint: {TREZOR_24_MASTER_FINGERPRINT}\n"));
+}
+
+#[test]
+fn xprv_to_fingerprint_account_xpriv() {
+    // Fingerprint of the account-level xprv's xpub (NOT the master fingerprint).
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xprv={TREZOR_24_BIP84_MAINNET_XPRV}"),
+            "--to",
+            "fingerprint",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // Account-xpub fingerprint, computed by hashing the account-xpub's pubkey.
+    // Same value emitted by `--from xpub --to fingerprint` against the
+    // matching xpub fixture.
+    assert!(stdout.starts_with("fingerprint: "));
+    assert_eq!(stdout.trim().len(), "fingerprint: ".len() + 8);
+    let fp = stdout.trim().trim_start_matches("fingerprint: ");
+    // Cross-check against the xpub-source emission for byte-for-byte equality.
+    let xpub_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={TREZOR_BIP84_MAINNET_XPUB}"),
+            "--to",
+            "fingerprint",
+        ])
+        .assert()
+        .success();
+    let xpub_fp = String::from_utf8(xpub_out.get_output().stdout.clone())
+        .unwrap()
+        .trim()
+        .trim_start_matches("fingerprint: ")
+        .to_string();
+    assert_eq!(fp, xpub_fp, "xprv→fingerprint must equal xpub→fingerprint for the same account-level key");
+}
+
+#[test]
+fn wif_to_fingerprint_co_tested_with_wif_to_xpub() {
+    // Co-tested with wif → xpub (sentinel) per architect r1 L-3: same setup,
+    // same WIF, two derived outputs verified together via compound --to.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("wif={SAMPLE_WIF}"),
+            "--to",
+            "xpub,fingerprint",
+            "--network",
+            "mainnet",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2);
+    assert!(lines[0].starts_with("xpub: xpub661"));
+    assert_eq!(lines[1], format!("fingerprint: {SAMPLE_WIF_SENTINEL_FINGERPRINT}"));
+}
+
 /// SPEC-A §8 invariant — `--passphrase` is meaningful for phrase/entropy → wif
 /// (the edge traverses PBKDF2: phrase → seed → master → derive → leaf privkey).
 /// The "passphrase ignored" warning MUST NOT fire on this edge.
