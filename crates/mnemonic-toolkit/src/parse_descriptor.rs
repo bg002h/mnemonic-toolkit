@@ -808,9 +808,10 @@ fn bind_full_mode(
 
     // SPEC §4.11: full mode requires @0 [fp/path] annotation.
     let at0_fp = resolved.fingerprint_annos[0].ok_or_else(|| {
-        ToolkitError::DescriptorParse(
-            "@0 in full descriptor mode requires explicit [fp/path] origin annotation".into(),
-        )
+        let mode_label = if n == 1 { "single-sig" } else { "multisig" };
+        ToolkitError::DescriptorParse(format!(
+            "@0 in full {mode_label} descriptor mode requires explicit [fp/path] origin annotation."
+        ))
     })?;
     if at0_fp.to_bytes() != master_fp.to_bytes() {
         return Err(ToolkitError::DescriptorParse(
@@ -838,13 +839,14 @@ fn bind_full_mode(
     );
 
     if n >= 2 {
-        // Full multisig: cosigner_specs.len() must be n - 1.
+        // Full multisig: cosigner_specs.len() must be n - 1 (SPEC §6.9 row 14).
         if cosigner_specs.len() != (n as usize) - 1 {
-            return Err(ToolkitError::ModeViolation {
-                mode: "full-multisig",
-                flag: "--cosigner",
-                message: "full multisig descriptor mode requires n-1 cosigner triples (--phrase supplies @0).",
-            });
+            return Err(ToolkitError::DescriptorParse(format!(
+                "full multisig descriptor mode requires {}-1 = {} cosigner triples (--phrase supplies @0); got {} --cosigner triple(s).",
+                n,
+                (n as usize) - 1,
+                cosigner_specs.len()
+            )));
         }
         for (k, spec) in cosigner_specs.iter().enumerate() {
             let i = (k + 1) as u8;
@@ -914,12 +916,10 @@ fn bind_watch_only_multisig(
 ) -> Result<DescriptorBinding, ToolkitError> {
     let n = resolved.n as usize;
     if cosigner_specs.len() != n {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only-multisig",
-            flag: "--cosigner",
-            message:
-                "watch-only multisig descriptor mode requires n cosigner triples (one per @N).",
-        });
+        return Err(ToolkitError::DescriptorParse(format!(
+            "watch-only multisig descriptor mode requires {n} cosigner triples (one per @N); got {} --cosigner triple(s).",
+            cosigner_specs.len()
+        )));
     }
     let mut keys = Vec::with_capacity(n);
     let mut fps = Vec::with_capacity(n);
@@ -953,7 +953,12 @@ fn bind_watch_only_multisig(
 fn path_from_decl(resolved: &ResolvedPlaceholders, i: u8) -> Result<DerivationPath, ToolkitError> {
     let origin = match &resolved.path_decl.paths {
         PathDeclPaths::Shared(p) => p,
-        PathDeclPaths::Divergent(v) => &v[i as usize],
+        PathDeclPaths::Divergent(v) => v.get(i as usize).ok_or_else(|| {
+            ToolkitError::DescriptorParse(format!(
+                "internal: @{i} path index out of bounds (Divergent.len()={})",
+                v.len()
+            ))
+        })?,
     };
     if origin.components.is_empty() {
         return Err(ToolkitError::DescriptorParse(format!(
@@ -993,11 +998,12 @@ fn check_anno_match(
     }
     let anno_path = match &resolved.path_decl.paths {
         PathDeclPaths::Shared(p) => Some(p),
-        PathDeclPaths::Divergent(v) => Some(&v[i as usize]),
+        PathDeclPaths::Divergent(v) => v.get(i as usize),
     };
     if let (Some(anno), Some(sp)) = (anno_path, spec_path) {
         if !anno.components.is_empty() {
-            // Compare via string serialization (cheap; both are absolute paths).
+            // bitcoin's DerivationPath::from_str normalizes both ' and h hardened
+            // markers, so cosigner-spec paths using either form compare correctly.
             let anno_str = anno
                 .components
                 .iter()
@@ -1010,12 +1016,12 @@ fn check_anno_match(
                 })
                 .collect::<Vec<_>>()
                 .join("/");
-            if let Ok(anno_dp) = DerivationPath::from_str(&anno_str) {
-                if anno_dp != *sp {
-                    return Err(ToolkitError::DescriptorParse(format!(
-                        "@{i} origin annotation path does not match cosigner-triple path"
-                    )));
-                }
+            let anno_dp = DerivationPath::from_str(&anno_str)
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+            if anno_dp != *sp {
+                return Err(ToolkitError::DescriptorParse(format!(
+                    "@{i} origin annotation path does not match cosigner-triple path"
+                )));
             }
         }
     }
