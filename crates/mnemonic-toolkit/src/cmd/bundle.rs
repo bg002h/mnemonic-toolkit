@@ -543,18 +543,15 @@ fn resolve_slots(
                 entropy: Some(entropy_bytes),
             });
         } else if subkeys.contains(&SlotSubkey::Wif) {
-            // K.3: {wif} — degenerate single-key. Parse WIF; use its public
-            // point as a depth-0 xpub with zero chain code (BIP-32 framing
-            // accepts depth-0 with sentinel chain code; non-derivable but
-            // the wallet policy slot just needs a stable pubkey).
-            // v0.4.2 minimum: wif slots only in single-sig contexts; multisig
-            // with wif slots is a v0.4.3 FOLLOWUP `wif-multisig-resolution`.
-            if by_index_len > 1 {
-                return Err(ToolkitError::BadInput(format!(
-                    "--slot @{idx}.wif in multisig context not supported in v0.4.2; \
-                    deferred to v0.4.3 per FOLLOWUP `wif-multisig-resolution`."
-                )));
-            }
+            // K.3 (v0.4.2) + R (v0.4.3): {wif} — degenerate single-key. Parse
+            // WIF; use its public point as a depth-0 xpub with zero chain code
+            // (BIP-32 framing accepts depth-0 with sentinel chain code;
+            // non-derivable but the wallet policy slot just needs a stable
+            // pubkey). v0.4.3 R: lifted the v0.4.2 single-sig-only guard;
+            // wif slots are now legal in multisig contexts. BIP-388
+            // distinctness applies normally — same WIF supplied for two slots
+            // → identical pubkey + empty path → row 13 collision.
+            let _ = by_index_len; // by_index_len no longer guards; multi-wif allowed.
             let wif_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Wif)

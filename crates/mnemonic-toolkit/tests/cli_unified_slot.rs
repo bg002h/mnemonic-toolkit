@@ -193,8 +193,20 @@ fn unified_slot_wif_singlesig_emits_valid_bundle() {
     assert!(v["mk1"].is_array());
 }
 
+// v0.4.3 Phase R: wif slots in multisig contexts are now SUPPORTED
+// (previously rejected with v0.4.3 deferral pointer in v0.4.2).
+// The v0.4.2 rejection test is replaced by 3 R tests below.
+
+// Two distinct WIFs (Bitcoin Core compressed-pubkey test vector + a flipped
+// variant). Same 32-byte private-key test vector both times would produce
+// the same xpub, hence we use two genuinely-distinct WIFs to avoid
+// triggering BIP-388 row 13.
+const SAMPLE_WIF_2: &str = "L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1";
+
 #[test]
-fn unified_slot_wif_in_multisig_rejected_with_followup_pointer() {
+fn unified_slot_wif_in_multisig_2_of_3() {
+    // Phase R: hybrid 2-of-3 with phrase + wif + xpub cosigners.
+    let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -210,14 +222,78 @@ fn unified_slot_wif_in_multisig_rejected_with_followup_pointer() {
             "--slot",
             &format!("@1.wif={}", SAMPLE_WIF),
             "--slot",
-            &format!("@2.phrase={}", TREZOR_24),
+            &format!("@2.xpub={}", xpub),
+            "--json",
+            "--no-engraving-card",
         ])
         .assert()
-        .failure();
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(v["schema_version"], "4");
+    // ms1: [secret, "", ""] — only @0 is secret-bearing.
+    assert!(v["ms1"][0].as_str().unwrap().starts_with("ms1"));
+    assert_eq!(v["ms1"][1], "");
+    assert_eq!(v["ms1"][2], "");
+}
+
+#[test]
+fn unified_slot_wif_alone_in_2_of_2() {
+    // Phase R: pure wif multisig (degenerate but legal). Two DISTINCT WIFs.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.wif={}", SAMPLE_WIF),
+            "--slot",
+            &format!("@1.wif={}", SAMPLE_WIF_2),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(v["schema_version"], "4");
+    // Both wif slots are watch-only at the ms1 level (empty sentinels).
+    assert_eq!(v["ms1"], serde_json::json!(["", ""]));
+}
+
+#[test]
+fn unified_slot_same_wif_twice_emits_bip388_row13() {
+    // Phase R: BIP-388 distinct-key conformance under wif multisig. Same
+    // WIF supplied for @0 AND @1 → identical pubkey + empty path tuples
+    // → SPEC §6.6 row 13 fires (exit 2).
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.wif={}", SAMPLE_WIF),
+            "--slot",
+            &format!("@1.wif={}", SAMPLE_WIF),
+        ])
+        .assert()
+        .failure()
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("wif in multisig context not supported") && stderr.contains("v0.4.3"),
-        "wif in multisig must be rejected with v0.4.3 deferral pointer; got: {stderr}"
+    assert_eq!(
+        stderr,
+        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n",
+        "same WIF twice in multisig must trigger SPEC §6.6 row 13 byte-exactly"
     );
 }
 
