@@ -989,6 +989,15 @@ pub fn emit_verify_checks(
 ///
 /// Watch-only / wif slots (where `expected.ms1[i].is_empty()`): the two ms1
 /// checks short-circuit with `passed: true + decode_error: "skipped: watch-only slot"`.
+/// Per-cosigner mapping outcome. v0.5 SPEC §5.7 mk1-mapping diagnostic.
+/// Precedence when multiple modes apply: `XpubNotInPolicy > DecodeFailed > NotSupplied`.
+#[derive(Debug)]
+enum MappingFailure {
+    NotSupplied,
+    DecodeFailed(String),
+    XpubNotInPolicy,
+}
+
 fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<VerifyCheck> {
     let n = expected.ms1.len();
     let mut checks: Vec<VerifyCheck> = Vec::with_capacity(6 * n + 3);
@@ -1013,8 +1022,9 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         }
     };
 
-    // Group supplied.mk1 by chunk_set_id; map to cosigner-i by xpub-vs-md1.tlv.pubkeys
-    // (with positional fallback).
+    // Group supplied.mk1 by chunk_set_id; remember per-group decode outcome
+    // (Ok(card) or Err(message)) so the mapping diagnostic can distinguish
+    // DecodeFailed from NotSupplied.
     use std::collections::BTreeMap;
     let mut chunked: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
     let mut singles: Vec<Vec<&str>> = Vec::new();
@@ -1025,48 +1035,76 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         }
     }
     let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
-    let supplied_decoded: Vec<Option<mk_codec::KeyCard>> = groups
+    let supplied_decoded: Vec<Result<mk_codec::KeyCard, String>> = groups
         .iter()
-        .map(|g| mk_codec::decode(g).ok())
+        .map(|g| mk_codec::decode(g).map_err(|e| format!("{:?}", e)))
         .collect();
 
     // Decode supplied.md1 once for cosigner-mapping by tlv.pubkeys.
     let supplied_md1_strs: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
     let supplied_md_decoded = md_codec::chunk::reassemble(&supplied_md1_strs);
 
-    // Map decoded supplied groups → cosigner positions.
-    let mut card_for_cosigner: Vec<Option<&mk_codec::KeyCard>> = vec![None; n];
-    if let Ok(desc) = supplied_md_decoded.as_ref() {
-        if let Some(pubkeys) = desc.tlv.pubkeys.as_ref() {
-            for (gi, opt) in supplied_decoded.iter().enumerate() {
-                if let Some(card) = opt {
-                    let want = crate::synthesize::xpub_to_65(&card.xpub);
-                    // Prefer slot gi if it matches (covers self-multisig where all xpubs are equal).
-                    if let Some((_, b)) = pubkeys.get(gi) {
-                        if b == &want && card_for_cosigner[gi].is_none() {
-                            card_for_cosigner[gi] = Some(card);
-                            continue;
-                        }
+    // B.2: positional fallback condition refactored to match for clarity.
+    let needs_positional_fallback = match supplied_md_decoded.as_ref() {
+        Err(_) => true,
+        Ok(d) => d.tlv.pubkeys.is_none(),
+    };
+
+    // Map decoded supplied groups → cosigner positions, tracking failure modes.
+    // B.4: Vec<Result<&KeyCard, MappingFailure>> with precedence enforcement.
+    let mut card_for_cosigner: Vec<Result<&mk_codec::KeyCard, MappingFailure>> =
+        (0..n).map(|_| Err(MappingFailure::NotSupplied)).collect();
+
+    if !needs_positional_fallback {
+        let desc = supplied_md_decoded.as_ref().expect("Ok per needs_positional_fallback");
+        let pubkeys = desc.tlv.pubkeys.as_ref().expect("Some per needs_positional_fallback");
+        // First pass: place decoded groups into matching cosigner slots by xpub.
+        for (gi, decode_res) in supplied_decoded.iter().enumerate() {
+            if let Ok(card) = decode_res {
+                let want = crate::synthesize::xpub_to_65(&card.xpub);
+                // Prefer slot gi if it matches.
+                if let Some((_, b)) = pubkeys.get(gi) {
+                    if b == &want && matches!(card_for_cosigner[gi], Err(MappingFailure::NotSupplied)) {
+                        card_for_cosigner[gi] = Ok(card);
+                        continue;
                     }
-                    if let Some((idx, _)) = pubkeys.iter().find(|(slot, b)| {
-                        b == &want && card_for_cosigner[*slot as usize].is_none()
-                    }) {
-                        card_for_cosigner[*idx as usize] = Some(card);
+                }
+                // Otherwise scan for first unfilled matching slot.
+                if let Some((idx, _)) = pubkeys.iter().find(|(slot, b)| {
+                    b == &want && matches!(card_for_cosigner[*slot as usize], Err(MappingFailure::NotSupplied))
+                }) {
+                    card_for_cosigner[*idx as usize] = Ok(card);
+                } else {
+                    // Decoded successfully but xpub not in any policy slot.
+                    // Promote any NotSupplied slot to XpubNotInPolicy (precedence).
+                    for slot in card_for_cosigner.iter_mut() {
+                        if matches!(slot, Err(MappingFailure::NotSupplied)) {
+                            *slot = Err(MappingFailure::XpubNotInPolicy);
+                            break;
+                        }
                     }
                 }
             }
         }
-    }
-    // Positional fallback if md1 decode failed or pubkeys absent.
-    if supplied_md_decoded.is_err()
-        || supplied_md_decoded
-            .as_ref()
-            .map(|d| d.tlv.pubkeys.is_none())
-            .unwrap_or(false)
-    {
+        // Second pass: any remaining group with DecodeFailed promotes a NotSupplied slot.
+        // Precedence: XpubNotInPolicy > DecodeFailed > NotSupplied.
+        for decode_res in &supplied_decoded {
+            if let Err(msg) = decode_res {
+                for slot in card_for_cosigner.iter_mut() {
+                    if matches!(slot, Err(MappingFailure::NotSupplied)) {
+                        *slot = Err(MappingFailure::DecodeFailed(msg.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        // Positional fallback: position-i decoded card → Ok; per-position decode error → DecodeFailed.
         for (i, slot) in card_for_cosigner.iter_mut().enumerate().take(n) {
-            if let Some(Some(c)) = supplied_decoded.get(i) {
-                *slot = Some(c);
+            match supplied_decoded.get(i) {
+                Some(Ok(c)) => *slot = Ok(c),
+                Some(Err(msg)) => *slot = Err(MappingFailure::DecodeFailed(msg.clone())),
+                None => {} // stays NotSupplied
             }
         }
     }
@@ -1077,8 +1115,9 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         let watch_only_slot = exp_ms1.is_empty();
         let sup_ms1 = supplied.ms1.get(i).map(|s| s.as_str());
 
-        // ms1_decode[i] + ms1_entropy_match[i].
+        // SPEC §5.7 four-case ms1_decode[i] + ms1_entropy_match[i].
         if watch_only_slot {
+            // Case 1: watch-only slot — pass-vacuously regardless of supplied.
             checks.push(VerifyCheck {
                 name: format!("ms1_decode[{}]", i),
                 passed: true,
@@ -1096,6 +1135,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         } else if let Some(s) = sup_ms1.filter(|s| !s.is_empty()) {
             match ms_codec::decode(s) {
                 Ok(_) => {
+                    // Case 2: full-mode, supplied present, decodes Ok.
                     checks.push(VerifyCheck {
                         name: format!("ms1_decode[{}]", i),
                         passed: true,
@@ -1123,6 +1163,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     }
                 }
                 Err(e) => {
+                    // Case 3: full-mode, supplied present, decodes Err.
                     let err_msg = format!("{:?}", e);
                     checks.push(VerifyCheck {
                         name: format!("ms1_decode[{}]", i),
@@ -1141,17 +1182,20 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                 }
             }
         } else {
-            // Expected substantive but supplied missing/empty.
+            // Case 4: full-mode, supplied absent. v0.5 SPEC §5.7 — passed: false.
             checks.push(VerifyCheck {
                 name: format!("ms1_decode[{}]", i),
-                passed: true,
-                detail: format!("cosigner[{}] ms1 not supplied", i),
-                decode_error: Some(format!("skipped: ms1[{}] not supplied", i)),
+                passed: false,
+                detail: format!("cosigner[{}] ms1 expected (full-mode bundle) but not supplied", i),
+                decode_error: Some(format!(
+                    "error: ms1[{}] expected (full-mode bundle) but not supplied",
+                    i
+                )),
                 ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: format!("ms1_entropy_match[{}]", i),
-                passed: true,
+                passed: false,
                 detail: format!("cosigner[{}] ms1 not supplied", i),
                 decode_error: Some(format!("skipped: ms1[{}] not supplied", i)),
                 ..Default::default()
@@ -1159,10 +1203,10 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         }
 
         // mk1_decode[i] + mk1_xpub_match[i] + mk1_fingerprint_match[i] + mk1_path_match[i].
-        let sup_card = card_for_cosigner[i];
+        let sup_card_result = &card_for_cosigner[i];
         let exp_card = expected_mk1_per_cos.get(i).and_then(|o| o.as_ref());
-        match (sup_card, exp_card) {
-            (Some(sup), Some(exp)) => {
+        match (sup_card_result, exp_card) {
+            (Ok(sup), Some(exp)) => {
                 checks.push(VerifyCheck {
                     name: format!("mk1_decode[{}]", i),
                     passed: true,
@@ -1233,27 +1277,41 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     });
                 }
             }
-            (None, _) => {
-                // Supplied mk1 missing/undecodable for this cosigner.
-                let err = format!("skipped: mk1[{}] not supplied or decode failed", i);
+            (Err(failure), _) => {
+                // SPEC §5.7 mk1-mapping diagnostic: distinguish three failure modes.
+                let (detail, decode_error) = match failure {
+                    MappingFailure::NotSupplied => (
+                        format!("cosigner[{}] mk1 not supplied", i),
+                        format!("skipped: mk1[{}] not supplied", i),
+                    ),
+                    MappingFailure::DecodeFailed(msg) => (
+                        format!("cosigner[{}] mk1 decode failed", i),
+                        msg.clone(),
+                    ),
+                    MappingFailure::XpubNotInPolicy => (
+                        format!("cosigner[{}] supplied mk1 card xpub absent from descriptor policy", i),
+                        "supplied mk1 card xpub absent from descriptor policy".to_string(),
+                    ),
+                };
                 checks.push(VerifyCheck {
                     name: format!("mk1_decode[{}]", i),
                     passed: false,
-                    detail: err.clone(),
-                    decode_error: Some(err.clone()),
+                    detail,
+                    decode_error: Some(decode_error),
                     ..Default::default()
                 });
-                for n in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
+                // Cascade-skip dependent checks: passed=true (vacuous-skip; no oracle).
+                for nm in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
                     checks.push(VerifyCheck {
-                        name: format!("{}[{}]", n, i),
+                        name: format!("{}[{}]", nm, i),
                         passed: true,
-                        detail: err.clone(),
+                        detail: format!("cosigner[{}] mk1 decode failed; cannot evaluate", i),
                         decode_error: Some(format!("skipped: mk1[{}] decode failed", i)),
                         ..Default::default()
                     });
                 }
             }
-            (Some(_), None) => {
+            (Ok(_), None) => {
                 // Expected card unavailable (legacy MkField::Single beyond i=0): treat as
                 // unknown — supplied card decoded but no comparison oracle.
                 checks.push(VerifyCheck {
@@ -1262,9 +1320,9 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     detail: format!("cosigner[{}] mk1 decoded; no expected oracle", i),
                     ..Default::default()
                 });
-                for n in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
+                for nm in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
                     checks.push(VerifyCheck {
-                        name: format!("{}[{}]", n, i),
+                        name: format!("{}[{}]", nm, i),
                         passed: true,
                         detail: format!("cosigner[{}] no expected mk1 oracle", i),
                         decode_error: Some(format!("skipped: expected mk1[{}] not available", i)),
@@ -1296,7 +1354,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     detail: "wallet-policy mode confirmed".into(),
                     ..Default::default()
                 });
-                // md1_xpub_match (shared, set-equality across all N pubkeys).
+                // md1_xpub_match (B.3: SPEC §5.7 multiset semantics, sort-then-compare).
                 let exp_pubs: Vec<[u8; 65]> = expected_md_decoded
                     .tlv
                     .pubkeys
@@ -1309,11 +1367,16 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     .as_ref()
                     .map(|v| v.iter().map(|(_, b)| *b).collect())
                     .unwrap_or_default();
-                if exp_pubs == act_pubs {
+                let mut exp_sorted = exp_pubs.clone();
+                let mut act_sorted = act_pubs.clone();
+                exp_sorted.sort();
+                act_sorted.sort();
+                let pubkeys_match = exp_sorted == act_sorted;
+                if pubkeys_match {
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
                         passed: true,
-                        detail: format!("all {} pubkeys match expected", exp_pubs.len()),
+                        detail: format!("all {} pubkeys match expected (multiset)", exp_pubs.len()),
                         ..Default::default()
                     });
                 } else {
@@ -1706,5 +1769,162 @@ mod helper_tests {
             .filter(|c| c.name.starts_with("ms1_decode"))
             .all(|c| c.passed);
         assert!(ms1_decode_passed, "ms1_decode[i] must pass on byte-identical happy path");
+    }
+
+    #[test]
+    fn helper_multisig_full_emits_3plus6n_checks_in_spec_order() {
+        // B.1: full-mode multisig fixture. Reuses watch-only synthesis for the
+        // mk1+md1 (distinct cosigners → distinct chunk_set_ids → grouping works)
+        // then manually populates expected.ms1 with two distinct non-empty ms1
+        // strings derived from synthesize_full(seed_a/seed_b). The unit-test
+        // scope is emit_multisig_checks behavior in isolation, not synthesis.
+        use crate::parse::{CosignerSpec, MultisigPathFamily};
+        use crate::synthesize::{synthesize_full, synthesize_multisig_watch_only};
+        use bitcoin::bip32::DerivationPath;
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();
+        let m_a = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let entropy_a = m_a.to_entropy();
+        let seed_a = m_a.to_seed("");
+        let master_a = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_a).unwrap();
+        let xpriv_a = master_a.derive_priv(&secp, &path).unwrap();
+        let xpub_a = Xpub::from_priv(&secp, &xpriv_a);
+        let fp_a = master_a.fingerprint(&secp);
+        let m_b = Mnemonic::parse_in(
+            bip39::Language::English,
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        )
+        .unwrap();
+        let entropy_b = m_b.to_entropy();
+        let seed_b = m_b.to_seed("");
+        let master_b = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_b).unwrap();
+        let xpriv_b = master_b.derive_priv(&secp, &path).unwrap();
+        let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
+        let fp_b = master_b.fingerprint(&secp);
+        let cosigners = vec![
+            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
+            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+        ];
+        let n: usize = 2;
+        let mut expected = synthesize_multisig_watch_only(
+            &cosigners,
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            0,
+            MultisigPathFamily::default(),
+            false,
+        )
+        .unwrap();
+        // Manually populate per-cosigner ms1 with non-empty strings (full-mode shape).
+        let bundle_a = synthesize_full(
+            &entropy_a, fp_a, xpub_a, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+        )
+        .unwrap();
+        let bundle_b = synthesize_full(
+            &entropy_b, fp_b, xpub_b, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+        )
+        .unwrap();
+        expected.ms1 = vec![bundle_a.ms1[0].clone(), bundle_b.ms1[0].clone()];
+        let supplied_ms1 = expected.ms1.clone();
+        let supplied_mk1: Vec<String> = match &expected.mk1 {
+            MkField::Multi(per_cos) => per_cos.iter().flat_map(|v| v.iter().cloned()).collect(),
+            MkField::Single(_) => panic!("expected multisig"),
+        };
+        let supplied_md1 = expected.md1.clone();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1,
+        };
+        let checks = emit_verify_checks(&expected, &supplied, true);
+        assert_eq!(checks.len(), 6 * n + 3, "multisig must emit 3+6N checks (N={n})");
+        // Substantive ms1 happy-path: case 2 (decodes Ok + byte-equal) for both slots.
+        for i in 0..n {
+            let dec = checks.iter().find(|c| c.name == format!("ms1_decode[{i}]")).unwrap();
+            assert!(dec.passed, "case 2 ms1_decode[{i}] must pass");
+            let mat = checks
+                .iter()
+                .find(|c| c.name == format!("ms1_entropy_match[{i}]"))
+                .unwrap();
+            assert!(mat.passed, "case 2 ms1_entropy_match[{i}] must pass on byte-identical");
+        }
+    }
+
+    #[test]
+    fn helper_multisig_missing_ms1_emits_passed_false_per_spec_5_7_case_4() {
+        // B.5: SPEC §5.7 case 4 — full-mode bundle with no supplied ms1 → passed=false.
+        use crate::parse::{CosignerSpec, MultisigPathFamily};
+        use crate::synthesize::{synthesize_full, synthesize_multisig_watch_only};
+        use bitcoin::bip32::DerivationPath;
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();
+        let m_a = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let entropy_a = m_a.to_entropy();
+        let seed_a = m_a.to_seed("");
+        let master_a = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_a).unwrap();
+        let xpriv_a = master_a.derive_priv(&secp, &path).unwrap();
+        let xpub_a = Xpub::from_priv(&secp, &xpriv_a);
+        let fp_a = master_a.fingerprint(&secp);
+        let m_b = Mnemonic::parse_in(
+            bip39::Language::English,
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        )
+        .unwrap();
+        let entropy_b = m_b.to_entropy();
+        let seed_b = m_b.to_seed("");
+        let master_b = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed_b).unwrap();
+        let xpriv_b = master_b.derive_priv(&secp, &path).unwrap();
+        let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
+        let fp_b = master_b.fingerprint(&secp);
+        let cosigners = vec![
+            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
+            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+        ];
+        let mut expected = synthesize_multisig_watch_only(
+            &cosigners,
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            0,
+            MultisigPathFamily::default(),
+            false,
+        )
+        .unwrap();
+        let bundle_a = synthesize_full(
+            &entropy_a, fp_a, xpub_a, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+        )
+        .unwrap();
+        let bundle_b = synthesize_full(
+            &entropy_b, fp_b, xpub_b, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+        )
+        .unwrap();
+        expected.ms1 = vec![bundle_a.ms1[0].clone(), bundle_b.ms1[0].clone()];
+        // Supply EMPTY ms1 to trigger case 4.
+        let supplied_ms1: Vec<String> = vec![];
+        let supplied_mk1: Vec<String> = match &expected.mk1 {
+            MkField::Multi(per_cos) => per_cos.iter().flat_map(|v| v.iter().cloned()).collect(),
+            MkField::Single(_) => panic!("expected multisig"),
+        };
+        let supplied_md1 = expected.md1.clone();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1,
+        };
+        let checks = emit_verify_checks(&expected, &supplied, true);
+        for i in 0..2 {
+            let dec = checks.iter().find(|c| c.name == format!("ms1_decode[{i}]")).unwrap();
+            assert!(!dec.passed, "case 4 ms1_decode[{i}] must fail (passed=false)");
+            assert_eq!(
+                dec.decode_error.as_deref().unwrap(),
+                &format!("error: ms1[{i}] expected (full-mode bundle) but not supplied")
+            );
+            let mat = checks
+                .iter()
+                .find(|c| c.name == format!("ms1_entropy_match[{i}]"))
+                .unwrap();
+            assert!(!mat.passed, "case 4 ms1_entropy_match[{i}] must fail");
+        }
     }
 }
