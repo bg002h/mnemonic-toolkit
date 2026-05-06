@@ -766,8 +766,10 @@ pub struct SuppliedCards<'a> {
 /// actual/diff_byte_offset; decode-failure → decode_error; watch-only short-
 /// circuit → passed: true + decode_error: "skipped: watch-only slot".
 ///
-/// `expected.ms1[i].is_empty()` discriminates watch-only slots per SPEC §5.8
-/// MsField sentinel. `is_multisig` selects the 9 vs 3+6N schema.
+/// `expected.ms1[i].is_empty()` discriminates watch-only slots per SPEC §5.7
+/// (the §5.8 MsField wire-format defines the empty-string sentinel; §5.7
+/// specifies the watch-only short-circuit semantics in verify-bundle).
+/// `is_multisig` selects the 9 vs 3+6N schema.
 ///
 pub fn emit_verify_checks(
     expected: &Bundle,
@@ -886,13 +888,12 @@ pub fn emit_verify_checks(
     }
     let mk_card = mk_card_result.expect("Ok branch handled above");
 
-    // Decode expected mk1 to compare. expected.mk1 is MkField; for single-sig
-    // it's MkField::Single(Vec<String>).
+    // expected.mk1 is MkField::Single for single-sig. Caller invariant: only
+    // multisig dispatch passes MkField::Multi (handled in emit_multisig_checks).
     let expected_mk1_strs: Vec<&str> = match &expected.mk1 {
         crate::format::MkField::Single(v) => v.iter().map(|s| s.as_str()).collect(),
         crate::format::MkField::Multi(_) => {
-            // Single-sig path; helper shouldn't reach Multi here.
-            return checks;
+            unreachable!("single-sig branch reached MkField::Multi — caller invariant violation")
         }
     };
     let exp_card = mk_codec::decode(&expected_mk1_strs).expect("expected bundle is well-formed");
