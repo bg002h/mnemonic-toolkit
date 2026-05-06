@@ -65,8 +65,12 @@ pub struct VerifyBundleArgs {
     #[arg(long, default_value = "0")]
     pub account: u32,
 
-    #[arg(long)]
-    pub ms1: Option<String>,
+    /// v0.4.1 J.5: schema-4 repeating-flag for per-slot ms1 cards. For
+    /// schema-2/3 single-sig invocations, supply once (`--ms1 <s>`); for
+    /// schema-4 multi-source multisig, repeat per slot (`--ms1 "" --ms1
+    /// <s2>`...). Empty string `""` is the watch-only sentinel per SPEC §5.8.
+    #[arg(long, action = clap::ArgAction::Append)]
+    pub ms1: Vec<String>,
 
     #[arg(long, num_args = 1.., required = true)]
     pub mk1: Vec<String>,
@@ -292,7 +296,7 @@ fn run_full(
     )?;
 
     // Check 1: ms1 entropy match.
-    if let Some(ms1) = args.ms1.as_deref() {
+    if let Some(ms1) = args.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
         match ms_codec::decode(ms1) {
             Ok((_tag, payload)) => {
                 if let ms_codec::Payload::Entr(e) = payload {
@@ -301,12 +305,14 @@ fn run_full(
                             name: "ms1_entropy_match".into(),
                             result: "ok",
                             detail: "entropy bytes match".into(),
+                            ..Default::default()
                         });
                     } else {
                         checks.push(VerifyCheck {
                             name: "ms1_entropy_match".into(),
                             result: "fail",
                             detail: format!("decoded {}-byte entropy != derived", e.len()),
+                            ..Default::default()
                         });
                     }
                 } else {
@@ -314,6 +320,7 @@ fn run_full(
                         name: "ms1_entropy_match".into(),
                         result: "fail",
                         detail: "decoded ms1 payload is not Entr".into(),
+                        ..Default::default()
                     });
                 }
             }
@@ -322,6 +329,7 @@ fn run_full(
                     name: "ms1_entropy_match".into(),
                     result: "fail",
                     detail: format!("ms1 decode: {:?}", e),
+                    ..Default::default()
                 });
             }
         }
@@ -330,6 +338,7 @@ fn run_full(
             name: "ms1_entropy_match".into(),
             result: "skipped",
             detail: "no --ms1 supplied".into(),
+            ..Default::default()
         });
     }
 
@@ -341,6 +350,7 @@ fn run_full(
                 name: "mk1_decode".into(),
                 result: "ok",
                 detail: "decoded successfully".into(),
+                ..Default::default()
             });
             let xpub_match = card.xpub == acc.account_xpub;
             checks.push(VerifyCheck {
@@ -351,6 +361,7 @@ fn run_full(
                 } else {
                     "xpub does not match derived".into()
                 },
+                ..Default::default()
             });
             let fp_match = card.origin_fingerprint == Some(acc.master_fingerprint);
             checks.push(VerifyCheck {
@@ -361,6 +372,7 @@ fn run_full(
                 } else {
                     "master fingerprint does not match".into()
                 },
+                ..Default::default()
             });
             let expected_path = args
                 .template_unchecked()
@@ -374,6 +386,7 @@ fn run_full(
                 } else {
                     format!("expected {}, got {}", expected_path, card.origin_path)
                 },
+                ..Default::default()
             });
 
             // Check 3+5: md1 decode + cross-binding.
@@ -384,21 +397,25 @@ fn run_full(
                 name: "mk1_decode".into(),
                 result: "fail",
                 detail: format!("{:?}", e),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "mk1_xpub_match".into(),
                 result: "skipped",
                 detail: "mk1 decode failed".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "mk1_fingerprint_match".into(),
                 result: "skipped",
                 detail: "mk1 decode failed".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "mk1_path_match".into(),
                 result: "skipped",
                 detail: "mk1 decode failed".into(),
+                ..Default::default()
             });
 
             // Try md1 anyway for diagnostic completeness.
@@ -421,6 +438,7 @@ fn verify_md1_and_stub(
                 name: "md1_decode".into(),
                 result: "ok",
                 detail: "decoded successfully".into(),
+                ..Default::default()
             });
             let wp = desc.is_wallet_policy();
             checks.push(VerifyCheck {
@@ -431,6 +449,7 @@ fn verify_md1_and_stub(
                 } else {
                     "descriptor is template-only (no pubkeys TLV)".into()
                 },
+                ..Default::default()
             });
 
             if wp {
@@ -450,12 +469,14 @@ fn verify_md1_and_stub(
                     } else {
                         "md1 xpub differs from mk1's".into()
                     },
+                    ..Default::default()
                 });
             } else {
                 checks.push(VerifyCheck {
                     name: "md1_xpub_match".into(),
                     result: "skipped",
                     detail: "not in wallet-policy mode".into(),
+                    ..Default::default()
                 });
             }
 
@@ -471,6 +492,7 @@ fn verify_md1_and_stub(
                         } else {
                             "stub linkage broken".into()
                         },
+                        ..Default::default()
                     });
                 }
                 Err(e) => {
@@ -478,6 +500,7 @@ fn verify_md1_and_stub(
                         name: "stub_linkage".into(),
                         result: "fail",
                         detail: format!("policy_id compute: {:?}", e),
+                        ..Default::default()
                     });
                 }
             }
@@ -487,21 +510,25 @@ fn verify_md1_and_stub(
                 name: "md1_decode".into(),
                 result: "fail",
                 detail: format!("{:?}", e),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
                 result: "skipped",
                 detail: "md1 decode failed".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_xpub_match".into(),
                 result: "skipped",
                 detail: "md1 decode failed".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "stub_linkage".into(),
                 result: "skipped",
                 detail: "md1 decode failed".into(),
+                ..Default::default()
             });
         }
     }
@@ -515,22 +542,26 @@ fn verify_md1_only(args: &VerifyBundleArgs, checks: &mut Vec<VerifyCheck>) {
                 name: "md1_decode".into(),
                 result: "ok",
                 detail: "decoded successfully".into(),
+                ..Default::default()
             });
             let wp = desc.is_wallet_policy();
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
                 result: if wp { "ok" } else { "fail" },
                 detail: "".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_xpub_match".into(),
                 result: "skipped",
                 detail: "mk1 decode failed; no reference xpub".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "stub_linkage".into(),
                 result: "skipped",
                 detail: "mk1 decode failed".into(),
+                ..Default::default()
             });
         }
         Err(e) => {
@@ -538,21 +569,25 @@ fn verify_md1_only(args: &VerifyBundleArgs, checks: &mut Vec<VerifyCheck>) {
                 name: "md1_decode".into(),
                 result: "fail",
                 detail: format!("{:?}", e),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
                 result: "skipped",
                 detail: "".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_xpub_match".into(),
                 result: "skipped",
                 detail: "".into(),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "stub_linkage".into(),
                 result: "skipped",
                 detail: "".into(),
+                ..Default::default()
             });
         }
     }
@@ -638,6 +673,7 @@ pub(crate) fn watch_only_checks(
         name: "ms1_entropy_match".into(),
         result: "skipped",
         detail: "watch-only mode: no entropy known to toolkit".into(),
+        ..Default::default()
     });
 
     // 2. mk1_decode.
@@ -646,11 +682,13 @@ pub(crate) fn watch_only_checks(
             name: "mk1_decode".into(),
             result: "ok",
             detail: "decoded successfully".into(),
+            ..Default::default()
         }),
         Err(e) => out.push(VerifyCheck {
             name: "mk1_decode".into(),
             result: "fail",
             detail: e.clone(),
+            ..Default::default()
         }),
     }
 
@@ -666,12 +704,14 @@ pub(crate) fn watch_only_checks(
                 } else {
                     "differs from --xpub".into()
                 },
+                ..Default::default()
             });
         }
         Err(_) => out.push(VerifyCheck {
             name: "mk1_xpub_match".into(),
             result: "skipped",
             detail: "mk1 decode failed".into(),
+            ..Default::default()
         }),
     }
 
@@ -682,6 +722,7 @@ pub(crate) fn watch_only_checks(
             name: "mk1_fingerprint_match".into(),
             result: "skipped",
             detail: "privacy-preserving mode; fingerprint suppressed".into(),
+            ..Default::default()
         });
     } else {
         match mk_decode {
@@ -695,12 +736,14 @@ pub(crate) fn watch_only_checks(
                     } else {
                         "differs from --master-fingerprint".into()
                     },
+                    ..Default::default()
                 });
             }
             Err(_) => out.push(VerifyCheck {
                 name: "mk1_fingerprint_match".into(),
                 result: "skipped",
                 detail: "mk1 decode failed".into(),
+                ..Default::default()
             }),
         }
     }
@@ -710,6 +753,7 @@ pub(crate) fn watch_only_checks(
         name: "mk1_path_match".into(),
         result: "skipped",
         detail: "watch-only mode: path verification requires master seed (SPEC §2.2.2)".into(),
+        ..Default::default()
     });
 
     // 6. md1_decode.
@@ -718,11 +762,13 @@ pub(crate) fn watch_only_checks(
             name: "md1_decode".into(),
             result: "ok",
             detail: "decoded successfully".into(),
+            ..Default::default()
         }),
         Err(e) => out.push(VerifyCheck {
             name: "md1_decode".into(),
             result: "fail",
             detail: e.clone(),
+            ..Default::default()
         }),
     }
 
@@ -738,12 +784,14 @@ pub(crate) fn watch_only_checks(
                 } else {
                     "descriptor is template-only (no pubkeys TLV)".into()
                 },
+                ..Default::default()
             });
         }
         Err(_) => out.push(VerifyCheck {
             name: "md1_wallet_policy".into(),
             result: "skipped",
             detail: "md1 decode failed".into(),
+            ..Default::default()
         }),
     }
 
@@ -768,12 +816,14 @@ pub(crate) fn watch_only_checks(
                     } else {
                         "md1 xpub differs from --xpub".into()
                     },
+                    ..Default::default()
                 });
             } else {
                 out.push(VerifyCheck {
                     name: "md1_xpub_match".into(),
                     result: "skipped",
                     detail: "not in wallet-policy mode".into(),
+                    ..Default::default()
                 });
             }
         }
@@ -781,6 +831,7 @@ pub(crate) fn watch_only_checks(
             name: "md1_xpub_match".into(),
             result: "skipped",
             detail: "md1 decode failed".into(),
+            ..Default::default()
         }),
     }
 
@@ -798,18 +849,21 @@ pub(crate) fn watch_only_checks(
                     } else {
                         "stub linkage broken".into()
                     },
+                    ..Default::default()
                 });
             }
             Err(e) => out.push(VerifyCheck {
                 name: "stub_linkage".into(),
                 result: "fail",
                 detail: format!("policy_id compute: {:?}", e),
+                ..Default::default()
             }),
         },
         _ => out.push(VerifyCheck {
             name: "stub_linkage".into(),
             result: "skipped",
             detail: "decode failed".into(),
+            ..Default::default()
         }),
     }
 
@@ -1021,8 +1075,9 @@ fn run_multisig<E: Write>(
             name: "ms1_entropy_match".into(),
             result: "skipped",
             detail: "watch-only multisig: no entropy known to toolkit".into(),
+            ..Default::default()
         });
-    } else if let Some(ms1) = args.ms1.as_deref() {
+    } else if let Some(ms1) = args.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
         let language = args.language.unwrap_or_default();
         // BIP-39 entropy is passphrase-independent; passphrase affects only seed derivation.
         let mnemonic = bip39::Mnemonic::parse_in(language.into(), phrase_arg.unwrap_or(""))
@@ -1039,17 +1094,20 @@ fn run_multisig<E: Write>(
                     } else {
                         format!("decoded {}-byte entropy != derived", e.len())
                     },
+                    ..Default::default()
                 });
             }
             Ok((_t, _)) => checks.push(VerifyCheck {
                 name: "ms1_entropy_match".into(),
                 result: "fail",
                 detail: "decoded ms1 payload is not Entr".into(),
+                ..Default::default()
             }),
             Err(e) => checks.push(VerifyCheck {
                 name: "ms1_entropy_match".into(),
                 result: "fail",
                 detail: format!("ms1 decode: {:?}", e),
+                ..Default::default()
             }),
         }
     } else {
@@ -1057,6 +1115,7 @@ fn run_multisig<E: Write>(
             name: "ms1_entropy_match".into(),
             result: "skipped",
             detail: "no --ms1 supplied".into(),
+            ..Default::default()
         });
     }
 
@@ -1067,6 +1126,7 @@ fn run_multisig<E: Write>(
                 name: format!("mk1_decode[{}]", i),
                 result: "ok",
                 detail: format!("cosigner[{}] decoded", i),
+                ..Default::default()
             }),
             None => {
                 // If we have a decode error at index i (positional), surface it.
@@ -1078,6 +1138,7 @@ fn run_multisig<E: Write>(
                     name: format!("mk1_decode[{}]", i),
                     result: "fail",
                     detail,
+                    ..Default::default()
                 });
             }
         }
@@ -1096,12 +1157,14 @@ fn run_multisig<E: Write>(
                     } else {
                         format!("cosigner[{}] xpub does not match expected", i)
                     },
+                    ..Default::default()
                 });
             }
             None => checks.push(VerifyCheck {
                 name: format!("mk1_xpub_match[{}]", i),
                 result: "skipped",
                 detail: format!("cosigner[{}] mk1 decode failed", i),
+                ..Default::default()
             }),
         }
     }
@@ -1113,6 +1176,7 @@ fn run_multisig<E: Write>(
                 name: format!("mk1_fingerprint_match[{}]", i),
                 result: "skipped",
                 detail: "privacy-preserving mode; fingerprint suppressed".into(),
+                ..Default::default()
             });
             continue;
         }
@@ -1127,12 +1191,14 @@ fn run_multisig<E: Write>(
                     } else {
                         format!("cosigner[{}] fp does not match expected", i)
                     },
+                    ..Default::default()
                 });
             }
             None => checks.push(VerifyCheck {
                 name: format!("mk1_fingerprint_match[{}]", i),
                 result: "skipped",
                 detail: format!("cosigner[{}] mk1 decode failed", i),
+                ..Default::default()
             }),
         }
     }
@@ -1155,12 +1221,14 @@ fn run_multisig<E: Write>(
                             i, expected[i].path, card.origin_path
                         )
                     },
+                    ..Default::default()
                 });
             }
             None => checks.push(VerifyCheck {
                 name: format!("mk1_path_match[{}]", i),
                 result: "skipped",
                 detail: format!("cosigner[{}] mk1 decode failed", i),
+                ..Default::default()
             }),
         }
     }
@@ -1172,6 +1240,7 @@ fn run_multisig<E: Write>(
                 name: "md1_decode".into(),
                 result: "ok",
                 detail: "decoded successfully".into(),
+                ..Default::default()
             });
             let wp = desc.is_wallet_policy();
             checks.push(VerifyCheck {
@@ -1182,6 +1251,7 @@ fn run_multisig<E: Write>(
                 } else {
                     "descriptor is template-only (no pubkeys TLV)".into()
                 },
+                ..Default::default()
             });
             (true, wp)
         }
@@ -1190,11 +1260,13 @@ fn run_multisig<E: Write>(
                 name: "md1_decode".into(),
                 result: "fail",
                 detail: format!("{:?}", e),
+                ..Default::default()
             });
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
                 result: "skipped",
                 detail: "md1 decode failed".into(),
+                ..Default::default()
             });
             (false, false)
         }
@@ -1212,6 +1284,7 @@ fn run_multisig<E: Write>(
                 } else {
                     "not in wallet-policy mode".into()
                 },
+                ..Default::default()
             });
             continue;
         }
@@ -1232,6 +1305,7 @@ fn run_multisig<E: Write>(
             } else {
                 format!("cosigner[{}] md1 xpub differs from expected", i)
             },
+            ..Default::default()
         });
     }
 
@@ -1259,12 +1333,14 @@ fn run_multisig<E: Write>(
                     } else {
                         format!("cosigner[{}] stub linkage broken", i)
                     },
+                    ..Default::default()
                 });
             }
             _ => checks.push(VerifyCheck {
                 name: format!("stub_linkage[{}]", i),
                 result: "skipped",
                 detail: format!("cosigner[{}] decode failed", i),
+                ..Default::default()
             }),
         }
     }
@@ -1369,22 +1445,34 @@ fn descriptor_mode_verify_run<W: Write>(
     // impossible Some("") case (now routes to "skipped" rather than "fail";
     // synthesis never produced Some("") under v0.4.0). Phase J supersedes
     // this with the full per-slot ms1 check.
-    if let Some(supplied_ms1) = args.ms1.as_deref() {
+    if let Some(supplied_ms1) = args.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
         match expected.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
             Some(exp) if exp == supplied_ms1 => checks.push(VerifyCheck {
                 name: "ms1_entropy_match".into(),
                 result: "ok",
                 detail: "ms1 byte-identical".into(),
+                ..Default::default()
             }),
-            Some(_) => checks.push(VerifyCheck {
-                name: "ms1_entropy_match".into(),
-                result: "fail",
-                detail: "expected ms1 bytes differ from supplied".into(),
-            }),
+            Some(exp) => {
+                // v0.4.1 J.7: populate per-cell forensic diagnostic fields
+                // (SPEC §5.7) on string-mismatch checks. expected/actual hold
+                // the full strings; diff_byte_offset locates first divergence.
+                let diff = crate::format::VerifyCheck::diff_offset(exp, supplied_ms1);
+                checks.push(VerifyCheck {
+                    name: "ms1_entropy_match".into(),
+                    result: "fail",
+                    detail: "expected ms1 bytes differ from supplied".into(),
+                    expected: Some(exp.to_string()),
+                    actual: Some(supplied_ms1.to_string()),
+                    diff_byte_offset: Some(diff),
+                    decode_error: None,
+                });
+            }
             None => checks.push(VerifyCheck {
                 name: "ms1_entropy_match".into(),
                 result: "skipped",
                 detail: "watch-only descriptor mode (no entropy expected)".into(),
+                ..Default::default()
             }),
         }
     } else {
@@ -1392,6 +1480,7 @@ fn descriptor_mode_verify_run<W: Write>(
             name: "ms1_entropy_match".into(),
             result: "skipped",
             detail: "no --ms1 supplied".into(),
+            ..Default::default()
         });
     }
 
@@ -1418,6 +1507,7 @@ fn descriptor_mode_verify_run<W: Write>(
                 supplied_mk1.len()
             )
         },
+        ..Default::default()
     });
 
     // Check 3: md1 byte-equality.
@@ -1434,6 +1524,7 @@ fn descriptor_mode_verify_run<W: Write>(
                 args.md1.len()
             )
         },
+        ..Default::default()
     });
 
     let any_fail = checks.iter().any(|c| c.result == "fail");
@@ -1638,7 +1729,7 @@ mod watch_only_tests {
             language: None,
             passphrase: None,
             account: 0,
-            ms1: None,
+            ms1: Vec::new(),
             mk1: vec!["mk1placeholder".into()],
             md1: vec!["md1placeholder".into()],
             json: false,

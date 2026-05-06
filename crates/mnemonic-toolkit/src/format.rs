@@ -153,11 +153,49 @@ pub struct VerifyBundleJson {
     pub checks: Vec<VerifyCheck>,
 }
 
-#[derive(Debug, Serialize)]
+/// SPEC §5.7 verify-bundle check entry. v0.4.1 Phase J.1: gains 4 forensic
+/// fields populated on `result == "fail"` checks. `#[serde(skip_serializing_if
+/// = "Option::is_none")]` keeps the JSON envelope clean — forensic fields are
+/// omitted entirely on `"ok"`/`"skipped"` checks.
+#[derive(Debug, Clone, Serialize)]
 pub struct VerifyCheck {
     pub name: String,
     pub result: &'static str, // "ok" | "fail" | "skipped"
     pub detail: String,
+    /// Expected encoded string (for string-mismatch checks); omitted otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected: Option<String>,
+    /// Actual encoded string (for string-mismatch checks); omitted otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
+    /// First UTF-8 byte position where expected and actual differ.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff_byte_offset: Option<usize>,
+    /// Decode-error message text for decode-failure checks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decode_error: Option<String>,
+}
+
+impl Default for VerifyCheck {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            result: "ok",
+            detail: String::new(),
+            expected: None,
+            actual: None,
+            diff_byte_offset: None,
+            decode_error: None,
+        }
+    }
+}
+
+impl VerifyCheck {
+    /// First UTF-8 byte position where `a` and `b` differ; `min(len_a, len_b)`
+    /// for length-mismatch (one is a prefix of the other).
+    pub fn diff_offset(a: &str, b: &str) -> usize {
+        a.bytes().zip(b.bytes()).take_while(|(x, y)| x == y).count()
+    }
 }
 
 /// Returns true for taproot-multisig templates that need the HARDWARE WALLET CAVEAT.
@@ -727,6 +765,59 @@ engrave each card on its own plate. record this card alongside.
         // Long descriptor renders truncated with chars-total annotation.
         assert!(card.contains(&format!("({} chars total)", long_d.len())));
         assert!(card.contains("[md1: 1234]"));
+    }
+
+    // ---- v0.4.1 Phase J — VerifyCheck forensic fields ----
+
+    #[test]
+    fn verify_check_diff_offset_finds_first_byte_divergence() {
+        assert_eq!(VerifyCheck::diff_offset("abcdef", "abcdef"), 6);
+        assert_eq!(VerifyCheck::diff_offset("abcdef", "abcXef"), 3);
+        assert_eq!(VerifyCheck::diff_offset("abc", "abcdef"), 3);
+        assert_eq!(VerifyCheck::diff_offset("", "abc"), 0);
+    }
+
+    #[test]
+    fn verify_check_default_is_ok_with_no_forensics() {
+        let vc = VerifyCheck::default();
+        assert_eq!(vc.result, "ok");
+        assert!(vc.expected.is_none());
+        assert!(vc.actual.is_none());
+        assert!(vc.diff_byte_offset.is_none());
+        assert!(vc.decode_error.is_none());
+    }
+
+    #[test]
+    fn verify_check_serde_skip_omits_none_forensics_in_ok_path() {
+        let vc = VerifyCheck {
+            name: "ms1_entropy_match".into(),
+            result: "ok",
+            detail: "ms1 byte-identical".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&vc).unwrap();
+        assert!(!json.contains("expected"));
+        assert!(!json.contains("actual"));
+        assert!(!json.contains("diff_byte_offset"));
+        assert!(!json.contains("decode_error"));
+    }
+
+    #[test]
+    fn verify_check_serde_includes_populated_forensics_on_fail() {
+        let vc = VerifyCheck {
+            name: "ms1_entropy_match".into(),
+            result: "fail",
+            detail: "expected ms1 bytes differ from supplied".into(),
+            expected: Some("ms1abcde".into()),
+            actual: Some("ms1abcXX".into()),
+            diff_byte_offset: Some(6),
+            decode_error: None,
+        };
+        let json = serde_json::to_string(&vc).unwrap();
+        assert!(json.contains("\"expected\":\"ms1abcde\""));
+        assert!(json.contains("\"actual\":\"ms1abcXX\""));
+        assert!(json.contains("\"diff_byte_offset\":6"));
+        assert!(!json.contains("decode_error"));
     }
 
     #[test]
