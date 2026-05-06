@@ -710,7 +710,6 @@ fn emit_unified<W: Write, E: Write>(
             ms1: bundle.ms1.clone(),
             mk1: bundle.mk1.clone(),
             md1: bundle.md1.clone(),
-            engraving_card: None,
             multisig: multisig_info,
             privacy_preserving: args.privacy_preserving,
         };

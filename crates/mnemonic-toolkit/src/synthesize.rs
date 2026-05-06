@@ -1305,7 +1305,6 @@ mod tests {
             ms1: vec!["ms1stub".into()],
             mk1: MkField::Single(vec![]),
             md1: vec![],
-            engraving_card: None,
             multisig: None,
             privacy_preserving: false,
         };

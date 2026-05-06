@@ -140,7 +140,6 @@ pub struct BundleJson {
     pub ms1: MsField,
     pub mk1: MkField,
     pub md1: Vec<String>,
-    pub engraving_card: Option<String>,
     pub multisig: Option<MultisigInfo>,
     pub privacy_preserving: bool,
 }
@@ -214,14 +213,12 @@ fn is_tr_multisig(template: &str) -> bool {
 // v0.4.1 Phase I — unified engraving card (SPEC §5.5).
 // ============================================================================
 
-/// SPEC §5.5 unified engraving card input — replaces per-mode `EngravingMode`
-/// variants with a single shape carrying header + per-slot blocks +
-/// template-or-descriptor + md1 reference.
+/// SPEC §5.5 unified engraving card input — single shape carrying header +
+/// per-slot blocks + template-or-descriptor + md1 reference.
 ///
-/// v0.4.1 scope: this struct + `engraving_card_unified` are wired into the
-/// new `bundle_run_unified` dispatch only. Full migration of the 4 legacy
-/// `engraving_card(...)` call sites is deferred to v0.4.2 per FOLLOWUP
-/// `engraving-card-unified-legacy-migration`.
+/// Sole engraving-card surface in v0.5+ (legacy per-mode emission removed
+/// in v0.4.2; the dead `BundleJson.engraving_card: Option<String>` field
+/// removed in v0.5.0 Phase A.3 — engraving cards are stderr-only).
 #[derive(Debug, Clone)]
 pub struct BundleInputForCard {
     pub network: &'static str,
