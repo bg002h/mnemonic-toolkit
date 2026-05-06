@@ -4,6 +4,72 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.4.1] — 2026-05-05
+
+### What's new (v0.4.1 schema-4 cutover + multi-source synthesis + foundations for unified card and forensics)
+
+v0.4.1 lands the three v0.4.0 deferrals:
+
+- **`bundle-json-schema-4-cutover` (Phase H, complete).** `Bundle.ms1` and `BundleJson.ms1` migrate from `Option<String>` to `MsField` (= `Vec<String>`). `schema_version` bumps `"3"` → `"4"`. All 5 producers + 4 emit sites updated. SPEC §5.8 dense-with-empty-string-sentinel layout: single-sig watch-only is `[""]`; pure watch-only multisig N=3 is `["", "", ""]`; multi-source full N=3 is `["ms1...", "ms1...", "ms1..."]`; hybrid is mixed. `mode_str` derivation switches to `bundle.any_secret_bearing()`.
+- **Multi-source synthesis (Phase H).** `synthesize_unified(slots, template, threshold, network, privacy)` is the new universal synthesis entry handling all five `BundleMode` variants (SingleSigFull / SingleSigWatchOnly / MultisigMultiSource / MultisigWatchOnly / MultisigHybrid). `ResolvedSlot` carries per-slot xpub + fingerprint + path + path_raw + optional entropy.
+- **`bundle::run` unified dispatch (Phase H).** When `--slot @N.<subkey>=<value>` is supplied, `bundle::run` routes through `bundle_run_unified`: `expand_legacy_to_slots → validate_slot_set → detect_bundle_mode → resolve_slots → check_resolved_slots_distinctness → synthesize_unified → emit_unified`. Legacy `--phrase` / `--xpub` / `--cosigner` retain v0.3 dispatch (full deprecation deferred to v0.5+).
+- **BIP-388 raw-string path normalization (Phase H.6).** `check_key_vector_distinctness` switches to raw-string `(xpub.to_string(), path_raw)` equality per SPEC §4.11.b literal text. `CosignerKeyInfo` and `ResolvedSlot` both carry `path_raw: String`. Legacy descriptor-placeholder paths preserve the parser's canonical `'`-form; `--slot @N.path=<value>` preserves the user's literal byte sequence end-to-end (so `48h/0h` and `48'/0'` compare unequal under raw-string equality on the slot path).
+- **Unified engraving card foundation (Phase I, additive).** `BundleInputForCard` struct + `engraving_card_unified` function per SPEC §5.5. Wired into `bundle_run_unified`'s emit_unified path. The 4 legacy `engraving_card(...)` call sites retain v0.3 behavior (full migration deferred to v0.4.2 per FOLLOWUP `engraving-card-unified-legacy-migration`). Card layout: header / threshold / cosigners block / template OR descriptor (truncation at 80 chars) / md1 reference / recovery hint / language+passphrase footer / hardware caveat for tap-multisig.
+- **Verify-bundle forensic-field foundation (Phase J, additive).** `VerifyCheck` gains 4 forensic fields (`expected`, `actual`, `diff_byte_offset`, `decode_error`) per SPEC §5.7, with `#[serde(skip_serializing_if = "Option::is_none")]` so JSON envelopes stay clean for "ok"/"skipped" checks. `VerifyCheck::diff_offset(a, b)` helper. Per-cell forensic field POPULATION is wired at one proof-of-shape site (descriptor-mode `ms1_entropy_match` mismatch); full ~78-site rollout deferred to v0.4.2 alongside the `emit_verify_checks` helper refactor (FOLLOWUP `verify-bundle-emit-checks-helper-and-full-forensics-rollout`).
+- **`--ms1` CLI repeating-flag migration (Phase J.5).** `VerifyBundleArgs.ms1: Option<String>` → `Vec<String>` with `ArgAction::Append`. Existing single-value invocations continue to work (clap accepts the single occurrence as a 1-element vec). Multi-source schema-4 verification supplies `--ms1` per slot (`--ms1 "" --ms1 <s>` for hybrid-shaped vectors).
+
+### Deferred to v0.4.2
+
+The following SPEC-mandated v0.4 deliverables are deferred to v0.4.2 to preserve v0.4.1 release-window scope-safety. See `design/FOLLOWUPS.md` entries at tier `v0.4.2`:
+
+- `unified-slot-additional-subkey-shapes` — `entropy` / `xprv` / `wif` / partial-xpub-only resolution under `--slot` (v0.4.1 supports `{phrase}` and `{xpub, fingerprint, path}` shapes).
+- `unified-slot-descriptor-mode-support` — descriptor mode under unified `--slot` dispatch.
+- `bundle-json-cli-flag-and-dispatch` — `--bundle-json <file>` verify-bundle JSON intake + schema-version dispatch (Phase J.4).
+- `cosigner-keyinfo-resolved-slot-merge` — retire `CosignerKeyInfo` into `ResolvedSlot`.
+- `engraving-card-unified-legacy-migration` — migrate the 4 legacy `engraving_card()` call sites (Phase I migration tail).
+- `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase J.2 + J.3 + ~78-site forensic field population.
+- `verify-bundle-9-3plus6n-descriptor-mode-parity` — descriptor-mode 9/3+6N parity (depends on the helper).
+
+### Versioning rationale
+
+v0.4.1 is a patch bump (not a 0.5.0 minor bump) under the framing established in v0.4.0's CHANGELOG: v0.4.0 explicitly deferred these breaking changes "to v0.4.1" with full FOLLOWUPS pointers, designating the v0.4 cycle as the breaking-change unit landing in two releases (v0.4.0 ships the BIP-388 enforcement + CLI surface foundation; v0.4.1 completes the schema-4 wire migration + multi-source synthesis + foundations for the unified card and forensics). Consumers reading either v0.4.x release's CHANGELOG are explicitly warned of the schema-4 cutover. Per the repo's pre-1.0 SemVer convention, the breaking changes WOULD justify 0.5.0; the deliberate choice to land them within 0.4.x is an internal-cycle accounting decision documented at v0.4.0.
+
+### Breaking changes
+
+- **`BundleJson.schema_version`** bumps `"3"` → `"4"` for all bundles emitted by v0.4.1. Consumers that assert `schema_version == "3"` will break; update to `"4"` or to schema-aware dispatch.
+- **`BundleJson.ms1`** type changes from `string | null` to `array<string>`. Consumers that read `.ms1` as a string break. Migration: read `.ms1` as an array; for single-sig full, use `.ms1[0]`; for watch-only, the array contains an empty-string sentinel `[""]`.
+- **`Bundle.ms1`** (Rust API) type changes from `Option<String>` to `Vec<String>`. Direct consumers of the toolkit's library API need to update their pattern matching.
+- **`VerifyBundleArgs.ms1`** (CLI flag) accepts `--ms1` multiple times (`Vec<String>`). Single `--ms1 <s>` invocations continue to work as 1-element vec. **Note for multi-slot verification:** v0.4.1's verify-bundle path compares only the FIRST `--ms1` value against the bundle's slot 0; full per-slot multi-source verification (all elements of `--ms1` checked against all slots) is deferred to v0.4.2 alongside `--bundle-json` intake (FOLLOWUP `bundle-json-cli-flag-and-dispatch`).
+- **BIP-388 raw-string path equality** for `--slot @N.path=` paths preserves the user's literal byte sequence; `48h/0h` and `48'/0'` are now treated as distinct paths under the slot-driven path. Legacy descriptor paths continue to use the parser's canonical form.
+
+### Wire-bit-identical guarantee
+
+v0.4.0 v0.2/v0.3 single-sig + watch-only multisig fixtures continue to pass byte-identically (text-mode output for these cases is unchanged; only the JSON envelope shape changes). The 5 v0.2 self-multisig integration tests remain `#[ignore]`d per BIP-388 hard-reject (introduced in v0.4.0).
+
+### Test corpus
+
+246 lib unit tests + integration suites pass (was 227 in v0.4.0; +19). New tests added in v0.4.1:
+- 2 BIP-388 raw-string distinctness unit tests.
+- 7 `synthesize_unified` shape tests (each BundleMode + threshold-out-of-range + schema-version pin).
+- 4 unified `--slot` CLI integration tests (happy path + missing-template/descriptor + unsupported-subkey-shape + row-6 conflict).
+- 6 unified engraving card unit tests (single-sig full / watch-only / multisig / privacy-preserving / descriptor truncation / tap caveat).
+- 4 VerifyCheck forensic field unit tests.
+
+### Cycle artifacts
+
+- Implementation plan: `design/IMPLEMENTATION_PLAN_v0_4_1_cutover.md` (r2 APPROVE WITH NITS; nits applied).
+- Per-phase reviews: `design/agent-reports/phase-H-schema-4-cutover-review-r1.md` (r1 BLOCK 0C/2I/1L → r2 APPROVE 0C/0I/0L).
+
+### Architect-review history
+
+- v0.4.1 impl plan: 2 in-cycle rounds (r1 BLOCK 3C/2I → r2 APPROVE WITH NITS 0C/0I/2N + nits applied inline).
+- Phase H: 2 rounds (r1 BLOCK 0C/2I/1L → r2 APPROVE 0C/0I/0L).
+- Phase I: scope-minimized to additive only; format.rs unit tests (6) directly cover the new function; per-phase review skipped.
+- Phase J: scope-minimized to additive only (J.1 + J.5 + one J.7 proof-of-shape); format.rs unit tests (4) directly cover the new VerifyCheck behavior; per-phase review skipped.
+- Final cross-phase review: pending (this CHANGELOG entry).
+
+---
+
 ## mnemonic-toolkit [0.4.0] — 2026-05-05
 
 ### What's new (v0.4.0 foundation release)
