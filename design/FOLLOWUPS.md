@@ -30,6 +30,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **`v0.4-cross-repo`**: deferred to v0.4 AND requires coordination with sibling repos.
 - **`v0.4-nice-to-have`**: surfaced during v0.4 review; non-blocking. Documented in v0.4's CHANGELOG if shipped.
 - **`v0.4.1`**: explicitly deferred from v0.4.0 to a v0.4.1 follow-on patch (typically scope-safety deferrals).
+- **`v0.4.2`**: explicitly deferred from v0.4.1 to a v0.4.2 follow-on patch.
+- **`v0.5`**: explicitly deferred to a v0.5 minor release (typically scope too large for a v0.4.x patch).
 - **`cross-repo`**: depends on coordination with sibling repos (`descriptor-mnemonic`, `mnemonic-key`, `mnemonic-secret`). Mirrored by a companion entry in the affected sibling's tracker; both cite each other.
 - **`v1+`**: deferred indefinitely.
 - **`external`**: depends on upstream work (e.g., a sibling crate exposing a helper).
@@ -327,6 +329,51 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** Phase A's typed approach is correct under the v0.3 binding model; the decision is a Phase B design choice (slot input parsing).
 - **Status:** `open`
 - **Tier:** `v0.4-nice-to-have`
+
+### `unified-slot-additional-subkey-shapes` — entropy / xprv / wif / partial-xpub-only resolution deferred from v0.4.1 to v0.4.2
+
+- **Surfaced:** v0.4.1 Phase H.5 scope decision 2026-05-05.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots`.
+- **What:** v0.4.1's unified `--slot` dispatch (`bundle_run_unified`) supports two slot subkey shapes: `{phrase}` (BIP-39 → derived xpub) and `{xpub, fingerprint, path}` (watch-only with full origin metadata). The remaining SPEC §6.6.b shapes (`{entropy}` raw entropy → ms-codec ENTR; `{xprv}` xpriv-direct; `{wif}` degenerate single-key; `{xpub}` alone; `{xpub, fingerprint}`; `{xpub, path}`) return BadInput with a pointer to this FOLLOWUP. v0.4.2 lands the resolution logic for each shape + integration tests per shape.
+- **Why deferred:** scope-safety in v0.4.1 release window; the two supported shapes cover the headline multi-source-secrets and watch-only-multisig use cases.
+- **Status:** `open`
+- **Tier:** `v0.4.2`
+
+### `unified-slot-descriptor-mode-support` — descriptor mode under unified --slot dispatch deferred from v0.4.1 to v0.4.2
+
+- **Surfaced:** v0.4.1 Phase H.5 scope decision 2026-05-05.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified`.
+- **What:** v0.4.1's unified `--slot` dispatch supports `--template` only; supplying `--descriptor` alongside `--slot` is rejected with a pointer to this FOLLOWUP. Legacy descriptor-mode dispatch (no `--slot`) continues to work via `descriptor_mode_run`. v0.4.2 unifies the two paths so `--slot` works with both `--template` and `--descriptor`, including descriptor-mode multi-source via per-`@N` slot binding.
+- **Why deferred:** scope-safety; the legacy descriptor-mode path remains the recommended invocation for descriptor-driven workflows in v0.4.1.
+- **Status:** `open`
+- **Tier:** `v0.4.2`
+
+### `bundle-json-cli-flag-and-dispatch` — `--bundle-json <file>` verify-bundle intake + schema-version dispatch
+
+- **Surfaced:** v0.4.1 Phase J.4 scope decision 2026-05-05 (per impl plan r1 review I2).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::VerifyBundleArgs` + new JSON-intake handler.
+- **What:** SPEC §6.7 reserves `--bundle-json <file>` as a verify-bundle flag for round-tripping a `bundle --json` envelope. v0.4.2 adds the CLI flag + the `serde_json::Value` peek-then-typed-decode dispatch on `schema_version` (handle schema 2/3 ms1 as flat string, schema 4 as `MsField` array). The two land atomically because a dispatch without a CLI entry point is untestable (TDD discipline violated).
+- **Why deferred:** atomic landing avoids dead code in v0.4.1.
+- **Status:** `open`
+- **Tier:** `v0.4.2`
+
+### `cosigner-keyinfo-resolved-slot-merge` — retire CosignerKeyInfo into ResolvedSlot
+
+- **Surfaced:** v0.4.1 Phase H.6 (impl plan r1 review I1).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs::CosignerKeyInfo` + `ResolvedSlot`.
+- **What:** v0.4.1 carries two near-identical typed shapes (`CosignerKeyInfo` for legacy descriptor-mode binding; `ResolvedSlot` for unified --slot binding). Both have `xpub: Xpub`, `fingerprint: Fingerprint`, `path: DerivationPath`, `path_raw: String`; ResolvedSlot adds `entropy: Option<Vec<u8>>`. v0.4.2 retires `CosignerKeyInfo` by adding `entropy: Option<Vec<u8>>` to it and renaming, then deletes ResolvedSlot. Touches synthesize.rs + parse_descriptor.rs::bind_descriptor_keys.
+- **Why deferred:** binding refactor scope; non-blocking for v0.4.1 functional surface.
+- **Status:** `open`
+- **Tier:** `v0.4.2`
+
+### `legacy-flag-deprecation` — full migration of --phrase / --xpub / --cosigner to alias-only deferred from v0.4.1 to v0.5+
+
+- **Surfaced:** v0.4.1 Phase H.5 scope decision 2026-05-05.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::run` legacy dispatch path.
+- **What:** SPEC §9 v0.4 promises that legacy `--phrase` / `--xpub` / `--cosigner` flags become deprecation aliases that auto-expand into `--slot` form. v0.4.1 ships unified `--slot` as opt-in alongside the unchanged legacy dispatch. v0.5+ (a future BREAKING release) deletes the legacy dispatch entirely and routes everything through `bundle_run_unified` via `expand_legacy_to_slots`.
+- **Why deferred:** would force fixture regeneration of 16+ v0.1 byte-exact fixture files + v0.2 carry-forward fixtures; too large for v0.4.1 release window.
+- **Status:** `open`
+- **Tier:** `v0.5`
 
 ### `bundle-removed-subcommand-trap-positional-eq-bypass` — `bundle multisig-full=value` token bypasses pre-clap trap
 

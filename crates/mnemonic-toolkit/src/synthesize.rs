@@ -559,6 +559,169 @@ pub fn synthesize_multisig_watch_only(
     })
 }
 
+/// v0.4.1 Phase H.3 — per-slot post-binding shape for multi-source / hybrid
+/// multisig synthesis. Carries entropy iff the slot is secret-bearing.
+/// `path_raw` preserves the user-supplied raw path string for SPEC §4.11.b
+/// raw-equality.
+#[derive(Debug, Clone)]
+pub struct ResolvedSlot {
+    pub xpub: Xpub,
+    pub fingerprint: Fingerprint,
+    pub path: DerivationPath,
+    pub path_raw: String,
+    /// Some(entropy_bytes) for secret-bearing slots; None for watch-only.
+    pub entropy: Option<Vec<u8>>,
+}
+
+impl ResolvedSlot {
+    pub fn is_secret_bearing(&self) -> bool {
+        self.entropy.is_some()
+    }
+}
+
+/// v0.4.1 Phase H.3+H.4 — synthesize a multi-source or hybrid multisig bundle.
+/// Each slot may be secret-bearing (with entropy) OR watch-only (no entropy).
+/// Per SPEC §5.8 the resulting `Bundle.ms1` is dense Vec of length N with
+/// empty-string sentinels for watch-only slots.
+///
+/// Used by `bundle_run_unified` for `BundleMode::MultisigMultiSource` and
+/// `BundleMode::MultisigHybrid` dispatch arms. Also handles single-sig under
+/// the unified path (N=1; SingleSigFull and SingleSigWatchOnly modes route
+/// through the same code path with N=1).
+pub fn synthesize_unified(
+    slots: &[ResolvedSlot],
+    template: CliTemplate,
+    threshold: u8,
+    network: CliNetwork,
+    privacy_preserving: bool,
+) -> Result<Bundle, ToolkitError> {
+    let n = slots.len();
+    if n == 0 || n > 16 {
+        return Err(ToolkitError::MultisigConfig {
+            message: format!("slot count {n} out of range 1..=16"),
+        });
+    }
+    if threshold == 0 || (threshold as usize) > n {
+        return Err(ToolkitError::MultisigConfig {
+            message: format!("threshold {threshold} out of range 1..={n}"),
+        });
+    }
+    // SPEC §4.3 per-slot network/xpub cross-check.
+    for (i, s) in slots.iter().enumerate() {
+        if s.xpub.network != network.network_kind() {
+            return Err(ToolkitError::CosignerSpec {
+                cosigner_idx: i,
+                message: format!(
+                    "xpub network {:?} does not match --network {}",
+                    s.xpub.network,
+                    network.human_name()
+                ),
+            });
+        }
+    }
+
+    // Path family check (single-sig N=1: use template default; multisig: use
+    // each slot's path).
+    let origin_paths: Vec<OriginPath> =
+        slots.iter().map(|s| derivation_path_to_origin_path(&s.path)).collect();
+    let all_same = origin_paths.windows(2).all(|w| w[0] == w[1]);
+    let path_decl_paths = if all_same || n == 1 {
+        PathDeclPaths::Shared(origin_paths[0].clone())
+    } else {
+        PathDeclPaths::Divergent(origin_paths)
+    };
+
+    // Build descriptor.
+    let tree = template.wrapper_node(threshold, n);
+    let fingerprints: Vec<(u8, [u8; 4])> = slots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i as u8, s.fingerprint.to_bytes()))
+        .collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = slots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i as u8, xpub_to_65(&s.xpub)))
+        .collect();
+
+    let descriptor = Descriptor {
+        n: n as u8,
+        path_decl: PathDecl {
+            n: n as u8,
+            paths: path_decl_paths,
+        },
+        use_site_path: UseSitePath::standard_multipath(),
+        tree,
+        tlv: TlvSection {
+            use_site_path_overrides: None,
+            fingerprints: Some(fingerprints),
+            pubkeys: Some(pubkeys),
+            origin_path_overrides: None,
+            unknown: Vec::new(),
+        },
+    };
+
+    let policy_id = md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)?;
+    let mut stub = [0u8; 4];
+    stub.copy_from_slice(&policy_id.as_bytes()[..4]);
+    let stubs: Vec<[u8; 4]> = vec![stub; n];
+
+    // Per-slot ms1 (dense vec; "" sentinel for watch-only).
+    let mut ms1: MsField = Vec::with_capacity(n);
+    for s in slots {
+        match &s.entropy {
+            Some(e) => ms1.push(
+                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.clone()))
+                    .map_err(ToolkitError::from)?,
+            ),
+            None => ms1.push(String::new()),
+        }
+    }
+
+    // Per-slot mk1.
+    let mk1 = if n == 1 {
+        let s = &slots[0];
+        let card = mk_codec::KeyCard::new(
+            vec![stub],
+            if privacy_preserving {
+                None
+            } else {
+                Some(s.fingerprint)
+            },
+            s.path.clone(),
+            s.xpub,
+        );
+        let csi = derive_mk1_chunk_set_id(&stub);
+        let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+        MkField::Single(chunks)
+    } else {
+        let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(n);
+        for s in slots {
+            let card = mk_codec::KeyCard::new(
+                stubs.clone(),
+                if privacy_preserving {
+                    None
+                } else {
+                    Some(s.fingerprint)
+                },
+                s.path.clone(),
+                s.xpub,
+            );
+            let csi = derive_mk1_chunk_set_id(&stubs[0]);
+            let chunks =
+                mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+            per_cosigner.push(chunks);
+        }
+        MkField::Multi(per_cosigner)
+    };
+
+    let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
+
+    debug_assert!(descriptor.is_wallet_policy());
+
+    Ok(Bundle { ms1, mk1, md1 })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

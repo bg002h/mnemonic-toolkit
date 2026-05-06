@@ -167,6 +167,14 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // v0.4.1 H.5: unified slot-driven dispatch fires when --slot is supplied.
+    // Legacy --phrase/--xpub/--cosigner retain v0.3 dispatch in v0.4.1
+    // (full SPEC §6.6.a alias migration deferred to v0.5+ per FOLLOWUP
+    // `legacy-flag-deprecation`).
+    if !args.slot.is_empty() {
+        return bundle_run_unified(args, stdin, stdout, stderr);
+    }
+
     // SPEC §6.9 v0.3 mode-violation pre-check ladder, rows 1-6 (flag-combination
     // checks; rows 7-15 fire after descriptor parse, inside descriptor_mode_run).
     // Evaluated TOP-TO-BOTTOM; first triggered row fires.
@@ -1337,4 +1345,361 @@ fn derive_threshold_from_descriptor_tree(md1: &[String]) -> Option<u8> {
         None
     }
     find_top_k(&descriptor.tree)
+}
+
+// ============================================================================
+// v0.4.1 Phase H.5: unified --slot-driven dispatch.
+// ============================================================================
+
+use crate::bundle_unified::{detect_bundle_mode, BundleMode};
+use crate::slot_input::{SlotInput, SlotSubkey};
+use crate::synthesize::{synthesize_unified, ResolvedSlot};
+use bip39::Mnemonic;
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
+use bitcoin::secp256k1::Secp256k1;
+
+/// v0.4.1 H.5 entry point — activated when `args.slot` is non-empty.
+/// Routes through SPEC §6.6.b validate_slot_set + §3.3 detect_bundle_mode +
+/// `synthesize_unified` (Phase H.3+H.4).
+fn bundle_run_unified<W: Write, E: Write>(
+    args: &BundleArgs,
+    _stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    use crate::bundle_unified::{pre_check_template_n, pre_check_threshold};
+    use crate::slot_input::{expand_legacy_to_slots, validate_slot_set};
+
+    // SPEC §6.6 row 4 + row 8: validate per-slot subkey shape + contiguity.
+    // Legacy alias expansion: --phrase / --cosigner-count fold into slot vec
+    // via expand_legacy_to_slots (legacy --cosigner triple parsing is deferred
+    // to v0.4.2 alongside the wider deprecation FOLLOWUP).
+    let slots = expand_legacy_to_slots(
+        args.slot.clone(),
+        args.phrase.as_deref(),
+        &[],
+        args.cosigner_count,
+    )?;
+    validate_slot_set(&slots)?;
+
+    let mode = detect_bundle_mode(&slots)?;
+    let n = slots
+        .iter()
+        .map(|s| s.index as usize)
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+
+    // SPEC §6.6 row 9, 9.5, 10, 11.
+    let template_str = args.template.map(|t| t.human_name());
+    let multisig_template = template_str.filter(|_| {
+        args.template.map(|t| t.is_multisig()).unwrap_or(false)
+    });
+    pre_check_threshold(args.threshold, n, multisig_template)?;
+    if let Some(t) = args.template {
+        pre_check_template_n(t.human_name(), t.is_multisig(), n)?;
+    } else if args.descriptor.is_none() && args.descriptor_file.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "unified-slot",
+            flag: "--template / --descriptor",
+            message: "missing --template or --descriptor",
+        });
+    }
+
+    if args.descriptor.is_some() || args.descriptor_file.is_some() {
+        return Err(ToolkitError::BadInput(
+            "v0.4.1 unified --slot dispatch does not yet support --descriptor; \
+            use --template OR drop --slot and use legacy descriptor-mode \
+            invocation. Tracked in FOLLOWUP `unified-slot-descriptor-mode-support` (v0.4.2)."
+                .into(),
+        ));
+    }
+
+    let template = args
+        .template
+        .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
+
+    // Resolve slots into ResolvedSlot vec.
+    let resolved = resolve_slots(&slots, args, template)?;
+
+    // SPEC §4.11.b BIP-388 distinct-key check on resolved slots.
+    check_resolved_slots_distinctness(&resolved)?;
+
+    let threshold = args.threshold.unwrap_or(n as u8);
+
+    // Mode-specific synthesis.
+    let bundle = match mode {
+        BundleMode::SingleSigFull
+        | BundleMode::SingleSigWatchOnly
+        | BundleMode::MultisigMultiSource
+        | BundleMode::MultisigWatchOnly
+        | BundleMode::MultisigHybrid => synthesize_unified(
+            &resolved,
+            template,
+            threshold,
+            args.network,
+            args.privacy_preserving,
+        )?,
+    };
+
+    // Emit (reuse legacy text/JSON renderer; engraving card omitted for now;
+    // unified card lands in Phase I).
+    emit_unified(args, &bundle, &resolved, mode, stdout, stderr)?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
+}
+
+/// v0.4.1 H.5 BIP-388 distinct-key check on ResolvedSlot vector. Mirrors
+/// `check_key_vector_distinctness` for the unified path; comparison key
+/// is `(xpub.to_string(), path_raw)` raw-string equality per SPEC §4.11.b.
+fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), ToolkitError> {
+    for i in 0..slots.len() {
+        for j in (i + 1)..slots.len() {
+            if slots[i].xpub.to_string() == slots[j].xpub.to_string()
+                && slots[i].path_raw == slots[j].path_raw
+            {
+                return Err(ToolkitError::Bip388Distinctness {
+                    i: i as u8,
+                    j: j as u8,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolve slot inputs into ResolvedSlot vec for the v0.4.1 unified dispatch.
+/// Supported subkey shapes:
+/// - {phrase} → BIP-39 derive entropy + seed + master_xpriv → xpub at template
+///   path + master_fingerprint + path.
+/// - {xpub, fingerprint, path} → parse all three directly.
+/// Other shapes (entropy, xprv, wif, partial xpub-only) return BadInput with
+/// pointer to FOLLOWUP `unified-slot-additional-subkey-shapes` (v0.4.2).
+fn resolve_slots(
+    slots: &[SlotInput],
+    args: &BundleArgs,
+    template: CliTemplate,
+) -> Result<Vec<ResolvedSlot>, ToolkitError> {
+    use std::collections::BTreeMap;
+    let mut by_index: BTreeMap<u8, Vec<&SlotInput>> = BTreeMap::new();
+    for s in slots {
+        by_index.entry(s.index).or_default().push(s);
+    }
+    let secp = Secp256k1::new();
+    let mut out: Vec<ResolvedSlot> = Vec::with_capacity(by_index.len());
+    for (idx, slot_inputs) in by_index {
+        let subkeys: std::collections::BTreeSet<SlotSubkey> =
+            slot_inputs.iter().map(|s| s.subkey).collect();
+        if subkeys.contains(&SlotSubkey::Phrase) {
+            // Phrase path. Drive via derive_full reusing template+network+account.
+            let phrase = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Phrase)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let language = args.language.unwrap_or_default();
+            let passphrase = args.passphrase.clone().unwrap_or_default();
+            let mnemonic = Mnemonic::parse_in(language.into(), phrase)
+                .map_err(ToolkitError::Bip39)?;
+            let entropy = mnemonic.to_entropy();
+            let seed = mnemonic.to_seed(&passphrase);
+            let master = Xpriv::new_master(args.network.network_kind(), &seed)
+                .map_err(|e| {
+                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+                })?;
+            let master_fp = master.fingerprint(&secp);
+            let path = template.derivation_path(args.network, args.account);
+            let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
+                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+            })?;
+            let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &acct_xpriv);
+            let path_raw = path.to_string();
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint: master_fp,
+                path,
+                path_raw,
+                entropy: Some(entropy),
+            });
+        } else if subkeys.contains(&SlotSubkey::Xpub) {
+            let xpub_str = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Xpub)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let xpub = bitcoin::bip32::Xpub::from_str(xpub_str).map_err(|e| {
+                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+            })?;
+            let fp_str = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Fingerprint)
+                .map(|s| s.value.as_str());
+            let fingerprint = match fp_str {
+                Some(s) => Fingerprint::from_str(s).map_err(|e| {
+                    ToolkitError::BadInput(format!("--slot @{idx}.fingerprint parse: {e}"))
+                })?,
+                None => Fingerprint::default(),
+            };
+            let (path, path_raw) = match slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Path)
+            {
+                Some(p) => {
+                    let parsed = DerivationPath::from_str(&p.value).map_err(|e| {
+                        ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+                    })?;
+                    (parsed, p.value.clone())
+                }
+                None => (DerivationPath::default(), String::new()),
+            };
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint,
+                path,
+                path_raw,
+                entropy: None,
+            });
+        } else {
+            return Err(ToolkitError::BadInput(format!(
+                "v0.4.1 unified --slot dispatch supports {{phrase}} and {{xpub, fingerprint, path}} \
+                shapes; slot @{idx} subkey set {:?} requires v0.4.2 (FOLLOWUP \
+                `unified-slot-additional-subkey-shapes`).",
+                subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+            )));
+        }
+    }
+    Ok(out)
+}
+
+/// v0.4.1 unified-path emit: reuses the existing emit() / emit_multisig() text
+/// rendering by adapting ResolvedSlot back into the shapes those functions
+/// expect. Engraving card omitted in v0.4.1 unified path (Phase I lands the
+/// unified card across both paths).
+fn emit_unified<W: Write, E: Write>(
+    args: &BundleArgs,
+    bundle: &Bundle,
+    resolved: &[ResolvedSlot],
+    mode: BundleMode,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let _ = mode;
+    let n = resolved.len();
+    let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
+    if args.json {
+        let template = args.template.map(|t| t.human_name());
+        let (multisig_info, origin_path, origin_paths) = if n == 1 {
+            (None, Some(resolved[0].path_raw.clone()), None)
+        } else {
+            let cosigners: Vec<CosignerEntry> = resolved
+                .iter()
+                .enumerate()
+                .map(|(i, s)| CosignerEntry {
+                    index: i,
+                    master_fingerprint: if args.privacy_preserving {
+                        None
+                    } else {
+                        Some(s.fingerprint.to_string().to_lowercase())
+                    },
+                    origin_path: s.path_raw.clone(),
+                    xpub: s.xpub.to_string(),
+                })
+                .collect();
+            let threshold = args.threshold.unwrap_or(n as u8);
+            let info = MultisigInfo {
+                template: template.unwrap_or("descriptor"),
+                threshold,
+                cosigner_count: n,
+                path_family: "bip87",
+                cosigners: cosigners.clone(),
+            };
+            let paths: Vec<String> = cosigners.iter().map(|c| c.origin_path.clone()).collect();
+            let all_same = paths.windows(2).all(|w| w[0] == w[1]);
+            if all_same {
+                (Some(info), paths.first().cloned(), None)
+            } else {
+                (Some(info), None, Some(paths))
+            }
+        };
+        let master_fp = if n == 1 && !args.privacy_preserving {
+            Some(resolved[0].fingerprint.to_string().to_lowercase())
+        } else {
+            None
+        };
+        let json = BundleJson {
+            schema_version: "4",
+            mode: mode_str,
+            network: args.network.human_name(),
+            template,
+            descriptor: None,
+            account: args.account,
+            origin_path,
+            origin_paths,
+            master_fingerprint: master_fp,
+            ms1: bundle.ms1.clone(),
+            mk1: bundle.mk1.clone(),
+            md1: bundle.md1.clone(),
+            engraving_card: None,
+            multisig: multisig_info,
+            privacy_preserving: args.privacy_preserving,
+        };
+        serde_json::to_writer(&mut *stdout, &json).ok();
+        writeln!(stdout).ok();
+    } else {
+        // Schema-4 text mode: emit per-slot ms1 sections (skip empty sentinels).
+        for (i, ms) in bundle.ms1.iter().enumerate() {
+            if ms.is_empty() {
+                continue;
+            }
+            if n > 1 {
+                writeln!(stdout, "# ms1[{i}] (entropy, BCH-checksummed)").ok();
+            } else {
+                writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
+            }
+            writeln!(stdout, "{}", ms).ok();
+            writeln!(stdout).ok();
+            writeln!(stdout, "{}", chunk_5char(ms)).ok();
+            writeln!(stdout).ok();
+        }
+        match &bundle.mk1 {
+            MkField::Single(mk1) => {
+                writeln!(stdout, "# mk1 (xpub + origin)").ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", s).ok();
+                }
+                writeln!(stdout).ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", chunk_5char(s)).ok();
+                }
+                writeln!(stdout).ok();
+            }
+            MkField::Multi(per_cosigner) => {
+                for (i, chunks) in per_cosigner.iter().enumerate() {
+                    writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", s).ok();
+                    }
+                    writeln!(stdout).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", chunk_5char(s)).ok();
+                    }
+                    writeln!(stdout).ok();
+                }
+            }
+        }
+        writeln!(stdout, "# md1 (wallet policy)").ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", s).ok();
+        }
+        writeln!(stdout).ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", chunk_md1(s)).ok();
+        }
+        writeln!(stdout).ok();
+        let _ = stderr; // engraving card lands in Phase I.
+    }
+    Ok(())
 }
