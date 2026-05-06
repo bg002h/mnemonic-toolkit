@@ -277,8 +277,6 @@ pub fn run<W: Write, E: Write>(
     let result = if any_fail { "mismatch" } else { "ok" };
 
     if args.json {
-        // v0.2: schema_version "2"; single-sig checks shape unchanged from v0.1
-        // (multisig array shape comes in Phase C).
         let json = VerifyBundleJson {
             schema_version: "4",
             result,
@@ -585,101 +583,14 @@ fn descriptor_mode_verify_run<W: Write>(
         args.privacy_preserving,
     )?;
 
-    // Build the v0.3 §5.7 check ladder. For descriptor mode we use direct
-    // bundle-cell comparison: ms1 string equality, mk1 string equality, md1
-    // string equality. SPEC §5.7 conservatively emits a 3-element ladder for
-    // descriptor mode (full 9 / 3+6N check schema + per-cell forensics land in
-    // v0.4.1 per FOLLOWUPS `verify-bundle-9-3plus6n-forensics`).
-    let mut checks: Vec<VerifyCheck> = Vec::new();
-
-    // Check 1: ms1 entropy match (skipped if no --ms1 supplied or watch-only).
-    // v0.4.1 H.1 shim: Bundle.ms1 is now Vec<String> (schema-4); descriptor
-    // mode binds entropy at @0 only, so ms1[0] is the secret. The shim takes
-    // the first non-empty element. Behavior diverges from v0.4.0 for the
-    // impossible Some("") case (now routes to "skipped" rather than "fail";
-    // synthesis never produced Some("") under v0.4.0). Phase J supersedes
-    // this with the full per-slot ms1 check.
-    if let Some(supplied_ms1) = args.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
-        match expected.ms1.first().map(|s| s.as_str()).filter(|s| !s.is_empty()) {
-            Some(exp) if exp == supplied_ms1 => checks.push(VerifyCheck {
-                name: "ms1_entropy_match".into(),
-                passed: true,
-                detail: "ms1 byte-identical".into(),
-                ..Default::default()
-            }),
-            Some(exp) => {
-                // v0.4.1 J.7: populate per-cell forensic diagnostic fields
-                // (SPEC §5.7) on string-mismatch checks. expected/actual hold
-                // the full strings; diff_byte_offset locates first divergence.
-                let diff = crate::format::VerifyCheck::diff_offset(exp, supplied_ms1);
-                checks.push(VerifyCheck {
-                    name: "ms1_entropy_match".into(),
-                    passed: false,
-                    detail: "expected ms1 bytes differ from supplied".into(),
-                    expected: Some(exp.to_string()),
-                    actual: Some(supplied_ms1.to_string()),
-                    diff_byte_offset: Some(diff),
-                    decode_error: None,
-                });
-            }
-            None => checks.push(VerifyCheck {
-                name: "ms1_entropy_match".into(),
-                passed: true,
-                detail: "watch-only descriptor mode (no entropy expected)".into(),
-                ..Default::default()
-            }),
-        }
-    } else {
-        checks.push(VerifyCheck {
-            name: "ms1_entropy_match".into(),
-            passed: true,
-            detail: "no --ms1 supplied".into(),
-            ..Default::default()
-        });
-    }
-
-    // Check 2: mk1 byte-equality (per-card for multisig).
-    let supplied_mk1 = &args.mk1;
-    let expected_mk1: Vec<String> = match &expected.mk1 {
-        crate::format::MkField::Single(v) => v.clone(),
-        crate::format::MkField::Multi(per) => per.iter().flatten().cloned().collect(),
+    // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
+    // is_multisig := descriptor.n > 1.
+    let supplied = SuppliedCards {
+        ms1: &args.ms1,
+        mk1: &args.mk1,
+        md1: &args.md1,
     };
-    let mk1_match = expected_mk1.len() == supplied_mk1.len()
-        && expected_mk1
-            .iter()
-            .zip(supplied_mk1.iter())
-            .all(|(a, b)| a == b);
-    checks.push(VerifyCheck {
-        name: "mk1_match".into(),
-        passed: mk1_match,
-        detail: if mk1_match {
-            "mk1 byte-identical".into()
-        } else {
-            format!(
-                "expected {} chunks, got {}",
-                expected_mk1.len(),
-                supplied_mk1.len()
-            )
-        },
-        ..Default::default()
-    });
-
-    // Check 3: md1 byte-equality.
-    let md1_match = expected.md1 == args.md1;
-    checks.push(VerifyCheck {
-        name: "md1_match".into(),
-        passed: md1_match,
-        detail: if md1_match {
-            "md1 byte-identical".into()
-        } else {
-            format!(
-                "expected {} chunks, got {}",
-                expected.md1.len(),
-                args.md1.len()
-            )
-        },
-        ..Default::default()
-    });
+    let checks = emit_verify_checks(&expected, &supplied, descriptor.n > 1);
 
     let any_fail = checks.iter().any(|c| !c.passed);
     let result_str = if any_fail { "mismatch" } else { "ok" };
@@ -692,10 +603,17 @@ fn descriptor_mode_verify_run<W: Write>(
         serde_json::to_writer(&mut *stdout, &json).ok();
         writeln!(stdout).ok();
     } else {
-        writeln!(stdout, "verify-bundle: {}", result_str).ok();
         for c in &checks {
-            writeln!(stdout, "  - {} [{}]: {}", c.name, (if c.passed { "ok" } else { "fail" }), c.detail).ok();
+            writeln!(
+                stdout,
+                "{}: {} {}",
+                c.name,
+                (if c.passed { "ok" } else { "fail" }),
+                c.detail
+            )
+            .ok();
         }
+        writeln!(stdout, "result: {}", result_str).ok();
     }
     Ok(if any_fail { 4 } else { 0 })
 }
