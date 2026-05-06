@@ -273,3 +273,82 @@ fn unified_slot_xpub_with_fingerprint_no_path() {
     assert_eq!(v["mode"], "watch-only");
     assert_eq!(v["master_fingerprint"], "deadbeef");
 }
+
+// ---- v0.4.2 Phase L — descriptor mode under unified --slot ----
+
+#[test]
+fn unified_slot_descriptor_singlesig_phrase_full() {
+    let descriptor = format!("wpkh(@0[{TREZOR_FP_HEX}/84'/0'/0']/<0;1>/*)");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            &descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={}", TREZOR_24),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(v["schema_version"], "4");
+    assert_eq!(v["mode"], "full");
+    assert_eq!(v["template"], Value::Null);
+    assert_eq!(v["descriptor"].as_str().unwrap(), descriptor);
+    assert!(v["ms1"].is_array());
+    assert!(v["ms1"][0].as_str().unwrap().starts_with("ms1"));
+}
+
+#[test]
+fn unified_slot_descriptor_watch_only_xpub_via_slot() {
+    let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
+    let descriptor = "wpkh(@0/<0;1>/*)";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={}", xpub),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(v["mode"], "watch-only");
+    assert_eq!(v["ms1"], serde_json::json!([""]));
+}
+
+#[test]
+fn unified_slot_descriptor_phrase_fingerprint_mismatch_rejected() {
+    // Descriptor annotation says fingerprint deadbeef but TREZOR_24 produces
+    // 5436d724 — must be rejected as cross-check failure.
+    let descriptor = "wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={}", TREZOR_24),
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("derives master fingerprint")
+            && stderr.contains("annotation specifies"),
+        "fingerprint mismatch must be reported; got: {stderr}"
+    );
+}
