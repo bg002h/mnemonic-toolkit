@@ -422,7 +422,7 @@ fn walk_tr(
     let key_index = lookup_key(&t.internal_key().to_string(), km)?;
     let tree: Option<Box<Node>> = match t.tap_tree() {
         None => None,
-        Some(tt) => Some(Box::new(walk_tap_tree_singleleaf(tt, km)?)),
+        Some(tt) => Some(Box::new(walk_tap_tree(tt, km)?)),
     };
     Ok(Node {
         tag: Tag::Tr,
@@ -430,22 +430,62 @@ fn walk_tr(
     })
 }
 
-/// v0.3 supports 0 or 1 leaves. Multi-leaf taproot trees are deferred to v0.4
-/// per SPEC §6.8.
-fn walk_tap_tree_singleleaf(
+/// Walk a miniscript `TapTree` into a `md_codec::tree::Node`. SPEC §4.9.a:
+/// single-leaf descends directly to the leaf miniscript node (no `Tag::TapTree`
+/// wrapper); multi-leaf folds miniscript's flat DFS-preorder `(depth, ms)` list
+/// into a binary tree of `Tag::TapTree` branches via a depth-stack algorithm.
+/// Empty tap_tree is unreachable per BIP-341 + miniscript constructors
+/// (TapTree::leaf requires a Miniscript; combine concatenates non-empty trees);
+/// SPIKE-1 confirmed via 6 round-trip probes (1/2/3/4/5-leaf shapes incl.
+/// asymmetric and right-spine). Algorithm transcribed verbatim from the
+/// SPIKE-1 deliverable at design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md.
+fn walk_tap_tree(
     tt: &miniscript::descriptor::TapTree<DescriptorPublicKey>,
     km: &BTreeMap<String, u8>,
 ) -> Result<Node, ToolkitError> {
-    let leaves: Vec<_> = tt.leaves().collect();
-    match leaves.len() {
-        0 => Err(ToolkitError::DescriptorParse(
+    let leaves: Vec<(u8, _)> = tt.leaves().map(|li| (li.depth(), li.miniscript())).collect();
+    if leaves.is_empty() {
+        return Err(ToolkitError::DescriptorParse(
             "tap tree present but contains no leaves".into(),
-        )),
-        1 => walk_miniscript_node(leaves[0].miniscript(), km, /*tap=*/ true),
-        n => Err(ToolkitError::DescriptorParse(format!(
-            "tap tree with {n} leaves not supported in v0.3 (single-leaf only; multi-leaf deferred to v0.4)"
-        ))),
+        ));
     }
+    if leaves.len() == 1 {
+        let (d, ms) = leaves[0];
+        if d != 0 {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "single-leaf tap_tree leaf at depth {d} (expected 0)"
+            )));
+        }
+        return walk_miniscript_node(ms, km, /*tap=*/ true);
+    }
+    let mut stack: Vec<(u8, Node)> = Vec::with_capacity(leaves.len());
+    for (depth, ms) in leaves {
+        let leaf_node = walk_miniscript_node(ms, km, /*tap=*/ true)?;
+        stack.push((depth, leaf_node));
+        while stack.len() >= 2 {
+            let (top_d, _) = stack[stack.len() - 1];
+            let (next_d, _) = stack[stack.len() - 2];
+            if top_d != next_d || top_d == 0 {
+                break;
+            }
+            let (d, right) = stack.pop().unwrap();
+            let (_, left) = stack.pop().unwrap();
+            stack.push((
+                d - 1,
+                Node {
+                    tag: Tag::TapTree,
+                    body: Body::Children(vec![left, right]),
+                },
+            ));
+        }
+    }
+    if stack.len() != 1 || stack[0].0 != 0 {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "tap tree did not fold to a single root at depth 0 (stack depths: {:?})",
+            stack.iter().map(|(d, _)| *d).collect::<Vec<_>>()
+        )));
+    }
+    Ok(stack.pop().unwrap().1)
 }
 
 /// Walk a miniscript AST node into `md_codec::Node`. v0.3 covers the BIP-388
@@ -2373,6 +2413,92 @@ mod tests {
         };
         assert_eq!(*k, 3);
         assert_eq!(children.len(), 3);
+    }
+
+    // ---- Phase F (v0.4): walk_tap_tree multi-leaf round-trips ----
+
+    /// Recursive descent helper: count leaves + max-depth in a md_codec Node tree
+    /// rooted at a TapTree branch (or single leaf).
+    fn count_tap_leaves(n: &Node, depth: u8) -> (usize, u8) {
+        match (&n.tag, &n.body) {
+            (Tag::TapTree, Body::Children(cs)) if cs.len() == 2 => {
+                let (l1, d1) = count_tap_leaves(&cs[0], depth + 1);
+                let (l2, d2) = count_tap_leaves(&cs[1], depth + 1);
+                (l1 + l2, d1.max(d2))
+            }
+            _ => (1, depth),
+        }
+    }
+
+    #[test]
+    fn walk_tap_tree_2_leaf_balanced() {
+        // tr(@0, {pk(@1), pk(@2)}) — depths [1, 1]. Root: TapTree[leaf, leaf].
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),pk(@2/<0;1>/*)})",
+            ScriptCtx::MultiSig,
+        );
+        assert_eq!(root.tag, Tag::Tr);
+        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let tap_root = tree.as_ref().expect("multi-leaf tap_tree present");
+        assert_eq!(tap_root.tag, Tag::TapTree);
+        let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
+        assert_eq!(leaves, 2);
+        assert_eq!(max_depth, 1);
+    }
+
+    #[test]
+    fn walk_tap_tree_3_leaf_asymmetric() {
+        // tr(@0, {pk(@1), {pk(@2), pk(@3)}}) — depths [1, 2, 2].
+        // Root: TapTree[leaf, TapTree[leaf, leaf]].
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),{pk(@2/<0;1>/*),pk(@3/<0;1>/*)}})",
+            ScriptCtx::MultiSig,
+        );
+        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let tap_root = tree.as_ref().unwrap();
+        assert_eq!(tap_root.tag, Tag::TapTree);
+        let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
+        assert_eq!(leaves, 3);
+        assert_eq!(max_depth, 2);
+        // Confirm asymmetry: left child is leaf (PkK), right is TapTree.
+        let Body::Children(children) = &tap_root.body else { panic!("expected TapTree.Children") };
+        assert_eq!(children[0].tag, Tag::PkK);
+        assert_eq!(children[1].tag, Tag::TapTree);
+    }
+
+    #[test]
+    fn walk_tap_tree_4_leaf_balanced() {
+        // tr(@0, {{pk(@1),pk(@2)},{pk(@3),pk(@4)}}) — depths [2,2,2,2].
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,{{pk(@1/<0;1>/*),pk(@2/<0;1>/*)},{pk(@3/<0;1>/*),pk(@4/<0;1>/*)}})",
+            ScriptCtx::MultiSig,
+        );
+        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let tap_root = tree.as_ref().unwrap();
+        assert_eq!(tap_root.tag, Tag::TapTree);
+        let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
+        assert_eq!(leaves, 4);
+        assert_eq!(max_depth, 2);
+        // Both children of root are TapTree branches.
+        let Body::Children(children) = &tap_root.body else { panic!("expected TapTree.Children") };
+        assert_eq!(children[0].tag, Tag::TapTree);
+        assert_eq!(children[1].tag, Tag::TapTree);
+    }
+
+    #[test]
+    fn walk_tap_tree_4_leaf_right_spine() {
+        // tr(@0, {pk(@1), {pk(@2), {pk(@3), pk(@4)}}}) — depths [1, 2, 3, 3].
+        // SPIKE-1 r1 review L-1 added this shape to confirm the depth-stack
+        // algorithm correctly defers folding for right-heavy trees.
+        let root = parse_and_walk(
+            "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),{pk(@2/<0;1>/*),{pk(@3/<0;1>/*),pk(@4/<0;1>/*)}}})",
+            ScriptCtx::MultiSig,
+        );
+        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let tap_root = tree.as_ref().unwrap();
+        let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
+        assert_eq!(leaves, 4);
+        assert_eq!(max_depth, 3);
     }
 
     #[test]
