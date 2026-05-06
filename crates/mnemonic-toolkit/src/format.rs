@@ -76,7 +76,7 @@ impl MkField {
 }
 
 /// Per-cosigner descriptor entry for `MultisigInfo.cosigners` (SPEC §5.3 v0.2).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CosignerEntry {
     pub index: usize,
     /// `None` when `--privacy-preserving` (mk1 omits origin_fingerprint).

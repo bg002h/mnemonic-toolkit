@@ -148,9 +148,10 @@ fn descriptor_with_nonzero_account_rejected() {
         ));
 }
 
-// ---- Row 6 negative: --descriptor with --account 0 (default) is OK ----
+// ---- Row 6 negative + Row 13: --descriptor n=2 multisig with --phrase but no
+// [fp/path] annotation → SPEC §6.9 row 13 fires (full mode requires annotation).
 #[test]
-fn descriptor_with_zero_account_accepted_to_phase_c_stub() {
+fn descriptor_full_multisig_without_annotation_rejected() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -167,7 +168,9 @@ fn descriptor_with_zero_account_accepted_to_phase_c_stub() {
         .assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains("not yet wired in v0.3 Phase B"));
+        .stderr(predicate::str::contains(
+            "requires explicit [fp/path] origin annotation",
+        ));
 }
 
 // ---- Row 8: descriptor with no @N placeholder ----

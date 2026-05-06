@@ -1068,17 +1068,21 @@ pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), Toolk
     Ok(())
 }
 
-/// Phase B stub for descriptor-mode dispatch. Lex's the descriptor (so SPEC §6.9
-/// row 8 — empty / no @N — fires as a DescriptorParse error from lex_placeholders),
-/// then errors out indicating Phase C lands the synthesis. Phase C will replace
-/// this stub with full pipeline: parse_descriptor → key sourcing → synthesize_descriptor.
+/// Descriptor-mode dispatch: read descriptor → lex → resolve → bind → parse →
+/// synthesize → emit. Replaces the Phase B stub (Phase C.6).
 fn descriptor_mode_run<W: Write, E: Write>(
     args: &BundleArgs,
-    _stdin: &mut dyn std::io::Read,
-    _stdout: &mut W,
-    _stderr: &mut E,
+    stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    let descriptor = match (&args.descriptor, &args.descriptor_file) {
+    use crate::parse_descriptor::{
+        bind_descriptor_keys, check_self_multisig_warning, lex_placeholders, parse_descriptor,
+        resolve_placeholders,
+    };
+    use crate::synthesize::synthesize_descriptor;
+
+    let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
         (None, Some(p)) => std::fs::read_to_string(p)
             .map_err(|e| {
@@ -1088,10 +1092,229 @@ fn descriptor_mode_run<W: Write, E: Write>(
             .to_string(),
         _ => unreachable!("pre-check ladder rejects all other combos"),
     };
-    // Row 8: SPEC §6.9 "descriptor must contain at least one @N placeholder."
-    let _ = crate::parse_descriptor::lex_placeholders(&descriptor)?;
-    Err(ToolkitError::DescriptorParse(
-        "descriptor mode is not yet wired in v0.3 Phase B; Phase C will land the synthesis path"
-            .into(),
-    ))
+
+    let occs = lex_placeholders(&descriptor_str)?;
+    let resolved = resolve_placeholders(&occs)?;
+
+    let phrase_owned: Option<String> = if args.phrase.is_some() {
+        Some(read_phrase_input(args.phrase.as_deref(), stdin)?)
+    } else {
+        None
+    };
+    let passphrase = args.passphrase.clone().unwrap_or_default();
+    let language = args.language.unwrap_or_default();
+
+    let cosigner_specs: Vec<CosignerSpec> = if !args.cosigner.is_empty() {
+        args.cosigner
+            .iter()
+            .enumerate()
+            .map(|(i, s)| parse_cosigner_spec(s, i))
+            .collect::<Result<Vec<_>, _>>()?
+    } else if let Some(p) = args.cosigners_file.as_ref() {
+        parse_cosigners_file(p)?
+    } else {
+        Vec::new()
+    };
+
+    let binding = bind_descriptor_keys(
+        &resolved,
+        args.network,
+        phrase_owned.as_deref(),
+        &passphrase,
+        language,
+        args.xpub.as_deref(),
+        args.master_fingerprint.as_deref(),
+        &cosigner_specs,
+    )?;
+
+    if check_self_multisig_warning(&binding).is_some() {
+        write!(stderr, "{}", SELF_MULTISIG_WARNING).ok();
+    }
+
+    let descriptor = parse_descriptor(&descriptor_str, &binding.keys, &binding.fingerprints)?;
+    let bundle = synthesize_descriptor(
+        &descriptor,
+        &binding.cosigners,
+        binding.entropy.as_deref(),
+        args.privacy_preserving,
+    )?;
+
+    descriptor_mode_emit(args, &bundle, &binding, &descriptor_str, stdout, stderr)?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn descriptor_mode_emit<W: Write, E: Write>(
+    args: &BundleArgs,
+    bundle: &Bundle,
+    binding: &crate::parse_descriptor::DescriptorBinding,
+    descriptor_str: &str,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let n = binding.cosigners.len();
+    let mode_str = if bundle.ms1.is_some() {
+        "full"
+    } else {
+        "watch-only"
+    };
+
+    if args.json {
+        let (multisig_info, origin_path, origin_paths) = if n == 1 {
+            (None, Some(binding.cosigners[0].path.to_string()), None)
+        } else {
+            let cosigners: Vec<CosignerEntry> = binding
+                .cosigners
+                .iter()
+                .enumerate()
+                .map(|(i, c)| CosignerEntry {
+                    index: i,
+                    master_fingerprint: if args.privacy_preserving {
+                        None
+                    } else {
+                        Some(c.fingerprint.to_string().to_lowercase())
+                    },
+                    origin_path: c.path.to_string(),
+                    xpub: c.xpub.to_string(),
+                })
+                .collect();
+            let threshold = derive_threshold_from_descriptor_tree(&bundle.md1).unwrap_or(n as u8);
+            let info = MultisigInfo {
+                template: "descriptor",
+                threshold,
+                cosigner_count: n,
+                path_family: "descriptor",
+                cosigners: cosigners.clone(),
+            };
+            let paths: Vec<String> = cosigners.iter().map(|c| c.origin_path.clone()).collect();
+            let all_same = paths.windows(2).all(|w| w[0] == w[1]);
+            if all_same {
+                (Some(info), paths.first().cloned(), None)
+            } else {
+                (Some(info), None, Some(paths))
+            }
+        };
+
+        let master_fp = if n == 1 && !args.privacy_preserving {
+            Some(binding.cosigners[0].fingerprint.to_string().to_lowercase())
+        } else {
+            None
+        };
+
+        let json = BundleJson {
+            schema_version: "3",
+            mode: mode_str,
+            network: args.network.human_name(),
+            template: None,
+            descriptor: Some(descriptor_str.to_string()),
+            account: args.account,
+            origin_path,
+            origin_paths,
+            master_fingerprint: master_fp,
+            ms1: bundle.ms1.clone(),
+            mk1: bundle.mk1.clone(),
+            md1: bundle.md1.clone(),
+            engraving_card: None,
+            multisig: multisig_info,
+            privacy_preserving: args.privacy_preserving,
+        };
+        serde_json::to_writer(&mut *stdout, &json).ok();
+        writeln!(stdout).ok();
+    } else {
+        if let Some(ms1) = bundle.ms1.as_deref() {
+            writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
+            writeln!(stdout, "{}", ms1).ok();
+            writeln!(stdout).ok();
+            writeln!(stdout, "{}", chunk_5char(ms1)).ok();
+            writeln!(stdout).ok();
+        } else {
+            writeln!(stdout, "# ms1 (omitted — descriptor watch-only mode)").ok();
+            writeln!(stdout).ok();
+        }
+        match &bundle.mk1 {
+            MkField::Single(mk1) => {
+                writeln!(stdout, "# mk1 (xpub + origin)").ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", s).ok();
+                }
+                writeln!(stdout).ok();
+                for s in mk1 {
+                    writeln!(stdout, "{}", chunk_5char(s)).ok();
+                }
+                writeln!(stdout).ok();
+            }
+            MkField::Multi(per_cosigner) => {
+                for (i, chunks) in per_cosigner.iter().enumerate() {
+                    writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", s).ok();
+                    }
+                    writeln!(stdout).ok();
+                    for s in chunks {
+                        writeln!(stdout, "{}", chunk_5char(s)).ok();
+                    }
+                    writeln!(stdout).ok();
+                }
+            }
+        }
+        let md1_label = if matches!(bundle.mk1, MkField::Multi(_)) {
+            "# md1 (descriptor wallet policy)"
+        } else {
+            "# md1 (descriptor)"
+        };
+        writeln!(stdout, "{}", md1_label).ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", s).ok();
+        }
+        writeln!(stdout).ok();
+        for s in &bundle.md1 {
+            writeln!(stdout, "{}", chunk_md1(s)).ok();
+        }
+        writeln!(stdout).ok();
+        // Engraving card omitted in descriptor mode for v0.3; flagged as a v0.4 follow-up.
+        let _ = stderr;
+    }
+    Ok(())
+}
+
+/// Walk the encoded md1 strings to recover the descriptor tree, then derive a
+/// threshold k from the top-level Multi/SortedMulti/MultiA/SortedMultiA/Thresh.
+/// Returns None for compositions without a clean K (or_d, andor without thresh
+/// at top); caller substitutes n. SPEC §5.6 last paragraph.
+fn derive_threshold_from_descriptor_tree(md1: &[String]) -> Option<u8> {
+    let strs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let descriptor = md_codec::chunk::reassemble(&strs).ok()?;
+    use md_codec::tag::Tag;
+    use md_codec::tree::Body;
+    fn find_top_k(node: &md_codec::tree::Node) -> Option<u8> {
+        match node.tag {
+            Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA | Tag::Thresh => {
+                if let Body::Variable { k, .. } = node.body {
+                    return Some(k);
+                }
+            }
+            // Wsh/Sh/Tr have a child that may be a multisig — recurse one level.
+            Tag::Wsh | Tag::Sh => {
+                if let Body::Children(kids) = &node.body {
+                    if let Some(c) = kids.first() {
+                        return find_top_k(c);
+                    }
+                }
+            }
+            Tag::Tr => {
+                if let Body::Tr { tree, .. } = &node.body {
+                    if let Some(t) = tree.as_ref() {
+                        return find_top_k(t);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+    find_top_k(&descriptor.tree)
 }
