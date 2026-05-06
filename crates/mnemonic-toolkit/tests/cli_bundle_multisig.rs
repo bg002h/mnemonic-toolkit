@@ -6,6 +6,10 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+// deprecated v0.2 pattern; remove after v0.4 release. Per SPEC §4.11.b the
+// `--cosigner-count > 1` self-multisig path now hard-rejects with exit 2 +
+// `BIP-388 distinct-key violation` stderr.
+#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
 #[test]
 fn self_multisig_full_emits_warning_and_n_card_sets() {
     let out = Command::cargo_bin("mnemonic")

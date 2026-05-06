@@ -8,6 +8,10 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+// deprecated v0.2 pattern; remove after v0.4 release. v0.2 multisig-full
+// fixtures violate BIP-388 distinctness (all N cosigner xpubs derived from
+// one seed at one path). Per SPEC §10 v0.4 fixture exclusions.
+#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
 #[test]
 fn bundle_multisig_full_24_cells_byte_exact() {
     for &t in &[

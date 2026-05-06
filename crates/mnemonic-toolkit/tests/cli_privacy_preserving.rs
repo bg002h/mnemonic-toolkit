@@ -7,6 +7,10 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+// deprecated v0.2 pattern; remove after v0.4 release. Uses --cosigner-count > 1
+// (BIP-388 violating self-multisig). v0.4 Phase G.7 lands a replacement
+// `--privacy-preserving` fixture under descriptor mode with distinct cosigners.
+#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
 #[test]
 fn bundle_privacy_preserving_4_cells() {
     for &n in &["mainnet", "testnet", "signet", "regtest"] {

@@ -1281,9 +1281,8 @@ fn descriptor_mode_verify_run<W: Write>(
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
 ) -> Result<u8, ToolkitError> {
-    use crate::cmd::bundle::SELF_MULTISIG_WARNING;
     use crate::parse_descriptor::{
-        bind_descriptor_keys, check_self_multisig_warning, lex_placeholders, parse_descriptor,
+        bind_descriptor_keys, check_key_vector_distinctness, lex_placeholders, parse_descriptor,
         resolve_placeholders,
     };
     use crate::synthesize::synthesize_descriptor;
@@ -1339,8 +1338,11 @@ fn descriptor_mode_verify_run<W: Write>(
         &cosigner_specs,
     )?;
 
-    let _ = check_self_multisig_warning(&binding); // verify-bundle doesn't re-emit warnings
-    let _ = SELF_MULTISIG_WARNING;
+    // SPEC §4.11.c symmetric verify-bundle enforcement: re-wrap to the verify-bundle
+    // exit-4 variant so v0.2 self-multisig artifacts fail with the §4.11.c stderr.
+    if let Err(ToolkitError::Bip388Distinctness { .. }) = check_key_vector_distinctness(&binding) {
+        return Err(ToolkitError::Bip388VerifyDistinctness);
+    }
 
     let descriptor = parse_descriptor(&descriptor_str, &binding.keys, &binding.fingerprints)
         .map_err(|e| ToolkitError::DescriptorReparseFailed {

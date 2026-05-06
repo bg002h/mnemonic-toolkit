@@ -31,6 +31,9 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
     assert_eq!(stdout, expected, "self-check single-sig fixture mismatch");
 }
 
+// deprecated v0.2 pattern; remove after v0.4 release. Uses --cosigner-count > 1
+// (BIP-388 violating self-multisig). v0.4 multi-source self-check fixture in Phase G.
+#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
 #[test]
 fn bundle_self_check_passes_for_canonical_seed_multisig() {
     let expected =

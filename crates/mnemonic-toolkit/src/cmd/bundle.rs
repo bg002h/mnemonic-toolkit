@@ -634,15 +634,6 @@ fn emit<W: Write, E: Write>(
     Ok(())
 }
 
-/// SPEC §4.1 SELF-MULTISIG WARNING (byte-exact, non-suppressible).
-/// Emitted BEFORE the bundle stdout block per SPEC §4.1 ordering rule.
-pub const SELF_MULTISIG_WARNING: &str = "\
-warning: full-mode multisig (--cosigner-count > 1) derives all N cosigner xpubs from one
-warning: seed at one path; all N cosigner cards are byte-identical interchangeable copies.
-warning: For production multi-device multisig, use --cosigner watch-only mode with distinct
-warning: cosigner xpubs from distinct seeds.
-";
-
 #[allow(clippy::too_many_arguments)]
 fn bundle_multisig_full<W: Write, E: Write>(
     args: &BundleArgs,
@@ -653,15 +644,19 @@ fn bundle_multisig_full<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // v0.4 SPEC §4.11.b BIP-388 hard-reject: legacy `multisig-full --cosigner-count > 1`
+    // derives all N cosigner xpubs from one seed at one path → identical (xpub, path)
+    // tuples by construction. Phase C.1 removes the subcommand entirely; Phase A
+    // hard-rejects multi-cosigner invocations here so v0.2 self-multisig fixtures
+    // exit 2 with §6.6 row 13 stderr rather than producing a non-conformant bundle.
+    if cosigner_count > 1 {
+        return Err(ToolkitError::Bip388Distinctness { i: 0, j: 1 });
+    }
+
     let phrase = read_phrase_input(args.phrase.as_deref(), stdin)?;
     let passphrase = args.passphrase.clone().unwrap_or_default();
     let language = args.language.unwrap_or_default();
 
-    // Stderr ordering (SPEC §4.1 + §5.2): SELF-MULTISIG WARNING FIRST when N>1
-    // (BEFORE language/passphrase warnings to satisfy "before bundle stdout block").
-    if cosigner_count > 1 {
-        write!(stderr, "{}", SELF_MULTISIG_WARNING).ok();
-    }
     if args.language.is_none() {
         writeln!(stderr, "warning: --language defaulting to english; record the wordlist language alongside the engraved cards.").ok();
     }
@@ -1077,7 +1072,7 @@ fn descriptor_mode_run<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     use crate::parse_descriptor::{
-        bind_descriptor_keys, check_self_multisig_warning, lex_placeholders, parse_descriptor,
+        bind_descriptor_keys, check_key_vector_distinctness, lex_placeholders, parse_descriptor,
         resolve_placeholders,
     };
     use crate::synthesize::synthesize_descriptor;
@@ -1127,9 +1122,8 @@ fn descriptor_mode_run<W: Write, E: Write>(
         &cosigner_specs,
     )?;
 
-    if check_self_multisig_warning(&binding).is_some() {
-        write!(stderr, "{}", SELF_MULTISIG_WARNING).ok();
-    }
+    // SPEC §4.11.b: hard-reject BIP-388 distinct-key violations post-binding.
+    check_key_vector_distinctness(&binding)?;
 
     let descriptor = parse_descriptor(&descriptor_str, &binding.keys, &binding.fingerprints)?;
     let bundle = synthesize_descriptor(

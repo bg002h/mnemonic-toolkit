@@ -65,6 +65,15 @@ pub enum ToolkitError {
     DescriptorReparseFailed {
         detail: String,
     },
+    /// SPEC §4.11.b BIP-388 distinct-key violation at bundle creation. Exit 2.
+    /// `i` and `j` are the colliding slot indices (i < j) under
+    /// `(xpub, derivation_path_string)` raw-string equality per §4.11.b
+    /// normalization domain.
+    Bip388Distinctness { i: u8, j: u8 },
+    /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
+    /// Re-emitted from `check_key_vector_distinctness` post-binding under
+    /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
+    Bip388VerifyDistinctness,
 }
 
 #[derive(Debug)]
@@ -180,9 +189,12 @@ impl ToolkitError {
             ToolkitError::MdCodec(e) => md_codec_exit_code(e),
             ToolkitError::ModeViolation { .. }
             | ToolkitError::NetworkMismatch { .. }
-            | ToolkitError::DescriptorParse(_) => 2,
+            | ToolkitError::DescriptorParse(_)
+            | ToolkitError::Bip388Distinctness { .. } => 2,
             ToolkitError::FutureFormat { .. } => 3,
-            ToolkitError::BundleMismatch { .. } | ToolkitError::DescriptorReparseFailed { .. } => 4,
+            ToolkitError::BundleMismatch { .. }
+            | ToolkitError::DescriptorReparseFailed { .. }
+            | ToolkitError::Bip388VerifyDistinctness => 4,
             ToolkitError::MultisigConfig { .. }
             | ToolkitError::CosignerSpec { .. }
             | ToolkitError::CosignersFile { .. } => 1,
@@ -209,6 +221,8 @@ impl ToolkitError {
             ToolkitError::CosignersFile { .. } => "CosignersFile",
             ToolkitError::DescriptorParse(_) => "DescriptorParse",
             ToolkitError::DescriptorReparseFailed { .. } => "DescriptorReparseFailed",
+            ToolkitError::Bip388Distinctness { .. } => "Bip388Distinctness",
+            ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
         }
     }
 
@@ -250,6 +264,12 @@ impl ToolkitError {
             ToolkitError::DescriptorReparseFailed { detail } => {
                 format!("descriptor re-parse failed during verify-bundle: {detail}")
             }
+            ToolkitError::Bip388Distinctness { i, j } => {
+                format!("BIP-388 distinct-key violation: slot @{i} and slot @{j} resolve to identical (xpub, path)")
+            }
+            ToolkitError::Bip388VerifyDistinctness => {
+                "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys".to_string()
+            }
         }
     }
 
@@ -277,6 +297,7 @@ impl ToolkitError {
             ToolkitError::CosignerSpec { cosigner_idx, .. } => Some(json!({
                 "cosigner_idx": cosigner_idx,
             })),
+            ToolkitError::Bip388Distinctness { i, j } => Some(json!({ "i": i, "j": j })),
             _ => None,
         }
     }
@@ -488,6 +509,29 @@ mod tests {
         };
         assert_eq!(e.exit_code(), 1);
         assert_eq!(e.kind(), "CosignersFile");
+    }
+
+    #[test]
+    fn bip388_variants_exit_code_kind_message() {
+        let e = ToolkitError::Bip388Distinctness { i: 0, j: 1 };
+        assert_eq!(e.exit_code(), 2);
+        assert_eq!(e.kind(), "Bip388Distinctness");
+        assert_eq!(
+            e.message(),
+            "BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)"
+        );
+        let det = e.details().unwrap();
+        assert_eq!(det["i"], 0);
+        assert_eq!(det["j"], 1);
+
+        let v = ToolkitError::Bip388VerifyDistinctness;
+        assert_eq!(v.exit_code(), 4);
+        assert_eq!(v.kind(), "Bip388VerifyDistinctness");
+        assert_eq!(
+            v.message(),
+            "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys"
+        );
+        assert!(v.details().is_none());
     }
 
     #[test]

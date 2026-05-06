@@ -7,6 +7,10 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+// deprecated v0.2 pattern; remove after v0.4 release. Uses --cosigner-count > 1
+// (BIP-388 violating self-multisig). Replacement v0.4 fixtures with multi-source
+// secrets land in Phase G.7.
+#[ignore = "deprecated v0.2 pattern; remove after v0.4 release"]
 #[test]
 fn bundle_account_5_4_cells_byte_exact() {
     for &n in &["mainnet", "testnet", "signet", "regtest"] {

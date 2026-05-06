@@ -164,11 +164,7 @@ pub fn synthesize_watch_only(
 }
 
 /// Per-`@N` key + fingerprint + path triple for descriptor-mode synthesis.
-/// Length matches the parsed descriptor's `n`. Caller (Phase C.2/C.3) does
-/// the `@0` seed-derivation / `--xpub` binding / `@N≥1` cosigner binding
-/// before passing to `synthesize_descriptor`.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Wired into descriptor_mode_run in Phase C.2/C.3.
 pub struct CosignerKeyInfo {
     pub xpub: Xpub,
     pub fingerprint: Fingerprint,

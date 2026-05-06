@@ -722,9 +722,7 @@ pub fn determine_mode(d: &MdDescriptor) -> DescriptorMode {
     }
 }
 
-// ctx_for_descriptor (string-prefix heuristic) was retired in Phase C.6 r2 in
-// favor of post-resolve n-based classification per FOLLOWUP
-// `ctx-for-descriptor-heuristic-misroutes`.
+// ctx_for_descriptor retired Phase C.6 r2; classification is post-resolve n-based.
 
 /// Synthetic xpub for placeholder `@i` under `ctx`. Deterministic; never wire-emitted.
 /// Seed prefix `b"toolkit-v0.3"` is normative — fixture stability depends on it.
@@ -1035,24 +1033,30 @@ fn check_anno_match(
     Ok(())
 }
 
-/// SPEC §4.7 / §4.12: SELF-MULTISIG WARNING. Returns Some(message) when
-/// (n≥2) + (--phrase set, i.e. entropy.is_some()) + any cosigner xpub equals
-/// @0's xpub. Non-fatal; descriptor_mode_run emits to stderr (Phase C.6).
-pub fn check_self_multisig_warning(binding: &DescriptorBinding) -> Option<&'static str> {
-    if binding.entropy.is_none() || binding.cosigners.len() < 2 {
-        return None;
-    }
-    let at0_xpub = &binding.cosigners[0].xpub;
-    for c in binding.cosigners.iter().skip(1) {
-        if c.xpub == *at0_xpub {
-            return Some(SELF_MULTISIG_WARNING);
+/// SPEC §4.11.b BIP-388 distinct-key conformance.
+///
+/// Pairwise scan over `binding.cosigners`; returns `Err(Bip388Distinctness { i, j })`
+/// for the first colliding pair under raw-string `(xpub, derivation_path)` equality
+/// (i < j). No path canonicalization, no xpub network normalization. A slot with the
+/// degenerate empty path (`DerivationPath::master()`) renders as `"m"` for collision
+/// purposes. Symmetric across bundle creation (exit 2 via §6.6 row 13) and
+/// verify-bundle (caller re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
+pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), ToolkitError> {
+    let cs = &binding.cosigners;
+    for i in 0..cs.len() {
+        for j in (i + 1)..cs.len() {
+            if cs[i].xpub.to_string() == cs[j].xpub.to_string()
+                && cs[i].path.to_string() == cs[j].path.to_string()
+            {
+                return Err(ToolkitError::Bip388Distinctness {
+                    i: i as u8,
+                    j: j as u8,
+                });
+            }
         }
     }
-    None
+    Ok(())
 }
-
-pub const SELF_MULTISIG_WARNING: &str =
-    "WARNING: full-mode multisig descriptor detected with at least one cosigner xpub equal to the seed-derived @0 xpub. This is a self-multisig configuration (signing power consolidated under one seed); a production multisig wallet should use independent cosigner keys.";
 
 fn push_binding(
     keys: &mut Vec<ParsedKey>,
@@ -1609,73 +1613,111 @@ mod tests {
         assert!(b.entropy.is_none());
     }
 
-    // ---- C.4: SELF-MULTISIG WARNING (2 tests) ----
+    // ---- A.2 (v0.4): BIP-388 distinct-key conformance ----
 
-    #[test]
-    fn self_multisig_warning_fires_when_at0_equals_other_cosigner() {
-        // Construct a binding manually where @0 and @1 share the same xpub.
-        let xpub = Xpub::from_str(
-            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
-        )
-        .unwrap();
-        let path = DerivationPath::from_str("48'/0'/0'/2'").unwrap();
-        let fp = Fingerprint::from_str("deadbeef").unwrap();
-        let cosigners = vec![
-            CosignerKeyInfo {
-                xpub,
-                fingerprint: fp,
-                path: path.clone(),
-            },
-            CosignerKeyInfo {
-                xpub,
-                fingerprint: fp,
-                path,
-            }, // same xpub → self-multisig
-        ];
+    fn ckd(cosigners: Vec<CosignerKeyInfo>) -> Result<(), ToolkitError> {
         let binding = DescriptorBinding {
             keys: vec![],
             fingerprints: vec![],
             cosigners,
-            entropy: Some(vec![0u8; 32]),
+            entropy: None,
         };
-        let warn = check_self_multisig_warning(&binding);
-        assert!(warn.is_some(), "self-multisig pair must trigger warning");
+        check_key_vector_distinctness(&binding)
+    }
+
+    fn xpub_a() -> Xpub {
+        Xpub::from_str("xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz").unwrap()
+    }
+    fn xpub_b() -> Xpub {
+        Xpub::from_str("xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ").unwrap()
+    }
+    fn xpub_c() -> Xpub {
+        Xpub::from_str("xpub6BemYiVEULcbqF34sTQgz3c2MzCoNmz8ZJieEwjH6HwnZ54tYQmnFgEwRckq3hLJ9feTr4xUFx7XwJ3nraRrQcPnvEuYfddWQ8A4kwU4QMx").unwrap()
+    }
+    fn cinfo(x: Xpub, p: &str) -> CosignerKeyInfo {
+        CosignerKeyInfo {
+            xpub: x,
+            fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
+            path: DerivationPath::from_str(p).unwrap(),
+        }
     }
 
     #[test]
-    fn self_multisig_warning_silent_for_distinct_xpubs() {
-        let xpub_a = Xpub::from_str(
-            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
-        )
-        .unwrap();
-        let xpub_b = Xpub::from_str(
-            "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ",
-        )
-        .unwrap();
-        let path = DerivationPath::from_str("48'/0'/0'/2'").unwrap();
-        let fp = Fingerprint::from_str("deadbeef").unwrap();
-        let cosigners = vec![
-            CosignerKeyInfo {
-                xpub: xpub_a,
-                fingerprint: fp,
-                path: path.clone(),
-            },
-            CosignerKeyInfo {
-                xpub: xpub_b,
-                fingerprint: fp,
-                path,
-            },
-        ];
-        let binding = DescriptorBinding {
-            keys: vec![],
-            fingerprints: vec![],
-            cosigners,
-            entropy: Some(vec![0u8; 32]),
-        };
-        assert!(
-            check_self_multisig_warning(&binding).is_none(),
-            "distinct cosigner xpubs must not trigger warning"
-        );
+    fn bip388_distinct_n3_passes() {
+        let p = "48'/0'/0'/2'";
+        ckd(vec![
+            cinfo(xpub_a(), p),
+            cinfo(xpub_b(), p),
+            cinfo(xpub_c(), p),
+        ])
+        .expect("3 distinct xpubs at same path is BIP-388-distinct");
+    }
+
+    #[test]
+    fn bip388_n1_degenerate_passes() {
+        let p = "48'/0'/0'/2'";
+        ckd(vec![cinfo(xpub_a(), p)]).expect("N=1 has no pairs to compare");
+    }
+
+    #[test]
+    fn bip388_collision_at0_at1_same_xpub_same_path() {
+        let p = "48'/0'/0'/2'";
+        let err = ckd(vec![cinfo(xpub_a(), p), cinfo(xpub_a(), p), cinfo(xpub_b(), p)])
+            .expect_err("@0 == @1 (xpub, path) must collide");
+        match err {
+            ToolkitError::Bip388Distinctness { i, j } => {
+                assert_eq!((i, j), (0, 1));
+            }
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bip388_first_pair_reported_when_two_collisions() {
+        // (@0, @2) and (@1, @3) both collide; first-detected (lex(i,j)) is (@0, @2).
+        let p = "48'/0'/0'/2'";
+        let err = ckd(vec![
+            cinfo(xpub_a(), p),
+            cinfo(xpub_b(), p),
+            cinfo(xpub_a(), p),
+            cinfo(xpub_b(), p),
+        ])
+        .expect_err("two collisions present; first must be reported");
+        match err {
+            ToolkitError::Bip388Distinctness { i, j } => assert_eq!((i, j), (0, 2)),
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bip388_same_xpub_different_paths_accepted() {
+        // SPEC §4.11.b BIP-388-letter: distinct (xpub, path) tuples → no collision.
+        ckd(vec![
+            cinfo(xpub_a(), "48'/0'/0'/2'"),
+            cinfo(xpub_a(), "48'/0'/1'/2'"),
+        ])
+        .expect("identical xpubs with different paths are distinct tuples");
+    }
+
+    #[test]
+    fn bip388_different_xpubs_same_path_accepted() {
+        ckd(vec![
+            cinfo(xpub_a(), "48'/0'/0'/2'"),
+            cinfo(xpub_b(), "48'/0'/0'/2'"),
+        ])
+        .expect("distinct xpubs at the same path are distinct tuples");
+    }
+
+    #[test]
+    fn bip388_collision_same_xpub_both_master_path() {
+        // SPEC §4.11.b normalization: both paths == DerivationPath::master() = "m"
+        // → equal under raw-string comparison → collide.
+        let err = ckd(vec![cinfo(xpub_a(), "m"), cinfo(xpub_a(), "m")])
+            .expect_err("identical xpubs at master path must collide");
+        match err {
+            ToolkitError::Bip388Distinctness { i, j } => assert_eq!((i, j), (0, 1)),
+            other => panic!("unexpected variant {other:?}"),
+        }
     }
 
     // ---- C.5: descriptor-mode wire-bit-identical to template-mode (3 fixtures) ----
