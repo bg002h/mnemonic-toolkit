@@ -605,3 +605,27 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** scope-safety in v0.6.0; the headline conversion graph nodes were prioritized.
 - **Status:** `open`
 - **Tier:** `v0.6.1`
+
+### `convert-test-coverage-tightening` — close convert subcommand test gaps (6 direct-edge + 2 deferral + 3 round-trip tests)
+
+- **Surfaced:** v0.6.0 post-release coverage audit 2026-05-06 (user-prompted enumeration of supported edges vs. test coverage).
+- **Where:** `crates/mnemonic-toolkit/tests/cli_convert_happy_paths.rs`.
+- **What:** v0.6.0 ships 23 convert tests covering 14 of 20 supported direct edges. Three coverage gaps to close in v0.6.1:
+  1. **6 untested supported direct edges** — add at least one happy-path test each:
+     - `phrase → ms1`
+     - `entropy → xpub`
+     - `entropy → xprv`
+     - `entropy → fingerprint`
+     - `xprv → fingerprint`
+     - `wif → fingerprint`
+  2. **2 deferral-message negative tests** — assert the v0.6.0 BadInput stderr ("not yet supported in v0.6 (path-to-leaf-WIF derivation deferred)") for:
+     - `phrase → wif`
+     - `entropy → wif`
+     These tests pin the deferral text byte-exactly so the v0.6.1+ implementation of `convert-phrase-to-leaf-wif` will need to update them in lockstep (intentional: forces the deferral-→-implementation transition to be explicit).
+  3. **3 explicit round-trip loop tests** (A→B→A) for the supported bidirectional pairs:
+     - `phrase ↔ entropy` — assert `phrase → entropy → phrase` produces the canonical phrase byte-for-byte.
+     - `entropy ↔ ms1` — assert `entropy → ms1 → entropy` produces identical entropy bytes.
+     - `phrase ↔ ms1` (via entropy intermediate) — assert `phrase → ms1 → phrase` produces the canonical phrase. v0.6.0 has one-direction tests on each leg but no full-loop assertion.
+- **Why deferred:** v0.6.0 prioritized headline-edge coverage and refusal-taxonomy correctness; the missing tests are tightening, not net-new functionality. The 6 uncovered edges are exercised indirectly through the JSON envelope test (#3 in `cli_convert_json.rs`) and the v0.5.2 16-cell parametric byte-identity test, but lack explicit asserts.
+- **Status:** `open`
+- **Tier:** `v0.6.1`
