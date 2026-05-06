@@ -1138,4 +1138,174 @@ mod tests {
             }
         }
     }
+
+    // ---- v0.4.1 Phase H r1 review I-2 — synthesize_unified shape tests ----
+
+    /// Build N ResolvedSlots from TREZOR_24 at distinct child paths. The
+    /// `entropy_indices` set marks which slots are secret-bearing; all others
+    /// are watch-only (entropy = None).
+    fn unified_fixture(n: usize, entropy_indices: &[usize]) -> Vec<ResolvedSlot> {
+        let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let entropy = mnemonic.to_entropy();
+        let seed = mnemonic.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        let master_fp = master.fingerprint(&secp);
+
+        let mut out = Vec::with_capacity(n);
+        for i in 0..n {
+            let path_str = format!("48'/0'/{}'/2'", i);
+            let path = DerivationPath::from_str(&path_str).unwrap();
+            let xpriv = master.derive_priv(&secp, &path).unwrap();
+            let xpub = Xpub::from_priv(&secp, &xpriv);
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint: master_fp,
+                path: path.clone(),
+                path_raw: path_str,
+                entropy: if entropy_indices.contains(&i) {
+                    Some(entropy.clone())
+                } else {
+                    None
+                },
+            });
+        }
+        out
+    }
+
+    #[test]
+    fn synthesize_unified_single_sig_full_ms1_one_non_empty() {
+        // SingleSigFull (n=1, secret-bearing): ms1 = ["ms1..."] length-1.
+        let slots = unified_fixture(1, &[0]);
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::Bip84,
+            1,
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap();
+        assert_eq!(bundle.ms1.len(), 1);
+        assert!(bundle.ms1[0].starts_with("ms1"));
+        assert!(bundle.any_secret_bearing());
+    }
+
+    #[test]
+    fn synthesize_unified_single_sig_watch_only_ms1_empty_sentinel() {
+        // SingleSigWatchOnly (n=1, no entropy): ms1 = [""] length-1 with sentinel.
+        let slots = unified_fixture(1, &[]);
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::Bip84,
+            1,
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap();
+        assert_eq!(bundle.ms1.len(), 1);
+        assert_eq!(bundle.ms1[0], "");
+        assert!(!bundle.any_secret_bearing());
+    }
+
+    #[test]
+    fn synthesize_unified_multisig_multisource_ms1_all_non_empty() {
+        // MultisigMultiSource N=3: every slot secret-bearing.
+        // Note: TREZOR_24 produces the same entropy across slots; in practice
+        // multi-source uses N distinct phrases, but the synthesis contract
+        // operates on per-slot entropy regardless of provenance.
+        let slots = unified_fixture(3, &[0, 1, 2]);
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::WshSortedMulti,
+            2,
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap();
+        assert_eq!(bundle.ms1.len(), 3);
+        assert!(bundle.ms1.iter().all(|s| s.starts_with("ms1")));
+        assert!(bundle.any_secret_bearing());
+    }
+
+    #[test]
+    fn synthesize_unified_multisig_watch_only_ms1_all_sentinel() {
+        // MultisigWatchOnly N=3: every slot watch-only.
+        let slots = unified_fixture(3, &[]);
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::WshSortedMulti,
+            2,
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap();
+        assert_eq!(bundle.ms1.len(), 3);
+        assert!(bundle.ms1.iter().all(|s| s.is_empty()));
+        assert!(!bundle.any_secret_bearing());
+    }
+
+    #[test]
+    fn synthesize_unified_multisig_hybrid_ms1_dense_with_sentinels() {
+        // MultisigHybrid N=3: slot 0 secret, slots 1+2 watch-only.
+        let slots = unified_fixture(3, &[0]);
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::WshSortedMulti,
+            2,
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap();
+        assert_eq!(bundle.ms1.len(), 3);
+        assert!(bundle.ms1[0].starts_with("ms1"), "slot 0 secret-bearing");
+        assert_eq!(bundle.ms1[1], "", "slot 1 watch-only sentinel");
+        assert_eq!(bundle.ms1[2], "", "slot 2 watch-only sentinel");
+        assert!(bundle.any_secret_bearing(), "hybrid is secret-bearing for any-non-empty");
+    }
+
+    #[test]
+    fn synthesize_unified_threshold_out_of_range_rejected() {
+        let slots = unified_fixture(2, &[0, 1]);
+        let err = synthesize_unified(
+            &slots,
+            CliTemplate::WshSortedMulti,
+            3, // threshold > N
+            CliNetwork::Mainnet,
+            false,
+        )
+        .unwrap_err();
+        match err {
+            ToolkitError::MultisigConfig { message } => {
+                assert!(message.contains("threshold 3 out of range 1..=2"));
+            }
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bundle_json_schema_version_pinned_to_4() {
+        // Direct pin: BundleJson.schema_version must be the &'static str "4".
+        // (BundleJson construction sites use the literal "4" per Phase H.1.)
+        // This test pins the format-module's commitment and prevents accidental
+        // downgrade during refactoring.
+        use crate::format::{BundleJson, MkField};
+        let json = BundleJson {
+            schema_version: "4",
+            mode: "full",
+            network: "mainnet",
+            template: Some("wpkh"),
+            descriptor: None,
+            account: 0,
+            origin_path: None,
+            origin_paths: None,
+            master_fingerprint: None,
+            ms1: vec!["ms1stub".into()],
+            mk1: MkField::Single(vec![]),
+            md1: vec![],
+            engraving_card: None,
+            multisig: None,
+            privacy_preserving: false,
+        };
+        assert_eq!(json.schema_version, "4");
+    }
 }

@@ -31,6 +31,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **`v0.4-nice-to-have`**: surfaced during v0.4 review; non-blocking. Documented in v0.4's CHANGELOG if shipped.
 - **`v0.4.1`**: explicitly deferred from v0.4.0 to a v0.4.1 follow-on patch (typically scope-safety deferrals).
 - **`v0.4.2`**: explicitly deferred from v0.4.1 to a v0.4.2 follow-on patch.
+- **`v0.4.2-nice-to-have`**: surfaced during v0.4.1 review; non-blocking. Documented in v0.4.2's CHANGELOG if shipped.
 - **`v0.5`**: explicitly deferred to a v0.5 minor release (typically scope too large for a v0.4.x patch).
 - **`cross-repo`**: depends on coordination with sibling repos (`descriptor-mnemonic`, `mnemonic-key`, `mnemonic-secret`). Mirrored by a companion entry in the affected sibling's tracker; both cite each other.
 - **`v1+`**: deferred indefinitely.
@@ -329,6 +330,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** Phase A's typed approach is correct under the v0.3 binding model; the decision is a Phase B design choice (slot input parsing).
 - **Status:** `open`
 - **Tier:** `v0.4-nice-to-have`
+
+### `unified-slot-xpub-missing-path-origin-path-null` — origin_path empty-string vs null divergence
+
+- **Surfaced:** v0.4.1 Phase H r1 review L-1.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots` (xpub branch) + `emit_unified` (single-sig N=1 origin_path emission).
+- **What:** When `--slot @0.xpub=X` is supplied without `--slot @0.path=`, `emit_unified` emits `"origin_path": ""` in the JSON envelope. Legacy `emit` for the equivalent `--xpub X` (no path) invocation emits `"origin_path": null`. SPEC §4.11.b defines `""` as the absent-path sentinel for collision purposes but does not govern the JSON envelope value. Two paths diverge for semantically equivalent inputs.
+- **Why deferred:** non-blocking; tooling that reads the envelope can treat `""` and `null` as equivalent. v0.4.2 unifies emission to `null`.
+- **Status:** `open`
+- **Tier:** `v0.4.2-nice-to-have`
 
 ### `unified-slot-additional-subkey-shapes` — entropy / xprv / wif / partial-xpub-only resolution deferred from v0.4.1 to v0.4.2
 

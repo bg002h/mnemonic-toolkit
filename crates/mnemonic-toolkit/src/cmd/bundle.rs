@@ -1609,11 +1609,15 @@ fn emit_unified<W: Write, E: Write>(
                 })
                 .collect();
             let threshold = args.threshold.unwrap_or(n as u8);
+            // r1 review I-1 fix: derive path_family from --multisig-path-family
+            // (defaults to bip87 when unset). Hardcoded "bip87" was wrong for
+            // sh-wsh-* templates (which require bip48) and broke SPEC §5.6
+            // cross-schema invariant for BIP-48 recovery tooling.
             let info = MultisigInfo {
                 template: template.unwrap_or("descriptor"),
                 threshold,
                 cosigner_count: n,
-                path_family: "bip87",
+                path_family: args.multisig_path_family.unwrap_or_default().human_name(),
                 cosigners: cosigners.clone(),
             };
             let paths: Vec<String> = cosigners.iter().map(|c| c.origin_path.clone()).collect();
