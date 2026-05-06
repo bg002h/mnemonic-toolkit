@@ -22,8 +22,8 @@ fn descriptor_full_singlesig_bip84_emits_valid_bundle() {
             &descriptor,
             "--network",
             "mainnet",
-            "--phrase",
-            TREZOR_24,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
             "--json",
         ])
         .assert()
@@ -55,10 +55,10 @@ fn descriptor_watch_only_singlesig_emits_no_ms1() {
             descriptor,
             "--network",
             "mainnet",
-            "--xpub",
-            xpub,
-            "--master-fingerprint",
-            TREZOR_FP_HEX,
+            "--slot",
+            &format!("@0.xpub={xpub}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_FP_HEX}"),
             "--json",
         ])
         .assert()
@@ -84,8 +84,8 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
             &descriptor,
             "--network",
             "mainnet",
-            "--phrase",
-            TREZOR_24,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
             "--json",
         ])
         .assert()
@@ -113,8 +113,8 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
         descriptor.clone(),
         "--network".into(),
         "mainnet".into(),
-        "--phrase".into(),
-        TREZOR_24.into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
         "--ms1".into(),
         ms1.into(),
         "--json".into(),
@@ -153,8 +153,8 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
             &descriptor,
             "--network",
             "mainnet",
-            "--phrase",
-            TREZOR_24,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
             "--json",
         ])
         .assert()
@@ -177,8 +177,8 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
         descriptor,
         "--network".into(),
         "mainnet".into(),
-        "--phrase".into(),
-        TREZOR_24.into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
         "--ms1".into(),
         ms1.into(),
         "--mk1".into(),

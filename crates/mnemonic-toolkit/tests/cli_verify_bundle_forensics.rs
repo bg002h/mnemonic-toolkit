@@ -35,8 +35,8 @@ fn read_fixture() -> (String, Vec<String>, Vec<String>) {
 fn run_verify_bundle(ms1: &str, mk1: &[String], md1: &[String]) -> Value {
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--phrase".into(),
-        TREZOR_24.into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),
@@ -61,10 +61,10 @@ fn run_verify_bundle(ms1: &str, mk1: &[String], md1: &[String]) -> Value {
 fn run_verify_bundle_watch_only(xpub: &str, fp: &str, mk1: &[String], md1: &[String]) -> Value {
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--xpub".into(),
-        xpub.into(),
-        "--master-fingerprint".into(),
-        fp.into(),
+        "--slot".into(),
+        format!("@0.xpub={xpub}"),
+        "--slot".into(),
+        format!("@0.fingerprint={fp}"),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),

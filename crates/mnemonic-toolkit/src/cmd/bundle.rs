@@ -7,7 +7,7 @@ use crate::error::ToolkitError;
 use crate::format::{chunk_5char, chunk_md1, BundleJson, CosignerEntry, MkField, MultisigInfo};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::parse::{check_no_concurrent_stdin, MultisigPathFamily};
+use crate::parse::MultisigPathFamily;
 use crate::synthesize::Bundle;
 use crate::template::CliTemplate;
 use clap::Args;
@@ -15,25 +15,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-// SPEC §6.6 requires byte-exact rejection text + exit code 2 for the
-// xpub-mode-incompatible flag set. clap's `conflicts_with` would exit 64
-// with clap's default usage error and overwrite the SPEC text. So we
-// declare ONLY `--phrase` ↔ `--xpub` as mutually-exclusive at the clap
-// level (which is the intent — pick a mode); --passphrase / --language /
-// --master-fingerprint compatibility is enforced at runtime in `run()`
-// with the exact §6.6 text and exit code 2 via ToolkitError::ModeViolation.
-
 #[derive(Args, Debug)]
 pub struct BundleArgs {
-    #[arg(long, conflicts_with = "xpub")]
-    pub phrase: Option<String>,
-
-    #[arg(long, conflicts_with = "phrase")]
-    pub xpub: Option<String>,
-
-    #[arg(long = "master-fingerprint")]
-    pub master_fingerprint: Option<String>,
-
     #[arg(long)]
     pub network: CliNetwork,
 
@@ -69,14 +52,6 @@ pub struct BundleArgs {
     #[arg(long = "no-engraving-card")]
     pub no_engraving_card: bool,
 
-    /// v0.2 multisig watch-only: per-cosigner spec `<xpub>:<fp>:<path>`. Repeatable.
-    #[arg(long, action = clap::ArgAction::Append)]
-    pub cosigner: Vec<String>,
-
-    /// v0.2 multisig watch-only: bulk cosigners via JSON file.
-    #[arg(long = "cosigners-file")]
-    pub cosigners_file: Option<PathBuf>,
-
     /// v0.2 multisig path family (default: bip87).
     #[arg(long = "multisig-path-family", value_enum)]
     pub multisig_path_family: Option<MultisigPathFamily>,
@@ -93,10 +68,6 @@ pub struct BundleArgs {
     #[arg(long)]
     pub threshold: Option<u8>,
 
-    /// v0.2 multisig cosigner count N (1 ≤ K ≤ N ≤ 16).
-    #[arg(long = "cosigner-count")]
-    pub cosigner_count: Option<usize>,
-
     /// v0.4 unified slot input. Repeating flag — one occurrence per
     /// (slot, subkey) tuple. Grammar: `@N.<subkey>=<value>` where N is
     /// the slot index (u8) and subkey is one of phrase / entropy / xpub /
@@ -108,35 +79,14 @@ pub struct BundleArgs {
 
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
 pub mod mode_text {
-    pub const PASSPHRASE_WITH_XPUB: &str = "--passphrase is incompatible with --xpub: the xpub is already a post-passphrase derivation product (the passphrase is baked into the xpub at engrave time).";
-    pub const LANGUAGE_WITH_XPUB: &str =
-        "--language is meaningful only with --phrase; xpub-only mode does not consult any wordlist";
-    pub const XPUB_NEEDS_FINGERPRINT: &str = "--xpub requires --master-fingerprint (xpub mode needs the master fingerprint to populate mk1's origin)";
-    pub const FINGERPRINT_WITHOUT_XPUB: &str =
-        "--master-fingerprint is meaningful only with --xpub";
-    pub const XPUB_STDIN: &str =
-        "--xpub does not accept stdin (-); pass the xpub literally on argv";
-
-    // v0.2 NEW rows (SPEC §6.6 v0.2 NEW table). Byte-exact.
-    pub const XPUB_AND_COSIGNER: &str = "--xpub cannot be combined with --cosigner or --cosigners-file; pick single-sig (--xpub) or multisig (--cosigner/--cosigners-file) but not both.";
-    pub const COSIGNER_AND_COSIGNERS_FILE: &str = "--cosigner cannot be combined with --cosigners-file; supply cosigners via flag-repetition or file, not both.";
     pub const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
-    pub const COSIGNER_COUNT_WITHOUT_MULTISIG: &str =
-        "--cosigner-count is meaningful only with a multisig --template.";
     pub const PATH_FAMILY_WITHOUT_MULTISIG: &str =
         "--multisig-path-family is meaningful only with a multisig --template.";
-    pub const PRIVACY_WITH_XPUB: &str = "--privacy-preserving with --xpub (single-sig watch-only) has no useful effect: --xpub mode requires --master-fingerprint and the bundle's md1 binds that fingerprint into tlv.fingerprints; suppressing it from mk1 only would produce an inconsistent bundle. Drop --privacy-preserving or switch to multisig watch-only mode.";
-    // §6.6 row 7 — reserved for Phase C+ when v0.3+ templates may lack
-    // an account-position. Currently never emitted (all v0.2 templates have
-    // an account position).
-    #[allow(dead_code)]
-    pub const ACCOUNT_INCOMPATIBLE_TEMPLATE: &str = "--account is incompatible with the selected --template (template lacks an account-position in its standard path).";
 
     // v0.3 NEW rows (SPEC §6.9). Byte-exact.
     pub const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --template are mutually exclusive; pick descriptor passthrough or template, not both.";
     pub const DESCRIPTOR_AND_DESCRIPTOR_FILE: &str = "--descriptor and --descriptor-file are mutually exclusive; supply the descriptor inline or via file, not both.";
     pub const DESCRIPTOR_WITH_THRESHOLD: &str = "--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.";
-    pub const DESCRIPTOR_WITH_COSIGNER_COUNT: &str = "--cosigner-count is meaningful only with --template; descriptor mode encodes N from @i placeholder count.";
     pub const DESCRIPTOR_WITH_PATH_FAMILY: &str = "--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.";
     pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.";
 }
@@ -147,21 +97,14 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // v0.4.2 Phase M: thin wrapper. The 14 mode-violation pre-checks below
-    // pin byte-exact stderr per cli_mode_violations*.rs tests; everything
-    // else routes into bundle_run_unified after legacy-flag expansion.
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
-    let xpub_arg = args.xpub.as_deref();
-    let phrase_arg = args.phrase.as_deref();
-    let cosigner_present = !args.cosigner.is_empty();
-    let cosigners_file_present = args.cosigners_file.is_some();
     let multisig_template = args
         .template
         .as_ref()
         .map(|t| t.is_multisig())
         .unwrap_or(false);
 
-    // SPEC §6.6 v0.3 mode-violation pre-check ladder (descriptor-mode).
+    // SPEC §6.6 / §6.9 retained mode-violation pre-checks.
     if descriptor_mode && args.template.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
@@ -183,13 +126,6 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::DESCRIPTOR_WITH_THRESHOLD,
         });
     }
-    if descriptor_mode && args.cosigner_count.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "descriptor",
-            flag: "--cosigner-count",
-            message: mode_text::DESCRIPTOR_WITH_COSIGNER_COUNT,
-        });
-    }
     if descriptor_mode && args.multisig_path_family.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
@@ -204,34 +140,11 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT,
         });
     }
-
-    // SPEC §6.6 v0.2 mode-violation pre-checks (template-mode).
-    if xpub_arg.is_some() && (cosigner_present || cosigners_file_present) {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--cosigner/--cosigners-file",
-            message: mode_text::XPUB_AND_COSIGNER,
-        });
-    }
-    if cosigner_present && cosigners_file_present {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only-multisig",
-            flag: "--cosigners-file",
-            message: mode_text::COSIGNER_AND_COSIGNERS_FILE,
-        });
-    }
     if args.threshold.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
             flag: "--threshold",
             message: mode_text::THRESHOLD_WITHOUT_MULTISIG,
-        });
-    }
-    if args.cosigner_count.is_some() && !multisig_template && !descriptor_mode {
-        return Err(ToolkitError::ModeViolation {
-            mode: "single-sig",
-            flag: "--cosigner-count",
-            message: mode_text::COSIGNER_COUNT_WITHOUT_MULTISIG,
         });
     }
     if args.multisig_path_family.is_some() && !multisig_template && !descriptor_mode {
@@ -241,62 +154,7 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::PATH_FAMILY_WITHOUT_MULTISIG,
         });
     }
-    if args.privacy_preserving && xpub_arg.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--privacy-preserving",
-            message: mode_text::PRIVACY_WITH_XPUB,
-        });
-    }
 
-    // Single-sig xpub-mode pre-checks.
-    if xpub_arg.is_some() && args.passphrase.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--passphrase",
-            message: mode_text::PASSPHRASE_WITH_XPUB,
-        });
-    }
-    if xpub_arg.is_some() && args.language.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--language",
-            message: mode_text::LANGUAGE_WITH_XPUB,
-        });
-    }
-    if xpub_arg.is_some() && args.master_fingerprint.is_none() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--xpub",
-            message: mode_text::XPUB_NEEDS_FINGERPRINT,
-        });
-    }
-    if xpub_arg.is_none() && args.master_fingerprint.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "full",
-            flag: "--master-fingerprint",
-            message: mode_text::FINGERPRINT_WITHOUT_XPUB,
-        });
-    }
-    if xpub_arg == Some("-") {
-        return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
-    }
-
-    // v0.4.2 Phase M reconciliation: --master-fingerprint format pre-check
-    // (8 hex chars) — preserves legacy v0.3 byte-exact stderr from
-    // parse_master_fingerprint. Without this, an invalid fingerprint flows
-    // into bundle_args_to_slots → resolve_slots and emits a less-specific
-    // BIP-32 error if the xpub is also invalid.
-    if let Some(fp) = args.master_fingerprint.as_deref() {
-        crate::parse::parse_master_fingerprint(fp)?;
-    }
-
-    // Phrase stdin guard: --phrase "-" + --passphrase "-" both consume stdin.
-    if phrase_arg.is_some() {
-        check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
-    }
-
-    // v0.4.2 Phase M: route everything (legacy + --slot) through unified dispatch.
     bundle_run_unified(args, stdin, stdout, stderr)
 }
 // ============================================================================
@@ -310,9 +168,9 @@ use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
 use bitcoin::secp256k1::Secp256k1;
 
-/// v0.4.1 H.5 entry point — activated when `args.slot` is non-empty.
+/// v0.5.1 entry point — `--slot`-driven dispatch is the sole shape.
 /// Routes through SPEC §6.6.b validate_slot_set + §3.3 detect_bundle_mode +
-/// `synthesize_unified` (Phase H.3+H.4).
+/// `synthesize_unified`.
 fn bundle_run_unified<W: Write, E: Write>(
     args: &BundleArgs,
     _stdin: &mut dyn std::io::Read,
@@ -322,9 +180,7 @@ fn bundle_run_unified<W: Write, E: Write>(
     use crate::bundle_unified::{pre_check_template_n, pre_check_threshold};
     use crate::slot_input::validate_slot_set;
 
-    // v0.4.2 Phase M: fold ALL legacy flags (--phrase / --xpub / --master-fingerprint
-    // / --cosigner / --cosigners-file / --cosigner-count) into the unified slot vec.
-    let slots = bundle_args_to_slots(args)?;
+    let slots = args.slot.clone();
     validate_slot_set(&slots)?;
 
     let mode = detect_bundle_mode(&slots)?;
@@ -361,7 +217,14 @@ fn bundle_run_unified<W: Write, E: Write>(
         .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
 
     // Resolve slots into ResolvedSlot vec.
-    let resolved = resolve_slots(&slots, args, template)?;
+    let resolved = resolve_slots(
+        &slots,
+        template,
+        args.network,
+        args.account,
+        args.language,
+        args.passphrase.as_deref(),
+    )?;
 
     // SPEC §4.11.b BIP-388 distinct-key check on resolved slots.
     check_resolved_slots_distinctness(&resolved)?;
@@ -412,17 +275,19 @@ fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), Toolk
     Ok(())
 }
 
-/// Resolve slot inputs into ResolvedSlot vec for the v0.4.1 unified dispatch.
+/// Resolve slot inputs into ResolvedSlot vec.
 /// Supported subkey shapes:
 /// - {phrase} → BIP-39 derive entropy + seed + master_xpriv → xpub at template
 ///   path + master_fingerprint + path.
 /// - {xpub, fingerprint, path} → parse all three directly.
-/// Other shapes (entropy, xprv, wif, partial xpub-only) return BadInput with
-/// pointer to FOLLOWUP `unified-slot-additional-subkey-shapes` (v0.4.2).
-fn resolve_slots(
+/// - {entropy} / {wif} / {xprv-rejected} per slot_input.rs validity matrix.
+pub(crate) fn resolve_slots(
     slots: &[SlotInput],
-    args: &BundleArgs,
     template: CliTemplate,
+    network: CliNetwork,
+    account: u32,
+    language: Option<CliLanguage>,
+    passphrase: Option<&str>,
 ) -> Result<Vec<ResolvedSlot>, ToolkitError> {
     use std::collections::BTreeMap;
     let mut by_index: BTreeMap<u8, Vec<&SlotInput>> = BTreeMap::new();
@@ -442,18 +307,18 @@ fn resolve_slots(
                 .find(|s| s.subkey == SlotSubkey::Phrase)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let language = args.language.unwrap_or_default();
-            let passphrase = args.passphrase.clone().unwrap_or_default();
+            let language = language.unwrap_or_default();
+            let passphrase = passphrase.unwrap_or("");
             let mnemonic = Mnemonic::parse_in(language.into(), phrase)
                 .map_err(ToolkitError::Bip39)?;
             let entropy = mnemonic.to_entropy();
-            let seed = mnemonic.to_seed(&passphrase);
-            let master = Xpriv::new_master(args.network.network_kind(), &seed)
+            let seed = mnemonic.to_seed(passphrase);
+            let master = Xpriv::new_master(network.network_kind(), &seed)
                 .map_err(|e| {
                     ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
                 })?;
             let master_fp = master.fingerprint(&secp);
-            let path = template.derivation_path(args.network, args.account);
+            let path = template.derivation_path(network, account);
             let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
@@ -495,7 +360,14 @@ fn resolve_slots(
                     })?;
                     (parsed, p.value.clone())
                 }
-                None => (DerivationPath::default(), String::new()),
+                None => {
+                    // v0.5.1: Path absent → fall back to template's per-network
+                    // origin path so xpub-only watch-only slots can verify
+                    // against fixtures built at the same path.
+                    let dp = template.derivation_path(network, account);
+                    let raw = dp.to_string();
+                    (dp, raw)
+                }
             };
             out.push(ResolvedSlot {
                 xpub,
@@ -519,17 +391,17 @@ fn resolve_slots(
                     "--slot @{idx}.entropy hex-decode: {e}"
                 ))
             })?;
-            let language = args.language.unwrap_or_default();
-            let passphrase = args.passphrase.clone().unwrap_or_default();
+            let language = language.unwrap_or_default();
+            let passphrase = passphrase.unwrap_or("");
             let mnemonic = Mnemonic::from_entropy_in(language.into(), &entropy_bytes)
                 .map_err(ToolkitError::Bip39)?;
-            let seed = mnemonic.to_seed(&passphrase);
-            let master = Xpriv::new_master(args.network.network_kind(), &seed)
+            let seed = mnemonic.to_seed(passphrase);
+            let master = Xpriv::new_master(network.network_kind(), &seed)
                 .map_err(|e| {
                     ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
                 })?;
             let master_fp = master.fingerprint(&secp);
-            let path = template.derivation_path(args.network, args.account);
+            let path = template.derivation_path(network, account);
             let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
@@ -565,7 +437,7 @@ fn resolve_slots(
             // The KeyCard accepts this via the standard mk-codec encoder; the
             // resulting bundle's mk1 carries the wif's pubkey verbatim.
             let xpub = bitcoin::bip32::Xpub {
-                network: args.network.network_kind().into(),
+                network: network.network_kind().into(),
                 depth: 0,
                 parent_fingerprint: Fingerprint::default(),
                 child_number: bitcoin::bip32::ChildNumber::Normal { index: 0 },
@@ -1149,92 +1021,6 @@ fn origin_to_derivation_path(
     })
 }
 
-/// v0.4.2 Phase M: fold all legacy CLI flags (--phrase / --xpub /
-/// --master-fingerprint / --cosigner / --cosigners-file / --cosigner-count)
-/// into a unified `Vec<SlotInput>`. Cosigner offset rule per impl plan
-/// r1 review C-2: phrase present → cosigners @1+; phrase absent → cosigners @0+;
-/// phrase + xpub → error.
-fn bundle_args_to_slots(args: &BundleArgs) -> Result<Vec<SlotInput>, ToolkitError> {
-    use crate::slot_input::expand_legacy_to_slots;
-
-    if args.phrase.is_some() && args.xpub.is_some() {
-        // Belt-and-braces: clap conflicts_with handles this at CLI level, but
-        // direct API callers may bypass. Don't reach unified dispatch with
-        // both set.
-        return Err(ToolkitError::ModeViolation {
-            mode: "bundle",
-            flag: "--phrase / --xpub",
-            message: "--phrase and --xpub are mutually exclusive (clap normally rejects)",
-        });
-    }
-
-    // Pre-expand --cosigner triples + --cosigners-file into per-slot SlotInput vecs.
-    let cosigner_specs: Vec<crate::parse::CosignerSpec> = if !args.cosigner.is_empty() {
-        args.cosigner
-            .iter()
-            .enumerate()
-            .map(|(i, s)| crate::parse::parse_cosigner_spec(s, i))
-            .collect::<Result<Vec<_>, _>>()?
-    } else if let Some(p) = args.cosigners_file.as_ref() {
-        crate::parse::parse_cosigners_file(p)?
-    } else {
-        Vec::new()
-    };
-
-    // Apply offset rule.
-    let cosigner_offset: u8 = if args.phrase.is_some() { 1 } else { 0 };
-    let legacy_cosigners: Vec<(u8, Vec<SlotInput>)> = cosigner_specs
-        .into_iter()
-        .enumerate()
-        .map(|(i, c)| {
-            let idx = cosigner_offset + i as u8;
-            let mut rows = vec![SlotInput {
-                index: idx,
-                subkey: SlotSubkey::Xpub,
-                value: c.xpub.to_string(),
-            }];
-            // CosignerSpec.master_fingerprint is non-optional in v0.3 schema.
-            rows.push(SlotInput {
-                index: idx,
-                subkey: SlotSubkey::Fingerprint,
-                value: c.master_fingerprint.to_string().to_lowercase(),
-            });
-            if let Some(p) = c.path.as_ref() {
-                rows.push(SlotInput {
-                    index: idx,
-                    subkey: SlotSubkey::Path,
-                    value: p.to_string(),
-                });
-            }
-            (idx, rows)
-        })
-        .collect();
-
-    // Build the user-supplied --slot vec and append --xpub / --master-fingerprint
-    // expansions (these expand into @0 slot entries if not already present).
-    let mut existing_slots = args.slot.clone();
-    if let Some(x) = args.xpub.as_deref() {
-        existing_slots.push(SlotInput {
-            index: 0,
-            subkey: SlotSubkey::Xpub,
-            value: x.to_string(),
-        });
-        if let Some(fp) = args.master_fingerprint.as_deref() {
-            existing_slots.push(SlotInput {
-                index: 0,
-                subkey: SlotSubkey::Fingerprint,
-                value: fp.to_string(),
-            });
-        }
-    }
-
-    expand_legacy_to_slots(
-        existing_slots,
-        args.phrase.as_deref(),
-        &legacy_cosigners,
-        args.cosigner_count,
-    )
-}
 pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), ToolkitError> {
     // md1 decode.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();

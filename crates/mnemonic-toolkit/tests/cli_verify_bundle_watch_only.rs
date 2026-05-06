@@ -25,10 +25,10 @@ fn verify_bundle_watch_only_bip84_mainnet_round_trip() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--xpub".into(),
-        xpub_str,
-        "--master-fingerprint".into(),
-        "5436d724".into(),
+        "--slot".into(),
+        format!("@0.xpub={xpub_str}"),
+        "--slot".into(),
+        "@0.fingerprint=5436d724".into(),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),
@@ -80,10 +80,10 @@ fn verify_bundle_watch_only_spurious_ms1_silently_absorbed_v0_5() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--xpub".into(),
-        xpub_str,
-        "--master-fingerprint".into(),
-        "5436d724".into(),
+        "--slot".into(),
+        format!("@0.xpub={xpub_str}"),
+        "--slot".into(),
+        "@0.fingerprint=5436d724".into(),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),

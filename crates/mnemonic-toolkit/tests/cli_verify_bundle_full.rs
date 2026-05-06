@@ -28,8 +28,8 @@ fn verify_bundle_full_bip84_mainnet_round_trip() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--phrase".into(),
-        TREZOR_24.into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),

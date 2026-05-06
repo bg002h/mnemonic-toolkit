@@ -7,8 +7,6 @@ use serde_json::Value;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
-// Trezor canonical 24-word seed → BIP-84 mainnet account-0 xpub.
-const TREZOR_BIP84_XPUB: &str = "zpub6jftahH18ngZxRZS6QPhWZAjzmK3HQjJfPZG7HzgaXwj1S3MaSCZmCsX8s8Pn7Z5XZ2D8wgXjYtAS65g7HFwy3WL6vSXKM4UCEMEnzXAtQF";
 const TREZOR_FP_HEX: &str = "5436d724";
 
 #[test]
@@ -65,34 +63,6 @@ fn unified_slot_missing_template_or_descriptor_rejected() {
 // v0.4.2 K.1: {entropy} is now SUPPORTED via the test
 // `unified_slot_entropy_singlesig_full_round_trips_against_phrase` below.
 // The v0.4.1 rejection test is superseded by the round-trip-equivalence assertion.
-
-// Smoke check: --slot still triggers the unified path even with row-6 conflict
-// (--phrase + --slot @0.phrase=) — confirms expand_legacy_to_slots fires.
-#[test]
-fn unified_slot_phrase_collides_with_legacy_phrase_emits_row6() {
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args([
-            "bundle",
-            "--template",
-            "bip84",
-            "--network",
-            "mainnet",
-            "--phrase",
-            TREZOR_24,
-            "--slot",
-            &format!("@0.phrase={}", TREZOR_24),
-        ])
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("--phrase deprecated; cannot combine with --slot @0.phrase="),
-        "stderr should match SPEC §6.6 row 6; got: {stderr}"
-    );
-    let _ = TREZOR_BIP84_XPUB;
-    let _ = TREZOR_FP_HEX;
-}
 
 // ---- v0.4.2 Phase K — additional slot subkey shapes ----
 
@@ -325,7 +295,7 @@ fn unified_slot_xpub_alone_emits_partial_origin() {
 
 #[test]
 fn unified_slot_xpub_with_fingerprint_no_path() {
-    // K.4: {xpub, fingerprint} (no path). Default empty path applied.
+    // K.4: {xpub, fingerprint} (no path). v0.5.1 defaults the path from the template.
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()

@@ -19,15 +19,13 @@ fn top_level_help_lists_subcommands() {
 }
 
 #[test]
-fn bundle_help_shows_phrase_and_xpub() {
+fn bundle_help_shows_slot_and_template_flags() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["bundle", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("--phrase"))
-        .stdout(predicate::str::contains("--xpub"))
-        .stdout(predicate::str::contains("--master-fingerprint"))
+        .stdout(predicate::str::contains("--slot"))
         .stdout(predicate::str::contains("--network"))
         .stdout(predicate::str::contains("--template"))
         .stdout(predicate::str::contains("--no-engraving-card"));

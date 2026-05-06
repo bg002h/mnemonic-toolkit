@@ -3,7 +3,7 @@
 //! Locked by Phase 2 SPIKE-2 (`design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md`).
 //! Phase C consumes `parse_slot_input` as the clap value-parser and `validate_slot_set`
 //! as the post-parse / pre-binding gate.
-#![allow(dead_code)] // validate_slot_set + expand_legacy_to_slots wired in Phase D; parse_slot_input wired via bundle.rs:115.
+#![allow(dead_code)] // parse_slot_input wired as a clap value-parser via bundle.rs / verify_bundle.rs.
 
 use std::collections::BTreeMap;
 
@@ -211,85 +211,6 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
     }
 
     Ok(())
-}
-
-/// SPEC §6.6.a deprecation aliases: expand legacy v0.2 flags into virtual
-/// `SlotInput` entries. Phase C wires this into `bundle_run` post-clap.
-///
-/// Inputs:
-/// - `existing_slots` — the user-supplied `--slot` flags (already parsed).
-/// - `phrase` — `Option<&str>` (legacy `--phrase` value).
-/// - `cosigners` — `Vec<&str>` of legacy `--cosigner=...` values (bare or annotated).
-/// - `cosigner_count_supplied` — present iff `--cosigner-count` was set.
-///
-/// Conflicts (per SPEC §6.6 rows 5-7):
-/// - row 5: `--cosigner-count K` AND `K != max(slot_indices) + 1` → ToolkitError.
-/// - row 6: `--phrase X` AND any `--slot @0.phrase=` → ToolkitError.
-/// - row 7: `--cosigner @N=…` AND any `--slot @N.<subkey>=` for the same N → ToolkitError.
-///
-/// Returns the union of `existing_slots` + virtual expansions of legacy flags.
-/// The annotated `--cosigner @N=[fp/path]xpub` form is parsed elsewhere
-/// (`parse::parse_cosigner_spec`) and converted by the caller into 1-3 SlotInput
-/// rows (xpub + optional fingerprint + optional path).
-pub fn expand_legacy_to_slots(
-    existing_slots: Vec<SlotInput>,
-    phrase: Option<&str>,
-    legacy_cosigner_at_indexed: &[(u8, Vec<SlotInput>)],
-    cosigner_count_supplied: Option<usize>,
-) -> Result<Vec<SlotInput>, ToolkitError> {
-    // SPEC §6.6 row 6: legacy --phrase vs new --slot @0.phrase= conflict.
-    if phrase.is_some()
-        && existing_slots
-            .iter()
-            .any(|s| s.index == 0 && s.subkey == SlotSubkey::Phrase)
-    {
-        return Err(ToolkitError::SlotInputViolation {
-            kind: "conflict",
-            message: "--phrase deprecated; cannot combine with --slot @0.phrase=".to_string(),
-        });
-    }
-
-    // SPEC §6.6 row 7: legacy --cosigner @N=… vs new --slot @N.<subkey>= conflict.
-    for (n, _) in legacy_cosigner_at_indexed {
-        if existing_slots.iter().any(|s| s.index == *n) {
-            return Err(ToolkitError::SlotInputViolation {
-                kind: "conflict",
-                message: "--cosigner annotation conflicts with --slot @N.<subkey>=".to_string(),
-            });
-        }
-    }
-
-    let mut out = existing_slots;
-
-    // Virtual expansion: --phrase X → --slot @0.phrase=X (if not already present).
-    if let Some(p) = phrase {
-        out.push(SlotInput {
-            index: 0,
-            subkey: SlotSubkey::Phrase,
-            value: p.to_string(),
-        });
-    }
-
-    // Legacy --cosigner annotated rows already pre-expanded by the caller.
-    for (_, rows) in legacy_cosigner_at_indexed {
-        out.extend(rows.iter().cloned());
-    }
-
-    // SPEC §6.6 row 5: --cosigner-count K consistency check.
-    if let Some(k) = cosigner_count_supplied {
-        let max_idx = out.iter().map(|s| s.index as usize).max();
-        let derived_n = max_idx.map(|m| m + 1).unwrap_or(0);
-        if k != derived_n {
-            return Err(ToolkitError::SlotInputViolation {
-                kind: "conflict",
-                message: format!(
-                    "--cosigner-count deprecated and inconsistent with slot indices (declared N={k}, derived N={derived_n})"
-                ),
-            });
-        }
-    }
-
-    Ok(out)
 }
 
 /// Caller pre-sorts; SlotSubkey's derived Ord is Phrase < Entropy < Xpub <
@@ -526,80 +447,6 @@ mod tests {
                 assert!(message.contains(
                     "slot indices must be contiguous starting at @0; missing @1"
                 ));
-            }
-            other => panic!("unexpected variant {other:?}"),
-        }
-    }
-
-    // ---- expand_legacy_to_slots ----
-
-    #[test]
-    fn expand_phrase_alone_appends_at_slot_0() {
-        let out = expand_legacy_to_slots(vec![], Some("p"), &[], None).unwrap();
-        assert_eq!(out, vec![slot(0, SlotSubkey::Phrase, "p")]);
-    }
-
-    #[test]
-    fn expand_phrase_conflicts_with_slot_0_phrase() {
-        let e = expand_legacy_to_slots(
-            vec![slot(0, SlotSubkey::Phrase, "x")],
-            Some("p"),
-            &[],
-            None,
-        )
-        .unwrap_err();
-        match e {
-            ToolkitError::SlotInputViolation { message, .. } => {
-                assert!(message.contains("--phrase deprecated; cannot combine with --slot @0.phrase="));
-            }
-            other => panic!("unexpected variant {other:?}"),
-        }
-    }
-
-    #[test]
-    fn expand_legacy_cosigner_at_n_conflicts_with_existing_slot_n() {
-        let legacy: Vec<(u8, Vec<SlotInput>)> =
-            vec![(1, vec![slot(1, SlotSubkey::Xpub, "xpub-stub")])];
-        let e =
-            expand_legacy_to_slots(vec![slot(1, SlotSubkey::Xpub, "x")], None, &legacy, None)
-                .unwrap_err();
-        match e {
-            ToolkitError::SlotInputViolation { message, .. } => {
-                assert!(message
-                    .contains("--cosigner annotation conflicts with --slot @N.<subkey>="));
-            }
-            other => panic!("unexpected variant {other:?}"),
-        }
-    }
-
-    #[test]
-    fn expand_cosigner_count_consistent_passes() {
-        // K=2, slots @0 + @1 → derived N=2 → consistent.
-        let out = expand_legacy_to_slots(
-            vec![slot(0, SlotSubkey::Phrase, "p"), slot(1, SlotSubkey::Xpub, "x")],
-            None,
-            &[],
-            Some(2),
-        )
-        .unwrap();
-        assert_eq!(out.len(), 2);
-    }
-
-    #[test]
-    fn expand_cosigner_count_inconsistent_rejected() {
-        // K=3, slots @0..@1 → derived N=2 → conflict.
-        let e = expand_legacy_to_slots(
-            vec![slot(0, SlotSubkey::Phrase, "p"), slot(1, SlotSubkey::Xpub, "x")],
-            None,
-            &[],
-            Some(3),
-        )
-        .unwrap_err();
-        match e {
-            ToolkitError::SlotInputViolation { message, .. } => {
-                assert!(message.contains("--cosigner-count deprecated and inconsistent"));
-                assert!(message.contains("declared N=3"));
-                assert!(message.contains("derived N=2"));
             }
             other => panic!("unexpected variant {other:?}"),
         }

@@ -16,8 +16,8 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
         .unwrap()
         .args([
             "bundle",
-            "--phrase",
-            TREZOR_24,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
             "--template",

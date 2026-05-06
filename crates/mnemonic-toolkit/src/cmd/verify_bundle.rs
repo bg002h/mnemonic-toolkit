@@ -7,37 +7,20 @@
 //! routing rule (only pre-decode failures escape to the §5.5 error
 //! envelope).
 
-use crate::error::{BitcoinErrorKind, ToolkitError};
+use crate::error::ToolkitError;
 use crate::format::{chunk_set_id_extract, VerifyBundleJson, VerifyCheck};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::parse::{
-    check_no_concurrent_stdin, parse_cosigner_spec, parse_cosigners_file, parse_master_fingerprint,
-    read_phrase_input, CosignerSpec, MultisigPathFamily,
-};
+use crate::parse::MultisigPathFamily;
+use crate::slot_input::SlotInput;
 use crate::template::CliTemplate;
-use bitcoin::bip32::Xpub;
 use clap::Args;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-// SPEC §6.6 mode-violation symmetry mirrored from bundle.rs:
-// clap-level mutual exclusion is ONLY --phrase ↔ --xpub; all other
-// xpub-mode-incompatible flag rejections are runtime checks emitting
-// byte-exact §6.6 strings via ToolkitError::ModeViolation (exit 2).
-
 #[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
-    #[arg(long, conflicts_with = "xpub")]
-    pub phrase: Option<String>,
-
-    #[arg(long, conflicts_with = "phrase")]
-    pub xpub: Option<String>,
-
-    #[arg(long = "master-fingerprint")]
-    pub master_fingerprint: Option<String>,
-
     #[arg(long)]
     pub network: CliNetwork,
 
@@ -79,23 +62,13 @@ pub struct VerifyBundleArgs {
 
     /// v0.4.3 Phase Q: read supplied ms1/mk1/md1 cards from a JSON envelope
     /// file (the output of `bundle --json`). Mutually exclusive with the
-    /// explicit --ms1/--mk1/--md1 triplet. Re-derivation flags
-    /// (--slot/--phrase/--xpub/etc.) are STILL required to compute the
-    /// expected bundle. Schema-4 only in v0.4.3; schema-2/3 retro-compat
-    /// tracked at FOLLOWUP `bundle-json-schema-2-3-retro-compat` (v0.4.4+).
+    /// explicit --ms1/--mk1/--md1 triplet. Re-derivation flags (`--slot`)
+    /// are STILL required to compute the expected bundle.
     #[arg(long = "bundle-json", conflicts_with_all = ["ms1", "mk1", "md1"])]
     pub bundle_json: Option<PathBuf>,
 
     #[arg(long)]
     pub json: bool,
-
-    /// v0.2 multisig watch-only: per-cosigner spec `<xpub>:<fp>:<path>`. Repeatable.
-    #[arg(long, action = clap::ArgAction::Append)]
-    pub cosigner: Vec<String>,
-
-    /// v0.2 multisig watch-only: bulk cosigners via JSON file.
-    #[arg(long = "cosigners-file")]
-    pub cosigners_file: Option<PathBuf>,
 
     /// v0.2 multisig path family (default: bip87).
     #[arg(long = "multisig-path-family", value_enum)]
@@ -109,9 +82,10 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub threshold: Option<u8>,
 
-    /// v0.2 multisig cosigner count N.
-    #[arg(long = "cosigner-count")]
-    pub cosigner_count: Option<usize>,
+    /// v0.4 unified slot input. Repeating flag — see `BundleArgs::slot`
+    /// for grammar.
+    #[arg(long = "slot", action = clap::ArgAction::Append, value_parser = crate::slot_input::parse_slot_input)]
+    pub slot: Vec<SlotInput>,
 }
 
 impl VerifyBundleArgs {
@@ -153,39 +127,13 @@ pub fn run<W: Write, E: Write>(
         return descriptor_mode_verify_run(args, stdin, stdout);
     }
 
-    let xpub_arg = args.xpub.as_deref();
-    let phrase_arg = args.phrase.as_deref();
     let multisig = args.template_unchecked().is_multisig();
-    let cosigner_present = !args.cosigner.is_empty();
-    let cosigners_file_present = args.cosigners_file.is_some();
 
-    // SPEC §6.6 v0.2 NEW mode-violation pre-checks (mirror bundle.rs).
-    if xpub_arg.is_some() && (cosigner_present || cosigners_file_present) {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--cosigner/--cosigners-file",
-            message: mode_text::XPUB_AND_COSIGNER,
-        });
-    }
-    if cosigner_present && cosigners_file_present {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only-multisig",
-            flag: "--cosigners-file",
-            message: mode_text::COSIGNER_AND_COSIGNERS_FILE,
-        });
-    }
     if args.threshold.is_some() && !multisig {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
             flag: "--threshold",
             message: mode_text::THRESHOLD_WITHOUT_MULTISIG,
-        });
-    }
-    if args.cosigner_count.is_some() && !multisig {
-        return Err(ToolkitError::ModeViolation {
-            mode: "single-sig",
-            flag: "--cosigner-count",
-            message: mode_text::COSIGNER_COUNT_WITHOUT_MULTISIG,
         });
     }
     if args.multisig_path_family.is_some() && !multisig {
@@ -195,87 +143,35 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::PATH_FAMILY_WITHOUT_MULTISIG,
         });
     }
-    if args.privacy_preserving && xpub_arg.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--privacy-preserving",
-            message: mode_text::PRIVACY_WITH_XPUB,
-        });
-    }
 
-    // SPEC §6.6 single-sig mode-violation pre-checks (mirror bundle.rs).
-    if xpub_arg.is_some() && args.passphrase.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--passphrase",
-            message: mode_text::PASSPHRASE_WITH_XPUB,
-        });
-    }
-    if xpub_arg.is_some() && args.language.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--language",
-            message: mode_text::LANGUAGE_WITH_XPUB,
-        });
-    }
-    if xpub_arg.is_some() && args.master_fingerprint.is_none() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "watch-only",
-            flag: "--xpub",
-            message: mode_text::XPUB_NEEDS_FINGERPRINT,
-        });
-    }
-    if xpub_arg.is_none() && args.master_fingerprint.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "full",
-            flag: "--master-fingerprint",
-            message: mode_text::FINGERPRINT_WITHOUT_XPUB,
-        });
-    }
-    if xpub_arg == Some("-") {
-        return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
-    }
-
-    // v0.2 multisig verify dispatch.
-    if multisig {
-        let mut checks: Vec<VerifyCheck> = Vec::new();
-        run_multisig(args, &mut checks, stderr)?;
-        let any_fail = checks.iter().any(|c| !c.passed);
-        let result = if any_fail { "mismatch" } else { "ok" };
-        if args.json {
-            let json = VerifyBundleJson {
-                schema_version: "4",
-                result,
-                checks,
-            };
-            serde_json::to_writer(&mut *stdout, &json).ok();
-            writeln!(stdout).ok();
-        } else {
-            for c in &checks {
-                let status = if c.passed { "ok" } else { "fail" };
-                if c.detail.is_empty() {
-                    writeln!(stdout, "{}: {}", c.name, status).ok();
-                } else {
-                    writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
-                }
-            }
-            writeln!(stdout, "result: {}", result).ok();
-        }
-        return Ok(if any_fail { 4 } else { 0 });
+    crate::slot_input::validate_slot_set(&args.slot)?;
+    let n = args
+        .slot
+        .iter()
+        .map(|s| s.index as usize)
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+    let template_str = args.template.map(|t| t.human_name());
+    let multisig_template_name = template_str.filter(|_| multisig);
+    crate::bundle_unified::pre_check_threshold(args.threshold, n, multisig_template_name)?;
+    if let Some(t) = args.template {
+        crate::bundle_unified::pre_check_template_n(t.human_name(), t.is_multisig(), n)?;
     }
 
     let mut checks: Vec<VerifyCheck> = Vec::new();
-
-    if xpub_arg.is_some() {
-        // Watch-only mode (SPEC §2.2.2): emits the §5.4 9-element array
-        // with entropy + path-rederivation marked `skipped`.
-        run_watch_only(args, &mut checks, stderr)?;
-    } else if phrase_arg.is_some() {
-        // Full mode (SPEC §2.2.1): emits the §5.4 9-element array.
-        check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
-        run_full(args, stdin, &mut checks)?;
+    if multisig {
+        run_multisig(args, &mut checks, stderr)?;
     } else {
-        return Err(ToolkitError::BadInput("expected --phrase or --xpub".into()));
+        let secret_bearing_at_0 = args
+            .slot
+            .iter()
+            .any(|s| s.index == 0 && s.subkey.is_secret_bearing());
+        if secret_bearing_at_0 {
+            run_full(args, &mut checks)?;
+        } else {
+            run_watch_only(args, &mut checks, stderr)?;
+        }
     }
 
     let any_fail = checks.iter().any(|c| !c.passed);
@@ -291,7 +187,12 @@ pub fn run<W: Write, E: Write>(
         writeln!(stdout).ok();
     } else {
         for c in &checks {
-            writeln!(stdout, "{}: {} {}", c.name, (if c.passed { "ok" } else { "fail" }), c.detail).ok();
+            let status = if c.passed { "ok" } else { "fail" };
+            if c.detail.is_empty() {
+                writeln!(stdout, "{}: {}", c.name, status).ok();
+            } else {
+                writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
+            }
         }
         writeln!(stdout, "result: {}", result).ok();
     }
@@ -301,37 +202,31 @@ pub fn run<W: Write, E: Write>(
 
 fn run_full(
     args: &VerifyBundleArgs,
-    stdin: &mut dyn std::io::Read,
     checks: &mut Vec<VerifyCheck>,
 ) -> Result<(), ToolkitError> {
-    let phrase = read_phrase_input(args.phrase.as_deref(), stdin)?;
-    let passphrase = args.passphrase.clone().unwrap_or_default();
-    let language = args.language.unwrap_or_default();
-
-    let acc = crate::derive::derive_full(
-        &phrase,
-        &passphrase,
-        language,
-        args.network,
-        args.template_unchecked(),
-        args.account,
-    )?;
-
-    let expected = crate::synthesize::synthesize_full(
-        &acc.entropy,
-        acc.master_fingerprint,
-        acc.account_xpub,
-        args.template_unchecked(),
+    let template = args.template_unchecked();
+    let resolved = crate::cmd::bundle::resolve_slots(
+        &args.slot,
+        template,
         args.network,
         args.account,
+        args.language,
+        args.passphrase.as_deref(),
     )?;
-
+    let n = resolved.len() as u8;
+    let threshold = args.threshold.unwrap_or(n);
+    let expected = crate::synthesize::synthesize_unified(
+        &resolved,
+        template,
+        threshold,
+        args.network,
+        args.privacy_preserving,
+    )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
         mk1: &args.mk1,
         md1: &args.md1,
     };
-
     checks.extend(emit_verify_checks(&expected, &supplied, false));
     Ok(())
 }
@@ -342,10 +237,11 @@ fn run_watch_only<E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // SPEC §2.2.2 watch-only-cannot-verify-path warning. Emitted before any
-    // parse error so the user always sees it, even if --xpub fails to parse.
+    // parse error so the user always sees it, even if the supplied xpub is
+    // malformed.
     writeln!(
         stderr,
-        "warning: watch-only verify-bundle does not verify --xpub is actually at the"
+        "warning: watch-only verify-bundle does not verify --slot @0.xpub= is actually at the"
     )
     .ok();
     writeln!(
@@ -355,46 +251,33 @@ fn run_watch_only<E: Write>(
     .ok();
     writeln!(
         stderr,
-        "warning: for re-derivation). Use --phrase mode for end-to-end verification."
+        "warning: for re-derivation). Use --slot @0.phrase= mode for end-to-end verification."
     )
     .ok();
 
-    let xpub_str = args.xpub.as_deref().expect("xpub set in watch-only mode");
-    let fp_str = args
-        .master_fingerprint
-        .as_deref()
-        .ok_or_else(|| ToolkitError::BadInput("--xpub requires --master-fingerprint".into()))?;
-    let supplied_xpub = Xpub::from_str(xpub_str)
-        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::XpubParse(format!("{}", e))))?;
-    let supplied_fp = parse_master_fingerprint(fp_str)?;
-
-    if supplied_xpub.network != args.network.network_kind() {
-        return Err(ToolkitError::NetworkMismatch {
-            xpub_network: if supplied_xpub.network == bitcoin::NetworkKind::Main {
-                "mainnet"
-            } else {
-                "testnet/signet/regtest"
-            },
-            expected: args.network.human_name(),
-        });
-    }
-
-    // Synthesize the watch-only Bundle from supplied xpub+fp; expected.ms1 = [""]
-    // (empty-string sentinel) drives the helper's watch-only short-circuit.
-    let expected = crate::synthesize::synthesize_watch_only(
-        supplied_fp,
-        supplied_xpub,
-        args.template_unchecked(),
+    let template = args.template_unchecked();
+    let resolved = crate::cmd::bundle::resolve_slots(
+        &args.slot,
+        template,
         args.network,
         args.account,
+        args.language,
+        args.passphrase.as_deref(),
     )?;
-
+    let n = resolved.len() as u8;
+    let threshold = args.threshold.unwrap_or(n);
+    let expected = crate::synthesize::synthesize_unified(
+        &resolved,
+        template,
+        threshold,
+        args.network,
+        args.privacy_preserving,
+    )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
         mk1: &args.mk1,
         md1: &args.md1,
     };
-
     checks.extend(emit_verify_checks(&expected, &supplied, false));
     Ok(())
 }
@@ -418,18 +301,21 @@ fn run_multisig<E: Write>(
     checks: &mut Vec<VerifyCheck>,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    use crate::synthesize::{synthesize_multisig_full, synthesize_multisig_watch_only};
-
-    let phrase_arg = args.phrase.as_deref();
-    let cosigner_present = !args.cosigner.is_empty();
-    let cosigners_file_present = args.cosigners_file.is_some();
-    let watch_only_multi = cosigner_present || cosigners_file_present;
+    let any_secret = args
+        .slot
+        .iter()
+        .any(|s| s.subkey.is_secret_bearing());
+    let any_watch_only = args
+        .slot
+        .iter()
+        .any(|s| s.subkey.is_watch_only());
+    let watch_only_multi = !any_secret && any_watch_only;
 
     if watch_only_multi {
         // SPEC §2.2.2 multisig watch-only stderr warning.
         writeln!(
             stderr,
-            "warning: watch-only multisig verify-bundle does not verify --cosigner xpubs are at the"
+            "warning: watch-only multisig verify-bundle does not verify --slot xpubs are at the"
         )
         .ok();
         writeln!(
@@ -439,61 +325,30 @@ fn run_multisig<E: Write>(
         .ok();
         writeln!(
             stderr,
-            "warning: Use --phrase mode for end-to-end verification of self-multisig backups."
+            "warning: Use --slot @N.phrase= mode for end-to-end verification of self-multisig backups."
         )
         .ok();
     }
 
     let template = args.template_unchecked();
-    let path_family = args.multisig_path_family.unwrap_or_default();
+    let resolved = crate::cmd::bundle::resolve_slots(
+        &args.slot,
+        template,
+        args.network,
+        args.account,
+        args.language,
+        args.passphrase.as_deref(),
+    )?;
+    let n = resolved.len() as u8;
     let threshold = args.threshold.unwrap_or(1);
-
-    let expected = if watch_only_multi {
-        let specs: Vec<CosignerSpec> = if let Some(file) = &args.cosigners_file {
-            parse_cosigners_file(file)?
-        } else {
-            let mut out = Vec::with_capacity(args.cosigner.len());
-            for (i, s) in args.cosigner.iter().enumerate() {
-                out.push(parse_cosigner_spec(s, i)?);
-            }
-            out
-        };
-        synthesize_multisig_watch_only(
-            &specs,
-            args.network,
-            template,
-            threshold,
-            args.account,
-            path_family,
-            args.privacy_preserving,
-        )?
-    } else if let Some(p) = phrase_arg {
-        check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
-        let cosigner_count = args
-            .cosigner_count
-            .ok_or_else(|| ToolkitError::MultisigConfig {
-                message: "--cosigner-count required for full-mode multisig verify".into(),
-            })?;
-        let language = args.language.unwrap_or_default();
-        let passphrase = args.passphrase.clone().unwrap_or_default();
-        let mnemonic = bip39::Mnemonic::parse_in(language.into(), p)
-            .map_err(ToolkitError::Bip39)?;
-        synthesize_multisig_full(
-            &mnemonic,
-            &passphrase,
-            args.network,
-            template,
-            threshold,
-            cosigner_count as usize,
-            args.account,
-            path_family,
-            args.privacy_preserving,
-        )?
-    } else {
-        return Err(ToolkitError::BadInput(
-            "multisig verify-bundle requires --phrase (full) or --cosigner/--cosigners-file (watch-only)".into(),
-        ));
-    };
+    let expected = crate::synthesize::synthesize_unified(
+        &resolved,
+        template,
+        threshold,
+        args.network,
+        args.privacy_preserving,
+    )?;
+    let _ = n;
 
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -511,14 +366,14 @@ fn run_multisig<E: Write>(
 /// the check schema is structurally unchanged; only the source of truth differs).
 fn descriptor_mode_verify_run<W: Write>(
     args: &VerifyBundleArgs,
-    stdin: &mut dyn std::io::Read,
+    _stdin: &mut dyn std::io::Read,
     stdout: &mut W,
 ) -> Result<u8, ToolkitError> {
     use crate::parse_descriptor::{
-        bind_descriptor_keys, check_key_vector_distinctness, lex_placeholders, parse_descriptor,
-        resolve_placeholders,
+        check_key_vector_distinctness, lex_placeholders, parse_descriptor, resolve_placeholders,
+        DescriptorBinding, ParsedFingerprint, ParsedKey,
     };
-    use crate::synthesize::synthesize_descriptor;
+    use crate::synthesize::{synthesize_descriptor, xpub_to_65, CosignerKeyInfo};
 
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
@@ -535,41 +390,64 @@ fn descriptor_mode_verify_run<W: Write>(
         lex_placeholders(&descriptor_str).map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
-    let resolved =
+    let descriptor_resolved =
         resolve_placeholders(&occs).map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
+    let n = descriptor_resolved.n as usize;
 
-    let phrase_owned: Option<String> = if args.phrase.is_some() {
-        Some(read_phrase_input(args.phrase.as_deref(), stdin)?)
-    } else {
-        None
-    };
-    let passphrase = args.passphrase.clone().unwrap_or_default();
-    let language = args.language.unwrap_or_default();
-
-    let cosigner_specs: Vec<CosignerSpec> = if !args.cosigner.is_empty() {
-        args.cosigner
-            .iter()
-            .enumerate()
-            .map(|(i, s)| parse_cosigner_spec(s, i))
-            .collect::<Result<Vec<_>, _>>()?
-    } else if let Some(p) = args.cosigners_file.as_ref() {
-        parse_cosigners_file(p)?
-    } else {
-        Vec::new()
-    };
-
-    let binding = bind_descriptor_keys(
-        &resolved,
+    crate::slot_input::validate_slot_set(&args.slot)?;
+    let template = args
+        .template
+        .unwrap_or(crate::template::CliTemplate::Bip84);
+    let resolved_slots = crate::cmd::bundle::resolve_slots(
+        &args.slot,
+        template,
         args.network,
-        phrase_owned.as_deref(),
-        &passphrase,
-        language,
-        args.xpub.as_deref(),
-        args.master_fingerprint.as_deref(),
-        &cosigner_specs,
+        args.account,
+        args.language,
+        args.passphrase.as_deref(),
     )?;
+
+    if resolved_slots.len() != n {
+        return Err(ToolkitError::DescriptorReparseFailed {
+            detail: format!(
+                "descriptor has n={n} placeholders but --slot vec covers {} slots",
+                resolved_slots.len()
+            ),
+        });
+    }
+
+    let mut keys: Vec<ParsedKey> = Vec::with_capacity(n);
+    let mut fingerprints: Vec<ParsedFingerprint> = Vec::with_capacity(n);
+    let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
+    let mut entropy_at_0: Option<Vec<u8>> = None;
+    for (i, slot) in resolved_slots.iter().enumerate() {
+        keys.push(ParsedKey {
+            i: i as u8,
+            payload: xpub_to_65(&slot.xpub),
+        });
+        fingerprints.push(ParsedFingerprint {
+            i: i as u8,
+            fp: slot.fingerprint.to_bytes(),
+        });
+        cosigners.push(CosignerKeyInfo {
+            xpub: slot.xpub,
+            fingerprint: slot.fingerprint,
+            path: slot.path.clone(),
+            path_raw: slot.path_raw.clone(),
+            entropy: slot.entropy.clone(),
+        });
+        if i == 0 {
+            entropy_at_0 = slot.entropy.clone();
+        }
+    }
+
+    let binding = DescriptorBinding {
+        keys: keys.clone(),
+        fingerprints: fingerprints.clone(),
+        cosigners: cosigners.clone(),
+    };
 
     // SPEC §4.11.c symmetric verify-bundle enforcement: re-wrap to the verify-bundle
     // exit-4 variant so v0.2 self-multisig artifacts fail with the §4.11.c stderr.
@@ -577,14 +455,14 @@ fn descriptor_mode_verify_run<W: Write>(
         return Err(ToolkitError::Bip388VerifyDistinctness);
     }
 
-    let descriptor = parse_descriptor(&descriptor_str, &binding.keys, &binding.fingerprints)
+    let descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)
         .map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
     let expected = synthesize_descriptor(
         &descriptor,
-        &binding.cosigners,
-        binding.entropy_at_0(),
+        &cosigners,
+        entropy_at_0.as_deref(),
         args.privacy_preserving,
     )?;
 
@@ -619,56 +497,6 @@ fn descriptor_mode_verify_run<W: Write>(
         writeln!(stdout, "result: {}", result_str).ok();
     }
     Ok(if any_fail { 4 } else { 0 })
-}
-
-#[cfg(test)]
-mod watch_only_tests {
-    use super::*;
-    #[test]
-    fn watch_only_emits_spec_2_2_2_warning_to_stderr() {
-        let mut stdin = std::io::empty();
-        let mut stdout: Vec<u8> = Vec::new();
-        let mut stderr: Vec<u8> = Vec::new();
-        let args = VerifyBundleArgs {
-            phrase: None,
-            xpub: Some("xpub6BadInvalidShortString".into()),
-            master_fingerprint: Some("deadbeef".into()),
-            network: CliNetwork::Mainnet,
-            template: Some(CliTemplate::Bip84),
-            descriptor: None,
-            descriptor_file: None,
-            language: None,
-            passphrase: None,
-            account: 0,
-            ms1: Vec::new(),
-            mk1: vec!["mk1placeholder".into()],
-            md1: vec!["md1placeholder".into()],
-            bundle_json: None,
-            json: false,
-            cosigner: Vec::new(),
-            cosigners_file: None,
-            multisig_path_family: None,
-            privacy_preserving: false,
-            threshold: None,
-            cosigner_count: None,
-        };
-        // run() will fail at xpub parse, but the §2.2.2 warning should
-        // already be on stderr.
-        let _ = run(&args, &mut stdin, &mut stdout, &mut stderr);
-        let stderr_text = String::from_utf8(stderr).unwrap();
-        assert!(
-            stderr_text.contains("watch-only verify-bundle does not verify"),
-            "missing line 1 of §2.2.2 warning; got: {stderr_text:?}"
-        );
-        assert!(
-            stderr_text.contains("BIP path m/<purpose>'/<coin>'/0'"),
-            "missing line 2 of §2.2.2 warning; got: {stderr_text:?}"
-        );
-        assert!(
-            stderr_text.contains("Use --phrase mode for end-to-end verification."),
-            "missing line 3 of §2.2.2 warning; got: {stderr_text:?}"
-        );
-    }
 }
 
 /// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize

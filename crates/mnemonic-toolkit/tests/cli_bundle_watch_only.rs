@@ -1,8 +1,8 @@
 //! Watch-only bundle integration test.
 //!
 //! Decodes the bip84/mainnet fixture's mk1 to recover the xpub, then runs
-//! `bundle --xpub --master-fingerprint` and confirms the ms1 section is the
-//! pinned omitted-marker.
+//! `bundle --slot @0.xpub= --slot @0.fingerprint=` and confirms the ms1
+//! section is the pinned omitted-marker.
 
 use assert_cmd::Command;
 
@@ -24,10 +24,10 @@ fn watch_only_bip84_mainnet_omits_ms1_section() {
         .unwrap()
         .args([
             "bundle",
-            "--xpub",
-            &xpub_str,
-            "--master-fingerprint",
-            "5436d724",
+            "--slot",
+            &format!("@0.xpub={xpub_str}"),
+            "--slot",
+            "@0.fingerprint=5436d724",
             "--network",
             "mainnet",
             "--template",

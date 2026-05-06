@@ -11,8 +11,8 @@ fn bundle_json_schema_field_order() {
         .unwrap()
         .args([
             "bundle",
-            "--phrase",
-            TREZOR_24,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
             "--template",
@@ -59,8 +59,8 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--phrase".into(),
-        TREZOR_24.into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
         "--template".into(),

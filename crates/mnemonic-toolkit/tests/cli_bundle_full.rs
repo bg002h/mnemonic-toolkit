@@ -20,8 +20,8 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
                 .unwrap()
                 .args([
                     "bundle",
-                    "--phrase",
-                    TREZOR_24,
+                    "--slot",
+                    &format!("@0.phrase={TREZOR_24}"),
                     "--network",
                     n,
                     "--template",
