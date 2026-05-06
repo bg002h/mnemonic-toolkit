@@ -606,25 +606,25 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.6.1`
 
-### `convert-slip0132-prefix-support` — accept zpub/ypub on input + optional emit modes
+### `convert-slip0132-prefix-support` — accept zpub/ypub on input + emit modes (consolidated v0.6.1)
 
 - **Surfaced:** v0.6.0 post-release UX audit 2026-05-06 (user prompt about SLIP-0132 prefix interpretation).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` (input normalization + new edge); possibly cross-cutting into `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots` Xpub branch (if input normalization is repo-wide rather than convert-only).
-- **What:** SLIP-0132 (`ypub`/`Ypub`/`zpub`/`Zpub` mainnet, plus `tpub`/`upub`/`vpub`/`Upub`/`Vpub` testnet) extended-key prefixes encode the intended script type (BIP-49 single/multi, BIP-84 single/multi) in the version bytes. Bitcoin Core + rust-miniscript + BIP-388 wallet policies reject non-`xpub` prefixes; the canonical modern path is descriptor-native xpub + descriptor wrapper. v0.6.0 currently fails at `Xpub::from_str` for a SLIP-0132 prefix. Two phases of support to consider:
+- **What:** SLIP-0132 (`ypub`/`Ypub`/`zpub`/`Zpub` mainnet, plus `tpub`/`upub`/`vpub`/`Upub`/`Vpub` testnet) extended-key prefixes encode the intended script type (BIP-49 single/multi, BIP-84 single/multi) in the version bytes. Bitcoin Core + rust-miniscript + BIP-388 wallet policies reject non-`xpub` prefixes; the canonical modern path is descriptor-native xpub + descriptor wrapper. v0.6.0 currently fails at `Xpub::from_str` for a SLIP-0132 prefix. Both directions ship together in v0.6.1:
 
-  **Phase 1 — Permissive input (v0.6.1, small):** add a SLIP-0132 → xpub normalizer (`src/slip0132.rs` helper or inline). On input, detect non-`xpub` prefix; recompute version bytes to the matching `xpub`/`tpub` neutral prefix and re-base58check. The 78 payload bytes are byte-identical across SLIP-0132 variants, so no ECC work — pure prefix swap. Applies to:
+  **Permissive input (mechanical):** add a SLIP-0132 → xpub normalizer (`src/slip0132.rs` helper or inline). On input, detect non-`xpub` prefix; recompute version bytes to the matching `xpub`/`tpub` neutral prefix and re-base58check. The 78 payload bytes are byte-identical across SLIP-0132 variants, so no ECC work — pure prefix swap. Applies to:
     - `convert --from xpub=<zpub-string>`
     - `convert --from xpub=<ypub-string>` (etc.)
-    - Possibly cross-cutting: `bundle --slot @0.xpub=<zpub>` and `verify-bundle --slot @0.xpub=<zpub>` should normalize identically for input symmetry across the toolkit.
+    - Cross-cutting: `bundle --slot @0.xpub=<zpub>` and `verify-bundle --slot @0.xpub=<zpub>` normalize identically for input symmetry across the toolkit.
 
-  **Phase 2 — Expressive output (v0.6.2+, design call):** add output-side SLIP-0132 emission. Two grammar shapes to choose between:
+  **Expressive output (design fork — resolve early in the cycle):** add output-side SLIP-0132 emission. Two grammar shapes to choose between via a SPEC amendment + one architect review round at the start of the v0.6.1 cycle:
     - (a) New target nodes `ypub`/`zpub`/`Ypub`/`Zpub` plus testnet `upub`/`vpub`/`Upub`/`Vpub`. Adds 8 nodes to NodeType. Edges: `xpub → ypub` etc. (pure prefix swap; no derivation).
     - (b) Existing `--to xpub` plus a `--xpub-prefix <neutral|y|z|Y|Z>` modifier flag. Single new flag; no new nodes.
-   Option (b) is grammar-lighter and preserves the convention that SLIP-0132 variants are *encodings of the same xpub*, not different artifact classes.
+   Option (b) is grammar-lighter and preserves the convention that SLIP-0132 variants are *encodings of the same xpub*, not different artifact classes. Lock the choice before implementation begins.
 
-- **Why deferred:** v0.6.0 prioritized the headline single-format conversion graph; SLIP-0132 is a UX-convenience layer over BIP-32 + BIP-388 descriptors, which are the canonical primitives. Permissive input (Phase 1) is small enough to land in v0.6.1; expressive output (Phase 2) is a design call that warrants its own SPEC amendment cycle.
+- **Why deferred:** v0.6.0 prioritized the headline single-format conversion graph; SLIP-0132 is a UX-convenience layer over BIP-32 + BIP-388 descriptors. Both directions ship together in v0.6.1 to close the SLIP-0132 story in one release cycle.
 - **Status:** `open`
-- **Tier:** `v0.6.1` (Phase 1) / `v0.6.2+` (Phase 2)
+- **Tier:** `v0.6.1`
 
 ### `convert-test-coverage-tightening` — close convert subcommand test gaps (6 direct-edge + 2 deferral + 3 round-trip tests)
 
