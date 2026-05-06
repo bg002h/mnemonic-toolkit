@@ -673,6 +673,114 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.6.2`
 
+### `bip38-encrypted-wif` — accept + emit BIP-38 passphrase-encrypted privkeys (`6P...`)
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new `BipEncryptedWif` (or `Bip38`) `NodeType` variant in `convert.rs`; new edges from/to `wif`; SPEC §1 + §2 amendments.
+- **What:** BIP-38 (`6P...`, base58check, 58 chars) is a passphrase-encrypted WIF format — widely used for paper wallets and key handoff. Two pieces: non-EC-multiplied form (encrypts an existing privkey under a passphrase via Scrypt) and EC-multiplied form (generates new privkey from passphrase + intermediate code; less common). Add as a new convert node so users can decrypt `6P → wif` (with `--passphrase`) and encrypt `wif → 6P` (with `--passphrase`); composite edges `phrase → 6P` follow naturally. Refusal class for `6P → 6P` and any cross-format pivot.
+- **Why deferred:** v0.6.x focused on BIP-39 + BIP-32 + SLIP-0132 graph completeness; BIP-38 is its own well-defined Scrypt-backed format and merits a dedicated phase. Implementation likely uses the `bip38` crate or hand-rolled Scrypt against `secp256k1` primitives already in the dep tree.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `casascius-mini-private-key` — accept Casascius mini-key (`S...`, 22/26/30 chars) on input
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new `MiniKey` `NodeType` (or absorb into `Wif` arm with prefix-detect) in `convert.rs`; SPEC §1 + §2.
+- **What:** Casascius mini private key is a compact base-58 alphabet encoding starting with capital `S` (22, 26, or 30 chars) used historically on physical Bitcoin coins. Format: `S` + N chars; SHA256 of the full string + `?` must hash to `0x00` prefix (typo-checksum). Decoding: SHA256 of the mini-key string yields a 32-byte privkey scalar. One-way edge `mini-key → wif` (encoding-only; no key change). No `wif → mini-key` (mini-key generation requires a search for the typo-checksum-passing string; not deterministic from a given privkey). Refusal class: encode direction is a `§3.b lossy compression barrier` (the typo-checksum embedded in the mini-key string is not recoverable from a raw privkey).
+- **Why deferred:** small but distinct format with its own checksum spec (Casascius's typo-check rule); fits a v0.7 grab-bag of less-common formats.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `bip85-deterministic-entropy` — derive child seeds from a BIP-32 master
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new top-level `mnemonic derive-child` subcommand OR new edge `xprv → entropy` (with `--bip85-path` modifier); SPEC §1 / new top-level SPEC.
+- **What:** BIP-85 derives deterministic child entropy from a BIP-32 master xpriv via HMAC-SHA512 at the path `m/83696968'/<application>'/<index>'`. Use cases: managing many seeds from one master; per-application sub-seeds; password derivation; WIF derivation. Standard application codes per BIP-85: `39'` (BIP-39 entropy of length L words), `2'` (HD-seed), `32'` (xprv child), `128169'` (hex bytes), `707764'` (passwords). Output node depends on the application code: `entropy` for `39'`, `xprv` for `32'`, etc. Grammar lean: `mnemonic derive-child --from xprv=<master> --application <bip39|hd-seed|xprv|hex|password> --length <N> --index <N>` to keep convert's edge-table model untouched (BIP-85 is a *derivation* operation, not a *single-format conversion*).
+- **Why deferred:** BIP-85 is a useful but narrow derivation utility; doesn't fit `convert`'s "single-format conversion" framing cleanly. Likely wants its own subcommand. SPEC question to resolve at brainstorm: subcommand vs. extending convert.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `slip39-shamir-secret-sharing` — SLIP-39 Trezor Shamir backup format
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new `Slip39` `NodeType` (or new top-level subcommand `mnemonic slip39`); SPEC additions or new SPEC document.
+- **What:** SLIP-39 (Trezor's standard) is a K-of-N Shamir-secret-sharing scheme for BIP-39 entropy with its own wordlist (1024 words, distinct from BIP-39's 2048). Shares carry: identifier, iteration exponent, group threshold, group count, member threshold, member index, share value, checksum (Reed-Solomon). Two-level scheme: groups × shares-within-group. Used by Trezor Model T for its native backup. Edges: `entropy → slip39-shares` (split; takes `--group-threshold` + per-group `--member-threshold`); `slip39-shares → entropy` (combine; needs ≥ K shares). Composite via entropy intermediate: `phrase → slip39-shares` etc. The 1024-word SLIP-39 wordlist must be embedded.
+- **Why deferred:** Largest single addition in the queue — SLIP-39 is essentially an alternative to BIP-39's wordlist + a Shamir layer. The toolkit's secret-material slot would gain a second-class citizen alongside BIP-39 entropy. Significant SPEC + impl work; may want its own minor cycle (v0.7 or v0.8). Trezor's `python-shamir-mnemonic` library is the reference impl. Note: the planned `mnemonic-secret` v0.2 cycle (sibling repo) is shipping K-of-N share encoding for ms1 codex32 — that may obviate the need for SLIP-39 in this toolkit, depending on user priorities. Brainstorm should resolve "do we want SLIP-39 *and* ms1-shares, or just ms1-shares?" before any impl.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `electrum-native-seed-format` — Electrum seed wordlist + version-prefix checksum
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new `ElectrumPhrase` `NodeType` in `convert.rs` (or distinct from BIP-39's `Phrase`); SPEC §1 + §2.
+- **What:** Electrum's seed format is its own wordlist + checksum scheme distinct from BIP-39. The seed validates by HMAC-SHA512 of the phrase prefixed with `"Seed version"`; the resulting hash's hex prefix encodes the seed-type (`01` = standard, `100` = segwit, `101` = 2FA standard, `102` = 2FA segwit). Conversion: `electrum-phrase → entropy` (different mapping than BIP-39); `electrum-phrase → seed → master xpriv`. Edges symmetric to BIP-39's. Wordlist embedding required (Electrum English wordlist is similar to BIP-39's but differs).
+- **Why deferred:** medium scope — own wordlist + checksum + seed-version dispatch. Used by Electrum users transitioning to / from BIP-39-based wallets. Less urgent than BIP-38 / BIP-85 because most Electrum users can re-derive into BIP-39 via the wallet. Brainstorm should weigh user demand.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `miniscript-beyond-bip388` — accept full miniscript policies beyond BIP-388's descriptor-template subset
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified_descriptor`; descriptor-input handling in `parse_descriptor.rs`.
+- **What:** v0.5+ accepts BIP-388-conformant descriptors (placeholder-template form `wpkh(@0/<0;1>/*)`, multipath, sortedmulti, etc.). The full miniscript language has many additional policies the toolkit doesn't surface as supported wallet types: `andor`, `thresh`, `pk_h`, time-locked branches via `older` / `after`, hash-locked `hash160` / `sha256` / `ripemd160`, `multi_a` (taproot multi without sortedness), arbitrary `tr` taproot trees with multi-leaf miniscript. Rust-miniscript supports parsing these; the gap is the toolkit's wallet-policy validation and the engraving-card / verify-bundle UX.
+- **Why deferred:** Open-ended scope. Each new miniscript shape may have its own UX implications (verify-bundle parity check counts; engraving-card rendering; BIP-388 distinct-key extensions). Brainstorm should pick a small subset (e.g., `thresh`, `andor`, `tr` with single-leaf miniscript) for v0.7 rather than open-ended "all of miniscript."
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `vault-construction-covenant-based` — accept covenant-based vault descriptors (CTV / OP_CAT / OP_VAULT)
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** `parse_descriptor.rs` (descriptor parser extension); SPEC additions.
+- **What:** Vault constructions use covenant opcodes (BIP-119 `OP_CHECKTEMPLATEVERIFY`, BIP-348 `OP_CAT` re-enable, BIP-345 `OP_VAULT`) to enforce spending paths beyond what current Bitcoin script allows: time-delayed spends, recovery paths, batch authorizations, etc. None of these opcodes are activated on mainnet today. When/if activated, vault descriptors become a wallet-type class distinct from current single-sig/multisig descriptors.
+- **Why deferred:** **Gated on Bitcoin consensus activation.** No mainnet support today; signet test-cases exist for some of these. Re-evaluate when the relevant BIP advances to mainnet. The plumbing in this toolkit (descriptor parsing, mk1 xpub binding, md1 wallet-policy encoding) generalizes to vaults, so the impl gap is small once the script-side BIP activates — but speculative until then.
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `address-derivation-from-xpub-path` — xpub + path + script-type → bitcoin address
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06; **REVERSES `convert` SPEC §10 out-of-scope decision.**
+- **Where:** new edge `(xpub, address)` in `convert.rs::is_supported_direct_edge`; new `Address` `NodeType`; SPEC §1 + §2 amendments + §10 deletion of the address-derivation exclusion bullet.
+- **What:** v0.6.0 SPEC §10 explicitly excluded `xpub + path → bitcoin address` as "different problem class; out of `convert` scope." v0.6.1 post-release UX shifted: address derivation IS a frequent ask (verifying a wallet's first-receive address; cross-checking hardware-wallet output). Edge: `xpub` source + `--path` (or `--address-index N` + `--chain receive|change`) + script-type inferred from `--template` (or explicit `--script-type p2wpkh|p2sh-p2wpkh|p2tr|...`) → bech32/bech32m/base58 address string. Composite from `phrase` / `entropy` via the existing BIP-32 derivation pipeline. Refusal classes: address → anything (one-way; addresses are hash160/SHA256 of pubkeys).
+- **Why deferred:** SPEC scope reversal — explicitly out-of-scope in v0.6.0 per "different problem class" framing. The reversal is justified by user demand but should be SPEC-amended carefully. Brainstorm question: does this open the door to PSBT (BIP-174) and signing flows? Lean: NO — address derivation is read-only display; PSBT/signing remains out of scope per `bip174-psbt-signing` (v1+).
+- **Status:** `open`
+- **Tier:** `v0.7`
+
+### `bip327-musig2-collective-keys` — MuSig2 collective-key wallet-policy support
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** descriptor parser + new wallet-policy class.
+- **What:** BIP-327 (MuSig2) defines a 2-round Schnorr multi-signature scheme that produces a single aggregated public key from N participants. Wallet-policy formats for MuSig2 collective keys are still maturing — there's no settled "BIP-388-equivalent" for MuSig2 wallets yet. When the spec settles, add support for MuSig2 collective keys as a wallet-policy variant alongside multisig (sortedmulti) and single-sig.
+- **Why deferred:** **Standards-maturity gate.** No settled wallet-policy spec; rust-miniscript support is partial; hardware-wallet vendor adoption is preliminary. Re-evaluate when the wallet-policy spec for MuSig2 stabilizes.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `bip174-psbt-signing` — Partially Signed Bitcoin Transactions support
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** would be an entirely new subcommand surface area.
+- **What:** BIP-174 PSBT (Partially Signed Bitcoin Transactions) is the standard format for unsigned/partially-signed transactions exchanged between wallets and signers. Adding PSBT support would expand the toolkit from "key/wallet management" into "transaction signing" — a fundamentally different problem class.
+- **Why deferred:** **Out of scope per `convert` SPEC §10:** "different problem class." This toolkit is explicitly about key/wallet info, not transaction signing. PSBT belongs in a distinct tool (or in a separate signer subcommand of this toolkit if scope is reframed at v1+).
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `frost-threshold-keys` — FROST threshold signature scheme support
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new wallet-policy class; cryptographic primitive set extension.
+- **What:** FROST (Flexible Round-Optimized Schnorr Threshold signatures) is a K-of-N threshold signature scheme that produces a single aggregated Schnorr signature without requiring a trusted dealer. Distinct from MuSig2 in that it's threshold (K-of-N) rather than n-of-n. Wallet-policy and key-aggregation formats are still being standardized.
+- **Why deferred:** **Standards-maturity gate.** No settled wallet-policy spec; cryptographic primitives not yet in `bitcoin` / `secp256k1` crates; hardware-wallet adoption preliminary. Re-evaluate when the spec stabilizes.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `liquid-confidential-extended-keys` — Liquid sidechain extended-key formats
+
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
+- **Where:** new network variant in `network.rs` (`Liquid` / `LiquidTestnet`); xpub/xprv version-byte table extension; SPEC §11 SLIP-0132 swap table additions.
+- **What:** Elements/Liquid sidechain uses its own xpub/xprv version bytes plus blinding-key extensions for confidential transactions. Asset-blinding keys, value-blinding keys, and the address-blinding-key derivation (SLIP-0077) are Liquid-specific cryptographic primitives. Adding Liquid support would require: (a) network variant + version-byte table; (b) blinding-key derivation primitives; (c) Confidential Address derivation (different from mainnet bech32 addresses).
+- **Why deferred:** Different chain context. Liquid is a federated sidechain with its own wallet ecosystem (Blockstream Green, Elements). The toolkit's primary user base is Bitcoin mainnet/testnet; Liquid users typically use Liquid-specific tooling. Re-evaluate if there's demand from cross-chain users.
+- **Status:** `open`
+- **Tier:** `v1+`
+
 ### `wallet-export-industry-formats` — `mnemonic export-wallet` (or `bundle --wallet-export <format>`) for Bitcoin Core / Sparrow / Specter / BIP-388 import
 
 - **Surfaced:** v0.6.1 post-release UX discussion 2026-05-06.
