@@ -738,10 +738,10 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ### `address-derivation-from-xpub-path` — xpub + path + script-type → bitcoin address
 
-- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06; **REVERSES `convert` SPEC §10 out-of-scope decision.**
-- **Where:** new edge `(xpub, address)` in `convert.rs::is_supported_direct_edge`; new `Address` `NodeType`; SPEC §1 + §2 amendments + §10 deletion of the address-derivation exclusion bullet.
-- **What:** v0.6.0 SPEC §10 explicitly excluded `xpub + path → bitcoin address` as "different problem class; out of `convert` scope." v0.6.1 post-release UX shifted: address derivation IS a frequent ask (verifying a wallet's first-receive address; cross-checking hardware-wallet output). Edge: `xpub` source + `--path` (or `--address-index N` + `--chain receive|change`) + script-type inferred from `--template` (or explicit `--script-type p2wpkh|p2sh-p2wpkh|p2tr|...`) → bech32/bech32m/base58 address string. Composite from `phrase` / `entropy` via the existing BIP-32 derivation pipeline. Refusal classes: address → anything (one-way; addresses are hash160/SHA256 of pubkeys).
-- **Why deferred:** SPEC scope reversal — explicitly out-of-scope in v0.6.0 per "different problem class" framing. The reversal is justified by user demand but should be SPEC-amended carefully. Brainstorm question: does this open the door to PSBT (BIP-174) and signing flows? Lean: NO — address derivation is read-only display; PSBT/signing remains out of scope per `bip174-psbt-signing` (v1+).
+- **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06; in-scope confirmed 2026-05-06 (SPEC §10 exclusion struck through, see `SPEC_convert_v0_6.md` §10 v0.6.1 amendment).
+- **Where:** new edge `(xpub, address)` in `convert.rs::is_supported_direct_edge`; new `Address` `NodeType`; SPEC §1 + §2 amendments.
+- **What:** Edge: `xpub` source + `--path` (or `--address-index N` + `--chain receive|change`) + script-type inferred from `--template` (or explicit `--script-type p2wpkh|p2sh-p2wpkh|p2tr|...`) → bech32 / bech32m / base58 address string. Composite from `phrase` / `entropy` via the existing BIP-32 derivation pipeline. Refusal classes: address → anything (one-way; addresses are hash160/SHA256 of pubkeys). Read-only display only — does NOT extend to PSBT / signing (PSBT remains out-of-scope per `bip174-psbt-signing` v1+).
+- **Why deferred:** Useful but not blocking; v0.7 cycle slot. SPEC §10 amendment from "out of scope" to "in scope, deferred to v0.7" was committed alongside this entry update.
 - **Status:** `open`
 - **Tier:** `v0.7`
 

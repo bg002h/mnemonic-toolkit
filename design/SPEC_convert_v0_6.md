@@ -261,7 +261,7 @@ Internal graph as a typed enum + adjacency `HashMap<(PrimaryNode, TargetNode), E
 - `seed`, `raw_privkey`, `xprv`-via-ms1, `seed`-via-ms1 nodes (deferred pending ms-codec v0.2 — §1).
 - Multi-value-bearing `--from` flags (single-from-value v0.6 constraint — §5). Reserved for future `--slot @N` indexing.
 - Cross-format pivots (`ms1 ↔ mk1`, etc.) — `mnemonic bundle` is the composition operator.
-- Address derivation (xpub + path → bitcoin address). Different problem class; out of `convert` scope.
+- ~~Address derivation (xpub + path → bitcoin address).~~ **(v0.6.1+ amendment, 2026-05-06): in scope, deferred.** Originally excluded as "different problem class" in v0.6.0; v0.6.1 post-release UX audit reclassified address derivation as a frequent ask aligned with the toolkit's wallet-info purpose. Tracked at FOLLOWUP `address-derivation-from-xpub-path` (tier `v0.7`). Read-only display only — does NOT extend to PSBT / signing flows (those remain out-of-scope per `bip174-psbt-signing` v1+).
 
 ## §11 SLIP-0132 prefix-tolerant input (v0.6.1)
 
