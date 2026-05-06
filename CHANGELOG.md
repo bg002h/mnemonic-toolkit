@@ -4,6 +4,68 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.5.0] — 2026-05-06
+
+### What's new (v0.5.0 — bundle the v0.4.5-nice-to-have + open `*-nice-to-have` deferrals)
+
+v0.5.0 closes 13 open FOLLOWUPS across 6 of the 7 planned phases. The user's strongest "no users yet → break anything" license is exercised: a deliberate SPEC §4.11.b reversal (typed-DerivationPath equality), a JSON envelope `engraving_card` field deletion, a four-case ms1 short-circuit table with byte-exact `decode_error` strings, and a `MappingFailure` enum for mk1 cosigner-mapping diagnostics.
+
+A new SPEC document `design/SPEC_mnemonic_toolkit_v0_5.md` is created (v0.4 retained for historical reference). Cycle artifacts: `/home/bcg/.claude/plans/robust-cooking-kazoo.md` (in-plan-mode brainstorm + SPEC + plan all converged 0C/0I across multiple architect rounds).
+
+- **Phase S0 — SPEC v0.5 document.** New `SPEC_mnemonic_toolkit_v0_5.md` with 6 normative amendments: §4.11.b deliberate reversal, §5.7 line 103 multiset semantics for `md1_xpub_match`, §5.7 line 104 four-case ms1 table, §5.7 NEW mk1-mapping-diagnostic paragraph, §5.5 `engraving_card` field deletion, §6.6 legacy-flag-deletion sketch (full deletion deferred to v0.5.1).
+- **Phase B — multisig helper polish (5 items).** B.1 new `helper_multisig_full_emits_3plus6n_checks_in_spec_order` unit test. B.2 positional-fallback condition refactored to `match`. B.3 `md1_xpub_match` now multiset (sort-then-compare with multiplicity). B.4 `MappingFailure` enum (`NotSupplied` / `DecodeFailed(String)` / `XpubNotInPolicy`) replaces `Vec<Option<&KeyCard>>`; precedence `XpubNotInPolicy > DecodeFailed > NotSupplied`. B.5 four-case ms1 emission per SPEC §5.7 line 104 — full-mode supplied-absent case now `passed: false` (was `passed: true` in v0.4.5) with byte-exact `decode_error: "error: ms1[{i}] expected (full-mode bundle) but not supplied"`.
+- **Phase C — SPEC reversals (3 items).** C.1 `check_key_vector_distinctness` switches from raw-string `path_raw == path_raw` to typed `path == path` (folds `h` → `'`). v0.4.1 `bip388_h_vs_apostrophe_paths_distinct_under_raw_string` test migrated to `bip388_h_vs_apostrophe_paths_collide_under_typed_equality_v0_5`. C.2 SPEC-only codification of watch-only spurious-`--ms1` short-circuit + new integration test. C.3+C.4 `detect_removed_subcommand` trap deleted entirely (~80 lines including 5 inline tests); 2 byte-exact-stderr tests migrated to clap-fallback exit-64 assertions.
+- **Phase D — schema-2/3 placeholder rejection deletion.** `load_bundle_json_into_args`'s peek-and-reject `schema_version` branch deleted (~16 lines including the FOLLOWUP placeholder pointer). Schema-mismatch envelopes now fail at the underlying field extraction.
+- **Phase E — `origin_path` null unification (single-sig).** New `origin_path_for_json(path_raw)` helper returns `None` when `path_raw.is_empty()` (was `Some("m")` via the v0.4.2 normalize fallback).
+- **Phase F — text-mode trailing-space fix.** Three identical `writeln!` emit sites in `cmd/verify_bundle.rs` rewritten to branch on `c.detail.is_empty()` (no more `"md1_xpub_match: skipped "` trailing space).
+- **Phase A.3 — engraving-card dead-field cleanup.** `BundleJson.engraving_card: Option<String>` field DELETED + 2 always-`None` initializers DELETED + stale doc-comment rewritten. Active stderr emission path (`build_unified_card` + `engraving_card_unified`) and `--no-engraving-card` CLI flag both preserved.
+
+### Deferred to v0.5.1 (Phase A scope reduction)
+
+- **`legacy-cli-flag-deletion`** — Delete `--phrase`, `--xpub`, `--cosigner`, `--master-fingerprint`, `--cosigner-count`, `--cosigners-file` from `BundleArgs` + `VerifyBundleArgs`. Rewrite ~25 integration tests (~1500 LOC churn) to use `--slot @N.<subkey>=<value>` syntax exclusively.
+- **`legacy-flag-deprecation`** — superseded by the deletion above.
+- **Mode-violation guard sweep + new `cli_mode_violations_v0_5.rs`** — 9 guards delete; 3 retain (`THRESHOLD_WITHOUT_MULTISIG`, `PATH_FAMILY_WITHOUT_MULTISIG`, `DESCRIPTOR_AND_TEMPLATE`). New test file pinning the 3 retained guards.
+
+Per the plan's explicit scope-reduction trigger, the ~2500 LOC of mechanical-but-error-prone churn is deferred to its own cycle, matching the v0.4.4→v0.4.5 helper-foundation-then-rollout pattern.
+
+### Breaking changes
+
+Per "no users yet → break anything" license:
+
+- **JSON envelope `BundleJson.engraving_card` field DELETED.**
+- **JSON envelope `verify-bundle` `mk1_decode[i]` `decode_error` strings changed** (per SPEC §5.7 mk1-mapping diagnostic; was conflated as "skipped: mk1[i] not supplied or decode failed"; now distinguishes 3 modes).
+- **JSON envelope `verify-bundle` multisig `ms1_decode[i]` / `ms1_entropy_match[i]` semantics changed** (case 4: `passed: false` for full-mode supplied-absent; was `passed: true` in v0.4.5).
+- **JSON envelope `verify-bundle` `md1_xpub_match` is now multiset-equality** (was ordered Vec equality).
+- **JSON envelope `bundle` `origin_path` field is `null` for absent paths** (was `"m"` in v0.4.2 unified-slot watch-only).
+- **BIP-388 distinctness now treats `48h/0h` and `48'/0'` as the same path** (v0.4 raw-string equality REVERSED). Existing tests using `h`/`'` notation differences as a distinctness lever migrated.
+- **`detect_removed_subcommand` trap deleted** — `mnemonic bundle multisig-full` now rejected by clap fallback (exit 64) instead of the byte-exact pre-clap stderr.
+- **`--bundle-json` schema-2/3 rejection deleted** — schema-mismatch envelopes fail at field extraction (no more placeholder error pointer).
+- **Plain-text `verify-bundle` output no longer has trailing spaces** when `detail` is empty.
+
+### Wire-bit-identical guarantee
+
+v0.4.5 schema-4 `bundle --json` envelopes continue to emit byte-identically EXCEPT for the deleted `engraving_card: null` field and `origin_path: null` (was `"m"`) for unified-slot single-sig watch-only.
+
+### Test corpus
+
+236 lib unit tests + 22 integration suites pass (was 243+22 in v0.4.5; net -7 lib over the cycle from C.3+C.4 trap deletion offsetting B+C+F additions).
+
+### Cycle artifacts
+
+- Plan: `/home/bcg/.claude/plans/robust-cooking-kazoo.md` (in-plan-mode brainstorm + SPEC + plan all converged 0C/0I).
+- SPEC: new `design/SPEC_mnemonic_toolkit_v0_5.md`.
+- Per-phase reports: `design/agent-reports/phase-{S0,B,C,D,E,F,A}-*-review-r1.md`.
+
+### Architect-review history
+
+- Brainstorm: 2 rounds (r1 0C/2I/3L → addressed; r2 0C/0I/2L → addressed).
+- SPEC: 3 rounds (r1 0C/2I/2L → addressed; r2 0C/1I/1L → addressed; r3 0C/0I → APPROVE).
+- Implementation plan: 2 rounds (r1 0C/3I/3L → addressed; r2 0C/0I/2L → addressed).
+- Per-phase reviews: S0 0C/2I addressed; B-F 0C/0I; A 0C/0I (scope-reduced).
+- Final cross-phase review: APPROVED 2026-05-06 (2 Important re: CHANGELOG arithmetic + SPEC §6.6 partial-delivery note both addressed inline; 2 Low/Nit deferred).
+
+---
+
 ## mnemonic-toolkit [0.4.5] — 2026-05-06
 
 ### What's new (v0.4.5 helper call-site rollout + 9/3+6N descriptor-mode parity)

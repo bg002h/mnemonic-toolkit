@@ -131,7 +131,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run` text-mode output.
 - **What:** Skipped checks with empty `detail` render as `"md1_xpub_match: skipped "` (trailing space). SPEC §5.4 only pins JSON byte-exact; text mode is unpinned.
 - **Why deferred:** cosmetic; not test-covered.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase F (commit 85c678b) — branch on detail.is_empty() at 3 emit sites`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `error-allow-comments-staleness` — `error::Result<T>` and `BundleMismatch` doc-comments will rot
@@ -332,7 +332,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs:1049` (`check_key_vector_distinctness`); SPEC `design/SPEC_mnemonic_toolkit_v0_4.md` §4.11.b.
 - **What:** Phase A compares `cs[i].path.to_string()` on typed `bitcoin::bip32::DerivationPath`. The bitcoin library normalizes `48h/0h/0h/2h` ↔ `48'/0'/0'/2'` at `from_str` time, so collision detection is normalization-aware. SPEC §4.11.b says "raw user-supplied path string ... no path canonicalization". In Phase A this is safe because all paths arrive through the typed lex/cosigner parser; in Phase B the `--slot @N.path=` raw string flows into the binding directly. Phase B must lock whether `CosignerKeyInfo.path` stores typed `DerivationPath` (normalizing) or raw `String` (preserving), then update SPEC §4.11.b's normalization-domain paragraph in lockstep.
 - **Why deferred:** Phase A's typed approach is correct under the v0.3 binding model; the decision is a Phase B design choice (slot input parsing).
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase C.1 (commit 4a650aa) — typed DerivationPath equality replaces raw-string in check_key_vector_distinctness`
 - **Tier:** `v0.4-nice-to-have`
 
 ### `verify-bundle-helper-and-full-forensics-rollout-v0.4.4` — Phase P.1-P.5 deferred from v0.4.3 to v0.4.4 — SUPERSEDED
@@ -351,7 +351,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` helper_tests mod.
 - **What:** v0.4.5 ships `helper_multisig_watch_only_emits_3plus6n_checks_in_spec_order` (renamed from `_full_` after review confirmed the fixture exercises watch-only synthesis with empty `expected.ms1`). The full-mode multisig ms1 branch (`emit_multisig_checks` lines ~1096-1159: substantive ms1_decode + ms1_entropy_match per cosigner) has end-to-end coverage via `cli_bundle_multisig.rs` integration tests but no isolated unit-level test. Add a companion `helper_multisig_full_emits_3plus6n_checks_in_spec_order` that uses `synthesize_multisig_full` (or constructs a synthetic Bundle with non-empty `expected.ms1` strings) to exercise the substantive ms1 path.
 - **Why deferred:** integration coverage is sufficient for v0.4.5; the unit-level gap is test isolation hygiene, not behavior.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase B.1 (commit 9f1a4e7) — helper_multisig_full_emits_3plus6n_checks_in_spec_order added`
 - **Tier:** `v0.4.5-nice-to-have`
 
 ### `verify-bundle-multisig-positional-fallback-condition-cosmetic` — cosmetic dead `unwrap_or(false)` in card_for_cosigner positional fallback
@@ -360,7 +360,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_multisig_checks` (`card_for_cosigner` positional fallback condition).
 - **What:** Condition `supplied_md_decoded.is_err() || supplied_md_decoded.as_ref().map(|d| d.tlv.pubkeys.is_none()).unwrap_or(false)` — the `.map().unwrap_or(false)` chain is unreachable when `supplied_md_decoded.is_err()` short-circuits OR semantically dead inside the Ok branch. Refactor to `match` for clarity.
 - **Why deferred:** cosmetic; no logic impact.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase B.2 (commit 9f1a4e7) — refactored to clean match expression`
 - **Tier:** `v0.4.5-nice-to-have`
 
 ### `verify-bundle-multisig-md1-xpub-match-set-equality` — md1_xpub_match uses ordered Vec equality
@@ -369,7 +369,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_multisig_checks` (md1_xpub_match arm).
 - **What:** Helper compares `expected_md1.tlv.pubkeys` and `supplied_md1.tlv.pubkeys` as ordered `Vec<[u8; 65]>` via `==`. SPEC §5.7 line 103 says the shared `md1_xpub_match` confirms "all N pubkeys match expected" — semantics are arguably set-equality (the script-level pubkey set must be identical), not ordered. Template-mode synthesis preserves cosigner-index order, so ordered equality is correct for that path. Descriptor-mode verify-bundle (P.5) where the user supplies a descriptor with arbitrary `@N` placement could false-fail under ordered equality even when the logical pubkey set is identical.
 - **Why deferred:** template-mode P.4 doesn't trigger this; descriptor-mode P.5 lands in v0.4.5 but the SPEC clarification needed to choose set-vs-ordered semantics is itself open. Re-evaluate after P.5 implementation surfaces real-world cases.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase B.3 (commit 9f1a4e7) — sort-then-compare multiset equality`
 - **Tier:** `v0.4.5-nice-to-have`
 
 ### `verify-bundle-multisig-cosigner-mapping-diagnostic` — distinguish "card not supplied" from "xpub not in policy"
@@ -380,7 +380,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   1. User forgot to supply --mk1 for cosigner i.
   2. User supplied an mk1 card whose xpub doesn't appear in the descriptor's pubkey set (wrong-key attack scenario).
 - **Why deferred:** diagnostic clarity, not correctness. Could split into two distinct check names or add a per-card "policy-membership" field.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase B.4 (commit 9f1a4e7) — MappingFailure enum with precedence XpubNotInPolicy > DecodeFailed > NotSupplied`
 - **Tier:** `v0.4.5-nice-to-have`
 
 ### `verify-bundle-multisig-missing-ms1-passes-true` — full-mode multisig with no --ms1 supplied reports passed=true
@@ -389,7 +389,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_multisig_checks` ("Expected substantive but supplied missing/empty" branch).
 - **What:** When `expected.ms1[i]` is non-empty (full-mode) but the caller supplies no corresponding --ms1 value, `ms1_decode[i]` and `ms1_entropy_match[i]` are emitted with `passed: true, decode_error: "skipped: ms1[i] not supplied"`. A full-mode multisig bundle verified without supplying any ms1 cards thus reports `result: ok` if mk1+md1 match. SPEC §5.7 line 104 specifies "skipped: watch-only slot" semantics ONLY for `ms1[i] == ""` (watch-only sentinel); the missing-but-expected case is unspecified.
 - **Why deferred:** policy decision — should missing-but-expected ms1 be a hard fail (like missing mk1[i])? Or stays as soft skip (current behavior)? Defer for SPEC clarification.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase B.5 (commit 9f1a4e7) — SPEC §5.7 four-case table, case 4 passed=false on missing-but-expected ms1`
 - **Tier:** `v0.4.5-nice-to-have`
 
 ### `verify-bundle-watch-only-spurious-ms1-handling` — watch-only with user-supplied --ms1 produces ms1_entropy_match: fail
@@ -398,7 +398,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run_watch_only` + `emit_verify_checks` watch-only short-circuit.
 - **What:** Pre-v0.4.5 `watch_only_checks` ignored `args.ms1` (always emitted "watch-only mode: no entropy known to toolkit" passing-vacuously). Post-v0.4.5 P.3 wire-up: run_watch_only synthesizes the watch-only Bundle (`ms1: vec![""]`) and the helper compares supplied vs expected. If user spuriously supplies `--ms1 <non-empty>` in watch-only mode, `ms1_decode` runs against the supplied string, then `ms1_entropy_match` fails because `expected="" ≠ supplied=non-empty`. Behavior change vs v0.4.4: arguably more useful (tool flags the user's mistake) but not formally specified.
 - **Why deferred:** non-blocking; SPEC §5.7 doesn't address this edge. Decide whether to short-circuit in run_watch_only (ignore args.ms1, force-empty SuppliedCards.ms1) or document the behavior in SPEC §2.2.2.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase C.2 (commit 4a650aa) — SPEC §5.7 case 1 codification + integration test`
 - **Tier:** `v0.4-nice-to-have`
 
 ### `verify-bundle-helper-foundation-cleanup-v0.4.5` — 2 Low/Nit cleanups from v0.4.4 final cross-phase review
@@ -453,7 +453,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** v0.4.2 lands the unified `--slot @N.<subkey>=<value>` dispatch and routes legacy CLI flags through `expand_legacy_to_slots` (option (a) per the v0.4.2 brainstorm). v0.5 takes the next step: delete the legacy CLI flags entirely from `BundleArgs` + `VerifyBundleArgs`. Estimated cost: rewrite ~25 integration tests (~1500 lines of test churn) to use `--slot` syntax. The unified path itself is unchanged; only the CLI surface contracts.
 - **Why deferred:** the user accepted the bigger v0.4.2 scope (legacy-flag-deprecation under option a) but routes the cleaner-CLI-surface end-state to v0.5 to amortize the test-rewrite churn against a separate cycle. Captured as a follow-on after v0.4.2 ships.
 - **Status:** `open`
-- **Tier:** `v0.5`
+- **Tier:** `v0.5.1`
 
 ### `engraving-card-unified-legacy-migration` — migrate 4 legacy engraving_card() call sites to engraving_card_unified
 
@@ -461,7 +461,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` 4 legacy call sites (bundle_full, bundle_watch_only, bundle_multisig_full, bundle_multisig_watch_only) + `crates/mnemonic-toolkit/src/format.rs` legacy `engraving_card` + `EngravingMode` enum.
 - **What:** v0.4.1 ships `engraving_card_unified` + `BundleInputForCard` per SPEC §5.5 and wires only the new `bundle_run_unified` (--slot-driven) path through it. Migrating the 4 legacy call sites to the unified card requires removing 3 byte-exact format.rs unit tests for `EngravingMode::*` variants and verifying integration tests still pass with the new card layout. v0.4.2 lands the migration + drops `EngravingMode`.
 - **Why deferred:** scope-safety in v0.4.1 release window; legacy call sites work unchanged via the existing `engraving_card` function.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase A.3 (commit 456c878) — BundleJson.engraving_card field deleted; doc-comment rewritten`
 - **Tier:** `v0.4.2`
 
 ### `unified-slot-xpub-missing-path-origin-path-null` — origin_path empty-string vs null divergence
@@ -470,7 +470,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots` (xpub branch) + `emit_unified` (single-sig N=1 origin_path emission).
 - **What:** When `--slot @0.xpub=X` is supplied without `--slot @0.path=`, `emit_unified` emits `"origin_path": ""` in the JSON envelope. Legacy `emit` for the equivalent `--xpub X` (no path) invocation emits `"origin_path": null`. SPEC §4.11.b defines `""` as the absent-path sentinel for collision purposes but does not govern the JSON envelope value. Two paths diverge for semantically equivalent inputs.
 - **Why deferred:** non-blocking; tooling that reads the envelope can treat `""` and `null` as equivalent. v0.4.2 unifies emission to `null`.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase E (commit 990ccad) — origin_path_for_json helper emits null on empty path_raw`
 - **Tier:** `v0.4.2-nice-to-have`
 
 ### `unified-slot-additional-subkey-shapes` — entropy / xprv / wif / partial-xpub-only resolution deferred from v0.4.1 to v0.4.2
@@ -522,7 +522,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::load_bundle_json_into_args`.
 - **What:** v0.4.3 ships schema-4-only intake. Schema-2/3 envelopes (theoretical; no real-world bundles exist since v0.4.1) error with byte-exact stderr pointing at this FOLLOWUP. v0.4.4+ adds schema-2/3 typed dispatch IF a real-world need surfaces.
 - **Why deferred:** speculative; no real bundles to consume.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase D (commit 6e4b87e) — placeholder rejection branch deleted; schema-mismatch fails at field extraction`
 - **Tier:** `v0.4.4-nice-to-have`
 
 ### `wif-multisig-resolution` — wif slots in multisig contexts
@@ -540,7 +540,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** SPEC §9 v0.4 promises that legacy `--phrase` / `--xpub` / `--cosigner` flags become deprecation aliases that auto-expand into `--slot` form. v0.4.1 ships unified `--slot` as opt-in alongside the unchanged legacy dispatch. v0.5+ (a future BREAKING release) deletes the legacy dispatch entirely and routes everything through `bundle_run_unified` via `expand_legacy_to_slots`.
 - **Why deferred:** would force fixture regeneration of 16+ v0.1 byte-exact fixture files + v0.2 carry-forward fixtures; too large for v0.4.1 release window.
 - **Status:** `open`
-- **Tier:** `v0.5`
+- **Tier:** `v0.5.1`
 
 ### `bundle-removed-subcommand-trap-positional-eq-bypass` — `bundle multisig-full=value` token bypasses pre-clap trap
 
@@ -548,7 +548,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** Phase C.1 `detect_removed_subcommand` (locked SPIKE shape at `design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md` SPIKE-2).
 - **What:** Trap matches `argv[i+1] == "multisig-full"` with exact string equality. A token like `multisig-full=value` would not match and would fall through to clap's generic "unexpected argument" error rather than the byte-exact §6.6 row 1 message. Positional args do not idiomatically take `=value` form in shells, so this is essentially theoretical.
 - **Why deferred:** no realistic user invocation produces this argv shape; a post-trap fallback in clap already rejects with exit 2.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase C.3 (commit 4a650aa) — entire detect_removed_subcommand trap deleted`
 - **Tier:** `v0.4-nice-to-have`
 
 ### `bundle-removed-subcommand-trap-double-dash-bypass` — `mnemonic bundle -- multisig-full` bypasses pre-clap trap
@@ -557,7 +557,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** Phase C.1 `detect_removed_subcommand` (locked SPIKE shape at `design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md` SPIKE-2).
 - **What:** With a `--` separator inserted between `bundle` and `multisig-full`, the trap reads `argv[i+1] == "--"` and skips. Clap then processes `multisig-full` as a positional after `--` and emits a generic "unexpected argument" error rather than the byte-exact §6.6 row 1 text. UX difference matters only if a user intentionally inserts `--` before a removed subcommand name — not a realistic migration-error path.
 - **Why deferred:** vanishingly unlikely user error; clap's fallback still rejects with exit 2.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.0 Phase C.4 (commit 4a650aa) — entire detect_removed_subcommand trap deleted`
 - **Tier:** `v0.4-nice-to-have`
 
 ### `tr-sortedmulti-a-via-upstream` — toolkit-side resolved in v0.3.1; v0.3.2 is the cleanup release
