@@ -2,7 +2,7 @@
 //!
 //! Realizes `design/SPEC_convert_v0_6.md`.
 
-use crate::derive_slot::derive_bip32_from_entropy;
+use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
@@ -194,14 +194,19 @@ fn refusal_xpub_to_mk1() -> ToolkitError {
     )
 }
 
+fn refusal_phrase_entropy_to_wif_no_path() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).".into(),
+    )
+}
+
 fn refusal_wif_with_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "--from wif does not retain a chain code; --path-driven derivation is impossible.".into(),
     )
 }
 
-/// Direct edges supported per SPEC §2 (plus deferred-but-not-refused edges
-/// that compute_outputs handles with a BadInput-class deferral message).
+/// Direct edges supported per SPEC §2.
 /// Used as the negative-space check for the catch-all refusal: any (from, to)
 /// NOT in this set is a one-way barrier.
 fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
@@ -214,12 +219,12 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Phrase, Xprv)
             | (Phrase, Fingerprint)
             | (Phrase, Ms1)
-            | (Phrase, Wif)        // deferred (path-to-leaf-WIF) — handled in compute_outputs
+            | (Phrase, Wif)        // SPEC-A v0.6.1
             | (Entropy, Xpub)
             | (Entropy, Xprv)
             | (Entropy, Fingerprint)
             | (Entropy, Ms1)
-            | (Entropy, Wif)       // deferred — same as phrase → wif
+            | (Entropy, Wif)       // SPEC-A v0.6.1
             | (Xprv, Xpub)
             | (Xprv, Fingerprint)
             | (Xpub, Fingerprint)
@@ -348,11 +353,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // 6) §8 --passphrase warning when not on PBKDF2 edge.
+    //    SPEC-A v0.6.1: `Wif` joins the PBKDF2-bearing target set so
+    //    `--from phrase --to wif --passphrase x` does NOT spuriously
+    //    fire the ignored-passphrase warning (phrase → seed → master
+    //    → derive at path → leaf privkey → WIF traverses PBKDF2).
     let edge_uses_pbkdf2 = matches!(primary.node, NodeType::Phrase | NodeType::Entropy)
         && targets.iter().any(|t| {
             matches!(
                 t,
-                NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint
+                NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
             )
         });
     if args.passphrase.is_some() && !edge_uses_pbkdf2 {
@@ -479,9 +488,25 @@ fn compute_outputs(
                         &ms_codec::Payload::Entr(entropy.clone()),
                     )
                     .map_err(ToolkitError::from)?,
-                    Wif => return Err(ToolkitError::BadInput(
-                        "--from phrase/entropy --to wif is not yet supported in v0.6 (path-to-leaf-WIF derivation deferred)".into(),
-                    )),
+                    Wif => {
+                        // SPEC-A v0.6.1: phrase/entropy → wif requires explicit
+                        // --path. `needs_derive` deliberately does NOT include
+                        // Wif, so --template is not required for this edge.
+                        let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
+                        let path = bip32::DerivationPath::from_str(path_str)
+                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let leaf_xpriv = derive_bip32_at_path(
+                            &entropy, passphrase, language, network, &path,
+                        )?;
+                        // BIP-32 §4 mandates compressed pubkeys for derived
+                        // keys; WIF compression follows the BIP-32 contract.
+                        let pk = PrivateKey {
+                            compressed: true,
+                            network: network.network_kind(),
+                            inner: leaf_xpriv.private_key,
+                        };
+                        pk.to_wif()
+                    }
                     Path => return Err(ToolkitError::BadInput(
                         "--to path is informational; not emitted as a value".into(),
                     )),

@@ -649,3 +649,12 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** v0.6.0 prioritized headline-edge coverage and refusal-taxonomy correctness; the missing tests are tightening, not net-new functionality. The 6 uncovered edges are exercised indirectly through the JSON envelope test (#3 in `cli_convert_json.rs`) and the v0.5.2 16-cell parametric byte-identity test, but lack explicit asserts.
 - **Status:** `open`
 - **Tier:** `v0.6.1`
+
+### `convert-run-step-numbering-duplicate-8` — `cmd::convert::run` has duplicate `// 8)` step labels
+
+- **Surfaced:** Phase B code-reviewer r1 (Nit, deferred — predates Phase B).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs:382` and `:385`.
+- **What:** The dispatch in `convert::run` numbers its steps `// 1)` through `// 9)`; both "Compute outputs" and "Emit" are labeled `// 8)`. The second should be `// 9)` to keep the comment numbering monotonic. Comment-only nit; no behavioral effect.
+- **Why deferred:** Pre-existed Phase B; out of scope for the SPEC-A `phrase/entropy → wif` commit. Cleanly fixable in the next convert-touching patch.
+- **Status:** `open`
+- **Tier:** `v0.6.2-nice-to-have`

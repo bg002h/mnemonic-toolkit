@@ -10,7 +10,7 @@ use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
-use bitcoin::bip32::{Xpriv, Xpub};
+use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
 
 /// entropy → mnemonic-in-language → seed → master xpriv → derive at template
@@ -57,4 +57,36 @@ pub(crate) fn derive_bip32_from_entropy(
         account_xpriv,
         account_path: path,
     })
+}
+
+/// SPEC-A v0.6.1: path-driven sibling of `derive_bip32_from_entropy`.
+///
+/// entropy → mnemonic-in-language → seed → master xpriv → derive at the
+/// supplied `--path` → return the leaf xpriv. Used by `cmd::convert`'s
+/// `phrase`/`entropy` → `wif` edge (SPEC `§2`).
+///
+/// `path` may be at any BIP-32 depth; no normative depth assertion is made
+/// (the caller is responsible for supplying a path that produces a leaf
+/// privkey suitable for the downstream emission). Network-mismatch checks
+/// in the parent `derive_bip32_from_entropy` are intentionally NOT
+/// duplicated here — that helper guards the BIP-39 → account flow against a
+/// toolkit-bug class; the path-driven flow inherits the same guarantees
+/// from `Xpriv::new_master`.
+pub(crate) fn derive_bip32_at_path(
+    entropy: &[u8],
+    passphrase: &str,
+    language: CliLanguage,
+    network: CliNetwork,
+    path: &DerivationPath,
+) -> Result<Xpriv, ToolkitError> {
+    let mnemonic =
+        Mnemonic::from_entropy_in(language.into(), entropy).map_err(ToolkitError::Bip39)?;
+    let seed = mnemonic.to_seed(passphrase);
+
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(network.network_kind(), &seed)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    master
+        .derive_priv(&secp, path)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))
 }

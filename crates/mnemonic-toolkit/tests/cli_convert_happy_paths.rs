@@ -237,3 +237,88 @@ fn ms1_to_phrase_direct_edge() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, format!("phrase: {TREZOR_12}\n"));
 }
+
+// SPEC-A v0.6.1 — phrase/entropy → wif at explicit leaf path.
+
+/// Canonical BIP-84 vector: 12-word zero-entropy "abandon...about" mnemonic +
+/// `m/84'/0'/0'/0/0` produces the well-known WIF
+/// `KyZpNDKnfs94vbrwhJneDi77V6jF64PWPF8x5cdJb8ifgg2DUc9d` (the BIP-84-test-vector
+/// first-receive privkey for the all-zeros 128-bit entropy seed).
+#[test]
+fn phrase_to_wif_bip84_leaf_mainnet() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--to",
+            "wif",
+            "--network",
+            "mainnet",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout,
+        "wif: KyZpNDKnfs94vbrwhJneDi77V6jF64PWPF8x5cdJb8ifgg2DUc9d\n"
+    );
+}
+
+/// 16-byte all-zero entropy + the same path; matches the phrase-source vector
+/// (the entropy IS the all-zero 128-bit entropy that decodes to TREZOR_12).
+#[test]
+fn entropy_to_wif_bip84_leaf_mainnet() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            "entropy=00000000000000000000000000000000",
+            "--to",
+            "wif",
+            "--network",
+            "mainnet",
+            "--path",
+            "m/84'/0'/0'/0/0",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout,
+        "wif: KyZpNDKnfs94vbrwhJneDi77V6jF64PWPF8x5cdJb8ifgg2DUc9d\n"
+    );
+}
+
+/// SPEC-A §8 invariant — `--passphrase` is meaningful for phrase/entropy → wif
+/// (the edge traverses PBKDF2: phrase → seed → master → derive → leaf privkey).
+/// The "passphrase ignored" warning MUST NOT fire on this edge.
+#[test]
+fn phrase_to_wif_passphrase_does_not_emit_ignored_warning() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--to",
+            "wif",
+            "--network",
+            "mainnet",
+            "--path",
+            "m/84'/0'/0'/0/0",
+            "--passphrase",
+            "TREZOR",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("--passphrase ignored"),
+        "ignored-passphrase warning must not fire on PBKDF2-bearing wif edge; got stderr: {stderr:?}"
+    );
+}

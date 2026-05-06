@@ -137,6 +137,57 @@ fn refusal_wif_to_entropy_one_way() {
     );
 }
 
+// SPEC-A v0.6.1 — phrase/entropy → wif requires explicit --path.
+
+const TREZOR_12: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+#[test]
+fn refusal_phrase_to_wif_missing_path() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--to",
+            "wif",
+            "--network",
+            "mainnet",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        stderr,
+        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"
+    );
+}
+
+#[test]
+fn refusal_entropy_to_wif_missing_path() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            "entropy=00000000000000000000000000000000",
+            "--to",
+            "wif",
+            "--network",
+            "mainnet",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        stderr,
+        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"
+    );
+}
+
 #[test]
 fn refusal_fingerprint_as_source() {
     let out = Command::cargo_bin("mnemonic")
