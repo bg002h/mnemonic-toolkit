@@ -32,6 +32,10 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **`v0.4.1`**: explicitly deferred from v0.4.0 to a v0.4.1 follow-on patch (typically scope-safety deferrals).
 - **`v0.4.2`**: explicitly deferred from v0.4.1 to a v0.4.2 follow-on patch.
 - **`v0.4.2-nice-to-have`**: surfaced during v0.4.1 review; non-blocking. Documented in v0.4.2's CHANGELOG if shipped.
+- **`v0.4.3`**: explicitly deferred to a v0.4.3 follow-on patch.
+- **`v0.4.3-nice-to-have`**: surfaced during v0.4.2 review; non-blocking.
+- **`v0.4.4`**: explicitly deferred to a v0.4.4 follow-on patch.
+- **`v0.4.4-nice-to-have`**: surfaced during v0.4.3 review; non-blocking.
 - **`v0.5`**: explicitly deferred to a v0.5 minor release (typically scope too large for a v0.4.x patch).
 - **`cross-repo`**: depends on coordination with sibling repos (`descriptor-mnemonic`, `mnemonic-key`, `mnemonic-secret`). Mirrored by a companion entry in the affected sibling's tracker; both cite each other.
 - **`v1+`**: deferred indefinitely.
@@ -331,7 +335,18 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.4-nice-to-have`
 
-### `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase J.2 + J.3 + full forensic field rollout deferred from v0.4.1 to v0.4.2
+### `verify-bundle-helper-and-full-forensics-rollout-v0.4.4` — Phase P.1-P.5 deferred from v0.4.3 to v0.4.4
+
+- **Surfaced:** v0.4.3 Phase P scope decision 2026-05-06 (P.0 struct shape correction landed; P.1-P.5 deferred for scope safety).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (~78 VerifyCheck push sites + new `emit_verify_checks` helper + descriptor-mode 9/3+6N parity refactor).
+- **What:** v0.4.3 P.0 corrected the VerifyCheck struct shape per SPEC §5.7 (`result: &'static str` → `passed: bool`). The full SPEC §5.7 rollout — `emit_verify_checks` helper + refactor of run_full / run_multisig / descriptor_mode_verify_run + per-cell forensic field population at every push site + descriptor-mode 9/3+6N parity (closes `verify-bundle-9-3plus6n-descriptor-mode-parity` simultaneously) + skipped-check decode_error population — is deferred to v0.4.4. v0.4.3 ships passing checks with `passed: false` set on failures but forensic fields (expected/actual/diff_byte_offset/decode_error) only populated at the one v0.4.1 J.7 proof-of-shape site.
+- **Why deferred:** scope-safety in v0.4.3 release window. Full helper + refactor estimated at ~800-1000 lines deleted in verify_bundle.rs alongside ~70 push-site updates.
+- **Status:** `open`
+- **Tier:** `v0.4.4`
+
+### `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase J.2 + J.3 + full forensic field rollout deferred from v0.4.1 to v0.4.2 — SUPERSEDED
+
+- **Status:** `superseded by verify-bundle-helper-and-full-forensics-rollout-v0.4.4 (2026-05-06)`. v0.4.3 P.0 landed the struct shape correction; the helper + full rollout deferred again to v0.4.4.
 
 - **Surfaced:** v0.4.1 Phase J scope decision 2026-05-05.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (~78 VerifyCheck push sites) + new `emit_verify_checks` helper.
@@ -394,23 +409,47 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.4.2`
 
+### `descriptor-binding-entropy-field-redundant` — DescriptorBinding.entropy field is redundant after v0.4.3 N
+
+- **Surfaced:** v0.4.3 Phase N (CosignerKeyInfo type alias merge) 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs::DescriptorBinding`.
+- **What:** v0.4.3 N merged CosignerKeyInfo into ResolvedSlot via type alias; ResolvedSlot has per-slot `entropy: Option<Vec<u8>>`. The bundle-level `DescriptorBinding.entropy: Option<Vec<u8>>` field is now semantically redundant with `binding.cosigners[0].entropy`. v0.4.4 retires the field; ~10 call sites (parse_descriptor.rs tests, verify_bundle.rs, bundle.rs::bundle_run_unified_descriptor) update to read `binding.cosigners[0].entropy.as_deref()` instead.
+- **Why deferred:** non-blocking; harmless redundancy.
+- **Status:** `open`
+- **Tier:** `v0.4.4`
+
 ### `bundle-json-cli-flag-and-dispatch` — `--bundle-json <file>` verify-bundle intake + schema-version dispatch
 
 - **Surfaced:** v0.4.1 Phase J.4 scope decision 2026-05-05 (per impl plan r1 review I2).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::VerifyBundleArgs` + new JSON-intake handler.
-- **What:** SPEC §6.7 reserves `--bundle-json <file>` as a verify-bundle flag for round-tripping a `bundle --json` envelope. v0.4.2 adds the CLI flag + the `serde_json::Value` peek-then-typed-decode dispatch on `schema_version` (handle schema 2/3 ms1 as flat string, schema 4 as `MsField` array). The two land atomically because a dispatch without a CLI entry point is untestable (TDD discipline violated).
-- **Why deferred:** atomic landing avoids dead code in v0.4.1.
-- **Status:** `open`
-- **Tier:** `v0.4.2`
+- **What:** SPEC §6.7 reserves `--bundle-json <file>` as a verify-bundle flag for round-tripping a `bundle --json` envelope. v0.4.3 added the CLI flag + the `serde_json::Value` peek-then-typed-decode dispatch on `schema_version` (schema-4 only; schema-2/3 retro-compat tracked at NEW FOLLOWUP `bundle-json-schema-2-3-retro-compat` at v0.4.4+).
+- **Status:** `resolved by v0.4.3 Phase Q (commit pending)` — clap flag with `conflicts_with_all = ["ms1", "mk1", "md1"]`; `load_bundle_json_into_args` synthesizes a VerifyBundleArgs with extracted card vecs; rest of run() unchanged. 3 integration tests in `cli_bundle_json_intake.rs`.
+- **Tier:** `v0.4.2` (target met)
 
 ### `cosigner-keyinfo-resolved-slot-merge` — retire CosignerKeyInfo into ResolvedSlot
 
 - **Surfaced:** v0.4.1 Phase H.6 (impl plan r1 review I1).
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs::CosignerKeyInfo` + `ResolvedSlot`.
-- **What:** v0.4.1 carries two near-identical typed shapes (`CosignerKeyInfo` for legacy descriptor-mode binding; `ResolvedSlot` for unified --slot binding). Both have `xpub: Xpub`, `fingerprint: Fingerprint`, `path: DerivationPath`, `path_raw: String`; ResolvedSlot adds `entropy: Option<Vec<u8>>`. v0.4.2 retires `CosignerKeyInfo` by adding `entropy: Option<Vec<u8>>` to it and renaming, then deletes ResolvedSlot. Touches synthesize.rs + parse_descriptor.rs::bind_descriptor_keys.
-- **Why deferred:** binding refactor scope; non-blocking for v0.4.1 functional surface.
+- **What:** v0.4.1 carried two near-identical typed shapes; v0.4.3 N merged them via `pub type CosignerKeyInfo = ResolvedSlot;` alias. ResolvedSlot is now the sole binding type. CosignerKeyInfo retained as a #[allow(dead_code)] alias for source-compat.
+- **Status:** `resolved by v0.4.3 Phase N (commit 25581f3)` — type alias merge; per-slot entropy lives on ResolvedSlot; legacy DescriptorBinding.entropy field retained but redundant (tracked at NEW FOLLOWUP `descriptor-binding-entropy-field-redundant` at v0.4.4).
+- **Tier:** `v0.4.2` (target met)
+
+### `bundle-json-schema-2-3-retro-compat` — `--bundle-json` schema-2/3 retro-compat intake
+
+- **Surfaced:** v0.4.3 Phase Q scope decision 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::load_bundle_json_into_args`.
+- **What:** v0.4.3 ships schema-4-only intake. Schema-2/3 envelopes (theoretical; no real-world bundles exist since v0.4.1) error with byte-exact stderr pointing at this FOLLOWUP. v0.4.4+ adds schema-2/3 typed dispatch IF a real-world need surfaces.
+- **Why deferred:** speculative; no real bundles to consume.
 - **Status:** `open`
-- **Tier:** `v0.4.2`
+- **Tier:** `v0.4.4-nice-to-have`
+
+### `wif-multisig-resolution` — wif slots in multisig contexts
+
+- **Surfaced:** v0.4.2 Phase K.3 (single-sig-only guard introduced; multisig deferred).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots`.
+- **What:** v0.4.3 R lifted the single-sig-only guard. Wif slots in multisig produce ResolvedSlots with the wif's pubkey + zero chain code + empty path. BIP-388 distinctness applies normally (same WIF twice → row 13 collision).
+- **Status:** `resolved by v0.4.3 Phase R (commit 610bef6)` — 3 new integration tests cover hybrid 2-of-3 + pure 2-of-2 + same-WIF-twice collision.
+- **Tier:** `v0.4.3` (target met)
 
 ### `legacy-flag-deprecation` — full migration of --phrase / --xpub / --cosigner to alias-only deferred from v0.4.1 to v0.5+
 

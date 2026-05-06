@@ -28,7 +28,7 @@ use std::str::FromStr;
 // xpub-mode-incompatible flag rejections are runtime checks emitting
 // byte-exact §6.6 strings via ToolkitError::ModeViolation (exit 2).
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
     #[arg(long, conflicts_with = "xpub")]
     pub phrase: Option<String>,
@@ -69,14 +69,23 @@ pub struct VerifyBundleArgs {
     /// schema-2/3 single-sig invocations, supply once (`--ms1 <s>`); for
     /// schema-4 multi-source multisig, repeat per slot (`--ms1 "" --ms1
     /// <s2>`...). Empty string `""` is the watch-only sentinel per SPEC §5.8.
-    #[arg(long, action = clap::ArgAction::Append)]
+    #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
 
-    #[arg(long, num_args = 1.., required = true)]
+    #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
     pub mk1: Vec<String>,
 
-    #[arg(long, num_args = 1.., required = true)]
+    #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
     pub md1: Vec<String>,
+
+    /// v0.4.3 Phase Q: read supplied ms1/mk1/md1 cards from a JSON envelope
+    /// file (the output of `bundle --json`). Mutually exclusive with the
+    /// explicit --ms1/--mk1/--md1 triplet. Re-derivation flags
+    /// (--slot/--phrase/--xpub/etc.) are STILL required to compute the
+    /// expected bundle. Schema-4 only in v0.4.3; schema-2/3 retro-compat
+    /// tracked at FOLLOWUP `bundle-json-schema-2-3-retro-compat` (v0.4.4+).
+    #[arg(long = "bundle-json", conflicts_with_all = ["ms1", "mk1", "md1"])]
+    pub bundle_json: Option<PathBuf>,
 
     #[arg(long)]
     pub json: bool,
@@ -120,6 +129,17 @@ pub fn run<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
+
+    // v0.4.3 Phase Q: --bundle-json intake. Load JSON envelope, extract
+    // ms1/mk1/md1 into a synthetic VerifyBundleArgs, then continue dispatch
+    // as if the user had supplied --ms1/--mk1/--md1 directly.
+    let synthetic_args;
+    let args = if args.bundle_json.is_some() {
+        synthetic_args = load_bundle_json_into_args(args)?;
+        &synthetic_args
+    } else {
+        args
+    };
 
     // v0.3 descriptor-mode dispatch (escapes before template_unchecked).
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
@@ -1732,6 +1752,7 @@ mod watch_only_tests {
             ms1: Vec::new(),
             mk1: vec!["mk1placeholder".into()],
             md1: vec!["md1placeholder".into()],
+            bundle_json: None,
             json: false,
             cosigner: Vec::new(),
             cosigners_file: None,
@@ -1757,4 +1778,82 @@ mod watch_only_tests {
             "missing line 3 of §2.2.2 warning; got: {stderr_text:?}"
         );
     }
+}
+
+/// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize
+/// a VerifyBundleArgs with the extracted ms1/mk1/md1 vecs populated. Other
+/// args (re-derivation flags --slot/--phrase/etc) are preserved from the
+/// caller's args. Schema-4 only; other schema versions error out with a
+/// pointer to FOLLOWUP `bundle-json-schema-2-3-retro-compat`.
+fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, ToolkitError> {
+    let path = args.bundle_json.as_ref().expect("caller checked bundle_json.is_some()");
+    let raw = std::fs::read_to_string(path).map_err(|e| {
+        ToolkitError::BadInput(format!(
+            "--bundle-json {}: {e}",
+            path.display()
+        ))
+    })?;
+    let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
+        ToolkitError::BadInput(format!(
+            "--bundle-json {} parse: {e}",
+            path.display()
+        ))
+    })?;
+    let schema = v["schema_version"].as_str().ok_or_else(|| {
+        ToolkitError::BadInput(format!(
+            "--bundle-json {} missing or non-string schema_version field",
+            path.display()
+        ))
+    })?;
+    if schema != "4" {
+        return Err(ToolkitError::BadInput(format!(
+            "--bundle-json schema_version {schema} not supported in v0.4.3; this toolkit emits and reads schema_version \"4\" only. Schema-2/3 retro-compat intake tracked at FOLLOWUP `bundle-json-schema-2-3-retro-compat`."
+        )));
+    }
+    // Extract ms1 (MsField = Vec<String>) + mk1 (MkField — flat or nested) + md1 (Vec<String>).
+    let ms1: Vec<String> = v["ms1"]
+        .as_array()
+        .ok_or_else(|| ToolkitError::BadInput("--bundle-json ms1 field is not an array".into()))?
+        .iter()
+        .map(|s| s.as_str().unwrap_or("").to_string())
+        .collect();
+    // mk1 may be flat (Vec<String>) or nested (Vec<Vec<String>>); both flatten
+    // into a single Vec<String> for verify-bundle's --mk1 vec semantics.
+    let mk1: Vec<String> = match &v["mk1"] {
+        serde_json::Value::Array(arr) => {
+            let mut flat = Vec::new();
+            for item in arr {
+                match item {
+                    serde_json::Value::String(s) => flat.push(s.clone()),
+                    serde_json::Value::Array(inner) => {
+                        for s in inner {
+                            if let Some(t) = s.as_str() {
+                                flat.push(t.to_string());
+                            }
+                        }
+                    }
+                    _ => return Err(ToolkitError::BadInput(
+                        "--bundle-json mk1 element is neither string nor array".into(),
+                    )),
+                }
+            }
+            flat
+        }
+        _ => return Err(ToolkitError::BadInput("--bundle-json mk1 field is not an array".into())),
+    };
+    let md1: Vec<String> = v["md1"]
+        .as_array()
+        .ok_or_else(|| ToolkitError::BadInput("--bundle-json md1 field is not an array".into()))?
+        .iter()
+        .map(|s| s.as_str().unwrap_or("").to_string())
+        .collect();
+    // Construct synthetic args: clone everything from caller, override the
+    // card-input fields. bundle_json field is cleared to avoid recursion.
+    Ok(VerifyBundleArgs {
+        ms1,
+        mk1,
+        md1,
+        bundle_json: None,
+        ..args.clone()
+    })
 }

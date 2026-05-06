@@ -4,6 +4,50 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.4.3] — 2026-05-06
+
+### What's new (v0.4.3 verify-bundle finish + unified-path edges)
+
+v0.4.3 closes 4 of 5 v0.4.3-tagged FOLLOWUPS plus 1 NEW (`wif-multisig-resolution`). Theme: **finish verify-bundle (struct-shape correction + JSON intake) and close the unified-path edges (binding-type merge + wif multisig)**. Per the user's "no users yet → ignore migration" license, the v0.4.1-introduced VerifyCheck struct drift from SPEC §5.7 is corrected directly.
+
+- **Phase N — `CosignerKeyInfo` → `ResolvedSlot` merge.** Sole binding type is now `ResolvedSlot`; `CosignerKeyInfo` retained as a `#[allow(dead_code)]` type alias for source-compat. Per-slot `entropy: Option<Vec<u8>>` lives on every `ResolvedSlot`. Closes FOLLOWUP `cosigner-keyinfo-resolved-slot-merge`. Bundle-level `DescriptorBinding.entropy` field retained for now (semantically redundant; tracked at NEW v0.4.4 FOLLOWUP `descriptor-binding-entropy-field-redundant`).
+- **Phase R — wif slots in multisig contexts.** `resolve_slots` (cmd/bundle.rs) lifted the v0.4.2 single-sig-only guard. Wif slots produce ResolvedSlots with the wif's pubkey + zero chain code + empty path. BIP-388 distinctness applies — same WIF twice → SPEC §6.6 row 13 collision (verified by new test). Closes FOLLOWUP `wif-multisig-resolution`. 3 new integration tests in `cli_unified_slot.rs`: hybrid 2-of-3 (phrase + wif + xpub), pure wif 2-of-2 (two distinct WIFs), same-WIF-twice → row 13.
+- **Phase P.0 — VerifyCheck struct shape correction.** Long-standing v0.4.1 J.1 drift from SPEC §5.7: `result: &'static str` ("ok"|"fail"|"skipped") → `passed: bool`. Skipped checks: `passed: true` (decode_error population deferred to v0.4.4 with the helper rollout). Mechanical migration of ~78 push sites in `cmd/verify_bundle.rs` + ~30 test assertions. JSON envelope: `"result": "ok"|"fail"` → `"passed": true|false`.
+- **Phase Q — `--bundle-json <file>` verify-bundle JSON intake (SPEC §6.7 amended).** New CLI flag mutually exclusive with `--ms1`/`--mk1`/`--md1` triplet via clap `conflicts_with_all`. Reads a `bundle --json` envelope file, peeks `schema_version`, validates `"4"`, extracts `ms1`/`mk1`/`md1` arrays into a synthetic VerifyBundleArgs, then continues dispatch as if user had supplied the explicit triplet. Re-derivation flags (`--slot`/`--phrase`/etc.) are STILL required for expected-bundle computation. Schema-2/3 envelopes rejected with byte-exact stderr pointing at NEW v0.4.4-nice-to-have FOLLOWUP `bundle-json-schema-2-3-retro-compat`. SPEC §6.7 amended in lockstep with v0.4.3 amendment paragraph. Closes FOLLOWUP `bundle-json-cli-flag-and-dispatch`. 3 new integration tests in `cli_bundle_json_intake.rs` (round-trip, unsupported schema, conflicts_with).
+
+### Deferred to v0.4.4
+
+- **`verify-bundle-helper-and-full-forensics-rollout-v0.4.4`** — full Phase P (P.1 emit_verify_checks helper + P.2-P.5 ~78-site forensic rollout + descriptor-mode 9/3+6N parity refactor). Estimated ~800-1000 lines deleted in verify_bundle.rs. v0.4.3 ships the structural pieces (P.0); the heavy refactor lands in v0.4.4. Bundles `verify-bundle-9-3plus6n-descriptor-mode-parity` from v0.4.2 deferral.
+- **`descriptor-binding-entropy-field-redundant`** — retire `DescriptorBinding.entropy` field after v0.4.3 N's per-slot ResolvedSlot.entropy. Cleanup-only; no behavior change.
+
+### Breaking changes
+
+- **JSON envelope `VerifyCheck`**: `"result": "ok"|"fail"|"skipped"` → `"passed": true|false` (skipped: `"passed": true`, `decode_error` population in v0.4.4). Per "no users yet" license — internal-only break; no existing JSON consumers to migrate. SPEC §5.7 was always specified this way; v0.4.1 had implementation drift.
+
+### Wire-bit-identical guarantee
+
+v0.4.0 / v0.4.1 / v0.4.2 schema-4 bundles continue to emit byte-identically. The VerifyCheck struct change affects only `verify-bundle --json` output, not `bundle --json` output.
+
+### Test corpus
+
+240 lib + integration suites pass (was 240 in v0.4.2; net 0 — additions: 3 wif-multisig + 3 bundle-json + struct-shape correction touched ~30 test sites; no test count delta because the v0.4.2 wif-multisig-rejected test was replaced by 3 new wif-multisig-supported tests).
+
+### Cycle artifacts
+
+- Implementation plan: `design/IMPLEMENTATION_PLAN_v0_4_3_verify_bundle_finish.md` (r2 APPROVE WITH NITS; nits applied).
+- SPEC: `design/SPEC_mnemonic_toolkit_v0_4.md` §6.7 amended in lockstep with Phase Q.
+
+### Architect-review history
+
+- v0.4.3 impl plan + SPEC: 2 in-cycle rounds (r1 BLOCK 2C/3N → r2 APPROVE WITH NITS 0C/0I/1N; SPEC §6.7 amendment for `--bundle-json` landed before execution).
+- Phase N: scope-minimized type alias merge; 240 tests pass post-migration.
+- Phase R: scope-minimized guard lift; 3 new tests including BIP-388 collision.
+- Phase P.0: SPEC §5.7 drift correction (~78-site mechanical migration); P.1-P.5 deferred to v0.4.4 atomic refactor.
+- Phase Q: scope-minimized JSON intake (load + dispatch + 3 tests); helper landed without rewriting run() entry.
+- Final cross-phase review: pending (this CHANGELOG entry is the gate).
+
+---
+
 ## mnemonic-toolkit [0.4.2] — 2026-05-06
 
 ### What's new (v0.4.2 unified-path consolidation)
