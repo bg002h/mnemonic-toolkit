@@ -9,6 +9,7 @@ mod language;
 mod network;
 mod parse;
 mod parse_descriptor;
+mod slot_input;
 mod synthesize;
 mod template;
 

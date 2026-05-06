@@ -106,6 +106,14 @@ pub struct BundleArgs {
     /// v0.2 multisig cosigner count N (1 ≤ K ≤ N ≤ 16).
     #[arg(long = "cosigner-count")]
     pub cosigner_count: Option<usize>,
+
+    /// v0.4 unified slot input. Repeating flag — one occurrence per
+    /// (slot, subkey) tuple. Grammar: `@N.<subkey>=<value>` where N is
+    /// the slot index (u8) and subkey is one of phrase / entropy / xpub /
+    /// fingerprint / path / wif / xprv. Phase B lands the parser; Phase C
+    /// wires it into the unified `bundle_run` dispatch.
+    #[arg(long = "slot", action = clap::ArgAction::Append, value_parser = crate::slot_input::parse_slot_input)]
+    pub slot: Vec<crate::slot_input::SlotInput>,
 }
 
 impl BundleArgs {

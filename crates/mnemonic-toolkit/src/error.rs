@@ -74,6 +74,15 @@ pub enum ToolkitError {
     /// Re-emitted from `check_key_vector_distinctness` post-binding under
     /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
     Bip388VerifyDistinctness,
+    /// SPEC §6.6 row 4 (conflict) / row 8 (gap) / §6.6.b (invalid subkey set)
+    /// `--slot @N.<subkey>=<value>` validation violation at bundle creation.
+    /// Exit 2. Wired into `bundle_run` in Phase C.
+    #[allow(dead_code)]
+    SlotInputViolation {
+        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey".
+        kind: &'static str,
+        message: String,
+    },
 }
 
 #[derive(Debug)]
@@ -190,7 +199,8 @@ impl ToolkitError {
             ToolkitError::ModeViolation { .. }
             | ToolkitError::NetworkMismatch { .. }
             | ToolkitError::DescriptorParse(_)
-            | ToolkitError::Bip388Distinctness { .. } => 2,
+            | ToolkitError::Bip388Distinctness { .. }
+            | ToolkitError::SlotInputViolation { .. } => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -223,6 +233,7 @@ impl ToolkitError {
             ToolkitError::DescriptorReparseFailed { .. } => "DescriptorReparseFailed",
             ToolkitError::Bip388Distinctness { .. } => "Bip388Distinctness",
             ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
+            ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
         }
     }
 
@@ -270,6 +281,7 @@ impl ToolkitError {
             ToolkitError::Bip388VerifyDistinctness => {
                 "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys".to_string()
             }
+            ToolkitError::SlotInputViolation { message, .. } => message.clone(),
         }
     }
 
@@ -298,6 +310,7 @@ impl ToolkitError {
                 "cosigner_idx": cosigner_idx,
             })),
             ToolkitError::Bip388Distinctness { i, j } => Some(json!({ "i": i, "j": j })),
+            ToolkitError::SlotInputViolation { kind, .. } => Some(json!({ "kind": kind })),
             _ => None,
         }
     }
