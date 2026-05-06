@@ -4,6 +4,44 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.6.0] — 2026-05-06
+
+### What's new (v0.6.0 — `mnemonic convert` subcommand)
+
+A new orthogonal subcommand for single-format conversions between BIP-39 phrase, BIP-39 entropy, BIP-32 xpriv/xpub, WIF, fingerprint, path, and the codex32 codec encodings ms1 and mk1. The subcommand makes conversions a first-class CLI operation rather than a side-effect of bundle synthesis.
+
+- **New subcommand `mnemonic convert`**, governed by the new `design/SPEC_convert_v0_6.md` (architect-approved 0C/0I at r3).
+- **9-node typed conversion graph.** `phrase`, `entropy`, `xpub`, `xprv`, `wif`, `fingerprint`, `path`, `ms1`, `mk1`. Direct edges enumerated in `is_supported_direct_edge`; any (from, to) NOT in the set is auto-refused as a one-way barrier (exit 2). Deferred nodes (`seed`, `raw_privkey`) are documented but not yet emit/accept-supported (gated on ms-codec v0.2). `md1` is deliberately excluded (descriptors are bundle artifacts).
+- **Three refusal classes** (one-way cryptographic barrier / lossy compression / cross-format pivot) with byte-exact stderr templates. `xpub → mk1` has a distinct refusal redirecting to `mnemonic bundle` (mk1 cards bind xpubs to specific policies via `policy_id_stubs`; standalone encoding is meaningless).
+- **`--from`/`--to` grammar.** Single-from-value v0.6 constraint (one primary value-bearing `--from` plus optional side-input `--from path=...` / `--from fingerprint=...`); multi-value `--from` reserved for future `--slot @N` indexing.
+- **`--from <node>=-` stdin convention** for any single-line node; `mk1` reads whitespace-separated tokens from stdin.
+- **ConvertJson schema-1 envelope** independent of `BundleJson`. `from_value` omitted when `from_node` is secret-bearing (privacy hygiene); `to` array preserves `--to` argument order.
+- **Side-channel hygiene:** stderr warning when secret material is on stdout. New convention in v0.6; bundle retrofit tracked at FOLLOWUP `secret-on-stdout-warning-bundle-retrofit`.
+- **`--passphrase` ignored-on-non-PBKDF2-edge stderr warning** — explicit (higher-stakes than other ignored side-inputs).
+- **`wif → xpub` sentinel stderr warning** — emits depth-0 sentinel xpub with zeroed chain code; warns the resulting xpub is not BIP-32 derivable. Refuses `wif → xpub --path m/...` (chain code destroyed).
+- **`derive::DerivedAccount` extended** with `account_xpriv: Xpriv` field to support the `phrase/entropy → xprv` edge. Both `derive::derive_full` and `derive_slot::derive_bip32_from_entropy` populate it.
+- **New error variant** `ToolkitError::ConvertRefusal(String)`; exit code 2.
+
+### Test corpus
+
+230 lib + 67 integration tests pass (was 230 lib + 44 integration in v0.5.2). 23 new convert tests across 4 files: `cli_convert_happy_paths.rs` (11 edges + mk1→xpub decode), `cli_convert_refusals.rs` (7 refusal classes, byte-exact stderr), `cli_convert_json.rs` (3 envelope shape tests), `cli_convert_help_fixtures.rs` (2 help-text smoke tests).
+
+### FOLLOWUPS
+
+- New: `secret-on-stdout-warning-bundle-retrofit` — apply v0.6 §7 secret-on-stdout warning to `bundle` for cross-tool consistency.
+- New: `convert-seed-and-raw-privkey-nodes` — add `seed`, `raw_privkey`, `xprv`-via-ms1, `seed`-via-ms1 nodes when ms-codec v0.2 ships.
+- New: `convert-phrase-to-leaf-wif` — implement `phrase/entropy → wif` (path-to-leaf-WIF derivation; deferred from v0.6).
+
+### Wire format
+
+Bundle/verify-bundle wire format unchanged. Convert subcommand is additive.
+
+### Architect review reports
+
+- `design/agent-reports/spike-convert-v0_6_0-pre-spec.md` — Phase 0 codec call-shape spike.
+- `design/agent-reports/v0_6_0_phase_spec_r3.md` — SPEC 0C/0I at r3.
+- `design/agent-reports/v0_6_0_phase_impl_r1.md` — implementation review (0C/2I/2L/1N → 0C/0I after foldings).
+
 ## mnemonic-toolkit [0.5.2] — 2026-05-06
 
 ### What's new (v0.5.2 — derive_slot helper extraction)

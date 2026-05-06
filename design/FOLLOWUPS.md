@@ -578,3 +578,30 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   5. Watch via `gh api repos/rust-bitcoin/rust-miniscript/tags --jq '.[].name' | grep -E 'miniscript-(13\.[1-9]|14|15)'`.
 - **Status:** `partially resolved by v0.3.1; v0.3.2 cleanup pending miniscript crates.io release`
 - **Tier:** `v0.3.2` (toolkit-side; was `v0.4-cross-repo` until v0.3.1 shipped)
+
+### `secret-on-stdout-warning-bundle-retrofit` — apply convert's §7 secret-on-stdout warning to bundle
+
+- **Surfaced:** v0.6.0 SPEC architect review r1 C-2 + impl decision 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` emit_unified ms1 emission paths.
+- **What:** v0.6.0 introduces a stderr warning `"warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"` when convert emits secret-bearing material to stdout (phrase/entropy/xprv/wif/ms1). The bundle subcommand also emits secret-bearing ms1 strings to stdout but does NOT have the warning. Retrofit for cross-tool consistency.
+- **Why deferred:** convert was the natural place to introduce the convention (ad-hoc one-shot operations where stdout-redirect-discipline is most likely overlooked); bundle retrofit is a separate scope-bounded change.
+- **Status:** `open`
+- **Tier:** `v0.6.1`
+
+### `convert-seed-and-raw-privkey-nodes` — add seed / raw_privkey / xprv-via-ms1 / seed-via-ms1 nodes to convert when ms-codec v0.2 ships
+
+- **Surfaced:** v0.6.0 SPEC §1 deferral 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs::NodeType` + edge table + SPEC §1.
+- **What:** ms-codec v0.1.0's `SEED`, `XPRV`, `PRVK` tags are `RESERVED_NOT_EMITTED_V01`. v0.6.0 SPEC §1 documents `seed` and `raw_privkey` as deferred-not-rejected nodes. When ms-codec ships v0.2 with the reserved tags activated, add these nodes + their edges to convert (and update SPEC §1 / §2 accordingly).
+- **Why deferred:** upstream codec library limit; additive.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+
+### `convert-phrase-to-leaf-wif` — implement phrase/entropy → wif (path-to-leaf-WIF derivation)
+
+- **Surfaced:** v0.6.0 SPEC §10 deferral 2026-05-06 + impl r1 review.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` Phrase|Entropy arm.
+- **What:** v0.6.0 SPEC §2 lists `phrase/entropy → wif` as not directly defined; impl returns `BadInput` with deferral message. Implementing requires a leaf-depth BIP-32 path (`m/<purpose>'/<coin>'/<account>'/<chain>/<index>`, depth 5) and serializing the leaf privkey to WIF. v0.6.1+ adds the missing edge.
+- **Why deferred:** scope-safety in v0.6.0; the headline conversion graph nodes were prioritized.
+- **Status:** `open`
+- **Tier:** `v0.6.1`
