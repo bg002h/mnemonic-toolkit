@@ -30,3 +30,12 @@
 ## Verdict
 
 **BLOCK at r1; APPROVE after I-1 + I-2 fixes (see r2 commit).**
+
+## r2 closure
+
+**Delta:** commit `c1ffffd`. Verdict: APPROVE — 0C / 0I / 0L. Terminates Phase H iterative-review loop.
+
+- I-1 closure: cmd/bundle.rs:1620 derives `path_family` from `args.multisig_path_family`; sh-wsh-* templates correctly emit `"bip48"`.
+- I-2 closure: 7 new unit tests in synthesize.rs::tests cover all five BundleMode shape variants + threshold-out-of-range error path + BundleJson schema_version pin. Coverage adequate.
+- L-1 closure: FOLLOWUPS entry `unified-slot-xpub-missing-path-origin-path-null` filed at `v0.4.2-nice-to-have`.
+- No new findings.
