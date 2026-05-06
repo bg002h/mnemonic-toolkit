@@ -1488,8 +1488,9 @@ fn resolve_slots(
     for s in slots {
         by_index.entry(s.index).or_default().push(s);
     }
+    let by_index_len = by_index.len();
     let secp = Secp256k1::new();
-    let mut out: Vec<ResolvedSlot> = Vec::with_capacity(by_index.len());
+    let mut out: Vec<ResolvedSlot> = Vec::with_capacity(by_index_len);
     for (idx, slot_inputs) in by_index {
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
@@ -1562,11 +1563,100 @@ fn resolve_slots(
                 path_raw,
                 entropy: None,
             });
+        } else if subkeys.contains(&SlotSubkey::Entropy) {
+            // K.1: {entropy} — hex-decode → Mnemonic::from_entropy → seed →
+            // derive at template path. Produces a secret-bearing slot
+            // byte-identical to the equivalent {phrase} resolution for the
+            // same underlying entropy.
+            let entropy_hex = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Entropy)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let entropy_bytes = hex::decode(entropy_hex).map_err(|e| {
+                ToolkitError::BadInput(format!(
+                    "--slot @{idx}.entropy hex-decode: {e}"
+                ))
+            })?;
+            let language = args.language.unwrap_or_default();
+            let passphrase = args.passphrase.clone().unwrap_or_default();
+            let mnemonic = Mnemonic::from_entropy_in(language.into(), &entropy_bytes)
+                .map_err(ToolkitError::Bip39)?;
+            let seed = mnemonic.to_seed(&passphrase);
+            let master = Xpriv::new_master(args.network.network_kind(), &seed)
+                .map_err(|e| {
+                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+                })?;
+            let master_fp = master.fingerprint(&secp);
+            let path = template.derivation_path(args.network, args.account);
+            let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
+                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+            })?;
+            let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &acct_xpriv);
+            let path_raw = path.to_string();
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint: master_fp,
+                path,
+                path_raw,
+                entropy: Some(entropy_bytes),
+            });
+        } else if subkeys.contains(&SlotSubkey::Wif) {
+            // K.3: {wif} — degenerate single-key. Parse WIF; use its public
+            // point as a depth-0 xpub with zero chain code (BIP-32 framing
+            // accepts depth-0 with sentinel chain code; non-derivable but
+            // the wallet policy slot just needs a stable pubkey).
+            // v0.4.2 minimum: wif slots only in single-sig contexts; multisig
+            // with wif slots is a v0.4.3 FOLLOWUP `wif-multisig-resolution`.
+            if by_index_len > 1 {
+                return Err(ToolkitError::BadInput(format!(
+                    "--slot @{idx}.wif in multisig context not supported in v0.4.2; \
+                    deferred to v0.4.3 per FOLLOWUP `wif-multisig-resolution`."
+                )));
+            }
+            let wif_str = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Wif)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let priv_key = bitcoin::PrivateKey::from_wif(wif_str).map_err(|e| {
+                ToolkitError::BadInput(format!("--slot @{idx}.wif parse: {e}"))
+            })?;
+            let pubkey = priv_key.public_key(&secp);
+            // Build a depth-0 xpub from the WIF's pubkey + zero chain code.
+            // The KeyCard accepts this via the standard mk-codec encoder; the
+            // resulting bundle's mk1 carries the wif's pubkey verbatim.
+            let xpub = bitcoin::bip32::Xpub {
+                network: args.network.network_kind().into(),
+                depth: 0,
+                parent_fingerprint: Fingerprint::default(),
+                child_number: bitcoin::bip32::ChildNumber::Normal { index: 0 },
+                public_key: pubkey.inner,
+                chain_code: bitcoin::bip32::ChainCode::from([0u8; 32]),
+            };
+            // wif slots are secret-bearing for signing but ms-codec ENTR encoding
+            // takes BIP-39 entropy bytes, not raw WIF bytes. v0.4.2 emits an
+            // empty-string ms1 sentinel for wif slots — analogous to the xprv
+            // case. Document in SPEC §5.8 amendment block.
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint: Fingerprint::default(),
+                path: DerivationPath::default(),
+                path_raw: String::new(),
+                entropy: None,
+            });
+        } else if subkeys.contains(&SlotSubkey::Xprv) {
+            // K.2: {xprv} — REJECTED in v0.4.2 per impl plan r1 review C-1.
+            // Resolution requires ms-codec XPRV-tag support (cross-repo cycle).
+            return Err(ToolkitError::BadInput(format!(
+                "--slot @{idx}.xprv not supported in v0.4.2; deferred to v0.5+ \
+                pending ms-codec XPRV-tag extension. See FOLLOWUP \
+                `unified-slot-xprv-resolution-needs-ms-codec-extension`."
+            )));
         } else {
             return Err(ToolkitError::BadInput(format!(
-                "v0.4.1 unified --slot dispatch supports {{phrase}} and {{xpub, fingerprint, path}} \
-                shapes; slot @{idx} subkey set {:?} requires v0.4.2 (FOLLOWUP \
-                `unified-slot-additional-subkey-shapes`).",
+                "slot @{idx} subkey set {:?} not supported by resolve_slots; \
+                this should have been caught by validate_slot_set",
                 subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
             )));
         }
