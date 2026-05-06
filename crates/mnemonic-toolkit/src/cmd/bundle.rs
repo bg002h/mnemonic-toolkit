@@ -1703,7 +1703,98 @@ fn emit_unified<W: Write, E: Write>(
             writeln!(stdout, "{}", chunk_md1(s)).ok();
         }
         writeln!(stdout).ok();
-        let _ = stderr; // engraving card lands in Phase I.
+        // v0.4.1 Phase I: emit unified engraving card to stderr unless suppressed.
+        if !args.no_engraving_card {
+            let card = build_unified_card(args, bundle, resolved);
+            write!(stderr, "{}", card).ok();
+        }
     }
     Ok(())
+}
+
+/// v0.4.1 Phase I helper: assemble `BundleInputForCard` from the unified
+/// dispatch's `ResolvedSlot` vec + `Bundle` + args, then render via
+/// `engraving_card_unified`.
+fn build_unified_card(
+    args: &BundleArgs,
+    bundle: &Bundle,
+    resolved: &[ResolvedSlot],
+) -> String {
+    use crate::format::{engraving_card_unified, BundleInputForCard, SlotCardBlock,
+        TemplateOrDescriptor};
+    use crate::synthesize::derive_mk1_chunk_set_id;
+
+    let n = resolved.len() as u8;
+    let template_str: &'static str =
+        args.template.map(|t| t.human_name()).unwrap_or("descriptor");
+
+    // Compute md1 chunk_set_id from the descriptor's policy_id (re-extracted
+    // from the encoded md1 strings to avoid threading the policy_id through
+    // the synthesis output).
+    let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+    let md1_chunk_set_id = match md_codec::chunk::reassemble(&md1_strs)
+        .ok()
+        .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok())
+    {
+        Some(pid) => {
+            let bytes = pid.as_bytes();
+            format!("{:02x}{:02x}", bytes[0], bytes[1])
+        }
+        None => "????".to_string(),
+    };
+
+    let per_slot: Vec<SlotCardBlock> = resolved
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            // Both ms1 and mk1 share the policy_id_stub-derived chunk_set_id
+            // (per Phase I.1 spec note in the impl plan).
+            let stub_csi_4hex = match md_codec::chunk::reassemble(&md1_strs)
+                .ok()
+                .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok())
+            {
+                Some(pid) => {
+                    let stub = &pid.as_bytes()[..4];
+                    format!("{:05x}", derive_mk1_chunk_set_id(&[
+                        stub[0], stub[1], stub[2], stub[3]
+                    ]))
+                }
+                None => "?????".to_string(),
+            };
+            let ms1_card_id = if bundle.ms1.get(i).map(|s| !s.is_empty()).unwrap_or(false) {
+                Some(stub_csi_4hex.clone())
+            } else {
+                None
+            };
+            SlotCardBlock {
+                index: i as u8,
+                ms1_card_id,
+                mk1_card_id: stub_csi_4hex,
+                fingerprint: if args.privacy_preserving {
+                    None
+                } else {
+                    Some(s.fingerprint.to_string().to_lowercase())
+                },
+                origin_path: if s.path_raw.is_empty() {
+                    None
+                } else {
+                    Some(s.path_raw.clone())
+                },
+            }
+        })
+        .collect();
+
+    let input = BundleInputForCard {
+        network: args.network.human_name(),
+        template_or_descriptor: TemplateOrDescriptor::Template(template_str),
+        threshold: args.threshold.or(if n > 1 { Some(n) } else { None }),
+        n,
+        language: args.language.map(|l| l.human_name()),
+        passphrase_used: args.passphrase.as_ref().map(|p| !p.is_empty()).unwrap_or(false),
+        privacy_preserving: args.privacy_preserving,
+        per_slot,
+        md1_chunk_set_id,
+    };
+
+    engraving_card_unified(&input)
 }

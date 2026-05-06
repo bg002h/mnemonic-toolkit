@@ -165,6 +165,174 @@ fn is_tr_multisig(template: &str) -> bool {
     matches!(template, "tr-multi-a" | "tr-sortedmulti-a")
 }
 
+// ============================================================================
+// v0.4.1 Phase I — unified engraving card (SPEC §5.5).
+// ============================================================================
+
+/// SPEC §5.5 unified engraving card input — replaces per-mode `EngravingMode`
+/// variants with a single shape carrying header + per-slot blocks +
+/// template-or-descriptor + md1 reference.
+///
+/// v0.4.1 scope: this struct + `engraving_card_unified` are wired into the
+/// new `bundle_run_unified` dispatch only. Full migration of the 4 legacy
+/// `engraving_card(...)` call sites is deferred to v0.4.2 per FOLLOWUP
+/// `engraving-card-unified-legacy-migration`.
+#[derive(Debug, Clone)]
+pub struct BundleInputForCard {
+    pub network: &'static str,
+    pub template_or_descriptor: TemplateOrDescriptor,
+    pub threshold: Option<u8>,
+    pub n: u8,
+    pub language: Option<&'static str>,
+    pub passphrase_used: bool,
+    pub privacy_preserving: bool,
+    pub per_slot: Vec<SlotCardBlock>,
+    pub md1_chunk_set_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum TemplateOrDescriptor {
+    Template(&'static str),
+    Descriptor(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct SlotCardBlock {
+    pub index: u8,
+    /// 4-hex chunk_set_id derived from policy_id_stub (None for watch-only).
+    pub ms1_card_id: Option<String>,
+    /// 4-hex chunk_set_id for mk1.
+    pub mk1_card_id: String,
+    /// Master fingerprint (None under privacy_preserving).
+    pub fingerprint: Option<String>,
+    /// Origin derivation path (None if absent / wif slot).
+    pub origin_path: Option<String>,
+}
+
+/// SPEC §5.5 unified card layout: header / threshold / cosigners block /
+/// template-or-descriptor / md1 reference / recovery hint.
+///
+/// Truncation policy (SPEC §5.5): descriptor strings > 80 chars render as
+/// `<first 60 chars>... [md1: <chunk-set-id>] (<descriptor_len> chars total)`.
+pub fn engraving_card_unified(input: &BundleInputForCard) -> String {
+    const DESCRIPTOR_MAX_INLINE: usize = 80;
+    const DESCRIPTOR_TRUNC_PREFIX: usize = 60;
+
+    let mut s = String::new();
+
+    // 1. Header line.
+    let summary = match &input.template_or_descriptor {
+        TemplateOrDescriptor::Template(t) => (*t).to_string(),
+        TemplateOrDescriptor::Descriptor(d) => {
+            if d.len() <= DESCRIPTOR_MAX_INLINE {
+                d.clone()
+            } else {
+                format!("descriptor[{}..]", &d[..DESCRIPTOR_TRUNC_PREFIX.min(d.len())])
+            }
+        }
+    };
+    s.push_str(&format!(
+        "# === Wallet bundle: {}, {} ===\n",
+        summary, input.network
+    ));
+
+    // 2. Threshold line (multisig only).
+    if let Some(t) = input.threshold {
+        if input.n > 1 {
+            s.push_str(&format!("# Threshold: {} of {}\n", t, input.n));
+        }
+    }
+
+    // 3. Cosigners block.
+    if input.n > 1 {
+        s.push_str("# Cosigners:\n");
+        for blk in &input.per_slot {
+            let ms1_part = match &blk.ms1_card_id {
+                Some(id) => format!("ms1:{},", id),
+                None => "(no ms1; watch-only),".to_string(),
+            };
+            let mk1_part = format!("mk1:{}", blk.mk1_card_id);
+            let fp_part = match &blk.fingerprint {
+                Some(fp) => fp.clone(),
+                None => "anon".to_string(),
+            };
+            let path_part = blk
+                .origin_path
+                .clone()
+                .unwrap_or_else(|| "(no path)".to_string());
+            s.push_str(&format!(
+                "#   @{}: {}{} ({} @ {})\n",
+                blk.index, ms1_part, mk1_part, fp_part, path_part
+            ));
+        }
+    } else if let Some(blk) = input.per_slot.first() {
+        // Single-sig: emit one slot block without the "Cosigners:" header.
+        let ms1_part = match &blk.ms1_card_id {
+            Some(id) => format!("# ms1: {}\n", id),
+            None => "# ms1: (omitted; watch-only)\n".to_string(),
+        };
+        s.push_str(&ms1_part);
+        s.push_str(&format!("# mk1: {}\n", blk.mk1_card_id));
+        if let Some(fp) = &blk.fingerprint {
+            s.push_str(&format!("# fingerprint: {}\n", fp));
+        }
+        if let Some(p) = &blk.origin_path {
+            s.push_str(&format!("# origin path: {}\n", p));
+        }
+    }
+
+    // 4. Template OR descriptor line.
+    match &input.template_or_descriptor {
+        TemplateOrDescriptor::Template(t) => {
+            s.push_str(&format!("# Template: {}\n", t));
+        }
+        TemplateOrDescriptor::Descriptor(d) => {
+            if d.len() <= DESCRIPTOR_MAX_INLINE {
+                s.push_str(&format!("# Descriptor: {}\n", d));
+            } else {
+                s.push_str(&format!(
+                    "# Descriptor: {}... [md1: {}] ({} chars total)\n",
+                    &d[..DESCRIPTOR_TRUNC_PREFIX.min(d.len())],
+                    input.md1_chunk_set_id,
+                    d.len()
+                ));
+            }
+        }
+    }
+
+    // 5. md1 reference line.
+    s.push_str(&format!("# md1: {}\n", input.md1_chunk_set_id));
+
+    // 6. Recovery hint line.
+    if let Some(t) = input.threshold {
+        if input.n > 1 {
+            s.push_str(&format!(
+                "# Recovery: any {} of {} signing keys + md1 (template card).\n",
+                t, input.n
+            ));
+        }
+    }
+
+    // 7. Language / passphrase footer.
+    if let Some(l) = input.language {
+        s.push_str(&format!("# Language: {}\n", l));
+    }
+    if input.passphrase_used {
+        s.push_str("# Passphrase: USED — not engraved on any card; record separately.\n");
+    }
+
+    // 8. Hardware wallet caveat for tr-multisig templates (SPEC §5.5).
+    if let TemplateOrDescriptor::Template(t) = &input.template_or_descriptor {
+        if is_tr_multisig(t) {
+            s.push_str(
+                "# HARDWARE WALLET CAVEAT: taproot multisig (multi_a / sortedmulti_a) signing-side\n#   support is nascent as of v0.4; verify your signing device supports it before engraving.\n",
+            );
+        }
+    }
+
+    s
+}
+
 /// Compose the engraving-card stderr text (SPEC §5.2). Byte-exact for all modes.
 pub fn engraving_card(
     network: &str,
@@ -432,5 +600,153 @@ engrave each card on its own plate. record this card alongside.
         assert!(card.contains("ms1 card omitted"));
         assert!(!card.contains("language:"));
         assert!(!card.contains("passphrase:"));
+    }
+
+    // ---- v0.4.1 Phase I — engraving_card_unified shape tests (SPEC §5.5) ----
+
+    fn slot_block(idx: u8, secret: bool, fp: Option<&str>, path: Option<&str>) -> SlotCardBlock {
+        SlotCardBlock {
+            index: idx,
+            ms1_card_id: if secret { Some("abcde".into()) } else { None },
+            mk1_card_id: "abcde".into(),
+            fingerprint: fp.map(String::from),
+            origin_path: path.map(String::from),
+        }
+    }
+
+    #[test]
+    fn unified_card_single_sig_full_includes_template_and_md1() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Template("bip84"),
+            threshold: None,
+            n: 1,
+            language: Some("english"),
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: vec![slot_block(0, true, Some("5436d724"), Some("m/84'/0'/0'"))],
+            md1_chunk_set_id: "1234".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(card.contains("# === Wallet bundle: bip84, mainnet ===\n"));
+        assert!(card.contains("# ms1: abcde\n"));
+        assert!(card.contains("# mk1: abcde\n"));
+        assert!(card.contains("# fingerprint: 5436d724\n"));
+        assert!(card.contains("# origin path: m/84'/0'/0'\n"));
+        assert!(card.contains("# Template: bip84\n"));
+        assert!(card.contains("# md1: 1234\n"));
+        assert!(card.contains("# Language: english\n"));
+        assert!(!card.contains("# Threshold:"));
+        assert!(!card.contains("# Cosigners:"));
+    }
+
+    #[test]
+    fn unified_card_single_sig_watch_only_omits_ms1_id_and_passphrase_footer() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Template("bip84"),
+            threshold: None,
+            n: 1,
+            language: None,
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: vec![slot_block(0, false, Some("5436d724"), Some("m/84'/0'/0'"))],
+            md1_chunk_set_id: "1234".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(card.contains("# ms1: (omitted; watch-only)\n"));
+        assert!(!card.contains("Passphrase:"));
+        assert!(!card.contains("Language:"));
+    }
+
+    #[test]
+    fn unified_card_multisig_2_of_3_includes_threshold_cosigners_recovery() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Template("wsh-sortedmulti"),
+            threshold: Some(2),
+            n: 3,
+            language: Some("english"),
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: vec![
+                slot_block(0, true, Some("aaaaaaaa"), Some("m/48'/0'/0'/2'")),
+                slot_block(1, false, Some("bbbbbbbb"), Some("m/48'/0'/0'/2'")),
+                slot_block(2, false, Some("cccccccc"), Some("m/48'/0'/0'/2'")),
+            ],
+            md1_chunk_set_id: "9999".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(card.contains("# Threshold: 2 of 3\n"));
+        assert!(card.contains("# Cosigners:\n"));
+        assert!(card.contains("#   @0: ms1:abcde,mk1:abcde (aaaaaaaa @ m/48'/0'/0'/2')\n"));
+        assert!(card.contains("#   @1: (no ms1; watch-only),mk1:abcde (bbbbbbbb @ m/48'/0'/0'/2')\n"));
+        assert!(card.contains("#   @2: (no ms1; watch-only),mk1:abcde (cccccccc @ m/48'/0'/0'/2')\n"));
+        assert!(card.contains("# Recovery: any 2 of 3 signing keys + md1 (template card).\n"));
+    }
+
+    #[test]
+    fn unified_card_privacy_preserving_anonymizes_fingerprints() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Template("wsh-sortedmulti"),
+            threshold: Some(2),
+            n: 2,
+            language: None,
+            passphrase_used: false,
+            privacy_preserving: true,
+            per_slot: vec![
+                slot_block(0, true, None, Some("m/48'/0'/0'/2'")),
+                slot_block(1, false, None, Some("m/48'/0'/0'/2'")),
+            ],
+            md1_chunk_set_id: "abcd".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(card.contains("anon @ m/48'/0'/0'/2'"));
+        assert!(!card.contains("5436d724"));
+    }
+
+    #[test]
+    fn unified_card_descriptor_truncation_at_80_chars() {
+        let long_d = "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*,@3/<0;1>/*,@4/<0;1>/*,@5/<0;1>/*))";
+        assert!(long_d.len() > 80);
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Descriptor(long_d.into()),
+            threshold: Some(2),
+            n: 6,
+            language: None,
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: (0..6)
+                .map(|i| slot_block(i, false, Some("ffffffff"), Some("m/48'/0'/0'/2'")))
+                .collect(),
+            md1_chunk_set_id: "1234".into(),
+        };
+        let card = engraving_card_unified(&input);
+        // Long descriptor renders truncated with chars-total annotation.
+        assert!(card.contains(&format!("({} chars total)", long_d.len())));
+        assert!(card.contains("[md1: 1234]"));
+    }
+
+    #[test]
+    fn unified_card_tap_multisig_includes_hardware_caveat() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Template("tr-sortedmulti-a"),
+            threshold: Some(2),
+            n: 3,
+            language: None,
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: vec![
+                slot_block(0, true, Some("aaaaaaaa"), Some("m/86'/0'/0'")),
+                slot_block(1, false, Some("bbbbbbbb"), Some("m/86'/0'/0'")),
+                slot_block(2, false, Some("cccccccc"), Some("m/86'/0'/0'")),
+            ],
+            md1_chunk_set_id: "1234".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(card.contains("HARDWARE WALLET CAVEAT"));
     }
 }
