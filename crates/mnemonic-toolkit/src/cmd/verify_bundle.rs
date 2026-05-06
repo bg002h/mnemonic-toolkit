@@ -192,7 +192,7 @@ pub fn run<W: Write, E: Write>(
         let result = if any_fail { "mismatch" } else { "ok" };
         if args.json {
             let json = VerifyBundleJson {
-                schema_version: "2",
+                schema_version: "3",
                 result,
                 checks,
             };
@@ -228,7 +228,7 @@ pub fn run<W: Write, E: Write>(
         // v0.2: schema_version "2"; single-sig checks shape unchanged from v0.1
         // (multisig array shape comes in Phase C).
         let json = VerifyBundleJson {
-            schema_version: "2",
+            schema_version: "3",
             result,
             checks,
         };

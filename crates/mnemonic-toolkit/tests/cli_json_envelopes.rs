@@ -23,7 +23,7 @@ fn bundle_json_schema_field_order() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("bundle stdout is valid JSON");
-    assert_eq!(v["schema_version"], "2");
+    assert_eq!(v["schema_version"], "3");
     assert_eq!(v["mode"], "full");
     assert_eq!(v["network"], "mainnet");
     assert_eq!(v["template"], "bip84");
@@ -83,7 +83,7 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("verify-bundle stdout is valid JSON");
-    assert_eq!(v["schema_version"], "2");
+    assert_eq!(v["schema_version"], "3");
     assert_eq!(v["result"], "ok");
     let checks = v["checks"].as_array().expect("checks is an array");
     assert_eq!(checks.len(), 9, "9 checks emitted (SPEC §2.2)");

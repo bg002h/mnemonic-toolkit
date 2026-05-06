@@ -552,10 +552,11 @@ fn emit<W: Write, E: Write>(
         // for multisig). multisig: None for single-sig. origin_path populated;
         // origin_paths: None (single-sig is always shared-with-itself).
         let json = BundleJson {
-            schema_version: "2",
+            schema_version: "3",
             mode,
             network: args.network.human_name(),
-            template: args.template_unchecked().human_name(),
+            template: Some(args.template_unchecked().human_name()),
+            descriptor: None,
             account: args.account,
             origin_path: Some(origin_path),
             origin_paths: None,
@@ -923,10 +924,11 @@ fn emit_multisig<W: Write, E: Write>(
             (None, None)
         };
         let json = BundleJson {
-            schema_version: "2",
+            schema_version: "3",
             mode,
             network: args.network.human_name(),
-            template: args.template_unchecked().human_name(),
+            template: Some(args.template_unchecked().human_name()),
+            descriptor: None,
             account: args.account,
             origin_path,
             origin_paths,

@@ -107,7 +107,11 @@ pub struct BundleJson {
     pub schema_version: &'static str,
     pub mode: &'static str, // "full" | "watch-only"
     pub network: &'static str,
-    pub template: &'static str,
+    /// `None` in descriptor mode (v0.3 §5.6); always `Some` in template mode.
+    pub template: Option<&'static str>,
+    /// User-supplied descriptor verbatim; `Some` in descriptor mode, `None`
+    /// in template mode (v0.3 §5.6).
+    pub descriptor: Option<String>,
     pub account: u32,
     /// Single-sig OR shared-path multisig. `None` for divergent-path multisig.
     pub origin_path: Option<String>,
