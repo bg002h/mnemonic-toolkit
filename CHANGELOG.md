@@ -4,6 +4,39 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.5.1] — 2026-05-06
+
+### What's new (v0.5.1 — close the v0.5.0 partial-delivery deferrals)
+
+v0.5.1 closes the 2 FOLLOWUPS deferred from v0.5.0 (`legacy-cli-flag-deletion` + `legacy-flag-deprecation`). The unified `--slot @N.<subkey>=<value>` syntax is now the sole input shape for slot-bearing data; the v0.4-era legacy CLI flags are deleted entirely from `BundleArgs` + `VerifyBundleArgs` along with their alias plumbing.
+
+- **Phase A.1a — source-side deletions.** 6 legacy fields (`--phrase`, `--xpub`, `--master-fingerprint`, `--cosigner`, `--cosigners-file`, `--cosigner-count`) deleted from both `BundleArgs` and `VerifyBundleArgs`. `bundle::bundle_args_to_slots` and `slot_input::expand_legacy_to_slots` shims (+ 5 unit tests) deleted entirely. 9 mode-violation guards swept from `bundle.rs::run`; 11 mode-text consts removed (`PASSPHRASE_WITH_XPUB`, `LANGUAGE_WITH_XPUB`, `XPUB_NEEDS_FINGERPRINT`, `FINGERPRINT_WITHOUT_XPUB`, `XPUB_STDIN`, `XPUB_AND_COSIGNER`, `COSIGNER_AND_COSIGNERS_FILE`, `COSIGNER_COUNT_WITHOUT_MULTISIG`, `PRIVACY_WITH_XPUB`, `ACCOUNT_INCOMPATIBLE_TEMPLATE`, `DESCRIPTOR_WITH_COSIGNER_COUNT`); 3 retained guards: `THRESHOLD_WITHOUT_MULTISIG`, `PATH_FAMILY_WITHOUT_MULTISIG`, `DESCRIPTOR_AND_TEMPLATE` (plus the v0.3 retained descriptor-mode set).
+- **Phase A.1d — verify-bundle slot dispatch refactor.** `VerifyBundleArgs` gains a `pub slot: Vec<SlotInput>` field with parity to `BundleArgs::slot`. `bundle::resolve_slots` refactored to take an explicit args-tuple `(template, network, account, language, passphrase)` and promoted to `pub(crate)`; both `bundle.rs` and `verify_bundle.rs` share the helper. `verify_bundle::run` reshaped to dispatch via slot-shape detection; `run_full` / `run_watch_only` / `run_multisig` / `descriptor_mode_verify_run` rewired to consume slots through `synthesize_unified` (template mode) or `synthesize_descriptor` (descriptor mode).
+- **Phase A.1b/c — test corpus migration.** 3 `cli_mode_violations*.rs` files deleted (~584 lines, 61 legacy-flag references). New `cli_mode_violations_v0_5.rs` (6 tests; byte-exact stderr) covers the 3 retained guards.
+- **Phase A.2 — consumer test rewrites.** 13 `cli_*.rs` integration test files rewritten per the v0.5.0 mapping table. Special handling: `cli_unified_slot.rs` row-6 collision test + dead `TREZOR_BIP84_XPUB` const deleted; `cli_bip388_distinctness.rs` row-5-conflict test deleted (trap unreachable post-`--cosigner-count` deletion).
+- **Phase A.3 — SPEC §6.6 partial-delivery note removal.** The v0.5.0 SPEC paragraph acknowledging the deferral is deleted; the §6.6 table now reflects shipped state.
+- **Path-defaulting refinement.** `bundle::resolve_slots` Xpub branch now defaults the path from `template.derivation_path(network, account)` when the slot lacks an explicit `Path` subkey. Preserves v0.4 watch-only path-default semantics; required for verify-bundle round-trip on bip84/etc account-paths.
+
+### Breaking changes
+
+Per "no users yet → break anything" license:
+
+- **6 legacy CLI flags deleted entirely.** `--phrase`, `--xpub`, `--master-fingerprint`, `--cosigner`, `--cosigners-file`, `--cosigner-count` are now unknown to clap (exit 2 unknown-arg). Use `--slot @N.<subkey>=<value>` instead.
+- **Mode-violation pre-check ladder reduced.** 9 guard branches removed; 3 retained. Stderr text for the 3 retained guards is unchanged byte-for-byte.
+
+### Test corpus
+
+230 lib + 44 integration tests pass (2 lib ignored, pre-existing). Net delta: -6 lib (5 expand-legacy unit tests + 1 watch-only-stderr test), -3 integration files (cli_mode_violations*.rs), +1 integration file (cli_mode_violations_v0_5.rs), -2 integration tests within rewritten files.
+
+### Carry-forward
+
+v0.5.0 schema-4 `bundle --json` envelopes continue to emit byte-identically. The legacy-flag → `--slot` rewrite is wire-format-neutral.
+
+### Architect review reports
+
+- `design/agent-reports/v0_5_1_phase_atomic_r1.md` (Commit 1, 0C/0I/0L/2N).
+- `design/agent-reports/v0_5_1_phase_spec_r1.md` (Commit 2, 0C/0I).
+
 ## mnemonic-toolkit [0.5.0] — 2026-05-06
 
 ### What's new (v0.5.0 — bundle the v0.4.5-nice-to-have + open `*-nice-to-have` deferrals)

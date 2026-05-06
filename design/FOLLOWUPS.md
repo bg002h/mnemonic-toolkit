@@ -452,7 +452,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::BundleArgs` + `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::VerifyBundleArgs`; consumer test files under `crates/mnemonic-toolkit/tests/`.
 - **What:** v0.4.2 lands the unified `--slot @N.<subkey>=<value>` dispatch and routes legacy CLI flags through `expand_legacy_to_slots` (option (a) per the v0.4.2 brainstorm). v0.5 takes the next step: delete the legacy CLI flags entirely from `BundleArgs` + `VerifyBundleArgs`. Estimated cost: rewrite ~25 integration tests (~1500 lines of test churn) to use `--slot` syntax. The unified path itself is unchanged; only the CLI surface contracts.
 - **Why deferred:** the user accepted the bigger v0.4.2 scope (legacy-flag-deprecation under option a) but routes the cleaner-CLI-surface end-state to v0.5 to amortize the test-rewrite churn against a separate cycle. Captured as a follow-on after v0.4.2 ships.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.1 commit d782a2d` — 6 legacy fields deleted from both `BundleArgs` and `VerifyBundleArgs`; `bundle_args_to_slots` + `expand_legacy_to_slots` shims deleted; 9 mode-violation guards + 11 mode-text consts removed; 3 retained guards covered by new `cli_mode_violations_v0_5.rs`. `bundle::resolve_slots` refactored to take an explicit args-tuple + promoted to `pub(crate)`; `verify_bundle.rs` dispatch reshaped to consume slots. 13 consumer test files rewritten per the v0.5.0 mapping table.
 - **Tier:** `v0.5.1`
 
 ### `engraving-card-unified-legacy-migration` — migrate 4 legacy engraving_card() call sites to engraving_card_unified
@@ -539,7 +539,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::run` legacy dispatch path.
 - **What:** SPEC §9 v0.4 promises that legacy `--phrase` / `--xpub` / `--cosigner` flags become deprecation aliases that auto-expand into `--slot` form. v0.4.1 ships unified `--slot` as opt-in alongside the unchanged legacy dispatch. v0.5+ (a future BREAKING release) deletes the legacy dispatch entirely and routes everything through `bundle_run_unified` via `expand_legacy_to_slots`.
 - **Why deferred:** would force fixture regeneration of 16+ v0.1 byte-exact fixture files + v0.2 carry-forward fixtures; too large for v0.4.1 release window.
-- **Status:** `open`
+- **Status:** `resolved by v0.5.1 commit d782a2d` — superseded by `legacy-cli-flag-deletion`. Legacy dispatch path is deleted entirely; `--slot` is the sole input shape.
 - **Tier:** `v0.5.1`
 
 ### `bundle-removed-subcommand-trap-positional-eq-bypass` — `bundle multisig-full=value` token bypasses pre-clap trap
