@@ -39,6 +39,24 @@ pub fn chunk_md1(s: &str) -> String {
     md_codec::encode::render_codex32_grouped(s, 5)
 }
 
+/// SPEC §5.8 (v0.4) ms1 field type. Schema 4 layout: dense `Vec<String>` of
+/// length-N, with empty-string sentinels (`""`) marking watch-only slots.
+///
+/// - `["ms1abc..."]`               — single-sig full (N=1, secret-bearing)
+/// - `["", "", ""]`                — pure watch-only multisig (N=3)
+/// - `["ms1...", "ms1...", "..."]` — multi-source full multisig (N=3)
+/// - `["ms1...", "", ""]`          — hybrid (N=3, slot 0 secret, others watch-only)
+///
+/// Verify-bundle skips ms1 checks for empty-string elements. The dense layout
+/// preserves slot-index correspondence `ms1[i] ↔ mk1[i] ↔ slot @i`.
+///
+/// Phase D-foundation: type alias + structural helpers only. The
+/// `BundleJson.ms1` field migration from `Option<String>` → `MsField` is
+/// deferred to v0.4.1 — see `design/FOLLOWUPS.md` entry
+/// `bundle-json-schema-4-cutover` for the staged plan.
+#[allow(dead_code)] // Wired into BundleJson.ms1 in v0.4.1 cutover.
+pub type MsField = Vec<String>;
+
 /// Discriminated union for `BundleJson.mk1` (SPEC §5.3 v0.2 + Q9 closure).
 ///
 /// - `Single`: flat `Vec<String>` for single-sig invocations (matches v0.1 shape).
