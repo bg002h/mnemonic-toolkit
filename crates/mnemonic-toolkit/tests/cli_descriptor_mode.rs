@@ -137,7 +137,7 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
     assert_eq!(verify["schema_version"], "4");
     assert_eq!(verify["result"], "ok");
     let checks = verify["checks"].as_array().unwrap();
-    assert!(checks.iter().all(|c| c["result"] == "ok"));
+    assert!(checks.iter().all(|c| c["passed"] == true));
 }
 
 #[test]

@@ -153,14 +153,20 @@ pub struct VerifyBundleJson {
     pub checks: Vec<VerifyCheck>,
 }
 
-/// SPEC §5.7 verify-bundle check entry. v0.4.1 Phase J.1: gains 4 forensic
-/// fields populated on `result == "fail"` checks. `#[serde(skip_serializing_if
-/// = "Option::is_none")]` keeps the JSON envelope clean — forensic fields are
-/// omitted entirely on `"ok"`/`"skipped"` checks.
+/// SPEC §5.7 verify-bundle check entry. v0.4.3 Phase P.0: shape corrected
+/// from `result: &'static str` (v0.4.1 J.1 long-standing drift) to
+/// `passed: bool` per SPEC §5.7. Skipped checks use
+/// `passed: true + decode_error: Some("skipped: <reason>")` per SPEC's
+/// hybrid-mode treatment.
+///
+/// Forensic fields (gained at v0.4.1 Phase J.1) are populated on
+/// `passed: false` checks. `#[serde(skip_serializing_if = "Option::is_none")]`
+/// keeps the JSON envelope clean — forensic fields are omitted entirely
+/// for passing checks.
 #[derive(Debug, Clone, Serialize)]
 pub struct VerifyCheck {
     pub name: String,
-    pub result: &'static str, // "ok" | "fail" | "skipped"
+    pub passed: bool,
     pub detail: String,
     /// Expected encoded string (for string-mismatch checks); omitted otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -172,6 +178,7 @@ pub struct VerifyCheck {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diff_byte_offset: Option<usize>,
     /// Decode-error message text for decode-failure checks.
+    /// Also used for skipped checks: `Some("skipped: <reason>")`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decode_error: Option<String>,
 }
@@ -180,7 +187,7 @@ impl Default for VerifyCheck {
     fn default() -> Self {
         Self {
             name: String::new(),
-            result: "ok",
+            passed: true,
             detail: String::new(),
             expected: None,
             actual: None,
@@ -556,7 +563,7 @@ mod tests {
     #[test]
     fn verify_check_default_is_ok_with_no_forensics() {
         let vc = VerifyCheck::default();
-        assert_eq!(vc.result, "ok");
+        assert!(vc.passed);
         assert!(vc.expected.is_none());
         assert!(vc.actual.is_none());
         assert!(vc.diff_byte_offset.is_none());
@@ -567,7 +574,7 @@ mod tests {
     fn verify_check_serde_skip_omits_none_forensics_in_ok_path() {
         let vc = VerifyCheck {
             name: "ms1_entropy_match".into(),
-            result: "ok",
+            passed: true,
             detail: "ms1 byte-identical".into(),
             ..Default::default()
         };
@@ -582,7 +589,7 @@ mod tests {
     fn verify_check_serde_includes_populated_forensics_on_fail() {
         let vc = VerifyCheck {
             name: "ms1_entropy_match".into(),
-            result: "fail",
+            passed: false,
             detail: "expected ms1 bytes differ from supplied".into(),
             expected: Some("ms1abcde".into()),
             actual: Some("ms1abcXX".into()),
