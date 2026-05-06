@@ -168,8 +168,6 @@ Mismatch identifies the failing field within a card, not just the failing card. 
 
 ## §6.6 Mode-violation pre-check ladder (v0.5 — legacy flags fully deleted)
 
-**v0.5.0 partial delivery:** legacy flag deletion is described in this section but **deferred to v0.5.1** (`legacy-cli-flag-deletion` FOLLOWUP at tier `v0.5.1`). The v0.5.0 binary retains `--phrase`, `--xpub`, `--cosigner`, `--master-fingerprint`, `--cosigner-count`, `--cosigners-file` from `BundleArgs` + `VerifyBundleArgs` plus all 9 mode-violation guards from v0.4. The §6.6 table below reflects the v0.5.1 target state. v0.5.0 ships the SPEC text and the architectural intent; v0.5.1 ships the actual deletion + ~25-test rewrite.
-
 v0.5 deletes the legacy CLI flags entirely. The unified `--slot @N.<subkey>=<value>` syntax is the sole input shape for slot-bearing data. The mode-violation ladder is correspondingly trimmed.
 
 **Deleted flags (v0.4.2 alias-routed; v0.5 hard-removed):** `--phrase`, `--xpub`, `--cosigner`, `--master-fingerprint`, `--cosigner-count`, `--cosigners-file`. Clap rejects them as unknown args (exit 2 with the standard "unknown argument" message).
