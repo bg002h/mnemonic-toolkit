@@ -270,21 +270,25 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 ### `ctx-for-descriptor-heuristic-misroutes` — Phase A `ctx_for_descriptor` is string-prefix heuristic
 
 - **Surfaced:** v0.3 Phase A end-of-phase architect review I-2 (2026-05-05).
-- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs` `ctx_for_descriptor`.
-- **What:** ctx is classified by string prefix (`wpkh(` / `pkh(` / `sh(wpkh(` → SingleSig; else MultiSig). This determines synthetic xpub depth byte. Phase A uses the result only for test-fixture lookup — synthetic xpubs are never wire-emitted, so misrouting is benign in Phase A. But Phase B/C will use this result for real key-path derivation. `sh(pk(@0))` and `wsh(pk(@0))` (single-sig under §4.10's `n==1` rule) get classified MultiSig (depth 4), creating an inconsistency between synthetic xpub depth and expected real-derivation depth.
-- **Fix direction:** replace the string-prefix heuristic with a post-parse mode classifier that derives ScriptCtx from `n` (or from `DescriptorMode` after `determine_mode`). Apply in Phase B when wiring the bundle command's mode dispatch. Or expand the heuristic to cover `sh(pk` and `sh(wsh`.
-- **Why deferred:** non-blocking for Phase A (test-only impact); Phase B implementer must address before parse_descriptor is called from CLI dispatch.
-- **Status:** `open`
+- **Resolved:** v0.3 Phase C end-of-phase r1 (2026-05-05). Replaced string-prefix heuristic with post-resolve n-based classification inside `parse_descriptor`: `n == 1 → SingleSig`, `n ≥ 2 → MultiSig`. The dead `ctx_for_descriptor` function was removed.
+- **Status:** `resolved by Phase C.6 r2 (2026-05-05)`
 - **Tier:** `v0.3`
 
 ### `parse-descriptor-allow-dead-code-audit` — module-level `#![allow(dead_code)]` audit
 
 - **Surfaced:** v0.3 Phase A end-of-phase architect review L-1 (2026-05-05).
-- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs` line 5.
-- **What:** Module-level `#![allow(dead_code)]` was added in A.1 because items were used only by tests until A.7 wired the public API. Phase B.3 wired only `lex_placeholders` (via `descriptor_mode_run` stub); `parse_descriptor` itself is not yet called from main.rs's compilation graph. Audit + lift the attribute at Phase C.3 once `descriptor_mode_run` calls `parse_descriptor` directly.
-- **Why deferred:** Phase C.3 is the natural time to audit reachability (per Phase B end-of-phase L-2; B.3 timing was optimistic).
-- **Status:** `open`
+- **Resolved:** v0.3 Phase C end-of-phase r1 (2026-05-05). Lifted module-level `#![allow(dead_code)]`. Two items remained dead at the binary-compile boundary (`DescriptorMode` enum + `determine_mode` fn, used only in tests + Phase D verify-bundle re-parse path); both received per-item `#[allow(dead_code)]`.
+- **Status:** `resolved by Phase C.6 r2 (2026-05-05)`
 - **Tier:** `v0.3`
+
+### `descriptor-mode-engraving-card` — engraving card omitted in descriptor mode
+
+- **Surfaced:** v0.3 Phase C end-of-phase architect review L-5 (2026-05-05).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` `descriptor_mode_emit` (Phase C.6).
+- **What:** `engraving_card: None` for descriptor mode. The existing `engraving_card()` builder takes a `CliTemplate` + path-family + `EngravingMode`, which descriptor mode lacks. v0.3 ships without a descriptor-mode card; v0.4 should add a descriptor-aware engraving card (custom text including the descriptor string + per-cosigner xpub origins).
+- **Why deferred:** out of v0.3 scope; engraving card logic is template-coupled.
+- **Status:** `open`
+- **Tier:** `v0.4`
 
 ### `tr-sortedmulti-a-via-upstream` — `tr(@0, sortedmulti_a(...))` deferred to v0.4 pending upstream parser
 

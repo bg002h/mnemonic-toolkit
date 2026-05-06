@@ -1,10 +1,9 @@
 //! User-supplied BIP-388 descriptor parser (v0.3 §4.9).
-
-// Phase A ships the module's public API (parse_descriptor + supporting types).
-// Phase B wires the bundle command's --descriptor / --descriptor-file flags
-// to call parse_descriptor; until then, the module is exercised only by tests.
-// Items kept #[allow(dead_code)] individually if needed.
-#![allow(dead_code)]
+//!
+//! Phase C.6 wired `descriptor_mode_run` to the full pipeline; module-level
+//! `#![allow(dead_code)]` was lifted at end-of-phase C per FOLLOWUP
+//! `parse-descriptor-allow-dead-code-audit`. Items reachable only from tests
+//! carry an inline `#[allow(dead_code)]`.
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
@@ -648,9 +647,17 @@ pub fn parse_descriptor(
     keys: &[ParsedKey],
     fingerprints: &[ParsedFingerprint],
 ) -> Result<MdDescriptor, ToolkitError> {
-    let ctx = ctx_for_descriptor(input);
     let occs = lex_placeholders(input)?;
     let resolved = resolve_placeholders(&occs)?;
+    // SPEC §4.10 mode-determination drives ScriptCtx for synthetic xpub depth.
+    // n=1 → SingleSig (depth 3) regardless of outer wrapper; n≥2 → MultiSig
+    // (depth 4). Replaces the v0.3-r0 string-prefix heuristic per FOLLOWUP
+    // `ctx-for-descriptor-heuristic-misroutes` (Phase A end-of-phase I-2).
+    let ctx = if resolved.n == 1 {
+        ScriptCtx::SingleSig
+    } else {
+        ScriptCtx::MultiSig
+    };
 
     let (substituted, key_map) = substitute_synthetic(input, ctx)?;
     let ms_desc = MsDescriptor::<DescriptorPublicKey>::from_str(&substituted)
@@ -694,12 +701,17 @@ pub fn parse_descriptor(
 /// SPEC §4.10 mode determination: `n == 1` → SingleSig regardless of outer
 /// wrapper; `n ≥ 2` → MultiSig. The mode controls key sourcing, mk1 cardinality,
 /// and verify-bundle's check-element count — NOT the descriptor's structural tree.
+/// CLI dispatch delegates mode determination to `bind_descriptor_keys`'s
+/// internal `n`-based branching; this enum remains for downstream callers
+/// (Phase D verify-bundle re-parse + tests) needing an explicit mode value.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[allow(dead_code)]
 pub enum DescriptorMode {
     SingleSig,
     MultiSig,
 }
 
+#[allow(dead_code)]
 pub fn determine_mode(d: &MdDescriptor) -> DescriptorMode {
     if d.n == 1 {
         DescriptorMode::SingleSig
@@ -708,16 +720,9 @@ pub fn determine_mode(d: &MdDescriptor) -> DescriptorMode {
     }
 }
 
-/// Heuristic ScriptCtx for substitute_synthetic — depth 3 (SingleSig) for
-/// wpkh/pkh/sh-wpkh outer wrappers, depth 4 (MultiSig) otherwise.
-fn ctx_for_descriptor(descriptor: &str) -> ScriptCtx {
-    let head = descriptor.trim_start();
-    if head.starts_with("wpkh(") || head.starts_with("pkh(") || head.starts_with("sh(wpkh(") {
-        ScriptCtx::SingleSig
-    } else {
-        ScriptCtx::MultiSig
-    }
-}
+// ctx_for_descriptor (string-prefix heuristic) was retired in Phase C.6 r2 in
+// favor of post-resolve n-based classification per FOLLOWUP
+// `ctx-for-descriptor-heuristic-misroutes`.
 
 /// Synthetic xpub for placeholder `@i` under `ctx`. Deterministic; never wire-emitted.
 /// Seed prefix `b"toolkit-v0.3"` is normative — fixture stability depends on it.
