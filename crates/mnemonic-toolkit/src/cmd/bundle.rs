@@ -164,8 +164,7 @@ pub fn run<W: Write, E: Write>(
 use crate::bundle_unified::{detect_bundle_mode, BundleMode};
 use crate::slot_input::{SlotInput, SlotSubkey};
 use crate::synthesize::{synthesize_unified, ResolvedSlot};
-use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv};
+use bitcoin::bip32::{DerivationPath, Fingerprint};
 use bitcoin::secp256k1::Secp256k1;
 
 /// v0.5.1 entry point — `--slot`-driven dispatch is the sole shape.
@@ -301,35 +300,23 @@ pub(crate) fn resolve_slots(
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
         if subkeys.contains(&SlotSubkey::Phrase) {
-            // Phrase path. Drive via derive_full reusing template+network+account.
             let phrase = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Phrase)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let language = language.unwrap_or_default();
-            let passphrase = passphrase.unwrap_or("");
-            let mnemonic = Mnemonic::parse_in(language.into(), phrase)
-                .map_err(ToolkitError::Bip39)?;
-            let entropy = mnemonic.to_entropy();
-            let seed = mnemonic.to_seed(passphrase);
-            let master = Xpriv::new_master(network.network_kind(), &seed)
-                .map_err(|e| {
-                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-                })?;
-            let master_fp = master.fingerprint(&secp);
-            let path = template.derivation_path(network, account);
-            let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
-            let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &acct_xpriv);
-            let path_raw = path.to_string();
+            let lang = language.unwrap_or_default();
+            let pass = passphrase.unwrap_or("");
+            let acc = crate::derive::derive_full(
+                phrase, pass, lang, network, template, account,
+            )?;
+            let path_raw = acc.account_path.to_string();
             out.push(ResolvedSlot {
-                xpub,
-                fingerprint: master_fp,
-                path,
+                xpub: acc.account_xpub,
+                fingerprint: acc.master_fingerprint,
+                path: acc.account_path,
                 path_raw,
-                entropy: Some(entropy),
+                entropy: Some(acc.entropy),
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
@@ -377,10 +364,8 @@ pub(crate) fn resolve_slots(
                 entropy: None,
             });
         } else if subkeys.contains(&SlotSubkey::Entropy) {
-            // K.1: {entropy} — hex-decode → Mnemonic::from_entropy → seed →
-            // derive at template path. Produces a secret-bearing slot
-            // byte-identical to the equivalent {phrase} resolution for the
-            // same underlying entropy.
+            // K.1: {entropy} — byte-identical to phrase resolution for the same
+            // underlying entropy via the shared derive_slot helper.
             let entropy_hex = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Entropy)
@@ -391,26 +376,16 @@ pub(crate) fn resolve_slots(
                     "--slot @{idx}.entropy hex-decode: {e}"
                 ))
             })?;
-            let language = language.unwrap_or_default();
-            let passphrase = passphrase.unwrap_or("");
-            let mnemonic = Mnemonic::from_entropy_in(language.into(), &entropy_bytes)
-                .map_err(ToolkitError::Bip39)?;
-            let seed = mnemonic.to_seed(passphrase);
-            let master = Xpriv::new_master(network.network_kind(), &seed)
-                .map_err(|e| {
-                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-                })?;
-            let master_fp = master.fingerprint(&secp);
-            let path = template.derivation_path(network, account);
-            let acct_xpriv = master.derive_priv(&secp, &path).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
-            let xpub = bitcoin::bip32::Xpub::from_priv(&secp, &acct_xpriv);
-            let path_raw = path.to_string();
+            let lang = language.unwrap_or_default();
+            let pass = passphrase.unwrap_or("");
+            let acc = crate::derive_slot::derive_bip32_from_entropy(
+                &entropy_bytes, pass, lang, network, template, account,
+            )?;
+            let path_raw = acc.account_path.to_string();
             out.push(ResolvedSlot {
-                xpub,
-                fingerprint: master_fp,
-                path,
+                xpub: acc.account_xpub,
+                fingerprint: acc.master_fingerprint,
+                path: acc.account_path,
                 path_raw,
                 entropy: Some(entropy_bytes),
             });

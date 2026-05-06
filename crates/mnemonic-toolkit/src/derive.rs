@@ -7,8 +7,7 @@ use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
-use bitcoin::bip32::{Fingerprint, Xpriv, Xpub};
-use bitcoin::secp256k1::Secp256k1;
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 
 /// Result of full-mode derivation.
 #[derive(Debug)]
@@ -16,6 +15,7 @@ pub struct DerivedAccount {
     pub entropy: Vec<u8>,
     pub master_fingerprint: Fingerprint,
     pub account_xpub: Xpub,
+    pub account_path: DerivationPath,
 }
 
 pub fn derive_full(
@@ -28,33 +28,14 @@ pub fn derive_full(
 ) -> Result<DerivedAccount, ToolkitError> {
     let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
     let entropy = mnemonic.to_entropy();
-    let seed = mnemonic.to_seed(passphrase);
-
-    let secp = Secp256k1::new();
-    let master = Xpriv::new_master(network.network_kind(), &seed)
-        .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
-    let master_fingerprint = master.fingerprint(&secp);
-
-    let path = template.derivation_path(network, account);
-    let account_xpriv = master
-        .derive_priv(&secp, &path)
-        .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
-    let account_xpub = Xpub::from_priv(&secp, &account_xpriv);
-
-    // Belt-and-braces network cross-check (SPEC §4.3).
-    if account_xpub.network != network.network_kind() {
-        return Err(ToolkitError::BadInput(format!(
-            "derived-xpub network {:?} does not match --network {}; this is a toolkit bug",
-            account_xpub.network,
-            network.human_name(),
-        )));
-    }
-
-    Ok(DerivedAccount {
-        entropy,
-        master_fingerprint,
-        account_xpub,
-    })
+    crate::derive_slot::derive_bip32_from_entropy(
+        &entropy,
+        passphrase,
+        language,
+        network,
+        template,
+        account,
+    )
 }
 
 #[cfg(test)]
