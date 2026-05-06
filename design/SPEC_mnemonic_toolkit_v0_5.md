@@ -102,6 +102,20 @@ NOT a discriminated union; NOT `#[serde(untagged)]`. Schema_version is the dispa
 
 **Privacy-preserving rendering:** under `--privacy-preserving`, fingerprint columns render as `anon` (3 ASCII chars); ms1/mk1 chunk_set_ids still render (they don't leak provenance). Card layout shape is otherwise identical.
 
+## §5.5.a Secret-on-stdout warning (v0.6.1 amendment)
+
+When `Bundle::any_secret_bearing()` returns true (per `synthesize.rs` — at least one ms1 entry is non-empty under §5.8), the toolkit prints a one-line stderr warning byte-exactly:
+
+```
+warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+```
+
+This matches the convention introduced by `convert` in `SPEC_convert_v0_6.md` §7. Watch-only single-sig and multisig-watch-only invocations (where all `ms1` strings are the empty-string sentinel per §5.8) do NOT emit the warning — there is no BIP-39 entropy to leak.
+
+**Stderr emission ordering:** the warning is the LAST stderr write in `bundle.rs::emit_unified`, AFTER the engraving-card stderr block. The engraving card is informational about what was emitted; the secret-on-stdout warning is a security advisory ABOUT what was just emitted. Stderr ordering: `engraving card → secret-on-stdout warning`.
+
+**Wif-only-bundle limitation:** wif slots emit `entropy: None` → `ms1[i] == ""` (empty sentinel) per §5.8. A wif-only bundle has all-empty `ms1`, so `any_secret_bearing()` returns `false`, and the warning does NOT fire — even though the WIF input itself is secret material. This is a known limitation, acceptable because (i) the WIF was supplied by the user (they already had it on the command line / in their environment), and (ii) the `ms1` slot is the toolkit's BIP-39-entropy-leak surface, not the WIF input. The warning's scope is BIP-39 entropy emission, consistent with the v0.6.0 §7 secret-on-stdout convention.
+
 ## §5.6 Wire-bit-identical guarantee (DELTA: schema-4 carry rules)
 
 **Schema 2 / 3 fixtures:** byte-identical regression invariant carries forward UNCHANGED (subject to §10 exclusions).

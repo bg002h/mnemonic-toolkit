@@ -46,7 +46,8 @@ Mainnet swap target: `0x04 88 B2 1E` (xpub). Testnet swap target: `0x04 35 87 CF
 ### 4. Decode-swap-reencode pattern (canonical implementation sketch)
 
 ```rust
-fn normalize_slip0132_xpub(s: &str) -> Result<String, ToolkitError> {
+// In SPEC v0.6.1 §11 this is named `normalize_xpub_prefix` (per `src/slip0132.rs`).
+fn normalize_xpub_prefix(s: &str) -> Result<String, ToolkitError> {
     let raw = bitcoin::base58::decode_check(s)
         .map_err(|e| ToolkitError::BadInput(format!("base58check decode: {e}")))?;
     if raw.len() != 78 {

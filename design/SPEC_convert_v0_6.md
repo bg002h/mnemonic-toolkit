@@ -1,11 +1,18 @@
 # mnemonic-toolkit v0.6 SPEC — `convert` subcommand
 
-**Version:** 0.6.0
+**Version:** 0.6.1
 **Date:** 2026-05-06
-**Status:** DRAFT (pre-architect-review)
+**Status:** SHIPPED (v0.6.0 architect-approved 0C/0I at r3; v0.6.1 amendments architect-approved 0C/0I — see SPEC change history below)
 **Predecessor:** [SPEC_mnemonic_toolkit_v0_5.md](SPEC_mnemonic_toolkit_v0_5.md) (covers `bundle` / `verify-bundle`).
 
 This SPEC covers a new orthogonal subcommand `mnemonic convert`. v0.5 SPEC carries forward unchanged.
+
+**v0.6.1 amendment summary** (see in-section markers `(v0.6.1)` for the exact deltas):
+
+- **SPEC-A** — `phrase/entropy → wif` edge moved from deferred-in-code to supported (§2 edge addition + §2 path-requirement note + §8 PBKDF2 cross-reference). No spike required: derivation is well-understood BIP-32 + WIF serialization atop the existing `derive_slot::derive_bip32_from_entropy` shape (the v0.6.0 convert-cycle spike `design/agent-reports/spike-convert-v0_6_0-pre-spec.md` covers the BIP-39/BIP-32 surface).
+- **SPEC-B** — new §11 documenting the SLIP-0132 prefix-tolerant input normalizer (applied universally wherever the toolkit reads an xpub).
+- **SPEC-C** — new §11.a documenting the `--xpub-prefix <variant>` output flag (5-value modifier; `--network` required when non-default).
+- **SPEC-D** — partner amendment in `SPEC_mnemonic_toolkit_v0_5.md` extending the §7 secret-on-stdout warning to `bundle`.
 
 ## §0 Prerequisites
 
@@ -54,9 +61,20 @@ Bidirectional and one-way edges with required side-inputs:
 | `xprv` | `fingerprint` | none | hash160 of pubkey |
 | `xpub` | `fingerprint` | none | hash160 of pubkey |
 | `wif` | `xpub` (sentinel) | none | depth-0 sentinel xpub with zero chain code; matches `bundle.rs::resolve_slots` WIF behavior — stderr warning emitted |
+| `phrase` / `entropy` | `wif` (v0.6.1) | explicit `--path` (any valid BIP-32 path; no depth assertion); `--passphrase` (optional, default ""; meaningful per §8 — this edge traverses PBKDF2); `--network` (optional, default mainnet — affects WIF version byte) | Phrase source: `Mnemonic::parse_in(language, phrase)?.to_entropy()` → shared entropy path. Entropy source: entropy bytes directly. Then: `Mnemonic::from_entropy_in(language, entropy).to_seed(passphrase)` → `Xpriv::new_master(network, seed)` → derive at `--path` → `bitcoin::PrivateKey { compressed: true, network: network.network_kind(), inner: derived_xpriv.private_key }` → `to_wif()`. The `compressed` flag MUST be `true` (BIP-32 §4 mandates compressed pubkeys for all derived keys; WIF compression follows the BIP-32 contract, not the network or input-WIF source flag). |
 | `entropy` | `ms1` | none | `ms_codec::encode(Tag::ENTR, &Payload::Entr(bytes))` |
 | `ms1` | `entropy` | none | `ms_codec::decode(s) -> (Tag, Payload)`; pattern-match `Payload::Entr(bytes)` |
 | `mk1` | `xpub` (+ fingerprint + path as sub-outputs) | none | `mk_codec::decode(&[&str]) -> KeyCard`; `policy_id_stubs` ignored |
+
+### `phrase`/`entropy` → `wif` path requirement (v0.6.1)
+
+The `phrase`/`entropy` → `wif` edge requires `--path` to be supplied. The toolkit does NOT auto-default a path from `--template`/`--account`. No depth assertion is made (BIP-32 depth is a counter, not a normative constraint); the user is responsible for supplying a path that produces a leaf privkey suitable for WIF serialization. Refusal stderr when `--path` is absent (byte-exact):
+
+```
+error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).
+```
+
+Exit code: 2 (refusal class via `ToolkitError::ConvertRefusal`). NOT exit 1 (BadInput class) — this is a §3 refusal of an under-specified invocation, not a parse error of malformed input.
 
 ### Composite edges (graph traversal)
 
@@ -138,6 +156,7 @@ mnemonic convert \
   [--passphrase <s>] \
   [--account <u32>] \
   [--fingerprint <8-hex>] \
+  [--xpub-prefix <xpub|ypub|Ypub|zpub|Zpub>]   # v0.6.1 — see §11.a
   [--json]
 ```
 
@@ -202,7 +221,7 @@ Per-edge meaningfulness:
 |------------|-----------------|
 | `--passphrase` | edge traverses PBKDF2: `phrase → xprv/xpub/fingerprint`, `entropy → xprv/xpub/fingerprint` |
 | `--language` | `phrase` is `--from` or `--to` |
-| `--network` | edge derives a BIP-32 xpub/xprv (network is encoded in the version bytes) |
+| `--network` | edge derives a BIP-32 xpub/xprv (network is encoded in the version bytes), OR emits `wif` (the WIF version byte is network-dependent), OR `--xpub-prefix` is non-default per §11.a (selects the SLIP-0132 mainnet/testnet swap target) |
 | `--template` + `--account` | edge derives at a template path (substitutes for explicit `--path`) |
 | `--path` | edge derives at a custom BIP-32 path (mutually exclusive with `--template`) |
 | `--fingerprint` | side-input for compound `--from` invocations (e.g., assembling KeyCard inputs) |
@@ -214,6 +233,8 @@ Side-inputs that are not meaningful for the chosen edge are IGNORED (not refused
 warning: --passphrase ignored on this edge (not a PBKDF2-bearing conversion)
 ```
 This is a higher-stakes side-input than the others (a user who believes a passphrase was applied may proceed with wrong assumptions about wallet recovery). All other ignored side-inputs are silent.
+
+**`phrase`/`entropy` → `wif` PBKDF2 invariant (v0.6.1):** the v0.6.1 SPEC-A edge addition extends the PBKDF2-bearing target set. `convert.rs::run`'s `edge_uses_pbkdf2` predicate MUST include `Wif` in the matched set so that `--from phrase --to wif --passphrase x` does NOT spuriously emit the ignored-passphrase warning — PBKDF2 IS traversed (phrase → seed → master → derive at path). Normative invariant: `--passphrase` is meaningful for the v0.6.1-added `phrase/entropy → wif` edge.
 
 ## §9 Implementation hooks
 
@@ -240,3 +261,68 @@ Internal graph as a typed enum + adjacency `HashMap<(PrimaryNode, TargetNode), E
 - Multi-value-bearing `--from` flags (single-from-value v0.6 constraint — §5). Reserved for future `--slot @N` indexing.
 - Cross-format pivots (`ms1 ↔ mk1`, etc.) — `mnemonic bundle` is the composition operator.
 - Address derivation (xpub + path → bitcoin address). Different problem class; out of `convert` scope.
+
+## §11 SLIP-0132 prefix-tolerant input (v0.6.1)
+
+The toolkit's xpub-bearing inputs (`convert --from xpub=...`, `bundle --slot @0.xpub=...`, `verify-bundle --slot @0.xpub=...`) accept SLIP-0132 prefix variants in addition to the BIP-32 neutral `xpub`/`tpub`. On input, a non-neutral prefix is normalized to the neutral form via base58check-decode → version-byte swap → re-encode. The 78-byte raw buffer (4-byte version prefix + 74-byte payload of depth/parent_fingerprint/child_number/chain_code/pubkey) returned by `bitcoin::base58::decode_check` has the version-prefix swapped at offset `[0..4]`; the trailing 74-byte payload is byte-identical across SLIP-0132 variants of the same key. Normalization is encoding-only — no derivation, no key-material change. Implementation invariant: `raw.len() == 78`.
+
+**Recognized prefixes (mainnet → swap to `xpub` `0x04 88 B2 1E`):**
+
+- `ypub` (BIP-49 single-sig, `0x04 9D 7C B2`)
+- `Ypub` (BIP-49 multisig P2SH-P2WSH, `0x02 95 B4 3F`)
+- `zpub` (BIP-84 single-sig, `0x04 B2 47 46`)
+- `Zpub` (BIP-84 multisig P2WSH, `0x02 AA 7E D3`)
+
+**Recognized prefixes (testnet → swap to `tpub` `0x04 35 87 CF`):**
+
+- `upub` (BIP-49 single-sig, `0x04 4A 52 62`)
+- `Upub` (BIP-49 multisig, `0x02 42 89 EF`)
+- `vpub` (BIP-84 single-sig, `0x04 5F 1C F6`)
+- `Vpub` (BIP-84 multisig, `0x02 57 54 83`)
+
+**Unknown prefix:** stderr `error: unknown extended-key version prefix: <hex>` — exit 1 (BadInput class). Not exit 2 (refusal class) — the input is malformed from the toolkit's perspective, not a policy-refused operation.
+
+**Network cross-check:** the normalizer does NOT validate `--network` against the SLIP-0132 prefix's implied network. Users are responsible for network-consistent inputs; mismatch (e.g., `--network mainnet` with a `vpub` input that normalizes to `tpub`) produces a well-formed but network-inconsistent bundle, matching existing toolkit behavior for raw `tpub` supplied with `--network mainnet`. Not all xpub-flow paths route through `derive_slot::derive_bip32_from_entropy`'s downstream check; the policy is "user responsibility," not "caught downstream."
+
+**Implementation hooks:** the normalizer is implemented in `src/slip0132.rs::normalize_xpub_prefix(s) -> Result<String, ToolkitError>` and called at every PRODUCTION `Xpub::from_str` site that consumes a user-supplied xpub:
+
+- `convert.rs::compute_outputs` (Xpub-source branch, line ~515)
+- `bundle.rs::resolve_slots` (template-mode Xpub branch, line ~327)
+- `bundle.rs::bundle_run_unified_descriptor` (descriptor-mode Xpub branch, line ~853)
+- `verify_bundle.rs`: NO `Xpub::from_str` call sites post-v0.5.1; coverage is transitive via `bundle::resolve_slots`.
+
+**No normalizer call needed at:**
+
+- `parse_descriptor.rs:946` (`bind_watch_only_singlesig`) — reachable only from `bind_descriptor_keys::830`, which is no longer called from any production path in `cmd/bundle.rs` after v0.5's `--xpub`/`--cosigner` flag deletion. Reached only by tests in `parse_descriptor.rs` (lines 1496+).
+- `parse.rs:129` (`parse_cosigner_spec`) and `parse.rs:196` (`parse_cosigners_file`) — also dead post-v0.5: their CLI flag callers were removed in v0.5.1.
+- `parse_descriptor.rs:1632` and `:1660` and the test fixtures at `:1702`/`:1705`/`:1708` — test bodies only; supply hand-crafted xpub strings, never user input.
+
+**Output side:** see §11.a for `--to`-side SLIP-0132 emission grammar.
+
+## §11.a `--xpub-prefix` modifier (v0.6.1)
+
+When the convert invocation has `xpub` in `--to` (directly or via composite traversal — e.g., `phrase → xpub`), the optional `--xpub-prefix <variant>` flag controls the version-byte prefix of the emitted xpub:
+
+| `--xpub-prefix` value | Mainnet swap | Testnet swap | Intent |
+|---|---|---|---|
+| `xpub` (default) | `0x04 88 B2 1E` | `0x04 35 87 CF` | BIP-32 neutral; default behavior |
+| `ypub` | `0x04 9D 7C B2` | `0x04 4A 52 62` | BIP-49 single-sig (advisory) |
+| `Ypub` | `0x02 95 B4 3F` | `0x02 42 89 EF` | BIP-49 multisig (advisory) |
+| `zpub` | `0x04 B2 47 46` | `0x04 5F 1C F6` | BIP-84 single-sig (advisory) |
+| `Zpub` | `0x02 AA 7E D3` | `0x02 57 54 83` | BIP-84 multisig (advisory) |
+
+**5 flag values; network is selected by `--network`.** The flag value names the SLIP-0132 *semantic class* (BIP-49-single, BIP-49-multisig, BIP-84-single, BIP-84-multisig, neutral), not the specific prefix string. `--xpub-prefix ypub` emits `ypub` on mainnet and `upub` on testnet — selected via `--network`. There is no `--xpub-prefix upub` flag value (testnet variants are not exposed as flag values). The lowercase value names match the SLIP-0132 prefix character; uppercase `Y`/`Z` correspond to the multisig variants per the SLIP-0132 spec. The flag value `xpub` IS the default (omitting the flag emits BIP-32-neutral).
+
+**`--network` required when `--xpub-prefix` is non-default.** When `--xpub-prefix` is anything other than `xpub`, `--network` MUST be supplied explicitly. Refusal stderr when `--network` is omitted (byte-exact):
+
+```
+error: --xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).
+```
+
+Exit code: 2 (refusal class via `ToolkitError::ConvertRefusal`). Eliminates an entire class of "testnet user omits `--network` and gets mainnet zpub" bugs. Default `--xpub-prefix xpub` continues to default `--network mainnet` per the existing convert behavior.
+
+**No effect on non-xpub targets:** `--xpub-prefix` is silently ignored when the invocation has no xpub-typed target, consistent with §8's side-input ignore policy. Example: `convert --from phrase=... --to entropy --xpub-prefix zpub` emits entropy normally; the flag has no effect.
+
+**`--passphrase` semantics on phrase-source edges through `--xpub-prefix`:** when the source is `phrase` or `entropy` and the target is `xpub` (with any `--xpub-prefix` value), the edge traverses PBKDF2 per §8. `--passphrase` is meaningful — non-empty passphrases produce distinct keys, and the resulting xpub (regardless of prefix swap) reflects the supplied passphrase.
+
+**Round-trip property:** `convert --from xpub=<x> --to xpub --xpub-prefix zpub --network mainnet | mnemonic convert --from xpub=- --to xpub` emits `<x>` byte-for-byte (modulo trailing whitespace). The output zpub re-decodes to the same neutral xpub via §11; symmetry is exact for all SLIP-0132 prefix variants (mainnet + testnet).
