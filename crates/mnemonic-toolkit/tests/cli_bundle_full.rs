@@ -35,3 +35,57 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
         }
     }
 }
+
+/// SPEC v0.6.1 §5.5.a — full bundle (BIP-39 entropy on stdout) MUST emit
+/// the secret-on-stdout warning to stderr. Byte-exact text matches convert §7.
+/// Asserts on a single template/network to keep the assertion focused; the
+/// parametric test above pins the wire format.
+#[test]
+fn bundle_full_emits_secret_on_stdout_warning() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"),
+        "full bundle must emit the secret-on-stdout warning; got stderr: {stderr:?}"
+    );
+}
+
+/// SPEC v0.6.1 §5.5.a — full bundle in `--json` mode also fires the warning.
+/// `any_secret_bearing()` is independent of output mode; the warning sits
+/// outside `emit_unified`'s json/text branches.
+#[test]
+fn bundle_full_json_mode_emits_secret_on_stdout_warning() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "JSON-mode full bundle must emit the secret-on-stdout warning; got stderr: {stderr:?}"
+    );
+}

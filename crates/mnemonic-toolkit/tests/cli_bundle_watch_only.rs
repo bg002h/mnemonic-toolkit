@@ -44,6 +44,13 @@ fn watch_only_bip84_mainnet_omits_ms1_section() {
     );
     assert!(stdout.contains("# mk1"), "stdout must contain # mk1 header");
     assert!(stdout.contains("# md1"), "stdout must contain # md1 header");
+    // SPEC v0.6.1 §5.5.a — watch-only invocations (all ms1 == "" sentinel)
+    // do NOT emit the secret-on-stdout warning.
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("warning: secret material on stdout"),
+        "watch-only bundle must NOT emit the secret-on-stdout warning; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC v0.6.1 §11 cross-cut at bundle.rs::resolve_slots — `bundle --slot
