@@ -1358,8 +1358,8 @@ fn descriptor_mode_verify_run<W: Write>(
     // Build the v0.3 §5.7 check ladder. For descriptor mode we use direct
     // bundle-cell comparison: ms1 string equality, mk1 string equality, md1
     // string equality. SPEC §5.7 conservatively emits a 3-element ladder for
-    // descriptor mode (full check schema lands in v0.4 alongside descriptor-
-    // aware verify-bundle expansion).
+    // descriptor mode (full 9 / 3+6N check schema + per-cell forensics land in
+    // v0.4.1 per FOLLOWUPS `verify-bundle-9-3plus6n-forensics`).
     let mut checks: Vec<VerifyCheck> = Vec::new();
 
     // Check 1: ms1 entropy match (skipped if no --ms1 supplied or watch-only).

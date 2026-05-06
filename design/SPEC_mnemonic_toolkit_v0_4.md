@@ -247,7 +247,9 @@ Carry-forward from v0.3 §8 plus v0.4 additions:
 
 ## §9 CHANGELOG
 
-### v0.4.0 — UNRELEASED
+### v0.4.0 — 2026-05-05 (foundation release; full v0.4 deliverables in v0.4.0 + v0.4.1)
+
+**Note:** v0.4.0 ships the BIP-388 hard-reject + `--slot` CLI surface + multi-leaf taproot walker + foundation primitives (MsField type, BundleMode helpers). The full schema-4 cutover, multi-source synthesis wiring, unified engraving card, and verify-bundle 9/3+6N forensics are deferred to v0.4.1 — see `design/FOLLOWUPS.md` entries `bundle-json-schema-4-cutover`, `engraving-card-unified-1-master-card`, `verify-bundle-9-3plus6n-forensics`. The breaking-changes and new-features lists below describe the full v0.4 cycle (v0.4.0 + v0.4.1 combined).
 
 **Breaking changes:**
 
