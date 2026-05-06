@@ -345,6 +345,24 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** scope-safety in v0.4.3 release window. Full helper + refactor estimated at ~800-1000 lines deleted in verify_bundle.rs alongside ~70 push-site updates.
 - **Tier:** `v0.4.4`
 
+### `verify-bundle-multisig-helper-full-mode-unit-test` — add unit-level coverage for emit_multisig_checks full-mode ms1 branch
+
+- **Surfaced:** v0.4.5 final cross-phase review I-1 (2026-05-06).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` helper_tests mod.
+- **What:** v0.4.5 ships `helper_multisig_watch_only_emits_3plus6n_checks_in_spec_order` (renamed from `_full_` after review confirmed the fixture exercises watch-only synthesis with empty `expected.ms1`). The full-mode multisig ms1 branch (`emit_multisig_checks` lines ~1096-1159: substantive ms1_decode + ms1_entropy_match per cosigner) has end-to-end coverage via `cli_bundle_multisig.rs` integration tests but no isolated unit-level test. Add a companion `helper_multisig_full_emits_3plus6n_checks_in_spec_order` that uses `synthesize_multisig_full` (or constructs a synthetic Bundle with non-empty `expected.ms1` strings) to exercise the substantive ms1 path.
+- **Why deferred:** integration coverage is sufficient for v0.4.5; the unit-level gap is test isolation hygiene, not behavior.
+- **Status:** `open`
+- **Tier:** `v0.4.5-nice-to-have`
+
+### `verify-bundle-multisig-positional-fallback-condition-cosmetic` — cosmetic dead `unwrap_or(false)` in card_for_cosigner positional fallback
+
+- **Surfaced:** v0.4.5 final cross-phase review L-2 (2026-05-06).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_multisig_checks` (`card_for_cosigner` positional fallback condition).
+- **What:** Condition `supplied_md_decoded.is_err() || supplied_md_decoded.as_ref().map(|d| d.tlv.pubkeys.is_none()).unwrap_or(false)` — the `.map().unwrap_or(false)` chain is unreachable when `supplied_md_decoded.is_err()` short-circuits OR semantically dead inside the Ok branch. Refactor to `match` for clarity.
+- **Why deferred:** cosmetic; no logic impact.
+- **Status:** `open`
+- **Tier:** `v0.4.5-nice-to-have`
+
 ### `verify-bundle-multisig-md1-xpub-match-set-equality` — md1_xpub_match uses ordered Vec equality
 
 - **Surfaced:** v0.4.5 Phase P.4 review I-1 (2026-05-06).
@@ -391,7 +409,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   - **L-1** — Doc-comment in `emit_verify_checks` cites SPEC §5.8 for the watch-only sentinel discrimination (`expected.ms1[i].is_empty()`); the watch-only short-circuit logic actually lives in §5.7. §5.8 is the MsField wire-format definition. Fix: change `§5.8` → `§5.7` in the doc-comment near `verify_bundle.rs:1882`.
   - **L-2** — `MkField::Multi` arm in single-sig branch returns early with potentially fewer than 9 checks; this path is unreachable in production (single-sig bundles always have `MkField::Single`) and is documented with a comment, but the early return is an implicit invariant assumption. Fix: replace early return with `unreachable!("single-sig branch reached MkField::Multi — invariant violation")` or `debug_assert!(false, ...)`. Land alongside P.3 wiring in v0.4.5.
 - **Why deferred:** non-blocking nits; helper is `#[allow(dead_code)]` so no runtime exposure. Bundle with the v0.4.5 P.3-P.7 call-site rollout.
-- **Status:** `open`
+- **Status:** `resolved by v0.4.5 Phase L (commit 40638c8)` — L-1 §5.7 cited; L-2 `unreachable!()` invariant assertion in place.
 - **Tier:** `v0.4.5`
 
 ### `verify-bundle-helper-call-sites-rollout-v0.4.5` — Phase P.3-P.7 call-site rollout deferred from v0.4.4 to v0.4.5
@@ -405,7 +423,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   - **P.6** — `watch_only_tests.rs` migrates to the new shape (`passed` + forensic field assertions).
   - **P.7** — Add integration tests for full forensic field population: tampered-cell roundtrips that assert `expected`/`actual`/`diff_byte_offset` populated; skipped checks assert `decode_error` populated.
 - **Why deferred:** scope-safety in v0.4.4 release window. The helper-foundation pattern is the right shape; consolidating ~78 call sites at the same time was estimated at ~800-1000 lines deleted plus ~70 push-site updates and risked release timeline.
-- **Status:** `open`
+- **Status:** `resolved by v0.4.5 commits 679ded7 (P.3+P.6) + d3207dd (P.4) + 57f62eb (P.5) + 40638c8 (L+P.7)` — all 5 sub-phases shipped; net cmd/verify_bundle.rs delete ~660 lines; 3 forensic integration tests added.
 - **Tier:** `v0.4.5`
 
 ### `verify-bundle-emit-checks-helper-and-full-forensics-rollout` — Phase J.2 + J.3 + full forensic field rollout deferred from v0.4.1 to v0.4.2 — SUPERSEDED
@@ -425,7 +443,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::descriptor_mode_verify_run`.
 - **What:** SPEC §5.7 specifies descriptor-mode verify-bundle emits the same 9 / 3+6N check schema as template-mode (replacing v0.3's 3-element coarse ladder). v0.4.1 retains the v0.3 coarse ladder (cmd/verify_bundle.rs:1361 onward) with the H.1 shim for the schema-4 ms1 vec. v0.4.2 lands the parity refactor atomically with the `emit_verify_checks` helper (FOLLOWUP `verify-bundle-emit-checks-helper-and-full-forensics-rollout`).
 - **Why deferred:** depends on the helper; bundled with the same v0.4.2 cycle.
-- **Status:** `open`
+- **Status:** `resolved by v0.4.5 Phase P.5 (commit 57f62eb)` — descriptor_mode_verify_run dispatches to emit_verify_checks(... is_multisig: descriptor.n > 1); single-sig descriptors emit the 9 schema, multisig descriptors emit 3+6N.
 - **Tier:** `v0.4.2`
 
 ### `legacy-cli-flag-deletion` — delete --phrase / --xpub / --cosigner / --master-fingerprint / --cosigner-count / --cosigners-file CLI flags entirely

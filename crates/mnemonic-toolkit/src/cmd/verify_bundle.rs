@@ -1620,7 +1620,7 @@ mod helper_tests {
     }
 
     #[test]
-    fn helper_multisig_full_emits_3plus6n_checks_in_spec_order() {
+    fn helper_multisig_watch_only_emits_3plus6n_checks_in_spec_order() {
         use crate::parse::{CosignerSpec, MultisigPathFamily};
         use crate::synthesize::synthesize_multisig_watch_only;
         use bitcoin::bip32::DerivationPath;

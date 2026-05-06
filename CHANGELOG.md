@@ -4,6 +4,56 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.4.5] — 2026-05-06
+
+### What's new (v0.4.5 helper call-site rollout + 9/3+6N descriptor-mode parity)
+
+v0.4.5 finishes the v0.4.4 helper-foundation work by wiring `emit_verify_checks` into all four production verify-bundle dispatch paths (`run_full`, `run_watch_only`, `run_multisig`, `descriptor_mode_verify_run`), expanding the helper to emit the SPEC §5.7 3+6N multisig schema, dropping the legacy `stub_linkage` v0.1 leftover, and adding forensic-field integration tests. Per the user's "no users yet → ignore migration" license, the JSON envelope check-array shape changes are taken directly without compatibility shims.
+
+- **Phase P.3+P.6 — `run_full` + `run_watch_only` via helper.** Replaced ~270 lines of duplicated push-site logic with helper-routed shapes (~50 lines each). Deleted `verify_md1_and_stub` (~107 lines), `verify_md1_only` (~58 lines), `watch_only_checks` (~210 lines), and 5 obsolete unit tests (~165 lines). The single-sig 9-check JSON envelope shape changes: `stub_linkage` is dropped (was a v0.1 leftover with no SPEC §5.7 equivalent); `ms1_decode` joins at position 0 (canonical SPEC §5.7 ordering). `cli_json_envelopes.rs` test pin migrated in lockstep. Runs cmd/verify_bundle.rs from 2365 → 1707 lines (-658 net).
+- **Phase P.4 — multisig 3+6N helper expansion.** New `emit_multisig_checks` (~280 lines) implements SPEC §5.7 line 103 multisig schema: 6N per-cosigner [i]-indexed checks (`ms1_decode[i]`, `ms1_entropy_match[i]`, `mk1_decode[i]`, `mk1_xpub_match[i]`, `mk1_fingerprint_match[i]`, `mk1_path_match[i]`) interleaved by cosigner, then 3 shared md1 checks (`md1_decode`, `md1_wallet_policy`, `md1_xpub_match`). Watch-only / wif slots short-circuit ms1 checks per SPEC §5.7 lines 104-106. `run_multisig` body collapses from ~450 lines to ~85 lines via synthesize → SuppliedCards → helper. JSON envelope shape change: per-cosigner `md1_xpub_match[i]` (×N) replaced by single shared `md1_xpub_match`; per-cosigner `stub_linkage[i]` (×N) dropped entirely (no SPEC §5.7 equivalent). New helper unit test `helper_multisig_watch_only_emits_3plus6n_checks_in_spec_order` pins the 3+6N name vec via the watch-only synthesis path; full-mode multisig 3+6N unit-level coverage is open as FOLLOWUP `verify-bundle-multisig-helper-full-mode-unit-test` (covered end-to-end by `cli_bundle_multisig.rs`).
+- **Phase P.5 — descriptor-mode rewrite (closes 9/3+6N parity).** `descriptor_mode_verify_run` body's v0.3 3-element coarse ladder (`ms1_entropy_match`, `mk1_match`, `md1_match`) replaced with `emit_verify_checks(&expected, &supplied, descriptor.n > 1)` — yields the same SPEC §5.7 9 / 3+6N schema as template-mode. Plain-text output format also aligned to template-mode (`{name}: ok|fail {detail}` per check + `result: {result}` trailer). Closes FOLLOWUP `verify-bundle-9-3plus6n-descriptor-mode-parity`.
+- **Phase L — helper foundation cleanup.** L-1: `emit_verify_checks` doc-comment §5.8 → §5.7 (watch-only short-circuit semantics live in §5.7; §5.8 is the MsField wire format). L-2: `MkField::Multi` early-return arm in the single-sig branch replaced with `unreachable!()` — converts silent data truncation into loud invariant violation now that the helper is live. Closes FOLLOWUP `verify-bundle-helper-foundation-cleanup-v0.4.5`.
+- **Phase P.7 — forensic-field integration tests.** New `cli_verify_bundle_forensics.rs` (3 tests): pass-checks omit forensic fields per `#[serde(skip_serializing_if = "Option::is_none")]`; garbage-payload tamper exercises `decode_error` population on `ms1_decode`; watch-only mode emits `decode_error: "skipped: watch-only slot"` on `ms1_decode` + `ms1_entropy_match`.
+
+### Deferred to v0.4.5-nice-to-have / v0.4.6+
+
+- **`verify-bundle-multisig-md1-xpub-match-set-equality`** — `md1_xpub_match` uses ordered Vec equality. SPEC §5.7 "all N pubkeys match" arguably implies set semantics. Triggered only by descriptor-mode where user provides non-canonical slot order. Re-evaluate after descriptor-mode use cases surface.
+- **`verify-bundle-multisig-cosigner-mapping-diagnostic`** — distinguish "card not supplied" from "xpub not in policy" failure modes (currently conflated as "skipped: mk1[i] not supplied or decode failed").
+- **`verify-bundle-multisig-missing-ms1-passes-true`** — full-mode multisig with no `--ms1` supplied reports `passed: true` for `ms1_decode[i]`/`ms1_entropy_match[i]`. SPEC §5.7 doesn't address this case.
+- **`verify-bundle-watch-only-spurious-ms1-handling`** — watch-only with user-supplied `--ms1` produces `ms1_entropy_match: fail` (was silently passed-vacuously pre-v0.4.5). Behavior change; SPEC clarification pending.
+
+### Breaking changes
+
+JSON envelope `verify-bundle --json` check-array shape — internal-only break per "no users yet" license; no consumers to migrate:
+
+- **Single-sig (template-mode + descriptor-mode + watch-only):** `[ms1_entropy_match, mk1_decode, ..., stub_linkage]` (9 names with stub_linkage) → `[ms1_decode, ms1_entropy_match, mk1_decode, ..., md1_xpub_match]` (9 names per SPEC §5.7).
+- **Multisig (template-mode + descriptor-mode):** old per-cell shape (`[ms1_entropy_match, mk1_decode[0..N], mk1_xpub_match[0..N], ..., md1_xpub_match[0..N], stub_linkage[0..N]]`) → SPEC §5.7 3+6N (`[ms1_decode[0], ms1_entropy_match[0], mk1_decode[0], ..., mk1_path_match[N-1], md1_decode, md1_wallet_policy, md1_xpub_match]`).
+- **Descriptor-mode plain-text output** also aligned to template-mode format (`{name}: ok|fail {detail}` per check + `result: {result}` trailer; was `verify-bundle: {result}` header + `  - {name} [ok|fail]: {detail}`).
+
+### Wire-bit-identical guarantee
+
+v0.4.0 / v0.4.1 / v0.4.2 / v0.4.3 / v0.4.4 schema-4 `bundle --json` envelopes continue to emit byte-identically. The shape changes are confined to `verify-bundle --json` and `verify-bundle` plain-text output.
+
+### Test corpus
+
+243 lib unit tests + 22 integration suites pass (was 244 lib in v0.4.4; -1 from `helper_multisig_returns_todo_stub` deletion replaced by `helper_multisig_full_emits_3plus6n_checks_in_spec_order`; +3 forensic integration tests).
+
+### Cycle artifacts
+
+- Implementation plan: `design/IMPLEMENTATION_PLAN_v0_4_5_helper_call_sites.md` (r2 APPROVE 0C/0I post-r1 fix).
+- Phase reports: `design/agent-reports/phase-P3-helper-wire-up-review-r1.md`, `design/agent-reports/phase-P4-multisig-helper-review-r1.md`, `design/agent-reports/phase-P5-descriptor-mode-helper-review-r1.md`.
+
+### Architect-review history
+
+- v0.4.5 impl plan: 2 in-cycle rounds (r1 BLOCK 2I → 0C/0I r2; multisig check-name bracket notation + shared/per-cosigner grouping corrections inline).
+- Phase P.3+P.6: 1 review round (1 Important re: stale `#[allow(dead_code)]` attrs addressed inline; 1 Low re: watch-only spurious --ms1 deferred to FOLLOWUP).
+- Phase P.4: 1 review round (1 Critical re: stale doc-comment + 2 nits addressed inline; 2 Important + 1 Low deferred via 3 FOLLOWUPS at v0.4.5-nice-to-have).
+- Phase P.5: 1 review round (1 Important re: plain-text format divergence + 1 nit addressed inline).
+- Final cross-phase review: APPROVED 2026-05-06 (1 Important re: multisig helper test name/fixture mismatch addressed via rename + FOLLOWUP for full-mode unit coverage; 3 Low/Nit deferred via FOLLOWUPS at v0.4.5-nice-to-have tier).
+
+---
+
 ## mnemonic-toolkit [0.4.4] — 2026-05-06
 
 ### What's new (v0.4.4 verify-bundle helper foundation + DescriptorBinding cleanup)
