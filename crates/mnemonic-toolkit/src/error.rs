@@ -59,6 +59,12 @@ pub enum ToolkitError {
     /// Distinct from `ModeViolation` (SPEC §6.9, flag-combination errors):
     /// `DescriptorParse` covers descriptor *content* failures.
     DescriptorParse(String),
+    /// SPEC §5.7 verify-bundle: descriptor-derived bundle's preserved
+    /// descriptor string fails to round-trip (corrupted JSON, manual edit,
+    /// upstream library version mismatch). Exit 4 (BundleMismatch tier).
+    DescriptorReparseFailed {
+        detail: String,
+    },
 }
 
 #[derive(Debug)]
@@ -176,7 +182,7 @@ impl ToolkitError {
             | ToolkitError::NetworkMismatch { .. }
             | ToolkitError::DescriptorParse(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
-            ToolkitError::BundleMismatch { .. } => 4,
+            ToolkitError::BundleMismatch { .. } | ToolkitError::DescriptorReparseFailed { .. } => 4,
             ToolkitError::MultisigConfig { .. }
             | ToolkitError::CosignerSpec { .. }
             | ToolkitError::CosignersFile { .. } => 1,
@@ -202,6 +208,7 @@ impl ToolkitError {
             ToolkitError::CosignerSpec { .. } => "CosignerSpec",
             ToolkitError::CosignersFile { .. } => "CosignersFile",
             ToolkitError::DescriptorParse(_) => "DescriptorParse",
+            ToolkitError::DescriptorReparseFailed { .. } => "DescriptorReparseFailed",
         }
     }
 
@@ -240,6 +247,9 @@ impl ToolkitError {
                 format!("--cosigners-file: {}", message)
             }
             ToolkitError::DescriptorParse(m) => m.clone(),
+            ToolkitError::DescriptorReparseFailed { detail } => {
+                format!("descriptor re-parse failed during verify-bundle: {detail}")
+            }
         }
     }
 

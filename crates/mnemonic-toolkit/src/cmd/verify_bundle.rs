@@ -42,8 +42,17 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
 
-    #[arg(long)]
-    pub template: CliTemplate,
+    /// Template name. Mutually-required-one-of with --descriptor / --descriptor-file.
+    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file"])]
+    pub template: Option<CliTemplate>,
+
+    /// User-supplied descriptor (v0.3 §5.7 verify-bundle re-parse path).
+    #[arg(long, conflicts_with = "descriptor_file")]
+    pub descriptor: Option<String>,
+
+    /// User-supplied descriptor file (single-line UTF-8).
+    #[arg(long = "descriptor-file")]
+    pub descriptor_file: Option<PathBuf>,
 
     #[arg(long)]
     pub language: Option<CliLanguage>,
@@ -93,6 +102,13 @@ pub struct VerifyBundleArgs {
     pub cosigner_count: Option<usize>,
 }
 
+impl VerifyBundleArgs {
+    fn template_unchecked(&self) -> CliTemplate {
+        self.template
+            .expect("template-mode dispatch contract — descriptor-mode escapes earlier")
+    }
+}
+
 pub fn run<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     stdin: &mut dyn std::io::Read,
@@ -101,9 +117,22 @@ pub fn run<W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
 
+    // v0.3 descriptor-mode dispatch (escapes before template_unchecked).
+    let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
+    if descriptor_mode && args.template.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--template",
+            message: mode_text::DESCRIPTOR_AND_TEMPLATE,
+        });
+    }
+    if descriptor_mode {
+        return descriptor_mode_verify_run(args, stdin, stdout);
+    }
+
     let xpub_arg = args.xpub.as_deref();
     let phrase_arg = args.phrase.as_deref();
-    let multisig = args.template.is_multisig();
+    let multisig = args.template_unchecked().is_multisig();
     let cosigner_present = !args.cosigner.is_empty();
     let cosigners_file_present = args.cosigners_file.is_some();
 
@@ -258,7 +287,7 @@ fn run_full(
         &passphrase,
         language,
         args.network,
-        args.template,
+        args.template_unchecked(),
         args.account,
     )?;
 
@@ -333,7 +362,9 @@ fn run_full(
                     "master fingerprint does not match".into()
                 },
             });
-            let expected_path = args.template.derivation_path(args.network, args.account);
+            let expected_path = args
+                .template_unchecked()
+                .derivation_path(args.network, args.account);
             let path_match = card.origin_path == expected_path;
             checks.push(VerifyCheck {
                 name: "mk1_path_match".into(),
@@ -855,7 +886,7 @@ fn run_multisig<E: Write>(
             out
         };
         let path_family = args.multisig_path_family.unwrap_or_default();
-        let script_type = args.template.bip48_script_type().unwrap_or(0);
+        let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
         let default_path_str =
             path_family.default_origin_path(args.network, args.account, script_type);
         let default_path = bitcoin::bip32::DerivationPath::from_str(&default_path_str)
@@ -885,7 +916,7 @@ fn run_multisig<E: Write>(
         let master = bitcoin::bip32::Xpriv::new_master(args.network.network_kind(), &seed)
             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
         let master_fp = master.fingerprint(&secp);
-        let script_type = args.template.bip48_script_type().unwrap_or(0);
+        let script_type = args.template_unchecked().bip48_script_type().unwrap_or(0);
         let path_str = path_family.default_origin_path(args.network, args.account, script_type);
         let path = bitcoin::bip32::DerivationPath::from_str(&path_str)
             .map_err(|e| ToolkitError::BadInput(format!("path parse: {}", e)))?;
@@ -1241,6 +1272,181 @@ fn run_multisig<E: Write>(
     Ok(())
 }
 
+/// Phase D descriptor-mode verify: re-run the descriptor pipeline to build the
+/// expected Bundle, then compare each card against the supplied --ms1/--mk1/--md1.
+/// Emits the same VerifyBundleJson schema as template-mode verify (per SPEC §5.7
+/// the check schema is structurally unchanged; only the source of truth differs).
+fn descriptor_mode_verify_run<W: Write>(
+    args: &VerifyBundleArgs,
+    stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+) -> Result<u8, ToolkitError> {
+    use crate::cmd::bundle::SELF_MULTISIG_WARNING;
+    use crate::parse_descriptor::{
+        bind_descriptor_keys, check_self_multisig_warning, lex_placeholders, parse_descriptor,
+        resolve_placeholders,
+    };
+    use crate::synthesize::synthesize_descriptor;
+
+    let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
+        (Some(s), None) => s.clone(),
+        (None, Some(p)) => std::fs::read_to_string(p)
+            .map_err(|e| ToolkitError::DescriptorReparseFailed {
+                detail: format!("--descriptor-file {}: {e}", p.display()),
+            })?
+            .trim_end()
+            .to_string(),
+        _ => unreachable!("clap conflicts_with rules out both"),
+    };
+
+    let occs =
+        lex_placeholders(&descriptor_str).map_err(|e| ToolkitError::DescriptorReparseFailed {
+            detail: e.message(),
+        })?;
+    let resolved =
+        resolve_placeholders(&occs).map_err(|e| ToolkitError::DescriptorReparseFailed {
+            detail: e.message(),
+        })?;
+
+    let phrase_owned: Option<String> = if args.phrase.is_some() {
+        Some(read_phrase_input(args.phrase.as_deref(), stdin)?)
+    } else {
+        None
+    };
+    let passphrase = args.passphrase.clone().unwrap_or_default();
+    let language = args.language.unwrap_or_default();
+
+    let cosigner_specs: Vec<CosignerSpec> = if !args.cosigner.is_empty() {
+        args.cosigner
+            .iter()
+            .enumerate()
+            .map(|(i, s)| parse_cosigner_spec(s, i))
+            .collect::<Result<Vec<_>, _>>()?
+    } else if let Some(p) = args.cosigners_file.as_ref() {
+        parse_cosigners_file(p)?
+    } else {
+        Vec::new()
+    };
+
+    let binding = bind_descriptor_keys(
+        &resolved,
+        args.network,
+        phrase_owned.as_deref(),
+        &passphrase,
+        language,
+        args.xpub.as_deref(),
+        args.master_fingerprint.as_deref(),
+        &cosigner_specs,
+    )?;
+
+    let _ = check_self_multisig_warning(&binding); // verify-bundle doesn't re-emit warnings
+    let _ = SELF_MULTISIG_WARNING;
+
+    let descriptor = parse_descriptor(&descriptor_str, &binding.keys, &binding.fingerprints)
+        .map_err(|e| ToolkitError::DescriptorReparseFailed {
+            detail: e.message(),
+        })?;
+    let expected = synthesize_descriptor(
+        &descriptor,
+        &binding.cosigners,
+        binding.entropy.as_deref(),
+        args.privacy_preserving,
+    )?;
+
+    // Build the v0.3 §5.7 check ladder. For descriptor mode we use direct
+    // bundle-cell comparison: ms1 string equality, mk1 string equality, md1
+    // string equality. SPEC §5.7 conservatively emits a 3-element ladder for
+    // descriptor mode (full check schema lands in v0.4 alongside descriptor-
+    // aware verify-bundle expansion).
+    let mut checks: Vec<VerifyCheck> = Vec::new();
+
+    // Check 1: ms1 entropy match (skipped if no --ms1 supplied or watch-only).
+    if let Some(supplied_ms1) = args.ms1.as_deref() {
+        match expected.ms1.as_deref() {
+            Some(exp) if exp == supplied_ms1 => checks.push(VerifyCheck {
+                name: "ms1_entropy_match".into(),
+                result: "ok",
+                detail: "ms1 byte-identical".into(),
+            }),
+            Some(_) => checks.push(VerifyCheck {
+                name: "ms1_entropy_match".into(),
+                result: "fail",
+                detail: "expected ms1 bytes differ from supplied".into(),
+            }),
+            None => checks.push(VerifyCheck {
+                name: "ms1_entropy_match".into(),
+                result: "skipped",
+                detail: "watch-only descriptor mode (no entropy expected)".into(),
+            }),
+        }
+    } else {
+        checks.push(VerifyCheck {
+            name: "ms1_entropy_match".into(),
+            result: "skipped",
+            detail: "no --ms1 supplied".into(),
+        });
+    }
+
+    // Check 2: mk1 byte-equality (per-card for multisig).
+    let supplied_mk1 = &args.mk1;
+    let expected_mk1: Vec<String> = match &expected.mk1 {
+        crate::format::MkField::Single(v) => v.clone(),
+        crate::format::MkField::Multi(per) => per.iter().flatten().cloned().collect(),
+    };
+    let mk1_match = expected_mk1.len() == supplied_mk1.len()
+        && expected_mk1
+            .iter()
+            .zip(supplied_mk1.iter())
+            .all(|(a, b)| a == b);
+    checks.push(VerifyCheck {
+        name: "mk1_match".into(),
+        result: if mk1_match { "ok" } else { "fail" },
+        detail: if mk1_match {
+            "mk1 byte-identical".into()
+        } else {
+            format!(
+                "expected {} chunks, got {}",
+                expected_mk1.len(),
+                supplied_mk1.len()
+            )
+        },
+    });
+
+    // Check 3: md1 byte-equality.
+    let md1_match = expected.md1 == args.md1;
+    checks.push(VerifyCheck {
+        name: "md1_match".into(),
+        result: if md1_match { "ok" } else { "fail" },
+        detail: if md1_match {
+            "md1 byte-identical".into()
+        } else {
+            format!(
+                "expected {} chunks, got {}",
+                expected.md1.len(),
+                args.md1.len()
+            )
+        },
+    });
+
+    let any_fail = checks.iter().any(|c| c.result == "fail");
+    let result_str = if any_fail { "mismatch" } else { "ok" };
+    if args.json {
+        let json = VerifyBundleJson {
+            schema_version: "3",
+            result: result_str,
+            checks,
+        };
+        serde_json::to_writer(&mut *stdout, &json).ok();
+        writeln!(stdout).ok();
+    } else {
+        writeln!(stdout, "verify-bundle: {}", result_str).ok();
+        for c in &checks {
+            writeln!(stdout, "  - {} [{}]: {}", c.name, c.result, c.detail).ok();
+        }
+    }
+    Ok(if any_fail { 4 } else { 0 })
+}
+
 #[cfg(test)]
 mod watch_only_tests {
     use super::*;
@@ -1418,7 +1624,9 @@ mod watch_only_tests {
             xpub: Some("xpub6BadInvalidShortString".into()),
             master_fingerprint: Some("deadbeef".into()),
             network: CliNetwork::Mainnet,
-            template: CliTemplate::Bip84,
+            template: Some(CliTemplate::Bip84),
+            descriptor: None,
+            descriptor_file: None,
             language: None,
             passphrase: None,
             account: 0,
