@@ -3,7 +3,7 @@
 //! Locked by Phase 2 SPIKE-2 (`design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md`).
 //! Phase C consumes `parse_slot_input` as the clap value-parser and `validate_slot_set`
 //! as the post-parse / pre-binding gate.
-#![allow(dead_code)] // validate_slot_set + helpers wired in Phase C.
+#![allow(dead_code)] // validate_slot_set + expand_legacy_to_slots wired in Phase D; parse_slot_input wired via bundle.rs:115.
 
 use std::collections::BTreeMap;
 

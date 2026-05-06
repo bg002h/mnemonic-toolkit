@@ -30,9 +30,10 @@ pub fn detect_removed_subcommand(argv: &[String]) -> Option<&'static str> {
     None
 }
 
-/// SPEC §3.3 (revised) bundle modes. Auto-detected from per-slot subkeys.
-/// Descriptor presence is orthogonal — `--descriptor` does NOT add a variant;
-/// it is consumed by the synthesis path independently of `BundleMode`.
+/// v0.4 bundle-mode classification (impl plan Phase C.3). Auto-detected
+/// from per-slot subkeys. Descriptor presence is orthogonal — `--descriptor`
+/// does NOT add a variant; it is consumed by the synthesis path independently
+/// of `BundleMode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BundleMode {
     /// N=1, slot @0 secret-bearing (phrase / entropy / xprv / wif).
