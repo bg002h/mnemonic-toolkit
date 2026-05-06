@@ -1073,12 +1073,12 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     }
 
     // SPEC §4.11.b BIP-388 distinct-key check (use bridging path: cosigners
-    // already carry path_raw).
+    // already carry path_raw + entropy per slot post-v0.4.3 N alias merge).
+    let _ = &entropy_at_0; // entropy is on cosigners[0] already; remove this binding
     let dummy_binding = crate::parse_descriptor::DescriptorBinding {
         keys: keys.clone(),
         fingerprints: fingerprints.clone(),
         cosigners: cosigners.clone(),
-        entropy: entropy_at_0.clone(),
     };
     crate::parse_descriptor::check_key_vector_distinctness(&dummy_binding)?;
 

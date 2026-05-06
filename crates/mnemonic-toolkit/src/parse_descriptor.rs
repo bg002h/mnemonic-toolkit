@@ -791,7 +791,20 @@ pub struct DescriptorBinding {
     pub keys: Vec<ParsedKey>,
     pub fingerprints: Vec<ParsedFingerprint>,
     pub cosigners: Vec<CosignerKeyInfo>,
-    pub entropy: Option<Vec<u8>>,
+    // v0.4.4 Phase S: bundle-level `entropy` field retired. Per-slot entropy
+    // lives on `binding.cosigners[i].entropy` (added in v0.4.3 Phase N's
+    // CosignerKeyInfo→ResolvedSlot type alias merge). Callers that need
+    // "is binding @0 secret-bearing?" use
+    // `binding.cosigners.first().and_then(|c| c.entropy.as_deref())`.
+}
+
+impl DescriptorBinding {
+    /// v0.4.4 Phase S compatibility shim — returns the @0 slot's entropy
+    /// for callers transitioning from the retired `binding.entropy` field.
+    /// New code reads `binding.cosigners[0].entropy` directly.
+    pub fn entropy_at_0(&self) -> Option<&[u8]> {
+        self.cosigners.first().and_then(|c| c.entropy.as_deref())
+    }
 }
 
 /// SPEC §4.11 binding logic. Resolves the four descriptor-mode key sources:
@@ -913,11 +926,15 @@ fn bind_full_mode(
         }
     }
 
+    // v0.4.4 Phase S: per-slot entropy on the @0 cosigner; bundle-level
+    // entropy field retired.
+    if let Some(c0) = cosigners.first_mut() {
+        c0.entropy = Some(entropy);
+    }
     Ok(DescriptorBinding {
         keys,
         fingerprints: fps,
         cosigners,
-        entropy: Some(entropy),
     })
 }
 
@@ -951,7 +968,6 @@ fn bind_watch_only_singlesig(
         keys,
         fingerprints: fps,
         cosigners,
-        entropy: None,
     })
 }
 
@@ -991,7 +1007,6 @@ fn bind_watch_only_multisig(
         keys,
         fingerprints: fps,
         cosigners,
-        entropy: None,
     })
 }
 
@@ -1526,7 +1541,7 @@ mod tests {
         .unwrap();
         assert_eq!(b.cosigners.len(), 1);
         assert_eq!(b.keys.len(), 1);
-        assert!(b.entropy.is_some(), "full mode emits entropy");
+        assert!(b.entropy_at_0().is_some(), "full mode emits entropy");
     }
 
     #[test]
@@ -1583,7 +1598,7 @@ mod tests {
             &[],
         )
         .unwrap();
-        assert!(b.entropy.is_none(), "watch-only mode omits entropy");
+        assert!(b.entropy_at_0().is_none(), "watch-only mode omits entropy");
         assert_eq!(b.cosigners.len(), 1);
     }
 
@@ -1636,7 +1651,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(b.cosigners.len(), 2);
-        assert!(b.entropy.is_some());
+        assert!(b.entropy_at_0().is_some());
     }
 
     #[test]
@@ -1670,7 +1685,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(b.cosigners.len(), 2);
-        assert!(b.entropy.is_none());
+        assert!(b.entropy_at_0().is_none());
     }
 
     // ---- A.2 (v0.4): BIP-388 distinct-key conformance ----
@@ -1680,7 +1695,6 @@ mod tests {
             keys: vec![],
             fingerprints: vec![],
             cosigners,
-            entropy: None,
         };
         check_key_vector_distinctness(&binding)
     }
@@ -1842,7 +1856,7 @@ mod tests {
         crate::synthesize::synthesize_descriptor(
             &descriptor,
             &binding.cosigners,
-            binding.entropy.as_deref(),
+            binding.entropy_at_0(),
             false,
         )
         .unwrap()
@@ -2058,7 +2072,7 @@ mod tests {
         let descriptor_bundle = crate::synthesize::synthesize_descriptor(
             &parsed,
             &binding.cosigners,
-            binding.entropy.as_deref(),
+            binding.entropy_at_0(),
             false,
         )
         .unwrap();

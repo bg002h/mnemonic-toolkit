@@ -1447,7 +1447,7 @@ fn descriptor_mode_verify_run<W: Write>(
     let expected = synthesize_descriptor(
         &descriptor,
         &binding.cosigners,
-        binding.entropy.as_deref(),
+        binding.entropy_at_0(),
         args.privacy_preserving,
     )?;
 
