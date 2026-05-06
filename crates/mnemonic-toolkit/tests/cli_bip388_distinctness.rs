@@ -12,8 +12,16 @@ use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+// v0.4.2 Phase M reconciliation: the v0.4.0 hard-reject in
+// `bundle_multisig_full --cosigner-count > 1` was a placeholder for the
+// missing multi-source synthesis. v0.4.2 ships proper multi-source
+// synthesis via `--slot @N.phrase=`, and the legacy `--cosigner-count > 1
+// --phrase` invocation now hits SPEC §6.6 row 5 (declared-vs-derived N
+// mismatch) FIRST since no actual cosigners are supplied. The
+// architecturally correct diagnosis is now row 5; the v0.4.0 row-13
+// hard-reject test is superseded.
 #[test]
-fn bundle_multisig_full_legacy_emits_row13_byte_exact_stderr() {
+fn bundle_multisig_full_legacy_cosigner_count_inconsistent_emits_row5() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -28,6 +36,37 @@ fn bundle_multisig_full_legacy_emits_row13_byte_exact_stderr() {
             "2",
             "--cosigner-count",
             "3",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        stderr,
+        "error: --cosigner-count deprecated and inconsistent with slot indices (declared N=3, derived N=1)\n",
+        "stderr must match SPEC §6.6 row 5 byte-exactly"
+    );
+}
+
+// v0.4.2 Phase K-driven BIP-388 distinctness test using --slot directly:
+// supply two slots that resolve to the same (xpub, path) → row 13 fires.
+#[test]
+fn bip388_row13_fires_for_duplicate_slot_phrases() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={}", TREZOR_24),
+            "--slot",
+            &format!("@1.phrase={}", TREZOR_24),
             "--no-engraving-card",
         ])
         .assert()

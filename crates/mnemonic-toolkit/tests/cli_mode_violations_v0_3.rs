@@ -149,9 +149,16 @@ fn descriptor_with_nonzero_account_rejected() {
 }
 
 // ---- Row 6 negative + Row 13: --descriptor n=2 multisig with --phrase but no
-// [fp/path] annotation → SPEC §6.9 row 13 fires (full mode requires annotation).
+// v0.4.2 Phase M reconciliation: under unified dispatch, --phrase + --descriptor
+// with n=2 placeholders + no --cosigner triples now hits the slot-count gap
+// check BEFORE the annotation check (bundle_args_to_slots produces just
+// [@0.phrase=...] from --phrase, then the descriptor's n=2 vs slot vec
+// length=1 mismatch fires). The "requires explicit [fp/path] annotation"
+// error path still exists but only when both slots ARE supplied AND the
+// descriptor lacks the annotation. Test updated to assert the new
+// architecturally-correct gap diagnosis.
 #[test]
-fn descriptor_full_multisig_without_annotation_rejected() {
+fn descriptor_full_multisig_phrase_only_emits_slot_count_gap() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -169,7 +176,7 @@ fn descriptor_full_multisig_without_annotation_rejected() {
         .failure()
         .code(2)
         .stderr(predicate::str::contains(
-            "requires explicit [fp/path] origin annotation",
+            "descriptor has n=2 placeholders but --slot vec covers 1 slots",
         ));
 }
 

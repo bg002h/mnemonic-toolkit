@@ -167,18 +167,21 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // v0.4.1 H.5: unified slot-driven dispatch fires when --slot is supplied.
-    // Legacy --phrase/--xpub/--cosigner retain v0.3 dispatch in v0.4.1
-    // (full SPEC §6.6.a alias migration deferred to v0.5+ per FOLLOWUP
-    // `legacy-flag-deprecation`).
-    if !args.slot.is_empty() {
-        return bundle_run_unified(args, stdin, stdout, stderr);
-    }
-
-    // SPEC §6.9 v0.3 mode-violation pre-check ladder, rows 1-6 (flag-combination
-    // checks; rows 7-15 fire after descriptor parse, inside descriptor_mode_run).
-    // Evaluated TOP-TO-BOTTOM; first triggered row fires.
+    // v0.4.2 Phase M: thin wrapper. The 14 mode-violation pre-checks below
+    // pin byte-exact stderr per cli_mode_violations*.rs tests; everything
+    // else routes into bundle_run_unified after legacy-flag expansion.
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
+    let xpub_arg = args.xpub.as_deref();
+    let phrase_arg = args.phrase.as_deref();
+    let cosigner_present = !args.cosigner.is_empty();
+    let cosigners_file_present = args.cosigners_file.is_some();
+    let multisig_template = args
+        .template
+        .as_ref()
+        .map(|t| t.is_multisig())
+        .unwrap_or(false);
+
+    // SPEC §6.6 v0.3 mode-violation pre-check ladder (descriptor-mode).
     if descriptor_mode && args.template.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
@@ -187,8 +190,6 @@ pub fn run<W: Write, E: Write>(
         });
     }
     if args.descriptor.is_some() && args.descriptor_file.is_some() {
-        // clap conflicts_with usually rejects this; runtime backstop for
-        // direct API callers that bypass clap.
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
             flag: "--descriptor-file",
@@ -224,18 +225,7 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
-    // Descriptor-mode dispatch (Phase B stub; Phase C lands synthesis).
-    if descriptor_mode {
-        return descriptor_mode_run(args, stdin, stdout, stderr);
-    }
-
-    let phrase_arg = args.phrase.as_deref();
-    let xpub_arg = args.xpub.as_deref();
-    let multisig = args.template_unchecked().is_multisig();
-    let cosigner_present = !args.cosigner.is_empty();
-    let cosigners_file_present = args.cosigners_file.is_some();
-
-    // SPEC §6.6 v0.2 NEW mode-violation pre-checks (BEFORE single-sig checks).
+    // SPEC §6.6 v0.2 mode-violation pre-checks (template-mode).
     if xpub_arg.is_some() && (cosigner_present || cosigners_file_present) {
         return Err(ToolkitError::ModeViolation {
             mode: "watch-only",
@@ -250,21 +240,21 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::COSIGNER_AND_COSIGNERS_FILE,
         });
     }
-    if args.threshold.is_some() && !multisig {
+    if args.threshold.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
             flag: "--threshold",
             message: mode_text::THRESHOLD_WITHOUT_MULTISIG,
         });
     }
-    if args.cosigner_count.is_some() && !multisig {
+    if args.cosigner_count.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
             flag: "--cosigner-count",
             message: mode_text::COSIGNER_COUNT_WITHOUT_MULTISIG,
         });
     }
-    if args.multisig_path_family.is_some() && !multisig {
+    if args.multisig_path_family.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
             flag: "--multisig-path-family",
@@ -278,12 +268,8 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::PRIVACY_WITH_XPUB,
         });
     }
-    // §6.6 row "ACCOUNT_INCOMPATIBLE_TEMPLATE": never fires for v0.2's
-    // templates (all have an account-position in their standard path).
-    // TODO: revisit when v0.3+ adds template families that lack one.
 
-    // SPEC §6.6 single-sig mode-violation pre-checks (BEFORE mode dispatch so the
-    // exit code is 2 + byte-exact text, not clap's 64 + default text).
+    // Single-sig xpub-mode pre-checks.
     if xpub_arg.is_some() && args.passphrase.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "watch-only",
@@ -312,51 +298,26 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::FINGERPRINT_WITHOUT_XPUB,
         });
     }
-
-    // v0.2 multisig mode dispatch.
-    if multisig {
-        let threshold = args.threshold.ok_or_else(|| ToolkitError::MultisigConfig {
-            message: "--threshold required for multisig templates".into(),
-        })?;
-        let path_family = args.multisig_path_family.unwrap_or_default();
-
-        if cosigner_present || cosigners_file_present {
-            return bundle_multisig_watch_only(args, threshold, path_family, stdout, stderr);
-        }
-        if phrase_arg.is_some() {
-            check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
-            let cosigner_count =
-                args.cosigner_count
-                    .ok_or_else(|| ToolkitError::MultisigConfig {
-                        message: "--cosigner-count required for full-mode multisig".into(),
-                    })?;
-            return bundle_multisig_full(
-                args,
-                threshold,
-                cosigner_count,
-                path_family,
-                stdin,
-                stdout,
-                stderr,
-            );
-        }
-        return Err(ToolkitError::BadInput(
-            "multisig bundle requires --phrase (full mode) or --cosigner/--cosigners-file (watch-only)".into(),
-        ));
+    if xpub_arg == Some("-") {
+        return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
     }
 
-    // Single-sig mode dispatch.
-    if let Some(xpub_str) = xpub_arg {
-        if xpub_str == "-" {
-            return Err(ToolkitError::BadInput(mode_text::XPUB_STDIN.to_string()));
-        }
-        bundle_watch_only(args, xpub_str, stdout, stderr)
-    } else if phrase_arg.is_some() {
+    // v0.4.2 Phase M reconciliation: --master-fingerprint format pre-check
+    // (8 hex chars) — preserves legacy v0.3 byte-exact stderr from
+    // parse_master_fingerprint. Without this, an invalid fingerprint flows
+    // into bundle_args_to_slots → resolve_slots and emits a less-specific
+    // BIP-32 error if the xpub is also invalid.
+    if let Some(fp) = args.master_fingerprint.as_deref() {
+        crate::parse::parse_master_fingerprint(fp)?;
+    }
+
+    // Phrase stdin guard: --phrase "-" + --passphrase "-" both consume stdin.
+    if phrase_arg.is_some() {
         check_no_concurrent_stdin(phrase_arg, args.passphrase.as_deref())?;
-        bundle_full(args, stdin, stdout, stderr)
-    } else {
-        Err(ToolkitError::BadInput("expected --phrase or --xpub".into()))
     }
+
+    // v0.4.2 Phase M: route everything (legacy + --slot) through unified dispatch.
+    bundle_run_unified(args, stdin, stdout, stderr)
 }
 
 fn bundle_full<W: Write, E: Write>(
@@ -1368,18 +1329,11 @@ fn bundle_run_unified<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     use crate::bundle_unified::{pre_check_template_n, pre_check_threshold};
-    use crate::slot_input::{expand_legacy_to_slots, validate_slot_set};
+    use crate::slot_input::validate_slot_set;
 
-    // SPEC §6.6 row 4 + row 8: validate per-slot subkey shape + contiguity.
-    // Legacy alias expansion: --phrase / --cosigner-count fold into slot vec
-    // via expand_legacy_to_slots (legacy --cosigner triple parsing is deferred
-    // to v0.4.2 alongside the wider deprecation FOLLOWUP).
-    let slots = expand_legacy_to_slots(
-        args.slot.clone(),
-        args.phrase.as_deref(),
-        &[],
-        args.cosigner_count,
-    )?;
+    // v0.4.2 Phase M: fold ALL legacy flags (--phrase / --xpub / --master-fingerprint
+    // / --cosigner / --cosigners-file / --cosigner-count) into the unified slot vec.
+    let slots = bundle_args_to_slots(args)?;
     validate_slot_set(&slots)?;
 
     let mode = detect_bundle_mode(&slots)?;
@@ -1675,10 +1629,25 @@ fn emit_unified<W: Write, E: Write>(
     let _ = mode;
     let n = resolved.len();
     let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
+    // v0.4.2 Phase M reconciliation: legacy emit_*/descriptor_mode_emit
+    // emitted origin_path with "m/" prefix (md-codec OriginPath rendering).
+    // Unified path uses bitcoin DerivationPath::to_string() which omits the
+    // "m/" prefix in current bitcoin lib version. Normalize for backward-
+    // compatibility with cli_json_envelopes / cli_descriptor_mode tests.
+    fn normalize_origin_path(p: &str) -> String {
+        if p.is_empty() || p == "m" {
+            "m".to_string()
+        } else if p.starts_with("m/") {
+            p.to_string()
+        } else {
+            format!("m/{}", p)
+        }
+    }
+
     if args.json {
         let template = args.template.map(|t| t.human_name());
         let (multisig_info, origin_path, origin_paths) = if n == 1 {
-            (None, Some(resolved[0].path_raw.clone()), None)
+            (None, Some(normalize_origin_path(&resolved[0].path_raw)), None)
         } else {
             let cosigners: Vec<CosignerEntry> = resolved
                 .iter()
@@ -1690,7 +1659,7 @@ fn emit_unified<W: Write, E: Write>(
                     } else {
                         Some(s.fingerprint.to_string().to_lowercase())
                     },
-                    origin_path: s.path_raw.clone(),
+                    origin_path: normalize_origin_path(&s.path_raw),
                     xpub: s.xpub.to_string(),
                 })
                 .collect();
@@ -1750,6 +1719,21 @@ fn emit_unified<W: Write, E: Write>(
         writeln!(stdout).ok();
     } else {
         // Schema-4 text mode: emit per-slot ms1 sections (skip empty sentinels).
+        // v0.4.2 Phase M reconciliation: when ALL ms1 entries are empty, emit
+        // an "omitted" marker line for backward-compatibility with v0.3
+        // legacy text-mode output. The marker text varies by mode.
+        let any_non_empty = bundle.ms1.iter().any(|s| !s.is_empty());
+        if !any_non_empty {
+            let marker = if args.descriptor.is_some() || args.descriptor_file.is_some() {
+                "# ms1 (omitted — descriptor watch-only mode)"
+            } else if n > 1 {
+                "# ms1 (omitted — multisig watch-only mode)"
+            } else {
+                "# ms1 (omitted — xpub-only mode)"
+            };
+            writeln!(stdout, "{marker}").ok();
+            writeln!(stdout).ok();
+        }
         for (i, ms) in bundle.ms1.iter().enumerate() {
             if ms.is_empty() {
                 continue;
@@ -1790,7 +1774,14 @@ fn emit_unified<W: Write, E: Write>(
                 }
             }
         }
-        writeln!(stdout, "# md1 (wallet policy)").ok();
+        // v0.4.2 Phase M reconciliation: legacy emit_multisig prefixed
+        // "multisig" to the md1 header for n>1; preserve.
+        let md1_header = if n > 1 {
+            "# md1 (multisig wallet policy)"
+        } else {
+            "# md1 (wallet policy)"
+        };
+        writeln!(stdout, "{md1_header}").ok();
         for s in &bundle.md1 {
             writeln!(stdout, "{}", s).ok();
         }
@@ -2156,4 +2147,91 @@ fn origin_to_derivation_path(
     DerivationPath::from_str(&s).map_err(|e| {
         ToolkitError::DescriptorParse(format!("descriptor @N annotation path parse failed: {e}"))
     })
+}
+
+/// v0.4.2 Phase M: fold all legacy CLI flags (--phrase / --xpub /
+/// --master-fingerprint / --cosigner / --cosigners-file / --cosigner-count)
+/// into a unified `Vec<SlotInput>`. Cosigner offset rule per impl plan
+/// r1 review C-2: phrase present → cosigners @1+; phrase absent → cosigners @0+;
+/// phrase + xpub → error.
+fn bundle_args_to_slots(args: &BundleArgs) -> Result<Vec<SlotInput>, ToolkitError> {
+    use crate::slot_input::expand_legacy_to_slots;
+
+    if args.phrase.is_some() && args.xpub.is_some() {
+        // Belt-and-braces: clap conflicts_with handles this at CLI level, but
+        // direct API callers may bypass. Don't reach unified dispatch with
+        // both set.
+        return Err(ToolkitError::ModeViolation {
+            mode: "bundle",
+            flag: "--phrase / --xpub",
+            message: "--phrase and --xpub are mutually exclusive (clap normally rejects)",
+        });
+    }
+
+    // Pre-expand --cosigner triples + --cosigners-file into per-slot SlotInput vecs.
+    let cosigner_specs: Vec<crate::parse::CosignerSpec> = if !args.cosigner.is_empty() {
+        args.cosigner
+            .iter()
+            .enumerate()
+            .map(|(i, s)| crate::parse::parse_cosigner_spec(s, i))
+            .collect::<Result<Vec<_>, _>>()?
+    } else if let Some(p) = args.cosigners_file.as_ref() {
+        crate::parse::parse_cosigners_file(p)?
+    } else {
+        Vec::new()
+    };
+
+    // Apply offset rule.
+    let cosigner_offset: u8 = if args.phrase.is_some() { 1 } else { 0 };
+    let legacy_cosigners: Vec<(u8, Vec<SlotInput>)> = cosigner_specs
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let idx = cosigner_offset + i as u8;
+            let mut rows = vec![SlotInput {
+                index: idx,
+                subkey: SlotSubkey::Xpub,
+                value: c.xpub.to_string(),
+            }];
+            // CosignerSpec.master_fingerprint is non-optional in v0.3 schema.
+            rows.push(SlotInput {
+                index: idx,
+                subkey: SlotSubkey::Fingerprint,
+                value: c.master_fingerprint.to_string().to_lowercase(),
+            });
+            if let Some(p) = c.path.as_ref() {
+                rows.push(SlotInput {
+                    index: idx,
+                    subkey: SlotSubkey::Path,
+                    value: p.to_string(),
+                });
+            }
+            (idx, rows)
+        })
+        .collect();
+
+    // Build the user-supplied --slot vec and append --xpub / --master-fingerprint
+    // expansions (these expand into @0 slot entries if not already present).
+    let mut existing_slots = args.slot.clone();
+    if let Some(x) = args.xpub.as_deref() {
+        existing_slots.push(SlotInput {
+            index: 0,
+            subkey: SlotSubkey::Xpub,
+            value: x.to_string(),
+        });
+        if let Some(fp) = args.master_fingerprint.as_deref() {
+            existing_slots.push(SlotInput {
+                index: 0,
+                subkey: SlotSubkey::Fingerprint,
+                value: fp.to_string(),
+            });
+        }
+    }
+
+    expand_legacy_to_slots(
+        existing_slots,
+        args.phrase.as_deref(),
+        &legacy_cosigners,
+        args.cosigner_count,
+    )
 }
