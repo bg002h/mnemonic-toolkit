@@ -80,35 +80,27 @@ fn bip388_row13_fires_for_duplicate_slot_phrases() {
     );
 }
 
-// SPEC §6.6 row 1 — pre-clap trap for the removed sub-subcommands.
+// v0.5 trap deletion: the v0.4.2 detect_removed_subcommand pre-clap trap was
+// removed in v0.5; clap's unknown-arg fallback (exit 64 — toolkit's
+// format-violation override of clap's default 2) is the surviving rejection
+// path.
+
 #[test]
-fn bundle_multisig_full_subtoken_emits_row1_byte_exact_stderr() {
-    let out = Command::cargo_bin("mnemonic")
+fn bundle_multisig_full_subtoken_rejected_by_clap_exit_64() {
+    Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["bundle", "multisig-full", "--phrase", TREZOR_24])
+        .args(["bundle", "multisig-full"])
         .assert()
         .failure()
-        .code(2);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr,
-        "error: 'bundle multisig-full' / 'bundle multisig-watch-only' subcommands removed in v0.4. Use 'bundle' (mode auto-detected from --slot @N.<subkey>=<value> inputs).\n",
-        "stderr must match SPEC §6.6 row 1 byte-exactly"
-    );
+        .code(64);
 }
 
 #[test]
-fn bundle_multisig_watch_only_subtoken_emits_row1_byte_exact_stderr() {
-    let out = Command::cargo_bin("mnemonic")
+fn bundle_multisig_watch_only_subtoken_rejected_by_clap_exit_64() {
+    Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["bundle", "multisig-watch-only"])
         .assert()
         .failure()
-        .code(2);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr,
-        "error: 'bundle multisig-full' / 'bundle multisig-watch-only' subcommands removed in v0.4. Use 'bundle' (mode auto-detected from --slot @N.<subkey>=<value> inputs).\n",
-        "stderr must match SPEC §6.6 row 1 byte-exactly"
-    );
+        .code(64);
 }

@@ -39,15 +39,6 @@ enum Command {
 }
 
 fn main() -> ExitCode {
-    // SPEC §6.6 row 1: pre-clap argv inspection trap for the v0.4-removed
-    // `bundle multisig-full` / `bundle multisig-watch-only` sub-tokens.
-    // Locked by SPIKE-2; see bundle_unified::detect_removed_subcommand.
-    let argv: Vec<String> = std::env::args().collect();
-    if let Some(msg) = bundle_unified::detect_removed_subcommand(&argv) {
-        let _ = writeln!(io::stderr(), "{msg}");
-        return ExitCode::from(2);
-    }
-
     let cli = match Cli::try_parse() {
         Ok(c) => c,
         Err(e) => {

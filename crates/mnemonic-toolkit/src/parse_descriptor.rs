@@ -1088,25 +1088,24 @@ fn check_anno_match(
     Ok(())
 }
 
-/// SPEC §4.11.b BIP-388 distinct-key conformance.
+/// SPEC §4.11.b BIP-388 distinct-key conformance (v0.5: typed-DerivationPath equality).
 ///
 /// Pairwise scan over `binding.cosigners`; returns `Err(Bip388Distinctness { i, j })`
-/// for the first colliding pair under raw-string `(xpub, path_raw)` equality
-/// (i < j). No path canonicalization beyond what the binding source preserves: for
-/// legacy `--cosigner` / descriptor-placeholder paths the `h`-vs-`'` notation is
-/// already canonicalized by the parser before reaching CosignerKeyInfo (so
-/// `48h/0h` and `48'/0'` still compare equal under those paths); for v0.4.1
-/// slot-driven paths the `--slot @N.path=<literal>` value flows through
-/// unchanged (so the user's literal notation is preserved end-to-end). Symmetric
-/// across bundle creation (exit 2 via §6.6 row 13) and verify-bundle (caller
-/// re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
+/// for the first colliding pair under typed `(xpub, path)` equality (i < j). The
+/// typed `DerivationPath` form folds `h`-notation into `'`-notation, so
+/// `48h/0h/0h/2h` and `48'/0'/0'/2'` compare EQUAL and produce a collision.
+///
+/// Raw user input (`path_raw: String`) is preserved separately for round-trip
+/// fidelity but not consulted for collision detection. v0.4 raw-string equality
+/// is REVERSED — see SPEC v0.5 §4.11.b deliberate-reversal paragraph.
+///
+/// Symmetric across bundle creation (exit 2 via §6.6 row 13) and verify-bundle
+/// (caller re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
 pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), ToolkitError> {
     let cs = &binding.cosigners;
     for i in 0..cs.len() {
         for j in (i + 1)..cs.len() {
-            if cs[i].xpub.to_string() == cs[j].xpub.to_string()
-                && cs[i].path_raw == cs[j].path_raw
-            {
+            if cs[i].xpub.to_string() == cs[j].xpub.to_string() && cs[i].path == cs[j].path {
                 return Err(ToolkitError::Bip388Distinctness {
                     i: i as u8,
                     j: j as u8,
@@ -1810,19 +1809,20 @@ mod tests {
         }
     }
 
-    // v0.4.1 H.6 — raw-string path equality. Same xpub + paths that differ ONLY
-    // in `h` vs `'` notation must NOT collide under raw-string comparison.
+    // v0.5 SPEC §4.11.b REVERSAL — typed-DerivationPath equality. Same xpub +
+    // paths that differ ONLY in `h` vs `'` notation now COLLIDE.
     #[test]
-    fn bip388_h_vs_apostrophe_paths_distinct_under_raw_string() {
+    fn bip388_h_vs_apostrophe_paths_collide_under_typed_equality_v0_5() {
         let canonical = "48'/0'/0'/2'";
         let h_form = "48h/0h/0h/2h";
-        // Under v0.4.1, same xpub at h-form vs apostrophe-form is distinct
-        // because path_raw differs character-for-character.
-        ckd(vec![
+        // Under v0.5, the typed DerivationPath folds h → ', so both notations
+        // produce the same DerivationPath value and collide for distinctness.
+        let err = ckd(vec![
             cinfo_raw(xpub_a(), canonical, canonical),
             cinfo_raw(xpub_a(), canonical, h_form),
         ])
-        .expect("raw-string equality treats h-form and apostrophe-form as distinct paths");
+        .expect_err("v0.5 typed-equality treats h-form and apostrophe-form as the same path");
+        assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
     }
 
     // v0.4.1 H.6 — raw-string equality: identical raw strings collide.

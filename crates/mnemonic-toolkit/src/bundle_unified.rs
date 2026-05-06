@@ -7,29 +7,6 @@
 use crate::error::ToolkitError;
 use crate::slot_input::SlotInput;
 
-/// SPEC §6.6 row 1 byte-exact stderr text. Locked by SPIKE-2.
-pub const REMOVED_SUBCOMMAND_ERR: &str = "error: 'bundle multisig-full' / 'bundle multisig-watch-only' subcommands removed in v0.4. Use 'bundle' (mode auto-detected from --slot @N.<subkey>=<value> inputs).";
-
-/// SPEC §6.6 row 1 trap: pre-clap argv inspection for removed sub-subcommands.
-/// Returns `Some(stderr-text)` if the user typed `mnemonic bundle multisig-full ...`
-/// or `mnemonic bundle multisig-watch-only ...`. Caller emits to stderr +
-/// `std::process::exit(2)`.
-pub fn detect_removed_subcommand(argv: &[String]) -> Option<&'static str> {
-    let mut i = 0;
-    while i < argv.len() {
-        if argv[i] == "bundle" {
-            if let Some(next) = argv.get(i + 1) {
-                if next == "multisig-full" || next == "multisig-watch-only" {
-                    return Some(REMOVED_SUBCOMMAND_ERR);
-                }
-            }
-            return None;
-        }
-        i += 1;
-    }
-    None
-}
-
 /// v0.4 bundle-mode classification (impl plan Phase C.3). Auto-detected
 /// from per-slot subkeys. Descriptor presence is orthogonal — `--descriptor`
 /// does NOT add a variant; it is consumed by the synthesis path independently
@@ -141,53 +118,6 @@ mod tests {
 
     fn s(idx: u8, sk: SlotSubkey, v: &str) -> SlotInput {
         SlotInput { index: idx, subkey: sk, value: v.to_string() }
-    }
-
-    // ---- detect_removed_subcommand ----
-
-    #[test]
-    fn trap_fires_on_bundle_multisig_full() {
-        let argv = vec!["mnemonic", "bundle", "multisig-full", "--phrase", "x"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        assert_eq!(detect_removed_subcommand(&argv), Some(REMOVED_SUBCOMMAND_ERR));
-    }
-
-    #[test]
-    fn trap_fires_on_bundle_multisig_watch_only() {
-        let argv = vec!["mnemonic", "bundle", "multisig-watch-only"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        assert_eq!(detect_removed_subcommand(&argv), Some(REMOVED_SUBCOMMAND_ERR));
-    }
-
-    #[test]
-    fn trap_silent_on_legitimate_bundle() {
-        let argv = vec!["mnemonic", "bundle", "--template", "wpkh"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        assert_eq!(detect_removed_subcommand(&argv), None);
-    }
-
-    #[test]
-    fn trap_silent_on_other_subcommand() {
-        let argv = vec!["mnemonic", "verify-bundle", "multisig-full"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        assert_eq!(detect_removed_subcommand(&argv), None);
-    }
-
-    #[test]
-    fn trap_silent_on_no_subsubcommand_after_bundle() {
-        let argv = vec!["mnemonic", "bundle"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        assert_eq!(detect_removed_subcommand(&argv), None);
     }
 
     // ---- detect_bundle_mode ----
