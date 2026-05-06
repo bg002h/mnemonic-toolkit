@@ -632,10 +632,21 @@ fn emit_unified<W: Write, E: Write>(
         }
     }
 
+    // v0.5 Phase E: absent paths emit null in JSON (was Some("m") via the
+    // normalize_origin_path "" → "m" branch). path_raw.is_empty() is the
+    // SPEC §4.11.b absent-path sentinel; null is the JSON wire-format absent.
+    fn origin_path_for_json(path_raw: &str) -> Option<String> {
+        if path_raw.is_empty() {
+            None
+        } else {
+            Some(normalize_origin_path(path_raw))
+        }
+    }
+
     if args.json {
         let template = args.template.map(|t| t.human_name());
         let (multisig_info, origin_path, origin_paths) = if n == 1 {
-            (None, Some(normalize_origin_path(&resolved[0].path_raw)), None)
+            (None, origin_path_for_json(&resolved[0].path_raw), None)
         } else {
             let cosigners: Vec<CosignerEntry> = resolved
                 .iter()
