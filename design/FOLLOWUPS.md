@@ -28,6 +28,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **`v0.3`**: explicitly deferred to v0.3 (user-supplied descriptor passthrough; resolve during v0.3 cycle).
 - **`v0.3-nice-to-have`**: surfaced during v0.3 review; non-blocking.
 - **`v0.4-cross-repo`**: deferred to v0.4 AND requires coordination with sibling repos.
+- **`v0.4-nice-to-have`**: surfaced during v0.4 review; non-blocking. Documented in v0.4's CHANGELOG if shipped.
 - **`cross-repo`**: depends on coordination with sibling repos (`descriptor-mnemonic`, `mnemonic-key`, `mnemonic-secret`). Mirrored by a companion entry in the affected sibling's tracker; both cite each other.
 - **`v1+`**: deferred indefinitely.
 - **`external`**: depends on upstream work (e.g., a sibling crate exposing a helper).
@@ -289,6 +290,24 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** out of v0.3 scope; engraving card logic is template-coupled.
 - **Status:** `open`
 - **Tier:** `v0.4`
+
+### `bundle-removed-subcommand-trap-positional-eq-bypass` — `bundle multisig-full=value` token bypasses pre-clap trap
+
+- **Surfaced:** v0.4 Phase 2 SPIKE r1 architect review L-2 (2026-05-05).
+- **Where:** Phase C.1 `detect_removed_subcommand` (locked SPIKE shape at `design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md` SPIKE-2).
+- **What:** Trap matches `argv[i+1] == "multisig-full"` with exact string equality. A token like `multisig-full=value` would not match and would fall through to clap's generic "unexpected argument" error rather than the byte-exact §6.6 row 1 message. Positional args do not idiomatically take `=value` form in shells, so this is essentially theoretical.
+- **Why deferred:** no realistic user invocation produces this argv shape; a post-trap fallback in clap already rejects with exit 2.
+- **Status:** `open`
+- **Tier:** `v0.4-nice-to-have`
+
+### `bundle-removed-subcommand-trap-double-dash-bypass` — `mnemonic bundle -- multisig-full` bypasses pre-clap trap
+
+- **Surfaced:** v0.4 Phase 2 SPIKE r1 architect review L-3 (2026-05-05).
+- **Where:** Phase C.1 `detect_removed_subcommand` (locked SPIKE shape at `design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md` SPIKE-2).
+- **What:** With a `--` separator inserted between `bundle` and `multisig-full`, the trap reads `argv[i+1] == "--"` and skips. Clap then processes `multisig-full` as a positional after `--` and emits a generic "unexpected argument" error rather than the byte-exact §6.6 row 1 text. UX difference matters only if a user intentionally inserts `--` before a removed subcommand name — not a realistic migration-error path.
+- **Why deferred:** vanishingly unlikely user error; clap's fallback still rejects with exit 2.
+- **Status:** `open`
+- **Tier:** `v0.4-nice-to-have`
 
 ### `tr-sortedmulti-a-via-upstream` — toolkit-side resolved in v0.3.1; v0.3.2 is the cleanup release
 
