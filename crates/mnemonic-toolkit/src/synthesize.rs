@@ -171,11 +171,10 @@ pub struct CosignerKeyInfo {
     pub path: DerivationPath,
 }
 
-/// Phase C.1: produce a `Bundle` from a pre-parsed `md_codec::Descriptor` +
-/// per-`@N` cosigner key info. Dispatches to single-card mk1 (n=1) or n-card
-/// mk1 (n≥2) per SPEC §4.10. Annotation cross-checks + SELF-MULTISIG WARNING
-/// land in C.2/C.3/C.4 inside `descriptor_mode_run`.
-#[allow(dead_code)] // Wired into descriptor_mode_run in Phase C.2/C.3.
+/// Produce a `Bundle` from a pre-parsed `md_codec::Descriptor` + per-`@N`
+/// cosigner key info. Dispatches to single-card mk1 (n=1) or n-card mk1 (n≥2)
+/// per SPEC §4.10. Annotation cross-checks + BIP-388 distinctness enforcement
+/// run inside `descriptor_mode_run` (cmd/bundle.rs).
 pub fn synthesize_descriptor(
     descriptor: &Descriptor,
     cosigners: &[CosignerKeyInfo],
