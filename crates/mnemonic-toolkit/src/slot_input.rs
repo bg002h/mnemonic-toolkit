@@ -292,24 +292,22 @@ pub fn expand_legacy_to_slots(
     Ok(out)
 }
 
+/// Caller pre-sorts; SlotSubkey's derived Ord is Phrase < Entropy < Xpub <
+/// Fingerprint < Path < Wif < Xprv, so only the canonical-order arms below
+/// are reachable.
 fn is_legal_set(set: &[SlotSubkey]) -> bool {
     use SlotSubkey::*;
-    match set {
-        [Phrase] => true,
-        [Entropy] => true,
-        [Xprv] => true,
-        [Wif] => true,
-        [Xpub] => true,
-        [Xpub, Fingerprint] | [Fingerprint, Xpub] => true,
-        [Xpub, Path] | [Path, Xpub] => true,
-        [Xpub, Fingerprint, Path]
-        | [Xpub, Path, Fingerprint]
-        | [Fingerprint, Xpub, Path]
-        | [Fingerprint, Path, Xpub]
-        | [Path, Xpub, Fingerprint]
-        | [Path, Fingerprint, Xpub] => true,
-        _ => false,
-    }
+    matches!(
+        set,
+        [Phrase]
+            | [Entropy]
+            | [Xpub]
+            | [Wif]
+            | [Xprv]
+            | [Xpub, Fingerprint]
+            | [Xpub, Path]
+            | [Xpub, Fingerprint, Path]
+    )
 }
 
 #[cfg(test)]
