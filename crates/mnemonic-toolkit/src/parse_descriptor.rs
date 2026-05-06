@@ -6,9 +6,13 @@
 // Items kept #[allow(dead_code)] individually if needed.
 #![allow(dead_code)]
 
-use crate::error::ToolkitError;
+use crate::error::{BitcoinErrorKind, ToolkitError};
+use crate::language::CliLanguage;
+use crate::network::CliNetwork;
+use crate::parse::CosignerSpec;
+use crate::synthesize::{xpub_to_65, CosignerKeyInfo};
 use bitcoin::base58;
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint};
+use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpriv, Xpub};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::{Secp256k1, SecretKey};
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
@@ -735,6 +739,313 @@ pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String {
     base58::encode_check(&bytes)
 }
 
+/// Output of `bind_descriptor_keys`: per-`@N` key/fp pairs for `parse_descriptor`,
+/// per-`@N` cosigner triples for `synthesize_descriptor`, and entropy if full mode.
+#[derive(Debug)]
+pub struct DescriptorBinding {
+    pub keys: Vec<ParsedKey>,
+    pub fingerprints: Vec<ParsedFingerprint>,
+    pub cosigners: Vec<CosignerKeyInfo>,
+    pub entropy: Option<Vec<u8>>,
+}
+
+/// SPEC §4.11 binding logic. Resolves the four descriptor-mode key sources:
+/// full single-sig (--phrase + n=1), watch-only single-sig (--xpub + n=1),
+/// full multisig (--phrase + n-1 cosigners), watch-only multisig (no phrase /
+/// xpub + n cosigners). Annotation cross-checks per SPEC §4.11. Phase C.2+C.3.
+#[allow(clippy::too_many_arguments)]
+pub fn bind_descriptor_keys(
+    resolved: &ResolvedPlaceholders,
+    network: CliNetwork,
+    phrase: Option<&str>,
+    passphrase: &str,
+    language: CliLanguage,
+    xpub_arg: Option<&str>,
+    master_fp_arg: Option<&str>,
+    cosigner_specs: &[CosignerSpec],
+) -> Result<DescriptorBinding, ToolkitError> {
+    let n = resolved.n;
+    if let Some(p) = phrase {
+        bind_full_mode(resolved, network, p, passphrase, language, cosigner_specs)
+    } else if let Some(x) = xpub_arg {
+        if n == 1 {
+            bind_watch_only_singlesig(resolved, x, master_fp_arg)
+        } else {
+            Err(ToolkitError::ModeViolation {
+                mode: "watch-only-multisig",
+                flag: "--xpub",
+                message: "--xpub is single-sig watch-only; for multisig watch-only, use --cosigner / --cosigners-file with no --phrase / --xpub.",
+            })
+        }
+    } else if !cosigner_specs.is_empty() && n >= 2 {
+        bind_watch_only_multisig(resolved, cosigner_specs)
+    } else {
+        Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--phrase / --xpub / --cosigner",
+            message: "descriptor uses @0 but no key source provided; supply --phrase OR a cosigner triple bound to @0.",
+        })
+    }
+}
+
+fn bind_full_mode(
+    resolved: &ResolvedPlaceholders,
+    network: CliNetwork,
+    phrase: &str,
+    passphrase: &str,
+    language: CliLanguage,
+    cosigner_specs: &[CosignerSpec],
+) -> Result<DescriptorBinding, ToolkitError> {
+    let n = resolved.n;
+    let mnemonic =
+        bip39::Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
+    let entropy = mnemonic.to_entropy();
+    let seed = mnemonic.to_seed(passphrase);
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(network.network_kind(), &seed)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    let master_fp = master.fingerprint(&secp);
+
+    // SPEC §4.11: full mode requires @0 [fp/path] annotation.
+    let at0_fp = resolved.fingerprint_annos[0].ok_or_else(|| {
+        ToolkitError::DescriptorParse(
+            "@0 in full descriptor mode requires explicit [fp/path] origin annotation".into(),
+        )
+    })?;
+    if at0_fp.to_bytes() != master_fp.to_bytes() {
+        return Err(ToolkitError::DescriptorParse(
+            "@0 origin fingerprint annotation does not match seed master fingerprint".into(),
+        ));
+    }
+    let at0_path = path_from_decl(resolved, 0)?;
+    let at0_xpriv = master
+        .derive_priv(&secp, &at0_path)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    let at0_xpub = Xpub::from_priv(&secp, &at0_xpriv);
+
+    let mut keys = Vec::with_capacity(n as usize);
+    let mut fps = Vec::with_capacity(n as usize);
+    let mut cosigners = Vec::with_capacity(n as usize);
+
+    push_binding(
+        &mut keys,
+        &mut fps,
+        &mut cosigners,
+        0,
+        &at0_xpub,
+        master_fp,
+        at0_path,
+    );
+
+    if n >= 2 {
+        // Full multisig: cosigner_specs.len() must be n - 1.
+        if cosigner_specs.len() != (n as usize) - 1 {
+            return Err(ToolkitError::ModeViolation {
+                mode: "full-multisig",
+                flag: "--cosigner",
+                message: "full multisig descriptor mode requires n-1 cosigner triples (--phrase supplies @0).",
+            });
+        }
+        for (k, spec) in cosigner_specs.iter().enumerate() {
+            let i = (k + 1) as u8;
+            let path = spec.path.clone().ok_or_else(|| {
+                ToolkitError::DescriptorParse(format!(
+                    "cosigner @{i}: descriptor mode requires explicit path in --cosigner triple"
+                ))
+            })?;
+            check_anno_match(resolved, i, Some(spec.master_fingerprint), Some(&path))?;
+            push_binding(
+                &mut keys,
+                &mut fps,
+                &mut cosigners,
+                i,
+                &spec.xpub,
+                spec.master_fingerprint,
+                path,
+            );
+        }
+    }
+
+    Ok(DescriptorBinding {
+        keys,
+        fingerprints: fps,
+        cosigners,
+        entropy: Some(entropy),
+    })
+}
+
+fn bind_watch_only_singlesig(
+    resolved: &ResolvedPlaceholders,
+    xpub_str: &str,
+    master_fp_arg: Option<&str>,
+) -> Result<DescriptorBinding, ToolkitError> {
+    let xpub = Xpub::from_str(xpub_str)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::XpubParse(format!("{e}"))))?;
+    let fp_arg = master_fp_arg.ok_or(ToolkitError::ModeViolation {
+        mode: "watch-only",
+        flag: "--master-fingerprint",
+        message: "--xpub requires --master-fingerprint (xpub mode needs the master fingerprint to populate mk1's origin)",
+    })?;
+    let fp = Fingerprint::from_str(fp_arg)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::FingerprintParse(format!("{e}"))))?;
+    if let Some(anno_fp) = resolved.fingerprint_annos[0] {
+        if anno_fp.to_bytes() != fp.to_bytes() {
+            return Err(ToolkitError::DescriptorParse(
+                "@0 origin fingerprint annotation does not match --master-fingerprint".into(),
+            ));
+        }
+    }
+    let path = path_from_decl(resolved, 0).unwrap_or(DerivationPath::master());
+    let mut keys = Vec::new();
+    let mut fps = Vec::new();
+    let mut cosigners = Vec::new();
+    push_binding(&mut keys, &mut fps, &mut cosigners, 0, &xpub, fp, path);
+    Ok(DescriptorBinding {
+        keys,
+        fingerprints: fps,
+        cosigners,
+        entropy: None,
+    })
+}
+
+fn bind_watch_only_multisig(
+    resolved: &ResolvedPlaceholders,
+    cosigner_specs: &[CosignerSpec],
+) -> Result<DescriptorBinding, ToolkitError> {
+    let n = resolved.n as usize;
+    if cosigner_specs.len() != n {
+        return Err(ToolkitError::ModeViolation {
+            mode: "watch-only-multisig",
+            flag: "--cosigner",
+            message:
+                "watch-only multisig descriptor mode requires n cosigner triples (one per @N).",
+        });
+    }
+    let mut keys = Vec::with_capacity(n);
+    let mut fps = Vec::with_capacity(n);
+    let mut cosigners = Vec::with_capacity(n);
+    for (k, spec) in cosigner_specs.iter().enumerate() {
+        let i = k as u8;
+        let path = spec.path.clone().ok_or_else(|| {
+            ToolkitError::DescriptorParse(format!(
+                "cosigner @{i}: descriptor mode requires explicit path in --cosigner triple"
+            ))
+        })?;
+        check_anno_match(resolved, i, Some(spec.master_fingerprint), Some(&path))?;
+        push_binding(
+            &mut keys,
+            &mut fps,
+            &mut cosigners,
+            i,
+            &spec.xpub,
+            spec.master_fingerprint,
+            path,
+        );
+    }
+    Ok(DescriptorBinding {
+        keys,
+        fingerprints: fps,
+        cosigners,
+        entropy: None,
+    })
+}
+
+fn path_from_decl(resolved: &ResolvedPlaceholders, i: u8) -> Result<DerivationPath, ToolkitError> {
+    let origin = match &resolved.path_decl.paths {
+        PathDeclPaths::Shared(p) => p,
+        PathDeclPaths::Divergent(v) => &v[i as usize],
+    };
+    if origin.components.is_empty() {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "@{i} requires explicit [fp/path] origin annotation in descriptor mode"
+        )));
+    }
+    let path_str = origin
+        .components
+        .iter()
+        .map(|c| {
+            if c.hardened {
+                format!("{}'", c.value)
+            } else {
+                format!("{}", c.value)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    DerivationPath::from_str(&path_str)
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))
+}
+
+fn check_anno_match(
+    resolved: &ResolvedPlaceholders,
+    i: u8,
+    spec_fp: Option<Fingerprint>,
+    spec_path: Option<&DerivationPath>,
+) -> Result<(), ToolkitError> {
+    if let Some(anno_fp) = resolved.fingerprint_annos[i as usize] {
+        if let Some(sf) = spec_fp {
+            if anno_fp.to_bytes() != sf.to_bytes() {
+                return Err(ToolkitError::DescriptorParse(format!(
+                    "@{i} origin annotation does not match cosigner-triple at index {i}"
+                )));
+            }
+        }
+    }
+    let anno_path = match &resolved.path_decl.paths {
+        PathDeclPaths::Shared(p) => Some(p),
+        PathDeclPaths::Divergent(v) => Some(&v[i as usize]),
+    };
+    if let (Some(anno), Some(sp)) = (anno_path, spec_path) {
+        if !anno.components.is_empty() {
+            // Compare via string serialization (cheap; both are absolute paths).
+            let anno_str = anno
+                .components
+                .iter()
+                .map(|c| {
+                    if c.hardened {
+                        format!("{}'", c.value)
+                    } else {
+                        format!("{}", c.value)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            if let Ok(anno_dp) = DerivationPath::from_str(&anno_str) {
+                if anno_dp != *sp {
+                    return Err(ToolkitError::DescriptorParse(format!(
+                        "@{i} origin annotation path does not match cosigner-triple path"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn push_binding(
+    keys: &mut Vec<ParsedKey>,
+    fps: &mut Vec<ParsedFingerprint>,
+    cosigners: &mut Vec<CosignerKeyInfo>,
+    i: u8,
+    xpub: &Xpub,
+    fp: Fingerprint,
+    path: DerivationPath,
+) {
+    keys.push(ParsedKey {
+        i,
+        payload: xpub_to_65(xpub),
+    });
+    fps.push(ParsedFingerprint {
+        i,
+        fp: fp.to_bytes(),
+    });
+    cosigners.push(CosignerKeyInfo {
+        xpub: *xpub,
+        fingerprint: fp,
+        path,
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1070,6 +1381,219 @@ mod tests {
             2,
         );
         assert_eq!(determine_mode(&d), DescriptorMode::MultiSig);
+    }
+
+    // ---- C.2+C.3: bind_descriptor_keys (8 tests) ----
+
+    const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    fn trezor_master_fp() -> Fingerprint {
+        let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let seed = m.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        master.fingerprint(&secp)
+    }
+
+    fn trezor_master_fp_hex() -> String {
+        let fp = trezor_master_fp();
+        hex_fp(&fp.to_bytes())
+    }
+
+    fn hex_fp(bytes: &[u8; 4]) -> String {
+        format!(
+            "{:02x}{:02x}{:02x}{:02x}",
+            bytes[0], bytes[1], bytes[2], bytes[3]
+        )
+    }
+
+    fn lex_resolve(template: &str) -> ResolvedPlaceholders {
+        let occs = lex_placeholders(template).unwrap();
+        resolve_placeholders(&occs).unwrap()
+    }
+
+    #[test]
+    fn bind_full_singlesig_with_correct_annotation() {
+        let fp_hex = trezor_master_fp_hex();
+        let template = format!("wpkh(@0[{fp_hex}/84'/0'/0']/<0;1>/*)");
+        let resolved = lex_resolve(&template);
+        let b = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(b.cosigners.len(), 1);
+        assert_eq!(b.keys.len(), 1);
+        assert!(b.entropy.is_some(), "full mode emits entropy");
+    }
+
+    #[test]
+    fn bind_full_singlesig_rejects_fp_mismatch() {
+        let template = "wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)";
+        let resolved = lex_resolve(template);
+        let err = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, ToolkitError::DescriptorParse(_)));
+        assert!(err.message().contains("seed master fingerprint"));
+    }
+
+    #[test]
+    fn bind_full_singlesig_rejects_missing_annotation() {
+        let template = "wpkh(@0/<0;1>/*)";
+        let resolved = lex_resolve(template);
+        let err = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.message().contains("origin annotation"));
+    }
+
+    #[test]
+    fn bind_watch_only_singlesig_with_xpub() {
+        // Use a valid xpub from existing test vectors.
+        let xpub = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz";
+        let template = "wpkh(@0/<0;1>/*)";
+        let resolved = lex_resolve(template);
+        let b = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            None,
+            "",
+            CliLanguage::English,
+            Some(xpub),
+            Some("deadbeef"),
+            &[],
+        )
+        .unwrap();
+        assert!(b.entropy.is_none(), "watch-only mode omits entropy");
+        assert_eq!(b.cosigners.len(), 1);
+    }
+
+    #[test]
+    fn bind_watch_only_singlesig_rejects_anno_fp_mismatch() {
+        let xpub = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz";
+        // Annotation fp `deadbeef` but --master-fingerprint is `cafef00d` → mismatch.
+        let template = "wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)";
+        let resolved = lex_resolve(template);
+        let err = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            None,
+            "",
+            CliLanguage::English,
+            Some(xpub),
+            Some("cafef00d"),
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.message().contains("--master-fingerprint"));
+    }
+
+    #[test]
+    fn bind_full_multisig_n_minus_1_cosigners() {
+        let fp_hex = trezor_master_fp_hex();
+        // n=2 multisig: phrase supplies @0; --cosigner supplies @1.
+        let template = format!(
+            "wsh(sortedmulti(2,@0[{fp_hex}/48'/0'/0'/2']/<0;1>/*,@1[cafef00d/48'/0'/0'/2']/<0;1>/*))"
+        );
+        let resolved = lex_resolve(&template);
+        let xpub = Xpub::from_str(
+            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
+        )
+        .unwrap();
+        let cosigner = CosignerSpec {
+            xpub,
+            master_fingerprint: Fingerprint::from_str("cafef00d").unwrap(),
+            path: Some(DerivationPath::from_str("48'/0'/0'/2'").unwrap()),
+        };
+        let b = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[cosigner],
+        )
+        .unwrap();
+        assert_eq!(b.cosigners.len(), 2);
+        assert!(b.entropy.is_some());
+    }
+
+    #[test]
+    fn bind_watch_only_multisig_n_cosigners() {
+        let template = "wsh(sortedmulti(2,@0[deadbeef/48'/0'/0'/2']/<0;1>/*,@1[cafef00d/48'/0'/0'/2']/<0;1>/*))";
+        let resolved = lex_resolve(template);
+        let xpub = Xpub::from_str(
+            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
+        )
+        .unwrap();
+        let path = Some(DerivationPath::from_str("48'/0'/0'/2'").unwrap());
+        let c0 = CosignerSpec {
+            xpub,
+            master_fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
+            path: path.clone(),
+        };
+        let c1 = CosignerSpec {
+            xpub,
+            master_fingerprint: Fingerprint::from_str("cafef00d").unwrap(),
+            path,
+        };
+        let b = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            None,
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[c0, c1],
+        )
+        .unwrap();
+        assert_eq!(b.cosigners.len(), 2);
+        assert!(b.entropy.is_none());
+    }
+
+    #[test]
+    fn bind_rejects_xpub_with_multisig() {
+        let template = "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))";
+        let resolved = lex_resolve(template);
+        let xpub = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz";
+        let err = bind_descriptor_keys(
+            &resolved,
+            CliNetwork::Mainnet,
+            None,
+            "",
+            CliLanguage::English,
+            Some(xpub),
+            Some("deadbeef"),
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, ToolkitError::ModeViolation { .. }));
     }
 
     // ---- A.7: parse_descriptor top-level orchestration (4 tests) ----
