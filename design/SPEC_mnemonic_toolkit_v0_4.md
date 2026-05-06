@@ -198,18 +198,20 @@ Each slot's subkey set must be one of the following exact shapes (any other comb
 ```
 mnemonic verify-bundle [--template X | --descriptor Y] \
     --slot @N.<subkey>=<value> ... \
-    --ms1 <ms1-card> \
-    --mk1 <mk1-card> [--mk1 <mk1-card> ...] \
-    --md1 <md1-card> \
+    [ --ms1 <ms1-card> --mk1 <mk1-card> [--mk1 <mk1-card> ...] --md1 <md1-card>
+    | --bundle-json <path> ] \
     --network <mainnet|testnet|signet|regtest> \
     [--threshold T] \
     [--json] \
     [--privacy-preserving]
 ```
 
+**v0.4.3 §6.7 amendment — `--bundle-json <path>`:** v0.4.3 adds an alternative card-input form: `--bundle-json <path>` reads a JSON-envelope bundle (the output of `bundle --json`) from the named file and extracts the supplied ms1/mk1/md1 from its envelope (same wire bytes as if the user had typed `--ms1 ... --mk1 ... --md1 ...` directly). Mutually exclusive with the explicit `--ms1` / `--mk1` / `--md1` flag triplet (clap `conflicts_with`). The re-derivation inputs (`--slot` / `--phrase` / `--xpub` / `--cosigner` / etc.) are STILL required — `--bundle-json` only supplies the `supplied` side of the verification; the `expected` side is re-derived from user inputs as before. Schema-version dispatch: `--bundle-json` only accepts schema-4 envelopes in v0.4.3; schema-2/3 retro-compat intake is tracked at FOLLOWUP `bundle-json-schema-2-3-retro-compat` and deferred to v0.4.4+ pending real need.
+
 **Flag semantics:**
 
 - `--slot @N.<subkey>=<value>`: re-derivation inputs (same vocabulary as `bundle`; identical alias mapping per §6.6.a). Used to RE-derive the expected ms1/mk1/md1 from user inputs for cross-comparison against the supplied cards.
+- `--bundle-json <path>` (v0.4.3+): supplies `--ms1`/`--mk1`/`--md1` from a JSON envelope file. Mutually exclusive with the explicit triplet. Schema-4 only in v0.4.3.
 - `--ms1 <card>`: supplied ms1 card(s).
   - **Schema 4 (v0.4 bundles): `--ms1` MUST repeat exactly N times** (where N = number of slots, derived from `--slot @N` indices), in slot index order. The CLI shape mirrors the JSON `MsField` shape verbatim (1:1 positional correspondence with `ms1[i]`). For watch-only slots, the empty-string sentinel is supplied as a literal CLI argument: `--ms1 ""`. Example: `--ms1 "ms1abc..." --ms1 "" --ms1 "ms1xyz..."` (slot 0 secret-bearing, slot 1 watch-only, slot 2 secret-bearing). NO inference from `--slot @N.<subkey>=` presence; verify-bundle does NOT skip absent flags or auto-fill empty strings — the user is required to be explicit. Mismatch (`len(--ms1) != N`) triggers row 16 below.
   - **Schemas 2 and 3 (v0.2 / v0.3 bundles, ms1 = flat string)**: `--ms1 <card>` accepts exactly ONE value (the flat-string ms1). Repeating `--ms1` under schema 2/3 is a CLI error (exit 2 with `error: --ms1 may appear at most once for schema-2/3 bundles`).
