@@ -1028,6 +1028,25 @@ fn check_anno_match(
     Ok(())
 }
 
+/// SPEC §4.7 / §4.12: SELF-MULTISIG WARNING. Returns Some(message) when
+/// (n≥2) + (--phrase set, i.e. entropy.is_some()) + any cosigner xpub equals
+/// @0's xpub. Non-fatal; descriptor_mode_run emits to stderr (Phase C.6).
+pub fn check_self_multisig_warning(binding: &DescriptorBinding) -> Option<&'static str> {
+    if binding.entropy.is_none() || binding.cosigners.len() < 2 {
+        return None;
+    }
+    let at0_xpub = &binding.cosigners[0].xpub;
+    for c in binding.cosigners.iter().skip(1) {
+        if c.xpub == *at0_xpub {
+            return Some(SELF_MULTISIG_WARNING);
+        }
+    }
+    None
+}
+
+pub const SELF_MULTISIG_WARNING: &str =
+    "WARNING: full-mode multisig descriptor detected with at least one cosigner xpub equal to the seed-derived @0 xpub. This is a self-multisig configuration (signing power consolidated under one seed); a production multisig wallet should use independent cosigner keys.";
+
 fn push_binding(
     keys: &mut Vec<ParsedKey>,
     fps: &mut Vec<ParsedFingerprint>,
@@ -1581,6 +1600,193 @@ mod tests {
         .unwrap();
         assert_eq!(b.cosigners.len(), 2);
         assert!(b.entropy.is_none());
+    }
+
+    // ---- C.4: SELF-MULTISIG WARNING (2 tests) ----
+
+    #[test]
+    fn self_multisig_warning_fires_when_at0_equals_other_cosigner() {
+        // Construct a binding manually where @0 and @1 share the same xpub.
+        let xpub = Xpub::from_str(
+            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
+        )
+        .unwrap();
+        let path = DerivationPath::from_str("48'/0'/0'/2'").unwrap();
+        let fp = Fingerprint::from_str("deadbeef").unwrap();
+        let cosigners = vec![
+            CosignerKeyInfo {
+                xpub,
+                fingerprint: fp,
+                path: path.clone(),
+            },
+            CosignerKeyInfo {
+                xpub,
+                fingerprint: fp,
+                path,
+            }, // same xpub → self-multisig
+        ];
+        let binding = DescriptorBinding {
+            keys: vec![],
+            fingerprints: vec![],
+            cosigners,
+            entropy: Some(vec![0u8; 32]),
+        };
+        let warn = check_self_multisig_warning(&binding);
+        assert!(warn.is_some(), "self-multisig pair must trigger warning");
+    }
+
+    #[test]
+    fn self_multisig_warning_silent_for_distinct_xpubs() {
+        let xpub_a = Xpub::from_str(
+            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz",
+        )
+        .unwrap();
+        let xpub_b = Xpub::from_str(
+            "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ",
+        )
+        .unwrap();
+        let path = DerivationPath::from_str("48'/0'/0'/2'").unwrap();
+        let fp = Fingerprint::from_str("deadbeef").unwrap();
+        let cosigners = vec![
+            CosignerKeyInfo {
+                xpub: xpub_a,
+                fingerprint: fp,
+                path: path.clone(),
+            },
+            CosignerKeyInfo {
+                xpub: xpub_b,
+                fingerprint: fp,
+                path,
+            },
+        ];
+        let binding = DescriptorBinding {
+            keys: vec![],
+            fingerprints: vec![],
+            cosigners,
+            entropy: Some(vec![0u8; 32]),
+        };
+        assert!(
+            check_self_multisig_warning(&binding).is_none(),
+            "distinct cosigner xpubs must not trigger warning"
+        );
+    }
+
+    // ---- C.5: descriptor-mode wire-bit-identical to template-mode (3 fixtures) ----
+
+    fn parse_synth_descriptor(template: &str, network: CliNetwork) -> crate::synthesize::Bundle {
+        let resolved = lex_resolve(template);
+        let binding = bind_descriptor_keys(
+            &resolved,
+            network,
+            Some(TREZOR_24),
+            "",
+            CliLanguage::English,
+            None,
+            None,
+            &[],
+        )
+        .unwrap();
+        let descriptor = parse_descriptor(template, &binding.keys, &binding.fingerprints).unwrap();
+        crate::synthesize::synthesize_descriptor(
+            &descriptor,
+            &binding.cosigners,
+            binding.entropy.as_deref(),
+            false,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn descriptor_bip84_matches_template_bip84_md1() {
+        use crate::derive::derive_full;
+        use crate::template::CliTemplate;
+        let acc = derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip84,
+            0,
+        )
+        .unwrap();
+        let template_bundle = crate::synthesize::synthesize_full(
+            &acc.entropy,
+            acc.master_fingerprint,
+            acc.account_xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
+        let fp_hex = trezor_master_fp_hex();
+        let descriptor_template = format!("wpkh(@0[{fp_hex}/84'/0'/0']/<0;1>/*)");
+        let descriptor_bundle = parse_synth_descriptor(&descriptor_template, CliNetwork::Mainnet);
+        assert_eq!(
+            descriptor_bundle.md1, template_bundle.md1,
+            "md1 must be byte-identical for descriptor expression of bip84 template"
+        );
+    }
+
+    #[test]
+    fn descriptor_bip86_matches_template_bip86_md1() {
+        use crate::derive::derive_full;
+        use crate::template::CliTemplate;
+        let acc = derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip86,
+            0,
+        )
+        .unwrap();
+        let template_bundle = crate::synthesize::synthesize_full(
+            &acc.entropy,
+            acc.master_fingerprint,
+            acc.account_xpub,
+            CliTemplate::Bip86,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
+        let fp_hex = trezor_master_fp_hex();
+        let descriptor_template = format!("tr(@0[{fp_hex}/86'/0'/0']/<0;1>/*)");
+        let descriptor_bundle = parse_synth_descriptor(&descriptor_template, CliNetwork::Mainnet);
+        assert_eq!(
+            descriptor_bundle.md1, template_bundle.md1,
+            "md1 must be byte-identical for descriptor expression of bip86 template"
+        );
+    }
+
+    #[test]
+    fn descriptor_bip44_matches_template_bip44_md1() {
+        use crate::derive::derive_full;
+        use crate::template::CliTemplate;
+        let acc = derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip44,
+            0,
+        )
+        .unwrap();
+        let template_bundle = crate::synthesize::synthesize_full(
+            &acc.entropy,
+            acc.master_fingerprint,
+            acc.account_xpub,
+            CliTemplate::Bip44,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
+        let fp_hex = trezor_master_fp_hex();
+        let descriptor_template = format!("pkh(@0[{fp_hex}/44'/0'/0']/<0;1>/*)");
+        let descriptor_bundle = parse_synth_descriptor(&descriptor_template, CliNetwork::Mainnet);
+        assert_eq!(
+            descriptor_bundle.md1, template_bundle.md1,
+            "md1 must be byte-identical for descriptor expression of bip44 template"
+        );
     }
 
     #[test]
