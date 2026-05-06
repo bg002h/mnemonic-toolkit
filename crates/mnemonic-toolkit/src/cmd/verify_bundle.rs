@@ -252,7 +252,12 @@ pub fn run<W: Write, E: Write>(
             writeln!(stdout).ok();
         } else {
             for c in &checks {
-                writeln!(stdout, "{}: {} {}", c.name, (if c.passed { "ok" } else { "fail" }), c.detail).ok();
+                let status = if c.passed { "ok" } else { "fail" };
+                if c.detail.is_empty() {
+                    writeln!(stdout, "{}: {}", c.name, status).ok();
+                } else {
+                    writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
+                }
             }
             writeln!(stdout, "result: {}", result).ok();
         }
@@ -604,14 +609,12 @@ fn descriptor_mode_verify_run<W: Write>(
         writeln!(stdout).ok();
     } else {
         for c in &checks {
-            writeln!(
-                stdout,
-                "{}: {} {}",
-                c.name,
-                (if c.passed { "ok" } else { "fail" }),
-                c.detail
-            )
-            .ok();
+            let status = if c.passed { "ok" } else { "fail" };
+            if c.detail.is_empty() {
+                writeln!(stdout, "{}: {}", c.name, status).ok();
+            } else {
+                writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
+            }
         }
         writeln!(stdout, "result: {}", result_str).ok();
     }
