@@ -83,6 +83,10 @@ pub enum ToolkitError {
         kind: &'static str,
         message: String,
     },
+    /// SPEC_convert_v0_6.md §3 / §4 refusal — convert subcommand rejects
+    /// a (from, to) pair as cryptographically unrecoverable, sibling-pivot,
+    /// or otherwise invalid. Exit 2.
+    ConvertRefusal(String),
 }
 
 #[derive(Debug)]
@@ -200,7 +204,8 @@ impl ToolkitError {
             | ToolkitError::NetworkMismatch { .. }
             | ToolkitError::DescriptorParse(_)
             | ToolkitError::Bip388Distinctness { .. }
-            | ToolkitError::SlotInputViolation { .. } => 2,
+            | ToolkitError::SlotInputViolation { .. }
+            | ToolkitError::ConvertRefusal(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -234,6 +239,7 @@ impl ToolkitError {
             ToolkitError::Bip388Distinctness { .. } => "Bip388Distinctness",
             ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
+            ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
         }
     }
 
@@ -282,6 +288,7 @@ impl ToolkitError {
                 "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys".to_string()
             }
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
+            ToolkitError::ConvertRefusal(m) => m.clone(),
         }
     }
 

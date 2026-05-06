@@ -37,6 +37,8 @@ enum Command {
     Bundle(cmd::bundle::BundleArgs),
     /// round-trip-check an engraved bundle
     VerifyBundle(cmd::verify_bundle::VerifyBundleArgs),
+    /// convert between seed/key formats (BIP-39 / BIP-32 / WIF / ms1 / mk1)
+    Convert(cmd::convert::ConvertArgs),
 }
 
 fn main() -> ExitCode {
@@ -56,6 +58,7 @@ fn main() -> ExitCode {
     let result: Result<u8, ToolkitError> = match &cli.command {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
         Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr),
+        Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr),
     };
 
     match result {

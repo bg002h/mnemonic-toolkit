@@ -7,7 +7,7 @@ use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
 
 /// Result of full-mode derivation.
 #[derive(Debug)]
@@ -15,6 +15,7 @@ pub struct DerivedAccount {
     pub entropy: Vec<u8>,
     pub master_fingerprint: Fingerprint,
     pub account_xpub: Xpub,
+    pub account_xpriv: Xpriv,
     pub account_path: DerivationPath,
 }
 

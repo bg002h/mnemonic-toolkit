@@ -54,6 +54,7 @@ pub(crate) fn derive_bip32_from_entropy(
         entropy: entropy.to_vec(),
         master_fingerprint,
         account_xpub,
+        account_xpriv,
         account_path: path,
     })
 }
