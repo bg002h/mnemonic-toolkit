@@ -14,7 +14,8 @@ The three cards engrave together as a coherent backup. Each card is independentl
 
 ## Documentation
 
-- [`design/SPEC_mnemonic_toolkit_v0_4.md`](design/SPEC_mnemonic_toolkit_v0_4.md) — current SPEC (v0.4 cycle delta).
+- [`design/SPEC_mnemonic_toolkit_v0_5.md`](design/SPEC_mnemonic_toolkit_v0_5.md) — current SPEC (v0.5 cycle delta — typed-DerivationPath BIP-388 reversal, four-case ms1 short-circuit, mk1 cosigner-mapping diagnostic, legacy CLI flag deletion).
+- [`design/SPEC_mnemonic_toolkit_v0_4.md`](design/SPEC_mnemonic_toolkit_v0_4.md) — predecessor (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
 - [`design/SPEC_mnemonic_toolkit_v0_3.md`](design/SPEC_mnemonic_toolkit_v0_3.md) — predecessor (descriptor-mode foundation).
 - [`design/SPEC_mnemonic_toolkit_v0_2.md`](design/SPEC_mnemonic_toolkit_v0_2.md) — multisig foundation.
 - [`design/SPEC_mnemonic_toolkit_v0_1.md`](design/SPEC_mnemonic_toolkit_v0_1.md) — single-sig foundation.

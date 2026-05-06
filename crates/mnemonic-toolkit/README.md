@@ -92,7 +92,8 @@ mnemonic verify-bundle --phrase "abandon abandon ... art" \
 
 ## Documentation
 
-- [SPEC v0.4](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_4.md) — current cycle delta (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
+- [SPEC v0.5](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_5.md) — current cycle delta (typed-DerivationPath BIP-388 reversal, four-case ms1 short-circuit, mk1 cosigner-mapping diagnostic, legacy CLI flag deletion).
+- [SPEC v0.4](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_4.md) — predecessor (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
 - [SPEC v0.3](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_3.md) — descriptor-mode foundation.
 - [SPEC v0.2](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_2.md) — multisig foundation.
 - [SPEC v0.1](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_1.md) — single-sig foundation.
