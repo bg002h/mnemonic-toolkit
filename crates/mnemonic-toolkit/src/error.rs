@@ -99,8 +99,9 @@ pub enum ToolkitError {
     /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
     /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
     ExportWalletTaprootMultisigUnsupported(&'static str),
-    /// SPEC_derive_child_v0_7.md §5 / §7 — `--application rsa|rsa-gpg|dice`
-    /// is out-of-scope for v0.7. Exit 2.
+    /// SPEC_derive_child_v0_7.md §7 — `--application rsa|rsa-gpg` deferred
+    /// pending rsa-crate stability (RUSTSEC-2023-0071 unpatched as of v0.8.0).
+    /// `dice` shipped in v0.8 Phase 7. Exit 2.
     DeriveChildUnsupportedApp,
     /// SPEC_derive_child_v0_7.md §7 — `--length <N>` falls outside the
     /// per-app valid range. Exit 2.

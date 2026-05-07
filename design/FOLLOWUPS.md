@@ -958,6 +958,34 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved 2c59b27`
 - **Tier:** `v0.7.1`
 
+### `bip85-dice-application` — BIP-85 `89101'` dice rolls (split product of `bip85-rsa-rsa-gpg-dice-applications`)
+
+- **Surfaced:** v0.8 Phase 6 SPIKE split decision.
+- **Where:** `crates/mnemonic-toolkit/src/bip85.rs::format_dice_rolls` + `crates/mnemonic-toolkit/src/cmd/derive_child.rs` dispatch.
+- **What:** BIP-85 §"DICE" deterministic dice rolls via SHAKE256 BIP85-DRNG + rejection sampling. Spec at BIP-85 v1.3.0 §"DICE".
+- **Status:** `resolved 1dde4dc` (v0.8 Phase 7).
+- **Resolution:** v0.8 Phase 7 — `--application dice` + new `--dice-sides <N>` flag. Spec reference vector pinned (`m/83696968'/89101'/6'/10'/0'` → `1,0,0,2,0,1,5,5,2,4`). New `sha3 = "0.10"` direct dep.
+- **Tier:** `v0.8`
+
+### `bip85-rsa-rsa-gpg-applications` — BIP-85 RSA + RSA-GPG (split product, deferred)
+
+- **Surfaced:** v0.8 Phase 6 SPIKE split decision (`design/agent-reports/v0_8-phase-6-rsa-crate-security-review.md`).
+- **Where:** `crates/mnemonic-toolkit/src/bip85.rs` (would need new app dispatchers); `crates/mnemonic-toolkit/src/cmd/derive_child.rs` (would lift `rsa` / `rsa-gpg` from out-of-scope refusal).
+- **What:** BIP-85 application codes `828365'` (RSA) + `67797633'` (RSA-GPG) generate RSA keys deterministically from BIP-85 entropy. Implementation requires the `rsa` crate.
+- **Why deferred:** v0.8 Phase 6 SPIKE returned DEFER verdict. RUSTSEC-2023-0071 (Marvin attack: timing sidechannel against PKCS#1 v1.5 decryption) is **unpatched** as of 2026-05-07 (`patched = []`). `rsa` crate is in extended pre-release (`v0.10.0-rc.18`). Adding it as direct dep would import an open advisory into mnemonic-toolkit's `cargo audit` output. BIP-85 RSA / RSA-GPG demand signal is absent.
+- **Reopen criteria:** rsa crate publishes patched stable release (`patched = ["X.Y.Z"]` in advisory) OR a user requests BIP-85 RSA / RSA-GPG with a stated downstream use case.
+- **Status:** `open`
+- **Tier:** `v0.9 / pending-rsa-crate-stability`
+
+### `18-remaining-bip39-trezor-corpus-vectors` — pin remaining 18 of 24 Trezor english corpus cells
+
+- **Surfaced:** v0.7.1 Phase 1.B (BIP test vector audit cycle).
+- **Where:** `crates/mnemonic-toolkit/tests/cli_convert_bip39_vectors.rs`.
+- **What:** v0.7.1 Phase 1.B pinned 6 of 24 BIP-39 §"Test Vectors" English Trezor corpus cells via hand-rolled tests; the remaining 18 stayed MISSING per the v0.7.1 audit matrix. v0.8 lifts to a parametric loop over the full corpus.
+- **Status:** `resolved 85694b2` (v0.8 Phase 8).
+- **Resolution:** v0.8 Phase 8 — refactored `cli_convert_bip39_vectors.rs` to a single `bip39_trezor_english_corpus_full` test that loops over all 24 english entries via vendored `tests/bip39_trezor_vectors.json` (Trezor `python-mnemonic` SHA `b57a5ad77a981e743f4167ab2f7927a55c1e82a8`). Audit-matrix coverage 6/24 → 24/24 ✓.
+- **Tier:** `v0.7.1-carry`
+
 ### `bip38-spec-vector-3-null-byte-passphrase` — V3 Unicode passphrase contains U+0000; not representable via argv
 
 - **Surfaced:** v0.7.1 Phase 3.A (BIP test vector audit cycle).
