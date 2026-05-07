@@ -300,6 +300,14 @@ The toolkit's xpub-bearing inputs (`convert --from xpub=...`, `bundle --slot @0.
 
 **Output side:** see §11.a for `--to`-side SLIP-0132 emission grammar.
 
+**Stderr info-line on actual normalization (v0.6.2).** When `normalize_xpub_prefix` actually fires (input was a SLIP-0132 variant, not already neutral), `mnemonic convert` and `mnemonic bundle` emit a stderr informational line of the form:
+
+```
+info: normalized <variant> input to neutral <xpub|tpub> (encoding-only; no key change). Re-emit with --xpub-prefix <variant> if you need the SLIP-0132 form.
+```
+
+`<variant>` is the input prefix preserving case (`ypub | Ypub | zpub | Zpub | upub | Upub | vpub | Vpub`); `<xpub|tpub>` is the BIP-32 neutral form for the variant's network class (mainnet → `xpub`; testnet → `tpub`). Suppressed when input is already neutral. Emitted regardless of `--json` and `--no-engraving-card`. See `SPEC_mnemonic_toolkit_v0_5.md` §5.5.a for the cross-cutting stderr ordering invariant (info-line precedes the engraving-card block; secret-on-stdout warning, when it fires, is last).
+
 ## §11.a `--xpub-prefix` modifier (v0.6.1)
 
 When the convert invocation has `xpub` in `--to` (directly or via composite traversal — e.g., `phrase → xpub`), the optional `--xpub-prefix <variant>` flag controls the version-byte prefix of the emitted xpub:

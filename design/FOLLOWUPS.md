@@ -670,7 +670,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   Suppressed when input is already neutral. Quiet for users who already understand the normalization; informative for users discovering the round-trip primitive. The emitter must thread `&mut dyn Write` for stderr to all 3 cross-cut sites OR be implemented as an out-parameter on `normalize_xpub_prefix` so the caller decides where to write. Implementation tip: if `normalize_xpub_prefix` returns `Result<(String, Option<&'static str> /* variant-name */), ToolkitError>`, callers can match on `Some(_)` and emit per their stderr convention.
 - **Why deferred:** v0.6.1 shipped the silent-normalization MVP intentionally (smaller blast radius; no new stderr bytes that could break byte-exact tests; Phase D's stderr-ordering invariant stays simple). UX-improvement work fits a v0.6.2 patch.
 - **Caveat:** new stderr lines at the 3 cross-cut sites must NOT break the Phase D §5.5.a "secret-on-stdout warning is the LAST stderr write" invariant. Either fire the info note BEFORE the engraving card / before the secret-on-stdout warning, or relax the §5.5.a SPEC clause. Spike before SPEC-amending.
-- **Status:** `open`
+- **Status:** `resolved 7bf1f1e` — v0.6.2 lean cycle. SLIP-0132 input-normalization stderr info-line shipped; SPEC §5.5.a relaxation + multi-slot ordering + `--json` / `--no-engraving-card` independence locked. Phase 1 RED scaffold (`38c4272` + `740a917`), Phase 2 helper signature (`11c8edb` + `957db16`), Phase 3 emission (`e4fedd7` + `7bf1f1e`).
 - **Tier:** `v0.6.2`
 
 ### `bip38-encrypted-wif` — accept + emit BIP-38 passphrase-encrypted privkeys (`6P...`)
