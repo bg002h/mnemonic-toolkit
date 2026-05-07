@@ -205,7 +205,8 @@ fn run_full(
     checks: &mut Vec<VerifyCheck>,
 ) -> Result<(), ToolkitError> {
     let template = args.template_unchecked();
-    let resolved = crate::cmd::bundle::resolve_slots(
+    // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
         args.network,
@@ -256,7 +257,9 @@ fn run_watch_only<E: Write>(
     .ok();
 
     let template = args.template_unchecked();
-    let resolved = crate::cmd::bundle::resolve_slots(
+    // verify-bundle does not surface SLIP-0132 input-normalization signals (no
+    // engraving card / synthesized output reflects them). Discard.
+    let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
         args.network,
@@ -331,7 +334,8 @@ fn run_multisig<E: Write>(
     }
 
     let template = args.template_unchecked();
-    let resolved = crate::cmd::bundle::resolve_slots(
+    // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
         args.network,
@@ -400,7 +404,8 @@ fn descriptor_mode_verify_run<W: Write>(
     let template = args
         .template
         .unwrap_or(crate::template::CliTemplate::Bip84);
-    let resolved_slots = crate::cmd::bundle::resolve_slots(
+    // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    let (resolved_slots, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
         args.network,

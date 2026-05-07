@@ -402,7 +402,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // 8) Compute outputs.
-    let mut outputs = compute_outputs(primary.node, &primary_value, &targets, args)?;
+    let (mut outputs, input_variant) = compute_outputs(primary.node, &primary_value, &targets, args)?;
+
+    // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
+    if let Some(variant) = input_variant {
+        let _ = writeln!(
+            stderr,
+            "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
+            neutral = crate::slip0132::neutral_for(variant),
+        );
+    }
 
     // 8.a) SPEC §11.a — apply --xpub-prefix to xpub-typed outputs. The flag
     //      is silently ignored when no xpub target is present (per §11.a).
@@ -471,7 +480,7 @@ fn compute_outputs(
     value: &str,
     targets: &[NodeType],
     args: &ConvertArgs,
-) -> Result<Vec<Output>, ToolkitError> {
+) -> Result<(Vec<Output>, Option<&'static str>), ToolkitError> {
     use NodeType::*;
     let language = args.language.unwrap_or_default();
     let passphrase = args.passphrase.as_deref().unwrap_or("");
@@ -553,7 +562,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, None))
         }
         Xprv => {
             let xprv = bip32::Xpriv::from_str(value)
@@ -573,11 +582,11 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, None))
         }
         Xpub => {
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let (value, _input_variant) = normalize_xpub_prefix(value)?;
+            let (value, input_variant) = normalize_xpub_prefix(value)?;
             let xpub = bip32::Xpub::from_str(&value)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
             let mut out = Vec::with_capacity(targets.len());
@@ -597,7 +606,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, input_variant))
         }
         Wif => {
             let pk = PrivateKey::from_wif(value)
@@ -625,7 +634,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, None))
         }
         Ms1 => {
             let (_tag, payload) = ms_codec::decode(value).map_err(ToolkitError::from)?;
@@ -653,7 +662,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, None))
         }
         Mk1 => {
             let tokens: Vec<&str> = value.split_whitespace().collect();
@@ -680,7 +689,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok(out)
+            Ok((out, None))
         }
         Fingerprint | Path => Err(ToolkitError::BadInput(format!(
             "--from {} is not a primary value-bearing node",

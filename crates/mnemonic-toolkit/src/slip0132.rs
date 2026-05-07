@@ -113,6 +113,20 @@ pub(crate) fn apply_xpub_prefix(
     base58::encode_check(&raw)
 }
 
+/// Map a SLIP-0132 variant name (as produced by `normalize_xpub_prefix`'s
+/// `Option<&'static str>` channel) to its BIP-32 neutral counterpart.
+///
+/// Variant determines neutral per SPEC §11/§11.b: mainnet variants
+/// (`ypub | Ypub | zpub | Zpub`) → `xpub`; testnet variants
+/// (`upub | Upub | vpub | Vpub`) → `tpub`.
+pub(crate) fn neutral_for(variant: &'static str) -> &'static str {
+    match variant {
+        "ypub" | "Ypub" | "zpub" | "Zpub" => "xpub",
+        "upub" | "Upub" | "vpub" | "Vpub" => "tpub",
+        _ => unreachable!("neutral_for: unknown variant {variant:?} — must be one of the 8 produced by normalize_xpub_prefix"),
+    }
+}
+
 fn swap_target_for(variant: XpubPrefix, network: CliNetwork) -> [u8; 4] {
     let mainnet = matches!(network, CliNetwork::Mainnet);
     match (variant, mainnet) {
@@ -243,6 +257,24 @@ mod tests {
         assert_eq!(parse_xpub_prefix_arg("Ypub").unwrap(), XpubPrefix::YpubMultisig);
         assert_eq!(parse_xpub_prefix_arg("zpub").unwrap(), XpubPrefix::Zpub);
         assert_eq!(parse_xpub_prefix_arg("Zpub").unwrap(), XpubPrefix::ZpubMultisig);
+    }
+
+    #[test]
+    fn neutral_for_maps_all_8_variants() {
+        assert_eq!(neutral_for("ypub"), "xpub");
+        assert_eq!(neutral_for("Ypub"), "xpub");
+        assert_eq!(neutral_for("zpub"), "xpub");
+        assert_eq!(neutral_for("Zpub"), "xpub");
+        assert_eq!(neutral_for("upub"), "tpub");
+        assert_eq!(neutral_for("Upub"), "tpub");
+        assert_eq!(neutral_for("vpub"), "tpub");
+        assert_eq!(neutral_for("Vpub"), "tpub");
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown variant")]
+    fn neutral_for_panics_on_unknown_variant() {
+        let _ = neutral_for("xpub");
     }
 
     #[test]

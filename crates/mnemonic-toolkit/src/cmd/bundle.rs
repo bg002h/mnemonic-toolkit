@@ -216,7 +216,7 @@ fn bundle_run_unified<W: Write, E: Write>(
         .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
 
     // Resolve slots into ResolvedSlot vec.
-    let resolved = resolve_slots(
+    let (resolved, slip0132_signals) = resolve_slots(
         &slots,
         template,
         args.network,
@@ -247,7 +247,7 @@ fn bundle_run_unified<W: Write, E: Write>(
 
     // Emit (reuse legacy text/JSON renderer; engraving card omitted for now;
     // unified card lands in Phase I).
-    emit_unified(args, &bundle, &resolved, mode, stdout, stderr)?;
+    emit_unified(args, &bundle, &resolved, mode, &slip0132_signals, stdout, stderr)?;
 
     if args.self_check {
         self_check_bundle(&bundle, args)?;
@@ -280,6 +280,12 @@ fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), Toolk
 ///   path + master_fingerprint + path.
 /// - {xpub, fingerprint, path} → parse all three directly.
 /// - {entropy} / {wif} / {xprv-rejected} per slot_input.rs validity matrix.
+///
+/// Returns `(resolved, slip0132_signals)`. The signals vec carries `(slot_idx,
+/// variant)` pairs in slot-index ascending order (BTreeMap iteration) for any
+/// `xpub` slots whose input was a SLIP-0132 prefix variant; `emit_unified`
+/// uses them to emit the SPEC §5.5.a info-line.
+#[allow(clippy::type_complexity)]
 pub(crate) fn resolve_slots(
     slots: &[SlotInput],
     template: CliTemplate,
@@ -287,7 +293,7 @@ pub(crate) fn resolve_slots(
     account: u32,
     language: Option<CliLanguage>,
     passphrase: Option<&str>,
-) -> Result<Vec<ResolvedSlot>, ToolkitError> {
+) -> Result<(Vec<ResolvedSlot>, Vec<(u8, &'static str)>), ToolkitError> {
     use std::collections::BTreeMap;
     let mut by_index: BTreeMap<u8, Vec<&SlotInput>> = BTreeMap::new();
     for s in slots {
@@ -296,6 +302,10 @@ pub(crate) fn resolve_slots(
     let by_index_len = by_index.len();
     let secp = Secp256k1::new();
     let mut out: Vec<ResolvedSlot> = Vec::with_capacity(by_index_len);
+    // SPEC v0.6.2 §5.5.a — accumulate SLIP-0132 input-normalization signals
+    // for the emit_unified info-line. BTreeMap iteration is slot-index
+    // ascending → no re-sort needed downstream.
+    let mut slip0132_signals: Vec<(u8, &'static str)> = Vec::new();
     for (idx, slot_inputs) in by_index {
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
@@ -325,7 +335,10 @@ pub(crate) fn resolve_slots(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let (xpub_str, _input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let (xpub_str, input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            if let Some(v) = input_variant {
+                slip0132_signals.push((idx, v));
+            }
             let xpub = bitcoin::bip32::Xpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
@@ -448,7 +461,7 @@ pub(crate) fn resolve_slots(
             )));
         }
     }
-    Ok(out)
+    Ok((out, slip0132_signals))
 }
 
 /// v0.4.1 unified-path emit: reuses the existing emit() / emit_multisig() text
@@ -460,10 +473,23 @@ fn emit_unified<W: Write, E: Write>(
     bundle: &Bundle,
     resolved: &[ResolvedSlot],
     mode: BundleMode,
+    slip0132_signals: &[(u8, &'static str)],
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let _ = mode;
+    // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational notes for SLIP-0132
+    // input normalization. Slot-index ascending; both callers accumulate in
+    // ascending order (BTreeMap iteration in resolve_slots; 0..n range in
+    // bundle_run_unified_descriptor) so no re-sort needed here. Emitted
+    // unconditionally of --json (stderr advisories follow §5.5.a).
+    for (_idx, variant) in slip0132_signals.iter() {
+        let _ = writeln!(
+            stderr,
+            "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
+            neutral = crate::slip0132::neutral_for(variant),
+        );
+    }
     let n = resolved.len();
     let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
     // v0.4.2 Phase M reconciliation: legacy emit_*/descriptor_mode_emit
@@ -804,6 +830,9 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let mut entropy_at_0: Option<Vec<u8>> = None;
     let mut keys: Vec<crate::parse_descriptor::ParsedKey> = Vec::with_capacity(n);
     let mut fingerprints: Vec<crate::parse_descriptor::ParsedFingerprint> = Vec::with_capacity(n);
+    // SPEC v0.6.2 §5.5.a — accumulate SLIP-0132 input-normalization signals.
+    // The 0..n range loop walks slots in ascending order natively → no re-sort.
+    let mut slip0132_signals: Vec<(u8, &'static str)> = Vec::new();
 
     for idx in 0..(n as u8) {
         let slot_inputs = by_index
@@ -863,7 +892,10 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let (xpub_str, _input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let (xpub_str, input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            if let Some(v) = input_variant {
+                slip0132_signals.push((idx, v));
+            }
             let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
@@ -976,7 +1008,15 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         })
         .collect();
 
-    emit_unified(args, &bundle, &resolved_slots, BundleMode::SingleSigFull, stdout, stderr)?;
+    emit_unified(
+        args,
+        &bundle,
+        &resolved_slots,
+        BundleMode::SingleSigFull,
+        &slip0132_signals,
+        stdout,
+        stderr,
+    )?;
 
     if args.self_check {
         self_check_bundle(&bundle, args)?;
