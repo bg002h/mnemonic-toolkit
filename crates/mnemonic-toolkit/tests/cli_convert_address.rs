@@ -11,13 +11,23 @@ const TREZOR_12: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 // BIP-84 §"Test vectors". Account 0 zpub at m/84'/0'/0'.
+// <https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki>
 const BIP84_ACCOUNT_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
 const BIP84_RECEIVE_0_ADDRESS: &str = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+const BIP84_RECEIVE_1_ADDRESS: &str = "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g";
+const BIP84_CHANGE_0_ADDRESS: &str = "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el";
+
+// BIP-49 §"Test vectors". Account-level upub at m/49'/1'/0' (testnet).
+// <https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki>
+const BIP49_ACCOUNT_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
 
 // BIP-86 §"Test vectors". Account 0 xpub at m/86'/0'/0' (mainnet) for the
 // Trezor 12-word seed; cross-checked via `mnemonic convert --template bip86`.
+// <https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki>
 const BIP86_ACCOUNT_XPUB: &str = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
 const BIP86_RECEIVE_0_ADDRESS: &str = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
+const BIP86_RECEIVE_1_ADDRESS: &str = "bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh";
+const BIP86_CHANGE_0_ADDRESS: &str = "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7";
 
 // ---------------------------------------------------------------------------
 // Happy paths — direct (Xpub, Address) edge.
@@ -138,6 +148,126 @@ fn entropy_to_address_bip86_composite() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, format!("address: {BIP86_RECEIVE_0_ADDRESS}\n"));
+}
+
+// ---------------------------------------------------------------------------
+// BIP-49/84/86 §Test Vectors — full corpus pin (matrix completion).
+// Source URLs cited per-const above.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn phrase_to_account_upub_bip49_reference_testnet() {
+    // BIP-49 §"Test vectors": account-level extended pubkey at m/49'/1'/0' on
+    // testnet. SLIP-0132 `upub` is the testnet sibling of mainnet `ypub`
+    // (BIP-49 single-sig variant), emitted via `--xpub-prefix ypub` +
+    // `--network testnet` per `src/slip0132.rs::apply_xpub_prefix`.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--to",
+            "xpub",
+            "--template",
+            "bip49",
+            "--network",
+            "testnet",
+            "--xpub-prefix",
+            "ypub",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("xpub: {BIP49_ACCOUNT_TESTNET_UPUB}\n"));
+}
+
+#[test]
+fn xpub_to_address_bip84_p2wpkh_receive_index_1() {
+    // BIP-84 §"Test vectors": second receive address at m/84'/0'/0'/0/1.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={BIP84_ACCOUNT_ZPUB}"),
+            "--to",
+            "address",
+            "--path",
+            "m/0/1",
+            "--script-type",
+            "p2wpkh",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("address: {BIP84_RECEIVE_1_ADDRESS}\n"));
+}
+
+#[test]
+fn xpub_to_address_bip84_p2wpkh_change_index_0() {
+    // BIP-84 §"Test vectors": first change address at m/84'/0'/0'/1/0.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={BIP84_ACCOUNT_ZPUB}"),
+            "--to",
+            "address",
+            "--path",
+            "m/1/0",
+            "--script-type",
+            "p2wpkh",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("address: {BIP84_CHANGE_0_ADDRESS}\n"));
+}
+
+#[test]
+fn xpub_to_address_bip86_p2tr_receive_index_1() {
+    // BIP-86 §"Test vectors": second receive address at m/86'/0'/0'/0/1.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={BIP86_ACCOUNT_XPUB}"),
+            "--to",
+            "address",
+            "--path",
+            "m/0/1",
+            "--script-type",
+            "p2tr",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("address: {BIP86_RECEIVE_1_ADDRESS}\n"));
+}
+
+#[test]
+fn xpub_to_address_bip86_p2tr_change_index_0() {
+    // BIP-86 §"Test vectors": first change address at m/86'/0'/0'/1/0.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={BIP86_ACCOUNT_XPUB}"),
+            "--to",
+            "address",
+            "--path",
+            "m/1/0",
+            "--script-type",
+            "p2tr",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, format!("address: {BIP86_CHANGE_0_ADDRESS}\n"));
 }
 
 // ---------------------------------------------------------------------------

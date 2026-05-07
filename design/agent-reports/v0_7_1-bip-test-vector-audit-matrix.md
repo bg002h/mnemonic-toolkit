@@ -160,7 +160,7 @@ Single published vector against TREZOR_12 mnemonic on testnet:
 | # | Path | Expected | Status | Notes |
 |---|---|---|---|---|
 | 49.1 | m/49'/1'/0'/0/0 | `2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2` | COVERED | `tests/cli_convert_address.rs::phrase_to_address_bip49_p2sh_p2wpkh_reference_testnet` |
-| 49.2 | account-level upub at m/49'/1'/0' | `upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY` | MISSING | Phase 2 — pin testnet account upub via `--to xpub --xpub-prefix upub --network testnet` |
+| 49.2 | account-level upub at m/49'/1'/0' | `upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY` | COVERED | `tests/cli_convert_address.rs::phrase_to_account_upub_bip49_reference_testnet` (`--xpub-prefix ypub --network testnet` produces SLIP-0132 `upub` per slip0132 testnet sibling table) |
 | 49.3 | mainnet receive index 0 (computed) | (no spec-published mainnet vector) | OUT-OF-SCOPE-PER-SPEC | BIP-49 spec only publishes testnet |
 | 49.4 | mainnet receive index 1 (computed) | (none) | OUT-OF-SCOPE-PER-SPEC | same |
 
@@ -174,10 +174,10 @@ Source: <https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki> §Test 
 
 | # | Path | Expected | Status | Notes |
 |---|---|---|---|---|
-| 84.1 | m/84'/0'/0' (account zpub) | `zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs` | COVERED-PARTIAL | `cli_convert_slip0132.rs::*` exercise the same value as `TREZOR_24_BIP84_MAINNET_ZPUB` — but BIP-84 spec uses TREZOR_12. PIN-DRIFT: confirm mainnet zpub matches both seed lengths under the same path; if not, the v0.7 const is mis-named. **DISCOVERY-FLAG.** |
+| 84.1 | m/84'/0'/0' (account zpub) | `zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip84_p2wpkh_reference` consumes this value as `BIP84_ACCOUNT_ZPUB`. (DISCOVERY-FLAG resolved Phase 2: the slip0132 module's `TREZOR_24_BIP84_MAINNET_ZPUB` constant is correctly named — its value `zpub6qTBTNft...` is genuinely TREZOR_24-derived and DIFFERS from the BIP-84 spec value above; the existing slip0132 round-trip test re-derives from the 24-word phrase, confirming the rename hypothesis was incorrect.) |
 | 84.2 | m/84'/0'/0'/0/0 | `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip84_p2wpkh_reference` (and `phrase_to_address_bip84_composite_with_template_inferred_script_type`) |
-| 84.3 | m/84'/0'/0'/0/1 (second receive) | `bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g` | MISSING | Phase 2 |
-| 84.4 | m/84'/0'/0'/1/0 (first change) | `bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el` | MISSING | Phase 2 |
+| 84.3 | m/84'/0'/0'/0/1 (second receive) | `bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip84_p2wpkh_receive_index_1` |
+| 84.4 | m/84'/0'/0'/1/0 (first change) | `bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip84_p2wpkh_change_index_0` |
 | 84.5 | testnet receive 0 (no spec-published) | n/a | OUT-OF-SCOPE-PER-SPEC | BIP-84 spec is mainnet-only |
 
 ---
@@ -215,8 +215,8 @@ Source: <https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki> §Test 
 |---|---|---|---|---|
 | 86.1 | m/86'/0'/0' (account xpub) | `xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ` | COVERED-IMPLICIT | const `BIP86_ACCOUNT_XPUB` in `cli_convert_address.rs` matches; xpub-equality check is implicit via address-derivation pin |
 | 86.2 | m/86'/0'/0'/0/0 | `bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr` | COVERED | `cli_convert_address.rs::xpub_to_address_bip86_p2tr_reference` + `entropy_to_address_bip86_composite` |
-| 86.3 | m/86'/0'/0'/0/1 | `bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh` | MISSING | Phase 2 |
-| 86.4 | m/86'/0'/0'/1/0 | `bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7` | MISSING | Phase 2 |
+| 86.3 | m/86'/0'/0'/0/1 | `bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip86_p2tr_receive_index_1` |
+| 86.4 | m/86'/0'/0'/1/0 | `bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7` | COVERED | `tests/cli_convert_address.rs::xpub_to_address_bip86_p2tr_change_index_0` |
 
 ---
 
@@ -363,10 +363,10 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | BIP-38 | 9 | 4 | 2 (Phase 3) | 4 (EC-mult) | 0 |
 | BIP-39 | 24 | 6 | 18 (carry over to v0.8) | 0 | 0 |
 | BIP-44 | 0 | — | — | — | examples-only, no vectors |
-| BIP-49 | 2 | 1 | 1 (Phase 2) | 0 | 2 (no mainnet) |
-| BIP-84 | 4 | 2 | 2 (Phase 2) | 0 | 1 (no testnet) |
+| BIP-49 | 2 | 2 | 0 | 0 | 2 (no mainnet) |
+| BIP-84 | 4 | 4 | 0 | 0 | 1 (no testnet) |
 | BIP-85 | 9 | 7 | 1 (Phase 1: 85.3) | 1 (DICE 85.9) | 0 |
-| BIP-86 | 4 | 2 | 2 (Phase 2) | 0 | 0 |
+| BIP-86 | 4 | 4 | 0 | 0 | 0 |
 | BIP-93 | n/a | — | — | — | delegated to ms-codec audit |
 | BIP-380 | 46 | 0 | 1 (Phase 4: checksum 380.1) | 0 | 45 (7 reject-checksum + 38 key-expression: rust-miniscript surface) |
 | BIP-388 | 8 | 2 SHAPE | 2 (Phase 4) | 4 | 0 |
@@ -383,16 +383,16 @@ Phase 1–6 target: close the ~50 in-scope MISSING entries. v0.8 carry: ~16
 ## Discoveries (require architect review before pinning)
 
 1. **DISCOVERY-FLAG (84.1 / 132.2 / 132.3) — TREZOR_24 vs TREZOR_12 zpub
-   collision check.** Toolkit's `cli_convert_slip0132.rs` constants name
-   `TREZOR_24_BIP84_MAINNET_ZPUB` but the value is identical to the
-   BIP-84 spec example, which uses the TREZOR_12 mnemonic (not 24).
-   Phase 2 must verify whether the constant is mis-named (24-word seed
-   produces a *different* zpub at `m/84'/0'/0'`) OR the constant is the
-   BIP-84 spec value mis-attributed in code. Likely mis-naming bug:
-   the existing test passes because it never re-derives from a 24-word
-   seed; it just consumes the constant as input. **Action:** rename
-   const + add a 24-word-seed derivation pin distinct from the spec
-   value. Not a wire bug, but a fixture-attribution drift.
+   collision check.** *(CLOSED Phase 2 — hypothesis disconfirmed.)* On
+   inspection in Phase 2 the two values are NOT identical: the BIP-84
+   spec value is `zpub6rFR7y4Q2...` (TREZOR_12-derived; pinned in
+   `cli_convert_address.rs` as `BIP84_ACCOUNT_ZPUB`); the slip0132
+   module's `TREZOR_24_BIP84_MAINNET_ZPUB` is `zpub6qTBTNft...` —
+   genuinely 24-word-derived, with the matching `slip0132 src/tests`
+   verifying the round-trip from the 24-word phrase via CLI. The
+   constants are correctly named; no rename was needed. The matrix
+   line 84.1 was a misread of the source values during Phase 0 audit.
+   Resolved without code changes; matrix entry updated.
 
 2. **DISCOVERY-FLAG (SLIP-0132 fetch).** WebFetch returned a SLIP-0132
    document body with truncated xpub strings (prefix `xpub`/`ypub`/`zpub`
