@@ -17,7 +17,7 @@ The three cards engrave together as a coherent backup. Each card is independentl
 `cargo install mnemonic-toolkit` is gated on the three sibling codecs reaching crates.io; until then build from the GitHub tag:
 
 ```bash
-git clone --branch mnemonic-toolkit-v0.4.1 https://github.com/bg002h/mnemonic-toolkit
+git clone --branch mnemonic-toolkit-v0.8.0 https://github.com/bg002h/mnemonic-toolkit
 cd mnemonic-toolkit
 cargo build --release --bin mnemonic
 ./target/release/mnemonic --help
@@ -72,13 +72,90 @@ mnemonic verify-bundle --phrase "abandon abandon ... art" \
     --ms1 ms1... --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
 ```
 
-`--json` is available on both subcommands for tooling. Schema version `"4"` is the v0.4 wire envelope; `ms1` is a length-N array (empty-string sentinel for watch-only slots).
+`--json` is available on `bundle` / `verify-bundle` for tooling. Schema version `"4"` is the v0.4 wire envelope; `ms1` is a length-N array (empty-string sentinel for watch-only slots).
+
+### `mnemonic convert` (v0.6+) — single-format conversions
+
+```bash
+# BIP-39 phrase ↔ entropy ↔ xpub.
+mnemonic convert --from "phrase=abandon abandon ... art" --to entropy
+mnemonic convert --from "entropy=00000000000000000000000000000000" --to phrase
+mnemonic convert --from "phrase=abandon abandon ... art" --to xpub --template bip84 --network mainnet
+
+# BIP-38 encrypted WIF (v0.7).
+mnemonic convert --from "wif=L4..." --to bip38 --passphrase "TestingOneTwoThree"
+mnemonic convert --from "bip38=6PYN..." --to wif --passphrase "TestingOneTwoThree"
+
+# v0.8 BREAKING — composite (phrase|entropy, bip38) splits the passphrase:
+#   --passphrase  drives BIP-39 PBKDF2 (mnemonic extension);
+#   --bip38-passphrase  drives BIP-38 Scrypt independently.
+# v0.7 dual-purpose semantics: `--passphrase X` reused for both legs.
+# v0.8: `--passphrase X --bip38-passphrase X` to preserve v0.7 behavior.
+mnemonic convert --from "phrase=abandon abandon ... art" --to bip38 \
+    --path "m/84'/0'/0'/0/0" --passphrase "extension" --bip38-passphrase "scrypt-key"
+
+# Raw-stdin passphrase (preserves NULL bytes; BIP-38 V3 spec vector).
+printf '\xcf\x93\x00\xf0\x90\x90\x80\xf0\x9f\x92\xa9' | \
+    mnemonic convert --from "bip38=6PRW..." --to wif --passphrase-stdin
+
+# Electrum native seed (v0.7; v0.8 adds --electrum-language for non-English).
+mnemonic convert --from "electrum-phrase=cram swing cover prefer ... able" --to entropy
+mnemonic convert --from "electrum-phrase=almíbar tibio superar ... odisea" --to entropy \
+    --electrum-language spanish
+
+# Casascius mini-key (v0.7).
+mnemonic convert --from "minikey=SzavMBLoXU6kDrqtUVmffv" --to wif
+```
+
+### `mnemonic export-wallet` (v0.7) — watch-only wallet artifacts
+
+```bash
+# Bitcoin Core importdescriptors JSON (default).
+mnemonic export-wallet --template bip84 --network mainnet \
+    --slot "@0.xpub=xpub6..." --slot "@0.fingerprint=73c5da0a" --slot "@0.path=m/84'/0'/0'"
+
+# BIP-388 wallet_policy JSON (template-mode).
+mnemonic export-wallet --template wsh-sortedmulti --threshold 2 --format bip388 --network mainnet \
+    --slot "@0.xpub=xpub6A..." --slot "@0.fingerprint=fp1" --slot "@0.path=m/48'/0'/0'/2'" \
+    --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=fp2" --slot "@1.path=m/48'/0'/0'/2'"
+
+# v0.8: descriptor → BIP-388 wallet_policy interop (multipath form required).
+mnemonic export-wallet --format bip388 --network mainnet \
+    --descriptor "wsh(sortedmulti(2,[fp1/48'/0'/0'/2']xpub6A.../<0;1>/*,[fp2/48'/0'/0'/2']xpub6B.../<0;1>/*))"
+
+# v0.8: taproot multisig — choose internal key (NUMS or cosigner @N).
+mnemonic export-wallet --template tr-multi-a --threshold 2 --network mainnet \
+    --taproot-internal-key nums \
+    --slot "@0.xpub=xpub6A..." --slot "@0.fingerprint=fp1" --slot "@0.path=m/48'/0'/0'/2'" \
+    --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=fp2" --slot "@1.path=m/48'/0'/0'/2'"
+```
+
+### `mnemonic derive-child` (v0.7) — BIP-85 deterministic children
+
+```bash
+# BIP-85 BIP-39 children.
+mnemonic derive-child --from "xprv=xprv9s21..." \
+    --application bip39 --length 12 --index 0
+
+# v0.8: phrase as master + non-English wordlist.
+mnemonic derive-child --from "phrase=girl mad pet ... nose" \
+    --application bip39 --length 12 --index 0 --language japanese
+
+# v0.8: testnet emission (hd-seed / xprv).
+mnemonic derive-child --from "xprv=xprv9s21..." \
+    --application hd-seed --length 0 --index 0 --network testnet
+
+# v0.8: BIP-85 DICE (deterministic dice rolls per BIP-85 v1.3.0 §"DICE").
+mnemonic derive-child --from "xprv=xprv9s21..." \
+    --application dice --length 10 --index 0 --dice-sides 6
+# → 1,0,0,2,0,1,5,5,2,4
+```
 
 ## Templates and networks
 
 - **Single-sig templates:** `bip44` (pkh), `bip49` (sh-wpkh), `bip84` (wpkh), `bip86` (tr).
-- **Multisig templates:** `wsh-multi`, `wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`, `tr-sortedmulti-a`. Threshold `1 ≤ K ≤ N ≤ 16`.
-- **User-supplied descriptors:** any BIP-388 descriptor string via `--descriptor` / `--descriptor-file`. Multi-leaf taproot (`tr(K, {leaf1, leaf2, ...})`) supported in v0.4+.
+- **Multisig templates:** `wsh-multi`, `wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`, `tr-sortedmulti-a`. Threshold `1 ≤ K ≤ N ≤ 16`. Taproot multisig under `mnemonic export-wallet` requires `--taproot-internal-key <nums|@N>` (v0.8).
+- **User-supplied descriptors:** any BIP-388 descriptor string via `--descriptor` / `--descriptor-file`. Multi-leaf taproot (`tr(K, {leaf1, leaf2, ...})`) supported in v0.4+. v0.8 lifts the `--descriptor + --format bip388` refusal in `export-wallet` (multipath `<0;1>/*` form required).
 - **Networks:** `mainnet`, `testnet`, `signet`, `regtest`.
 - **Account:** `--account <u32>` (default `0`).
 - **Multisig path family:** `--multisig-path-family {bip48,bip87}` (default `bip87`).
@@ -92,12 +169,16 @@ mnemonic verify-bundle --phrase "abandon abandon ... art" \
 
 ## Documentation
 
-- [SPEC v0.5](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_5.md) — current cycle delta (typed-DerivationPath BIP-388 reversal, four-case ms1 short-circuit, mk1 cosigner-mapping diagnostic, legacy CLI flag deletion).
+- [SPEC `convert` v0.6 (+ v0.7/v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_convert_v0_6.md) — `mnemonic convert` 13-node typed graph.
+- [SPEC `export-wallet` v0.7 (+ v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_export_wallet_v0_7.md) — Bitcoin Core / BIP-388 emit pipelines.
+- [SPEC `derive-child` v0.7 (+ v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_derive_child_v0_7.md) — BIP-85 derivations.
+- [SPEC v0.5](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_5.md) — current bundle/verify-bundle SPEC.
 - [SPEC v0.4](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_4.md) — predecessor (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
 - [SPEC v0.3](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_3.md) — descriptor-mode foundation.
 - [SPEC v0.2](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_2.md) — multisig foundation.
 - [SPEC v0.1](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_1.md) — single-sig foundation.
-- [CHANGELOG](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md) — release notes.
+- [CHANGELOG](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md) — release notes (v0.8.0 [BREAKING] entry includes the v0.7 → v0.8 BIP-38 composite-edge migration sentence).
+- [FOLLOWUPS](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/FOLLOWUPS.md) — deferred-work tracker.
 - Sibling pointers: [`md-codec`](https://github.com/bg002h/descriptor-mnemonic), [`mk-codec`](https://github.com/bg002h/mnemonic-key), [`ms-codec`](https://github.com/bg002h/mnemonic-secret).
 
 ## License
