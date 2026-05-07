@@ -4,7 +4,14 @@
   "ignorePaths": [
     "build/**",
     "tests/fixtures/**",
-    "agent-reports/**"
+    "agent-reports/**",
+    "transcripts/**"
+  ],
+  "ignoreRegExpList": [
+    "(ms1|mk1|md1)[a-z0-9]+",
+    "0x[a-fA-F0-9]+",
+    "https?://[^\\s)]+",
+    "`[^`]+`"
   ],
   "words": [
     "BCH",
@@ -42,12 +49,16 @@
     "SLIP",
     "sortedmulti",
     "serialisation",
+    "regtest",
+    "rustc",
+    "rustup",
     "Sparrow",
     "Specter",
     "subkey",
     "summarises",
     "synthesises",
     "custodying",
+    "tlsv",
     "synthesising",
     "TinyTeX",
     "trezor",

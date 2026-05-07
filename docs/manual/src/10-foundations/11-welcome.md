@@ -60,7 +60,7 @@ so partial damage is locatable, not catastrophic.
 
 :::primer
 **Cross-binding, in one sentence.** Each mk1 card carries a 4-byte
-`policy_id_stub`\index{policy_id_stub} — `SHA-256(canonical wallet-policy
+`policy_id_stub`\index{policy\_id\_stub} — `SHA-256(canonical wallet-policy
 preimage)[0..4]` — that is also computable from each md1 card. If you
 mix cards from different wallets, the stubs disagree and
 `mnemonic verify-bundle` fails fast.

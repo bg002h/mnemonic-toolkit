@@ -117,7 +117,9 @@ if [ -f "$INDEX_TABLE" ]; then
   # The index table file itself is excluded from the source-side scan
   # (it is the destination, not a source of authored markers, and its
   # prose may legitimately reference \index{} as documentation).
-  src_terms=$(grep -rohE --exclude='69-index-table.md' '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sort -u || true)
+  # Strip LaTeX escape backslashes (e.g. \_ in \index{policy\_id\_stub}) so
+  # the comparison is by semantic term, not by escape form.
+  src_terms=$(grep -rohE --exclude='69-index-table.md' '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sed -E 's/\\_/_/g' | sort -u || true)
   tbl_terms=$(grep -oE '^\| `[^`]+`' "$INDEX_TABLE" | sed -E 's/^\| `([^`]*)`$/\1/' | sort -u || true)
   while read -r t; do
     [ -z "$t" ] && continue
