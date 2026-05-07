@@ -3,7 +3,7 @@
 //! Source: <https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki>
 //! §Test Vectors. Closes the BIP-32 row in
 //! `design/agent-reports/v0_7_1-bip-test-vector-audit-matrix.md`
-//! (16 derivation cells across TV1..TV4). TV5 (invalid extended keys) is
+//! (17 derivation cells across TV1..TV4: 6+6+2+3). TV5 (invalid extended keys) is
 //! OUT-OF-SCOPE-PER-SPEC: the toolkit does not expose a generic
 //! "decode arbitrary extended key" surface; `bitcoin v0.32` enforces those
 //! invariants at parse time.

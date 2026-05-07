@@ -359,9 +359,9 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 
 | Category | Total vectors | Covered | Missing (in-scope) | Out-of-scope-per-user | Out-of-scope-per-spec |
 |---|---|---|---|---|---|
-| BIP-32 | 18 | 0 | 16 (Phase 1) | 0 | 2 (vector 5 invalid keys) |
+| BIP-32 | 18 | 17 | 0 | 0 | 1 (vector 5 invalid keys) |
 | BIP-38 | 9 | 4 | 2 (Phase 3) | 4 (EC-mult) | 0 |
-| BIP-39 | 24 | 2 PARTIAL | 22 (Phase 1 covers 6; 16 carry over to v0.8) | 0 | 0 |
+| BIP-39 | 24 | 6 | 18 (carry over to v0.8) | 0 | 0 |
 | BIP-44 | 0 | — | — | — | examples-only, no vectors |
 | BIP-49 | 2 | 1 | 1 (Phase 2) | 0 | 2 (no mainnet) |
 | BIP-84 | 4 | 2 | 2 (Phase 2) | 0 | 1 (no testnet) |
