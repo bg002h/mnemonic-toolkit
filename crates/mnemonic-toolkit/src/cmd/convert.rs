@@ -562,7 +562,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             let n = NodeType::from_token(t).ok_or_else(|| {
                 ToolkitError::BadInput(format!(
-                    "unknown --to node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1",
+                    "unknown --to node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address",
                     t
                 ))
             })?;

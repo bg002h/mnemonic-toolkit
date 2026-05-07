@@ -116,3 +116,17 @@ cargo clippy -p mnemonic-toolkit --tests   # 5 pre-existing errors; 0 net-new on
 - §10.a "One-way" clause: classified in classify_edge.
 - §10.a "Composite" clause: phrase/entropy edges implemented; `--path` from master semantics documented.
 - §10.a "Reference vectors pinned in tests": BIP-84 + BIP-49 + BIP-86 each have at least one byte-pinned test.
+
+## Code-quality reviewer supplement (independent dispatch)
+
+A second code-quality reviewer ran in parallel with the spec-compliance review and surfaced one Important finding NOT in the implementer's self-report, plus one Low. Both addressed in the same commit as this supplement (post-`53efe72`).
+
+**Important — Stale `--to` unknown-node hint string (confidence 90).**
+`crates/mnemonic-toolkit/src/cmd/convert.rs:565` — the `unknown --to node` error message had not been updated since v0.6 and omitted `bip38`, `minikey`, `electrum-phrase` (added in Phase 3) and `address` (added in Phase 4). The `--from` counterpart at line 123 was already current. A user typing `--to bip38` would get an "unknown node" error that misleadingly suggests `bip38` is not a valid target.
+**Fix applied:** updated the line-565 hint to enumerate all 13 NodeType tokens, mirroring line 123.
+
+**Low — Misleading test name `xpub_to_address_testnet_inferred_from_tpub`.**
+The test passes `--network testnet` explicitly; the "inferred_from_tpub" suffix is incorrect (xpub-prefix inference is exercised by neighboring tests but not this one).
+**Fix applied:** renamed to `xpub_to_address_testnet_explicit_network_with_vpub`, and updated the section comment to match.
+
+**Verification post-fix:** `cargo test --workspace --no-fail-fast` → 420 passed / 0 failed / 2 ignored (same count; rename + string change don't add or remove tests).

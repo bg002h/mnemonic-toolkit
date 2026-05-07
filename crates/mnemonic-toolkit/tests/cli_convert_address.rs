@@ -290,11 +290,11 @@ fn refusal_invalid_script_type_value() {
 }
 
 // ---------------------------------------------------------------------------
-// Network handling — testnet xpub inferred when --network omitted.
+// Network handling — explicit --network testnet with vpub input.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn xpub_to_address_testnet_inferred_from_tpub() {
+fn xpub_to_address_testnet_explicit_network_with_vpub() {
     // BIP-84 testnet vector for the same Trezor 12-word seed:
     // m/84'/1'/0' account vpub → tpub neutralization, then address at m/0/0
     // produces a testnet bech32 (`tb1q...`). The vpub is decoded via §11
