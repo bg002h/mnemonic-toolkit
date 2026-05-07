@@ -72,18 +72,24 @@ Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki> §Test 
 |---|---|---|---|---|---|
 | V1 | TestingOneTwoThree | `5KN7Mzq...QQi5CVR` | `6PRVWUbk...Nh2ZoGg` | COVERED | `tests/cli_convert_bip38.rs::encrypt_wif_to_bip38_vector1_no_compression` + `decrypt_..._vector1_...` |
 | V2 | Satoshi | `5HtasZ6...gi5` | `6PRNFFkZ...PX1dWByq` | COVERED | `tests/cli_convert_bip38.rs::*_vector2_no_compression` |
-| V3 | unicode (U+03D2 U+0301 U+0000010400 U+0001F4A9) | `5Jajm8e...SZ4` | `6PRW5o9F...apcDQn` | MISSING | Phase 3 (Unicode-NFC edge worth pinning) |
+| V3 | unicode (U+03D2 U+0301 U+0000 U+10400 U+1F4A9) | `5Jajm8e...SZ4` | `6PRW5o9F...apcDQn` | COVERED-IGNORED | `tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector3_unicode_nfc_passphrase` (`#[ignore]`'d — U+0000 NULL not representable via argv; FOLLOWUP `bip38-spec-vector-3-null-byte-passphrase`). Test bodies + spec values pinned for the day a NULL-safe input channel lands. |
 | V4 | TestingOneTwoThree (compressed) | `L44B5gG...VpP` | `6PYNKZ1E...tpUeo` | COVERED | `tests/cli_convert_bip38.rs::*_vector3_compressed` |
-| V5 | Satoshi (compressed) | `KwYgW8g...SK7` | `6PYLtMnX...PmY7` | MISSING | Phase 3 |
+| V5 | Satoshi (compressed) | `KwYgW8g...SK7` | `6PYLtMnX...PmY7` | COVERED | `tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector5_satoshi_compressed` (Phase 3.A) |
 
-### EC-multiplied (4 published)
+### EC-multiplied (4 published — DECRYPT)
 
-| # | Pass | BIP-38 | Status | Notes |
-|---|---|---|---|---|
-| EC1 | TestingOneTwoThree | `6PfQu77y...gTX` | OUT-OF-SCOPE-PER-USER | `bip38 = "1.1"` crate does not expose EC-multiplied; v0.7.1 Phase 3 pins ONE refusal byte-exact + filed v0.8 FOLLOWUP `bip38-ec-multiplied-mode-support` |
-| EC2 | Satoshi | `6PfLGnQs...sH` | OUT-OF-SCOPE-PER-USER | same |
-| EC3 | MOLON LABE (Lot 263183/Seq 1) | `6PgNBNN...Ypo1j` | OUT-OF-SCOPE-PER-USER | same |
-| EC4 | ΜΟΛΩΝ ΛΑΒΕ (Lot 806938/Seq 1) | `6PgGWtx...ngH` | OUT-OF-SCOPE-PER-USER | same |
+| # | Pass | BIP-38 | Expected WIF | Status | Notes |
+|---|---|---|---|---|---|
+| EC1 | TestingOneTwoThree | `6PfQu77y...gTX` | `5K4caxez...LisLR2` | COVERED (DECRYPT) | `tests/cli_convert_bip38.rs::decrypt_bip38_to_wif_ec_multiplied_vector_ec1_testing_one_two_three` (Phase 3.B) |
+| EC2 | Satoshi | `6PfLGnQs...sH` | `5KJ51Sgx...vkv5sH` | COVERED (DECRYPT) | `tests/cli_convert_bip38.rs::decrypt_bip38_to_wif_ec_multiplied_vector_ec2_satoshi` (Phase 3.B) |
+| EC3 | MOLON LABE (Lot 263183/Seq 1) | `6PgNBNN...Ypo1j` | `5JLdxTtc...rdtf8` | COVERED (DECRYPT) | `tests/cli_convert_bip38.rs::decrypt_bip38_to_wif_ec_multiplied_vector_ec3_lot_sequence_no_compress` (Phase 3.B) |
+| EC4 | ΜΟΛΩΝ ΛΑΒΕ (Lot 806938/Seq 1) | `6PgGWtx...ngH` | `5KMKKuUm...1ov33D` | COVERED (DECRYPT) | `tests/cli_convert_bip38.rs::decrypt_bip38_to_wif_ec_multiplied_vector_ec4_lot_sequence_unicode` (Phase 3.B) |
+
+### EC-multiplied ENCRYPT (intermediate-code workflow)
+
+| # | Direction | Status | Notes |
+|---|---|---|---|
+| ECE | Wif → Bip38 (EC-multiplied) | NEW MISSING (v0.8 carry) | Encrypt-side requires the BIP-38 intermediate-code workflow (passphrase code → 3rd party adds entropy → encrypted privkey + address). Toolkit's `(Wif, Bip38)` arm emits non-EC form only. v0.8 FOLLOWUP `bip38-ec-multiplied-encrypt-mode-support` tracks this. |
 
 ---
 
@@ -360,7 +366,7 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | Category | Total vectors | Covered | Missing (in-scope) | Out-of-scope-per-user | Out-of-scope-per-spec |
 |---|---|---|---|---|---|
 | BIP-32 | 18 | 17 | 0 | 0 | 1 (vector 5 invalid keys) |
-| BIP-38 | 9 | 4 | 2 (Phase 3) | 4 (EC-mult) | 0 |
+| BIP-38 | 9 | 9 (5 non-EC + 4 EC-decrypt; V3 `#[ignore]`'d cite-only) | 0 (encrypt-side EC-mult tracked as NEW MISSING v0.8 carry — see `bip38-ec-multiplied-encrypt-mode-support`) | 0 | 0 |
 | BIP-39 | 24 | 6 | 18 (carry over to v0.8) | 0 | 0 |
 | BIP-44 | 0 | — | — | — | examples-only, no vectors |
 | BIP-49 | 4 | 2 | 0 | 0 | 2 (no mainnet) |
@@ -414,3 +420,32 @@ Phase 1–6 target: close the ~50 in-scope MISSING entries. v0.8 carry: ~16
    xpub through our derivation" is not testable. v0.7.1 settles for
    "template-shape COVERED" + spec-xpub-quoted-in-source — same
    resolution as BIP-388 reference impl tests at upstream rust-miniscript.
+
+5. **ERRATUM (BIP-38 EC-multiplied DECRYPT) — Phase 3.** *(Source claim
+   surfaced + corrected in Phase 3.B.)* The v0.7.0 audit matrix +
+   SPEC §12 + Phase 1 BIP-38 security review
+   (`design/agent-reports/v0_7-phase-1-bip38-security-review.md`)
+   all stated that the `bip38 = "1.1"` crate's `Decrypt` impl rejects
+   EC-multiplied codes with a typed error variant, and that the toolkit
+   relied on this for clean refusal of EC-mult inputs. Empirical Phase 3
+   testing disconfirmed: all 4 BIP-38 §"Test vectors" EC-multiplied
+   vectors (EC1–EC4) decrypt correctly through the toolkit's existing
+   `(Bip38, Wif)` arm via `bip38::Decrypt`. No code change was required;
+   SPEC §12 was edited in Phase 3.B to reflect actual capability, and
+   the matrix flips 4 cells from OUT-OF-SCOPE-PER-USER → COVERED
+   (DECRYPT). Encrypt-side EC-mult (intermediate-code workflow) becomes
+   the new gap, tracked as v0.8 FOLLOWUP
+   `bip38-ec-multiplied-encrypt-mode-support`. The erratum-history entry
+   is FOLLOWUP `bip38-spec-section-12-ec-multiplied-erratum` (closed in
+   Phase 3.B).
+
+6. **DISCOVERY-FLAG (BIP-38 V3 NULL-byte passphrase) — Phase 3.A.**
+   BIP-38 §"Test vectors" vector 3 specifies a 5-codepoint Unicode
+   passphrase that includes U+0000 between U+0301 and U+10400. POSIX
+   `execve` truncates argv strings at NULL, and the toolkit's existing
+   `--passphrase=-` stdin path applies `.trim()` (which doesn't strip
+   NULL but also doesn't help with the encoding round-trip the spec
+   intends). v0.7.1 Phase 3.A pins the spec values verbatim in
+   `#[ignore]`'d test bodies; the cells flip from MISSING → COVERED-IGNORED.
+   v0.8 FOLLOWUP `bip38-spec-vector-3-null-byte-passphrase` tracks
+   exposing a NULL-safe input channel (e.g. `--passphrase-bytes-hex`).

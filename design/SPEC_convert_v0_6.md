@@ -482,12 +482,12 @@ The `(Wif, Bip38)` and `(Bip38, Wif)` edges implement the non-EC-multiplied form
 
 - `Bip38 → Bip38`: identity-pivot refusal — `refusal_bip38_identity` (see §3.d).
 - `Bip38 → <non-Wif>`: composite via `Wif` intermediate; the dispatcher walks `Bip38 → Wif → <target>`. No special refusal (engages standard composite-edge resolution).
-- BIP-38 EC-multiplied form (intermediate codes / passphrase codes — BIP-38 §"Encryption when EC multiply mode is used"): the `bip38` crate's `Decrypt` impl rejects EC-multiplied codes with a typed `bip38::Error` variant; dispatch maps to a clean error rather than silent mis-processing. v0.7 does NOT support EC-multiplied form on either encrypt or decrypt direction; FOLLOWUPS-tier deferral if user demand surfaces.
+- **EC-multiplied form (decrypt-only, v0.7.1).** BIP-38 defines two encoding forms: non-EC-multiplied (`6P` prefix; standard) and EC-multiplied (`6Pf` prefix; intermediate-code passphrase workflow). v0.7 supports DECRYPT for both forms transparently via `bip38 = "1.1"`'s `Decrypt` impl — pinned in `tests/cli_convert_bip38.rs::decrypt_bip38_to_wif_ec_multiplied_vector_ec{1,2,3,4}_*`. ENCRYPT direction supports only non-EC-multiplied form; producing EC-multiplied output requires the intermediate-code workflow (passphrase code generation) which is not yet exposed by the toolkit. v0.8 FOLLOWUP `bip38-ec-multiplied-encrypt-mode-support` tracks the encrypt-side gap.
 - Passphrase mismatch (decrypt direction): `bip38::Error::Pass` → `refusal_bip38_passphrase_mismatch` (see §3.d).
 
 **Secret-bearing classification (architect R1-L12):** `Bip38` is added to the `NodeType::is_secret_bearing` arm — although the byte stream is encrypted, possession-with-passphrase yields the underlying privkey, so the §7 secret-on-stdout warning fires when `--to bip38` output is rendered to a terminal.
 
-**Reference vectors:** BIP-38 §"Test vectors" — three non-EC-multiplied test vectors (no compression, with compression, and a test with passphrase containing non-ASCII). All three are pinned in Phase 1 RED tests.
+**Reference vectors:** BIP-38 §"Test vectors" — five non-EC-multiplied vectors (V1/V2/V4 = 3 base + V3 Unicode-NFC + V5 Satoshi-compressed) and four EC-multiplied DECRYPT vectors (EC1–EC4). v0.7.0 Phase 1 pinned 3 of the 5 non-EC vectors; v0.7.1 Phase 3.A added V3 + V5 (V3 is `#[ignore]`'d pending NULL-safe input — see FOLLOWUP `bip38-spec-vector-3-null-byte-passphrase`); v0.7.1 Phase 3.B added EC1–EC4 DECRYPT.
 
 ### §12.b Composite `(Phrase|Entropy, Bip38)` passphrase semantics
 

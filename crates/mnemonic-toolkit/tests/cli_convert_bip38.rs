@@ -217,6 +217,101 @@ fn decrypt_bip38_to_wif_spec_vector5_satoshi_compressed() {
 }
 
 // ============================================================================
+// BIP-38 §"Test vectors" EC-multiplied DECRYPT — Phase 3.B
+//
+// Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>
+// §"Test vectors" §"Encryption when EC multiply mode is used".
+//
+// BIP-38 defines two encoding forms: non-EC-multiplied (`6P` prefix; the
+// passphrase owner already holds the privkey) and EC-multiplied (`6Pf`
+// prefix; an intermediate code derived from the passphrase is combined with
+// random entropy by a third party to produce the encrypted privkey). The
+// toolkit decrypts both forms transparently via `bip38 = "1.1"`'s `Decrypt`
+// impl. ENCRYPT to EC-multiplied form (intermediate-code workflow) is NOT
+// yet exposed and is tracked as v0.8 FOLLOWUP
+// `bip38-ec-multiplied-encrypt-mode-support`.
+//
+// SPEC §12 erratum: pre-Phase-3 SPEC text incorrectly claimed `bip38`'s
+// `Decrypt` impl rejected EC-multiplied codes. Empirical Phase 3 testing
+// confirmed all 4 EC vectors decrypt successfully; SPEC §12 corrected in
+// the same Phase 3.B commit.
+// ============================================================================
+
+#[test]
+fn decrypt_bip38_to_wif_ec_multiplied_vector_ec1_testing_one_two_three() {
+    // EC1: passphrase "TestingOneTwoThree", no Lot/Sequence.
+    const EC1_PASS: &str = "TestingOneTwoThree";
+    const EC1_BIP38: &str = "6PfQu77ygVyJLZjfvMLyhLMQbYnu5uguoJJ4kMCLqWwPEdfpwANVS76gTX";
+    const EC1_WIF: &str = "5K4caxezwjGCGfnoPTZ8tMcJBLB7Jvyjv4xxeacadhq8nLisLR2";
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={EC1_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        EC1_PASS,
+    ]);
+    assert_eq!(out, EC1_WIF);
+}
+
+#[test]
+fn decrypt_bip38_to_wif_ec_multiplied_vector_ec2_satoshi() {
+    // EC2: passphrase "Satoshi", no Lot/Sequence.
+    const EC2_PASS: &str = "Satoshi";
+    const EC2_BIP38: &str = "6PfLGnQs6VZnrNpmVKfjotbnQuaJK4KZoPFrAjx1JMJUa1Ft8gnf5WxfKd";
+    const EC2_WIF: &str = "5KJ51SgxWaAYR13zd9ReMhJpwrcX47xTJh2D3fGPG9CM8vkv5sH";
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={EC2_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        EC2_PASS,
+    ]);
+    assert_eq!(out, EC2_WIF);
+}
+
+#[test]
+fn decrypt_bip38_to_wif_ec_multiplied_vector_ec3_lot_sequence_no_compress() {
+    // EC3: passphrase "MOLON LABE", Lot 263183 / Sequence 1, no compression.
+    const EC3_PASS: &str = "MOLON LABE";
+    const EC3_BIP38: &str = "6PgNBNNzDkKdhkT6uJntUXwwzQV8Rr2tZcbkDcuC9DZRsS6AtHts4Ypo1j";
+    const EC3_WIF: &str = "5JLdxTtcTHcfYcmJsNVy1v2PMDx432JPoYcBTVVRHpPaxUrdtf8";
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={EC3_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        EC3_PASS,
+    ]);
+    assert_eq!(out, EC3_WIF);
+}
+
+#[test]
+fn decrypt_bip38_to_wif_ec_multiplied_vector_ec4_lot_sequence_unicode() {
+    // EC4: passphrase "ΜΟΛΩΝ ΛΑΒΕ" (Greek capitals), Lot 806938 / Sequence 1,
+    // no compression. Pins both the EC-multiplied decrypt path AND
+    // Unicode-NFC normalization of the passphrase under the EC-multiply form.
+    const EC4_PASS: &str = "\u{039C}\u{039F}\u{039B}\u{03A9}\u{039D} \u{039B}\u{0391}\u{0392}\u{0395}";
+    const EC4_BIP38: &str = "6PgGWtx25kUg8QWvwuJAgorN6k9FbE25rv5dMRwu5SKMnfpfVe5mar2ngH";
+    const EC4_WIF: &str = "5KMKKuUmAkiNbA3DazMQiLfDq47qs8MAEThm4yL8R2PhV1ov33D";
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={EC4_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        EC4_PASS,
+    ]);
+    assert_eq!(out, EC4_WIF);
+}
+
+// ============================================================================
 // Refusals — SPEC v0.7 §3.d
 // ============================================================================
 

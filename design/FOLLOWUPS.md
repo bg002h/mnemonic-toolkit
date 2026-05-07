@@ -939,3 +939,30 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** Documentation-only nit; implementation is consistent with the worked examples and CLI tests.
 - **Status:** `open`
 - **Tier:** `v0.7-nice-to-have`
+
+### `bip38-ec-multiplied-encrypt-mode-support` — emit BIP-38 EC-multiplied form via intermediate codes
+
+- **Surfaced:** v0.7.1 Phase 3 (BIP test vector audit cycle); rescoped from `bip38-ec-multiplied-mode-support` after Phase 3 forensics.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` `(Wif, Bip38)` arm; `bip38 = "1.1"` crate.
+- **What:** v0.7.1 supports BIP-38 EC-multiplied DECRYPT transparently (4 spec vectors pinned). ENCRYPT to EC-multiplied form requires the intermediate-code workflow per BIP-38 §"Generation of intermediate code": the passphrase owner generates a passphrase code; a third party combines it with random entropy to derive the encrypted privkey + the corresponding bitcoin address. Implementation: new subcommand `mnemonic intermediate-code` (or `--passphrase-code <code>` flag on the `(Wif, Bip38)` arm). Out of scope for v0.7.1 vectors-only audit.
+- **Why deferred:** new subcommand-grade feature with its own SPEC § + UX surface; not pickable from a vectors-only patch cycle.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `bip38-spec-section-12-ec-multiplied-erratum` — SPEC §12 incorrectly claimed EC-multiplied was refused
+
+- **Surfaced:** v0.7.1 Phase 3 (audit cycle).
+- **Where:** `design/SPEC_convert_v0_6.md` §12.
+- **What:** The v0.7.0 SPEC §12 stated the `bip38` crate's `Decrypt` impl rejected EC-multiplied codes. Empirical testing in Phase 3 disconfirmed: all 4 EC-multiplied spec vectors decrypt correctly. SPEC §12 corrected in this cycle (commit pinned in matrix). Filed for cross-referencing the erratum source: the v0.7 Phase 1 security review report at `design/agent-reports/v0_7-phase-1-bip38-security-review.md` likely contains the source claim — re-read on next sec-review touch.
+- **Why deferred:** documentation-only; closed in this cycle. Filed for audit history continuity.
+- **Status:** `resolved <commit-sha-of-this-Phase-3-commit>`
+- **Tier:** `v0.7.1`
+
+### `bip38-spec-vector-3-null-byte-passphrase` — V3 Unicode passphrase contains U+0000; not representable via argv
+
+- **Surfaced:** v0.7.1 Phase 3.A (BIP test vector audit cycle).
+- **Where:** `crates/mnemonic-toolkit/tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector3_unicode_nfc_passphrase` (`#[ignore]`'d); `crates/mnemonic-toolkit/src/cmd/convert.rs` passphrase input plumbing.
+- **What:** BIP-38 §"Test vectors" vector 3 specifies a passphrase of 5 codepoints (U+03D2 + U+0301 + U+0000 + U+10400 + U+1F4A9). The U+0000 NULL byte cannot be passed via argv (POSIX `execve` truncates at NULL); the existing `--passphrase=-` stdin path also fails because `read_stdin_to_string` calls `.trim()`. To exercise this vector end-to-end the toolkit needs a NULL-safe input channel — e.g. `--passphrase-bytes-hex <hex>` accepting the raw byte sequence, or a stdin path that reads bytes verbatim (no trim, no UTF-8 reinterpretation). The `bip38` crate itself NFC-normalizes whatever string slice it receives; the gap is purely at the toolkit's input plumbing.
+- **Why deferred:** new input-channel surface (CLI + SPEC + tests); not pickable from a vectors-only patch cycle. Cite-only `#[ignore]`'d tests preserve the spec values for the day this lands.
+- **Status:** `open`
+- **Tier:** `v0.8`
