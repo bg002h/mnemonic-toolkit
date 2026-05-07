@@ -18,7 +18,12 @@
     // MD041 — first line h1. Each chapter file's first line IS h1,
     // but markdownlint is sometimes confused by leading raw blocks.
     // Keep the rule on; revisit if false positives appear.
-    "first-line-heading": true
+    "first-line-heading": true,
+
+    // MD024 — no-duplicate-headings. Allow duplicate H3/H4 headings as
+    // long as their parent H2 is distinct (CLI-reference chapters have
+    // many subcommands each with `### Flags`, `### Synopsis`, etc.).
+    "no-duplicate-heading": { "siblings_only": true }
   },
   "ignores": [
     "build/**",
