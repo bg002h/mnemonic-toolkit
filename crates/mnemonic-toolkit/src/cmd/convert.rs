@@ -34,6 +34,10 @@ pub enum NodeType {
     Path,
     Ms1,
     Mk1,
+    Bip38,
+    MiniKey,
+    ElectrumPhrase,
+    Address,
 }
 
 impl NodeType {
@@ -48,6 +52,10 @@ impl NodeType {
             Self::Path => "path",
             Self::Ms1 => "ms1",
             Self::Mk1 => "mk1",
+            Self::Bip38 => "bip38",
+            Self::MiniKey => "minikey",
+            Self::ElectrumPhrase => "electrum-phrase",
+            Self::Address => "address",
         }
     }
 
@@ -62,6 +70,10 @@ impl NodeType {
             "path" => Self::Path,
             "ms1" => Self::Ms1,
             "mk1" => Self::Mk1,
+            "bip38" => Self::Bip38,
+            "minikey" => Self::MiniKey,
+            "electrum-phrase" => Self::ElectrumPhrase,
+            "address" => Self::Address,
             _ => return None,
         })
     }
@@ -69,7 +81,13 @@ impl NodeType {
     pub fn is_secret_bearing(self) -> bool {
         matches!(
             self,
-            Self::Phrase | Self::Entropy | Self::Xprv | Self::Wif | Self::Ms1
+            Self::Phrase
+                | Self::Entropy
+                | Self::Xprv
+                | Self::Wif
+                | Self::Ms1
+                | Self::Bip38
+                | Self::ElectrumPhrase
         )
     }
 
@@ -99,7 +117,7 @@ pub fn parse_from_input(s: &str) -> Result<FromInput, String> {
     }
     let node = NodeType::from_token(token).ok_or_else(|| {
         format!(
-            "unknown --from node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1",
+            "unknown --from node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address",
             token
         )
     })?;
@@ -555,6 +573,10 @@ fn compute_outputs(
                         "--to path is informational; not emitted as a value".into(),
                     )),
                     Mk1 => unreachable!("classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"),
+                    Bip38 => unreachable!("Phase 1 implements this — Phase 0 scaffold only"),
+                    MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
+                    ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
+                    Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
                 };
                 out.push((t, v));
             }
@@ -691,5 +713,9 @@ fn compute_outputs(
             "--from {} is not a primary value-bearing node",
             from.as_str()
         ))),
+        Bip38 => unreachable!("Phase 1 implements this — Phase 0 scaffold only"),
+        MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
+        ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
+        Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
     }
 }
