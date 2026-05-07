@@ -3,6 +3,7 @@
 //! Realizes `design/SPEC_convert_v0_6.md`.
 
 use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
+use crate::electrum::{self, SeedVersion};
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
@@ -173,8 +174,30 @@ pub struct ConvertArgs {
     #[arg(long = "xpub-prefix", value_parser = parse_xpub_prefix_arg)]
     pub xpub_prefix: Option<XpubPrefix>,
 
+    /// SPEC v0.7 §14 — Electrum seed-version selector for `(Entropy, ElectrumPhrase)` encode.
+    /// Default: `standard`. 2FA versions (`101`, `102`) are REFUSED at the
+    /// encode layer; cannot be selected here.
+    #[arg(long = "electrum-version", value_parser = parse_electrum_version_arg)]
+    pub electrum_version: Option<SeedVersion>,
+
     #[arg(long)]
     pub json: bool,
+}
+
+fn parse_electrum_version_arg(s: &str) -> Result<SeedVersion, String> {
+    match s {
+        "standard" => Ok(SeedVersion::Standard),
+        "segwit" => Ok(SeedVersion::Segwit),
+        "standard-2fa" | "segwit-2fa" | "101" | "102" => Err(format!(
+            "--electrum-version {:?} is refused (Electrum 2FA seeds require a second factor; \
+             only 'standard' and 'segwit' are supported)",
+            s,
+        )),
+        _ => Err(format!(
+            "--electrum-version must be one of: standard, segwit; got {:?}",
+            s,
+        )),
+    }
 }
 
 // ============================================================================
@@ -288,6 +311,25 @@ fn refusal_minikey_invalid_checksum() -> ToolkitError {
     )
 }
 
+// SPEC v0.7 §3.d — Electrum refusals.
+fn refusal_electrum_2fa_unsupported() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.".into(),
+    )
+}
+
+fn refusal_electrum_phrase_pivot() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.".into(),
+    )
+}
+
+fn refusal_electrum_invalid_format() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from electrum-phrase value is not a valid Electrum native seed (HMAC-SHA512 prefix did not match a known seed version, or contains words outside the wordlist).".into(),
+    )
+}
+
 /// Direct edges supported per SPEC §2.
 /// Used as the negative-space check for the catch-all refusal: any (from, to)
 /// NOT in this set is a one-way barrier.
@@ -323,6 +365,8 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Phrase, Bip38)      // SPEC v0.7 §12 — composite via WIF intermediate
             | (Entropy, Bip38)     // SPEC v0.7 §12 — composite via WIF intermediate
             | (MiniKey, Wif)       // SPEC v0.7 §13 — Casascius mini-key decode (one-way)
+            | (ElectrumPhrase, Entropy) // SPEC v0.7 §14 — Electrum seed decode
+            | (Entropy, ElectrumPhrase) // SPEC v0.7 §14 — Electrum seed encode
     )
 }
 
@@ -349,6 +393,16 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
     // §3.c distinct xpub→mk1 message.
     if from == Xpub && to == Mk1 {
         return Some(refusal_xpub_to_mk1());
+    }
+
+    // §3.d v0.7 — Phrase ↔ ElectrumPhrase sibling-pivot refusal (distinct from
+    // the generic codec-set sibling pivot below; BIP-39 vs Electrum-native
+    // are different artifact classes with different validation rules).
+    if matches!(
+        (from, to),
+        (Phrase, ElectrumPhrase) | (ElectrumPhrase, Phrase),
+    ) {
+        return Some(refusal_electrum_phrase_pivot());
     }
 
     // §3.c sibling pivots between codec formats.
@@ -676,8 +730,19 @@ fn compute_outputs(
                             .encrypt_wif(passphrase)
                             .map_err(map_bip38_error)?
                     }
-                    MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
-                    ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
+                    MiniKey => unreachable!("classify_edge intercepts (*, MiniKey) as one-way"),
+                    ElectrumPhrase => {
+                        // SPEC v0.7 §14 — `(Entropy, ElectrumPhrase)` direct;
+                        // `(Phrase, ElectrumPhrase)` is intercepted as sibling
+                        // pivot in classify_edge, so this arm is reached only
+                        // for from == Entropy.
+                        debug_assert_eq!(from, Entropy);
+                        let version = args
+                            .electrum_version
+                            .unwrap_or(SeedVersion::Standard);
+                        electrum::entropy_to_phrase(&entropy, version)
+                            .map_err(map_electrum_error)?
+                    }
                     Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
                 };
                 out.push((t, v));
@@ -885,7 +950,25 @@ fn compute_outputs(
             }
             Ok((out, None))
         }
-        ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
+        ElectrumPhrase => {
+            // SPEC v0.7 §14 — validate via HMAC-SHA512 prefix; refuse 2FA;
+            // decode via base-2048 wordlist mapping.
+            let version =
+                electrum::validate_seed_version(value).map_err(map_electrum_error)?;
+            if version.is_2fa() {
+                return Err(refusal_electrum_2fa_unsupported());
+            }
+            let entropy = electrum::phrase_to_entropy(value).map_err(map_electrum_error)?;
+            let mut out = Vec::with_capacity(targets.len());
+            for &t in targets {
+                let v = match t {
+                    Entropy => hex::encode(&entropy),
+                    _ => unreachable!("classify_edge intercepts (ElectrumPhrase, !Entropy)"),
+                };
+                out.push((t, v));
+            }
+            Ok((out, None))
+        }
         Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
     }
 }
@@ -896,4 +979,12 @@ fn map_bip38_error(e: bip38::Error) -> ToolkitError {
         bip38::Error::Pass => refusal_bip38_passphrase_mismatch(),
         other => ToolkitError::BadInput(format!("bip38: {other}")),
     }
+}
+
+/// Map `electrum::ElectrumError` variants to ToolkitError per SPEC v0.7 §14.
+/// `Empty`, `UnknownWord`, and `InvalidVersion` all surface as a single
+/// invalid-format refusal — the user-facing distinction is "this isn't an
+/// Electrum native seed."
+fn map_electrum_error(_e: electrum::ElectrumError) -> ToolkitError {
+    refusal_electrum_invalid_format()
 }

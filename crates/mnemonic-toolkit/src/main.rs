@@ -4,6 +4,7 @@ mod bundle_unified;
 mod cmd;
 mod derive;
 mod derive_slot;
+mod electrum;
 mod error;
 mod format;
 mod friendly;
