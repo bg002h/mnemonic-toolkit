@@ -259,3 +259,91 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
         SPEC §9 cell 6 reduces to documentation per the conditional clause."
     );
 }
+
+/// Phase-5 post-review: `--template tr-multi-a` and `--template tr-sortedmulti-a`
+/// emit a clean refusal at exit 2. Constructing `tr(<internal-key>,
+/// multi_a(...))` requires picking a NUMS point or designating a key-path key;
+/// deferred to v0.8.
+#[test]
+fn taproot_multisig_template_refusal_byte_exact() {
+    for (template_name, expected) in [
+        (
+            "tr-multi-a",
+            "error: --template <tr-multi-a> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts.\n",
+        ),
+        (
+            "tr-sortedmulti-a",
+            "error: --template <tr-sortedmulti-a> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts.\n",
+        ),
+    ] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "export-wallet",
+                "--template",
+                template_name,
+                "--threshold",
+                "2",
+                "--multisig-path-family",
+                "bip48",
+                "--network",
+                "mainnet",
+                "--slot",
+                &format!("@0.xpub={COSIGNER_A_XPUB}"),
+                "--slot",
+                &format!("@0.fingerprint={COSIGNER_A_FP}"),
+                "--slot",
+                "@0.path=m/48'/0'/0'/2'",
+                "--slot",
+                &format!("@1.xpub={COSIGNER_B_XPUB}"),
+                "--slot",
+                &format!("@1.fingerprint={COSIGNER_B_FP}"),
+                "--slot",
+                "@1.path=m/48'/0'/0'/2'",
+            ])
+            .assert()
+            .failure()
+            .code(2);
+        let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+        assert_eq!(stderr, expected);
+    }
+}
+
+/// Phase-5 post-review: `--threshold N > cosigner_count` returns a clean
+/// refusal at exit 1 (BadInput) rather than a miniscript parse error.
+#[test]
+fn threshold_greater_than_cosigner_count_refusal() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "5",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--threshold 5 exceeds cosigner count 2"),
+        "stderr did not contain k>n refusal: {stderr:?}",
+    );
+}

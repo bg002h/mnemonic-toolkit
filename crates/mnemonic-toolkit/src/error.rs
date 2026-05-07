@@ -92,6 +92,13 @@ pub enum ToolkitError {
     ExportWalletSecretInput,
     /// SPEC_export_wallet_v0_7.md §7 — sparrow / specter format stub. Exit 2.
     ExportWalletFormatStub(&'static str),
+    /// SPEC_export_wallet_v0_7.md §4 — taproot multisig templates
+    /// (`tr-multi-a`, `tr-sortedmulti-a`) are not yet supported by
+    /// `mnemonic export-wallet` because constructing `tr(<internal-key>,
+    /// multi_a(...))` requires picking an internal-key designation (NUMS vs
+    /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
+    /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
+    ExportWalletTaprootMultisigUnsupported(&'static str),
 }
 
 #[derive(Debug)]
@@ -212,7 +219,8 @@ impl ToolkitError {
             | ToolkitError::SlotInputViolation { .. }
             | ToolkitError::ConvertRefusal(_)
             | ToolkitError::ExportWalletSecretInput
-            | ToolkitError::ExportWalletFormatStub(_) => 2,
+            | ToolkitError::ExportWalletFormatStub(_)
+            | ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -249,6 +257,9 @@ impl ToolkitError {
             ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
             ToolkitError::ExportWalletSecretInput => "ExportWalletSecretInput",
             ToolkitError::ExportWalletFormatStub(_) => "ExportWalletFormatStub",
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => {
+                "ExportWalletTaprootMultisigUnsupported"
+            }
         }
     }
 
@@ -300,6 +311,9 @@ impl ToolkitError {
             ToolkitError::ConvertRefusal(m) => m.clone(),
             ToolkitError::ExportWalletSecretInput => crate::wallet_export::REFUSAL_SECRET_INPUT.to_string(),
             ToolkitError::ExportWalletFormatStub(name) => crate::wallet_export::format_stub_message(name),
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
+                crate::wallet_export::taproot_multisig_unsupported_message(name)
+            }
         }
     }
 

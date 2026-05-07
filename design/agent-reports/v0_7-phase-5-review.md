@@ -82,3 +82,60 @@ cargo clippy -p mnemonic-toolkit --tests
 
 - New: `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`, `crates/mnemonic-toolkit/src/wallet_export.rs`, `crates/mnemonic-toolkit/tests/cli_export_wallet.rs`.
 - Modified: `crates/mnemonic-toolkit/src/cmd/mod.rs`, `crates/mnemonic-toolkit/src/main.rs`, `crates/mnemonic-toolkit/src/error.rs`.
+
+## Post-review fixes
+
+Two parallel reviewers (spec-compliance + code-quality) ran after `f8369d3` and surfaced 2 Important + 1 spec-Important + 3 Lows. All addressed in a single follow-up commit on master; net effect on tests is 426 → 428 (2 new integration tests; no regressions).
+
+### I1 (code-quality) — taproot multisig templates emit malformed descriptor strings
+
+`wallet_export.rs::build_descriptor_string_inner` produced `tr(multi_a(K, ...keys...))` for `CliTemplate::TrMultiA` / `TrSortedMultiA`. Miniscript's `tr(...)` grammar requires `tr(<internal-key>, <taptree>)` (two arguments); the single-argument form fails to parse, so any user invoking `--template tr-multi-a|tr-sortedmulti-a` with `mnemonic export-wallet` got a `DescriptorParse` error at runtime.
+
+**Fix applied:** REFUSE both templates for `export-wallet` v0.7 with a clean stub-style refusal (parallel to sparrow/specter). New error variant `ToolkitError::ExportWalletTaprootMultisigUnsupported(&'static str)` (exit 2) carries the offending template name; refusal text:
+
+```
+error: --template <tr-multi-a|tr-sortedmulti-a> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts.
+```
+
+The proper construction (`tr(<internal-key>, multi_a(...))` with NUMS or designated key-path key) is intentional v0.7 scope — out of scope for the Phase 5 deliverable, deferred to v0.8 with FOLLOWUP entry to file in Phase 8: `tr-multi-a-tr-sortedmulti-a-export-wallet-support`. Refusal is gated in `cmd/export_wallet.rs::run` before any `resolve_slots` / `build_descriptor_string` call. New integration test `taproot_multisig_template_refusal_byte_exact` asserts byte-exact stderr + exit 2 for both template names.
+
+### I2 (spec-compliance) — `validate_watch_only` runs pre-`resolve_slots`, contradicting SPEC §3
+
+SPEC §3 mandates "post-`resolve_slots` pipeline" / "validator runs on the resolved-slot set." The pre-resolve check was acting as the only validation layer, even though observable behavior was correct (raw `SlotInput.subkey` is a reliable proxy).
+
+**Fix applied:** kept the pre-resolve check as an early-exit fast path AND added a post-resolve check `validate_watch_only_resolved(resolved: &[ResolvedSlot])` that asserts `resolved.iter().all(|r| r.entropy.is_none())` and returns the same `ExportWalletSecretInput` error if any resolved slot carries entropy. Phrase= / entropy= / wif= slots populate `ResolvedSlot.entropy`; xprv= is refused upstream by the pre-resolve fast path before reaching `resolve_slots`. Source comments document the layering (fast-path vs SPEC-mandated invariant). No new test (existing cell 3 still GREEN — the post-resolve check is unreachable in practice today, but it pins the SPEC invariant for future refactors).
+
+### I3 (code-quality) — `--descriptor` + `--format bip388` ordering
+
+`run()` previously called the canonical-descriptor parse (line 156-158) before the bip388-requires-template refusal (line 191-210). A user passing `--descriptor 'wpkh(...)' --format bip388` saw a parse-or-refusal cascade depending on how malformed the descriptor was; even with a well-formed descriptor, the user got the bip388 refusal AFTER paying the parse cost.
+
+**Fix applied:** added an early gate at the top of `run()` (immediately after `validate_watch_only`): if `args.format == Bip388 && args.descriptor.is_some()`, return the BadInput refusal immediately. The bip388 branch in the format-emitter match is unreachable for the descriptor-passthrough path; comment documents the invariant. Existing `cell_*` tests still GREEN; the cell that exercised this path retains the same observable behavior (refusal text identical), just at a different call site.
+
+### L1 — double `resolve_slots` call
+
+The bip388 branch re-called `resolve_slots` after the canonical-descriptor branch already resolved the same slots. Threaded the `(resolved, template, k)` tuple via a new local `resolved_template: Option<...>` populated in the template branch and consumed in the bip388 emitter arm. The `--descriptor` passthrough path can't reach bip388 (refused above), so the `expect("Bip388 reached without resolved_template ...")` is provably unreachable — comment documents the invariant.
+
+### L2 — dead `_output_path` field
+
+`ExportWalletArgs._output_path: Option<PathBuf>` was `#[arg(skip)]` with no use site. Removed. `std::path::PathBuf` import dropped from the same file.
+
+### L3 — missing `k > n` guard
+
+`k = args.threshold.unwrap_or(n)` did not validate `k <= n`. A user passing `--threshold 5` with 2 cosigners surfaced a miniscript parse error rather than a clear refusal. Added explicit guard: if `k > n`, return `ToolkitError::BadInput(format!("--threshold {k} exceeds cosigner count {n}"))` (exit 1, user-input tier; matches `MultisigConfig` semantics in `synthesize::synthesize_unified`). New integration test `threshold_greater_than_cosigner_count_refusal` covers a `wsh-sortedmulti --threshold 5` against 2 slots and asserts exit 1 + the refusal substring.
+
+### Verification post-fix
+
+```fish
+cd /scratch/code/shibboleth/mnemonic-toolkit
+cargo build --workspace --tests   # GREEN
+cargo test --workspace --no-fail-fast   # 428 passed / 0 failed / 2 ignored
+                                          # (= 426 baseline + 2 new: taproot refusal + k>n guard)
+cargo clippy -p mnemonic-toolkit --tests   # 5 pre-existing warnings unchanged;
+                                            # 0 net-new on touched files
+                                            # (wallet_export.rs / cmd/export_wallet.rs / error.rs / cli_export_wallet.rs)
+```
+
+### Phase 8 FOLLOWUPS to file
+
+- `tr-multi-a-tr-sortedmulti-a-export-wallet-support` — implement `tr(<internal-key>, multi_a(...))` for `mnemonic export-wallet` with NUMS or key-path designation; un-stub the refusal added in this fix.
+- `--descriptor-format-bip388-interop` (existing entry already in `Known caveats / FOLLOWUPS for v0.8` above) — could be implemented via reverse-template-detection in v0.8.

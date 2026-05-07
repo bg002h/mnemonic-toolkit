@@ -11,11 +11,11 @@ use crate::parse::MultisigPathFamily;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, format_bip388_wallet_policy,
-    format_bitcoin_core_importdescriptors, validate_watch_only, TimestampArg,
+    format_bitcoin_core_importdescriptors, validate_watch_only,
+    validate_watch_only_resolved, TimestampArg,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum CliExportFormat {
@@ -81,10 +81,6 @@ pub struct ExportWalletArgs {
     /// Bitcoin Core target version. 24 or 25 (default 25).
     #[arg(long = "bitcoin-core-version", default_value = "25")]
     pub bitcoin_core_version: u8,
-
-    /// Reserved for output-path file writes (not used elsewhere).
-    #[arg(skip)]
-    pub _output_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -132,8 +128,42 @@ pub fn run<W: Write, E: Write>(
         _ => {}
     }
 
-    // SPEC §3 watch-only validator runs before any descriptor parsing.
+    // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
+    // inputs. The SPEC-mandated invariant ("runs on the resolved-slot set") is
+    // additionally enforced by `validate_watch_only_resolved` after
+    // `resolve_slots` returns (see template branch below).
     validate_watch_only(&args.slot)?;
+
+    // Refuse `tr-multi-a` / `tr-sortedmulti-a` — `tr(multi_a(...))` is malformed
+    // grammar (miniscript requires `tr(<internal-key>, <taptree>)`); proper
+    // construction needs an internal-key designation (NUMS vs key-path key)
+    // and is deferred to v0.8.
+    if let Some(template) = args.template {
+        match template {
+            CliTemplate::TrMultiA => {
+                return Err(ToolkitError::ExportWalletTaprootMultisigUnsupported(
+                    "tr-multi-a",
+                ));
+            }
+            CliTemplate::TrSortedMultiA => {
+                return Err(ToolkitError::ExportWalletTaprootMultisigUnsupported(
+                    "tr-sortedmulti-a",
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    // BIP-388 + `--descriptor` passthrough are mutually unsupported in v0.7
+    // (BIP-388 needs `@N/**` placeholders; --descriptor substitutes concrete
+    // xpubs at the canonical layer). Fire this refusal BEFORE the canonical
+    // descriptor parse so the user gets the more-specific message rather than
+    // a parse error.
+    if args.format == CliExportFormat::Bip388 && args.descriptor.is_some() {
+        return Err(ToolkitError::BadInput(
+            "--format bip388 requires --template (descriptor passthrough not supported in v0.7)".into(),
+        ));
+    }
 
     // Mutual-exclusion + minimal arg surface checks.
     if args.descriptor.is_some() && args.template.is_some() {
@@ -148,6 +178,11 @@ pub fn run<W: Write, E: Write>(
             "export-wallet requires either --template or --descriptor".into(),
         ));
     }
+
+    // `resolved_template` carries the (resolved-slots, template, k) tuple
+    // forward to the bip388 branch so we don't double-call `resolve_slots`.
+    let mut resolved_template: Option<(Vec<crate::synthesize::ResolvedSlot>, CliTemplate, u8)> =
+        None;
 
     let canonical = if let Some(desc) = &args.descriptor {
         // Descriptor passthrough: parse + canonicalize via miniscript.
@@ -168,6 +203,8 @@ pub fn run<W: Write, E: Write>(
             args.language,
             None,
         )?;
+        // SPEC §3 invariant: validator runs on the resolved-slot set.
+        validate_watch_only_resolved(&resolved)?;
         let n = resolved.len() as u8;
         if n == 0 {
             return Err(ToolkitError::BadInput(
@@ -175,10 +212,18 @@ pub fn run<W: Write, E: Write>(
             ));
         }
         let k = args.threshold.unwrap_or(n);
+        if k > n {
+            return Err(ToolkitError::BadInput(format!(
+                "--threshold {k} exceeds cosigner count {n}"
+            )));
+        }
         // SPEC §5.5.a — verify-bundle Option B: suppress slip0132 info-line on
         // export-wallet (consistent with verify-bundle's read-only checker
         // semantics; see self-review report).
-        build_descriptor_string(template, &resolved, k, args.network, args.account)?
+        let canonical =
+            build_descriptor_string(template, &resolved, k, args.network, args.account)?;
+        resolved_template = Some((resolved, template, k));
+        canonical
     };
 
     let value = match args.format {
@@ -191,22 +236,12 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Bip388 => {
             // BIP-388: render template + slots directly so description_template
             // uses @N/** placeholders (canonical descriptor with concrete xpubs
-            // does not).
-            let template = args.template.ok_or_else(|| {
-                ToolkitError::BadInput(
-                    "--format bip388 requires --template (descriptor passthrough not supported in v0.7)".into(),
-                )
-            })?;
-            let (resolved, _) = crate::cmd::bundle::resolve_slots(
-                &args.slot,
-                template,
-                args.network,
-                args.account,
-                args.language,
-                None,
-            )?;
-            let n = resolved.len() as u8;
-            let k = args.threshold.unwrap_or(n);
+            // does not). `--descriptor` passthrough was refused above; reaching
+            // here implies the template branch ran and `resolved_template` is
+            // populated.
+            let (resolved, template, k) = resolved_template.expect(
+                "Bip388 reached without resolved_template; --descriptor refused upstream",
+            );
             format_bip388_wallet_policy(template, &resolved, k, args.network, args.account)?
         }
         CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),

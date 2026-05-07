@@ -24,7 +24,20 @@ pub fn format_stub_message(name: &str) -> String {
     )
 }
 
-/// SPEC §3: refuse phrase / entropy / xprv / wif subkeys.
+/// Refusal text for `tr-multi-a` / `tr-sortedmulti-a` templates under
+/// `export-wallet` v0.7. Internal-key designation (NUMS vs key-path key) for
+/// `tr(<internal-key>, multi_a(...))` is deferred to v0.8.
+pub fn taproot_multisig_unsupported_message(name: &str) -> String {
+    format!(
+        "--template <{name}> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts."
+    )
+}
+
+/// SPEC §3: refuse phrase / entropy / xprv / wif subkeys. Pre-`resolve_slots`
+/// fast path — runs on the user-supplied raw slot inputs to short-circuit
+/// before any work. The SPEC-mandated invariant ("validator runs on the
+/// resolved-slot set") is additionally enforced by `validate_watch_only_resolved`
+/// after `bundle::resolve_slots` returns.
 pub(crate) fn validate_watch_only(slots: &[SlotInput]) -> Result<(), ToolkitError> {
     for s in slots {
         if matches!(
@@ -33,6 +46,22 @@ pub(crate) fn validate_watch_only(slots: &[SlotInput]) -> Result<(), ToolkitErro
         ) {
             return Err(ToolkitError::ExportWalletSecretInput);
         }
+    }
+    Ok(())
+}
+
+/// SPEC §3 post-`resolve_slots` invariant — asserts that no resolved slot
+/// carries entropy material. `phrase=` / `entropy=` slots populate
+/// `ResolvedSlot.entropy`; `xprv=` slots are refused upstream by the
+/// pre-resolve fast path before reaching `resolve_slots`. `wif=` slots can
+/// only be supplied at single-sig N=1 in the slot grammar but populate
+/// `ResolvedSlot.entropy` with the wif marker; the pre-resolve check catches
+/// them, this post-resolve check is the SPEC-stated invariant.
+pub(crate) fn validate_watch_only_resolved(
+    resolved: &[ResolvedSlot],
+) -> Result<(), ToolkitError> {
+    if resolved.iter().any(|r| r.entropy.is_some()) {
+        return Err(ToolkitError::ExportWalletSecretInput);
     }
     Ok(())
 }
