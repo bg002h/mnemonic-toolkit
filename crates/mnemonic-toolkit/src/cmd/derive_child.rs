@@ -27,10 +27,12 @@ pub struct DeriveChildArgs {
     pub application: String,
 
     /// Per-app `--length` validator (range varies; see SPEC §4).
-    /// Required at clap level for grammar-uniformity even for `hd-seed` /
-    /// `xprv` (where supplying any value emits the not-applicable refusal).
-    #[arg(long = "length")]
-    pub length: Option<u32>,
+    /// Required at clap level for grammar-uniformity (SPEC §2). For
+    /// `hd-seed` / `xprv` the value is irrelevant unless non-zero, in which
+    /// case the SPEC §7 not-applicable refusal fires; pass `--length 0` as
+    /// the sentinel to satisfy clap without triggering the refusal.
+    #[arg(long = "length", required = true)]
+    pub length: u32,
 
     /// Hardened child index (`0..2^31`).
     #[arg(long = "index", required = true)]
@@ -67,15 +69,13 @@ pub fn run<W: Write, E: Write>(
 
     // SPEC §5 + §7 — out-of-scope apps surface byte-exact refusal here.
     match args.application.as_str() {
-        "rsa" => return Err(ToolkitError::DeriveChildUnsupportedApp("rsa")),
-        "rsa-gpg" => return Err(ToolkitError::DeriveChildUnsupportedApp("rsa-gpg")),
-        "dice" => return Err(ToolkitError::DeriveChildUnsupportedApp("dice")),
+        "rsa" | "rsa-gpg" | "dice" => return Err(ToolkitError::DeriveChildUnsupportedApp),
         _ => {}
     }
 
     let output = match args.application.as_str() {
         "bip39" => {
-            let words = require_length(args, "bip39")?;
+            let words = args.length;
             if !matches!(words, 12 | 15 | 18 | 21 | 24) {
                 return Err(ToolkitError::DeriveChildLengthOutOfRange {
                     app: "bip39",
@@ -87,15 +87,15 @@ pub fn run<W: Write, E: Write>(
             bip85::format_bip39_phrase(&master, 0, words, args.index)?
         }
         "hd-seed" => {
-            reject_length(args, "hd-seed")?;
+            reject_length(args.length)?;
             bip85::format_hd_seed_wif(&master, args.index)?
         }
         "xprv" => {
-            reject_length(args, "xprv")?;
+            reject_length(args.length)?;
             bip85::format_xprv_child(&master, args.index)?
         }
         "hex" => {
-            let n = require_length(args, "hex")?;
+            let n = args.length;
             if !(16..=64).contains(&n) {
                 return Err(ToolkitError::DeriveChildLengthOutOfRange {
                     app: "hex",
@@ -106,7 +106,7 @@ pub fn run<W: Write, E: Write>(
             bip85::format_hex_bytes(&master, n, args.index)?
         }
         "password-base64" => {
-            let n = require_length(args, "password-base64")?;
+            let n = args.length;
             if !(20..=86).contains(&n) {
                 return Err(ToolkitError::DeriveChildLengthOutOfRange {
                     app: "password-base64",
@@ -117,7 +117,7 @@ pub fn run<W: Write, E: Write>(
             bip85::format_password_base64(&master, n, args.index)?
         }
         "password-base85" => {
-            let n = require_length(args, "password-base85")?;
+            let n = args.length;
             if !(10..=80).contains(&n) {
                 return Err(ToolkitError::DeriveChildLengthOutOfRange {
                     app: "password-base85",
@@ -145,17 +145,11 @@ pub fn run<W: Write, E: Write>(
     Ok(())
 }
 
-fn require_length(args: &DeriveChildArgs, app: &'static str) -> Result<u32, ToolkitError> {
-    args.length.ok_or_else(|| {
-        ToolkitError::BadInput(format!(
-            "derive-child: --length is required for --application {app}"
-        ))
-    })
-}
-
-fn reject_length(args: &DeriveChildArgs, app: &'static str) -> Result<(), ToolkitError> {
-    if args.length.is_some() {
-        return Err(ToolkitError::DeriveChildLengthNotApplicable(app));
+/// SPEC §7 — `hd-seed` / `xprv` ignore `--length 0` (sentinel for grammar-
+/// uniformity); any non-zero value triggers the not-applicable refusal.
+fn reject_length(length: u32) -> Result<(), ToolkitError> {
+    if length != 0 {
+        return Err(ToolkitError::DeriveChildLengthNotApplicable);
     }
     Ok(())
 }

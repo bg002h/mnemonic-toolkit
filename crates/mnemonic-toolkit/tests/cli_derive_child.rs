@@ -69,13 +69,18 @@ fn cell_2_bip39_18_words_reference_vector() {
         stdout,
         "near account window bike charge season chef number sketch tomorrow excuse sniff circle vital hockey outdoor supply token\n",
     );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC §6 cell 3 — BIP-85 HD-Seed WIF reference vector.
 /// Path m/83696968'/2'/0' → WIF Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp.
-/// `--length` MUST be supplied for grammar-uniformity but is ignored at
-/// validation; supplying any value triggers the not-applicable refusal,
-/// so we use a sentinel `0`.
+/// `--length` is required at clap level for SPEC §2 grammar-uniformity but
+/// ignored at validation when `0` (the sentinel); any non-zero value
+/// triggers the SPEC §7 not-applicable refusal (cell 9).
 #[test]
 fn cell_3_hd_seed_wif_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
@@ -86,6 +91,8 @@ fn cell_3_hd_seed_wif_reference_vector() {
             &format!("xprv={MASTER_XPRV}"),
             "--application",
             "hd-seed",
+            "--length",
+            "0",
             "--index",
             "0",
         ])
@@ -96,10 +103,15 @@ fn cell_3_hd_seed_wif_reference_vector() {
         stdout,
         "Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp\n",
     );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC §6 cell 4 — BIP-85 XPRV reference vector.
-/// Path m/83696968'/32'/0'.
+/// Path m/83696968'/32'/0'. `--length 0` sentinel per SPEC §2 (see cell 3).
 #[test]
 fn cell_4_xprv_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
@@ -110,6 +122,8 @@ fn cell_4_xprv_reference_vector() {
             &format!("xprv={MASTER_XPRV}"),
             "--application",
             "xprv",
+            "--length",
+            "0",
             "--index",
             "0",
         ])
@@ -119,6 +133,11 @@ fn cell_4_xprv_reference_vector() {
     assert_eq!(
         stdout,
         "xprv9s21ZrQH143K2srSbCSg4m4kLvPMzcWydgmKEnMmoZUurYuBuYG46c6P71UGXMzmriLzCCBvKQWBUv3vPB3m1SATMhp3uEjXHJ42jFg7myX\n",
+    );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
     );
 }
 
@@ -146,6 +165,11 @@ fn cell_5_hex_reference_vector() {
         stdout,
         "492db4698cf3b73a5a24998aa3e9d7fa96275d85724a91e71aa2d645442f878555d078fd1f1f67e368976f04137b1f7a0d19232136ca50c44614af72b5582a5c\n",
     );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC §6 cell 6a — BIP-85 PWD BASE64 reference vector.
@@ -169,6 +193,11 @@ fn cell_6a_pwd_base64_reference_vector() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, "dKLoepugzdVJvdL56ogNV\n");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC §6 cell 6b — BIP-85 PWD BASE85 reference vector.
@@ -192,6 +221,11 @@ fn cell_6b_pwd_base85_reference_vector() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, "_s`{TW89)i4`\n");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
 }
 
 /// SPEC §7 — refusal: --application rsa is out-of-scope for v0.7. Byte-exact stderr.
@@ -214,12 +248,10 @@ fn cell_7_unsupported_application_rsa_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains(
-            "error: --application <rsa|rsa-gpg|dice> is out-of-scope for v0.7 \
-             (rsa crate not in tree; dice is niche). Tracked for v0.8+."
-        ),
-        "expected SPEC §7 unsupported-app refusal; got: {stderr:?}"
+    assert_eq!(
+        stderr.trim(),
+        "error: --application <rsa|rsa-gpg|dice> is out-of-scope for v0.7 \
+         (rsa crate not in tree; dice is niche). Tracked for v0.8+.",
     );
 }
 
@@ -243,11 +275,9 @@ fn cell_8_bip39_length_out_of_range_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains(
-            "error: --length 16 out of range for --application bip39 (valid: 12 | 15 | 18 | 21 | 24 words)"
-        ),
-        "expected SPEC §7 bip39 out-of-range refusal; got: {stderr:?}"
+    assert_eq!(
+        stderr.trim(),
+        "error: --length 16 out of range for --application bip39 (valid: 12 | 15 | 18 | 21 | 24 words)",
     );
 }
 
@@ -271,10 +301,35 @@ fn cell_9_hd_seed_length_not_applicable_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains(
-            "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
-        ),
-        "expected SPEC §7 not-applicable refusal; got: {stderr:?}"
+    assert_eq!(
+        stderr.trim(),
+        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)",
+    );
+}
+
+/// SPEC §7 — refusal: --length not applicable for xprv (output is fixed-size).
+/// Mirrors cell 9 for the xprv branch of the not-applicable family.
+#[test]
+fn cell_9b_xprv_length_not_applicable_refusal() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "xprv",
+            "--length",
+            "32",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        stderr.trim(),
+        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)",
     );
 }

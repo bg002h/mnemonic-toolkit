@@ -22,7 +22,7 @@ Wired to clap via:
 - `main.rs`: `mod bip85;` declaration + new `Command::DeriveChild(...)` variant + dispatch arm.
 - `error.rs`: 3 new `DeriveChildRefusal` family variants — `DeriveChildUnsupportedApp(&'static str)`, `DeriveChildLengthOutOfRange { app, length, valid_text }`, `DeriveChildLengthNotApplicable(&'static str)`. All exit 2; `kind()` and `message()` arms wired; messages built in-place to match SPEC §7 byte-exact stderr verbatim.
 
-Tests: `crates/mnemonic-toolkit/tests/cli_derive_child.rs` (10 cells — 7 reference vectors + 3 refusals).
+Tests: `crates/mnemonic-toolkit/tests/cli_derive_child.rs` (9 cells — 6 reference vectors with cell 6 split as 6a + 6b + 3 refusals; 10 test functions).
 
 ## SPEC compliance table
 
@@ -110,3 +110,57 @@ mnemonic derive-child --from xprv=xprv9s21ZrQH143K2LBWUUQRFXhucrQqBpKdRRxNVq2zBq
 - Modified: `crates/mnemonic-toolkit/src/cmd/mod.rs` (1 line — `pub mod derive_child;`).
 - Modified: `crates/mnemonic-toolkit/src/main.rs` (3 hunks — `mod bip85;`, `Command::DeriveChild(...)` variant, dispatch arm).
 - Modified: `crates/mnemonic-toolkit/src/error.rs` (3 hunks — variants, exit-code, kind+message).
+
+## Post-review fixes
+
+Two parallel reviewers (spec-compliance + code-quality) ran after `edaa959` and surfaced 3 Important + 3 Lows + 1 Nit. All addressed in a single follow-up commit on master; net effect on tests is 442 → 443 (1 new integration test cell 9b; no regressions).
+
+### I1 (spec-compliance) — `--length` was `Option<u32>` without `required = true`, violating SPEC §2 grammar-uniformity
+
+`crates/mnemonic-toolkit/src/cmd/derive_child.rs:32-33` declared `pub length: Option<u32>` without `required = true`. SPEC §2 mandates: "All four core flags (`--from`, `--application`, `--length`, `--index`) are MANDATORY"; the impl let users omit `--length` on bip39 (yielding `BadInput` exit 1 instead of clap-layer exit 64). Worse, cells 3 and 4 (hd-seed, xprv) reference-vector tests omitted `--length` entirely, masking the bug.
+
+**Fix applied:** changed `pub length: Option<u32>` → `pub length: u32` with `#[arg(long = "length", required = true)]`. Adopted the SPEC §7 `--length 0` sentinel convention for hd-seed/xprv: clap-required `--length` value is irrelevant for fixed-output apps unless non-zero; non-zero values still trigger `DeriveChildLengthNotApplicable`. The `reject_length(length: u32)` helper now operates on the raw u32 and only fires the refusal when `length != 0`. The `require_length` helper was removed (callers read `args.length` directly). Cells 3 and 4 updated to pass `--length 0`; cells 6a + 6b (already in scope) were already passing concrete values. Cell 9 (hd-seed `--length 32`) refusal assertion preserved; new cell 9b mirrors it for xprv (see L2 below).
+
+### I2 (spec-compliance) — secret-on-stdout warning tested for only 1 of 6 reference-vector cells
+
+SPEC §4 last paragraph mandates the warning fires on every successful invocation. Only cell 1 asserted `stderr.contains("warning: secret material on stdout")`.
+
+**Fix applied:** added the same `assert!(stderr.contains("warning: secret material on stdout"), ...)` to cells 2, 3, 4, 5, 6a, 6b. All 6 reference-vector cells now exercise the §4 invariant.
+
+### I3 (code-quality) — cell 3 doc-comment contradicted actual behavior
+
+`tests/cli_derive_child.rs:75-78` doc-comment promised a `--length 0` sentinel that the test did not pass. After I1 (the test now passes `--length 0`), the doc-comment matches the new behavior; rewritten for clarity to reference SPEC §2 grammar-uniformity + §7 sentinel semantics, with cross-link to cell 9 for the non-zero refusal path.
+
+### L1 (spec-compliance) — refusal tests used `contains` instead of `assert_eq!` byte-exact
+
+SPEC §6/§7 require byte-exact stderr. Cells 7 (rsa), 8 (bip39 length out-of-range), 9 (hd-seed length not-applicable) used `assert!(stderr.contains(...))`.
+
+**Fix applied:** all 3 cells now use `assert_eq!(stderr.trim(), "<spec-byte-exact-text>")`. The `.trim()` keeps the assertion robust against trailing newlines from `clap`'s default error formatter; the `<error: ...>` prefix is included verbatim per SPEC §7.
+
+### L2 (code-quality) — new cell 9b mirroring cell 9 for xprv branch
+
+SPEC §7 not-applicable refusal text reads `<hd-seed|xprv>` but only the hd-seed branch was tested. Added `cell_9b_xprv_length_not_applicable_refusal` invoking `--application xprv --length 32`; asserts byte-exact stderr matching SPEC §7 + exit 2.
+
+### L3 (code-quality) — unused `&'static str` payloads dropped
+
+`ToolkitError::DeriveChildUnsupportedApp(&'static str)` and `DeriveChildLengthNotApplicable(&'static str)` payloads were never read (`message()` arms used the SPEC §7 byte-exact text directly; `details()` had no entries). Variants converted to fieldless: `DeriveChildUnsupportedApp` and `DeriveChildLengthNotApplicable`. Updated all match arms in `error.rs` (2 hunks: exit-code + kind + message) and the 3 constructor sites in `cmd/derive_child.rs` (collapsed `rsa | rsa-gpg | dice` arm into single match, and dropped the `app` argument from `reject_length`). `DeriveChildLengthOutOfRange { app, length, valid_text }` keeps its struct payload (used by `message()` formatter).
+
+### N1 — review report test-count wording corrected
+
+Self-review §"Implementation summary" claim "10 cells — 7 reference vectors + 3 refusals" was inconsistent with §6 of the SPEC (9 cells: 6 reference + 3 refusals; cell 6 split as 6a + 6b → 7 reference-vector test functions, 10 total). Reworded to "9 cells — 6 reference vectors with cell 6 split as 6a + 6b + 3 refusals; 10 test functions."
+
+### Verification post-fix
+
+```fish
+cd /scratch/code/shibboleth/mnemonic-toolkit
+cargo build --workspace --tests   # GREEN
+cargo test --workspace --no-fail-fast   # 443 passed / 0 failed / 2 ignored
+                                          # (= 442 baseline + 1 new cell 9b)
+cargo clippy -p mnemonic-toolkit --tests   # pre-existing warnings unchanged;
+                                            # 0 net-new on touched files
+                                            # (cmd/derive_child.rs / error.rs / cli_derive_child.rs)
+```
+
+### Phase 8 SPEC delta to file
+
+- The §2 + §7 grammar-uniformity text "supplying any value emits the refusal" had internal tension with §6 cells 3 + 4 reference-vector cells (which would be unreachable under that strict reading). The implementation adopts a sentinel-0 convention: `--length` is required at clap (§2 grammar-uniformity), the value is ignored for hd-seed/xprv when `0`, and any non-zero value triggers the §7 not-applicable refusal. SPEC text edits deferred to Phase 8 (§2 / §7 sentinel-0 wording clarification).

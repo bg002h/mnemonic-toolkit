@@ -100,9 +100,8 @@ pub enum ToolkitError {
     /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
     ExportWalletTaprootMultisigUnsupported(&'static str),
     /// SPEC_derive_child_v0_7.md §5 / §7 — `--application rsa|rsa-gpg|dice`
-    /// is out-of-scope for v0.7. Exit 2. The `&'static str` payload is the
-    /// offending app value (e.g. `"rsa"`).
-    DeriveChildUnsupportedApp(&'static str),
+    /// is out-of-scope for v0.7. Exit 2.
+    DeriveChildUnsupportedApp,
     /// SPEC_derive_child_v0_7.md §7 — `--length <N>` falls outside the
     /// per-app valid range. Exit 2.
     DeriveChildLengthOutOfRange {
@@ -110,10 +109,9 @@ pub enum ToolkitError {
         length: u32,
         valid_text: &'static str,
     },
-    /// SPEC_derive_child_v0_7.md §4 / §7 — `--length` supplied to an app
-    /// whose output is fixed-size (`hd-seed`, `xprv`). Exit 2. The
-    /// `&'static str` payload is the offending app value.
-    DeriveChildLengthNotApplicable(&'static str),
+    /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
+    /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
+    DeriveChildLengthNotApplicable,
 }
 
 #[derive(Debug)]
@@ -236,9 +234,9 @@ impl ToolkitError {
             | ToolkitError::ExportWalletSecretInput
             | ToolkitError::ExportWalletFormatStub(_)
             | ToolkitError::ExportWalletTaprootMultisigUnsupported(_)
-            | ToolkitError::DeriveChildUnsupportedApp(_)
+            | ToolkitError::DeriveChildUnsupportedApp
             | ToolkitError::DeriveChildLengthOutOfRange { .. }
-            | ToolkitError::DeriveChildLengthNotApplicable(_) => 2,
+            | ToolkitError::DeriveChildLengthNotApplicable => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -278,9 +276,9 @@ impl ToolkitError {
             ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => {
                 "ExportWalletTaprootMultisigUnsupported"
             }
-            ToolkitError::DeriveChildUnsupportedApp(_) => "DeriveChildUnsupportedApp",
+            ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
             ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
-            ToolkitError::DeriveChildLengthNotApplicable(_) => "DeriveChildLengthNotApplicable",
+            ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
         }
     }
 
@@ -335,7 +333,7 @@ impl ToolkitError {
             ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
                 crate::wallet_export::taproot_multisig_unsupported_message(name)
             }
-            ToolkitError::DeriveChildUnsupportedApp(_) => {
+            ToolkitError::DeriveChildUnsupportedApp => {
                 // SPEC_derive_child_v0_7.md §7 byte-exact stderr text.
                 "--application <rsa|rsa-gpg|dice> is out-of-scope for v0.7 \
                  (rsa crate not in tree; dice is niche). Tracked for v0.8+."
@@ -348,7 +346,7 @@ impl ToolkitError {
             } => format!(
                 "--length {length} out of range for --application {app} (valid: {valid_text})",
             ),
-            ToolkitError::DeriveChildLengthNotApplicable(_) => {
+            ToolkitError::DeriveChildLengthNotApplicable => {
                 "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
                     .to_string()
             }
