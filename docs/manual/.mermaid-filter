@@ -1,0 +1,3 @@
+{
+  "puppeteerConfigFile": "/etc/puppeteer-config.json"
+}
