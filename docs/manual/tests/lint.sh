@@ -79,13 +79,16 @@ else
       continue
     fi
     # shellcheck disable=SC2086
-    flags=$(eval $cmd 2>&1 | grep -oE '(^|[^A-Za-z])(--[a-z][a-z0-9-]+)' | grep -oE '\-\-[a-z][a-z0-9-]+' | sort -u || true)
+    flags=$(eval $cmd 2>&1 | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
     if [ -z "$flags" ]; then
       warn "no flags parsed from \`$cmd\`; skipping"
       continue
     fi
     while read -r flag; do
-      if ! grep -qF "$flag" "$chapter"; then
+      # `--` end-of-options marker prevents grep from interpreting the
+      # flag string itself as an option to grep (which causes grep to
+      # spam its --help output and exit non-zero).
+      if ! grep -qF -- "$flag" "$chapter"; then
         err "flag $flag for \`$bin $sub\` is not documented in $(basename "$chapter")"
       fi
     done <<<"$flags"
@@ -111,7 +114,10 @@ step "6/6 index bidirectional"
 INDEX_TABLE="$SRC_DIR/60-appendices/69-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
-  src_terms=$(grep -rohE '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sort -u || true)
+  # The index table file itself is excluded from the source-side scan
+  # (it is the destination, not a source of authored markers, and its
+  # prose may legitimately reference \index{} as documentation).
+  src_terms=$(grep -rohE --exclude='69-index-table.md' '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sort -u || true)
   tbl_terms=$(grep -oE '^\| `[^`]+`' "$INDEX_TABLE" | sed -E 's/^\| `([^`]*)`$/\1/' | sort -u || true)
   while read -r t; do
     [ -z "$t" ] && continue
