@@ -3,6 +3,7 @@
 //! Realizes SPEC §2.1.4 (4 networks + coin-type table) + §4.3 (network/
 //! xpub cross-check via Xpub::network field).
 
+use bitcoin::address::KnownHrp;
 use bitcoin::NetworkKind;
 use clap::ValueEnum;
 
@@ -30,6 +31,17 @@ impl CliNetwork {
         match self {
             CliNetwork::Mainnet => NetworkKind::Main,
             _ => NetworkKind::Test,
+        }
+    }
+
+    /// SPEC v0.7 §10.a — `bitcoin::address::KnownHrp` for bech32/bech32m
+    /// address constructors (`p2wpkh`, `p2tr`). Mainnet → `Mainnet`; testnet
+    /// + signet → `Testnets` (shared `tb1...` HRP); regtest → `Regtest`.
+    pub fn known_hrp(&self) -> KnownHrp {
+        match self {
+            CliNetwork::Mainnet => KnownHrp::Mainnet,
+            CliNetwork::Testnet | CliNetwork::Signet => KnownHrp::Testnets,
+            CliNetwork::Regtest => KnownHrp::Regtest,
         }
     }
 

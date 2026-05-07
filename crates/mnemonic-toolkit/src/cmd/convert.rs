@@ -16,7 +16,7 @@ use bip39::Mnemonic;
 use bitcoin::bip32 as bip32;
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::PrivateKey;
+use bitcoin::{Address, PrivateKey};
 use clap::Args;
 use serde::Serialize;
 use std::io::{Read, Write};
@@ -180,8 +180,52 @@ pub struct ConvertArgs {
     #[arg(long = "electrum-version", value_parser = parse_electrum_version_arg)]
     pub electrum_version: Option<SeedVersion>,
 
+    /// SPEC v0.7 §10.a — script-type selector for `(Xpub, Address)` derivation.
+    /// Values: `p2wpkh | p2sh-p2wpkh | p2tr`. If absent and `--template` is
+    /// supplied, inferred from the template (`bip84` → p2wpkh, `bip49` →
+    /// p2sh-p2wpkh, `bip86` → p2tr); else refused.
+    #[arg(long = "script-type", value_parser = parse_script_type_arg)]
+    pub script_type: Option<ScriptType>,
+
     #[arg(long)]
     pub json: bool,
+}
+
+/// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
+/// Single-sig variants only in v0.7; multisig templates do not infer to a
+/// single-sig script-type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptType {
+    P2wpkh,
+    P2shP2wpkh,
+    P2tr,
+}
+
+pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
+    match s {
+        "p2wpkh" => Ok(ScriptType::P2wpkh),
+        "p2sh-p2wpkh" => Ok(ScriptType::P2shP2wpkh),
+        "p2tr" => Ok(ScriptType::P2tr),
+        _ => Err(format!(
+            "--script-type must be one of: p2wpkh, p2sh-p2wpkh, p2tr; got {:?}",
+            s,
+        )),
+    }
+}
+
+/// SPEC v0.7 §10.a — infer script-type from `--template` when `--script-type`
+/// is absent. Single-sig templates (`bip49` / `bip84` / `bip86`) map cleanly;
+/// `bip44` and any multisig template return None (refused upstream as
+/// `refusal_address_script_type_unknown_template`).
+fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
+    match template {
+        CliTemplate::Bip84 => Some(ScriptType::P2wpkh),
+        CliTemplate::Bip49 => Some(ScriptType::P2shP2wpkh),
+        CliTemplate::Bip86 => Some(ScriptType::P2tr),
+        // Bip44 (P2PKH) is not in the v0.7 single-sig script-type set.
+        // Multisig templates don't reduce to a single-sig script-type.
+        _ => None,
+    }
 }
 
 fn parse_electrum_version_arg(s: &str) -> Result<SeedVersion, String> {
@@ -330,6 +374,31 @@ fn refusal_electrum_invalid_format() -> ToolkitError {
     )
 }
 
+// SPEC v0.7 §10.a / §3.d — Address derivation refusals.
+fn refusal_address_no_path() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--to address requires --path (xpub does not carry an origin path; supply BIP-32 derivation explicitly).".into(),
+    )
+}
+
+fn refusal_address_no_script_type() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--to address requires --script-type <p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
+    )
+}
+
+fn refusal_address_script_type_unknown_template() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--template does not infer a single-sig --script-type for --to address (bip49/bip84/bip86 supported; multisig templates and bip44 require explicit --script-type).".into(),
+    )
+}
+
+fn refusal_address_one_way() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from address is one-way (addresses are hashes; cannot recover xpub or any source material).".into(),
+    )
+}
+
 /// Direct edges supported per SPEC §2.
 /// Used as the negative-space check for the catch-all refusal: any (from, to)
 /// NOT in this set is a one-way barrier.
@@ -367,6 +436,9 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (MiniKey, Wif)       // SPEC v0.7 §13 — Casascius mini-key decode (one-way)
             | (ElectrumPhrase, Entropy) // SPEC v0.7 §14 — Electrum seed decode
             | (Entropy, ElectrumPhrase) // SPEC v0.7 §14 — Electrum seed encode
+            | (Xpub, Address)      // SPEC v0.7 §10.a — address derivation (one-way)
+            | (Phrase, Address)    // SPEC v0.7 §10.a — composite via leaf xpriv
+            | (Entropy, Address)   // SPEC v0.7 §10.a — composite via leaf xpriv
     )
 }
 
@@ -377,6 +449,11 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
     // §3.d v0.7 — BIP-38 identity-pivot refusal.
     if from == Bip38 && to == Bip38 {
         return Some(refusal_bip38_identity());
+    }
+
+    // §3.d v0.7 — `address → *` is one-way (addresses are hashes; no preimage).
+    if from == Address {
+        return Some(refusal_address_one_way());
     }
 
     // §3.d v0.7 — `* → minikey` is one-way (typo-checksum requires brute-force).
@@ -743,7 +820,27 @@ fn compute_outputs(
                         electrum::entropy_to_phrase(&entropy, version)
                             .map_err(map_electrum_error)?
                     }
-                    Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
+                    Address => {
+                        // SPEC v0.7 §10.a — composite phrase/entropy → address.
+                        // `--path` is mandatory and applied from MASTER (NOT
+                        // relative to a template-derived account xpub), matching
+                        // the semantics of the `phrase|entropy → wif` edge:
+                        // the user supplies a path that derives directly to the
+                        // leaf pubkey. `--script-type` (or `--template`-inferred)
+                        // selects the address dispatch.
+                        let path_str = args
+                            .path
+                            .as_deref()
+                            .ok_or_else(refusal_address_no_path)?;
+                        let path = bip32::DerivationPath::from_str(path_str)
+                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let script_type = resolve_script_type(args)?;
+                        let leaf_xpriv = derive_bip32_at_path(
+                            &entropy, passphrase, language, network, &path,
+                        )?;
+                        let leaf_xpub = bip32::Xpub::from_priv(&secp, &leaf_xpriv);
+                        build_address_from_xpub(&secp, &leaf_xpub, script_type, network)
+                    }
                 };
                 out.push((t, v));
             }
@@ -782,6 +879,20 @@ fn compute_outputs(
                     // emit is the neutral xpub/tpub; any --xpub-prefix swap
                     // happens in run() after compute_outputs.
                     Xpub => xpub.to_string(),
+                    Address => {
+                        // SPEC v0.7 §10.a — derive child xpub at --path,
+                        // build address per --script-type. Network is
+                        // inferred from the xpub when --network is absent.
+                        let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
+                        let path = bip32::DerivationPath::from_str(path_str)
+                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let script_type = resolve_script_type(args)?;
+                        let child = xpub
+                            .derive_pub(&secp, &path)
+                            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+                        let net = args.network.unwrap_or_else(|| network_from_xpub(&xpub));
+                        build_address_from_xpub(&secp, &child, script_type, net)
+                    }
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
                             "--from xpub --to {} is not a defined edge",
@@ -969,7 +1080,7 @@ fn compute_outputs(
             }
             Ok((out, None))
         }
-        Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
+        Address => unreachable!("classify_edge intercepts (Address, *) as one-way"),
     }
 }
 
@@ -987,4 +1098,49 @@ fn map_bip38_error(e: bip38::Error) -> ToolkitError {
 /// Electrum native seed."
 fn map_electrum_error(_e: electrum::ElectrumError) -> ToolkitError {
     refusal_electrum_invalid_format()
+}
+
+/// SPEC v0.7 §10.a — resolve the `--script-type` from explicit flag, then
+/// `--template` inference, then refuse. Callers reach this only on the
+/// `(*, Address)` edge where the resolved type is mandatory.
+fn resolve_script_type(args: &ConvertArgs) -> Result<ScriptType, ToolkitError> {
+    if let Some(st) = args.script_type {
+        return Ok(st);
+    }
+    if let Some(template) = args.template {
+        return script_type_from_template(template)
+            .ok_or_else(refusal_address_script_type_unknown_template);
+    }
+    Err(refusal_address_no_script_type())
+}
+
+/// SPEC v0.7 §10.a — render an address from a child xpub (already derived to
+/// the leaf path) per the requested script-type and network.
+fn build_address_from_xpub<C: bitcoin::secp256k1::Verification>(
+    secp: &Secp256k1<C>,
+    child: &bip32::Xpub,
+    script_type: ScriptType,
+    network: CliNetwork,
+) -> String {
+    match script_type {
+        ScriptType::P2wpkh => Address::p2wpkh(&child.to_pub(), network.known_hrp()).to_string(),
+        ScriptType::P2shP2wpkh => {
+            Address::p2shwpkh(&child.to_pub(), network.network_kind()).to_string()
+        }
+        ScriptType::P2tr => {
+            Address::p2tr(secp, child.to_x_only_pub(), None, network.known_hrp()).to_string()
+        }
+    }
+}
+
+/// SPEC v0.7 §10.a — infer `CliNetwork` from a parsed `Xpub` when `--network`
+/// is absent. `NetworkKind::Test` collapses testnet / signet / regtest into
+/// `Testnet` (the bech32 HRP `tb1...` is shared; signet/regtest disambiguation
+/// is not encoded in the version-byte prefix). `--network` overrides this when
+/// supplied.
+fn network_from_xpub(xpub: &bip32::Xpub) -> CliNetwork {
+    match xpub.network {
+        bitcoin::NetworkKind::Main => CliNetwork::Mainnet,
+        bitcoin::NetworkKind::Test => CliNetwork::Testnet,
+    }
 }
