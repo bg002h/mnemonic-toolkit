@@ -363,7 +363,7 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | BIP-38 | 9 | 4 | 2 (Phase 3) | 4 (EC-mult) | 0 |
 | BIP-39 | 24 | 6 | 18 (carry over to v0.8) | 0 | 0 |
 | BIP-44 | 0 | — | — | — | examples-only, no vectors |
-| BIP-49 | 2 | 2 | 0 | 0 | 2 (no mainnet) |
+| BIP-49 | 4 | 2 | 0 | 0 | 2 (no mainnet) |
 | BIP-84 | 4 | 4 | 0 | 0 | 1 (no testnet) |
 | BIP-85 | 9 | 7 | 1 (Phase 1: 85.3) | 1 (DICE 85.9) | 0 |
 | BIP-86 | 4 | 4 | 0 | 0 | 0 |
