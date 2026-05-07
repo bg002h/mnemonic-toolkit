@@ -71,7 +71,7 @@ fn main() -> ExitCode {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
         }
         Command::DeriveChild(args) => {
-            cmd::derive_child::run(args, stdout, stderr).map(|_| 0)
+            cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
         }
     };
 

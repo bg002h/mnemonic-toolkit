@@ -333,3 +333,287 @@ fn cell_9b_xprv_length_not_applicable_refusal() {
         "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)",
     );
 }
+
+// ============================================================================
+// SPEC v0.8 §3 — Item #5: phrase-master input
+// ============================================================================
+
+/// Trezor's canonical zero-entropy 12-word mnemonic. Self-consistency test
+/// below derives the corresponding master xprv in-test and uses it to cross-
+/// validate `--from phrase=` against `--from xprv=`.
+const ZERO_PHRASE: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+/// Compute the mainnet master xprv for `phrase` + `passphrase` extension,
+/// matching what `derive-child --from phrase=` does internally.
+fn master_xprv_for(phrase: &str, passphrase: &str) -> String {
+    use bip39::{Language, Mnemonic};
+    use bitcoin::bip32::Xpriv;
+    use bitcoin::NetworkKind;
+    let mnemonic = Mnemonic::parse_in(Language::English, phrase).unwrap();
+    let seed = mnemonic.to_seed(passphrase);
+    Xpriv::new_master(NetworkKind::Main, &seed).unwrap().to_string()
+}
+
+#[test]
+fn phrase_master_matches_xprv_master_bip39_12_words() {
+    // Compute the xprv from the phrase, then derive from BOTH `xprv=` and
+    // `phrase=` and assert outputs match. Cross-validates that derive-child
+    // performs the phrase → master conversion identically to the reference.
+    let derived_xprv = master_xprv_for(ZERO_PHRASE, "");
+
+    let from_xprv = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={derived_xprv}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let from_phrase = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("phrase={ZERO_PHRASE}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8(from_xprv.get_output().stdout.clone()).unwrap(),
+        String::from_utf8(from_phrase.get_output().stdout.clone()).unwrap(),
+    );
+}
+
+#[test]
+fn phrase_master_with_passphrase_diverges_from_empty_extension() {
+    // Different BIP-39 extensions ⇒ different master xprvs ⇒ different outputs.
+    let no_pass = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("phrase={ZERO_PHRASE}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let with_pass = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("phrase={ZERO_PHRASE}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+            "--passphrase",
+            "extension",
+        ])
+        .assert()
+        .success();
+    assert_ne!(
+        String::from_utf8(no_pass.get_output().stdout.clone()).unwrap(),
+        String::from_utf8(with_pass.get_output().stdout.clone()).unwrap(),
+    );
+}
+
+// ============================================================================
+// SPEC v0.8 §4 — Item #6: BIP-85 language code dispatch
+// ============================================================================
+
+/// SPEC v0.8 §4 — `--language japanese` selects BIP-85 language code 1 +
+/// the Japanese wordlist. Output should be a Japanese-wordlist phrase
+/// distinct from the English default for the same master + index.
+#[test]
+fn bip39_japanese_diverges_from_english() {
+    let english = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let japanese = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+            "--language",
+            "japanese",
+        ])
+        .assert()
+        .success();
+    let en_out = String::from_utf8(english.get_output().stdout.clone()).unwrap();
+    let ja_out = String::from_utf8(japanese.get_output().stdout.clone()).unwrap();
+    assert_ne!(en_out, ja_out);
+    // Sanity check that Japanese output is in fact non-ASCII.
+    assert!(!ja_out.is_ascii(), "expected non-ASCII Japanese output; got {ja_out:?}");
+}
+
+#[test]
+fn bip39_portuguese_refused_no_bip85_code() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+            "--language",
+            "portuguese",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("portuguese is not assigned a BIP-85 path code"),
+        "stderr did not mention BIP-85 code refusal: {stderr:?}",
+    );
+}
+
+// ============================================================================
+// SPEC v0.8 §4 — Item #7: testnet network emission
+// ============================================================================
+
+/// SPEC v0.8 §4 — `--network testnet` emits hd-seed WIF with `c…` prefix
+/// (testnet compressed) instead of the mainnet `K…`/`L…` prefix.
+#[test]
+fn hd_seed_wif_testnet_prefix() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "hd-seed",
+            "--length",
+            "0",
+            "--index",
+            "0",
+            "--network",
+            "testnet",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let wif = stdout.trim();
+    assert!(
+        wif.starts_with('c'),
+        "testnet WIF must start with 'c'; got {wif:?}",
+    );
+}
+
+#[test]
+fn xprv_child_testnet_prefix() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "xprv",
+            "--length",
+            "0",
+            "--index",
+            "0",
+            "--network",
+            "testnet",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let xprv = stdout.trim();
+    assert!(
+        xprv.starts_with("tprv"),
+        "testnet xprv must start with 'tprv'; got {xprv:?}",
+    );
+}
+
+// ============================================================================
+// SPEC v0.8 §3 — Item #8: stdin master xprv
+// ============================================================================
+
+/// SPEC v0.8 §3 — `--from xprv=-` reads the master from stdin.
+#[test]
+fn xprv_from_stdin_matches_argv_master() {
+    let from_argv = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let from_stdin = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            "xprv=-",
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .write_stdin(MASTER_XPRV.as_bytes())
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8(from_argv.get_output().stdout.clone()).unwrap(),
+        String::from_utf8(from_stdin.get_output().stdout.clone()).unwrap(),
+    );
+}

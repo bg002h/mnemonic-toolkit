@@ -11,6 +11,7 @@ use bip39::Mnemonic;
 use bitcoin::bip32::{ChildNumber, DerivationPath, Xpriv};
 use bitcoin::hashes::{sha512, Hash, HashEngine, Hmac, HmacEngine};
 use bitcoin::secp256k1::Secp256k1;
+use bitcoin::NetworkKind;
 
 /// BIP-85 §"Specification" — derive 64 bytes of entropy from a master xprv
 /// at path `m/83696968'/<app_code>'/<app_params...>'/<index>'`, then
@@ -52,19 +53,23 @@ fn hardened(n: u32) -> Result<ChildNumber, ToolkitError> {
 // ============================================================================
 
 /// SPEC §4 — BIP-39 entropy → mnemonic. `words` must be one of 12/15/18/21/24.
-/// Path m/83696968'/39'/<language>'/<words>'/<index>'.
-/// v0.7 supports English only (language code 0); SPEC §4 carry-over.
+/// Path m/83696968'/39'/<language_code>'/<words>'/<index>'.
+/// `language_code` indexes the BIP-85 path tree (per BIP-85 §"Language Codes");
+/// `language` is the matching `bip39::Language` for wordlist selection. Caller
+/// is responsible for keeping the two consistent (see
+/// `crate::cmd::derive_child::resolve_bip85_language`).
 pub(crate) fn format_bip39_phrase(
     master: &Xpriv,
     language_code: u32,
+    language: bip39::Language,
     words: u32,
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 39, &[language_code, words], index)?;
     // BIP-39 entropy bytes = words * 4 / 3 (12→16, 15→20, 18→24, 21→28, 24→32).
     let bytes: usize = (words as usize) * 4 / 3;
-    let mnemonic = Mnemonic::from_entropy_in(bip39::Language::English, &entropy[..bytes])
-        .map_err(ToolkitError::Bip39)?;
+    let mnemonic =
+        Mnemonic::from_entropy_in(language, &entropy[..bytes]).map_err(ToolkitError::Bip39)?;
     Ok(mnemonic.to_string())
 }
 
@@ -75,16 +80,20 @@ pub(crate) fn format_bip39_phrase(
 /// SPEC §4 — HD-Seed WIF. Path m/83696968'/2'/<index>'.
 /// Output is a WIF-encoded 32-byte privkey from the FIRST 32 bytes of the
 /// 64-byte entropy (BIP-85 reference impl convention; verified against
-/// BIP-85 §"Test Vectors" for index 0 producing
+/// BIP-85 §"Test Vectors" for index 0 + mainnet producing
 /// `Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp`).
-pub(crate) fn format_hd_seed_wif(master: &Xpriv, index: u32) -> Result<String, ToolkitError> {
+/// `network` selects the WIF prefix (`K…`/`L…` mainnet vs `c…` testnet).
+pub(crate) fn format_hd_seed_wif(
+    master: &Xpriv,
+    index: u32,
+    network: NetworkKind,
+) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 2, &[], index)?;
     let inner = bitcoin::secp256k1::SecretKey::from_slice(&entropy[..32])
         .map_err(|e| ToolkitError::BadInput(format!("BIP-85 hd-seed scalar parse: {e}")))?;
     let pk = bitcoin::PrivateKey {
         compressed: true,
-        // BIP-85 §"Test Vectors" pin the WIF on mainnet (`K...` prefix).
-        network: bitcoin::NetworkKind::Main,
+        network,
         inner,
     };
     Ok(pk.to_wif())
@@ -96,14 +105,18 @@ pub(crate) fn format_hd_seed_wif(master: &Xpriv, index: u32) -> Result<String, T
 
 /// SPEC §4 — Child xprv. Path m/83696968'/32'/<index>'.
 /// First 32 bytes = chain code, last 32 bytes = privkey (BIP-85 §"XPRV").
-pub(crate) fn format_xprv_child(master: &Xpriv, index: u32) -> Result<String, ToolkitError> {
+/// `network` selects the prefix (`xprv…` mainnet vs `tprv…` testnet).
+pub(crate) fn format_xprv_child(
+    master: &Xpriv,
+    index: u32,
+    network: NetworkKind,
+) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 32, &[], index)?;
     let chain_code = bitcoin::bip32::ChainCode::from(<[u8; 32]>::try_from(&entropy[..32]).unwrap());
     let inner = bitcoin::secp256k1::SecretKey::from_slice(&entropy[32..])
         .map_err(|e| ToolkitError::BadInput(format!("BIP-85 xprv scalar parse: {e}")))?;
     let xprv = Xpriv {
-        // BIP-85 §"Test Vectors" pin xprv on mainnet (`xprv9s21...`).
-        network: bitcoin::NetworkKind::Main,
+        network,
         depth: 0,
         parent_fingerprint: bitcoin::bip32::Fingerprint::default(),
         child_number: ChildNumber::Normal { index: 0 },

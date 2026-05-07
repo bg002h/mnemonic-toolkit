@@ -151,41 +151,86 @@ fn decrypt_bip38_to_wif_vector4_compressed() {
 // SPEC_V5: vector 5 (compression, Satoshi passphrase).
 // ============================================================================
 
-// SPEC_V3 (BIP-38 vector 3) is `#[ignore]`'d: the spec passphrase contains
-// U+0000 (NULL), which POSIX/argv do not permit in command-line arguments.
-// The `--passphrase=-` stdin sentinel is also unsuitable here because
-// `read_stdin_to_string` applies `.trim()`. v0.8 FOLLOWUP
-// `bip38-spec-vector-3-null-byte-passphrase` tracks exposing a NULL-safe
-// input channel (raw stdin bytes via `--passphrase-bytes-hex` or similar).
-// Cite-only entries below preserve the source URL for matrix completeness.
+// SPEC v0.8 §5.a — BIP-38 V3 spec vector now passes via `--passphrase-stdin`.
+// The V3 passphrase contains U+0000 (NULL), which POSIX argv cannot carry,
+// so v0.7 marked these tests `#[ignore]`. v0.8 introduces `--passphrase-stdin`
+// which reads raw stdin bytes (preserving NULL); the BIP-38 crate then NFC-
+// normalizes per spec.
 #[test]
-#[ignore = "BIP-38 V3 passphrase contains U+0000; not representable via argv (FOLLOWUP bip38-spec-vector-3-null-byte-passphrase)"]
-fn encrypt_wif_to_bip38_spec_vector3_unicode_nfc_passphrase() {
-    let out = convert_value(&[
-        "convert",
-        "--from",
-        &format!("wif={SPEC_V4_WIF}"),
-        "--to",
-        "bip38",
-        "--passphrase",
-        SPEC_V4_PASS,
-    ]);
-    assert_eq!(out, SPEC_V4_BIP38);
+fn encrypt_wif_to_bip38_spec_vector3_unicode_nfc_passphrase_via_stdin() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("wif={SPEC_V4_WIF}"),
+            "--to",
+            "bip38",
+            "--passphrase-stdin",
+        ])
+        .write_stdin(SPEC_V4_PASS.as_bytes())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let line = stdout.trim();
+    let colon = line.find(": ").unwrap();
+    assert_eq!(&line[colon + 2..], SPEC_V4_BIP38);
 }
 
 #[test]
-#[ignore = "BIP-38 V3 passphrase contains U+0000; not representable via argv (FOLLOWUP bip38-spec-vector-3-null-byte-passphrase)"]
-fn decrypt_bip38_to_wif_spec_vector3_unicode_nfc_passphrase() {
-    let out = convert_value(&[
+fn decrypt_bip38_to_wif_spec_vector3_unicode_nfc_passphrase_via_stdin() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("bip38={SPEC_V4_BIP38}"),
+            "--to",
+            "wif",
+            "--passphrase-stdin",
+        ])
+        .write_stdin(SPEC_V4_PASS.as_bytes())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let line = stdout.trim();
+    let colon = line.find(": ").unwrap();
+    assert_eq!(&line[colon + 2..], SPEC_V4_WIF);
+}
+
+/// SPEC v0.8 §5.a — `--passphrase-stdin` preserves leading and trailing
+/// non-newline whitespace (only a single trailing `\r?\n` line-ending is
+/// stripped). Without this guarantee a passphrase containing intentional
+/// spaces would be silently mangled.
+#[test]
+fn passphrase_stdin_preserves_internal_whitespace() {
+    const PADDED_PASS: &str = " padded ";
+    let bip38 = convert_value(&[
         "convert",
         "--from",
-        &format!("bip38={SPEC_V4_BIP38}"),
+        &format!("wif={V1_WIF}"),
         "--to",
-        "wif",
+        "bip38",
         "--passphrase",
-        SPEC_V4_PASS,
+        PADDED_PASS,
     ]);
-    assert_eq!(out, SPEC_V4_WIF);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("bip38={bip38}"),
+            "--to",
+            "wif",
+            "--passphrase-stdin",
+        ])
+        .write_stdin(format!("{PADDED_PASS}\n").into_bytes())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let line = stdout.trim();
+    let colon = line.find(": ").unwrap();
+    assert_eq!(&line[colon + 2..], V1_WIF);
 }
 
 #[test]
@@ -332,7 +377,7 @@ fn refusal_wif_to_bip38_no_passphrase() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase (BIP-38 encryption is passphrase-driven).\n"
+        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"
     );
 }
 
@@ -353,7 +398,7 @@ fn refusal_bip38_to_wif_no_passphrase() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase (BIP-38 encryption is passphrase-driven).\n"
+        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"
     );
 }
 
@@ -412,6 +457,10 @@ fn composite_phrase_to_bip38_via_wif() {
     // Trezor zero-entropy 12-word phrase, BIP-84 derivation path m/84'/0'/0'/0/0,
     // mainnet. The same phrase + path drives a deterministic WIF; we verify
     // that the BIP-38 decrypt of the emitted ciphertext recovers that WIF.
+    //
+    // SPEC v0.8 §12.b: composite arm uses TWO passphrases — `--passphrase`
+    // for BIP-39 PBKDF2 + `--bip38-passphrase` for BIP-38 Scrypt. Here we
+    // pass an empty PBKDF2 (no `--passphrase`) and a Scrypt passphrase only.
     const PHRASE: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const BIP38_PASS: &str = "encrypt-pass-12345";
@@ -424,13 +473,14 @@ fn composite_phrase_to_bip38_via_wif() {
         "bip38",
         "--path",
         "m/84'/0'/0'/0/0",
-        "--passphrase",
+        "--bip38-passphrase",
         BIP38_PASS,
     ]);
     assert!(bip38_out.starts_with("6P"), "BIP-38 ciphertext must start with 6P; got {bip38_out:?}");
 
     // Verify by decrypting back; the recovered WIF must match the direct
-    // phrase → wif path with the same passphrase.
+    // phrase → wif path with NO mnemonic extension (we did not pass
+    // `--passphrase` on encrypt).
     let direct_wif = convert_value(&[
         "convert",
         "--from",
@@ -439,8 +489,6 @@ fn composite_phrase_to_bip38_via_wif() {
         "wif",
         "--path",
         "m/84'/0'/0'/0/0",
-        "--passphrase",
-        BIP38_PASS,
     ]);
     let recovered_wif = convert_value(&[
         "convert",
@@ -448,7 +496,7 @@ fn composite_phrase_to_bip38_via_wif() {
         &format!("bip38={bip38_out}"),
         "--to",
         "wif",
-        "--passphrase",
+        "--bip38-passphrase",
         BIP38_PASS,
     ]);
     assert_eq!(recovered_wif, direct_wif);
@@ -461,6 +509,8 @@ fn composite_entropy_to_bip38_via_wif() {
     // derivation path m/84'/0'/0'/0/0, mainnet. Mirrors
     // `composite_phrase_to_bip38_via_wif` but exercises the (Entropy, Bip38)
     // arm end-to-end via the CLI.
+    //
+    // SPEC v0.8 §12.b: same separate-passphrase semantics as the phrase variant.
     const ENTROPY: &str = "00000000000000000000000000000000";
     const BIP38_PASS: &str = "TestingOneTwoThree";
 
@@ -472,7 +522,7 @@ fn composite_entropy_to_bip38_via_wif() {
         "bip38",
         "--path",
         "m/84'/0'/0'/0/0",
-        "--passphrase",
+        "--bip38-passphrase",
         BIP38_PASS,
     ]);
     assert!(
@@ -481,7 +531,7 @@ fn composite_entropy_to_bip38_via_wif() {
     );
 
     // Decrypt back; recovered WIF must match the direct entropy → wif path
-    // with the same passphrase (dual-purpose --passphrase, SPEC §12.b).
+    // with no mnemonic extension.
     let direct_wif = convert_value(&[
         "convert",
         "--from",
@@ -490,8 +540,6 @@ fn composite_entropy_to_bip38_via_wif() {
         "wif",
         "--path",
         "m/84'/0'/0'/0/0",
-        "--passphrase",
-        BIP38_PASS,
     ]);
     let recovered_wif = convert_value(&[
         "convert",
@@ -499,32 +547,31 @@ fn composite_entropy_to_bip38_via_wif() {
         &format!("bip38={bip38_out}"),
         "--to",
         "wif",
-        "--passphrase",
+        "--bip38-passphrase",
         BIP38_PASS,
     ]);
     assert_eq!(recovered_wif, direct_wif);
 }
 
 // ============================================================================
-// Dual-passphrase semantics (SPEC §12.b) — cross-check
+// SPEC v0.8 §12.b — composite-edge BREAKING change: --passphrase and
+// --bip38-passphrase are independent inputs (no fallback on composite arm).
 // ============================================================================
 
 #[test]
-fn composite_phrase_to_bip38_dual_passphrase_semantics_pinned() {
-    // SPEC §12.b: in `phrase → wif → bip38`, --passphrase serves a DUAL
-    // purpose: BIP-39 mnemonic extension AND BIP-38 Scrypt key. This test
-    // pins that behavior — decrypting a `phrase → bip38 --passphrase X`
-    // output yields the WIF derived from the phrase WITH X as mnemonic
-    // extension (WIF_B), NOT the WIF derived without an extension (WIF_A).
-    //
-    // If a future refactor splits the two channels (FOLLOWUP
-    // `bip38-distinct-passphrase-flag`), this test must be updated.
+fn composite_phrase_to_bip38_separate_passphrase_semantics_pinned() {
+    // SPEC v0.8 §12.b BREAKING from v0.7: on `phrase → wif → bip38`,
+    // `--passphrase X` drives ONLY the BIP-39 PBKDF2 leg; the BIP-38 Scrypt
+    // leg uses `""` unless `--bip38-passphrase Y` is supplied. Decrypting
+    // `phrase → bip38 --passphrase X` therefore requires the EMPTY Scrypt
+    // passphrase, and the recovered WIF equals the WIF derived from the
+    // phrase WITH X as mnemonic extension.
     const PHRASE: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const PATH: &str = "m/84'/0'/0'/0/0";
-    const X: &str = "dual-purpose-passphrase";
+    const X: &str = "ext-only-passphrase";
 
-    // WIF_A: phrase → wif with EMPTY mnemonic extension.
+    // WIF_A: phrase → wif with NO mnemonic extension.
     let wif_a = convert_value(&[
         "convert",
         "--from",
@@ -553,7 +600,8 @@ fn composite_phrase_to_bip38_dual_passphrase_semantics_pinned() {
         "BIP-39 extension must change derived WIF; if these are equal, the test setup is wrong"
     );
 
-    // BIP38_C: phrase → bip38 with --passphrase X (composite arm).
+    // BIP38_C: phrase → bip38 with --passphrase X only (composite arm,
+    // no --bip38-passphrase).
     let bip38_c = convert_value(&[
         "convert",
         "--from",
@@ -566,25 +614,104 @@ fn composite_phrase_to_bip38_dual_passphrase_semantics_pinned() {
         X,
     ]);
 
-    // Decrypt BIP38_C with X.
+    // Decrypt BIP38_C with EMPTY Scrypt passphrase (SPEC v0.8 §12.b
+    // requires explicit `--bip38-passphrase ""` to use empty; on direct
+    // (Bip38, Wif) the fallback to --passphrase still applies, so we need
+    // to pass an explicit empty `--bip38-passphrase`).
     let recovered = convert_value(&[
         "convert",
         "--from",
         &format!("bip38={bip38_c}"),
         "--to",
         "wif",
+        "--bip38-passphrase",
+        "",
+    ]);
+
+    // Per SPEC v0.8 §12.b: recovered must equal WIF_B (X applied to PBKDF2
+    // only), NOT WIF_A (which would imply X bypassed PBKDF2 entirely).
+    assert_eq!(
+        recovered, wif_b,
+        "SPEC v0.8 §12.b — composite --passphrase MUST drive PBKDF2 leg",
+    );
+    assert_ne!(
+        recovered, wif_a,
+        "SPEC v0.8 §12.b — composite --passphrase MUST NOT be ignored",
+    );
+}
+
+#[test]
+fn composite_phrase_to_bip38_independent_passphrases() {
+    // SPEC v0.8 §12.b — verify --passphrase and --bip38-passphrase route
+    // independently: PBKDF2 sees X, Scrypt sees Y, decryption with Y
+    // recovers the WIF derived with X as mnemonic extension.
+    const PHRASE: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const PATH: &str = "m/84'/0'/0'/0/0";
+    const X: &str = "pbkdf2-only";
+    const Y: &str = "scrypt-only";
+
+    let wif_x = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={PHRASE}"),
+        "--to",
+        "wif",
+        "--path",
+        PATH,
         "--passphrase",
         X,
     ]);
 
-    // Per SPEC §12.b: recovered must equal WIF_B (X applied to BOTH legs),
-    // NOT WIF_A (which would imply X was treated as BIP-38-only).
-    assert_eq!(
-        recovered, wif_b,
-        "SPEC §12.b — composite --passphrase MUST drive both PBKDF2 and Scrypt"
-    );
-    assert_ne!(
-        recovered, wif_a,
-        "SPEC §12.b — composite --passphrase MUST NOT bypass PBKDF2 mnemonic extension"
-    );
+    let bip38_xy = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={PHRASE}"),
+        "--to",
+        "bip38",
+        "--path",
+        PATH,
+        "--passphrase",
+        X,
+        "--bip38-passphrase",
+        Y,
+    ]);
+
+    let recovered = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={bip38_xy}"),
+        "--to",
+        "wif",
+        "--bip38-passphrase",
+        Y,
+    ]);
+
+    assert_eq!(recovered, wif_x);
+}
+
+#[test]
+fn direct_wif_to_bip38_passphrase_fallback() {
+    // SPEC v0.8 §12.b — on the direct `(wif, bip38)` edge, `--bip38-passphrase`
+    // falls back to `--passphrase` when unset (preserves v0.7 single-flag UX).
+    let bip38_a = convert_value(&[
+        "convert",
+        "--from",
+        &format!("wif={V1_WIF}"),
+        "--to",
+        "bip38",
+        "--passphrase",
+        V1_PASS,
+    ]);
+    let bip38_b = convert_value(&[
+        "convert",
+        "--from",
+        &format!("wif={V1_WIF}"),
+        "--to",
+        "bip38",
+        "--bip38-passphrase",
+        V1_PASS,
+    ]);
+    assert_eq!(bip38_a, V1_BIP38);
+    assert_eq!(bip38_b, V1_BIP38);
 }

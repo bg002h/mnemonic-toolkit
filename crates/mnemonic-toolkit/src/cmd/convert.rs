@@ -163,6 +163,23 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub passphrase: Option<String>,
 
+    /// SPEC v0.8 §12.b — BIP-38 Scrypt passphrase, distinct from `--passphrase`.
+    /// On composite `(phrase|entropy, bip38)` paths, `--passphrase` feeds BIP-39
+    /// PBKDF2 and `--bip38-passphrase` feeds BIP-38 Scrypt independently; if
+    /// `--bip38-passphrase` is unset on a composite path, BIP-38 encrypt uses
+    /// `""` (BREAKING CHANGE from v0.7's dual-purpose dispatch). On direct
+    /// `(wif, bip38)` and `(bip38, wif)` edges, `--bip38-passphrase` falls back
+    /// to `--passphrase` when unset.
+    #[arg(long = "bip38-passphrase")]
+    pub bip38_passphrase: Option<String>,
+
+    /// SPEC v0.8 §5.a — read the value of `--passphrase` from stdin (raw,
+    /// preserving NULL bytes). Mutually exclusive with `--passphrase`. Closes
+    /// the BIP-38 spec V3 NULL-byte passphrase gap (POSIX argv cannot carry
+    /// U+0000). Mutually exclusive with any `--from <node>=-` (single stdin).
+    #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
+
     #[arg(long, default_value = "0")]
     pub account: u32,
 
@@ -307,10 +324,10 @@ fn refusal_wif_with_path() -> ToolkitError {
     )
 }
 
-// SPEC v0.7 §3.d
+// SPEC v0.7 §3.d, v0.8 §12.b
 fn refusal_bip38_no_passphrase() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--from <bip38|wif> --to <wif|bip38> requires --passphrase (BIP-38 encryption is passphrase-driven).".into(),
+        "--from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).".into(),
     )
 }
 
@@ -500,12 +517,31 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
 // SPEC §5.a stdin
 // ============================================================================
 
-fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
+pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
     let mut buf = String::new();
     stdin
         .read_to_string(&mut buf)
         .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
     Ok(buf.trim().to_string())
+}
+
+/// SPEC v0.8 §5.a — stdin reader for passphrase channels (`--passphrase-stdin`).
+/// Strips a single trailing line-ending pair (`\r?\n`) so users can pipe via
+/// `echo` or `printf '\n'`-terminated files, but preserves all other bytes —
+/// including leading/trailing spaces, internal NULL (BIP-38 V3 spec passphrase),
+/// and tabs that may be intentional in the user's passphrase.
+fn read_stdin_passphrase<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
+    let mut buf = String::new();
+    stdin
+        .read_to_string(&mut buf)
+        .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+    if buf.ends_with('\n') {
+        buf.pop();
+        if buf.ends_with('\r') {
+            buf.pop();
+        }
+    }
+    Ok(buf)
 }
 
 // ============================================================================
@@ -542,7 +578,22 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
     let primary = primaries.pop().unwrap();
 
-    // 2) Stdin if `--from <node>=-`.
+    // 2.a) SPEC v0.8 §5.a — `--passphrase-stdin` populates the BIP-39 / direct
+    // BIP-38 passphrase from raw stdin (preserving NULL bytes). Mutually
+    // exclusive with `--from <node>=-` since a single stdin cannot serve both.
+    let primary_uses_stdin = primary.value == "-";
+    if args.passphrase_stdin && primary_uses_stdin {
+        return Err(ToolkitError::BadInput(
+            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv".into(),
+        ));
+    }
+    let effective_passphrase: Option<String> = if args.passphrase_stdin {
+        Some(read_stdin_passphrase(stdin)?)
+    } else {
+        args.passphrase.clone()
+    };
+
+    // 2.b) Stdin if `--from <node>=-`.
     let primary_value = if primary.value == "-" {
         read_stdin_to_string(stdin)?
     } else {
@@ -594,10 +645,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // 5.b) SPEC v0.7 §12 — BIP-38 edges require --passphrase.
+    // 5.b) SPEC v0.7 §12 + v0.8 §12.b — BIP-38 edges require some passphrase
+    //      (`--passphrase`, `--passphrase-stdin`, or `--bip38-passphrase`).
     let bip38_edge = primary.node == NodeType::Bip38
         || targets.iter().any(|t| *t == NodeType::Bip38);
-    if bip38_edge && args.passphrase.is_none() {
+    if bip38_edge && effective_passphrase.is_none() && args.bip38_passphrase.is_none() {
         return Err(refusal_bip38_no_passphrase());
     }
 
@@ -616,10 +668,18 @@ pub fn run<R: Read, W: Write, E: Write>(
     // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS
     // meaningful; suppress the "ignored" warning for BIP-38 edges.
     let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge;
-    if args.passphrase.is_some() && !edge_uses_passphrase {
+    if effective_passphrase.is_some() && !edge_uses_passphrase {
         let _ = writeln!(
             stderr,
             "warning: --passphrase ignored on this edge (not a PBKDF2-bearing conversion)",
+        );
+    }
+    // SPEC v0.8 §12.b — `--bip38-passphrase` is BIP-38-only; warn if supplied
+    // on a non-BIP-38 edge.
+    if args.bip38_passphrase.is_some() && !bip38_edge {
+        let _ = writeln!(
+            stderr,
+            "warning: --bip38-passphrase ignored on this edge (no BIP-38 source/target)",
         );
     }
 
@@ -632,7 +692,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // 8) Compute outputs.
-    let (mut outputs, input_variant) = compute_outputs(primary.node, &primary_value, &targets, args)?;
+    let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
+    let bip38_passphrase = args.bip38_passphrase.as_deref();
+    let (mut outputs, input_variant) = compute_outputs(
+        primary.node,
+        &primary_value,
+        &targets,
+        args,
+        pbkdf2_passphrase,
+        bip38_passphrase,
+    )?;
 
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {
@@ -701,15 +770,22 @@ pub fn run<R: Read, W: Write, E: Write>(
 
 type Output = (NodeType, String);
 
+// SPEC v0.8 §12.b — `pbkdf2_passphrase` feeds BIP-39 PBKDF2 (mnemonic extension);
+// resolved upstream from `--passphrase` or stdin (`--passphrase-stdin`).
+// `bip38_passphrase` is `Some` only when the user passed `--bip38-passphrase`.
+// Edge-specific fallback rules: composite `(phrase|entropy, bip38)` does NOT
+// fall back to `pbkdf2_passphrase` (BREAKING CHANGE); direct `(wif, bip38)` /
+// `(bip38, wif)` falls back when unset.
 fn compute_outputs(
     from: NodeType,
     value: &str,
     targets: &[NodeType],
     args: &ConvertArgs,
+    pbkdf2_passphrase: &str,
+    bip38_passphrase: Option<&str>,
 ) -> Result<(Vec<Output>, Option<&'static str>), ToolkitError> {
     use NodeType::*;
     let language = args.language.unwrap_or_default();
-    let passphrase = args.passphrase.as_deref().unwrap_or("");
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
     let secp = Secp256k1::new();
 
@@ -736,7 +812,7 @@ fn compute_outputs(
                     )
                 })?;
                 Some(derive_bip32_from_entropy(
-                    &entropy, passphrase, language, network, template, args.account,
+                    &entropy, pbkdf2_passphrase, language, network, template, args.account,
                 )?)
             } else {
                 None
@@ -770,7 +846,7 @@ fn compute_outputs(
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language, network, &path,
                         )?;
                         // BIP-32 §4 mandates compressed pubkeys for derived
                         // keys; WIF compression follows the BIP-32 contract.
@@ -786,16 +862,17 @@ fn compute_outputs(
                     )),
                     Mk1 => unreachable!("classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"),
                     Bip38 => {
-                        // SPEC v0.7 §12 — composite phrase/entropy → wif → bip38.
+                        // SPEC v0.7 §12 + v0.8 §12.b — composite phrase/entropy → wif → bip38.
                         // Same --path requirement as the direct phrase→wif edge.
+                        // BREAKING (v0.8): on this composite arm `--passphrase`
+                        // feeds BIP-39 PBKDF2 only; `--bip38-passphrase` feeds
+                        // BIP-38 Scrypt independently. If the latter is unset,
+                        // BIP-38 encrypt uses `""` (no fallback to --passphrase).
                         let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
-                        // SPEC §12.b — composite path: --passphrase serves dual purpose
-                        // (BIP-39 mnemonic extension AND BIP-38 Scrypt key). Distinct flag tracked
-                        // as v0.8 FOLLOWUP `bip38-distinct-passphrase-flag`.
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language, network, &path,
                         )?;
                         let pk = PrivateKey {
                             compressed: true,
@@ -803,8 +880,9 @@ fn compute_outputs(
                             inner: leaf_xpriv.private_key,
                         };
                         let wif = pk.to_wif();
+                        let scrypt_pp = bip38_passphrase.unwrap_or("");
                         wif.as_str()
-                            .encrypt_wif(passphrase)
+                            .encrypt_wif(scrypt_pp)
                             .map_err(map_bip38_error)?
                     }
                     MiniKey => unreachable!("classify_edge intercepts (*, MiniKey) as one-way"),
@@ -836,7 +914,7 @@ fn compute_outputs(
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let script_type = resolve_script_type(args)?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language, network, &path,
                         )?;
                         let leaf_xpub = bip32::Xpub::from_priv(&secp, &leaf_xpriv);
                         build_address_from_xpub(&secp, &leaf_xpub, script_type, network)
@@ -922,11 +1000,13 @@ fn compute_outputs(
                     Xpub => sentinel_xpub.to_string(),
                     Fingerprint => sentinel_xpub.fingerprint().to_string().to_lowercase(),
                     Bip38 => {
-                        // SPEC v0.7 §12 — encrypt WIF with passphrase via the
-                        // bip38 crate's EncryptWif trait (NFC + Scrypt n=16384).
+                        // SPEC v0.7 §12 + v0.8 §12.b — direct (wif, bip38) Scrypt
+                        // encrypt. Per v0.8 lock, `--bip38-passphrase` falls back
+                        // to `--passphrase` (effective) on this direct edge.
                         // Passphrase presence is enforced earlier in run().
+                        let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
                         value
-                            .encrypt_wif(passphrase)
+                            .encrypt_wif(scrypt_pp)
                             .map_err(map_bip38_error)?
                     }
                     _ => {
@@ -941,10 +1021,13 @@ fn compute_outputs(
             Ok((out, None))
         }
         Bip38 => {
-            // SPEC v0.7 §12 — decrypt to raw key + compress flag, then build
-            // WIF with the user's --network (the crate's decrypt_to_wif always
-            // emits mainnet; per Phase 1 security review caveat 2).
-            let (raw, compressed) = <str as Decrypt>::decrypt(value, passphrase)
+            // SPEC v0.7 §12 + v0.8 §12.b — decrypt to raw key + compress flag,
+            // then build WIF with the user's --network (the crate's
+            // decrypt_to_wif always emits mainnet; per Phase 1 security review
+            // caveat 2). Per v0.8 lock, `--bip38-passphrase` falls back to
+            // `--passphrase` (effective) on this direct edge.
+            let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
+            let (raw, compressed) = <str as Decrypt>::decrypt(value, scrypt_pp)
                 .map_err(map_bip38_error)?;
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
                 .map_err(|e| ToolkitError::BadInput(format!("BIP-38 decrypted key parse: {e}")))?;

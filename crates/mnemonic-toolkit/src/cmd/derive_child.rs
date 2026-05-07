@@ -1,21 +1,27 @@
 //! `mnemonic derive-child` subcommand — BIP-85 deterministic derivation.
 //!
 //! Realizes `design/SPEC_derive_child_v0_7.md` §2 (grammar), §3 (primitive),
-//! §4 (in-scope apps), §5 (out-of-scope refusal), §7 (refusal taxonomy).
+//! §4 (in-scope apps), §5 (out-of-scope refusal), §7 (refusal taxonomy)
+//! plus v0.8 extensions: §3 phrase-master input, language-code dispatch,
+//! testnet emission, stdin-master sentinel.
 
 use crate::bip85;
-use crate::cmd::convert::{parse_from_input, FromInput, NodeType};
+use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
+use bip39::Mnemonic;
 use bitcoin::bip32::Xpriv;
+use bitcoin::NetworkKind;
 use clap::Args;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::str::FromStr;
 
 #[derive(Args, Debug)]
 pub struct DeriveChildArgs {
-    /// Master xpriv source. Only `--from xprv=<value>` is accepted.
+    /// Master source. v0.7 accepted `--from xprv=<value>` only; v0.8 also
+    /// accepts `--from phrase=<bip39-mnemonic>` (combined with `--passphrase`
+    /// + `--language`). Both forms accept `=-` to read from stdin.
     #[arg(long = "from", value_parser = parse_from_input, required = true)]
     pub from: FromInput,
 
@@ -38,34 +44,66 @@ pub struct DeriveChildArgs {
     #[arg(long = "index", required = true)]
     pub index: u32,
 
-    /// Network for emitted xprv / WIF (defaults to source xprv's network).
-    /// Reserved (BIP-85 spec test vectors pin mainnet); in v0.7 the WIF
-    /// and xprv emitters always render mainnet to match the spec vectors,
-    /// and this flag is held for v0.8 testnet-vector support.
+    /// SPEC v0.8 §4 — network for emitted `--application <hd-seed|xprv>`.
+    /// Defaults to mainnet (matches BIP-85 §"Test Vectors"). Testnet emits
+    /// `c…` WIF and `tprv…` xprv prefixes.
     #[arg(long)]
-    #[allow(dead_code)]
     pub network: Option<CliNetwork>,
 
-    /// BIP-39 language. v0.7 supports English only; reserved for v0.8.
+    /// SPEC v0.8 §4 — BIP-39 wordlist + BIP-85 language code for
+    /// `--application bip39`. Defaults to English (BIP-85 code 0).
     #[arg(long)]
-    #[allow(dead_code)]
     pub language: Option<CliLanguage>,
+
+    /// SPEC v0.8 §3 — BIP-39 mnemonic extension passphrase, used only
+    /// when `--from phrase=…`. Empty by default. Ignored on `--from xprv=…`.
+    #[arg(long)]
+    pub passphrase: Option<String>,
 }
 
-pub fn run<W: Write, E: Write>(
+pub fn run<R: Read, W: Write, E: Write>(
     args: &DeriveChildArgs,
+    stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // SPEC §2 — `--from xprv=<value>` only.
-    if args.from.node != NodeType::Xprv {
-        return Err(ToolkitError::BadInput(format!(
-            "derive-child: --from must be xprv=<master-xprv>; got {}",
-            args.from.node.as_str(),
-        )));
+    // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
+    let from_value = if args.from.value == "-" {
+        read_stdin_to_string(stdin)?
+    } else {
+        args.from.value.clone()
+    };
+    let master = match args.from.node {
+        NodeType::Xprv => Xpriv::from_str(&from_value)
+            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,
+        NodeType::Phrase => {
+            let language = args.language.unwrap_or_default();
+            let mnemonic = Mnemonic::parse_in(language.into(), &from_value)
+                .map_err(ToolkitError::Bip39)?;
+            let passphrase = args.passphrase.as_deref().unwrap_or("");
+            let seed = mnemonic.to_seed(passphrase);
+            // BIP-85 spec test vectors are network-agnostic at the entropy
+            // level; the master xprv's network field doesn't affect any
+            // BIP-85 derivation byte. Use Main as a stable internal default;
+            // emission-side network is driven by `--network` per SPEC §4.
+            Xpriv::new_master(NetworkKind::Main, &seed)
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
+        }
+        _ => {
+            return Err(ToolkitError::BadInput(format!(
+                "derive-child: --from must be xprv=<master-xprv> or phrase=<mnemonic>; got {}",
+                args.from.node.as_str(),
+            )))
+        }
+    };
+    if args.passphrase.is_some() && args.from.node != NodeType::Phrase {
+        let _ = writeln!(
+            stderr,
+            "warning: --passphrase ignored on --from xprv (no BIP-39 mnemonic to extend)",
+        );
     }
-    let master = Xpriv::from_str(&args.from.value)
-        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+
+    let emit_network = args.network.unwrap_or(CliNetwork::Mainnet).network_kind();
 
     // SPEC §5 + §7 — out-of-scope apps surface byte-exact refusal here.
     match args.application.as_str() {
@@ -83,16 +121,17 @@ pub fn run<W: Write, E: Write>(
                     valid_text: "12 | 15 | 18 | 21 | 24 words",
                 });
             }
-            // SPEC §4 — English only in v0.7 (language code 0).
-            bip85::format_bip39_phrase(&master, 0, words, args.index)?
+            let cli_lang = args.language.unwrap_or_default();
+            let (lang_code, bip39_lang) = resolve_bip85_language(cli_lang)?;
+            bip85::format_bip39_phrase(&master, lang_code, bip39_lang, words, args.index)?
         }
         "hd-seed" => {
             reject_length(args.length)?;
-            bip85::format_hd_seed_wif(&master, args.index)?
+            bip85::format_hd_seed_wif(&master, args.index, emit_network)?
         }
         "xprv" => {
             reject_length(args.length)?;
-            bip85::format_xprv_child(&master, args.index)?
+            bip85::format_xprv_child(&master, args.index, emit_network)?
         }
         "hex" => {
             let n = args.length;
@@ -152,4 +191,40 @@ fn reject_length(length: u32) -> Result<(), ToolkitError> {
         return Err(ToolkitError::DeriveChildLengthNotApplicable);
     }
     Ok(())
+}
+
+/// SPEC v0.8 §4 — map `CliLanguage` → (BIP-85 path language code,
+/// `bip39::Language` for wordlist selection). BIP-85 language codes per
+/// <https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki> §"Application: BIP39":
+///
+/// | Code | Language               |
+/// |------|------------------------|
+/// | 0    | English                |
+/// | 1    | Japanese               |
+/// | 2    | Korean                 |
+/// | 3    | Spanish                |
+/// | 4    | Chinese (Simplified)   |
+/// | 5    | Chinese (Traditional)  |
+/// | 6    | French                 |
+/// | 7    | Italian                |
+/// | 8    | Czech                  |
+///
+/// Portuguese (BIP-39 wordlist, but no BIP-85 code assigned) is refused.
+fn resolve_bip85_language(lang: CliLanguage) -> Result<(u32, bip39::Language), ToolkitError> {
+    Ok(match lang {
+        CliLanguage::English => (0, bip39::Language::English),
+        CliLanguage::Japanese => (1, bip39::Language::Japanese),
+        CliLanguage::Korean => (2, bip39::Language::Korean),
+        CliLanguage::Spanish => (3, bip39::Language::Spanish),
+        CliLanguage::SimplifiedChinese => (4, bip39::Language::SimplifiedChinese),
+        CliLanguage::TraditionalChinese => (5, bip39::Language::TraditionalChinese),
+        CliLanguage::French => (6, bip39::Language::French),
+        CliLanguage::Italian => (7, bip39::Language::Italian),
+        CliLanguage::Czech => (8, bip39::Language::Czech),
+        CliLanguage::Portuguese => {
+            return Err(ToolkitError::BadInput(
+                "--language portuguese is not assigned a BIP-85 path code; only english, japanese, korean, spanish, simplified-chinese, traditional-chinese, french, italian, czech are supported for --application bip39".into(),
+            ))
+        }
+    })
 }
