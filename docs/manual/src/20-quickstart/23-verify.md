@@ -8,8 +8,10 @@ plus the overall result.
 ## The command
 
 Pass the original `--slot @0.phrase=…` plus the cards that came back
-from your bundle invocation. For a single-sig BIP-84 mainnet wallet
-with one ms1, two mk1 strings, and three md1 strings:
+from your bundle invocation. (Same canonical test seed as
+[Chapter 22](#your-first-bundle); see the DANGER box there.) For a
+single-sig BIP-84 mainnet wallet with one ms1, two mk1 strings, and
+three md1 strings:
 
 ```sh
 mnemonic verify-bundle \

@@ -40,10 +40,9 @@ single-sig P2WPKH wallet's descriptor is simple:
 ## Multisig\index{multisig} — K of N must sign
 
 A multisig wallet requires *at least K* out of N cosigners to produce
-a valid signature. K=N (every cosigner signs) is the toolkit's v0.1
-default; K<N (threshold) is planned for v0.2. Multisig changes
-neither the seed (each cosigner has their own) nor the address
-derivation — it composes them through a script. The toolkit takes
+a valid signature. K is set via `--threshold K`; any value 1..=N is
+valid. Multisig changes neither the seed (each cosigner has their own)
+nor the address derivation — it composes them through a script. The toolkit takes
 each cosigner via `--slot @N.<subkey>=<value>`\index{slot}; the
 descriptor card encodes the resulting multisig policy. *Deep dive
 for newcomers:* [Appendix D](#appendix-d-descriptors-and-bip-388-primer)

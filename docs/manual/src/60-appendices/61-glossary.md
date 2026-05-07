@@ -164,6 +164,14 @@ entropy.
 A descriptor key-list constructor: `multi(K, key1, key2, …)` — keys
 remain in the original order.
 
+## multisig
+
+A wallet that requires *at least K of N* cosigners' signatures to
+spend. Composed at the script layer, not the seed layer; each
+cosigner has their own seed. Toolkit support: `wsh-multi`,
+`wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`,
+`tr-sortedmulti-a`.
+
 ## multi_a
 
 The taproot variant of `multi`, defined in BIP-386 (`multi_a`
@@ -211,8 +219,10 @@ single-key taproot (BIP-86) and multisig taproot via `tr-multi-a` /
 
 ## threshold (K-of-N)
 
-A multisig parameter: any K of the N cosigners can sign. Toolkit v0.1
-ships threshold = N (single-string); K < N is planned for v0.2.
+A multisig parameter: any K of the N cosigners can sign. Set via
+`--threshold K` (any value 1..=N). Note: K-of-N *secret-share splitting*
+(splitting the ms1 card itself into N shares) is a separate feature
+planned for ms-codec v0.2.
 
 ## tr (taproot descriptor)
 

@@ -18,7 +18,7 @@ flowchart LR
   toolkit -- "synthesises" --> ms1
   toolkit -- "synthesises" --> mk1
   toolkit -- "synthesises" --> md1
-  ms1 -. "BIP-39 entropy" .-> seed[(BIP-39 seed)]
+  ms1 -. "BIP-39 entropy" .-> phrase[(seed phrase)]
   mk1 -. "xpub + origin" .-> wallet[(watch-only wallet)]
   md1 -. "wallet policy" .-> wallet
 

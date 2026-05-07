@@ -24,7 +24,7 @@ Power-user prose lives at the chapter top level.
 :::primer
 A short paragraph (≤80 words) explaining just enough background for
 this chapter's main flow. Power users skip these. For a deep dive see
-[Appendix B](#appendix-b--bip-39-entropy-primer).
+[Appendix B](#appendix-b-bip-39-entropy-primer).
 :::
 ````
 

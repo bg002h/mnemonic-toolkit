@@ -51,32 +51,49 @@ recoverable; ms1 is recoverable even with a few stamping mistakes.
 ## Step 2 — confirm the public-key side via mk1
 
 If you only need to *watch* the wallet (no signing), the seed isn't
-required. Decode the mk1 card to recover the xpub and origin:
+required. Decode the mk1 card via `mnemonic convert` to recover the
+xpub, master fingerprint, and origin path:
 
 ```sh
-md decode \
-  --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
-  --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
+mnemonic convert \
+  --from mk1="mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh" \
+  --to xpub --to fingerprint --to path
 ```
 
-(The `md` CLI handles mk1 decoding too; future `mk` CLI is on the
-v0.2 roadmap.)
+Output:
+
+```text
+xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
+fingerprint: 73c5da0a
+path: 84'/0'/0'
+```
+
+The two mk1 strings are passed as a single space-separated value;
+the toolkit re-assembles them and verifies the BCH checksum on each.
+A standalone `mk` CLI is on the v0.2 roadmap.
 
 ## Step 3 — re-derive the descriptor from md1
 
 The md1 card carries the wallet policy. Decoding it tells your
 watch-only wallet what kind of multisig (or single-sig) script to
-expect:
+expect. Pass the strings positionally to `md decode`:
 
 ```sh
 md decode \
-  --md1 md1zsxdspqqqpm6jzzqqvqz6qu79mg9p2sgfff6p2eph8wftp5uf6gqnlgzqqqnymv0 \
-  --md1 md1zsxdspq259s3jnsrcrhnlagpftrf9apnc3m9fy8uqfc85cha4nqnh5k67ey2hzyc \
-  --md1 md1zsxdspqjd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nvqhuuyvzgaejah6
+  md1zsxdspqqqpm6jzzqqvqz6qu79mg9p2sgfff6p2eph8wftp5uf6gqnlgzqqqnymv0 \
+  md1zsxdspq259s3jnsrcrhnlagpftrf9apnc3m9fy8uqfc85cha4nqnh5k67ey2hzyc \
+  md1zsxdspqjd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nvqhuuyvzgaejah6
 ```
 
-For this BIP-84 single-sig bundle, the decoded descriptor is the
-standard `wpkh(xpub.../84'/0'/0'/0/*)` shape.
+Output:
+
+```text
+wpkh(@0/<0;1>/*)
+```
+
+For this BIP-84 single-sig bundle, the decoded wallet-policy template
+is `wpkh(@0/<0;1>/*)` — single key, native segwit, with `<0;1>` for
+external-and-change descriptor pairs (BIP-388 multipath).
 
 ## Step 4 — verify before trusting
 

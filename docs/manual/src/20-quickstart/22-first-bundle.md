@@ -103,9 +103,10 @@ heeding for production: redirect the output to a file or pipe to
 
 ## What about the engraving cards themselves?
 
-The toolkit also emits *engraving-card* layouts when invoked without
-`--no-engraving-card`. The default emits text only, suitable for
-verification. See
+The toolkit also emits an *engraving-card* layout to stderr by
+default; pass `--no-engraving-card` to suppress it. The card is plain
+text — suitable for verification before committing to physical
+engraving. See
 [Single-sig steel-engraved backup workflow](#single-sig-steel-engraved-backup)
 for the full ceremony, including which strings go on which physical
 plate, plus visual checksum verification.
