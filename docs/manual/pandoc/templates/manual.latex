@@ -16,13 +16,12 @@ $if(geometry)$\geometry{$for(geometry)$$geometry$$sep$,$endfor$}$endif$
 
 % Hyperlinks
 \usepackage{hyperref}
-\hypersetup{
-$if(linkcolor)$  linkcolor={$linkcolor$},$endif$
-$if(urlcolor)$  urlcolor={$urlcolor$},$endif$
-$if(toccolor)$  toccolor={$toccolor$},$endif$
-  pdftitle={$title$},
-$if(author)$  pdfauthor={$for(author)$$author$$sep$, $endfor$},$endif$
-  colorlinks=true,
+\hypersetup{%
+$if(linkcolor)$  linkcolor={$linkcolor$},
+$endif$$if(urlcolor)$  urlcolor={$urlcolor$},
+$endif$  pdftitle={$title$},
+$if(author)$  pdfauthor={$for(author)$$author$$sep$, $endfor$},
+$endif$  colorlinks=true,
 }
 
 % Pandoc-injected packages (lists, code, etc.)

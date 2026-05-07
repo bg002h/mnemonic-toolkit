@@ -34,6 +34,7 @@ done
 FIXTURE="$MANUAL_DIR/tests/fixtures/filter-smoke.md"
 FILTERS="$MANUAL_DIR/pandoc/filters"
 PREAMBLE="$MANUAL_DIR/pandoc/preamble.tex"
+METADATA="$MANUAL_DIR/pandoc/metadata.yaml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -49,13 +50,18 @@ echo "[filter-smoke] render path 1/2: make md"
   --output "$WORK/smoke.md" \
   "$FIXTURE"
 
-# Assertions: no \index, no \begin{primerbox}, but the prefix string is present.
-if grep -q '\\index' "$WORK/smoke.md"; then
-  echo "[filter-smoke] FAIL: \\index{} leaked into markdown output" >&2
+# Assertions: the literal `\index{m-format star}` marker (the only "real"
+# marker in the fixture) must be stripped; the LaTeX env names must not
+# appear; the primer-box prefix string must be present. We match on the
+# specific marker rather than `\\index` because the fixture's prose
+# legitimately contains the literal `` `\index{}` `` inside an inline
+# code span as documentation.
+if grep -qF '\index{m-format star}' "$WORK/smoke.md"; then
+  echo "[filter-smoke] FAIL: real \\index{m-format star} marker leaked into markdown output" >&2
   exit 1
 fi
-if grep -q 'primerbox' "$WORK/smoke.md"; then
-  echo "[filter-smoke] FAIL: primerbox env leaked into markdown output" >&2
+if grep -q 'begin{primerbox}\|begin{dangerbox}' "$WORK/smoke.md"; then
+  echo "[filter-smoke] FAIL: primerbox/dangerbox env leaked into markdown output" >&2
   exit 1
 fi
 if ! grep -q 'Background' "$WORK/smoke.md"; then
@@ -69,6 +75,7 @@ echo "[filter-smoke] render path 2/2: make pdf"
 "$PANDOC" \
   --from markdown --to latex --standalone \
   --lua-filter "$FILTERS/primer-box.lua" \
+  --metadata-file="$METADATA" \
   -H "$PREAMBLE" \
   --output "$WORK/smoke.tex" \
   "$FIXTURE"

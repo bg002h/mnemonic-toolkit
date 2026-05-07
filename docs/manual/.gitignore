@@ -1,0 +1,14 @@
+# Generated artifacts — never commit.
+build/
+src/99-build-banner.md
+mermaid-filter.err
+*.aux
+*.log
+*.toc
+*.idx
+*.ind
+*.ilg
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
