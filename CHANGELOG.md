@@ -4,6 +4,78 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.8.0] — 2026-05-07 [BREAKING]
+
+Minor release atop v0.7.1. **Breaking change** to BIP-38 composite-edge passphrase semantics; new flags + new BIP-85 application + Electrum i18n + taproot multisig export. Two spike-driven deferrals (BIP-38 EC-mult encrypt → v0.8.1; BIP-85 RSA / RSA-GPG → v0.9 pending RUSTSEC-2023-0071 patch). 11 phases (0–10) shipped this cycle.
+
+### [BREAKING] BIP-38 composite-edge passphrase
+
+**Migration:** users running `mnemonic convert --from phrase=... --to bip38 --passphrase X` in v0.7 got BIP-38 output encrypted with passphrase X (dual-purpose); v0.8 produces output encrypted with `""`. Migrate by supplying `--passphrase X --bip38-passphrase X` to preserve v0.7 behavior.
+
+The v0.7 `(phrase, bip38)` and `(entropy, bip38)` composite arms used `--passphrase` for BOTH BIP-39 PBKDF2 (mnemonic extension) AND BIP-38 Scrypt encryption — a dual-purpose dispatch that masked which leg the passphrase was reaching. v0.8 introduces a separate `--bip38-passphrase` flag; the two legs now use independent passphrase inputs. If `--bip38-passphrase` is unset on a composite path, BIP-38 encrypt uses `""` (no fallback to `--passphrase`). Direct `(wif, bip38)` and `(bip38, wif)` edges retain v0.7 single-flag UX: `--bip38-passphrase` falls back to `--passphrase` when unset.
+
+### Added
+
+- **`--bip38-passphrase`** flag on `mnemonic convert` (Phase 1; SPEC v0.8 §12.b). Distinct BIP-38 Scrypt passphrase; see `[BREAKING]` section above.
+- **`--passphrase-stdin`** flag on `mnemonic convert` (Phase 1; SPEC v0.8 §5.a). Reads the passphrase from raw stdin preserving NULL bytes. Closes the BIP-38 spec V3 Unicode-NFC NULL-byte gap (POSIX argv cannot carry U+0000); the 2 V3 spec vectors previously `#[ignore]`'d are now active.
+- **`mnemonic derive-child --from phrase=...`** (Phase 1, Item #5). Accepts a BIP-39 mnemonic as the master input alongside `--passphrase` for BIP-39 mnemonic extension; internal `phrase → seed → master xprv` conversion before BIP-85 derivation.
+- **`mnemonic derive-child --from xprv=-` / `--from phrase=-`** (Phase 1, Item #8). Reads the master from stdin.
+- **`mnemonic derive-child --language <code>`** wired to BIP-85 path code + `bip39::Language` wordlist selection (Phase 1, Item #6). Supports the 9 BIP-85-coded languages: `english` (0), `japanese` (1), `korean` (2), `spanish` (3), `simplified-chinese` (4), `traditional-chinese` (5), `french` (6), `italian` (7), `czech` (8). Portuguese refused (no BIP-85 code assigned).
+- **`mnemonic derive-child --network`** wired to BIP-85 emission for `--application <hd-seed|xprv>` (Phase 1, Item #7). Testnet emits `c…` WIF / `tprv…` xprv.
+- **`mnemonic derive-child --application dice`** (Phase 7). New `--dice-sides <N>` flag; rejection-sampled dice rolls per BIP-85 v1.3.0 §"DICE" via SHAKE256 BIP85-DRNG. Spec reference vector pinned (`m/83696968'/89101'/6'/10'/0'` → `1,0,0,2,0,1,5,5,2,4`).
+- **`mnemonic convert --electrum-language <english|spanish|japanese|portuguese|chinese-simplified>`** (Phase 2, Item #9; SPEC v0.8 §14). Adds 4 non-English Electrum wordlists embedded from `spesmilo/electrum` at upstream commit `e1099925e30d91dd033815b512f00582a8795d25`. Distinct from `--language` (BIP-39 wordlist set differs from Electrum's). On Electrum arms, `--electrum-language` wins; `--language` silently ignored. Portuguese is base-1626 (not 2048); base-N arithmetic correctly parameterized.
+- **Electrum encode iteration bound** (Phase 2, Item #10). `MAX_ENCODE_ITERATIONS = 2^20` cap on `entropy_to_phrase` rejection-search loop.
+- **Electrum SeedVersion stderr info-line** (Phase 2, Item #11). On `(electrum-phrase, entropy)` decode, emits `note: detected Electrum SeedVersion <01|100> (<standard|segwit>)` to stderr.
+- **`mnemonic export-wallet --taproot-internal-key <nums|@N>`** (Phase 3, Item #12; SPEC v0.8 §7). `nums` selects the BIP-341 reference NUMS x-only point `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`. `@N` selects cosigner N as the key-path internal key; cosigner N is removed from the multi_a leaf set, leaving (k-of-(N-1)) script-path multisig. Unblocks `tr-multi-a` / `tr-sortedmulti-a` templates (refused outright in v0.7).
+- **`mnemonic export-wallet --descriptor + --format bip388`** interop (Phase 3, Item #13; SPEC v0.8 §6). User-supplied descriptors are parsed, multipath-checked, `#checksum`-stripped, and rendered as BIP-388 wallet_policy with `@N/**` placeholders. Refused for non-multipath descriptors.
+- **New direct dependencies**: `unicode-normalization = "0.1"` (Electrum NFKD; was transitive via bip38), `sha3 = "0.10"` (BIP85-DRNG-SHAKE256 for DICE).
+
+### Changed
+
+- **SPEC `design/SPEC_derive_child_v0_7.md`** § 2 + §3 + §4 (Phase 0). §3 BIP-39 byte-slicing formula corrected to canonical `length_in_words * 4 / 3`. §2 + §4 prose updated to document the sentinel-0 convention for fixed-output `--application <hd-seed|xprv>`.
+- **`mnemonic derive-child --application <rsa|rsa-gpg>`** refusal text rewritten to reference RUSTSEC-2023-0071 + crate stability (Phase 7). `dice` lifted from out-of-scope to in-scope.
+- **`mnemonic export-wallet --template <tr-multi-a|tr-sortedmulti-a>`** refusal text now points the user at `--taproot-internal-key` (Phase 3); was a v0.7 byte-exact "deferred to v0.8" message.
+- **BIP-39 §Test Vectors corpus**: `tests/cli_convert_bip39_vectors.rs` refactored from 6 hand-pinned tests to a single parametric loop over the full Trezor 24-vector english corpus (Phase 8). New vendored corpus at `tests/bip39_trezor_vectors.json`.
+
+### Deferred
+
+- **BIP-38 EC-multiplied encrypt** (Phase 5 SPIKE verdict — Phase 4): deferred to v0.8.1 / v0.9. The `bip38 v1.1.1` `Generate` trait covers the owner-only path only with internal `rand::thread_rng()` (non-deterministic) and exposes no intermediate-code workflow + no confirmation code. Hand-rolling the spec-compliant API would cost ~155 LOC of cryptographic code (AES + scrypt + secp256k1 + Unicode normalization). Marginal user value (paper-wallet niche). v0.7.1 EC-multiplied DECRYPT coverage is unchanged. Spike: `design/agent-reports/v0_8-phase-4-bip38-ec-mult-encrypt-spike.md`.
+- **BIP-85 RSA + RSA-GPG** (Phase 7 narrowed — Phase 6 SPIKE verdict): deferred pending `rsa` crate stability + user demand. RUSTSEC-2023-0071 (Marvin attack: timing sidechannel against PKCS#1 v1.5 decryption) is **unpatched** as of 2026-05-07 (`patched = []`). Crate is in extended pre-release (`v0.10.0-rc.18`). Adding it as direct dep would import an open advisory into mnemonic-toolkit's `cargo audit` output. Reopen criteria: rsa crate publishes patched stable release OR user requests with stated downstream use case. Spike: `design/agent-reports/v0_8-phase-6-rsa-crate-security-review.md`.
+
+### Internal
+
+- Per-phase code-reviewer rounds: Phase 1 (0C/1I), Phase 2 (0C/2I), Phase 3 (0C/1I), Phase 7 (0C/0I). All findings applied in-phase. Reports persist to `design/agent-reports/v0_8-phase-{N}-review.md`.
+- 4 wordlist files added under `crates/mnemonic-toolkit/src/wordlists/electrum_*.txt`. Total ~60KB embedded data.
+- `compute_outputs` in `cmd/convert.rs` now returns a triple (`outputs, slip0132_input_variant, electrum_seed_version`) to surface the Electrum SeedVersion to the run-loop for stderr emission.
+- `validate_watch_only_resolved` enforced post-resolve in `export-wallet`; Phase 3 cosigner-internal taproot adds `n=1` degenerate-case refusal.
+
+### Test corpus
+
+484 active + 2 ignored (v0.7.1) → 527 active + 2 ignored (v0.8.0). Net: +43 active; the 2 V3 NULL-byte tests previously ignored are now active. The `cli_convert_bip39_vectors.rs` parametric refactor reduces test-function count by 5 (6 hand-pinned → 1 loop) but raises BIP-39 §Test Vectors English coverage from 6/24 to 24/24 cells.
+
+### FOLLOWUPS resolved this cycle (v0.8.0 ship)
+
+- `bip85-spec-prose-byte-formula-clarification` (Phase 0, `4dfea5a`).
+- `derive-child-spec-2-grammar-uniformity-tension` (Phase 0, `4dfea5a`).
+- `bip38-distinct-passphrase-flag` (Phase 1, `2eef44b`).
+- `bip38-spec-vector-3-null-byte-passphrase` (Phase 1, `2eef44b`).
+- `bip85-passphrase-protected-master` (Phase 1, `2eef44b`).
+- `bip85-non-english-bip39-language-codes` (Phase 1, `2eef44b`).
+- `bip85-testnet-emission` (Phase 1, `2eef44b`).
+- `bip85-stdin-master-xprv` (Phase 1, `2eef44b`).
+- `electrum-non-latin-wordlists` (Phase 2, `5dc83eb`).
+- `electrum-encode-iteration-bound` (Phase 2, `5dc83eb`).
+- `electrum-version-info-stderr` (Phase 2, `5dc83eb`).
+- `tr-multi-a-tr-sortedmulti-a-export-wallet-support` (Phase 3, `86647ca`).
+- `export-wallet-descriptor-bip388-interop` (Phase 3, `86647ca`).
+- `bip85-dice-application` (Phase 7, `1dde4dc`; split from `bip85-rsa-rsa-gpg-dice-applications`).
+- `18-remaining-bip39-trezor-corpus-vectors` (Phase 8, `85694b2`).
+
+### FOLLOWUPS re-tiered
+
+- `bip38-ec-multiplied-encrypt-mode-support`: v0.8 → v0.8.1+ (Phase 4 SPIKE).
+- `bip85-rsa-rsa-gpg-applications` (renamed from `bip85-rsa-rsa-gpg-dice-applications` after DICE split): v0.8 → v0.9 / pending-rsa-crate-stability (Phase 6 SPIKE).
+
 ## mnemonic-toolkit [0.7.1] — 2026-05-07
 
 Vectors-only patch atop v0.7.0. Pins published §Test Vectors entries from every BIP/SLIP/spec the toolkit cites. No behavior change; no wire-format change. New SPEC `design/SPEC_test_vector_audit_v0_7_1.md` summarizes coverage, discoveries, and out-of-scope classifications. 7 cycle phases (0–7) closed; Phase 8 ships docs + CHANGELOG.

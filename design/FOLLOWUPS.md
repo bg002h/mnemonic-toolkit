@@ -700,9 +700,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 1 code-quality review (commit `c3d0a85`).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` composite arm + `convert::ConvertArgs` clap struct; SPEC §12.b reference.
 - **What:** v0.7 ships dual-purpose `--passphrase` for composite paths flowing `phrase → wif → bip38` (or `entropy → wif → bip38`). One passphrase value drives both BIP-39 PBKDF2 mnemonic extension and BIP-38 Scrypt encryption. A user wanting distinct values must invoke `convert` twice. v0.8 may add `--bip38-passphrase` as a distinct flag so a single composite invocation can use different passphrases per layer. Implementation: thread the new flag through `compute_outputs`'s composite arms; if `--bip38-passphrase` is supplied, use it for the Scrypt step and use `--passphrase` (or `""` if absent) for the PBKDF2 step.
-- **Why deferred:** v0.7 ships the simplest UX (single dual-purpose flag); the distinct-passphrase use case is uncommon and adds clap surface that needs its own UX brainstorm.
-- **Status:** `open`
-- **Tier:** `v0.8-nice-to-have`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — `--bip38-passphrase` flag added with locked R1-I3 semantics (composite arm: independent passphrases, no fallback, BREAKING change from v0.7's dual-purpose dispatch; direct arm: fallback to `--passphrase`). CHANGELOG `[0.8.0]` migration sentence pinned. SPEC v0.8 §12.b amendment.
+- **Tier:** `v0.8`
 
 ### `bip38-encrypted-wif` — accept + emit BIP-38 passphrase-encrypted privkeys (`6P...`)
 
@@ -837,8 +837,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
 - **Where:** `crates/mnemonic-toolkit/src/electrum.rs` (wordlist embedding + lookup).
 - **What:** Electrum supports 9 wordlists across English, Japanese, Spanish, Chinese (simplified/traditional), Korean, Italian, Portuguese, Dutch, etc. v0.7 Phase 3 ships only the English wordlist; non-English Electrum users cannot decode their phrases through `mnemonic convert`. Add a `--language` parameter mirroring BIP-39 + bundle the additional embedded wordlists.
-- **Why deferred:** v0.7 ships the most-common case (English) to bound scope; non-English wordlists triple the wordlist-data surface and warrant their own bundling decision (compile-time const arrays vs. runtime resource files).
-- **Status:** `open`
+- **Status:** `resolved 5dc83eb` (v0.8 Phase 2).
+- **Resolution:** v0.8 Phase 2 — embedded 4 non-English Electrum wordlists (zh-Hans, ja, pt, es) from `spesmilo/electrum` upstream commit `e1099925e30d91dd033815b512f00582a8795d25`. Plan correction noted: upstream Electrum has 5 total wordlists, not 9 (zh-Hant, German, French, Italian are NOT upstream). Separate `--electrum-language` flag distinct from `--language` (R1-I2 lock); `--electrum-language` wins on Electrum arms (R2-L2 lock). Portuguese is base-1626 (Monero copyright header); base-N arithmetic correctly parameterized.
 - **Tier:** `v0.8`
 
 ### `electrum-encode-iteration-bound` — encode mining loop has no upper iteration cap
@@ -846,8 +846,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
 - **Where:** `crates/mnemonic-toolkit/src/electrum.rs::encode_phrase` (or equivalent encode-from-entropy path).
 - **What:** Electrum's encode direction iterates by incrementing a nonce until the HMAC-SHA512 prefix matches the requested SeedVersion (`01` standard / `100` segwit). The loop has no iteration bound; on adversarially-chosen entropy or for rare versions, the search may run unboundedly long. Add a sane upper bound (e.g., `2^24` iterations) with a byte-exact stderr refusal on exhaustion.
-- **Why deferred:** v0.7 Phase 3 prioritized correctness against the corpus spike fixtures; iteration-bound hardening is a defensive fix unlikely to fire on legitimate input.
-- **Status:** `open`
+- **Status:** `resolved 5dc83eb` (v0.8 Phase 2).
+- **Resolution:** v0.8 Phase 2 — `MAX_ENCODE_ITERATIONS = 1<<20` cap on `entropy_to_phrase` rejection-search loop. New `ElectrumError::EncodeIterationBoundExceeded` mapped to user-visible refusal.
 - **Tier:** `v0.8`
 
 ### `electrum-version-info-stderr` — decode emits the detected SeedVersion silently
@@ -855,8 +855,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
 - **Where:** `crates/mnemonic-toolkit/src/electrum.rs::decode_phrase` + `cmd::convert::run` electrum arm.
 - **What:** When `mnemonic convert --from electrum-phrase=... --to entropy` decodes a phrase, the toolkit dispatches via the SeedVersion prefix (`01` / `100` / `101` / `102`) but does not surface which version it detected. Adding a stderr info-line (e.g., `info: Electrum SeedVersion=01 (standard)`) parallel to the SLIP-0132 input-normalization note (SPEC §11) would help users confirm the dispatch matches their wallet's expectation.
-- **Why deferred:** Nice-to-have UX polish; not behaviorally incorrect to be silent. Ordering against the SPEC §5.5.a stderr-discipline invariant needs a brainstorm.
-- **Status:** `open`
+- **Status:** `resolved 5dc83eb` (v0.8 Phase 2).
+- **Resolution:** v0.8 Phase 2 — `note: detected Electrum SeedVersion <01|100> (<standard|segwit>)` emitted to stderr on decode arms. `compute_outputs` extended to triple-tuple return surfacing the detected SeedVersion.
 - **Tier:** `v0.8-nice-to-have`
 
 ### `tr-multi-a-tr-sortedmulti-a-export-wallet-support` — `mnemonic export-wallet` refuses taproot multisig templates
@@ -864,8 +864,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 5 code-quality review (commit `f8369d3`).
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export.rs` (descriptor pipeline + taproot-multisig validator).
 - **What:** `mnemonic export-wallet` refuses `--template tr-multi-a` and `--template tr-sortedmulti-a` at runtime with an error pointing at this v0.8 deferral. Reason: taproot multisig descriptors require an internal-key designation (NUMS point or shared key) plus the script-path tree; the export-wallet pipeline doesn't yet thread the internal-key choice through to Bitcoin Core / BIP-388 formatters. Single-leaf `tr` (BIP-86) IS supported.
-- **Why deferred:** v0.7 Phase 5 prioritized the BIP-44/49/84/86 + multisig-WSH path. Taproot multisig export needs its own brainstorm on internal-key selection UX.
-- **Status:** `open`
+- **Status:** `resolved 86647ca` (v0.8 Phase 3).
+- **Resolution:** v0.8 Phase 3 — new `--taproot-internal-key <nums|@N>` flag designates the BIP-341 internal key. NUMS uses the canonical reference `50929b74...0ac0` x-only point; `@N` makes cosigner N the key-path key (removed from multi_a leaf set). v0.7 stub refusal replaced with flag-pointing message. Bounds-checked + n=1 degenerate refusal.
 - **Tier:** `v0.8`
 
 ### `export-wallet-descriptor-bip388-interop` — `--descriptor` mode + `--format bip388` is refused
@@ -873,8 +873,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 5 code-quality review (commit `f8369d3`).
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export.rs` (format dispatch + descriptor-mode validator).
 - **What:** `mnemonic export-wallet --descriptor <user-supplied> --format bip388` is refused at runtime; `--descriptor` mode currently only supports `--format bitcoin-core`. Reason: user-supplied descriptors arrive as opaque strings; converting them to BIP-388 `wallet_policy` requires re-parsing into the placeholder-template form (`@0/<0;1>/*`), which the watch-only template-mode pipeline already does but the descriptor-mode pipeline skips.
-- **Why deferred:** v0.7 Phase 5 fork: descriptor-mode interop with BIP-388 is a non-trivial parsing extension; bitcoin-core format covers the primary user need.
-- **Status:** `open`
+- **Status:** `resolved 86647ca` (v0.8 Phase 3).
+- **Resolution:** v0.8 Phase 3 — new `descriptor_to_bip388_wallet_policy` helper parses canonical descriptor via miniscript, iterates `iter_pk()` to collect `[fp/path]xpub` keys (stripping `/<0;1>/*`), strips `#checksum`, and replaces each full key-expression with `@N/**` placeholder via longest-first substitution. Refused for non-multipath descriptors.
 - **Tier:** `v0.8`
 
 ### `bip85-rsa-rsa-gpg-dice-applications` — RSA / RSA-GPG / DICE BIP-85 applications deferred
@@ -882,17 +882,17 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `crates/mnemonic-toolkit/src/bip85.rs` application dispatch + `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface.
 - **What:** BIP-85 application codes `828365'` (RSA), `67797633'` (RSA-GPG), `89101'` (DICE) are refused with v0.8 deferral stubs. Reason: RSA derivation requires an RSA crate not currently in the dep tree; DICE is a niche application (deterministic dice-roll output) with limited demand. The 6 in-scope applications (`bip39`, `hd-seed`, `xprv`, `hex`, `password-base64`, `password-base85`) cover the primary use cases.
-- **Why deferred:** Adding RSA pulls in a heavy crypto dep for a niche use case; needs explicit user-demand signal. DICE is unusual enough to warrant its own UX brainstorm.
-- **Status:** `open`
-- **Tier:** `v0.8`
+- **Status:** `split-resolved 1dde4dc` (v0.8 Phase 7); split into `bip85-dice-application` (resolved) + `bip85-rsa-rsa-gpg-applications` (re-tiered).
+- **Resolution:** v0.8 Phase 7 — DICE shipped with BIP85-DRNG-SHAKE256 + rejection sampling per BIP-85 v1.3.0 §"DICE". Spec reference vector (`m/83696968'/89101'/6'/10'/0'` → `1,0,0,2,0,1,5,5,2,4`) pinned. New `--dice-sides` flag. New `sha3 = "0.10"` direct dep. RSA + RSA-GPG re-tiered to v0.9 / pending-rsa-crate-stability per Phase 6 SPIKE (`design/agent-reports/v0_8-phase-6-rsa-crate-security-review.md`): RUSTSEC-2023-0071 Marvin-attack timing sidechannel is **unpatched** (`patched = []`); rsa crate is in extended pre-release (`v0.10.0-rc.18`). Reopen criteria: rsa crate publishes patched stable release OR user requests with stated downstream use case.
+- **Tier:** `v0.8` (DICE) / `v0.9` (RSA + RSA-GPG)
 
 ### `bip85-passphrase-protected-master` — `--from phrase=` + `--passphrase` direct path
 
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface.
 - **What:** `mnemonic derive-child --from xprv=...` requires xprv input. A user with a passphrase-protected BIP-39 phrase must currently route through `mnemonic convert --from phrase=... --passphrase ... --to xprv` first, then pipe the xprv to `derive-child`. A direct `--from phrase=... --passphrase ...` path on `derive-child` would be more ergonomic.
-- **Why deferred:** Two-step flow works correctly today; one-step UX is nice-to-have, not blocking.
-- **Status:** `open`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — `--from phrase=...` accepted; internal `phrase → seed → master xprv` (mainnet, BIP-85-network-agnostic) before BIP-85 derivation. New `--passphrase` for BIP-39 mnemonic extension.
 - **Tier:** `v0.8-nice-to-have`
 
 ### `bip85-non-english-bip39-language-codes` — `--language` flag inert for BIP-39 application
@@ -900,8 +900,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface + `bip85::derive_bip39`.
 - **What:** `--language` is plumbed through clap on `mnemonic derive-child` but ignored for BIP-85's `bip39` application. BIP-85 supports 9 wordlists (`0'` English through `8'` Czech) for the BIP-39 application via the language-index sub-path component. v0.7 hardcodes English (`0'`).
-- **Why deferred:** Mirror of the convert-side `electrum-non-latin-wordlists` deferral; non-English wordlist bundling is its own scope.
-- **Status:** `open`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — new `resolve_bip85_language` maps `CliLanguage` → (BIP-85 path code, `bip39::Language`). 9 BIP-85-coded languages supported. Portuguese refused (no BIP-85 code assigned).
 - **Tier:** `v0.8`
 
 ### `bip85-testnet-emission` — `--network` flag inert for hd-seed / xprv applications
@@ -909,8 +909,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface + `bip85::derive_hd_seed` / `derive_xprv`.
 - **What:** `--network` is plumbed through clap but unused. v0.7 hardcodes mainnet WIF / xprv emission for `--application hd-seed` and `--application xprv`. Testnet users must post-process via `mnemonic convert` to swap version bytes.
-- **Why deferred:** v0.7 Phase 6 prioritized BIP-85 algorithmic correctness; network-aware emission is a clean v0.8 follow-on.
-- **Status:** `open`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — `format_hd_seed_wif` + `format_xprv_child` now take `NetworkKind` parameter. Testnet emits `c…` WIF / `tprv…` xprv. Driven by `--network` flag (default mainnet to match BIP-85 spec test vectors).
 - **Tier:** `v0.8`
 
 ### `bip85-spec-prose-byte-formula-clarification` — SPEC §3 prose vs. worked-example formula mismatch
@@ -918,8 +918,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `design/SPEC_derive_child_v0_7.md` §3 (BIP-39 byte slicing).
 - **What:** SPEC §3 prose says BIP-39 byte slicing uses `2 * length_in_words / 3`; the worked examples (12 words → 16 bytes, 24 words → 32 bytes) match the correct formula `words * 4 / 3`. The two are equivalent for word counts divisible by 3 but the prose formula is not the canonical BIP-39 form. Pure SPEC text fix — implementation is correct.
-- **Why deferred:** Documentation-only nit; behavior matches the worked examples and BIP-39 spec.
-- **Status:** `open`
+- **Status:** `resolved 4dfea5a` (v0.8 Phase 0).
+- **Resolution:** v0.8 Phase 0 — `2 * length_in_words / 3` → `length_in_words * 4 / 3` in SPEC §3.
 - **Tier:** `v0.7-nice-to-have`
 
 ### `bip85-stdin-master-xprv` — `--from xprv=-` parses but does not read stdin
@@ -927,8 +927,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs::run`.
 - **What:** `mnemonic derive-child --from xprv=-` parses through clap (the `=-` sentinel is recognized) but `derive_child::run` does not read stdin to populate the xprv value. `mnemonic convert` does honor `=-`. Add stdin-read parity for cross-subcommand consistency.
-- **Why deferred:** Two-character feature gap; nice-to-have for shell-pipeline ergonomics.
-- **Status:** `open`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — `derive_child::run` now reads stdin when `args.from.value == "-"` via `crate::cmd::convert::read_stdin_to_string` (made `pub(crate)`). Works for both `xprv=-` and `phrase=-`.
 - **Tier:** `v0.8`
 
 ### `derive-child-spec-2-grammar-uniformity-tension` — SPEC §2 prose-internal contradiction on `--length` mandatoriness
@@ -936,8 +936,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
 - **Where:** `design/SPEC_derive_child_v0_7.md` §2.
 - **What:** SPEC §2 has internal tension: it says `--length` is mandatory at clap level AND that `--length` is refused for `--application hd-seed` / `--application xprv`. Phase 6 implementation adopted a sentinel-0 convention: clap requires `--length`, and `hd-seed`/`xprv` arms refuse only when the supplied value is non-zero (`0` is treated as sentinel-absent). The SPEC text should be edited to reflect this; current prose reads as a contradiction.
-- **Why deferred:** Documentation-only nit; implementation is consistent with the worked examples and CLI tests.
-- **Status:** `open`
+- **Status:** `resolved 4dfea5a` (v0.8 Phase 0).
+- **Resolution:** v0.8 Phase 0 — SPEC §2 + §4 prose updated to document the sentinel-0 convention canonically.
 - **Tier:** `v0.7-nice-to-have`
 
 ### `bip38-ec-multiplied-encrypt-mode-support` — emit BIP-38 EC-multiplied form via intermediate codes
@@ -945,9 +945,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7.1 Phase 3 (BIP test vector audit cycle); rescoped from `bip38-ec-multiplied-mode-support` after Phase 3 forensics.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` `(Wif, Bip38)` arm; `bip38 = "1.1"` crate.
 - **What:** v0.7.1 supports BIP-38 EC-multiplied DECRYPT transparently (4 spec vectors pinned). ENCRYPT to EC-multiplied form requires the intermediate-code workflow per BIP-38 §"Generation of intermediate code": the passphrase owner generates a passphrase code; a third party combines it with random entropy to derive the encrypted privkey + the corresponding bitcoin address. Implementation: new subcommand `mnemonic intermediate-code` (or `--passphrase-code <code>` flag on the `(Wif, Bip38)` arm). Out of scope for v0.7.1 vectors-only audit.
-- **Why deferred:** new subcommand-grade feature with its own SPEC § + UX surface; not pickable from a vectors-only patch cycle.
+- **Why deferred:** v0.8 Phase 4 SPIKE returned DEFER verdict (`design/agent-reports/v0_8-phase-4-bip38-ec-mult-encrypt-spike.md`). The `bip38 v1.1.1` `Generate` trait covers owner-only path only with internal `rand::thread_rng()` (non-deterministic) and exposes no intermediate-code workflow + no confirmation code. Hand-rolling spec-compliant API costs ~155 LOC of cryptographic code (AES + scrypt + secp256k1 + Unicode normalization). Marginal user value (paper-wallet niche). Re-tiered to `v0.8.1+`.
 - **Status:** `open`
-- **Tier:** `v0.8`
+- **Tier:** `v0.8.1+`
 
 ### `bip38-spec-section-12-ec-multiplied-erratum` — SPEC §12 incorrectly claimed EC-multiplied was refused
 
@@ -963,6 +963,6 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.7.1 Phase 3.A (BIP test vector audit cycle).
 - **Where:** `crates/mnemonic-toolkit/tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector3_unicode_nfc_passphrase` (`#[ignore]`'d); `crates/mnemonic-toolkit/src/cmd/convert.rs` passphrase input plumbing.
 - **What:** BIP-38 §"Test vectors" vector 3 specifies a passphrase of 5 codepoints (U+03D2 + U+0301 + U+0000 + U+10400 + U+1F4A9). The U+0000 NULL byte cannot be passed via argv (POSIX `execve` truncates at NULL); the existing `--passphrase=-` stdin path also fails because `read_stdin_to_string` calls `.trim()`. To exercise this vector end-to-end the toolkit needs a NULL-safe input channel — e.g. `--passphrase-bytes-hex <hex>` accepting the raw byte sequence, or a stdin path that reads bytes verbatim (no trim, no UTF-8 reinterpretation). The `bip38` crate itself NFC-normalizes whatever string slice it receives; the gap is purely at the toolkit's input plumbing.
-- **Why deferred:** new input-channel surface (CLI + SPEC + tests); not pickable from a vectors-only patch cycle. Cite-only `#[ignore]`'d tests preserve the spec values for the day this lands.
-- **Status:** `open`
+- **Status:** `resolved 2eef44b` (v0.8 Phase 1).
+- **Resolution:** v0.8 Phase 1 — new `--passphrase-stdin` flag with line-ending-only trim (preserves leading/trailing spaces + internal NULL). Both V3 ignored tests unignored and now active. Phase 1 review I1 added a separate `read_stdin_passphrase` helper distinct from `read_stdin_to_string` to prevent the trim issue.
 - **Tier:** `v0.8`
