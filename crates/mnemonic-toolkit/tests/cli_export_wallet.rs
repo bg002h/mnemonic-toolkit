@@ -338,18 +338,13 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
 /// emit a clean refusal at exit 2. Constructing `tr(<internal-key>,
 /// multi_a(...))` requires picking a NUMS point or designating a key-path key;
 /// deferred to v0.8.
+/// SPEC v0.8 §7 — `tr-multi-a` / `tr-sortedmulti-a` without
+/// `--taproot-internal-key` returns a refusal that points the user at the
+/// new flag. v0.7 refused these templates outright; v0.8 supports them via
+/// the new flag.
 #[test]
-fn taproot_multisig_template_refusal_byte_exact() {
-    for (template_name, expected) in [
-        (
-            "tr-multi-a",
-            "error: --template <tr-multi-a> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts.\n",
-        ),
-        (
-            "tr-sortedmulti-a",
-            "error: --template <tr-sortedmulti-a> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts.\n",
-        ),
-    ] {
+fn taproot_multisig_template_requires_internal_key_flag() {
+    for template_name in ["tr-multi-a", "tr-sortedmulti-a"] {
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
             .args([
@@ -377,9 +372,12 @@ fn taproot_multisig_template_refusal_byte_exact() {
             ])
             .assert()
             .failure()
-            .code(2);
+            .code(1);
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-        assert_eq!(stderr, expected);
+        assert!(
+            stderr.contains(&format!("--template {template_name} requires --taproot-internal-key")),
+            "stderr missing taproot-internal-key pointer for {template_name}; got: {stderr:?}",
+        );
     }
 }
 
@@ -626,5 +624,343 @@ fn threshold_greater_than_cosigner_count_refusal() {
     assert!(
         stderr.contains("--threshold 5 exceeds cosigner count 2"),
         "stderr did not contain k>n refusal: {stderr:?}",
+    );
+}
+
+// ============================================================================
+// SPEC v0.8 §7 — Item #12: tr-multi-a / tr-sortedmulti-a + --taproot-internal-key
+// ============================================================================
+
+const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+/// SPEC v0.8 §7 — `--taproot-internal-key nums` produces a `tr(NUMS,multi_a(K,...))`
+/// canonical descriptor; round-trips through Bitcoin Core importdescriptors.
+#[test]
+fn tr_multi_a_with_nums_internal_key_emits_canonical_tr_descriptor() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "tr-multi-a",
+            "--taproot-internal-key",
+            "nums",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // The canonical descriptor must start with `tr(<NUMS>,multi_a(2,...))`.
+    assert!(
+        stdout.contains(&format!("tr({NUMS_HEX},multi_a(2,")),
+        "stdout missing tr(NUMS,multi_a(2,...)) shape; got: {stdout:?}",
+    );
+    // Both cosigner xpubs must appear as multi_a leaves.
+    assert!(stdout.contains(COSIGNER_A_XPUB), "missing cosigner A xpub in {stdout:?}");
+    assert!(stdout.contains(COSIGNER_B_XPUB), "missing cosigner B xpub in {stdout:?}");
+}
+
+/// SPEC v0.8 §7 — `--taproot-internal-key @0` makes cosigner 0 the key-path
+/// internal key; cosigner 0 is removed from the multi_a leaf set, leaving
+/// only cosigner 1 as a single-leaf multi_a (k=1).
+#[test]
+fn tr_multi_a_with_cosigner_internal_key_removes_cosigner_from_leaves() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "tr-multi-a",
+            "--taproot-internal-key",
+            "@0",
+            "--threshold",
+            "1",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // Cosigner A is the internal key (appears outside multi_a); cosigner B
+    // is the sole multi_a leaf.
+    assert!(stdout.contains(COSIGNER_A_XPUB), "missing internal key (cosigner A) in {stdout:?}");
+    assert!(stdout.contains(COSIGNER_B_XPUB), "missing leaf key (cosigner B) in {stdout:?}");
+    assert!(
+        stdout.contains("multi_a(1,"),
+        "expected multi_a(1,...) with cosigner A removed; got {stdout:?}",
+    );
+}
+
+/// SPEC v0.8 §7 — `--taproot-internal-key @N` out of range refusal.
+#[test]
+fn tr_multi_a_internal_key_out_of_range() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "tr-multi-a",
+            "--taproot-internal-key",
+            "@5",
+            "--threshold",
+            "1",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--taproot-internal-key @5 out of range"),
+        "stderr missing out-of-range refusal: {stderr:?}",
+    );
+}
+
+/// SPEC v0.8 §7 — `--taproot-internal-key` on a non-taproot template is refused.
+#[test]
+fn taproot_internal_key_on_non_taproot_template_refused() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "wsh-sortedmulti",
+            "--taproot-internal-key",
+            "nums",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"),
+        "stderr missing non-taproot refusal: {stderr:?}",
+    );
+}
+
+/// SPEC v0.8 §6 + §7 — taproot multisig + BIP-388 wallet_policy. NUMS internal
+/// embeds the literal hex; multi_a leaves use `@N/**` placeholders.
+#[test]
+fn tr_multi_a_bip388_wallet_policy_with_nums() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "tr-multi-a",
+            "--taproot-internal-key",
+            "nums",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--format",
+            "bip388",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(
+        json["description_template"].as_str().unwrap(),
+        format!("tr({NUMS_HEX},multi_a(2,@0/**,@1/**))"),
+    );
+    let keys_info = json["keys_info"].as_array().unwrap();
+    assert_eq!(keys_info.len(), 2);
+}
+
+// ============================================================================
+// SPEC v0.8 §6 — Item #13: --descriptor + --format bip388 interop
+// ============================================================================
+
+/// SPEC v0.8 §6 — user-supplied descriptor → BIP-388 wallet_policy. Each key
+/// in the descriptor is replaced with `@N/**`; keys_info collects the
+/// `[fp/path]xpub` slices in source order.
+#[test]
+fn descriptor_to_bip388_wallet_policy_round_trip() {
+    let descriptor = format!(
+        "wsh(sortedmulti(2,[{COSIGNER_A_FP}/48'/0'/0'/2']{COSIGNER_A_XPUB}/<0;1>/*,[{COSIGNER_B_FP}/48'/0'/0'/2']{COSIGNER_B_XPUB}/<0;1>/*))",
+    );
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &descriptor,
+            "--format",
+            "bip388",
+            "--network",
+            "mainnet",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(
+        json["description_template"].as_str().unwrap(),
+        "wsh(sortedmulti(2,@0/**,@1/**))",
+    );
+    let keys_info: Vec<&str> = json["keys_info"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(keys_info.len(), 2);
+    assert!(
+        keys_info[0].contains(COSIGNER_A_XPUB) && keys_info[0].contains(COSIGNER_A_FP),
+        "keys_info[0] missing cosigner A: {:?}", keys_info[0],
+    );
+    assert!(
+        keys_info[1].contains(COSIGNER_B_XPUB) && keys_info[1].contains(COSIGNER_B_FP),
+        "keys_info[1] missing cosigner B: {:?}", keys_info[1],
+    );
+    // keys_info entries must NOT include the `/<0;1>/*` suffix — BIP-388
+    // appends `@N/**` shorthand instead.
+    for k in &keys_info {
+        assert!(
+            !k.contains("/<0;1>/*"),
+            "keys_info entry kept multipath suffix: {k:?}",
+        );
+    }
+}
+
+/// SPEC v0.8 §7 — n=1 cosigner-internal taproot is a degenerate case
+/// (removing the only cosigner leaves no multi_a leaves). Refused with a
+/// clean `BadInput` rather than letting miniscript fail with an opaque
+/// parse error. Phase 3 review I1 fix.
+#[test]
+fn tr_multi_a_n1_cosigner_internal_degenerate_refused() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "tr-multi-a",
+            "--taproot-internal-key",
+            "@0",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("with a single cosigner leaves no multi_a leaves"),
+        "stderr missing degenerate refusal: {stderr:?}",
+    );
+}
+
+/// SPEC v0.8 §6 — non-multipath descriptor refused under `--format bip388`.
+#[test]
+fn descriptor_to_bip388_non_multipath_refused() {
+    let descriptor = format!(
+        "wpkh([{TREZOR_BIP84_FP}/84'/0'/0']{TREZOR_BIP84_XPUB}/0/*)",
+    );
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &descriptor,
+            "--format",
+            "bip388",
+            "--network",
+            "mainnet",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("requires the --descriptor to use multipath form"),
+        "stderr missing multipath requirement: {stderr:?}",
     );
 }

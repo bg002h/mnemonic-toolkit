@@ -10,9 +10,9 @@ use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
-    build_descriptor_string, format_bip388_wallet_policy,
-    format_bitcoin_core_importdescriptors, validate_watch_only,
-    validate_watch_only_resolved, TimestampArg,
+    build_descriptor_string, descriptor_to_bip388_wallet_policy, format_bip388_wallet_policy,
+    format_bitcoin_core_importdescriptors, validate_watch_only, validate_watch_only_resolved,
+    TaprootInternalKey, TimestampArg,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -81,6 +81,29 @@ pub struct ExportWalletArgs {
     /// Bitcoin Core target version. 24 or 25 (default 25).
     #[arg(long = "bitcoin-core-version", default_value = "25")]
     pub bitcoin_core_version: u8,
+
+    /// SPEC v0.8 §7 — Taproot internal-key designation for `tr-multi-a` /
+    /// `tr-sortedmulti-a` templates. `nums` selects the BIP-341 reference
+    /// NUMS x-only point. `@N` selects cosigner N's xpub as the key-path
+    /// internal key (cosigner N is then removed from the multi_a leaf set).
+    #[arg(long = "taproot-internal-key", value_parser = parse_taproot_internal_key_arg)]
+    pub taproot_internal_key: Option<TaprootInternalKey>,
+}
+
+/// SPEC v0.8 §7 parser: `nums` or `@N` (decimal index).
+fn parse_taproot_internal_key_arg(s: &str) -> Result<TaprootInternalKey, String> {
+    if s == "nums" {
+        return Ok(TaprootInternalKey::Nums);
+    }
+    if let Some(n) = s.strip_prefix('@') {
+        let idx: u8 = n.parse().map_err(|e| {
+            format!("--taproot-internal-key {s:?}: cosigner index must be u8: {e}")
+        })?;
+        return Ok(TaprootInternalKey::Cosigner(idx));
+    }
+    Err(format!(
+        "--taproot-internal-key must be 'nums' or '@N' (cosigner index); got {s:?}",
+    ))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -137,34 +160,34 @@ pub fn run<W: Write, E: Write>(
     // `resolve_slots` returns (see template branch below).
     validate_watch_only(&args.slot)?;
 
-    // Refuse `tr-multi-a` / `tr-sortedmulti-a` — `tr(multi_a(...))` is malformed
-    // grammar (miniscript requires `tr(<internal-key>, <taptree>)`); proper
-    // construction needs an internal-key designation (NUMS vs key-path key)
-    // and is deferred to v0.8.
+    // SPEC v0.8 §7 — `tr-multi-a` / `tr-sortedmulti-a` require
+    // `--taproot-internal-key`. The flag designates the BIP-341 internal key
+    // (NUMS or cosigner index) for the canonical `tr(<internal>,multi_a(K,...))`
+    // construction. v0.7 refused these templates outright; v0.8 supports them
+    // with the internal-key designation.
     if let Some(template) = args.template {
-        match template {
-            CliTemplate::TrMultiA => {
-                return Err(ToolkitError::ExportWalletTaprootMultisigUnsupported(
-                    "tr-multi-a",
-                ));
-            }
-            CliTemplate::TrSortedMultiA => {
-                return Err(ToolkitError::ExportWalletTaprootMultisigUnsupported(
-                    "tr-sortedmulti-a",
-                ));
-            }
-            _ => {}
+        if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA)
+            && args.taproot_internal_key.is_none()
+        {
+            return Err(ToolkitError::BadInput(format!(
+                "--template {} requires --taproot-internal-key (use 'nums' for an unspendable BIP-341 NUMS point, or '@N' to designate cosigner N as the key-path internal key)",
+                match template {
+                    CliTemplate::TrMultiA => "tr-multi-a",
+                    CliTemplate::TrSortedMultiA => "tr-sortedmulti-a",
+                    _ => unreachable!(),
+                },
+            )));
         }
     }
-
-    // BIP-388 + `--descriptor` passthrough are mutually unsupported in v0.7
-    // (BIP-388 needs `@N/**` placeholders; --descriptor substitutes concrete
-    // xpubs at the canonical layer). Fire this refusal BEFORE the canonical
-    // descriptor parse so the user gets the more-specific message rather than
-    // a parse error.
-    if args.format == CliExportFormat::Bip388 && args.descriptor.is_some() {
+    // SPEC v0.8 §7 — `--taproot-internal-key` is taproot-multisig-only.
+    if args.taproot_internal_key.is_some()
+        && !matches!(
+            args.template,
+            Some(CliTemplate::TrMultiA) | Some(CliTemplate::TrSortedMultiA)
+        )
+    {
         return Err(ToolkitError::BadInput(
-            "--format bip388 requires --template (descriptor passthrough not supported in v0.7)".into(),
+            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a".into(),
         ));
     }
 
@@ -214,17 +237,60 @@ pub fn run<W: Write, E: Write>(
                 "export-wallet: at least one --slot @N.xpub=... required".into(),
             ));
         }
-        let k = args.threshold.unwrap_or(n);
-        if k > n {
-            return Err(ToolkitError::BadInput(format!(
-                "--threshold {k} exceeds cosigner count {n}"
-            )));
+        // For taproot multisig with a cosigner-internal key, the multi_a leaf
+        // set has N-1 cosigners (one becomes the key-path key). Default
+        // threshold = N for non-taproot or NUMS-internal; = N-1 when a
+        // cosigner is internal. Caller may still override via --threshold.
+        let leaf_count = match (template, args.taproot_internal_key) {
+            (
+                CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA,
+                Some(TaprootInternalKey::Cosigner(_)),
+            ) => n - 1,
+            _ => n,
+        };
+        // n=1 cosigner-internal degenerate case: removing the only cosigner
+        // leaves no multi_a leaves. Refuse cleanly here rather than letting
+        // miniscript reject `multi_a(0,)` with an opaque parse error.
+        if leaf_count == 0 {
+            return Err(ToolkitError::BadInput(
+                "--taproot-internal-key @N with a single cosigner leaves no multi_a leaves; supply at least 2 cosigners (or use --taproot-internal-key nums for unspendable key-path)".into(),
+            ));
         }
-        // SPEC §5.5.a — verify-bundle Option B: suppress slip0132 info-line on
-        // export-wallet (consistent with verify-bundle's read-only checker
-        // semantics; see self-review report).
-        let canonical =
-            build_descriptor_string(template, &resolved, k, args.network, args.account)?;
+        let k = args.threshold.unwrap_or(leaf_count);
+        if k > leaf_count {
+            // Distinguish multi_a-leaf-count error (cosigner-internal taproot)
+            // from the general cosigner-count error to keep the existing
+            // refusal text stable for non-taproot multisig.
+            let msg = if leaf_count != n {
+                format!("--threshold {k} exceeds multi_a leaf count {leaf_count} (one cosigner is the taproot internal key)")
+            } else {
+                format!("--threshold {k} exceeds cosigner count {n}")
+            };
+            return Err(ToolkitError::BadInput(msg));
+        }
+        if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA)
+            && matches!(
+                args.taproot_internal_key,
+                Some(TaprootInternalKey::Cosigner(_))
+            )
+        {
+            // Validate cosigner index range.
+            if let Some(TaprootInternalKey::Cosigner(idx)) = args.taproot_internal_key {
+                if idx >= n {
+                    return Err(ToolkitError::BadInput(format!(
+                        "--taproot-internal-key @{idx} out of range; only {n} cosigners supplied",
+                    )));
+                }
+            }
+        }
+        let canonical = build_descriptor_string(
+            template,
+            &resolved,
+            k,
+            args.network,
+            args.account,
+            args.taproot_internal_key,
+        )?;
         resolved_template = Some((resolved, template, k));
         canonical
     };
@@ -237,15 +303,25 @@ pub fn run<W: Write, E: Write>(
             args.bitcoin_core_version,
         )?,
         CliExportFormat::Bip388 => {
-            // BIP-388: render template + slots directly so description_template
-            // uses @N/** placeholders (canonical descriptor with concrete xpubs
-            // does not). `--descriptor` passthrough was refused above; reaching
-            // here implies the template branch ran and `resolved_template` is
-            // populated.
-            let (resolved, template, k) = resolved_template.expect(
-                "Bip388 reached without resolved_template; --descriptor refused upstream",
-            );
-            format_bip388_wallet_policy(template, &resolved, k, args.network, args.account)?
+            if args.descriptor.is_some() {
+                // SPEC v0.8 §6 — `--descriptor` + `--format bip388`: extract
+                // `[fp/path]xpub` keys from the parsed descriptor; build
+                // wallet_policy by replacing each key with `@N/**` placeholder.
+                descriptor_to_bip388_wallet_policy(&canonical)?
+            } else {
+                // Template branch: render directly using `@N/**` placeholders.
+                let (resolved, template, k) = resolved_template.expect(
+                    "Bip388 template branch reached without resolved_template",
+                );
+                format_bip388_wallet_policy(
+                    template,
+                    &resolved,
+                    k,
+                    args.network,
+                    args.account,
+                    args.taproot_internal_key,
+                )?
+            }
         }
         CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
     };
