@@ -577,7 +577,7 @@ fn compute_outputs(
         }
         Xpub => {
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let value = normalize_xpub_prefix(value)?;
+            let (value, _normalized) = normalize_xpub_prefix(value)?;
             let xpub = bip32::Xpub::from_str(&value)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
             let mut out = Vec::with_capacity(targets.len());

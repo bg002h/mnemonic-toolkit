@@ -58,7 +58,14 @@ const SWAP_TO_TPUB_TESTNET: [u8; 4] = [0x04, 0x35, 0x87, 0xCF];
 /// SPEC §11 — accept SLIP-0132 prefix variants on input by decode-swap-reencode
 /// down to BIP-32 neutral `xpub` / `tpub`. Returns the input unchanged when it
 /// is already neutral. Returns `BadInput` (exit 1) for unknown prefixes.
-pub(crate) fn normalize_xpub_prefix(s: &str) -> Result<String, ToolkitError> {
+///
+/// The `Option<&'static str>` second element is the variant-name signal: `None`
+/// when the input was already neutral, otherwise the SLIP-0132 prefix string
+/// (`"ypub"`, `"Ypub"`, `"zpub"`, `"Zpub"`, `"upub"`, `"Upub"`, `"vpub"`, `"Vpub"`)
+/// that was swapped out. Phase 3 surfaces this on stderr.
+pub(crate) fn normalize_xpub_prefix(
+    s: &str,
+) -> Result<(String, Option<&'static str>), ToolkitError> {
     let raw = base58::decode_check(s)
         .map_err(|e| ToolkitError::BadInput(format!("base58check decode: {e}")))?;
     if raw.len() != 78 {
@@ -68,21 +75,19 @@ pub(crate) fn normalize_xpub_prefix(s: &str) -> Result<String, ToolkitError> {
         )));
     }
     let prefix: [u8; 4] = raw[0..4].try_into().expect("78 bytes guarantees 4-byte prefix");
-    let neutral = match prefix {
-        // already neutral — pass through
-        SWAP_TO_XPUB_MAINNET | SWAP_TO_TPUB_TESTNET => return Ok(s.to_string()),
+    let (neutral, variant): ([u8; 4], &'static str) = match prefix {
+        // already neutral — pass through with None signal
+        SWAP_TO_XPUB_MAINNET | SWAP_TO_TPUB_TESTNET => return Ok((s.to_string(), None)),
         // SLIP-0132 mainnet → xpub
-        [0x04, 0x9D, 0x7C, 0xB2]   // ypub
-        | [0x02, 0x95, 0xB4, 0x3F] // Ypub
-        | [0x04, 0xB2, 0x47, 0x46] // zpub
-        | [0x02, 0xAA, 0x7E, 0xD3] // Zpub
-        => SWAP_TO_XPUB_MAINNET,
+        [0x04, 0x9D, 0x7C, 0xB2] => (SWAP_TO_XPUB_MAINNET, "ypub"),
+        [0x02, 0x95, 0xB4, 0x3F] => (SWAP_TO_XPUB_MAINNET, "Ypub"),
+        [0x04, 0xB2, 0x47, 0x46] => (SWAP_TO_XPUB_MAINNET, "zpub"),
+        [0x02, 0xAA, 0x7E, 0xD3] => (SWAP_TO_XPUB_MAINNET, "Zpub"),
         // SLIP-0132 testnet → tpub
-        [0x04, 0x4A, 0x52, 0x62]   // upub
-        | [0x02, 0x42, 0x89, 0xEF] // Upub
-        | [0x04, 0x5F, 0x1C, 0xF6] // vpub
-        | [0x02, 0x57, 0x54, 0x83] // Vpub
-        => SWAP_TO_TPUB_TESTNET,
+        [0x04, 0x4A, 0x52, 0x62] => (SWAP_TO_TPUB_TESTNET, "upub"),
+        [0x02, 0x42, 0x89, 0xEF] => (SWAP_TO_TPUB_TESTNET, "Upub"),
+        [0x04, 0x5F, 0x1C, 0xF6] => (SWAP_TO_TPUB_TESTNET, "vpub"),
+        [0x02, 0x57, 0x54, 0x83] => (SWAP_TO_TPUB_TESTNET, "Vpub"),
         _ => {
             return Err(ToolkitError::BadInput(format!(
                 "unknown extended-key version prefix: {:02x}{:02x}{:02x}{:02x}",
@@ -92,7 +97,7 @@ pub(crate) fn normalize_xpub_prefix(s: &str) -> Result<String, ToolkitError> {
     };
     let mut swapped = raw.clone();
     swapped[0..4].copy_from_slice(&neutral);
-    Ok(base58::encode_check(&swapped))
+    Ok((base58::encode_check(&swapped), Some(variant)))
 }
 
 /// SPEC §11.a — emit `xpub` with a SLIP-0132 (or neutral) version prefix
@@ -142,14 +147,16 @@ mod tests {
 
     #[test]
     fn normalize_passes_neutral_xpub_through_unchanged() {
-        let out = normalize_xpub_prefix(BIP84_REF_XPUB).unwrap();
+        let (out, sig) = normalize_xpub_prefix(BIP84_REF_XPUB).unwrap();
         assert_eq!(out, BIP84_REF_XPUB);
+        assert!(sig.is_none());
     }
 
     #[test]
     fn normalize_swaps_zpub_to_xpub() {
-        let out = normalize_xpub_prefix(BIP84_REF_ZPUB).unwrap();
+        let (out, sig) = normalize_xpub_prefix(BIP84_REF_ZPUB).unwrap();
         assert_eq!(out, BIP84_REF_XPUB);
+        assert_eq!(sig, Some("zpub"));
     }
 
     #[test]
@@ -157,8 +164,9 @@ mod tests {
         let xpub = Xpub::from_str(BIP84_REF_XPUB).unwrap();
         let zpub_out = apply_xpub_prefix(&xpub, XpubPrefix::Zpub, CliNetwork::Mainnet);
         assert_eq!(zpub_out, BIP84_REF_ZPUB);
-        let neutral = normalize_xpub_prefix(&zpub_out).unwrap();
+        let (neutral, sig) = normalize_xpub_prefix(&zpub_out).unwrap();
         assert_eq!(neutral, BIP84_REF_XPUB);
+        assert_eq!(sig, Some("zpub"));
     }
 
     #[test]
@@ -198,10 +206,17 @@ mod tests {
         assert!(big_y_out.starts_with("Ypub"));
         assert!(zpub_out.starts_with("zpub"));
         assert!(big_z_out.starts_with("Zpub"));
-        // All decode back to the same neutral xpub.
-        for variant_out in &[ypub_out, big_y_out, zpub_out, big_z_out] {
-            let neutral = normalize_xpub_prefix(variant_out).unwrap();
+        // All decode back to the same neutral xpub, with variant-name signal
+        // matching the prefix that was swapped out.
+        for (variant_out, expected_sig) in &[
+            (ypub_out, "ypub"),
+            (big_y_out, "Ypub"),
+            (zpub_out, "zpub"),
+            (big_z_out, "Zpub"),
+        ] {
+            let (neutral, sig) = normalize_xpub_prefix(variant_out).unwrap();
             assert_eq!(neutral, BIP84_REF_XPUB);
+            assert_eq!(sig, Some(*expected_sig));
         }
     }
 
