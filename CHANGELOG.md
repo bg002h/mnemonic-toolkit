@@ -8,13 +8,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `mnemonic convert` and `mnemonic bundle` now emit a stderr informational line when a SLIP-0132 input prefix (`ypub | Ypub | zpub | Zpub` mainnet; `upub | Upub | vpub | Vpub` testnet) is silently normalized to its BIP-32 neutral form (`xpub` / `tpub`). Closes the v0.6.1 UX gap where intent signals were lost without trace. Emission is independent of `--json` and `--no-engraving-card`. Multi-slot bundles emit one note per slot in slot-index ascending order. (Closes FOLLOWUPS `slip0132-input-normalization-stderr-info`.)
+- `mnemonic convert` and `mnemonic bundle` now emit a stderr informational line when a SLIP-0132 input prefix (`ypub | Ypub | zpub | Zpub` mainnet; `upub | Upub | vpub | Vpub` testnet) is silently normalized to its BIP-32 neutral form (`xpub` / `tpub`). Closes the v0.6.1 UX gap where intent signals were lost without trace. Emission is independent of `--json` and `--no-engraving-card`. Multi-slot bundles emit one note per slot in slot-index ascending order.
 
 ### Changed
 
 - SPEC §5.5.a relaxed: the secret-on-stdout warning is the last stderr write *when it fires*; informational notes precede the engraving-card block. Deterministic stderr ordering: `informational notes → engraving card → secret-on-stdout warning (conditional)`. See `design/SPEC_mnemonic_toolkit_v0_5.md` §5.5.a (v0.6.2 amendment block).
+
+### Internal
+
 - `slip0132::normalize_xpub_prefix` return type changed from `Result<String, ToolkitError>` to `Result<(String, Option<&'static str>), ToolkitError>` to thread the variant-name signal up to the emission layer. `pub(crate)` API only — no impact on external consumers.
 - `bundle::resolve_slots` return type extended with a `Vec<(u8, &'static str)>` slot-index→variant-name signal channel. `pub(crate)` API only.
+
+### FOLLOWUPS resolved
+
+- `slip0132-input-normalization-stderr-info` — SLIP-0132 input-normalization stderr info-line shipped (this release).
 
 ## mnemonic-toolkit [0.6.1] — 2026-05-06
 

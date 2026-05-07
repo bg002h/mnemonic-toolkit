@@ -102,7 +102,7 @@ NOT a discriminated union; NOT `#[serde(untagged)]`. Schema_version is the dispa
 
 **Privacy-preserving rendering:** under `--privacy-preserving`, fingerprint columns render as `anon` (3 ASCII chars); ms1/mk1 chunk_set_ids still render (they don't leak provenance). Card layout shape is otherwise identical.
 
-## §5.5.a Secret-on-stdout warning (v0.6.1 amendment)
+## §5.5.a Secret-on-stdout warning (v0.6.1 amendment; v0.6.2 ordering relaxation)
 
 When `Bundle::any_secret_bearing()` returns true (per `synthesize.rs` — at least one ms1 entry is non-empty under §5.8), the toolkit prints a one-line stderr warning byte-exactly:
 
