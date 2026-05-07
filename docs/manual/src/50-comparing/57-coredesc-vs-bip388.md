@@ -15,7 +15,7 @@ shallow.
 |---|---|---|
 | Shape | flat string | JSON object |
 | Inline keys | full xpubs in the string | placeholders `@0`, `@1`; xpubs in `keys_info` |
-| Multipath | inline `<0;1>/*` | inline `<0;1>/*` in `policy_template` |
+| Multipath | inline `<0;1>/*` | template-side `@N/**` (per-key path elided into the placeholder) |
 | Master fingerprint | inline `[fp/path]` prefix | in `keys_info` strings |
 | Origin paths | inline | in `keys_info` strings |
 | Hardware-wallet display | full string | template-only (privacy) |
@@ -30,10 +30,13 @@ Both, via `mnemonic export-wallet --format <bitcoin-core | bip388>`:
   descriptors, suitable for `bitcoin-cli importdescriptors`. Both
   receive (`<0;1>/0/*`) and change (`<0;1>/1/*`) descriptors are
   emitted.
-- **`bip388`** — single JSON object with `policy_template` (the
-  template string) and `keys_info` (the bound xpubs). Used by
-  Sparrow, Specter, Coldcard, and Bitcoin Core 24+ (which accepts
-  wallet policies via the BIP-388 import path).
+- **`bip388`** — single JSON object with `description_template`
+  (the template string) and `keys_info` (the bound xpubs). Targets
+  hardware-wallet coordinators (Coldcard, Ledger, Foundation
+  Passport) and third-party wallet imports that consume the
+  BIP-388 shape directly. Bitcoin Core's `importdescriptors` RPC
+  does **not** consume this format; use `--format bitcoin-core`
+  for Bitcoin Core.
 
 ## Why two formats coexist
 
@@ -48,9 +51,12 @@ as a *complete* representation: one string carries everything. The
 flat string is easy to copy-paste and unambiguous; the trade-off is
 no separable display.
 
-Bitcoin Core 25+ supports importing both shapes; Bitcoin Core 24
-prefers the descriptor shape; older software prefers descriptors
-exclusively.
+Bitcoin Core (any version) accepts the descriptor shape via
+`importdescriptors`. The BIP-388 wallet-policy shape targets
+hardware wallets and third-party coordinators; Bitcoin Core's
+`importdescriptors` RPC does not consume it directly (an open
+issue in Bitcoin Core's tracker proposes adding rendering, but
+nothing has shipped).
 
 ## Side-by-side example
 
@@ -72,7 +78,7 @@ wsh(sortedmulti(2,
 {
   "name": "wsh-sortedmulti-2-of-3",
   "description": "",
-  "policy_template": "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+  "description_template": "wsh(sortedmulti(2,@0/**,@1/**,@2/**))",
   "keys_info": [
     "[fp0/87h/0h/0h]xpub6Cosig0...",
     "[fp1/87h/0h/0h]xpub6Cosig1...",
@@ -88,12 +94,16 @@ Same wallet; different shapes. The toolkit converts between them via
 
 | Receiving software | Use |
 |---|---|
-| Bitcoin Core 25 + (importdescriptors) | `--format bitcoin-core` |
-| Bitcoin Core 24 (BIP-388-aware) | either; bip388 is more compact |
-| Sparrow | `--format sparrow` (Sparrow-native) or `bip388` |
-| Specter | `--format specter` (Specter-native) or `bip388` |
+| Bitcoin Core (any version, via `importdescriptors`) | `--format bitcoin-core` |
+| Sparrow | `--format bip388` (sparrow-native export deferred) |
+| Specter | `--format bip388` (specter-native export deferred) |
 | Coldcard / SeedSigner / Foundation Passport | `--format bip388` |
-| Custom tooling | whatever's cheapest to parse |
+| Custom tooling | whichever shape is cheapest to parse |
+
+(`--format sparrow` and `--format specter` flags are accepted by
+the binary but currently return a deferral stub; use
+`--format bip388` for both. A future v0.8.x patch may light up
+the stubs.)
 
 ## What the m-format md1 card carries
 

@@ -12,9 +12,9 @@ one your software wants.
 flowchart LR
   A[Wallet policy<br/>md1 + mk1 set] --> B{Receiving<br/>software?}
   B -- Bitcoin Core 25+ --> C["--format bitcoin-core<br/>(importdescriptors JSON)"]
-  B -- Sparrow / Specter / Bitcoin Core 24 --> D["--format bip388<br/>(wallet_policy JSON)"]
-  B -- Sparrow native --> E["--format sparrow"]
-  B -- Specter native --> F["--format specter"]
+  B -- Sparrow / Specter / Coldcard / Ledger --> D["--format bip388<br/>(wallet_policy JSON)"]
+  B -- Sparrow native --> E["--format sparrow<br/>(deferred stub)"]
+  B -- Specter native --> F["--format specter<br/>(deferred stub)"]
   C --> G[bitcoin-cli importdescriptors '...']
   D --> H[Import as wallet policy]
   E --> H
@@ -70,7 +70,7 @@ Output is the canonical BIP-388 JSON shape:
 {
   "name": "wsh-sortedmulti-2-of-3",
   "description": "",
-  "policy_template": "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+  "description_template": "wsh(sortedmulti(2,@0/**,@1/**,@2/**))",
   "keys_info": [
     "[fp0/87h/0h/0h]xpub...",
     "[fp1/87h/0h/0h]xpub...",
@@ -83,7 +83,18 @@ Output is the canonical BIP-388 JSON shape:
 paths. For Coldcard / SeedSigner / older-Sparrow compatibility, add
 `--multisig-path-family bip48` and the paths become `m/48'/0'/0'/2'`.)
 
-## Sparrow native format
+## Sparrow + Specter (currently via BIP-388)
+
+`--format sparrow` and `--format specter` are accepted by the
+binary but currently return a deferral stub:
+
+```text
+error: --format <sparrow> is deferred to a future release; use
+--format bitcoin-core or --format bip388 instead.
+```
+
+For now, export as BIP-388 and import via the receiving wallet's
+BIP-388-aware path:
 
 ```sh
 mnemonic export-wallet \
@@ -92,28 +103,14 @@ mnemonic export-wallet \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
   --slot @2.xpub=<xpub-2> \
-  --format sparrow \
-  --output sparrow-wallet.json
+  --format bip388 \
+  --output wallet-policy.json
 ```
 
-The Sparrow native format is similar to BIP-388 with Sparrow-specific
-metadata (label, scripts, gap-limit hints). Import via Sparrow's
-*File → Import* dialog.
-
-## Specter native format
-
-```sh
-mnemonic export-wallet \
-  --template wsh-sortedmulti \
-  --threshold 2 \
-  --slot @0.xpub=<xpub-0> \
-  --slot @1.xpub=<xpub-1> \
-  --slot @2.xpub=<xpub-2> \
-  --format specter
-```
-
-Specter's native config follows its own JSON conventions. Import via
-the Specter HTTP API or the *Add Wallet* UI.
+Sparrow consumes wallet-policy JSON via *File → Import → Wallet
+Policy*. Specter accepts BIP-388 via the *Add Wallet → Import → Multisig*
+flow. Native Sparrow / Specter shapes will land if a future toolkit
+release lights up the format stubs.
 
 ## From a user-supplied descriptor
 
