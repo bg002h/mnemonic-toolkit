@@ -739,9 +739,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
 - **Where:** new `Slip39` `NodeType` (or new top-level subcommand `mnemonic slip39`); SPEC additions or new SPEC document.
 - **What:** SLIP-39 (Trezor's standard) is a K-of-N Shamir-secret-sharing scheme for BIP-39 entropy with its own wordlist (1024 words, distinct from BIP-39's 2048). Shares carry: identifier, iteration exponent, group threshold, group count, member threshold, member index, share value, checksum (Reed-Solomon). Two-level scheme: groups × shares-within-group. Used by Trezor Model T for its native backup. Edges: `entropy → slip39-shares` (split; takes `--group-threshold` + per-group `--member-threshold`); `slip39-shares → entropy` (combine; needs ≥ K shares). Composite via entropy intermediate: `phrase → slip39-shares` etc. The 1024-word SLIP-39 wordlist must be embedded.
-- **Why deferred:** Largest single addition in the queue — SLIP-39 is essentially an alternative to BIP-39's wordlist + a Shamir layer. The toolkit's secret-material slot would gain a second-class citizen alongside BIP-39 entropy. Significant SPEC + impl work; may want its own minor cycle (v0.7 or v0.8). Trezor's `python-shamir-mnemonic` library is the reference impl. Note: the planned `mnemonic-secret` v0.2 cycle (sibling repo) is shipping K-of-N share encoding for ms1 codex32 — that may obviate the need for SLIP-39 in this toolkit, depending on user priorities. Brainstorm should resolve "do we want SLIP-39 *and* ms1-shares, or just ms1-shares?" before any impl.
+- **Why deferred:** Largest single addition in the queue — SLIP-39 is essentially an alternative to BIP-39's wordlist + a Shamir layer. The toolkit's secret-material slot would gain a second-class citizen alongside BIP-39 entropy. Significant SPEC + impl work; may want its own minor cycle (v0.7 or v0.8). Trezor's `python-shamir-mnemonic` library is the reference impl. Note: the planned `mnemonic-secret` v0.2 cycle (sibling repo) is shipping K-of-N share encoding for ms1 codex32 — that may obviate the need for SLIP-39 in this toolkit, depending on user priorities. Brainstorm should resolve "do we want SLIP-39 *and* ms1-shares, or just ms1-shares?" before any impl. v0.7 cycle resolved to defer (lib audit returned hand-roll-required; no maintained Rust crate).
 - **Status:** `open`
-- **Tier:** `v0.7`
+- **Tier:** `v0.8`
 
 ### `electrum-native-seed-format` — Electrum seed wordlist + version-prefix checksum
 
@@ -758,9 +758,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified_descriptor`; descriptor-input handling in `parse_descriptor.rs`.
 - **What:** v0.5+ accepts BIP-388-conformant descriptors (placeholder-template form `wpkh(@0/<0;1>/*)`, multipath, sortedmulti, etc.). The full miniscript language has many additional policies the toolkit doesn't surface as supported wallet types: `andor`, `thresh`, `pk_h`, time-locked branches via `older` / `after`, hash-locked `hash160` / `sha256` / `ripemd160`, `multi_a` (taproot multi without sortedness), arbitrary `tr` taproot trees with multi-leaf miniscript. Rust-miniscript supports parsing these; the gap is the toolkit's wallet-policy validation and the engraving-card / verify-bundle UX.
-- **Why deferred:** Open-ended scope. Each new miniscript shape may have its own UX implications (verify-bundle parity check counts; engraving-card rendering; BIP-388 distinct-key extensions). Brainstorm should pick a small subset (e.g., `thresh`, `andor`, `tr` with single-leaf miniscript) for v0.7 rather than open-ended "all of miniscript."
+- **Why deferred:** Open-ended scope. Each new miniscript shape may have its own UX implications (verify-bundle parity check counts; engraving-card rendering; BIP-388 distinct-key extensions). Brainstorm should pick a small subset (e.g., `thresh`, `andor`, `tr` with single-leaf miniscript) rather than open-ended "all of miniscript." v0.7 cycle did not pick this up; carry forward.
 - **Status:** `open`
-- **Tier:** `v0.7`
+- **Tier:** `v0.8`
 
 ### `vault-construction-covenant-based` — accept covenant-based vault descriptors (CTV / OP_CAT / OP_VAULT)
 
@@ -769,7 +769,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** Vault constructions use covenant opcodes (BIP-119 `OP_CHECKTEMPLATEVERIFY`, BIP-348 `OP_CAT` re-enable, BIP-345 `OP_VAULT`) to enforce spending paths beyond what current Bitcoin script allows: time-delayed spends, recovery paths, batch authorizations, etc. None of these opcodes are activated on mainnet today. When/if activated, vault descriptors become a wallet-type class distinct from current single-sig/multisig descriptors.
 - **Why deferred:** **Gated on Bitcoin consensus activation.** No mainnet support today; signet test-cases exist for some of these. Re-evaluate when the relevant BIP advances to mainnet. The plumbing in this toolkit (descriptor parsing, mk1 xpub binding, md1 wallet-policy encoding) generalizes to vaults, so the impl gap is small once the script-side BIP activates — but speculative until then.
 - **Status:** `open`
-- **Tier:** `v0.7`
+- **Tier:** `v1+`
 
 ### `address-derivation-from-xpub-path` — xpub + path + script-type → bitcoin address
 

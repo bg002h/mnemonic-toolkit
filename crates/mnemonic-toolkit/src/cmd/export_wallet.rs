@@ -112,6 +112,9 @@ fn parse_timestamp(s: &str) -> Result<TimestampArgValue, String> {
     }
 }
 
+/// `_stderr` is unused: export-wallet is watch-only by SPEC §3, so the
+/// secret-on-stdout warning never fires; the parameter exists for callsite
+/// symmetry with the other subcommands.
 pub fn run<W: Write, E: Write>(
     args: &ExportWalletArgs,
     stdout: &mut W,
