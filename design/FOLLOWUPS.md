@@ -670,8 +670,28 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   Suppressed when input is already neutral. Quiet for users who already understand the normalization; informative for users discovering the round-trip primitive. The emitter must thread `&mut dyn Write` for stderr to all 3 cross-cut sites OR be implemented as an out-parameter on `normalize_xpub_prefix` so the caller decides where to write. Implementation tip: if `normalize_xpub_prefix` returns `Result<(String, Option<&'static str> /* variant-name */), ToolkitError>`, callers can match on `Some(_)` and emit per their stderr convention.
 - **Why deferred:** v0.6.1 shipped the silent-normalization MVP intentionally (smaller blast radius; no new stderr bytes that could break byte-exact tests; Phase D's stderr-ordering invariant stays simple). UX-improvement work fits a v0.6.2 patch.
 - **Caveat:** new stderr lines at the 3 cross-cut sites must NOT break the Phase D §5.5.a "secret-on-stdout warning is the LAST stderr write" invariant. Either fire the info note BEFORE the engraving card / before the secret-on-stdout warning, or relax the §5.5.a SPEC clause. Spike before SPEC-amending.
-- **Status:** `resolved 7bf1f1e` — v0.6.2 lean cycle. SLIP-0132 input-normalization stderr info-line shipped; SPEC §5.5.a relaxation + multi-slot ordering + `--json` / `--no-engraving-card` independence locked. Phase 1 RED scaffold (`38c4272` + `740a917`), Phase 2 helper signature (`11c8edb` + `957db16`), Phase 3 emission (`e4fedd7` + `7bf1f1e`).
+- **Status:** `resolved e4fedd7` — v0.6.2 lean cycle. SLIP-0132 input-normalization stderr info-line shipped; SPEC §5.5.a relaxation + multi-slot ordering + `--json` / `--no-engraving-card` independence locked. Phase 1 RED scaffold (`38c4272` + `740a917`), Phase 2 helper signature (`11c8edb` + `957db16`), Phase 3 emission (`e4fedd7` + `7bf1f1e` review-fix DRY refactor), Phase 4 SPEC + CHANGELOG (`39fa359` + `42561f3`), Phase 5 cosmetic step-numbering (`a52b2aa` + `96c2e3b`), Phase 6 release (`1fddf3b`).
 - **Tier:** `v0.6.2`
+
+### `slip0132-info-line-spec-text-not-byte-pinned` — SPEC §11 info-line wording isn't programmatically locked to the production format string
+
+- **Surfaced:** v0.6.2 final cumulative review 2026-05-06.
+- **Where:** `design/SPEC_convert_v0_6.md` §11 (canonical info-line paragraph); `crates/mnemonic-toolkit/src/slip0132.rs::render_slip0132_info_line` (production helper); `crates/mnemonic-toolkit/src/slip0132.rs::tests::render_slip0132_info_line_pins_canonical_text` (existing pin test, locks production ↔ slip0132 internal only).
+- **What:** v0.6.2 introduced `render_slip0132_info_line(variant)` as the single production source of truth for the info-line text, with a unit test pinning the byte sequence for representative variants. The SPEC body in §11 carries the canonical text but as a templated example with `<variant>` and `<xpub|tpub>` placeholders. There is no test that asserts the SPEC body matches the production format-string structure. A future editor "improving" SPEC §11 prose (e.g., changing "Re-emit with" to "Re-encode with") would silently desync the SPEC from shipped behavior; CI catches nothing.
+- **Why deferred:** v0.6.2 lean cycle scope; not a correctness bug. Test-side helpers in `tests/cli_*_slip0132_info.rs` provide bidirectional locking against production already (any production-text drift fails the integration tests), so the practical drift hazard is bounded — this entry is about catching SPEC-prose drift specifically.
+- **Possible fix:** add a doc-test or unit test that grep-matches the SPEC §11 paragraph against a structural pattern, OR convert SPEC §11's example block into a fenced ```text block whose canonical form is read at test time. The first option is lower-overhead.
+- **Status:** `open`
+- **Tier:** `v0.7-nice-to-have`
+
+### `verify-bundle-discards-slip0132-input-variant-asymmetry` — `verify-bundle` silently drops the SLIP-0132 input-normalization signal across 4 callsites
+
+- **Surfaced:** v0.6.2 Phase 3 implementation (`e4fedd7`); confirmed in v0.6.2 final cumulative review 2026-05-06.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:209`, `:261`, `:337`, `:407` — each callsite destructures `let (resolved, _slip0132_signals) = resolve_slots(...)?;` and discards the signal with the comment `// verify-bundle does not surface SLIP-0132 input-normalization signals.`
+- **What:** v0.6.2 made `mnemonic convert` and `mnemonic bundle` emit a stderr informational line when a user-supplied SLIP-0132 prefix is silently normalized. `mnemonic verify-bundle` calls the same `pub(crate) resolve_slots` helper but discards the signal. Result: a user who pastes a `zpub` to `bundle` gets the info-line; pasting the same `zpub` to `verify-bundle` does not. The discard is semantically correct for v0.6.2's scope (verify-bundle is structurally a checker that emits check-pass/fail status, not a renderer of user inputs), but it creates a UX asymmetry within the toolkit.
+- **Why deferred:** parity decision is its own UX policy question (does verify-bundle want to also emit the info-line? Or remain silent on stderr by design?). v0.6.2 lean cycle did not litigate this — the discard was the no-op-on-verify-bundle choice that minimized blast radius.
+- **Possible fix (v0.7+ brainstorm):** decide whether `verify-bundle` should also emit the info-line for symmetry. If yes, thread `slip0132_signals` to a stderr emitter near each of the 4 callsites; SPEC §5.5.a's stderr-ordering invariant applies (notes precede any conditional warnings). If no, document the asymmetry intentionally in `SPEC_convert_v0_6.md` §11 / verify-bundle SPEC.
+- **Status:** `open`
+- **Tier:** `v0.7-nice-to-have`
 
 ### `bip38-encrypted-wif` — accept + emit BIP-38 passphrase-encrypted privkeys (`6P...`)
 
