@@ -955,7 +955,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_convert_v0_6.md` §12.
 - **What:** The v0.7.0 SPEC §12 stated the `bip38` crate's `Decrypt` impl rejected EC-multiplied codes. Empirical testing in Phase 3 disconfirmed: all 4 EC-multiplied spec vectors decrypt correctly. SPEC §12 corrected in this cycle (commit pinned in matrix). Filed for cross-referencing the erratum source: the v0.7 Phase 1 security review report at `design/agent-reports/v0_7-phase-1-bip38-security-review.md` likely contains the source claim — re-read on next sec-review touch.
 - **Why deferred:** documentation-only; closed in this cycle. Filed for audit history continuity.
-- **Status:** `resolved <commit-sha-of-this-Phase-3-commit>`
+- **Status:** `resolved 2c59b27`
 - **Tier:** `v0.7.1`
 
 ### `bip38-spec-vector-3-null-byte-passphrase` — V3 Unicode passphrase contains U+0000; not representable via argv
