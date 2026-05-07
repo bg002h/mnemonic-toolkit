@@ -693,6 +693,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.7-nice-to-have`
 
+### `bip38-distinct-passphrase-flag` — split composite `(Phrase|Entropy, Bip38)` passphrase into two channels
+
+- **Surfaced:** v0.7 Phase 1 code-quality review (commit `c3d0a85`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` composite arm + `convert::ConvertArgs` clap struct; SPEC §12.b reference.
+- **What:** v0.7 ships dual-purpose `--passphrase` for composite paths flowing `phrase → wif → bip38` (or `entropy → wif → bip38`). One passphrase value drives both BIP-39 PBKDF2 mnemonic extension and BIP-38 Scrypt encryption. A user wanting distinct values must invoke `convert` twice. v0.8 may add `--bip38-passphrase` as a distinct flag so a single composite invocation can use different passphrases per layer. Implementation: thread the new flag through `compute_outputs`'s composite arms; if `--bip38-passphrase` is supplied, use it for the Scrypt step and use `--passphrase` (or `""` if absent) for the PBKDF2 step.
+- **Why deferred:** v0.7 ships the simplest UX (single dual-purpose flag); the distinct-passphrase use case is uncommon and adds clap surface that needs its own UX brainstorm.
+- **Status:** `open`
+- **Tier:** `v0.8-nice-to-have`
+
 ### `bip38-encrypted-wif` — accept + emit BIP-38 passphrase-encrypted privkeys (`6P...`)
 
 - **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.

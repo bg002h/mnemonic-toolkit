@@ -484,6 +484,17 @@ The `(Wif, Bip38)` and `(Bip38, Wif)` edges implement the non-EC-multiplied form
 
 **Reference vectors:** BIP-38 §"Test vectors" — three non-EC-multiplied test vectors (no compression, with compression, and a test with passphrase containing non-ASCII). All three are pinned in Phase 1 RED tests.
 
+### §12.b Composite `(Phrase|Entropy, Bip38)` passphrase semantics
+
+For composite paths flowing `phrase → wif → bip38` (or `entropy → wif → bip38`), `--passphrase` serves a DUAL purpose:
+
+1. **BIP-39 mnemonic extension** (input to PBKDF2 during seed derivation in `phrase → wif` step).
+2. **BIP-38 encryption passphrase** (input to Scrypt during `wif → bip38` step).
+
+This means a single `--passphrase` value composes BOTH the seed extension and the BIP-38 encryption. To use distinct values for each layer, invoke `convert` twice: first `phrase → wif --passphrase X` (or `--passphrase ""` for empty extension), then `wif → bip38 --passphrase Y`.
+
+The `--bip38-passphrase` distinct-flag option is tracked as a v0.8 UX FOLLOWUP (`bip38-distinct-passphrase-flag`).
+
 ## §13 Casascius mini-private-key (v0.7)
 
 The `(MiniKey, Wif)` edge decodes Casascius mini-private-key strings (the engraved format on physical Casascius bitcoin coins, ~2011-2013).

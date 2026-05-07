@@ -268,3 +268,138 @@ fn composite_phrase_to_bip38_via_wif() {
     ]);
     assert_eq!(recovered_wif, direct_wif);
 }
+
+#[test]
+fn composite_entropy_to_bip38_via_wif() {
+    // Trezor zero-entropy 12-word phrase's entropy (BIP-39 reference vector,
+    // `abandon × 11 about` → `00000000000000000000000000000000`). BIP-84
+    // derivation path m/84'/0'/0'/0/0, mainnet. Mirrors
+    // `composite_phrase_to_bip38_via_wif` but exercises the (Entropy, Bip38)
+    // arm end-to-end via the CLI.
+    const ENTROPY: &str = "00000000000000000000000000000000";
+    const BIP38_PASS: &str = "TestingOneTwoThree";
+
+    let bip38_out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("entropy={ENTROPY}"),
+        "--to",
+        "bip38",
+        "--path",
+        "m/84'/0'/0'/0/0",
+        "--passphrase",
+        BIP38_PASS,
+    ]);
+    assert!(
+        bip38_out.starts_with("6P"),
+        "BIP-38 ciphertext must start with 6P; got {bip38_out:?}"
+    );
+
+    // Decrypt back; recovered WIF must match the direct entropy → wif path
+    // with the same passphrase (dual-purpose --passphrase, SPEC §12.b).
+    let direct_wif = convert_value(&[
+        "convert",
+        "--from",
+        &format!("entropy={ENTROPY}"),
+        "--to",
+        "wif",
+        "--path",
+        "m/84'/0'/0'/0/0",
+        "--passphrase",
+        BIP38_PASS,
+    ]);
+    let recovered_wif = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={bip38_out}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        BIP38_PASS,
+    ]);
+    assert_eq!(recovered_wif, direct_wif);
+}
+
+// ============================================================================
+// Dual-passphrase semantics (SPEC §12.b) — cross-check
+// ============================================================================
+
+#[test]
+fn composite_phrase_to_bip38_dual_passphrase_semantics_pinned() {
+    // SPEC §12.b: in `phrase → wif → bip38`, --passphrase serves a DUAL
+    // purpose: BIP-39 mnemonic extension AND BIP-38 Scrypt key. This test
+    // pins that behavior — decrypting a `phrase → bip38 --passphrase X`
+    // output yields the WIF derived from the phrase WITH X as mnemonic
+    // extension (WIF_B), NOT the WIF derived without an extension (WIF_A).
+    //
+    // If a future refactor splits the two channels (FOLLOWUP
+    // `bip38-distinct-passphrase-flag`), this test must be updated.
+    const PHRASE: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const PATH: &str = "m/84'/0'/0'/0/0";
+    const X: &str = "dual-purpose-passphrase";
+
+    // WIF_A: phrase → wif with EMPTY mnemonic extension.
+    let wif_a = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={PHRASE}"),
+        "--to",
+        "wif",
+        "--path",
+        PATH,
+    ]);
+
+    // WIF_B: phrase → wif with X as mnemonic extension.
+    let wif_b = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={PHRASE}"),
+        "--to",
+        "wif",
+        "--path",
+        PATH,
+        "--passphrase",
+        X,
+    ]);
+
+    assert_ne!(
+        wif_a, wif_b,
+        "BIP-39 extension must change derived WIF; if these are equal, the test setup is wrong"
+    );
+
+    // BIP38_C: phrase → bip38 with --passphrase X (composite arm).
+    let bip38_c = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={PHRASE}"),
+        "--to",
+        "bip38",
+        "--path",
+        PATH,
+        "--passphrase",
+        X,
+    ]);
+
+    // Decrypt BIP38_C with X.
+    let recovered = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={bip38_c}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        X,
+    ]);
+
+    // Per SPEC §12.b: recovered must equal WIF_B (X applied to BOTH legs),
+    // NOT WIF_A (which would imply X was treated as BIP-38-only).
+    assert_eq!(
+        recovered, wif_b,
+        "SPEC §12.b — composite --passphrase MUST drive both PBKDF2 and Scrypt"
+    );
+    assert_ne!(
+        recovered, wif_a,
+        "SPEC §12.b — composite --passphrase MUST NOT bypass PBKDF2 mnemonic extension"
+    );
+}

@@ -618,6 +618,9 @@ fn compute_outputs(
                         let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        // SPEC §12.b — composite path: --passphrase serves dual purpose
+                        // (BIP-39 mnemonic extension AND BIP-38 Scrypt key). Distinct flag tracked
+                        // as v0.8 FOLLOWUP `bip38-distinct-passphrase-flag`.
                         let leaf_xpriv = derive_bip32_at_path(
                             &entropy, passphrase, language, network, &path,
                         )?;
