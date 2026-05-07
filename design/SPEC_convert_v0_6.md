@@ -199,9 +199,14 @@ error: Electrum 2FA seed (version 101 or 102) requires a second factor not prese
 error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.
 ```
 
-**`refusal_minikey_one_way` stderr (byte-exact, used for both `--to minikey` and `minikey → non-wif` cascades):**
+**`refusal_minikey_one_way` stderr (byte-exact, used for `--to minikey` cascades):**
 ```
 error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).
+```
+
+**`refusal_minikey_decode_only` stderr (byte-exact, used for `--from minikey --to <non-wif>`; `{to}` is the rejected target node-string):**
+```
+error: --from minikey only supports --to wif (decode-only); cannot convert to {to}.
 ```
 
 **`refusal_bip38_identity` stderr (byte-exact):**

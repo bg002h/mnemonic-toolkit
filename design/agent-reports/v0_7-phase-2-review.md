@@ -56,3 +56,15 @@ Network coverage: at least one mainnet (`5...`) AND one testnet (`9...`) WIF pre
 ## Assessment
 
 **Shippable.** All 10 new tests GREEN; no clippy regressions; no SPEC/text drift. `(MiniKey, Wif)` edge implements §13 exactly.
+
+## Code-quality review supplement (post-impl)
+
+Fresh code-quality reviewer dispatched 2026-05-06 after the implementer's self-report. Finding:
+
+### Important — `refusal_minikey_one_way` text misleading for `minikey → non-wif`
+
+`classify_edge` originally dispatched two distinct cases (`to == MiniKey` and `from == MiniKey && to != Wif`) to the same helper. The message wrongly told users invoking `--from minikey --to xpub` that they were asking for `--to minikey`.
+
+**Resolution:** split into two helpers — `refusal_minikey_one_way()` (kept for `to == MiniKey`) and `refusal_minikey_decode_only(to)` (new, for `from == MiniKey && to != Wif`). Test byte-pins updated (`refusal_minikey_to_xpub_one_way` → `refusal_minikey_to_xpub_decode_only`; `refusal_minikey_to_phrase_one_way` → `refusal_minikey_to_phrase_decode_only`). SPEC §3.d byte-pin enumeration updated to list both helpers.
+
+Fix landed in commit <this-commit>.

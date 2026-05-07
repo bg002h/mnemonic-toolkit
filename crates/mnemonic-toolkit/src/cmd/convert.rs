@@ -260,13 +260,19 @@ fn refusal_bip38_identity() -> ToolkitError {
 }
 
 // SPEC v0.7 §3.d — Casascius mini-key refusals.
-// Covers BOTH `--to minikey` cascades (mini-key generation requires
-// brute-forcing the typo-checksum) AND `minikey → non-wif` requests
-// (decode-only contract; pivot via wif intermediate).
+// `--to minikey`: generation requires brute-forcing the typo-checksum.
 fn refusal_minikey_one_way() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "--to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).".into(),
     )
+}
+
+// SPEC v0.7 §3.d — `minikey → non-wif`: decode-only contract; pivot via wif intermediate.
+fn refusal_minikey_decode_only(to: NodeType) -> ToolkitError {
+    ToolkitError::ConvertRefusal(format!(
+        "--from minikey only supports --to wif (decode-only); cannot convert to {}.",
+        to.as_str()
+    ))
 }
 
 fn refusal_minikey_invalid_format() -> ToolkitError {
@@ -330,10 +336,14 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
     }
 
     // §3.d v0.7 — `* → minikey` is one-way (typo-checksum requires brute-force).
-    // Also covers `minikey → non-wif` (decode-only contract): the only supported
-    // edge from `minikey` is `(MiniKey, Wif)`; everything else routes here.
-    if to == MiniKey || (from == MiniKey && to != Wif) {
+    if to == MiniKey {
         return Some(refusal_minikey_one_way());
+    }
+    // §3.d v0.7 — `minikey → non-wif`: decode-only contract; the only supported
+    // edge from `minikey` is `(MiniKey, Wif)`. Everything else surfaces with a
+    // distinct refusal pointing at the supported target.
+    if from == MiniKey && to != Wif {
+        return Some(refusal_minikey_decode_only(to));
     }
 
     // §3.c distinct xpub→mk1 message.

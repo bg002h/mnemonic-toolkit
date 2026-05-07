@@ -174,8 +174,8 @@ fn refusal_minikey_invalid_checksum() {
 }
 
 #[test]
-fn refusal_minikey_to_xpub_one_way() {
-    // §3.d: minikey → non-wif is a sibling-pivot, surfaces as one-way refusal.
+fn refusal_minikey_to_xpub_decode_only() {
+    // §3.d: minikey → non-wif surfaces with distinct decode-only refusal pointing at wif.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -191,12 +191,12 @@ fn refusal_minikey_to_xpub_one_way() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).\n"
+        "error: --from minikey only supports --to wif (decode-only); cannot convert to xpub.\n"
     );
 }
 
 #[test]
-fn refusal_minikey_to_phrase_one_way() {
+fn refusal_minikey_to_phrase_decode_only() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -212,7 +212,7 @@ fn refusal_minikey_to_phrase_one_way() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).\n"
+        "error: --from minikey only supports --to wif (decode-only); cannot convert to phrase.\n"
     );
 }
 
