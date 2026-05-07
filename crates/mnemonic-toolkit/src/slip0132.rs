@@ -165,10 +165,17 @@ mod tests {
     /// BIP-84 reference vector (https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki):
     /// mnemonic "abandon abandon abandon abandon abandon abandon abandon abandon abandon
     /// abandon abandon about" + account 0 + m/84'/0'/0' →
+    /// Also SLIP-0132 §"Bitcoin Test Vectors" m/84'/0'/0' published example.
     const BIP84_REF_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
     /// Equivalent neutral xpub for the same account-level key (computed by
     /// decode-swap-reencode against the spec's zpub).
     const BIP84_REF_XPUB: &str = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V";
+
+    /// SLIP-0132 §"Bitcoin Test Vectors" m/44'/0'/0' published xpub.
+    /// Source: <https://github.com/satoshilabs/slips/blob/master/slip-0132.md>.
+    const SLIP0132_BIP44_XPUB: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj";
+    /// SLIP-0132 §"Bitcoin Test Vectors" m/49'/0'/0' published ypub.
+    const SLIP0132_BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
 
     #[test]
     fn normalize_passes_neutral_xpub_through_unchanged() {
@@ -338,6 +345,43 @@ mod tests {
                 "SPEC §11 template ↔ production drift for variant {variant:?}",
             );
         }
+    }
+
+    /// SLIP-0132 §"Bitcoin Test Vectors" — pin the 3 published Bitcoin mainnet
+    /// examples (BIP-44 xpub, BIP-49 ypub, BIP-84 zpub all derived from the
+    /// Trezor 12-word seed). The toolkit's `normalize_xpub_prefix` round-trips
+    /// each through neutral xpub form. The remaining 6 SLIP-0132 prefix
+    /// variants (Ypub/Zpub multisig + upub/Upub/vpub/Vpub testnet) have no
+    /// published xpub examples in the spec; their behavior is exercised by
+    /// `apply_emits_all_5_mainnet_variants` and
+    /// `apply_testnet_variants_swap_to_lowercase_t_class_prefixes`.
+    #[test]
+    fn slip0132_spec_bitcoin_test_vector_bip44_xpub_round_trip() {
+        // m/44'/0'/0' — neutral xpub, no normalization expected.
+        let (out, sig) = normalize_xpub_prefix(SLIP0132_BIP44_XPUB).unwrap();
+        assert_eq!(out, SLIP0132_BIP44_XPUB);
+        assert!(sig.is_none(), "neutral xpub should not signal");
+    }
+
+    #[test]
+    fn slip0132_spec_bitcoin_test_vector_bip49_ypub_normalize() {
+        // m/49'/0'/0' — ypub normalizes to xpub, signals "ypub".
+        let (out, sig) = normalize_xpub_prefix(SLIP0132_BIP49_YPUB).unwrap();
+        assert!(out.starts_with("xpub"), "ypub must normalize to xpub head");
+        assert_eq!(sig, Some("ypub"));
+        // Round-trip: re-emit ypub from neutral, must equal original.
+        let xpub = Xpub::from_str(&out).unwrap();
+        let reemit = apply_xpub_prefix(&xpub, XpubPrefix::Ypub, CliNetwork::Mainnet);
+        assert_eq!(reemit, SLIP0132_BIP49_YPUB);
+    }
+
+    #[test]
+    fn slip0132_spec_bitcoin_test_vector_bip84_zpub_normalize() {
+        // m/84'/0'/0' — zpub normalizes to xpub, signals "zpub".
+        // (BIP84_REF_ZPUB === SLIP-0132 spec example for m/84'/0'/0'.)
+        let (out, sig) = normalize_xpub_prefix(BIP84_REF_ZPUB).unwrap();
+        assert_eq!(out, BIP84_REF_XPUB);
+        assert_eq!(sig, Some("zpub"));
     }
 
     #[test]

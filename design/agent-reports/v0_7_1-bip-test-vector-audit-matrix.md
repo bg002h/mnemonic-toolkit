@@ -316,20 +316,24 @@ table is the canonical reference.
 
 | # | Path | Prefix | Example head | Status | Notes |
 |---|---|---|---|---|---|
-| 132.1 | m/44'/0'/0' | xpub | `BosfCnif...` | OUT-OF-SCOPE-PER-SPEC | the doc's body shown above is missing the leading `xpub6` framing; toolkit's xpub round-trips exercise the BIP-32 neutral form against TREZOR_24 instead |
-| 132.2 | m/49'/0'/0' | ypub | `Ww3ibxVf...` | COVERED-IMPLICIT | `src/slip0132.rs::tests` exercise ypub↔xpub via TREZOR_24 BIP-84-derived xpub (NOT the SLIP-0132 spec example xpub itself); matrix cell PIN-DRIFT — phase 5 pins the canonical SLIP-0132 ypub |
-| 132.3 | m/84'/0'/0' | zpub | `rFR7y4Q2...` | COVERED | `src/slip0132.rs::tests::*` use BIP84_REF_ZPUB matching the spec example (cross-checked above with BIP-84 84.1) |
-| 132.4 | m/49'/0'/0' Ypub multisig | Ypub | (no spec example in the doc body fetched) | MISSING | Phase 5 — pin Ypub mainnet from spec full §Examples table |
-| 132.5 | m/48'/0'/0'/2' Zpub multisig | Zpub | (no spec example in fetched body) | MISSING | Phase 5 — pin Zpub mainnet |
-| 132.6 | testnet upub | upub | (none in fetched body) | MISSING | Phase 5 |
-| 132.7 | testnet vpub | vpub | (none in fetched body) | MISSING | Phase 5 |
-| 132.8 | testnet Upub | Upub | (none in fetched body) | MISSING | Phase 5 |
-| 132.9 | testnet Vpub | Vpub | (none in fetched body) | MISSING | Phase 5 |
+| 132.1 | m/44'/0'/0' | xpub | `xpub6Bosf...zsP` | COVERED | `src/slip0132.rs::tests::slip0132_spec_bitcoin_test_vector_bip44_xpub_round_trip` (Phase 5; full xpub re-fetched via `gh api`) |
+| 132.2 | m/49'/0'/0' | ypub | `ypub6Ww3i...zsP` | COVERED | `src/slip0132.rs::tests::slip0132_spec_bitcoin_test_vector_bip49_ypub_normalize` (Phase 5; full ypub re-fetched via `gh api`; round-trips through `apply_xpub_prefix`) |
+| 132.3 | m/84'/0'/0' | zpub | `zpub6rFR7...tZYs` | COVERED | `src/slip0132.rs::tests::slip0132_spec_bitcoin_test_vector_bip84_zpub_normalize` + reuses `BIP84_REF_ZPUB` (cross-checked above with BIP-84 84.1) |
+| 132.4 | m/49'/0'/0' Ypub multisig | Ypub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | spec only documents the version-byte; behavior covered by `apply_emits_all_5_mainnet_variants` |
+| 132.5 | m/48'/0'/0'/2' Zpub multisig | Zpub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | same |
+| 132.6 | testnet upub | upub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | behavior covered by `apply_testnet_variants_swap_to_lowercase_t_class_prefixes` |
+| 132.7 | testnet vpub | vpub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | same |
+| 132.8 | testnet Upub | Upub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | same |
+| 132.9 | testnet Vpub | Vpub | (no spec xpub published) | OUT-OF-SCOPE-PER-SPEC | same |
 
-DISCOVERY-FLAG: WebFetch returned a SLIP-0132 body that **garbled** the xpub
-strings (dropped the `xpub6...` / `ypub6...` 4-char prefix). Phase 5 must
-re-fetch from the raw markdown via `gh api repos/satoshilabs/slips/contents/...`
-or local clone before pinning, NOT from the fetched text in this matrix.
+DISCOVERY-FLAG (resolved): Phase 0 WebFetch had truncated the SLIP-0132
+xpub strings (dropped the `xpub6...` / `ypub6...` 4-char prefix). Phase 5
+re-fetched the spec via `gh api repos/satoshilabs/slips/contents/slip-0132.md`
+and verified that SLIP-0132 §"Bitcoin Test Vectors" only publishes 3 mainnet
+single-sig xpubs (BIP-44/BIP-49/BIP-84) — all 3 now COVERED. The 6 multisig
++ testnet variants have no published spec xpubs and are exercised
+behaviorally by the existing `apply_*_variants` tests; reclassified
+OUT-OF-SCOPE-PER-SPEC.
 
 ---
 
@@ -382,7 +386,7 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | BIP-93 | n/a | — | — | — | delegated to ms-codec audit |
 | BIP-380 | 46 | 1 (Phase 4.A: checksum 380.1) | 0 | 0 | 45 (7 reject-checksum + 38 key-expression: rust-miniscript surface) |
 | BIP-388 | 8 | 4 SHAPE (Phase 4.B closes 388.2 + 388.4) | 0 | 4 | 0 |
-| SLIP-0132 | 9 | 1 + 1 IMPLICIT | 7 (Phase 5) | 0 | 1 |
+| SLIP-0132 | 9 | 3 | 0 | 0 | 6 (multisig + testnet — no spec xpub published) |
 | Electrum | 4 | 0 (canonical) | 4 (Phase 6) | 0 | 0 |
 | Casascius | 3 | 2 IMPL | 0 | 0 | 1 (no canonical) |
 | **TOTAL** | **101** | **~25** | **~50** | **~8** | **~13** |
