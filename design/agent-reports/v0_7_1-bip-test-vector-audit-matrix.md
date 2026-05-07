@@ -346,13 +346,17 @@ verbatim in `design/agent-reports/v0_7-phase-3-electrum-corpus-spike.md`.
 
 | # | Version | Status | Notes |
 |---|---|---|---|
-| EL.1 | 01 (standard) | MISSING | Phase 6 — promote spike phrase to `cli_convert_electrum.rs` decode + round-trip pin |
-| EL.2 | 100 (segwit) | MISSING | Phase 6 |
-| EL.3 | 101 (2FA-standard) | MISSING | Phase 6 — refusal byte-exact |
-| EL.4 | 102 (2FA-segwit) | MISSING | Phase 6 — refusal byte-exact |
+| EL.1 | 01 (standard) | COVERED | `tests/cli_convert_electrum.rs::{decode_standard_phrase_to_entropy,encode_entropy_to_standard_phrase,round_trip_standard_phrase_via_entropy}` (`STANDARD_PHRASE` const) |
+| EL.2 | 100 (segwit) | COVERED | `tests/cli_convert_electrum.rs::{decode_segwit_phrase_to_entropy,encode_entropy_to_segwit_phrase_via_flag,round_trip_segwit_phrase_via_entropy}` (`SEGWIT_PHRASE` const) |
+| EL.3 | 101 (2FA-standard) | COVERED | `tests/cli_convert_electrum.rs::refusal_standard_2fa_decode` (`STANDARD_2FA_PHRASE` const; refusal byte-exact) |
+| EL.4 | 102 (2FA-segwit) | COVERED | `tests/cli_convert_electrum.rs::refusal_segwit_2fa_decode` (`SEGWIT_2FA_PHRASE` const; refusal byte-exact) |
 
-Existing `cli_convert_electrum.rs` tests use *toolkit-internal* phrases (not
-the Electrum-published canonical 4). Phase 6 promotes the canonical 4.
+Phase 0 audit-matrix entry incorrectly stated MISSING; investigation in
+Phase 6 found that all 4 canonical phrases were already auto-wired from
+the v0.7 Phase 3 spike commit — the existing test constants ARE the
+spike's canonical 4. Phase 6 deliverable: strengthen the citation
+comment in `cli_convert_electrum.rs` to cite the upstream Electrum
+source files explicitly. No new tests needed.
 
 ---
 
@@ -387,7 +391,7 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | BIP-380 | 46 | 1 (Phase 4.A: checksum 380.1) | 0 | 0 | 45 (7 reject-checksum + 38 key-expression: rust-miniscript surface) |
 | BIP-388 | 8 | 4 SHAPE (Phase 4.B closes 388.2 + 388.4) | 0 | 4 | 0 |
 | SLIP-0132 | 9 | 3 | 0 | 0 | 6 (multisig + testnet — no spec xpub published) |
-| Electrum | 4 | 0 (canonical) | 4 (Phase 6) | 0 | 0 |
+| Electrum | 4 | 4 | 0 | 0 | 0 |
 | Casascius | 3 | 2 IMPL | 0 | 0 | 1 (no canonical) |
 | **TOTAL** | **101** | **~25** | **~50** | **~8** | **~13** |
 

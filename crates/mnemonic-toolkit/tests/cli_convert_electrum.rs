@@ -6,6 +6,13 @@
 use assert_cmd::Command;
 
 // --- Reference phrases (verified GREEN in corpus spike) ---
+//
+// All 4 phrases below are the canonical Electrum reference corpus entries,
+// one per SeedVersion (01/100/101/102), sourced from spesmilo/electrum:
+// - 01, 100, 101 from `tests/test_mnemonic.py::Test_seeds.mnemonics`.
+// - 102 from `tests/test_wallet_vertical.py::test_electrum_seed_2fa_segwit`.
+// HMAC-SHA512 prefix predictions cross-validated in v0.7 Phase 3 spike
+// (`design/agent-reports/v0_7-phase-3-electrum-corpus-spike.md`).
 
 const STANDARD_PHRASE: &str =
     "cram swing cover prefer miss modify ritual silly deliver chunk behind inform able";
