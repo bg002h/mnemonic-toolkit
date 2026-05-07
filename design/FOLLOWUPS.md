@@ -680,7 +680,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** v0.6.2 introduced `render_slip0132_info_line(variant)` as the single production source of truth for the info-line text, with a unit test pinning the byte sequence for representative variants. The SPEC body in §11 carries the canonical text but as a templated example with `<variant>` and `<xpub|tpub>` placeholders. There is no test that asserts the SPEC body matches the production format-string structure. A future editor "improving" SPEC §11 prose (e.g., changing "Re-emit with" to "Re-encode with") would silently desync the SPEC from shipped behavior; CI catches nothing.
 - **Why deferred:** v0.6.2 lean cycle scope; not a correctness bug. Test-side helpers in `tests/cli_*_slip0132_info.rs` provide bidirectional locking against production already (any production-text drift fails the integration tests), so the practical drift hazard is bounded — this entry is about catching SPEC-prose drift specifically.
 - **Possible fix:** add a doc-test or unit test that grep-matches the SPEC §11 paragraph against a structural pattern, OR convert SPEC §11's example block into a fenced ```text block whose canonical form is read at test time. The first option is lower-overhead.
-- **Status:** `open`
+- **Status:** `resolved 354c945`
+- **Resolution:** v0.7 Phase 7 — `slip0132::tests::spec_info_line_template_matches_production_render` reads `SPEC_convert_v0_6.md` §11 via `include_str!`, slices between HTML markers, and asserts byte-equality against `render_slip0132_info_line` for all 8 SLIP-0132 variants. SPEC↔production drift now CI-locked.
 - **Tier:** `v0.7-nice-to-have`
 
 ### `verify-bundle-discards-slip0132-input-variant-asymmetry` — `verify-bundle` silently drops the SLIP-0132 input-normalization signal across 4 callsites
@@ -690,7 +691,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** v0.6.2 made `mnemonic convert` and `mnemonic bundle` emit a stderr informational line when a user-supplied SLIP-0132 prefix is silently normalized. `mnemonic verify-bundle` calls the same `pub(crate) resolve_slots` helper but discards the signal. Result: a user who pastes a `zpub` to `bundle` gets the info-line; pasting the same `zpub` to `verify-bundle` does not. The discard is semantically correct for v0.6.2's scope (verify-bundle is structurally a checker that emits check-pass/fail status, not a renderer of user inputs), but it creates a UX asymmetry within the toolkit.
 - **Why deferred:** parity decision is its own UX policy question (does verify-bundle want to also emit the info-line? Or remain silent on stderr by design?). v0.6.2 lean cycle did not litigate this — the discard was the no-op-on-verify-bundle choice that minimized blast radius.
 - **Possible fix (v0.7+ brainstorm):** decide whether `verify-bundle` should also emit the info-line for symmetry. If yes, thread `slip0132_signals` to a stderr emitter near each of the 4 callsites; SPEC §5.5.a's stderr-ordering invariant applies (notes precede any conditional warnings). If no, document the asymmetry intentionally in `SPEC_convert_v0_6.md` §11 / verify-bundle SPEC.
-- **Status:** `open`
+- **Status:** `resolved 354c945`
+- **Resolution:** v0.7 Phase 7 — Option B locked per architect R1-I8. The 4 callsite-comments at `verify_bundle.rs:208/:261/:336/:406` gain a SPEC §11 v0.7 amendment cross-pointer; verify-bundle remains silent on SLIP-0132 input-normalization signals as intentional checker semantics. Zero new emission code.
 - **Tier:** `v0.7-nice-to-have`
 
 ### `bip38-distinct-passphrase-flag` — split composite `(Phrase|Entropy, Bip38)` passphrase into two channels
@@ -708,7 +710,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** new `BipEncryptedWif` (or `Bip38`) `NodeType` variant in `convert.rs`; new edges from/to `wif`; SPEC §1 + §2 amendments.
 - **What:** BIP-38 (`6P...`, base58check, 58 chars) is a passphrase-encrypted WIF format — widely used for paper wallets and key handoff. Two pieces: non-EC-multiplied form (encrypts an existing privkey under a passphrase via Scrypt) and EC-multiplied form (generates new privkey from passphrase + intermediate code; less common). Add as a new convert node so users can decrypt `6P → wif` (with `--passphrase`) and encrypt `wif → 6P` (with `--passphrase`); composite edges `phrase → 6P` follow naturally. Refusal class for `6P → 6P` and any cross-format pivot.
 - **Why deferred:** v0.6.x focused on BIP-39 + BIP-32 + SLIP-0132 graph completeness; BIP-38 is its own well-defined Scrypt-backed format and merits a dedicated phase. Implementation likely uses the `bip38` crate or hand-rolled Scrypt against `secp256k1` primitives already in the dep tree.
-- **Status:** `open`
+- **Status:** `resolved c3d0a85`
+- **Resolution:** v0.7 Phase 1 — `Wif↔Bip38` edges + composite paths shipped via `bip38 = "1.1"` crate (Apache-2.0). Security review at `design/agent-reports/v0_7-phase-1-bip38-security-review.md`. SPEC §12.
 - **Tier:** `v0.7`
 
 ### `casascius-mini-private-key` — accept Casascius mini-key (`S...`, 22/26/30 chars) on input
@@ -717,7 +720,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** new `MiniKey` `NodeType` (or absorb into `Wif` arm with prefix-detect) in `convert.rs`; SPEC §1 + §2.
 - **What:** Casascius mini private key is a compact base-58 alphabet encoding starting with capital `S` (22, 26, or 30 chars) used historically on physical Bitcoin coins. Format: `S` + N chars; SHA256 of the full string + `?` must hash to `0x00` prefix (typo-checksum). Decoding: SHA256 of the mini-key string yields a 32-byte privkey scalar. One-way edge `mini-key → wif` (encoding-only; no key change). No `wif → mini-key` (mini-key generation requires a search for the typo-checksum-passing string; not deterministic from a given privkey). Refusal class: encode direction is a `§3.b lossy compression barrier` (the typo-checksum embedded in the mini-key string is not recoverable from a raw privkey).
 - **Why deferred:** small but distinct format with its own checksum spec (Casascius's typo-check rule); fits a v0.7 grab-bag of less-common formats.
-- **Status:** `open`
+- **Status:** `resolved 89d29ab`
+- **Resolution:** v0.7 Phase 2 — `(MiniKey, Wif)` decode-only edge shipped; SHA256 self-checksum rule enforced; encode direction refused as one-way (§3.b lossy-compression barrier). SPEC §13.
 - **Tier:** `v0.7`
 
 ### `bip85-deterministic-entropy` — derive child seeds from a BIP-32 master
@@ -726,7 +730,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** new top-level `mnemonic derive-child` subcommand OR new edge `xprv → entropy` (with `--bip85-path` modifier); SPEC §1 / new top-level SPEC.
 - **What:** BIP-85 derives deterministic child entropy from a BIP-32 master xpriv via HMAC-SHA512 at the path `m/83696968'/<application>'/<index>'`. Use cases: managing many seeds from one master; per-application sub-seeds; password derivation; WIF derivation. Standard application codes per BIP-85: `39'` (BIP-39 entropy of length L words), `2'` (HD-seed), `32'` (xprv child), `128169'` (hex bytes), `707764'` (passwords). Output node depends on the application code: `entropy` for `39'`, `xprv` for `32'`, etc. Grammar lean: `mnemonic derive-child --from xprv=<master> --application <bip39|hd-seed|xprv|hex|password> --length <N> --index <N>` to keep convert's edge-table model untouched (BIP-85 is a *derivation* operation, not a *single-format conversion*).
 - **Why deferred:** BIP-85 is a useful but narrow derivation utility; doesn't fit `convert`'s "single-format conversion" framing cleanly. Likely wants its own subcommand. SPEC question to resolve at brainstorm: subcommand vs. extending convert.
-- **Status:** `open`
+- **Status:** `resolved 965cc3e`
+- **Resolution:** v0.7 Phase 6 — new `mnemonic derive-child` subcommand shipped with 6 in-scope applications (`bip39`, `hd-seed`, `xprv`, `hex`, `password-base64`, `password-base85`). RSA / RSA-GPG / DICE refused with v0.8 deferral stubs. New SPEC `design/SPEC_derive_child_v0_7.md`.
 - **Tier:** `v0.7`
 
 ### `slip39-shamir-secret-sharing` — SLIP-39 Trezor Shamir backup format
@@ -744,7 +749,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** new `ElectrumPhrase` `NodeType` in `convert.rs` (or distinct from BIP-39's `Phrase`); SPEC §1 + §2.
 - **What:** Electrum's seed format is its own wordlist + checksum scheme distinct from BIP-39. The seed validates by HMAC-SHA512 of the phrase prefixed with `"Seed version"`; the resulting hash's hex prefix encodes the seed-type (`01` = standard, `100` = segwit, `101` = 2FA standard, `102` = 2FA segwit). Conversion: `electrum-phrase → entropy` (different mapping than BIP-39); `electrum-phrase → seed → master xpriv`. Edges symmetric to BIP-39's. Wordlist embedding required (Electrum English wordlist is similar to BIP-39's but differs).
 - **Why deferred:** medium scope — own wordlist + checksum + seed-version dispatch. Used by Electrum users transitioning to / from BIP-39-based wallets. Less urgent than BIP-38 / BIP-85 because most Electrum users can re-derive into BIP-39 via the wallet. Brainstorm should weigh user demand.
-- **Status:** `open`
+- **Status:** `resolved 892139c`
+- **Resolution:** v0.7 Phase 3 — `ElectrumPhrase ↔ Entropy` edges shipped with 4-version HMAC-SHA512 prefix dispatch (`01`/`100`/`101`/`102`); 2FA versions (`101`/`102`) refused. Corpus spike at `design/agent-reports/v0_7-phase-3-electrum-corpus-spike.md`. SPEC §14.
 - **Tier:** `v0.7`
 
 ### `miniscript-beyond-bip388` — accept full miniscript policies beyond BIP-388's descriptor-template subset
@@ -771,7 +777,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** new edge `(xpub, address)` in `convert.rs::is_supported_direct_edge`; new `Address` `NodeType`; SPEC §1 + §2 amendments.
 - **What:** Edge: `xpub` source + `--path` (or `--address-index N` + `--chain receive|change`) + script-type inferred from `--template` (or explicit `--script-type p2wpkh|p2sh-p2wpkh|p2tr|...`) → bech32 / bech32m / base58 address string. Composite from `phrase` / `entropy` via the existing BIP-32 derivation pipeline. Refusal classes: address → anything (one-way; addresses are hash160/SHA256 of pubkeys). Read-only display only — does NOT extend to PSBT / signing (PSBT remains out-of-scope per `bip174-psbt-signing` v1+).
 - **Why deferred:** Useful but not blocking; v0.7 cycle slot. SPEC §10 amendment from "out of scope" to "in scope, deferred to v0.7" was committed alongside this entry update.
-- **Status:** `open`
+- **Status:** `resolved 940ec0b`
+- **Resolution:** v0.7 Phase 4 — `(Xpub, Address)` edge shipped with `--path` mandatory + `--script-type` inferred from `--template` for BIP-44/49/84/86 → P2PKH/P2SH-P2WPKH/P2WPKH/P2TR. Composite paths via the existing BIP-32 derivation pipeline. SPEC §10.a.
 - **Tier:** `v0.7`
 
 ### `bip327-musig2-collective-keys` — MuSig2 collective-key wallet-policy support
@@ -821,5 +828,114 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   - **HWI signer JSON** (optional) — for cosigner export.
   Grammar lean: `mnemonic export-wallet --format <bitcoin-core|bip388|sparrow|specter> --output <path-or-->` with the same `--slot @N.<subkey>=<value>` input shape as `bundle`. Refuses if any slot supplies entropy/phrase (export-wallet is watch-only by definition). SPEC question to resolve at brainstorm: does this live as a new top-level subcommand OR a `bundle --wallet-export` flag? Lean: new subcommand because the input grammar is a strict subset of bundle (no entropy/phrase) and the output is a different wire format from `BundleJson`.
 - **Why deferred:** v0.6.1 was a polish patch for `convert` + `bundle` UX. New subcommand or new bundle flag is its own minor scope. Brainstorm should resolve the format priority list (Bitcoin Core first vs BIP-388 first), the subcommand-vs-flag fork, and whether `range`/`timestamp` defaults need to be configurable.
-- **Status:** `open`
+- **Status:** `resolved 3821f66`
+- **Resolution:** v0.7 Phase 5 — new `mnemonic export-wallet` subcommand shipped. Bitcoin Core `importdescriptors` JSON (default) + BIP-388 `wallet_policy` JSON. Sparrow / Specter formats stubbed (refuse with v0.8 deferral). `--range` / `--timestamp` / `--bitcoin-core-version` overrides. Watch-only enforced (refuses entropy/phrase slot input). New SPEC `design/SPEC_export_wallet_v0_7.md`.
 - **Tier:** `v0.6.2`
+
+### `electrum-non-latin-wordlists` — Electrum native seed format hard-codes the English wordlist
+
+- **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
+- **Where:** `crates/mnemonic-toolkit/src/electrum.rs` (wordlist embedding + lookup).
+- **What:** Electrum supports 9 wordlists across English, Japanese, Spanish, Chinese (simplified/traditional), Korean, Italian, Portuguese, Dutch, etc. v0.7 Phase 3 ships only the English wordlist; non-English Electrum users cannot decode their phrases through `mnemonic convert`. Add a `--language` parameter mirroring BIP-39 + bundle the additional embedded wordlists.
+- **Why deferred:** v0.7 ships the most-common case (English) to bound scope; non-English wordlists triple the wordlist-data surface and warrant their own bundling decision (compile-time const arrays vs. runtime resource files).
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `electrum-encode-iteration-bound` — encode mining loop has no upper iteration cap
+
+- **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
+- **Where:** `crates/mnemonic-toolkit/src/electrum.rs::encode_phrase` (or equivalent encode-from-entropy path).
+- **What:** Electrum's encode direction iterates by incrementing a nonce until the HMAC-SHA512 prefix matches the requested SeedVersion (`01` standard / `100` segwit). The loop has no iteration bound; on adversarially-chosen entropy or for rare versions, the search may run unboundedly long. Add a sane upper bound (e.g., `2^24` iterations) with a byte-exact stderr refusal on exhaustion.
+- **Why deferred:** v0.7 Phase 3 prioritized correctness against the corpus spike fixtures; iteration-bound hardening is a defensive fix unlikely to fire on legitimate input.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `electrum-version-info-stderr` — decode emits the detected SeedVersion silently
+
+- **Surfaced:** v0.7 Phase 3 review (commit `69ac560`).
+- **Where:** `crates/mnemonic-toolkit/src/electrum.rs::decode_phrase` + `cmd::convert::run` electrum arm.
+- **What:** When `mnemonic convert --from electrum-phrase=... --to entropy` decodes a phrase, the toolkit dispatches via the SeedVersion prefix (`01` / `100` / `101` / `102`) but does not surface which version it detected. Adding a stderr info-line (e.g., `info: Electrum SeedVersion=01 (standard)`) parallel to the SLIP-0132 input-normalization note (SPEC §11) would help users confirm the dispatch matches their wallet's expectation.
+- **Why deferred:** Nice-to-have UX polish; not behaviorally incorrect to be silent. Ordering against the SPEC §5.5.a stderr-discipline invariant needs a brainstorm.
+- **Status:** `open`
+- **Tier:** `v0.8-nice-to-have`
+
+### `tr-multi-a-tr-sortedmulti-a-export-wallet-support` — `mnemonic export-wallet` refuses taproot multisig templates
+
+- **Surfaced:** v0.7 Phase 5 code-quality review (commit `f8369d3`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export.rs` (descriptor pipeline + taproot-multisig validator).
+- **What:** `mnemonic export-wallet` refuses `--template tr-multi-a` and `--template tr-sortedmulti-a` at runtime with an error pointing at this v0.8 deferral. Reason: taproot multisig descriptors require an internal-key designation (NUMS point or shared key) plus the script-path tree; the export-wallet pipeline doesn't yet thread the internal-key choice through to Bitcoin Core / BIP-388 formatters. Single-leaf `tr` (BIP-86) IS supported.
+- **Why deferred:** v0.7 Phase 5 prioritized the BIP-44/49/84/86 + multisig-WSH path. Taproot multisig export needs its own brainstorm on internal-key selection UX.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `export-wallet-descriptor-bip388-interop` — `--descriptor` mode + `--format bip388` is refused
+
+- **Surfaced:** v0.7 Phase 5 code-quality review (commit `f8369d3`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export.rs` (format dispatch + descriptor-mode validator).
+- **What:** `mnemonic export-wallet --descriptor <user-supplied> --format bip388` is refused at runtime; `--descriptor` mode currently only supports `--format bitcoin-core`. Reason: user-supplied descriptors arrive as opaque strings; converting them to BIP-388 `wallet_policy` requires re-parsing into the placeholder-template form (`@0/<0;1>/*`), which the watch-only template-mode pipeline already does but the descriptor-mode pipeline skips.
+- **Why deferred:** v0.7 Phase 5 fork: descriptor-mode interop with BIP-388 is a non-trivial parsing extension; bitcoin-core format covers the primary user need.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `bip85-rsa-rsa-gpg-dice-applications` — RSA / RSA-GPG / DICE BIP-85 applications deferred
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `crates/mnemonic-toolkit/src/bip85.rs` application dispatch + `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface.
+- **What:** BIP-85 application codes `828365'` (RSA), `67797633'` (RSA-GPG), `89101'` (DICE) are refused with v0.8 deferral stubs. Reason: RSA derivation requires an RSA crate not currently in the dep tree; DICE is a niche application (deterministic dice-roll output) with limited demand. The 6 in-scope applications (`bip39`, `hd-seed`, `xprv`, `hex`, `password-base64`, `password-base85`) cover the primary use cases.
+- **Why deferred:** Adding RSA pulls in a heavy crypto dep for a niche use case; needs explicit user-demand signal. DICE is unusual enough to warrant its own UX brainstorm.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `bip85-passphrase-protected-master` — `--from phrase=` + `--passphrase` direct path
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface.
+- **What:** `mnemonic derive-child --from xprv=...` requires xprv input. A user with a passphrase-protected BIP-39 phrase must currently route through `mnemonic convert --from phrase=... --passphrase ... --to xprv` first, then pipe the xprv to `derive-child`. A direct `--from phrase=... --passphrase ...` path on `derive-child` would be more ergonomic.
+- **Why deferred:** Two-step flow works correctly today; one-step UX is nice-to-have, not blocking.
+- **Status:** `open`
+- **Tier:** `v0.8-nice-to-have`
+
+### `bip85-non-english-bip39-language-codes` — `--language` flag inert for BIP-39 application
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface + `bip85::derive_bip39`.
+- **What:** `--language` is plumbed through clap on `mnemonic derive-child` but ignored for BIP-85's `bip39` application. BIP-85 supports 9 wordlists (`0'` English through `8'` Czech) for the BIP-39 application via the language-index sub-path component. v0.7 hardcodes English (`0'`).
+- **Why deferred:** Mirror of the convert-side `electrum-non-latin-wordlists` deferral; non-English wordlist bundling is its own scope.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `bip85-testnet-emission` — `--network` flag inert for hd-seed / xprv applications
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs` clap surface + `bip85::derive_hd_seed` / `derive_xprv`.
+- **What:** `--network` is plumbed through clap but unused. v0.7 hardcodes mainnet WIF / xprv emission for `--application hd-seed` and `--application xprv`. Testnet users must post-process via `mnemonic convert` to swap version bytes.
+- **Why deferred:** v0.7 Phase 6 prioritized BIP-85 algorithmic correctness; network-aware emission is a clean v0.8 follow-on.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `bip85-spec-prose-byte-formula-clarification` — SPEC §3 prose vs. worked-example formula mismatch
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `design/SPEC_derive_child_v0_7.md` §3 (BIP-39 byte slicing).
+- **What:** SPEC §3 prose says BIP-39 byte slicing uses `2 * length_in_words / 3`; the worked examples (12 words → 16 bytes, 24 words → 32 bytes) match the correct formula `words * 4 / 3`. The two are equivalent for word counts divisible by 3 but the prose formula is not the canonical BIP-39 form. Pure SPEC text fix — implementation is correct.
+- **Why deferred:** Documentation-only nit; behavior matches the worked examples and BIP-39 spec.
+- **Status:** `open`
+- **Tier:** `v0.7-nice-to-have`
+
+### `bip85-stdin-master-xprv` — `--from xprv=-` parses but does not read stdin
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/derive_child.rs::run`.
+- **What:** `mnemonic derive-child --from xprv=-` parses through clap (the `=-` sentinel is recognized) but `derive_child::run` does not read stdin to populate the xprv value. `mnemonic convert` does honor `=-`. Add stdin-read parity for cross-subcommand consistency.
+- **Why deferred:** Two-character feature gap; nice-to-have for shell-pipeline ergonomics.
+- **Status:** `open`
+- **Tier:** `v0.8`
+
+### `derive-child-spec-2-grammar-uniformity-tension` — SPEC §2 prose-internal contradiction on `--length` mandatoriness
+
+- **Surfaced:** v0.7 Phase 6 review (commit `edaa959`).
+- **Where:** `design/SPEC_derive_child_v0_7.md` §2.
+- **What:** SPEC §2 has internal tension: it says `--length` is mandatory at clap level AND that `--length` is refused for `--application hd-seed` / `--application xprv`. Phase 6 implementation adopted a sentinel-0 convention: clap requires `--length`, and `hd-seed`/`xprv` arms refuse only when the supplied value is non-zero (`0` is treated as sentinel-absent). The SPEC text should be edited to reflect this; current prose reads as a contradiction.
+- **Why deferred:** Documentation-only nit; implementation is consistent with the worked examples and CLI tests.
+- **Status:** `open`
+- **Tier:** `v0.7-nice-to-have`

@@ -4,6 +4,50 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.7.0] — 2026-05-06
+
+### Added
+
+- `mnemonic convert` gains 4 new `NodeType` targets: `bip38`, `minikey`, `electrum-phrase`, `address`.
+- **BIP-38 encrypt/decrypt** edges (`Wif↔Bip38`) plus composite paths (`phrase|entropy → bip38` via the `wif` intermediate). New crate dependency `bip38 = "1.1"` (Apache-2.0). SPEC §12.
+- **Casascius mini-private-key** decode (`MiniKey → Wif`); SHA256 self-checksum rule per Casascius's typo-check. One-way edge (no encode direction; key search is non-deterministic). SPEC §13.
+- **Electrum native seed format** (`ElectrumPhrase ↔ Entropy`); 4 SeedVersion dispatch (`01` standard, `100` segwit, `101`/`102` 2FA) via HMAC-SHA512 prefix; 2FA versions refused. Composite paths via `entropy` reach `phrase`/`xprv`/`xpub`/`wif`/etc. SPEC §14.
+- **Address derivation** (`Xpub → Address`); `--script-type` flag with inference from `--template` for BIP-44/49/84/86 → P2PKH/P2SH-P2WPKH/P2WPKH/P2TR. SPEC §10.a.
+- New subcommand **`mnemonic export-wallet`** — Bitcoin Core `importdescriptors` JSON (default) + BIP-388 `wallet_policy` JSON. Sparrow / Specter formats refuse with v0.8 deferral stubs. `--range` / `--timestamp` / `--bitcoin-core-version` overrides. Watch-only by definition (refuses entropy/phrase slot input). New SPEC `design/SPEC_export_wallet_v0_7.md`.
+- New subcommand **`mnemonic derive-child`** — BIP-85 deterministic entropy via HMAC-SHA512 at `m/83696968'/<application>'/<index>'`. 6 in-scope applications: `bip39`, `hd-seed`, `xprv`, `hex`, `password-base64`, `password-base85`. RSA / RSA-GPG / DICE applications refused with v0.8 deferral stubs. New SPEC `design/SPEC_derive_child_v0_7.md`.
+
+### Changed
+
+- `NodeType` enum extended with 4 variants (`Bip38`, `MiniKey`, `ElectrumPhrase`, `Address`). `is_secret_bearing` extended for `Bip38` + `ElectrumPhrase`.
+
+### Internal
+
+- SPEC §11 carry-over: new `slip0132::tests::spec_info_line_template_matches_production_render` reads `SPEC_convert_v0_6.md` text via `include_str!` and asserts byte-equality against `render_slip0132_info_line` for all 8 SLIP-0132 variants. Closes the SPEC↔production drift hazard.
+- `verify_bundle.rs` callsite-comments at `:208/:261/:336/:406` gain a SPEC §11 v0.7 amendment cross-pointer (Option B per architect R1-I8 — verify-bundle remains silent on SLIP-0132 input-normalization signals; documented as intentional checker semantics).
+- New module `bip85.rs` — BIP-85 derivation primitive + 6 application dispatchers.
+- New module `electrum.rs` — `SeedVersion` enum + HMAC-SHA512 prefix dispatch + entropy↔phrase encode/decode.
+- New module `wallet_export.rs` — descriptor pipeline + Bitcoin Core / BIP-388 formatters + watch-only validator.
+- 3 new error variants on `ToolkitError`: `ExportWalletSecretInput`, `ExportWalletFormatStub(&'static str)`, `ExportWalletTaprootMultisigUnsupported(&'static str)` (all exit 2). Plus 3 new derive-child variants: `DeriveChildUnsupportedApp`, `DeriveChildLengthOutOfRange`, `DeriveChildLengthNotApplicable` (all exit 2).
+
+### Fixed
+
+- `convert.rs:565` — `--to` unknown-node hint string was stale since v0.6 (omitted `bip38`, `minikey`, `electrum-phrase`, `address`); now enumerates all 13 NodeType tokens.
+
+### FOLLOWUPS resolved
+
+- `slip0132-info-line-spec-text-not-byte-pinned` — SPEC §11 byte-pin test shipped (Phase 7, `354c945`).
+- `verify-bundle-discards-slip0132-input-variant-asymmetry` — Option B locked: 4 callsite-comments cross-pointed to SPEC §11 v0.7 amendment; intentional checker semantics (Phase 7, `354c945`).
+- `bip38-encrypted-wif` — `Wif↔Bip38` edges + composite paths via `bip38 = "1.1"` (Phase 1, `c3d0a85`).
+- `casascius-mini-private-key` — `MiniKey → Wif` decode-only edge with SHA256 self-checksum (Phase 2, `89d29ab`).
+- `bip85-deterministic-entropy` — `mnemonic derive-child` subcommand with 6 in-scope apps (Phase 6, `965cc3e`).
+- `electrum-native-seed-format` — `ElectrumPhrase ↔ Entropy` edges with 4-version dispatch + 2FA refusal (Phase 3, `892139c`).
+- `address-derivation-from-xpub-path` — `(Xpub, Address)` edge with `--path` mandatory + `--script-type` template-inferred (Phase 4, `940ec0b`).
+- `wallet-export-industry-formats` — `mnemonic export-wallet` subcommand with Bitcoin Core importdescriptors + BIP-388 wallet_policy (Phase 5, `3821f66`).
+
+### Test corpus
+
+363 lib + integration tests at v0.6.2 → 444 at v0.7.0 (2 ignored, pre-existing).
+
 ## mnemonic-toolkit [0.6.2] — 2026-05-06
 
 ### Added
