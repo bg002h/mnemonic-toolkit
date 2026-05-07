@@ -1,8 +1,8 @@
 # mnemonic-toolkit v0.6 SPEC — `convert` subcommand
 
-**Version:** 0.6.1
+**Version:** 0.7.0
 **Date:** 2026-05-06
-**Status:** SHIPPED (v0.6.0 architect-approved 0C/0I at r3; v0.6.1 amendments architect-approved 0C/0I — see SPEC change history below)
+**Status:** v0.7.0 amendments DRAFT (v0.6.0 architect-approved 0C/0I at r3; v0.6.1/v0.6.2 amendments architect-approved 0C/0I; v0.7.0 amendments converged 0C/0I after 3 user-rounds + 2 architect-rounds — see SPEC change history below)
 **Predecessor:** [SPEC_mnemonic_toolkit_v0_5.md](SPEC_mnemonic_toolkit_v0_5.md) (covers `bundle` / `verify-bundle`).
 
 This SPEC covers a new orthogonal subcommand `mnemonic convert`. v0.5 SPEC carries forward unchanged.
@@ -14,6 +14,17 @@ This SPEC covers a new orthogonal subcommand `mnemonic convert`. v0.5 SPEC carri
 - **SPEC-C** — new §11.a documenting the `--xpub-prefix <variant>` output flag (5-value modifier; `--network` required when non-default).
 - **SPEC-D** — partner amendment in `SPEC_mnemonic_toolkit_v0_5.md` extending the §7 secret-on-stdout warning to `bundle`.
 
+**v0.7.0 amendment summary** (see in-section markers `(v0.7)` for the exact deltas):
+
+- **SPEC-E** — §1 NodeType extension: 4 new variants (`Bip38`, `MiniKey`, `ElectrumPhrase`, `Address`); `Slip39Shares` deferred to v0.8.
+- **SPEC-F** — §2 edge table: 7 new edges (BIP-38 encrypt/decrypt, mini-key decode, Electrum phrase ↔ entropy, xpub → address, sibling-pivot refusal for `Phrase ↔ ElectrumPhrase`).
+- **SPEC-G** — §3 refusal taxonomy: explicit enumeration of new "obvious" refusal pairs (Bip38↔Bip38 identity; Bip38→non-Wif via Wif intermediate; MiniKey→non-Wif; Address→*; *→MiniKey; *→Address-without-path; 2FA Electrum).
+- **SPEC-H** — §10 address derivation: replaces v0.6.1 "deferred to v0.7" stub with the full spec.
+- **SPEC-I** — §11 SLIP-0132: HTML-comment fence markers around the canonical info-line block; verify-bundle Option B clause documented.
+- **SPEC-J** — new §12 BIP-38 encrypted WIF (Scrypt parameters, NFC normalization, refusal taxonomy).
+- **SPEC-K** — new §13 Casascius mini-key (SHA256 self-checksum, decode-only contract).
+- **SPEC-L** — new §14 Electrum native seed format (wordlist provenance, `SeedVersion` enum, HMAC-SHA512 prefix dispatch, 2FA refusal class).
+
 ## §0 Prerequisites
 
 - v0.5.2 SHIPPED — `derive_slot::derive_bip32_from_entropy` available as the shared BIP-39 + BIP-32 derivation helper.
@@ -21,7 +32,7 @@ This SPEC covers a new orthogonal subcommand `mnemonic convert`. v0.5 SPEC carri
 
 ## §1 Node table
 
-The v0.6 conversion graph nodes:
+The v0.6/v0.7 conversion graph nodes:
 
 | Node | Wire/in-memory shape | Annotations |
 |------|----------------------|-------------|
@@ -34,6 +45,14 @@ The v0.6 conversion graph nodes:
 | `path` | BIP-32 path string | informational; not accepted as a primary `--from` |
 | `ms1` | codex32 (ms-codec) | tag = ENTR; carries entropy |
 | `mk1` | codex32 (mk-codec) | carries xpub + origin metadata + policy_id_stubs |
+| `bip38` (v0.7) | base58check BIP-38 encrypted WIF | non-EC-multiplied form; requires `--passphrase`; secret-bearing |
+| `minikey` (v0.7) | Casascius mini-private-key | 22/26/30-char base58 string with SHA256 self-checksum; secret-bearing; decode-only |
+| `electrum-phrase` (v0.7) | Electrum native seed phrase | own wordlist (NOT BIP-39); HMAC-SHA512 version-prefix dispatch; secret-bearing |
+| `address` (v0.7) | Bitcoin address (bech32 / base58check) | hash of pubkey; one-way terminal |
+
+**v0.7 NodeType `from_token` strings (locked per architect R1-I7):** `"bip38" → Bip38`, `"minikey" → MiniKey` (no hyphen, consistent with `mk1`/`ms1`), `"electrum-phrase" → ElectrumPhrase` (hyphen acceptable; multi-word with no ambiguity), `"address" → Address`.
+
+**Deferred to v0.8 (not added in v0.7):** `Slip39Shares` (SLIP-39 group/member shares) — hand-roll required (no maintained Rust crate verified GREEN as of 2026-05-06); deferred to a focused v0.8 cycle OR closed wont-fix in favor of ms1-shares (the family's v0.2 share-encoding mechanism via codex32).
 
 ### Deferred nodes (not refused; awaiting upstream)
 
@@ -66,6 +85,14 @@ Bidirectional and one-way edges with required side-inputs:
 | `entropy` | `ms1` | none | `ms_codec::encode(Tag::ENTR, &Payload::Entr(bytes))` |
 | `ms1` | `entropy` | none | `ms_codec::decode(s) -> (Tag, Payload)`; pattern-match `Payload::Entr(bytes)` |
 | `mk1` | `xpub` (+ fingerprint + path as sub-outputs) | none | `mk_codec::decode(&[&str]) -> KeyCard`; `policy_id_stubs` ignored |
+| `wif` | `bip38` (v0.7) | `--passphrase` (mandatory; NFC-normalized) | `bip38::EncryptWif::encrypt(wif, passphrase)` → BIP-38 non-EC-multiplied form (Scrypt n=16384, r=8, p=8); secret-bearing output |
+| `bip38` | `wif` (v0.7) | `--passphrase` (mandatory; NFC-normalized) | `bip38::Decrypt::decrypt(bip38_str, passphrase)` → recovered WIF; mismatched passphrase emits `refusal_bip38_passphrase_mismatch` |
+| `minikey` | `wif` (v0.7) | `--network` (optional; default mainnet) | Verify SHA256(mini_key + "?")[0] == 0x00; if checksum-ok, raw privkey = SHA256(mini_key); compressed=false (Casascius keys predate BIP-32 compressed-pubkey convention); `bitcoin::PrivateKey { compressed: false, network, inner: privkey_scalar }.to_wif()`. **Decode-only contract:** no reverse `(Wif, MiniKey)` edge — generating a valid mini-key requires brute-force search for the typo-checksum byte. |
+| `electrum-phrase` | `entropy` (v0.7) | none | `electrum::validate_seed_version(phrase) -> SeedVersion`; if `Standard`/`Segwit`, `electrum::phrase_to_entropy(phrase, version) -> Vec<u8>` (own wordlist + HMAC-SHA512 verify); if `Standard2FA`/`Segwit2FA`, refuse via `refusal_electrum_2fa_unsupported`. |
+| `entropy` | `electrum-phrase` (v0.7) | `--electrum-version <standard\|segwit>` (optional; default `standard`) | `electrum::entropy_to_phrase(entropy, version) -> String`; HMAC-SHA512(`"Seed version" \|\| candidate_phrase`) hex-prefix must match the requested version's discriminator (`01` for Standard, `100` for Segwit). 2FA versions (`101`/`102`) NOT exposed as encode targets. |
+| `xpub` | `address` (v0.7) | `--path <BIP32-path>` (mandatory); `--script-type <p2wpkh\|p2sh-p2wpkh\|p2tr>` (mandatory unless inferable from `--template`); `--network` (optional; inferred from xpub prefix when absent) | `bitcoin::bip32::Xpub::derive_pub(secp, &path)` → child xpub → compressed pubkey → dispatch to `Address::p2wpkh` / `Address::p2shwpkh` / `Address::p2tr` per `--script-type`. **One-way:** address is a hash; no reverse edge. Missing `--path` → `refusal_address_no_path`. |
+| `phrase` | `electrum-phrase` (v0.7) | — | **REFUSE** (sibling-pivot): BIP-39 and Electrum native seeds are different artifact classes with different wordlists and validation rules; no meaningful direct conversion. Cross-format pivot via bundle, not single-format conversion. |
+| `electrum-phrase` | `phrase` (v0.7) | — | **REFUSE** (sibling-pivot): same rationale as forward direction. |
 
 ### `phrase`/`entropy` → `wif` path requirement (v0.6.1)
 
@@ -134,6 +161,52 @@ error: --from <from_node> --to <to_node> is a sibling-format pivot, not a single
 **`xpub → mk1` stderr (byte-exact):**
 ```
 error: --to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --template ...' to emit a complete bundle.
+```
+
+### §3.d v0.7 refusal-table completeness
+
+The new v0.7 NodeTypes interact with existing edges through the catch-all refusal paths. Per architect R1-L11, the SPEC explicitly enumerates the new "obvious" refusal pairs so the code-reviewer can verify coverage:
+
+| from | to | refusal class |
+|---|---|---|
+| `bip38` | `electrum-phrase`, `address`, `mk1`, `ms1`, `phrase`, `entropy`, `xpub`, `xprv`, `fingerprint` | one-way / sibling-pivot via `wif` intermediate (decrypt → wif → target) |
+| `bip38` | `bip38` | identity-pivot refusal (same NodeType source and target) |
+| `minikey` | anything except `wif` | sibling-pivot via `wif` intermediate (decode → wif → target) |
+| `*` | `minikey` | one-way (mini-key generation requires brute-force search for typo-checksum byte) |
+| `*` (any node where source is not `xpub`/`xprv`-derived) | `address` | composite via `xpub` intermediate; missing-arg refusal `refusal_address_no_path` if `--path` absent |
+| `address` | `*` (every node) | one-way (address = hash160/sha256 of pubkey or scripthash) |
+| `electrum-phrase` (2FA seed-versions `101`/`102`) | `entropy` | `refusal_electrum_2fa_unsupported` |
+| `electrum-phrase` | `electrum-phrase` | identity-pivot refusal |
+| `phrase` ↔ `electrum-phrase` | — | sibling-pivot refusal (different artifact classes) |
+
+**`refusal_bip38_passphrase_mismatch` stderr (byte-exact):**
+```
+error: BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §"Decryption" address-hash check).
+```
+
+**`refusal_address_no_path` stderr (byte-exact):**
+```
+error: --to address requires --path (xpub does not carry an origin path; supply BIP-32 derivation explicitly).
+```
+
+**`refusal_electrum_2fa_unsupported` stderr (byte-exact):**
+```
+error: Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.
+```
+
+**`refusal_electrum_phrase_pivot` stderr (byte-exact):**
+```
+error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.
+```
+
+**`refusal_minikey_one_way` stderr (byte-exact, used for both `--to minikey` and `minikey → non-wif` cascades):**
+```
+error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).
+```
+
+**`refusal_bip38_identity` stderr (byte-exact):**
+```
+error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a different passphrase, decrypt to wif then re-encrypt.
 ```
 
 ## §4 Specific refusal cases
@@ -261,7 +334,35 @@ Internal graph as a typed enum + adjacency `HashMap<(PrimaryNode, TargetNode), E
 - `seed`, `raw_privkey`, `xprv`-via-ms1, `seed`-via-ms1 nodes (deferred pending ms-codec v0.2 — §1).
 - Multi-value-bearing `--from` flags (single-from-value v0.6 constraint — §5). Reserved for future `--slot @N` indexing.
 - Cross-format pivots (`ms1 ↔ mk1`, etc.) — `mnemonic bundle` is the composition operator.
-- ~~Address derivation (xpub + path → bitcoin address).~~ **(v0.6.1+ amendment, 2026-05-06): in scope, deferred.** Originally excluded as "different problem class" in v0.6.0; v0.6.1 post-release UX audit reclassified address derivation as a frequent ask aligned with the toolkit's wallet-info purpose. Tracked at FOLLOWUP `address-derivation-from-xpub-path` (tier `v0.7`). Read-only display only — does NOT extend to PSBT / signing flows (those remain out-of-scope per `bip174-psbt-signing` v1+).
+- **Address derivation (xpub + path → bitcoin address) — SHIPPED in v0.7** per §2 edge `(Xpub, Address)` and the full grammar below. Read-only display only — does NOT extend to PSBT / signing flows (those remain out-of-scope per `bip174-psbt-signing` v1+).
+
+### §10.a Address derivation grammar (v0.7)
+
+The `(Xpub, Address)` edge derives a child key at a user-supplied BIP-32 path and renders it as a Bitcoin address per the requested script type.
+
+**Inputs:**
+
+- `--path <BIP32-path>` — **MANDATORY**. The toolkit does NOT auto-default a path from `--template`/`--account` for address derivation. Refusal stderr if absent: `refusal_address_no_path` (see §3.d). The `--chain receive|change` + `--address-index N` shorthand is deferred to v0.8 FOLLOWUPS as UX polish (architect R1-I6).
+- `--script-type <p2wpkh|p2sh-p2wpkh|p2tr>` — **MANDATORY** unless inferable from `--template` (`wpkh` → `p2wpkh`; `sh-wpkh` → `p2sh-p2wpkh`; `tr` → `p2tr`). Explicit `--script-type` overrides any template-implied value.
+- `--network <mainnet|testnet|signet|regtest>` — optional. When absent, network is inferred from the xpub version-byte prefix per BIP-32 (mainnet `0x0488B21E` / testnet `0x043587CF`) or from the SLIP-0132 prefix per §11 normalization.
+
+**Algorithm:**
+
+1. Normalize input xpub via `slip0132::normalize_xpub_prefix` (§11).
+2. Parse the normalized xpub via `bitcoin::bip32::Xpub::from_str`.
+3. Derive at `--path` via `Xpub::derive_pub(&secp, &path)` → child `Xpub`.
+4. Extract compressed pubkey from child xpub.
+5. Dispatch:
+   - `p2wpkh` → `Address::p2wpkh(&compressed_pubkey, network)` (BIP-84 §"Test vectors": <https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki>).
+   - `p2sh-p2wpkh` → `Address::p2shwpkh(&compressed_pubkey, network)` (BIP-49 §"Test vectors": <https://github.com/bitcoin/bips/blob/master/bip-0049.mediawiki>).
+   - `p2tr` → `Address::p2tr(&secp, x_only_pubkey, None /* no script-path */, network)` (BIP-86 §"Test vectors": <https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki>).
+6. Emit address string via `Address::to_string()`.
+
+**One-way:** the reverse edge `(Address, *)` is REFUSED for every target node — addresses are hashes (`hash160` for P2WPKH/P2SH-P2WPKH; `sha256(taproot_output)` semantics for P2TR) and carry no preimage to the pubkey, let alone the xpub or upstream BIP-32 chain.
+
+**Composite:** the edge `phrase → address` and `entropy → address` traverse `phrase/entropy → xpub → address` via the existing BIP-32 derivation pipeline. `--passphrase` is meaningful (PBKDF2-bearing per §8). `--path` is still mandatory at the address step — the toolkit does NOT collapse a single `--path` into both BIP-32 derivation and address-step derivation; the user supplies a path that derives directly to the leaf privkey/pubkey.
+
+**Reference vectors pinned in tests:** at minimum one P2WPKH (BIP-84), one P2SH-P2WPKH (BIP-49), one P2TR (BIP-86) reference vector, byte-exact stderr-pinned in Phase 4 RED tests.
 
 ## §11 SLIP-0132 prefix-tolerant input (v0.6.1)
 
@@ -302,11 +403,19 @@ The toolkit's xpub-bearing inputs (`convert --from xpub=...`, `bundle --slot @0.
 
 **Stderr info-line on actual normalization (v0.6.2).** When `normalize_xpub_prefix` actually fires (input was a SLIP-0132 variant, not already neutral), `mnemonic convert` and `mnemonic bundle` emit a stderr informational line of the form:
 
+<!-- BEGIN: slip0132-info-line -->
 ```
 info: normalized <variant> input to neutral <xpub|tpub> (encoding-only; no key change). Re-emit with --xpub-prefix <variant> if you need the SLIP-0132 form.
 ```
+<!-- END: slip0132-info-line -->
 
 `<variant>` is the input prefix preserving case (`ypub | Ypub | zpub | Zpub | upub | Upub | vpub | Vpub`); `<xpub|tpub>` is the BIP-32 neutral form for the variant's network class (mainnet → `xpub`; testnet → `tpub`). Suppressed when input is already neutral. Emitted regardless of `--json` and `--no-engraving-card`. See `SPEC_mnemonic_toolkit_v0_5.md` §5.5.a for the cross-cutting stderr ordering invariant (info-line precedes the engraving-card block; secret-on-stdout warning, when it fires, is last).
+
+The HTML-comment markers `<!-- BEGIN: slip0132-info-line -->` / `<!-- END: slip0132-info-line -->` delimit the canonical info-line block for deterministic extraction by the Phase 7 carry-over test (`slip0132-info-line-spec-text-not-byte-pinned`): a unit test in `crates/mnemonic-toolkit/src/slip0132.rs` reads this SPEC via `include_str!`, slices between the markers, and asserts byte-equality with `render_slip0132_info_line(variant)` output. Closes the SPEC↔production drift hazard surfaced in v0.6.2 final review.
+
+**v0.7 amendment — `mnemonic verify-bundle` SLIP-0132 input-normalization asymmetry (locked Option B per architect R1-I8).** `mnemonic verify-bundle` is structurally a checker that emits `VERIFIED` / `MISMATCH` status; SLIP-0132 input-normalization info notes are deliberately suppressed on this codepath to avoid breaking script callers that parse stderr line-by-line for status. Surfacing info-lines in `verify-bundle` would be an explicit UX policy change, not a bugfix. The 4 callsite-comments at `verify_bundle.rs:~209/~261/~337/~407` (each `// verify-bundle does not surface SLIP-0132 input-normalization signals.`) gain a one-line cross-pointer to this SPEC clause. Zero new emission code in v0.7.
+
+Rationale (architect R1 audit, transcribed): Option A (surface info-line in verify-bundle) would thread `slip0132_signals` through `verify-bundle`'s render loop (~80 LOC); but `verify-bundle` output is consumed by scripts and humans checking for `VERIFIED`/`MISMATCH` signals; injecting info-lines into that path risks breaking callers that parse stderr line-by-line. Option B (document) has zero blast radius and is consistent with `verify-bundle`'s read-only checker semantics.
 
 ## §11.a `--xpub-prefix` modifier (v0.6.1)
 
@@ -335,3 +444,111 @@ Exit code: 2 (refusal class via `ToolkitError::ConvertRefusal`). Eliminates an e
 **`--passphrase` semantics on phrase-source edges through `--xpub-prefix`:** when the source is `phrase` or `entropy` and the target is `xpub` (with any `--xpub-prefix` value), the edge traverses PBKDF2 per §8. `--passphrase` is meaningful — non-empty passphrases produce distinct keys, and the resulting xpub (regardless of prefix swap) reflects the supplied passphrase.
 
 **Round-trip property:** `convert --from xpub=<x> --to xpub --xpub-prefix zpub --network mainnet | mnemonic convert --from xpub=- --to xpub` emits `<x>` byte-for-byte (modulo trailing whitespace). The output zpub re-decodes to the same neutral xpub via §11; symmetry is exact for all SLIP-0132 prefix variants (mainnet + testnet).
+
+## §12 BIP-38 encrypted WIF (v0.7)
+
+The `(Wif, Bip38)` and `(Bip38, Wif)` edges implement the non-EC-multiplied form of BIP-38 (<https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>) via the `bip38 v1.1.1` crate (<https://crates.io/crates/bip38>; Apache-2.0; verified GREEN per `design/agent-reports/spike-libaudit-bip38-electrum-2026-05-06.md` and Phase 1 source-level security review).
+
+**Scrypt parameters (BIP-38 §"Encryption when EC multiply flag is not used"):** `n=16384`, `r=8`, `p=8`, derived-key length 64 bytes. Hardcoded inside the `bip38` crate; verified in Phase 1 security review.
+
+**Passphrase normalization (BIP-38 §"Encryption when EC multiply flag is not used"):** Unicode NFC applied at both encrypt and decrypt entry points by the `bip38` crate.
+
+**Inputs:**
+
+- `--passphrase <s>` — **MANDATORY** for both `(Wif, Bip38)` and `(Bip38, Wif)`. Empty passphrase is permitted (BIP-38 spec does not forbid it). Stdin convention: `--passphrase=-` reads from stdin (consistent with §5.a).
+
+**Algorithm (encrypt, `Wif → Bip38`):**
+
+1. Parse input WIF via `bitcoin::PrivateKey::from_wif`.
+2. Apply NFC normalization to passphrase.
+3. Call `<&str as bip38::EncryptWif>::encrypt(wif_str, &passphrase) -> Result<String, bip38::Error>`.
+4. Emit BIP-38 encrypted string (~58 chars; base58check; starts with `6P`).
+
+**Algorithm (decrypt, `Bip38 → Wif`):**
+
+1. Apply NFC normalization to passphrase.
+2. Call `<&str as bip38::Decrypt>::decrypt(bip38_str, &passphrase) -> Result<(SecretKey, bool /* compressed */), bip38::Error>`.
+3. Reconstruct `bitcoin::PrivateKey { compressed, network: <inferred from BIP-38 address-hash check>, inner: secret_key }`.
+4. Emit WIF via `to_wif()`.
+
+**Refusal taxonomy (v0.7):**
+
+- `Bip38 → Bip38`: identity-pivot refusal — `refusal_bip38_identity` (see §3.d).
+- `Bip38 → <non-Wif>`: composite via `Wif` intermediate; the dispatcher walks `Bip38 → Wif → <target>`. No special refusal (engages standard composite-edge resolution).
+- BIP-38 EC-multiplied form (intermediate codes / passphrase codes — BIP-38 §"Encryption when EC multiply mode is used"): the `bip38` crate's `Decrypt` impl rejects EC-multiplied codes with a typed `bip38::Error` variant; dispatch maps to a clean error rather than silent mis-processing. v0.7 does NOT support EC-multiplied form on either encrypt or decrypt direction; FOLLOWUPS-tier deferral if user demand surfaces.
+- Passphrase mismatch (decrypt direction): `bip38::Error::Pass` → `refusal_bip38_passphrase_mismatch` (see §3.d).
+
+**Secret-bearing classification (architect R1-L12):** `Bip38` is added to the `NodeType::is_secret_bearing` arm — although the byte stream is encrypted, possession-with-passphrase yields the underlying privkey, so the §7 secret-on-stdout warning fires when `--to bip38` output is rendered to a terminal.
+
+**Reference vectors:** BIP-38 §"Test vectors" — three non-EC-multiplied test vectors (no compression, with compression, and a test with passphrase containing non-ASCII). All three are pinned in Phase 1 RED tests.
+
+## §13 Casascius mini-private-key (v0.7)
+
+The `(MiniKey, Wif)` edge decodes Casascius mini-private-key strings (the engraved format on physical Casascius bitcoin coins, ~2011-2013).
+
+**Source:** Casascius mini private key spec (<https://en.bitcoin.it/wiki/Mini_private_key_format>).
+
+**Format:** 22, 26, or 30 base58 characters; starts with `S`. Carries a single SHA256 self-checksum (no length-prefix or version byte).
+
+**Self-checksum rule:** `SHA256(mini_key + "?")[0] == 0x00` — the first byte of the SHA256 hash of the mini-key string with the literal `?` byte appended must be zero. This is the typo-detection mechanism; valid mini-keys are mined by brute-force search until a candidate satisfies the checksum.
+
+**Decode algorithm:**
+
+1. Validate length is 22, 26, or 30 characters.
+2. Validate self-checksum: `SHA256(mini_key.as_bytes() ++ b"?")[0] == 0x00` — refuse with `error: invalid Casascius mini-key checksum (SHA256(key + "?")[0] != 0x00)` on mismatch.
+3. Compute raw privkey scalar: `SHA256(mini_key.as_bytes())` (32-byte output).
+4. Wrap as `bitcoin::PrivateKey { compressed: false, network, inner: secp256k1::SecretKey::from_slice(&raw)? }`. **Compressed flag is `false`** — Casascius mini-keys predate BIP-32 compressed-pubkey convention; the canonical decode is uncompressed.
+5. Emit WIF via `to_wif()`.
+
+**Decode-only contract:** there is NO `(*, MiniKey)` edge. Generating a mini-key requires brute-force search until the self-checksum byte is zero (expected ~256 candidate strings per valid mini-key). This is a deliberate one-way refusal — `refusal_minikey_one_way` (see §3.d).
+
+**Reference vectors:** at minimum one of each length class (22-char, 26-char, 30-char) pinned in Phase 2 RED tests, sourced from public references (cite source URL inline in test comments).
+
+## §14 Electrum native seed format (v0.7)
+
+The `(ElectrumPhrase, Entropy)` and `(Entropy, ElectrumPhrase)` edges implement Electrum's native seed-phrase format (NOT BIP-39 — Electrum uses its own wordlist and validation rule).
+
+**Source:** Electrum's `electrum/mnemonic.py` (<TODO@phase-3-corpus-spike-resolves-this>; Phase 3 of v0.7 execution will pin the SHA + retrieval date for the wordlist + seed-version constants). Per architect R1-I5, Phase 3 executes a corpus spike against Electrum's `tests/test_wallet.py` before encode-direction lock.
+
+**Wordlist provenance:** the embedded English wordlist (constant array, ~2KB, ~2048 entries) is sourced from Electrum's `electrum/wordlist/english.txt` (referenced from `electrum/mnemonic.py::ElectrumMnemonicEnglish`). Cite SHA + retrieval date inline in `crates/mnemonic-toolkit/src/electrum.rs` at module top.
+
+**Seed version dispatch:**
+
+```rust
+enum SeedVersion {
+    Standard,    // HMAC-SHA512("Seed version" || phrase) hex starts with "01"
+    Segwit,      // HMAC-SHA512("Seed version" || phrase) hex starts with "100"
+    Standard2FA, // HMAC-SHA512("Seed version" || phrase) hex starts with "101"
+    Segwit2FA,   // HMAC-SHA512("Seed version" || phrase) hex starts with "102"
+}
+```
+
+Validation function:
+
+```rust
+fn validate_seed_version(phrase: &str) -> Result<SeedVersion, ElectrumError>
+```
+
+Computes `HMAC-SHA512(key=b"Seed version", msg=phrase.as_bytes())` and dispatches on the lowercase hex prefix.
+
+**Decode (`ElectrumPhrase → Entropy`):**
+
+1. Call `validate_seed_version(phrase)`.
+2. If `Standard2FA` or `Segwit2FA`, refuse with `refusal_electrum_2fa_unsupported` (§3.d).
+3. Decode wordlist mapping: each whitespace-separated word → 11-bit index in the embedded wordlist; concatenate to form the entropy bigint; serialize to bytes.
+4. Emit hex.
+
+**Encode (`Entropy → ElectrumPhrase`):**
+
+1. Take optional `--electrum-version <standard|segwit>` (default `standard`).
+2. Encode entropy as a candidate phrase via wordlist forward mapping.
+3. Verify `validate_seed_version(candidate) == requested_version`. If not, the entropy does NOT cleanly map to the requested seed-version (Electrum-style entropy must be "mined" by incrementing through candidates until the HMAC prefix matches); the toolkit's encode behavior in this case is left to Phase 3 spike-driven decision (lock once corpus reproduces).
+4. Emit phrase string.
+
+**Refusal class (2FA seeds):** seed-versions `101` (Standard2FA) and `102` (Segwit2FA) are explicitly refused on the decode direction with `refusal_electrum_2fa_unsupported` (§3.d). 2FA seeds require a second factor (Electrum's challenge-response with TrustedCoin) not present in the phrase alone; silently decoding them produces garbage entropy. 2FA versions are also NOT exposed as encode targets — `--electrum-version` enum is restricted to `standard|segwit`.
+
+**Sibling-pivot refusals:**
+
+- `Phrase → ElectrumPhrase` and `ElectrumPhrase → Phrase` are REFUSED via `refusal_electrum_phrase_pivot` (§3.d) — BIP-39 and Electrum native are different artifact classes.
+
+**Reference vectors:** at minimum one Standard + one Segwit reference phrase from Electrum's `tests/test_wallet.py`, pinned in Phase 3 RED tests with cite-comment to source SHA. 2FA refusal stderr byte-pinned for both `101` and `102` versions.
