@@ -50,12 +50,22 @@ flowchart TD
 | `nums` | nobody (BIP-341 reference NUMS point) | every spend reveals script | privacy-by-uniformity is less important than guaranteeing K-of-N enforcement on every spend |
 | `@N` (cosigner xpub) | cosigner N alone (key path) | cooperative spend is single-sig-shaped; non-cooperative spend reveals script | privacy in cooperative spends matters; one cosigner is "primary" and the multisig is a recovery / coercion-resistance layer |
 
-The toolkit accepts `--taproot-internal-key nums` for the NUMS-point
-form and `--taproot-internal-key @N` for the designated-cosigner form.
-If you specify `@2`, cosigner 2's xpub becomes the internal key and
-cosigner 2 is *removed* from the script-path leaf set. The remaining
-cosigners (0, 1) form the script-path `multi_a` leaf with adjusted
-threshold.
+The two key-path variants are selected differently in `bundle`:
+
+- **NUMS variant** — the *default* for `tr-multi-a` and
+  `tr-sortedmulti-a` templates. Just pass the template; no extra
+  flag is needed. The bundle embeds the BIP-341 reference NUMS
+  point as the internal key.
+- **Designated-cosigner variant** — supply a user-defined BIP-388
+  descriptor via `--descriptor 'tr(@N,sortedmulti_a(K,@0,…))'`,
+  promoting cosigner `@N` out of the script-path leaf set into the
+  key-path. The bundle binds slot `@N` to the chosen cosigner's
+  xpub.
+
+(The `mnemonic export-wallet` subcommand has a `--taproot-internal-key
+<nums|@N>` flag that toggles the variant on the watch-only export
+side; this flag does not exist on `bundle` or `verify-bundle`. See
+[the wallet-export workflow](#exporting-to-bitcoin-core-bip-388-sparrow-specter).)
 
 ## Step 1 — synthesise (NUMS internal key)
 
@@ -64,14 +74,13 @@ mnemonic bundle \
   --network mainnet \
   --template tr-sortedmulti-a \
   --threshold 2 \
-  --taproot-internal-key nums \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
   --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
   --self-check
 ```
 
-The descriptor inside md1 will be
+The descriptor inside md1 is
 `tr(NUMS_POINT,sortedmulti_a(2,@0,@1,@2))`. Spends always traverse
 the script path; the NUMS point cannot sign.
 
@@ -80,32 +89,30 @@ the script path; the NUMS point cannot sign.
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template tr-sortedmulti-a \
-  --threshold 2 \
-  --taproot-internal-key @2 \
+  --descriptor 'tr(@2,sortedmulti_a(2,@0,@1))' \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
   --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
   --self-check
 ```
 
-Cosigner 2's xpub becomes the key-path. The script-path leaf becomes
-`sortedmulti_a(K=2, @0, @1)` — only cosigners 0 and 1 in the leaf,
-because cosigner 2 has been promoted out. With `--threshold 2` and
-two remaining cosigners, the script path requires unanimity of the
-script-path participants.
+Cosigner 2's xpub becomes the key-path. The script-path leaf is
+`sortedmulti_a(2, @0, @1)` — only cosigners 0 and 1 in the leaf,
+because cosigner 2 has been promoted out. With K=2 and two remaining
+cosigners, the script path requires unanimity of the script-path
+participants.
 
-For larger sets, the script-path threshold preserves the original K:
-a `tr-multi-a` with K=3 across cosigners @0..@4 with
-`--taproot-internal-key @4` gives a script-path `multi_a(3, @0, @1, @2, @3)`
-— still K=3, just over the remaining four.
+For larger sets, write the descriptor to preserve the original K:
+e.g. `tr(@4,sortedmulti_a(3,@0,@1,@2,@3))` gives a script-path of
+3-of-4, still K=3, just over the remaining four cosigners.
 
 ## Step 3 — verify and stamp
 
-`mnemonic verify-bundle` accepts the same `--taproot-internal-key`
-flag and re-derives the expected key-path point and script-path leaf
-to verify the engraved cards match. The stamping ceremony is
-identical to the [non-taproot multisig flow](#multi-source-2-of-3-multisig).
+`mnemonic verify-bundle` accepts the same `--descriptor` (or
+`--template`) the bundle was built with and re-derives the expected
+key-path point and script-path leaf to verify the engraved cards
+match. The stamping ceremony is identical to the
+[non-taproot multisig flow](#multi-source-2-of-3-multisig).
 
 ## Multi-leaf taproot
 

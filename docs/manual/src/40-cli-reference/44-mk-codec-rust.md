@@ -33,15 +33,20 @@ pub use key_card::{KeyCard, decode, encode, encode_with_chunk_set_id};
 
 ## Encoding an mk1 card from a `KeyCard`
 
+`KeyCard` is `#[non_exhaustive]`, so external callers must construct
+it via `KeyCard::new(...)`:
+
 ```rust
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use mk_codec::{KeyCard, encode};
 
-let card = KeyCard {
-    fingerprint: [0x73, 0xc5, 0xda, 0x0a],
-    origin_path: "m/84'/0'/0'".parse().unwrap(),
-    xpub_compact: [0u8; 65],   // serialised xpub
-    policy_id_stub: [0u8; 4],
-};
+let xpub: Xpub = "xpub6CatWdiZi...".parse().unwrap();
+let card = KeyCard::new(
+    vec![[0u8; 4]],                                   // policy_id_stubs (non-empty)
+    Some(Fingerprint::from([0x73, 0xc5, 0xda, 0x0a])), // origin_fingerprint (None for privacy-preserving mode)
+    "m/84'/0'/0'".parse::<DerivationPath>().unwrap(),  // origin_path
+    xpub,                                              // xpub: bitcoin::bip32::Xpub
+);
 
 let strings: Vec<String> = encode(&card)?;
 for s in strings {
@@ -49,9 +54,10 @@ for s in strings {
 }
 ```
 
-The function returns one or more BCH-checksummed strings, depending
-on whether the card fits in the regular code or needs the long code
-(`MK_LONG_CONST` vs `MK_REGULAR_CONST`).
+The function takes `&KeyCard` (borrows, doesn't consume) and returns
+one or more BCH-checksummed strings, depending on whether the card
+fits in the regular code or needs the long code (`MK_LONG_CONST` vs
+`MK_REGULAR_CONST`).
 
 ## Decoding an mk1 card
 
@@ -63,21 +69,28 @@ let card = decode(&[
     "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh",
 ])?;
 
-println!("xpub fingerprint: {:02x?}", card.fingerprint);
+println!("xpub fingerprint: {:?}", card.origin_fingerprint);
 println!("origin path: {}", card.origin_path);
+println!("xpub: {}", card.xpub);
+println!("policy_id_stubs: {} stub(s)", card.policy_id_stubs.len());
 ```
+
+`origin_fingerprint` is `Option<Fingerprint>` (None when the card
+was emitted in privacy-preserving mode); `policy_id_stubs` is
+`Vec<[u8; 4]>` (always non-empty after a successful decode).
 
 ## Cross-binding with md-codec
 
-Each mk1 card carries the 4-byte `policy_id_stub` (the first 4 bytes
-of `SHA-256(canonical wallet-policy preimage)`). Toolkits combining
-mk-codec with md-codec compute the stub on the policy side and
-embed it on the key side, so that mismatched cards can be detected:
+Each mk1 card carries one or more 4-byte `policy_id_stub`s (each is
+the first 4 bytes of `SHA-256(canonical wallet-policy preimage)`).
+Toolkits combining mk-codec with md-codec compute the stub on the
+policy side and embed it on the key side, so that mismatched cards
+can be detected:
 
 ```rust
-let mk_stub = mk_card.policy_id_stub;
+let mk_stubs = &mk_card.policy_id_stubs;
 let md_stub = compute_policy_id_stub(&md_template, &xpubs);
-assert_eq!(mk_stub, md_stub);
+assert!(mk_stubs.contains(&md_stub));
 ```
 
 The md-codec crate exposes `compute_policy_id_stub`; see the
@@ -91,8 +104,9 @@ descriptor-mnemonic README for that surface.
 - **`string_layer`** — the alphabet / chunking / checksum machinery.
 - **`key_card`** — the high-level `KeyCard` struct, `encode`, `decode`.
 - **`error`** — the `Error` and `Result` types.
-- **`bin`** (internal) — fixture-generation helpers used by the test
-  vectors; not part of the stable surface.
+The crate ships a `gen_mk_vectors` binary target (`src/bin/`) for
+fixture regeneration; it is a maintainer tool, not a library module
+(no `mk_codec::bin` import path).
 
 ## Stability
 

@@ -72,12 +72,16 @@ Output is the canonical BIP-388 JSON shape:
   "description": "",
   "policy_template": "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
   "keys_info": [
-    "[fp0/48h/0h/0h/2h]xpub...",
-    "[fp1/48h/0h/0h/2h]xpub...",
-    "[fp2/48h/0h/0h/2h]xpub..."
+    "[fp0/87h/0h/0h]xpub...",
+    "[fp1/87h/0h/0h]xpub...",
+    "[fp2/87h/0h/0h]xpub..."
   ]
 }
 ```
+
+(The default `--multisig-path-family bip87` produces `m/87'/0'/0'`
+paths. For Coldcard / SeedSigner / older-Sparrow compatibility, add
+`--multisig-path-family bip48` and the paths become `m/48'/0'/0'/2'`.)
 
 ## Sparrow native format
 

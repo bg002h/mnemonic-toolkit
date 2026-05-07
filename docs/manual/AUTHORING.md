@@ -71,8 +71,9 @@ When you add a new index marker:
    ```
 
    Section anchors come from pandoc's slug rules: lowercase, drop
-   non-alphanumerics, replace whitespace with `-`. Em-dashes
-   surrounded by spaces become `--` (double hyphen).
+   non-alphanumerics (em-dashes included), replace runs of whitespace
+   with a single `-`. So `# Appendix B — BIP-39 entropy primer`
+   slugs to `appendix-b-bip-39-entropy-primer` (single hyphen).
 
 Do not place `\index{}` markers inside fenced code blocks (the
 strip-latex filter would still strip them but readers would see the

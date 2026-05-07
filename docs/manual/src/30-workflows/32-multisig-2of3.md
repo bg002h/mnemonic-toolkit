@@ -2,15 +2,14 @@
 
 The headline use of the m-format star: a 2-of-3 segwit multisig
 wallet whose three cosigners each generate their seed *on their own
-machine*. No single device ever sees more than one cosigner's secret.
-Each cosigner ends up with a personal ms1 card plus the same shared
-mk1-set + md1-set.
+machine*. Each cosigner ends up with a personal ms1 card plus the
+same shared mk1-set + md1-set.
 
-This chapter walks the *coordinated* synthesis flow, where one
-laptop has all three phrases briefly during the bundle pass. For the
-fully air-gapped variant — no machine ever sees more than one phrase
-— see the section ["Air-gapped variant"](#air-gapped-variant) at the
-end.
+This chapter walks the *coordinated* synthesis flow first, where
+one laptop has all three phrases briefly during the bundle pass.
+For the fully air-gapped variant — where no machine ever sees more
+than one cosigner's secret — see the section
+["Air-gapped variant"](#air-gapped-variant) at the end.
 
 :::danger
 Examples below use the canonical BIP-39 test vector

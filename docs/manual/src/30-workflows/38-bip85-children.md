@@ -66,10 +66,11 @@ The four required flags:
 | `password-base85` | base85-shaped password | `10..=80` |
 | `dice` | deterministic dice rolls | `1..=10000` |
 
-The 6 in-scope BIP-85 applications map to BIP-85 codes 39', 2',
-32', 128169', 707764', and 707785'. RSA and RSA-GPG (BIP-85 codes
-828365' and 707785') are out-of-scope for v0.8 pending
-RUSTSEC-2023-0071 patch and will land in v0.9.
+The seven in-scope BIP-85 applications map to BIP-85 codes 39',
+2', 32', 128169', 707764', 707785', and 89101' (DICE; BIP-85
+v1.3.0). RSA and RSA-GPG (both under BIP-85 code 828365') are
+out-of-scope for v0.8 pending RUSTSEC-2023-0071 patch and will
+land in v0.9.
 
 ## Worked examples
 
