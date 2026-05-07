@@ -19,9 +19,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `slip0132::normalize_xpub_prefix` return type changed from `Result<String, ToolkitError>` to `Result<(String, Option<&'static str>), ToolkitError>` to thread the variant-name signal up to the emission layer. `pub(crate)` API only — no impact on external consumers.
 - `bundle::resolve_slots` return type extended with a `Vec<(u8, &'static str)>` slot-index→variant-name signal channel. `pub(crate)` API only.
 
+### Fixed
+
+- `cmd::convert::run` had duplicate `// 8)` step-label comments (`8) Compute outputs.` and `8) Emit.`). Renumbered for sequence clarity. Closes FOLLOWUPS `convert-run-step-numbering-duplicate-8`.
+
 ### FOLLOWUPS resolved
 
 - `slip0132-input-normalization-stderr-info` — SLIP-0132 input-normalization stderr info-line shipped (this release).
+- `convert-run-step-numbering-duplicate-8` — duplicate `// 8)` step labels in `cmd::convert::run` renumbered (this release).
 
 ## mnemonic-toolkit [0.6.1] — 2026-05-06
 

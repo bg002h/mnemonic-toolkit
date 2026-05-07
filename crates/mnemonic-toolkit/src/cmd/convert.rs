@@ -426,7 +426,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // 8) Emit.
+    // 9) Emit.
     if args.json {
         let from_value = if primary.node.is_secret_bearing() {
             None
@@ -454,7 +454,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // 9) §7 secret-on-stdout warning.
+    // 10) §7 secret-on-stdout warning.
     if outputs.iter().any(|(n, _)| n.is_secret_bearing()) {
         let _ = writeln!(
             stderr,
