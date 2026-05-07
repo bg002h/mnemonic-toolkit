@@ -454,7 +454,7 @@ Exit code: 2 (refusal class via `ToolkitError::ConvertRefusal`). Eliminates an e
 
 ## §12 BIP-38 encrypted WIF (v0.7)
 
-The `(Wif, Bip38)` and `(Bip38, Wif)` edges implement the non-EC-multiplied form of BIP-38 (<https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>) via the `bip38 v1.1.1` crate (<https://crates.io/crates/bip38>; Apache-2.0; verified GREEN per `design/agent-reports/spike-libaudit-bip38-electrum-2026-05-06.md` and Phase 1 source-level security review).
+The `(Wif, Bip38)` and `(Bip38, Wif)` edges implement BIP-38 (<https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>) via the `bip38 v1.1.1` crate (<https://crates.io/crates/bip38>; Apache-2.0; verified GREEN per `design/agent-reports/spike-libaudit-bip38-electrum-2026-05-06.md` and Phase 1 source-level security review). The `(Wif, Bip38)` edge emits non-EC-multiplied form only; the `(Bip38, Wif)` edge handles BOTH non-EC-multiplied (`6P*`) and EC-multiplied (`6Pf*`) input transparently. See the EC-multiplied subsection below for the v0.7.1 erratum.
 
 **Scrypt parameters (BIP-38 §"Encryption when EC multiply flag is not used"):** `n=16384`, `r=8`, `p=8`, derived-key length 64 bytes. Hardcoded inside the `bip38` crate; verified in Phase 1 security review.
 

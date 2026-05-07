@@ -73,7 +73,7 @@ Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki> §Test 
 | V1 | TestingOneTwoThree | `5KN7Mzq...QQi5CVR` | `6PRVWUbk...Nh2ZoGg` | COVERED | `tests/cli_convert_bip38.rs::encrypt_wif_to_bip38_vector1_no_compression` + `decrypt_..._vector1_...` |
 | V2 | Satoshi | `5HtasZ6...gi5` | `6PRNFFkZ...PX1dWByq` | COVERED | `tests/cli_convert_bip38.rs::*_vector2_no_compression` |
 | V3 | unicode (U+03D2 U+0301 U+0000 U+10400 U+1F4A9) | `5Jajm8e...SZ4` | `6PRW5o9F...apcDQn` | COVERED-IGNORED | `tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector3_unicode_nfc_passphrase` (`#[ignore]`'d — U+0000 NULL not representable via argv; FOLLOWUP `bip38-spec-vector-3-null-byte-passphrase`). Test bodies + spec values pinned for the day a NULL-safe input channel lands. |
-| V4 | TestingOneTwoThree (compressed) | `L44B5gG...VpP` | `6PYNKZ1E...tpUeo` | COVERED | `tests/cli_convert_bip38.rs::*_vector3_compressed` |
+| V4 | TestingOneTwoThree (compressed) | `L44B5gG...VpP` | `6PYNKZ1E...tpUeo` | COVERED | `tests/cli_convert_bip38.rs::*_vector4_compressed` |
 | V5 | Satoshi (compressed) | `KwYgW8g...SK7` | `6PYLtMnX...PmY7` | COVERED | `tests/cli_convert_bip38.rs::{encrypt,decrypt}_..._spec_vector5_satoshi_compressed` (Phase 3.A) |
 
 ### EC-multiplied (4 published — DECRYPT)
