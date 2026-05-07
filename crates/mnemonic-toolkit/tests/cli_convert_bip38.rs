@@ -16,10 +16,26 @@ const V2_PASS: &str = "Satoshi";
 const V2_WIF: &str = "5HtasZ6ofTHP6HCwTqTkLDuLQisYPah7aUnSKfC7h4hMUVw2gi5";
 const V2_BIP38: &str = "6PRNFFkZc2NZ6dJqFfhRoFNMR9Lnyj7dYGrzdgXXVMXcxoKTePPX1dWByq";
 
-// V3: compression, passphrase "TestingOneTwoThree"
+// V3 (legacy local naming = "compressed TestingOneTwoThree") — BIP-38 spec
+// §"Test vectors" §"Encryption when EC multiply flag is not used", vector 4.
 const V3_PASS: &str = "TestingOneTwoThree";
 const V3_WIF: &str = "L44B5gGEpqEDRS9vVPz7QT35jcBG2r3CZwSwQ4fCewXAhAhqGVpP";
 const V3_BIP38: &str = "6PYNKZ1EAgYgmQfmNVamxyXVWHzK5s6DGhwP4J5o44cvXdoY7sRzhtpUeo";
+
+// SPEC_V3 (BIP-38 §"Test vectors" vector 3): no compression, Unicode-NFC
+// passphrase encoded as U+03D2 + U+0301 + U+0000 + U+10400 + U+1F4A9.
+// (The spec includes a U+0000 NULL between U+0301 and U+10400; after NFC
+// normalization the byte sequence is 0xcf9300f0909080f09f92a9.)
+// Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>.
+const SPEC_V3_PASS: &str = "\u{03D2}\u{0301}\u{0000}\u{10400}\u{1F4A9}";
+const SPEC_V3_WIF: &str = "5Jajm8eQ22H3pGWLEVCXyvND8dQZhiQhoLJNKjYXk9roUFTMSZ4";
+const SPEC_V3_BIP38: &str = "6PRW5o9FLp4gJDDVqJQKJFTpMvdsSGJxMYHtHaQBF3ooa8mwD69bapcDQn";
+
+// SPEC_V5 (BIP-38 §"Test vectors" vector 5): compression, passphrase "Satoshi".
+// Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>.
+const SPEC_V5_PASS: &str = "Satoshi";
+const SPEC_V5_WIF: &str = "KwYgW8gcxj1JWJXhPSu4Fqwzfhp5Yfi42mdYmMa4XqK7NJxXUSK7";
+const SPEC_V5_BIP38: &str = "6PYLtMnXvfG3oJde97zRyLYFZCYizPU5T3LwgdYJz1fRhh16bU7u6PPmY7";
 
 /// Helper: extract the value from `<node>: <value>\n` stdout.
 fn convert_value(args: &[&str]) -> String {
@@ -124,6 +140,80 @@ fn decrypt_bip38_to_wif_vector3_compressed() {
         V3_PASS,
     ]);
     assert_eq!(out, V3_WIF);
+}
+
+// ============================================================================
+// BIP-38 §"Test vectors" SPEC_V3 + SPEC_V5 — Phase 3.A
+//
+// Source: <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>
+// §"Test vectors" §"Encryption when EC multiply flag is not used".
+// SPEC_V3: vector 3 (no compression, Unicode-NFC passphrase).
+// SPEC_V5: vector 5 (compression, Satoshi passphrase).
+// ============================================================================
+
+// SPEC_V3 (BIP-38 vector 3) is `#[ignore]`'d: the spec passphrase contains
+// U+0000 (NULL), which POSIX/argv do not permit in command-line arguments.
+// The `--passphrase=-` stdin sentinel is also unsuitable here because
+// `read_stdin_to_string` applies `.trim()`. v0.8 FOLLOWUP
+// `bip38-spec-vector-3-null-byte-passphrase` tracks exposing a NULL-safe
+// input channel (raw stdin bytes via `--passphrase-bytes-hex` or similar).
+// Cite-only entries below preserve the source URL for matrix completeness.
+#[test]
+#[ignore = "BIP-38 V3 passphrase contains U+0000; not representable via argv (FOLLOWUP bip38-spec-vector-3-null-byte-passphrase)"]
+fn encrypt_wif_to_bip38_spec_vector3_unicode_nfc_passphrase() {
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("wif={SPEC_V3_WIF}"),
+        "--to",
+        "bip38",
+        "--passphrase",
+        SPEC_V3_PASS,
+    ]);
+    assert_eq!(out, SPEC_V3_BIP38);
+}
+
+#[test]
+#[ignore = "BIP-38 V3 passphrase contains U+0000; not representable via argv (FOLLOWUP bip38-spec-vector-3-null-byte-passphrase)"]
+fn decrypt_bip38_to_wif_spec_vector3_unicode_nfc_passphrase() {
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={SPEC_V3_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        SPEC_V3_PASS,
+    ]);
+    assert_eq!(out, SPEC_V3_WIF);
+}
+
+#[test]
+fn encrypt_wif_to_bip38_spec_vector5_satoshi_compressed() {
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("wif={SPEC_V5_WIF}"),
+        "--to",
+        "bip38",
+        "--passphrase",
+        SPEC_V5_PASS,
+    ]);
+    assert_eq!(out, SPEC_V5_BIP38);
+}
+
+#[test]
+fn decrypt_bip38_to_wif_spec_vector5_satoshi_compressed() {
+    let out = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={SPEC_V5_BIP38}"),
+        "--to",
+        "wif",
+        "--passphrase",
+        SPEC_V5_PASS,
+    ]);
+    assert_eq!(out, SPEC_V5_WIF);
 }
 
 // ============================================================================
