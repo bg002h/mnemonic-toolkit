@@ -228,7 +228,9 @@ fn cell_6b_pwd_base85_reference_vector() {
     );
 }
 
-/// SPEC §7 — refusal: --application rsa is out-of-scope for v0.7. Byte-exact stderr.
+/// SPEC v0.8 §7 — refusal: --application rsa / rsa-gpg are still out-of-scope
+/// (Phase 6 RSA-crate security spike: RUSTSEC-2023-0071 unpatched). v0.8 lifts
+/// `dice` to in-scope; the rsa-family tokens stay in the deferred list.
 #[test]
 fn cell_7_unsupported_application_rsa_refusal() {
     let out = Command::cargo_bin("mnemonic")
@@ -248,10 +250,10 @@ fn cell_7_unsupported_application_rsa_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr.trim(),
-        "error: --application <rsa|rsa-gpg|dice> is out-of-scope for v0.7 \
-         (rsa crate not in tree; dice is niche). Tracked for v0.8+.",
+    assert!(
+        stderr.contains("--application <rsa|rsa-gpg> is out-of-scope")
+            && stderr.contains("RUSTSEC-2023-0071"),
+        "stderr missing v0.8 RSA refusal text: {stderr:?}",
     );
 }
 
@@ -615,5 +617,60 @@ fn xprv_from_stdin_matches_argv_master() {
     assert_eq!(
         String::from_utf8(from_argv.get_output().stdout.clone()).unwrap(),
         String::from_utf8(from_stdin.get_output().stdout.clone()).unwrap(),
+    );
+}
+
+// ============================================================================
+// SPEC v0.8 §4 — Item #7 (DICE only; RSA + RSA-GPG deferred per Phase 6 spike)
+// ============================================================================
+
+/// SPEC v0.8 §4 + BIP-85 v1.3.0 §"DICE" — d6 reference vector at index 0.
+/// Path m/83696968'/89101'/6'/10'/0' → "1,0,0,2,0,1,5,5,2,4".
+#[test]
+fn dice_d6_10_rolls_reference_vector() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "dice",
+            "--length",
+            "10",
+            "--index",
+            "0",
+            "--dice-sides",
+            "6",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout, "1,0,0,2,0,1,5,5,2,4\n");
+}
+
+/// SPEC v0.8 §4 — `--application dice` requires `--dice-sides`.
+#[test]
+fn dice_missing_dice_sides_refused() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "dice",
+            "--length",
+            "10",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--application dice requires --dice-sides"),
+        "stderr missing dice-sides refusal: {stderr:?}",
     );
 }

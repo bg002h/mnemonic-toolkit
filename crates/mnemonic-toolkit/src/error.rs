@@ -334,9 +334,13 @@ impl ToolkitError {
                 crate::wallet_export::taproot_multisig_unsupported_message(name)
             }
             ToolkitError::DeriveChildUnsupportedApp => {
-                // SPEC_derive_child_v0_7.md §7 byte-exact stderr text.
-                "--application <rsa|rsa-gpg|dice> is out-of-scope for v0.7 \
-                 (rsa crate not in tree; dice is niche). Tracked for v0.8+."
+                // SPEC_derive_child_v0_8.md §7 byte-exact stderr text. v0.8
+                // lifts `dice` to in-scope; `rsa` and `rsa-gpg` remain deferred
+                // per Phase 6 RSA-crate security spike (RUSTSEC-2023-0071
+                // unpatched as of 2026-05-07).
+                "--application <rsa|rsa-gpg> is out-of-scope: the rsa crate has unpatched \
+                 timing-attack advisory RUSTSEC-2023-0071 and BIP-85 RSA / RSA-GPG demand is \
+                 limited; deferred pending crate stability + user demand."
                     .to_string()
             }
             ToolkitError::DeriveChildLengthOutOfRange {

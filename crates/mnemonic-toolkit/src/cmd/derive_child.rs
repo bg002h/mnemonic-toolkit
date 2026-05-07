@@ -59,6 +59,11 @@ pub struct DeriveChildArgs {
     /// when `--from phrase=…`. Empty by default. Ignored on `--from xprv=…`.
     #[arg(long)]
     pub passphrase: Option<String>,
+
+    /// SPEC v0.8 §4 — number of sides for `--application dice`. Required
+    /// when `--application dice`; ignored otherwise. Range: 2..=2^32-1.
+    #[arg(long = "dice-sides")]
+    pub dice_sides: Option<u32>,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -106,8 +111,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     let emit_network = args.network.unwrap_or(CliNetwork::Mainnet).network_kind();
 
     // SPEC §5 + §7 — out-of-scope apps surface byte-exact refusal here.
+    // v0.8: `dice` lifted to in-scope; `rsa` and `rsa-gpg` remain deferred
+    // per Phase 6 RSA-crate security spike (RUSTSEC-2023-0071 unpatched).
     match args.application.as_str() {
-        "rsa" | "rsa-gpg" | "dice" => return Err(ToolkitError::DeriveChildUnsupportedApp),
+        "rsa" | "rsa-gpg" => return Err(ToolkitError::DeriveChildUnsupportedApp),
         _ => {}
     }
 
@@ -166,11 +173,27 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             bip85::format_password_base85(&master, n, args.index)?
         }
+        "dice" => {
+            let rolls = args.length;
+            if rolls < 1 {
+                return Err(ToolkitError::DeriveChildLengthOutOfRange {
+                    app: "dice",
+                    length: rolls,
+                    valid_text: "rolls >= 1",
+                });
+            }
+            let sides = args.dice_sides.ok_or_else(|| {
+                ToolkitError::BadInput(
+                    "--application dice requires --dice-sides <N> (number of sides; >=2)".into(),
+                )
+            })?;
+            bip85::format_dice_rolls(&master, sides, rolls, args.index)?
+        }
         other => {
             return Err(ToolkitError::BadInput(format!(
                 "derive-child: --application {other:?} is not recognized; \
                  expected one of: bip39, hd-seed, xprv, hex, password-base64, \
-                 password-base85 (or out-of-scope: rsa, rsa-gpg, dice)",
+                 password-base85, dice (or out-of-scope: rsa, rsa-gpg)",
             )));
         }
     };

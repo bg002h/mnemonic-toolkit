@@ -12,6 +12,8 @@ use bitcoin::bip32::{ChildNumber, DerivationPath, Xpriv};
 use bitcoin::hashes::{sha512, Hash, HashEngine, Hmac, HmacEngine};
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::NetworkKind;
+use sha3::digest::{ExtendableOutput, Update, XofReader};
+use sha3::Shake256;
 
 /// BIP-85 §"Specification" — derive 64 bytes of entropy from a master xprv
 /// at path `m/83696968'/<app_code>'/<app_params...>'/<index>'`, then
@@ -174,6 +176,74 @@ pub(crate) fn format_password_base85(
 }
 
 // ============================================================================
+// DICE (app 89101')
+// ============================================================================
+
+/// SPEC v0.8 §4 — BIP-85 DICE rolls. Path m/83696968'/89101'/<sides>'/<rolls>'/<index>'.
+/// Per BIP-85 v1.3.0 §"DICE" the algorithm is:
+///   1. Derive 64 bytes of BIP-85 entropy at the spec path.
+///   2. Seed a SHAKE256 DRNG with the entropy (BIP85-DRNG-SHAKE256).
+///   3. For each roll: read `bytes_per_roll = ceil(bits_per_roll / 8)` bytes,
+///      keep the most significant `bits_per_roll = ceil(log_2(sides))` bits,
+///      reject the trial if it's >= sides; otherwise accept as a roll value
+///      in `[0, sides-1]`.
+///   4. Output rolls separated by `,` (per BIP-85 spec example).
+///
+/// Constraints: `2 <= sides <= 2^32 - 1`, `1 <= rolls <= 2^32 - 1`.
+pub(crate) fn format_dice_rolls(
+    master: &Xpriv,
+    sides: u32,
+    rolls: u32,
+    index: u32,
+) -> Result<String, ToolkitError> {
+    if sides < 2 {
+        return Err(ToolkitError::BadInput(format!(
+            "BIP-85 dice: sides must be >= 2, got {sides}",
+        )));
+    }
+    if rolls < 1 {
+        return Err(ToolkitError::BadInput(
+            "BIP-85 dice: rolls must be >= 1".into(),
+        ));
+    }
+
+    let entropy = derive_entropy(master, 89_101, &[sides, rolls], index)?;
+
+    // BIP85-DRNG-SHAKE256: seed a SHAKE256 stream with the 64-byte entropy.
+    let mut shake = Shake256::default();
+    shake.update(&entropy);
+    let mut reader = shake.finalize_xof();
+
+    // bits_per_roll = ceil(log_2(sides)); bytes_per_roll = ceil(bits_per_roll / 8).
+    let bits_per_roll = u32::BITS - (sides - 1).leading_zeros();
+    let bytes_per_roll = bits_per_roll.div_ceil(8) as usize;
+
+    let mut out: Vec<String> = Vec::with_capacity(rolls as usize);
+    let mut buf = vec![0u8; bytes_per_roll];
+    while out.len() < rolls as usize {
+        reader.read(&mut buf);
+        // Big-endian assembly of bytes into a u32 trial value (sides up to
+        // 2^32 - 1 fits in u32).
+        let mut trial: u32 = 0;
+        for &b in &buf {
+            trial = (trial << 8) | (b as u32);
+        }
+        // Trim excess low bits — BIP-85 spec says "retain the most significant
+        // `bits_per_roll` bits". `bytes_per_roll * 8` bits total, keep top
+        // `bits_per_roll`, so right-shift by the difference.
+        let total_bits = (bytes_per_roll as u32) * 8;
+        let shift = total_bits - bits_per_roll;
+        trial >>= shift;
+        if trial < sides {
+            out.push(trial.to_string());
+        }
+        // else: rejection sample — read the next chunk.
+    }
+
+    Ok(out.join(","))
+}
+
+// ============================================================================
 // Encoders (hand-rolled — neither base64 nor base85 are toolkit deps).
 // ============================================================================
 
@@ -286,5 +356,40 @@ mod tests {
     fn pwd_base85_matches_spec() {
         let pwd = format_password_base85(&master(), 12, 0).unwrap();
         assert_eq!(pwd, "_s`{TW89)i4`");
+    }
+
+    /// BIP-85 v1.3.0 §"DICE" reference vector.
+    /// Path m/83696968'/89101'/6'/10'/0' → rolls 1,0,0,2,0,1,5,5,2,4.
+    #[test]
+    fn dice_d6_10_rolls_matches_spec() {
+        let rolls = format_dice_rolls(&master(), 6, 10, 0).unwrap();
+        assert_eq!(rolls, "1,0,0,2,0,1,5,5,2,4");
+    }
+
+    /// Boundary: sides=2 (coin flip). bits_per_roll = 1; rolls are 0 or 1.
+    #[test]
+    fn dice_d2_rolls_in_range() {
+        let rolls = format_dice_rolls(&master(), 2, 50, 0).unwrap();
+        for r in rolls.split(',') {
+            let v: u32 = r.parse().unwrap();
+            assert!(v < 2, "d2 roll out of [0,1]: {v}");
+        }
+    }
+
+    /// Boundary: sides=256 (no rejection sampling required). 1 byte per roll.
+    #[test]
+    fn dice_d256_rolls_in_range() {
+        let rolls = format_dice_rolls(&master(), 256, 20, 0).unwrap();
+        for r in rolls.split(',') {
+            let v: u32 = r.parse().unwrap();
+            assert!(v < 256, "d256 roll out of [0,255]: {v}");
+        }
+    }
+
+    /// Refusal: sides < 2.
+    #[test]
+    fn dice_sides_too_small_refused() {
+        let r = format_dice_rolls(&master(), 1, 5, 0);
+        assert!(matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2")));
     }
 }
