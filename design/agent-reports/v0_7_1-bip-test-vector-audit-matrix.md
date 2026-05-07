@@ -96,30 +96,30 @@ Source: <https://raw.githubusercontent.com/trezor/python-mnemonic/master/vectors
 
 | # | Entropy (head) | Words | Status | Notes |
 |---|---|---|---|---|
-| 1 | `00000000...` (16 B) | 12 | COVERED-PARTIAL | TREZOR_12 ("abandon...about") used implicitly via `cli_convert_address.rs`; entropy-↔-seed-↔-xprv tuple NOT pinned. Phase 1 pins full quad in `tests/cli_convert_bip39_vectors.rs`. |
-| 2 | `7f7f7f7f...` (16 B) | 12 | MISSING | Phase 1 |
-| 3 | `80808080...` (16 B) | 12 | MISSING | Phase 1 |
-| 4 | `ffffffff...` (16 B) | 12 | MISSING | Phase 1 |
-| 5 | `00000000...` (24 B) | 18 | MISSING | Phase 1 |
-| 6 | `7f7f7f7f...` (24 B) | 18 | MISSING | Phase 1 |
-| 7 | `80808080...` (24 B) | 18 | MISSING | Phase 1 |
-| 8 | `ffffffff...` (24 B) | 18 | MISSING | Phase 1 |
-| 9 | `00000000...` (32 B) | 24 | COVERED-PARTIAL | TREZOR_24 ("abandon...art") used in derive.rs + cli_convert_happy_paths.rs (xprv head matches V9 row); Trezor entropy/seed quad NOT pinned. Phase 1 closes. |
-| 10 | `7f7f7f7f...` (32 B) | 24 | MISSING | Phase 1 |
-| 11 | `80808080...` (32 B) | 24 | MISSING | Phase 1 |
-| 12 | `ffffffff...` (32 B) | 24 | MISSING | Phase 1 |
-| 13 | `9e885d95...` (16 B) | 12 | MISSING | Phase 1 |
-| 14 | `6610b259...` (24 B) | 18 | MISSING | Phase 1 |
-| 15 | `68a79eac...` (32 B) | 24 | MISSING | Phase 1 |
-| 16 | `c0ba5a8e...` (16 B) | 12 | MISSING | Phase 1 |
-| 17 | `6d9be1ee...` (24 B) | 18 | MISSING | Phase 1 |
-| 18 | `9f6a2878...` (32 B) | 24 | MISSING | Phase 1 |
-| 19 | `23db8160...` (16 B) | 12 | MISSING | Phase 1 |
-| 20 | `8197a4a4...` (24 B) | 18 | MISSING | Phase 1 |
-| 21 | `066dca1a...` (32 B) | 24 | MISSING | Phase 1 |
-| 22 | `f30f8c1d...` (16 B) | 12 | MISSING | Phase 1 |
-| 23 | `c10ec20d...` (24 B) | 18 | MISSING | Phase 1 |
-| 24 | `f585c11a...` (32 B) | 24 | MISSING | Phase 1 |
+| 1 | `00000000...` (16 B) | 12 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v01_12word_zero_entropy` (full quad: entropy/phrase/seed/xprv with TREZOR passphrase) |
+| 2 | `7f7f7f7f...` (16 B) | 12 | MISSING | v0.8 carry |
+| 3 | `80808080...` (16 B) | 12 | MISSING | v0.8 carry |
+| 4 | `ffffffff...` (16 B) | 12 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v04_12word_all_ff_entropy` |
+| 5 | `00000000...` (24 B) | 18 | MISSING | v0.8 carry |
+| 6 | `7f7f7f7f...` (24 B) | 18 | MISSING | v0.8 carry |
+| 7 | `80808080...` (24 B) | 18 | MISSING | v0.8 carry |
+| 8 | `ffffffff...` (24 B) | 18 | MISSING | v0.8 carry |
+| 9 | `00000000...` (32 B) | 24 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v09_24word_zero_entropy` (closes prior partial-coverage gap) |
+| 10 | `7f7f7f7f...` (32 B) | 24 | MISSING | v0.8 carry |
+| 11 | `80808080...` (32 B) | 24 | MISSING | v0.8 carry |
+| 12 | `ffffffff...` (32 B) | 24 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v12_24word_all_ff_entropy` |
+| 13 | `9e885d95...` (16 B) | 12 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v13_12word_nontrivial_entropy` |
+| 14 | `6610b259...` (24 B) | 18 | MISSING | v0.8 carry |
+| 15 | `68a79eac...` (32 B) | 24 | COVERED | `tests/cli_convert_bip39_vectors.rs::bip39_trezor_v15_24word_nontrivial_entropy` |
+| 16 | `c0ba5a8e...` (16 B) | 12 | MISSING | v0.8 carry |
+| 17 | `6d9be1ee...` (24 B) | 18 | MISSING | v0.8 carry |
+| 18 | `9f6a2878...` (32 B) | 24 | MISSING | v0.8 carry |
+| 19 | `23db8160...` (16 B) | 12 | MISSING | v0.8 carry |
+| 20 | `8197a4a4...` (24 B) | 18 | MISSING | v0.8 carry |
+| 21 | `066dca1a...` (32 B) | 24 | MISSING | v0.8 carry |
+| 22 | `f30f8c1d...` (16 B) | 12 | MISSING | v0.8 carry |
+| 23 | `c10ec20d...` (24 B) | 18 | MISSING | v0.8 carry |
+| 24 | `f585c11a...` (32 B) | 24 | MISSING | v0.8 carry |
 
 Plan §Phase 1 pins 6 entries (12-word + 24-word × 3 passphrase variants).
 Remaining 18 stay MISSING (FOLLOWUP — full corpus pin deferred to v0.8 unless
