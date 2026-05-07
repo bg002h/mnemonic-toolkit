@@ -27,9 +27,9 @@ The manual is **two-track**:
   appendices for full primers.
 
 If you do not yet know what BIP-39, BIP-32, descriptors, or multisig
-*are*, start with [Appendix B (BIP-39)](#appendix-b--bip-39-entropy-primer),
-[Appendix C (BIP-32)](#appendix-c--bip-32-derivation-primer), and
-[Appendix D (descriptors / BIP-388)](#appendix-d--descriptors-and-bip-388-primer).
+*are*, start with [Appendix B (BIP-39)](#appendix-b-bip-39-entropy-primer),
+[Appendix C (BIP-32)](#appendix-c-bip-32-derivation-primer), and
+[Appendix D (descriptors / BIP-388)](#appendix-d-descriptors-and-bip-388-primer).
 Then come back to the front and read forward.
 
 ## How to read this manual

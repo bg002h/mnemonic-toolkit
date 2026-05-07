@@ -2,7 +2,7 @@
 
 Definitions are intentionally terse for v0.1; expanded in Phase 7. For
 deeper background, see the newcomer primers in
-[Appendix B](#appendix-b--bip-39-entropy-primer)–[Appendix E](#appendix-e--codex32--bch--m-codec-error-correction).
+[Appendix B](#appendix-b-bip-39-entropy-primer)–[Appendix E](#appendix-e-codex32-bch-m-codec-error-correction).
 
 ## BCH
 
@@ -15,7 +15,7 @@ codex32) to detect and locate engraving errors on each card. The
 
 Hierarchical Deterministic (HD) wallet derivation. Defines extended
 keys (`xprv` / `xpub`) and child-key derivation paths like
-`m/84'/0'/0'`. See [Appendix C](#appendix-c--bip-32-derivation-primer).
+`m/84'/0'/0'`. See [Appendix C](#appendix-c-bip-32-derivation-primer).
 
 ## BIP-38
 
@@ -28,7 +28,7 @@ the BIP-39 passphrase.
 
 Mnemonic phrase encoding of wallet entropy as 12, 15, 18, 21, or 24
 English (or other-language) words. The "seed phrase" stored on the
-**ms1** card. See [Appendix B](#appendix-b--bip-39-entropy-primer).
+**ms1** card. See [Appendix B](#appendix-b-bip-39-entropy-primer).
 
 ## BIP-44 / BIP-49 / BIP-84 / BIP-86
 
