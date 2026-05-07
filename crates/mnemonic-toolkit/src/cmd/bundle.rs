@@ -325,7 +325,7 @@ pub(crate) fn resolve_slots(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let (xpub_str, _normalized) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let (xpub_str, _input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
             let xpub = bitcoin::bip32::Xpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
@@ -863,7 +863,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
-            let (xpub_str, _normalized) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let (xpub_str, _input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
             let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
