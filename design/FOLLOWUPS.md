@@ -656,7 +656,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs:382` and `:385`.
 - **What:** The dispatch in `convert::run` numbers its steps `// 1)` through `// 9)`; both "Compute outputs" and "Emit" are labeled `// 8)`. The second should be `// 9)` to keep the comment numbering monotonic. Comment-only nit; no behavioral effect.
 - **Why deferred:** Pre-existed Phase B; out of scope for the SPEC-A `phrase/entropy → wif` commit. Cleanly fixable in the next convert-touching patch.
-- **Status:** `open`
+- **Status:** `resolved a52b2aa` — v0.6.2 cosmetic micro-commit (Phase 5). `// 8) Emit.` → `// 9) Emit.`; `// 9) §7 secret-on-stdout warning.` → `// 10)`. Comment-only.
 - **Tier:** `v0.6.2-nice-to-have`
 
 ### `slip0132-input-normalization-stderr-info` — emit a one-line stderr note when SLIP-0132 input is silently normalized
