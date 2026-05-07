@@ -150,7 +150,13 @@ $(BUILD_DIR)/m-format-manual.tex: $(PDF_SRC) $(FILTERS_DIR)/primer-box.lua $(PAN
 
 $(BUILD_DIR)/m-format-manual.pdf: $(BUILD_DIR)/m-format-manual.tex
 	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error m-format-manual.tex
-	cd $(BUILD_DIR) && $(MAKEINDEX) m-format-manual.idx
+	# Run makeindex only if the .idx file was produced (xelatex emits it
+	# only when the source contains at least one \index{} marker).
+	cd $(BUILD_DIR) && if [ -f m-format-manual.idx ]; then \
+	    $(MAKEINDEX) m-format-manual.idx; \
+	else \
+	    echo '[pdf] no \\index{} markers in source; skipping makeindex'; \
+	fi
 	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error m-format-manual.tex
 	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error m-format-manual.tex
 

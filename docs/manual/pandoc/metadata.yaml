@@ -38,8 +38,10 @@ keywords:
   - mnemonic
   - steel-engraving
 rights: "CC0 1.0 Universal (Public Domain Dedication)"
-header-includes: |
-  \usepackage{makeidx}
-  \makeindex
+header-includes:
+  - \usepackage{makeidx}
+  - \makeindex
+  - \usepackage{fvextra}
+  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\footnotesize}
 copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
 ...

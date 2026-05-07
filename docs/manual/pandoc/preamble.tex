@@ -5,10 +5,10 @@
 % directives loaded here (`\index{...}`, `:::primer` divs handled by Lua
 % filter) are part of the authoring contract.
 
-% --- Index support (book-style alphabetical index w/ page numbers) -----------
-% Loaded once; `\makeindex` is invoked from metadata.yaml's header-includes
-% so the .idx file is opened.
-\usepackage{makeidx}
+% --- Index support ----------------------------------------------------------
+% `\usepackage{makeidx}` and `\makeindex` are now loaded via metadata.yaml's
+% `header-includes:` list (which the template emits before this preamble).
+% Do not double-load here.
 
 % --- Primer-box rendering for `:::primer` fenced divs ------------------------
 \usepackage{mdframed}
@@ -45,12 +45,9 @@
 ]{dangerbox}
 
 % --- Better code-block typography -------------------------------------------
-\usepackage{fvextra}
-\DefineVerbatimEnvironment{Highlighting}{Verbatim}{
-  breaklines,
-  breakanywhere,
-  fontsize=\footnotesize,
-}
+% `fvextra` + `\DefineVerbatimEnvironment{Highlighting}` is loaded via
+% metadata.yaml's header-includes list so the redefinition runs BEFORE
+% pandoc's own `$highlighting-macros$` block in the template.
 
 % --- Mermaid figures (embedded as SVG by mermaid-filter) --------------------
 \usepackage{graphicx}

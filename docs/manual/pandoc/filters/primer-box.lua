@@ -20,7 +20,10 @@ function Div(el)
   end
 
   local class = is_primer and "primerbox" or "dangerbox"
-  local md_prefix = is_primer and "**Background.** " or "**DANGER.** "
+  -- Plain prefix text; `pandoc.Strong` wraps it as bold in the AST so the
+  -- writer (gfm or otherwise) handles the bold rendering. Do NOT include
+  -- raw markdown asterisks here — pandoc.Str escapes them.
+  local prefix_text = is_primer and "Background." or "DANGER."
 
   if FORMAT:match("latex") then
     local out = {
@@ -35,7 +38,7 @@ function Div(el)
     -- Wrap the contents in a BlockQuote, prepending the prefix to the
     -- first inline-bearing block (Para or Plain) it finds. If the div
     -- has none, just emit a BlockQuote with the prefix as a Para.
-    local prefix_inline = pandoc.Strong({ pandoc.Str(md_prefix:match("^(.-)%s$") or md_prefix) })
+    local prefix_inline = pandoc.Strong({ pandoc.Str(prefix_text) })
     local prefixed = false
     local body = {}
     for _, b in ipairs(el.content) do
