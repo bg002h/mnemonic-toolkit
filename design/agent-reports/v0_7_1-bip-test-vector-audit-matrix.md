@@ -367,9 +367,9 @@ canonical references.
 
 | # | Length | Canonical | Status | Notes |
 |---|---|---|---|---|
-| C.1 | 22-char | `S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy` (wiki canonical) | COVERED-IMPL | `cli_convert_minikey.rs::decode_minikey_22char_to_wif_mainnet` |
-| C.2 | 26-char | (no public canonical reference) | OUT-OF-SCOPE-PER-SPEC | Phase 7 documents the gap; impl-generated value retained |
-| C.3 | 30-char | `SzavMBLoXU6kDrqtUVmffv` + impl-generated | COVERED-IMPL | `cli_convert_minikey.rs::decode_minikey_30char_to_wif_*` |
+| C.1 | 22-char | `SzavMBLoXU6kDrqtUVmffv` (Casascius wiki canonical) | COVERED-IMPL | `cli_convert_minikey.rs::decode_minikey_22char_to_wif_mainnet` |
+| C.2 | 26-char | (no public canonical reference) | OUT-OF-SCOPE-PER-SPEC | Phase 7 documents the gap; impl-generated value (`S2WSthnpsFbmS1btGUBjCNjG5r`) retained for length-class coverage |
+| C.3 | 30-char | `S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy` (Casascius wiki canonical) | COVERED-IMPL | `cli_convert_minikey.rs::decode_minikey_30char_to_wif_*` (mainnet + testnet) |
 
 Phase 7 audits for any *additional* public canonical entries; pins if found.
 
