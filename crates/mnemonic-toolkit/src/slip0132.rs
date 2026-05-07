@@ -303,6 +303,43 @@ mod tests {
         let _ = neutral_for("xpub");
     }
 
+    /// v0.7 Phase 7 carry-over (`slip0132-info-line-spec-text-not-byte-pinned`):
+    /// extracts the canonical info-line template from `design/SPEC_convert_v0_6.md`
+    /// §11 (delimited by HTML markers) and asserts it matches `render_slip0132_info_line`
+    /// after substituting the `<variant>` and `<xpub|tpub>` placeholders. Closes
+    /// the SPEC↔production drift hazard surfaced in v0.6.2 final review.
+    #[test]
+    fn spec_info_line_template_matches_production_render() {
+        const SPEC: &str =
+            include_str!("../../../design/SPEC_convert_v0_6.md");
+        const BEGIN: &str = "<!-- BEGIN: slip0132-info-line -->";
+        const END: &str = "<!-- END: slip0132-info-line -->";
+        let begin_idx = SPEC.find(BEGIN).expect("BEGIN marker present in SPEC");
+        let end_idx = SPEC.find(END).expect("END marker present in SPEC");
+        assert!(begin_idx < end_idx, "BEGIN must precede END");
+        let block = &SPEC[begin_idx + BEGIN.len()..end_idx];
+        // Block contains a fenced code block: ```\n<line>\n```\n. Extract the
+        // single content line between the fences.
+        let mut lines = block.lines().filter(|l| !l.is_empty());
+        let opener = lines.next().expect("fence opener present");
+        assert_eq!(opener.trim(), "```", "expected fence opener, got {opener:?}");
+        let content = lines.next().expect("fence content present");
+        let closer = lines.next().expect("fence closer present");
+        assert_eq!(closer.trim(), "```", "expected fence closer, got {closer:?}");
+        // Substitute placeholders for each variant and compare to production.
+        for &variant in &["ypub", "Ypub", "zpub", "Zpub", "upub", "Upub", "vpub", "Vpub"] {
+            let neutral = neutral_for(variant);
+            let expected = content
+                .replace("<variant>", variant)
+                .replace("<xpub|tpub>", neutral);
+            assert_eq!(
+                render_slip0132_info_line(variant),
+                expected,
+                "SPEC §11 template ↔ production drift for variant {variant:?}",
+            );
+        }
+    }
+
     #[test]
     fn parse_xpub_prefix_arg_rejects_other_values_including_testnet_strings() {
         // Testnet variants are NOT exposed as flag values per SPEC §11.a.

@@ -206,6 +206,9 @@ fn run_full(
 ) -> Result<(), ToolkitError> {
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
+    // semantics suppress info-lines to avoid breaking script callers parsing
+    // VERIFIED/MISMATCH stderr line-by-line.
     let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
@@ -258,6 +261,9 @@ fn run_watch_only<E: Write>(
 
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
+    // semantics suppress info-lines to avoid breaking script callers parsing
+    // VERIFIED/MISMATCH stderr line-by-line.
     let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
@@ -334,6 +340,9 @@ fn run_multisig<E: Write>(
 
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
+    // semantics suppress info-lines to avoid breaking script callers parsing
+    // VERIFIED/MISMATCH stderr line-by-line.
     let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
@@ -404,6 +413,9 @@ fn descriptor_mode_verify_run<W: Write>(
         .template
         .unwrap_or(crate::template::CliTemplate::Bip84);
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
+    // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
+    // semantics suppress info-lines to avoid breaking script callers parsing
+    // VERIFIED/MISMATCH stderr line-by-line.
     let (resolved_slots, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
