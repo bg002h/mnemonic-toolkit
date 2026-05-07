@@ -18,6 +18,7 @@ mod slot_input;
 mod synthesize;
 mod template;
 mod wallet_export;
+mod wordlists;
 
 use clap::{Parser, Subcommand};
 use error::ToolkitError;

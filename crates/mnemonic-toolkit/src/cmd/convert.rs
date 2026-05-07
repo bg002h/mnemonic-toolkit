@@ -4,6 +4,7 @@
 
 use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
 use crate::electrum::{self, SeedVersion};
+use crate::wordlists::ElectrumWordlist;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
@@ -197,6 +198,14 @@ pub struct ConvertArgs {
     #[arg(long = "electrum-version", value_parser = parse_electrum_version_arg)]
     pub electrum_version: Option<SeedVersion>,
 
+    /// SPEC v0.8 §14 — Electrum wordlist for the `(Entropy, ElectrumPhrase)`
+    /// and `(ElectrumPhrase, Entropy)` arms. Distinct from `--language`
+    /// (BIP-39 wordlist set diverges from Electrum's). On Electrum arms,
+    /// `--electrum-language` wins; `--language` is silently ignored.
+    /// Default: `english`.
+    #[arg(long = "electrum-language", value_parser = parse_electrum_language_arg)]
+    pub electrum_language: Option<ElectrumWordlist>,
+
     /// SPEC v0.7 §10.a — script-type selector for `(Xpub, Address)` derivation.
     /// Values: `p2wpkh | p2sh-p2wpkh | p2tr`. If absent and `--template` is
     /// supplied, inferred from the template (`bip84` → p2wpkh, `bip49` →
@@ -242,6 +251,21 @@ fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
         // Bip44 (P2PKH) is not in the v0.7 single-sig script-type set.
         // Multisig templates don't reduce to a single-sig script-type.
         _ => None,
+    }
+}
+
+fn parse_electrum_language_arg(s: &str) -> Result<ElectrumWordlist, String> {
+    match s {
+        "english" => Ok(ElectrumWordlist::English),
+        "spanish" | "es" => Ok(ElectrumWordlist::Spanish),
+        "japanese" | "ja" => Ok(ElectrumWordlist::Japanese),
+        "portuguese" | "pt" => Ok(ElectrumWordlist::Portuguese),
+        "chinese-simplified" | "zh-hans" | "zh" => Ok(ElectrumWordlist::ChineseSimplified),
+        _ => Err(format!(
+            "--electrum-language must be one of: english, spanish, japanese, portuguese, \
+             chinese-simplified; got {:?}",
+            s,
+        )),
     }
 }
 
@@ -694,7 +718,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // 8) Compute outputs.
     let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
     let bip38_passphrase = args.bip38_passphrase.as_deref();
-    let (mut outputs, input_variant) = compute_outputs(
+    let (mut outputs, input_variant, electrum_seed_version) = compute_outputs(
         primary.node,
         &primary_value,
         &targets,
@@ -706,6 +730,21 @@ pub fn run<R: Read, W: Write, E: Write>(
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {
         let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
+    }
+
+    // SPEC v0.8 §14 — Electrum decode emits detected SeedVersion to stderr.
+    if let Some(version) = electrum_seed_version {
+        let _ = writeln!(
+            stderr,
+            "note: detected Electrum SeedVersion {} ({})",
+            version.label(),
+            match version {
+                SeedVersion::Standard => "standard",
+                SeedVersion::Segwit => "segwit",
+                SeedVersion::Standard2FA => "standard-2fa",
+                SeedVersion::Segwit2FA => "segwit-2fa",
+            },
+        );
     }
 
     // 8.a) SPEC §11.a — apply --xpub-prefix to xpub-typed outputs. The flag
@@ -783,7 +822,7 @@ fn compute_outputs(
     args: &ConvertArgs,
     pbkdf2_passphrase: &str,
     bip38_passphrase: Option<&str>,
-) -> Result<(Vec<Output>, Option<&'static str>), ToolkitError> {
+) -> Result<(Vec<Output>, Option<&'static str>, Option<SeedVersion>), ToolkitError> {
     use NodeType::*;
     let language = args.language.unwrap_or_default();
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
@@ -895,7 +934,10 @@ fn compute_outputs(
                         let version = args
                             .electrum_version
                             .unwrap_or(SeedVersion::Standard);
-                        electrum::entropy_to_phrase(&entropy, version)
+                        let wl = args
+                            .electrum_language
+                            .unwrap_or(ElectrumWordlist::English);
+                        electrum::entropy_to_phrase(&entropy, version, wl)
                             .map_err(map_electrum_error)?
                     }
                     Address => {
@@ -922,7 +964,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Xprv => {
             let xprv = bip32::Xpriv::from_str(value)
@@ -942,7 +984,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Xpub => {
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
@@ -980,7 +1022,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, input_variant))
+            Ok((out, input_variant, None))
         }
         Wif => {
             let pk = PrivateKey::from_wif(value)
@@ -1018,7 +1060,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Bip38 => {
             // SPEC v0.7 §12 + v0.8 §12.b — decrypt to raw key + compress flag,
@@ -1049,7 +1091,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Ms1 => {
             let (_tag, payload) = ms_codec::decode(value).map_err(ToolkitError::from)?;
@@ -1077,7 +1119,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Mk1 => {
             let tokens: Vec<&str> = value.split_whitespace().collect();
@@ -1104,7 +1146,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         Fingerprint | Path => Err(ToolkitError::BadInput(format!(
             "--from {} is not a primary value-bearing node",
@@ -1142,17 +1184,23 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, None))
         }
         ElectrumPhrase => {
-            // SPEC v0.7 §14 — validate via HMAC-SHA512 prefix; refuse 2FA;
-            // decode via base-2048 wordlist mapping.
+            // SPEC v0.7 §14 + v0.8 §14 — validate via HMAC-SHA512 prefix;
+            // refuse 2FA; decode via per-wordlist base-N mapping; surface the
+            // detected SeedVersion to the caller for the §14 stderr info-line.
             let version =
                 electrum::validate_seed_version(value).map_err(map_electrum_error)?;
             if version.is_2fa() {
                 return Err(refusal_electrum_2fa_unsupported());
             }
-            let entropy = electrum::phrase_to_entropy(value).map_err(map_electrum_error)?;
+            let detected_version = Some(version);
+            let wl = args
+                .electrum_language
+                .unwrap_or(ElectrumWordlist::English);
+            let entropy =
+                electrum::phrase_to_entropy(value, wl).map_err(map_electrum_error)?;
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
@@ -1161,7 +1209,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None))
+            Ok((out, None, detected_version))
         }
         Address => unreachable!("classify_edge intercepts (Address, *) as one-way"),
     }
