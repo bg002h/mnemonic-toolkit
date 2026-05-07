@@ -13,6 +13,7 @@ use crate::template::CliTemplate;
 use bip38::{Decrypt, EncryptWif};
 use bip39::Mnemonic;
 use bitcoin::bip32 as bip32;
+use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::PrivateKey;
 use clap::Args;
@@ -258,6 +259,29 @@ fn refusal_bip38_identity() -> ToolkitError {
     )
 }
 
+// SPEC v0.7 §3.d — Casascius mini-key refusals.
+// Covers BOTH `--to minikey` cascades (mini-key generation requires
+// brute-forcing the typo-checksum) AND `minikey → non-wif` requests
+// (decode-only contract; pivot via wif intermediate).
+fn refusal_minikey_one_way() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).".into(),
+    )
+}
+
+fn refusal_minikey_invalid_format() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from minikey requires a Casascius mini-key string (22/26/30 chars, starting with uppercase 'S'); supplied value does not match.".into(),
+    )
+}
+
+fn refusal_minikey_invalid_checksum() -> ToolkitError {
+    // SPEC §13 wording: "invalid Casascius mini-key checksum (SHA256(key + \"?\")[0] != 0x00)".
+    ToolkitError::ConvertRefusal(
+        "invalid Casascius mini-key checksum (SHA256(key + \"?\")[0] != 0x00); supplied string is not a valid Casascius mini-key.".into(),
+    )
+}
+
 /// Direct edges supported per SPEC §2.
 /// Used as the negative-space check for the catch-all refusal: any (from, to)
 /// NOT in this set is a one-way barrier.
@@ -292,6 +316,7 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Bip38, Wif)         // SPEC v0.7 §12 — BIP-38 decrypt
             | (Phrase, Bip38)      // SPEC v0.7 §12 — composite via WIF intermediate
             | (Entropy, Bip38)     // SPEC v0.7 §12 — composite via WIF intermediate
+            | (MiniKey, Wif)       // SPEC v0.7 §13 — Casascius mini-key decode (one-way)
     )
 }
 
@@ -302,6 +327,13 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
     // §3.d v0.7 — BIP-38 identity-pivot refusal.
     if from == Bip38 && to == Bip38 {
         return Some(refusal_bip38_identity());
+    }
+
+    // §3.d v0.7 — `* → minikey` is one-way (typo-checksum requires brute-force).
+    // Also covers `minikey → non-wif` (decode-only contract): the only supported
+    // edge from `minikey` is `(MiniKey, Wif)`; everything else routes here.
+    if to == MiniKey || (from == MiniKey && to != Wif) {
+        return Some(refusal_minikey_one_way());
     }
 
     // §3.c distinct xpub→mk1 message.
@@ -809,7 +841,40 @@ fn compute_outputs(
             "--from {} is not a primary value-bearing node",
             from.as_str()
         ))),
-        MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
+        MiniKey => {
+            // SPEC v0.7 §13 — Casascius mini-private-key decode.
+            // Format: 22/26/30 chars, starts with 'S'.
+            // Self-checksum: SHA256(key + "?")[0] == 0x00 (typo detection).
+            // Privkey: SHA256(key) (32-byte scalar). Compressed flag is false
+            // (Casascius predates BIP-32 compressed-pubkey convention).
+            let len = value.len();
+            if !(matches!(len, 22 | 26 | 30) && value.starts_with('S')) {
+                return Err(refusal_minikey_invalid_format());
+            }
+            let mut buf = Vec::with_capacity(len + 1);
+            buf.extend_from_slice(value.as_bytes());
+            buf.push(b'?');
+            if sha256::Hash::hash(&buf).as_byte_array()[0] != 0x00 {
+                return Err(refusal_minikey_invalid_checksum());
+            }
+            let raw = sha256::Hash::hash(value.as_bytes()).to_byte_array();
+            let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
+                .map_err(|e| ToolkitError::BadInput(format!("Casascius decoded scalar parse: {e}")))?;
+            let pk = PrivateKey {
+                compressed: false,
+                network: network.network_kind(),
+                inner,
+            };
+            let mut out = Vec::with_capacity(targets.len());
+            for &t in targets {
+                let v = match t {
+                    Wif => pk.to_wif(),
+                    _ => unreachable!("classify_edge intercepts (MiniKey, !Wif)"),
+                };
+                out.push((t, v));
+            }
+            Ok((out, None))
+        }
         ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
         Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
     }
