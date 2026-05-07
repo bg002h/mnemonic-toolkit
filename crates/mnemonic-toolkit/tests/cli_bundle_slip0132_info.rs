@@ -17,13 +17,23 @@ const TREZOR_FP_HEX: &str = "5436d724";
 const TREZOR_24_BIP84_MAINNET_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
 const TREZOR_24_BIP84_MAINNET_ZPUB: &str = "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S";
 
-const INFO_LINE_ZPUB_MAINNET: &str =
-    "info: normalized zpub input to neutral xpub (encoding-only; no key change). Re-emit with --xpub-prefix zpub if you need the SLIP-0132 form.\n";
-const INFO_LINE_BIG_Y_MAINNET: &str =
-    "info: normalized Ypub input to neutral xpub (encoding-only; no key change). Re-emit with --xpub-prefix Ypub if you need the SLIP-0132 form.\n";
-
 const SECRET_WARNING: &str =
     "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')";
+
+/// Build the SPEC §5.5.a info-line for a recognized SLIP-0132 input prefix.
+/// Variant determines the neutral form: mainnet → xpub, testnet → tpub.
+fn info_line(variant: &str) -> String {
+    let neutral = match variant {
+        "ypub" | "Ypub" | "zpub" | "Zpub" => "xpub",
+        "upub" | "Upub" | "vpub" | "Vpub" => "tpub",
+        _ => unreachable!(
+            "info_line: unknown variant {variant:?} (must be one of: ypub, Ypub, zpub, Zpub, upub, Upub, vpub, Vpub)"
+        ),
+    };
+    format!(
+        "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.\n"
+    )
+}
 
 fn engraving_card_offset(stderr: &str) -> Option<usize> {
     stderr.find("# === Wallet bundle:")
@@ -32,9 +42,11 @@ fn secret_warning_offset(stderr: &str) -> Option<usize> {
     stderr.find(SECRET_WARNING)
 }
 
-/// Derive `(xpub, fingerprint, path)` for a phrase + derivation path on
-/// mainnet. Pattern lifted from `cli_bundle_multisig.rs`.
-fn derive_mainnet(phrase: &str, path_str: &str) -> (Xpub, String, String) {
+/// Derive `(xpub, fingerprint)` for a phrase + derivation path on mainnet.
+/// Pattern lifted from `cli_bundle_multisig.rs`. The path itself is already
+/// in scope at every call site (passed in as `path_str`), so it is not
+/// returned.
+fn derive_mainnet(phrase: &str, path_str: &str) -> (Xpub, String) {
     let secp = Secp256k1::new();
     let m = Mnemonic::parse_in(Language::English, phrase).unwrap();
     let seed = m.to_seed("");
@@ -43,7 +55,7 @@ fn derive_mainnet(phrase: &str, path_str: &str) -> (Xpub, String, String) {
     let path = DerivationPath::from_str(path_str).unwrap();
     let xpriv = master.derive_priv(&secp, &path).unwrap();
     let xpub = Xpub::from_priv(&secp, &xpriv);
-    (xpub, fp.to_string().to_lowercase(), path_str.to_string())
+    (xpub, fp.to_string().to_lowercase())
 }
 
 /// Re-encode an xpub with the SLIP-0132 multisig-`Ypub` (mainnet) version
@@ -80,7 +92,7 @@ fn bundle_descriptor_watch_only_zpub_emits_info_line_then_card_no_warning() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
-        .find(INFO_LINE_ZPUB_MAINNET)
+        .find(&info_line("zpub"))
         .unwrap_or_else(|| panic!("expected info-line in stderr; got: {stderr:?}"));
     let card_idx = engraving_card_offset(&stderr)
         .unwrap_or_else(|| panic!("expected engraving card in stderr; got: {stderr:?}"));
@@ -140,18 +152,13 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
 #[test]
 fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
     let path = "m/48'/0'/0'/2'";
-    let (xpub_b, fp_b, _) = derive_mainnet(
+    let (xpub_b, fp_b) = derive_mainnet(
         "legal winner thank year wave sausage worth useful legal winner thank yellow",
         path,
     );
     // Re-encode cosigner B as Ypub (multisig SLIP-0132). Used to ensure the
     // input differs from neutral xpub so the normalizer fires.
-    let big_y_b = {
-        let mut raw = xpub_b.encode();
-        // Ypub mainnet multisig prefix.
-        raw[0..4].copy_from_slice(&[0x02, 0x95, 0xB4, 0x3F]);
-        base58::encode_check(&raw)
-    };
+    let big_y_b = to_big_y_mainnet(&xpub_b);
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -176,7 +183,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
-        .find(INFO_LINE_BIG_Y_MAINNET)
+        .find(&info_line("Ypub"))
         .unwrap_or_else(|| panic!("expected Ypub info-line; stderr: {stderr:?}"));
     let card_idx = engraving_card_offset(&stderr)
         .unwrap_or_else(|| panic!("expected engraving card; stderr: {stderr:?}"));
@@ -230,8 +237,8 @@ fn bundle_full_phrase_only_no_info_line_card_then_warning() {
 fn bundle_multisig_two_normalized_slots_emit_info_lines_in_slot_order() {
     let path_a = "m/48'/0'/0'/2'";
     let path_b = "m/48'/0'/0'/2'";
-    let (xpub_a, fp_a, _) = derive_mainnet(TREZOR_24, path_a);
-    let (xpub_b, fp_b, _) = derive_mainnet(
+    let (xpub_a, fp_a) = derive_mainnet(TREZOR_24, path_a);
+    let (xpub_b, fp_b) = derive_mainnet(
         "legal winner thank year wave sausage worth useful legal winner thank yellow",
         path_b,
     );
@@ -271,10 +278,10 @@ fn bundle_multisig_two_normalized_slots_emit_info_lines_in_slot_order() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let zpub_idx = stderr
-        .find(INFO_LINE_ZPUB_MAINNET)
+        .find(&info_line("zpub"))
         .unwrap_or_else(|| panic!("expected zpub info-line; stderr: {stderr:?}"));
     let ypub_idx = stderr
-        .find(INFO_LINE_BIG_Y_MAINNET)
+        .find(&info_line("Ypub"))
         .unwrap_or_else(|| panic!("expected Ypub info-line; stderr: {stderr:?}"));
     let card_idx = engraving_card_offset(&stderr)
         .unwrap_or_else(|| panic!("expected engraving card; stderr: {stderr:?}"));
@@ -313,7 +320,7 @@ fn bundle_json_watch_only_zpub_emits_info_line_no_warning() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains(INFO_LINE_ZPUB_MAINNET),
+        stderr.contains(&info_line("zpub")),
         "expected info-line; stderr: {stderr:?}"
     );
     assert!(
@@ -350,7 +357,7 @@ fn bundle_no_engraving_card_zpub_emits_info_line_only() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains(INFO_LINE_ZPUB_MAINNET),
+        stderr.contains(&info_line("zpub")),
         "expected info-line; stderr: {stderr:?}"
     );
     assert!(

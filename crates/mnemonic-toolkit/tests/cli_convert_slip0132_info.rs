@@ -28,7 +28,16 @@ const TREZOR_12_BIP84_TESTNET_BIG_U: &str = "Upub5QASZFAegYvFv9Yep5EELvJz6Lw759Q
 
 const TREZOR_24_BIP84_ACCT_XPUB_FINGERPRINT: &str = "2bd87e08";
 
-fn info_line(variant: &str, neutral: &str) -> String {
+/// Build the SPEC §5.5.a info-line for a recognized SLIP-0132 input prefix.
+/// Variant determines the neutral form: mainnet → xpub, testnet → tpub.
+fn info_line(variant: &str) -> String {
+    let neutral = match variant {
+        "ypub" | "Ypub" | "zpub" | "Zpub" => "xpub",
+        "upub" | "Upub" | "vpub" | "Vpub" => "tpub",
+        _ => unreachable!(
+            "info_line: unknown variant {variant:?} (must be one of: ypub, Ypub, zpub, Zpub, upub, Upub, vpub, Vpub)"
+        ),
+    };
     format!(
         "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.\n"
     )
@@ -51,7 +60,7 @@ fn convert_zpub_to_xpub_emits_info_line() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("zpub", "xpub"));
+    assert_eq!(stderr, info_line("zpub"));
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n"));
 }
@@ -100,7 +109,7 @@ fn convert_zpub_to_xpub_with_output_prefix_still_emits_info_line() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("zpub", "xpub"));
+    assert_eq!(stderr, info_line("zpub"));
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_BIG_Y}\n"));
 }
@@ -122,7 +131,7 @@ fn convert_zpub_to_fingerprint_emits_info_line() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("zpub", "xpub"));
+    assert_eq!(stderr, info_line("zpub"));
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(
         stdout,
@@ -148,7 +157,7 @@ fn convert_variant_coverage_ypub_mainnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("ypub", "xpub"));
+    assert_eq!(stderr, info_line("ypub"));
 }
 
 #[test]
@@ -165,7 +174,7 @@ fn convert_variant_coverage_big_y_mainnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("Ypub", "xpub"));
+    assert_eq!(stderr, info_line("Ypub"));
 }
 
 #[test]
@@ -182,7 +191,7 @@ fn convert_variant_coverage_zpub_mainnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("zpub", "xpub"));
+    assert_eq!(stderr, info_line("zpub"));
 }
 
 #[test]
@@ -199,7 +208,7 @@ fn convert_variant_coverage_big_z_mainnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("Zpub", "xpub"));
+    assert_eq!(stderr, info_line("Zpub"));
 }
 
 #[test]
@@ -216,7 +225,7 @@ fn convert_variant_coverage_upub_testnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("upub", "tpub"));
+    assert_eq!(stderr, info_line("upub"));
 }
 
 #[test]
@@ -233,7 +242,7 @@ fn convert_variant_coverage_big_u_testnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("Upub", "tpub"));
+    assert_eq!(stderr, info_line("Upub"));
 }
 
 #[test]
@@ -250,7 +259,7 @@ fn convert_variant_coverage_vpub_testnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("vpub", "tpub"));
+    assert_eq!(stderr, info_line("vpub"));
 }
 
 #[test]
@@ -267,7 +276,7 @@ fn convert_variant_coverage_big_v_testnet() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("Vpub", "tpub"));
+    assert_eq!(stderr, info_line("Vpub"));
 }
 
 // ============================================================================
@@ -288,7 +297,7 @@ fn convert_json_mode_emits_info_line_on_stderr() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, info_line("zpub", "xpub"));
+    assert_eq!(stderr, info_line("zpub"));
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
     assert!(v.is_object(), "stdout must be a JSON object; got {v:?}");
