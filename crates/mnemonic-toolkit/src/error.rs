@@ -87,6 +87,11 @@ pub enum ToolkitError {
     /// a (from, to) pair as cryptographically unrecoverable, sibling-pivot,
     /// or otherwise invalid. Exit 2.
     ConvertRefusal(String),
+    /// SPEC_export_wallet_v0_7.md §3 watch-only refusal — phrase / entropy /
+    /// xprv / wif slot supplied to `export-wallet`. Exit 2.
+    ExportWalletSecretInput,
+    /// SPEC_export_wallet_v0_7.md §7 — sparrow / specter format stub. Exit 2.
+    ExportWalletFormatStub(&'static str),
 }
 
 #[derive(Debug)]
@@ -205,7 +210,9 @@ impl ToolkitError {
             | ToolkitError::DescriptorParse(_)
             | ToolkitError::Bip388Distinctness { .. }
             | ToolkitError::SlotInputViolation { .. }
-            | ToolkitError::ConvertRefusal(_) => 2,
+            | ToolkitError::ConvertRefusal(_)
+            | ToolkitError::ExportWalletSecretInput
+            | ToolkitError::ExportWalletFormatStub(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -240,6 +247,8 @@ impl ToolkitError {
             ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
             ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
+            ToolkitError::ExportWalletSecretInput => "ExportWalletSecretInput",
+            ToolkitError::ExportWalletFormatStub(_) => "ExportWalletFormatStub",
         }
     }
 
@@ -289,6 +298,8 @@ impl ToolkitError {
             }
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::ConvertRefusal(m) => m.clone(),
+            ToolkitError::ExportWalletSecretInput => crate::wallet_export::REFUSAL_SECRET_INPUT.to_string(),
+            ToolkitError::ExportWalletFormatStub(name) => crate::wallet_export::format_stub_message(name),
         }
     }
 

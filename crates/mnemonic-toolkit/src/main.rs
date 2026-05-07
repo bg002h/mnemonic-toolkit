@@ -16,6 +16,7 @@ mod slip0132;
 mod slot_input;
 mod synthesize;
 mod template;
+mod wallet_export;
 
 use clap::{Parser, Subcommand};
 use error::ToolkitError;
@@ -41,6 +42,8 @@ enum Command {
     VerifyBundle(cmd::verify_bundle::VerifyBundleArgs),
     /// convert between seed/key formats (BIP-39 / BIP-32 / WIF / ms1 / mk1)
     Convert(cmd::convert::ConvertArgs),
+    /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
+    ExportWallet(cmd::export_wallet::ExportWalletArgs),
 }
 
 fn main() -> ExitCode {
@@ -61,6 +64,9 @@ fn main() -> ExitCode {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
         Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr),
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr),
+        Command::ExportWallet(args) => {
+            cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
+        }
     };
 
     match result {
