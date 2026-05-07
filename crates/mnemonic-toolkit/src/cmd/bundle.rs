@@ -484,11 +484,7 @@ fn emit_unified<W: Write, E: Write>(
     // bundle_run_unified_descriptor) so no re-sort needed here. Emitted
     // unconditionally of --json (stderr advisories follow §5.5.a).
     for (_idx, variant) in slip0132_signals.iter() {
-        let _ = writeln!(
-            stderr,
-            "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
-            neutral = crate::slip0132::neutral_for(variant),
-        );
+        let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
     }
     let n = resolved.len();
     let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
@@ -1022,7 +1018,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         self_check_bundle(&bundle, args)?;
     }
 
-    let _ = stderr;
     Ok(())
 }
 

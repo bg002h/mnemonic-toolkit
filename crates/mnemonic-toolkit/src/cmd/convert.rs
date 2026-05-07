@@ -406,11 +406,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {
-        let _ = writeln!(
-            stderr,
-            "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
-            neutral = crate::slip0132::neutral_for(variant),
-        );
+        let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
     }
 
     // 8.a) SPEC §11.a — apply --xpub-prefix to xpub-typed outputs. The flag

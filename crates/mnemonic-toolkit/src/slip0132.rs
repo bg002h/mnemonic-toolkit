@@ -127,6 +127,17 @@ pub(crate) fn neutral_for(variant: &'static str) -> &'static str {
     }
 }
 
+/// Render the canonical SPEC §5.5.a SLIP-0132 input-normalization info-line
+/// for a recognized variant. The variant determines the neutral form via
+/// `neutral_for`. Returns the line text WITHOUT a trailing newline (callers
+/// add one via `writeln!`).
+pub(crate) fn render_slip0132_info_line(variant: &'static str) -> String {
+    format!(
+        "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
+        neutral = neutral_for(variant),
+    )
+}
+
 fn swap_target_for(variant: XpubPrefix, network: CliNetwork) -> [u8; 4] {
     let mainnet = matches!(network, CliNetwork::Mainnet);
     match (variant, mainnet) {
@@ -257,6 +268,21 @@ mod tests {
         assert_eq!(parse_xpub_prefix_arg("Ypub").unwrap(), XpubPrefix::YpubMultisig);
         assert_eq!(parse_xpub_prefix_arg("zpub").unwrap(), XpubPrefix::Zpub);
         assert_eq!(parse_xpub_prefix_arg("Zpub").unwrap(), XpubPrefix::ZpubMultisig);
+    }
+
+    #[test]
+    fn render_slip0132_info_line_pins_canonical_text() {
+        // Pin the exact byte sequence the SPEC §5.5.a / SPEC convert §11 mandates.
+        // If this test changes, both production sites and the test-side info_line
+        // helpers in tests/cli_*_slip0132_info.rs must update in lockstep.
+        assert_eq!(
+            render_slip0132_info_line("zpub"),
+            "info: normalized zpub input to neutral xpub (encoding-only; no key change). Re-emit with --xpub-prefix zpub if you need the SLIP-0132 form.",
+        );
+        assert_eq!(
+            render_slip0132_info_line("Vpub"),
+            "info: normalized Vpub input to neutral tpub (encoding-only; no key change). Re-emit with --xpub-prefix Vpub if you need the SLIP-0132 form.",
+        );
     }
 
     #[test]

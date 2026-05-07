@@ -257,8 +257,7 @@ fn run_watch_only<E: Write>(
     .ok();
 
     let template = args.template_unchecked();
-    // verify-bundle does not surface SLIP-0132 input-normalization signals (no
-    // engraving card / synthesized output reflects them). Discard.
+    // verify-bundle does not surface SLIP-0132 input-normalization signals.
     let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
         &args.slot,
         template,
