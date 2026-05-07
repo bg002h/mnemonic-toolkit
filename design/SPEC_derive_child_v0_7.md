@@ -23,11 +23,11 @@ mnemonic derive-child \
   [--language <english|...>]                     # for --application bip39
 ```
 
-All four core flags (`--from`, `--application`, `--length`, `--index`) are MANDATORY. No defaults — BIP-85's deterministic-derivation contract requires exact parameter pinning.
+All four core flags (`--from`, `--application`, `--length`, `--index`) are MANDATORY at the clap-grammar level. No defaults — BIP-85's deterministic-derivation contract requires exact parameter pinning.
 
 **Per-application `--length` validators** (range varies per app; see §4). Out-of-range `--length` emits `error: --length <N> out of range for --application <app> (valid: <range>)` and exits 2.
 
-Note: For `hd-seed` and `xprv` applications, `--length` must still be supplied at the clap-grammar level for grammar-uniformity, but supplying any value emits a refusal at application validation. See §4 for per-application validators.
+**Sentinel-0 convention for fixed-output applications.** For `hd-seed` and `xprv` applications, the output size is BIP-85-specified and `--length` carries no value. To preserve grammar-uniformity (the four core flags appear at parse time on every invocation), these arms accept `--length 0` as a sentinel-absent marker; any non-zero value is refused with the not-applicable taxonomy in §4 / §7. Sentinel-0 is the canonical form for these arms.
 
 ## §3 BIP-85 derivation primitive
 
@@ -39,7 +39,7 @@ The master xprv is derived to the BIP-85 root (`83696968'`), then to the applica
 
 **Per-app entropy slicing:** each application takes a prefix of the 64-byte entropy:
 
-- BIP-39: `2 * length_in_words / 3` bytes (e.g., 12 words → 16 bytes; 24 words → 32 bytes).
+- BIP-39: `length_in_words * 4 / 3` bytes (e.g., 12 words → 16 bytes; 24 words → 32 bytes).
 - HD-Seed WIF: 64 bytes (full output).
 - XPRV: 64 bytes (32 bytes chain code + 32 bytes private key).
 - HEX: `length` bytes (16 ≤ length ≤ 64).
@@ -61,7 +61,7 @@ The master xprv is derived to the BIP-85 root (`83696968'`), then to the applica
 
 Output is rendered to stdout as a single line (no leading whitespace; one trailing `\n`). Secret-bearing outputs (all 6 apps emit secret material) trigger the `convert::§7 secret-on-stdout warning` to stderr.
 
-`hd-seed` and `xprv` reject `--length` with: `error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)`. The flag is still required at the clap-grammar level for grammar-uniformity; supplying a value emits the refusal.
+`hd-seed` and `xprv` reject any non-zero `--length` value with: `error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)`. The flag is still required at the clap-grammar level for grammar-uniformity; pass `--length 0` (sentinel-absent) on these arms — see §2.
 
 ## §5 Application scope (out-of-v0.7)
 
