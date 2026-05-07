@@ -41,8 +41,8 @@ To recover the entropy, reverse the slicing and verify the checksum.
 
 The 2048-word wordlist is *sorted* and curated to:
 
-- Have unique 4-letter prefixes — "abandon" and "ability" differ in
-  the 4th character, never in the first three.
+- Have unique 4-letter prefixes: the first four letters identify
+  any word in the list unambiguously.
 - Avoid pairs that are easily confused (no `won` / `one`, no
   `their` / `there`).
 - Be ASCII-only (with non-English wordlists similarly curated for

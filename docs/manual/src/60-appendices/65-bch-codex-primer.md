@@ -76,9 +76,11 @@ Each format has two BCH codes:
   when the payload requires the extended layout (e.g., a
   multi-cosigner mk1 with many path components).
 
-The toolkit picks the right code automatically; users never see
-this dimension unless they pass `--force-long-code` (a debug flag)
-or the codec emits a long-code string due to payload size.
+The toolkit picks the right code automatically based on payload
+size; no user flag is needed. (`md encode --force-long-code` is
+accepted on the binary as a forward-compat scaffold but is a
+documented no-op since md-codec v0.12.0; long-code mode for md1
+was dropped on the codec side.)
 
 ## Error-correction limits in practice
 

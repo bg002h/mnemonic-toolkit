@@ -25,8 +25,8 @@ The md1 format. Tracking notable releases:
 
 | Version | Date | Highlights |
 |---|---|---|
-| `md-codec 0.16.2` | 2026-05-07 | v0.7.1 multi-repo audit-cycle close-out; BIP-388 388.2 cite. |
-| `md-codec 0.16.0` | 2026-05-07 | v0.16 cycle: BIP test-vector audit matrix. |
+| `md-codec 0.16.2` | 2026-05-07 | v0.7.1 audit-cycle close-out; BIP-388 388.2 test vector pinned. |
+| `md-codec 0.16.0` | 2026-05-03 | CLI extracted to `md-cli` crate; library-only `md-codec`. |
 | `md-codec 0.11.x` | 2026-05 | Wire-format cleanup; path dictionaries dropped. |
 | `md-codec 0.10.x` | 2026-04-29 | `OriginPaths = 0x36`; per-`@N` divergent-path encoding. |
 | `md-codec 0.9.x` | 2026-04-29 | BIP-submission gate cleared; `chunk_set_id` rename. |
@@ -47,7 +47,8 @@ The ms1 format. BIP-93 codex32 directly via `rust-codex32`.
 
 | Version | Date | Highlights |
 |---|---|---|
-| `ms-codec 0.1.x` + `ms-cli 0.1.0` | 2026-05-03 .. 04 | Initial release: BIP-93 codex32 single-string mode. K-of-N share splitting deferred to v0.2. |
+| `ms-codec 0.1.0` + `ms-cli 0.1.0` | 2026-05-03 .. 04 | Initial release: BIP-93 codex32 single-string mode. K-of-N share splitting deferred to v0.2. |
+| `ms-codec 0.1.1` | 2026-05-07 | v0.7.1 audit-cycle: extra corpus vectors; BIP-93 §"Test vectors" cross-format pinning. |
 
 ## Cross-repo coordination
 

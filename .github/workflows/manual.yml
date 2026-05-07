@@ -1,0 +1,45 @@
+name: manual
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/manual/**'
+    tags:
+      - 'manual-v*'
+  pull_request:
+    paths:
+      - 'docs/manual/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build manual (lint + PDF) inside Dockerfile.build
+        working-directory: docs/manual
+        run: |
+          docker build -t mnemonic-manual-build:ci -f Dockerfile.build .
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            mnemonic-manual-build:ci \
+            bash -c 'make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true && make pdf'
+
+      - name: Verify PDF was produced
+        working-directory: docs/manual
+        run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
+
+      - name: Upload PDF to release (on manual-v* tag)
+        if: startsWith(github.ref, 'refs/tags/manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/manual
+        run: gh release upload "$REF_NAME" build/m-format-manual.pdf --clobber

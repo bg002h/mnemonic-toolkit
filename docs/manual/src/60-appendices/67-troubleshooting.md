@@ -42,7 +42,7 @@ m-format star bundle, ordered by frequency.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Bitcoin Core returns "non-canonical descriptor" | Old Bitcoin Core version | Pass `--bitcoin-core-version 24` for Bitcoin Core 24, or upgrade. |
-| Sparrow/Specter rejects the file | Format mismatch | Use `--format sparrow` or `--format specter` for native shapes. |
+| Sparrow/Specter rejects the file | `--format sparrow` / `--format specter` are accepted by the binary but currently return a deferral stub | Use `--format bip388` (or `--format bitcoin-core`); import the resulting JSON via the wallet's BIP-388 / descriptor-import dialog. |
 | Address scan misses recent receives | `--range` too small | Pass a larger `--range`, or re-scan the chain via `bitcoin-cli rescanblockchain`. |
 
 ## BIP-85 derive-child

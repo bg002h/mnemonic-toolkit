@@ -15,7 +15,11 @@ child key from inferring siblings). From any node, two operations
 produce a child node:
 
 - **Normal (non-hardened) derivation:** `child_i = HMAC-SHA-512(parent_chain_code, parent_pubkey || i)`
-- **Hardened derivation:** `child_i' = HMAC-SHA-512(parent_chain_code, parent_privkey || (i + 2^31))`
+- **Hardened derivation:** `child_i' = HMAC-SHA-512(parent_chain_code, 0x00 || parent_privkey || ser32(i))` where the resulting child is labelled with index `i + 2^31`.
+
+The leading `0x00` byte makes the hardened-derivation HMAC input
+exactly 33 bytes, matching the length of a compressed pubkey used
+in normal derivation; this is what differentiates the two paths.
 
 Hardened derivation needs the parent's *private* key; normal
 derivation can be done with only the parent's *public* key — which is

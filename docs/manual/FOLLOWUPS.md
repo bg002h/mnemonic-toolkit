@@ -45,13 +45,67 @@ reproducibility, pin to exact versions and check in a lockfile
 
 **How to apply:** introduce `package.json` + `package-lock.json` in v0.2.
 
-### `cspell-dictionary-curation`
+### `cspell-dictionary-curation` — closed for v0.1
 
 `cspell` lint will produce many false positives until a project
-dictionary is maintained. Add `docs/manual/.cspell.json` with a
-curated word list of m-format-star vocabulary (`mnemonic`, `codex32`,
-`mdframed`, etc.) once Phase 1 stabilises the glossary.
+dictionary is maintained. **Closed:** `docs/manual/.cspell.json`
+ships with the v0.1 curated wordlist (m-format vocabulary +
+British-spelling forms used across chapters). Future additions
+follow the natural pattern of editing this file when chapters add
+new technical terms.
+
+### `page-count-overflow-v0.1` — accepted exception
+
+The v0.1 PDF builds at 126 pages, vs. the A2 acceptance criterion
+of 60–100 pages. The plan permits "signed off explicitly" overflows.
+
+**Why accepted:** v0.1 covers the entire CLI surface (~120 flags),
+8 workflow chapters, 7 compare/contrast chapters, and 8 appendices —
+the surface area drove the page count, not narrative bloat. Trimming
+to 100pp would require cutting either the BIP-85 chapter, one
+appendix primer, or compressing the workflow chapters past the
+2-4pp-per-chapter ceiling. None of those reductions improves the
+manual's utility.
+
+**How to apply:** future minor manual revisions either accept the
+new ceiling or scope-cut explicitly. v0.2 may revisit the layout
+constants (font size, margins) for a tighter render.
+
+### `derive-child-dice-out-of-scope-docstring` — toolkit-side
+
+The `mnemonic derive-child --help` output (sourced from
+`crates/mnemonic-toolkit/src/cmd/derive_child.rs`) still says
+"3 out-of-scope tokens (`rsa`, `rsa-gpg`, `dice`)" — but v0.8
+promoted `dice` to in-scope. The chapter 38 prose is correct;
+the binary's docstring is stale. **Where:** mnemonic-toolkit
+v0.8.x patch.
+
+### `dice-length-cap-undocumented` — toolkit-side
+
+Chapter 38's `--length` table for `dice` says `1..=10000`, but
+the source enforces only `≥ 1` (no upper cap). Pick one: either
+add a cap to the validator (with the documented limit) or drop
+the upper bound from the chapter table. **Where:** mnemonic-toolkit
+v0.8.x patch.
+
+### `recovery-paths-bch-error-format-illustrative` — manual-side
+
+`src/30-workflows/35-recovery-paths.md` shows an illustrative
+BCH error output ("position 11: invalid character 'Q'"). The
+format is illustrative, not transcribed from a binary run. Add
+a paired `transcripts/35-recovery-bch-error.{cmd,out}` that
+captures the actual error message format from a deliberately-
+corrupted ms1 string. **Where:** manual v0.2.
+
+### `format-sparrow-format-specter-stubs` — toolkit-side
+
+`mnemonic export-wallet --format sparrow` and `--format specter`
+are accepted at the clap level but return `ExportWalletFormatStub`
+errors. v0.1 of the manual recommends `--format bip388` for both
+receiving wallets. Either light up the stubs in a v0.8.x patch
+(emitting Sparrow-/Specter-native JSON shapes) or change the clap
+definition to remove the `sparrow` / `specter` choices entirely.
 
 ## Closed
 
-(none yet)
+### `cspell-dictionary-curation` — closed by v0.1 cycle
