@@ -10,6 +10,7 @@ use crate::slip0132::{
     apply_xpub_prefix, normalize_xpub_prefix, parse_xpub_prefix_arg, XpubPrefix,
 };
 use crate::template::CliTemplate;
+use bip38::{Decrypt, EncryptWif};
 use bip39::Mnemonic;
 use bitcoin::bip32 as bip32;
 use bitcoin::secp256k1::Secp256k1;
@@ -238,6 +239,25 @@ fn refusal_wif_with_path() -> ToolkitError {
     )
 }
 
+// SPEC v0.7 §3.d
+fn refusal_bip38_no_passphrase() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from <bip38|wif> --to <wif|bip38> requires --passphrase (BIP-38 encryption is passphrase-driven).".into(),
+    )
+}
+
+fn refusal_bip38_passphrase_mismatch() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).".into(),
+    )
+}
+
+fn refusal_bip38_identity() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--from bip38 --to bip38 is an identity pivot. To re-encrypt with a different passphrase, decrypt to wif then re-encrypt.".into(),
+    )
+}
+
 /// Direct edges supported per SPEC §2.
 /// Used as the negative-space check for the catch-all refusal: any (from, to)
 /// NOT in this set is a one-way barrier.
@@ -268,12 +288,21 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Mk1, Xpub)
             | (Mk1, Fingerprint)
             | (Mk1, Path)
+            | (Wif, Bip38)         // SPEC v0.7 §12 — BIP-38 encrypt
+            | (Bip38, Wif)         // SPEC v0.7 §12 — BIP-38 decrypt
+            | (Phrase, Bip38)      // SPEC v0.7 §12 — composite via WIF intermediate
+            | (Entropy, Bip38)     // SPEC v0.7 §12 — composite via WIF intermediate
     )
 }
 
 /// Returns Some(refusal) for a refused (from, to) edge; None when permitted.
 fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
     use NodeType::*;
+
+    // §3.d v0.7 — BIP-38 identity-pivot refusal.
+    if from == Bip38 && to == Bip38 {
+        return Some(refusal_bip38_identity());
+    }
 
     // §3.c distinct xpub→mk1 message.
     if from == Xpub && to == Mk1 {
@@ -392,6 +421,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
+    // 5.b) SPEC v0.7 §12 — BIP-38 edges require --passphrase.
+    let bip38_edge = primary.node == NodeType::Bip38
+        || targets.iter().any(|t| *t == NodeType::Bip38);
+    if bip38_edge && args.passphrase.is_none() {
+        return Err(refusal_bip38_no_passphrase());
+    }
+
     // 6) §8 --passphrase warning when not on PBKDF2 edge.
     //    SPEC-A v0.6.1: `Wif` joins the PBKDF2-bearing target set so
     //    `--from phrase --to wif --passphrase x` does NOT spuriously
@@ -404,7 +440,10 @@ pub fn run<R: Read, W: Write, E: Write>(
                 NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
             )
         });
-    if args.passphrase.is_some() && !edge_uses_pbkdf2 {
+    // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS
+    // meaningful; suppress the "ignored" warning for BIP-38 edges.
+    let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge;
+    if args.passphrase.is_some() && !edge_uses_passphrase {
         let _ = writeln!(
             stderr,
             "warning: --passphrase ignored on this edge (not a PBKDF2-bearing conversion)",
@@ -573,7 +612,25 @@ fn compute_outputs(
                         "--to path is informational; not emitted as a value".into(),
                     )),
                     Mk1 => unreachable!("classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"),
-                    Bip38 => unreachable!("Phase 1 implements this — Phase 0 scaffold only"),
+                    Bip38 => {
+                        // SPEC v0.7 §12 — composite phrase/entropy → wif → bip38.
+                        // Same --path requirement as the direct phrase→wif edge.
+                        let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
+                        let path = bip32::DerivationPath::from_str(path_str)
+                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let leaf_xpriv = derive_bip32_at_path(
+                            &entropy, passphrase, language, network, &path,
+                        )?;
+                        let pk = PrivateKey {
+                            compressed: true,
+                            network: network.network_kind(),
+                            inner: leaf_xpriv.private_key,
+                        };
+                        let wif = pk.to_wif();
+                        wif.as_str()
+                            .encrypt_wif(passphrase)
+                            .map_err(map_bip38_error)?
+                    }
                     MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
                     ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
                     Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
@@ -643,9 +700,45 @@ fn compute_outputs(
                 let v = match t {
                     Xpub => sentinel_xpub.to_string(),
                     Fingerprint => sentinel_xpub.fingerprint().to_string().to_lowercase(),
+                    Bip38 => {
+                        // SPEC v0.7 §12 — encrypt WIF with passphrase via the
+                        // bip38 crate's EncryptWif trait (NFC + Scrypt n=16384).
+                        // Passphrase presence is enforced earlier in run().
+                        value
+                            .encrypt_wif(passphrase)
+                            .map_err(map_bip38_error)?
+                    }
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
                             "--from wif --to {} is not a defined edge",
+                            t.as_str()
+                        )))
+                    }
+                };
+                out.push((t, v));
+            }
+            Ok((out, None))
+        }
+        Bip38 => {
+            // SPEC v0.7 §12 — decrypt to raw key + compress flag, then build
+            // WIF with the user's --network (the crate's decrypt_to_wif always
+            // emits mainnet; per Phase 1 security review caveat 2).
+            let (raw, compressed) = <str as Decrypt>::decrypt(value, passphrase)
+                .map_err(map_bip38_error)?;
+            let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
+                .map_err(|e| ToolkitError::BadInput(format!("BIP-38 decrypted key parse: {e}")))?;
+            let pk = PrivateKey {
+                compressed,
+                network: network.network_kind(),
+                inner,
+            };
+            let mut out = Vec::with_capacity(targets.len());
+            for &t in targets {
+                let v = match t {
+                    Wif => pk.to_wif(),
+                    _ => {
+                        return Err(ToolkitError::BadInput(format!(
+                            "--from bip38 --to {} is not a defined edge",
                             t.as_str()
                         )))
                     }
@@ -713,9 +806,16 @@ fn compute_outputs(
             "--from {} is not a primary value-bearing node",
             from.as_str()
         ))),
-        Bip38 => unreachable!("Phase 1 implements this — Phase 0 scaffold only"),
         MiniKey => unreachable!("Phase 2 implements this — Phase 0 scaffold only"),
         ElectrumPhrase => unreachable!("Phase 3 implements this — Phase 0 scaffold only"),
         Address => unreachable!("Phase 4 implements this — Phase 0 scaffold only"),
+    }
+}
+
+/// Map `bip38::Error` variants to ToolkitError per SPEC v0.7 §12.
+fn map_bip38_error(e: bip38::Error) -> ToolkitError {
+    match e {
+        bip38::Error::Pass => refusal_bip38_passphrase_mismatch(),
+        other => ToolkitError::BadInput(format!("bip38: {other}")),
     }
 }
