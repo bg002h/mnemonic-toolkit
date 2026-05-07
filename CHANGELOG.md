@@ -4,6 +4,48 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+## mnemonic-toolkit [0.7.1] — 2026-05-07
+
+Vectors-only patch atop v0.7.0. Pins published §Test Vectors entries from every BIP/SLIP/spec the toolkit cites. No behavior change; no wire-format change. New SPEC `design/SPEC_test_vector_audit_v0_7_1.md` summarizes coverage, discoveries, and out-of-scope classifications. 7 cycle phases (0–7) closed; Phase 8 ships docs + CHANGELOG.
+
+### Added
+
+- **~40 newly-pinned BIP/SLIP test vectors** across 5 specs:
+  - **BIP-32** §Test Vectors — 16 derivation cells from TVs 1–4 plus the leading-zero chain-code edge (`tests/bip32_vectors.rs`); Phase 1.
+  - **BIP-39** Trezor reference corpus — 6 entries (12-word + 24-word × 3 passphrase variants) at `tests/cli_convert_bip39_vectors.rs`; remaining 18 carry to v0.8. Phase 1.
+  - **BIP-49 / BIP-84 / BIP-86** §Test vectors — pinned account-level + receive/change vectors at `tests/cli_convert_address.rs`; Phase 2.
+  - **BIP-38** §Test vectors — V3 (`#[ignore]`'d, cite-only — see §3.b of the v0.7.1 audit SPEC) + V5 (Satoshi-compressed) non-EC, plus EC1–EC4 EC-multiplied DECRYPT vectors at `tests/cli_convert_bip38.rs`; Phase 3.
+  - **BIP-380** checksum vector 380.1 at `tests/cli_export_wallet.rs::bip380_valid_checksum_round_trip_via_miniscript`; Phase 4.
+  - **BIP-388** §Reference Wallet Policies 388.2 + 388.4 template-shape pinning at `tests/cli_export_wallet.rs::cell_{8,9}_*`; Phase 4.
+  - **SLIP-0132** §Bitcoin Test Vectors — 3 mainnet single-sig xpubs at `src/slip0132.rs::tests::slip0132_spec_bitcoin_test_vector_*`; Phase 5.
+- New SPEC `design/SPEC_test_vector_audit_v0_7_1.md` summarizing audit coverage, discoveries, OOS classifications, and v0.8 carry-overs.
+
+### Changed
+
+- **`SPEC_convert_v0_6.md` §12 erratum** — v0.7.0 incorrectly stated `bip38 = "1.1"`'s `Decrypt` impl rejected EC-multiplied codes. Empirical Phase 3 testing disconfirmed: all 4 spec EC-multiplied vectors (EC1–EC4) decrypt transparently through the existing `(Bip38, Wif)` arm. SPEC §12 now reflects actual capability; encrypt-side EC-mult (intermediate-code workflow) is the new gap, tracked as v0.8 FOLLOWUP. Closed in `2c59b27`.
+
+### Internal
+
+- Audit matrix: `design/agent-reports/v0_7_1-bip-test-vector-audit-matrix.md`. Per-spec §Test Vectors enumerated verbatim with COVERED / MISSING / OUT-OF-SCOPE-PER-{USER,SPEC} classification.
+- Test-fn rename in `tests/cli_convert_bip38.rs`: prior `*_vector3_*` (compressed-Satoshi) renamed to `*_vector4_*` to align with BIP-38 spec numbering after Phase 3.A pinned spec V3 (Unicode-NFC) at the canonical V3 slot. No coverage change; rename preserves test behavior byte-for-byte.
+
+### Fixed
+
+— (no impl bug fixes in this cycle.)
+
+### FOLLOWUPS resolved
+
+- `bip38-spec-section-12-ec-multiplied-erratum` — SPEC §12 erratum corrected (Phase 3.B, `2c59b27`).
+
+### FOLLOWUPS filed (v0.8 carry)
+
+- `bip38-ec-multiplied-encrypt-mode-support` — emit BIP-38 EC-multiplied form via intermediate codes.
+- `bip38-spec-vector-3-null-byte-passphrase` — NULL-safe passphrase input channel needed to exercise V3 Unicode-NFC vector end-to-end.
+
+### Test corpus
+
+444 lib + integration tests at v0.7.0 → 484 at v0.7.1 (+40 active). 2 → 4 ignored (+2 V3 Unicode-NFC encrypt + decrypt cells, `#[ignore]`'d pending NULL-safe input channel — see FOLLOWUP).
+
 ## mnemonic-toolkit [0.7.0] — 2026-05-06
 
 ### Added
