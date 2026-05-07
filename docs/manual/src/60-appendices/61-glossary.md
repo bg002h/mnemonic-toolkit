@@ -59,12 +59,14 @@ exchanging multisig descriptors between wallets. Exposed via
 
 The 3-card aggregate (ms1 + mk1 + md1) emitted by `mnemonic bundle`.
 Each card is independently BCH-checksummed by its sibling codec; the
-toolkit cross-binds them via the `policy_id_stub` carried on each mk1
-card.
+toolkit cross-binds them via the `policy_id_stub`, which is carried
+on each mk1 card and is computable from each md1 card. (The `mnemonic`
+toolkit is the integration *layer* over the three card formats; it
+emits no separate "toolkit card" of its own.)
 
 ## card
 
-A single engravable string emitted by one of the four codecs:
+A single engravable string emitted by one of the three card codecs:
 **ms1** (secret), **mk1** (key), or **md1** (descriptor). Each card
 carries its own BCH checksum so partial damage is locatable.
 
@@ -75,7 +77,7 @@ and `mk1` use HRP-mixed BCH (forked from codex32, not upstream-shared).
 
 ## codex32
 
-The BIP-93 checksumed alphabet used by `ms-codec`. See **BCH**.
+The BIP-93 checksummed alphabet used by `ms-codec`. See **BCH**.
 
 ## cosigner
 
@@ -148,7 +150,9 @@ binary `ms`; library crate `ms-codec`. Repo `bg002h/mnemonic-secret`.
 
 The integration CLI binary, shipped by the `mnemonic-toolkit` crate.
 Five subcommands: `bundle`, `verify-bundle`, `convert`,
-`export-wallet`, `derive-child`.
+`export-wallet`, `derive-child`. Multi-source seeds, xpubs, and
+related wallet inputs flow in via the uniform `--slot @N.<subkey>=<value>`
+shape (where `@N` is a cosigner index).
 
 ## mnemonic phrase
 
@@ -162,7 +166,8 @@ remain in the original order.
 
 ## multi_a
 
-The taproot variant of `multi` (post-BIP-386 / BIP-388).
+The taproot variant of `multi`, defined in BIP-386 (`multi_a`
+descriptor) and exchanged via BIP-388 (wallet policy).
 
 ## NUMS internal key
 

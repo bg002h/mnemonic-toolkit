@@ -56,10 +56,35 @@ Re-ran the same lint invocation. Result tail:
 Exit code: **1**. ✅ FAILS as required, with the exact diagnostic the
 plan specifies (`src \index{TERM} missing from <path>`).
 
-## Step 3 — entry restored (must PASS again)
+## Step 2b — inverse direction (must FAIL with the inverse diagnostic)
 
-Modification: copied `/tmp/69-index-table.md.backup` back over
-`69-index-table.md`.
+Per Phase 1 architect-review C1: the bidirectional check has *two*
+loops (source-not-in-table; table-not-in-source). Step 2 only proved
+the first. Step 2b proves the second.
+
+Modification: deleted only the `\index{m-format star}` marker from
+`00-frontmatter.md` (preserving the `69-index-table.md` row this
+time, the inverse of Step 2). The frontmatter now has no `\index{}`
+markers at all; the table still has the `m-format star` row.
+
+Re-ran the same lint invocation. Result tail:
+
+```
+[lint] === 6/6 index bidirectional ===
+[lint] FAIL: .../60-appendices/69-index-table.md term 'm-format star' has no matching \index{} marker in src/
+
+[lint] FAILED
+```
+
+Exit code: **1**. ✅ FAILS as required, with the *inverse* diagnostic
+(`...table.md term 'X' has no matching \index{} marker in src/`),
+proving the table-side loop is also exercised.
+
+## Step 3 — both restored (must PASS again)
+
+Modification: restored `00-frontmatter.md` from
+`/tmp/00-frontmatter.md.backup`. (`69-index-table.md` was already
+correct after Step 2b's modification only touched the source side.)
 
 Re-ran the same lint invocation. Result tail:
 
@@ -73,15 +98,16 @@ Exit code: **0**. ✅ PASSES as required.
 
 ## Conclusion
 
-The trapdoor test demonstrates that the bidirectional consistency
-check is exercised (not vacuously passing). The implementation is
-honest: present + matching → OK; missing on either side → FAIL with
-a concrete diagnostic naming the offending term and the affected
-file. Phase 1 acceptance criterion A5 (index present in both
-formats; bidirectional check passes) is satisfied for the
-markdown-side curated table; the PDF-side `\printindex` is exercised
-by `make filter-smoke` (Phase 0 deliverable, blocked locally on
-texlive availability — verified by CI in Phase 8).
+The trapdoor test demonstrates that *both* loops of the bidirectional
+consistency check are exercised (not vacuously passing in either
+direction). The implementation is honest: present + matching → OK;
+missing on either side → FAIL with a concrete direction-specific
+diagnostic naming the offending term and the affected file. Phase 1
+acceptance criterion A5 (index present in both formats; bidirectional
+check passes) is satisfied for the markdown-side curated table; the
+PDF-side `\printindex` is exercised by `make filter-smoke` (Phase 0
+deliverable, blocked locally on texlive availability — verified by
+CI in Phase 8).
 
 ## Bug fixes applied during Phase 1 (lint.sh)
 
