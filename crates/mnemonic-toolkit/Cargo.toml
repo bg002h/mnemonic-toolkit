@@ -22,6 +22,7 @@ mk-codec = { git = "https://github.com/bg002h/mnemonic-key",         tag = "mk-c
 md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic",  tag = "md-codec-v0.16.1" }
 miniscript = { version = "13", default-features = false, features = ["std"] }
 regex = "1"
+bip38 = "1.1"
 bip39 = { version = "2", features = ["all-languages"] }
 bitcoin = "0.32"
 clap = { version = "4", features = ["derive"] }
