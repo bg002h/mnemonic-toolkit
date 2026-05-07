@@ -25,34 +25,34 @@ Source: <https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki> §Test 
 
 | # | Chain | Expected (xpub head) | Status | Notes |
 |---|---|---|---|---|
-| 1.1 | m | `xpub661MyMwAqRbcF...EGMcet8` | MISSING | Phase 1 (`tests/cli_convert_bip32_vectors.rs`) |
-| 1.2 | m/0H | `xpub68Gmy5EdvgibQ...vgGDnw` | MISSING | Phase 1 |
-| 1.3 | m/0H/1 | `xpub6ASuArnXKPbfE...puCkwQ` | MISSING | Phase 1 |
-| 1.4 | m/0H/1/2H | `xpub6D4BDPcP2GT57...fcLW5` | MISSING | Phase 1 |
-| 1.5 | m/0H/1/2H/2 | `xpub6FHa3pjLCk84B...iyLHV` | MISSING | Phase 1 |
-| 1.6 | m/0H/1/2H/2/1000000000 | `xpub6H1LXWLaKsWFh...drTHy` | MISSING | Phase 1 |
+| 1.1 | m | `xpub661MyMwAqRbcF...EGMcet8` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m` |
+| 1.2 | m/0H | `xpub68Gmy5EdvgibQ...vgGDnw` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m_0h` |
+| 1.3 | m/0H/1 | `xpub6ASuArnXKPbfE...puCkwQ` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m_0h_1` |
+| 1.4 | m/0H/1/2H | `xpub6D4BDPcP2GT57...fcLW5` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m_0h_1_2h` |
+| 1.5 | m/0H/1/2H/2 | `xpub6FHa3pjLCk84B...iyLHV` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m_0h_1_2h_2` |
+| 1.6 | m/0H/1/2H/2/1000000000 | `xpub6H1LXWLaKsWFh...drTHy` | COVERED | `tests/bip32_vectors.rs::bip32_tv1_chain_m_0h_1_2h_2_1000000000` |
 
 ### Test Vector 2 — seed `fffcf9f6...4e4b4845...4542`
 
 | # | Chain | Expected (xpub head) | Status | Notes |
 |---|---|---|---|---|
-| 2.1 | m | `xpub661MyMwAqRbcF...EGuduB` | MISSING | Phase 1 |
-| 2.2 | m/0 | `xpub69H7F5d8KSRgm...kQTPH` | MISSING | Phase 1 |
-| 2.3 | m/0/2147483647H | `xpub6ASAVgeehLbnw...nBC5y4a` | MISSING | Phase 1 |
-| 2.4 | m/0/2147483647H/1 | `xpub6DF8uhdarytz3...dhHKon` | MISSING | Phase 1 |
-| 2.5 | m/0/2147483647H/1/2147483646H | `xpub6ERApfZwUNrhL...vRcEL` | MISSING | Phase 1 |
-| 2.6 | m/0/2147483647H/1/2147483646H/2 | `xpub6FnCn6nSzZAw5...gAtqt` | MISSING | Phase 1 |
+| 2.1 | m | `xpub661MyMwAqRbcF...EGuduB` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m` |
+| 2.2 | m/0 | `xpub69H7F5d8KSRgm...kQTPH` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m_0` |
+| 2.3 | m/0/2147483647H | `xpub6ASAVgeehLbnw...nBC5y4a` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m_0_2147483647h` |
+| 2.4 | m/0/2147483647H/1 | `xpub6DF8uhdarytz3...dhHKon` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m_0_2147483647h_1` |
+| 2.5 | m/0/2147483647H/1/2147483646H | `xpub6ERApfZwUNrhL...vRcEL` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m_0_2147483647h_1_2147483646h` |
+| 2.6 | m/0/2147483647H/1/2147483646H/2 | `xpub6FnCn6nSzZAw5...gAtqt` | COVERED | `tests/bip32_vectors.rs::bip32_tv2_chain_m_0_2147483647h_1_2147483646h_2` |
 
 ### Test Vector 3 — seed `4b381541...c73235be`
 
 | # | Chain | Expected (xpub head) | Status | Notes |
 |---|---|---|---|---|
-| 3.1 | m | `xpub661MyMwAqRbcE...epUt13` | MISSING | Phase 1 — leading-zero chain code edge |
-| 3.2 | m/0H | `xpub68NZiKmJWnxxS...19Zm4Y` | MISSING | Phase 1 |
+| 3.1 | m | `xpub661MyMwAqRbcE...epUt13` | COVERED | `tests/bip32_vectors.rs::bip32_tv3_chain_m` (leading-zero chain code edge) |
+| 3.2 | m/0H | `xpub68NZiKmJWnxxS...19Zm4Y` | COVERED | `tests/bip32_vectors.rs::bip32_tv3_chain_m_0h` |
 
 ### Test Vector 4 — seed `3ddd5602...db19b678`
 
-m, m/0H, m/0H/1H. MISSING — Phase 1.
+m, m/0H, m/0H/1H. COVERED — `tests/bip32_vectors.rs::bip32_tv4_chain_m{,_0h,_0h_1h}`.
 
 ### Test Vector 5 — invalid extended key examples
 
