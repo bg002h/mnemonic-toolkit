@@ -4,7 +4,7 @@
 
 ## Context
 
-mnemonic-toolkit v0.6.2 SHIPPED 2026-05-06 (tag `mnemonic-toolkit-v0.7.0` to follow this cycle; predecessor tag `mnemonic-toolkit-v0.6.2` at `1fddf3b`). The post-release wallet-types audit cataloged 8 v0.7-tier candidates; the user locked v0.7 scope through 3 brainstorm rounds:
+mnemonic-toolkit v0.6.2 SHIPPED 2026-05-06. This cycle will produce tag `mnemonic-toolkit-v0.7.0`; predecessor tag `mnemonic-toolkit-v0.6.2` sits at `1fddf3b`. The post-release wallet-types audit cataloged 8 v0.7-tier candidates; the user locked v0.7 scope through 3 brainstorm rounds:
 
 1. Round 1 (slip39-vs-ms1-shares gate): user originally chose "ship SLIP-39 in v0.7 as major addition."
 2. Round 2 (cycle shape): user originally chose "SLIP-39 + wallet-export + address-derivation."
@@ -206,7 +206,7 @@ Out-of-scope for v0.7 (defer to v0.8 FOLLOWUPS):
    - 6 application dispatchers (one fn per app).
    - Common helper: `derive_entropy(master, app_code, app_params, index) -> [u8; 64]` for the HMAC-SHA512 step.
    - Per-app output formatter (e.g., `format_bip39_phrase(entropy, length)`, `format_xprv_child(entropy, network)`).
-3. **TDD:** Phase 6 RED tests cover (a) one BIP-85 §"Test Vectors" reference per application × at least 1 vector each (BIP-85 spec includes test vectors for all 6 in-scope apps); (b) refusal for unsupported `--application rsa|rsa-gpg` ("RSA applications require external crypto deps; deferred to v0.8+").
+3. **TDD:** Phase 6 RED tests cover (a) one BIP-85 §"Test Vectors" reference per application × at least 1 vector each (BIP-85 spec includes test vectors for all 6 in-scope apps); (b) refusal for unsupported `--application rsa|rsa-gpg|dice` (byte-exact refusal stderr text per SPEC_derive_child_v0_7.md §5 (covers rsa, rsa-gpg, AND dice)).
 
 **Phase 6 exit gate:** All 6 in-scope BIP-85 applications functional; reference vectors pinned per app; RSA/RSA-GPG refusal byte-exact.
 

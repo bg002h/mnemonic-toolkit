@@ -90,7 +90,7 @@ Bidirectional and one-way edges with required side-inputs:
 | `minikey` | `wif` (v0.7) | `--network` (optional; default mainnet) | Verify SHA256(mini_key + "?")[0] == 0x00; if checksum-ok, raw privkey = SHA256(mini_key); compressed=false (Casascius keys predate BIP-32 compressed-pubkey convention); `bitcoin::PrivateKey { compressed: false, network, inner: privkey_scalar }.to_wif()`. **Decode-only contract:** no reverse `(Wif, MiniKey)` edge — generating a valid mini-key requires brute-force search for the typo-checksum byte. |
 | `electrum-phrase` | `entropy` (v0.7) | none | `electrum::validate_seed_version(phrase) -> SeedVersion`; if `Standard`/`Segwit`, `electrum::phrase_to_entropy(phrase, version) -> Vec<u8>` (own wordlist + HMAC-SHA512 verify); if `Standard2FA`/`Segwit2FA`, refuse via `refusal_electrum_2fa_unsupported`. |
 | `entropy` | `electrum-phrase` (v0.7) | `--electrum-version <standard\|segwit>` (optional; default `standard`) | `electrum::entropy_to_phrase(entropy, version) -> String`; HMAC-SHA512(`"Seed version" \|\| candidate_phrase`) hex-prefix must match the requested version's discriminator (`01` for Standard, `100` for Segwit). 2FA versions (`101`/`102`) NOT exposed as encode targets. |
-| `xpub` | `address` (v0.7) | `--path <BIP32-path>` (mandatory); `--script-type <p2wpkh\|p2sh-p2wpkh\|p2tr>` (mandatory unless inferable from `--template`); `--network` (optional; inferred from xpub prefix when absent) | `bitcoin::bip32::Xpub::derive_pub(secp, &path)` → child xpub → compressed pubkey → dispatch to `Address::p2wpkh` / `Address::p2shwpkh` / `Address::p2tr` per `--script-type`. **One-way:** address is a hash; no reverse edge. Missing `--path` → `refusal_address_no_path`. |
+| `xpub` | `address` (v0.7) | `--path <BIP32-path>` (mandatory); `--script-type <p2wpkh\|p2sh-p2wpkh\|p2tr>` (mandatory unless inferable from `--template`); `--network` (optional; inferred from xpub prefix when absent) | `bitcoin::bip32::Xpub::derive_pub(secp, &path)` → child xpub → compressed pubkey → dispatch to `Address::p2wpkh` / `Address::p2shwpkh` / `Address::p2tr` per `--script-type`. **One-way:** address is a hash; no reverse edge. Missing `--path` → `refusal_address_no_path`. (v0.7 — see §10.a) |
 | `phrase` | `electrum-phrase` (v0.7) | — | **REFUSE** (sibling-pivot): BIP-39 and Electrum native seeds are different artifact classes with different wordlists and validation rules; no meaningful direct conversion. Cross-format pivot via bundle, not single-format conversion. |
 | `electrum-phrase` | `phrase` (v0.7) | — | **REFUSE** (sibling-pivot): same rationale as forward direction. |
 
@@ -329,7 +329,9 @@ Convert subcommand at `crates/mnemonic-toolkit/src/cmd/convert.rs`. Top-level di
 
 Internal graph as a typed enum + adjacency `HashMap<(PrimaryNode, TargetNode), EdgeKind>`. `EdgeKind::Direct(fn)` for direct edges; `EdgeKind::Refusal(RefusalClass)` for refused edges; `EdgeKind::Composite(Vec<TargetNode>)` for traversal-based edges. Unit test asserts every `(from, to)` cell is either Direct, Composite, or Refusal — no holes (architect r1 I-2 partition).
 
-## §10 Out-of-scope for v0.6
+## §10 v0.6 out-of-scope items (with v0.7 address-derivation extension)
+
+> v0.7 amendment: §10.a now ships address derivation in scope; see §10.a for the full spec.
 
 - `seed`, `raw_privkey`, `xprv`-via-ms1, `seed`-via-ms1 nodes (deferred pending ms-codec v0.2 — §1).
 - Multi-value-bearing `--from` flags (single-from-value v0.6 constraint — §5). Reserved for future `--slot @N` indexing.

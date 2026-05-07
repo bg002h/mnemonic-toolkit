@@ -27,6 +27,8 @@ All four core flags (`--from`, `--application`, `--length`, `--index`) are MANDA
 
 **Per-application `--length` validators** (range varies per app; see §4). Out-of-range `--length` emits `error: --length <N> out of range for --application <app> (valid: <range>)` and exits 2.
 
+Note: For `hd-seed` and `xprv` applications, `--length` must still be supplied at the clap-grammar level for grammar-uniformity, but supplying any value emits a refusal at application validation. See §4 for per-application validators.
+
 ## §3 BIP-85 derivation primitive
 
 **Path:** `m/83696968'/<app>'/<idx>'`
@@ -86,7 +88,7 @@ Phase 6 RED tests cover, at minimum:
 3. **HD-Seed WIF reference vector** from BIP-85 §"Test Vectors" — hd-seed/`0` (no length param).
 4. **XPRV reference vector** from BIP-85 §"Test Vectors" — xprv/`0`.
 5. **HEX reference vector** from BIP-85 §"Test Vectors" — hex/`64`/`0`.
-6. **Password reference vector** — at least one of PWD BASE64 (`707764'`) or PWD BASE85 (`707785'`) reference. (BIP-85 §"Test Vectors" provides both; pin both if available.)
+6. **Password reference vector** — Pin both PWD BASE64 and PWD BASE85 reference vectors (BIP-85 §"Test Vectors" provides both).
 
 Plus refusal tests:
 

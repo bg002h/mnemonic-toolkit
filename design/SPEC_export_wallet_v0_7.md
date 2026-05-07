@@ -146,7 +146,7 @@ The HWI / Sparrow / Specter wallet-import JSON schemas are documented but hetero
 
 The `--format <value>` enum order in clap reflects this priority (`bitcoin-core` first; `bip388` second; `sparrow` / `specter` last with stub refusals).
 
-## §9 Test corpus (Phase 5 minimum, 6 cells)
+## §9 Test corpus (Phase 5 minimum: 5 mandatory cells + 1 conditional cell (cell 6 reduces to a documentation test if version 24 ↔ 25 shape diff is empty))
 
 Phase 5 RED tests cover, at minimum:
 
