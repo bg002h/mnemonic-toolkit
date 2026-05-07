@@ -250,7 +250,7 @@ lives in rust-miniscript upstream.
 
 | # | Descriptor | Status | Notes |
 |---|---|---|---|
-| 380.1 | `raw(deadbeef)#89f8spxm` (valid checksum) | MISSING | Phase 4 — pin in `tests/cli_export_wallet.rs` (toolkit emits descriptors with `#checksum`) |
+| 380.1 | `raw(deadbeef)#89f8spxm` (valid checksum) | COVERED | `tests/cli_export_wallet.rs::bip380_valid_checksum_round_trip_via_miniscript` (Phase 4.A; pinned via `miniscript::descriptor::checksum::verify_checksum` + toolkit-emitted wpkh descriptor end-to-end). Note: spec vector exercised against `verify_checksum` not `Descriptor::from_str` because `raw(<hex>)` is a Bitcoin-Core-only descriptor form not exposed by miniscript's typed `Descriptor` enum; `verify_checksum` is the layer of miniscript that implements BIP-380's checksum spec (and is the same algorithm `Descriptor::Display` uses). |
 | 380.2 | `raw(deadbeef)` (no checksum, REJECT) | OUT-OF-SCOPE-PER-SPEC | toolkit always emits the checksum form on export |
 | 380.3 | `raw(deadbeef)#` (empty checksum, REJECT) | OUT-OF-SCOPE-PER-SPEC | same |
 | 380.4 | `raw(deadbeef)#89f8spxmx` (9-char, REJECT) | OUT-OF-SCOPE-PER-SPEC | rust-miniscript enforces |
@@ -269,9 +269,13 @@ directly; it constructs them from typed `bitcoin::bip32::Xpub` + `Fingerprint`
 `miniscript::Descriptor::to_string()`. rust-miniscript's own test corpus exercises
 these vectors upstream. Pinning them in the toolkit would be redundant.
 
-Phase 4 deliverable: pin 380.1 against the toolkit's emitted descriptor for
-the wpkh single-sig export (verifies our `#checksum` is BIP-380-conformant
-end-to-end). Remaining 45 vectors are upstream-rust-miniscript contract tests.
+Phase 4.A deliverable: pin 380.1 against `miniscript::descriptor::checksum::verify_checksum`
+(the layer of miniscript that implements BIP-380's checksum spec — the
+typed `Descriptor` enum doesn't expose `raw(<hex>)` since that's a
+Bitcoin-Core-only descriptor form) AND against the toolkit's emitted
+descriptor for the wpkh single-sig export end-to-end. Closed
+2026-05-07 — `tests/cli_export_wallet.rs::bip380_valid_checksum_round_trip_via_miniscript`.
+Remaining 45 vectors are upstream-rust-miniscript contract tests.
 
 ---
 
@@ -285,20 +289,22 @@ Spec lists 7 reference wallet policy patterns. Of these the toolkit's v0.7
 | # | Template | Reference key info | Status | Notes |
 |---|---|---|---|---|
 | 388.1 | `pkh(@0/**)` (BIP-44 legacy) | `[6738736c/44'/0'/0']xpub6Br37...` | OUT-OF-SCOPE-PER-USER | wpkh + p2sh-p2wpkh + p2tr only in v0.7 export-wallet; pkh deferred to v0.8 |
-| 388.2 | `sh(wpkh(@0/**))` (BIP-49 nested) | `[6738736c/49'/0'/1']xpub6Bex1...` | MISSING | Phase 4 — pin via export-wallet against constructed bundle at m/49' |
+| 388.2 | `sh(wpkh(@0/**))` (BIP-49 nested) | `[6738736c/49'/0'/1']xpub6Bex1...` | COVERED-TEMPLATE-SHAPE | `tests/cli_export_wallet.rs::cell_8_bip388_sh_wpkh_bip49_template_shape` (Phase 4.B; toolkit-derived xpub from TREZOR_12 phrase since 388.2 spec value uses an unspecified seed, same caveat as 388.3) |
 | 388.3 | `wpkh(@0/**)` (BIP-84 native) | `[6738736c/84'/0'/2']xpub6CRQz...` | COVERED | `tests/cli_export_wallet.rs::cell_1_bitcoin_core_single_sig_wpkh_round_trip` (template-shape match; spec key info not byte-pinned because toolkit-derived xpub differs by seed) |
-| 388.4 | `tr(@0/**)` (BIP-86 taproot) | `[6738736c/86'/0'/0']xpub6CryU...` | MISSING | Phase 4 — pin tr-template export-wallet round-trip |
+| 388.4 | `tr(@0/**)` (BIP-86 taproot) | `[6738736c/86'/0'/0']xpub6CryU...` | COVERED-TEMPLATE-SHAPE | `tests/cli_export_wallet.rs::cell_9_bip388_tr_bip86_template_shape` (Phase 4.B; the toolkit-derived xpub here IS the BIP-86 §"Test vectors" reference value, but BIP-388's 388.4 spec entry uses an unspecified different seed — template shape pinned, BIP-388 spec xpub still not byte-pinnable) |
 | 388.5 | `wsh(sortedmulti(2,@0/**,@1/**))` (BIP-48 P2WSH) | 2 xpubs (cosigner) | COVERED | `tests/cli_export_wallet.rs::cell_2_bip388_wallet_policy_multisig_wsh_sortedmulti` |
 | 388.6 | `wsh(thresh(3,pk(@0/**),s:pk(@1/**),s:pk(@2/**),sln:older(12960)))` (miniscript decay) | 3 xpubs at `48'/0'/0'/100'` | OUT-OF-SCOPE-PER-USER | toolkit v0.7 only emits sortedmulti template families; miniscript thresh deferred |
 | 388.7 | `tr(@0/**,{sortedmulti_a(1,@0/<2;3>/*,@1/**),or_b(pk(@2/**),s:pk(@3/**))}` (taproot tree) | 4 xpubs | OUT-OF-SCOPE-PER-USER | tap-tree multisig deferred to v0.8 (per `mnemonic_toolkit_v0_7_plan` mem) |
 | 388.8 | musig2 keypath/scriptpath | 3 xpubs | OUT-OF-SCOPE-PER-USER | musig2 not in any v0.7.x scope |
 
-Phase 4 deliverables: pin 388.2 (BIP-49 nested wpkh-in-sh template export)
-+ 388.4 (BIP-86 taproot template export). 388.3 + 388.5 are template-shape
-COVERED but the spec's exact `[6738736c/...]` xpub values are not pinned
-(toolkit derives from its own TREZOR_24/12 seed, not from BIP-388's
-unspecified seed). Documented as COVERED-TEMPLATE-SHAPE-ONLY; full xpub
-byte-pinning would require fabricating a BIP-388 seed (no spec value).
+Phase 4.B deliverables: pin 388.2 (BIP-49 nested wpkh-in-sh template export)
++ 388.4 (BIP-86 taproot template export). Closed 2026-05-07 —
+`tests/cli_export_wallet.rs::cell_8_bip388_sh_wpkh_bip49_template_shape`
++ `cell_9_bip388_tr_bip86_template_shape`. 388.3 + 388.5 + 388.2 + 388.4
+are template-shape COVERED but the spec's exact `[6738736c/...]` xpub values
+are not pinned (toolkit derives from its own TREZOR_24/12 seed, not from
+BIP-388's unspecified seed). Documented as COVERED-TEMPLATE-SHAPE-ONLY;
+full xpub byte-pinning would require fabricating a BIP-388 seed (no spec value).
 
 ---
 
@@ -374,8 +380,8 @@ Phase 7 audits for any *additional* public canonical entries; pins if found.
 | BIP-85 | 9 | 7 | 1 (Phase 1: 85.3) | 1 (DICE 85.9) | 0 |
 | BIP-86 | 4 | 4 | 0 | 0 | 0 |
 | BIP-93 | n/a | — | — | — | delegated to ms-codec audit |
-| BIP-380 | 46 | 0 | 1 (Phase 4: checksum 380.1) | 0 | 45 (7 reject-checksum + 38 key-expression: rust-miniscript surface) |
-| BIP-388 | 8 | 2 SHAPE | 2 (Phase 4) | 4 | 0 |
+| BIP-380 | 46 | 1 (Phase 4.A: checksum 380.1) | 0 | 0 | 45 (7 reject-checksum + 38 key-expression: rust-miniscript surface) |
+| BIP-388 | 8 | 4 SHAPE (Phase 4.B closes 388.2 + 388.4) | 0 | 4 | 0 |
 | SLIP-0132 | 9 | 1 + 1 IMPLICIT | 7 (Phase 5) | 0 | 1 |
 | Electrum | 4 | 0 (canonical) | 4 (Phase 6) | 0 | 0 |
 | Casascius | 3 | 2 IMPL | 0 | 0 | 1 (no canonical) |
