@@ -51,7 +51,7 @@ full string. BIP-388 separates the *template* from the *bound keys*:
 ```json
 {
   "name": "wsh-sortedmulti-2-of-3",
-  "policy_template": "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+  "description_template": "wsh(sortedmulti(2,@0/**,@1/**,@2/**))",
   "keys_info": [
     "[fp0/87h/0h/0h]xpub...",
     "[fp1/87h/0h/0h]xpub...",

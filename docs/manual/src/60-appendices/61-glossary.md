@@ -242,7 +242,7 @@ material. Created via `mnemonic export-wallet`.
 
 ## wallet_policy
 
-The BIP-388 JSON shape: `{ name, description, policy_template,
+The BIP-388 JSON shape: `{ name, description, description_template,
 keys_info }`. Emitted via
 `mnemonic export-wallet --format bip388`.
 

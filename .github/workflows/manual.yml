@@ -1,5 +1,10 @@
 name: manual
 
+# `paths` filters apply only to branch pushes / PRs; tag pushes
+# matching `manual-v*` always trigger the workflow regardless of
+# which files are in the tag's commit. This is intentional — the
+# release-asset upload step needs to run on every tag push.
+
 on:
   push:
     branches: [main, master]
@@ -25,17 +30,26 @@ jobs:
           fetch-depth: 0
 
       - name: Build manual (lint + PDF) inside Dockerfile.build
-        working-directory: docs/manual
         run: |
-          docker build -t mnemonic-manual-build:ci -f Dockerfile.build .
+          docker build -t mnemonic-manual-build:ci -f docs/manual/Dockerfile.build docs/manual
           docker run --rm \
-            -v "$PWD":/work -w /work \
+            -v "$GITHUB_WORKSPACE":/work \
+            -w /work/docs/manual \
             mnemonic-manual-build:ci \
-            bash -c 'make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true && make pdf'
+            bash -c 'make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true && make pdf MERMAID_FILTER=on'
 
       - name: Verify PDF was produced
         working-directory: docs/manual
         run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
+
+      - name: Ensure GitHub release exists for this tag
+        if: startsWith(github.ref, 'refs/tags/manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+            gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+          fi
 
       - name: Upload PDF to release (on manual-v* tag)
         if: startsWith(github.ref, 'refs/tags/manual-v')

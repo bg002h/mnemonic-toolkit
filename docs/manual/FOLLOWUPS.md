@@ -56,7 +56,7 @@ new technical terms.
 
 ### `page-count-overflow-v0.1` — accepted exception
 
-The v0.1 PDF builds at 126 pages, vs. the A2 acceptance criterion
+The v0.1 PDF builds at 129 pages, vs. the A2 acceptance criterion
 of 60–100 pages. The plan permits "signed off explicitly" overflows.
 
 **Why accepted:** v0.1 covers the entire CLI surface (~120 flags),
