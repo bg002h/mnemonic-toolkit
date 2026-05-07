@@ -2,13 +2,6 @@
 build/
 src/99-build-banner.md
 mermaid-filter.err
-*.aux
-*.log
-*.toc
-*.idx
-*.ind
-*.ilg
-*.out
-*.fls
-*.fdb_latexmk
-*.synctex.gz
+# LaTeX byproducts inside build/ are covered by `build/`. Don't ignore
+# `*.out` globally — it would also ignore `transcripts/*.out` (the
+# committed worked-example transcripts).
