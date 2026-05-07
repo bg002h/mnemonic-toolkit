@@ -1,5 +1,6 @@
 //! `mnemonic` — engraving-bundle CLI for the m-format star.
 
+mod bip85;
 mod bundle_unified;
 mod cmd;
 mod derive;
@@ -44,6 +45,8 @@ enum Command {
     Convert(cmd::convert::ConvertArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
+    /// derive deterministic child entropy / keys from a master xprv (BIP-85)
+    DeriveChild(cmd::derive_child::DeriveChildArgs),
 }
 
 fn main() -> ExitCode {
@@ -66,6 +69,9 @@ fn main() -> ExitCode {
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
+        }
+        Command::DeriveChild(args) => {
+            cmd::derive_child::run(args, stdout, stderr).map(|_| 0)
         }
     };
 
