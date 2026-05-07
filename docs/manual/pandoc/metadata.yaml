@@ -1,0 +1,45 @@
+---
+title: "The m-format Star User Manual"
+subtitle: "Steel-engravable Bitcoin self-custody backup with `mnemonic-toolkit`, `md-cli`, `ms-cli`, and `mk-codec`"
+author:
+  - "Brian Goss <goss.brian@gmail.com>"
+date: \today
+lang: en-US
+documentclass: book
+classoption:
+  - oneside
+  - 11pt
+geometry:
+  - margin=1in
+papersize: letter
+linkcolor: NavyBlue
+urlcolor: NavyBlue
+toccolor: NavyBlue
+fontsize: 11pt
+mainfont: "DejaVu Serif"
+sansfont: "DejaVu Sans"
+monofont: "DejaVu Sans Mono"
+abstract: |
+  A guided tour of the m-format star — `mnemonic-toolkit`, `md-cli`,
+  `ms-cli`, and the `mk-codec` Rust library — for users building
+  steel-engravable Bitcoin self-custody backups. Two-track design:
+  Bitcoin power users follow the main flow; newcomers can take the
+  optional `:::primer` boxes and Part VI appendices to fill in
+  background. CC0 licensed; living document tracking `main`.
+keywords:
+  - bitcoin
+  - self-custody
+  - bip-39
+  - bip-32
+  - bip-388
+  - descriptors
+  - multisig
+  - codex32
+  - mnemonic
+  - steel-engraving
+rights: "CC0 1.0 Universal (Public Domain Dedication)"
+header-includes: |
+  \usepackage{makeidx}
+  \makeindex
+copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+...
