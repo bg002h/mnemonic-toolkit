@@ -1,0 +1,14 @@
+derive deterministic child entropy / keys from a master xprv (BIP-85)
+
+Usage: mnemonic derive-child [OPTIONS] --from <FROM> --application <APPLICATION> --length <LENGTH> --index <INDEX>
+
+Options:
+      --from <FROM>                Master source. v0.7 accepted `--from xprv=<value>` only; v0.8 also accepts `--from phrase=<bip39-mnemonic>` (combined with `--passphrase` + `--language`). Both forms accept `=-` to read from stdin
+      --application <APPLICATION>  BIP-85 application. The 6 in-scope tokens map to apps `39'`, `2'`, `32'`, `128169'`, `707764'`, `707785'`. The 3 out-of-scope tokens (`rsa`, `rsa-gpg`, `dice`) parse here and surface the SPEC §7 byte-exact refusal at runtime (per SPEC §5 + plan deviation note)
+      --length <LENGTH>            Per-app `--length` validator (range varies; see SPEC §4). Required at clap level for grammar-uniformity (SPEC §2). For `hd-seed` / `xprv` the value is irrelevant unless non-zero, in which case the SPEC §7 not-applicable refusal fires; pass `--length 0` as the sentinel to satisfy clap without triggering the refusal
+      --index <INDEX>              Hardened child index (`0..2^31`)
+      --network <NETWORK>          SPEC v0.8 §4 — network for emitted `--application <hd-seed|xprv>`. Defaults to mainnet (matches BIP-85 §"Test Vectors"). Testnet emits `c…` WIF and `tprv…` xprv prefixes [possible values: mainnet, testnet, signet, regtest]
+      --language <LANGUAGE>        SPEC v0.8 §4 — BIP-39 wordlist + BIP-85 language code for `--application bip39`. Defaults to English (BIP-85 code 0) [possible values: english, simplifiedchinese, traditionalchinese, czech, french, italian, japanese, korean, portuguese, spanish]
+      --passphrase <PASSPHRASE>    SPEC v0.8 §3 — BIP-39 mnemonic extension passphrase, used only when `--from phrase=…`. Empty by default. Ignored on `--from xprv=…`
+      --dice-sides <DICE_SIDES>    SPEC v0.8 §4 — number of sides for `--application dice`. Required when `--application dice`; ignored otherwise. Range: 2..=2^32-1
+  -h, --help                       Print help

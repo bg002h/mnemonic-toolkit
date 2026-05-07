@@ -1,0 +1,65 @@
+convert between seed/key formats (BIP-39 / BIP-32 / WIF / ms1 / mk1)
+
+Usage: mnemonic convert [OPTIONS] --from <FROM> --to <TO>
+
+Options:
+      --from <FROM>
+          
+
+      --to <TO>
+          
+
+      --network <NETWORK>
+          [possible values: mainnet, testnet, signet, regtest]
+
+      --template <TEMPLATE>
+          Possible values:
+          - bip44
+          - bip49
+          - bip84
+          - bip86
+          - wsh-multi:          `wsh(multi(K,@0,...,@N-1))` — segwit unsorted multisig
+          - wsh-sortedmulti:    `wsh(sortedmulti(K,@0,...,@N-1))` — segwit sorted multisig
+          - sh-wsh-multi:       `sh(wsh(multi(K,...)))` — nested-segwit unsorted multisig
+          - sh-wsh-sortedmulti: `sh(wsh(sortedmulti(K,...)))` — nested-segwit sorted multisig
+          - tr-multi-a:         `tr(multi_a(K,@0,...,@N-1))` — taproot unsorted multisig (script-path leaf)
+          - tr-sortedmulti-a:   `tr(sortedmulti_a(K,@0,...,@N-1))` — taproot sorted multisig (script-path leaf)
+
+      --path <PATH>
+          
+
+      --language <LANGUAGE>
+          [possible values: english, simplifiedchinese, traditionalchinese, czech, french, italian, japanese, korean, portuguese, spanish]
+
+      --passphrase <PASSPHRASE>
+          
+
+      --bip38-passphrase <BIP38_PASSPHRASE>
+          SPEC v0.8 §12.b — BIP-38 Scrypt passphrase, distinct from `--passphrase`. On composite `(phrase|entropy, bip38)` paths, `--passphrase` feeds BIP-39 PBKDF2 and `--bip38-passphrase` feeds BIP-38 Scrypt independently; if `--bip38-passphrase` is unset on a composite path, BIP-38 encrypt uses `""` (BREAKING CHANGE from v0.7's dual-purpose dispatch). On direct `(wif, bip38)` and `(bip38, wif)` edges, `--bip38-passphrase` falls back to `--passphrase` when unset
+
+      --passphrase-stdin
+          SPEC v0.8 §5.a — read the value of `--passphrase` from stdin (raw, preserving NULL bytes). Mutually exclusive with `--passphrase`. Closes the BIP-38 spec V3 NULL-byte passphrase gap (POSIX argv cannot carry U+0000). Mutually exclusive with any `--from <node>=-` (single stdin)
+
+      --account <ACCOUNT>
+          [default: 0]
+
+      --fingerprint <FINGERPRINT>
+          
+
+      --xpub-prefix <XPUB_PREFIX>
+          SPEC v0.6.1 §11.a — emit `xpub` targets with a SLIP-0132 prefix. Requires explicit `--network` when non-default (`xpub`)
+
+      --electrum-version <ELECTRUM_VERSION>
+          SPEC v0.7 §14 — Electrum seed-version selector for `(Entropy, ElectrumPhrase)` encode. Default: `standard`. 2FA versions (`101`, `102`) are REFUSED at the encode layer; cannot be selected here
+
+      --electrum-language <ELECTRUM_LANGUAGE>
+          SPEC v0.8 §14 — Electrum wordlist for the `(Entropy, ElectrumPhrase)` and `(ElectrumPhrase, Entropy)` arms. Distinct from `--language` (BIP-39 wordlist set diverges from Electrum's). On Electrum arms, `--electrum-language` wins; `--language` is silently ignored. Default: `english`
+
+      --script-type <SCRIPT_TYPE>
+          SPEC v0.7 §10.a — script-type selector for `(Xpub, Address)` derivation. Values: `p2wpkh | p2sh-p2wpkh | p2tr`. If absent and `--template` is supplied, inferred from the template (`bip84` → p2wpkh, `bip49` → p2sh-p2wpkh, `bip86` → p2tr); else refused
+
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')

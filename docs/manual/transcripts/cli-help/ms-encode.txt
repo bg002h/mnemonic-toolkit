@@ -1,0 +1,31 @@
+Encode a BIP-39 mnemonic (or hex entropy) as an ms1 string for engraving
+
+Usage: ms encode [OPTIONS] <--phrase <PHRASE>|--hex <HEX>>
+
+Options:
+      --phrase <PHRASE>
+          BIP-39 mnemonic. Use `-` to read from stdin
+
+      --hex <HEX>
+          Hex-encoded entropy bytes (16/20/24/28/32 B = 32/40/48/56/64 hex chars)
+
+      --language <LANGUAGE>
+          BIP-39 wordlist for the input phrase. Ignored under --hex
+          
+          [default: english]
+          [possible values: english, japanese, korean, spanish, chinese-simplified, chinese-traditional, french, italian, czech, portuguese]
+
+      --no-engraving-card
+          Suppress the stderr engraving card (for tooling)
+
+      --json
+          Emit a single JSON object on stdout instead of multi-line text
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+EXAMPLES:
+  ms encode --phrase "abandon abandon … about"
+  ms encode --phrase - < phrase.txt
+  ms encode --hex 00000000000000000000000000000000 --no-engraving-card
+  ms encode --phrase "..." --json | jq .ms1

@@ -1,0 +1,18 @@
+Mnemonic Descriptor (MD) — engravable BIP 388 wallet policy backups
+
+Usage: md <COMMAND>
+
+Commands:
+  encode    Encode a wallet policy into MD backup string(s)
+  decode    Decode one or more MD backup strings into a wallet policy template
+  verify    Verify backup strings re-encode to a given template
+  inspect   Decode + pretty-print everything the codec sees
+  bytecode  Dump the raw payload bits in an annotated layout
+  vectors   Regenerate the project's test-vector corpus (maintainer tool)
+  compile   Compile a sub-Miniscript-Policy expression into a BIP 388 template
+  address   Derive bitcoin addresses from a wallet-policy-mode descriptor
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

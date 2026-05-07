@@ -1,0 +1,10 @@
+Dump the raw payload bits in an annotated layout
+
+Usage: md bytecode [OPTIONS] <STRINGS>...
+
+Arguments:
+  <STRINGS>...  
+
+Options:
+      --json  
+  -h, --help  Print help
