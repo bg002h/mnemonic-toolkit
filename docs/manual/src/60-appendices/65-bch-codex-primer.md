@@ -189,6 +189,88 @@ In practice:
   of every string: chunking makes character counts trivially
   auditable on the plate.
 
+## Hand-decodability with the codex32 volvelle
+
+Codex32 was designed by Leon Olson Curr & Pearlwort Snead as a
+**paper computer** — a printed rotating-disk volvelle — so that a
+user can encode, verify, and even substitution-correct codex32
+strings without ever touching an electronic device. The
+[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)
+repo carries the printable volvelle PDFs; the design ethos is also
+visible in the original BIP-93 draft branch name
+(`apoelstra/bips/blob/2023-02--volvelles/...`) and the project
+website [secretcodex32.com](https://www.secretcodex32.com/).
+
+The implication for the m-format constellation is that
+hand-decodability is a *graded* property across the three cards.
+
+### What the wheel does mechanically
+
+A codex32 volvelle physically encodes the BCH polynomial
+arithmetic. Each input symbol triggers a fixed rotation; the
+operator reads off the result of the polymod operation step by
+step. The wheel encodes:
+
+- the **field arithmetic** (GF(32) multiplication via the rotation
+  positions),
+- the **generator polynomial coefficients** (the wheel's tooth
+  spacing), and
+- an **endpoint comparison** at the last symbol against a fixed
+  target residue. A valid string lands on a marked position; an
+  invalid string lands elsewhere.
+
+The first two are baked into the wheel's physical geometry. The
+third — the endpoint comparison — depends on which target residue
+the code uses.
+
+### Which constellation cards work directly with the off-the-shelf wheel
+
+| Card | Generator polynomial | Target residue | Off-the-shelf wheel? |
+|---|---|---|---|
+| ms1 | BIP-93 stock | `MS32_CONST = 0x10ce0795c2fd1e62a` (BIP-93 stock) | **Yes — directly.** ms1 uses BIP-93 codex32 unchanged via `rust-codex32`. The standard codex32 wheel decodes ms1 strings as-is. |
+| mk1 (regular) | BIP-93 stock | `MK_REGULAR_CONST = 0x1062435f91072fa5c` (NUMS-derived, top 65 bits of `SHA-256("shibbolethnumskey")`) | **Mechanics yes, endpoint no.** Per-step rotations are identical; the final endpoint comparison is against a different 65-bit constant. |
+| mk1 (long) | BIP-93 long-code generator | `MK_LONG_CONST = 0x41890d7e441cbe97273` (NUMS-derived, top 75 bits) | Same as mk1 regular — generator matches BIP-93 long, endpoint differs. |
+| md1 (regular) | BIP-93 stock | `MD_REGULAR_CONST = 0x0815c07747a3392e7` (NUMS-derived, top 65 bits of `SHA-256("shibbolethnums")`) | **Mechanics yes, endpoint no.** Same as mk1 regular. |
+
+A user who wants to verify an ms1 card on the kitchen table with
+a printed codex32 volvelle can do so directly. A user who wants
+to verify mk1 or md1 with the same wheel needs either:
+
+1. **A printed target-residue card.** Carry a small print-out
+   listing all three target residues; do the final XOR-against-target
+   step manually after the wheel computes the polymod. Straightforward
+   but reduces the elegance of the volvelle's all-on-the-wheel
+   property.
+2. **An mk1- or md1-specific volvelle** with endpoint marks
+   shifted to match the HRP-mixed target residue. This is what
+   `custom-volvelles-per-card-type` in
+   `docs/manual/FOLLOWUPS.md` tracks as a v0.2+ deliverable.
+
+### Why HRP mixing was accepted at this cost
+
+Format separation. An mk1 string cannot accidentally validate as
+an ms1 or md1 string at decode time, because a wallet decoding
+mk1 compares the polymod against `MK_REGULAR_CONST` /
+`MK_LONG_CONST` while a wallet decoding ms1 compares against
+`MS32_CONST`. The probability that random bit-flipping turns a
+valid ms1 string into a valid mk1 string is the probability of
+the polymod landing on `MK_REGULAR_CONST` instead of
+`MS32_CONST` — combinatorially implausible with NUMS-derived
+constants.
+
+The trade-off: stock-volvelle compatibility for mk1 / md1 was
+given up in exchange for cryptographically strong format
+separation. ms1 retains stock-volvelle compatibility because it
+uses BIP-93 directly. For a user who specifically wants
+hand-recovery without electronics, the practical recipe today is:
+
+- Print the BlockstreamResearch volvelle for ms1 verification.
+- Carry a small printed card listing the three target residues
+  (`MS32_CONST`, `MK_REGULAR_CONST`, `MD_REGULAR_CONST`); do the
+  final XOR step by hand for mk1 / md1.
+- Or wait for HRP-specific volvelles per
+  `custom-volvelles-per-card-type` in `docs/manual/FOLLOWUPS.md`.
+
 ### Sources for further reading
 
 - **[BIP-93](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki)** — the canonical codex32 specification, including the §"Error Correction" claims quoted above and a Python reference implementation of the polynomial.

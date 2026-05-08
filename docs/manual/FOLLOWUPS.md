@@ -7,6 +7,39 @@ a confirmed retirement. Mirrors the FOLLOWUPS pattern used in
 
 ## Open
 
+### `custom-volvelles-per-card-type` — v0.2+ candidate
+
+The codex32 volvelle (printable paper-computer wheel) at
+[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)
+hand-decodes ms1 strings directly, but mk1 and md1 use HRP-mixed
+target residues (`MK_REGULAR_CONST`, `MK_LONG_CONST`,
+`MD_REGULAR_CONST`) that the stock wheel doesn't recognise at the
+endpoint comparison step. Per Appendix E §"Hand-decodability with
+the codex32 volvelle", this can be worked around by printing a
+small target-residue card and doing the final XOR manually.
+
+A more elegant solution would be to publish **HRP-specific
+volvelles per card type** — physically the same wheel as the
+stock codex32 volvelle (same generator polynomial, same field
+arithmetic), but with the endpoint marks shifted to land on the
+mk1 or md1 target residues for a valid string.
+
+**Why it matters.** The constellation's hand-recovery story is
+currently graded — ms1 fully volvelle-decodable, mk1/md1 partially.
+A custom volvelle per card would restore the all-on-the-wheel
+property for the public cards too, supporting the "no electronics
+needed at restoration time" use case end-to-end.
+
+**Where to ship.** A `volvelles/` directory in the toolkit (or
+sibling) repo with three printable PDFs (mk1-regular, mk1-long,
+md1-regular). Long-code wheels are larger but follow the same
+template. The PDFs would carry a CC0 dedication matching the
+BlockstreamResearch source material.
+
+**Dependencies.** None — purely a graphic-design / print-layout
+deliverable. Could be done by anyone with TikZ / Inkscape capability
+and no Rust experience.
+
 ### `bch-string-length-empirical-sweep` — v0.2 candidate
 
 The "Typical string length" column of Appendix E's per-card table
