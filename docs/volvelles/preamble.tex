@@ -19,11 +19,15 @@
 % at typical scaling.
 \newcommand{\volvellecell}[1]{\textsf{\fontsize{6}{7}\selectfont #1}}
 
-% \volvellecellinner{<bech32-char>}: same as \volvellecell but ~60% of the
-% regular font size. Used by the helper for row 0 only — the innermost ring
-% has the smallest arc length per cell (radius shrinks linearly with row),
-% so its 32 cells crowd together at full font size.
+% \volvellecellinner{<bech32-char>}: ~60% of regular. Used for row 1 (the
+% second-innermost ring), where arc-length per cell is small but not yet
+% as cramped as row 0.
 \newcommand{\volvellecellinner}[1]{\textsf{\fontsize{3.6}{4.2}\selectfont #1}}
+
+% \volvellecellinnermost{<bech32-char>}: ~40% of regular (~60% of inner).
+% Used for row 0 only — radius is smallest there, so the 32 cells must be
+% squeezed into the tightest arc.
+\newcommand{\volvellecellinnermost}[1]{\textsf{\fontsize{2.4}{3}\selectfont #1}}
 
 % \volvelleendpoint{<angle-deg>}{<format-label>}: thick arc segment at the
 % named angle on the top disc + small text label outside the disc. The arc
