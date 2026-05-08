@@ -22,7 +22,7 @@ This spec covers that variant: a parallel artifact at `docs/quickstart/` with it
 |---|---|---|
 | D1 | Audience | True Bitcoin / m-format newcomer; ~25-40pp |
 | D2 | Workflow scope | Single-sig + 2-of-3 multisig + watch-only (single-sig WO + multisig WO) |
-| D3 | Source-of-truth strategy | Independent prose authoring; shared assets via symlinks for stable configs (transcripts, markdownlint, puppeteer, Dockerfile, lua filters); `.cspell.json` is a local file using cspell's `extends` key (so the QuickStart can manage its own word list); mermaid blocks copy-pasted (allows newcomer-tuned captions/colors) |
+| D3 | Source-of-truth strategy | Independent prose authoring; shared assets via symlinks for stable configs (transcripts, markdownlint, puppeteer, Dockerfile, lua filters); `.cspell.json` is a local file using cspell's `import` key (so the QuickStart can manage its own word list); mermaid blocks copy-pasted (allows newcomer-tuned captions/colors) |
 | D4 | Location + versioning | `docs/quickstart/` parallel to `docs/manual/`; own `quickstart-v*` tag schedule |
 | D5 | Worked-example seed convention | Same canonical BIP-39 test seed + DANGER pattern as the manual; reuses the 5 existing `docs/manual/transcripts/*.{cmd,out}` files via symlink |
 
@@ -74,7 +74,7 @@ mnemonic-toolkit/docs/quickstart/
 ├── tests/
 │   ├── lint.sh                     # local trimmed copy (markdownlint + cspell + lychee only)
 │   └── verify-examples.sh          # SYMLINK → ../../manual/tests/verify-examples.sh
-├── .cspell.json                    # LOCAL file: { "extends": "../manual/.cspell.json", "words": [] }
+├── .cspell.json                    # LOCAL file: { "import": ["../manual/.cspell.json"], "words": [] }
 ├── .markdownlint-cli2.jsonc        # SYMLINK → ../manual/.markdownlint-cli2.jsonc
 ├── .puppeteer.json                 # SYMLINK → ../manual/.puppeteer.json
 ├── Dockerfile.build                # SYMLINK → ../manual/Dockerfile.build
@@ -85,7 +85,7 @@ mnemonic-toolkit/docs/quickstart/
 
 **Symlink rationale.** Linux/Mac default; Windows requires `core.symlinks=true`. Documented in `README.md`. Local + CI both run on Linux, so this is operational not blocking. Updates to symlinked configs (markdownlint, puppeteer, Dockerfile, filters) propagate to QuickStart automatically.
 
-**`.cspell.json` is a *local* file (not symlink).** Per architect review C-1: the QuickStart needs its own extension point for newcomer-voice vocabulary that the manual doesn't carry. cspell's `extends` key (supported since v6) lets the local file inherit the full manual word list while adding QuickStart-specific words without mutating the manual's config (which would trigger `manual.yml` CI on a `docs/manual/**` touch). cspell resolves `extends` relative to the config file's location (not the invocation CWD), so `../manual/.cspell.json` is stable regardless of where cspell is invoked. (If Phase-0 verification reveals different semantics, fall back to an absolute path or a repo-root `cspell.config.yaml` that imports both — see review-r2 I-R1.)
+**`.cspell.json` is a *local* file (not symlink).** Per architect review C-1: the QuickStart needs its own extension point for newcomer-voice vocabulary that the manual doesn't carry. cspell's `import` key (supported since v6) lets the local file inherit the full manual word list while adding QuickStart-specific words without mutating the manual's config (which would trigger `manual.yml` CI on a `docs/manual/**` touch). cspell resolves `import` paths relative to the config file's location (not the invocation CWD), so `../manual/.cspell.json` is stable regardless of where cspell is invoked. (Phase-0 verified empirically: `mdframed` from manual's word list resolves through the import. The earlier spec text said `extends` — that key does not exist in cspell; `import` is the correct one.)
 
 **Why mermaid is *not* shared.** Mermaid blocks for the QuickStart's newcomer audience may want different colours, simpler labels, or trimmed nodes. Copy-pasting respects that. Drift cost is bounded — both copies are visible in `git grep '^```mermaid'`.
 
@@ -150,7 +150,7 @@ Cloned from `docs/manual/Makefile`. Differences:
 | Check | Source |
 |---|---|
 | markdownlint-cli2 | symlinked `.markdownlint-cli2.jsonc` |
-| cspell | local `.cspell.json` (extends manual's via cspell `extends` key) |
+| cspell | local `.cspell.json` (extends manual's via cspell `import` key) |
 | lychee `--offline` | host-installed (CI installs in workflow) |
 
 Drops: glossary-coverage (no formal glossary), flag-coverage (no CLI ref part), index-bidirectional (no `\index{}` markers).

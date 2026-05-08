@@ -4,9 +4,9 @@
 
 **Goal:** Build and ship a 25-40pp newcomer-aimed Quick Start guide as a parallel artifact at `docs/quickstart/` in `bg002h/mnemonic-toolkit`, sharing the manual's toolchain and worked-example transcripts via symlinks, on its own `quickstart-v*` tag schedule.
 
-**Architecture:** Parallel layout to `docs/manual/`. `.cspell.json` is local with `extends` to manual's; other configs (markdownlint, puppeteer, Dockerfile, lua filters, verify-examples.sh, transcripts/) symlink to manual. Pandoc PDF render drops `--template` (uses pandoc default; no `\printindex`). CI workflow `.github/workflows/quickstart.yml` builds host-installed (no Docker), uploads PDF on `quickstart-v*` tags.
+**Architecture:** Parallel layout to `docs/manual/`. `.cspell.json` is local with cspell's `import` array pointing at manual's; other configs (markdownlint, puppeteer, Dockerfile, lua filters, verify-examples.sh, transcripts/) symlink to manual. Pandoc PDF render drops `--template` (uses pandoc default; no `\printindex`). CI workflow `.github/workflows/quickstart.yml` builds host-installed (no Docker), uploads PDF on `quickstart-v*` tags.
 
-**Tech Stack:** Pandoc + xelatex + mermaid-filter + lychee + cspell + markdownlint-cli2. Same versions as manual. cspell `extends` resolves relative to config-file location.
+**Tech Stack:** Pandoc + xelatex + mermaid-filter + lychee + cspell + markdownlint-cli2. Same versions as manual. cspell `import` paths resolve relative to config-file location.
 
 **Spec:** `docs/superpowers/specs/2026-05-08-quickstart-design.md` (with reviewer reports `-review-1.md` and `-review-2.md`).
 
@@ -85,7 +85,7 @@ ls -L docs/quickstart/tests/verify-examples.sh
 
 All seven `ls -L` commands must succeed (exit 0).
 
-### Task 0.3: Create local `.cspell.json` with `extends`
+### Task 0.3: Create local `.cspell.json` with `import`
 
 **Files:**
 
@@ -97,7 +97,7 @@ All seven `ls -L` commands must succeed (exit 0).
 {
   "version": "0.2",
   "language": "en,en-US",
-  "extends": "../manual/.cspell.json",
+  "import": ["../manual/.cspell.json"],
   "ignorePaths": [
     "build/**",
     "tests/fixtures/**",
@@ -122,7 +122,7 @@ cspell --config docs/quickstart/.cspell.json --no-progress --no-summary --versio
 
 Expected: cspell version string, exit 0.
 
-- [ ] **Step 3:** **Phase-0 verify-item from spec §4 rationale:** confirm `extends` resolves correctly. Create a one-line test markdown that uses a manual-only word (`mdframed`):
+- [ ] **Step 3:** **Phase-0 verify-item from spec §4 rationale:** confirm `import` resolves correctly. Create a one-line test markdown that uses a manual-only word (`mdframed`):
 
 ```bash
 echo "The mdframed example." > /tmp/cspell-test.md
@@ -130,9 +130,9 @@ cspell --config docs/quickstart/.cspell.json --no-progress /tmp/cspell-test.md
 echo "exit $? — expected 0 (mdframed inherited from manual word list)"
 ```
 
-Expected: `cspell` exits 0 (no issues — `mdframed` is in the manual's word list and inherited via `extends`).
+Expected: `cspell` exits 0 (no issues — `mdframed` is in the manual's word list and inherited via `import`).
 
-If exit 1 (i.e., `mdframed` flagged unknown) → `extends` is not resolving. Fall back to absolute path: change `"extends": "../manual/.cspell.json"` to `"extends": "/scratch/code/shibboleth/mnemonic-toolkit/docs/manual/.cspell.json"` and re-test. If still broken, file an issue and try `cspell.config.yaml` at repo root.
+If exit 1 (i.e., `mdframed` flagged unknown) → `import` is not resolving. Fall back to absolute path: change `"import": ["../manual/.cspell.json"]` to `"import": ["/scratch/code/shibboleth/mnemonic-toolkit/docs/manual/.cspell.json"]` and re-test. If still broken, file an issue and try `cspell.config.yaml` at repo root.
 
 (Per plan-review I-1: dropped `--no-summary` so cspell still emits the issues-count line in the failure case; pass criterion is exit code, not a specific output string.)
 
