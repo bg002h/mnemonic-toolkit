@@ -20,9 +20,9 @@
 % Page 1 — top disc (rotating overlay).
 % =========================================================================
 \begin{center}
-% Top disc: scaled to fit letter page. Max raw extent ≈ 4.9" (license footer)
-% vs. ~3.75" usable radius after 0.5" margins; scale ≈ 0.75 keeps margin-safe.
-\begin{tikzpicture}[rotate=-90, scale=0.75]
+% Top disc: scaled to fit letter page. Footer moved to y=-4.65" so the
+% +5% scale=0.7875 still keeps margin-safe (4.65 × 0.7875 = 3.66" < 3.75").
+\begin{tikzpicture}[rotate=-90, scale=0.7875]
   % 32 input-symbol labels at radius 3.5", 11.25° per segment, 10pt.
   \foreach \sym [count=\i from 0] in \WheelAlphabet {%
     \node at ({\i*11.25}:3.5in) [font=\sffamily\fontsize{10}{12}\selectfont,
@@ -51,7 +51,7 @@
   \volvelleendpoint{\WheelEndpointAngle}{\WheelFormat\ endpoint}
 
   % License footer.
-  \node at (0,-4.9in) [font=\sffamily\fontsize{7}{8}\selectfont, rotate=90]
+  \node at (0,-4.65in) [font=\sffamily\fontsize{7}{8}\selectfont, rotate=90]
     {\copyright\ 2026 Brian Goss --- MIT License \quad \WheelFormat\ top disc};
 \end{tikzpicture}
 \end{center}
@@ -64,10 +64,11 @@
 % =========================================================================
 \begin{center}
 % Bottom disc: helper-emitted cells span radius 0.35" through 11.2"
-% (32 rows × 0.35" pitch). Scaled to fit letter page (~3.5" max usable
-% radius); the geometric relationships in the .cells.tex fragment are
-% scale-invariant so the wheel still works as designed.
-\begin{tikzpicture}[rotate=-90, scale=0.31]
+% (32 rows × 0.35" pitch). +5% scale=0.3255 puts the outer ring at
+% 11.4 × 0.3255 = 3.71" (within 3.75" usable). Geometric relationships
+% in the .cells.tex fragment are scale-invariant; encoding/decoding
+% behavior is unchanged.
+\begin{tikzpicture}[rotate=-90, scale=0.3255]
   % Background ring boundaries at the outer-most cell radius.
   \draw[line width=0.3pt] (0,0) circle (0.3in);
   \draw[line width=0.3pt] (0,0) circle (11.4in);
