@@ -118,6 +118,14 @@ jobs:
             mnemonic-toolkit/docs/volvelles/build/mk-long.pdf
             mnemonic-toolkit/docs/volvelles/build/md-regular.pdf
 
+      - name: Promote PDFs to release-source path
+        # Ensures the uploaded PDFs match freshly-rebuilt ones from this
+        # CI run (not the committed copies, which could go stale if the
+        # author forgot to re-attach before tagging).
+        if: startsWith(github.ref, 'refs/tags/volvelle-v')
+        working-directory: mnemonic-toolkit
+        run: make -C docs/volvelles release-attach
+
       - name: Ensure GitHub release exists for this tag
         if: startsWith(github.ref, 'refs/tags/volvelle-v')
         working-directory: mnemonic-toolkit
