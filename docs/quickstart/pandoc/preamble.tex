@@ -1,0 +1,62 @@
+% mnemonic-toolkit/docs/quickstart/pandoc/preamble.tex
+%
+% LaTeX preamble passed to pandoc via `-H preamble.tex` for the PDF build.
+% Authors should NOT edit individual chapters with raw LaTeX; only the
+% directives loaded here (`:::primer` divs handled by Lua filter) are part
+% of the authoring contract.
+%
+% Differs from docs/manual/pandoc/preamble.tex in that it does NOT load
+% `makeidx` / call `\makeindex` — the QuickStart has no \index{} markers.
+
+% --- Primer-box rendering for `:::primer` fenced divs ------------------------
+\usepackage{mdframed}
+\usepackage{xcolor}
+\definecolor{primerbg}{RGB}{245,245,245}
+\definecolor{primerrule}{RGB}{180,180,180}
+
+\newmdenv[
+  backgroundcolor=primerbg,
+  linecolor=primerrule,
+  linewidth=0.4pt,
+  innertopmargin=6pt,
+  innerbottommargin=6pt,
+  innerleftmargin=10pt,
+  innerrightmargin=10pt,
+  skipabove=8pt,
+  skipbelow=8pt,
+]{primerbox}
+
+% --- DANGER admonitions (used in worked-example chapters) --------------------
+\definecolor{dangerbg}{RGB}{255,235,235}
+\definecolor{dangerrule}{RGB}{180,40,40}
+
+\newmdenv[
+  backgroundcolor=dangerbg,
+  linecolor=dangerrule,
+  linewidth=1pt,
+  innertopmargin=6pt,
+  innerbottommargin=6pt,
+  innerleftmargin=10pt,
+  innerrightmargin=10pt,
+  skipabove=8pt,
+  skipbelow=8pt,
+]{dangerbox}
+
+% --- Better code-block typography -------------------------------------------
+% Loaded here too. `-H preamble.tex` lands in `$for(header-includes)$`,
+% which precedes `$highlighting-macros$` in pandoc's template — so this
+% \DefineVerbatimEnvironment runs early enough to be authoritative.
+% `commandchars=\\\{\}` is required for pandoc's syntax-highlighting
+% commands (\ExtensionTok, \NormalTok, \AttributeTok, etc.) to expand
+% inside the Verbatim environment; without it they render as literal text.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+  commandchars=\\\{\},
+  breaklines,
+  breakanywhere,
+  fontsize=\footnotesize,
+}
+
+% --- Mermaid figures (embedded as SVG by mermaid-filter) --------------------
+\usepackage{graphicx}
+\usepackage{svg}
