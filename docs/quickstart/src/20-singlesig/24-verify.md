@@ -10,6 +10,9 @@ Pass the same `--network`, `--template`, and `--slot @0.phrase=…`
 as the original `bundle` invocation, plus the cards that came back
 in the bundle output:
 
+> **Reminder.** Still the public BIP-39 test phrase — see
+> [Generating entropy safely](22-generate-entropy.md).
+
 ```sh
 mnemonic verify-bundle \
   --network mainnet \

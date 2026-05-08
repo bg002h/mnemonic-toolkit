@@ -16,6 +16,11 @@ Wanted:
 
 ## Step 1 — recover the phrase from ms1
 
+> **Reminder.** This Quick Start uses the public BIP-39 test phrase
+> throughout — including in the output below. See [Generating entropy
+> safely](22-generate-entropy.md) for why you must never use it for a
+> real wallet.
+
 ```sh
 mnemonic convert \
   --from ms1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \

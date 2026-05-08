@@ -5,6 +5,10 @@ BIP-84 mainnet wallet. End-to-end takes about three minutes.
 
 ## The command
 
+> **Reminder.** The phrase below is the public BIP-39 test vector —
+> never engrave or fund a wallet built from it. See [Generating
+> entropy safely](22-generate-entropy.md) for the full warning.
+
 ```sh
 mnemonic bundle \
   --network mainnet \
