@@ -51,7 +51,8 @@ output directly; older Bitcoin Core versions need the v24 shape,
 and BIP-388 wallet-policy importers (Sparrow, Specter, Coldcard,
 Ledger) need a different format entirely.
 
-**Fix:** match the export format to the receiving software:
+**Fix:** re-run `mnemonic export-wallet` with the format matched to
+the receiving software:
 
 - Bitcoin Core 25+ → `--format bitcoin-core` (default).
 - Bitcoin Core 24 → `--format bitcoin-core --bitcoin-core-version 24`.

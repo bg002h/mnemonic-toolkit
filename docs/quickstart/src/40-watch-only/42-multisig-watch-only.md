@@ -94,8 +94,8 @@ that recovery software re-derives at import time.
 ## Step 3 — each cosigner separately derives their own ms1
 
 The watch-only bundle is the public-side artifact. To be able to
-sign, each cosigner separately derives their *own* ms1 on their own
-air-gapped machine:
+sign, each cosigner derives their *own* ms1 on their own air-gapped
+machine:
 
 ```sh
 # On cosigner N's air-gapped machine
