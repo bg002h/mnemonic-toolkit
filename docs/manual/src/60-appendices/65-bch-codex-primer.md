@@ -242,9 +242,16 @@ to verify mk1 or md1 with the same wheel needs either:
    but reduces the elegance of the volvelle's all-on-the-wheel
    property.
 2. **An mk1- or md1-specific volvelle** with endpoint marks
-   shifted to match the HRP-mixed target residue. This is what
-   `custom-volvelles-per-card-type` in
-   `docs/manual/FOLLOWUPS.md` tracks as a v0.2+ deliverable.
+   shifted to match the HRP-mixed target residue. First-cut v0.1
+   wheels for the m-format constellation NUMS-derived BCH
+   residues are now available in this repo:
+   [mk1-regular wheel](../../../volvelles/mk-regular.pdf),
+   [mk1-long wheel](../../../volvelles/mk-long.pdf), and
+   [md1-regular wheel](../../../volvelles/md-regular.pdf).
+   Hand-decoding ergonomics will improve in v0.2 — see
+   `bottom-disc-cell-density` and
+   `bottom-disc-registration-tick-radius` in
+   `docs/manual/FOLLOWUPS.md`.
 
 ### Why HRP mixing was accepted at this cost
 
@@ -265,11 +272,13 @@ uses BIP-93 directly. For a user who specifically wants
 hand-recovery without electronics, the practical recipe today is:
 
 - Print the BlockstreamResearch volvelle for ms1 verification.
-- Carry a small printed card listing the three target residues
+- Print the v0.1 HRP-specific wheels for mk1 and md1 verification:
+  [mk1-regular wheel](../../../volvelles/mk-regular.pdf),
+  [mk1-long wheel](../../../volvelles/mk-long.pdf),
+  [md1-regular wheel](../../../volvelles/md-regular.pdf).
+- Or carry a small printed card listing the three target residues
   (`MS32_CONST`, `MK_REGULAR_CONST`, `MD_REGULAR_CONST`); do the
   final XOR step by hand for mk1 / md1.
-- Or wait for HRP-specific volvelles per
-  `custom-volvelles-per-card-type` in `docs/manual/FOLLOWUPS.md`.
 
 ### Sources for further reading
 

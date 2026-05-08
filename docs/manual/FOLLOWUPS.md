@@ -62,38 +62,40 @@ when that's no longer true:
 
 This entry's punch-list assumes the mk-cli surface is roughly: `mk-cli encode` (xpub + origin → mk1), `mk-cli decode` (mk1 → xpub + origin), `mk-cli inspect` (decoded fields with policy_id_stub display), `mk-cli verify` (round-trip check), `mk-cli vectors` (test-vector dump). Adjust the docs touch-list when the actual mk-cli SPEC lands.
 
-### `custom-volvelles-per-card-type` — v0.2+ candidate
+### `bottom-disc-cell-density` — v0.2 candidate
 
-The codex32 volvelle (printable paper-computer wheel) at
-[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)
-hand-decodes ms1 strings directly, but mk1 and md1 use HRP-mixed
-target residues (`MK_REGULAR_CONST`, `MK_LONG_CONST`,
-`MD_REGULAR_CONST`) that the stock wheel doesn't recognise at the
-endpoint comparison step. Per Appendix E §"Hand-decodability with
-the codex32 volvelle", this can be worked around by printing a
-small target-residue card and doing the final XOR manually.
+The v0.1 wheels under `docs/volvelles/` compress the bottom disc's
+32×32 cell grid via TikZ `scale=0.31` so the wheel fits letter
+paper. This yields ~0.108" effective cell pitch, well below the
+original codex32 volvelle spec's 0.35" minimum. Cells are
+technically printable but require fine motor skill to scissor-cut
+accurately. Acceptable for a v0.1 reference deliverable; not for
+production hand-operation.
 
-A more elegant solution would be to publish **HRP-specific
-volvelles per card type** — physically the same wheel as the
-stock codex32 volvelle (same generator polynomial, same field
-arithmetic), but with the endpoint marks shifted to land on the
-mk1 or md1 target residues for a valid string.
+**v0.2 fix.** Redesign the bottom disc for tabloid-or-larger paper
+size, or adopt a different state-encoding convention that doesn't
+require a 32×32 cell grid at all (e.g., factor the state into two
+smaller wheels). The choice depends on whether wheel-pair-per-card
+operation is acceptable; if not, tabloid is the simpler path.
 
-**Why it matters.** The constellation's hand-recovery story is
-currently graded — ms1 fully volvelle-decodable, mk1/md1 partially.
-A custom volvelle per card would restore the all-on-the-wheel
-property for the public cards too, supporting the "no electronics
-needed at restoration time" use case end-to-end.
+**Where:** `docs/volvelles/{mk-regular,mk-long,md-regular}.tex`.
 
-**Where to ship.** A `volvelles/` directory in the toolkit (or
-sibling) repo with three printable PDFs (mk1-regular, mk1-long,
-md1-regular). Long-code wheels are larger but follow the same
-template. The PDFs would carry an MIT dedication matching the toolkit
-project license.
+### `bottom-disc-registration-tick-radius` — v0.2 candidate
 
-**Dependencies.** None — purely a graphic-design / print-layout
-deliverable. Could be done by anyone with TikZ / Inkscape capability
-and no Rust experience.
+The v0.1 wheels' registration alignment ticks render at radius
+`3.65–3.85in` in unscaled TikZ coordinates; under the
+letter-paper `scale=0.31` they land in the disc interior
+(~1.13–1.19" from center) instead of at the outer rim where they
+would be most useful for visual alignment verification.
+
+**v0.2 fix.** Move the registration ticks outside the cell grid
+so they sit at the disc's outer rim post-scaling. Requires either
+re-parameterizing the tick radii against the bottom-disc outer
+boundary or reflowing the layout once `bottom-disc-cell-density`
+is addressed (the two FOLLOWUPS interact).
+
+**Where:** `docs/volvelles/{mk-regular,mk-long,md-regular}.tex`,
+the registration-tick block.
 
 ### `bch-string-length-empirical-sweep` — v0.2 candidate
 
@@ -235,3 +237,22 @@ definition to remove the `sparrow` / `specter` choices entirely.
 Fix: added `commandchars=\\\{\},` as the first option in `\DefineVerbatimEnvironment{Highlighting}{Verbatim}{...}`. Verified post-fix: `pdftotext` on the rebuilt PDF returns zero `*Tok` raw-text leaks; rendered code blocks now show clean syntax-highlighted output. Manual PDF page count dropped 129pp → 121pp (the leaked macro names had been bloating the layout).
 
 ### `cspell-dictionary-curation` — closed by v0.1 cycle
+
+### `custom-volvelles-per-card-type` — closed by volvelle-v0.1.0
+
+**Filed:** v0.1 cycle (manual Appendix E §"Hand-decodability with the codex32 volvelle")
+**Resolved:** 2026-05-08 (volvelle-v0.1.0 release)
+
+`docs/volvelles/{mk-regular,mk-long,md-regular}.pdf` ship as
+first-cut HRP-specific wheels for the m-format constellation
+NUMS-derived BCH residues — physically the same generator-polynomial
+and field-arithmetic geometry as the stock codex32 volvelle, with
+the endpoint marks shifted to land on `MK_REGULAR_CONST`,
+`MK_LONG_CONST`, and `MD_REGULAR_CONST` respectively. Appendix E
+now cross-links these from the §"Hand-decodability" subsection.
+
+**Carry-overs to v0.2.** Hand-decoding ergonomics are not yet
+production-grade at letter-paper size; see
+`bottom-disc-cell-density` and
+`bottom-disc-registration-tick-radius` above for the open
+ergonomics work. The v0.1 deliverable is a reference / first-cut.

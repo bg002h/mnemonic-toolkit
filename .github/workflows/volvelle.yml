@@ -1,0 +1,149 @@
+name: volvelle
+
+# `paths` filters apply only to PRs; tag pushes matching `volvelle-v*`
+# always trigger the workflow regardless of which files changed in the
+# tag commit. This is intentional — the release-asset upload step needs
+# to run on every tag push.
+#
+# Recurring apt-get hang on GH-runners: precedent from manual.yml /
+# quickstart.yml. If the texlive install step hangs, recovery path is
+# `gh run cancel <id>` then `gh run rerun <id>`.
+
+on:
+  push:
+    tags:
+      - 'volvelle-v*'
+  pull_request:
+    paths:
+      - 'docs/volvelles/**'
+      - 'docs/tools/make-volvelle-data.py'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # --------------------------------------------------------------
+      # Sibling repo checkouts.
+      #
+      # The verify crate at docs/volvelles/verify/ path-deps into
+      # sibling repos:
+      #   mk-codec = { path = "../../../../mnemonic-key/crates/mk-codec" }
+      #   md-codec = { path = "../../../../descriptor-mnemonic/crates/md-codec" }
+      #
+      # On a single-repo CI clone these don't exist by default. We
+      # mirror the on-disk layout used during local development by
+      # checking out each sibling into a parent-relative path so
+      # `path = "../../../../<repo>/..."` resolves correctly.
+      #
+      # Layout produced (relative to $GITHUB_WORKSPACE root):
+      #   mnemonic-toolkit/      <- this checkout
+      #   mnemonic-key/          <- sibling
+      #   descriptor-mnemonic/   <- sibling
+      # --------------------------------------------------------------
+      - name: Checkout mnemonic-toolkit
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          path: mnemonic-toolkit
+          fetch-depth: 0
+
+      - name: Checkout mnemonic-key (sibling, for verify-crate path-dep)
+        uses: actions/checkout@v4
+        with:
+          repository: bg002h/mnemonic-key
+          submodules: false
+          path: mnemonic-key
+
+      - name: Checkout descriptor-mnemonic (sibling, for verify-crate path-dep)
+        uses: actions/checkout@v4
+        with:
+          repository: bg002h/descriptor-mnemonic
+          submodules: false
+          path: descriptor-mnemonic
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mnemonic-toolkit/docs/volvelles/verify
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install TeX Live
+        # Recurring apt-get hang on GH-runners is recoverable via
+        # `gh run cancel <id>` + `gh run rerun <id>`. See workflow
+        # header comment for context.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-xetex \
+            texlive-latex-recommended \
+            texlive-pictures \
+            texlive-fonts-recommended \
+            make
+
+      - name: Run drift gate (verify crate -> bch-params.toml -> Python --check-only)
+        working-directory: mnemonic-toolkit
+        run: |
+          (cd docs/volvelles/verify && cargo run --bin print-constants > ../bch-params.toml)
+          python3 docs/tools/make-volvelle-data.py --params docs/volvelles/bch-params.toml --check-only
+
+      - name: Build wheel PDFs
+        working-directory: mnemonic-toolkit
+        run: make -C docs/volvelles pdf
+
+      - name: Verify PDFs exist
+        working-directory: mnemonic-toolkit
+        run: |
+          ls -lh docs/volvelles/build/mk-regular.pdf
+          ls -lh docs/volvelles/build/mk-long.pdf
+          ls -lh docs/volvelles/build/md-regular.pdf
+
+      - name: Upload PDFs as workflow artifacts (PR review)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: volvelle-wheels-pdf
+          path: |
+            mnemonic-toolkit/docs/volvelles/build/mk-regular.pdf
+            mnemonic-toolkit/docs/volvelles/build/mk-long.pdf
+            mnemonic-toolkit/docs/volvelles/build/md-regular.pdf
+
+      - name: Promote PDFs to release-source path
+        # Ensures the uploaded PDFs match freshly-rebuilt ones from this
+        # CI run (not the committed copies, which could go stale if the
+        # author forgot to re-attach before tagging).
+        if: startsWith(github.ref, 'refs/tags/volvelle-v')
+        working-directory: mnemonic-toolkit
+        run: make -C docs/volvelles release-attach
+
+      - name: Ensure GitHub release exists for this tag
+        if: startsWith(github.ref, 'refs/tags/volvelle-v')
+        working-directory: mnemonic-toolkit
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+            gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+          fi
+
+      - name: Upload PDFs to release (on volvelle-v* tag)
+        if: startsWith(github.ref, 'refs/tags/volvelle-v')
+        working-directory: mnemonic-toolkit
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          gh release upload "$REF_NAME" \
+            docs/volvelles/mk-regular.pdf \
+            docs/volvelles/mk-long.pdf \
+            docs/volvelles/md-regular.pdf \
+            --clobber
