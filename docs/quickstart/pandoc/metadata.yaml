@@ -1,0 +1,23 @@
+---
+title: "m-format Quick Start"
+subtitle: "Engrave your first 3-card backup in 90 minutes"
+author:
+  - "bg002h"
+date: \today
+lang: en-US
+documentclass: book
+classoption:
+  - oneside
+  - 11pt
+mainfont: "DejaVu Serif"
+sansfont: "DejaVu Sans"
+monofont: "DejaVu Sans Mono"
+fontsize: 11pt
+geometry:
+  - margin=1in
+papersize: letter
+linkcolor: blue!60!black
+urlcolor: blue!60!black
+rights: "CC0 1.0 Universal (Public Domain Dedication)"
+copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+...
