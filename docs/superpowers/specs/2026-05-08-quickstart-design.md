@@ -85,7 +85,7 @@ mnemonic-toolkit/docs/quickstart/
 
 **Symlink rationale.** Linux/Mac default; Windows requires `core.symlinks=true`. Documented in `README.md`. Local + CI both run on Linux, so this is operational not blocking. Updates to symlinked configs (markdownlint, puppeteer, Dockerfile, filters) propagate to QuickStart automatically.
 
-**`.cspell.json` is a *local* file (not symlink).** Per architect review C-1: the QuickStart needs its own extension point for newcomer-voice vocabulary that the manual doesn't carry. cspell's `extends` key (supported since v6) lets the local file inherit the full manual word list while adding QuickStart-specific words without mutating the manual's config (which would trigger `manual.yml` CI on a `docs/manual/**` touch).
+**`.cspell.json` is a *local* file (not symlink).** Per architect review C-1: the QuickStart needs its own extension point for newcomer-voice vocabulary that the manual doesn't carry. cspell's `extends` key (supported since v6) lets the local file inherit the full manual word list while adding QuickStart-specific words without mutating the manual's config (which would trigger `manual.yml` CI on a `docs/manual/**` touch). cspell resolves `extends` relative to the config file's location (not the invocation CWD), so `../manual/.cspell.json` is stable regardless of where cspell is invoked. (If Phase-0 verification reveals different semantics, fall back to an absolute path or a repo-root `cspell.config.yaml` that imports both — see review-r2 I-R1.)
 
 **Why mermaid is *not* shared.** Mermaid blocks for the QuickStart's newcomer audience may want different colours, simpler labels, or trimmed nodes. Copy-pasting respects that. Drift cost is bounded — both copies are visible in `git grep '^```mermaid'`.
 
@@ -150,7 +150,7 @@ Cloned from `docs/manual/Makefile`. Differences:
 | Check | Source |
 |---|---|
 | markdownlint-cli2 | symlinked `.markdownlint-cli2.jsonc` |
-| cspell | symlinked `.cspell.json` |
+| cspell | local `.cspell.json` (extends manual's via cspell `extends` key) |
 | lychee `--offline` | host-installed (CI installs in workflow) |
 
 Drops: glossary-coverage (no formal glossary), flag-coverage (no CLI ref part), index-bidirectional (no `\index{}` markers).
@@ -190,7 +190,7 @@ Same install steps (apt pandoc + texlive + chromium-browser; npm tools; lychee t
 
 ### 6.4 Tag schedule
 
-- `quickstart-v0.1.0-rc1` — A10b smoke test (verify upload, then delete tag + release: `git tag -d quickstart-v0.1.0-rc1 && git push origin :quickstart-v0.1.0-rc1&& gh release delete quickstart-v0.1.0-rc1 --yes`).
+- `quickstart-v0.1.0-rc1` — A10b smoke test (verify upload, then delete tag + release: `git tag -d quickstart-v0.1.0-rc1 && git push origin :quickstart-v0.1.0-rc1 && gh release delete quickstart-v0.1.0-rc1 --yes`).
 - `quickstart-v0.1.0` — final tag.
 - Independent of manual's `manual-v*` tags.
 
