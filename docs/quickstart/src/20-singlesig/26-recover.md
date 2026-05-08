@@ -1,13 +1,13 @@
 # Recovering from the plates
 
-Recovery is the inverse of [Producing your first bundle](#producing-your-first-bundle):
+Recovery is the inverse of [Producing your first bundle](23-bundle.md):
 read the cards off the engraved plates and reconstruct what you
 need to spend or watch the wallet. Three commands, one per card.
 
 ## What you have, what you want
 
 In hand: three engraved plates with the card strings from
-[Producing your first bundle](#producing-your-first-bundle).
+[Producing your first bundle](23-bundle.md).
 Wanted:
 
 - the seed phrase (to sign spends),
@@ -87,15 +87,15 @@ with `<0;1>` covering the external-and-change descriptor pair.
 
 You now have everything a watch-only wallet needs (xpub, path,
 fingerprint, template) and everything a signer needs (the
-phrase). Re-running [`mnemonic verify-bundle`](#verifying-the-bundle)
+phrase). Re-running [`mnemonic verify-bundle`](24-verify.md)
 with the recovered values is a useful final sanity check — it
 exercises the same `policy_id_stub` cross-binding as the original
 verification and confirms the three plates still belong together.
 
 If verification passes, import the phrase into your signing wallet
 and the xpub-plus-policy into your watch-only wallet of choice.
-[Part IV — watch-only](#part-iv-watch-only) covers the import
-shapes for Bitcoin Core, Sparrow, and Specter.
+[Part IV — watch-only](../40-watch-only/41-singlesig-watch-only.md)
+covers the import shapes for Bitcoin Core, Sparrow, and Specter.
 
 For multisig (a 2-of-3 wallet built from three independent
-cosigners), continue with [Part III — multisig](#part-iii-multisig).
+cosigners), continue with [Part III — multisig](../30-multisig/31-why-multisig.md).

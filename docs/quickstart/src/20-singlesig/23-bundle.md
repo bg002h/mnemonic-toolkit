@@ -29,7 +29,7 @@ Three flags carry the work:
   multisig walkthrough in Part III uses `@0`, `@1`, `@2`.
 
 For a real bundle, replace the canonical phrase with the one you
-generated in [Generating entropy safely](#generating-entropy-safely).
+generated in [Generating entropy safely](22-generate-entropy.md).
 
 ## Output
 
@@ -99,7 +99,7 @@ from it.
 
 The toolkit also emits an *engraving-card* layout to stderr — a
 visual aid showing where each chunk goes on the physical plate.
-The cards covered in Part II ([Stamping the steel plates](#stamping-the-steel-plates))
+The cards covered in Part II ([Stamping the steel plates](25-stamp.md))
 walk through using the layout when transferring strings to steel.
 Pass `--no-engraving-card` to suppress the stderr emission if you
 don't want it.

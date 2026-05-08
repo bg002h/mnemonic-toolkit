@@ -2,7 +2,8 @@
 
 Engraving turns three card strings on a screen into three steel
 plates that survive fire, flood, and time. The discipline is
-short: stamp one plate, re-decode it, then move on.
+short: stamp all three plates, then re-decode them as a set
+through `mnemonic verify-bundle`.
 
 ## Ceremony at a glance
 
@@ -36,13 +37,14 @@ The chapters before this one cover the first three boxes
   characters (no `0`/`O`, no `1`/`l`), but stamping artefacts can
   still mimic the wrong character at a glance. A 5x loupe pays for
   itself the first time it catches a misaligned strike.
-- **Re-decode after each plate.** Don't trust your own typing or
-  your own striking. After each plate is stamped, read the
-  characters off the steel and run `mnemonic verify-bundle` with
-  the just-stamped strings. If `result: ok`, that plate is done; if
-  a sub-check fails (e.g. `mk1_decode: error at position 47`), the
-  diagnostic names the position so you know which character to
-  inspect.
+- **Re-decode the set after stamping.** Don't trust your own typing
+  or your own striking. Once all three plates are stamped, read the
+  characters off each plate and run `mnemonic verify-bundle` with
+  the steel-read strings (same `--ms1`/`--mk1`/`--md1` shape as
+  chapter 24). If `result: ok`, the set is engraved correctly; if a
+  sub-check fails (e.g., `mk1_decode: error at position 47`), the
+  diagnostic names the card and the character position so you know
+  which plate to re-strike.
 
 ## Where each plate goes
 
