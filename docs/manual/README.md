@@ -69,5 +69,4 @@ reader.
 
 ## License
 
-CC0 1.0 Universal (Creative Commons Public Domain Dedication). See
-[`../../LICENSE`](../../LICENSE).
+MIT License. See [`../../LICENSE`](../../LICENSE).

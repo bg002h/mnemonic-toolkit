@@ -18,6 +18,6 @@ geometry:
 papersize: letter
 linkcolor: blue!60!black
 urlcolor: blue!60!black
-rights: "CC0 1.0 Universal (Public Domain Dedication)"
-copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+rights: "MIT License"
+copyright: "Copyright (c) 2026 Brian Goss — MIT License; see LICENSE in the source tree."
 ...

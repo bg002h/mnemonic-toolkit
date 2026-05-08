@@ -35,12 +35,12 @@ keywords:
   - codex32
   - mnemonic
   - steel-engraving
-rights: "CC0 1.0 Universal (Public Domain Dedication)"
+rights: "MIT License"
 # Note: per-package `\usepackage{...}` and `\makeindex` directives are
 # loaded from `pandoc/preamble.tex` via the build's `-H preamble.tex`
 # flag — pandoc's metadata `header-includes:` mechanism (whether YAML
 # list or `|` literal) does not reliably round-trip raw LaTeX in 3.x
 # unless you wrap each item with a `{=latex}` raw block, which is
 # brittle. preamble.tex is the single load site.
-copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+copyright: "Copyright (c) 2026 Brian Goss — MIT License; see LICENSE in the source tree."
 ...

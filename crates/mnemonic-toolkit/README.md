@@ -185,4 +185,4 @@ mnemonic derive-child --from "xprv=xprv9s21..." \
 
 ## License
 
-CC0 1.0 Universal.
+MIT License.
