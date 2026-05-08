@@ -50,8 +50,12 @@
 % Loaded here too. `-H preamble.tex` lands in `$for(header-includes)$`,
 % which precedes `$highlighting-macros$` in pandoc's template — so this
 % \DefineVerbatimEnvironment runs early enough to be authoritative.
+% `commandchars=\\\{\}` is required for pandoc's syntax-highlighting
+% commands (\ExtensionTok, \NormalTok, \AttributeTok, etc.) to expand
+% inside the Verbatim environment; without it they render as literal text.
 \usepackage{fvextra}
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+  commandchars=\\\{\},
   breaklines,
   breakanywhere,
   fontsize=\footnotesize,

@@ -108,4 +108,13 @@ definition to remove the `sparrow` / `specter` choices entirely.
 
 ## Closed
 
+### `pandoc-highlighting-macros-leaked-to-pdf` — closed by manual-v0.1.1
+
+**Filed:** 2026-05-08 (user-reported)
+**Resolved:** 2026-05-08 (manual-v0.1.1 patch release)
+
+`pandoc/preamble.tex` redefined the `Highlighting` Verbatim environment without `commandchars=\\\{\}`. Pandoc's syntax-highlighting commands (`\ExtensionTok`, `\NormalTok`, `\AttributeTok`, `\DataTypeTok`, `\OperatorTok`, etc.) require commandchars on the Verbatim environment to expand inside the block; without it, they ship to the PDF as literal text (visible e.g. inside the watch-only multisig command in chapter 32 and the BIP-32 primer in chapter 63 of the published `manual-v0.1.0` PDF).
+
+Fix: added `commandchars=\\\{\},` as the first option in `\DefineVerbatimEnvironment{Highlighting}{Verbatim}{...}`. Verified post-fix: `pdftotext` on the rebuilt PDF returns zero `*Tok` raw-text leaks; rendered code blocks now show clean syntax-highlighted output. Manual PDF page count dropped 129pp → 121pp (the leaked macro names had been bloating the layout).
+
 ### `cspell-dictionary-curation` — closed by v0.1 cycle
