@@ -110,9 +110,12 @@ or pipe through `age -e` to encrypt at rest.
 
 The companion `mnemonic verify-bundle` step (mirroring
 [chapter 24](../20-singlesig/24-verify.md)) takes the same four
-flags plus three `--ms1`, six `--mk1` (two per cosigner × 3), and
-four `--md1` repetitions to confirm the seven cards round-trip
-against the three seeds. Run it before stamping any plate.
+re-derivation flags plus one repetition per *string* in the
+output: three `--ms1` (3 cosigner secrets, 1 string each), six
+`--mk1` (3 mk1 cards, 2 strings each), and four `--md1` (1 md1
+card, ~4 strings for the longer wsh-sortedmulti descriptor). The
+flag-count tracks the chunked-string emission, not the seven-plate
+card count.
 
 The full air-gapped variant — where each cosigner produces their
 own ms1 + xpub locally and the coordinator only ever sees public
