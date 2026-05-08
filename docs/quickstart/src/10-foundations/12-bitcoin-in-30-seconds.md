@@ -9,9 +9,9 @@ encodes all three.
 
 A seed phrase is a sequence of 12 to 24 English words that encodes
 a random secret. The standard for this encoding is **BIP-39**:
-roughly, you pick 128 or 256 random bits, append a short checksum,
-and slice the result into 11-bit chunks that index into a fixed
-2048-word list. Almost every Bitcoin wallet today understands
+roughly, you pick 128 or 256 random bits, compute a short checksum
+of them, append it, and slice the combined bitstream into 11-bit
+chunks that index into a fixed 2048-word list. Almost every Bitcoin wallet today understands
 BIP-39 phrases. The seed phrase is the only thing you actually
 need to keep secret — every key in your wallet derives from it.
 

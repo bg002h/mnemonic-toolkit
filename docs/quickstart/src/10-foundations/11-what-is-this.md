@@ -25,7 +25,7 @@ checksummed cards**, each engraved on its own steel plate:
 
 Each card has its own error-correcting checksum, so a stamping
 mistake is detectable and locatable. A fourth piece — the
-`mnemonic-toolkit` command-line tool — synthesises all three from
+`mnemonic-toolkit` command-line tool — synthesizes all three from
 your inputs and verifies they belong together.
 
 ## The four pieces

@@ -51,11 +51,10 @@ BCH error-correcting checksum, so a stamping mistake is detected
 and located, not silently absorbed.
 
 The toolkit verifies that the three cards belong together via a
-small fingerprint called the **policy ID stub**: a 4-byte hash
-derived from the wallet policy that every `mk1` and `md1` card in
-a coherent bundle carries identically. If you mix cards from
-different wallets, the stubs disagree and `mnemonic verify-bundle`
-fails fast.
+small fingerprint called the **policy ID stub**: a 4-byte hash of
+the wallet policy that each `mk1` and `md1` card carries at encode
+time, so mixing cards from different wallets is caught immediately.
+If the stubs disagree, `mnemonic verify-bundle` fails fast.
 
 Onward: install the toolkit and produce your first single-sig
 bundle.
