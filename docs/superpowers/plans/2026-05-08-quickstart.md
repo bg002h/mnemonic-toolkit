@@ -126,12 +126,15 @@ Expected: cspell version string, exit 0.
 
 ```bash
 echo "The mdframed example." > /tmp/cspell-test.md
-cspell --config docs/quickstart/.cspell.json --no-progress --no-summary /tmp/cspell-test.md
+cspell --config docs/quickstart/.cspell.json --no-progress /tmp/cspell-test.md
+echo "exit $? — expected 0 (mdframed inherited from manual word list)"
 ```
 
-Expected: `Issues found: 0 in 0 files.` (proving `mdframed` was inherited from manual's word list via `extends`).
+Expected: `cspell` exits 0 (no issues — `mdframed` is in the manual's word list and inherited via `extends`).
 
-If `Issues found: 1 in 1 files.` (i.e., `mdframed` flagged unknown) → `extends` is not resolving. Fall back to absolute path: change `"extends": "../manual/.cspell.json"` to `"extends": "/scratch/code/shibboleth/mnemonic-toolkit/docs/manual/.cspell.json"` and re-test. If still broken, file an issue and try `cspell.config.yaml` at repo root.
+If exit 1 (i.e., `mdframed` flagged unknown) → `extends` is not resolving. Fall back to absolute path: change `"extends": "../manual/.cspell.json"` to `"extends": "/scratch/code/shibboleth/mnemonic-toolkit/docs/manual/.cspell.json"` and re-test. If still broken, file an issue and try `cspell.config.yaml` at repo root.
+
+(Per plan-review I-1: dropped `--no-summary` so cspell still emits the issues-count line in the failure case; pass criterion is exit code, not a specific output string.)
 
 ### Task 0.4: Create local trimmed `tests/lint.sh`
 
@@ -224,32 +227,35 @@ cat docs/manual/pandoc/preamble.tex
 
 - Create: `docs/quickstart/pandoc/metadata.yaml`
 
-- [ ] **Step 1:** Write the file:
+- [ ] **Step 1:** Write the file (per plan-review C-1: NO `header-includes:` block — pandoc 3.x does not reliably round-trip raw LaTeX from YAML, and `preamble.tex` is the single load site for `\usepackage{...}` and verbatim-env definitions; see `docs/manual/pandoc/metadata.yaml:38-45` for the canonical rationale):
 
 ```yaml
+---
 title: "m-format Quick Start"
 subtitle: "Engrave your first 3-card backup in 90 minutes"
-author: "bg002h"
-date: ""
+author:
+  - "bg002h"
+date: \today
+lang: en-US
 documentclass: book
 classoption:
   - oneside
+  - 11pt
 mainfont: "DejaVu Serif"
 sansfont: "DejaVu Sans"
 monofont: "DejaVu Sans Mono"
 fontsize: 11pt
 geometry:
   - margin=1in
-colorlinks: true
-linkcolor: NavyBlue
-urlcolor: NavyBlue
-toccolor: black
-header-includes:
-  - \usepackage{fvextra}
-  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\footnotesize}
+papersize: letter
+linkcolor: blue!60!black
+urlcolor: blue!60!black
+rights: "CC0 1.0 Universal (Public Domain Dedication)"
+copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+...
 ```
 
-(Note: no `\usepackage{makeidx}` or `\makeindex` in `header-includes` — the no-index decision per spec I-1.)
+All LaTeX-package and verbatim-environment setup lives in `preamble.tex` (Task 0.5), which the Makefile loads via `-H preamble.tex`. Do NOT add `\usepackage{...}` or `\DefineVerbatimEnvironment{...}` to `header-includes:` — duplicate definitions cause a fatal LaTeX error.
 
 ### Task 0.7: Create `Makefile` (clone of manual's, with the documented diffs)
 
@@ -305,30 +311,28 @@ Expected: usage / target list output, exit 0.
 
 - Create: 18 stub `.md` files under `docs/quickstart/src/`
 
-- [ ] **Step 1:** Create each stub with a single H1 + one-line `(Phase N — to be authored.)` body. Mapping:
+- [ ] **Step 1:** Create each stub with a single H1 + the literal one-line body shown in the Body column. Per plan-review C-3 + M-4: the Phase digit is concrete per file; the build-banner stub explicitly carries a do-not-author marker.
 
-| File | H1 |
-|---|---|
-| `src/00-frontmatter.md` | `# About this Quick Start` |
-| `src/10-foundations/11-what-is-this.md` | `# What you're building` |
-| `src/10-foundations/12-bitcoin-in-30-seconds.md` | `# Bitcoin in 30 seconds` |
-| `src/10-foundations/13-the-three-cards.md` | `# The three cards: ms1, mk1, md1` |
-| `src/20-singlesig/21-install.md` | `# Install the toolkit` |
-| `src/20-singlesig/22-generate-entropy.md` | `# Generating entropy safely` |
-| `src/20-singlesig/23-bundle.md` | `# Producing your first bundle` |
-| `src/20-singlesig/24-verify.md` | `# Verifying the bundle` |
-| `src/20-singlesig/25-stamp.md` | `# Stamping the steel plates` |
-| `src/20-singlesig/26-recover.md` | `# Recovering from the plates` |
-| `src/30-multisig/31-why-multisig.md` | `# Why multisig` |
-| `src/30-multisig/32-bundle.md` | `# Producing a 2-of-3 bundle` |
-| `src/30-multisig/33-stamp-and-recover.md` | `# Stamping and recovering a 2-of-3 wallet` |
-| `src/40-watch-only/41-singlesig-watch-only.md` | `# Watch-only single-sig` |
-| `src/40-watch-only/42-multisig-watch-only.md` | `# Watch-only multisig (air-gapped)` |
-| `src/50-next-steps/51-where-to-go.md` | `# Where to go from here` |
-| `src/50-next-steps/52-troubleshooting.md` | `# Troubleshooting` |
-| `src/99-build-banner.md` | `# Build banner` |
-
-Each file body: `(Phase N — to be authored.)\n` (one line plus trailing newline).
+| File | H1 | Body |
+|---|---|---|
+| `src/00-frontmatter.md` | `# About this Quick Start` | `(Phase 1 — to be authored.)` |
+| `src/10-foundations/11-what-is-this.md` | `# What you're building` | `(Phase 1 — to be authored.)` |
+| `src/10-foundations/12-bitcoin-in-30-seconds.md` | `# Bitcoin in 30 seconds` | `(Phase 1 — to be authored.)` |
+| `src/10-foundations/13-the-three-cards.md` | `# The three cards: ms1, mk1, md1` | `(Phase 1 — to be authored.)` |
+| `src/20-singlesig/21-install.md` | `# Install the toolkit` | `(Phase 2 — to be authored.)` |
+| `src/20-singlesig/22-generate-entropy.md` | `# Generating entropy safely` | `(Phase 2 — to be authored.)` |
+| `src/20-singlesig/23-bundle.md` | `# Producing your first bundle` | `(Phase 2 — to be authored.)` |
+| `src/20-singlesig/24-verify.md` | `# Verifying the bundle` | `(Phase 2 — to be authored.)` |
+| `src/20-singlesig/25-stamp.md` | `# Stamping the steel plates` | `(Phase 2 — to be authored.)` |
+| `src/20-singlesig/26-recover.md` | `# Recovering from the plates` | `(Phase 2 — to be authored.)` |
+| `src/30-multisig/31-why-multisig.md` | `# Why multisig` | `(Phase 3 — to be authored.)` |
+| `src/30-multisig/32-bundle.md` | `# Producing a 2-of-3 bundle` | `(Phase 3 — to be authored.)` |
+| `src/30-multisig/33-stamp-and-recover.md` | `# Stamping and recovering a 2-of-3 wallet` | `(Phase 3 — to be authored.)` |
+| `src/40-watch-only/41-singlesig-watch-only.md` | `# Watch-only single-sig` | `(Phase 4 — to be authored.)` |
+| `src/40-watch-only/42-multisig-watch-only.md` | `# Watch-only multisig (air-gapped)` | `(Phase 4 — to be authored.)` |
+| `src/50-next-steps/51-where-to-go.md` | `# Where to go from here` | `(Phase 4 — to be authored.)` |
+| `src/50-next-steps/52-troubleshooting.md` | `# Troubleshooting` | `(Phase 4 — to be authored.)` |
+| `src/99-build-banner.md` | `# Build banner` | `(Makefile-managed — do not author.)` |
 
 ### Task 0.9: Create README.md, FOLLOWUPS.md
 
@@ -389,14 +393,43 @@ Manual-local deferred-work tracker. Closes lockstep with QuickStart release cade
 cat .github/workflows/manual.yml
 ```
 
-- [ ] **Step 2:** Write `.github/workflows/quickstart.yml` with these diffs:
+- [ ] **Step 2:** Write `.github/workflows/quickstart.yml` with these diffs from `manual.yml`:
     - Top-of-file comment carried verbatim about `paths` filters not applying to tags
     - `paths: docs/quickstart/**` (push) instead of `docs/manual/**`
     - `paths: docs/quickstart/**, docs/manual/.markdownlint-cli2.jsonc, docs/manual/pandoc/filters/**` (pull_request) — the cross-paths set per spec I-2
-    - `tags: quickstart-v*`
-    - `working-directory: docs/quickstart` (host-build steps only)
+    - `tags: quickstart-v*` instead of `manual-v*`
+    - `working-directory: docs/quickstart` for host-build steps (lint, build PDF, asset-upload)
     - Asset path `build/m-format-quickstart.pdf`
-    - Same install steps + puppeteer-config write step + ensure-release-exists step
+    - **`if:` conditions on tag-only steps:** every `if: startsWith(github.ref, 'refs/tags/manual-v')` from the manual.yml clone becomes `if: startsWith(github.ref, 'refs/tags/quickstart-v')` (per plan-review C-2).
+
+    The three CI steps that the manual.yml clone leaves implicit — must be explicit per plan-review C-2:
+
+    ```yaml
+    - name: Write puppeteer config (no-sandbox; CI Chromium needs this for mermaid-filter)
+      run: |
+        sudo tee /etc/puppeteer-config.json >/dev/null <<'EOF'
+        { "args": ["--no-sandbox", "--disable-setuid-sandbox"] }
+        EOF
+    ```
+
+    ```yaml
+    - name: Build PDF
+      working-directory: docs/quickstart
+      run: make pdf MERMAID_FILTER=on
+    ```
+
+    ```yaml
+    - name: Ensure GitHub release exists for this tag
+      if: startsWith(github.ref, 'refs/tags/quickstart-v')
+      env:
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+          gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+        fi
+    ```
+
+    Per plan-review M-1: `DOCKER_IMAGE` is Makefile-local. CI uses host `make pdf`, never `make pdf-docker`. No CI env var needed for it.
 
 ### Task 0.11: Smoke-test the scaffolding
 
@@ -417,16 +450,24 @@ make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true
 
 Expected: `[lint] OK` (3/3 checks pass).
 
-- [ ] **Step 3:** Run verify-examples:
+- [ ] **Step 3:** Verify transcript count (per plan-review I-3 — make this dynamic):
 
 ```bash
+N=$(ls docs/quickstart/transcripts/*.cmd | wc -l)
+echo "transcripts: $N"
+```
+
+Then run verify-examples:
+
+```bash
+cd docs/quickstart  # if not already there
 make verify-examples \
   MNEMONIC_BIN=/scratch/code/shibboleth/mnemonic-toolkit/target/release/mnemonic \
   MD_BIN=/scratch/code/shibboleth/descriptor-mnemonic/target/release/md \
   MS_BIN=/scratch/code/shibboleth/mnemonic-secret/target/release/ms
 ```
 
-Expected: `OK (5 transcripts pass)` (consuming the symlinked transcripts/ dir).
+Expected: `OK (N transcripts pass)` where N matches the count from the first command (5 as of `manual-v0.1.0`; may grow if the manual adds transcripts).
 
 - [ ] **Step 4:** Stage all and commit Phase 0:
 
@@ -740,9 +781,32 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ### Task 3.4: Lint, commit, reviewer round
 
-- [ ] **Step 1-2:** lint + commit (per Task 1.5 / 2.7).
+- [ ] **Step 1:** Run lint + verify-examples + PDF build (per Task 2.7 step 1-2). PDF should now be ~25-29 pages.
 
-- [ ] **Step 3:** Dispatch reviewer; persist to `phase-3-review-1.md`; apply 0C/0I.
+- [ ] **Step 2:** Stage explicitly + commit:
+
+```bash
+cd ../..
+git add docs/quickstart/src/30-multisig/ docs/quickstart/.cspell.json
+git commit -m "docs(quickstart): Phase 3 — Part III multisig (3 chapters)
+
+Authors:
+- 31-why-multisig.md (single-sig vs multisig framing)
+- 32-bundle.md (2-of-3 wsh-sortedmulti walkthrough; 3-cosigner mermaid)
+- 33-stamp-and-recover.md (per-cosigner plate set; recovery quick-table)
+
+cspell additions: <list>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3:** Dispatch `feature-dev:code-reviewer` on Part III. Reviewer prompt focus:
+    - 2-of-3 multisig command flags accurate against `cli-help/mnemonic-bundle.txt`
+    - Newcomer voice + DANGER box re-authored
+    - 3-cosigner mermaid present and labelled accurately
+    - Recovery table cells match Bitcoin reality (e.g., "1 ms1 + md1" → watch-only only)
+
+- [ ] **Step 4:** Persist report to `docs/quickstart/agent-reports/phase-3-review-1.md`; apply 0C/0I findings; iterate if needed.
 
 ---
 
@@ -809,7 +873,33 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ### Task 4.5: Lint, commit, reviewer round
 
-- [ ] **Step 1-3:** lint + commit + reviewer; persist to `phase-4-review-1.md`; apply 0C/0I.
+- [ ] **Step 1:** Run lint + verify-examples + PDF build (per Task 2.7 step 1-2). PDF should now be ~30-34 pages.
+
+- [ ] **Step 2:** Stage explicitly + commit:
+
+```bash
+cd ../..
+git add docs/quickstart/src/40-watch-only/ docs/quickstart/src/50-next-steps/ docs/quickstart/.cspell.json
+git commit -m "docs(quickstart): Phase 4 — Parts IV+V (4 chapters)
+
+Authors:
+- 41-singlesig-watch-only.md (2-card watch-only bundle from phrase)
+- 42-multisig-watch-only.md (air-gapped multisig coordinator flow; mermaid)
+- 51-where-to-go.md (topic-keyed pointers to reference manual)
+- 52-troubleshooting.md (5 most common newcomer issues; subset of manual ch 67)
+
+cspell additions: <list>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3:** Dispatch `feature-dev:code-reviewer` on Parts IV + V. Reviewer prompt focus:
+    - Watch-only commands match v0.8 toolkit (`mnemonic convert --from phrase=... --to xpub`, then `mnemonic bundle --slot @0.xpub=...`)
+    - Air-gapped multisig mermaid correctly shows xpubs (not phrases) crossing the coordinator boundary
+    - Forward-pointers in 51-where-to-go resolve to the manual's actual chapter slugs
+    - Troubleshooting table fixes are correct against v0.8 (sparrow/specter stub deferral, not a real format)
+
+- [ ] **Step 4:** Persist report to `docs/quickstart/agent-reports/phase-4-review-1.md`; apply 0C/0I findings; iterate if needed.
 
 ---
 
@@ -827,7 +917,21 @@ pdfinfo build/m-format-quickstart.pdf | grep Pages
 
 Expected: 25-40 pages (Q2 acceptance criterion). If outside band, file in FOLLOWUPS or trim.
 
-- [ ] **Step 2:** Run `make lint` + `make verify-examples` with real binaries; both must pass.
+- [ ] **Step 2:** Run `make lint` + `make verify-examples` with real binaries (per plan-review M-3 — show the full invocations):
+
+```bash
+make lint \
+  MNEMONIC_BIN=/scratch/code/shibboleth/mnemonic-toolkit/target/release/mnemonic \
+  MD_BIN=/scratch/code/shibboleth/descriptor-mnemonic/target/release/md \
+  MS_BIN=/scratch/code/shibboleth/mnemonic-secret/target/release/ms
+
+make verify-examples \
+  MNEMONIC_BIN=/scratch/code/shibboleth/mnemonic-toolkit/target/release/mnemonic \
+  MD_BIN=/scratch/code/shibboleth/descriptor-mnemonic/target/release/md \
+  MS_BIN=/scratch/code/shibboleth/mnemonic-secret/target/release/ms
+```
+
+Both must pass.
 
 - [ ] **Step 3:** Dispatch `feature-dev:code-architect` on the integrated QuickStart. Prompt should walk through Q1-Q9 acceptance criteria. Persist report to `docs/quickstart/agent-reports/phase-5-review-1.md`.
 
@@ -880,7 +984,12 @@ gh run list --workflow quickstart.yml --limit 2
 gh run watch <RUN_ID> --exit-status
 ```
 
-Expected: success. If failure, debug per manual cycle's Phase 8 lessons (Docker mount, lychee tarball, mermaid puppeteer config).
+Expected: success. If failure, work through these failure modes in order (per plan-review I-2; mirrors the manual cycle's Phase 8 fix sequence):
+
+1. **Lychee 404s on a URL** → bump `LYCHEE_VERSION` (already `0.24.2` in manual's Dockerfile.build) or add `--exclude <url>` to lychee call. Confirm tarball install uses `--strip-components=1` (already in manual.yml's clone).
+2. **Mermaid Chromium launch failure** ("Failed to launch the browser process! undefined") → confirm the puppeteer-config write step ran and `/etc/puppeteer-config.json` contains `{ "args": ["--no-sandbox", "--disable-setuid-sandbox"] }`. Confirm `docs/quickstart/.puppeteer.json` symlink resolves to manual's. Re-check that the chapter source carries valid mermaid blocks (no syntax errors).
+3. **PDF build errors** (xelatex error 83) → run `make pdf MERMAID_FILTER=on` locally to reproduce; `pdftotext` the failing file or read `m-format-manual.log` for the LaTeX error.
+4. **Release upload fails "release not found"** → confirm the `Ensure GitHub release exists for this tag` step is present in the workflow (manual Phase 8 I-2). Without it, `gh release upload` cannot create the release on a bare tag push.
 
 - [ ] **Step 3:** Verify PDF asset on rc release:
 
