@@ -5,8 +5,8 @@ Bitcoin self-custody backup formats that engrave together as a coherent
 steel-engravable bundle. This manual is the end-user companion to the
 four formats and to the `mnemonic-toolkit` integration tool.
 
-> **CC0 1.0 Universal (Public Domain).** This manual is freely
-> redistributable. See the `LICENSE` file in the source repository.
+> **MIT License.** This manual is freely redistributable under MIT terms.
+> See the `LICENSE` file in the source repository.
 
 This is **manual v0.1**, tracking `mnemonic-toolkit` `main` (initial
 sync targets toolkit `v0.8.0`). The manual is a *living document*: each

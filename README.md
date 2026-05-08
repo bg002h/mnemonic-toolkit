@@ -37,4 +37,4 @@ The three cards engrave together as a coherent backup. Each card is independentl
 
 ## License
 
-CC0 1.0 Universal. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).

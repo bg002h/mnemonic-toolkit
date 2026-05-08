@@ -88,8 +88,8 @@ needed at restoration time" use case end-to-end.
 **Where to ship.** A `volvelles/` directory in the toolkit (or
 sibling) repo with three printable PDFs (mk1-regular, mk1-long,
 md1-regular). Long-code wheels are larger but follow the same
-template. The PDFs would carry a CC0 dedication matching the
-BlockstreamResearch source material.
+template. The PDFs would carry an MIT dedication matching the toolkit
+project license.
 
 **Dependencies.** None — purely a graphic-design / print-layout
 deliverable. Could be done by anyone with TikZ / Inkscape capability
