@@ -93,7 +93,8 @@ $(CELLS_TEX) &: $(PARAMS_TOML) $(HELPER)
 # Order-only `verify` prereq ensures the drift gate runs before xelatex even
 # under parallel make (-j).
 $(BUILD_DIR)/%.pdf: $(VOLVELLES_DIR)/%.tex $(VOLVELLES_DIR)/%.cells.tex | verify $(BUILD_DIR)
-	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error \
+	cd $(BUILD_DIR) && TEXINPUTS="$(VOLVELLES_DIR):$$TEXINPUTS" \
+		$(XELATEX) -interaction=nonstopmode -halt-on-error \
 		-jobname=$* $(VOLVELLES_DIR)/$*.tex
 
 .PHONY: pdf

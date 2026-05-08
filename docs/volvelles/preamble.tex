@@ -1,0 +1,54 @@
+% Shared TikZ preamble for the m-format paper-computer wheels.
+% Engine: xelatex. Distinct from docs/manual/pandoc/preamble.tex.
+\documentclass[letterpaper]{article}
+\usepackage[letterpaper, margin=0.5in, nohead, nofoot]{geometry}
+\usepackage{fontspec}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,calc,positioning,arrows.meta}
+\pagestyle{empty}
+
+% Angle convention used by all macros + .cells.tex fragments: 0° at 12
+% o'clock, increasing clockwise. TikZ's native polar convention is
+% counter-clockwise from 3 o'clock; the helper emits the *clockwise-from-12*
+% angle directly, so a TikZ rotation of {-90} on each disc tikzpicture
+% restores the visual convention. We do that at the wheel level, not here.
+
+% \volvellecell{<bech32-char>}: presentation hook for one bottom-disc cell.
+% The helper-emitted .cells.tex fragments wrap each char in this macro and
+% provide the (angle:radius) placement themselves. Kept tiny; print-legible
+% at typical scaling.
+\newcommand{\volvellecell}[1]{\textsf{\fontsize{6}{7}\selectfont #1}}
+
+% \volvelleendpoint{<angle-deg>}{<format-label>}: thick arc segment at the
+% named angle on the top disc + small text label outside the disc. The arc
+% spans one segment (11.25°) centered on the angle. (Name avoids the
+% LaTeX-reserved `\end…` prefix.)
+\newcommand{\volvelleendpoint}[2]{%
+  \draw[line width=2pt] ([shift=(#1-5.625:3.05in)]0,0)
+    arc[start angle=#1-5.625, end angle=#1+5.625, radius=3.05in];
+  \node at (#1:3.30in) [font=\sffamily\fontsize{7}{8}\selectfont] {#2};%
+}
+
+% \registrationtarget: center cross-hair + 8 outer alignment ticks at 45°
+% intervals on the bottom disc. Helps the user verify cut+rotation accuracy.
+\newcommand{\registrationtarget}{%
+  \draw[line width=0.4pt] (-0.15in,0) -- (0.15in,0);
+  \draw[line width=0.4pt] (0,-0.15in) -- (0,0.15in);
+  \draw[line width=0.3pt] (0,0) circle (0.05in);
+  \foreach \a in {0,45,90,135,180,225,270,315} {%
+    \draw[line width=0.5pt] (\a:3.65in) -- (\a:3.85in);%
+  }%
+}
+
+% \selftestlegend{<format>}{<target-residue>}{<canonical-input>}: bottom-
+% margin self-test block in monospace. The user rotates through the
+% canonical input; the disc must land on the format's endpoint band.
+\newcommand{\selftestlegend}[3]{%
+  \begin{minipage}{7.0in}\ttfamily\fontsize{7}{9}\selectfont\raggedright%
+  format:          #1\\
+  target residue:  #2\\
+  canonical input: #3\\
+  Rotate through the canonical input. The disc must land on the\\
+  format-specific endpoint band. If it doesn't, this wheel is misprinted.%
+  \end{minipage}%
+}
