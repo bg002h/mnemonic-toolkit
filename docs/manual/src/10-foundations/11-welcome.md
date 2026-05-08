@@ -53,10 +53,21 @@ taproot internal key — the seed alone is insufficient. You need:
   multisig script,
 - the **policy** (md1) to know *what kind* of multisig.
 
-Engraving all three on independent steel cards means each card can be
-lost, water-damaged, or partially destroyed without compromising the
-whole. Each carries its own BCH error-correction\index{BCH} checksum,
-so partial damage is locatable, not catastrophic.
+Engraving all three on independent steel cards lets each card be
+stored separately and hardened against different threats. The
+redundancy is **asymmetric**: a surviving `ms1` plus knowledge of
+the wallet template suffices to re-derive `mk1` and `md1`, but
+losing all copies of `ms1` means losing spending capability
+permanently — the public cards alone reconstruct only a watch-only
+setup. Each card also carries its own BCH error-correction\index{BCH}
+checksum, so per-card mis-stamps and minor surface damage are
+locatable, not catastrophic ([Appendix E](#appendix-e-codex32-bch-m-codec-error-correction)
+gives the precise per-card detection / correction guarantees).
+Multisig adds threshold-level redundancy across cosigners' `ms1`
+cards: in a 2-of-3 wallet, one cosigner's `ms1` may be lost
+without losing spending capability; two cannot.
+[Chapter 35](#recovery-paths-by-damaged-card-scenario) walks
+through the full recovery matrix.
 
 :::primer
 **Cross-binding, in one sentence.** Each mk1 card carries a 4-byte
