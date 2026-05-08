@@ -1,7 +1,9 @@
-# m-format-star user manual
+# m-format constellation user manual
+
+> **⚠ DISCLAIMER — UNTESTED ALPHA SOFTWARE.** **This software has not yet been independently tested or audited. Do not use the m-format constellation to back up significant sums of money at this time — doing so is tantamount to asking to be rekt.** Use only with disposable amounts, on testnet, or for evaluation. Assume bugs until external review happens.
 
 Authored sources, build pipeline, and lint scaffolding for the
-m-format-star end-user manual. The manual covers all four sibling
+m-format constellation end-user manual. The manual covers all four sibling
 formats: `mnemonic-toolkit` (binary `mnemonic`), `descriptor-mnemonic`
 (`md-cli`), `mnemonic-secret` (`ms-cli`), and the no-CLI sibling
 `mnemonic-key` (`mk-codec`, used as a Rust library).

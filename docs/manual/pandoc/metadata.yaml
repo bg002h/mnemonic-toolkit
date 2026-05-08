@@ -1,8 +1,8 @@
 ---
-title: "The m-format Star User Manual"
+title: "The m-format Constellation User Manual"
 subtitle: "Steel-engravable Bitcoin self-custody backup with `mnemonic-toolkit`, `md-cli`, `ms-cli`, and `mk-codec`"
 author:
-  - "Brian Goss"
+  - "Brian Goss, MD"
 date: \today
 lang: en-US
 documentclass: book

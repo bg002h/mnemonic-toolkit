@@ -1,6 +1,6 @@
 # Multi-source 2-of-3 multisig
 
-The headline use of the m-format star: a 2-of-3 segwit multisig
+The headline use of the m-format constellation: a 2-of-3 segwit multisig
 wallet whose three cosigners each generate their seed *on their own
 machine*. Each cosigner ends up with a personal ms1 card plus the
 same shared mk1-set + md1-set.

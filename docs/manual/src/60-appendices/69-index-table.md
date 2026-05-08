@@ -12,7 +12,7 @@ without adding the row (or vice versa) fails the lint.
 
 | Term | Section |
 |---|---|
-| `BCH` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
+| `BCH` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `BCH error correction` | [Single-sig steel-engraved backup](#single-sig-steel-engraved-backup) |
 | `BIP-32` | [Concept signposts](#concept-signposts) |
 | `BIP-39` | [Concept signposts](#concept-signposts) |
@@ -20,11 +20,11 @@ without adding the row (or vice versa) fails the lint.
 | `cross-binding` | [Single-sig steel-engraved backup](#single-sig-steel-engraved-backup) |
 | `descriptor` | [Concept signposts](#concept-signposts) |
 | `HMAC-SHA-512` | [Deterministic child secrets via BIP-85](#deterministic-child-secrets-via-bip-85) |
-| `m-format star` | [About this manual](#about-this-manual) |
-| `md1` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
-| `mk1` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
-| `mnemonic-toolkit` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
-| `ms1` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
+| `m-format constellation` | [About this manual](#about-this-manual) |
+| `md1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
+| `mk1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
+| `mnemonic-toolkit` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
+| `ms1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `multisig` | [Concept signposts](#concept-signposts) |
-| `policy_id_stub` | [Welcome to the m-format star](#welcome-to-the-m-format-star) |
+| `policy_id_stub` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `slot` | [Concept signposts](#concept-signposts) |

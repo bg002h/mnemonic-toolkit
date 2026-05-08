@@ -1,4 +1,4 @@
-# Migrating from BIP-39-only to the m-format star
+# Migrating from BIP-39-only to the m-format constellation
 
 If you already keep your wallet on a BIP-39 phrase — engraved on
 steel, stamped on washers, or memorised in your head — the m-format

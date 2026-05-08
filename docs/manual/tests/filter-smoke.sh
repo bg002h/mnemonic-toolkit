@@ -50,14 +50,14 @@ echo "[filter-smoke] render path 1/2: make md"
   --output "$WORK/smoke.md" \
   "$FIXTURE"
 
-# Assertions: the literal `\index{m-format star}` marker (the only "real"
+# Assertions: the literal `\index{m-format constellation}` marker (the only "real"
 # marker in the fixture) must be stripped; the LaTeX env names must not
 # appear; the primer-box prefix string must be present. We match on the
 # specific marker rather than `\\index` because the fixture's prose
 # legitimately contains the literal `` `\index{}` `` inside an inline
 # code span as documentation.
-if grep -qF '\index{m-format star}' "$WORK/smoke.md"; then
-  echo "[filter-smoke] FAIL: real \\index{m-format star} marker leaked into markdown output" >&2
+if grep -qF '\index{m-format constellation}' "$WORK/smoke.md"; then
+  echo "[filter-smoke] FAIL: real \\index{m-format constellation} marker leaked into markdown output" >&2
   exit 1
 fi
 if grep -q 'begin{primerbox}\|begin{dangerbox}' "$WORK/smoke.md"; then
@@ -86,8 +86,8 @@ if ! grep -q 'begin{primerbox}' "$WORK/smoke.tex"; then
   exit 1
 fi
 # Assertion: \index entry preserved in LaTeX.
-if ! grep -q 'index{m-format star}' "$WORK/smoke.tex"; then
-  echo "[filter-smoke] FAIL: \\index{m-format star} missing from LaTeX output" >&2
+if ! grep -q 'index{m-format constellation}' "$WORK/smoke.tex"; then
+  echo "[filter-smoke] FAIL: \\index{m-format constellation} missing from LaTeX output" >&2
   exit 1
 fi
 echo "[filter-smoke] LaTeX OK"

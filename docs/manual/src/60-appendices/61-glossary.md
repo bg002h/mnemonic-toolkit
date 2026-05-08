@@ -123,7 +123,7 @@ wallet origin in BIP-32 / BIP-388 derivations.
 The keyed-hash primitive driving BIP-32 child-key derivation and
 BIP-85 child-entropy derivation.
 
-## m-format star
+## m-format constellation
 
 The four sibling formats — **ms1**, **mk1**, **md1**, and the
 `mnemonic-toolkit` integration layer. The "star" is the visual mental

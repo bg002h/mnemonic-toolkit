@@ -1,6 +1,6 @@
 # About this Quick Start
 
-This is a hands-on onboarding to the **m-format star** — a family of
+This is a hands-on onboarding to the **m-format constellation** — a family of
 checksum-protected backup cards designed for steel engraving. By the
 end you will have produced a working multi-card Bitcoin backup, and
 you will understand what each card does.

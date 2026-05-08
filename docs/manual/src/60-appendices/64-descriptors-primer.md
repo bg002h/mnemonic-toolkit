@@ -67,7 +67,7 @@ The hardware-wallet UI shows the template (verifiable as "2-of-3
 sortedmulti") without exposing the per-cosigner xpub strings to a
 casual viewer.
 
-## Why this matters for the m-format star
+## Why this matters for the m-format constellation
 
 The md1 card carries a BIP-388 wallet-policy template plus a *single*
 bound xpub for the slot it represents. Each cosigner's mk1 card

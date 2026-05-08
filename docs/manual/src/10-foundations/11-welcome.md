@@ -1,8 +1,8 @@
-# Welcome to the m-format star
+# Welcome to the m-format constellation
 
 Self-custodying Bitcoin starts with one secret — your seed phrase —
 and an inevitable question: *how do I keep that intact for decades?*
-The m-format star is a family of four sibling formats that answer
+The m-format constellation is a family of four sibling formats that answer
 the question by splitting the backup into independently-checksummed,
 steel-engravable cards.
 
@@ -80,7 +80,7 @@ Most readers want one of three things:
    recovery, migration, wallet export, and BIP-85 children.
 3. **"I want to know how this compares to SLIP-39 / Shamir / naked
    BIP-39."** Read [Part V — Comparing & contrasting]
-   (#m-format-star-vs-slip-39-vs-naked-bip-39-vs-shamir).
+   (#m-format constellation-vs-slip-39-vs-naked-bip-39-vs-shamir).
 
 The CLI reference (Part IV) and the appendices (Part VI) are
 consulted, not read top-to-bottom.

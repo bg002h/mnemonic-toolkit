@@ -1,9 +1,9 @@
-# m-format star vs SLIP-39 vs naked BIP-39 vs Shamir
+# m-format constellation vs SLIP-39 vs naked BIP-39 vs Shamir
 
 Bitcoin self-custody has a small handful of mature seed-backup
 standards. None is universally best; each has a use case for which
 it was designed. This chapter compares the four most common: naked
-BIP-39, the m-format star, SLIP-39 / Shamir-style splits, and
+BIP-39, the m-format constellation, SLIP-39 / Shamir-style splits, and
 codex32 alone (without a card-bundle wrapper).
 
 The intent here is **scope** rather than *ranking*. A reader's right
@@ -12,7 +12,7 @@ target lifetime.
 
 ## Side-by-side
 
-| | Naked BIP-39 | m-format star | SLIP-39 / Shamir | codex32 alone |
+| | Naked BIP-39 | m-format constellation | SLIP-39 / Shamir | codex32 alone |
 |---|---|---|---|---|
 | Per-character checksum | no | yes (BCH) | partial | yes (BCH) |
 | Engraving-friendly alphabet | no (English wordlist) | yes (32-char) | partial | yes (32-char) |
@@ -32,7 +32,7 @@ brittleness: no per-character checksum, no policy binding, and steel
 engravings of 12-24 words have failed in the field due to
 mis-stamping.
 
-**The m-format star** — the natural fit when (a) the wallet is
+**The m-format constellation** — the natural fit when (a) the wallet is
 multisig or non-default-template, (b) the backup must be
 self-describing (template + xpubs travel with the seed), and (c)
 the user values BCH error correction over hardware-wallet support.
@@ -48,7 +48,7 @@ recovery still needs an out-of-band descriptor.
 
 **codex32 alone** — the natural fit when the only need is "BIP-39
 entropy with BCH error correction, no multisig, no descriptor." This
-is essentially the m-format star's ms1 card without the bundle.
+is essentially the m-format constellation's ms1 card without the bundle.
 Useful for ms1-only pipelines (paper wallets, hardware-wallet
 firmware) where the toolkit is overkill.
 
@@ -57,7 +57,7 @@ firmware) where the toolkit is overkill.
 The four standards are not mutually exclusive. Useful combinations
 in production:
 
-- **m-format star + hardware wallet.** The hardware wallet handles
+- **m-format constellation + hardware wallet.** The hardware wallet handles
   daily signing from BIP-39; the m-format bundle backs up the seed
   *and* the policy binding for disaster recovery.
 - **SLIP-39 + the m-format mk1+md1 cards.** SLIP-39 splits the
@@ -78,7 +78,7 @@ unlikely to disappear:
 | highest | BIP-39 (universal) |
 | high | SLIP-39 (Trezor + others) |
 | high | BIP-93 codex32 (BIP-tracked) |
-| medium | m-format star (one toolkit, BIP-draft underway) |
+| medium | m-format constellation (one toolkit, BIP-draft underway) |
 
 A hybrid approach — e.g., naked BIP-39 phrase plus an m-format
 bundle as the "self-describing" supplement — minimises the bet on

@@ -1,6 +1,6 @@
 # About this manual
 
-The m-format star\index{m-format star} is a family of four sibling
+The m-format constellation\index{m-format constellation} is a family of four sibling
 Bitcoin self-custody backup formats that engrave together as a coherent
 steel-engravable bundle. This manual is the end-user companion to the
 four formats and to the `mnemonic-toolkit` integration tool.

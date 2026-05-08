@@ -87,7 +87,7 @@ limitation. v0.8 fixed it.
   short of trying to derive an address you've previously used.
 - **Use a BIP-38 passphrase for one-off-key paper wallets, never
   for HD wallet backup.** BIP-38 was designed for "import this one
-  WIF into your wallet"; HD wallets and the m-format star are for
+  WIF into your wallet"; HD wallets and the m-format constellation are for
   multi-key setups.
 - **If your software offers "extra word" or "13th word" prompts,
   it is offering BIP-39 passphrase mode.** This is *not* BIP-38.

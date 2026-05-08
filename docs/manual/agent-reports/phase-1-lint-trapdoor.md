@@ -6,7 +6,7 @@
 
 The plan mandates that Phase 1 demonstrate this via a deliberate-failure round. The discipline:
 
-1. With both a real `\index{m-format star}` marker in `00-frontmatter.md` AND a matching row in `69-index-table.md`, run `make lint` (exercising step 6 / "index bidirectional"). It must PASS.
+1. With both a real `\index{m-format constellation}` marker in `00-frontmatter.md` AND a matching row in `69-index-table.md`, run `make lint` (exercising step 6 / "index bidirectional"). It must PASS.
 2. Delete the matching row from `69-index-table.md` (preserving the source-side marker). Run lint again. It must FAIL with the expected diagnostic.
 3. Restore the row. Run lint a third time. It must PASS again.
 
@@ -40,7 +40,7 @@ Exit code: **0**. ✅ PASSES as required.
 
 ## Step 2 — entry removed (must FAIL with the right diagnostic)
 
-Modification: deleted the `| `m-format star` | ... |` row from
+Modification: deleted the `| `m-format constellation` | ... |` row from
 `src/60-appendices/69-index-table.md` (file backed up to
 `/tmp/69-index-table.md.backup` for restoration).
 
@@ -48,7 +48,7 @@ Re-ran the same lint invocation. Result tail:
 
 ```
 [lint] === 6/6 index bidirectional ===
-[lint] FAIL: src \index{m-format star} missing from .../60-appendices/69-index-table.md
+[lint] FAIL: src \index{m-format constellation} missing from .../60-appendices/69-index-table.md
 
 [lint] FAILED
 ```
@@ -62,16 +62,16 @@ Per Phase 1 architect-review C1: the bidirectional check has *two*
 loops (source-not-in-table; table-not-in-source). Step 2 only proved
 the first. Step 2b proves the second.
 
-Modification: deleted only the `\index{m-format star}` marker from
+Modification: deleted only the `\index{m-format constellation}` marker from
 `00-frontmatter.md` (preserving the `69-index-table.md` row this
 time, the inverse of Step 2). The frontmatter now has no `\index{}`
-markers at all; the table still has the `m-format star` row.
+markers at all; the table still has the `m-format constellation` row.
 
 Re-ran the same lint invocation. Result tail:
 
 ```
 [lint] === 6/6 index bidirectional ===
-[lint] FAIL: .../60-appendices/69-index-table.md term 'm-format star' has no matching \index{} marker in src/
+[lint] FAIL: .../60-appendices/69-index-table.md term 'm-format constellation' has no matching \index{} marker in src/
 
 [lint] FAILED
 ```

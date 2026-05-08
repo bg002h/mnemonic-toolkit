@@ -3,7 +3,7 @@
 Three orthogonal axes for backing up Bitcoin: how many *seeds* are
 involved (single vs many), how many *signatures* are needed (single
 vs threshold), and how the *secret material itself* is split
-(monolithic vs share-split). The m-format star supports all three
+(monolithic vs share-split). The m-format constellation supports all three
 combinations; choosing wrong is operationally expensive.
 
 ## Decision tree

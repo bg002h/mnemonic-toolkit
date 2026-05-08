@@ -2,7 +2,7 @@
 
 Sometimes you want to *track* a wallet — see its balance, derive
 addresses, monitor incoming transactions — without holding the seed.
-The m-format star supports this via the **2-card watch-only bundle**:
+The m-format constellation supports this via the **2-card watch-only bundle**:
 mk1 + md1, no ms1. Without the secret card the wallet cannot sign,
 but a watch-only client (Bitcoin Core / Sparrow / Specter) can
 derive addresses and watch the chain.

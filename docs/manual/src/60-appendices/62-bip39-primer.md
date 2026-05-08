@@ -2,7 +2,7 @@
 
 BIP-39 is the standard that turns a randomly-generated chunk of
 entropy into a sequence of *words*. Almost every Bitcoin wallet
-software in use today understands BIP-39; the m-format star's ms1
+software in use today understands BIP-39; the m-format constellation's ms1
 card is a checksum-protected encoding of the same entropy.
 
 This appendix is a one-page orientation, not a formal specification.

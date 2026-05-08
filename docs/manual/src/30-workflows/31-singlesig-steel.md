@@ -169,5 +169,5 @@ The recovery side of this arithmetic is covered in
   software then re-derives the fingerprint from the seed at import.
 
 For multisig variants — the more security-meaningful use of the
-m-format star — read the next chapter,
+m-format constellation — read the next chapter,
 [Multi-source 2-of-3 multisig](#multi-source-2-of-3-multisig).

@@ -63,7 +63,7 @@ md1 and the mk1 stays intact.
 If you have *only* the seed phrase (no cards), import the phrase
 into a wallet that supports BIP-39 directly. Standard wallet apps
 (Bitcoin Core, Sparrow, Electrum, hardware wallets) recover from
-phrase; the m-format star bundle is a *backup*, not a *requirement*.
+phrase; the m-format constellation bundle is a *backup*, not a *requirement*.
 
 If you previously used a non-default template (BIP-86 taproot, for
 example), specify it on import; the seed alone does not record the

@@ -1,6 +1,6 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format star. Five subcommands:
+The integration-layer CLI for the m-format constellation. Five subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 and [`derive-child`](#mnemonic-derive-child). Run any with `--help`
@@ -123,7 +123,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 ### Worked example
 
 See [Minimal recovery walkthrough](#minimal-recovery-walkthrough)
-and [Migrating from BIP-39-only to the m-format star](#migrating-from-bip-39-only-to-the-m-format-star).
+and [Migrating from BIP-39-only to the m-format constellation](#migrating-from-bip-39-only-to-the-m-format constellation).
 
 ---
 

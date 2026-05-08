@@ -100,7 +100,7 @@ step "5/6 glossary-coverage"
 GLOSSARY="$SRC_DIR/60-appendices/61-glossary.md"
 if [ -f "$GLOSSARY" ]; then
   # Token list — keep deliberately small; expand by curating, not by regex.
-  for term in "m-format star" "ms1" "mk1" "md1" "card" "bundle" "slot" "policy_id_stub" "codex32" "BCH" "BIP-388"; do
+  for term in "m-format constellation" "ms1" "mk1" "md1" "card" "bundle" "slot" "policy_id_stub" "codex32" "BCH" "BIP-388"; do
     if ! grep -qiF "$term" "$GLOSSARY"; then
       err "glossary missing entry for term: $term"
     fi

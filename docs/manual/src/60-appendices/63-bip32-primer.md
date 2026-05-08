@@ -80,5 +80,5 @@ levels are also non-hardened). Hardening at the *purpose / coin /
 account* boundary prevents this; child-level non-hardening is
 acceptable because the children only carry public keys.
 
-The m-format star follows this convention: hardened path up to the
+The m-format constellation follows this convention: hardened path up to the
 account level, then non-hardened wildcards for receive/change.

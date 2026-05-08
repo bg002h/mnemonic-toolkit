@@ -44,7 +44,7 @@ use in any chapter. *Same line as the term.* No newline between term
 and marker. Example:
 
 ```markdown
-The m-format star\index{m-format star} is a family of four sibling
+The m-format constellation\index{m-format constellation} is a family of four sibling
 formats…
 ```
 

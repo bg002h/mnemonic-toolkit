@@ -1,6 +1,6 @@
 # Installing the toolkit
 
-The m-format star ships as four crates across four sibling repositories.
+The m-format constellation ships as four crates across four sibling repositories.
 For end-user use you need three CLI binaries (`mnemonic`, `md`, `ms`)
 and one Rust library (`mk-codec`) that you only encounter when
 writing custom Rust code. This chapter installs the three binaries.

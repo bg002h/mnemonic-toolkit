@@ -1,7 +1,7 @@
 # Appendix G — Troubleshooting matrix
 
 Common failure modes when building, verifying, or recovering an
-m-format star bundle, ordered by frequency.
+m-format constellation bundle, ordered by frequency.
 
 ## Bundle synthesis fails
 

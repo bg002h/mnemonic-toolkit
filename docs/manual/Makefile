@@ -1,6 +1,6 @@
 # mnemonic-toolkit/docs/manual/Makefile
 #
-# Build the m-format-star user manual to markdown and PDF.
+# Build the m-format constellation user manual to markdown and PDF.
 #
 # Targets:
 #   make md            — concatenated markdown to build/m-format-manual.md

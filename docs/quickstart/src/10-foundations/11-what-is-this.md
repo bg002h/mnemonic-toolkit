@@ -15,7 +15,7 @@ keys.
 
 ## The m-format answer in one paragraph
 
-The m-format star splits the backup into **three independently
+The m-format constellation splits the backup into **three independently
 checksummed cards**, each engraved on its own steel plate:
 
 - a **secret card** (`ms1`) carrying the random bits behind your

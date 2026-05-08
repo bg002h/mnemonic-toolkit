@@ -1,6 +1,6 @@
 # The three cards: ms1, mk1, md1
 
-The m-format star maps the three Bitcoin concepts from the previous
+The m-format constellation maps the three Bitcoin concepts from the previous
 chapter onto three cards, one per concept.
 
 ## One card per concept

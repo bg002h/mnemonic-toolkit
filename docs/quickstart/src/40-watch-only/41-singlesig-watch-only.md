@@ -1,7 +1,7 @@
 # Watch-only single-sig
 
 A *watch-only* wallet sees the chain — incoming payments, balance,
-address derivation — without holding the seed. The m-format star
+address derivation — without holding the seed. The m-format constellation
 supports this via a **2-card bundle**: mk1 + md1, no ms1. Without
 the secret card the wallet cannot sign, but Bitcoin Core, Sparrow,
 or Specter can derive addresses and watch the chain.

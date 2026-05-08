@@ -17,7 +17,7 @@
 ## New findings
 
 - **N-new-1** — `filter-smoke.sh` PDF leg `makeindex` is unconditional;
-  fixture has `\index{m-format star}` so safe in practice. No action.
+  fixture has `\index{m-format constellation}` so safe in practice. No action.
 - **N-new-2** — `manual.latex` `\printindex` always emitted; with no
   source-side `\index{}` markers it produces an empty index page
   (benign visual clutter). No action.

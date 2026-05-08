@@ -11,7 +11,7 @@ All three `:::primer` blocks pass.
 
 **Content accuracy.**
 
-- `12-bitcoin-in-30-seconds.md` (line 52-62): BIP definition correct; enumerated BIPs (39, 32, 388, 93/codex32) accurate for the m-format star's actual dependencies.
+- `12-bitcoin-in-30-seconds.md` (line 52-62): BIP definition correct; enumerated BIPs (39, 32, 388, 93/codex32) accurate for the m-format constellation's actual dependencies.
 - `23-bundle.md` (line 31-39): `@N.<subkey>=<value>` grammar accurate; listed subkeys (`phrase`, `xpub`, `entropy`, `wif`) match the toolkit's implemented surface; the pointer to `--help` is appropriate hedging.
 - `24-verify.md` (line 65-74): BCH locator diagnostic description accurate — error-position is 0-based, names a single character, re-stamping + re-running is the correct recovery action. No overclaim about correction (only detection + location, which is correct for the BCH codes used).
 

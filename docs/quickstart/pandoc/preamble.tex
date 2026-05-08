@@ -60,3 +60,36 @@
 % --- Mermaid figures (embedded as SVG by mermaid-filter) --------------------
 \usepackage{graphicx}
 \usepackage{svg}
+
+% --- Title-page constellation graphic (m-format constellation) -----------------------
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usepackage{etoolbox}
+
+\newcommand{\mformatconstellation}{%
+  \begin{tikzpicture}[scale=1.2]
+    \fill[black!92] (-2.7,-2.2) rectangle (2.7,2.2);
+    % faint background stars
+    \foreach \x/\y in {-2.3/1.5, -1.7/-1.7, -0.6/0.9, 0.4/-1.9, 1.9/1.7, 2.3/-0.4, 1.0/1.2, -2.0/0.3, 0.7/-1.0, -1.1/1.8, 2.1/0.6} {
+      \fill[white] (\x,\y) circle (0.5pt);
+    }
+    % three labeled bright stars
+    \node[star, star points=5, star point ratio=2.25, fill=white, draw=white, inner sep=2.5pt] (ms) at (0.4, 1.5) {};
+    \node[right=3pt, white, font=\small] at (ms) {ms1};
+    \node[star, star points=5, star point ratio=2.25, fill=white, draw=white, inner sep=2.2pt] (mk) at (-1.6, 0.1) {};
+    \node[left=3pt, white, font=\small] at (mk) {mk1};
+    \node[star, star points=5, star point ratio=2.25, fill=white, draw=white, inner sep=2.2pt] (md) at (1.5, -0.7) {};
+    \node[right=3pt, white, font=\small] at (md) {md1};
+    % connecting strokes
+    \draw[white!55, very thin] (ms) -- (mk);
+    \draw[white!55, very thin] (ms) -- (md);
+    \draw[white!55, very thin] (mk) -- (md);
+  \end{tikzpicture}%
+}
+
+% Inject the constellation below the title block (i.e., at the end of
+% pandoc's titlepage environment, after \@title / \@author / \@date).
+\AtEndEnvironment{titlepage}{%
+  \vspace{2em}%
+  \begin{center}\mformatconstellation\end{center}%
+}

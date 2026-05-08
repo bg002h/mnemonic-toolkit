@@ -10,7 +10,7 @@
 
 `phase-1-lint-trapdoor.md` Step 2 removes a row from `69-index-table.md` while preserving the `\index{}` source marker — exercises "source term missing from table." The inverse direction — row present in the table but `\index{}` marker absent from source — is never deliberately triggered. The script implements both loops (lint.sh lines 122–133), but only one is proven non-vacuous.
 
-**Remedy applied:** Added Step 2b to the trapdoor that removes only the source-side `\index{m-format star}` marker from `00-frontmatter.md` (preserving the table row). Confirmed lint FAILS with the inverse diagnostic `... 69-index-table.md term 'm-format star' has no matching \index{} marker in src/`. Restored. Both loops now proven non-vacuous.
+**Remedy applied:** Added Step 2b to the trapdoor that removes only the source-side `\index{m-format constellation}` marker from `00-frontmatter.md` (preserving the table row). Confirmed lint FAILS with the inverse diagnostic `... 69-index-table.md term 'm-format constellation' has no matching \index{} marker in src/`. Restored. Both loops now proven non-vacuous.
 
 ### C2 — Anchor slugs for appendices B–E (architect missed Phase 0 stubs exist)
 

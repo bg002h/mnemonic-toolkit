@@ -1,6 +1,8 @@
 # m-format Quick Start guide
 
-Newcomer-aimed onboarding for the m-format star. Sibling artifact to the reference manual at `docs/manual/`.
+> **⚠ DISCLAIMER — UNTESTED ALPHA SOFTWARE.** **This software has not yet been independently tested or audited. Do not use the m-format constellation to back up significant sums of money at this time — doing so is tantamount to asking to be rekt.** Use only with disposable amounts, on testnet, or for evaluation. Assume bugs until external review happens.
+
+Newcomer-aimed onboarding for the m-format constellation. Sibling artifact to the reference manual at `docs/manual/`.
 
 ## Build
 

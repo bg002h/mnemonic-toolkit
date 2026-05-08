@@ -2,7 +2,7 @@
 
 Three concepts power every modern Bitcoin wallet: a *seed phrase*,
 an *extended public key*, and a *wallet descriptor*. This chapter
-introduces each in three or four sentences. The m-format star
+introduces each in three or four sentences. The m-format constellation
 encodes all three.
 
 ## Seed phrase

@@ -1,4 +1,4 @@
-% Pandoc LaTeX template for the m-format-star user manual.
+% Pandoc LaTeX template for the m-format constellation user manual.
 % Intentionally minimal — we lean on pandoc's defaults plus our preamble.tex
 % for primer/danger boxes, mdframed, and the index machinery.
 
