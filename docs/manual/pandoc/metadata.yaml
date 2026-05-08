@@ -1,0 +1,46 @@
+---
+title: "The m-format Star User Manual"
+subtitle: "Steel-engravable Bitcoin self-custody backup with `mnemonic-toolkit`, `md-cli`, `ms-cli`, and `mk-codec`"
+author:
+  - "Brian Goss"
+date: \today
+lang: en-US
+documentclass: book
+classoption:
+  - oneside
+  - 11pt
+geometry:
+  - margin=1in
+papersize: letter
+linkcolor: blue!60!black
+urlcolor: blue!60!black
+# `toccolor:` removed — older hyperref versions in TinyTeX emit
+# `Undefined key 'toccolor'`. Black TOC text is fine.
+fontsize: 11pt
+mainfont: "DejaVu Serif"
+sansfont: "DejaVu Sans"
+monofont: "DejaVu Sans Mono"
+# `abstract:` deliberately omitted — `documentclass: book` does not
+# define an `abstract` environment, and the manual's frontmatter
+# chapter (`src/00-frontmatter.md`) carries the same prose at the
+# top of the body.
+keywords:
+  - bitcoin
+  - self-custody
+  - bip-39
+  - bip-32
+  - bip-388
+  - descriptors
+  - multisig
+  - codex32
+  - mnemonic
+  - steel-engraving
+rights: "CC0 1.0 Universal (Public Domain Dedication)"
+# Note: per-package `\usepackage{...}` and `\makeindex` directives are
+# loaded from `pandoc/preamble.tex` via the build's `-H preamble.tex`
+# flag — pandoc's metadata `header-includes:` mechanism (whether YAML
+# list or `|` literal) does not reliably round-trip raw LaTeX in 3.x
+# unless you wrap each item with a `{=latex}` raw block, which is
+# brittle. preamble.tex is the single load site.
+copyright: "CC0 1.0 Universal — see LICENSE in the source tree."
+...

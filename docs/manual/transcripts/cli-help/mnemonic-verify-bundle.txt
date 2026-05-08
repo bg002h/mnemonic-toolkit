@@ -1,0 +1,71 @@
+round-trip-check an engraved bundle
+
+Usage: mnemonic verify-bundle [OPTIONS] --network <NETWORK>
+
+Options:
+      --network <NETWORK>
+          [possible values: mainnet, testnet, signet, regtest]
+
+      --template <TEMPLATE>
+          Template name. Mutually-required-one-of with --descriptor / --descriptor-file
+
+          Possible values:
+          - bip44
+          - bip49
+          - bip84
+          - bip86
+          - wsh-multi:          `wsh(multi(K,@0,...,@N-1))` — segwit unsorted multisig
+          - wsh-sortedmulti:    `wsh(sortedmulti(K,@0,...,@N-1))` — segwit sorted multisig
+          - sh-wsh-multi:       `sh(wsh(multi(K,...)))` — nested-segwit unsorted multisig
+          - sh-wsh-sortedmulti: `sh(wsh(sortedmulti(K,...)))` — nested-segwit sorted multisig
+          - tr-multi-a:         `tr(multi_a(K,@0,...,@N-1))` — taproot unsorted multisig (script-path leaf)
+          - tr-sortedmulti-a:   `tr(sortedmulti_a(K,@0,...,@N-1))` — taproot sorted multisig (script-path leaf)
+
+      --descriptor <DESCRIPTOR>
+          User-supplied descriptor (v0.3 §5.7 verify-bundle re-parse path)
+
+      --descriptor-file <DESCRIPTOR_FILE>
+          User-supplied descriptor file (single-line UTF-8)
+
+      --language <LANGUAGE>
+          [possible values: english, simplifiedchinese, traditionalchinese, czech, french, italian, japanese, korean, portuguese, spanish]
+
+      --passphrase <PASSPHRASE>
+          
+
+      --account <ACCOUNT>
+          BIP-32 account index (default 0). Non-zero values produce md1 with PathDeclPaths::Divergent per SPEC §4.2
+          
+          [default: 0]
+
+      --ms1 <MS1>
+          v0.4.1 J.5: schema-4 repeating-flag for per-slot ms1 cards. For schema-2/3 single-sig invocations, supply once (`--ms1 <s>`); for schema-4 multi-source multisig, repeat per slot (`--ms1 "" --ms1 <s2>`...). Empty string `""` is the watch-only sentinel per SPEC §5.8
+
+      --mk1 <MK1>...
+          
+
+      --md1 <MD1>...
+          
+
+      --bundle-json <BUNDLE_JSON>
+          v0.4.3 Phase Q: read supplied ms1/mk1/md1 cards from a JSON envelope file (the output of `bundle --json`). Mutually exclusive with the explicit --ms1/--mk1/--md1 triplet. Re-derivation flags (`--slot`) are STILL required to compute the expected bundle
+
+      --json
+          
+
+      --multisig-path-family <MULTISIG_PATH_FAMILY>
+          v0.2 multisig path family (default: bip87)
+          
+          [possible values: bip48, bip87]
+
+      --privacy-preserving
+          v0.2 privacy mode: expect mk1 omits master fingerprint
+
+      --threshold <THRESHOLD>
+          v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16)
+
+      --slot <SLOT>
+          v0.4 unified slot input. Repeating flag — see `BundleArgs::slot` for grammar
+
+  -h, --help
+          Print help (see a summary with '-h')

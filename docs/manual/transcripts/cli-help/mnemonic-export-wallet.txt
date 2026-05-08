@@ -1,0 +1,79 @@
+emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
+
+Usage: mnemonic export-wallet [OPTIONS]
+
+Options:
+      --template <TEMPLATE>
+          Pre-built template name. Mutually-required-one-of with --descriptor
+
+          Possible values:
+          - bip44
+          - bip49
+          - bip84
+          - bip86
+          - wsh-multi:          `wsh(multi(K,@0,...,@N-1))` — segwit unsorted multisig
+          - wsh-sortedmulti:    `wsh(sortedmulti(K,@0,...,@N-1))` — segwit sorted multisig
+          - sh-wsh-multi:       `sh(wsh(multi(K,...)))` — nested-segwit unsorted multisig
+          - sh-wsh-sortedmulti: `sh(wsh(sortedmulti(K,...)))` — nested-segwit sorted multisig
+          - tr-multi-a:         `tr(multi_a(K,@0,...,@N-1))` — taproot unsorted multisig (script-path leaf)
+          - tr-sortedmulti-a:   `tr(sortedmulti_a(K,@0,...,@N-1))` — taproot sorted multisig (script-path leaf)
+
+      --descriptor <DESCRIPTOR>
+          User-supplied BIP-388 descriptor. Mutually exclusive with --template
+
+      --threshold <THRESHOLD>
+          Multisig threshold K (1 ≤ K ≤ N)
+
+      --multisig-path-family <MULTISIG_PATH_FAMILY>
+          v0.2 multisig path family (default: bip87)
+          
+          [possible values: bip48, bip87]
+
+      --network <NETWORK>
+          [default: mainnet]
+          [possible values: mainnet, testnet, signet, regtest]
+
+      --language <LANGUAGE>
+          Ignored (watch-only); kept for slot parser symmetry
+          
+          [possible values: english, simplifiedchinese, traditionalchinese, czech, french, italian, japanese, korean, portuguese, spanish]
+
+      --account <ACCOUNT>
+          BIP-32 account index (default 0)
+          
+          [default: 0]
+
+      --slot <SLOT>
+          `@N.<subkey>=<value>` slot input, repeating
+
+      --format <FORMAT>
+          Output format. Default bitcoin-core
+          
+          [default: bitcoin-core]
+          [possible values: bitcoin-core, bip388, sparrow, specter]
+
+      --output <OUTPUT>
+          Output path. `-` (default) → stdout
+          
+          [default: -]
+
+      --range <RANGE>
+          Bitcoin Core `range` field, comma-separated. Default `0,999`
+          
+          [default: 0,999]
+
+      --timestamp <TIMESTAMP>
+          Bitcoin Core `timestamp` field. `now` (default) or unix seconds
+          
+          [default: now]
+
+      --bitcoin-core-version <BITCOIN_CORE_VERSION>
+          Bitcoin Core target version. 24 or 25 (default 25)
+          
+          [default: 25]
+
+      --taproot-internal-key <TAPROOT_INTERNAL_KEY>
+          SPEC v0.8 §7 — Taproot internal-key designation for `tr-multi-a` / `tr-sortedmulti-a` templates. `nums` selects the BIP-341 reference NUMS x-only point. `@N` selects cosigner N's xpub as the key-path internal key (cosigner N is then removed from the multi_a leaf set)
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,98 @@
+name: manual
+
+# `paths` filters apply only to branch pushes / PRs; tag pushes
+# matching `manual-v*` always trigger the workflow regardless of
+# which files are in the tag's commit. This is intentional — the
+# release-asset upload step needs to run on every tag push.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/manual/**'
+    tags:
+      - 'manual-v*'
+  pull_request:
+    paths:
+      - 'docs/manual/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pandoc + texlive + chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pandoc \
+            texlive-xetex \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            texlive-extra-utils \
+            chromium-browser \
+            make
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm tools (mermaid-filter, lints)
+        run: |
+          npm install -g \
+            @mermaid-js/mermaid-cli@^11 \
+            mermaid-filter@^1 \
+            markdownlint-cli2@^0.13 \
+            cspell@^8
+
+      - name: Install lychee
+        run: |
+          LARCH=x86_64-unknown-linux-gnu
+          curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-${LARCH}.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee"
+          sudo chmod +x /usr/local/bin/lychee
+
+      - name: Lint manual
+        working-directory: docs/manual
+        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true
+
+      - name: Build PDF
+        working-directory: docs/manual
+        run: make pdf MERMAID_FILTER=on
+
+      - name: Verify PDF
+        working-directory: docs/manual
+        run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
+
+      - name: Upload PDF as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m-format-manual-pdf
+          path: docs/manual/build/m-format-manual.pdf
+
+      - name: Ensure GitHub release exists for this tag
+        if: startsWith(github.ref, 'refs/tags/manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+            gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+          fi
+
+      - name: Upload PDF to release (on manual-v* tag)
+        if: startsWith(github.ref, 'refs/tags/manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/manual
+        run: gh release upload "$REF_NAME" build/m-format-manual.pdf --clobber

@@ -1,0 +1,28 @@
+Verify an ms1 string is valid (and optionally round-trips against a phrase)
+
+Usage: ms verify [OPTIONS] [MS1]
+
+Arguments:
+  [MS1]
+          ms1 string to verify. Use `-` or omit to read from stdin
+
+Options:
+      --phrase <PHRASE>
+          Original BIP-39 phrase to round-trip-check against the decoded entropy. When supplied, exit 4 on mismatch. Use `-` to read phrase from stdin
+
+      --language <LANGUAGE>
+          BIP-39 wordlist for --phrase. Default `english`
+          
+          [default: english]
+          [possible values: english, japanese, korean, spanish, chinese-simplified, chinese-traditional, french, italian, czech, portuguese]
+
+      --json
+          Emit success JSON on stdout (mirrors the §5 schema-versioned form)
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+EXAMPLES:
+  ms verify <ms1>                          # exit 0 = valid v0.1
+  ms verify <ms1> --phrase "abandon … about"   # round-trip; exit 4 on mismatch
+  ms verify <ms1> --phrase "..." --json    # structured outcome

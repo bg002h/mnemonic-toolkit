@@ -1,0 +1,18 @@
+Decode one or more MD backup strings into a wallet policy template
+
+Usage: md decode [OPTIONS] <STRINGS>...
+
+Arguments:
+  <STRINGS>...
+          
+
+Options:
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+EXAMPLES:
+  $ md decode md1qqpqqxqxkceprx7rap4t
+  wpkh(@0/<0;1>/*)

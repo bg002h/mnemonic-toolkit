@@ -1,0 +1,15 @@
+ms — engrave-friendly BIP-39 entropy backups (the ms1 format)
+
+Usage: ms <COMMAND>
+
+Commands:
+  encode   Encode a BIP-39 mnemonic (or hex entropy) as an ms1 string for engraving
+  decode   Decode an ms1 string back to its BIP-39 mnemonic and entropy bytes
+  inspect  Inspect an ms1 string's structural fields and decoder verdict
+  verify   Verify an ms1 string is valid (and optionally round-trips against a phrase)
+  vectors  Print the SHA-pinned v0.1 test-vector corpus as JSON
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

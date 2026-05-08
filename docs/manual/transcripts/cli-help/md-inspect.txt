@@ -1,0 +1,10 @@
+Decode + pretty-print everything the codec sees
+
+Usage: md inspect [OPTIONS] <STRINGS>...
+
+Arguments:
+  <STRINGS>...  
+
+Options:
+      --json  
+  -h, --help  Print help

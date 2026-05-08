@@ -1,0 +1,65 @@
+emit a 3-card engraving bundle from a phrase or xpub
+
+Usage: mnemonic bundle [OPTIONS] --network <NETWORK>
+
+Options:
+      --network <NETWORK>
+          [possible values: mainnet, testnet, signet, regtest]
+
+      --template <TEMPLATE>
+          Pre-built template name (single-sig or multisig). Mutually-required-one-of with --descriptor / --descriptor-file (clap-level + runtime pre-check)
+
+          Possible values:
+          - bip44
+          - bip49
+          - bip84
+          - bip86
+          - wsh-multi:          `wsh(multi(K,@0,...,@N-1))` — segwit unsorted multisig
+          - wsh-sortedmulti:    `wsh(sortedmulti(K,@0,...,@N-1))` — segwit sorted multisig
+          - sh-wsh-multi:       `sh(wsh(multi(K,...)))` — nested-segwit unsorted multisig
+          - sh-wsh-sortedmulti: `sh(wsh(sortedmulti(K,...)))` — nested-segwit sorted multisig
+          - tr-multi-a:         `tr(multi_a(K,@0,...,@N-1))` — taproot unsorted multisig (script-path leaf)
+          - tr-sortedmulti-a:   `tr(sortedmulti_a(K,@0,...,@N-1))` — taproot sorted multisig (script-path leaf)
+
+      --descriptor <DESCRIPTOR>
+          User-supplied BIP-388 descriptor (v0.3 §2.1.10). Mutually-required-one-of with --template / --descriptor-file. XOR with --descriptor-file (clap conflicts)
+
+      --descriptor-file <DESCRIPTOR_FILE>
+          User-supplied BIP-388 descriptor file (v0.3 §2.1.10). Single-line UTF-8; trailing newline tolerated. XOR with --descriptor (clap conflicts)
+
+      --language <LANGUAGE>
+          [possible values: english, simplifiedchinese, traditionalchinese, czech, french, italian, japanese, korean, portuguese, spanish]
+
+      --passphrase <PASSPHRASE>
+          
+
+      --account <ACCOUNT>
+          BIP-32 account index (default 0). Non-zero values produce md1 with PathDeclPaths::Divergent per SPEC §4.2
+          
+          [default: 0]
+
+      --json
+          
+
+      --no-engraving-card
+          
+
+      --multisig-path-family <MULTISIG_PATH_FAMILY>
+          v0.2 multisig path family (default: bip87)
+          
+          [possible values: bip48, bip87]
+
+      --privacy-preserving
+          v0.2 privacy mode: suppress master fingerprint from mk1 + engraving card
+
+      --self-check
+          v0.2 self-check: re-parse the emitted bundle and verify it round-trips
+
+      --threshold <THRESHOLD>
+          v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16)
+
+      --slot <SLOT>
+          v0.4 unified slot input. Repeating flag — one occurrence per (slot, subkey) tuple. Grammar: `@N.<subkey>=<value>` where N is the slot index (u8) and subkey is one of phrase / entropy / xpub / fingerprint / path / wif / xprv. Phase B lands the parser; Phase C wires it into the unified `bundle_run` dispatch
+
+  -h, --help
+          Print help (see a summary with '-h')

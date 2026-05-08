@@ -1,0 +1,7 @@
+Regenerate the project's test-vector corpus (maintainer tool)
+
+Usage: md vectors [OPTIONS]
+
+Options:
+      --out <DIR>  
+  -h, --help       Print help
