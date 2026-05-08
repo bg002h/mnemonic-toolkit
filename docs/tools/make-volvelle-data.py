@@ -161,6 +161,11 @@ def run_drift_gate(params_path: Path) -> None:
     """Read the TOML and check every canonical_vectors entry. Raises on failure."""
     with params_path.open("rb") as f:
         params = tomllib.load(f)
+    schema_version = params.get("schema_version")
+    if schema_version != 1:
+        raise ValueError(
+            f"{params_path}: unsupported schema_version {schema_version!r} (expected 1)"
+        )
     vectors = params.get("canonical_vectors") or []
     if not vectors:
         raise ValueError(f"{params_path}: no [[canonical_vectors]] entries")
