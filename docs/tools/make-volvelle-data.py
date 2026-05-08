@@ -217,9 +217,12 @@ def emit_cells_tex(format_name: str, out_path: Path) -> None:
             ch = ALPHABET[stepped & 0x1F]
             angle_deg = c * ANGULAR_PITCH_DEG
             radius_in = RADIAL_PITCH_IN * (r + 1)
+            # Row 0 is the innermost ring; arc length per cell is ~31× smaller
+            # than at row 31, so its char needs a smaller font to fit.
+            cell_macro = "volvellecellinner" if r == 0 else "volvellecell"
             lines.append(
                 f"\\node at ({angle_deg:.4f}:{radius_in:.4f}in)"
-                f" {{\\volvellecell{{{ch}}}}}; % r={r} c={c}"
+                f" {{\\{cell_macro}{{{ch}}}}}; % r={r} c={c}"
             )
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
