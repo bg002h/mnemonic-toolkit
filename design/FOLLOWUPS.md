@@ -45,6 +45,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `manual-cli-surface-mirror` — manual mirrors the four-format CLI/API surface
+
+- **Surfaced:** 2026-05-07, m-format-star user manual v0.1 release (`manual-v0.1.0` tag; PR #1).
+- **Where:** `docs/manual/src/40-cli-reference/` (`41-mnemonic.md`, `42-md.md`, `43-ms.md`, `44-mk-codec-rust.md`); CI gate at `docs/manual/tests/lint.sh` `flag-coverage` step (per-`<binary, subcommand>` pair).
+- **What:** v0.1 of the manual mirrors `mnemonic` (this repo), `md-cli` (`descriptor-mnemonic`), `ms-cli` (`mnemonic-secret`), and the `mk-codec` Rust API (`mnemonic-key`) verbatim against toolkit v0.8.0. **Any flag addition or removal in any of those four surfaces must touch `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR**; the manual's `flag-coverage` lint step gates on missing flags. Companion entries: `manual-cli-surface-mirror` in `descriptor-mnemonic/design/FOLLOWUPS.md`, `mnemonic-secret/design/FOLLOWUPS.md`, and `mnemonic-key/design/FOLLOWUPS.md`.
+- **Why filed:** the manual is a separate artifact (independent `manual-v*` versioning); without an explicit cross-repo mirror invariant, sibling-side flag changes would silently drift the manual.
+- **Status:** `open` (mirror invariant active for the lifetime of `docs/manual/`)
+- **Tier:** `cross-repo`
+
 ### `spec-5-5-kind-enum-gap` — SPEC §5.5 `kind` enum table omits `NetworkMismatch` and `FutureFormat`
 
 - **Surfaced:** Phase 1 review r1 (L-1).
