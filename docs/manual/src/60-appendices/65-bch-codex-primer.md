@@ -18,9 +18,11 @@ arithmetic. The decoder, on receiving the stream + checksum,
 recomputes the polynomial and:
 
 - If no errors: the recomputed checksum matches; data is intact.
-- If a few errors: the polynomial mismatch *locates* the error
-  positions (typically up to 4 incorrect characters in the standard
-  codex32 setting).
+- If a few errors: the polynomial syndrome *locates* the error
+  positions. BIP-93 guarantees correction of up to 4 unknown-position
+  substitutions, or up to 8 errors at known positions ("erasures"),
+  or up to 13 consecutive erasures. See *Error detection and
+  correction guarantees per card* below for the precise table.
 - If many errors: the polynomial mismatch is uncorrectable; decode
   fails.
 
@@ -82,11 +84,134 @@ accepted on the binary as a forward-compat scaffold but is a
 documented no-op since md-codec v0.12.0; long-code mode for md1
 was dropped on the codec side.)
 
-## Error-correction limits in practice
+## Error detection and correction guarantees per card
 
-A handful of stamping errors per card are correctable; an entire
-character-row mis-stamping is not. The codec reports error
-positions, so the operator can manually correct against the
-original digital bundle. Beyond the correction radius, the
-fall-back is re-deriving from the seed (single-sig) or from
-cosigner cooperation (multisig).
+The numbers below are taken **verbatim from BIP-93** §"Error
+Correction" and §"Generating the Checksum". They apply to every
+BCH variant in the constellation that shares codex32-pattern
+parameters: the minimum distance is set by the generator
+polynomial, which is identical across ms1, mk1, and md1; only the
+target residue differs (HRP-mixed `"mk"` / `"md"` for the forked
+codes, BIP-93 stock for ms1).
+
+### Regular code (n=93 symbols, k=80, 13-symbol checksum)
+
+Used by ms1 (BIP-93 directly), and by mk1 + md1 (forked, same
+generator polynomial). Applies to data strings of ≤93 bech32
+characters.
+
+| Property | Guarantee | Source |
+|---|---|---|
+| Detection — characters affected | ≥ 1 and ≤ 8 errors guaranteed detected | BIP-93 §"Generating the Checksum" |
+| Detection — random patterns beyond 8 errors | < 3 × 10⁻²⁰ probability of missed detection | BIP-93 §"Generating the Checksum" |
+| Correction — substitutions (unknown positions) | up to **4** substitutions corrected | BIP-93 §"Error Correction" |
+| Correction — erasures (known positions, e.g., `?`) | up to **8** erasures corrected | BIP-93 §"Error Correction" |
+| Correction — consecutive erasures (a single scratch) | up to **13** consecutive erasures corrected | BIP-93 §"Error Correction" |
+
+### Long code (n=108 symbols, k=93, 15-symbol checksum)
+
+Used by mk1 only (mk1 chunked-mode strings of 96–108 chars). md1
+dropped the long code in md-codec v0.11; ms1 v0.1 payloads always
+fit in the regular bracket.
+
+| Property | Guarantee | Source |
+|---|---|---|
+| Detection — characters affected | ≥ 1 and ≤ 8 errors guaranteed detected | BIP-93 §"Long codex32 Strings" |
+| Detection — random patterns beyond 8 errors | < 3 × 10⁻²³ probability of missed detection | BIP-93 §"Long codex32 Strings" |
+| Correction (substitutions / erasures / consecutive erasures) | same as regular code: 4 / 8 / 13 | BIP-93 §"Error Correction" applied to the longer code |
+
+### How the code variant is chosen per card
+
+| Card | Payload kind (v0.1) | Typical string length | Code variant |
+|---|---|---|---|
+| ms1 | BIP-39 entropy 16–32 B (`entr`) | ~70 chars | regular |
+| mk1 | xpub + origin (single-string mode) | ~52–55 chars | regular |
+| mk1 | xpub + origin (chunked mode, longer paths) | 96–108 chars | long |
+| md1 | wallet policy | 75–93 chars | regular only (v0.11+) |
+
+The toolkit picks the variant automatically based on data length;
+no user flag is needed. (The "typical string length" column is a
+best-read estimate pending an empirical sweep across all payload
+kinds; tracked as `bch-string-length-empirical-sweep` in
+`docs/manual/FOLLOWUPS.md`.)
+
+### One subtlety: HRP mixing does not change the correction guarantees
+
+The forked BCH for mk1 and md1 changes the **target residue** —
+the constant the polymod is XOR'd against at encode time and
+compared against at decode time. It does **not** change the
+**generator polynomial** or the **field arithmetic**, both of
+which are inherited byte-for-byte from BIP-93. Minimum distance,
+and therefore the detection / correction guarantees in the tables
+above, are properties of the generator polynomial alone — so the
+BIP-93 numbers transfer to mk1 and md1 unchanged. What HRP mixing
+buys is **format separation**: an mk1 string can never accidentally
+validate as an md1 or ms1 string, because the target residues
+disagree.
+
+### Errors the BCH code does NOT handle: deletions and insertions
+
+An "erasure" in the table above means *the character at a known
+position is unreadable, but the position itself is preserved*
+(typically rendered `?`). The string length is unchanged.
+
+A **deletion** (a missing character that causes everything after
+it to shift left) is a length-changing event and is **outside the
+BCH code's correction model**. Same for **insertions** (extra
+character shifts everything right).
+
+In practice:
+
+- **Detection of length-changing damage is overwhelming.** The
+  decoder first checks that the string length matches one of the
+  expected lengths (≤93 for regular, 96–108 for long). One deletion
+  drops the length by 1; if the encoded length was a known fixed
+  value for the payload kind, the decoder rejects on length
+  mismatch *before* even running the polynomial. Even when a
+  deletion happens to be paired with a compensating insertion (so
+  the length comes out right), ~half the symbols end up in wrong
+  positions and the polynomial syndrome is wildly non-zero. The
+  probability of length-changing damage silently passing the
+  checksum is comparable to the < 3 × 10⁻²⁰ general missed-detection
+  bound.
+- **Correction of length-changing damage is not supported.** The
+  decoder reports "string length out of range" or "checksum
+  invalid" without identifying the missing or extra character's
+  position. The polynomial syndrome encodes substitution-error
+  positions, not insertion / deletion positions.
+- **First line of recovery: count the characters on the plate.**
+  Each card has a known string length. If the count is off,
+  recount the engraved plate before attempting to decode — the
+  position of the missing or extra character is something only
+  physical inspection can recover. This is one practical reason
+  the toolkit emits both the contiguous form (handy for
+  copy-paste) and the chunked-in-fives form (handy for engraving)
+  of every string: chunking makes character counts trivially
+  auditable on the plate.
+
+### Sources for further reading
+
+- **[BIP-93](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki)** — the canonical codex32 specification, including the §"Error Correction" claims quoted above and a Python reference implementation of the polynomial.
+- **[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)** — the original codex32 paper-computer work by Leon Olson Curr & Pearlwort Snead that became BIP-93.
+- **[apoelstra/rust-codex32](https://github.com/apoelstra/rust-codex32)** — Andrew Poelstra's CC0 Rust reference implementation. ms-codec depends on `codex32 = "=0.1.0"` directly via this crate.
+- mk1's forked BCH plumbing: `crates/mk-codec/src/string_layer/bch.rs` in the [mnemonic-key](https://github.com/bg002h/mnemonic-key) repo.
+- md1's forked BCH plumbing: `crates/md-codec/src/bch.rs` in the [descriptor-mnemonic](https://github.com/bg002h/descriptor-mnemonic) repo.
+- The `mc-codex32` shared-crate extraction (which would have unified the mk1/md1 fork with rust-codex32) was considered and retired on 2026-05-03; see CLAUDE.md in any of the four repos for the coordination record.
+
+## Operational fallbacks
+
+When stamping errors exceed the per-card correction radius (4
+substitutions or 8 erasures in known positions), the fall-backs are:
+
+- **Single-sig:** re-derive the lost card from the seed phrase
+  plus the wallet template — `mk1` and `md1` are public material
+  and are reconstructable from `ms1` plus knowledge of the
+  template (chapter 35 walks through every scenario).
+- **Multisig:** for a 2-of-3 wallet, any one cosigner's `ms1` may
+  be lost without losing spending capability (the threshold absorbs
+  it); two cosigner `ms1` losses are fatal.
+
+When length-changing damage (deletion / insertion) is suspected
+but the character count looks right, the operator should manually
+re-decode each five-character chunk against the original digital
+bundle to spot the mis-aligned chunk.

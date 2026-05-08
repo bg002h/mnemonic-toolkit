@@ -7,6 +7,35 @@ a confirmed retirement. Mirrors the FOLLOWUPS pattern used in
 
 ## Open
 
+### `bch-string-length-empirical-sweep` — v0.2 candidate
+
+The "Typical string length" column of Appendix E's per-card table
+(`docs/manual/src/60-appendices/65-bch-codex-primer.md` §"How the
+code variant is chosen per card") gives best-read estimates:
+
+- ms1 BIP-39 entropy 16–32 B → ~70 chars
+- mk1 single-string mode → ~52–55 chars
+- mk1 chunked mode → 96–108 chars
+- md1 wallet policy → 75–93 chars
+
+These have not been empirically swept across all payload variants
+(network, template, cosigner count, path family, BIP-388 multipath
+form, etc.). v0.2 should encode known fixtures spanning all
+combinations and report a precise length range per card + payload
+kind, replacing the qualifier prose with measured data.
+
+**Where to add the sweep:** `docs/manual/tests/` is the natural
+home for a `bch_string_length_sweep.sh` that drives the four CLIs
+across a fixture matrix and emits a CSV. The CSV can then update
+the table in `65-bch-codex-primer.md` directly.
+
+**Why it matters:** the regular-vs-long code variant choice depends
+on string length crossing 93 chars. If a real-world mk1 payload
+(e.g., a deeply-nested derivation path) ever lands exactly at 93 /
+94 / 95 chars, the encoder behavior at the boundary is currently
+unverified by the manual — only by code review. An empirical sweep
+closes that gap.
+
 ### `release-history-auto-extract` — v0.2 candidate
 
 `src/60-appendices/68-release-history.md` is hand-authored for v0.1.

@@ -45,10 +45,35 @@ insufficient. You need the **secret** (`ms1`) to sign, the
 script, and the **policy** (`md1`) to know *what kind* of multisig.
 
 Splitting the backup across three independently-checksummed steel
-cards means a card lost, water-damaged, or partially destroyed is a
-recoverable problem — not a catastrophe. Each card carries its own
-BCH error-correcting checksum, so a stamping mistake is detected
-and located, not silently absorbed.
+cards gives two distinct kinds of resilience.
+
+**Per-card BCH error correction.** Each card carries its own
+codex32-pattern BCH checksum. Per BIP-93 §"Error Correction", the
+guarantees per card are:
+
+- **detection:** any error affecting up to 8 characters per card,
+  guaranteed (random patterns beyond that miss with probability
+  < 3 × 10⁻²⁰);
+- **correction (substitutions):** up to 4 wrong characters at
+  unknown positions can be reconstructed;
+- **correction (erasures):** up to 8 characters at known positions
+  (e.g., illegible smudges) can be reconstructed; or up to 13 in
+  a single consecutive run (a scratch).
+
+An erasure means *the position is preserved, the value is
+unknown*. **Deletions and insertions** (length-changing damage)
+are outside this model and are caught by length-check rather than
+BCH math — count the characters on a plate before decoding.
+
+**Cross-card recovery (asymmetric).** Public material (`mk1`,
+`md1`) is re-derivable from a surviving `ms1` plus knowledge of
+the wallet template. A lost or destroyed `ms1`, however, **cannot
+be reconstructed** from the public cards alone — those degrade to
+a watch-only wallet. For 2-of-3 multisig, the threshold adds
+further redundancy: any one cosigner's `ms1` may be lost without
+losing spending capability; two cannot. The reference manual's
+recovery-paths chapter walks through every scenario; appendix E
+of the manual cites the BIP-93 numbers in full.
 
 The toolkit verifies that the three cards belong together via a
 small fingerprint called the **policy ID stub**: a 4-byte hash of
