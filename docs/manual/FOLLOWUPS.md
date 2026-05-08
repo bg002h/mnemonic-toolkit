@@ -7,6 +7,40 @@ a confirmed retirement. Mirrors the FOLLOWUPS pattern used in
 
 ## Open
 
+### `mk-cli` — v0.2+ candidate
+
+mk-codec currently ships as a Rust library only (no standalone CLI),
+making it the asymmetric sibling among the four formats: `mnemonic`
+(integration CLI), `md-cli`, and `ms-cli` are command-line tools, but
+the only access to mk-codec is in-code via the Rust crate. The manual
+acknowledges this in chapter 44 (`44-mk-codec-rust.md`), which
+documents the Rust API surface rather than a CLI.
+
+A future `mk-cli` would close the asymmetry by exposing mk-codec's
+encode / decode / inspect / verify / vectors surface as a binary,
+parallel to md-cli's shape. End users who want to verify or recover
+an mk1 plate from a hardware-air-gapped machine without writing Rust
+would have a one-line install path.
+
+**Why it matters.** Without mk-cli, recovery from an mk1 plate
+requires either (a) running `mnemonic convert --from mk1=... --to
+xpub --to fingerprint --to path` (which works but bundles the entire
+toolkit, including all secret-material code paths the user may not
+want on a recovery machine), or (b) writing Rust against `mk-codec`
+directly. A standalone mk-cli with no secret-material dependencies
+would be the cleanest minimal-surface tool for mk1 plate recovery.
+
+**Manual coverage impact.** When mk-cli lands, chapter 44 of the
+manual would either be replaced with an `mk-cli.md` chapter
+(documenting the new CLI surface) or split — keeping the Rust-API
+chapter and adding a parallel CLI-ref chapter. Either way, the
+toolkit-side mirror invariant (`manual-cli-surface-mirror`,
+documented in CLAUDE.md) extends to mk-cli on day one.
+
+**Where it ships.** `crates/mk-cli/` in the `bg002h/mnemonic-key` repo,
+following the same crate-extraction pattern md-cli used. Cross-repo
+follow-up companion in the manual repo when the CLI ships.
+
 ### `custom-volvelles-per-card-type` — v0.2+ candidate
 
 The codex32 volvelle (printable paper-computer wheel) at
