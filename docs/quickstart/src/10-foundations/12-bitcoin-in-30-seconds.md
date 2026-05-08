@@ -49,6 +49,7 @@ goes into which slot).
 
 ## BIP, what's a BIP?
 
+:::primer
 A **BIP** — *Bitcoin Improvement Proposal* — is a numbered
 specification document. Bitcoin's standards process publishes
 each protocol or wallet convention as a BIP at
@@ -58,6 +59,7 @@ star uses several BIPs as building blocks: BIP-39 for entropy,
 BIP-32 for key derivation, BIP-388 for wallet policies, and
 BIP-93 ("codex32") for the error-correcting alphabet engraved on
 each card.
+:::
 
 Onward: how those three concepts map onto the three m-format
 cards.

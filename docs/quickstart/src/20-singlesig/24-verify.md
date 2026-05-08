@@ -62,6 +62,17 @@ the original bundle, a card from a different wallet — the failing
 sub-check names what disagrees and the run exits with a non-zero
 status.
 
+:::primer
+When a `*_decode` failure includes a *position* — for instance
+`mk1_decode: error at position 47` — the number is a 0-based index
+into the card string and pinpoints the single character whose
+checksum disagrees. This is the BCH code's locator output: a
+single-character error can be detected and located precisely. So
+"position 47" means look at character 47 of the failing card,
+re-stamp it, and re-run the check. You don't have to guess which
+character broke; the diagnostic names it.
+:::
+
 ## Why this matters before engraving
 
 Verification protects against three failure modes you do *not*

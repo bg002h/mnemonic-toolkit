@@ -28,6 +28,16 @@ Three flags carry the work:
   index `@0`. Single-sig has only one cosigner, so only `@0`. The
   multisig walkthrough in Part III uses `@0`, `@1`, `@2`.
 
+:::primer
+The `@N` notation is the toolkit's way of indexing a slot in a
+wallet template. For single-sig there is only `@0`. For 2-of-3
+multisig there are `@0`, `@1`, `@2` — one per cosigner. Inputs
+attach to slots via `--slot @N.<subkey>=<value>` where `<subkey>`
+can be `phrase` (BIP-39 seed phrase), `xpub` (watch-only xpub),
+`entropy` (raw bytes), `wif` (single-key import), and a few more.
+The full subkey grammar lives in `mnemonic bundle --help`.
+:::
+
 For a real bundle, replace the canonical phrase with the one you
 generated in [Generating entropy safely](22-generate-entropy.md).
 
