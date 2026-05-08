@@ -17,6 +17,12 @@ The three sibling codecs ship independently; this toolkit consumes them as libra
 
 When toolkit work surfaces an action item that affects a sibling codec, mirror an entry in BOTH repos' `design/FOLLOWUPS.md` with cross-citing `Companion:` lines. When the action ships, both entries update in lockstep.
 
+## Manual coverage
+
+The end-user manual lives at `docs/manual/` in this repo and is the single source of truth for the m-format star end-user surface (`mnemonic` / `md` / `ms` CLIs + `mk-codec` Rust API). v0.1 ships with the v0.8.0 toolkit surface (~120 flags across 18 subcommands). Tagged builds attach a PDF asset to the GitHub release (CI workflow at `.github/workflows/manual.yml`).
+
+Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`) or the `mk-codec` Rust API — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional `tests/lint.sh flag-coverage` step gates this on every CI run. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
+
 ## Conventions
 
 - Reference implementation in `crates/mnemonic-toolkit/`.
