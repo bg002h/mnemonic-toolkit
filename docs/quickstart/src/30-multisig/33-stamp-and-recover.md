@@ -42,15 +42,16 @@ six independent locations.
 
 ## Recovery quick-table
 
-The single rule: **the seed reconstructs everything else**. Public
-material (mk1, md1) is derivable from any cosigner's seed plus the
-wallet policy. So recovery scenarios fan out from "how many seeds
+The single rule: **each cosigner's seed reconstructs that
+cosigner's own ms1 and mk1**, and the md1 (the wallet policy) is
+derivable from any one of the three xpubs plus the bundle's
+template. So recovery scenarios fan out from "how many seeds
 remain accessible, and is the threshold still met?".
 
 | Lost / damaged | Wallet status | Recovery path |
 |---|---|---|
 | One cosigner's red ms1 | spendable (other two cosigners meet threshold) | The lost cosigner re-derives their ms1 from their seed via `mnemonic convert --from phrase=… --to ms1` and re-stamps. |
-| One blue mk1 plate | spendable | Re-derive from any cosigner's seed via `mnemonic convert --from phrase=… --to mk1`; the mk1 carries no secret. |
+| One blue mk1 plate | spendable | The cosigner whose mk1 was lost re-derives their own from their seed via `mnemonic convert --from phrase=… --to mk1`; the mk1 carries no secret, but each is bound to one specific cosigner's xpub. |
 | The green md1 plate | spendable | Re-derive from the three xpubs via `mnemonic export-wallet --template wsh-sortedmulti --threshold 2 --slot @N.xpub=…` (one slot per cosigner; no seeds needed). |
 | Two cosigners' ms1s + the md1 still readable | spendable | The threshold is 2; any two surviving seeds spend the wallet. |
 | Only one cosigner's ms1 + md1 readable | watch-only only | One seed cannot meet the 2-of-3 threshold; the wallet receives but does not spend. Move funds out via the surviving cosigners' coordination if any of their seeds can still be restated. |
