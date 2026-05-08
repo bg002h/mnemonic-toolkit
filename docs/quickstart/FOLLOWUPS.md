@@ -36,14 +36,14 @@ QuickStart-local deferred-work tracker. Closes lockstep with QuickStart release 
 
 mermaid-filter exits clean (zero-byte `mermaid-filter.err`) but the rendered TeX has no `\includegraphics` / `\includesvg` reference for the chapter 11 4-card overview. Source `.md` correctly opens with the ` ```mermaid ` fence (Q4 source-grep check passes). The same dropout is present in the published `manual-v0.1.0` PDF at chapter 11 — root cause is in shared toolchain (mermaid-filter + pandoc + svg integration), not the QuickStart source. Investigate during a future toolchain pass touching `docs/manual/pandoc/preamble.tex` or the mermaid-filter integration. Does NOT block QuickStart v0.1 since the issue is pre-existing.
 
-### `pandoc-highlighting-macros-leaked-to-pdf` — toolchain (cross-cuts manual + quickstart)
+## Closed
+
+### `pandoc-highlighting-macros-leaked-to-pdf` — toolchain (cross-cuts manual + quickstart) — RESOLVED
 
 **Tier:** cross-cutting (manual + quickstart)
 **Filed:** 2026-05-08 (Phase 1 implementer concern, observed in `m-format-quickstart.pdf` chapter 12 + verified in shipped `manual-v0.1.0` chapter 63)
-**Status:** open
+**Resolved:** 2026-05-08 — user-reported, fixed in same session
 
-Inside fenced `text` code blocks, pandoc's `\NormalTok{...}` and `\textless{}` highlighting macros render as raw text rather than expanding. Caused by `docs/manual/pandoc/preamble.tex:50` overriding the `Highlighting` Verbatim environment in a way that suppresses pandoc's `$highlighting-macros$` definitions. Same issue is present in the published manual (BIP-32 primer line 69 has identical input and renders identically broken — verified via `pdftotext` on `manual-v0.1.0`). Inherited; not a Phase 1 regression. Resolve during a toolchain pass touching `pandoc/preamble.tex`.
+Root cause: both `docs/manual/pandoc/preamble.tex` and `docs/quickstart/pandoc/preamble.tex` redefined the `Highlighting` Verbatim environment via `\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines, breakanywhere, fontsize=\footnotesize}` *without* `commandchars=\\\{\}`. Pandoc's syntax-highlighting macros (`\ExtensionTok`, `\NormalTok`, `\AttributeTok`, `\DataTypeTok`, `\OperatorTok`, etc.) require `commandchars=\\\{\}` on the Verbatim environment to be expanded; without it they render as literal text inside the PDF.
 
-## Closed
-
-(none yet)
+Fix: added `commandchars=\\\{\}` as the first option in both `\DefineVerbatimEnvironment{Highlighting}{Verbatim}{...}` blocks. Verified post-fix: `pdftotext` on freshly built PDFs returns no `*Tok` raw-text leaks; rendered code blocks now show clean syntax-highlighted output. Manual PDF page count dropped 129→121 pp; QuickStart 44→42 pp (highlighting-macros leak had bloated both).
