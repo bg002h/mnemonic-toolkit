@@ -10,3 +10,10 @@ build/
 # Rust target dir for the verify crate.
 verify/target/
 verify/Cargo.lock
+
+# LaTeX byproducts. xelatex normally writes these inside build/ (already
+# ignored above), but a misconfigured run could drop them at the source
+# root — these patterns are defensive in case that happens.
+*.aux
+*.log
+*.toc
