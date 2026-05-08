@@ -22,7 +22,7 @@ This spec covers that variant: a parallel artifact at `docs/quickstart/` with it
 |---|---|---|
 | D1 | Audience | True Bitcoin / m-format newcomer; ~25-40pp |
 | D2 | Workflow scope | Single-sig + 2-of-3 multisig + watch-only (single-sig WO + multisig WO) |
-| D3 | Source-of-truth strategy | Independent prose authoring; shared assets via symlinks (transcripts, lint configs); mermaid blocks copy-pasted (allows newcomer-tuned captions/colors) |
+| D3 | Source-of-truth strategy | Independent prose authoring; shared assets via symlinks for stable configs (transcripts, markdownlint, puppeteer, Dockerfile, lua filters); `.cspell.json` is a local file using cspell's `extends` key (so the QuickStart can manage its own word list); mermaid blocks copy-pasted (allows newcomer-tuned captions/colors) |
 | D4 | Location + versioning | `docs/quickstart/` parallel to `docs/manual/`; own `quickstart-v*` tag schedule |
 | D5 | Worked-example seed convention | Same canonical BIP-39 test seed + DANGER pattern as the manual; reuses the 5 existing `docs/manual/transcripts/*.{cmd,out}` files via symlink |
 
@@ -74,7 +74,7 @@ mnemonic-toolkit/docs/quickstart/
 ├── tests/
 │   ├── lint.sh                     # local trimmed copy (markdownlint + cspell + lychee only)
 │   └── verify-examples.sh          # SYMLINK → ../../manual/tests/verify-examples.sh
-├── .cspell.json                    # SYMLINK → ../manual/.cspell.json
+├── .cspell.json                    # LOCAL file: { "extends": "../manual/.cspell.json", "words": [] }
 ├── .markdownlint-cli2.jsonc        # SYMLINK → ../manual/.markdownlint-cli2.jsonc
 ├── .puppeteer.json                 # SYMLINK → ../manual/.puppeteer.json
 ├── Dockerfile.build                # SYMLINK → ../manual/Dockerfile.build
@@ -83,7 +83,9 @@ mnemonic-toolkit/docs/quickstart/
 └── FOLLOWUPS.md
 ```
 
-**Symlink rationale.** Linux/Mac default; Windows requires `core.symlinks=true`. Documented in `README.md`. Local + CI both run on Linux, so this is operational not blocking. Updates to lint configs in the manual propagate to QuickStart automatically.
+**Symlink rationale.** Linux/Mac default; Windows requires `core.symlinks=true`. Documented in `README.md`. Local + CI both run on Linux, so this is operational not blocking. Updates to symlinked configs (markdownlint, puppeteer, Dockerfile, filters) propagate to QuickStart automatically.
+
+**`.cspell.json` is a *local* file (not symlink).** Per architect review C-1: the QuickStart needs its own extension point for newcomer-voice vocabulary that the manual doesn't carry. cspell's `extends` key (supported since v6) lets the local file inherit the full manual word list while adding QuickStart-specific words without mutating the manual's config (which would trigger `manual.yml` CI on a `docs/manual/**` touch).
 
 **Why mermaid is *not* shared.** Mermaid blocks for the QuickStart's newcomer audience may want different colours, simpler labels, or trimmed nodes. Copy-pasting respects that. Drift cost is bounded — both copies are visible in `git grep '^```mermaid'`.
 
@@ -121,7 +123,7 @@ mnemonic-toolkit/docs/quickstart/
 - Single linear path: each chapter forward-points to the *next* one.
 - BIP terms introduced *as needed*, not in a separate primer chapter.
 - Power-user-only material (privacy-preserving, account-index, multipath family override) explicitly forward-pointed to the manual's relevant chapter.
-- DANGER box once per chapter that uses the canonical seed; subsequent re-uses cross-reference.
+- DANGER box once per chapter that uses the canonical seed; subsequent re-uses cross-reference. **DANGER box body text is re-authored in newcomer voice** (per architect review N-2); the box trigger (canonical seed appearance) and severity level are identical to the manual's.
 
 ## 6. Build pipeline
 
@@ -135,9 +137,11 @@ Cloned from `docs/manual/Makefile`. Differences:
 - `MD_SRC = $(shell find $(SRC_DIR) -type f -name '*.md' ! -name '99-build-banner.md' | LC_ALL=C sort)` (same exclusion pattern)
 - `PANDOC_METADATA = --metadata-file=$(QUICKSTART_DIR)/pandoc/metadata.yaml`
 - `MNEMONIC_BIN / MD_BIN / MS_BIN` defaults reuse manual's pattern (cargo run via symlinked workspace paths)
+- `DOCKER_IMAGE ?= mnemonic-quickstart-build:latest` (distinct from manual's tag, per architect review C-2; layers cache-hit since the Dockerfile is identical via symlink)
 - `release-attach VERSION=quickstart-v0.1.0` recipe identical shape
+- **`--template` flag dropped from the pandoc PDF invocation** (per architect review I-1). Manual's `pandoc/templates/manual.latex:83` hardcodes `\printindex`; the QuickStart has no `\index{}` markers so a separate template would be a no-op rename, and pandoc's built-in default is adequate for ~34pp. If output is unsatisfactory, add a local `pandoc/templates/quickstart.latex` without `\printindex` as a Phase-0 follow-on.
 
-`make pdf-docker` consumes the symlinked Dockerfile.build; reuses the same `mnemonic-manual-build:latest` image tag.
+`make pdf-docker` consumes the symlinked Dockerfile.build with the QuickStart's `mnemonic-quickstart-build:latest` tag.
 
 ### 6.2 Lint trimming
 
@@ -158,6 +162,12 @@ Drops: glossary-coverage (no formal glossary), flag-coverage (no CLI ref part), 
 Clone of `manual.yml`. Differences:
 
 ```yaml
+# `paths` filters apply only to branch pushes / PRs; tag pushes
+# matching `quickstart-v*` always trigger the workflow regardless of
+# which files are in the tag's commit. (Carry the same top-of-file
+# comment as manual.yml — GitHub Actions semantics, documented for
+# future maintainers.)
+
 on:
   push:
     branches: [main, master]
@@ -168,13 +178,19 @@ on:
   pull_request:
     paths:
       - 'docs/quickstart/**'
+      # Re-validate when symlinked-into-QuickStart configs change
+      # in the manual (per architect review I-2):
+      - 'docs/manual/.markdownlint-cli2.jsonc'
+      - 'docs/manual/pandoc/filters/**'
 ```
 
-Same install steps (apt pandoc + texlive + chromium-browser; npm tools; lychee tarball with `--strip-components=1`). Same `/etc/puppeteer-config.json` write step. Same `gh release create --generate-notes` if absent + `gh release upload --clobber`. Different `working-directory: docs/quickstart` and asset path (`build/m-format-quickstart.pdf`).
+Same install steps (apt pandoc + texlive + chromium-browser; npm tools; lychee tarball with `--strip-components=1`). Same `/etc/puppeteer-config.json` write step. Same `gh release create --generate-notes` if absent + `gh release upload --clobber`. Different `working-directory: docs/quickstart` (host-build `make pdf` step only — see §9 guardrail on Docker mounts) and asset path (`build/m-format-quickstart.pdf`).
+
+(No cross-path entry for `docs/manual/.cspell.json` because §4 makes it a local file, not a symlink. No cross-path for `Dockerfile.build` or `verify-examples.sh` — image rebuild not in CI path; logic-change in verify-examples.sh would be caught on the next QuickStart CI run.)
 
 ### 6.4 Tag schedule
 
-- `quickstart-v0.1.0-rc1` — A10b smoke test (delete after upload verified).
+- `quickstart-v0.1.0-rc1` — A10b smoke test (verify upload, then delete tag + release: `git tag -d quickstart-v0.1.0-rc1 && git push origin :quickstart-v0.1.0-rc1&& gh release delete quickstart-v0.1.0-rc1 --yes`).
 - `quickstart-v0.1.0` — final tag.
 - Independent of manual's `manual-v*` tags.
 
@@ -194,15 +210,16 @@ Same install steps (apt pandoc + texlive + chromium-browser; npm tools; lychee t
 
 ## 8. Phase plan (high-level)
 
+Per architect review N-4: Phases 4 + 5 collapsed into a single phase since each was only ~4pp / 2 chapters — too small to warrant its own reviewer round.
+
 | Phase | Scope | Reviewer | Convergence |
 |---|---|---|---|
 | 0 | Scaffolding | architect (structural) | 0C/0I |
 | 1 | Part I foundations (3 chapters) | reviewer | 0C/0I |
 | 2 | Part II single-sig (6 chapters) | reviewer | 0C/0I |
 | 3 | Part III multisig (3 chapters) | reviewer | 0C/0I |
-| 4 | Part IV watch-only (2 chapters) | reviewer | 0C/0I |
-| 5 | Part V next steps (2 chapters) | reviewer | 0C/0I |
-| 6 | Polish + CI smoke + PR + tag + release | architect (integrated) | Q1-Q9 |
+| 4 | Parts IV + V (4 chapters: 2 watch-only + 2 next-steps) | reviewer | 0C/0I |
+| 5 | Polish + CI smoke + PR + tag + release | architect (integrated) | Q1-Q9 |
 
 Per-phase reports persist to `docs/quickstart/agent-reports/phase-N-review-{1,2}.md`. Single-shot convergence acceptable when r1 reaches 0C/0I (manual cycle precedent).
 
@@ -217,6 +234,7 @@ No Phase 9 cross-repo equivalent. Existing `manual-cli-surface-mirror` already c
 - Read package source before guessing config-file names (mermaid-filter `.puppeteer.json` lesson).
 - Prefer host-installed CI over Docker for Chromium-dependent steps.
 - Default to using `--strip-components=1` for tarballs that include a top-level dir.
+- **CI runs host `make pdf` (not `make pdf-docker`)** (per architect review I-3); the Docker target is for local reproducibility only. If a Docker `run` step is ever added to the workflow, mount `$GITHUB_WORKSPACE` not `$PWD` and set `-w /work/docs/quickstart` as the working directory inside the container — this avoids the manual cycle's phase-8 C-1 bug where `git -C $TOOLKIT_ROOT` failed inside a too-narrow mount.
 
 ## 10. Out-of-scope deferrals (filed in `docs/quickstart/FOLLOWUPS.md`)
 
