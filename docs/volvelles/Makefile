@@ -96,27 +96,11 @@ $(BUILD_DIR)/%.pdf: $(VOLVELLES_DIR)/%.tex $(VOLVELLES_DIR)/%.cells.tex | verify
 	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error \
 		-jobname=$* $(VOLVELLES_DIR)/$*.tex
 
-# Wheel .tex sources are hand-written by Task 3. Fail fast with a clear error
-# if `make pdf` is run before they exist. The check happens at the top of the
-# `pdf` recipe (rather than as a pattern-rule dependency) so once the .tex
-# files exist on disk Task 3+ make runs are unaffected — make simply treats
-# the .tex files as source inputs to the pattern rule above.
-.PHONY: check-tex-sources
-check-tex-sources:
-	@missing=0; \
-	for tex in $(TEX_SRCS); do \
-		if [ ! -f $$tex ]; then \
-			echo "make pdf: missing wheel source $$tex — Task 3 (TikZ wheel sources) hasn't shipped yet." >&2; \
-			missing=1; \
-		fi; \
-	done; \
-	exit $$missing
-
 .PHONY: pdf
-# `.WAIT` (GNU make ≥ 4.4) is a parallel-safe sequencing fence: under -jN, all
-# prereqs left of `.WAIT` complete before any to its right start. This makes
-# the missing-.tex error fire cleanly without racing the pattern rule.
-pdf: check-tex-sources .WAIT $(PDFS)
+# If a wheel `.tex` source is missing (e.g. Task 3 hasn't shipped yet), make's
+# standard pattern-rule resolution emits a clear "No rule to make target
+# '<wheel>.tex'" error — graceful failure with no extra plumbing required.
+pdf: $(PDFS)
 
 # ---------------------------------------------------------------------------
 # Release-attach: copy rendered PDFs to the tracked release-source path.
