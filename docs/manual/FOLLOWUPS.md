@@ -50,24 +50,6 @@ by hand. Auto-extraction localises the toil to a single script.
 **How to apply:** stage during a v0.2 cycle when there is also a
 material content edit elsewhere; do not gate v0.2 on the script alone.
 
-### `ci-chromium-drop` — v0.3+ candidate
-
-Once `manual-v0.1.9` and one subsequent release have shipped without
-cache-skew issues, drop `chromium-browser` from the apt install lists
-in `.github/workflows/{manual,quickstart}.yml`. The cache-mode CI leg
-(`MERMAID_FILTER=skip` matrix entry, added in this cycle) already
-proves no chromium dependency at build time. Earliest candidate:
-`manual-v0.1.10+1`.
-
-**Why:** removes ~150–200 MB of chromium install + ~30 s of npm
-install of `mermaid-filter` from CI. Cache-mode build is the
-canonical chromium-less verification.
-
-**How to apply:** drop the `chromium-browser` apt line and the
-`mermaid-filter@^1` npm install from both workflow YAMLs; remove the
-matrix entirely so only the cache-mode build runs. Filed by the
-figures-cache cycle (manual-v0.1.9; commit pending).
-
 ### `npm-package-pinning` — v0.2 candidate
 
 `Dockerfile.build` uses `^` semver ranges on npm packages. For full
@@ -140,6 +122,33 @@ receiving wallets. Either light up the stubs in a v0.8.x patch
 definition to remove the `sparrow` / `specter` choices entirely.
 
 ## Closed
+
+### `ci-chromium-drop` — Resolved by manual-v0.1.10
+
+**Filed:** 2026-05-09 (figures-cache cycle, manual-v0.1.9).
+**Resolved:** 2026-05-09 (manual-v0.1.10 release; same day, no
+cache-skew waiting period — cache-mode build was already canonical
+under manual-v0.1.9 since `mermaid-block-silently-dropped-from-pdf`
+made on-mode unusable).
+
+Chromium + `mermaid-filter` + `mermaid-cli` removed from CI and the
+reproducible build environment:
+
+- `.github/workflows/{manual,quickstart}.yml`: dropped the
+  `cache_mode` matrix and the on-mode leg; the single remaining job
+  installs only pandoc + texlive + lint tools (no chromium, no
+  mermaid-* npm packages) and runs `make pdf MERMAID_FILTER=skip`.
+- `docs/manual/Dockerfile.build` (also covers quickstart via symlink):
+  dropped the `chromium` apt package, the `@mermaid-js/mermaid-cli`
+  and `mermaid-filter` npm installs, and the puppeteer-config block.
+- `docs/{manual,quickstart}/Makefile`: flipped `MERMAID_FILTER ?= on`
+  → `?= skip` so plain `make pdf` consumes the checked-in cache. The
+  on-mode arm is preserved for contributors regenerating the cache
+  (rare; only on mermaid source changes).
+
+Net: ~150–200 MB chromium install + ~30 s of npm install removed
+from every CI run; the build environment is `pandoc + texlive +
+markdownlint + cspell + lychee` with no browser stack.
 
 ### `figures-cache-implementation` — Resolved by manual-v0.1.9
 

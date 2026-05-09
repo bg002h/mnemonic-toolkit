@@ -1,8 +1,15 @@
 # mnemonic-toolkit/docs/manual/Dockerfile.build
 #
 # Reproducible build environment for `make pdf-docker`. Pinned versions
-# of pandoc, xelatex (texlive), makeindex, mermaid-cli, mermaid-filter,
-# markdownlint-cli2, cspell, lychee.
+# of pandoc, xelatex (texlive), makeindex, markdownlint-cli2, cspell,
+# lychee. No chromium / mermaid-filter / mermaid-cli: the build runs
+# `MERMAID_FILTER=skip` (Makefile default) and consumes the checked-in
+# `figures/cache/` PDFs. See `ci-chromium-drop` (closed) in
+# `docs/manual/FOLLOWUPS.md` for the migration record.
+#
+# Contributors who need to regenerate the cache (rare; only on mermaid
+# source changes) install mmdc + chromium locally and run
+# `make figures-cache`.
 #
 # Usage:
 #   make pdf-docker
@@ -30,16 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         texlive-fonts-recommended \
         texlive-fonts-extra \
         texlive-extra-utils \
-        chromium \
         nodejs \
         npm \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Node.js tools (mermaid + lint) ---------------------------------------
-# Pin major versions; `npm install -g` lands them in /usr/lib/node_modules.
+# --- Node.js tools (lint only; mermaid intentionally absent) --------------
 RUN npm install -g --omit=dev \
-        @mermaid-js/mermaid-cli@^11 \
-        mermaid-filter@^1 \
         markdownlint-cli2@^0.13 \
         cspell@^8
 
