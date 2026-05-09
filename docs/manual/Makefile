@@ -13,7 +13,7 @@
 #   make help          — print this help
 #
 # Variables (override on the command line or in CI):
-#   MNEMONIC_BIN, MD_BIN, MS_BIN — CLI invocation strings used by verify-examples and flag-coverage.
+#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings used by verify-examples and flag-coverage.
 #   MERMAID_FILTER  — 'on' (default) runs mermaid-filter; 'skip' uses figures/cache/ snapshots only.
 #   PANDOC, XELATEX, MAKEINDEX — tool paths (override if not on $PATH).
 #   DOCKER_IMAGE — name to tag the build image as (default mnemonic-manual-build:latest).
@@ -40,6 +40,7 @@ TRANSCRIPTS    := $(MANUAL_DIR)/transcripts
 MNEMONIC_BIN ?= cargo run --quiet --manifest-path $(TOOLKIT_ROOT)/Cargo.toml -p mnemonic-toolkit --bin mnemonic --
 MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-mnemonic/Cargo.toml -p md-cli --bin md --
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
+MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
 
 # ---------------------------------------------------------------------------
 # Tools (override with PANDOC=/path/to/pandoc etc.)
@@ -204,7 +205,8 @@ lint:
 		TESTS_DIR="$(TESTS_DIR)" \
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
-		MS_BIN="$(MS_BIN)"
+		MS_BIN="$(MS_BIN)" \
+		MK_BIN="$(MK_BIN)"
 
 # ---------------------------------------------------------------------------
 # Filter smoke test (Phase 0 verification)

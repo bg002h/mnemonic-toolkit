@@ -63,9 +63,12 @@ jobs:
             | sudo tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee"
           sudo chmod +x /usr/local/bin/lychee
 
+      - name: Install mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 --bin mk
+
       - name: Lint manual
         working-directory: docs/manual
-        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true
+        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk
 
       - name: Build PDF
         working-directory: docs/manual

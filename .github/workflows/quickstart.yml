@@ -71,9 +71,12 @@ jobs:
           { "args": ["--no-sandbox", "--disable-setuid-sandbox"] }
           EOF
 
+      - name: Install mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 --bin mk
+
       - name: Lint quickstart
         working-directory: docs/quickstart
-        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true
+        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk
 
       - name: Build PDF
         working-directory: docs/quickstart
