@@ -4,9 +4,9 @@
 #
 # Targets:
 #   make md            — concatenated markdown to build/m-format-quickstart.md
-#   make pdf           — typeset PDF to build/m-format-quickstart.pdf (needs pandoc + xelatex + mermaid-filter locally)
+#   make pdf           — typeset PDF to build/m-format-quickstart.pdf (needs pandoc + xelatex; consumes figures/cache/)
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
-#   make figures-cache — pre-render mermaid blocks to figures/cache/ for MERMAID_FILTER=skip mode
+#   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
 #   make lint          — markdownlint + cspell + lychee (3-of-6 from manual; no glossary/flag/index checks)
 #   make clean         — remove build/ and LaTeX byproducts
@@ -14,7 +14,8 @@
 #
 # Variables (override on the command line or in CI):
 #   MNEMONIC_BIN, MD_BIN, MS_BIN — CLI invocation strings used by verify-examples.
-#   MERMAID_FILTER  — 'on' (default) runs mermaid-filter; 'skip' uses figures/cache/ snapshots only.
+#   MERMAID_FILTER  — 'skip' (default) consumes figures/cache/ snapshots; 'on' runs mermaid-filter
+#                      (needs chromium + mermaid-filter locally — rare, only for cache regen review).
 #   PANDOC, XELATEX — tool paths (override if not on $PATH).
 #   DOCKER_IMAGE — name to tag the build image as (default mnemonic-quickstart-build:latest).
 
@@ -51,7 +52,7 @@ DOCKER_IMAGE ?= mnemonic-quickstart-build:latest
 # ---------------------------------------------------------------------------
 # Filter / build mode
 # ---------------------------------------------------------------------------
-MERMAID_FILTER ?= on
+MERMAID_FILTER ?= skip
 
 # ---------------------------------------------------------------------------
 # Source enumeration
