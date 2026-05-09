@@ -119,13 +119,12 @@ pdf: $(BUILD_DIR)/m-format-quickstart.pdf
 # Regenerate the build banner each PDF build so $(GIT_SHA) / $(BUILD_DATE) are fresh.
 GIT_SHA    ?= $(shell git -C $(TOOLKIT_ROOT) rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-TOOLKIT_VERSION ?= $(shell git -C $(TOOLKIT_ROOT) describe --tags --abbrev=0 2>/dev/null || echo dev)
 
 $(SRC_DIR)/99-build-banner.md: FORCE
 	@printf '%s\n' \
 		'# Build banner' \
 		'' \
-		'Built from commit `$(GIT_SHA)` on `$(BUILD_DATE)` for toolkit `$(TOOLKIT_VERSION)`.' \
+		'Built from commit `$(GIT_SHA)` on `$(BUILD_DATE)`.' \
 		'' \
 		'_This page is included in the PDF render only._' > $@
 
