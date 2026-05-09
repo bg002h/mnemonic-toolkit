@@ -10,17 +10,28 @@ on:
     branches: [main, master]
     paths:
       - 'docs/manual/**'
+      - 'docs/tools/render-mermaid-cache.py'
     tags:
       - 'manual-v*'
   pull_request:
     paths:
       - 'docs/manual/**'
+      - 'docs/tools/render-mermaid-cache.py'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      # Two render modes:
+      #   on   = mermaid-filter + Chromium (status-quo path).
+      #   skip = our pandoc Lua cache filter + checked-in PDFs (chromium-less).
+      # The skip-mode leg actively removes chromium before building, proving
+      # the cache is sufficient for build hosts without Puppeteer/Chromium.
+      fail-fast: false
+      matrix:
+        cache_mode: [on, skip]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -70,13 +81,32 @@ jobs:
         # against a multi-binary workspace.
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 mk-cli
 
+      - name: Remove chromium for cache-mode test
+        # Chromium-less proof: skip-mode must build without any Chromium
+        # binary on PATH. Covers apt's chromium-browser, the snap'd binary
+        # under /snap/bin/chromium, and pre-installed Chrome variants.
+        if: matrix.cache_mode == 'skip'
+        run: |
+          sudo apt-get remove -y --purge chromium chromium-browser \
+            google-chrome-stable chromium-snap 2>/dev/null || true
+          sudo snap remove chromium 2>/dev/null || true
+          sudo rm -rf /opt/google /opt/microsoft
+          if which chromium chrome google-chrome 2>/dev/null; then
+            echo "chromium still on PATH; cache-mode test invalid"; exit 1
+          fi
+
       - name: Lint manual
+        # Lint is render-mode-independent; run only on the on-mode leg to
+        # avoid doubling CI time. The figures-cache-verify gate (part of
+        # `make lint`) checks source-block ↔ cache-entry consistency, which
+        # is independent of which mermaid filter is active.
+        if: matrix.cache_mode == 'on'
         working-directory: docs/manual
         run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk
 
       - name: Build PDF
         working-directory: docs/manual
-        run: make pdf MERMAID_FILTER=on
+        run: make pdf MERMAID_FILTER=${{ matrix.cache_mode }}
 
       - name: Verify PDF
         working-directory: docs/manual
@@ -85,11 +115,18 @@ jobs:
       - name: Upload PDF as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: m-format-manual-pdf
+          name: m-format-manual-pdf-${{ matrix.cache_mode }}
           path: docs/manual/build/m-format-manual.pdf
 
       - name: Ensure GitHub release exists for this tag
-        if: startsWith(github.ref, 'refs/tags/manual-v')
+        # Release upload runs on the SKIP-mode leg only — that build embeds
+        # all 9 mermaid diagrams correctly via the cache filter. The on-mode
+        # leg silently drops mermaid blocks via a long-standing bug in
+        # mermaid-filter's emission path (see docs/quickstart/FOLLOWUPS.md
+        # closed entry `mermaid-block-silently-dropped-from-pdf`). The
+        # on-mode leg still runs as a regression check + chromium-install
+        # smoke-test, but its PDF is artifact-only, not shipped.
+        if: matrix.cache_mode == 'skip' && startsWith(github.ref, 'refs/tags/manual-v')
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -98,7 +135,7 @@ jobs:
           fi
 
       - name: Upload PDF to release (on manual-v* tag)
-        if: startsWith(github.ref, 'refs/tags/manual-v')
+        if: matrix.cache_mode == 'skip' && startsWith(github.ref, 'refs/tags/manual-v')
         env:
           REF_NAME: ${{ github.ref_name }}
         working-directory: docs/manual
