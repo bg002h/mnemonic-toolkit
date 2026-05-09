@@ -216,15 +216,14 @@ def emit_cells_tex(format_name: str, out_path: Path) -> None:
             stepped = polymod_step(residue, c, gen, shift, mask)
             ch = ALPHABET[stepped & 0x1F]
             angle_deg = c * ANGULAR_PITCH_DEG
-            radius_in = RADIAL_PITCH_IN * (r + 1)
-            # Innermost two rings have the tightest arc length per cell;
-            # ramp the font down for r=0 (smallest radius) and r=1.
-            if r == 0:
-                cell_macro = "volvellecellinnermost"
-            elif r == 1:
-                cell_macro = "volvellecellinner"
-            else:
-                cell_macro = "volvellecell"
+            # Shift the entire grid outward by one ring: innermost row sits
+            # at 2 * RADIAL_PITCH_IN (0.7"), giving 0.137" arc-length per
+            # letter vs the prior 0.069". 4× more readable; innermost-ring
+            # crowding eliminated. Outermost row extends from 11.2" to
+            # 11.55"; the wheel template's outer-boundary circle widens
+            # accordingly.
+            radius_in = RADIAL_PITCH_IN * (r + 2)
+            cell_macro = "volvellecellinner" if r == 0 else "volvellecell"
             lines.append(
                 f"\\node at ({angle_deg:.4f}:{radius_in:.4f}in)"
                 f" {{\\{cell_macro}{{{ch}}}}}; % r={r} c={c}"

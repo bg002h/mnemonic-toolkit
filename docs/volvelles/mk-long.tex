@@ -53,11 +53,16 @@
 % Page 2 — bottom disc (fixed).
 % =========================================================================
 \begin{center}
-% Bottom disc: helper-emitted cells span 0.35"–11.2"; +5% scale=0.3255
-% puts outer ring at 11.4 × 0.3255 = 3.71" (within 3.75" usable).
-\begin{tikzpicture}[rotate=-90, scale=0.3255]
-  \draw[line width=0.3pt] (0,0) circle (0.3in);
-  \draw[line width=0.3pt] (0,0) circle (11.4in);
+% Bottom disc: helper-emitted cells span 0.7"–11.55" after the v0.1.4 row-
+% shift (helper places row r at radius 0.35"·(r+2) instead of 0.35"·(r+1)).
+% Row 0's arc-length per cell jumps from 0.069" → 0.137" — 4× more readable;
+% innermost-ring crowding eliminated. scale=0.355 + 11.7" outer boundary
+% gives 11.7 × 0.355 = 4.15" → 8.30" diameter (within 8.3" usable at
+% margin=0.1in). Inner boundary circle removed: at 0.3" it overlapped the
+% new row-0 cells at 0.7"; the registration target's center cross-hair
+% suffices for cut-and-pivot alignment.
+\begin{tikzpicture}[rotate=-90, scale=0.355]
+  \draw[line width=0.3pt] (0,0) circle (11.7in);
 
   \input{mk-long.cells.tex}
 
