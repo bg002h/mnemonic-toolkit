@@ -42,6 +42,80 @@ is addressed (the two FOLLOWUPS interact).
 **Where:** `docs/volvelles/{mk-regular,mk-long,md-regular}.tex`,
 the registration-tick block.
 
+### `volvelle-hand-computation-toolkit-gap` — v0.2 candidate
+
+The v0.1 wheels under `docs/volvelles/` ship the 32×32 polymod-step
+cell grid only. Reference: codex32's
+`https://www.secretcodex32.com/docs/2023-03-07--color.pdf` ("Codex 32:
+A Shamir Secret Sharing Scheme", Curr & Snead, 2022, MIT-licensed). Its
+hand-computation toolkit comprises:
+
+- **codex32 Checksum Table** (2 pages) — 1024 entries indexed by 2-char
+  bech32 pairs, each output is 13 bech32 chars. The actual BCH polymod
+  step lookup; consumed by the Checksum Worksheet.
+- **Checksum Worksheet** (generation + verification) — triangular
+  grid; user copies share data into the top diagonal, looks up
+  2-char pairs in the Checksum Table to fill rows, adds adjacent rows
+  pairwise, verifies that the bottom diagonal equals `SECRETSHARE32`.
+- **Addition wheel/table** — GF(32) XOR for adjacent-row addition.
+- **Bech32 ↔ Binary conversion table** — 32 chars ↔ 5-bit values.
+- **Translation, Recovery, Fusion volvelles** — for Shamir share
+  arithmetic, not polymod. (Codex32 has *no* polymod wheel; the
+  Checksum Table replaces it.)
+
+Our v0.1 wheel answers exactly *"for state with top-5-bits b and input
+char c, what's the LOW-5-bits of the polymod output?"* — necessary
+but not sufficient: the polymod state is 60 bits (regular code) or
+70 bits (long code), and the wheel discards the upper bits the user
+needs to carry forward. As a result, **the v0.1 wheel cannot be used
+to hand-compute or hand-verify an mk1 / md1 string in isolation.**
+
+**v0.2 deliverable** (per-format, ×3 because mk1-regular, mk1-long,
+and md1-regular have different generator polynomials and target
+residues):
+
+1. **Per-format Checksum Table.** ~1024 × 13 chars (regular) or
+   × 15 chars (long). Two pages each. Enables 2-char-chunk polymod
+   lookup matching the codex32 worksheet model.
+2. **HRP-prefix encoding card.** A 5-symbol preamble derived from
+   BIP-173 HRP expansion (`[3,3,0,13,11]` for `mk`, `[3,3,0,13,4]`
+   for `md`) the user feeds before the data part. Codex32 doesn't
+   need this on the worksheet because `MS32_CONST` includes the
+   `ms` HRP; our `MK_*_CONST` / `MD_REGULAR_CONST` likewise include
+   the HRP, so the preamble must be explicit.
+3. **Per-format target-residue card.** The 13/15-char bech32-rendered
+   target the worksheet's bottom diagonal must equal — analogous to
+   codex32's `SECRETSHARE32` text. Today our `\selftestlegend` carries
+   the residue as a hex literal but not as the comparable
+   per-character string.
+4. **Addition wheel or table.** GF(32) XOR. Format-independent — one
+   artifact for all three formats.
+5. **Checksum Worksheet template.** Triangular grid sized for our
+   string lengths (mk1 single-chunk ~52 chars / chunked ~96–108 chars;
+   md1 ~22+ chars), with `+` / `=` markers and printed bottom-diagonal.
+6. **Bech32 ↔ binary conversion reference.** Codex32 prints this on
+   the front-matter; we don't ship it on the wheel pages.
+
+**Interaction with sibling FOLLOWUPS.** This entry partially
+supersedes both `bottom-disc-cell-density` and
+`bottom-disc-registration-tick-radius`: if v0.2 ships a full
+worksheet-and-table toolkit, the polymod wheel becomes optional
+companion-art, and the cell-density / tick-radius constraints stop
+being load-bearing. An honest v0.2 plan should pick one of:
+(a) ship the worksheet+table toolkit and demote the wheels to
+optional decorative companions; (b) keep wheels primary and accept
+hand-decodability remains aspirational; (c) hybrid — ship a
+cell-density-fixed wheel + the worksheet+table toolkit, with the
+wheel as a faster lookup for the polymod-step row of the worksheet.
+Decision deferred to the v0.2 spec phase.
+
+**Where:** new `docs/volvelles/checksum-tables/{mk-regular,mk-long,md-regular}.tex`
+(or `.pdf`); new `docs/volvelles/checksum-worksheet.tex`; new
+`docs/volvelles/addition.tex`; updates to the per-format wheel files
+to cross-reference the worksheet; new appendix subsection in
+`docs/manual/src/60-appendices/65-bch-codex-primer.md` documenting
+the hand-computation procedure end-to-end.
+
 ### `bch-string-length-empirical-sweep` — v0.2 candidate
 
 The "Typical string length" column of Appendix E's per-card table
