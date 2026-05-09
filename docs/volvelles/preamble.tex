@@ -1,7 +1,7 @@
 % Shared TikZ preamble for the m-format paper-computer wheels.
 % Engine: xelatex. Distinct from docs/manual/pandoc/preamble.tex.
 \documentclass[letterpaper]{article}
-\usepackage[letterpaper, margin=0.5in, nohead, nofoot]{geometry}
+\usepackage[letterpaper, margin=0.05in, nohead, nofoot]{geometry}
 \usepackage{fontspec}
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric,calc,positioning,arrows.meta}
@@ -24,10 +24,12 @@
 % as cramped as row 0.
 \newcommand{\volvellecellinner}[1]{\textsf{\fontsize{3.6}{4.2}\selectfont #1}}
 
-% \volvellecellinnermost{<bech32-char>}: ~40% of regular (~60% of inner).
-% Used for row 0 only — radius is smallest there, so the 32 cells must be
-% squeezed into the tightest arc.
-\newcommand{\volvellecellinnermost}[1]{\textsf{\fontsize{2.4}{3}\selectfont #1}}
+% \volvellecellinnermost{<bech32-char>}: aliased to \volvellecellinner
+% (3.6pt) for legibility per user-feedback in the v0.1.4 cycle. The
+% prior 2.4pt size proved hard to read on home printers; the +14%
+% diameter bump in v0.1.4 widens row-0 arc length enough that 3.6pt
+% fits without crowding.
+\newcommand{\volvellecellinnermost}[1]{\volvellecellinner{#1}}
 
 % \volvelleendpoint{<angle-deg>}{<format-label>}: thick arc segment at the
 % named angle on the top disc + small text label outside the disc. The arc
