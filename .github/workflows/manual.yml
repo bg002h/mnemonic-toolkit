@@ -64,7 +64,11 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Install mk-cli
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 --bin mk
+        # Use package-name selector (`mk-cli`) instead of `--bin mk`: the
+        # mnemonic-key workspace ships multiple binaries (mk-codec's
+        # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
+        # against a multi-binary workspace.
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 mk-cli
 
       - name: Lint manual
         working-directory: docs/manual
