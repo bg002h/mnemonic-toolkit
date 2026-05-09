@@ -69,9 +69,10 @@ difference is the slot input shape (`@0.xpub=…` instead of
 
 Stamp the two plates using the same discipline from
 [chapter 25](../20-singlesig/25-stamp.md). Recovery from mk1 + md1
-alone (`mnemonic convert --from mk1=… --to xpub --to fingerprint --to path`
-plus `md decode <md1 strings>`) yields everything a watch-only
-client needs.
+alone (`mk decode <mk1 strings>` plus `md decode <md1 strings>`)
+yields everything a watch-only client needs. The toolkit's
+`mnemonic convert --from mk1=… --to xpub --to fingerprint --to path`
+is also available if you have already installed it.
 
 ## Importing into a wallet
 

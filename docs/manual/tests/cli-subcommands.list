@@ -29,3 +29,10 @@ ms decode
 ms inspect
 ms verify
 ms vectors
+
+# mk
+mk encode
+mk decode
+mk inspect
+mk verify
+mk vectors

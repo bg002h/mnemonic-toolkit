@@ -1,18 +1,17 @@
 # Installing the toolkit
 
-The m-format constellation ships as four crates across four sibling repositories.
-For end-user use you need three CLI binaries (`mnemonic`, `md`, `ms`)
-and one Rust library (`mk-codec`) that you only encounter when
-writing custom Rust code. This chapter installs the three binaries.
+The m-format constellation ships as four crates across four sibling repositories,
+each with a standalone CLI binary (`mnemonic`, `md`, `ms`, `mk`).
+This chapter installs the four binaries.
 
 :::primer
 **The four sibling repos** are `bg002h/mnemonic-toolkit` (CLI:
 `mnemonic`), `bg002h/descriptor-mnemonic` (CLI: `md`),
 `bg002h/mnemonic-secret` (CLI: `ms`), and `bg002h/mnemonic-key`
-(library `mk-codec`, no CLI). They are published to crates.io as
-soon as their dependencies land there; until then, install from
-source via `cargo install --git`. Future versions will pin to
-crates.io directly.
+(library `mk-codec` plus CLI `mk`, since v0.2). They are published
+to crates.io as soon as their dependencies land there; until then,
+install from source via `cargo install --git`. Future versions will
+pin to crates.io directly.
 :::
 
 ## Pre-requisites
@@ -36,6 +35,7 @@ This is the recommended path until crates.io publication completes:
 cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit.git mnemonic-toolkit
 cargo install --locked --git https://github.com/bg002h/descriptor-mnemonic.git md-cli
 cargo install --locked --git https://github.com/bg002h/mnemonic-secret.git ms-cli
+cargo install --locked --git https://github.com/bg002h/mnemonic-key.git --tag mk-cli-v0.2.0 --bin mk
 ```
 
 Each command compiles the source and writes the binary into
@@ -48,6 +48,7 @@ Verify the binaries:
 mnemonic --version
 md --version
 ms --version
+mk --version
 ```
 
 ## Path B — clone and build (for contributors)
@@ -63,6 +64,7 @@ git clone https://github.com/bg002h/mnemonic-secret.git
 cd mnemonic-toolkit && cargo build --release --bin mnemonic
 cd ../descriptor-mnemonic && cargo build --release --bin md
 cd ../mnemonic-secret && cargo build --release --bin ms
+cd ../mnemonic-key && cargo build --release --bin mk
 ```
 
 The release binaries land in each repo's `target/release/`. Either
@@ -85,12 +87,13 @@ official binary releases.
 
 ## Verifying your install
 
-A trivial smoke check that all three CLIs respond:
+A trivial smoke check that all four CLIs respond:
 
 ```sh
 mnemonic --help | head -5
 md --help | head -5
 ms --help | head -5
+mk --help | head -5
 ```
 
 You should see a short usage banner from each. Now read on to

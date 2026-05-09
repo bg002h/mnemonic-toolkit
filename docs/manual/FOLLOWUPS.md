@@ -7,61 +7,6 @@ a confirmed retirement. Mirrors the FOLLOWUPS pattern used in
 
 ## Open
 
-### `mk-cli` — v0.2+ candidate
-
-mk-codec currently ships as a Rust library only (no standalone CLI),
-making it the asymmetric sibling among the four formats: `mnemonic`
-(integration CLI), `md-cli`, and `ms-cli` are command-line tools, but
-the only access to mk-codec is in-code via the Rust crate. The manual
-acknowledges this in chapter 44 (`44-mk-codec-rust.md`), which
-documents the Rust API surface rather than a CLI.
-
-A future `mk-cli` would close the asymmetry by exposing mk-codec's
-encode / decode / inspect / verify / vectors surface as a binary,
-parallel to md-cli's shape. End users who want to verify or recover
-an mk1 plate from a hardware-air-gapped machine without writing Rust
-would have a one-line install path.
-
-**Why it matters.** Without mk-cli, recovery from an mk1 plate
-requires either (a) running `mnemonic convert --from mk1=... --to
-xpub --to fingerprint --to path` (which works but bundles the entire
-toolkit, including all secret-material code paths the user may not
-want on a recovery machine), or (b) writing Rust against `mk-codec`
-directly. A standalone mk-cli with no secret-material dependencies
-would be the cleanest minimal-surface tool for mk1 plate recovery.
-
-**Where it ships.** `crates/mk-cli/` in the `bg002h/mnemonic-key`
-repo, following the same crate-extraction pattern md-cli used.
-
-**Cross-repo / cross-doc impact when mk-cli ships.** Concrete
-touch-list for whoever picks this up — every item below currently
-states or implies "mk-codec is library-only" and will need updating
-when that's no longer true:
-
-*Manual side (`docs/manual/`):*
-
-- `src/00-frontmatter.md`: prose that lists the four siblings (currently labels mk-codec as "no CLI") — update.
-- `src/10-foundations/11-welcome.md`: same prose pattern in the foundations chapter — update.
-- `src/40-cli-reference/44-mk-codec-rust.md`: either replace with `44-mk-cli.md` (CLI surface) or split into two chapters (Rust API + CLI). Decide based on whether the Rust API stays user-facing post-CLI or becomes internal.
-- `tests/lint.sh` glossary-coverage / flag-coverage steps: extend the term and flag enumerations to include mk-cli's surface so the lint catches drift.
-
-*QuickStart side (`docs/quickstart/`):*
-
-- `src/20-singlesig/26-recover.md`: the mk1-recovery step currently uses `mnemonic convert --from mk1=… --to xpub --to fingerprint --to path`. With mk-cli available, either swap to the minimal-surface form (`mk-cli decode …`) or document both paths.
-- `src/40-watch-only/41-singlesig-watch-only.md` + `42-multisig-watch-only.md`: any prose framing of "mk-codec is library-only" — update.
-
-*UltraQuickStart (`docs/ultraquickstart.md`):*
-
-- The 5-line "Recover" section uses `mnemonic convert --from mk1=…`. Probably the cleanest single-line replacement is `mk-cli decode <mk1-string>` for the air-gapped public-card recovery use case.
-
-*Top-level (`README.md`, `CLAUDE.md`, `crates/mnemonic-toolkit/README.md`):*
-
-- The 3- or 4-row sibling tables: change mk-codec's row from "library-only" to "library + mk-cli".
-- CLAUDE.md `## Manual coverage` section lists the CLIs the manual mirrors — extend to include mk-cli.
-- The `manual-cli-surface-mirror` invariant currently documented in CLAUDE.md / FOLLOWUPS.md applies to 3 CLIs; will extend to 4. The toolkit-side `tests/lint.sh flag-coverage` gate adds an mk-cli row.
-
-This entry's punch-list assumes the mk-cli surface is roughly: `mk-cli encode` (xpub + origin → mk1), `mk-cli decode` (mk1 → xpub + origin), `mk-cli inspect` (decoded fields with policy_id_stub display), `mk-cli verify` (round-trip check), `mk-cli vectors` (test-vector dump). Adjust the docs touch-list when the actual mk-cli SPEC lands.
-
 ### `bottom-disc-cell-density` — v0.2 candidate
 
 The v0.1 wheels under `docs/volvelles/` compress the bottom disc's
@@ -226,6 +171,24 @@ receiving wallets. Either light up the stubs in a v0.8.x patch
 definition to remove the `sparrow` / `specter` choices entirely.
 
 ## Closed
+
+### `mk-cli` — Resolved by mk-cli-v0.2.0
+
+**Filed:** 2026-05 (v0.1 cycle, asymmetric-CLI gap)
+**Resolved by mk-cli-v0.2.0** — 2026-05-08.
+
+`mk-cli` shipped as `crates/mk-cli/` in `bg002h/mnemonic-key` with the
+five planned subcommands (`encode`, `decode`, `inspect`, `verify`,
+`vectors`) per spec, plus the `--from-md1` cross-repo policy-id-stub
+derivation. The manual's chapter 44 (`44-mk-codec-rust.md`) was
+replaced with `44-mk-cli.md` (CLI surface; Rust API reference archived
+to `mnemonic-key/docs/MK_CODEC_RUST_API.md`). Frontmatter,
+foundations, install chapter, glossary, release-history, quickstart
+recovery + watch-only chapters, ultraquickstart, READMEs, and
+`CLAUDE.md` all updated to the four-CLI shape. `tests/lint.sh`
+flag-coverage gate now treats `mk` as a 4th CLI; `cli-subcommands.list`
+carries 5 new lines. The `manual-cli-surface-mirror` invariant extends
+from 3 CLIs to 4.
 
 ### `pandoc-highlighting-macros-leaked-to-pdf` — closed by manual-v0.1.1
 

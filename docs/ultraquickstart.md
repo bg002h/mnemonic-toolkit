@@ -85,5 +85,8 @@ md decode <md1-line-1> <md1-line-2> <md1-line-3>
 from `mk1`. `md decode` takes the three `md1` strings positionally and
 returns the wallet policy.
 
+If you have installed `mk-cli` separately, `mk decode <mk1-string>` is
+the minimal-surface alternative for the public-card recovery step.
+
 For multisig (`--template wsh-sortedmulti --threshold 2 --slot @0.phrase=… --slot @1.phrase=… --slot @2.phrase=…`)
 or watch-only (`--slot @0.xpub=…`), see the QuickStart's Parts III + IV.

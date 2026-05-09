@@ -31,12 +31,14 @@ The md1 format. Tracking notable releases:
 | `md-codec 0.10.x` | 2026-04-29 | `OriginPaths = 0x36`; per-`@N` divergent-path encoding. |
 | `md-codec 0.9.x` | 2026-04-29 | BIP-submission gate cleared; `chunk_set_id` rename. |
 
-## mnemonic-key / mk-codec
+## mnemonic-key / mk-codec / mk-cli
 
-The mk1 format. Library-only; no standalone CLI in v0.1.
+The mk1 format. Standalone CLI `mk` shipped in v0.2 alongside
+`mk-codec` v0.2.
 
 | Version | Date | Highlights |
 |---|---|---|
+| `mk-cli 0.2.0`  | 2026-05-08 | Standalone CLI with `encode`, `decode`, `inspect`, `verify`, `vectors` subcommands; `--from-md1` cross-repo policy-id-stub derivation. |
 | `mk-codec 0.2.2` | 2026-05-07 | Path-dictionary mirror retirement (post md-codec v0.11). v0.7.1 audit-cycle close-out. |
 | `mk-codec 0.2.0` | 2026-04-30 | Stable encoder/decoder surface; path-dictionary v1. |
 | `mk-codec 0.1.0` | 2026-04-29 | Initial release, v0.1 wire format. |

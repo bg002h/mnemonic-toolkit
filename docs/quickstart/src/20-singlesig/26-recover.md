@@ -41,26 +41,33 @@ if you need to persist it.
 
 ## Step 2 — recover xpub, fingerprint, and path from mk1
 
-The two mk1 strings are passed as a single space-separated value:
+The two mk1 strings are passed positionally to `mk decode`:
 
 ```sh
-mnemonic convert \
-  --from mk1="mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh" \
-  --to xpub --to fingerprint --to path
+mk decode \
+  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
+  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
 ```
 
 Output:
 
 ```text
-xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
-fingerprint: 73c5da0a
-path: 84'/0'/0'
+xpub:                xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
+origin_fingerprint:  73c5da0a
+origin_path:         m/84'/0'/0'
+policy_id_stubs:     deadbeef
+chunks:              2 (regular)
 ```
 
-The toolkit re-assembles the two strings, verifies the BCH checksum
-on each, and emits the three derived values. The `--to` flag
-repeats once per output you want — drop `--to fingerprint` and
-`--to path` if you only need the xpub.
+`mk decode` reassembles the two strings, verifies the BCH checksum
+on each, and emits the decoded card fields. `mk-cli` is the
+minimal-surface tool for mk1 recovery: it has no secret-material
+dependencies, so it is the cleanest binary to install on an
+air-gapped recovery machine.
+
+> If you have already installed `mnemonic-toolkit`, the equivalent
+> `mnemonic convert --from mk1="<string-1> <string-2>" --to xpub --to fingerprint --to path`
+> works too — pick whichever matches your recovery host's tooling.
 
 ## Step 3 — recover the wallet policy from md1
 

@@ -12,7 +12,7 @@
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR       — absolute path to src/
 #   TESTS_DIR     — absolute path to tests/
-#   MNEMONIC_BIN, MD_BIN, MS_BIN — CLI invocation strings.
+#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings.
 
 set -euo pipefail
 
@@ -23,6 +23,7 @@ for arg in "$@"; do
     MNEMONIC_BIN=*) MNEMONIC_BIN="${arg#*=}" ;;
     MD_BIN=*)       MD_BIN="${arg#*=}" ;;
     MS_BIN=*)       MS_BIN="${arg#*=}" ;;
+    MK_BIN=*)       MK_BIN="${arg#*=}" ;;
   esac
 done
 
@@ -69,9 +70,10 @@ else
     case "$line" in '' | '#'*) continue ;; esac
     bin="${line%% *}"; sub="${line#* }"
     case "$bin" in
-      mnemonic) cmd="$MNEMONIC_BIN $sub --help" ; chapter="$CLI_REF_DIR/41-mnemonic.md" ;;
-      md)       cmd="$MD_BIN $sub --help"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
-      ms)       cmd="$MS_BIN $sub --help"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
+      mnemonic)   cmd="$MNEMONIC_BIN $sub --help" ; chapter="$CLI_REF_DIR/41-mnemonic.md" ;;
+      md)         cmd="$MD_BIN $sub --help"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
+      ms)         cmd="$MS_BIN $sub --help"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
+      mk|mk-cli)  cmd="$MK_BIN $sub --help"       ; chapter="$CLI_REF_DIR/44-mk-cli.md" ;;
       *) err "unknown binary in cli-subcommands.list: $bin"; continue ;;
     esac
     if [ ! -f "$chapter" ]; then

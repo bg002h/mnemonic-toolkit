@@ -70,7 +70,10 @@ path: 84'/0'/0'
 
 The two mk1 strings are passed as a single space-separated value;
 the toolkit re-assembles them and verifies the BCH checksum on each.
-A standalone `mk` CLI is on the v0.2 roadmap.
+Alternatively, `mk decode <mk1-string-1> <mk1-string-2>` recovers
+the same fields directly from the standalone `mk-cli` binary
+without bundling the entire toolkit (useful on minimal-surface
+recovery machines).
 
 ## Step 3 — re-derive the descriptor from md1
 
