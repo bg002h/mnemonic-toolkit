@@ -59,15 +59,6 @@ RUN ARCH=$(dpkg --print-architecture) \
        | tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee" \
     && chmod +x /usr/local/bin/lychee
 
-# --- mermaid-cli wants a writable /tmp puppeteer config -------------------
-# Copy a known-good Puppeteer config that disables sandbox (we run as
-# non-root inside Docker, so Chromium's user-namespace sandbox is unhappy).
-RUN printf '%s\n' \
-    '{ "args": ["--no-sandbox", "--disable-setuid-sandbox"] }' \
-    > /etc/puppeteer-config.json
-ENV PUPPETEER_CONFIG_FILE=/etc/puppeteer-config.json
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
 WORKDIR /work
 
 # Default command prints help; the `make pdf-docker` recipe overrides this.
