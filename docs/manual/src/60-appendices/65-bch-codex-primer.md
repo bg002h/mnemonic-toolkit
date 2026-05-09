@@ -189,69 +189,59 @@ In practice:
   of every string: chunking makes character counts trivially
   auditable on the plate.
 
-## Hand-decodability with the codex32 volvelle
+## Hand-decodability of ms1 via the bundled codex32 paper-computer
 
-Codex32 was designed by Leon Olson Curr & Pearlwort Snead as a
-**paper computer** — a printed rotating-disk volvelle — so that a
-user can encode, verify, and even substitution-correct codex32
-strings without ever touching an electronic device. The
-[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)
-repo carries the printable volvelle PDFs; the design ethos is also
-visible in the original BIP-93 draft branch name
-(`apoelstra/bips/blob/2023-02--volvelles/...`) and the project
-website [secretcodex32.com](https://www.secretcodex32.com/).
+ms1 (HRP `ms`) uses BIP-93 codex32 directly via `rust-codex32` —
+identical generator polynomial, identical target residue
+`MS32_CONST = 0x10ce0795c2fd1e62a`, identical alphabet. The codex32
+hand-computation toolkit therefore decodes and verifies ms1 strings
+unmodified. A copy of the upstream PDF is bundled in this repo at
+[`docs/codex32/2023-03-07--color.pdf`](../../../codex32/2023-03-07--color.pdf)
+(MIT-licensed; see `docs/codex32/README.md` for attribution,
+provenance, and SHA-256 pin) so users can verify ms1 strings
+offline without depending on `secretcodex32.com` staying online.
 
-The implication for the m-format constellation is that
-hand-decodability is a *graded* property across the three cards.
+The codex32 hand-computation toolkit is richer than a single
+rotating disc: it ships a Checksum Worksheet (a triangular grid
+the user fills in two characters at a time), a 1024-entry Checksum
+Table indexed by 2-character bech32 pairs (the actual BCH
+polymod-step lookup), an Addition wheel for GF(32) XOR, a dice
+de-biasing worksheet for generating secret material, and three
+additional rotating discs for Shamir share arithmetic (Recovery,
+Translation, Fusion). Hand-verification of an ms1 string follows
+the bundled PDF's *Checksum Worksheet (Verification Instructions)*
+page directly.
 
-### What the wheel does mechanically
+### mk1 and md1: hand-decodability is out of scope
 
-A codex32 volvelle physically encodes the BCH polynomial
-arithmetic. Each input symbol triggers a fixed rotation; the
-operator reads off the result of the polymod operation step by
-step. The wheel encodes:
+The mk1 (HRP `mk`) and md1 (HRP `md`) cards use forked BCH
+plumbing — different target residues (`MK_REGULAR_CONST =
+0x1062435f91072fa5c`, `MK_LONG_CONST = 0x41890d7e441cbe97273`,
+`MD_REGULAR_CONST = 0x0815c07747a3392e7`) for cryptographic format
+separation, and (for mk1-long) a different generator polynomial.
 
-- the **field arithmetic** (GF(32) multiplication via the rotation
-  positions),
-- the **generator polynomial coefficients** (the wheel's tooth
-  spacing), and
-- an **endpoint comparison** at the last symbol against a fixed
-  target residue. A valid string lands on a marked position; an
-  invalid string lands elsewhere.
+A v0.1 cycle shipped per-format hand-computation discs for these
+cards, but a post-ship audit against the codex32 toolkit found
+those discs structurally insufficient: a 32×32 cell grid exposes
+only the LOW-5-bits of one polymod step, discarding the upper
+55–65 bits of state the user needs to carry forward to the next
+step. Codex32's hand-computation works through the combined
+Checksum Table, Worksheet, and Addition wheel; a single-step
+polymod disc cannot substitute. A v0.2 derivative covering mk1
+and md1 would have
+required ~6 pages of dense per-format lookup tables plus
+per-format worksheets — substantial work for cards that carry
+public material (xpub + origin metadata for mk1; wallet policy
+template for md1) where hand-decodability is not load-bearing.
 
-The first two are baked into the wheel's physical geometry. The
-third — the endpoint comparison — depends on which target residue
-the code uses.
-
-### Which constellation cards work directly with the off-the-shelf wheel
-
-| Card | Generator polynomial | Target residue | Off-the-shelf wheel? |
-|---|---|---|---|
-| ms1 | BIP-93 stock | `MS32_CONST = 0x10ce0795c2fd1e62a` (BIP-93 stock) | **Yes — directly.** ms1 uses BIP-93 codex32 unchanged via `rust-codex32`. The standard codex32 wheel decodes ms1 strings as-is. |
-| mk1 (regular) | BIP-93 stock | `MK_REGULAR_CONST = 0x1062435f91072fa5c` (NUMS-derived, top 65 bits of `SHA-256("shibbolethnumskey")`) | **Mechanics yes, endpoint no.** Per-step rotations are identical; the final endpoint comparison is against a different 65-bit constant. |
-| mk1 (long) | BIP-93 long-code generator | `MK_LONG_CONST = 0x41890d7e441cbe97273` (NUMS-derived, top 75 bits) | Same as mk1 regular — generator matches BIP-93 long, endpoint differs. |
-| md1 (regular) | BIP-93 stock | `MD_REGULAR_CONST = 0x0815c07747a3392e7` (NUMS-derived, top 65 bits of `SHA-256("shibbolethnums")`) | **Mechanics yes, endpoint no.** Same as mk1 regular. |
-
-A user who wants to verify an ms1 card on the kitchen table with
-a printed codex32 volvelle can do so directly. A user who wants
-to verify mk1 or md1 with the same wheel needs either:
-
-1. **A printed target-residue card.** Carry a small print-out
-   listing all three target residues; do the final XOR-against-target
-   step manually after the wheel computes the polymod. Straightforward
-   but reduces the elegance of the volvelle's all-on-the-wheel
-   property.
-2. **An mk1- or md1-specific volvelle** with endpoint marks
-   shifted to match the HRP-mixed target residue. First-cut v0.1
-   wheels for the m-format constellation NUMS-derived BCH
-   residues are now available in this repo:
-   [mk1-regular wheel](../../../volvelles/mk-regular.pdf),
-   [mk1-long wheel](../../../volvelles/mk-long.pdf), and
-   [md1-regular wheel](../../../volvelles/md-regular.pdf).
-   Hand-decoding ergonomics will improve in v0.2 — see
-   `bottom-disc-cell-density` and
-   `bottom-disc-registration-tick-radius` in
-   `docs/manual/FOLLOWUPS.md`.
+The strategic decision was therefore to retire the v0.1
+deliverables and not pursue v0.2 derivatives. Hand-verification
+for mk1 and md1 is performed at decode time by the toolkit's CLIs
+(`mnemonic verify-bundle`, `mk verify`, `md verify`); see Chapter 4
+for the operational details. The audit findings and the cycle
+that retired the v0.1 deliverables are recorded under the
+manual-v0.1.8 unified closure note in the *Closed* section of
+`docs/manual/FOLLOWUPS.md`.
 
 ### Why HRP mixing was accepted at this cost
 
@@ -265,25 +255,22 @@ the polymod landing on `MK_REGULAR_CONST` instead of
 `MS32_CONST` — combinatorially implausible with NUMS-derived
 constants.
 
-The trade-off: stock-volvelle compatibility for mk1 / md1 was
+The trade-off: stock-codex32 hand-decodability for mk1 / md1 was
 given up in exchange for cryptographically strong format
-separation. ms1 retains stock-volvelle compatibility because it
-uses BIP-93 directly. For a user who specifically wants
-hand-recovery without electronics, the practical recipe today is:
+separation. ms1 retains direct codex32 compatibility because it
+uses BIP-93 unchanged. The practical recipe today is:
 
-- Print the BlockstreamResearch volvelle for ms1 verification.
-- Print the v0.1 HRP-specific wheels for mk1 and md1 verification:
-  [mk1-regular wheel](../../../volvelles/mk-regular.pdf),
-  [mk1-long wheel](../../../volvelles/mk-long.pdf),
-  [md1-regular wheel](../../../volvelles/md-regular.pdf).
-- Or carry a small printed card listing the three target residues
-  (`MS32_CONST`, `MK_REGULAR_CONST`, `MD_REGULAR_CONST`); do the
-  final XOR step by hand for mk1 / md1.
+- For ms1 hand-verification, print the bundled
+  [codex32 paper-computer PDF](../../../codex32/2023-03-07--color.pdf)
+  and follow its Checksum Worksheet instructions verbatim.
+- For mk1 and md1, hand-verification is not in scope; the BCH
+  checksums are verified at decode time by the toolkit's CLIs
+  (`mnemonic verify-bundle`, `mk verify`, `md verify`).
 
 ### Sources for further reading
 
 - **[BIP-93](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki)** — the canonical codex32 specification, including the §"Error Correction" claims quoted above and a Python reference implementation of the polynomial.
-- **[BlockstreamResearch/codex32](https://github.com/BlockstreamResearch/codex32)** — the original codex32 paper-computer work by Leon Olson Curr & Pearlwort Snead that became BIP-93.
+- **[Bundled codex32 paper-computer PDF](../../../codex32/2023-03-07--color.pdf)** (`docs/codex32/2023-03-07--color.pdf`) — Curr & Snead's original Shamir Secret Sharing paper-computer toolkit, MIT-licensed; see `docs/codex32/README.md` for attribution, provenance, and SHA-256 pin.
 - **[apoelstra/rust-codex32](https://github.com/apoelstra/rust-codex32)** — Andrew Poelstra's CC0 Rust reference implementation. ms-codec depends on `codex32 = "=0.1.0"` directly via this crate.
 - mk1's forked BCH plumbing: `crates/mk-codec/src/string_layer/bch.rs` in the [mnemonic-key](https://github.com/bg002h/mnemonic-key) repo.
 - md1's forked BCH plumbing: `crates/md-codec/src/bch.rs` in the [descriptor-mnemonic](https://github.com/bg002h/descriptor-mnemonic) repo.
