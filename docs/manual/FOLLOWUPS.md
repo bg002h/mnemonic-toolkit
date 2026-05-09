@@ -150,18 +150,40 @@ definition to remove the `sparrow` / `specter` choices entirely.
 stub). The Python helper at `docs/tools/render-mermaid-cache.py` walks
 `docs/{manual,quickstart}/src/**/*.md`, extracts every ` ```mermaid `
 block via `re.MULTILINE | re.DOTALL`, hashes the body bytes-verbatim
-with SHA-256, and renders each via `mmdc` to
-`docs/{manual,quickstart}/figures/cache/<sha>.svg`. A vendored pure-Lua
+with SHA-256, and renders each via `mmdc -o *.pdf` to
+`docs/{manual,quickstart}/figures/cache/<sha>.pdf`. A vendored pure-Lua
 SHA-256 module (`docs/manual/pandoc/filters/sha256.lua`, byte-aligned
 with Python's `hashlib`) is consumed by a new pandoc Lua filter
 (`docs/manual/pandoc/filters/mermaid-cache-filter.lua`) that runs on
 `MERMAID_FILTER=skip` and replaces every mermaid block with
-`\includegraphics{cache/<sha>.svg}`. The 13 cache entries (9 manual + 4
-quickstart) ship checked into git; build hosts without Chromium can
-build the manual + quickstart from the cache. CI gains a `cache_mode:
-skip` matrix leg that actively removes Chromium before building,
-proving the cache is sufficient. Plan file:
+`\includegraphics{cache/<sha>.pdf}`. (Spec originally locked SVG; the
+SVG→PDF format pivot landed mid-cycle when xelatex couldn't size SVG
+without inkscape — see commit message for full rationale.) The 13
+cache entries (9 manual + 4 quickstart) ship checked into git; build
+hosts without Chromium can build the manual + quickstart from the
+cache. CI gains a `cache_mode: skip` matrix leg that actively removes
+Chromium before building, proving the cache is sufficient. Plan file:
 `/home/bcg/.claude/plans/concurrent-cooking-scone.md` (this cycle).
+
+### `mermaid-block-silently-dropped-from-pdf` — Resolved by manual-v0.1.9 (figures-cache cycle, bonus)
+
+**Filed:** 2026-05-08 (cross-cutting; primary entry in `docs/quickstart/FOLLOWUPS.md`).
+**Resolved:** 2026-05-09 (figures-cache cycle, bonus closure).
+
+Companion closure of the cross-cutting FOLLOWUP whose primary entry
+lives in `docs/quickstart/FOLLOWUPS.md`. Mid-cycle Spike B revealed
+the dropout was broader than chapter-11-only — `qpdf --qdf` on
+`m-format-manual.pdf` (manual-v0.1.8 build) showed `/Subtype /Form`
+count = 0, meaning **all 9 manual mermaid blocks were silently dropped
+from the on-mode pipeline**. The cache pipeline (introduced in this
+cycle) bypasses `mermaid-filter` entirely; `qpdf --qdf` on the
+cache-mode build shows `/Subtype /Form` count = 9 — all diagrams
+correctly embedded. The release workflow (`.github/workflows/manual.yml`)
+now uploads the **skip-mode PDF** as the canonical release artifact, so
+`manual-v0.1.9` and subsequent releases ship the corrected build with
+all diagrams visible. The committed `docs/m-format-manual.pdf` in the
+repo is also the skip-mode build. See the quickstart-side companion
+entry for full root-cause analysis.
 
 ### Volvelle retirement / codex32-incorporation cycle (manual-v0.1.8)
 

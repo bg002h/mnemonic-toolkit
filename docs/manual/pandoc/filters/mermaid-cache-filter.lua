@@ -1,5 +1,5 @@
 -- mermaid-cache-filter.lua — pandoc Lua filter for MERMAID_FILTER=skip mode.
--- Replaces every ```mermaid CodeBlock with `\includegraphics{<cache>/<sha>.svg}`,
+-- Replaces every ```mermaid CodeBlock with `\includegraphics{<cache>/<sha>.pdf}`,
 -- where <sha> is sha256(block.text) and <cache> is from MERMAID_CACHE_DIR.
 -- Hard-errors on cache-miss; warns on metadata mismatch / absent / malformed.
 -- See ../../FOLLOWUPS.md (Closed: figures-cache-implementation) for design rationale.

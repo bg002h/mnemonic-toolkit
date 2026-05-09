@@ -26,7 +26,7 @@ jobs:
     strategy:
       # Two render modes:
       #   on   = mermaid-filter + Chromium (status-quo path).
-      #   skip = our pandoc Lua cache filter + checked-in SVGs (chromium-less).
+      #   skip = our pandoc Lua cache filter + checked-in PDFs (chromium-less).
       # The skip-mode leg actively removes chromium before building, proving
       # the cache is sufficient for build hosts without Puppeteer/Chromium.
       fail-fast: false
