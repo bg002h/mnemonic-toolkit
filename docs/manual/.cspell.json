@@ -102,6 +102,7 @@
     "trezor",
     "unstored",
     "untracked",
+    "unspendable",
     "UTXOs",
     "walleted",
     "wordlist",
