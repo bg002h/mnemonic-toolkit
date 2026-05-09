@@ -135,11 +135,11 @@ The descriptor card. Encodes a BIP-388-style wallet policy. CLI
 binary `md`; library crate `md-codec` in repo
 `bg002h/descriptor-mnemonic`.
 
-## mk1 / mk-codec
+## mk1 / mk-cli / mk-codec
 
 The key card. Encodes an xpub plus its BIP-32 origin (master
-fingerprint + derivation path). Library-only — no CLI in v0.1.
-Repo `bg002h/mnemonic-key`.
+fingerprint + derivation path). CLI binary `mk` (since v0.2);
+library crate `mk-codec`. Repo `bg002h/mnemonic-key`.
 
 ## ms1 / ms-cli / ms-codec
 

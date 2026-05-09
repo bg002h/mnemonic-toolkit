@@ -6,10 +6,10 @@ This file is auto-loaded by Claude Code when starting a session in this reposito
 
 `mnemonic-toolkit` is the top-level integration crate of the **m-format constellation**:
 
-- [`md-codec`](https://github.com/bg002h/descriptor-mnemonic) — wallet descriptors / policies (`md1`, HRP `md`).
-- [`mk-codec`](https://github.com/bg002h/mnemonic-key) — xpubs (`mk1`, HRP `mk`).
-- [`ms-codec`](https://github.com/bg002h/mnemonic-secret) — BIP-39 entropy (`ms1`, HRP `ms`).
-- **mnemonic-toolkit** (this repo) — takes a seed phrase, emits the three cards as a coherent steel-engravable bundle.
+- [`md-codec`](https://github.com/bg002h/descriptor-mnemonic) — wallet descriptors / policies (`md1`, HRP `md`); CLI `md`.
+- [`mk-codec`](https://github.com/bg002h/mnemonic-key) — xpubs (`mk1`, HRP `mk`); CLI `mk` (since v0.2).
+- [`ms-codec`](https://github.com/bg002h/mnemonic-secret) — BIP-39 entropy (`ms1`, HRP `ms`); CLI `ms`.
+- **mnemonic-toolkit** (this repo) — takes a seed phrase, emits the three cards as a coherent steel-engravable bundle; CLI `mnemonic`.
 
 The three sibling codecs ship independently; this toolkit consumes them as library deps (git deps until they hit crates.io in lockstep with v0.1).
 
@@ -19,9 +19,9 @@ When toolkit work surfaces an action item that affects a sibling codec, mirror a
 
 ## Manual coverage
 
-The end-user manual lives at `docs/manual/` in this repo and is the single source of truth for the m-format constellation end-user surface (`mnemonic` / `md` / `ms` CLIs + `mk-codec` Rust API). v0.1 ships with the v0.8.0 toolkit surface (~120 flags across 18 subcommands). Tagged builds attach a PDF asset to the GitHub release (CI workflow at `.github/workflows/manual.yml`).
+The end-user manual lives at `docs/manual/` in this repo and is the single source of truth for the m-format constellation end-user surface (`mnemonic` / `md` / `ms` / `mk` CLIs). Tagged builds attach a PDF asset to the GitHub release (CI workflow at `.github/workflows/manual.yml`).
 
-Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`) or the `mk-codec` Rust API — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional `tests/lint.sh flag-coverage` step gates this on every CI run. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
+Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling-codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`, `mnemonic-key/mk-cli`) — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional `tests/lint.sh flag-coverage` step gates this on every CI run; the manual chapters mirror clap-derive's `--help` output for all four CLIs. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
 
 ## Conventions
 

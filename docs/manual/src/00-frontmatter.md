@@ -41,7 +41,7 @@ The chapters are divided into six parts:
 | I — Foundations | Welcome, navigation, concept signposts | Read first. |
 | II — Quick start | Install, first bundle, verify, recover | Read next; gives a working bundle in under 30 minutes. |
 | III — Guided workflows | 8 end-to-end recipes (single-sig, multisig, taproot multi, watch-only, recovery, migration, wallet export, BIP-85 children) | Skim the table of contents and read the workflows that match what you're building. |
-| IV — CLI reference | `mnemonic`, `md`, `ms`, `mk-codec` | Reference; consult per command. |
+| IV — CLI reference | `mnemonic`, `md`, `ms`, `mk` | Reference; consult per command. |
 | V — Comparing & contrasting | 7 decision-oriented chapters | Read to choose between overlapping features. |
 | VI — Appendices | Glossary + 4 newcomer primers + test seeds + troubleshooting + release history + index | Mix of reference and primer material. |
 
