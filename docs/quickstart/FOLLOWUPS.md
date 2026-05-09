@@ -28,15 +28,19 @@ QuickStart-local deferred-work tracker. Closes lockstep with QuickStart release 
 
 `pandoc/metadata.yaml` carries `fontsize` redundancy inherited from `docs/manual/pandoc/metadata.yaml`. Cosmetic; not a regression.
 
-### `mermaid-block-silently-dropped-from-pdf` — toolchain (cross-cuts manual + quickstart)
+## Closed
+
+### `mermaid-block-silently-dropped-from-pdf` — Resolved by manual-v0.1.9 / quickstart-v0.1.6 (figures-cache cycle)
 
 **Tier:** cross-cutting (manual + quickstart)
 **Filed:** 2026-05-08 (Phase 1 implementer concern, observed in `m-format-quickstart.pdf` chapter 11 + verified in shipped `manual-v0.1.0` chapter 11)
-**Status:** open
+**Resolved:** 2026-05-09 (figures-cache cycle, bonus closure)
 
-mermaid-filter exits clean (zero-byte `mermaid-filter.err`) but the rendered TeX has no `\includegraphics` / `\includesvg` reference for the chapter 11 4-card overview. Source `.md` correctly opens with the ` ```mermaid ` fence (Q4 source-grep check passes). The same dropout is present in the published `manual-v0.1.0` PDF at chapter 11 — root cause is in shared toolchain (mermaid-filter + pandoc + svg integration), not the QuickStart source. Investigate during a future toolchain pass touching `docs/manual/pandoc/preamble.tex` or the mermaid-filter integration. Does NOT block QuickStart v0.1 since the issue is pre-existing.
+Original report: `mermaid-filter` exits clean but the rendered TeX has no `\includegraphics` reference for chapter 11's 4-card overview. The same dropout was present in `manual-v0.1.0` chapter 11.
 
-## Closed
+**Bonus closure root-cause finding:** mid-cycle Spike B (figures-cache implementation, 2026-05-09) revealed the dropout was **not chapter-11-specific** — `qpdf --qdf` on `m-format-manual.pdf` (manual-v0.1.8 build, MERMAID_FILTER=on) showed `/Subtype /Form` count = 0 across the entire PDF, meaning **all 9 manual mermaid blocks were silently dropped**, not just chapter 11. The bug was in `mermaid-filter`'s pandoc-AST emission path — its synthesised `\includegraphics` references were apparently malformed in a way that xelatex silently skipped them (no error, no diagram). The cache-mode pipeline (introduced in this cycle) bypasses `mermaid-filter` entirely: the new pandoc Lua filter `docs/manual/pandoc/filters/mermaid-cache-filter.lua` emits its own `\includegraphics{cache/<sha>.pdf}` directly, and `qpdf --qdf` on the cache-mode build shows `/Subtype /Form` count = 9 — all diagrams successfully embedded. The published `manual-v0.1.9` PDF (released from this cycle) is the on-mode build, which still has the bug; once the `ci-chromium-drop` FOLLOWUP retires the on-mode leg in a future cycle, all releases will use the working cache-mode build.
+
+## Other closed entries
 
 ### `pandoc-highlighting-macros-leaked-to-pdf` — toolchain (cross-cuts manual + quickstart) — RESOLVED
 

@@ -50,19 +50,23 @@ by hand. Auto-extraction localises the toil to a single script.
 **How to apply:** stage during a v0.2 cycle when there is also a
 material content edit elsewhere; do not gate v0.2 on the script alone.
 
-### `figures-cache-implementation` — v0.2 candidate
+### `ci-chromium-drop` — v0.3+ candidate
 
-`make figures-cache` is currently a stub. It should pre-render every
-` ```mermaid ` block under `src/` to SVG, key the cache file by
-SHA-256 of the source block, and write into `figures/cache/`. The
-`MERMAID_FILTER=skip` mode then consumes the cache to support builds
-on hosts where `mermaid-filter` (Chromium) is unavailable.
+Once `manual-v0.1.9` and one subsequent release have shipped without
+cache-skew issues, drop `chromium-browser` from the apt install lists
+in `.github/workflows/{manual,quickstart}.yml`. The cache-mode CI leg
+(`MERMAID_FILTER=skip` matrix entry, added in this cycle) already
+proves no chromium dependency at build time. Earliest candidate:
+`manual-v0.1.10+1`.
 
-**Why:** Chromium / Puppeteer is a large dependency. Some contributors
-on minimal Linux images can't render mermaid live. Pre-rendered cache
-lets them still produce a PDF.
+**Why:** removes ~150–200 MB of chromium install + ~30 s of npm
+install of `mermaid-filter` from CI. Cache-mode build is the
+canonical chromium-less verification.
 
-**How to apply:** v0.2; not blocking v0.1.
+**How to apply:** drop the `chromium-browser` apt line and the
+`mermaid-filter@^1` npm install from both workflow YAMLs; remove the
+matrix entirely so only the cache-mode build runs. Filed by the
+figures-cache cycle (manual-v0.1.9; commit pending).
 
 ### `npm-package-pinning` — v0.2 candidate
 
@@ -136,6 +140,28 @@ receiving wallets. Either light up the stubs in a v0.8.x patch
 definition to remove the `sparrow` / `specter` choices entirely.
 
 ## Closed
+
+### `figures-cache-implementation` — Resolved by manual-v0.1.9
+
+**Filed:** v0.1 cycle (mid-cycle, deferred to v0.2).
+**Resolved:** 2026-05-09 (manual-v0.1.9 release).
+
+`make figures-cache` is now a working pre-render pipeline (replaced the
+stub). The Python helper at `docs/tools/render-mermaid-cache.py` walks
+`docs/{manual,quickstart}/src/**/*.md`, extracts every ` ```mermaid `
+block via `re.MULTILINE | re.DOTALL`, hashes the body bytes-verbatim
+with SHA-256, and renders each via `mmdc` to
+`docs/{manual,quickstart}/figures/cache/<sha>.svg`. A vendored pure-Lua
+SHA-256 module (`docs/manual/pandoc/filters/sha256.lua`, byte-aligned
+with Python's `hashlib`) is consumed by a new pandoc Lua filter
+(`docs/manual/pandoc/filters/mermaid-cache-filter.lua`) that runs on
+`MERMAID_FILTER=skip` and replaces every mermaid block with
+`\includegraphics{cache/<sha>.svg}`. The 13 cache entries (9 manual + 4
+quickstart) ship checked into git; build hosts without Chromium can
+build the manual + quickstart from the cache. CI gains a `cache_mode:
+skip` matrix leg that actively removes Chromium before building,
+proving the cache is sufficient. Plan file:
+`/home/bcg/.claude/plans/concurrent-cooking-scone.md` (this cycle).
 
 ### Volvelle retirement / codex32-incorporation cycle (manual-v0.1.8)
 

@@ -72,6 +72,12 @@ PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/primer-box.lua
 
 ifeq ($(MERMAID_FILTER),on)
 	PDF_FILTER_ARGS += --filter mermaid-filter
+else ifeq ($(MERMAID_FILTER),skip)
+	PDF_FILTER_ARGS += --lua-filter $(FILTERS_DIR)/mermaid-cache-filter.lua
+	# Absolute path: pandoc may be invoked from any cwd; the Lua filter
+	# resolves cache paths via this env var, so a relative value would
+	# silently miss-resolve.
+	export MERMAID_CACHE_DIR := $(abspath $(SRC_DIR)/../figures/cache)
 endif
 
 PANDOC_METADATA := --metadata-file=$(PANDOC_DIR)/metadata.yaml
@@ -167,10 +173,22 @@ pdf-docker: docker-image
 # ---------------------------------------------------------------------------
 # Pre-rendered mermaid figures cache (offline build fallback)
 # ---------------------------------------------------------------------------
-.PHONY: figures-cache
+.PHONY: figures-cache figures-cache-verify
 figures-cache:
-	@echo "figures-cache: not yet implemented (see FOLLOWUPS.md). Run with MERMAID_FILTER=on for live rendering."
-	@false
+	python3 $(TOOLKIT_ROOT)/docs/tools/render-mermaid-cache.py \
+		--doc-root $(QUICKSTART_DIR) \
+		--src-glob 'src/**/*.md' \
+		--cache-dir figures/cache
+
+figures-cache-verify:
+	@python3 $(TOOLKIT_ROOT)/docs/tools/render-mermaid-cache.py \
+		--doc-root $(QUICKSTART_DIR) \
+		--src-glob 'src/**/*.md' \
+		--cache-dir figures/cache \
+		--verify
+
+# Run the cache-verify gate as a lint prerequisite (Make merges multiple `lint:` rules).
+lint: figures-cache-verify
 
 # ---------------------------------------------------------------------------
 # Worked-example regeneration / verification
