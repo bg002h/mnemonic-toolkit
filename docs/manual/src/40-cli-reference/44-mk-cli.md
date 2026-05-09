@@ -239,7 +239,7 @@ runs from any working directory without a fixture-path dependency.
 
 ```sh
 mk vectors --out /tmp/mk-vectors
-# wrote N vector file(s) to /tmp/mk-vectors
+# (stderr) wrote N vector file(s) to /tmp/mk-vectors
 ```
 
 ---
@@ -263,7 +263,9 @@ In `--json` mode, errors are emitted as a structured envelope:
 Error `kind` values map 1:1 to mk-codec's `Error` enum variants
 (e.g., `InvalidHrp`, `MixedCase`, `BchUncorrectable`,
 `ChunkSetIdMismatch`, `PathTooDeep`) plus mk-cli-only kinds:
-`UsageError`, `ContentMismatch`, `IoError`, `MissingArgument`.
+`UsageError`, `ContentMismatch`, `IoError`, `MdCodec` (`--from-md1`
+parse failures), and `FutureFormat` (reserved for v0.3+ when mk-codec
+distinguishes future-version strings from currently-unsupported ones).
 The `details` field is kind-specific (e.g., `ContentMismatch` carries
 `{field, expected, actual}`).
 

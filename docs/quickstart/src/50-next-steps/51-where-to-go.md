@@ -39,8 +39,8 @@ For the per-flag, per-subcommand canonical reference:
   — `md` (descriptor card) subcommands.
 - [ms CLI reference](../../../manual/src/40-cli-reference/43-ms.md)
   — `ms` (secret card) subcommands.
-- [mk-codec Rust API](../../../manual/src/40-cli-reference/44-mk-codec-rust.md)
-  — for embedding the mk1 codec into another tool.
+- [mk CLI reference](../../../manual/src/40-cli-reference/44-mk-cli.md)
+  — `mk` (key card) subcommands.
 
 ## Comparing m-format with other backup standards
 
