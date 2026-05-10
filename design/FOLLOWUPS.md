@@ -45,6 +45,25 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `manual-v0.18-stale-md1-scenario-phrases` — quickstart/workflow chapters carry v0.17-era md1 phrases that no longer round-trip under v0.18
+
+- **Surfaced:** 2026-05-09, PR #11 architect review (manual-mirror for descriptor-mnemonic v0.18 cycle).
+- **Where:** `docs/manual/src/30-workflows/31-singlesig-steel.md` (lines 87–89), `docs/manual/src/20-quickstart/22-first-bundle.md` (~line 63), `docs/manual/src/20-quickstart/23-verify.md` (~line 24), `docs/manual/src/40-cli-reference/44-mk-cli.md` (~line 54). All reference the v0.17-era 3-chunk `md1zsxdspqqqpm6jzzqq...` scenario phrase set (3-of-3 multisig).
+- **What:** descriptor-mnemonic v0.18 is a wire-format break (`Tag::TrUnspendable` removed, `key_index_width` formula changed). v0.17 phrases now reject under v0.18 with `Error::UnknownExtensionTag(0x05)`. PR #11 limited scope to CLI surface (per `manual-cli-surface-mirror` invariant). The scenario phrases need regenerating from source (run the `mnemonic` derivation pipeline against the abandon mnemonic with v0.18 binaries) and the chapters re-published.
+- **Why deferred:** PR #11 maintains narrow CLI-surface-mirror scope. Scenario-content refresh is a separate concern that involves running the full 4-format pipeline and regenerating multiple chunked phrases. Local-only impact; toolkit CI runs `make lint` not `make verify-examples`.
+- **Status:** `open`
+- **Tier:** `v0.2` (next minor; non-blocking for descriptor-mnemonic v0.18 release).
+
+### `lint-md-flag-coverage-vacuous-with-md_bin-true` — CI flag-coverage step skipped for md/ms/mnemonic via `MD_BIN=true` substitution
+
+- **Surfaced:** 2026-05-09, PR #11 architect review.
+- **Where:** `.github/workflows/manual.yml` invokes `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk`. The `flag-coverage` step in `tests/lint.sh` runs `eval "$cmd <subcommand> --help"`; when `cmd=true`, the shell builtin `true` ignores all args and emits no flags, triggering the `warn "no flags parsed"` skip path.
+- **What:** Only `mk` actually executes flag-coverage in CI (mk is `cargo install`'d in the workflow). md/ms/mnemonic flag-coverage is silently vacuous. Pre-existing gap; not introduced by PR #11. The `lint` claim "every CLI flag is documented" is therefore not enforced for 3 of 4 binaries in CI — manual `make lint MD_BIN=/path/to/md` runs catch flag drift, but no CI gate.
+- **What to fix:** install `md`, `ms`, and `mnemonic` binaries in the manual.yml workflow (similar to how `mk` is installed) and pass them to `make lint` instead of `=true`.
+- **Why deferred:** orthogonal to PR #11's CLI-surface-mirror scope; pre-existing infrastructure gap.
+- **Status:** `open`
+- **Tier:** `v0.2` (CI hardening; non-blocking).
+
 ### `manual-cli-surface-mirror` — manual mirrors the four-format CLI/API surface
 
 - **Surfaced:** 2026-05-07, m-format-star user manual v0.1 release (`manual-v0.1.0` tag; PR #1).
