@@ -1,12 +1,12 @@
-# Session handoff — `tech-manual-v0.1` execution, paused at Phase 1.4 close
+# Session handoff — `tech-manual-v0.1` execution, paused at Phase 1.5 close
 
 | Field | Value |
 |---|---|
 | Created | 2026-05-11 (initial, at Phase 1.2 close) |
-| Last refreshed | 2026-05-11 (at Phase 1.4 close) |
-| Pause point | Phase 1.4 closed 0C/0I; Phase 1.5 not yet started |
-| Reason for pause | Context-budget management; clean break before back-matter + tag-time work, which is qualitatively different from the heavy wire-format-chapter drafting that produced the previous five commits |
-| Resume target | Phase 1.5 (back-matter skeleton) |
+| Last refreshed | 2026-05-11 (at Phase 1.5 close) |
+| Pause point | Phase 1.5 closed 0C/0I (2I + 3L + 1N folded inline; 2L deferred via FOLLOWUPS); Phase 1.6 not yet started |
+| Reason for pause | Phase 1.6 includes risky shared-state actions (`git push --tags`, `gh release create`); user confirmation required before those fire |
+| Resume target | Phase 1.6 (cycle exit + `tech-manual-v0.1.0` tag) |
 
 ## Read these first (in order)
 
@@ -55,6 +55,9 @@ For Phase 1.6 (cycle exit + tag), the **`feedback_zero_followups_from_release_cy
 | `3895501` | 1.3 close | Fold reviewer 1I + 1L inline: data-part-vs-total-string mixup ("108-char chunk 0" → "111-char"); reserved-range notation `0x08..0x10` → `0x08..=0x10` |
 | `cdc807b` | 1.4 | ms1 wire format chapter (§II.3): ~300 lines + 1 mermaid figure + 2 transcripts |
 | `6d53a3f` | 1.4 close | Fold reviewer 1I + 2L inline: long-code bracket parenthetical corrected to "99–111 for HRP=ms"; citation line range corrected; 3 RESERVED_TAG_TABLE rows made consistent |
+| `b74218a` | (handoff) | Session handoff at Phase 1.4 close (prior version of this doc) |
+| `ae5bb51` | 1.5 | Back-matter skeleton + index/glossary population: 6 chapters seeded; 86 new `\index{}` markers across 7 chapters; 22 new cspell dict entries |
+| `3e54791` | 1.5 close | Fold reviewer 2I + 3L + 1N inline; persist report. 2L deferred via FOLLOWUPS (`bibliography-bip-author-canonical-verification`, `troubleshooting-mk-codec-variant-coverage-audit`) |
 
 ## Cross-repo FOLLOWUPS
 
@@ -67,13 +70,17 @@ Both tier `cross-repo`. One-line fix to `descriptor-mnemonic/crates/md-cli/src/m
 
 ## Current state of the manual
 
-- **PDF: 83 pp** at end of Phase 1.4 (was 30pp stub at Phase 1.0; +53pp content across Phases 1.1–1.4).
+- **PDF: 100 pp** at end of Phase 1.5 (was 83pp at Phase 1.4 close; +17pp from back-matter skeleton). Within SPEC §6 v0.1 bracket [40, 110].
 - **Lint: 6/6 green** (`make -C docs/technical-manual lint`).
 - **PDF reproducibility:** `SOURCE_DATE_EPOCH=1746921600 make pdf` byte-identical across **clean** rebuilds (`rm -rf build && SOURCE_DATE_EPOCH=1746921600 make pdf` twice, then `diff`). Stale build state is NOT hermetic — always clean-rebuild for the reproducibility check.
-- **Mermaid figures: 4** (1 constellation-star in `12-the-m-format-star.md`; 2 in `22-mk1-wire-format.md` (encode pipeline + bytecode payload layout); 1 in `23-ms1-wire-format.md` (encode + recovery pipeline)). Rendered cache committed under `docs/technical-manual/figures/cache/`.
-- **Worked-example transcripts: 6** — 2 md1 (`md1-encode-wpkh-basic`, `md1-decode-wsh-multi-2of3`), 2 mk1 (`mk1-decode-bip48-multisig`, `mk1-decode-bip84-no-fingerprint`), 2 ms1 (`ms1-encode-12word-abandon`, `ms1-decode-12word-abandon`). All green via `verify-examples.sh` against HEAD `md`/`mk`/`ms` binaries.
-- **Index table: 10 entries** (`chunk_set_id (mk1)`, `cross_chunk_hash`, `m-format constellation`, `mk1`, `ms1`, `policy_id_stub`, `reserved-prefix byte (ms1)`, `RESERVED_TAG_TABLE`, `Tag::ENTR`, `Wallet Instance ID`). Phase 1.5 target: ~100 entries (Parts I + II coverage).
-- **Glossary: 11 seed entries** at Phase 1.1; unchanged since. Phase 1.5 target: ~30 entries.
+- **Mermaid figures: 4** (1 constellation-star in `12-the-m-format-star.md`; 2 in `22-mk1-wire-format.md`; 1 in `23-ms1-wire-format.md`). Rendered cache committed under `docs/technical-manual/figures/cache/`.
+- **Worked-example transcripts: 6** — 2 md1, 2 mk1, 2 ms1. All green via `verify-examples.sh` against HEAD `md`/`mk`/`ms` binaries.
+- **Index table: 96 entries** (was 10 at Phase 1.4). Covers Parts I + II markers; lint bidirectional check green. Plan target was "~100 entries at v0.1" — within reasonable tolerance.
+- **Glossary: 31 entries** (was 11 at Phase 1.4). Plan target was ~30 at v0.1 — satisfied.
+- **Release-history table: 11 rows.** Covers ms-codec v0.1.0/v0.1.1, ms-cli v0.1.0, mk-codec v0.2.2, mnemonic-toolkit v0.7.0/v0.7.1/v0.8.0, md-codec v0.30.0/v0.31.0/v0.32.0, md-cli v0.4.3.
+- **BIP cross-reference: 11 BIPs.** BIP-32, 39, 48, 84, 93, 173, 341, 342, 380, 388, 389 mapped to Parts I + II citations.
+- **Troubleshooting matrix: 35 error variants** across 3 codecs (curated subset; not exhaustive — `troubleshooting-mk-codec-variant-coverage-audit` FOLLOWUP filed for Phase 4 / v1.0 expansion).
+- **Bibliography: 11 BIPs + 3 academic refs + 2 reference impls + 6 per-version SPECs.** Per-BIP author lists deferred to `bibliography-bip-author-canonical-verification` FOLLOWUP (tier `tech-manual-v1.0-nice-to-have`).
 
 ## Sibling-repo binaries for `verify-examples`
 
@@ -90,7 +97,19 @@ MNEMONIC_BIN=/scratch/code/shibboleth/mnemonic-toolkit/target/release/mnemonic
 
 ## Resume plan
 
-When you resume, the next phase is **Phase 1.5 — back-matter skeleton**.
+When you resume, the next phase is **Phase 1.6 — cycle exit + `tech-manual-v0.1.0` tag**. See the "After Phase 1.5" section below for the sub-phase decomposition.
+
+**Open FOLLOWUPS at resume:**
+
+- `docs/technical-manual/FOLLOWUPS.md::bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`).
+- `docs/technical-manual/FOLLOWUPS.md::troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`).
+- Cross-repo: `descriptor-mnemonic/design/FOLLOWUPS.md::md-cli-unspendable-key-v0.19-error-string-stale` + companion (still open from Phase 0.B; not a Phase 1.6 blocker).
+
+**Important for Phase 1.6:** `feedback_zero_followups_from_release_cycles` activates at tag-time. ALL reviewer findings (Critical / Important / Low / Nit) fold inline at Phase 1.6's closing commit. Existing FOLLOWUPS above are not affected (those were filed during mid-cycle Phase 1.5, and the rule applies to *new* findings at tag-time). Sub-phases 1.6.5 and 1.6.6 (push tag, create GitHub release) are shared-state actions requiring user confirmation per the system instructions.
+
+---
+
+## (Archived) Resume plan for Phase 1.5 (executed in commits `ae5bb51` + `3e54791`)
 
 ### 1.5.1 — Glossary stubs (`60-back-matter/61-glossary.md`)
 
