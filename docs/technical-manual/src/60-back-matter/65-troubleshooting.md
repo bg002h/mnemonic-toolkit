@@ -1,8 +1,8 @@
 # Troubleshooting
 
-This appendix maps each `Error` variant surfaced by Parts I + II to a likely cause and the remediation pointer. v0.1 covers the wire-format-layer variants for each of the three codecs; Part V (added at tech-manual-v0.4) populates the full library-API error taxonomy.
+This appendix maps each `Error` variant surfaced by Parts I + II to a likely cause and the remediation pointer. v0.1 covers a curated subset of wire-format-layer variants for each of the three codecs (the variants reachable through the failure modes documented in Parts I + II). Part V (added at tech-manual-v0.4) populates the full library-API error taxonomy.
 
-For the authoritative source of each variant, see the cited `error.rs` file in the relevant repo.
+For the authoritative source of each variant — and the complete enum surface — see the cited `error.rs` file in the relevant repo.
 
 ## md1 — `md-codec::Error`
 
@@ -13,11 +13,13 @@ Source: `bg002h/descriptor-mnemonic/crates/md-codec/src/error.rs`.
 | `WireVersionMismatch { got }` | The string carries a v0.x or unknown wire-format version field. v0.30 expects `version = 4`. | §II.1 "Auto-dispatch and safe rejection" — re-issue the bundle with a v0.30 encoder, or re-encode the policy from canonical inputs. |
 | `MalformedHeader { detail }` | Header bits don't satisfy the v0.30 layout (e.g., reserved bit set, in-band chunked discriminator inconsistent). | §II.1 "Header layout"; check the encoder for stale bit-allocations. |
 | `TagOutOfRange { primary }` | A 6-bit primary tag fell in the reserved range `0x24..=0x3E`, or the extension prefix `0x3F` was followed by an unallocated 4-bit subcode (all subcodes are reserved in v0.30). | §II.1 "Tag table (v0.30)"; check encoder hasn't drifted to a post-v0.30 tag allocation. |
-| `OperatorContextViolation { tag, context }` | A tag appeared in an invalid position. `context: TopLevel` rejects roots outside `{Sh, Wsh, Wpkh, Pkh, Tr}`; `context: MultiBody` rejects a tag byte inside a multi-family raw-index body; `context: TapLeaf` rejects a non-BIP-342 fragment inside a TapTree leaf. | §II.1 "Canonicality rules" rules 2/3/4. |
+| `OperatorContextViolation { tag, context }` | A tag appeared in an invalid position. `context: TopLevel` rejects roots outside `{Sh, Wsh, Wpkh, Pkh, Tr}`; `context: TapLeaf` rejects a non-BIP-342 fragment inside a TapTree leaf. `context: MultiBody` is structurally unreachable in v0.30 — multi-family bodies carry raw kiw-bit indices, not child tags (`md-codec/src/error.rs:197-207`); the variant is retained for completeness. | §II.1 "Canonicality rules" rules 2/4. |
 | `NUMSSentinelConflict` | `is_nums = 0` but `key_index ≥ n` (the historical sentinel position). | §II.1 "NUMS encoding for `tr()`"; encoder must emit `is_nums = 1` for the NUMS H-point and `is_nums = 0` with `key_index < n` for any `@i` placeholder. |
 | `ForbiddenTapTreeLeaf` | A tap-leaf carries a fragment outside the BIP-342 admissible set. | §II.1 "Canonicality rules" rule 4. |
 | `ChunkSetIdMismatch { expected, derived }` | After bytecode-layer decode, the recomputed leading 20 bits of `Md1EncodingId` don't match the wire-carried `chunk_set_id`. Mixed chunks from different encodings, or post-encoding payload tampering. | §II.1 "Chunking"; verify all chunks in the input set originate from the same encode invocation. |
-| `MalformedPayloadPadding` | Trailing non-zero pad bits at the bytecode-section boundary that a conforming encoder wouldn't produce. | §II.1 "Canonicality rules" rule 5 (note: rollback-as-padding is permitted at the TLV-section boundary). |
+| `MalformedPayloadPadding` | Trailing non-zero pad bits at the bytecode-section boundary that a conforming encoder wouldn't produce. | §II.1 "Canonicality rules" rule 5. |
+
+The `MalformedPayloadPadding` failure mode has one carve-out: rollback-as-padding is permitted at the TLV-section boundary specifically (the section terminates by end-of-bytecode rather than a length prefix; trailing zero-bits inside that tolerance window do not trigger the error). See BIP draft §"End-of-section detection (rollback-as-padding)" and §II.1 "TLV section".
 
 ## mk1 — `mk-codec::Error`
 

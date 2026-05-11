@@ -136,7 +136,7 @@ ms1's `Tag` constant exposing the `entr` (BIP-39 entropy) type tag (`Tag(*b"entr
 
 The bit-aligned trailing region of md1's bytecode carrying optional metadata blocks (Fingerprints, Pubkeys, OriginPathOverrides, Unknown). TLV tags live in a **separate** 5-bit namespace from the bytecode 6-bit operator-tag space. Defined §II.1.
 
-## walker normalization
+## walker normalisation
 
 md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; saves wire bits on a wrapper that is structurally implied. Defined §II.1.
 

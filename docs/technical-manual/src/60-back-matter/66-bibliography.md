@@ -7,8 +7,8 @@ This bibliography seeds with the protocol and academic references cited in Parts
 For up-to-date BIP texts, see [github.com/bitcoin/bips](https://github.com/bitcoin/bips/blob/master/README.mediawiki). Tagged BIP versions referenced by the manual are stable; the linked README enumerates current status.
 
 - **BIP-32.** Pieter Wuille. *Hierarchical Deterministic Wallets.* [bip-0032.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki). Cited in §I.1, §I.2, §I.3, §I.4, §II.1, §II.2, §II.3.
-- **BIP-39.** Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe. *Mnemonic code for generating deterministic keys.* [bip-0039.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki). Cited in §I.1, §I.2, §I.3, §II.3.
-- **BIP-93.** Russell O'Connor. *codex32 — Checksummed SSSS-aware BIP-32 seeds.* [bip-0093.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki). Cited in §I.2, §I.3, §I.4, §II.2, §II.3.
+- **BIP-39.** Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe. *Mnemonic code for generating deterministic keys.* [bip-0039.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki). Cited in §I.1, §I.2, §II.3.
+- **BIP-93.** *codex32 — Checksummed SSSS-aware BIP-32 seeds.* [bip-0093.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki). Cited in §I.2, §I.3, §I.4, §II.2, §II.3. (For the design history and the academic precursor see also the codex32 paper entry below.)
 - **BIP-173.** Pieter Wuille, Greg Maxwell. *Base32 address format for native v0-16 witness outputs (bech32).* [bip-0173.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki). Cited in §I.2, §I.3, §II.3.
 - **BIP-340.** Pieter Wuille, Jonas Nick, Tim Ruffing. *Schnorr Signatures for secp256k1.* [bip-0340.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki). Cited indirectly via BIP-341.
 - **BIP-341.** Pieter Wuille, Jonas Nick, Anthony Towns. *Taproot: SegWit version 1 spending rules.* [bip-0341.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki). Cited in §II.1.
