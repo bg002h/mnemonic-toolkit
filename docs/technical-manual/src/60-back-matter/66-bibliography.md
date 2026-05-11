@@ -8,15 +8,15 @@ For up-to-date BIP texts, see [github.com/bitcoin/bips](https://github.com/bitco
 
 - **BIP-32.** Pieter Wuille. *Hierarchical Deterministic Wallets.* [bip-0032.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki). Cited in §I.1, §I.2, §I.3, §I.4, §II.1, §II.2, §II.3.
 - **BIP-39.** Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe. *Mnemonic code for generating deterministic keys.* [bip-0039.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki). Cited in §I.1, §I.2, §II.3.
-- **BIP-93.** *codex32 — Checksummed SSSS-aware BIP-32 seeds.* [bip-0093.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki). Cited in §I.2, §I.3, §I.4, §II.2, §II.3. (Author attribution intentionally omitted at v0.1 pending canonical verification — see `FOLLOWUPS.md::bibliography-bip-author-canonical-verification`; for the design history and the academic precursor see the codex32 paper entry below.)
+- **BIP-93.** Leon Olsson Curr and Pearlwort Sneed (pseudonyms), Andrew Poelstra. *codex32 — Checksummed SSSS-aware BIP-32 seeds.* [bip-0093.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki). Cited in §I.2, §I.3, §I.4, §II.2, §II.3.
 - **BIP-173.** Pieter Wuille, Greg Maxwell. *Base32 address format for native v0-16 witness outputs (bech32).* [bip-0173.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki). Cited in §I.2, §I.3, §II.3.
 - **BIP-340.** Pieter Wuille, Jonas Nick, Tim Ruffing. *Schnorr Signatures for secp256k1.* [bip-0340.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki). Cited indirectly via BIP-341.
 - **BIP-341.** Pieter Wuille, Jonas Nick, Anthony Towns. *Taproot: SegWit version 1 spending rules.* [bip-0341.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki). Cited in §II.1.
 - **BIP-342.** Pieter Wuille, Jonas Nick, Anthony Towns. *Validation of Taproot Scripts.* [bip-0342.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki). Cited in §II.1.
-- **BIP-379.** Pieter Wuille, Andrew Poelstra, Sanket Kanjalkar. *Miniscript.* [bip-0379.md](https://github.com/bitcoin/bips/blob/master/bip-0379.md). Cited indirectly (the type system underlying md1's bytecode AST).
-- **BIP-380.** Pieter Wuille, Andrew Chow. *Output Script Descriptors General Operation.* [bip-0380.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki). Cited in §II.2.
+- **BIP-379.** Pieter Wuille, Andrew Poelstra, Sanket Kanjalkar, Antoine Poinsot, Ava Chow. *Miniscript.* [bip-0379.md](https://github.com/bitcoin/bips/blob/master/bip-0379.md). Cited indirectly (the type system underlying md1's bytecode AST).
+- **BIP-380.** Pieter Wuille, Ava Chow. *Output Script Descriptors General Operation.* [bip-0380.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki). Cited in §II.2.
 - **BIP-388.** Salvatore Ingala. *Wallet Policies for Descriptor Wallets.* [bip-0388.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki). Cited in §I.1, §I.2, §I.3, §I.4, §II.1.
-- **BIP-389.** Andrew Chow. *Multipath Descriptor Key Expressions.* [bip-0389.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki). Cited in §I.4, §II.1.
+- **BIP-389.** Ava Chow. *Multipath Descriptor Key Expressions.* [bip-0389.mediawiki](https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki). Cited in §I.4, §II.1.
 
 ## Academic and protocol references
 

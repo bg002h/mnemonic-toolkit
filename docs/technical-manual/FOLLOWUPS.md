@@ -32,24 +32,22 @@ Reference `<short-id>` in commit messages when closing: `closes FOLLOWUPS.md <sh
 
 ## Open items
 
+_All v0.1-era follow-ups resolved 2026-05-11. New items will be filed as cuts proceed._
+
+## Resolved items
+
 ### `bibliography-bip-author-canonical-verification` — verify every BIP entry's author list against the canonical bitcoin/bips repo
 
 - **Surfaced:** Phase 1.5 reviewer round of commit `ae5bb51` (L-5).
 - **Where:** `docs/technical-manual/src/60-back-matter/66-bibliography.md` — every "BIP-NNN. <authors>." line.
-- **What:** Each BIP bibliography entry currently names authors based on best-recollection. Reviewer flagged BIP-93's author list as incomplete (omitting a coauthor). A defensible v1.0 bibliography needs each BIP author list cross-checked against the canonical BIP header in [github.com/bitcoin/bips](https://github.com/bitcoin/bips). Phase 1.5's inline fold dropped the BIP-93 author attribution rather than fabricating a list; the same verification should cover all 11 BIP entries before v1.0.
-- **Why deferred:** Local working tree has no vendored BIP-93 / BIP-39 / etc. mediawiki sources; canonical verification requires online access to the bitcoin/bips repo and isn't a Phase 1.5 blocker. Defer to Phase 5.5 bibliography completion.
-- **Status:** `open`.
-- **Tier:** `tech-manual-v1.0-nice-to-have`.
+- **What:** Each BIP bibliography entry was named with authors based on best-recollection. Reviewer flagged BIP-93's author list as incomplete; Phase 1.5's fold dropped the BIP-93 attribution rather than fabricating. **Resolution:** fetched each cited BIP's canonical mediawiki from `raw.githubusercontent.com/bitcoin/bips/master/` and reconciled the bibliography's author lists against the canonical headers. Updates landed for BIP-93 (added Leon Olsson Curr / Pearlwort Sneed pseudonyms + Andrew Poelstra), BIP-379 (added Antoine Poinsot, Ava Chow), BIP-380 (Andrew Chow → Ava Chow), BIP-389 (Andrew Chow → Ava Chow). All other entries (BIP-32, BIP-39, BIP-173, BIP-340, BIP-341, BIP-342, BIP-388) were verified to match the canonical headers exactly; no changes required.
+- **Status:** `resolved` (2026-05-11, this commit).
+- **Tier:** `tech-manual-v1.0-nice-to-have` (closed ahead of schedule during the v0.1→v0.2 transition).
 
 ### `troubleshooting-mk-codec-variant-coverage-audit` — audit which mk-codec Error variants belong in the wire-format-layer troubleshooting subset
 
 - **Surfaced:** Phase 1.5 reviewer round of commit `ae5bb51` (I-1).
 - **Where:** `docs/technical-manual/src/60-back-matter/65-troubleshooting.md` mk1 section.
-- **What:** Phase 1.5 covers a curated 17-of-22 subset of mk-codec's Error enum (`InvalidHrp`, `InvalidChar`, `UnexpectedEnd`, `TrailingBytes`, `CardPayloadTooLarge` are omitted; the first two are wire-format-layer adjacent and may belong in the subset). The intro now says "curated subset" rather than claiming completeness, but a Phase 4 / Phase 5 audit should re-evaluate the inclusion set against Part V (Rust API reference) coverage to ensure the troubleshooting appendix is complete-for-its-scope by tag-time at v1.0.
-- **Why deferred:** Phase 5 back-matter completion is the natural place for the audit; v0.1 sets the scaffold.
-- **Status:** `open`.
-- **Tier:** `tech-manual-v0.4`.
-
-## Resolved items
-
-_None yet._
+- **What:** Phase 1.5 covered a curated 17-of-22 subset of mk-codec's Error enum; the 5 omitted variants were `InvalidHrp`, `InvalidChar`, `UnexpectedEnd`, `TrailingBytes`, `CardPayloadTooLarge`. **Resolution:** all 5 are reachable wire-format-layer surface and warrant inclusion. Added rows for each to the mk1 troubleshooting table with per-variant cause + remediation pointer; the mk1 section now covers 22/22 mk-codec Error variants (full coverage).
+- **Status:** `resolved` (2026-05-11, this commit).
+- **Tier:** `tech-manual-v0.4` (closed ahead of schedule during the v0.1→v0.2 transition).

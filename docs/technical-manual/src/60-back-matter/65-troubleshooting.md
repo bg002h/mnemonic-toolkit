@@ -26,23 +26,28 @@ Source: `bg002h/mnemonic-key/crates/mk-codec/src/error.rs`.
 
 | Variant | Likely cause | Remediation pointer |
 |---|---|---|
-| `UnsupportedVersion(u8)` | The bytecode-header version field is not `0` (v0.1's only valid value), or the string-layer header carries an unknown 5-bit version. | §II.2 "Bytecode header" / "String-layer header". |
-| `ReservedBitsSet` | Bytecode-header bits 0, 1, or 3 are set (all reserved in v0.1). | §II.2 "Bytecode header"; valid v0.1 header bytes are exactly `0x00` and `0x04`. |
+| `InvalidHrp(String)` | HRP is not `mk` (or the input is not a valid bech32-shaped string at all). | §II.2 "Card structure"; mk1 strings start with `mk1` (lowercase). |
+| `MixedCase` | Input string mixes uppercase and lowercase characters (BIP-93 prohibits). | Re-engrave the card consistently; codex32 is single-case. |
+| `InvalidStringLength(usize)` | Data-part length in the reserved gap `94..=95` or outside BIP-93 brackets. | §II.2 "Card structure"; valid lengths are 14..=93 (regular) and 96..=108 (long). |
+| `InvalidChar { ch, position }` | Input data-part character is not in the codex32 alphabet (`qpzry9x8gf2tvdw0s3jn54khce6mua7l`). The offending character + 0-indexed position are surfaced for transcription-error feedback. | §I.3 "The codex32 alphabet"; check for visually-confusable substitutions (`0`/`O`, `1`/`l`/`I`). |
+| `BchUncorrectable(String)` | BCH detected more errors than it can correct. | §I.3 "Error-detection guarantees" — up to 4 random substitutions correctable; beyond that, re-engrave from the canonical source. |
 | `UnsupportedCardType(u8)` | The 5-bit chunk-type byte is in the reserved range `0x02..=0x1F`. | §II.2 "String-layer header"; only `0x00` (SingleString, unreachable in v0.1) and `0x01` (Chunked) are valid. |
+| `MalformedPayloadPadding` | Trailing 5-bit symbol pad bits non-zero after BCH. | §II.2 "Canonicality and validity rules" rule 14. |
 | `ChunkSetIdMismatch` | Chunks of one card disagree on the 20-bit `chunk_set_id`. | §II.2 "Chunking and cross-chunk integrity"; all chunks of one card must share `chunk_set_id`. |
 | `ChunkedHeaderMalformed(String)` | Bad `chunk_index`, gap, duplicate, or `total_chunks` disagreement across the chunk set. | §II.2 "String-layer header"; check for missing/duplicate cards. |
-| `CrossChunkHashMismatch` | After reassembly, the trailing 4-byte hash ≠ `SHA-256(reassembled_bytecode)[0..4]`. Content drift across chunks. | §II.2 "Chunking and cross-chunk integrity". |
 | `MixedHeaderTypes` | Input combines `SingleString` and `Chunked` chunks in one decode invocation. | §II.2 "String-layer header"; v0.1 emits only chunked cards. |
-| `MalformedPayloadPadding` | Trailing 5-bit symbol pad bits non-zero after BCH. | §II.2 "Canonicality and validity rules" rule 14. |
-| `InvalidStringLength(usize)` | Data-part length in the reserved gap `94..=95` or outside BIP-93 brackets. | §II.2 "Card structure"; valid lengths are 14..=93 (regular) and 96..=108 (long). |
+| `CrossChunkHashMismatch` | After reassembly, the trailing 4-byte hash ≠ `SHA-256(reassembled_bytecode)[0..4]`. Content drift across chunks. | §II.2 "Chunking and cross-chunk integrity". |
+| `UnsupportedVersion(u8)` | The bytecode-header version field is not `0` (v0.1's only valid value), or the string-layer header carries an unknown 5-bit version. | §II.2 "Bytecode header" / "String-layer header". |
+| `ReservedBitsSet` | Bytecode-header bits 0, 1, or 3 are set (all reserved in v0.1). | §II.2 "Bytecode header"; valid v0.1 header bytes are exactly `0x00` and `0x04`. |
 | `InvalidPolicyIdStubCount` | `stub_count == 0`. | §II.2 "Policy ID stub"; at least one stub is required. |
 | `InvalidPathIndicator(u8)` | A standard-table indicator outside the 14-entry table. | §II.2 "Origin path" — explicit-path escape (`0xFE`) is the alternative. |
 | `PathTooDeep(u8)` | Explicit-path `count == 0` or `count > 10`. | §II.2 "Origin path" Case B; the 10-component cap bounds chunk-size attacks. |
 | `InvalidPathComponent(String)` | LEB128 overflow or 6th continuation byte. | §II.2 "Origin path" Case B; components are u32 BIP-32 child numbers, max 5 bytes each. |
 | `InvalidXpubVersion(u32)` | xpub version bytes ≠ known network prefix (`0x0488B21E` mainnet, `0x043587CF` testnet). | §II.2 "Network detection". |
 | `InvalidXpubPublicKey(String)` | xpub public_key is not a valid compressed secp256k1 point. | §II.2 "Xpub compact-73". |
-| `MixedCase` | Input string mixes uppercase and lowercase characters (BIP-93 prohibits). | Re-engrave the card consistently; codex32 is single-case. |
-| `BchUncorrectable(String)` | BCH detected more errors than it can correct. | §I.3 "Error-detection guarantees" — up to 4 random substitutions correctable; beyond that, re-engrave from the canonical source. |
+| `UnexpectedEnd` | Decoder hit end-of-stream mid-field. | §II.2 "Payload field order"; check the card is not truncated. |
+| `TrailingBytes` | Decoder consumed all expected fields but bytes remain after the 73-byte compact xpub. | §II.2 "Payload field order"; check the card was not double-encoded or appended to. |
+| `CardPayloadTooLarge { bytecode_len, max_supported }` | Canonical bytecode exceeds the v0.1 chunking capacity (32 × 53 − 4 = 1692 bytes). Reachable only through pathological hand-constructed inputs; typical mk1 cards land well below this ceiling. | §II.2 "Length envelope"; this is an encoder-side guard. |
 
 ## ms1 — `ms-codec::Error`
 

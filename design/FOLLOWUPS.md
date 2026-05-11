@@ -50,8 +50,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-11, toolkit-repo Phase 0.B audit review r1 (commit `713178c`). Surfaced from this repo's audit pass but the fix lives in the sibling `descriptor-mnemonic` repo.
 - **Where:** `bg002h/descriptor-mnemonic/crates/md-cli/src/main.rs:224`.
 - **What:** Companion entry — see the primary entry in `descriptor-mnemonic/design/FOLLOWUPS.md` (`md-cli-unspendable-key-v0.19-error-string-stale`) for the full action item. No toolkit-side action; closure will happen when the md1-repo entry resolves.
-- **Why deferred:** Cross-repo Low. The toolkit-side manual fix landed in `713178c`; the corresponding CLI error string update belongs in the md1 repo's next patch cycle.
-- **Status:** `open`
+- **Status:** `resolved` (2026-05-11 alongside the primary md1-side fix; see the md1 FOLLOWUP entry for the resolving commit).
 - **Tier:** `cross-repo`
 - **Companion:** `descriptor-mnemonic/design/FOLLOWUPS.md` — `md-cli-unspendable-key-v0.19-error-string-stale`
 

@@ -1,19 +1,6 @@
 # Release History
 
-This table records the per-repo releases relevant to the m-format constellation. Each row's pointer cites the per-repo `CHANGELOG.md` entry for the named version.
+_This appendix is intentionally empty for v0.1; the prior release history of the four sibling repos is not in scope for this manual's coverage. Rows will be populated as the technical-manual cuts themselves accumulate (`tech-manual-vX.Y.Z` tags) — each cut's row lands during the next cut's back-matter accretion phase._
 
-The technical manual itself is versioned separately under the `tech-manual-vX.Y.Z` tag namespace; each cut's release row is added retrospectively at the *next* cut's back-matter accretion phase (Phase 2.4 onward).
-
-| Date | Repo / version | One-line summary | CHANGELOG entry |
-|---|---|---|---|
-| 2026-05-03 | ms-codec v0.1.0 | Initial release of ms1 (HRP `ms`) for BIP-39 entropy; BIP-93 codex32 used directly via `rust-codex32 = "=0.1.0"`. v0.1 payload kind `entr`; emitted lengths {50, 56, 62, 69, 75}. | `bg002h/mnemonic-secret/CHANGELOG.md` |
-| 2026-05-04 | ms-cli v0.1.0 | Companion CLI to ms-codec v0.1.0. 5 subcommands (encode, decode, inspect, verify, vectors); 10 BIP-39 wordlists; phrase-first encode with `--hex` escape hatch. | `bg002h/mnemonic-secret/CHANGELOG.md` |
-| 2026-05-06 | mnemonic-toolkit v0.7.0 | 6 features + 2 carry-overs across 9 phases. New subcommands `export-wallet` + `derive-child`; 4 new convert NodeTypes; +81 net tests (363 → 444). | `bg002h/mnemonic-toolkit/CHANGELOG.md` |
-| 2026-05-07 | mk-codec v0.2.2 | Documentation-only patch. Wire format and corpus byte-identical to v0.2.1. mk1's standard-table path dictionary reclassified as mk1-internal (md-codec v0.11 dropped path dictionaries from md1; mirror invariant retired). | `bg002h/mnemonic-key/CHANGELOG.md` |
-| 2026-05-07 | ms-codec v0.1.1 | BIP-93 audit close-out. SHA-pinned corpus +4 cross-format vectors; cross-format pin against md-codec and mk-codec. Wire format byte-identical to v0.1.0. | `bg002h/mnemonic-secret/CHANGELOG.md` |
-| 2026-05-07 | mnemonic-toolkit v0.7.1 | Multi-repo BIP test-vector audit cycle close-out. SHA-pinned cross-format vectors against md-codec / mk-codec / ms-codec; the path-dictionary mirror retirement surfaced and shipped. ~43 net-new pinned vectors. | `bg002h/mnemonic-toolkit/CHANGELOG.md` |
-| 2026-05-07 | mnemonic-toolkit v0.8.0 [BREAKING] | BIP-38 composite-edge passphrase split (`--bip38-passphrase`); BIP-85 DICE application; Electrum i18n (4 wordlists); taproot multisig export via `--taproot-internal-key`; BIP-388 descriptor interop. 484 → 527 tests. | `bg002h/mnemonic-toolkit/CHANGELOG.md` |
-| 2026-05-10 | md-codec v0.30.0 [BREAKING] | Wire-format redesign: 6-bit primary + 4-bit extension tag space; 4-bit version field; in-band chunked-flag dispatch; `Body::MultiKeys` raw-index packing; walker normalisation (`Tag::PkK`/`Tag::PkH` at `c:`-sites); `Body::Tr.is_nums` flag replaces NUMS sentinel; new error variants (`WireVersionMismatch`, `OperatorContextViolation`, `NUMSSentinelConflict`, `TagOutOfRange`). | `bg002h/descriptor-mnemonic/CHANGELOG.md` |
-| 2026-05-10 | md-codec v0.31.0 | Decoder-side `OperatorContextViolation { context: TopLevel }` rejection wired (BIP-388 root tag allow-list `{Sh, Wsh, Wpkh, Pkh, Tr}`). `JsonTag` serde mirror for stable JSON output. Repo-hygiene: stale `//! #file location` docstring artifacts removed. | `bg002h/descriptor-mnemonic/CHANGELOG.md` |
-| 2026-05-10 | md-cli v0.4.3 | Bug-fix: decoder rendered `Tag::RawPkH` as `pk_h(<hex>)`; corrected to `expr_raw_pkh(<hex>)` (parser-accepted checked form). Wire format unchanged. | `bg002h/descriptor-mnemonic/CHANGELOG.md` |
-| 2026-05-11 | md-codec v0.32.0 [BREAKING] | `Descriptor::derive_address` covers every BIP-388-parseable shape via rust-miniscript; the v0.14-era 5-shape allow-list replaced by a generic AST → `miniscript::Descriptor` converter (`to_miniscript`). New shapes: multi-leaf tap-trees, `tr(NUMS, ...)`, `sh(multi)`, arbitrary `wsh(<miniscript>)`, tap-leaf miniscript. Feature-gated `[features] default=["derive"]`; removed `Error::UnsupportedDerivationShape`. | `bg002h/descriptor-mnemonic/CHANGELOG.md` |
+| Date | Manual cut / version | One-line summary |
+|---|---|---|
