@@ -65,7 +65,7 @@ The markdown render strips `\index{}` markers via the
 `makeindex` builds a page-numbered alphabetical index.
 
 **Every `\index{TERM}` must have a matching row** in
-`src/60-appendices/69-index-table.md`. The bidirectional consistency
+`src/60-back-matter/62-index-table.md`. The bidirectional consistency
 check in `tests/lint.sh` verifies both directions: a missing row OR a
 missing source-side marker fails the lint with a direction-specific
 diagnostic.
@@ -117,7 +117,7 @@ the seed in the same chapter do not need to repeat it.
 ## Glossary
 
 Every acronym or m-format-specific term used anywhere in the manual
-must have an entry in `src/60-appendices/61-glossary.md`. A subset
+must have an entry in `src/60-back-matter/61-glossary.md`. A subset
 of these is enforced by `glossary-coverage` in `tests/lint.sh` (the
 hot list). Add to the lint hot list if a term you've added becomes
 foundational (used in 3+ chapters).
@@ -179,7 +179,8 @@ make lint
 ```
 
 Six checks: markdownlint-cli2, cspell, lychee `--offline`,
-flag-coverage, glossary-coverage, index bidirectional. The full
+api-surface-coverage (hint, warning-only), glossary-coverage,
+index bidirectional. The full
 toolchain may not be installed locally; missing tools are warned
 and skipped, but **CI runs all six** and a missing tool is not an
 excuse on a PR.

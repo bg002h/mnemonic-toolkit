@@ -10,12 +10,12 @@
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
-#   make lint          — markdownlint + cspell + lychee + flag-coverage + glossary-coverage + index bidirectional
+#   make lint          — markdownlint + cspell + lychee + api-surface-coverage (hint, warning-only) + glossary-coverage + index bidirectional
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
 #
 # Variables (override on the command line or in CI):
-#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings used by verify-examples and flag-coverage.
+#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings used by verify-examples and the Phase-4.5 api-surface-coverage helper.
 #   MERMAID_FILTER  — 'skip' (default) consumes figures/cache/ snapshots; 'on' runs mermaid-filter
 #                      (needs chromium + mermaid-filter locally — rare, only for cache regen review).
 #   PANDOC, XELATEX, MAKEINDEX — tool paths (override if not on $PATH).
@@ -197,6 +197,7 @@ pdf-docker: docker-image
 		-u $$(id -u):$$(id -g) \
 		-v $(TOOLKIT_ROOT):/work \
 		-w /work/docs/technical-manual \
+		$(if $(SOURCE_DATE_EPOCH),-e SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) -e FORCE_SOURCE_DATE=1,) \
 		$(DOCKER_IMAGE) \
 		make pdf MERMAID_FILTER=$(MERMAID_FILTER)
 

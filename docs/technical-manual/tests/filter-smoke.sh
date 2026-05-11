@@ -8,7 +8,7 @@
 #   make filter-smoke
 #
 # Args (NAME=value pairs from Makefile):
-#   MANUAL_DIR  — absolute path to docs/manual/
+#   MANUAL_DIR  — absolute path to docs/technical-manual/ (variable name preserved for compat with the shared Makefile pattern)
 #   PANDOC, XELATEX, MAKEINDEX — tool paths
 #
 # Exit 0 if both render paths produce the expected artifacts; non-zero
