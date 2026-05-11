@@ -6,16 +6,17 @@ This chapter walks the four-network surface and the SLIP-0132 prefix interaction
 
 ## The four networks
 
-`bitcoin::Network` enumerates four variants relevant to md1:
+`bitcoin::Network` enumerates five variants relevant to md1:
 
 | Variant | Magic | Address HRPs / version bytes | BIP-32 xpub version bytes |
 |---|---|---|---|
 | `Network::Bitcoin` | mainnet | `1...` (P2PKH), `3...` (P2SH), `bc1q...` (segwit v0), `bc1p...` (taproot) | `0x0488B21E` |
-| `Network::Testnet` | testnet3 / testnet4 | `m...` / `n...` (P2PKH), `2...` (P2SH), `tb1q...` / `tb1p...` | `0x043587CF` |
-| `Network::Signet` | signet | (same as testnet) | `0x043587CF` |
+| `Network::Testnet` | testnet3 | `m...` / `n...` (P2PKH), `2...` (P2SH), `tb1q...` / `tb1p...` | `0x043587CF` |
+| `Network::Testnet4` | testnet4 | (same as Testnet) | `0x043587CF` |
+| `Network::Signet` | signet | (same as Testnet) | `0x043587CF` |
 | `Network::Regtest` | regtest | (legacy + `bcrt1q...` / `bcrt1p...` bech32) | `0x043587CF` |
 
-The three non-mainnet variants share the BIP-32 `tpub` version-byte family (`0x043587CF`); md-cli treats them as one group when validating xpub-prefix bytes (`crates/md-cli/src/parse/keys.rs:43-49`). The bech32 *address* HRPs do diverge: `tb1` (testnet, signet), `bcrt1` (regtest).
+The four non-mainnet variants share the BIP-32 `tpub` version-byte family (`0x043587CF`); md-cli treats them as one group when validating xpub-prefix bytes (`crates/md-cli/src/parse/keys.rs:43-49`). The bech32 *address* HRPs do diverge: `tb1` (testnet3, testnet4, signet), `bcrt1` (regtest).
 
 ## The encoding-vs-script asymmetry
 
