@@ -28,7 +28,7 @@ flowchart TB
   classDef addr fill:#fce7f3,stroke:#9d174d,stroke-width:2px,color:#000
 ```
 
-`expand_per_at_N` (`crates/md-codec/src/canonicalize.rs`) resolves each `@N` to an xpub\index{xpub} (inline `Pubkeys` TLV `0x02`, else `Error::MissingPubkey`), an optional master fingerprint (`Fingerprints` TLV `0x01`), and an origin path (the inline path-decl block, with `OriginPathOverrides` TLV `0x03` applied per-`@N`). For each `@N` the converter then constructs a `DescriptorPublicKey::XPub`\index{DescriptorPublicKey} `{ origin, xkey, derivation_path, wildcard: Unhardened }` (`to_miniscript.rs:84-89`), where `derivation_path` is the use-site multipath alt selected by `chain`.
+`expand_per_at_N` (`descriptor-mnemonic/crates/md-codec/src/canonicalize.rs`) resolves each `@N` to an xpub\index{xpub} (inline `Pubkeys` TLV `0x02`, else `Error::MissingPubkey`), an optional master fingerprint (`Fingerprints` TLV `0x01`), and an origin path (the inline path-decl block, with `OriginPathOverrides` TLV `0x03` applied per-`@N`). For each `@N` the converter then constructs a `DescriptorPublicKey::XPub`\index{DescriptorPublicKey} `{ origin, xkey, derivation_path, wildcard: Unhardened }` (`to_miniscript.rs:84-89`), where `derivation_path` is the use-site multipath alt selected by `chain`.
 
 `node_to_descriptor`\index{node\_to\_descriptor} (`to_miniscript.rs:130-168`) maps the top-level tag onto a rust-miniscript constructor:
 
@@ -54,7 +54,7 @@ The single-key wrappers are the simplest shape: one `@N`, no inner tree. The con
 |---|---|---|---|---|
 | `wpkh` | BIP-84 m/84'/0'/0' | `wpkh(@0/<0;1>/*)` | `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu` | `address_derivation.rs:67-91` |
 | `pkh` | BIP-44 m/44'/0'/0' | `pkh(@0/<0;1>/*)` | `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` | `address_derivation.rs:193-217` |
-| `sh(wpkh)` | BIP-49 m/49'/0'/0' | `sh(wpkh(@0/<0;1>/*))` | — (covered by `Descriptor::new_sh_wpkh` at `to_miniscript.rs:220-223`; canonical-wrapper origin requirement gates external invocation) | — |
+| `sh(wpkh)` | BIP-49 m/49'/0'/0' | `sh(wpkh(@0/<0;1>/*))` | converter shape covered at `to_miniscript.rs:220-223`; no standalone abandon-mnemonic test (CLI invocation requires annotated origin metadata) | — |
 
 The BIP-44 `pkh` and BIP-84 `wpkh` worked invocations against `md address` are captured at `transcripts/md1-address-bip44-receive0.{cmd,out}` and `transcripts/md1-address-bip84-receive0.{cmd,out}` (the latter from §III.1) and re-run on every `verify-examples.sh` pass.
 

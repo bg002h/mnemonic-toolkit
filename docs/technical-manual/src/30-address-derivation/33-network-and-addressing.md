@@ -2,7 +2,7 @@
 
 `Descriptor::derive_address` (`descriptor-mnemonic/crates/md-codec/src/derive.rs:92-132`) takes a `bitcoin::Network` parameter and returns an `Address<NetworkUnchecked>`. Networks affect the *encoding* of the address — not the *script* it commits to. The same descriptor at the same `(chain, index)` produces the same redeem-script / witness-program / taproot output-key under every network; only the human-readable wrapper changes.
 
-This chapter walks the four-network surface and the SLIP-0132 prefix interactions. The deeper end-user workflow (using `mnemonic convert` to translate among `xpub` / `tpub` / `ypub` / `zpub` / `upub` / `vpub` prefix forms) lives in the end-user manual's `mnemonic` CLI chapter, §`mnemonic convert` (`mnemonic-toolkit/docs/manual/src/40-cli-reference/41-mnemonic.md:89-128`), and is not duplicated here.
+This chapter walks the five-network surface and the SLIP-0132 prefix interactions. The deeper end-user workflow (using `mnemonic convert` to translate among `xpub` / `tpub` / `ypub` / `zpub` / `upub` / `vpub` prefix forms) lives in the end-user manual's `mnemonic` CLI chapter, §`mnemonic convert` (`mnemonic-toolkit/docs/manual/src/40-cli-reference/41-mnemonic.md:89-128`), and is not duplicated here.
 
 ## The four networks
 

@@ -17,7 +17,7 @@ For BIP texts, see [github.com/bitcoin/bips](https://github.com/bitcoin/bips/blo
 | BIP-173 | Base32 address format (bech32) | §I.2, §I.3, §II.3 |
 | BIP-341 | Taproot: SegWit version 1 spending rules | §II.1, §III.2 |
 | BIP-342 | Validation of Taproot Scripts (tapscript) | §II.1 |
-| BIP-379 | Miniscript | §III.2 |
+| BIP-379 | Miniscript | Glossary (§"miniscript"), Bibliography |
 | BIP-380 | Output Script Descriptors General Operation | §II.2, §III.1 |
 | BIP-388 | Wallet Policies for Descriptor Wallets | §I.1, §I.2, §I.3, §I.4, §II.1, §III.1, §III.2 |
 | BIP-389 | Multipath Descriptor Key Expressions | §I.4, §II.1, §III.1 |

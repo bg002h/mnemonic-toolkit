@@ -6,6 +6,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## tech-manual [0.2.0] — 2026-05-11
+
+Part III added — address derivation end-to-end. 119pp PDF (was 97pp at v0.1 close, +22pp). Tag `tech-manual-v0.2.0`.
+
+### Added
+
+- **Part III — Address derivation** (3 chapters):
+  - **§III.1 Descriptor → miniscript → address.** The three-tier model (template → derivation → script → address); BIP-388 wallet-policy framing; origin path vs. use-site path; Shared/Divergent origin modes under header bit 4; pre-flight validation (4 rejection branches). Worked example: BIP-84 abandon mnemonic → `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`. Includes 2 mermaid figures (three-tier model; Shared vs. Divergent).
+  - **§III.2 Shape coverage.** Exhaustive enumeration of the seven BIP-388-parseable shape buckets handled by md-codec v0.32's AST → `miniscript::Descriptor` converter: wpkh/pkh/sh(wpkh); tr(K); tr(NUMS, ...); tr(@0, <leaf>); tr(@0, {leaf_a, leaf_b}); sh(...); wsh(<miniscript>). Off-limits shapes documented (hardened public derivation, `Tag::RawPkH`, `Tag::SortedMultiA`, top-level wrappers in miniscript context). Every shape's worked address-derivation is grounded in `descriptor-mnemonic/crates/md-codec/tests/address_derivation.rs`. Includes 1 mermaid figure (converter pipeline).
+  - **§III.3 Network and addressing.** Five `bitcoin::Network` variants; encoding-vs-script asymmetry; SLIP-0132 prefix interactions (cross-referenced to `mnemonic convert` in end-user manual; not duplicated).
+- **Worked-example transcript** (1 new): `md1-address-bip44-receive0` — BIP-44 pkh → `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` against abandon mnemonic, via `md address --template ... --key @0=<bip44 xpub>`.
+- **Back-matter accretion**:
+  - Glossary: +26 entries (31 → 57; SPEC §7 A4 target ≥80 at v1.0).
+  - Index table: +63 rows (96 → 159; SPEC §7 A5 target ≥250 at v1.0).
+  - BIP cross-reference: extended existing rows with §III citations; new rows for BIP-44, BIP-49, BIP-86, BIP-379. New non-BIP cross-references section for SLIP-0132.
+  - Release-history row for `tech-manual-v0.1.0` (per user directive, this table tracks only the manual's own cuts).
+- **cspell**: new word allow-list entries (`Timelock`, `taptree`, `PSBT`, `merkle`, `hardenedness`, `CKDpub`); new ignore-regexes (bech32 mainnet/testnet/regtest addresses; legacy base58 P2PKH/P2SH).
+
+### Notable corrections folded inline during the cut
+
+- §III.1 explicitly cross-references §II.1's history note on the retired v0.10 `Tag::OriginPaths = 0x36` to correct any reader inheriting that stale value from the SPEC (which was drafted before v0.11 retirement).
+- §III.2 originally claimed the NUMS `key_index` field was wire-present even when `is_nums = 1`; the wire layout actually suppresses it. Corrected at Phase 2.2 close; verified against `descriptor-mnemonic/design/SPEC_v0_30_wire_format.md §7.2`.
+- §III.3 originally listed four `bitcoin::Network` variants; `Network::Testnet4` is a distinct fifth variant. Corrected at Phase 2.3 close.
+
+### SPEC §7 acceptance criteria (v0.2 cut)
+
+- **A1 (partial)** — seven BIP-388-parseable buckets walk-through covered ✓
+- **A4** — glossary 57 entries (≥50) ✓
+- **A5** — index 159 rows (≥150) ✓
+- **A6** — Pandoc TOC covers Part III chapters ✓
+- **A8** — 8/8 worked-example transcripts verified by `tests/verify-examples.sh` ✓
+- **A10** — PDF 119pp (≥40pp soft floor) ✓
+- **A11** — `make pdf` reproducible: byte-identical across two clean `SOURCE_DATE_EPOCH=1746921600` builds ✓
+
+### Filed FOLLOWUPS
+
+One cross-repo FOLLOWUP filed mid-cycle (Phase 2.2): `cross-repo md1-wsh-multi-unsorted-integration-test` requesting a paired-derivation test for unsorted `wsh(multi(...))` in `descriptor-mnemonic/crates/md-codec/tests/address_derivation.rs`. Routes through `node_to_miniscript::<Segwitv0>` (`Terminal::Multi` arm); cited at §III.2 but untested.
+
 ## tech-manual [0.1.0] — 2026-05-11
 
 First releasable cut of the m-format constellation technical manual. Parts I + II + back-matter skeleton; 100pp PDF (`docs/technical-manual/build/m-format-technical-manual.pdf`). Tag `tech-manual-v0.1.0`.

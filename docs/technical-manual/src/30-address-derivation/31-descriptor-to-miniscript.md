@@ -79,7 +79,7 @@ flowchart TB
 
 The Shared form is dominant: single-signer wallets (BIP-44\index{BIP-44}/49\index{BIP-49}/84\index{BIP-84}/86\index{BIP-86}) trivially share a path with themselves (`n = 1`), and conventional multisig wallets where every cosigner uses the BIP-48\index{BIP-48} account path `m/48'/0'/0'/2'` collapse to one shared path. The Divergent form is reserved for the legitimate case where cosigners chose different account paths.
 
-Path-modification overrides (TLV `0x03` `OriginPathOverrides`\index{OriginPathOverrides TLV}, sparse) are an orthogonal mechanism for replacing a single `@N`'s origin path after the inline path-decl block is written. The data structures are `PathDecl` + `PathDeclPaths::{Shared, Divergent}` at `crates/md-codec/src/origin_path.rs:82-96`; the read/write code at `:110-146` and the wire layout at `:1-12`.
+Path-modification overrides (TLV `0x03` `OriginPathOverrides`\index{OriginPathOverrides TLV}, sparse) are an orthogonal mechanism for replacing a single `@N`'s origin path after the inline path-decl block is written. The data structures are `PathDecl` + `PathDeclPaths::{Shared, Divergent}` at `descriptor-mnemonic/crates/md-codec/src/origin_path.rs:82-96`; the read/write code at `:110-146` and the wire layout at `:1-12`.
 
 (Pre-v0.11 wire formats had an in-bytecode `Tag::OriginPaths = 0x36` for dictionary-style path lookups; that tag was retired with the v0.11 wire-format cleanup and **does not** exist in v0.30. See §II.1 §"History note: retired wire-layer dictionaries".)
 
