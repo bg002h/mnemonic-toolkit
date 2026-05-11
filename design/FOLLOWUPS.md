@@ -45,6 +45,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `md-cli-unspendable-key-v0.19-error-string-stale-companion` — companion: md-cli error string still references "v0.19+"
+
+- **Surfaced:** 2026-05-11, toolkit-repo Phase 0.B audit review r1 (commit `713178c`). Surfaced from this repo's audit pass but the fix lives in the sibling `descriptor-mnemonic` repo.
+- **Where:** `bg002h/descriptor-mnemonic/crates/md-cli/src/main.rs:224`.
+- **What:** Companion entry — see the primary entry in `descriptor-mnemonic/design/FOLLOWUPS.md` (`md-cli-unspendable-key-v0.19-error-string-stale`) for the full action item. No toolkit-side action; closure will happen when the md1-repo entry resolves.
+- **Why deferred:** Cross-repo Low. The toolkit-side manual fix landed in `713178c`; the corresponding CLI error string update belongs in the md1 repo's next patch cycle.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `descriptor-mnemonic/design/FOLLOWUPS.md` — `md-cli-unspendable-key-v0.19-error-string-stale`
+
 ### `manual-v0.18-stale-md1-scenario-phrases` — quickstart/workflow chapters carry v0.17-era md1 phrases that no longer round-trip under v0.18
 
 - **Surfaced:** 2026-05-09, PR #11 architect review (manual-mirror for descriptor-mnemonic v0.18 cycle).
