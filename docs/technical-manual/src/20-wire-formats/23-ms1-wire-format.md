@@ -96,7 +96,7 @@ v0.1 ms1 strings ride only BIP-93's **short code** bracket. The total string len
 
 Formula: total = `3 (HRP+sep) + 1 (threshold) + 4 (id) + 1 (share-index) + N (payload) + 13 (cksum) = 22 + N`. The payload symbol count is `⌈(entropy_bytes + 1) × 8 / 5⌉`. The bijection is sanity-tested in `crates/ms-codec/src/consts.rs:50-62`.
 
-v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength` (`crates/ms-codec/src/decode.rs:21`). This single rule rejects, in particular, every long-checksum BIP-93 string (length ≥ 96) without needing a separate "long codex32" rejection path.
+v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength` (`crates/ms-codec/src/decode.rs:21`). This single rule rejects, in particular, every BIP-93 long-code string (total 99–111 chars for HRP=ms — data-part length 96..=108 plus 3 chars of HRP+separator) without needing a separate "long codex32" rejection path.
 
 ### Pad bits in the final payload symbol
 
@@ -135,15 +135,15 @@ v0.1 deliberately does **not** expose `pub const SEED` or `pub const XPRV` const
 
 ### `RESERVED_TAG_TABLE`
 
-The full 5-entry table is curated to ms1's actual purpose (secret material, not metadata or certificates). The table grows by SemVer-minor only (SPEC §3.3; `crates/ms-codec/src/consts.rs:36-39`):
+The full 5-entry table is curated to ms1's actual purpose (secret material, not metadata or certificates). The table grows by SemVer-minor only (SPEC §3.3; `crates/ms-codec/src/consts.rs:36,39`):
 
 | Tag | Meaning | v0.1 emit | v0.1 accept |
 |---|---|---|---|
 | `entr`\index{Tag::ENTR} | BIP-39 entropy (128/160/192/224/256 b = 16/20/24/28/32 B) | yes | yes |
 | `seed` | BIP-32 master seed (64 B) | no — overflows BIP-93 long bracket with prefix byte | reject (`Error::ReservedTagNotEmittedInV01`) |
-| `xprv` | serialized BIP-32 xpriv (78 B stripped of Base58Check) | no — outside BIP-93 brackets at any length | reject |
-| `mnem` | reserved for future "entropy + wordlist-language hint" payload | no | reject |
-| `prvk` | reserved for future raw secp256k1 32-B private key | no | reject |
+| `xprv` | serialized BIP-32 xpriv (78 B stripped of Base58Check) | no — outside BIP-93 brackets at any length | reject (`Error::ReservedTagNotEmittedInV01`) |
+| `mnem` | reserved for future "entropy + wordlist-language hint" payload | no | reject (`Error::ReservedTagNotEmittedInV01`) |
+| `prvk` | reserved for future raw secp256k1 32-B private key | no | reject (`Error::ReservedTagNotEmittedInV01`) |
 
 Tags structurally valid (alphabet-conforming) but not in the table cause `Error::UnknownTag` (`crates/ms-codec/src/decode.rs:50-53`). The reservation policy applies at **both** sides: SPEC §3.5.1 mandates that the encoder also rejects reserved-not-emitted tags with the same `Error::ReservedTagNotEmittedInV01` variant, preventing an asymmetry where a v0.1 ms-codec could emit a string the v0.1 ms-codec itself cannot decode.
 
