@@ -1,6 +1,6 @@
 # codex32 and BCH
 
-All three card formats use Bose–Chaudhuri–Hocquenghem (BCH) error-correction codes over GF(32). This chapter covers the cryptographic mechanism at engineering depth — enough to reproduce the checksum computation by hand for a short payload, understand the error-detection / error-correction guarantees, and grasp why md1 and mk1 *fork* the polynomial while ms1 adopts BIP-93 codex32 directly.
+All three card formats use Bose–Chaudhuri–Hocquenghem (BCH)\index{BCH code} error-correction codes over GF(32)\index{GF(32)}. This chapter covers the cryptographic mechanism at engineering depth — enough to reproduce the checksum computation by hand for a short payload, understand the error-detection / error-correction guarantees, and grasp why md1 and mk1 *fork* the polynomial while ms1 adopts BIP-93\index{BIP-93} codex32\index{codex32} directly.
 
 For the formal codex32 spec see [BIP-93](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki); for the original codex32 design analysis see the Pearlwort / Poelstra paper cited in §66.
 
@@ -8,7 +8,7 @@ For the formal codex32 spec see [BIP-93](https://github.com/bitcoin/bips/blob/ma
 
 A BCH code is a class of cyclic block codes parameterised by (a) the field size `q`, (b) the codeword length `n`, (c) the dimension `k` (number of data symbols), and (d) the *designed distance* `δ` (minimum Hamming distance between any two codewords). The codec works in three steps:
 
-1. **Encode.** The encoder appends `n − k` *check symbols* to the `k` data symbols. The check symbols are the unique values that make the full `n`-symbol string a multiple of a fixed *generator polynomial* `g(x)`. Geometrically: the codewords form a subspace of all length-`n` strings; the check symbols project the data onto that subspace.
+1. **Encode.** The encoder appends `n − k` *check symbols* to the `k` data symbols. The check symbols are the unique values that make the full `n`-symbol string a multiple of a fixed *generator polynomial*\index{generator polynomial} `g(x)`. Geometrically: the codewords form a subspace of all length-`n` strings; the check symbols project the data onto that subspace.
 
 2. **Detect.** The decoder computes the *syndrome* — the remainder of the received string modulo `g(x)`. Syndrome = 0 iff the received string is a codeword (no errors, or undetectable error pattern). Syndrome ≠ 0 signals one or more errors.
 
@@ -18,7 +18,7 @@ The `q = 32` choice in codex32 is what makes the alphabet a 32-character bech32 
 
 ## The codex32 alphabet
 
-BIP-93 inherits the bech32 alphabet (introduced for BIP-173 SegWit addresses) with deliberate visual-disambiguation properties:
+BIP-93 inherits the bech32\index{bech32} alphabet (introduced for BIP-173\index{BIP-173} SegWit addresses) with deliberate visual-disambiguation properties:
 
 ```text
 0123456789  → q p z r y 9 x 8 g f      (no '0' / 'O' confusion)
@@ -39,13 +39,13 @@ The implication for cross-implementation work: an ms1 implementation in any othe
 
 md1 and mk1 use BCH codes over GF(32) with the *same algebraic machinery* as codex32 — same alphabet, same field, same encoding/decoding algorithms, **same generator polynomial coefficients**. The fork is not in the polynomial; it is in the **target residue** and the **HRP-mixing convention** layered on top of the shared generator.
 
-md1's reference implementation pins one BCH code (the v0.11+ regular code; the historical long code was retired together with the v0.x wire format). The generator coefficients (`GEN_REGULAR` in `crates/md-codec/src/bch.rs`) are the standard BCH(93,80,8) polynomial used across the bech32/codex32 family. The per-format differentiation appears in `MD_REGULAR_CONST` — a non-zero 65-bit constant derived from the top 65 bits of `SHA-256("shibbolethnums")` — that the verifier compares the polymod output against. mk1's `bch.rs` follows the same shape with its own format-specific constant.
+md1's reference implementation pins one BCH code (the v0.11+ regular code\index{regular code}; the historical long code\index{long code} was retired together with the v0.x wire format). The generator coefficients (`GEN_REGULAR` in `crates/md-codec/src/bch.rs`) are the standard BCH(93,80,8) polynomial used across the bech32/codex32 family. The per-format differentiation appears in `MD_REGULAR_CONST`\index{MD\_REGULAR\_CONST} — a non-zero 65-bit constant derived from the top 65 bits of `SHA-256("shibbolethnums")` — that the verifier compares the polymod\index{polymod} output against. The format-specific constant is the **target residue**\index{target residue}. mk1's `bch.rs` follows the same shape with its own format-specific constant.
 
 The BIP-93 design distance properties — guaranteed correction of up to 4 unknown-position substitutions, or up to 8 known-position erasures, or up to 13 consecutive erasures — carry through because the *generator* is the same. The target-residue swap doesn't change the distance, only which polymod output counts as "valid" for the format.
 
 ### HRP mixing
 
-The HRP is mixed in via the standard **BIP-173 HRP expansion**: each character of the HRP contributes two values to the polymod input, namely `c >> 5` (the high-3-bit half) and `c & 31` (the low-5-bit half), with a zero separator between the two halves. The expanded HRP is *prepended* to the data + checksum stream before the polymod runs; the generator itself is unchanged. The reference implementation is at `crates/md-codec/src/bch.rs::hrp_expand`.
+The HRP is mixed in via the standard **BIP-173 HRP expansion**\index{HRP-mixing}: each character of the HRP contributes two values to the polymod input, namely `c >> 5` (the high-3-bit half) and `c & 31` (the low-5-bit half), with a zero separator between the two halves. The expanded HRP is *prepended* to the data + checksum stream before the polymod runs; the generator itself is unchanged. The reference implementation is at `crates/md-codec/src/bch.rs::hrp_expand`.
 
 The verify path is therefore:
 

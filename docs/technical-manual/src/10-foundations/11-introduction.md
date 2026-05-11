@@ -8,8 +8,8 @@ The m-format constellation splits the backup across three independently-checksum
 
 - **ms1** carries BIP-39 entropy (or a BIP-32 master seed). HRP `ms`. Crate `ms-codec`.
 - **mk1** carries an xpub plus its BIP-32 origin (master fingerprint + derivation path). HRP `mk`. Crate `mk-codec`.
-- **md1** carries a BIP-388 wallet-policy template (and, for self-custody, one bound xpub per cosigner slot). HRP `md`. Crate `md-codec`.
-- The **`mnemonic-toolkit`** CLI synthesises the three cards from end-user inputs and verifies cross-card bindings on recovery. It does not engrave its own card.
+- **md1**\index{md1} carries a BIP-388\index{BIP-388} wallet-policy template (and, for self-custody, one bound xpub per cosigner slot). HRP `md`. Crate `md-codec`.
+- The **`mnemonic-toolkit`**\index{mnemonic-toolkit} CLI synthesises the three cards from end-user inputs and verifies cross-card bindings on recovery. It does not engrave its own card.
 
 Each card is independently BCH-checksummed: a damaged ms1 card decodes without needing the mk1 or md1 cards; the toolkit's cross-card invariants (the `policy_id_stub` carried on mk1 and computable from md1) verify *coherence* across the three cards once they are decoded.
 

@@ -68,10 +68,10 @@ References to external documents use these conventions:
 
 A handful of project-specific shorthands appear throughout:
 
-- **`@N`** — a BIP-388 placeholder for cosigner `N` (0-indexed). `@0` is the first cosigner; `@N` (where `N = n`) appears in md1 §II.1 as the NUMS-sentinel discussion (now retired in v0.30).
-- **`<0;1>/*`** — BIP-389 multipath; chain 0 for receive, chain 1 for change; `*` is the wildcard non-hardened address index.
-- **`kiw`** — *key index width*, the bit width of an `@N` placeholder index field in md1 wire format. `kiw = ⌈log₂(n)⌉` where `n` is the policy's placeholder count.
-- **`HRP`** — human-readable prefix (`md`, `mk`, or `ms`), inseparable from the BCH polynomial computation per §I.3.
+- **`@N`**\index{@N} — a BIP-388 placeholder for cosigner `N` (0-indexed). `@0` is the first cosigner; `@N` (where `N = n`) appears in md1 §II.1 as the NUMS-sentinel discussion (now retired in v0.30).
+- **`<0;1>/*`**\index{BIP-389 multipath} — BIP-389 multipath; chain 0 for receive, chain 1 for change; `*` is the wildcard non-hardened address index.
+- **`kiw`**\index{kiw} — *key index width*, the bit width of an `@N` placeholder index field in md1 wire format. `kiw = ⌈log₂(n)⌉` where `n` is the policy's placeholder count.
+- **`HRP`**\index{HRP} — human-readable prefix (`md`, `mk`, or `ms`), inseparable from the BCH polynomial computation per §I.3.
 - **`policy_id_stub`** — 4-byte stub of the canonical wallet-policy preimage hash; carried on each mk1 card, recomputable from md1. Defined fully in §IV.2.
 
 ## Code-block conventions

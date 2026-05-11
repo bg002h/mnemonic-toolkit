@@ -38,7 +38,7 @@ Each format encodes a single piece of recovery information:
 
 For a single-sig BIP-84 wallet, a bundle is three cards: one ms1 with the seed entropy, one mk1 with the account xpub, and one md1 with the `wpkh(@0/<0;1>/*)` template plus the bound xpub. For a 2-of-3 BIP-388 multisig, a bundle is up to seven cards: one ms1, three mk1 (one xpub per cosigner), and one (or more, if chunked) md1 carrying the `wsh(sortedmulti(2,@0,@1,@2))` template plus all three xpubs.
 
-## The forked-BCH boundary
+## The forked-BCH boundary\index{forked-BCH boundary}
 
 The four formats share *concept* but not *crate*. Two divergent paths are visible in the diagram above:
 
@@ -49,7 +49,7 @@ The four formats share *concept* but not *crate*. Two divergent paths are visibl
 
 The forked-vs-direct split is a deliberate design choice, not an accident of history. The rationale (briefly): ms1 benefits from BIP-93's existing K-of-N share specification (planned for ms-codec v0.2), so adopting codex32 directly is value-aligned. md1 and mk1 carry payloads outside BIP-93's intended domain (descriptors and xpubs respectively, not "secrets"), and the HRP-mixed polynomial gives each format an independent error-detection space without the cross-format ambiguity that would arise if all three formats shared one polynomial. The pattern is documented in each format's BIP draft; this manual takes it as given.
 
-## Cross-card binding
+## Cross-card binding\index{cross-card binding}
 
 The three cards are *individually* recoverable from their own BCH plus the human-readable string, but their *coherence* — "these three cards belong to the same wallet" — is enforced by an explicit cross-binding:
 

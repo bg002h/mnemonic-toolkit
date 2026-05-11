@@ -37,6 +37,8 @@ MK_REGULAR_CONST = 0x1062435f91072fa5c    (top 65 bits of SHA-256(domain))
 MK_LONG_CONST    = 0x41890d7e441cbe97273  (top 75 bits of SHA-256(domain))
 ```
 
+\index{MK\_REGULAR\_CONST}\index{MK\_LONG\_CONST}
+
 The constants are NUMS-derived ("Nothing Up My Sleeve"): the domain string is the audit trail; any reader can recompute the SHA-256 digest and verify that the constants follow. Cross-check: applying the same procedure to `b"shibbolethnums"` reproduces md1's `T_REGULAR = 0x0815c07747a3392e7` and `T_LONG = 0x205701dd1e8ce4b9f47`. The codex32 (BIP 93) family thus exhibits a three-domain partition under HRP-mixing + per-format target residue: codex32, md1, mk1. See §I.3 for the polymod algorithm and the HRP-mixing convention.
 
 ### String-layer header
@@ -55,11 +57,11 @@ mk1's string-layer header lives at the 5-bit symbol layer (closure Q-5; `crates/
 | 5:version | 5:type=0x01 | 20:chunk_set_id | 5:total_chunks | 5:chunk_index |
 ```
 
-- `version`: 5-bit format version. `0` in v0.1; decoders MUST reject unknown values with `Error::UnsupportedVersion`.
-- `type`: 5-bit chunk-type byte. `0x00` = `SingleString`, `0x01` = `Chunked`. Reserved range `0x02..=0x1F` MUST be rejected with `Error::UnsupportedCardType` (the 5-bit field has no spillover space).
+- `version`: 5-bit format version. `0` in v0.1; decoders MUST reject unknown values with `Error::UnsupportedVersion`\index{Error::UnsupportedVersion}.
+- `type`: 5-bit chunk-type byte. `0x00` = `SingleString`, `0x01` = `Chunked`. Reserved range `0x02..=0x1F` MUST be rejected with `Error::UnsupportedCardType`\index{Error::UnsupportedCardType} (the 5-bit field has no spillover space).
 - `chunk_set_id`\index{chunk\_set\_id (mk1)}: 20-bit per-encoding tag, packed into four 5-bit symbols big-endian — bits 19..15 in symbol 2, 14..10 in symbol 3, 9..5 in symbol 4, 4..0 in symbol 5. Opaque; mismatch across chunks is rejected at reassembly with `Error::ChunkSetIdMismatch`. Encoders MAY draw it from the system CSPRNG (mk-codec's default — `crates/mk-codec/src/string_layer/pipeline.rs::fresh_chunk_set_id`) or derive it deterministically from the leading 20 bits of `policy_id_stub[0]` (BIP draft §"String-layer header"); both choices are interop-equivalent.
 - `total_chunks`: 5-bit field carrying `count − 1`. Semantic range `1..=32`; wire range `0..=31`. Decoders MUST add 1 after reading (`crates/mk-codec/src/string_layer/header.rs:146`).
-- `chunk_index`: 5-bit zero-based index. `chunk_index >= total_chunks` is rejected as `Error::ChunkedHeaderMalformed`.
+- `chunk_index`: 5-bit zero-based index. `chunk_index >= total_chunks` is rejected as `Error::ChunkedHeaderMalformed`\index{Error::ChunkedHeaderMalformed}.
 
 ### Length envelope
 
@@ -82,7 +84,7 @@ With up to 32 long-code chunks, an mk1 card can encode up to `32 × 53 − 4 = 1
 
 The encoder appends a 4-byte `cross_chunk_hash`\index{cross\_chunk\_hash} = `SHA-256(canonical_bytecode)[0..4]` to the canonical bytecode, then splits the resulting `bytecode || hash` stream into chunks of at most 53 bytes per fragment (long-code target; the trailing chunk may be shorter and falls back to regular-code BCH). Each chunk's string carries the 8-symbol chunked header plus its fragment bytes re-packed into 5-bit symbols, then the BCH checksum (`crates/mk-codec/src/string_layer/chunk.rs::split_into_chunks`).
 
-Reassembly: the decoder collects N chunks, verifies all share the same `chunk_set_id` and `total_chunks`, places each fragment in slot `chunk_index`, concatenates in order, then verifies the trailing 4 bytes match `SHA-256(reassembled_bytecode_without_hash)[0..4]`. Mismatch surfaces as `Error::CrossChunkHashMismatch`. Out-of-order, duplicate, missing, or `SingleString`-mixed-with-`Chunked` chunks are all caught (`crates/mk-codec/src/string_layer/chunk.rs::reassemble_from_chunks` + `crates/mk-codec/src/string_layer/pipeline.rs::decode`).
+Reassembly: the decoder collects N chunks, verifies all share the same `chunk_set_id` and `total_chunks`, places each fragment in slot `chunk_index`, concatenates in order, then verifies the trailing 4 bytes match `SHA-256(reassembled_bytecode_without_hash)[0..4]`. Mismatch surfaces as `Error::CrossChunkHashMismatch`\index{Error::CrossChunkHashMismatch}. Out-of-order, duplicate, missing, or `SingleString`-mixed-with-`Chunked` chunks are all caught (`crates/mk-codec/src/string_layer/chunk.rs::reassemble_from_chunks` + `crates/mk-codec/src/string_layer/pipeline.rs::decode`).
 
 Cross-format note: md1 derives `chunk_set_id` from `SHA-256(canonical_bytecode)[0..20 bits]`, so the same md1 content always re-encodes to the same `chunk_set_id` (content-identity + reassembly-mismatch in 20 bits). mk1's `chunk_set_id` is **opaque** (CSPRNG by default; deterministic-from-stub also permitted per BIP draft §"String-layer header"), and content integrity is enforced separately by the explicit 4-byte `cross_chunk_hash`. The two designs solve the same problem with different bit budgets.
 
@@ -126,8 +128,8 @@ The first byte is the bytecode header (`crates/mk-codec/src/bytecode/header.rs`;
 ```
 
 - Bits 7..4 — `version`. `0` in v0.1. Decoder rejects non-zero with `Error::UnsupportedVersion`.
-- Bit 3 — reserved (MUST be 0; `Error::ReservedBitsSet`).
-- Bit 2 — `fingerprint_flag` (closure Q-8). `1` if `origin_fingerprint` is present in the payload; `0` if omitted (privacy-preserving mode).
+- Bit 3 — reserved (MUST be 0; `Error::ReservedBitsSet`\index{Error::ReservedBitsSet}).
+- Bit 2 — `fingerprint_flag`\index{fingerprint\_flag} (closure Q-8). `1` if `origin_fingerprint` is present in the payload; `0` if omitted (privacy-preserving mode\index{privacy-preserving mode}).
 - Bits 1, 0 — reserved (MUST be 0).
 
 Valid v0.1 header bytes are exactly `0x00` (no fingerprint) and `0x04` (fingerprint present). The bit-2 fingerprint-flag convention is shape-shared with md1's bytecode header (BIP draft §"Bytecode header — bit allocation"; the formats' bit-3 allocations diverged when md1 v0.10 reclaimed bit 3 as its `OriginPaths` flag).
@@ -178,7 +180,7 @@ Each stub\index{policy\_id\_stub} is the top 4 bytes of an md1 policy template's
 
 ### Origin path
 
-mk1's origin path uses a 1-byte standard-table indicator with a `0xFE` explicit-path escape hatch (`crates/mk-codec/src/bytecode/path.rs`; BIP draft §"Origin path encoding"). Two cases:
+mk1's origin path uses a 1-byte standard-table indicator\index{standard-path table (mk1)} with a `0xFE` explicit-path escape hatch (`crates/mk-codec/src/bytecode/path.rs`; BIP draft §"Origin path encoding"). Two cases:
 
 **Case A — standard-table indicator** (1 byte total). 14 entries as of mk-codec v0.2.0:
 
@@ -192,7 +194,7 @@ mk1's origin path uses a 1-byte standard-table indicator with a `0xFE` explicit-
 | `0x06` | `m/48'/0'/0'/1'` | `0x16` | `m/48'/1'/0'/1'` |
 | `0x07` | `m/87'/0'/0'` | `0x17` | `m/87'/1'/0'` |
 
-Indicators `0x00`, `0x08..=0x10`, `0x18..=0xFD`, and `0xFF` are reserved (`Error::InvalidPathIndicator`). The 14-entry table is mk1-internal as of mk-codec v0.2.2; see the history note at the end of this chapter.
+Indicators `0x00`, `0x08..=0x10`, `0x18..=0xFD`, and `0xFF` are reserved (`Error::InvalidPathIndicator`\index{Error::InvalidPathIndicator}). The 14-entry table is mk1-internal as of mk-codec v0.2.2; see the history note at the end of this chapter.
 
 **Case B — explicit-path escape** (`0xFE` indicator):
 
@@ -202,17 +204,17 @@ Indicators `0x00`, `0x08..=0x10`, `0x18..=0xFD`, and `0xFF` are reserved (`Error
 [component_1 .. component_N : each LEB128 u32, 1..=5 bytes]
 ```
 
-Each component is a LEB128-encoded u32 BIP 32 child number with the hardened-marker in the high bit (per BIP 32 convention; bit 31 of the u32). Hardened components require the full 5-byte LEB128 form (any u32 ≥ 2²⁸ uses 5 bytes); a 4-component all-hardened explicit path therefore encodes to `1 + 1 + 4×5 = 22` bytes. Decoders reject `count == 0` or `count > 10` with `Error::PathTooDeep`, and LEB128-overflow or 6th-continuation-byte with `Error::InvalidPathComponent`.
+Each component is a LEB128\index{LEB128}-encoded u32 BIP 32 child number with the hardened-marker in the high bit (per BIP 32 convention; bit 31 of the u32). Hardened components require the full 5-byte LEB128 form (any u32 ≥ 2²⁸ uses 5 bytes); a 4-component all-hardened explicit path therefore encodes to `1 + 1 + 4×5 = 22` bytes. Decoders reject `count == 0` or `count > 10` with `Error::PathTooDeep`, and LEB128-overflow or 6th-continuation-byte with `Error::InvalidPathComponent`.
 
 The component cap is 10 (closure Q-3). Real BIP-style derivations top out at 6 (BIP 48 multisig is 4); the cap bounds chunk-size attacks without locking out any plausibly real path.
 
 ### Origin fingerprint
 
-The 4-byte BIP 32 master fingerprint, verbatim from BIP 380 origin notation `[fp/...]`. **Present only if bytecode-header bit 2 is set**; otherwise omitted entirely from the payload (closure Q-8). The privacy-preserving mode (bit 2 = 0; no fingerprint on wire) lets cosigners who don't need master-seed identification on the card omit those 4 bytes from the engraving.
+The 4-byte BIP 32 master fingerprint\index{BIP 32 master fingerprint}, verbatim from BIP 380 origin notation `[fp/...]`. **Present only if bytecode-header bit 2 is set**; otherwise omitted entirely from the payload (closure Q-8). The privacy-preserving mode (bit 2 = 0; no fingerprint on wire) lets cosigners who don't need master-seed identification on the card omit those 4 bytes from the engraving.
 
 The fingerprint-flag↔presence consistency is an **encoder-side invariant**: a decoder follows the flag verbatim (`crates/mk-codec/src/bytecode/decode.rs:35`). A hand-crafted bytecode that violates the invariant decodes to a wrong-but-internally-consistent `KeyCard`; detection happens at the Wallet Instance ID check.
 
-### Xpub compact-73
+### Xpub compact-73\index{compact-73}
 
 mk1 encodes xpubs in a 73-byte compact form (closure Q-7; `crates/mk-codec/src/bytecode/xpub_compact.rs`):
 
@@ -243,7 +245,7 @@ A consequent **limit-of-detection note** (closure Q-7 → SPEC §6 normative): a
 - `0x0488B21E` → mainnet `xpub` prefix.
 - `0x043587CF` → testnet `tpub` prefix.
 
-Other values surface as `Error::InvalidXpubVersion`. Network awareness here lets mk1 cards cross-validate against the network implied by the standard-table indicator at recovery time (e.g., a mainnet `0x05` indicator paired with a testnet `tpub` would be diagnosed at the recovery orchestrator, not by the per-card decoder).
+Other values surface as `Error::InvalidXpubVersion`\index{Error::InvalidXpubVersion}. Network awareness here lets mk1 cards cross-validate against the network implied by the standard-table indicator at recovery time (e.g., a mainnet `0x05` indicator paired with a testnet `tpub` would be diagnosed at the recovery orchestrator, not by the per-card decoder).
 
 ## Canonicality and validity rules
 
@@ -359,7 +361,7 @@ The decoded `KeyCard` round-trips through `mk decode` to the human-readable form
 
 The reference implementation:
 
-- `crates/mk-codec/src/key_card.rs` — `KeyCard` struct + public `encode` / `decode` / `encode_with_chunk_set_id` entry points.
+- `crates/mk-codec/src/key_card.rs` — `KeyCard`\index{KeyCard} struct + public `encode` / `decode` / `encode_with_chunk_set_id` entry points.
 - `crates/mk-codec/src/bytecode/encode.rs`, `decode.rs` — byte-aligned bytecode codec.
 - `crates/mk-codec/src/bytecode/header.rs` — 1-byte bytecode header parse / serialize.
 - `crates/mk-codec/src/bytecode/path.rs` — standard-table dictionary + `0xFE` explicit-path codec.

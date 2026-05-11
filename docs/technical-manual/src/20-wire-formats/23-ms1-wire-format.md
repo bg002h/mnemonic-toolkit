@@ -2,9 +2,9 @@
 
 This chapter documents ms1's current wire format at bit-level depth. The format is **v0.1** (wire format locked 2026-05-03 after the r6 amendment that narrowed payloads to BIP-39 entropy only; reference implementation at `ms-codec` v0.1.1). For the normative spec, see `bg002h/mnemonic-secret/design/SPEC_ms_v0_1.md`. ms1 does not yet ship a BIP draft (the closest sibling, mk1, is at Pre-Draft; ms1 is reference-implementation-only for v0.1).
 
-ms1\index{ms1} encodes **secret material** for Bitcoin self-custody backups — specifically, the BIP-39 entropy that re-derives a wallet's master seed via PBKDF2. ms1 is designed to engrave alongside mk1 (xpub) and md1 (descriptor / wallet template) cards as a coherent restoration bundle.
+ms1\index{ms1} encodes **secret material** for Bitcoin self-custody backups — specifically, the BIP-39 entropy\index{BIP-39 entropy} that re-derives a wallet's master seed via PBKDF2\index{PBKDF2-HMAC-SHA512}. ms1 is designed to engrave alongside mk1 (xpub) and md1 (descriptor / wallet template) cards as a coherent restoration bundle.
 
-Unlike md1 and mk1 — which fork BIP-93 BCH plumbing locally with HRP-mixed per-format target residues — **ms1 is BIP-93 codex32 used directly** via Andrew Poelstra's `rust-codex32 = "=0.1.0"` crate (CC0). The "spec" is therefore mostly: which BIP-93 wire fields carry which payload semantics, what the v0.1 → v0.2 migration contract is, and what an implementer must do to avoid drifting from BIP-93 itself.
+Unlike md1 and mk1 — which fork BIP-93 BCH plumbing locally with HRP-mixed per-format target residues — **ms1 is BIP-93 codex32 used directly** via Andrew Poelstra's `rust-codex32`\index{rust-codex32} `= "=0.1.0"` crate (CC0). The "spec" is therefore mostly: which BIP-93 wire fields carry which payload semantics, what the v0.1 → v0.2 migration contract is, and what an implementer must do to avoid drifting from BIP-93 itself.
 
 ## Layer model
 
@@ -74,7 +74,7 @@ ms1 v0.1 fixes every BIP-93 codex32 field to a specific value (SPEC §2.5):
 | payload | `0x00` reserved-prefix byte ‖ entropy (16/20/24/28/32 B) | chars 9..(len−13) |
 | checksum | BCH(short) — 13 codex32 chars | chars (len−13).. |
 
-The `threshold = 0` + `share-index = 's'` choice is the BIP-93 "Unshared Secret" form (BIP-93 §"Unshared Secret"). v0.1 decoders reject `threshold ≠ '0'` with `Error::ThresholdNotZero` and `share-index ≠ 's'` with `Error::ShareIndexNotSecret` (`crates/ms-codec/src/envelope.rs:100,105`). The latter is also enforced upstream by `rust-codex32 v0.1.0`'s parse, but `ms-codec` re-checks for defense-in-depth and to surface a domain-typed error to its callers.
+The `threshold = 0` + `share-index = 's'` choice is the BIP-93 "Unshared Secret"\index{Unshared Secret form} form (BIP-93 §"Unshared Secret"). v0.1 decoders reject `threshold ≠ '0'` with `Error::ThresholdNotZero`\index{Error::ThresholdNotZero} and `share-index ≠ 's'` with `Error::ShareIndexNotSecret`\index{Error::ShareIndexNotSecret} (`crates/ms-codec/src/envelope.rs:100,105`). The latter is also enforced upstream by `rust-codex32 v0.1.0`'s parse, but `ms-codec` re-checks for defense-in-depth and to surface a domain-typed error to its callers.
 
 ### NUMS-derived target constants
 
@@ -96,7 +96,7 @@ v0.1 ms1 strings ride only BIP-93's **short code** bracket. The total string len
 
 Formula: total = `3 (HRP+sep) + 1 (threshold) + 4 (id) + 1 (share-index) + N (payload) + 13 (cksum) = 22 + N`. The payload symbol count is `⌈(entropy_bytes + 1) × 8 / 5⌉`. The bijection is sanity-tested in `crates/ms-codec/src/consts.rs:50-62`.
 
-v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength` (`crates/ms-codec/src/decode.rs:21`). This single rule rejects, in particular, every BIP-93 long-code string (total 99–111 chars for HRP=ms — data-part length 96..=108 plus 3 chars of HRP+separator) without needing a separate "long codex32" rejection path.
+v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength`\index{Error::UnexpectedStringLength} (`crates/ms-codec/src/decode.rs:21`). This single rule rejects, in particular, every BIP-93 long-code string (total 99–111 chars for HRP=ms — data-part length 96..=108 plus 3 chars of HRP+separator) without needing a separate "long codex32" rejection path.
 
 ### Pad bits in the final payload symbol
 
@@ -117,13 +117,13 @@ The payload (the bytes returned by `Parts::data()` after BIP-93 codex32 parsing)
 
 ### The `0x00` reserved-prefix byte
 
-Every v0.1 ms1 payload begins with a single byte of value `0x00`\index{reserved-prefix byte (ms1)}. In v0.1 this byte is reserved (decoder MUST reject any non-zero value with `Error::ReservedPrefixViolation`; `crates/ms-codec/src/envelope.rs:125-129`). In v0.2 it is **promoted to a type discriminator**, which makes the v0.2 share-encoding migration non-breaking for v0.1 strings — a v0.2 decoder seeing prefix `0x00` falls back to v0.1's "type tag is in BIP-93 `id` field" interpretation. See "v0.1 → v0.2 migration contract" below.
+Every v0.1 ms1 payload begins with a single byte of value `0x00`\index{reserved-prefix byte (ms1)}. In v0.1 this byte is reserved (decoder MUST reject any non-zero value with `Error::ReservedPrefixViolation`\index{Error::ReservedPrefixViolation}; `crates/ms-codec/src/envelope.rs:125-129`). In v0.2 it is **promoted to a type discriminator**, which makes the v0.2 share-encoding migration non-breaking for v0.1 strings — a v0.2 decoder seeing prefix `0x00` falls back to v0.1's "type tag is in BIP-93 `id` field" interpretation. See "v0.1 → v0.2 migration contract" below.
 
 The reservation is unique to ms1 among the four m-format formats. md1 / mk1 use their own bytecode-header bytes for version + flag bits; ms1 has no bytecode header (BIP-93's `id` field carries the type tag and BIP-93 guarantees the parsing structure). The single reserved byte is the entire forward-compatibility budget for v0.1.
 
 ### Tag type
 
-A `Tag` (`crates/ms-codec/src/tag.rs`) is a 4-byte value where each byte is a codex32-alphabet character (`qpzry9x8gf2tvdw0s3jn54khce6mua7l`). Construction validates the alphabet at construction; out-of-alphabet bytes return `Error::TagInvalidAlphabet`. A `Tag` value that is structurally valid but not a member of `RESERVED_TAG_TABLE` returns `Error::UnknownTag` at decode time.
+A `Tag`\index{Tag (ms1)} (`crates/ms-codec/src/tag.rs`) is a 4-byte value where each byte is a codex32-alphabet character (`qpzry9x8gf2tvdw0s3jn54khce6mua7l`). Construction validates the alphabet at construction; out-of-alphabet bytes return `Error::TagInvalidAlphabet`\index{Error::TagInvalidAlphabet}. A `Tag` value that is structurally valid but not a member of `RESERVED_TAG_TABLE` returns `Error::UnknownTag`\index{Error::UnknownTag} at decode time.
 
 v0.1's public API exposes exactly one `Tag` constant:
 
@@ -140,14 +140,14 @@ The full 5-entry table is curated to ms1's actual purpose (secret material, not 
 | Tag | Meaning | v0.1 emit | v0.1 accept |
 |---|---|---|---|
 | `entr`\index{Tag::ENTR} | BIP-39 entropy (128/160/192/224/256 b = 16/20/24/28/32 B) | yes | yes |
-| `seed` | BIP-32 master seed (64 B) | no — overflows BIP-93 long bracket with prefix byte | reject (`Error::ReservedTagNotEmittedInV01`) |
+| `seed` | BIP-32 master seed (64 B) | no — overflows BIP-93 long bracket with prefix byte | reject (`Error::ReservedTagNotEmittedInV01`\index{Error::ReservedTagNotEmittedInV01}) |
 | `xprv` | serialized BIP-32 xpriv (78 B stripped of Base58Check) | no — outside BIP-93 brackets at any length | reject (`Error::ReservedTagNotEmittedInV01`) |
 | `mnem` | reserved for future "entropy + wordlist-language hint" payload | no | reject (`Error::ReservedTagNotEmittedInV01`) |
 | `prvk` | reserved for future raw secp256k1 32-B private key | no | reject (`Error::ReservedTagNotEmittedInV01`) |
 
 Tags structurally valid (alphabet-conforming) but not in the table cause `Error::UnknownTag` (`crates/ms-codec/src/decode.rs:50-53`). The reservation policy applies at **both** sides: SPEC §3.5.1 mandates that the encoder also rejects reserved-not-emitted tags with the same `Error::ReservedTagNotEmittedInV01` variant, preventing an asymmetry where a v0.1 ms-codec could emit a string the v0.1 ms-codec itself cannot decode.
 
-### `Payload::Entr` and entropy-length validation
+### `Payload::Entr`\index{Payload::Entr} and entropy-length validation
 
 ```rust
 #[non_exhaustive]
@@ -156,7 +156,7 @@ pub enum Payload {
 }
 ```
 
-Encoder MUST reject `Payload::Entr(data)` with `data.len() ∉ {16, 20, 24, 28, 32}` (`Error::PayloadLengthMismatch { tag: Tag::ENTR, expected: <set>, got }`; `crates/ms-codec/src/payload.rs`). Decoder applies the same check after extracting the payload bytes following the prefix byte (`decode.rs:47`). The set `{16, 20, 24, 28, 32}` corresponds bijectively to BIP-39 word counts `{12, 15, 18, 21, 24}`. **ms-codec does not separately carry the word count on the wire**; the byte length is the unambiguous discriminator.
+Encoder MUST reject `Payload::Entr(data)` with `data.len() ∉ {16, 20, 24, 28, 32}` (`Error::PayloadLengthMismatch`\index{Error::PayloadLengthMismatch} `{ tag: Tag::ENTR, expected: <set>, got }`; `crates/ms-codec/src/payload.rs`). Decoder applies the same check after extracting the payload bytes following the prefix byte (`decode.rs:47`). The set `{16, 20, 24, 28, 32}` corresponds bijectively to BIP-39 word counts `{12, 15, 18, 21, 24}`. **ms-codec does not separately carry the word count on the wire**; the byte length is the unambiguous discriminator.
 
 The `#[non_exhaustive]` attribute is permanent from v0.1.0 onward; future variants (e.g., `Mnem`, `Seed`, `Xprv` once their framing is settled) are semver-minor additions. Removing `#[non_exhaustive]` would be semver-major and is not contemplated (SPEC §10.3).
 
@@ -183,7 +183,7 @@ The recovery chain re-derives the BIP-32 master seed from the entropy + (optiona
 
 **Engraving justification.** A 24-word BIP-39 mnemonic engraved on steel with its 4-bit BIP-39 checksum is too weak to localize transcription errors. The same 32 B of entropy encoded as `ms1 entr` carries a 13-character BCH checksum that detects up to 8 character substitutions and corrects up to 4. The user can reconstruct the entropy from a partially-corroded card, then re-derive the mnemonic deterministically (SPEC §6.1).
 
-### BIP-39 wordlist language — recovery hazard
+### BIP-39 wordlist\index{BIP-39 wordlist} language — recovery hazard
 
 BIP-39 entropy → mnemonic conversion depends on the wordlist language (English, Japanese, Korean, Spanish, Chinese Simplified, Chinese Traditional, French, Italian, Czech, Portuguese — 10 BIP-39-defined languages, fitting in 4 bits). The wordlist is **not carried on the v0.1 ms1 wire**. A user whose original wallet used a non-English wordlist who recovers via English-defaulted wallet software will silently derive a different 64-B BIP-32 master seed → different addresses → empty wallet. This is exactly the concern raised in BIP-93 §"Not BIP-0039 Entropy" (SPEC §6.3).
 

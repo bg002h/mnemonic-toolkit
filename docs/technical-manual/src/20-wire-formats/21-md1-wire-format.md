@@ -1,6 +1,6 @@
 # md1 Wire Format
 
-This chapter documents md1's current wire format at bit-level depth. The format is **v0.30** (a clean break from v0.x; decoders reject earlier versions via `Error::WireVersionMismatch`). For the normative spec, see `bg002h/descriptor-mnemonic/bip/bip-mnemonic-descriptor.mediawiki` §"Specification" and `design/SPEC_v0_30_wire_format.md`. The reference implementation is in `crates/md-codec/src/`; this chapter cites specific source files where they pin a wire-format decision.
+This chapter documents md1\index{md1}'s current wire format\index{wire format} at bit-level depth. The format is **v0.30** (a clean break from v0.x; decoders reject earlier versions via `Error::WireVersionMismatch`\index{Error::WireVersionMismatch}). For the normative spec, see `bg002h/descriptor-mnemonic/bip/bip-mnemonic-descriptor.mediawiki` §"Specification" and `design/SPEC_v0_30_wire_format.md`. The reference implementation is in `crates/md-codec/src/`; this chapter cites specific source files where they pin a wire-format decision.
 
 ## Layer model
 
@@ -36,7 +36,7 @@ The header carries the wire-format version and mode-dispatch flags. Two header s
 | 1:divergent_paths | 4:version |
 ```
 
-- Bit 4 (MSB): `divergent_paths` flag. When `1`, the path-declaration carries per-`@N` divergent paths (one path per placeholder); when `0`, a single shared path applies to all placeholders.
+- Bit 4 (MSB): `divergent_paths`\index{divergent\_paths} flag. When `1`, the path-declaration carries per-`@N` divergent paths (one path per placeholder); when `0`, a single shared path applies to all placeholders.
 - Bits 3–0: `version`. The 4-bit field absorbs the bit that v0.x reserved. v0.30 emits `0b0100` = 4.
 
 **Chunked header** (37 bits = 8 codex32 characters with 3 bits of trailing slack absorbed by the symbol grid):
@@ -47,11 +47,11 @@ The header carries the wire-format version and mode-dispatch flags. Two header s
 
 - Bits 36–33: `version`. Same 4-bit field as single-string. v0.30 = `0b0100`.
 - Bit 32: `chunked` flag, always `1` for chunked headers. This is the bit-0 discriminator of the first 5-bit symbol; auto-dispatch sees it before any other field.
-- Bits 31–12: `chunk_set_id`, 20 bits. A deterministic per-encoding identifier shared by all chunks of one Template Card; used at reassembly time to detect mixed chunks. Derived from `Md1EncodingId` = leading 16 bytes of `SHA-256(canonical bit-packed payload bytecode)`; the wire-level `chunk_set_id` is the leading 20 bits, MSB-first.
+- Bits 31–12: `chunk_set_id`\index{chunk\_set\_id (md1)}, 20 bits. A deterministic per-encoding identifier shared by all chunks of one Template Card; used at reassembly time to detect mixed chunks. Derived from `Md1EncodingId`\index{Md1EncodingId} = leading 16 bytes of `SHA-256(canonical bit-packed payload bytecode)`; the wire-level `chunk_set_id` is the leading 20 bits, MSB-first.
 - Bits 11–6: `count − 1`, 6 bits. Range `1..64`.
 - Bits 5–0: `index`, 6 bits. 0-indexed; range `0..(count − 1)`.
 
-### Auto-dispatch and safe rejection
+### Auto-dispatch and safe rejection\index{auto-dispatch}
 
 The decoder reads the first 5-bit symbol and dispatches by bit 0 (BIP draft §"Auto-dispatch and safe rejection"):
 
@@ -81,13 +81,13 @@ For payloads exceeding the single-string capacity (385 bits ≈ 48 bytes for the
 
 Reassembly: decoder collects N chunks, sorts by `index`, verifies all share the same `chunk_set_id`, concatenates their fragment bits, then runs the bytecode-layer decode on the joined stream prefixed with the 5-bit payload header reconstructed from the chunked-header version + a synthesised single-string-style `divergent_paths` bit recovered from the first chunk's reassembled bytecode.
 
-Cross-chunk integrity check: after bytecode decode, recompute `Md1EncodingId` from the canonical bytecode and confirm the wire-carried `chunk_set_id` matches the leading 20 bits. Mismatch surfaces as `Error::ChunkSetIdMismatch { expected, derived }`.
+Cross-chunk integrity check: after bytecode decode, recompute `Md1EncodingId` from the canonical bytecode and confirm the wire-carried `chunk_set_id` matches the leading 20 bits. Mismatch surfaces as `Error::ChunkSetIdMismatch`\index{Error::ChunkSetIdMismatch} `{ expected, derived }`.
 
 ## Bytecode layer
 
 The bytecode is a packed bit stream (no byte alignment between sections or operators) carrying — in this order — the **5-bit header**, **origin-path declaration**, **use-site-path declaration**, **tree**, and **TLV section**. The bit stream is laid out MSB-first; the final byte is zero-padded if the total bit count is not a multiple of 8.
 
-### Origin-path declaration
+### Origin-path declaration\index{OriginPath}
 
 The origin-path declaration encodes the BIP-32 derivation prefix shared by all placeholders (shared mode) or per-placeholder (divergent mode). It uses a depth-prefixed component encoding documented at BIP draft §"Origin path declaration".
 
@@ -111,9 +111,9 @@ Each component is encoded as:
 | 1:hardened | 7-or-more bits varint:index |
 ```
 
-The variable-width integer encoding is a length-prefixed varint (LP4-ext varint per BIP draft §"LP4-ext varint"): the first 4 bits are the length minus 1 (giving 1–16 four-bit groups), followed by the actual index in MSB-first bit order.
+The variable-width integer encoding is a length-prefixed varint (LP4-ext varint\index{LP4-ext varint} per BIP draft §"LP4-ext varint"): the first 4 bits are the length minus 1 (giving 1–16 four-bit groups), followed by the actual index in MSB-first bit order.
 
-### Use-site-path declaration
+### Use-site-path declaration\index{use-site-path declaration}
 
 Documents the *suffix* path applied at the descriptor's wildcard position (e.g., `/0/*`, `/<0;1>/*`). Always present (even for descriptors without an explicit suffix; the empty suffix encodes as `multipath = null + wildcard_hardened = 0`).
 
@@ -127,7 +127,7 @@ The bytecode's tree section is a tag-tree of operators. Each operator's wire sha
 
 Tags are drawn from a 6-bit primary code space (`0x00`–`0x3F`); primary `0x3F` is the extension prefix followed by a 4-bit subcode (no extension subcodes are allocated in v0.30 — the entire 16-slot subspace is reserved).
 
-### TLV section
+### TLV section\index{TLV section}
 
 A bit-aligned sequence of optional metadata blocks (Fingerprints, Pubkeys, OriginPathOverrides, Unknown). Each TLV is identified by a 5-bit tag from a **separate** namespace from the bytecode 6-bit space (BIP draft §"TLV tag allocations"). The TLV section terminates by end-of-bytecode rather than a length prefix — see BIP draft §"End-of-section detection (rollback-as-padding)" for the trailing-padding tolerance at the section boundary.
 
@@ -139,19 +139,19 @@ The 36 allocated primary tags. Authoritative source: `crates/md-codec/src/tag.rs
 
 | Primary | Operator | Operator data | Children | Notes |
 |---|---|---|---|---|
-| `0x00` | `wpkh()` | `key_index` (kiw bits) | 0 | Top-level: ACTIVE. As `sh(wpkh)` inner: ACTIVE. |
-| `0x01` | `tr()` | 1-bit `is_nums` + (`key_index` if `!is_nums`) + 1-bit `has_tree` + optional tree | 0 or 1 | See "NUMS encoding" below. |
-| `0x02` | `wsh()` | — | 1 | Top-level: ACTIVE. As `sh(wsh)` inner: ACTIVE. |
-| `0x03` | `sh()` | — | 1 | Top-level only (per Sh wrapper restriction matrix). |
-| `0x04` | `pkh()` | `key_index` (kiw bits) | 0 | Top-level: REJECTED. |
+| `0x00` | `wpkh()`\index{Tag::Wpkh} | `key_index`\index{key\_index} (kiw bits) | 0 | Top-level: ACTIVE. As `sh(wpkh)` inner: ACTIVE. |
+| `0x01` | `tr()`\index{Tag::Tr} | 1-bit `is_nums`\index{is\_nums} + (`key_index` if `!is_nums`) + 1-bit `has_tree` + optional tree | 0 or 1 | See "NUMS encoding" below. |
+| `0x02` | `wsh()`\index{Tag::Wsh} | — | 1 | Top-level: ACTIVE. As `sh(wsh)` inner: ACTIVE. |
+| `0x03` | `sh()`\index{Tag::Sh} | — | 1 | Top-level only (per Sh wrapper restriction matrix). |
+| `0x04` | `pkh()`\index{Tag::Pkh} | `key_index` (kiw bits) | 0 | Top-level: REJECTED. |
 | `0x05` | TapTree inner-node | — | 2 (left / right subtree) | Multi-leaf TapTree branching; recursive. |
-| `0x06` | `multi()` | 5-bit `k−1` + 5-bit `n−1` + n × `key_index` (kiw bits) | 0 (raw indices) | Multi-family raw-index packing. |
+| `0x06` | `multi()`\index{Tag::Multi} | 5-bit `k−1` + 5-bit `n−1` + n × `key_index` (kiw bits) | 0 (raw indices) | Multi-family raw-index packing. |
 | `0x07` | `sortedmulti()` | as `multi()` | 0 | |
 | `0x08` | `multi_a()` | as `multi()` | 0 (taproot context) | |
 | `0x09` | `sortedmulti_a()` | as `multi()` | 0 (taproot context) | |
-| `0x0A` | `pk_k()` (sugar `pk()`) | `key_index` (kiw bits) | 0 | |
-| `0x0B` | `pk_h()` (sugar `pkh()`) | `key_index` (kiw bits) | 0 | |
-| `0x0C` | `c:` (Check) | — | 1 | Walker normalisation: never wraps a bare `pk_k` / `pk_h` child on the wire. |
+| `0x0A` | `pk_k()`\index{Tag::PkK} (sugar `pk()`) | `key_index` (kiw bits) | 0 | |
+| `0x0B` | `pk_h()`\index{Tag::PkH} (sugar `pkh()`) | `key_index` (kiw bits) | 0 | |
+| `0x0C` | `c:` (Check)\index{Tag::Check} | — | 1 | Walker normalisation: never wraps a bare `pk_k` / `pk_h` child on the wire. |
 | `0x0D` | `v:` (Verify) | — | 1 | |
 | `0x0E` | `s:` (Swap) | — | 1 | |
 | `0x0F` | `a:` (Alt) | — | 1 | |
@@ -165,7 +165,7 @@ The 36 allocated primary tags. Authoritative source: `crates/md-codec/src/tag.rs
 | `0x17` | `or_c` | — | 2 | |
 | `0x18` | `or_d` | — | 2 | |
 | `0x19` | `or_i` | — | 2 | |
-| `0x1A` | `thresh()` | 5-bit `k−1` + 5-bit `n−1` + n × Node | n (full Node children) | Note: thresh keeps `Body::Variable` (per-child tags), unlike multi-family. |
+| `0x1A` | `thresh()`\index{Tag::Thresh} | 5-bit `k−1` + 5-bit `n−1` + n × Node | n (full Node children) | Note: thresh keeps `Body::Variable` (per-child tags), unlike multi-family. |
 | `0x1B` | `after()` | 32-bit absolute timelock | 0 | |
 | `0x1C` | `older()` | 32-bit relative timelock | 0 | |
 | `0x1D` | `sha256()` | 32-byte hash | 0 | |
@@ -185,10 +185,10 @@ The 36 allocated primary tags. Authoritative source: `crates/md-codec/src/tag.rs
 Three distinct body shapes encode the operands of an operator:
 
 - **Single-key bodies** (`wpkh`, `pkh`, `tr` without NUMS, `pk_k`, `pk_h`): one `key_index` field of width `kiw` bits.
-- **Multi-family bodies** (`multi`, `sortedmulti`, `multi_a`, `sortedmulti_a`): `5-bit (k−1) | 5-bit (n−1) | n × key_index (kiw bits)` — **raw indices, not tagged Nodes**. The decoder MUST treat the body as exactly n raw kiw-bit fields and reject any tag byte in this region with `Error::OperatorContextViolation { tag, context: MultiBody }`.
+- **Multi-family bodies**\index{multi-family bodies} (`multi`, `sortedmulti`, `multi_a`, `sortedmulti_a`): `5-bit (k−1) | 5-bit (n−1) | n × key_index (kiw bits)` — **raw indices, not tagged Nodes**. The decoder MUST treat the body as exactly n raw kiw-bit fields and reject any tag byte in this region with `Error::OperatorContextViolation`\index{Error::OperatorContextViolation} `{ tag, context: MultiBody }`.
 - **Thresh body** (`thresh`): `5-bit (k−1) | 5-bit (n−1) | n × Node` — full Node children, distinct from multi-family raw-index packing.
 
-The reference implementation pins these as `Body::KeyArg`, `Body::MultiKeys { k, indices }`, and `Body::Variable { k, children }` respectively, in `crates/md-codec/src/tree.rs`.
+The reference implementation pins these as `Body::KeyArg`\index{Body::KeyArg}, `Body::MultiKeys`\index{Body::MultiKeys} `{ k, indices }`, and `Body::Variable`\index{Body::Variable} `{ k, children }` respectively, in `crates/md-codec/src/tree.rs`.
 
 ## NUMS encoding for `tr()`
 
@@ -198,13 +198,13 @@ The `tr()` operator (`0x01`) has the special body shape:
 | 6:Tag::Tr | 1:is_nums | [kiw:key_index iff !is_nums] | 1:has_tree | [tree iff has_tree] |
 ```
 
-When `is_nums = 1`, the internal key is the BIP-341 NUMS H-point:
+When `is_nums = 1`, the internal key is the BIP-341\index{BIP-341} NUMS\index{NUMS} H-point:
 
 ```text
 50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0
 ```
 
-and the `key_index` field is **suppressed entirely on the wire** (no kiw-bit field follows). When `is_nums = 0`, a `kiw`-bit `key_index` field follows. Values `≥ n` are rejected with `Error::NUMSSentinelConflict` (the field name is historical; the rejection fires for `is_nums = 0 ∧ key_index ≥ n`).
+and the `key_index` field is **suppressed entirely on the wire** (no kiw-bit field follows). When `is_nums = 0`, a `kiw`-bit `key_index` field follows. Values `≥ n` are rejected with `Error::NUMSSentinelConflict`\index{Error::NUMSSentinelConflict} (the field name is historical; the rejection fires for `is_nums = 0 ∧ key_index ≥ n`).
 
 **Canonicalisation invariant.** Encoders MUST emit `is_nums = 1` iff the descriptor's `tr()` internal key is exactly the BIP-341 NUMS H-point. Encoders MUST emit `is_nums = 0` with `key_index = i` (`0 ≤ i < n`) for any `@i` placeholder internal key.
 
@@ -214,20 +214,20 @@ and the `key_index` field is **suppressed entirely on the wire** (no kiw-bit fie
 - **v0.18**: sentinel `key_index = n` in a widened-by-one kiw field.
 - **v0.30**: explicit `is_nums` flag (this version). Restores `kiw = ⌈log₂(n)⌉` (saves 1 bit at each `n ∈ {1, 2, 4, 8, 16, 32}`).
 
-## Walker normalisation
+## Walker normalisation\index{walker normalisation}
 
 The encoder emits a bare `Tag::PkK` or `Tag::PkH` at the c:-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; this preserves type correctness in the rendered descriptor without spending wire bits on a wrapper that is structurally implied. The invariant is documented in BIP draft §"Round-trip canonical form"; the reference implementation applies the inverse reconstruction in the miniscript-to-AST path (see `crates/md-codec/src/to_miniscript.rs`).
 
 The canonical form invariant: every `Tag::PkK` and `Tag::PkH` appearing as a direct child of a wrapper-tagged operator is rendered with the `c:` desugar at that position; every `Tag::PkK` or `Tag::PkH` appearing as a multi-family child is left bare (multi-family operands are already type-checked by their parent).
 
-## Canonicality rules
+## Canonicality rules\index{canonicality rules}
 
 The bytecode has a small set of rules that an encoder MUST follow and a decoder MUST verify. Violations surface as specific `Error` variants:
 
 1. **`is_nums` canonicalisation.** As described above. Non-canonical encodings (e.g., `is_nums = 0` with the literal NUMS H-point xpub for `key_index = i`) MUST be rejected by encoders.
 2. **Top-level wrapper.** The root tag MUST be one of `{Sh, Wsh, Wpkh, Pkh, Tr}`. Other top-level tags surface as `Error::OperatorContextViolation { tag, context: ContextKind::TopLevel }` (added in v0.31).
 3. **Multi-family raw-index body.** Multi-family bodies are exactly `5 + 5 + n × kiw` bits. Any tag byte appearing in this region is `Error::OperatorContextViolation { tag, context: MultiBody }`.
-4. **Tap-leaf admissible operators.** Inside a TapTree leaf, only BIP-342 admissible operators (per the leaf-allow-list) are permitted; others surface as `Error::ForbiddenTapTreeLeaf`.
+4. **Tap-leaf admissible operators.** Inside a TapTree leaf, only BIP-342 admissible operators (per the leaf-allow-list) are permitted; others surface as `Error::ForbiddenTapTreeLeaf`\index{Error::ForbiddenTapTreeLeaf}.
 5. **Mid-stream padding.** Trailing non-zero pad bits cannot have been produced by a conforming encoder. Surfaces as `Error::InvalidBytecode { kind: BytecodeErrorKind::MalformedPayloadPadding }`. The exception is rollback-as-padding at the TLV-section boundary (BIP draft §"TLV section / End-of-section detection").
 
 ## Worked encode: `wpkh(@0/<0;1>/*)` (corpus vector `wpkh_basic`)
@@ -268,7 +268,7 @@ The full decode produces 2 + 6 + 4 + use-site + 24 (= 6 + 5 + 5 + 6 indices + ch
 
 Pre-v0.11 wire formats carried byte-aligned framing tags for path-dictionary lookups (`Placeholder`, `SharedPath`, `Fingerprints`, `OriginPaths` at `0x33`–`0x36` in an 8-bit operator-tag namespace). v0.11 retired all four:
 
-- Path-decl framing moved into the bit-aligned §"Origin path declaration".
+- Path-decl framing moved into the bit-aligned §"Origin path declaration" (the v0.10-era `Tag::OriginPaths`\index{Tag::OriginPaths} = `0x36` was retired with v0.11's dictionary cleanup).
 - Key references moved into inline `key_index` bit fields.
 - Fingerprints, xpubs, and per-`@N` overrides moved into the TLV section.
 
