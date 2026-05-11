@@ -45,6 +45,7 @@
     "CKDpub",
     "Timelock",
     "taptree",
+    "PSBT",
     "Rusnak",
     "Sanket",
     "serde",

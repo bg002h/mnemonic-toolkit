@@ -10,6 +10,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `abandon test mnemonic` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `address derivation` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `auto-dispatch` | [md1 Wire Format](#md1-wire-format) |
+| `base58check` | [Network and Addressing](#network-and-addressing) |
 | `BCH code` | [codex32 and BCH](#codex32-and-bch) |
 | `bech32` | [codex32 and BCH](#codex32-and-bch) |
 | `BIP 32 master fingerprint` | [mk1 Wire Format](#mk1-wire-format) |
