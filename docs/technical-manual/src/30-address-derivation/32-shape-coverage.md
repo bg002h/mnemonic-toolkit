@@ -78,7 +78,7 @@ Network parameter changes flip the output HRP without touching the underlying sc
 
 (BIP-341 §"Constructing and spending Taproot outputs"; pinned in `to_miniscript.rs:34-35` as `NUMS_H_POINT_X_ONLY_HEX`). `build_nums_internal_key` (`to_miniscript.rs:172-179`) constructs a `DescriptorPublicKey::Single { origin: None, key: SinglePubKey::XOnly(H) }` — no origin, no path, no wildcard.
 
-When `is_nums = true` the `key_index` field is wire-present (the wire layout doesn't omit it on the `is_nums = 1` arm — see §II.1 §"NUMS handling" for the bit-level form) but ignored at conversion time. The mandatory `tree` arm carries the script-path leaves.
+The in-memory `Body::Tr` struct keeps the `key_index: u8` Rust field populated even when `is_nums = true`, but the kiw-bit `key_index` wire field is **suppressed on the wire** when `is_nums = 1`: the v0.30 layout is `Tag::Tr(6) | is_nums(1) | key_index(kiw, present iff !is_nums) | has_tree(1) | [tree if has_tree]` (`design/SPEC_v0_30_wire_format.md §7.2`; see §II.1 §"NUMS encoding for tr()" for the bit-level form). The mandatory `tree` arm carries the script-path leaves.
 
 | Shape | Template | Test |
 |---|---|---|
@@ -134,10 +134,11 @@ Mixed-leaf taproots — a `pk(...)` leaf and a `multi_a(...)` leaf — combine v
 | Shape | Template | Test |
 |---|---|---|
 | `wsh(pk(@0))` | `wsh(pk(@0/<0;1>/*))` | `address_derivation.rs:690-723` |
-| `wsh(multi(2,@0,@1,@2))` BIP-48 | `wsh(multi(...))` | (same shape as `wsh_sortedmulti_2_of_3_address` at `:252-331` with the sort step elided) |
 | `wsh(sortedmulti(2,@0,@1,@2))` BIP-48 | `wsh(sortedmulti(...))` | `address_derivation.rs:252-331` |
 | `wsh(and_v(v:pk(@0),older(144)))` | timelock-gated single-signer | `address_derivation.rs:849-894` |
 | `wsh(thresh(2,pk(@0),s:pk(@1),s:pk(@2)))` | canonical-`thresh` k-of-N | `address_derivation.rs:899-956` |
+
+The unsorted `wsh(multi(...))` variant routes through the same `wsh_inner_to_descriptor` fall-through path that handles arbitrary miniscript bodies — `node_to_miniscript::<Segwitv0>` reaches the `Terminal::Multi` arm at `to_miniscript.rs:365-373` and rust-miniscript's `check_global_consensus_validity` accepts it under `Segwitv0`. The integration suite currently exercises only the `sortedmulti` form (`address_derivation.rs:252-331`); a paired-derivation test for unsorted `wsh(multi(...))` is filed as a FOLLOWUP for the md1 repo.
 
 The hash-leaf fragments (`Tag::Sha256` / `Tag::Hash256` / `Tag::Ripemd160` / `Tag::Hash160`) are constructed via `sha256_from_bytes` / `hash256_from_bytes` / `ripemd160_from_bytes` / `hash160_from_bytes` (`to_miniscript.rs:484-502`) — round-tripping the 32-byte (or 20-byte) hash payload to the rust-miniscript hash newtype. `Tag::RawPkH` is explicitly rejected at the converter (`to_miniscript.rs:417-421`) because rust-miniscript's public API has no `RawPkH` constructor; only `pk_h(<pubkey>)` is reachable.
 

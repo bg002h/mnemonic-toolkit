@@ -32,7 +32,14 @@ Reference `<short-id>` in commit messages when closing: `closes FOLLOWUPS.md <sh
 
 ## Open items
 
-_All v0.1-era follow-ups resolved 2026-05-11. New items will be filed as cuts proceed._
+### `cross-repo md1-wsh-multi-unsorted-integration-test` — add paired-derivation test for `wsh(multi(...))` in md1
+
+- **Surfaced:** Phase 2.2 reviewer round of commit `7f05e50` (I-2).
+- **Where:** `descriptor-mnemonic/crates/md-codec/tests/address_derivation.rs` (new test).
+- **What:** The integration test suite covers `wsh(sortedmulti(...))` (`address_derivation.rs:252-331`) but lacks a paired-derivation test for the unsorted `wsh(multi(...))` variant. The `Terminal::Multi` arm at `to_miniscript.rs:365-373` handles it via the fall-through `node_to_miniscript::<Segwitv0>` path, but the path is untested against an independent `miniscript::Descriptor::from_str(...)` derivation. Add a `wsh_multi_2_of_3_address` test mirroring the sortedmulti shape with `Tag::Multi` substituted; assert byte-identical agreement. Once landed, §III.2 Bucket 7's prose can cite the new test directly instead of noting the absence.
+- **Why deferred:** out-of-scope for a technical-manual cut; the gap surfaced during prose review, not via a wire-format bug.
+- **Status:** `open`.
+- **Tier:** `cross-repo` (lands in `descriptor-mnemonic`; mirror entry to be filed in that repo's `design/FOLLOWUPS.md` when md1 work begins).
 
 ## Resolved items
 
