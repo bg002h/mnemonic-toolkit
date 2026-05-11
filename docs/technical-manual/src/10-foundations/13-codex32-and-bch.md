@@ -41,7 +41,7 @@ md1 and mk1 use BCH codes over GF(32) with the *same algebraic machinery* as cod
 
 md1's reference implementation pins one BCH code (the v0.11+ regular code\index{regular code}; the historical long code\index{long code} was retired together with the v0.x wire format). The generator coefficients (`GEN_REGULAR` in `crates/md-codec/src/bch.rs`) are the standard BCH(93,80,8) polynomial used across the bech32/codex32 family. The per-format differentiation appears in `MD_REGULAR_CONST`\index{MD\_REGULAR\_CONST} — a non-zero 65-bit constant derived from the top 65 bits of `SHA-256("shibbolethnums")` — that the verifier compares the polymod\index{polymod} output against. The format-specific constant is the **target residue**\index{target residue}. mk1's `bch.rs` follows the same shape with its own format-specific constant.
 
-The BIP-93 design distance properties — guaranteed correction of up to 4 unknown-position substitutions, or up to 8 known-position erasures, or up to 13 consecutive erasures — carry through because the *generator* is the same. The target-residue swap doesn't change the distance, only which polymod output counts as "valid" for the format.
+The BIP-93 design distance\index{BIP-93 design distance} properties — guaranteed correction of up to 4 unknown-position substitutions, or up to 8 known-position erasures, or up to 13 consecutive erasures — carry through because the *generator* is the same. The target-residue swap doesn't change the distance, only which polymod output counts as "valid" for the format.
 
 ### HRP mixing
 

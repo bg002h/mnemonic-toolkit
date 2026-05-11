@@ -185,7 +185,7 @@ The recovery chain re-derives the BIP-32 master seed from the entropy + (optiona
 
 ### BIP-39 wordlist\index{BIP-39 wordlist} language — recovery hazard
 
-BIP-39 entropy → mnemonic conversion depends on the wordlist language (English, Japanese, Korean, Spanish, Chinese Simplified, Chinese Traditional, French, Italian, Czech, Portuguese — 10 BIP-39-defined languages, fitting in 4 bits). The wordlist is **not carried on the v0.1 ms1 wire**. A user whose original wallet used a non-English wordlist who recovers via English-defaulted wallet software will silently derive a different 64-B BIP-32 master seed → different addresses → empty wallet. This is exactly the concern raised in BIP-93 §"Not BIP-0039 Entropy" (SPEC §6.3).
+BIP-39 entropy → mnemonic\index{BIP-39 mnemonic} conversion depends on the wordlist language (English, Japanese, Korean, Spanish, Chinese Simplified, Chinese Traditional, French, Italian, Czech, Portuguese — 10 BIP-39-defined languages, fitting in 4 bits). The wordlist is **not carried on the v0.1 ms1 wire**. A user whose original wallet used a non-English wordlist who recovers via English-defaulted wallet software will silently derive a different 64-B BIP-32 master seed → different addresses → empty wallet. This is exactly the concern raised in BIP-93 §"Not BIP-0039 Entropy" (SPEC §6.3).
 
 Informational recommendations (not enforced by the format):
 

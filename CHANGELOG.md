@@ -4,6 +4,42 @@ All notable changes to `mnemonic-toolkit` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) with the pre-1.0 convention that the second component (`0.X`) is the breaking-change axis.
 
+Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
+
+## tech-manual [0.1.0] — 2026-05-11
+
+First releasable cut of the m-format constellation technical manual. Parts I + II + back-matter skeleton; 100pp PDF (`docs/technical-manual/build/m-format-technical-manual.pdf`). Tag `tech-manual-v0.1.0`.
+
+### Added
+
+- **Part I — Foundations** (4 chapters): Introduction (§I.1), The m-format Star (§I.2), codex32 and BCH (§I.3), Conventions and Notation (§I.4). Includes 1 mermaid figure (constellation star).
+- **Part II — Wire formats** (3 chapters): md1 §II.1, mk1 §II.2, ms1 §II.3 — full bit-level treatment of each format with worked encode/decode examples. Includes 3 mermaid figures (mk1 encode pipeline, mk1 bytecode layout, ms1 encode + recovery pipeline).
+- **Back-matter skeleton** (6 chapters): glossary (31 entries), index table (110 entries), release history (11 rows), BIP cross-reference (11 BIPs), troubleshooting (per-format error → cause → remediation), bibliography.
+- **Worked-example transcripts** (6): 2 md1 (`md1-encode-wpkh-basic`, `md1-decode-wsh-multi-2of3`), 2 mk1 (`mk1-decode-bip48-multisig`, `mk1-decode-bip84-no-fingerprint`), 2 ms1 (`ms1-encode-12word-abandon`, `ms1-decode-12word-abandon`). All verified by `tests/verify-examples.sh` against HEAD release binaries.
+- **Build pipeline**: cloned-and-adapted from `docs/manual/`. Targets `pdf`, `pdf-docker`, `lint`, `verify-examples`. SOURCE_DATE_EPOCH-byte-identical reproducibility verified across clean rebuilds.
+- **Lint** (`tests/lint.sh`): 6 checks — markdownlint, cspell, lychee, api-surface-coverage stub (populated at Phase 4.5), glossary-coverage, index bidirectional.
+
+### Scope
+
+- Wire formats documented exhaustively at bit-level depth.
+- Part III (address derivation) deferred to `tech-manual-v0.2.0`.
+- Part IV (bundle formation) deferred to `tech-manual-v0.3.0`.
+- Part V (Rust API reference) deferred to `tech-manual-v0.4.0`.
+- Full back-matter completion (glossary ≥80, index ≥250, BIP cross-ref complete, bibliography complete, troubleshooting complete) deferred to `tech-manual-v1.0.0`.
+
+### SPEC §7 acceptance criteria (v0.1 cut)
+
+A4 (glossary ≥30): **31 ✓**. A5 (index ≥100): **110 ✓**. A6 (TOC auto-generated): ✓. A8 (transcripts verified): **6/6 ✓**. A10 (PDF ≥40pp soft floor): **100pp ✓**.
+
+### Sibling-repo coverage tracked at this cut
+
+md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0, mnemonic-toolkit v0.8.0.
+
+### Notes
+
+- Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
+- Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
+
 ## mnemonic-toolkit [0.8.0] — 2026-05-07 [BREAKING]
 
 Minor release atop v0.7.1. **Breaking change** to BIP-38 composite-edge passphrase semantics; new flags + new BIP-85 application + Electrum i18n + taproot multisig export. Two spike-driven deferrals (BIP-38 EC-mult encrypt → v0.8.1; BIP-85 RSA / RSA-GPG → v0.9 pending RUSTSEC-2023-0071 patch). 11 phases (0–10) shipped this cycle.

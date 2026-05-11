@@ -41,7 +41,7 @@ MK_LONG_CONST    = 0x41890d7e441cbe97273  (top 75 bits of SHA-256(domain))
 
 The constants are NUMS-derived ("Nothing Up My Sleeve"): the domain string is the audit trail; any reader can recompute the SHA-256 digest and verify that the constants follow. Cross-check: applying the same procedure to `b"shibbolethnums"` reproduces md1's `T_REGULAR = 0x0815c07747a3392e7` and `T_LONG = 0x205701dd1e8ce4b9f47`. The codex32 (BIP 93) family thus exhibits a three-domain partition under HRP-mixing + per-format target residue: codex32, md1, mk1. See §I.3 for the polymod algorithm and the HRP-mixing convention.
 
-### String-layer header
+### String-layer header\index{string-layer header (mk1)}
 
 mk1's string-layer header lives at the 5-bit symbol layer (closure Q-5; `crates/mk-codec/src/string_layer/header.rs`). Two variants:
 
@@ -118,7 +118,7 @@ flowchart TB
 
 The bytecode is a **byte-aligned** record. After chunk reassembly the decoder reads fields in fixed order via byte-granular cursor advances (`crates/mk-codec/src/bytecode/decode.rs::decode_bytecode`). Sub-byte addressing appears only inside the 1-byte bytecode header.
 
-### Bytecode header
+### Bytecode header\index{bytecode header (mk1)}
 
 The first byte is the bytecode header (`crates/mk-codec/src/bytecode/header.rs`; BIP draft §"Bytecode header"):
 
@@ -242,8 +242,8 @@ A consequent **limit-of-detection note** (closure Q-7 → SPEC §6 normative): a
 
 `xpub.version` selects the network (`crates/mk-codec/src/bytecode/xpub_compact.rs::version_to_network`):
 
-- `0x0488B21E` → mainnet `xpub` prefix.
-- `0x043587CF` → testnet `tpub` prefix.
+- `0x0488B21E` → mainnet\index{mainnet} `xpub` prefix.
+- `0x043587CF` → testnet\index{testnet} `tpub` prefix.
 
 Other values surface as `Error::InvalidXpubVersion`\index{Error::InvalidXpubVersion}. Network awareness here lets mk1 cards cross-validate against the network implied by the standard-table indicator at recovery time (e.g., a mainnet `0x05` indicator paired with a testnet `tpub` would be diagnosed at the recovery orchestrator, not by the per-card decoder).
 
@@ -260,7 +260,7 @@ A decoder MUST reject mk1 bytecode whose state matches any of the following (BIP
 | 5 | Explicit path with `count == 0` or `count > 10` | `PathTooDeep` |
 | 6 | LEB128 overflow / 6th continuation byte | `InvalidPathComponent` |
 | 7 | xpub version bytes ≠ known network prefix | `InvalidXpubVersion` |
-| 8 | xpub public_key not a valid compressed secp256k1 point | `InvalidXpubPublicKey` |
+| 8 | xpub public_key not a valid compressed secp256k1\index{secp256k1} point | `InvalidXpubPublicKey` |
 | 9 | Decoder hit end-of-stream mid-field | `UnexpectedEnd` |
 | 10 | Trailing bytes after xpub_compact | `TrailingBytes` |
 | 11 | Chunks disagree on `chunk_set_id` | `ChunkSetIdMismatch` |

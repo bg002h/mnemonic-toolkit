@@ -17,9 +17,8 @@ Source: `bg002h/descriptor-mnemonic/crates/md-codec/src/error.rs`.
 | `NUMSSentinelConflict` | `is_nums = 0` but `key_index ≥ n` (the historical sentinel position). | §II.1 "NUMS encoding for `tr()`"; encoder must emit `is_nums = 1` for the NUMS H-point and `is_nums = 0` with `key_index < n` for any `@i` placeholder. |
 | `ForbiddenTapTreeLeaf` | A tap-leaf carries a fragment outside the BIP-342 admissible set. | §II.1 "Canonicality rules" rule 4. |
 | `ChunkSetIdMismatch { expected, derived }` | After bytecode-layer decode, the recomputed leading 20 bits of `Md1EncodingId` don't match the wire-carried `chunk_set_id`. Mixed chunks from different encodings, or post-encoding payload tampering. | §II.1 "Chunking"; verify all chunks in the input set originate from the same encode invocation. |
-| `MalformedPayloadPadding` | Trailing non-zero pad bits at the bytecode-section boundary that a conforming encoder wouldn't produce. | §II.1 "Canonicality rules" rule 5. |
 
-The `MalformedPayloadPadding` failure mode has one carve-out: rollback-as-padding is permitted at the TLV-section boundary specifically (the section terminates by end-of-bytecode rather than a length prefix; trailing zero-bits inside that tolerance window do not trigger the error). See BIP draft §"End-of-section detection (rollback-as-padding)" and §II.1 "TLV section".
+md-codec has no dedicated pad-bit-rejection variant (unlike mk-codec, see below). Non-zero pad bits at the bytecode-section boundary surface as `MalformedHeader` or `BitStreamTruncated` depending on how the TLV-section parser interprets them. Trailing **zero** pad bits at the TLV-section boundary are tolerated by the rollback-as-padding mechanism — see §II.1 "Canonicality rules" rule 5 and "TLV section".
 
 ## mk1 — `mk-codec::Error`
 

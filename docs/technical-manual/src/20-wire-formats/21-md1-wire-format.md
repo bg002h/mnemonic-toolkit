@@ -30,7 +30,7 @@ The total card string length is capped at 93 characters (regular code). Payloads
 
 The header carries the wire-format version and mode-dispatch flags. Two header shapes exist, distinguished **in-band** by the first symbol's bit 0 (BIP draft §"Auto-dispatch and safe rejection"; reference impl at `crates/md-codec/src/header.rs`):
 
-**Single-string header** (5 bits = one codex32 character):
+**Single-string header**\index{single-string header (md1)} (5 bits = one codex32 character):
 
 ```text
 | 1:divergent_paths | 4:version |
@@ -39,7 +39,7 @@ The header carries the wire-format version and mode-dispatch flags. Two header s
 - Bit 4 (MSB): `divergent_paths`\index{divergent\_paths} flag. When `1`, the path-declaration carries per-`@N` divergent paths (one path per placeholder); when `0`, a single shared path applies to all placeholders.
 - Bits 3–0: `version`. The 4-bit field absorbs the bit that v0.x reserved. v0.30 emits `0b0100` = 4.
 
-**Chunked header** (37 bits = 8 codex32 characters with 3 bits of trailing slack absorbed by the symbol grid):
+**Chunked header**\index{chunked header (md1)} (37 bits = 8 codex32 characters with 3 bits of trailing slack absorbed by the symbol grid):
 
 ```text
 | 4:version | 1:chunked=1 | 20:chunk_set_id | 6:count-1 | 6:index |
@@ -47,7 +47,7 @@ The header carries the wire-format version and mode-dispatch flags. Two header s
 
 - Bits 36–33: `version`. Same 4-bit field as single-string. v0.30 = `0b0100`.
 - Bit 32: `chunked` flag, always `1` for chunked headers. This is the bit-0 discriminator of the first 5-bit symbol; auto-dispatch sees it before any other field.
-- Bits 31–12: `chunk_set_id`\index{chunk\_set\_id (md1)}, 20 bits. A deterministic per-encoding identifier shared by all chunks of one Template Card; used at reassembly time to detect mixed chunks. Derived from `Md1EncodingId`\index{Md1EncodingId} = leading 16 bytes of `SHA-256(canonical bit-packed payload bytecode)`; the wire-level `chunk_set_id` is the leading 20 bits, MSB-first.
+- Bits 31–12: `chunk_set_id`\index{chunk\_set\_id (md1)}, 20 bits. A deterministic per-encoding identifier shared by all chunks of one Template Card; used at reassembly time to detect mixed chunks. Derived from `Md1EncodingId`\index{Md1EncodingId} = leading 16 bytes of `SHA-256`\index{SHA-256}`(canonical bit-packed payload bytecode)`; the wire-level `chunk_set_id` is the leading 20 bits, MSB-first.
 - Bits 11–6: `count − 1`, 6 bits. Range `1..64`.
 - Bits 5–0: `index`, 6 bits. 0-indexed; range `0..(count − 1)`.
 
@@ -198,7 +198,7 @@ The `tr()` operator (`0x01`) has the special body shape:
 | 6:Tag::Tr | 1:is_nums | [kiw:key_index iff !is_nums] | 1:has_tree | [tree iff has_tree] |
 ```
 
-When `is_nums = 1`, the internal key is the BIP-341\index{BIP-341} NUMS\index{NUMS} H-point:
+When `is_nums = 1`, the Taproot internal key\index{taproot internal key} is the BIP-341\index{BIP-341} NUMS\index{NUMS} H-point:
 
 ```text
 50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0
@@ -228,7 +228,7 @@ The bytecode has a small set of rules that an encoder MUST follow and a decoder 
 2. **Top-level wrapper.** The root tag MUST be one of `{Sh, Wsh, Wpkh, Pkh, Tr}`. Other top-level tags surface as `Error::OperatorContextViolation { tag, context: ContextKind::TopLevel }` (added in v0.31).
 3. **Multi-family raw-index body.** Multi-family bodies are exactly `5 + 5 + n × kiw` bits. Any tag byte appearing in this region is `Error::OperatorContextViolation { tag, context: MultiBody }`.
 4. **Tap-leaf admissible operators.** Inside a TapTree leaf, only BIP-342 admissible operators (per the leaf-allow-list) are permitted; others surface as `Error::ForbiddenTapTreeLeaf`\index{Error::ForbiddenTapTreeLeaf}.
-5. **Mid-stream padding.** Trailing non-zero pad bits cannot have been produced by a conforming encoder. Surfaces as `Error::InvalidBytecode { kind: BytecodeErrorKind::MalformedPayloadPadding }`. The exception is rollback-as-padding at the TLV-section boundary (BIP draft §"TLV section / End-of-section detection").
+5. **Mid-stream padding.** Trailing non-zero pad bits cannot have been produced by a conforming encoder. md-codec's decoder does not carry a dedicated pad-bit-rejection error variant; instead, non-zero pad bits either decode into a malformed TLV header (surfacing as `Error::MalformedHeader { detail }`) or run the bitstream short (`Error::BitStreamTruncated`). Trailing **zero** pad bits at the TLV-section boundary are tolerated by the rollback-as-padding mechanism (BIP draft §"TLV section / End-of-section detection"; reference impl at `crates/md-codec/src/tlv.rs:217`).
 
 ## Worked encode: `wpkh(@0/<0;1>/*)` (corpus vector `wpkh_basic`)
 

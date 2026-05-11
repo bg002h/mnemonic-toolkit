@@ -16,16 +16,21 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `BIP-388` | [Introduction](#introduction) |
 | `BIP-389 multipath` | [Conventions and Notation](#conventions-and-notation) |
 | `BIP-39 entropy` | [ms1 Wire Format](#ms1-wire-format) |
+| `BIP-39 mnemonic` | [ms1 Wire Format](#ms1-wire-format) |
 | `BIP-39 wordlist` | [ms1 Wire Format](#ms1-wire-format) |
 | `BIP-93` | [codex32 and BCH](#codex32-and-bch) |
+| `BIP-93 design distance` | [codex32 and BCH](#codex32-and-bch) |
 | `Body::KeyArg` | [md1 Wire Format](#md1-wire-format) |
 | `Body::MultiKeys` | [md1 Wire Format](#md1-wire-format) |
 | `Body::Variable` | [md1 Wire Format](#md1-wire-format) |
+| `bytecode header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `canonicality rules` | [md1 Wire Format](#md1-wire-format) |
+| `chunked header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `codex32` | [codex32 and BCH](#codex32-and-bch) |
 | `compact-73` | [mk1 Wire Format](#mk1-wire-format) |
+| `cosigner` | [Introduction](#introduction) |
 | `cross-card binding` | [The m-format Star](#the-m-format-star) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
@@ -62,6 +67,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `LEB128` | [mk1 Wire Format](#mk1-wire-format) |
 | `long code` | [codex32 and BCH](#codex32-and-bch) |
 | `LP4-ext varint` | [md1 Wire Format](#md1-wire-format) |
+| `mainnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `md1` | [Introduction](#introduction) |
 | `Md1EncodingId` | [md1 Wire Format](#md1-wire-format) |
 | `MD_REGULAR_CONST` | [codex32 and BCH](#codex32-and-bch) |
@@ -83,7 +89,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `reserved-prefix byte (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
 | `RESERVED_TAG_TABLE` | [ms1 Wire Format](#ms1-wire-format) |
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
+| `secp256k1` | [mk1 Wire Format](#mk1-wire-format) |
+| `SHA-256` | [md1 Wire Format](#md1-wire-format) |
+| `single-string header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `standard-path table (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
+| `string-layer header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `Tag::Check` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::ENTR` | [ms1 Wire Format](#ms1-wire-format) |
 | `Tag (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
@@ -97,7 +107,9 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Tag::Tr` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wpkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wsh` | [md1 Wire Format](#md1-wire-format) |
+| `taproot internal key` | [md1 Wire Format](#md1-wire-format) |
 | `target residue` | [codex32 and BCH](#codex32-and-bch) |
+| `testnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
 | `Unshared Secret form` | [ms1 Wire Format](#ms1-wire-format) |
 | `use-site-path declaration` | [md1 Wire Format](#md1-wire-format) |
