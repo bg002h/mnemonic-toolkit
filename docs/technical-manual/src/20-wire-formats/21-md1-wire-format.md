@@ -216,7 +216,7 @@ and the `key_index` field is **suppressed entirely on the wire** (no kiw-bit fie
 
 ## Walker normalisation
 
-The walker emits a bare `Tag::PkK` or `Tag::PkH` at the c:-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; this preserves type correctness in the rendered descriptor without spending wire bits on a wrapper that is structurally implied. See `crates/md-codec/src/canonicalize.rs` for the walker normalisation pass.
+The encoder emits a bare `Tag::PkK` or `Tag::PkH` at the c:-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; this preserves type correctness in the rendered descriptor without spending wire bits on a wrapper that is structurally implied. The invariant is documented in BIP draft §"Round-trip canonical form"; the reference implementation applies the inverse reconstruction in the miniscript-to-AST path (see `crates/md-codec/src/to_miniscript.rs`).
 
 The canonical form invariant: every `Tag::PkK` and `Tag::PkH` appearing as a direct child of a wrapper-tagged operator is rendered with the `c:` desugar at that position; every `Tag::PkK` or `Tag::PkH` appearing as a multi-family child is left bare (multi-family operands are already type-checked by their parent).
 
@@ -236,13 +236,13 @@ Input: `wpkh(@0/<0;1>/*)`, no shared path declared, no TLVs.
 
 Encoder bytecode steps:
 
-1. **Header**: `divergent_paths = 0`, `version = 4` → bits `0 0100` = `0x04`.
-2. **Origin-path declaration**: shared-mode, `depth = 0` → bits `0000`. (Empty path; no components.)
-3. **Use-site-path declaration**: `multipath = [0, 1]`, `wildcard_hardened = 0` → bit-encoded per BIP-389 multipath rules.
-4. **Tree**: `wpkh(@0)` → `Tag::Wpkh (6 bits) + key_index = 0 (kiw = 0 bits, suppressed for n = 1)` = 6 bits.
+1. **Header**: `divergent_paths = 0`, `version = 4` → bits `00100` (5 bits).
+2. **Origin-path declaration**: shared-mode. The path-decl always opens with a 5-bit `n − 1` field then a 4-bit `depth` field; for `n = 1` and depth-0 that is `00000 0000` (9 bits). No components follow.
+3. **Use-site-path declaration**: `multipath = [0, 1]`, `wildcard_hardened = 0` → bit-encoded per BIP-389 multipath rules (variable width).
+4. **Tree**: `wpkh(@0)` → `Tag::Wpkh` (6 bits) + `key_index = 0` (kiw = 0 bits for `n = 1`, suppressed) = 6 bits.
 5. **TLV section**: empty.
 
-Total bytecode: 5 (header) + 4 (path-depth) + use-site (variable) + 6 (wpkh) + 0 (TLV) ≈ 35 bits. Packed into 5-bit codex32 symbols → 7 data symbols + 13 check symbols + HRP `md1` = 23 characters total.
+Total used bytecode: 5 (header) + 9 (path-decl: 5 `n−1` + 4 `depth`) + use-site (variable) + 6 (wpkh) + 0 (TLV) = 36 bits used, padded to the next 5-bit boundary = 40 bits on wire = 8 data symbols. Combined with 13 check symbols + the 3-character `md1` HRP+separator: **24 characters total**.
 
 Resulting card: `md1yqpqqxqq8xtwhw4xwn4qh` (matches corpus vector `crates/md-codec/tests/vectors/wpkh_basic.phrase.txt`).
 
@@ -250,13 +250,13 @@ For the full bit-by-bit trace, see BIP draft §"Bit-layout example" (§II.1's en
 
 ## Worked decode: `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))` (corpus vector `wsh_multi_2of3`)
 
-Card: `md1yzpqqxppsgsc8dua4tu0kekyl`. 23 data + check characters total.
+Card: `md1yzpqqxppsgsc8dua4tu0kekyl`. 28 characters total = 3 (HRP + separator `md1`) + 25 (data + check symbols).
 
 Decoder steps:
 
 1. **HRP + BCH.** Verify `polymod(hrp_expand("md") || data_symbols || check_symbols) == MD_REGULAR_CONST`. Pass.
-2. **Header.** First 5-bit symbol = `0 0010 0` (decoded character `y`'s value, MSB-first): `divergent_paths = 0`, `version = 4`. Single-payload mode.
-3. **Origin path.** Shared-mode, `depth = 0`. Empty.
+2. **Header.** First 5-bit symbol = the integer value of character `y` = `4` = bits `00100`: `divergent_paths = 0`, `version = 4`. Single-payload mode.
+3. **Origin path.** Shared-mode. Read `n − 1` (5 bits) = 2 (so `n = 3`); read `depth` (4 bits) = 0 (no components).
 4. **Use-site path.** Multipath `[0, 1]`, wildcard non-hardened.
 5. **Tree.** Read 6-bit tag = `Tag::Wsh` (`0x02`); 1 child follows. Read 6-bit tag = `Tag::Multi` (`0x06`); body is `5-bit (k−1=1) | 5-bit (n−1=2) | 3 × kiw-bit key_index` where `kiw = ⌈log₂(3)⌉ = 2`, so 6 bits of indices = `00 01 10` = indices `0, 1, 2`.
 6. **TLV.** Empty.
@@ -289,7 +289,8 @@ The reference implementation:
 - `crates/md-codec/src/header.rs` — header parse + auto-dispatch.
 - `crates/md-codec/src/tag.rs` — primary + extension tag space.
 - `crates/md-codec/src/tree.rs` — `Body` variants, encode/decode walker.
-- `crates/md-codec/src/canonicalize.rs` — walker normalisation pass.
+- `crates/md-codec/src/canonicalize.rs` — placeholder-ordering canonicalisation (permutes `@N` indices so first-encountered is `@0`).
+- `crates/md-codec/src/to_miniscript.rs` — bare-PkK/PkH → `c:`-wrapped reconstruction.
 - `crates/md-codec/src/origin_path.rs` — path-decl encoding.
 - `crates/md-codec/src/tlv.rs` — TLV section.
 - `crates/md-codec/src/chunk.rs` — chunked-card framing.
