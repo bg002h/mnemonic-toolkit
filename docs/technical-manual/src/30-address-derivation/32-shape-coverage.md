@@ -2,7 +2,7 @@
 
 §III.1 framed the three-tier model in the abstract; this chapter enumerates **every BIP-388-parseable shape** the v0.32 converter handles. The pre-v0.32 implementation (md-codec v0.14 through v0.31) carried a hand-rolled allow-list of five shapes; v0.32 replaced that with a generic AST-to-`miniscript::Descriptor` converter that delegates rendering to rust-miniscript. Any policy that round-trips through md1's wire format and parses as BIP-388 derives.
 
-The converter entry point is `to_miniscript::to_miniscript_descriptor` at `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs:54-64`. It is feature-gated behind `derive` (default-on).
+The converter entry point is `to_miniscript::to_miniscript_descriptor`\index{to\_miniscript\_descriptor} at `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs:54-64`. It is feature-gated behind `derive` (default-on).
 
 ## Converter pipeline
 
@@ -28,9 +28,9 @@ flowchart TB
   classDef addr fill:#fce7f3,stroke:#9d174d,stroke-width:2px,color:#000
 ```
 
-`expand_per_at_N` (`crates/md-codec/src/canonicalize.rs`) resolves each `@N` to an xpub (inline `Pubkeys` TLV `0x02`, else `Error::MissingPubkey`), an optional master fingerprint (`Fingerprints` TLV `0x01`), and an origin path (the inline path-decl block, with `OriginPathOverrides` TLV `0x03` applied per-`@N`). For each `@N` the converter then constructs a `DescriptorPublicKey::XPub { origin, xkey, derivation_path, wildcard: Unhardened }` (`to_miniscript.rs:84-89`), where `derivation_path` is the use-site multipath alt selected by `chain`.
+`expand_per_at_N` (`crates/md-codec/src/canonicalize.rs`) resolves each `@N` to an xpub\index{xpub} (inline `Pubkeys` TLV `0x02`, else `Error::MissingPubkey`), an optional master fingerprint (`Fingerprints` TLV `0x01`), and an origin path (the inline path-decl block, with `OriginPathOverrides` TLV `0x03` applied per-`@N`). For each `@N` the converter then constructs a `DescriptorPublicKey::XPub`\index{DescriptorPublicKey} `{ origin, xkey, derivation_path, wildcard: Unhardened }` (`to_miniscript.rs:84-89`), where `derivation_path` is the use-site multipath alt selected by `chain`.
 
-`node_to_descriptor` (`to_miniscript.rs:130-168`) maps the top-level tag onto a rust-miniscript constructor:
+`node_to_descriptor`\index{node\_to\_descriptor} (`to_miniscript.rs:130-168`) maps the top-level tag onto a rust-miniscript constructor:
 
 | Top-level tag | Body shape | rust-miniscript constructor |
 |---|---|---|
@@ -60,7 +60,7 @@ The BIP-44 `pkh` and BIP-84 `wpkh` worked invocations against `md address` are c
 
 ### Bucket 2 — `tr(@0)` key-path-only taproot\index{tr (key-path)}
 
-`Tag::Tr` with `Body::Tr { is_nums: false, key_index, tree: None }` produces a `Descriptor::new_tr(internal_key, None)` — a BIP-86 single-key taproot output where only the key-path-spend is reachable (`to_miniscript.rs:149-162`). The internal key is the xpub at `keys[key_index]`.
+`Tag::Tr` with `Body::Tr { is_nums: false, key_index, tree: None }` produces a `Descriptor::new_tr(internal_key, None)` — a BIP-86\index{BIP-86} single-key taproot output where only the key-path-spend is reachable (`to_miniscript.rs:149-162`). The internal key is the xpub at `keys[key_index]`.
 
 | BIP path | Template | Abandon-mnemonic test vector | Test |
 |---|---|---|---|
@@ -88,7 +88,7 @@ The in-memory `Body::Tr` struct keeps the `key_index: u8` Rust field populated e
 
 `Tag::Tr` with `tree: Some(<single Node>)` where the node is **not** `Tag::TapTree` triggers the v0.30 single-leaf wire optimization: the bare leaf node is wrapped in a `TapTree::leaf(Arc::new(ms))` without an enclosing `Tag::TapTree` (`to_miniscript.rs:254-258`). This saves the bits of a `Tag::TapTree` header for the (very common) single-leaf case.
 
-Any miniscript fragment that types-checks under the `Tap` script context is valid as the leaf body. The converter routes the leaf through `node_to_miniscript::<Tap>` (`to_miniscript.rs:262-443`); rust-miniscript's `check_global_consensus_validity` enforces context-appropriateness (e.g., rejects `multi` inside `Tap`).
+Any miniscript fragment that types-checks under the `Tap`\index{Tap (script context)} script context is valid as the leaf body. The converter routes the leaf through `node_to_miniscript`\index{node\_to\_miniscript}`::<Tap>` (`to_miniscript.rs:262-443`); rust-miniscript's `check_global_consensus_validity` enforces context-appropriateness (e.g., rejects `multi` inside `Tap`).
 
 | Shape | Template | Test |
 |---|---|---|
@@ -114,7 +114,7 @@ Mixed-leaf taproots — a `pk(...)` leaf and a `multi_a(...)` leaf — combine v
 - `Tag::Wpkh` → `Descriptor::new_sh_wpkh` (already counted in Bucket 1).
 - `Tag::Wsh` with a single `Tag::SortedMulti` grandchild → `Descriptor::new_sh_wsh_sortedmulti` (BIP-48 type-1 nested-segwit multisig).
 - `Tag::Wsh` with arbitrary inner miniscript → `Descriptor::new_sh_wsh(ms)` (nested-segwit wrapping a miniscript fragment).
-- Anything else → `Descriptor::new_sh(ms)` where `ms` is type-checked under the `Legacy` script context (`to_miniscript.rs:230-233`).
+- Anything else → `Descriptor::new_sh(ms)` where `ms` is type-checked under the `Legacy`\index{Legacy (script context)} script context (`to_miniscript.rs:230-233`).
 
 | Shape | Template | Test |
 |---|---|---|
@@ -123,7 +123,7 @@ Mixed-leaf taproots — a `pk(...)` leaf and a `multi_a(...)` leaf — combine v
 
 ### Bucket 7 — `wsh(<miniscript>)` arbitrary segwit-v0 miniscript\index{wsh (miniscript)}
 
-`wsh_inner_to_descriptor` (`to_miniscript.rs:183-196`) first short-circuits the `sortedmulti` case (→ `Descriptor::new_wsh_sortedmulti`); any other inner shape is passed through `node_to_miniscript::<Segwitv0>` and wrapped via `Descriptor::new_wsh(ms)`. The full miniscript fragment surface is supported:
+`wsh_inner_to_descriptor` (`to_miniscript.rs:183-196`) first short-circuits the `sortedmulti` case (→ `Descriptor::new_wsh_sortedmulti`); any other inner shape is passed through `node_to_miniscript::<Segwitv0>`\index{Segwitv0 (script context)} and wrapped via `Descriptor::new_wsh(ms)`. The full miniscript fragment surface is supported:
 
 - Boolean / threshold combinators: `and_v`, `and_b`, `andor`, `or_b`, `or_c`, `or_d`, `or_i`, `thresh`.
 - Time-lock operators: `after` (`Tag::After`, `Body::Timelock(v)`), `older` (`Tag::Older`).
@@ -138,7 +138,7 @@ Mixed-leaf taproots — a `pk(...)` leaf and a `multi_a(...)` leaf — combine v
 | `wsh(and_v(v:pk(@0),older(144)))` | timelock-gated single-signer | `address_derivation.rs:849-894` |
 | `wsh(thresh(2,pk(@0),s:pk(@1),s:pk(@2)))` | canonical-`thresh` k-of-N | `address_derivation.rs:899-956` |
 
-The unsorted `wsh(multi(...))` variant routes through the same `wsh_inner_to_descriptor` fall-through path that handles arbitrary miniscript bodies — `node_to_miniscript::<Segwitv0>` reaches the `Terminal::Multi` arm at `to_miniscript.rs:365-373` and rust-miniscript's `check_global_consensus_validity` accepts it under `Segwitv0`. The integration suite currently exercises only the `sortedmulti` form (`address_derivation.rs:252-331`); a paired-derivation test for unsorted `wsh(multi(...))` is filed as a FOLLOWUP for the md1 repo.
+The unsorted `wsh(multi(...))` variant routes through the same `wsh_inner_to_descriptor` fall-through path that handles arbitrary miniscript bodies — `node_to_miniscript::<Segwitv0>` reaches the `Terminal::Multi`\index{Terminal::Multi} arm at `to_miniscript.rs:365-373` and rust-miniscript's `check_global_consensus_validity` accepts it under `Segwitv0`. The integration suite currently exercises only the `sortedmulti` form (`address_derivation.rs:252-331`); a paired-derivation test for unsorted `wsh(multi(...))` is filed as a FOLLOWUP for the md1 repo.
 
 The hash-leaf fragments (`Tag::Sha256` / `Tag::Hash256` / `Tag::Ripemd160` / `Tag::Hash160`) are constructed via `sha256_from_bytes` / `hash256_from_bytes` / `ripemd160_from_bytes` / `hash160_from_bytes` (`to_miniscript.rs:484-502`) — round-tripping the 32-byte (or 20-byte) hash payload to the rust-miniscript hash newtype. `Tag::RawPkH` is explicitly rejected at the converter (`to_miniscript.rs:417-421`) because rust-miniscript's public API has no `RawPkH` constructor; only `pk_h(<pubkey>)` is reachable.
 

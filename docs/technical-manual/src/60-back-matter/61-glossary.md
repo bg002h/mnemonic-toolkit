@@ -8,6 +8,14 @@ Entries populate incrementally per cut; the tech-manual-v0.1 seed below tracks w
 
 A BIP-388 wallet-policy placeholder for cosigner `N` (0-indexed). `@0` is the first cosigner; the placeholder count `n` determines `kiw`. First defined §I.4.
 
+## address derivation
+
+The end-to-end transformation that turns an md1 template plus its key information into a network-specific bitcoin address. Entry point: `Descriptor::derive_address(chain, index, network)` at `crates/md-codec/src/derive.rs:92-132`. Three tiers — template, derivation, script + address — discussed §III.1.
+
+## base58check
+
+A base-58 encoding with a 4-byte SHA-256(SHA-256(·)) checksum appended; used for legacy P2PKH / P2SH addresses and BIP-32 extended-key serialization. Network-distinguished via leading version bytes (`0x00` mainnet P2PKH; `0x05` mainnet P2SH; `0x6F` / `0xC4` testnet). First cited §III.3.
+
 ## BCH
 
 Bose–Chaudhuri–Hocquenghem error-correction code. md1 and mk1 share a Bitcoin-tuned BCH polynomial *forked* from BIP-93 codex32 (HRP-mixed, per-format target residues). ms1 uses BIP-93 codex32 directly via `rust-codex32`. Primer at §I.3.
@@ -19,6 +27,14 @@ The 32-character alphabet introduced by BIP-173 (SegWit addresses) and reused by
 ## BIP-388
 
 Wallet-policy descriptor templates. The canonical JSON shape (`name`, `description_template`, `keys_info`) exchanged between hardware wallets and coordinators. md1 encodes BIP-388 wallet policies. First cited §I.1.
+
+## chain
+
+The multipath alternative selector argument to `Descriptor::derive_address`. For the canonical `<0;1>/*` use-site path, `chain = 0` is the receive branch and `chain = 1` is the change branch. Out-of-range or hardened values are pre-flight-rejected. Discussed §III.1.
+
+## CKDpub
+
+BIP-32's "public parent key → public child key" function: given an xpub (chain code + compressed pubkey) and a non-hardened child index, deterministically derive the child xpub without secret material. The primitive that turns Tier 2's xpub + chain + index into a definite secp256k1 pubkey. Discussed §III.1.
 
 ## chunk_set_id (md1)
 
@@ -40,6 +56,14 @@ mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_
 
 4-byte trailer = `SHA-256(canonical_bytecode)[0..4]` appended to mk1's canonical bytecode before chunk-split. Defends content-integrity across the (opaque) `chunk_set_id`. Mismatch → `Error::CrossChunkHashMismatch`. Defined §II.2.
 
+## definite key
+
+A `DescriptorPublicKey` after multipath alt selection and wildcard `/*` resolution: the underlying xpub has been derived along the use-site path with a specific `(chain, index)` and reduced to a single secp256k1 point. The input rust-miniscript wants for `address()` rendering. Discussed §III.1.
+
+## DescriptorPublicKey
+
+rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `to_miniscript.rs:84-89` builds `DescriptorPublicKey::XPub { origin, xkey, derivation_path, wildcard: Unhardened }` for each `@N`; the NUMS-internal-key path builds `DescriptorPublicKey::Single { origin: None, key: SinglePubKey::XOnly(H) }`. Discussed §III.1, §III.2.
+
 ## divergent_paths
 
 1-bit flag in the md1 single-string header. `1` = per-`@N` divergent paths declared (one path per placeholder); `0` = one shared path applies to all placeholders. Defined §II.1.
@@ -48,6 +72,10 @@ mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_
 
 The architectural split between md1+mk1 (which fork BIP-93 BCH plumbing with HRP-mixing + per-format target residues) and ms1 (which uses BIP-93 codex32 directly via `rust-codex32`). Discussed §I.2; mechanics §I.3.
 
+## fingerprint (master)
+
+The 4-byte HASH160-prefix identifier of an xpub's master key (BIP-32 §"Key identifiers"). Carried by md1 in the `Fingerprints` TLV (`0x01`) when an `@N` has an associated master-fingerprint annotation. Used by signing flows (PSBT key-source metadata); not consulted by address derivation. Discussed §III.1.
+
 ## GF(32)
 
 The finite field with 32 elements; the codex32 alphabet symbol set. Each card character is one GF(32) symbol; BCH polynomial operations work over this field. First defined §I.3.
@@ -55,6 +83,10 @@ The finite field with 32 elements; the codex32 alphabet symbol set. Each card ch
 ## HRP-mixing
 
 The BIP-173 HRP-expansion convention used by all three formats: each HRP character contributes `c >> 5` and `c & 31` to the polymod input (with a zero separator), so the format's HRP is structurally inseparable from the checksum. Defined §I.3.
+
+## H-point (NUMS)
+
+The BIP-341 nothing-up-my-sleeve internal-key x-only coordinate `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0` — the SHA-256 of an agreed-upon generator point's compressed encoding, with no known discrete log. Used as the taproot internal key when the wallet has no key-path-spend mode. Pinned at `to_miniscript.rs:34-35`. Discussed §III.2.
 
 ## is_nums
 
@@ -67,6 +99,10 @@ Key-index width — `kiw = ⌈log₂(n)⌉` bits, where `n` is the policy's `@N`
 ## LP4-ext varint
 
 Length-prefixed-by-4-bits-with-extension variable-width integer encoding used in md1 path-component fields. First 4 bits = length minus 1 (giving 1–16 four-bit groups); remaining bits = the index in MSB-first order. Defined §II.1.
+
+## key_index (md1)
+
+The kiw-bit (per-policy `n`) field identifying which `@N` placeholder a key-reference operator refers to. Carried inline for `wpkh` / `pkh` / `tr` / `pk_k` / `pk_h` bodies. Suppressed entirely on the wire for `Body::Tr` when `is_nums = 1`. Defined §II.1.
 
 ## m-format constellation
 
@@ -92,9 +128,17 @@ The key card. Encodes an xpub plus its BIP-32 origin (master fingerprint + deriv
 
 The secret card. Encodes BIP-39 entropy (or a BIP-32 master seed). HRP `ms`. Library crate `ms-codec`; uses `rust-codex32` directly. Repo `bg002h/mnemonic-secret`. Wire format documented §II.3.
 
+## multipath
+
+BIP-389's `<alt_0;alt_1;...;alt_n>` syntax for a use-site path. md1 encodes the alternatives inline in the use-site-path block; the `chain` parameter to `derive_address` selects which alternative resolves the leaf address. Defined §II.1; semantic role discussed §III.1.
+
 ## NUMS
 
 Nothing-Up-My-Sleeve. The BIP-341 H-point with no known discrete log, used as the Taproot internal key when a wallet has no cooperative-spend path. In md1 v0.30+ the NUMS encoding is the `is_nums = 1` flag on `Body::Tr`. First defined §II.1.
+
+## origin path
+
+The BIP-32 derivation path from a master seed to an xpub (e.g., `m/84'/0'/0'` for a BIP-84 account-0 xpub). md1 carries the origin path in the inline path-decl block (Shared or Divergent by header bit 4) plus per-`@N` overrides in TLV `0x03`. **Not** consulted by address derivation; metadata for signing flows. Discussed §III.1.
 
 ## OriginPath
 
@@ -108,6 +152,14 @@ ms1's `Payload` enum variant carrying BIP-39 entropy bytes. Accepted lengths `{1
 
 Password-Based Key Derivation Function 2 (HMAC-SHA512 in the BIP-39 application). Re-derives the 64-byte BIP-32 master seed from `(mnemonic + passphrase)` with 2048 iterations. The application-layer step ms1 chains into after decoding entropy. Defined §II.3.
 
+## PathDecl
+
+The md1 wire-format data structure for the inline origin-path declaration: `{ n: u8 (1..=32), paths: PathDeclPaths }`. The `paths` arm is `Shared(OriginPath)` (single path applies to all `@N`) or `Divergent(Vec<OriginPath>)` (one path per `@N`). Header bit 4 selects the arm. Defined `origin_path.rs:82-96`.
+
+## placeholder
+
+The `@N` token in a BIP-388 wallet-policy template that stands in for a concrete cosigner xpub. md1 carries the template (with placeholders) on-card; the key information (concrete xpubs filling the placeholders) is supplied either inline (`Pubkeys` TLV `0x02`) or out-of-band (mk1 sibling cards, `md address --key`). Discussed §III.1.
+
 ## policy_id_stub
 
 The top 4 bytes of `SHA-256(canonical md1 bytecode)`. Indexing aid (not a cryptographic primitive): birthday-bound collision probability among 50 stubs at 32 bits is `~2.85×10⁻⁷`. Each mk1 card carries `policy_id_stub` per linked md1 policy. Defined §II.2.
@@ -120,6 +172,10 @@ The BCH-codeword residue function: given an input symbol stream, advance a fixed
 
 A single byte at the head of every v0.1 ms1 payload (`0x00` in v0.1; rejected non-zero with `Error::ReservedPrefixViolation`). v0.2 promotes the byte to a type discriminator for share-encoding migration. Defined §II.3.
 
+## Pubkeys TLV
+
+md1's TLV `0x02`: an optional, inline carrier for the cosigner xpub bytes (33-byte compressed pubkey + 32-byte chain code per `@N`, repeated for each populated placeholder). When present, address derivation can resolve `@N` → xpub locally; when absent, xpubs must be supplied externally. Defined §II.1.
+
 ## RESERVED_TAG_TABLE
 
 ms1's 5-entry curated table of payload-type tags (`entr` emit/accept; `seed`, `xprv`, `mnem`, `prvk` reserved-not-emitted in v0.1). Grows by SemVer-minor only. Defined §II.3.
@@ -128,13 +184,37 @@ ms1's 5-entry curated table of payload-type tags (`entr` emit/accept; `seed`, `x
 
 The format-specific GF(32) constant the BCH polymod output is compared against. codex32 uses BIP-93's value; md1's `MD_REGULAR_CONST` derives from `SHA-256("shibbolethnums")`; mk1's `MK_REGULAR_CONST` derives from `SHA-256("shibbolethnumskey")`. Per-format target residues are what *fork* md1↔mk1 from codex32 — the generator polynomial is shared. Defined §I.3.
 
+## script context (rust-miniscript)
+
+rust-miniscript's type-class abstraction over the three valid contexts a miniscript expression can inhabit: `Legacy` (P2SH), `Segwitv0` (P2WSH), `Tap` (taproot script tree). Each context constrains which `Terminal` variants are admissible and the resource limits (key count, opcode count). md1's converter selects the context per shape and routes through `node_to_miniscript::<Ctx>` accordingly. Discussed §III.2.
+
+## SLIP-0132
+
+Alternative BIP-32 extended-key version bytes (`zpub`/`zprv`, `ypub`/`yprv`, `Zpub`/`Yprv`, etc.) that hint at the intended descriptor shape. **Purely cosmetic** — the chain code and pubkey bytes are unchanged; only the leading 4 version bytes differ. md1's `--key @N=...` accepts only the canonical `xpub`/`tpub` family; SLIP-0132 prefixes are normalized via `mnemonic convert`. Discussed §III.3.
+
 ## Tag::ENTR
 
 ms1's `Tag` constant exposing the `entr` (BIP-39 entropy) type tag (`Tag(*b"entr")`). The only callable `Tag` in v0.1's public API. Defined §II.3.
 
+## TapTree
+
+The tap-script-tree structure of a taproot output (BIP-341): a hierarchical merkle tree of leaves, each a miniscript fragment, that supplies script-path-spend alternatives. md1's `Tag::TapTree` is the wire encoding of an internal-node branching point (always 2 children). Bare-leaf `tr(@0, <leaf>)` shapes skip the `Tag::TapTree` wrap via the v0.30 single-leaf wire optimization. Discussed §III.2.
+
+## tap-leaf miniscript
+
+A miniscript fragment embedded as a leaf in a TapTree. Type-checked under the `Tap` script context. Most rust-miniscript miniscript fragments are admissible as tap-leaves; `multi` is rejected (must be `multi_a` under `Tap`). Discussed §III.2.
+
+## template (md1)
+
+The BIP-388 wallet policy expression engraved on an md1 card — a typed AST plus the use-site path (multipath alternatives + wildcard). Carries the *shape* of the wallet (descriptor type, key threshold, miniscript fragments); does not carry the *keys* (those are placeholders `@N` filled at derivation time). Discussed §III.1.
+
 ## TLV section
 
 The bit-aligned trailing region of md1's bytecode carrying optional metadata blocks (Fingerprints, Pubkeys, OriginPathOverrides, Unknown). TLV tags live in a **separate** 5-bit namespace from the bytecode 6-bit operator-tag space. Defined §II.1.
+
+## use-site path
+
+The BIP-389 multipath + BIP-32 wildcard segment applied at the descriptor placeholder position (e.g., `<0;1>/*`). Encoded inline in md1's use-site-path block; sparse per-`@N` overrides via TLV `0x00`. Consulted by address derivation: `chain` selects the multipath alt, `index` selects the wildcard child. Discussed §III.1.
 
 ## walker normalisation
 
@@ -143,6 +223,10 @@ md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position
 ## Wallet Instance ID
 
 `SHA-256(canonical_bytecode || canonical_xpub_serialization)[0..16]`. The cryptographic identity bound at recovery time when a complete assembly's bytecode + xpubs are recomputed and compared against an externally-anchored expected value. Distinct from `policy_id_stub` (which is the 4-byte indexing aid). Defined §II.2.
+
+## wildcard (BIP-389)
+
+The trailing `/*` (or `/*'` for hardened) in a use-site path that resolves to a child index at derivation time. md1 carries the wildcard hardenedness as a 1-bit field after the multipath block; hardened wildcards are pre-flight-rejected by `derive_address` (BIP-32 forbids hardened public derivation). Discussed §III.1.
 
 ## wire format
 

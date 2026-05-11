@@ -46,6 +46,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `cross-card binding` | [The m-format Star](#the-m-format-star) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `derivation (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `DescriptorPublicKey` | [Shape Coverage](#shape-coverage) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
 | `Error::AddressDerivationFailed` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Error::ChainIndexOutOfRange` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -83,6 +84,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `key_index` | [md1 Wire Format](#md1-wire-format) |
 | `kiw` | [Conventions and Notation](#conventions-and-notation) |
 | `LEB128` | [mk1 Wire Format](#mk1-wire-format) |
+| `Legacy (script context)` | [Shape Coverage](#shape-coverage) |
 | `long code` | [codex32 and BCH](#codex32-and-bch) |
 | `LP4-ext varint` | [md1 Wire Format](#md1-wire-format) |
 | `mainnet` | [mk1 Wire Format](#mk1-wire-format) |
@@ -98,6 +100,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `multi-family bodies` | [md1 Wire Format](#md1-wire-format) |
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `node_to_descriptor` | [Shape Coverage](#shape-coverage) |
+| `node_to_miniscript` | [Shape Coverage](#shape-coverage) |
 | `NUMS` | [md1 Wire Format](#md1-wire-format) |
 | `NUMS H-point` | [Shape Coverage](#shape-coverage) |
 | `origin path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -117,6 +121,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
 | `script (BIP-388)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `secp256k1` | [mk1 Wire Format](#mk1-wire-format) |
+| `Segwitv0 (script context)` | [Shape Coverage](#shape-coverage) |
 | `sh (legacy)` | [Shape Coverage](#shape-coverage) |
 | `sh(multi)` | [Shape Coverage](#shape-coverage) |
 | `sh(wpkh)` | [Shape Coverage](#shape-coverage) |
@@ -137,13 +142,16 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Tag::Tr` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wpkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wsh` | [md1 Wire Format](#md1-wire-format) |
+| `Tap (script context)` | [Shape Coverage](#shape-coverage) |
 | `tap-leaf miniscript` | [Shape Coverage](#shape-coverage) |
 | `taproot internal key` | [md1 Wire Format](#md1-wire-format) |
 | `TapTree` | [Shape Coverage](#shape-coverage) |
 | `target residue` | [codex32 and BCH](#codex32-and-bch) |
 | `template (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `Terminal::Multi` | [Shape Coverage](#shape-coverage) |
 | `testnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
+| `to_miniscript_descriptor` | [Shape Coverage](#shape-coverage) |
 | `tr (key-path)` | [Shape Coverage](#shape-coverage) |
 | `tr (multi-leaf)` | [Shape Coverage](#shape-coverage) |
 | `tr (NUMS)` | [Shape Coverage](#shape-coverage) |
@@ -157,3 +165,4 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `wire format` | [md1 Wire Format](#md1-wire-format) |
 | `wpkh` | [Shape Coverage](#shape-coverage) |
 | `wsh (miniscript)` | [Shape Coverage](#shape-coverage) |
+| `xpub` | [Shape Coverage](#shape-coverage) |

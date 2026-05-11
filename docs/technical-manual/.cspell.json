@@ -46,6 +46,8 @@
     "Timelock",
     "taptree",
     "PSBT",
+    "merkle",
+    "hardenedness",
     "Rusnak",
     "Sanket",
     "serde",
