@@ -10,5 +10,9 @@ The rows are sorted alphabetically. Add new rows as you add new `\index{}` marke
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `m-format constellation` | [Introduction](#introduction) |
 | `mk1` | [mk1 Wire Format](#mk1-wire-format) |
+| `ms1` | [ms1 Wire Format](#ms1-wire-format) |
 | `policy_id_stub` | [mk1 Wire Format](#mk1-wire-format) |
+| `reserved-prefix byte (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
+| `RESERVED_TAG_TABLE` | [ms1 Wire Format](#ms1-wire-format) |
+| `Tag::ENTR` | [ms1 Wire Format](#ms1-wire-format) |
 | `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |
