@@ -1,0 +1,66 @@
+# mnemonic-toolkit/docs/technical-manual/Dockerfile.build
+#
+# Reproducible build environment for `make pdf-docker`. Pinned versions
+# of pandoc, xelatex (texlive), makeindex, markdownlint-cli2, cspell,
+# lychee. No chromium / mermaid-filter / mermaid-cli: the build runs
+# `MERMAID_FILTER=skip` (Makefile default) and consumes the checked-in
+# `figures/cache/` PDFs. Cloned-and-adapted from
+# `docs/manual/Dockerfile.build`; the image-tag is independent
+# (`mnemonic-tech-manual-build:latest`).
+#
+# Contributors who need to regenerate the cache (rare; only on mermaid
+# source changes) install mmdc + chromium locally and run
+# `make figures-cache`.
+#
+# Usage:
+#   make pdf-docker
+#
+# Image is built locally via `docker build` (not pushed to a registry yet).
+
+FROM debian:trixie-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# --- System packages ------------------------------------------------------
+# `texlive-xetex` and friends pull in xelatex + makeindex.
+# `texlive-fonts-extra` brings DejaVu (matches metadata.yaml mainfont).
+# `texlive-luatex` is included for fallback only.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        make \
+        pandoc \
+        texlive-xetex \
+        texlive-luatex \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-fonts-extra \
+        texlive-extra-utils \
+        nodejs \
+        npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Node.js tools (lint only; mermaid intentionally absent) --------------
+RUN npm install -g --omit=dev \
+        markdownlint-cli2@^0.13 \
+        cspell@^8
+
+# --- Lychee (link checker) ------------------------------------------------
+# Use the static-binary GitHub release for portability across host arches.
+ARG LYCHEE_VERSION=0.24.2
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+         amd64) LARCH=x86_64-unknown-linux-gnu ;; \
+         arm64) LARCH=aarch64-unknown-linux-gnu ;; \
+         *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/lychee-${LARCH}.tar.gz" \
+       | tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee" \
+    && chmod +x /usr/local/bin/lychee
+
+WORKDIR /work
+
+# Default command prints help; the `make pdf-docker` recipe overrides this.
+CMD ["make", "help"]

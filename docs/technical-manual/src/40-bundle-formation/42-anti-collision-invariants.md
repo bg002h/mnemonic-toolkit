@@ -1,0 +1,1 @@
+# Anti-Collision Invariants

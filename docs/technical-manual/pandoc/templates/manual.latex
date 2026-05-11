@@ -1,0 +1,89 @@
+% Pandoc LaTeX template for the m-format constellation user manual.
+% Intentionally minimal — we lean on pandoc's defaults plus our preamble.tex
+% for primer/danger boxes, mdframed, and the index machinery.
+
+\documentclass[$if(fontsize)$$fontsize$,$endif$$if(papersize)$$papersize$paper,$endif$$for(classoption)$$classoption$$sep$,$endfor$]{$documentclass$}
+
+% Encoding & fonts (xelatex / lualatex)
+\usepackage{fontspec}
+\usepackage{unicode-math}
+$if(mainfont)$\setmainfont[]{$mainfont$}$endif$
+$if(sansfont)$\setsansfont[]{$sansfont$}$endif$
+$if(monofont)$\setmonofont[]{$monofont$}$endif$
+
+\usepackage{geometry}
+$if(geometry)$\geometry{$for(geometry)$$geometry$$sep$,$endfor$}$endif$
+
+% Hyperlinks
+\usepackage{hyperref}
+\hypersetup{%
+$if(linkcolor)$  linkcolor={$linkcolor$},
+$endif$$if(urlcolor)$  urlcolor={$urlcolor$},
+$endif$  pdftitle={$title$},
+$if(author)$  pdfauthor={$for(author)$$author$$sep$, $endfor$},
+$endif$  colorlinks=true,
+}
+
+% Pandoc-injected packages (lists, code, etc.)
+\usepackage{longtable,booktabs}
+\usepackage{calc}
+\usepackage{array}
+\usepackage{etoolbox}
+\usepackage{fancyvrb}
+\usepackage{xcolor}
+\usepackage{upquote}
+\usepackage{microtype}
+\usepackage{parskip}
+
+% Pandoc emits these wrappers
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\pandocbounded}[1]{#1}
+
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+% Caller header-includes (from metadata.yaml: makeidx + \makeindex)
+$for(header-includes)$
+$header-includes$
+$endfor$
+
+% Our preamble (primer/danger boxes, mermaid svg support, etc.) — passed
+% via `-H pandoc/preamble.tex` so it lands here automatically.
+$for(include-before)$
+$include-before$
+$endfor$
+
+\title{$title$$if(subtitle)$ \\ \large $subtitle$$endif$}
+\author{$for(author)$$author$$sep$ \and $endfor$}
+\date{$date$}
+
+\begin{document}
+
+\maketitle
+
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$
+
+$if(toc)$
+\setcounter{tocdepth}{$toc-depth$}
+\tableofcontents
+\clearpage
+$endif$
+
+$body$
+
+% Print the alphabetical index (LaTeX page-numbered) before any back-matter.
+% The 69-index-table.md chapter ALSO ships the markdown-side curated table;
+% this section is the PDF-only page-numbered version.
+\clearpage
+\printindex
+
+$for(include-after)$
+$include-after$
+$endfor$
+
+\end{document}
