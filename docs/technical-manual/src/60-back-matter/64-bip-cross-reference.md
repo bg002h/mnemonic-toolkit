@@ -10,7 +10,7 @@ For BIP texts, see [github.com/bitcoin/bips](https://github.com/bitcoin/bips/blo
 | BIP-39 | Mnemonic code for generating deterministic keys | §I.1, §I.2, §II.3 |
 | BIP-44 | Multi-Account Hierarchy for Deterministic Wallets | §III.1, §III.2 |
 | BIP-48 | Multi-Script Hierarchy for Multi-Sig Wallets | §II.2, §III.1, §III.2 |
-| BIP-49 | Derivation scheme for P2SH-P2WPKH based accounts | §III.2 |
+| BIP-49 | Derivation scheme for P2SH-P2WPKH based accounts | §III.1, §III.2 |
 | BIP-84 | Derivation scheme for P2WPKH based accounts | §I.1, §I.2, §II.2, §III.1, §III.2 |
 | BIP-86 | Key Derivation for Single Key P2TR Outputs | §III.1, §III.2 |
 | BIP-93 | codex32 — Checksummed SSSS-aware BIP-32 seeds | §I.2, §I.3, §I.4, §II.2, §II.3 |

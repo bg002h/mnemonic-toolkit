@@ -174,7 +174,7 @@ A single byte at the head of every v0.1 ms1 payload (`0x00` in v0.1; rejected no
 
 ## Pubkeys TLV
 
-md1's TLV `0x02`: an optional, inline carrier for the cosigner xpub bytes (33-byte compressed pubkey + 32-byte chain code per `@N`, repeated for each populated placeholder). When present, address derivation can resolve `@N` → xpub locally; when absent, xpubs must be supplied externally. Defined §II.1.
+md1's TLV `0x02`: an optional, inline carrier for the cosigner xpub bytes (32-byte chain code + 33-byte compressed pubkey per `@N`, repeated for each populated placeholder). When present, address derivation can resolve `@N` → xpub locally; when absent, xpubs must be supplied externally. Defined §II.1.
 
 ## RESERVED_TAG_TABLE
 
