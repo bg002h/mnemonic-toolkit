@@ -192,7 +192,7 @@ mk1's origin path uses a 1-byte standard-table indicator with a `0xFE` explicit-
 | `0x06` | `m/48'/0'/0'/1'` | `0x16` | `m/48'/1'/0'/1'` |
 | `0x07` | `m/87'/0'/0'` | `0x17` | `m/87'/1'/0'` |
 
-Indicators `0x00`, `0x08..0x10`, `0x18..0xFD`, and `0xFF` are reserved (`Error::InvalidPathIndicator`). The 14-entry table is mk1-internal as of mk-codec v0.2.2; see the history note at the end of this chapter.
+Indicators `0x00`, `0x08..=0x10`, `0x18..=0xFD`, and `0xFF` are reserved (`Error::InvalidPathIndicator`). The 14-entry table is mk1-internal as of mk-codec v0.2.2; see the history note at the end of this chapter.
 
 **Case B — explicit-path escape** (`0xFE` indicator):
 
@@ -332,7 +332,7 @@ Input: a privacy-preserving BIP 84 mainnet card (no fingerprint on wire), `polic
 
 Decoder string-layer steps (`crates/mk-codec/src/string_layer/pipeline.rs::decode`):
 
-1. **HRP + BCH** (per chunk). Verify `polymod(hrp_expand("mk") || data_5bit || check_5bit) == MK_LONG_CONST` for the 108-char chunk 0; same with `MK_REGULAR_CONST` for the 74-char chunk 1. Pass.
+1. **HRP + BCH** (per chunk). Verify `polymod(hrp_expand("mk") || data_5bit || check_5bit) == MK_LONG_CONST` for the 111-char chunk 0 (108-char data part + 3-char HRP+sep, long-code); same with `MK_REGULAR_CONST` for the 74-char chunk 1 (71-char data part + 3-char HRP+sep, regular-code). Pass.
 2. **Chunked header parse** (per chunk, 8 5-bit symbols). Chunk 0: `version=0`, `type=0x01`, `chunk_set_id=0x45678`, `total_chunks-wire=1 → 2`, `chunk_index=0`. Chunk 1: same `chunk_set_id`, `chunk_index=1`.
 3. **Fragment recovery** (per chunk). Chunk 0: 85 symbols → 53 bytes; chunk 1: 50 symbols → 31 bytes (pad bits zero).
 4. **Reassembly**. Concatenate fragments → 84-byte stream = 80-byte bytecode + 4-byte trailing hash.
