@@ -1,0 +1,1 @@
+$MD_BIN address --template 'pkh(@0/<0;1>/*)' --key '@0=xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj' --network mainnet --chain 0 --index 0

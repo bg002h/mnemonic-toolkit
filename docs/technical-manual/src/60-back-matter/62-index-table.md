@@ -98,11 +98,13 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `NUMS` | [md1 Wire Format](#md1-wire-format) |
+| `NUMS H-point` | [Shape Coverage](#shape-coverage) |
 | `origin path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `OriginPath` | [md1 Wire Format](#md1-wire-format) |
 | `OriginPathOverrides TLV` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Payload::Entr` | [ms1 Wire Format](#ms1-wire-format) |
 | `PBKDF2-HMAC-SHA512` | [ms1 Wire Format](#ms1-wire-format) |
+| `pkh` | [Shape Coverage](#shape-coverage) |
 | `placeholder (@N)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `policy_id_stub` | [mk1 Wire Format](#mk1-wire-format) |
 | `polymod` | [codex32 and BCH](#codex32-and-bch) |
@@ -114,6 +116,9 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
 | `script (BIP-388)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `secp256k1` | [mk1 Wire Format](#mk1-wire-format) |
+| `sh (legacy)` | [Shape Coverage](#shape-coverage) |
+| `sh(multi)` | [Shape Coverage](#shape-coverage) |
+| `sh(wpkh)` | [Shape Coverage](#shape-coverage) |
 | `SHA-256` | [md1 Wire Format](#md1-wire-format) |
 | `single-string header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `standard-path table (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
@@ -131,11 +136,17 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Tag::Tr` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wpkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wsh` | [md1 Wire Format](#md1-wire-format) |
+| `tap-leaf miniscript` | [Shape Coverage](#shape-coverage) |
 | `taproot internal key` | [md1 Wire Format](#md1-wire-format) |
+| `TapTree` | [Shape Coverage](#shape-coverage) |
 | `target residue` | [codex32 and BCH](#codex32-and-bch) |
 | `template (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `testnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
+| `tr (key-path)` | [Shape Coverage](#shape-coverage) |
+| `tr (multi-leaf)` | [Shape Coverage](#shape-coverage) |
+| `tr (NUMS)` | [Shape Coverage](#shape-coverage) |
+| `tr (single-leaf)` | [Shape Coverage](#shape-coverage) |
 | `Unshared Secret form` | [ms1 Wire Format](#ms1-wire-format) |
 | `use-site path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `use-site-path declaration` | [md1 Wire Format](#md1-wire-format) |
@@ -143,3 +154,5 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |
 | `wildcard (BIP-389)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `wire format` | [md1 Wire Format](#md1-wire-format) |
+| `wpkh` | [Shape Coverage](#shape-coverage) |
+| `wsh (miniscript)` | [Shape Coverage](#shape-coverage) |
