@@ -1,6 +1,6 @@
 # About this manual
 
-The m-format constellation\index{m-format constellation} is a family of four sibling Bitcoin self-custody backup formats — **md1**, **mk1**, **ms1**, and the `mnemonic-toolkit` integration layer — that engrave together as a coherent steel-engravable bundle.
+The m-format constellation is a family of four sibling Bitcoin self-custody backup formats — **md1**, **mk1**, **ms1**, and the `mnemonic-toolkit` integration layer — that engrave together as a coherent steel-engravable bundle. (See §I.1 for the definitional treatment with its index marker.)
 
 This **technical manual** is the companion to the end-user manual (`docs/manual/`). Where the end-user manual walks newcomers through workflows and the CLI surface, the technical manual answers the deeper questions:
 

@@ -1,6 +1,6 @@
 # Introduction
 
-The m-format constellation\index{m-format constellation} answers a specific question: *how do you durably back up a Bitcoin self-custody wallet on engravable media, in a form that survives decades of physical decay and human transcription error?*
+The m-format constellation\index{m-format constellation} (or "m-format star") answers a specific question: *how do you durably back up a Bitcoin self-custody wallet on engravable media, in a form that survives decades of physical decay and human transcription error?*
 
 A 24-word BIP-39 phrase, engraved on steel, restores a wallet's *keys*. It does not, on its own, restore a wallet's *spending rule* — the descriptor template, derivation paths, and (for multisig wallets) cosigner xpubs. For a single-sig BIP-84 wallet, the spending rule is conventional enough that recovery software can guess it. For arbitrary miniscript policies (taproot multisig, inheritance schemes, decaying conditions), the seed alone is insufficient.
 

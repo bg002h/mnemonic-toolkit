@@ -37,28 +37,27 @@ The implication for cross-implementation work: an ms1 implementation in any othe
 
 ## md1 and mk1: forked BCH plumbing
 
-md1 and mk1 use BCH codes over GF(32) with the *same algebraic machinery* as codex32 (same alphabet, same field, same encoding/decoding algorithms) but **different generator polynomial constants**.
+md1 and mk1 use BCH codes over GF(32) with the *same algebraic machinery* as codex32 — same alphabet, same field, same encoding/decoding algorithms, **same generator polynomial coefficients**. The fork is not in the polynomial; it is in the **target residue** and the **HRP-mixing convention** layered on top of the shared generator.
 
-Two BCH codes are defined per format:
+md1's reference implementation pins one BCH code (the v0.11+ regular code; the historical long code was retired together with the v0.x wire format). The generator coefficients (`GEN_REGULAR` in `crates/md-codec/src/bch.rs`) are the standard BCH(93,80,8) polynomial used across the bech32/codex32 family. The per-format differentiation appears in `MD_REGULAR_CONST` — a non-zero 65-bit constant derived from the top 65 bits of `SHA-256("shibbolethnums")` — that the verifier compares the polymod output against. mk1's `bch.rs` follows the same shape with its own format-specific constant.
 
-- **Regular code.** Shorter check length; used when the payload fits in the regular envelope.
-- **Long code.** Longer check length; used for larger payloads that exceed the regular envelope.
-
-Each generator polynomial is selected to satisfy the same BIP-93 design distance properties — guaranteed correction of up to 4 unknown-position substitutions, or up to 8 known-position erasures, or up to 13 consecutive erasures — but the polynomial *coefficients* differ between codex32, md1, and mk1.
-
-The polynomial constants are pinned in each crate's `bch.rs` module and documented in the corresponding BIP draft.
+The BIP-93 design distance properties — guaranteed correction of up to 4 unknown-position substitutions, or up to 8 known-position erasures, or up to 13 consecutive erasures — carry through because the *generator* is the same. The target-residue swap doesn't change the distance, only which polymod output counts as "valid" for the format.
 
 ### HRP mixing
 
-The crucial difference between codex32 and the md1/mk1 fork is **how the human-readable prefix is mixed in**. Codex32 mixes the HRP `ms` via a specific scheme in BIP-93. md1 and mk1 use a *different* HRP-mixing convention that produces a *per-format target residue* — when the BCH polynomial division is computed over `[HRP || separator || data || check]`, a conforming md1 card divides to leave residue `R_md1`; a conforming mk1 card leaves `R_mk1`; a conforming ms1 (codex32) card leaves `0` (BIP-93 convention).
+The HRP is mixed in via the standard **BIP-173 HRP expansion**: each character of the HRP contributes two values to the polymod input, namely `c >> 5` (the high-3-bit half) and `c & 31` (the low-5-bit half), with a zero separator between the two halves. The expanded HRP is *prepended* to the data + checksum stream before the polymod runs; the generator itself is unchanged. The reference implementation is at `crates/md-codec/src/bch.rs::hrp_expand`.
+
+The verify path is therefore:
+
+1. Take `hrp_expand(hrp) || data_symbols || check_symbols` as a flat GF(32)-symbol stream.
+2. Compute the polymod from a fixed initial state (`POLYMOD_INIT`).
+3. Compare the result against the format-specific target residue (`MD_REGULAR_CONST` for md1; a different constant for mk1; `0` for ms1 via BIP-93 codex32).
 
 Consequences:
 
-1. **No cross-format confusion.** A decoder applying mk1's polynomial + target-residue to an md1 string fails the checksum check, regardless of payload content. The forked encoding prevents an md1 card from being mistakenly decoded as an mk1 card or vice versa, even when the character set overlaps.
-
-2. **Format identification by prefix alone.** The HRP (`ms` / `mk` / `md`) is structurally inseparable from the BCH check. Stripping the HRP before BCH verification produces a string that does not pass any of the three formats' checks. Format identification is therefore: read the HRP, dispatch to the correct codec, run its BCH check.
-
-3. **md1 and mk1 are distinct in algebra.** Even sharing the *same character* alphabet and the *same field* (GF(32)), md1 and mk1 cards have different generator polynomials. There is no possibility of an mk1 codeword accidentally validating as an md1 codeword.
+1. **No cross-format confusion.** A decoder applying mk1's target-residue check to an md1 string fails the comparison, regardless of payload content. The forked encoding prevents an md1 card from being mistakenly decoded as an mk1 card or vice versa, even when the character set overlaps.
+2. **Format identification by prefix alone.** The HRP (`ms` / `mk` / `md`) is structurally inseparable from the polymod input. Stripping the HRP before BCH verification produces a different polymod path that matches no format's target residue. Format identification is therefore: read the HRP, dispatch to the correct codec, run its polymod with HRP-expanded prefix, compare against the format's target residue.
+3. **md1 and mk1 are distinct in the residue, not the polynomial.** Same generator polynomial, different target constants. There is no possibility of an mk1 codeword's polymod output accidentally matching `MD_REGULAR_CONST` (or vice versa) for any non-trivial payload.
 
 ### Why fork at all?
 
@@ -68,7 +67,7 @@ The decision tree:
 - **md1's payload (BIP-388 wallet-policy templates)** is not what codex32 was designed for. md1's wire format is a bit-aligned bytecode (§II.1) — a different shape than codex32's "secret blob with optional sharing." Forking the BCH plumbing lets md1 carry an arbitrary bit-aligned payload in a codex32-style envelope, with its own HRP-mixed BCH for cross-format safety.
 - **mk1's payload (xpub + origin metadata)** is similarly outside codex32's scope. The same forked-BCH-plus-HRP-mixing pattern applies.
 
-A previously-planned `mc-codex32` shared-crate extraction (sharing the forked-BCH plumbing between md1 and mk1 as a single dependency) was retired on 2026-05-03 — the HRP-mixed BCH isn't generic enough to be useful outside the m-format pair. md1 and mk1 maintain their own `bch.rs` modules; the *pattern* will be documented in a future cross-repo `PATTERNS.md`.
+A previously-planned `mc-codex32` shared-crate extraction (sharing the forked-BCH plumbing between md1 and mk1 as a single dependency) was retired on 2026-05-03 — the HRP-mixed BCH is not generic enough to be useful outside the m-format pair. md1 and mk1 maintain their own `bch.rs` modules; the *pattern* will be documented in a future cross-repo `PATTERNS.md`.
 
 ## Worked decode example (no errors)
 
@@ -93,37 +92,33 @@ For an actual bit-by-bit trace of the polynomial computation, see the reference 
 
 ## Error-detection guarantees
 
-The BCH codes in all three formats give the same design distance, inherited from BIP-93:
+md1 and mk1 ship with one BCH code each (the regular code; the historical long code was retired in md-codec v0.12 along with the rest of the v0.x wire format). ms1 inherits both regular and long codes from BIP-93 codex32. The guaranteed-correction counts follow from the BIP-93 BCH design distance:
 
-| Error pattern | Regular code | Long code |
-|---|---|---|
-| Detected (any pattern up to 8 random symbol errors) | Always | Always |
-| Corrected (random-position substitutions) | Up to 4 | Up to 4 |
-| Corrected (known-position erasures) | Up to 8 | Up to 8 |
-| Corrected (consecutive erasures, e.g., one continuous burn mark) | Up to 13 | Up to 13 |
+| Error pattern | md1 / mk1 (regular only) | ms1 regular (BIP-93) | ms1 long (BIP-93) |
+|---|---|---|---|
+| Corrected (random-position substitutions) | Up to 4 | Up to 4 | Up to 4 |
+| Corrected (known-position erasures) | Up to 8 | Up to 8 | Up to 8 |
+| Corrected (consecutive erasures — single contiguous burn mark) | Up to 13 | Up to 13 | Up to 15 |
 
-"Always detected" here means: any error pattern outside the corrected range either produces a different valid codeword (extremely rare — designed-against) or fails the check. For real-world engraving damage (a scratch obscuring 1–3 characters, light pitting on a small contiguous run), the codes are over-engineered.
+Any error pattern outside the corrected range either produces a different valid codeword (extremely rare; designed-against) or fails the check. For real-world engraving damage (a scratch obscuring 1–3 characters, light pitting on a small contiguous run), the codes are over-engineered.
 
 What the BCH does *not* protect against:
 
 - **Wrong HRP transcribed.** If the user engraves the HRP wrong (e.g., types `mk1...` for what should be `md1...`), the polynomial check fails. No correction is attempted across the wrong-HRP boundary; the codec returns an error and the user re-checks the HRP. This is the right behavior: a wrong HRP is almost certainly a typo, not a damage event, and silently auto-correcting it would risk decoding the wrong payload.
 - **Cross-card binding.** The BCH guarantees a *single card* is intact. Cross-card invariants (the `policy_id_stub` on mk1, the multiset xpub-match rule, etc.) are computed at the toolkit layer after each card decodes individually. The BCH cannot detect a bundle assembled from cards belonging to different wallets — that's what `mnemonic verify-bundle` is for.
 
-## Long vs regular code dispatch
+## Note on the retired long code
 
-Per format, the encoder selects regular or long code based on the payload size. The dispatch is deterministic and visible:
+md1 carried a long code in v0.x — used for payloads exceeding the regular envelope. v0.12 introduced bit-aligned chunking (multiple regular-code cards carrying a chunked payload), which subsumed the long code's role; the long-code path was dropped at the same time. The `md` CLI retains `--force-long-code` as a no-op flag for backward-compat in pipelines that pass it; the flag has no effect at v0.30+.
 
-- The first symbol of the card (after `<HRP>1`) carries a *length indicator* that the decoder reads to determine which code applies. md1 documents this in §II.1.1 (header bit 0 carries the dispatch).
-- An mismatched dispatch (e.g., a regular-code card whose length indicator says "long") fails BCH verification at the codeword-length step before any payload parsing occurs.
-
-The `--force-long-code` CLI flag (on `md encode`) lets an operator force the long code even when the regular would suffice — useful for cross-implementation conformance testing.
+ms1 inherits BIP-93's regular + long codes unchanged. mk1's situation mirrors md1's (regular only).
 
 ## Summary
 
 - All three formats use BCH codes over GF(32) with the BIP-93 design distance.
 - ms1 uses BIP-93 codex32 directly via `rust-codex32`.
-- md1 and mk1 use a forked BCH with HRP-mixed per-format target residues, sharing the algebra but not the polynomial constants.
-- The forked-vs-direct split is deliberate; the `mc-codex32` shared-crate extraction was retired in 2026-05-03.
+- md1 and mk1 share the BIP-93 generator polynomial and the standard BIP-173 HRP-expansion scheme; they differ from codex32 (and from each other) only in the **target residue** the verifier compares the polymod output against.
+- The forked-vs-direct split is deliberate; the `mc-codex32` shared-crate extraction was retired on 2026-05-03.
 - Cross-card binding (the `policy_id_stub` invariant set) is enforced at the toolkit layer, not the BCH layer.
 
 The wire-format chapters (§II.1 / §II.2 / §II.3) describe what the data symbols *encode*, which is the next layer above the BCH plumbing.
