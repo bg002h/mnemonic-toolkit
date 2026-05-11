@@ -9,6 +9,7 @@
   ],
   "ignoreRegExpList": [
     "(ms1|mk1|md1)[a-z0-9]+",
+    "(bc1|tb1|bcrt1)[a-z0-9]+",
     "(xpub|tpub|xprv|tprv|ypub|zpub|Ypub|Zpub)[A-HJ-NP-Za-km-z1-9]+",
     "0x[a-fA-F0-9]+",
     "\\b[a-fA-F0-9]{6,}\\b",
@@ -40,6 +41,7 @@
     "Pavol",
     "Pieter",
     "Pubkeys",
+    "CKDpub",
     "Rusnak",
     "Sanket",
     "serde",

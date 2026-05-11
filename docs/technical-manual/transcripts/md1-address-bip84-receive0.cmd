@@ -1,0 +1,1 @@
+$MD_BIN address --template 'wpkh(@0/<0;1>/*)' --key '@0=xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V' --network mainnet --chain 0 --index 0
