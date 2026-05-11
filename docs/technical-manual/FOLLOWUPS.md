@@ -41,6 +41,15 @@ Reference `<short-id>` in commit messages when closing: `closes FOLLOWUPS.md <sh
 - **Status:** `open`.
 - **Tier:** `cross-repo` (lands in `descriptor-mnemonic`; mirror entry to be filed in that repo's `design/FOLLOWUPS.md` when md1 work begins).
 
+### `cross-repo md1-bip49-integration-test` — add BIP-49 P2SH-P2WPKH integration test in md1
+
+- **Surfaced:** Post-tag audit of `address_derivation.rs` against tech-manual-v0.2.0 §III.2 coverage claims (2026-05-11).
+- **Where:** `descriptor-mnemonic/crates/md-codec/tests/address_derivation.rs` (new test).
+- **What:** The module doc-comment at `address_derivation.rs:26` lists the abandon mnemonic as the source for "BIP 84, BIP 86, BIP 49, and BIP 44 published test vectors", but **no `bip49_*` test exists** in the file. The §III.2 chapter's Bucket-1 table marks `sh(wpkh)` as having no standalone abandon-mnemonic test for this reason. BIP-49 §"Test vectors" provides a canonical testnet vector: mnemonic `abandon × 11 + about`, path `m/49'/1'/0'/0/0`, address `2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2`. Add a `bip49_sh_wpkh_testnet_address` test mirroring the BIP-84 / BIP-86 test pattern; assert against the BIP-49-published address. Once landed, §III.2 Bucket-1's `sh(wpkh)` row updates to cite the new test, and the file's doc-comment claim becomes truthful.
+- **Why deferred:** out-of-scope for a technical-manual cut; the gap surfaced during a post-tag user audit of test pedigree.
+- **Status:** `open`.
+- **Tier:** `cross-repo` (lands in `descriptor-mnemonic`; mirror entry to be filed in that repo's `design/FOLLOWUPS.md` when md1 work begins).
+
 ## Resolved items
 
 ### `bibliography-bip-author-canonical-verification` — verify every BIP entry's author list against the canonical bitcoin/bips repo
