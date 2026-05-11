@@ -6,4 +6,9 @@ The rows are sorted alphabetically. Add new rows as you add new `\index{}` marke
 
 | Term | Section |
 |---|---|
+| `chunk_set_id (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
+| `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `m-format constellation` | [Introduction](#introduction) |
+| `mk1` | [mk1 Wire Format](#mk1-wire-format) |
+| `policy_id_stub` | [mk1 Wire Format](#mk1-wire-format) |
+| `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |
