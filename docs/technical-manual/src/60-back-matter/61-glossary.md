@@ -72,13 +72,13 @@ BIP-93 — a Bitcoin-tuned 32-character alphabet with a BCH-style checksum and h
 
 mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_number` from the wire (reconstructed at decode time from `origin_path`); preserves `version`, `parent_fingerprint`, `chain_code`, `public_key`. Saves 5 bytes per card vs. BIP-32 serialization. Defined §II.2.
 
-## cross_chunk_hash
-
-4-byte trailer = `SHA-256(canonical_bytecode)[0..4]` appended to mk1's canonical bytecode before chunk-split. Defends content-integrity across the (opaque) `chunk_set_id`. Mismatch → `Error::CrossChunkHashMismatch`. Defined §II.2.
-
 ## cosigner-mapping diagnostic
 
 The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`verify_bundle.rs:831-836`, two-pass at `:895-947`). Defined §IV.2.
+
+## cross_chunk_hash
+
+4-byte trailer = `SHA-256(canonical_bytecode)[0..4]` appended to mk1's canonical bytecode before chunk-split. Defends content-integrity across the (opaque) `chunk_set_id`. Mismatch → `Error::CrossChunkHashMismatch`. Defined §II.2.
 
 ## definite key
 
@@ -160,13 +160,13 @@ The key card. Encodes an xpub plus its BIP-32 origin (master fingerprint + deriv
 
 The secret card. Encodes BIP-39 entropy (or a BIP-32 master seed). HRP `ms`. Library crate `ms-codec`; uses `rust-codex32` directly. Repo `bg002h/mnemonic-secret`. Wire format documented §II.3.
 
-## multiset
-
-A set with multiplicity — `{a, a, b}` differs from `{a, b}`. In the technical manual, the relevant case is `md1_xpub_match`, where the comparison must preserve multiplicity so degenerate templates (e.g., `wsh(multi(K,@0,@0))`) don't compare equal to non-degenerate ones. The toolkit implements multiset equality as sort-then-compare on `Vec<[u8; 65]>`. Discussed §IV.2.
-
 ## multipath
 
 BIP-389's `<alt_0;alt_1;...;alt_n>` syntax for a use-site path. md1 encodes the alternatives inline in the use-site-path block; the `chain` parameter to `derive_address` selects which alternative resolves the leaf address. Defined §II.1; semantic role discussed §III.1.
+
+## multiset
+
+A set with multiplicity — `{a, a, b}` differs from `{a, b}`. In the technical manual, the relevant case is `md1_xpub_match`, where the comparison must preserve multiplicity so degenerate templates (e.g., `wsh(multi(K,@0,@0))`) don't compare equal to non-degenerate ones. The toolkit implements multiset equality as sort-then-compare on `Vec<[u8; 65]>`. Discussed §IV.2.
 
 ## NUMS
 
@@ -220,13 +220,13 @@ ms1's 5-entry curated table of payload-type tags (`entr` emit/accept; `seed`, `x
 
 The format-specific GF(32) constant the BCH polymod output is compared against. codex32 uses BIP-93's value; md1's `MD_REGULAR_CONST` derives from `SHA-256("shibbolethnums")`; mk1's `MK_REGULAR_CONST` derives from `SHA-256("shibbolethnumskey")`. Per-format target residues are what *fork* md1↔mk1 from codex32 — the generator polynomial is shared. Defined §I.3.
 
-## secret-bearing slot
-
-A bundle slot whose subkey set contains any of `phrase` / `entropy` / `xprv` / `wif` — the four secret-material subkey types. Discriminator: `SlotSubkey::is_secret_bearing` at `crates/mnemonic-toolkit/src/slot_input.rs:47-49`. Bundle synthesis emits a non-empty `ms1` card for each secret-bearing slot. Defined §IV.1.
-
 ## script context (rust-miniscript)
 
 rust-miniscript's type-class abstraction over the three valid contexts a miniscript expression can inhabit: `Legacy` (P2SH), `Segwitv0` (P2WSH), `Tap` (taproot script tree). Each context constrains which `Terminal` variants are admissible and the resource limits (key count, opcode count). md1's converter selects the context per shape and routes through `node_to_miniscript::<Ctx>` accordingly. Discussed §III.2.
+
+## secret-bearing slot
+
+A bundle slot whose subkey set contains any of `phrase` / `entropy` / `xprv` / `wif` — the four secret-material subkey types. Discriminator: `SlotSubkey::is_secret_bearing` at `crates/mnemonic-toolkit/src/slot_input.rs:47-49`. Bundle synthesis emits a non-empty `ms1` card for each secret-bearing slot. Defined §IV.1.
 
 ## share-set grouping
 
