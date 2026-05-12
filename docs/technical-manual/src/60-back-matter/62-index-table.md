@@ -21,6 +21,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `BchCode` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `bech32` | [codex32 and BCH](#codex32-and-bch) |
 | `bifurcation (BIP-388 enforcement)` | [Anti-Collision Invariants](#anti-collision-invariants) |
+| `binary-only crate` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `BIP 32 master fingerprint` | [mk1 Wire Format](#mk1-wire-format) |
 | `BIP-173` | [codex32 and BCH](#codex32-and-bch) |
 | `BIP-32` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -50,6 +51,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `bundle envelope` | [Bundle Anatomy](#bundle-anatomy) |
 | `bundle JSON envelope` | [Bundle Anatomy](#bundle-anatomy) |
 | `bundle mode` | [Bundle Anatomy](#bundle-anatomy) |
+| `BundleJson` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `bytecode header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `BytecodeHeader` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `bytes_to_5bit` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -75,6 +77,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `CorrectionResult` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `cosigner` | [Introduction](#introduction) |
 | `cosigner-mapping diagnostic` | [Anti-Collision Invariants](#anti-collision-invariants) |
+| `CosignerEntry` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `cross-card binding` | [The m-format Star](#the-m-format-star) |
 | `cross-card binding (bundle)` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
@@ -88,6 +91,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `DecodedString` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `derivation (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `derive (Cargo feature)` | [md-codec Rust API](#md-codec-rust-api) |
+| `derive (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Descriptor (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `descriptor truncation` | [Bundle Anatomy](#bundle-anatomy) |
 | `Descriptor::derive_address` | [md-codec Rust API](#md-codec-rust-api) |
@@ -105,6 +109,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `engraving card` | [Bundle Anatomy](#bundle-anatomy) |
 | `Error (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `error (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Error (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Error::AddressDerivationFailed` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Error::AltCountOutOfRange` | [md-codec Rust API](#md-codec-rust-api) |
@@ -189,6 +194,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Fingerprints TLV` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `five_bit_to_bytes` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `forked-BCH boundary` | [The m-format Star](#the-m-format-star) |
+| `format (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `gen-vectors (Cargo feature)` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `GEN_LONG` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `GEN_REGULAR` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -275,6 +281,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `MK_REGULAR_CONST` | [mk1 Wire Format](#mk1-wire-format) |
 | `MkField` | [Bundle Anatomy](#bundle-anatomy) |
 | `mnemonic-toolkit` | [Introduction](#introduction) |
+| `mnemonic-toolkit v0.8.0` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `mnemonic_toolkit (crate)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `ms-codec` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `ms-codec v0.1.1` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `ms1` | [ms1 Wire Format](#ms1-wire-format) |
@@ -288,6 +296,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `ms_codec::inspect` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `ms_codec::payload` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `ms_codec::tag` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `MsField` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `multi-family bodies` | [md1 Wire Format](#md1-wire-format) |
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -306,6 +315,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `origin path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `OriginPath` | [md1 Wire Format](#md1-wire-format) |
 | `OriginPathOverrides TLV` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `parse (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `parse_descriptor (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `PathComponent` | [md-codec Rust API](#md-codec-rust-api) |
 | `PathDecl` | [md-codec Rust API](#md-codec-rust-api) |
 | `PathDeclPaths` | [md-codec Rust API](#md-codec-rust-api) |
@@ -356,6 +367,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `STANDARD_PATHS` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `string-layer header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `StringLayerHeader` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `synthesize (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Tag (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `Tag (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Tag (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
@@ -363,8 +375,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Tag::ENTR` | [ms1 Wire Format](#ms1-wire-format) |
 | `Tag::Multi` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::OriginPaths` | [md1 Wire Format](#md1-wire-format) |
-| `Tag::Pkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::PkH` | [md1 Wire Format](#md1-wire-format) |
+| `Tag::Pkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::PkK` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Sh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Thresh` | [md1 Wire Format](#md1-wire-format) |
@@ -378,6 +390,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `TapTree` | [Shape Coverage](#shape-coverage) |
 | `target residue` | [codex32 and BCH](#codex32-and-bch) |
 | `template (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `template (module)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Terminal::Multi` | [Shape Coverage](#shape-coverage) |
 | `testnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `Threshold (ms-codec v0.2)` | [Future Shares](#future-shares) |
@@ -385,8 +398,9 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
 | `TLV_PUBKEYS` | [md-codec Rust API](#md-codec-rust-api) |
 | `TlvSection` | [md-codec Rust API](#md-codec-rust-api) |
-| `to_miniscript_descriptor` | [Shape Coverage](#shape-coverage) |
 | `to_miniscript_descriptor` | [md-codec Rust API](#md-codec-rust-api) |
+| `to_miniscript_descriptor` | [Shape Coverage](#shape-coverage) |
+| `ToolkitError` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `tr (key-path)` | [Shape Coverage](#shape-coverage) |
 | `tr (multi-leaf)` | [Shape Coverage](#shape-coverage) |
 | `tr (NUMS)` | [Shape Coverage](#shape-coverage) |
@@ -401,6 +415,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `VALID_STR_LENGTHS` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `validate_presence_byte` | [md-codec Rust API](#md-codec-rust-api) |
 | `verify-bundle` | [Bundle Anatomy](#bundle-anatomy) |
+| `VerifyBundleJson` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `VerifyCheck` | [Bundle Anatomy](#bundle-anatomy) |
 | `walker normalisation` | [md1 Wire Format](#md1-wire-format) |
 | `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |

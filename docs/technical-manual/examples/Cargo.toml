@@ -13,6 +13,8 @@ md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "md-co
 mk-codec = { git = "https://github.com/bg002h/mnemonic-key", tag = "mnemonic-key-mk-codec-v0.2.2" }
 ms-codec = { git = "https://github.com/bg002h/mnemonic-secret", tag = "mnemonic-secret-ms-codec-v0.1.1" }
 bitcoin = "0.32"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [[example]]
 name = "md-codec-api-roundtrip"
@@ -25,3 +27,7 @@ path = "examples/mk-codec-api-roundtrip.rs"
 [[example]]
 name = "ms-codec-api-roundtrip"
 path = "examples/ms-codec-api-roundtrip.rs"
+
+[[example]]
+name = "mnemonic-toolkit-api-roundtrip"
+path = "examples/mnemonic-toolkit-api-roundtrip.rs"
