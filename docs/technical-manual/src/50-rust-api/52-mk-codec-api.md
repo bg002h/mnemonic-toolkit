@@ -50,16 +50,16 @@ Crate-wide constants (SPEC v0.1 closure questions Q-1, Q-2, Q-3, Q-7, Q-10; `con
 | `MK_REGULAR_CONST`\index{MK\_REGULAR\_CONST} | `pub const MK_REGULAR_CONST: u128 = 0x1062435f91072fa5c` | top 65 bits of `SHA-256(NUMS_DOMAIN)`; regular-code target residue | `consts.rs:18` |
 | `MK_LONG_CONST`\index{MK\_LONG\_CONST} | `pub const MK_LONG_CONST: u128 = 0x41890d7e441cbe97273` | top 75 bits of `SHA-256(NUMS_DOMAIN)`; long-code target residue | `consts.rs:21` |
 | `MAX_PATH_COMPONENTS`\index{MAX\_PATH\_COMPONENTS (mk-codec)} | `pub const MAX_PATH_COMPONENTS: u8 = 10` | maximum components in an explicit-path encoding | `consts.rs:27` |
-| `SINGLE_STRING_REGULAR_BYTES` | `pub const SINGLE_STRING_REGULAR_BYTES: usize = 48` | single-string regular-code payload bytes | `consts.rs:30` |
-| `SINGLE_STRING_LONG_BYTES` | `pub const SINGLE_STRING_LONG_BYTES: usize = 56` | single-string long-code payload bytes | `consts.rs:33` |
-| `CHUNKED_FRAGMENT_REGULAR_BYTES` | `pub const CHUNKED_FRAGMENT_REGULAR_BYTES: usize = 45` | chunked-fragment regular-code payload bytes per chunk | `consts.rs:36` |
-| `CHUNKED_FRAGMENT_LONG_BYTES` | `pub const CHUNKED_FRAGMENT_LONG_BYTES: usize = 53` | chunked-fragment long-code payload bytes per chunk | `consts.rs:39` |
+| `SINGLE_STRING_REGULAR_BYTES`\index{SINGLE\_STRING\_REGULAR\_BYTES} | `pub const SINGLE_STRING_REGULAR_BYTES: usize = 48` | single-string regular-code payload bytes | `consts.rs:30` |
+| `SINGLE_STRING_LONG_BYTES`\index{SINGLE\_STRING\_LONG\_BYTES} | `pub const SINGLE_STRING_LONG_BYTES: usize = 56` | single-string long-code payload bytes | `consts.rs:33` |
+| `CHUNKED_FRAGMENT_REGULAR_BYTES`\index{CHUNKED\_FRAGMENT\_REGULAR\_BYTES} | `pub const CHUNKED_FRAGMENT_REGULAR_BYTES: usize = 45` | chunked-fragment regular-code payload bytes per chunk | `consts.rs:36` |
+| `CHUNKED_FRAGMENT_LONG_BYTES`\index{CHUNKED\_FRAGMENT\_LONG\_BYTES} | `pub const CHUNKED_FRAGMENT_LONG_BYTES: usize = 53` | chunked-fragment long-code payload bytes per chunk | `consts.rs:39` |
 | `MAX_CHUNKS`\index{MAX\_CHUNKS} | `pub const MAX_CHUNKS: u8 = 32` | maximum chunks per card | `consts.rs:42` |
-| `CROSS_CHUNK_HASH_BYTES` | `pub const CROSS_CHUNK_HASH_BYTES: usize = 4` | cross-chunk integrity hash size in bytes | `consts.rs:45` |
+| `CROSS_CHUNK_HASH_BYTES`\index{CROSS\_CHUNK\_HASH\_BYTES} | `pub const CROSS_CHUNK_HASH_BYTES: usize = 4` | cross-chunk integrity hash size in bytes | `consts.rs:45` |
 | `GENERATOR_FAMILY`\index{GENERATOR\_FAMILY} | `pub const GENERATOR_FAMILY: &str = "mk-codec 0.2"` | family-stable BCH HRP-mixing token; rolls only on minor/major bumps | `consts.rs:50` |
-| `XPUB_COMPACT_BYTES` | `pub const XPUB_COMPACT_BYTES: usize = 73` | compact-73 xpub byte size | `consts.rs:53` |
-| `POLICY_ID_STUB_BYTES` | `pub const POLICY_ID_STUB_BYTES: usize = 4` | policy-ID stub size in bytes | `consts.rs:56` |
-| `ORIGIN_FINGERPRINT_BYTES` | `pub const ORIGIN_FINGERPRINT_BYTES: usize = 4` | origin fingerprint size in bytes | `consts.rs:59` |
+| `XPUB_COMPACT_BYTES`\index{XPUB\_COMPACT\_BYTES} | `pub const XPUB_COMPACT_BYTES: usize = 73` | compact-73 xpub byte size | `consts.rs:53` |
+| `POLICY_ID_STUB_BYTES`\index{POLICY\_ID\_STUB\_BYTES} | `pub const POLICY_ID_STUB_BYTES: usize = 4` | policy-ID stub size in bytes | `consts.rs:56` |
+| `ORIGIN_FINGERPRINT_BYTES`\index{ORIGIN\_FINGERPRINT\_BYTES} | `pub const ORIGIN_FINGERPRINT_BYTES: usize = 4` | origin fingerprint size in bytes | `consts.rs:59` |
 
 ### V.2.3.2 `error`\index{mk\_codec::error}
 
@@ -152,8 +152,8 @@ Origin-path codec: standard-table dictionary + `0xFE` explicit-path escape hatch
 | `XpubCompact`\index{XpubCompact} | `pub struct XpubCompact { pub version: [u8; 4], pub parent_fingerprint: [u8; 4], pub chain_code: [u8; 32], pub public_key: [u8; 33] }` (`#[derive(Debug, Clone, PartialEq, Eq)]`) | 73-byte compact form (closure Q-7) | `bytecode/xpub_compact.rs:32` |
 | `XpubCompact::from_xpub`\index{XpubCompact::from\_xpub} | `fn from_xpub(xpub: &Xpub) -> Self` | build compact form from full BIP-32 `Xpub` | `bytecode/xpub_compact.rs:45` |
 | `reconstruct_xpub`\index{reconstruct\_xpub} | `fn reconstruct_xpub(compact: &XpubCompact, origin_path: &DerivationPath) -> Result<Xpub>` | reconstruct full `Xpub` (depth ← `len(origin_path)`, child_number ← last component). Emits `InvalidXpubVersion`, `InvalidXpubPublicKey`. **Panics** on empty path — see §V.2.7 | `bytecode/xpub_compact.rs:85` |
-| `encode_xpub_compact` | `fn encode_xpub_compact(compact: &XpubCompact, out: &mut Vec<u8>)` | append 73-byte wire layout to `out` | `bytecode/xpub_compact.rs:109` |
-| `decode_xpub_compact` | `fn decode_xpub_compact(cursor: &mut &[u8]) -> Result<XpubCompact>` | decode 73 bytes. Emits `UnexpectedEnd`, `InvalidXpubVersion` | `bytecode/xpub_compact.rs:117` |
+| `encode_xpub_compact`\index{encode\_xpub\_compact} | `fn encode_xpub_compact(compact: &XpubCompact, out: &mut Vec<u8>)` | append 73-byte wire layout to `out` | `bytecode/xpub_compact.rs:109` |
+| `decode_xpub_compact`\index{decode\_xpub\_compact} | `fn decode_xpub_compact(cursor: &mut &[u8]) -> Result<XpubCompact>` | decode 73 bytes. Emits `UnexpectedEnd`, `InvalidXpubVersion` | `bytecode/xpub_compact.rs:117` |
 
 `XpubCompact` is **NOT** `#[non_exhaustive]`. See §V.2.7.
 
@@ -190,11 +190,11 @@ Constants:
 | `SEPARATOR`\index{SEPARATOR (bech32)} | `pub const SEPARATOR: char = '1'` | bech32 separator (BIP 173 §3) | `bch.rs:109` |
 | `GEN_REGULAR`\index{GEN\_REGULAR} | `pub const GEN_REGULAR: [u128; 5]` | BCH(93,80,8) polymod constants (BIP 93) | `bch.rs:173` |
 | `POLYMOD_INIT`\index{POLYMOD\_INIT} | `pub const POLYMOD_INIT: u128 = 0x23181b3` | initial residue (BIP 93) | `bch.rs:185` |
-| `REGULAR_SHIFT` | `pub const REGULAR_SHIFT: u32 = 60` | right-shift to extract top 5 bits of 65-bit residue | `bch.rs:191` |
-| `REGULAR_MASK` | `pub const REGULAR_MASK: u128 = 0x0fffffffffffffff` | low-60-bit mask | `bch.rs:194` |
+| `REGULAR_SHIFT`\index{REGULAR\_SHIFT} | `pub const REGULAR_SHIFT: u32 = 60` | right-shift to extract top 5 bits of 65-bit residue | `bch.rs:191` |
+| `REGULAR_MASK`\index{REGULAR\_MASK} | `pub const REGULAR_MASK: u128 = 0x0fffffffffffffff` | low-60-bit mask | `bch.rs:194` |
 | `GEN_LONG`\index{GEN\_LONG} | `pub const GEN_LONG: [u128; 5]` | BCH(108,93,8) polymod constants (BIP 93) | `bch.rs:203` |
-| `LONG_SHIFT` | `pub const LONG_SHIFT: u32 = 70` | right-shift to extract top 5 bits of 75-bit residue | `bch.rs:215` |
-| `LONG_MASK` | `pub const LONG_MASK: u128 = 0x3fffffffffffffffff` | low-70-bit mask | `bch.rs:218` |
+| `LONG_SHIFT`\index{LONG\_SHIFT} | `pub const LONG_SHIFT: u32 = 70` | right-shift to extract top 5 bits of 75-bit residue | `bch.rs:215` |
+| `LONG_MASK`\index{LONG\_MASK} | `pub const LONG_MASK: u128 = 0x3fffffffffffffffff` | low-70-bit mask | `bch.rs:218` |
 
 Types:
 
@@ -213,13 +213,13 @@ Functions:
 |---|---|---|---|
 | `bytes_to_5bit`\index{bytes\_to\_5bit} | `fn bytes_to_5bit(bytes: &[u8]) -> Vec<u8>` | 8-bit → 5-bit (zero-padded) | `bch.rs:56` |
 | `five_bit_to_bytes`\index{five\_bit\_to\_bytes} | `fn five_bit_to_bytes(values: &[u8]) -> Option<Vec<u8>>` | 5-bit → 8-bit; `None` for out-of-range or nonzero pad | `bch.rs:78` |
-| `bch_code_for_length` | `fn bch_code_for_length(data_part_len: usize) -> Option<BchCode>` | `Regular` for 14..=93, `Long` for 96..=108, `None` for the 94..=95 reserved gap or out-of-range | `bch.rs:117` |
+| `bch_code_for_length`\index{bch\_code\_for\_length} | `fn bch_code_for_length(data_part_len: usize) -> Option<BchCode>` | `Regular` for 14..=93, `Long` for 96..=108, `None` for the 94..=95 reserved gap or out-of-range | `bch.rs:117` |
 | `case_check`\index{case\_check} | `fn case_check(s: &str) -> CaseStatus` | all-lower / all-upper / mixed | `bch.rs:132` |
 | `hrp_expand`\index{hrp\_expand} | `fn hrp_expand(hrp: &str) -> Vec<u8>` | BIP 173 HRP-expansion; output length `2*hrp.len() + 1` for ASCII | `bch.rs:252` |
 | `bch_create_checksum_regular`\index{bch\_create\_checksum\_regular} | `fn bch_create_checksum_regular(hrp: &str, data: &[u8]) -> [u8; 13]` | 13-symbol regular checksum | `bch.rs:294` |
-| `bch_verify_regular` | `fn bch_verify_regular(hrp: &str, data_with_checksum: &[u8]) -> bool` | verify regular checksum | `bch.rs:312` |
+| `bch_verify_regular`\index{bch\_verify\_regular} | `fn bch_verify_regular(hrp: &str, data_with_checksum: &[u8]) -> bool` | verify regular checksum | `bch.rs:312` |
 | `bch_create_checksum_long`\index{bch\_create\_checksum\_long} | `fn bch_create_checksum_long(hrp: &str, data: &[u8]) -> [u8; 15]` | 15-symbol long checksum | `bch.rs:326` |
-| `bch_verify_long` | `fn bch_verify_long(hrp: &str, data_with_checksum: &[u8]) -> bool` | verify long checksum | `bch.rs:343` |
+| `bch_verify_long`\index{bch\_verify\_long} | `fn bch_verify_long(hrp: &str, data_with_checksum: &[u8]) -> bool` | verify long checksum | `bch.rs:343` |
 | `bch_correct_regular`\index{bch\_correct\_regular} | `fn bch_correct_regular(hrp: &str, data_with_checksum: &[u8]) -> Result<CorrectionResult, Error>` | BM/Forney decoder; up to `t=4` substitutions for BCH(93,80,8); re-verifies post-correction. Emits `BchUncorrectable` | `bch.rs:392` |
 | `bch_correct_long`\index{bch\_correct\_long} | `fn bch_correct_long(hrp: &str, data_with_checksum: &[u8]) -> Result<CorrectionResult, Error>` | long-code analog | `bch.rs:450` |
 | `encode_5bit_to_string`\index{encode\_5bit\_to\_string} | `fn encode_5bit_to_string(data_5bit: &[u8]) -> Result<String, Error>` | encode 5-bit symbols as complete mk1 string. Auto-selects regular/long. Output begins `"mk1"`. Emits `InvalidStringLength` | `bch.rs:515` |
@@ -241,10 +241,10 @@ Per-string header (`string_layer/header.rs`).
 
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
-| `SINGLE_HEADER_SYMBOLS` | `pub const SINGLE_HEADER_SYMBOLS: usize = 2` | 5-bit symbols in single-string header | `string_layer/header.rs:20` |
-| `CHUNKED_HEADER_SYMBOLS` | `pub const CHUNKED_HEADER_SYMBOLS: usize = 8` | 5-bit symbols in chunked header | `string_layer/header.rs:24` |
+| `SINGLE_HEADER_SYMBOLS`\index{SINGLE\_HEADER\_SYMBOLS} | `pub const SINGLE_HEADER_SYMBOLS: usize = 2` | 5-bit symbols in single-string header | `string_layer/header.rs:20` |
+| `CHUNKED_HEADER_SYMBOLS`\index{CHUNKED\_HEADER\_SYMBOLS} | `pub const CHUNKED_HEADER_SYMBOLS: usize = 8` | 5-bit symbols in chunked header | `string_layer/header.rs:24` |
 | `MAX_CHUNK_SET_ID`\index{MAX\_CHUNK\_SET\_ID} | `pub const MAX_CHUNK_SET_ID: u32 = (1 << 20) - 1` | maximum 20-bit `chunk_set_id` | `string_layer/header.rs:27` |
-| `VERSION_V0_1` | `pub const VERSION_V0_1: u8 = 0x00` | format-version field emitted in v0.1 | `string_layer/header.rs:30` |
+| `VERSION_V0_1`\index{VERSION\_V0\_1} | `pub const VERSION_V0_1: u8 = 0x00` | format-version field emitted in v0.1 | `string_layer/header.rs:30` |
 | `StringLayerHeader`\index{StringLayerHeader} | `pub enum StringLayerHeader { SingleString { version: u8 }, Chunked { version: u8, chunk_set_id: u32, total_chunks: u8, chunk_index: u8 } }` (`#[non_exhaustive]`) | per-string header. `total_chunks` is 1-based; wire encoding is `count − 1` | `string_layer/header.rs:35` |
 | `StringLayerHeader::to_5bit_symbols` | `fn to_5bit_symbols(self) -> Vec<u8>` | emit 2 or 8 symbols | `string_layer/header.rs:67` |
 | `StringLayerHeader::from_5bit_symbols` | `fn from_5bit_symbols(symbols: &[u8]) -> Result<(Self, usize)>` | parse leading header; returns `(header, consumed)`. Emits `UnexpectedEnd`, `UnsupportedVersion`, `UnsupportedCardType`, `ChunkedHeaderMalformed` | `string_layer/header.rs:120` |

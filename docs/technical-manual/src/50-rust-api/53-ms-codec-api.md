@@ -46,7 +46,7 @@ Crate-wide constants for the ms1 wire format (`crates/ms-codec/src/consts.rs`).
 | `RESERVED_PREFIX`\index{RESERVED\_PREFIX (ms1)} | `pub const RESERVED_PREFIX: u8 = 0x00` | v0.1 reserved-prefix byte; becomes the v0.2 type discriminator | `consts.rs:17` |
 | `THRESHOLD_V01`\index{THRESHOLD\_V01} | `pub const THRESHOLD_V01: u8 = b'0'` | v0.1 emit-side threshold value (ASCII `'0'`) | `consts.rs:20` |
 | `SHARE_INDEX_V01`\index{SHARE\_INDEX\_V01} | `pub const SHARE_INDEX_V01: u8 = b's'` | v0.1 emit-side share-index value (ASCII `'s'` per BIP-93 "the unshared secret") | `consts.rs:23` |
-| `CHECKSUM_LEN_SHORT` | `pub const CHECKSUM_LEN_SHORT: usize = 13` | short codex32 checksum length in characters | `consts.rs:26` |
+| `CHECKSUM_LEN_SHORT`\index{CHECKSUM\_LEN\_SHORT} | `pub const CHECKSUM_LEN_SHORT: usize = 13` | short codex32 checksum length in characters | `consts.rs:26` |
 | `VALID_ENTR_LENGTHS`\index{VALID\_ENTR\_LENGTHS} | `pub const VALID_ENTR_LENGTHS: &[usize] = &[16, 20, 24, 28, 32]` | allowed v0.1 entr entropy byte lengths (bijective with BIP-39 word counts {12,15,18,21,24}) | `consts.rs:29` |
 | `VALID_STR_LENGTHS`\index{VALID\_STR\_LENGTHS} | `pub const VALID_STR_LENGTHS: &[usize] = &[50, 56, 62, 69, 75]` | allowed total ms1 string lengths (HRP + sep + threshold + id + share + payload + cksum) | `consts.rs:33` |
 | `TAG_ENTR`\index{TAG\_ENTR} | `pub const TAG_ENTR: [u8; 4] = *b"entr"` | 4-byte type tag — v0.1 emit (also accept) | `consts.rs:36` |
@@ -136,9 +136,9 @@ if rep.prefix_byte != 0x00 {
 |---|---|---|---|
 | `PayloadKind`\index{PayloadKind} | `pub enum PayloadKind { Entr }` (`#[derive(Debug, Clone, Copy, PartialEq, Eq)]`, `#[non_exhaustive]`) | v0.1 payload kind. Future kinds (Mnem, Seed, Xprv) arrive in v0.2+ | `payload.rs:11` |
 | `Payload`\index{Payload (ms-codec)} | `pub enum Payload { Entr(Vec<u8>) }` (`#[derive(Debug, Clone, PartialEq, Eq)]`, `#[non_exhaustive]`) | v0.1 payload | `payload.rs:19` |
-| `Payload::validate` | `fn validate(&self) -> Result<()>` | validate intrinsic structure (byte length for Entr). Encoder MUST call before emitting; decoder calls after extracting payload bytes following the reserved-prefix byte | `payload.rs:36` |
-| `Payload::kind` | `fn kind(&self) -> PayloadKind` | the `PayloadKind` discriminant | `payload.rs:52` |
-| `Payload::as_bytes` | `fn as_bytes(&self) -> &[u8]` | borrow the inner byte slice | `payload.rs:59` |
+| `Payload::validate`\index{Payload::validate} | `fn validate(&self) -> Result<()>` | validate intrinsic structure (byte length for Entr). Encoder MUST call before emitting; decoder calls after extracting payload bytes following the reserved-prefix byte | `payload.rs:36` |
+| `Payload::kind`\index{Payload::kind} | `fn kind(&self) -> PayloadKind` | the `PayloadKind` discriminant | `payload.rs:52` |
+| `Payload::as_bytes`\index{Payload::as\_bytes} | `fn as_bytes(&self) -> &[u8]` | borrow the inner byte slice | `payload.rs:59` |
 
 The `Entr(Vec<u8>)` variant doc-comment includes a caller-responsibility caveat (`payload.rs:29`): ms-codec validates byte length only; it does **not** check the statistical quality of the bytes. Callers feeding entropy from non-OS-CSPRNG sources are responsible for randomness assurance.
 
@@ -150,10 +150,10 @@ The `Entr(Vec<u8>)` variant doc-comment includes a caller-responsibility caveat 
 |---|---|---|---|
 | `Tag`\index{Tag (ms-codec)} | `pub struct Tag([u8; 4])` (`#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]`) | 4-byte type tag. Field is private to enforce validated construction via `try_new` (alphabet-checked) or `from_raw_bytes` (tooling-only, unvalidated). Tuple field is **not** public | `tag.rs:12` |
 | `Tag::ENTR`\index{Tag::ENTR} | `pub const ENTR: Tag = Tag(TAG_ENTR)` | the v0.1 emit-tag for BIP-39 entropy | `tag.rs:16` |
-| `Tag::from_raw_bytes` | `fn from_raw_bytes(b: [u8; 4]) -> Self` | construct from raw 4 bytes **without** alphabet validation. Reserved for tooling (e.g. `inspect()`) that needs to surface whatever bytes appeared on the wire, alphabet violators included. Encoder + decoder paths MUST use `try_new` | `tag.rs:22` |
-| `Tag::try_new` | `fn try_new(s: &str) -> Result<Self>` | construct from a 4-character string slice. Returns `Error::TagInvalidAlphabet` if any character is outside the codex32 alphabet (`b"qpzry9x8gf2tvdw0s3jn54khce6mua7l"`, BIP-173 lowercase bech32 charset) | `tag.rs:28` |
-| `Tag::as_bytes` | `fn as_bytes(&self) -> &[u8; 4]` | borrow the underlying 4 bytes | `tag.rs:49` |
-| `Tag::as_str` | `fn as_str(&self) -> &str` | view the tag as a string slice. Always succeeds for `try_new`-constructed tags (codex32 alphabet is ASCII); for `from_raw_bytes`-constructed tags containing non-UTF-8 bytes, returns the literal sentinel `"\<non-utf8\>"` | `tag.rs:56` |
+| `Tag::from_raw_bytes`\index{Tag::from\_raw\_bytes} | `fn from_raw_bytes(b: [u8; 4]) -> Self` | construct from raw 4 bytes **without** alphabet validation. Reserved for tooling (e.g. `inspect()`) that needs to surface whatever bytes appeared on the wire, alphabet violators included. Encoder + decoder paths MUST use `try_new` | `tag.rs:22` |
+| `Tag::try_new`\index{Tag::try\_new} | `fn try_new(s: &str) -> Result<Self>` | construct from a 4-character string slice. Returns `Error::TagInvalidAlphabet` if any character is outside the codex32 alphabet (`b"qpzry9x8gf2tvdw0s3jn54khce6mua7l"`, BIP-173 lowercase bech32 charset) | `tag.rs:28` |
+| `Tag::as_bytes`\index{Tag::as\_bytes} | `fn as_bytes(&self) -> &[u8; 4]` | borrow the underlying 4 bytes | `tag.rs:49` |
+| `Tag::as_str`\index{Tag::as\_str} | `fn as_str(&self) -> &str` | view the tag as a string slice. Always succeeds for `try_new`-constructed tags (codex32 alphabet is ASCII); for `from_raw_bytes`-constructed tags containing non-UTF-8 bytes, returns the literal sentinel `"\<non-utf8\>"` | `tag.rs:56` |
 
 No `From`, `Display`, `AsRef`, or non-derived `Hash` impls. No `Default`, `PartialOrd`, or `Ord`.
 

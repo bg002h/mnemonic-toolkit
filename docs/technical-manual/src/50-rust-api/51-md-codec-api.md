@@ -183,8 +183,8 @@ Top-level encoder + `Descriptor` struct (SPEC §13.3; `encode.rs`).
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
 | `Descriptor`\index{Descriptor (md-codec)} | `pub struct Descriptor { pub n: u8, pub path_decl: PathDecl, pub use_site_path: UseSitePath, pub tree: Node, pub tlv: TlvSection }` | top-level v0.30 descriptor parsed/built from a wire payload | `encode.rs:16-28` |
-| `Descriptor::key_index_width` | `fn key_index_width(&self) -> u8` | `⌈log₂(n)⌉`; clamped to 0 at n∈{0,1} | `encode.rs:37` |
-| `Descriptor::is_wallet_policy` | `fn is_wallet_policy(&self) -> bool` | `true` iff `tlv.pubkeys.is_some()` with non-empty vec | `encode.rs:50` |
+| `Descriptor::key_index_width`\index{Descriptor::key\_index\_width} | `fn key_index_width(&self) -> u8` | `⌈log₂(n)⌉`; clamped to 0 at n∈{0,1} | `encode.rs:37` |
+| `Descriptor::is_wallet_policy`\index{Descriptor::is\_wallet\_policy} | `fn is_wallet_policy(&self) -> bool` | `true` iff `tlv.pubkeys.is_some()` with non-empty vec | `encode.rs:50` |
 | `encode_payload`\index{encode\_payload} | `fn encode_payload(d: &Descriptor) -> Result<(Vec<u8>, usize), Error>` | encode descriptor → (bytes, total_bit_count). Self-canonicalises internally; runs three `validate::*` checks before write | `encode.rs:65` |
 | `render_codex32_grouped`\index{render\_codex32\_grouped} | `fn render_codex32_grouped(s: &str, group_size: usize) -> String` | hyphen-grouped rendering for human display; `group_size = 0` returns input unchanged | `encode.rs:98` |
 | `encode_md1_string`\index{encode\_md1\_string} | `fn encode_md1_string(d: &Descriptor) -> Result<String, Error>` | `encode_payload` + `codex32::wrap_payload` | `encode.rs:114` |
@@ -212,7 +212,7 @@ Error taxonomy (43 variants; full table in §V.1.4). Two public types:
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
 | `Header`\index{Header (md-codec)} | `pub struct Header { pub version: u8, pub divergent_paths: bool }` | 4-bit version + 1 bit | `header.rs:16-22` |
-| `Header::WF_REDESIGN_VERSION` | `pub const WF_REDESIGN_VERSION: u8 = 4;` | v0.30 version literal | `header.rs:27` |
+| `Header::WF_REDESIGN_VERSION`\index{Header::WF\_REDESIGN\_VERSION} | `pub const WF_REDESIGN_VERSION: u8 = 4;` | v0.30 version literal | `header.rs:27` |
 | `Header::write` | `fn write(&self, w: &mut BitWriter)` | emit 5 bits | `header.rs:30` |
 | `Header::read` | `fn read(r: &mut BitReader) -> Result<Self, Error>` | parse 5 bits; rejects `version != 4` with `WireVersionMismatch` | `header.rs:38` |
 
@@ -228,7 +228,7 @@ Identity computations (SPEC §8; `identity.rs`).
 | `WalletDescriptorTemplateId::new` / `as_bytes` | as for `Md1EncodingId` | — | `identity.rs:59, 64` |
 | `WalletPolicyId`\index{WalletPolicyId} | `pub struct WalletPolicyId([u8; 16]);` | 128-bit canonical wallet-policy id (SPEC v0.13 §5.3) | `identity.rs:114-115` |
 | `WalletPolicyId::new` / `as_bytes` | as above | — | `identity.rs:119, 124` |
-| `WalletPolicyId::to_phrase` | `fn to_phrase(&self) -> Result<Phrase, Error>` | render id as 12-word BIP-39 phrase (SPEC §8.4) | `identity.rs:129` |
+| `WalletPolicyId::to_phrase`\index{WalletPolicyId::to\_phrase} | `fn to_phrase(&self) -> Result<Phrase, Error>` | render id as 12-word BIP-39 phrase (SPEC §8.4) | `identity.rs:129` |
 | `compute_md1_encoding_id`\index{compute\_md1\_encoding\_id} | `fn compute_md1_encoding_id(d: &Descriptor) -> Result<Md1EncodingId, Error>` | SHA-256 over canonical bit-packed payload bytes (truncated 16) | `identity.rs:39` |
 | `compute_wallet_descriptor_template_id`\index{compute\_wallet\_descriptor\_template\_id} | `fn compute_wallet_descriptor_template_id(d: &Descriptor) -> Result<WalletDescriptorTemplateId, Error>` | SHA-256 over use-site-path bits ‖ tree bits ‖ optional `UseSitePathOverrides` (truncated 16) | `identity.rs:71` |
 | `compute_wallet_policy_id`\index{compute\_wallet\_policy\_id} | `fn compute_wallet_policy_id(d: &Descriptor) -> Result<WalletPolicyId, Error>` | SHA-256 over canonical template ‖ per-`@N` records. Self-canonicalises + runs `expand_per_at_n` internally | `identity.rs:172` |
@@ -265,7 +265,7 @@ BIP-39 phrase rendering (SPEC §8.4; `phrase.rs`).
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
 | `Phrase`\index{Phrase} | `pub struct Phrase(pub [String; 12]);` | tuple-struct holding 12 BIP-39 words | `phrase.rs:7-10` |
-| `Phrase::from_id_bytes` | `fn from_id_bytes(id: &[u8; 16]) -> Result<Self, Error>` | render 128 bits as 12 BIP-39 words. **Infallible in practice** — inner `.expect()` cannot fire on 128-bit entropy; `Result` is API-uniform shape | `phrase.rs:17` |
+| `Phrase::from_id_bytes`\index{Phrase::from\_id\_bytes} | `fn from_id_bytes(id: &[u8; 16]) -> Result<Self, Error>` | render 128 bits as 12 BIP-39 words. **Infallible in practice** — inner `.expect()` cannot fire on 128-bit entropy; `Result` is API-uniform shape | `phrase.rs:17` |
 | `impl Display for Phrase` | — | joins words with single space | `phrase.rs:28-32` |
 
 ### V.1.3.14 `tag`\index{md\_codec::tag}
@@ -286,10 +286,10 @@ TLV section (SPEC §3.7 + v0.13 §3.2; `tlv.rs`).
 
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
-| `TLV_USE_SITE_PATH_OVERRIDES` | `pub const TLV_USE_SITE_PATH_OVERRIDES: u8 = 0x00;` | tag-code constant | `tlv.rs:11` |
-| `TLV_FINGERPRINTS` | `pub const TLV_FINGERPRINTS: u8 = 0x01;` | tag-code constant | `tlv.rs:13` |
+| `TLV_USE_SITE_PATH_OVERRIDES`\index{TLV\_USE\_SITE\_PATH\_OVERRIDES} | `pub const TLV_USE_SITE_PATH_OVERRIDES: u8 = 0x00;` | tag-code constant | `tlv.rs:11` |
+| `TLV_FINGERPRINTS`\index{TLV\_FINGERPRINTS} | `pub const TLV_FINGERPRINTS: u8 = 0x01;` | tag-code constant | `tlv.rs:13` |
 | `TLV_PUBKEYS`\index{TLV\_PUBKEYS} | `pub const TLV_PUBKEYS: u8 = 0x02;` | tag-code constant | `tlv.rs:16` |
-| `TLV_ORIGIN_PATH_OVERRIDES` | `pub const TLV_ORIGIN_PATH_OVERRIDES: u8 = 0x03;` | tag-code constant | `tlv.rs:19` |
+| `TLV_ORIGIN_PATH_OVERRIDES`\index{TLV\_ORIGIN\_PATH\_OVERRIDES} | `pub const TLV_ORIGIN_PATH_OVERRIDES: u8 = 0x03;` | tag-code constant | `tlv.rs:19` |
 | `TlvSection`\index{TlvSection} | `pub struct TlvSection { pub use_site_path_overrides: Option<Vec<(u8, UseSitePath)>>, pub fingerprints: Option<Vec<(u8, [u8; 4])>>, pub pubkeys: Option<Vec<(u8, [u8; 65])>>, pub origin_path_overrides: Option<Vec<(u8, OriginPath)>>, pub unknown: Vec<(u8, Vec<u8>, usize)> }` | decoded TLV section. `unknown` preserves unknown TLVs verbatim (D6 forward-compat: a v0.32 decoder round-trips an unknown v0.40 tag without loss) | `tlv.rs:23-39` |
 | `TlvSection::new_empty` | `fn new_empty() -> Self` | empty section (all `None`; `unknown = []`) | `tlv.rs:43` |
 | `TlvSection::is_empty` | `fn is_empty(&self) -> bool` | true iff every field is `None`/empty | `tlv.rs:57` |
@@ -347,8 +347,8 @@ Use-site-path-decl block (SPEC §3.5; `use_site_path.rs`).
 | `UseSitePath::standard_multipath` | `fn standard_multipath() -> Self` | the dominant `<0;1>/*` shape | `use_site_path.rs:58` |
 | `UseSitePath::write` | `fn write(&self, w: &mut BitWriter) -> Result<(), Error>` | rejects alt-count ∉ `2..=9` with `AltCountOutOfRange` | `use_site_path.rs:80` |
 | `UseSitePath::read` | `fn read(r: &mut BitReader) -> Result<Self, Error>` | — | `use_site_path.rs:99` |
-| `MIN_ALT_COUNT` | `pub const MIN_ALT_COUNT: usize = 2;` | minimum multipath alt count | `use_site_path.rs:43` |
-| `MAX_ALT_COUNT` | `pub const MAX_ALT_COUNT: usize = 9;` | maximum (3-bit field encoded as count − 2) | `use_site_path.rs:45` |
+| `MIN_ALT_COUNT`\index{MIN\_ALT\_COUNT} | `pub const MIN_ALT_COUNT: usize = 2;` | minimum multipath alt count | `use_site_path.rs:43` |
+| `MAX_ALT_COUNT`\index{MAX\_ALT\_COUNT} | `pub const MAX_ALT_COUNT: usize = 9;` | maximum (3-bit field encoded as count − 2) | `use_site_path.rs:45` |
 
 ### V.1.3.19 `validate`\index{md\_codec::validate}
 
@@ -356,11 +356,11 @@ Decoder-side validations (SPEC §7; `validate.rs`).
 
 | Item | Signature | Semantics | Source |
 |---|---|---|---|
-| `validate_placeholder_usage` | `fn validate_placeholder_usage(root: &Node, n: u8) -> Result<(), Error>` | every `@i ∈ 0..n` referenced; first occurrences ascending | `validate.rs:17` |
-| `validate_multipath_consistency` | `fn validate_multipath_consistency(shared: &UseSitePath, overrides: &[(u8, UseSitePath)]) -> Result<(), Error>` | all multipath groups share alt-count | `validate.rs:117` |
-| `validate_tap_script_tree` | `fn validate_tap_script_tree(node: &Node) -> Result<(), Error>` | tap-tree leaves restricted (no `Wpkh\|Tr\|Wsh\|Sh\|Pkh\|Multi\|SortedMulti`) | `validate.rs:141` |
-| `validate_explicit_origin_required` | `fn validate_explicit_origin_required(d: &Descriptor) -> Result<(), Error>` | when `canonical_origin(&d.tree).is_none()`, every `@N` needs an explicit non-empty origin | `validate.rs:182` |
-| `validate_xpub_bytes` | `fn validate_xpub_bytes(d: &Descriptor) -> Result<(), Error>` | every `Pubkeys` entry's 33-byte compressed pubkey field parses as a valid secp256k1 point | `validate.rs:216` |
+| `validate_placeholder_usage`\index{validate\_placeholder\_usage} | `fn validate_placeholder_usage(root: &Node, n: u8) -> Result<(), Error>` | every `@i ∈ 0..n` referenced; first occurrences ascending | `validate.rs:17` |
+| `validate_multipath_consistency`\index{validate\_multipath\_consistency} | `fn validate_multipath_consistency(shared: &UseSitePath, overrides: &[(u8, UseSitePath)]) -> Result<(), Error>` | all multipath groups share alt-count | `validate.rs:117` |
+| `validate_tap_script_tree`\index{validate\_tap\_script\_tree} | `fn validate_tap_script_tree(node: &Node) -> Result<(), Error>` | tap-tree leaves restricted (no `Wpkh\|Tr\|Wsh\|Sh\|Pkh\|Multi\|SortedMulti`) | `validate.rs:141` |
+| `validate_explicit_origin_required`\index{validate\_explicit\_origin\_required} | `fn validate_explicit_origin_required(d: &Descriptor) -> Result<(), Error>` | when `canonical_origin(&d.tree).is_none()`, every `@N` needs an explicit non-empty origin | `validate.rs:182` |
+| `validate_xpub_bytes`\index{validate\_xpub\_bytes} | `fn validate_xpub_bytes(d: &Descriptor) -> Result<(), Error>` | every `Pubkeys` entry's 33-byte compressed pubkey field parses as a valid secp256k1 point | `validate.rs:216` |
 
 `encode_payload` runs the first three; `decode_payload` runs all five.
 
