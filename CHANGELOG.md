@@ -6,6 +6,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## tech-manual [0.3.0] — 2026-05-11
+
+Part IV added — bundle formation end-to-end. 145pp PDF (was 119pp at v0.2 close, +26pp). Tag `tech-manual-v0.3.0`.
+
+### Added
+
+- **Part IV — Bundle formation** (3 chapters):
+  - **§IV.1 Bundle anatomy.** Three-card layout (md1 wallet policy + N mk1 xpub records + 0..N ms1 secret records); five `BundleMode` variants (`SingleSigFull` / `SingleSigWatchOnly` / `MultisigMultiSource` / `MultisigWatchOnly` / `MultisigHybrid`) auto-detected by `detect_bundle_mode`; `BundleJson` schema-version-4 envelope (`MkField` discriminated union, `MultisigInfo` block, dense-`MsField` with `""` sentinels for watch-only slots); unified engraving-card layout (SPEC §5.5); `VerifyCheck` per-row forensic-fields. Includes 2 mermaid figures (bundle creation pipeline + bundle verification pipeline). Worked example: BIP-84 abandon-mnemonic single-sig bundle with paired bundle / verify-bundle transcripts.
+  - **§IV.2 Anti-collision invariants.** Five invariants policing bundle integrity: (1) shared `chunk_set_id` prefix — md1 prints 16 bits / 4 hex; ms1/mk1 print 20 bits / 5 hex; leading 16 bits agree across all three cards from one bundle; (2) multiset `md1_xpub_match` (sort-then-compare on `Vec<[u8; 65]>` with multiplicity, multisig path only — single-sig uses `.first()` comparison via `emit_md1_checks`); (3) four-case ms1 short-circuit table (watch-only / full-decodes / full-malformed / full-absent) with byte-exact `decode_error` strings; (4) mk1 cosigner-mapping diagnostic (`NotSupplied` / `DecodeFailed` / `XpubNotInPolicy`) with `XpubNotInPolicy > DecodeFailed > NotSupplied` precedence; (5) BIP-388 distinct-key enforcement — typed `DerivationPath` equality folding `h` ↔ `'` per SPEC v0.5 §4.11.b deliberate reversal. Documents the live template-mode vs. descriptor-mode bifurcation in `(xpub, path_raw)` raw-string check vs. typed-`(xpub, DerivationPath)` check. Worked example: a 2-of-2 wsh-sortedmulti bundle with both slots resolving to the same `(xpub, path)` aborts at synthesis with byte-exact `error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)`.
+  - **§IV.3 Future shares.** v0.1 → v0.2-shares migration contract locked across all three formats. ms1's four-invariant contract (reserved-prefix byte, prefix-byte grouping discriminator, encoder anti-collision against `RESERVED_TAG_TABLE`, API back-compat via `encode_shares(tag, Threshold::ZERO, &[p])` wire-bit-identical to v0.1 `encode(tag, &p)`). mk1 and md1 v0.2-shares outlook (chunked-card framing leaves room for threshold + share-index header bits; GF(32) interpolation primitive needs to be implemented for HRP-`mk` / HRP-`md` forked-BCH plumbing, since these are NOT codex32 and `rust-codex32 v0.1.0`'s `interpolate_at` doesn't generalize directly). Why ms1 ships first: BIP-93 §"Generating Shares" prescribes the algorithm; migration contract already locked at v0.1 emission; highest-value use case (single-point-of-compromise resolution).
+- **Worked-example transcripts** (3 new):
+  - `mnemonic-bundle-bip84-abandon` — full single-sig BIP-84 bundle emission with multi-section stdout + engraving-card stderr + secret-on-stdout warning.
+  - `mnemonic-verify-bundle-bip84-abandon` — 10-line `ok` log against the v0.3.0 bundle.
+  - `mnemonic-bundle-bip388-collision` — 2-of-2 distinct-key violation, exit 2.
+- **Back-matter accretion**:
+  - Glossary: +16 entries (57 → 73; SPEC §7 A4 v1.0 target ≥80).
+  - Index table: +41 rows (159 → 200; SPEC §7 A5 v1.0 target ≥250).
+  - BIP cross-reference: extended existing rows for BIP-32, BIP-39, BIP-84, BIP-93, BIP-388, BIP-389 with §IV.* citations.
+  - Release-history row for `tech-manual-v0.2.0` (per user directive, this table tracks only the manual's own cuts).
+- **cspell**: new word allow-list entries (`subkeys`, `multiset`, `miscategorized`, `misgrouped`, `unmappable`).
+
+### Notable corrections folded inline during the cut
+
+- Phase 3.1: stdout `2` vs `4` `schema_version` corrected (chapter inherited a v0.2 doc-comment value that lagged HEAD's `"4"` emit at `cmd/bundle.rs:572`); md1 4-hex vs mk1/ms1 5-hex `chunk_set_id` asymmetry made explicit; `synthesize.rs:593-725` line range corrected from inverted `:725-593`.
+- Phase 3.2: `cs[i].path` type corrected from `Option<DerivationPath>` to `DerivationPath` (CosignerKeyInfo struct has it un-wrapped); BIP-388 raw-string vs. typed-equality bifurcation narrowed to the xpub-slot edge case (phrase/entropy slots cannot reach it because template.rs synthesizes its own `'`-notation paths); ms1 Case-3 `decode_error` table clarified as `format!("{:?}", e)` Debug-repr.
+- Phase 3.3: §IV.3 Reason-1 corrected — the chapter originally claimed `rust-codex32 v0.1.0` already exposes a `Codex32String::shares` API for threshold-share generation; it doesn't. The crate's public surface offers only `interpolate_at` (Lagrange-interpolation reconstruction from an existing share set). Share generation is novel implementation work (BIP-93 specifies the math at §"Generating Shares"; only the implementation is new). `Threshold` type call-out in the v0.2 `encode_shares` signature restored.
+- Phase 3.4: BIP cross-reference table errors corrected — BIP-32's §IV.3 → §IV.2; BIP-93's spurious §IV.2 removed; BIP-39's §IV.2 added. Glossary alphabetical sort fixed for 3 entries (`cosigner-mapping diagnostic`, `multiset`, `secret-bearing slot`).
+- Phase 3.5 (final whole-cut): §IV.2 Invariant 2 disclosure that the multiset semantics apply to the multisig path only (single-sig uses `.first()` at `verify_bundle.rs:1280-1355`); release-history v0.3.0 row added; index-table rows for `abandon test mnemonic` and `BIP-389` extended with §IV.1 (Bundle Anatomy) references.
+
+### SPEC §7 acceptance criteria (v0.3 cut)
+
+- **A1 (cumulative)** — bundle anatomy + anti-collision + future shares all covered ✓
+- **A4** — glossary 73 entries (≥72) ✓
+- **A5** — index 200 rows (≥199) ✓
+- **A6** — Pandoc TOC covers Part IV chapters ✓
+- **A8** — 11/11 worked-example transcripts verified by `tests/verify-examples.sh` ✓
+- **A10** — PDF 145pp (≥40pp soft floor) ✓
+- **A11** — `make pdf` reproducible: byte-identical across two clean `SOURCE_DATE_EPOCH=1746921600` builds (SHA256 `b888fcf55c6d4078f9b5d15d9bd2032e50822fbb33918499f2adcfa21b848a11`, 574,086 bytes) ✓
+
+### Open FOLLOWUPS (carried into v0.4)
+
+Two cross-repo entries open in `docs/technical-manual/FOLLOWUPS.md`, both targeting md1 work:
+- `cross-repo md1-wsh-multi-unsorted-integration-test` (filed Phase 2.2).
+- `cross-repo md1-bip49-integration-test` (filed post-v0.2-tag).
+
+Both resolve in lockstep when md1 work next opens. No new FOLLOWUPS filed at this tag time per `feedback_zero_followups_from_release_cycles`.
+
 ## tech-manual [0.2.0] — 2026-05-11
 
 Part III added — address derivation end-to-end. 119pp PDF (was 97pp at v0.1 close, +22pp). Tag `tech-manual-v0.2.0`.

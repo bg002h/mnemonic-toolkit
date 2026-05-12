@@ -7,7 +7,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | Term | Section |
 |---|---|
 | `@N` | [Conventions and Notation](#conventions-and-notation) |
-| `abandon test mnemonic` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `abandon test mnemonic` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address), [Bundle Anatomy](#bundle-anatomy) |
 | `address derivation` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `auto-dispatch` | [md1 Wire Format](#md1-wire-format) |
 | `base58check` | [Network and Addressing](#network-and-addressing) |
@@ -26,7 +26,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `BIP-380` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP-388` | [Introduction](#introduction) |
 | `BIP-388 distinct-key` | [Anti-Collision Invariants](#anti-collision-invariants) |
-| `BIP-389` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `BIP-389` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address), [Bundle Anatomy](#bundle-anatomy) |
 | `BIP-389 multipath` | [Conventions and Notation](#conventions-and-notation) |
 | `BIP-39 entropy` | [ms1 Wire Format](#ms1-wire-format) |
 | `BIP-39 mnemonic` | [ms1 Wire Format](#ms1-wire-format) |

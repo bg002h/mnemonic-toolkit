@@ -142,7 +142,7 @@ The descriptor card. Encodes a BIP-388-style wallet policy. HRP `md`. Library cr
 
 ## md1_xpub_match
 
-The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity (so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))`). Implementation at `verify_bundle.rs:1194-1232`. Defined §IV.2.
+The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity, so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))` (multisig path; single-sig uses `.first()` comparison in `emit_md1_checks` at `verify_bundle.rs:1280-1355` with detail `"65-byte xpub matches expected"`). Multisig implementation at `verify_bundle.rs:1194-1232`. Defined §IV.2.
 
 ## Md1EncodingId
 

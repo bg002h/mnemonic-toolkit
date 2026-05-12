@@ -41,6 +41,8 @@ let pubkeys_match = exp_sorted == act_sorted;
 
 The check fails with `passed: false` and populated forensic fields (`expected` and `actual` set to comma-joined hex; `diff_byte_offset` set to first-differ index). The `detail` text reads `"md1 pubkeys differ from expected set"`.
 
+Single-sig (N=1) uses a separate path: `emit_md1_checks` (`verify_bundle.rs:1280-1355`) compares only the *first* pubkey via `.first()` rather than the full sorted multiset — there is only one cosigner, so multiplicity is vacuous. Its success detail reads `"65-byte xpub matches expected"` (`verify_bundle.rs:1323`); failure detail reads `"md1 xpub differs from expected"`. The multiset semantics described above apply to the multisig path (`emit_multisig_checks`, `verify_bundle.rs:1194`) only.
+
 ## Invariant 3 — Four-case ms1 short-circuit table
 
 \index{ms1 four-case table}Per-cosigner ms1 checks divide into four mutually-exclusive cases per SPEC v0.5 §5.7 (`verify_bundle.rs:956-1040`). The check emits *exactly two* rows per slot: `ms1_decode[i]` and `ms1_entropy_match[i]`. The case-split discriminator is `expected.ms1[i].is_empty()` (watch-only sentinel) combined with whether `supplied.ms1[i]` is present and whether it decodes:
