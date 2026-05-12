@@ -173,6 +173,29 @@ pub fn run<W: Write, E: Write>(
     // `resolve_slots` returns (see template branch below).
     validate_watch_only(&args.slot)?;
 
+    // SPEC §5.1 + FOLLOWUPS `coldcard-master-xpub-plumbing-pending` — the
+    // `master_xpub` slot subkey parses (Phase 1.1) but the resolution
+    // pipeline does not yet plumb it through `ResolvedSlot` / `EmitInputs`,
+    // so the Coldcard generic-JSON top-level `xpub` is unconditionally
+    // omitted. Refuse-on-supply so the user is not silently misled (R1-I2
+    // fold). Other formats SPEC-IGNORE the slot — we accept silently for
+    // them since the per-format contract is "ignored if supplied".
+    let has_master_xpub_slot = args
+        .slot
+        .iter()
+        .any(|s| matches!(s.subkey, crate::slot_input::SlotSubkey::MasterXpub));
+    if has_master_xpub_slot
+        && matches!(args.format, CliExportFormat::Coldcard)
+        && matches!(
+            args.template,
+            Some(CliTemplate::Bip44) | Some(CliTemplate::Bip49) | Some(CliTemplate::Bip84)
+        )
+    {
+        return Err(ToolkitError::BadInput(
+            "--slot @N.master_xpub= is parsed but not yet plumbed through the resolution pipeline to the Coldcard emitter; the SPEC §5.1 conditional top-level `xpub` emission is pending v0.8.2 (tracked by FOLLOWUPS `coldcard-master-xpub-plumbing-pending`). Re-invoke without the master_xpub slot to emit the generic JSON skeleton with top-level `xpub` omitted.".into(),
+        ));
+    }
+
     // SPEC v0.8 §7 — `tr-multi-a` / `tr-sortedmulti-a` require
     // `--taproot-internal-key`. The flag designates the BIP-341 internal key
     // (NUMS or cosigner index) for the canonical `tr(<internal>,multi_a(K,...))`

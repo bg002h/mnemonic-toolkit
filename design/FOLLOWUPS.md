@@ -870,6 +870,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Resolution-extended (v0.8.1 Phase 1):** Coldcard generic JSON skeleton (singlesig bip44/bip49/bip84) + Coldcard multisig text (wsh / sh-wsh, sorted and unsorted) + Blockstream Jade multisig text (byte-identical to Coldcard's, delegated emitter) shipped. New `wallet_export/{coldcard,jade}.rs`. `CliExportFormat::Coldcard` + `CliExportFormat::Jade` variants. `--wallet-name <STRING>` clap flag for formats publishing wallet names (Coldcard generic JSON, Sparrow / Specter / Electrum land in subsequent phases). New slot subkey `@N.master_xpub=` (depth-0 root xpub, optional, watch-only-class). Coverage now 2/8 → 4/8 of the SPEC §11 priority list; Sparrow/Specter/Electrum/Green land in Phases 2-5.
 - **Tier:** `v0.6.2`
 
+### `coldcard-master-xpub-plumbing-pending` — `@N.master_xpub=` slot subkey parses but is dropped before reaching the Coldcard emitter
+
+- **Surfaced:** v0.8.1 Phase 1 R1 reviewer-loop fold (I-2).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs::ResolvedSlot` (carries no `master_xpub` field) + `crates/mnemonic-toolkit/src/wallet_export/mod.rs::EmitInputs` (no field) + `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs:200-204` (hard-codes `xpub: None`).
+- **What:** SPEC §2 + §5.1 ship two normative claims: (a) the slot grammar accepts `@N.master_xpub=<base58>` (shipped in Phase 1.1 via `SlotSubkey::MasterXpub`); (b) the Coldcard generic-JSON top-level `xpub` field is emitted iff `@0.master_xpub=` was supplied (NOT YET shipped). Today (a) holds but (b) doesn't — the slot is parsed, validated against `is_legal_set`, then silently dropped because neither `ResolvedSlot` nor `EmitInputs` carries the field. Phase 1.9.R1 added a refuse-on-supply guard in `cmd::export_wallet::run` so the gap is not silent: passing `--slot @0.master_xpub=...` to `--format coldcard --template bip44|bip49|bip84` now refuses with a pointer at this FOLLOWUPS slug.
+- **Why deferred:** plumbing requires extending `ResolvedSlot` and `synthesize::resolve_slots`, which has cross-cutting impact on `bundle` / `verify-bundle` / `convert`. Phase 1's scope is the per-format emitters, not the slot-resolution pipeline. Defer to v0.8.2 (additive, non-breaking).
+- **Status:** open (refusal guard active; plumbing pending v0.8.2).
+- **Tier:** `v0.8.2`
+
 ### `coldcard-bip86-generic-export-pending-firmware` — `--template bip86 --format coldcard` refuses (BIP-86 not in upstream schema)
 
 - **Surfaced:** v0.8.1 Phase 1 (SPEC R1-I2 reviewer-loop fold).
