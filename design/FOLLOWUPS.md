@@ -867,7 +867,32 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** v0.6.1 was a polish patch for `convert` + `bundle` UX. New subcommand or new bundle flag is its own minor scope. Brainstorm should resolve the format priority list (Bitcoin Core first vs BIP-388 first), the subcommand-vs-flag fork, and whether `range`/`timestamp` defaults need to be configurable.
 - **Status:** `resolved 3821f66`
 - **Resolution:** v0.7 Phase 5 — new `mnemonic export-wallet` subcommand shipped. Bitcoin Core `importdescriptors` JSON (default) + BIP-388 `wallet_policy` JSON. Sparrow / Specter formats stubbed (refuse with v0.8 deferral). `--range` / `--timestamp` / `--bitcoin-core-version` overrides. Watch-only enforced (refuses entropy/phrase slot input). New SPEC `design/SPEC_export_wallet_v0_7.md`.
+- **Resolution-extended (v0.8.1 Phase 1):** Coldcard generic JSON skeleton (singlesig bip44/bip49/bip84) + Coldcard multisig text (wsh / sh-wsh, sorted and unsorted) + Blockstream Jade multisig text (byte-identical to Coldcard's, delegated emitter) shipped. New `wallet_export/{coldcard,jade}.rs`. `CliExportFormat::Coldcard` + `CliExportFormat::Jade` variants. `--wallet-name <STRING>` clap flag for formats publishing wallet names (Coldcard generic JSON, Sparrow / Specter / Electrum land in subsequent phases). New slot subkey `@N.master_xpub=` (depth-0 root xpub, optional, watch-only-class). Coverage now 2/8 → 4/8 of the SPEC §11 priority list; Sparrow/Specter/Electrum/Green land in Phases 2-5.
 - **Tier:** `v0.6.2`
+
+### `coldcard-bip86-generic-export-pending-firmware` — `--template bip86 --format coldcard` refuses (BIP-86 not in upstream schema)
+
+- **Surfaced:** v0.8.1 Phase 1 (SPEC R1-I2 reviewer-loop fold).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_generic_json`.
+- **What:** Coldcard's canonical `generic-wallet-export.md` (upstream master) documents only `bip44` / `bip49` / `bip84` sub-objects. BIP-86 (P2TR singlesig) has no slot in the schema. The toolkit refuses `--template bip86 --format coldcard` with the SPEC §5.1 byte-exact pointer until Coldcard firmware extends the schema. Workaround: use `--format bitcoin-core` (descriptor passthrough) or `--format sparrow` (native P2TR support).
+- **Status:** open (pending Coldcard firmware).
+- **Tier:** `v1+`
+
+### `coldcard-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format coldcard`
+
+- **Surfaced:** v0.8.1 Phase 1.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_multisig_text`.
+- **What:** Coldcard's multisig text emitter ingests only `P2WSH` / `P2SH-P2WSH` / `P2SH` formats per the SPEC §5.2 `Format` field. Taproot-multisig (tr-multi-a / tr-sortedmulti-a) is not in the firmware's import surface. The toolkit refuses with a pointer at `--format bitcoin-core` (descriptor) / `--format sparrow` for taproot multisig watch-only setup. Companion: Jade has the same gap (`jade-tr-multi-a-pending-firmware` below).
+- **Status:** open (pending Coldcard firmware taproot-multisig support).
+- **Tier:** `v1+`
+
+### `jade-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format jade`
+
+- **Surfaced:** v0.8.1 Phase 1.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/jade.rs::JadeEmitter::emit`.
+- **What:** Blockstream Jade's `register_multisig.multisig_file` accepts the Coldcard §5.2 multisig text shape; taproot multisig is not yet in that surface. The toolkit refuses with a pointer at `--format bitcoin-core` / `--format sparrow` for taproot multisig. Companion: `coldcard-tr-multi-a-pending-firmware` above (Jade shares the schema; once Coldcard ships, Jade follows).
+- **Status:** open (pending Blockstream Jade firmware taproot-multisig support).
+- **Tier:** `v1+`
 
 ### `electrum-non-latin-wordlists` — Electrum native seed format hard-codes the English wordlist
 
