@@ -1,0 +1,14 @@
+{
+  "chain": "BTC",
+  "xfp": "5436D724",
+  "xpub": "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8",
+  "account": 0,
+  "bip84": {
+    "name": "p2wpkh",
+    "deriv": "m/84'/0'/0'",
+    "xfp": "127EA0E6",
+    "xpub": "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9",
+    "_pub": "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S",
+    "first": "bc1qzmtrqsfuaf6l6kkcsseumq26ukaphfj9skkug6"
+  }
+}

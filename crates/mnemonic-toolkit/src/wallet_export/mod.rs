@@ -348,6 +348,12 @@ pub(crate) struct EmitInputs<'a> {
     /// signing rule (UX rationale per SPEC §13 missing-threshold-refusal
     /// fixture row).
     pub threshold_user_supplied: bool,
+    /// v0.8.2 SPEC §5.1 — depth-0 master xpub for slot @0 (`@0.master_xpub=`),
+    /// when supplied. Consumed by `--format coldcard` singlesig emitter to
+    /// populate the top-level `xpub` field; silently ignored by other
+    /// formats (per the per-format ignored-input contract). `None` when the
+    /// slot subkey was absent.
+    pub master_xpub_at_0: Option<bitcoin::bip32::Xpub>,
     /// Resolved wallet name. For the template path, falls back to
     /// `<template-human-name>-<account>` when `--wallet-name` is absent;
     /// for the descriptor path, falls back to `"imported-descriptor"`.

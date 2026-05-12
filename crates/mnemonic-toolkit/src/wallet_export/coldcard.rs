@@ -210,13 +210,10 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
         chain: chain_string(inputs.network),
         xfp: slot.fingerprint.to_string().to_uppercase(),
         // SPEC §5.1: top-level xpub emitted iff @0.master_xpub= was supplied.
-        // The `cmd::export_wallet::run` guard (FOLLOWUPS
-        // `coldcard-master-xpub-plumbing-pending`) refuses before this point
-        // when `master_xpub` is supplied for singlesig templates, so `None`
-        // here is correct under the current dispatch invariant. v0.8.2 will
-        // lift the guard and plumb `MasterXpub` through
-        // `ResolvedSlot` / `EmitInputs` to populate this field conditionally.
-        xpub: None,
+        // v0.8.2 plumbing (FOLLOWUPS `coldcard-master-xpub-plumbing-pending`,
+        // now resolved): `inputs.master_xpub_at_0` is `Some(Xpub)` when the
+        // user supplied `--slot @0.master_xpub=<base58>`, `None` otherwise.
+        xpub: inputs.master_xpub_at_0.as_ref().map(|x| x.to_string()),
         account: inputs.account,
         bip44: matches!(sub_slot, ColdcardSubSlot::Bip44).then(|| sub_clone(&sub)),
         bip49: matches!(sub_slot, ColdcardSubSlot::Bip49).then(|| sub_clone(&sub)),

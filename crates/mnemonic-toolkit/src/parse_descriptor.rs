@@ -1153,6 +1153,7 @@ fn push_binding(
         path,
         path_raw,
         entropy: None,
+        master_xpub: None,
     });
 }
 

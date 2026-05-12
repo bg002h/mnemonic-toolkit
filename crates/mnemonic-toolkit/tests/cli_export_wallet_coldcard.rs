@@ -45,6 +45,15 @@ const FIXTURE_REFUSAL_BIP86: &str =
     "tests/export_wallet/coldcard_refusal_bip86.stderr";
 const FIXTURE_REFUSAL_TR_MULTI_A: &str =
     "tests/export_wallet/coldcard_refusal_tr_multi_a.stderr";
+const FIXTURE_BIP84_WITH_MASTER_XPUB: &str =
+    "tests/export_wallet/coldcard_generic_bip84_mainnet_with_master_xpub.json";
+
+/// BIP-32 spec test vector 1 master xpub (depth-0). Used here only as a
+/// known-valid base58check xpub for the `@0.master_xpub=` plumbing test;
+/// the emitter does not cross-validate that the master xpub and the
+/// account xpub derive from the same seed, so any valid depth-0 xpub is
+/// acceptable input.
+const BIP32_VEC1_MASTER_XPUB: &str = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
 
 // Phase 1.4 multisig vectors (BIP-48 wsh, m/48'/0'/0'/2').
 // Cosigner A + B from cli_export_wallet.rs's existing fixtures.
@@ -237,6 +246,87 @@ fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
     assert_eq!(
         stdout, expected,
         "Coldcard 2-of-3 wsh-sortedmulti multisig text must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+}
+
+/// SPEC §5.1 v0.8.2 — `@0.master_xpub=` slot subkey now plumbs through
+/// `ResolvedSlot.master_xpub` → `EmitInputs.master_xpub_at_0` → Coldcard
+/// generic JSON top-level `xpub` field (conditional emission per SPEC §5.1).
+/// Validates the resolution of FOLLOWUPS `coldcard-master-xpub-plumbing-pending`.
+#[test]
+fn cell_8_coldcard_master_xpub_plumbing_byte_exact() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP84_MAINNET_ZPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_24_MASTER_FP}"),
+            "--slot",
+            &format!("@0.master_xpub={BIP32_VEC1_MASTER_XPUB}"),
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let expected =
+        std::fs::read_to_string(FIXTURE_BIP84_WITH_MASTER_XPUB).expect(FIXTURE_BIP84_WITH_MASTER_XPUB);
+    assert_eq!(
+        stdout, expected,
+        "Coldcard BIP-84 with master_xpub supplied must emit top-level xpub field byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+    // Structural invariant: the top-level `xpub` field is present iff
+    // master_xpub was supplied. cell_1 (master_xpub absent) verifies the
+    // opposite case.
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        json["xpub"].is_string(),
+        "Top-level xpub field must be a string when @0.master_xpub= is supplied"
+    );
+    assert_eq!(
+        json["xpub"].as_str().unwrap(),
+        BIP32_VEC1_MASTER_XPUB,
+        "Top-level xpub must be the user-supplied master_xpub verbatim"
+    );
+}
+
+/// SPEC §5.1 v0.8.2 — when `@0.master_xpub=` is NOT supplied (the default
+/// case exercised by cell_1), the top-level `xpub` field is omitted from
+/// the JSON object. Verifies the absence-side of the conditional.
+#[test]
+fn cell_9_coldcard_master_xpub_absent_omits_top_level_xpub() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP84_MAINNET_ZPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_24_MASTER_FP}"),
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        json.get("xpub").is_none(),
+        "Top-level xpub field must be omitted when @0.master_xpub= is NOT supplied"
     );
 }
 

@@ -453,6 +453,7 @@ fn descriptor_mode_verify_run<W: Write>(
             path: slot.path.clone(),
             path_raw: slot.path_raw.clone(),
             entropy: slot.entropy.clone(),
+            master_xpub: slot.master_xpub,
         });
         if i == 0 {
             entropy_at_0 = slot.entropy.clone();

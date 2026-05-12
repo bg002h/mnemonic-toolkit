@@ -327,6 +327,7 @@ pub(crate) fn resolve_slots(
                 path: acc.account_path,
                 path_raw,
                 entropy: Some(acc.entropy),
+                master_xpub: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
@@ -371,12 +372,31 @@ pub(crate) fn resolve_slots(
                     (dp, raw)
                 }
             };
+            // v0.8.2 SPEC §5.1 — parse the optional `@N.master_xpub=` subkey
+            // into a depth-0 Xpub. Only emitted by `--format coldcard`
+            // singlesig (other formats silently ignore the slot per the
+            // per-format ignored-input contract).
+            let master_xpub = match slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::MasterXpub)
+            {
+                Some(m) => {
+                    let (mx_str, _variant) =
+                        crate::slip0132::normalize_xpub_prefix(&m.value)?;
+                    let mx = bitcoin::bip32::Xpub::from_str(&mx_str).map_err(|e| {
+                        ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+                    })?;
+                    Some(mx)
+                }
+                None => None,
+            };
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
                 path,
                 path_raw,
                 entropy: None,
+                master_xpub,
             });
         } else if subkeys.contains(&SlotSubkey::Entropy) {
             // K.1: {entropy} — byte-identical to phrase resolution for the same
@@ -403,6 +423,7 @@ pub(crate) fn resolve_slots(
                 path: acc.account_path,
                 path_raw,
                 entropy: Some(entropy_bytes),
+                master_xpub: None,
             });
         } else if subkeys.contains(&SlotSubkey::Wif) {
             // K.3 (v0.4.2) + R (v0.4.3): {wif} — degenerate single-key. Parse
@@ -444,6 +465,7 @@ pub(crate) fn resolve_slots(
                 path: DerivationPath::default(),
                 path_raw: String::new(),
                 entropy: None,
+                master_xpub: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xprv) {
             // K.2: {xprv} — REJECTED in v0.4.2 per impl plan r1 review C-1.
@@ -956,6 +978,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             path,
             path_raw,
             entropy: ent_opt.clone(),
+            master_xpub: None,
         });
         if idx == 0 {
             entropy_at_0 = ent_opt;
@@ -1001,6 +1024,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             path: c.path.clone(),
             path_raw: c.path_raw.clone(),
             entropy: if i == 0 { entropy_at_0.clone() } else { None },
+            master_xpub: None,
         })
         .collect();
 

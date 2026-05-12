@@ -168,28 +168,11 @@ pub fn run<W: Write, E: Write>(
     // `resolve_slots` returns (see template branch below).
     validate_watch_only(&args.slot)?;
 
-    // SPEC §5.1 + FOLLOWUPS `coldcard-master-xpub-plumbing-pending` — the
-    // `master_xpub` slot subkey parses (Phase 1.1) but the resolution
-    // pipeline does not yet plumb it through `ResolvedSlot` / `EmitInputs`,
-    // so the Coldcard generic-JSON top-level `xpub` is unconditionally
-    // omitted. Refuse-on-supply so the user is not silently misled (R1-I2
-    // fold). Other formats SPEC-IGNORE the slot — we accept silently for
-    // them since the per-format contract is "ignored if supplied".
-    let has_master_xpub_slot = args
-        .slot
-        .iter()
-        .any(|s| matches!(s.subkey, crate::slot_input::SlotSubkey::MasterXpub));
-    if has_master_xpub_slot
-        && matches!(args.format, CliExportFormat::Coldcard)
-        && matches!(
-            args.template,
-            Some(CliTemplate::Bip44) | Some(CliTemplate::Bip49) | Some(CliTemplate::Bip84)
-        )
-    {
-        return Err(ToolkitError::BadInput(
-            "--slot @N.master_xpub= is parsed but not yet plumbed through the resolution pipeline to the Coldcard emitter; the SPEC §5.1 conditional top-level `xpub` emission is pending v0.8.2 (tracked by FOLLOWUPS `coldcard-master-xpub-plumbing-pending`). Re-invoke without the master_xpub slot to emit the generic JSON skeleton with top-level `xpub` omitted.".into(),
-        ));
-    }
+    // v0.8.2 SPEC §5.1 — `master_xpub` slot subkey is now plumbed through
+    // `ResolvedSlot.master_xpub` and surfaced on `EmitInputs.master_xpub_at_0`
+    // for the Coldcard generic-JSON emitter. The Phase 1.9 refuse-on-supply
+    // guard is retired. Other formats silently ignore the subkey per the
+    // per-format ignored-input contract.
 
     // SPEC v0.8 §7 — `tr-multi-a` / `tr-sortedmulti-a` require
     // `--taproot-internal-key`. The flag designates the BIP-341 internal key
@@ -367,6 +350,12 @@ pub fn run<W: Write, E: Write>(
         },
     };
 
+    // v0.8.2 SPEC §5.1 — master_xpub plumbing. Surface @0.master_xpub= into
+    // `EmitInputs.master_xpub_at_0` when slot 0 carries one (other slots'
+    // master_xpub fields are not consumed by any current emitter, but
+    // ResolvedSlot retains them for future per-cosigner needs).
+    let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
+
     let inputs = EmitInputs {
         canonical_descriptor: &canonical,
         resolved_slots: resolved_slots_ref,
@@ -382,6 +371,7 @@ pub fn run<W: Write, E: Write>(
         range: args.range,
         timestamp: args.timestamp.0,
         bitcoin_core_version: args.bitcoin_core_version,
+        master_xpub_at_0,
     };
 
     // SPEC §4 missing-info channel — every emitter exposes a per-format
