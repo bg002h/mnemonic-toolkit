@@ -21,6 +21,10 @@ const FIXTURE_JADE_MULTISIG_2OF3_WSH: &str =
     "tests/export_wallet/jade_multisig_2of3_wsh.txt";
 const FIXTURE_COLDCARD_MULTISIG_2OF3_WSH: &str =
     "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
+const FIXTURE_JADE_REFUSAL_SINGLESIG: &str =
+    "tests/export_wallet/jade_refusal_singlesig.stderr";
+const FIXTURE_JADE_REFUSAL_TR_MULTI_A: &str =
+    "tests/export_wallet/jade_refusal_tr_multi_a.stderr";
 
 fn run_jade_multisig() -> String {
     let out = Command::cargo_bin("mnemonic")
@@ -163,14 +167,15 @@ fn cell_4_jade_singlesig_refuses_byte_exact() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §6 byte-exact stderr with a SINGLE `error:` prefix. R1-C1 fold:
-    // earlier test used `.contains(...)` which silently passed when the
-    // emitter source double-prefixed the message.
-    let expected = "error: mnemonic export-wallet --format jade emits multisig wallet config only; for singlesig setups Jade reads the seed on-device. Use --format coldcard for a singlesig JSON or --format bitcoin-core for a descriptor.";
+    // SPEC §6 byte-exact stderr with a SINGLE `error:` prefix. Phase 1.11 R1
+    // fold I-4: assertion is now against a pinned `.stderr` fixture (same
+    // shape as the other refusal fixtures) — the earlier inline literal +
+    // `.trim_end()` would silently pass on doubled trailing newlines.
+    let expected =
+        std::fs::read_to_string(FIXTURE_JADE_REFUSAL_SINGLESIG).expect(FIXTURE_JADE_REFUSAL_SINGLESIG);
     assert_eq!(
-        stderr.trim_end(),
-        expected,
-        "Jade singlesig refusal must match SPEC §6 byte-exact (single `error:` prefix).\n--- got ---\n{stderr}"
+        stderr, expected,
+        "Jade singlesig refusal must match SPEC §6 pinned fixture byte-exact (single `error:` prefix).\n--- got ---\n{stderr}\n--- expected ---\n{expected}"
     );
 }
 
@@ -210,8 +215,11 @@ fn cell_5_jade_tr_multi_a_refuses() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("jade-tr-multi-a-pending-firmware"),
-        "Jade tr-multi-a refusal must cite the FOLLOWUPS slug.\n--- got ---\n{stderr}"
+    // Phase 1.11 R1 fold I-4: byte-exact assertion against pinned fixture.
+    let expected = std::fs::read_to_string(FIXTURE_JADE_REFUSAL_TR_MULTI_A)
+        .expect(FIXTURE_JADE_REFUSAL_TR_MULTI_A);
+    assert_eq!(
+        stderr, expected,
+        "Jade tr-multi-a refusal must match SPEC §6 pinned fixture byte-exact (must include FOLLOWUPS slug).\n--- got ---\n{stderr}\n--- expected ---\n{expected}"
     );
 }

@@ -22,6 +22,12 @@ pub(crate) struct JadeEmitter;
 
 impl WalletFormatEmitter for JadeEmitter {
     fn collect_missing(_inputs: &EmitInputs) -> Vec<MissingField> {
+        // Same rationale as `ColdcardEmitter::collect_missing`: the
+        // singlesig + tr-multi-a refusals are surfaced as
+        // `ToolkitError::BadInput` with byte-exact pointer text (more
+        // helpful than the SPEC §4 enum bullet) from inside `emit()`.
+        // Multisig path delegates to `emit_coldcard_multisig_text` whose
+        // input invariants are guaranteed by the upstream dispatch site.
         Vec::new()
     }
 

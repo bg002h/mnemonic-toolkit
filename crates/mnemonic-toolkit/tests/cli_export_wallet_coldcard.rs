@@ -41,6 +41,10 @@ const FIXTURE_BIP44_MAINNET: &str =
     "tests/export_wallet/coldcard_generic_bip44_mainnet.json";
 const FIXTURE_MULTISIG_2OF3_WSH: &str =
     "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
+const FIXTURE_REFUSAL_BIP86: &str =
+    "tests/export_wallet/coldcard_refusal_bip86.stderr";
+const FIXTURE_REFUSAL_TR_MULTI_A: &str =
+    "tests/export_wallet/coldcard_refusal_tr_multi_a.stderr";
 
 // Phase 1.4 multisig vectors (BIP-48 wsh, m/48'/0'/0'/2').
 // Cosigner A + B from cli_export_wallet.rs's existing fixtures.
@@ -175,10 +179,13 @@ fn cell_4_coldcard_bip86_refuses_byte_exact() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    let expected = "--format coldcard does not yet support BIP-86 (P2TR) — Coldcard's generic-wallet-export schema documents only bip44/bip49/bip84. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup.";
-    assert!(
-        stderr.contains(expected),
-        "BIP-86 refusal stderr must contain the SPEC §5.1 pointer.\n--- got ---\n{stderr}"
+    // Phase 1.11 R1 fold I-4: byte-exact assertion against pinned fixture
+    // (was `.contains()` — would silently pass on doubled `error:` prefix or
+    // unexpected trailing whitespace).
+    let expected = std::fs::read_to_string(FIXTURE_REFUSAL_BIP86).expect(FIXTURE_REFUSAL_BIP86);
+    assert_eq!(
+        stderr, expected,
+        "BIP-86 refusal stderr must match SPEC §5.1 pinned fixture byte-exact.\n--- got ---\n{stderr}\n--- expected ---\n{expected}"
     );
 }
 
@@ -270,9 +277,12 @@ fn cell_6_coldcard_tr_multi_a_refuses() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("coldcard-tr-multi-a-pending-firmware"),
-        "tr-multi-a refusal must cite the FOLLOWUPS slug.\n--- got ---\n{stderr}"
+    // Phase 1.11 R1 fold I-4: byte-exact assertion against pinned fixture.
+    let expected =
+        std::fs::read_to_string(FIXTURE_REFUSAL_TR_MULTI_A).expect(FIXTURE_REFUSAL_TR_MULTI_A);
+    assert_eq!(
+        stderr, expected,
+        "Coldcard tr-multi-a refusal must match SPEC §5.2 pinned fixture byte-exact (must include FOLLOWUPS slug).\n--- got ---\n{stderr}\n--- expected ---\n{expected}"
     );
 }
 

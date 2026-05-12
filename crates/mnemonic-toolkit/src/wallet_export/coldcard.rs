@@ -22,10 +22,20 @@ pub(crate) struct ColdcardEmitter;
 
 impl WalletFormatEmitter for ColdcardEmitter {
     fn collect_missing(_inputs: &EmitInputs) -> Vec<MissingField> {
-        // Phase 1.2 placeholder: the singlesig emit path uses only
-        // resolved-slot data that the upstream validators already
-        // guarantee. Future phases that add multisig + bip86 refusal +
-        // missing-fingerprint refusal will populate this.
+        // SPEC §4 missing-info refusals are conceptually the right channel
+        // for "this format does not support this template" — but for
+        // Coldcard the user-facing refusal pointer ("use --format
+        // bitcoin-core / sparrow for taproot watch-only setup") is
+        // substantially more helpful than the generic §4 bullet
+        // ("format_template_compatibility (this format does not represent
+        // the resolved template)"). The per-template incompat refusals are
+        // therefore surfaced as `ToolkitError::BadInput` with byte-exact
+        // pointer text from inside `emit()`. By the time `emit()` runs,
+        // `resolve_slots` has already backfilled per-slot fields (xpub /
+        // fingerprint / path) and the dispatch site has set `threshold`
+        // for multisig, so the genuine per-slot / global missing-info case
+        // is compile-time-impossible. Phase 3 SpecterEmitter is the first
+        // emitter that genuinely populates `MissingField::WalletName`.
         Vec::new()
     }
 
