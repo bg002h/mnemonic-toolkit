@@ -25,6 +25,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `bifurcation (BIP-388 enforcement)` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `binary-only crate` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `bind_descriptor_keys` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `bip388 (format alias)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `BIP-173` | [codex32 and BCH](#codex32-and-bch) |
 | `BIP-32` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP 32 master fingerprint` | [mk1 Wire Format](#mk1-wire-format) |
@@ -44,9 +45,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `BIP-86` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP-93` | [codex32 and BCH](#codex32-and-bch) |
 | `BIP-93 design distance` | [codex32 and BCH](#codex32-and-bch) |
+| `Bitcoin Core (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `BitcoinErrorKind` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `BitReader` | [md-codec Rust API](#md-codec-rust-api) |
 | `BitWriter` | [md-codec Rust API](#md-codec-rust-api) |
+| `Blockstream Green (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Body::KeyArg` | [md1 Wire Format](#md1-wire-format) |
 | `Body (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `Body::MultiKeys` | [md1 Wire Format](#md1-wire-format) |
@@ -95,6 +98,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `CliTemplate::origin_path_str` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `CliTemplate::wrapper_node` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `codex32` | [codex32 and BCH](#codex32-and-bch) |
+| `Coldcard (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `compact-73` | [mk1 Wire Format](#mk1-wire-format) |
 | `compute_md1_encoding_id` | [md-codec Rust API](#md-codec-rust-api) |
 | `compute_wallet_descriptor_template_id` | [md-codec Rust API](#md-codec-rust-api) |
@@ -135,6 +139,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `detect_bundle_mode` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `distinct-key rule` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
+| `Electrum (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `ELECTRUM_SEED_VERSION_PIN` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `encode_5bit_to_string` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_bytecode` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_md1_string` | [md-codec Rust API](#md-codec-rust-api) |
@@ -254,6 +260,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `InspectReport` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `interpolate_at (rust-codex32)` | [Future Shares](#future-shares) |
 | `is_nums` | [md1 Wire Format](#md1-wire-format) |
+| `Jade (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `KeyCard` | [mk1 Wire Format](#mk1-wire-format) |
 | `KeyCard::new` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `key_index` | [md1 Wire Format](#md1-wire-format) |
@@ -441,6 +448,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `SlotCardBlock` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `SlotInput` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `SlotSubkey` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `Sparrow (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `Specter (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `split_into_chunks` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `STANDARD_PATHS` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `standard-path table (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
@@ -472,6 +481,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Tag::Wsh` | [md1 Wire Format](#md1-wire-format) |
 | `tap-leaf miniscript` | [Shape Coverage](#shape-coverage) |
 | `taproot internal key` | [md1 Wire Format](#md1-wire-format) |
+| `TaprootInternalKey` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Tap (script context)` | [Shape Coverage](#shape-coverage) |
 | `TapTree` | [Shape Coverage](#shape-coverage) |
 | `target residue` | [codex32 and BCH](#codex32-and-bch) |

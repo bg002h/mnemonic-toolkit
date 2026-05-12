@@ -28,6 +28,18 @@ The 32-character alphabet introduced by BIP-173 (SegWit addresses) and reused by
 
 A Cargo crate exposing only a `[[bin]]` target with no `[lib]` target and no `src/lib.rs`. `mnemonic-toolkit` v0.8.0 is binary-only — external code cannot `use mnemonic_toolkit::*`; integration goes through the `mnemonic` binary's JSON envelopes (§V.4.5) instead. Library extraction is deferred to v0.9+. Defined §V.4.1.
 
+## bip388 (format alias)
+
+The `--format bip388` selector for `mnemonic export-wallet`, emitting a BIP-388 `wallet_policy` JSON object (vendor-neutral; consumed by hardware wallets that implement BIP-388 natively, such as Ledger). Emitter: `wallet_export/bip388.rs` (`pub(crate)`). Defined §V.4.3.8.
+
+## Bitcoin Core (wallet-export format)
+
+The `--format bitcoin-core` selector for `mnemonic export-wallet`, emitting an `importdescriptors`-compatible JSON array. Emitter: `wallet_export/bitcoin_core.rs` (`pub(crate)`). Defined §V.4.3.8.
+
+## Blockstream Green (wallet-export format)
+
+The `--format green` selector for `mnemonic export-wallet`, emitting Blockstream Green's wallet-import JSON. Emitter: `wallet_export/green.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.3.8.
+
 ## BIP-388
 
 Wallet-policy descriptor templates. The canonical JSON shape (`name`, `description_template`, `keys_info`) exchanged between hardware wallets and coordinators. md1 encodes BIP-388 wallet policies. First cited §I.1.
@@ -84,6 +96,10 @@ BIP-93 — a Bitcoin-tuned 32-character alphabet with a BCH-style checksum and h
 
 mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_number` from the wire (reconstructed at decode time from `origin_path`); preserves `version`, `parent_fingerprint`, `chain_code`, `public_key`. Saves 5 bytes per card vs. BIP-32 serialization. Defined §II.2.
 
+## Coldcard (wallet-export format)
+
+The `--format coldcard` selector for `mnemonic export-wallet`, emitting a Coldcard wallet-import JSON (with master-xpub plumbing for offline-signer flows). Emitter: `wallet_export/coldcard.rs` (`pub(crate)`); shipped in v0.8.1, master-xpub wiring landed in v0.8.2. Defined §V.4.3.8.
+
 ## compute_wallet_policy_id
 
 `md-codec` identity function at `identity.rs:172` that computes a `WalletPolicyId` from a `Descriptor`. Self-canonicalises and self-runs `expand_per_at_n`; renders SHA-256 over canonical template ‖ per-`@N` records (truncated to 16 bytes). Sibling functions `compute_md1_encoding_id` (`identity.rs:39`) and `compute_wallet_descriptor_template_id` (`identity.rs:71`) compute the encoding-id and γ-flavor template-id. Defined §V.1.3.11.
@@ -115,6 +131,14 @@ rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `t
 ## divergent_paths
 
 1-bit flag in the md1 single-string header. `1` = per-`@N` divergent paths declared (one path per placeholder); `0` = one shared path applies to all placeholders. Defined §II.1.
+
+## Electrum (wallet-export format)
+
+The `--format electrum` selector for `mnemonic export-wallet`, emitting an Electrum wallet-file JSON. Emitter: `wallet_export/electrum.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.3.8.
+
+## ELECTRUM_SEED_VERSION_PIN
+
+The `pub const u32 = 17` at `wallet_export/electrum.rs:37` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.3.8.
 
 ## engraving card
 
@@ -151,6 +175,10 @@ The dependency-pinning pattern used by `mnemonic-toolkit` at `crates/mnemonic-to
 ## is_nums
 
 1-bit flag on `Body::Tr` (md1 wire format, v0.30+). When `1`, signals the BIP-341 NUMS H-point as the implicit Taproot internal key (with `key_index` field suppressed entirely on the wire). When `0`, references the placeholder at `key_index` (width `kiw = ⌈log₂(n)⌉`). Defined §II.1.
+
+## Jade (wallet-export format)
+
+The `--format jade` selector for `mnemonic export-wallet`, emitting a Blockstream Jade wallet-import JSON. Emitter: `wallet_export/jade.rs` (`pub(crate)`); shipped in v0.8.2. Defined §V.4.3.8.
 
 ## JSON envelope (toolkit)
 
@@ -308,6 +336,14 @@ The v0.2-shares ms1 read-side invariant: ms1 readers reassembling K-of-N shares 
 
 Alternative BIP-32 extended-key version bytes (`zpub`/`zprv`, `ypub`/`yprv`, `Zpub`/`Yprv`, etc.) that hint at the intended descriptor shape. **Purely cosmetic** — the chain code and pubkey bytes are unchanged; only the leading 4 version bytes differ. md1's `--key @N=...` accepts only the canonical `xpub`/`tpub` family; SLIP-0132 prefixes are normalized via `mnemonic convert`. Discussed §III.3.
 
+## Sparrow (wallet-export format)
+
+The `--format sparrow` selector for `mnemonic export-wallet`, emitting a Sparrow wallet-import JSON. Emitter: `wallet_export/sparrow.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.3.8.
+
+## Specter (wallet-export format)
+
+The `--format specter` selector for `mnemonic export-wallet`, emitting a Specter Desktop wallet-import JSON. Emitter: `wallet_export/specter.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.3.8.
+
 ## Tag::ENTR
 
 ms1's `Tag` constant exposing the `entr` (BIP-39 entropy) type tag (`Tag(*b"entr")`). The only callable `Tag` in v0.1's public API. Defined §II.3.
@@ -323,6 +359,10 @@ The tap-script-tree structure of a taproot output (BIP-341): a hierarchical merk
 ## tap-leaf miniscript
 
 A miniscript fragment embedded as a leaf in a TapTree. Type-checked under the `Tap` script context. Most rust-miniscript miniscript fragments are admissible as tap-leaves; `multi` is rejected (must be `multi_a` under `Tap`). Discussed §III.2.
+
+## TaprootInternalKey
+
+`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs:68` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.3.8.
 
 ## template (md1)
 
@@ -359,6 +399,10 @@ The per-check row struct in verify-bundle's output (`crates/mnemonic-toolkit/src
 ## walker normalisation
 
 md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; saves wire bits on a wrapper that is structurally implied. Defined §II.1.
+
+## wallet-export
+
+The `mnemonic export-wallet` subcommand and its underlying `wallet_export` orchestration module. Emits a vendor-specific watch-only wallet-import artifact (Bitcoin Core / BIP-388 / Coldcard / Electrum / Green / Jade / Sparrow / Specter) from xpub-only slot inputs and a template or descriptor. Refuses secret-bearing inputs (`ExportWalletSecretInput`, exit 2). Defined §V.4.3.8.
 
 ## WalletPolicyId
 
