@@ -31,6 +31,8 @@
     "bijective",
     "rustdoc",
     "upstreamable",
+    "Aneesh",
+    "Karve",
     "impls",
     "serialise",
     "serialised",
@@ -208,6 +210,22 @@
     "ypub",
     "zpub",
     "Ypub",
-    "Zpub"
+    "Zpub",
+    "unconstructed",
+    "varints",
+    "formedness",
+    "multipaths",
+    "Araoz",
+    "Matias",
+    "Alejo",
+    "Fontaine",
+    "Weigl",
+    "Kosakovsky",
+    "Spigler",
+    "Satoshi",
+    "satoshilabs",
+    "Riccardo",
+    "Casatta",
+    "Tolnay"
   ]
 }

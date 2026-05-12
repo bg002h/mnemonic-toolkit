@@ -42,7 +42,7 @@ For a single-sig BIP-84 wallet, a bundle is three cards: one ms1 with the seed e
 
 The four formats share *concept* but not *crate*. Two divergent paths are visible in the diagram above:
 
-- **ms1 → BIP-93 codex32 direct.** The `ms-codec` crate consumes [`rust-codex32`](https://docs.rs/rust-codex32) verbatim and stamps the canonical codex32 BCH polynomial into ms1 strings. There is no forking; ms1's checksum is byte-for-byte identical to what BIP-93 would compute for the same payload + HRP.
+- **ms1 → BIP-93 codex32 direct.** The `ms-codec` crate consumes the [`codex32`](https://docs.rs/codex32) crate (GitHub repo: `rust-codex32`) verbatim and stamps the canonical codex32 BCH polynomial into ms1 strings. There is no forking; ms1's checksum is byte-for-byte identical to what BIP-93 would compute for the same payload + HRP.
 - **md1 + mk1 → forked BCH.** The `md-codec` and `mk-codec` crates use the same BIP-93 BCH generator polynomial as codex32, but each format pins a **distinct non-zero target residue** that the verifier compares against. The HRP (`md` or `mk`) is mixed in via standard BIP-173 HRP expansion (prepended to the polymod input). Two consequences:
   1. A decoder applying the wrong format's target-residue check to a sibling-format string fails the comparison, so cards cannot be confused across formats even if a transcription error happens to land on a sibling format's character set.
   2. Phrases that round-trip under `md` will not round-trip if fed to `mk`, even ignoring payload content, because the polymod output is compared against a different constant per format.
