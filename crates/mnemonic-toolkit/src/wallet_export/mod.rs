@@ -14,11 +14,13 @@
 mod bip388;
 mod bitcoin_core;
 mod coldcard;
+mod jade;
 mod pipeline;
 
 pub(crate) use bip388::{format_bip388_wallet_policy, Bip388Emitter};
 pub(crate) use bitcoin_core::{format_bitcoin_core_importdescriptors, BitcoinCoreEmitter};
 pub(crate) use coldcard::ColdcardEmitter;
+pub(crate) use jade::JadeEmitter;
 pub(crate) use pipeline::{build_descriptor_string, descriptor_to_bip388_wallet_policy};
 
 use crate::error::ToolkitError;
