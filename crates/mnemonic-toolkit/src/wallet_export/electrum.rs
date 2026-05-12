@@ -18,17 +18,22 @@ use crate::slip0132::{apply_xpub_prefix, XpubPrefix};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-/// SPEC v0.8 §9 — pinned Electrum `seed_version` value. `17` is the
-/// long-standing Electrum-2.7+ value for new watch-only standard wallets
-/// and is accepted by Electrum 4.5.x's loader (which walks
-/// `_convert_version_<N>` migrations forward to FINAL_SEED_VERSION = 71).
+/// SPEC v0.8 §9 — pinned Electrum `seed_version` value.
 ///
-/// Phase 4 step 0 — Electrum seed-version spike (`design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`):
-/// the spike has NOT yet run interactively against a current Electrum
-/// install (deferred from the autonomous v0.8.1 cut). The pinned value
-/// `17` is the historically-broadest accept-able value; the spike will
-/// either confirm it or pin to a higher value as needed. Re-pin via a
-/// v0.8.2 patch once the spike report lands.
+/// **Empirically validated** by the Phase 4 step 0 spike (2026-05-12,
+/// Electrum 4.5.5; report: `design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`).
+/// A toolkit-emitted wallet file with `seed_version: 17` loads cleanly via
+/// `electrum --offline -w <file> listaddresses` and Electrum's loader walks
+/// the `_convert_version_<N>` migration chain forward to FINAL_SEED_VERSION
+/// (59 on Electrum 4.5.5; the upstream master drifts higher per FOLLOWUPS
+/// `electrum-final-seed-version-drift`).
+///
+/// Why 17: SPEC §9 specifies "minimum seed_version that current Electrum
+/// imports cleanly". `wallet_db.py:1207` returns any `seed_version >= 12`
+/// directly (with specific rejections only at 14-segwit and 51-insane), so
+/// 17 sits safely above the special-case rejection band. Pinning to 17
+/// (rather than the WRITE-time FINAL_SEED_VERSION) maximizes downstream
+/// compatibility with older Electrum installs.
 pub const ELECTRUM_SEED_VERSION_PIN: u32 = 17;
 
 /// SPEC v0.8 §9 — `WalletFormatEmitter` impl for `--format electrum`.

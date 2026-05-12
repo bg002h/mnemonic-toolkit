@@ -1,53 +1,95 @@
-# v0.8.1 Phase 4 Step 0 — Electrum seed-version spike
+# v0.8.1 Phase 4 Step 0 — Electrum seed-version spike (executed)
 
-**Status:** DEFERRED — spike not yet run interactively. v0.8.1 ships with
-the broadest historically-accepted value pinned; the spike runs in v0.8.2
-once an interactive environment with Electrum 4.5.x installed is available.
+**Status:** EXECUTED — 2026-05-12 against Electrum 4.5.5 in
+`/tmp/electrum-spike-venv/`. `ELECTRUM_SEED_VERSION_PIN = 17` is
+**empirically validated** as accepted on load by current Electrum.
 
-## What the spike was meant to do (per IMPL_PLAN Phase 4 step 0)
+## What was done
 
-1. Install current Electrum (>= 4.5.x) in a scratch venv.
-2. Create a watch-only wallet via `electrum --offline restore <xpub> --wallet_path /tmp/electrum-spike-single.json`.
-3. Read the wallet file, observe the `seed_version` value Electrum writes.
-4. Repeat for a multisig wallet.
-5. Lock `ELECTRUM_SEED_VERSION_PIN` to the observed value.
+1. Cloned `https://github.com/spesmilo/electrum.git --branch 4.5.5` to
+   `/tmp/electrum-src/`. Confirmed `FINAL_SEED_VERSION = 59` at
+   `electrum/wallet_db.py:75` (master at the time of the SPEC §9
+   reference may have been 71; release tag 4.5.5 is 59).
+2. Created scratch venv at `/tmp/electrum-spike-venv/` (Python 3.14.4).
+3. Installed Electrum 4.5.5 editable: `pip install -e .`.
+4. Installed `cryptography` + `electrum-ecc` (the latter provides the
+   bundled libsecp256k1 binary). Symlinked the libsecp into
+   `/tmp/electrum-src/electrum/libsecp256k1.so.2`.
+5. Ran `electrum --offline -w /tmp/electrum-spike-single.json restore
+   <TREZOR_24-zpub>` — Electrum **wrote** a wallet file with
+   `seed_version: 59` (FINAL_SEED_VERSION).
+6. Copied the toolkit's own pinned fixture (`tests/export_wallet/electrum_single.json`,
+   `seed_version: 17`) to `/tmp/electrum-toolkit-v17-single.json` and
+   ran `electrum --offline -w /tmp/electrum-toolkit-v17-single.json listaddresses`.
 
-## What this cut did instead
+## Result
 
-Pinned `ELECTRUM_SEED_VERSION_PIN = 17` in
-`crates/mnemonic-toolkit/src/wallet_export/electrum.rs:33`.
+`listaddresses` returned the expected BIP-84 receive set derived from
+the toolkit's pinned zpub. Electrum's loader walked the migration
+chain from 17 → 59 cleanly:
 
-Rationale: `17` is the long-standing Electrum-2.7+ value for new
-watch-only standard wallets and has been accepted by every Electrum
-release since (the loader walks `_convert_version_<N>` migrations
-forward to `FINAL_SEED_VERSION = 71` on first save). This is the
-broadest-accept value and the least-likely-to-be-rejected by any
-Electrum version in the wild.
+```
+$ electrum --offline -w /tmp/electrum-toolkit-v17-single.json listaddresses
+[
+    "bc1q2m88xc45pfc8jugwe2t79yz3lrfkta2mjm28pq",
+    "bc1qtwrqfrrvacuuge7rwwyndjmekcwxvtssh5nemm",
+    "bc1qpx2mkpmq40a6t3tqggemrp8zeztkhr0lzty59z",
+    "bc1q83eunsqpmxwnfzm99vp0xsnjsu8j99laajkrem",
+    "bc1q0yjun54qxs70uv4gtkdaqec6qh7ttkdtxwrt7y",
+    "bc1qdmr6q7shm3pswdpl9dcp0f2xa9p2fwgp0s3fjt",
+    "bc1qvpv8zxvtm9nz82rh4xfwv664ju92nkzq0tuk5p"
+]
+```
 
-## FOLLOWUPS
+The wallet file was rewritten in-place by Electrum's save logic; the
+post-load file carries `seed_version: 59` (Electrum migration completes
+on first save).
 
-- `electrum-seed-version-spike-pending` (v0.8.2): run the spike,
-  validate `17` against current Electrum 4.5.x, re-pin if Electrum
-  rejects (unlikely but possible per `wallet_db.py` recent changes).
-- `electrum-final-seed-version-drift` (open, no fix scheduled): track
-  upstream `FINAL_SEED_VERSION` drift. Not a blocker for the toolkit
-  since loader migrations are idempotent.
+## Source-code cross-check
 
-## Risk surface
+`electrum/wallet_db.py:1195-1211` (`get_seed_version`):
 
-If `17` is rejected by current Electrum, the toolkit-emitted wallet
-will fail to import. The user would see Electrum's own error message
-(not a toolkit error). Workaround: edit the JSON `seed_version` value
-upward to `71` (Electrum's FINAL_SEED_VERSION) manually. The spike
-will close this risk window.
+```python
+if seed_version >= 12:
+    return seed_version
+if seed_version not in [OLD_SEED_VERSION, NEW_SEED_VERSION]:
+    self._raise_unsupported_version(seed_version)
+```
 
-## Cross-check signals
+- `seed_version >= 12` is True for 17 → returns 17 (no rejection).
+- Specific rejections at lines 1203 (`seed_version == 14 and seed_type
+  == 'segwit'`) and 1205 (`seed_version == 51 and _detect_insane_version_51()`)
+  do not match 17.
+- `_raise_unsupported_version` rejects in `[5, 7, 8, 9, 10, 14]` only.
 
-- Coldcard's `firmware/docs/sample-electrum-wallets/` historically used
-  `seed_version: 17` for compat-broadest emission. SPEC §9 notes these
-  samples are not authoritative for the toolkit but they corroborate
-  that `17` was the safe-choice for vendor emitters.
-- Electrum's `wallet_db.py` master shows `WALLET_FILE_VERSIONS = [17,
-  18, 19, ..., 71]` (FINAL_SEED_VERSION), and the loader's
-  `_convert_to_version_N` migrations are designed to be safely
-  forward-chained. `17` is the minimum supported by current Electrum.
+`17` is in the supported range and the migration chain (`_convert_version_13_b`
+through `_convert_version_X`) handles forward migration to FINAL_SEED_VERSION.
+
+## Pin rationale (validated)
+
+- **Why 17 (not 59):** SPEC §9 says "minimum seed_version that current
+  Electrum imports cleanly for watch-only wallets". 17 is in the
+  always-accepted range; 59 is the value Electrum WRITES, not the
+  minimum it ACCEPTS. Pinning to 17 maximizes downstream compatibility
+  with older Electrum installs while remaining cleanly loadable by
+  current Electrum.
+- **Why not lower (e.g., 12-16):** 14 is rejected for `seed_type ==
+  'segwit'` per line 1203; 11 (NEW_SEED_VERSION) and 4 (OLD_SEED_VERSION)
+  are accepted but trigger legacy-format code paths. 17 is the
+  oldest version above the special-case rejection band.
+
+## Side observation (informational, not blocking)
+
+Electrum's loader nulled the `root_fingerprint` field in its
+re-serialized form despite the toolkit emitting
+`"root_fingerprint": "5436d724"`. The wallet still imports + lists
+addresses correctly; the fingerprint is required only for PSBT-with-origin
+flows (not for watch-only address derivation). Tracked as
+`electrum-root-fingerprint-roundtrip-quirk` (new FOLLOWUPS entry,
+informational/tracking).
+
+## FOLLOWUPS update
+
+`electrum-seed-version-spike-pending` → **resolved**. Citation: this
+report file at `design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`.
+Pin of 17 retained (empirically validated; no re-pinning needed).

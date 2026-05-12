@@ -1067,13 +1067,14 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Resolution:** v0.8 Phase 1 — new `--passphrase-stdin` flag with line-ending-only trim (preserves leading/trailing spaces + internal NULL). Both V3 ignored tests unignored and now active. Phase 1 review I1 added a separate `read_stdin_passphrase` helper distinct from `read_stdin_to_string` to prevent the trim issue.
 - **Tier:** `v0.8`
 
-### `electrum-seed-version-spike-pending` — Phase 4 step 0 interactive spike deferred
+### `electrum-seed-version-spike-pending` — Phase 4 step 0 interactive spike
 
 - **Surfaced:** v0.8.1 Phase 4 (`design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`).
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs:33` — `ELECTRUM_SEED_VERSION_PIN = 17`.
-- **What:** SPEC v0.8 §9 + IMPL_PLAN Phase 4 step 0 mandate an interactive spike against current Electrum (>= 4.5.x) to lock `ELECTRUM_SEED_VERSION_PIN` to a verified-cleanly-imports value. The v0.8.1 cut was produced autonomously without an Electrum install available; the constant is pinned to `17` (the long-standing Electrum-2.7+ broadest-accept value for new watch-only standard wallets) and Electrum's loader walks `_convert_version_<N>` migrations forward to FINAL_SEED_VERSION (=71 on master) on first save. Spike needs to run against current Electrum to confirm `17` is accepted; if not, re-pin upward.
-- **Status:** `open`.
-- **Tier:** `v0.8.2 / autonomous-cycle-deferral`
+- **What:** SPEC v0.8 §9 + IMPL_PLAN Phase 4 step 0 mandate an interactive spike against current Electrum (>= 4.5.x) to lock `ELECTRUM_SEED_VERSION_PIN` to a verified-cleanly-imports value.
+- **Status:** `resolved` (2026-05-12 spike against Electrum 4.5.5).
+- **Resolution:** Spike executed against Electrum 4.5.5 in `/tmp/electrum-spike-venv/`. Empirical result: a toolkit-emitted wallet file with `seed_version: 17` loads cleanly via `electrum --offline -w <file> listaddresses` (returns the expected BIP-84 receive set; Electrum migrates the in-memory state to FINAL_SEED_VERSION=59 on save). Source-code cross-check at `wallet_db.py:1195-1211` confirms `seed_version >= 12 → return seed_version` with no rejection at 17. Pin retained at 17 (the SPEC's "minimum cleanly-imports" specification matches 17; 59 is what Electrum WRITES, not the minimum it ACCEPTS). Full report: `design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`.
+- **Tier:** `v0.8.2`
 
 ### `electrum-tr-multi-a-pending-libsecp-taproot` — `--template tr-multi-a` refuses under `--format electrum`
 
@@ -1087,8 +1088,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 - **Surfaced:** v0.8.1 Phase 4.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` — `ELECTRUM_SEED_VERSION_PIN` doc-comment.
-- **What:** Electrum's `wallet_db.py` `FINAL_SEED_VERSION` constant drifts upward over releases (currently `71` on master). The toolkit pins to a fixed value (`17` per the Phase 4 spike deferral) and relies on Electrum's migration loader to walk forward. Track upstream drift in case the loader ever drops support for old migration paths.
+- **What:** Electrum's `wallet_db.py` `FINAL_SEED_VERSION` drifts upward over releases (4.5.5 = 59; the v0.8.1 SPEC §9 cited 71 from master at SPEC-write time). Toolkit pins to 17 (minimum cleanly-imports) and relies on Electrum's migration loader to walk forward. Track in case the loader ever drops support for old migration paths.
 - **Status:** `open` (no fix scheduled; tracking only).
+- **Tier:** `v1+ / informational`
+
+### `electrum-root-fingerprint-roundtrip-quirk` — Electrum nulls `root_fingerprint` on load
+
+- **Surfaced:** v0.8.1 Phase 4 step 0 spike (2026-05-12, Electrum 4.5.5).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` `emit_electrum_standard_json` + `electrum/keystore.py` `BIP32_KeyStore`.
+- **What:** The toolkit emits `keystore.root_fingerprint` per SPEC §9.1 (e.g., `"5436d724"`). Electrum 4.5.5's loader successfully imports the wallet, derives the correct BIP-84 addresses, but its re-serialized form has `"root_fingerprint": null` — the `_root_fingerprint` private attribute on the in-memory `BIP32_KeyStore` is not populated from the on-disk JSON field. Functionally inert for watch-only address derivation; required only for PSBT-with-origin flows. Likely an Electrum-side bug or intentional drop; cross-check against current master may surface a fix.
+- **Status:** `open` (informational).
 - **Tier:** `v1+ / informational`
 
 ### `green-native-multisig-pending-server-support` — `--format green` refuses multisig
