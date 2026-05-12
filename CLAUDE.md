@@ -21,7 +21,7 @@ When toolkit work surfaces an action item that affects a sibling codec, mirror a
 
 The end-user manual lives at `docs/manual/` in this repo and is the single source of truth for the m-format constellation end-user surface (`mnemonic` / `md` / `ms` / `mk` CLIs). Tagged builds attach a PDF asset to the GitHub release (CI workflow at `.github/workflows/manual.yml`).
 
-Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling-codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`, `mnemonic-key/mk-cli`) — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional `tests/lint.sh flag-coverage` step gates this on every CI run; the manual chapters mirror clap-derive's `--help` output for all four CLIs. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
+Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling-codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`, `mnemonic-key/mk-cli`) — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional flag-coverage check lives at `docs/manual/tests/lint.sh` and is invoked via `make -C docs/manual lint MNEMONIC_BIN=... MD_BIN=... MS_BIN=... MK_BIN=...`; CI calls this from `.github/workflows/manual.yml`. The manual chapters mirror clap-derive's `--help` output for all four CLIs. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
 
 ## Conventions
 
