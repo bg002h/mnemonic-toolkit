@@ -129,8 +129,8 @@ and [Migrating from BIP-39-only to the m-format constellation](#migrating-from-b
 
 ## `mnemonic export-wallet`
 
-Emit watch-only wallet artifacts for Bitcoin Core, BIP-388, Sparrow,
-or Specter.
+Emit watch-only wallet artifacts for Bitcoin Core, BIP-388, Coldcard,
+Blockstream Jade, Sparrow, or Specter.
 
 ### Synopsis
 
@@ -149,12 +149,13 @@ mnemonic export-wallet [OPTIONS]
 | `--network <NETWORK>` | default mainnet |
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
-| `--slot <SLOT>` | repeating `@N.<subkey>=<value>` |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bip388` / `sparrow` / `specter` |
+| `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys refused by `export-wallet`'s watch-only validator) |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `now` (default) or unix seconds |
 | `--bitcoin-core-version <BITCOIN_CORE_VERSION>` | 24 or 25 (default 25) |
+| `--wallet-name <WALLET_NAME>` | wallet name/label for formats that publish one (Coldcard generic JSON, Sparrow, Specter, Electrum); default `<template-human-name>-<account>` |
 | `--taproot-internal-key <TAPROOT_INTERNAL_KEY>` | `nums` or `@N` for `tr-multi-a` / `tr-sortedmulti-a` |
 | `--help` | print help |
 
