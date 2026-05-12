@@ -2,7 +2,7 @@
 
 This is the technical-manual glossary, focused on **wire-format / API / cryptography** terms. End-user-facing concepts (BIP-39 / BIP-32 walkthroughs, multisig UX) live in the end-user manual's glossary at `docs/manual/src/60-appendices/61-glossary.md`.
 
-Entries populate incrementally per cut; the tech-manual-v0.1 seed below tracks what Parts I + II introduce. Section pointers cite the section of first definitional use.
+Entries have accumulated across all five Parts (v0.1 through v1.0). Section pointers cite the section of first definitional use.
 
 ## @N
 
