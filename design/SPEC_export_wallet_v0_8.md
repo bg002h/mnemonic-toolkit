@@ -206,7 +206,7 @@ Format reference: <https://github.com/sparrowwallet/drongo/blob/master/src/main/
 - `masterFingerprint`: lowercase 8-hex (Sparrow convention).
 - `extendedPublicKey`: BIP-32 xpub form (Sparrow refuses SLIP-132 in import path).
 
-Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`): supported by Sparrow as descriptor-passthrough; emit `miniscript.script` directly from canonical descriptor. Rides on existing v0.8 taproot-internal-key flag.
+Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`): supported by Sparrow as descriptor-passthrough; emit `miniscript.script` from the canonical descriptor with the BIP-380 `#<8-char-checksum>` suffix STRIPPED. Sparrow's `defaultPolicy.miniscript.script` field is a bare miniscript policy expression (matching the `wpkh(@0/**)` / `wsh(sortedmulti(K,...))` shape used for every non-taproot template); the checksum is not valid miniscript grammar and Sparrow's policy parser would reject it (Phase 2 R1 fold C-1). Rides on existing v0.8 taproot-internal-key flag.
 
 ## §8 Specter Desktop format (`--format specter`)
 

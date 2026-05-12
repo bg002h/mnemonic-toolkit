@@ -26,6 +26,8 @@ const FIXTURE_MULTI_2OF3_WSH: &str =
     "tests/export_wallet/sparrow_multi_2of3_wsh_sortedmulti.json";
 const FIXTURE_REFUSAL_MISSING_THRESHOLD: &str =
     "tests/export_wallet/sparrow_missing_threshold_refusal.stderr";
+const FIXTURE_TR_MULTI_A_NUMS_2OF3: &str =
+    "tests/export_wallet/sparrow_tr_multi_a_nums_2of3.json";
 
 /// SPEC §7 cell 1 — `--format sparrow --template bip84 --network mainnet`
 /// emits the canonical Sparrow wallet JSON for the BIP-84 mainnet account.
@@ -187,12 +189,15 @@ fn cell_4_sparrow_missing_threshold_refusal_byte_exact() {
 }
 
 /// SPEC §7 cell 5 — Sparrow + tr-multi-a uses descriptor-passthrough for the
-/// miniscript script. Verifies the canonical descriptor appears verbatim in
-/// `defaultPolicy.miniscript.script`, with `scriptType: P2TR` (Sparrow's
-/// enum keeps taproot multisig as P2TR, distinguishing via the descriptor
-/// content itself).
+/// miniscript script. Phase 2 R1 C-1 fold: the `#checksum` suffix is stripped
+/// before placement in `defaultPolicy.miniscript.script` (Sparrow's policy
+/// parser expects a bare miniscript expression, not a BIP-380 descriptor).
+/// Byte-exact assertion against the pinned fixture (R1-I1 fold: the earlier
+/// structural-only rationale was factually incorrect — BIP-380 checksums are
+/// deterministic over fixed xpub inputs and the fixture is perfectly
+/// byte-pinneable).
 #[test]
-fn cell_5_sparrow_tr_multi_a_descriptor_passthrough() {
+fn cell_5_sparrow_tr_multi_a_nums_2of3_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -227,24 +232,20 @@ fn cell_5_sparrow_tr_multi_a_descriptor_passthrough() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    // The miniscript script field should contain the BIP-388 tr() expression
-    // with multi_a() (descriptor-passthrough). Check structural invariants
-    // without pinning byte-exact (the descriptor contents include derived
-    // checksums that change with BIP-32 library updates).
-    assert!(
-        stdout.contains("\"scriptType\": \"P2TR\""),
-        "tr-multi-a must keep scriptType=P2TR (Sparrow's enum)"
+    let expected =
+        std::fs::read_to_string(FIXTURE_TR_MULTI_A_NUMS_2OF3).expect(FIXTURE_TR_MULTI_A_NUMS_2OF3);
+    assert_eq!(
+        stdout, expected,
+        "Sparrow tr-multi-a NUMS 2-of-3 must match fixture byte-exact (with #checksum stripped per C-1).\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
     );
+    // Additional invariant: SPEC §7 says script must NOT include BIP-380
+    // `#checksum` suffix (Sparrow's policy parser would reject it).
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let script = json["defaultPolicy"]["miniscript"]["script"]
+        .as_str()
+        .unwrap();
     assert!(
-        stdout.contains("multi_a("),
-        "tr-multi-a script must contain the BIP-388 multi_a() expression"
-    );
-    assert!(
-        stdout.contains("tr("),
-        "tr-multi-a script must be wrapped in tr()"
-    );
-    assert!(
-        stdout.contains("\"policyType\": \"MULTI\""),
-        "tr-multi-a is multisig"
+        !script.contains('#'),
+        "miniscript.script must NOT include BIP-380 #checksum suffix (Phase 2 R1 C-1); got {script:?}",
     );
 }

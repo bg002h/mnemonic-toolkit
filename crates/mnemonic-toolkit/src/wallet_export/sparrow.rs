@@ -203,10 +203,19 @@ fn build_miniscript_script(
             multi_arg("sortedmulti", inputs, n)?
         )),
         // Taproot multisig: descriptor passthrough per SPEC §7 trailing
-        // paragraph. Sparrow understands BIP-388 tr() with multi_a /
-        // sortedmulti_a directly.
+        // paragraph. Sparrow's `defaultPolicy.miniscript.script` field is a
+        // bare miniscript policy expression (not a BIP-380 descriptor with
+        // checksum) — for every non-taproot template above we emit
+        // `wpkh(@0/**)` / `wsh(sortedmulti(K,...))` with no `#checksum`.
+        // Strip the canonical descriptor's `#<8-char>` suffix before
+        // emitting so the taproot path matches the same shape contract
+        // (Phase 2 R1 fold C-1: keeping the checksum would break Sparrow's
+        // policy parser, which substring-matches on `script` for policy
+        // detection).
         CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => {
-            Ok(inputs.canonical_descriptor.to_string())
+            let desc = inputs.canonical_descriptor;
+            let script = desc.rfind('#').map_or(desc, |pos| &desc[..pos]);
+            Ok(script.to_string())
         }
     }
 }
