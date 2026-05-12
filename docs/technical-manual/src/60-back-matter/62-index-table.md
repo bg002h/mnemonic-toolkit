@@ -110,6 +110,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `MD_REGULAR_CONST` | [codex32 and BCH](#codex32-and-bch) |
 | `m-format constellation` | [Introduction](#introduction) |
 | `mk1` | [mk1 Wire Format](#mk1-wire-format) |
+| `mk1 chunked-card grouping` | [Future Shares](#future-shares) |
 | `MK_LONG_CONST` | [mk1 Wire Format](#mk1-wire-format) |
 | `MK_REGULAR_CONST` | [mk1 Wire Format](#mk1-wire-format) |
 | `MkField` | [Bundle Anatomy](#bundle-anatomy) |
@@ -143,6 +144,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Pubkeys TLV` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `regular code` | [codex32 and BCH](#codex32-and-bch) |
 | `reserved-prefix byte (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
+| `reserved-prefix byte (v0.2)` | [Future Shares](#future-shares) |
 | `RESERVED_TAG_TABLE` | [ms1 Wire Format](#ms1-wire-format) |
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
 | `script (BIP-388)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -153,6 +155,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `sh(multi)` | [Shape Coverage](#shape-coverage) |
 | `sh(wpkh)` | [Shape Coverage](#shape-coverage) |
 | `SHA-256` | [md1 Wire Format](#md1-wire-format) |
+| `share-set grouping` | [Future Shares](#future-shares) |
 | `single-string header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `SingleSigFull` | [Bundle Anatomy](#bundle-anatomy) |
 | `SingleSigWatchOnly` | [Bundle Anatomy](#bundle-anatomy) |
@@ -188,6 +191,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Unshared Secret form` | [ms1 Wire Format](#ms1-wire-format) |
 | `use-site path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `use-site-path declaration` | [md1 Wire Format](#md1-wire-format) |
+| `v0.1 → v0.2-shares migration` | [Future Shares](#future-shares) |
 | `verify-bundle` | [Bundle Anatomy](#bundle-anatomy) |
 | `VerifyCheck` | [Bundle Anatomy](#bundle-anatomy) |
 | `walker normalisation` | [md1 Wire Format](#md1-wire-format) |
