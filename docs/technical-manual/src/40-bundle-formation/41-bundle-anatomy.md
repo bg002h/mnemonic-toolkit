@@ -84,7 +84,7 @@ flowchart TD
   classDef e fill:#e9d5ff,stroke:#6b21a8,stroke-width:2px,color:#000
 ```
 
-The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry per slot, carrying `xpub`, `fingerprint`, `path`, and optional `entropy`; `synthesize.rs:568-582`) and emits a `Bundle { ms1, mk1, md1 }`. The five bundle modes converge on the same synthesis core; mode-specific logic is confined to slot resolution (extracting an xpub from a phrase, or accepting an xpub verbatim) and to the dense `ms1` field's `""` empty-string sentinels for watch-only positions (`format.rs:42-54`).
+The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry per slot, carrying `xpub`, `fingerprint`, `path`, `path_raw` (the user-supplied raw path string preserved for SPEC §4.11.b raw-equality), and optional `entropy`; `synthesize.rs:568-582`) and emits a `Bundle { ms1, mk1, md1 }`. The five bundle modes converge on the same synthesis core; mode-specific logic is confined to slot resolution (extracting an xpub from a phrase, or accepting an xpub verbatim) and to the dense `ms1` field's `""` empty-string sentinels for watch-only positions (`format.rs:42-54`).
 
 ## The bundle JSON envelope
 
@@ -109,13 +109,13 @@ The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry
 
 \index{MkField}The `MkField` enum at `format.rs:64-70` is serialized with `#[serde(untagged)]`: the JSON output is a bare array (single-sig: `["mk1...", "mk1..."]`) or array-of-arrays (multisig: `[["mk1...", "..."], ["mk1...", "..."], ...]` with one outer entry per cosigner). The discriminator lives in the sibling `multisig` field — `None` → flat, `Some` → nested. Consumers MUST branch on `multisig` before deserializing `mk1`.
 
-\index{ms1 dense layout}The `ms1` field's **dense length-N layout** (`format.rs:42-54`) is the v0.4 simplification: the slot index `i` in `ms1[i]` corresponds to `mk1[i]` and to the slot `@i` indexed in `BundleJson.multisig.cosigners`. An empty string at position `i` marks slot `@i` as watch-only; verify-bundle's `emit_verify_checks` discriminates on `expected.ms1[i].is_empty()` (`verify_bundle.rs:621`) and emits `passed: true, decode_error: Some("skipped: watch-only slot")` for both ms1 checks at that position (`verify_bundle.rs:623-637`). Both `["ms1abc..."]` (single-sig full) and `[""]` (single-sig watch-only) are legal at N=1.
+\index{ms1 dense layout}The `ms1` field's **dense length-N layout** (`format.rs:42-54`) is the v0.4 simplification: the slot index `i` in `ms1[i]` corresponds to `mk1[i]` and to the slot `@i` indexed in `BundleJson.multisig.cosigners`. An empty string at position `i` marks slot `@i` as watch-only; verify-bundle's `emit_verify_checks` discriminates on `expected.ms1.first().map(|s| s.is_empty())` in the single-sig arm (`verify_bundle.rs:621`) and emits `passed: true, decode_error: Some("skipped: watch-only slot")` for both ms1 checks (`verify_bundle.rs:623-637`). The per-cosigner indexed equivalent for multisig lives in `emit_multisig_checks`. Both `["ms1abc..."]` (single-sig full) and `[""]` (single-sig watch-only) are legal at N=1.
 
 The `MultisigInfo`\index{MultisigInfo} block at `format.rs:103-111` is the lookup-table consumers use to reassemble a wallet from a JSON envelope: it carries the `template` name, the `threshold` K, `cosigner_count` N, the `path_family` string (`"bip48"` or `"bip87"`), and a `Vec<CosignerEntry>` (one entry per slot, holding `index`, `master_fingerprint` (None under privacy mode), `origin_path`, `xpub`). The `cosigners` ordering matches slot indices `@0..@N-1`.
 
 ## The engraving card
 
-\index{engraving card}The engraving card is a stderr-only emission designed for physical alignment when stamping plates. Its shape is fixed (SPEC §5.5) and produced by `engraving_card_unified` at `format.rs:259-376` from a `BundleInputForCard` (`format.rs:222-233`). The card is **not** machine-readable; verify-bundle does not consume it. It is the human's index card to the physical bundle, identifying each plate by its 4-hex `chunk_set_id`.
+\index{engraving card}The engraving card is a stderr-only emission designed for physical alignment when stamping plates. Its shape is fixed (SPEC §5.5) and produced by `engraving_card_unified` at `format.rs:259-376` from a `BundleInputForCard` (`format.rs:222-233`). The card is **not** machine-readable; verify-bundle does not consume it. It is the human's index card to the physical bundle, identifying each plate by its `chunk_set_id` (4 hex chars for md1, 5 hex chars for mk1/ms1 — see the chunk_set_id paragraph below for the formatting asymmetry).
 
 Anatomy of a multisig card (sections in the order they emit):
 
@@ -133,9 +133,9 @@ Anatomy of a multisig card (sections in the order they emit):
 # Passphrase: USED — not engraved on any card; record separately.
 ```
 
-The single-sig card collapses the cosigners block to four direct lines (`ms1`, `mk1`, `fingerprint`, `origin path`; `format.rs:310-324`). A taproot-multisig template (`tr-multi-a` / `tr-sortedmulti-a`) appends a hardware-wallet caveat block (`format.rs:367-373`) flagging that signing-side support is nascent at v0.4.
+The single-sig card collapses the cosigners block to up to four lines (`ms1`, `mk1`, `fingerprint`, `origin path`; `format.rs:310-324`). The `fingerprint` line is suppressed under `--privacy-preserving` and the `origin path` line is suppressed when the slot carries no path; both fields are guarded by `if let Some(...)` at `format.rs:318-323`. A taproot-multisig template (`tr-multi-a` / `tr-sortedmulti-a`) appends a hardware-wallet caveat block (`format.rs:367-373`) flagging that signing-side support is nascent at v0.4.
 
-The `chunk_set_id`\index{chunk\_set\_id} short-hashes printed inline are the **bundle-level binding key**. The md1 identifier is the first 2 bytes of the wallet `policy_id` rendered as 4 hex chars (`bundle.rs:707`); the ms1/mk1 identifier is the 20-bit value `derive_mk1_chunk_set_id` packs from the first 4 bytes of the same `policy_id` (`synthesize.rs:42-44`), rendered as 5 hex chars. Both derive from the *same* policy_id, so the leading 16 bits agree across all three cards in one bundle — that shared prefix is the visible cross-card binding. A separate helper `chunk_set_id_extract` (`format.rs:380-395`) recovers an mk1 chunked-string's `chunk_set_id` from the wire string itself; verify-bundle uses that to group cosigner cards in multisig. Their cross-format meaning is the subject of §IV.2.
+The `chunk_set_id`\index{chunk\_set\_id} short-hashes printed inline are the **bundle-level binding key**. The md1 identifier is the first 2 bytes of the wallet `policy_id` rendered as 4 hex chars (`bundle.rs:707`); the ms1/mk1 identifier is the 20-bit value `derive_mk1_chunk_set_id` packs from the first 4 bytes of the same `policy_id` (`synthesize.rs:42-44`), rendered as 5 hex chars. Both derive from the *same* policy_id, so the leading 16 bits agree across all three cards in one bundle — that shared prefix is the visible cross-card binding. A separate helper `chunk_set_id_extract` (`format.rs:379-395`) recovers an mk1 chunked-string's `chunk_set_id` from the wire string itself; verify-bundle uses that to group cosigner cards in multisig. Their cross-format meaning is the subject of §IV.2.
 
 \index{descriptor truncation}Descriptor mode (toolkit v0.3+) prints the descriptor inline if it is ≤80 chars (`format.rs:260` `DESCRIPTOR_MAX_INLINE = 80`); longer descriptors render as `<first 60 chars>... [md1: <chunk_set_id>] (<len> chars total)` and rely on the md1 card itself for the full descriptor body.
 
@@ -186,7 +186,7 @@ The verify-bundle JSON schema (`VerifyBundleJson` at `format.rs:148-153`) uses `
 
 ## Worked example
 
-A canonical BIP-84 single-sig bundle from the public abandon test mnemonic (`abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`)\index{abandon test mnemonic} produces a deterministic three-card bundle. The full invocation and stdout are captured at `transcripts/mnemonic-bundle-bip84-abandon.cmd`/`.out` and re-run by `tests/verify-examples.sh`.
+A canonical BIP-84 single-sig bundle from the public abandon test mnemonic (`abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`)\index{abandon test mnemonic} produces a deterministic three-card bundle. The full invocation and combined stdout+stderr output are captured at `transcripts/mnemonic-bundle-bip84-abandon.cmd`/`.out` (the `2>&1` merge happens in `tests/verify-examples.sh:53` and is why the engraving-card stderr block sits alongside the stdout card strings in the `.out` file) and re-run by `tests/verify-examples.sh`.
 
 Cross-card binding (verifiable from the captured transcripts):
 
