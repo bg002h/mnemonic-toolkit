@@ -6,6 +6,66 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## tech-manual [0.4.0] — 2026-05-11
+
+Part V added — Rust API reference across all four crates (`md-codec`, `mk-codec`, `ms-codec`, `mnemonic-toolkit`). 242pp PDF (was 145pp at v0.3 close, +97pp). Tag `tech-manual-v0.4.0`.
+
+### Added
+
+- **Part V — Rust API reference** (4 chapters):
+  - **§V.1 `md-codec`** (~558 lines). v0.32.0 baseline. 20 public modules (19 unconditional + cfg-gated `to_miniscript` behind the `derive` feature). 43-row Error taxonomy. Encoder pipeline (Descriptor → encode_payload → wrap_payload → card string) + decoder pipeline (unwrap → decode_payload → Descriptor) + chunked reassembly. Advanced notes cover the two declared-but-unconstructed Error variants, `Phrase::from_id_bytes` infallibility, `Address<NetworkUnchecked>` discipline, encoder self-canonicalisation, and `MAX_DECODE_DEPTH=128` anti-DoS rationale.
+  - **§V.2 `mk-codec`** (~385 lines). v0.2.2 baseline. 13 public modules (5 top-level + 8 sub-modules). 22-row Error taxonomy. Single feature flag (`gen-vectors`, binary-target only). Library-only — `mk-cli` is a sibling binary, out of Part V scope. Advanced notes: BCH primitives forked from BIP-93 (`mc-codex32` extraction retired 2026-05-03); path dictionary is mk1-internal post the `path-dictionary-mirror-stewardship` retirement; `#[non_exhaustive]` policy (6 marked: `KeyCard`/`Error`/`StringLayerHeader`/`CorrectionResult`/`DecodedString`/`ChunkFragment`; 4 unmarked: `BchCode`/`CaseStatus`/`BytecodeHeader`/`XpubCompact`); non-`Result` panic paths on `reconstruct_xpub` (empty path) and `encode*` (CSPRNG failure); stale `"md1"` doc-comments at `bch.rs:575,603`.
+  - **§V.3 `ms-codec`** (~278 lines). v0.1.1 baseline. 7 public modules (`consts`, `decode`, `encode`, `error`, `inspect`, `payload`, `tag`); crate-private `envelope` documented as the v0.2-migration seam. 10-row Error taxonomy. **No feature flags**. **Edition 2021** (distinct from md/mk's edition 2024). BIP-93 codex32 adopted **directly** via `rust-codex32 = "=0.1.0"` (the sole codec leaking into the public surface — only `codex32::Error` via `From<codex32::Error> for Error` at `error.rs:122`). v0.1 is single-string only; share encoding deferred to v0.2; no `Codex32String::shares` API claim (rust-codex32 v0.1 only exposes `interpolate_at`).
+  - **§V.4 `mnemonic-toolkit`** (~450 lines). v0.8.0 baseline. **Binary-only crate** (no `[lib]`, no `lib.rs`) — chapter pivots from library-API enumeration to (a) JSON envelope schema documentation (7 envelope types — `BundleJson` / `VerifyBundleJson` / `VerifyCheck` / `MultisigInfo` / `CosignerEntry` / `MkField` / `MsField`), (b) crate-structure reference for the 8 non-CLI orchestration modules, (c) 26-row ToolkitError taxonomy with exit codes + `kind()` strings, (d) engraving-card layout with two worked examples (BIP-86 single-sig + 3-of-5 wsh-sortedmulti). `cmd::*` modules explicitly out of scope. v0.9-or-later library-extraction posture documented. Note: variant 26 (`ExportWalletMissingFields`) is `#[allow(dead_code)]`-reserved at v0.8.0 with full machinery wired; Phase-1 emitters land at v0.8.1.
+- **Worked-example crate** at `docs/technical-manual/examples/`:
+  - Self-contained Rust crate (own `[workspace]`; isolated from the toolkit workspace at `crates/mnemonic-toolkit`).
+  - 4 `[[example]]` entries pinned to specific git tags: `md-codec-v0.32.0`, `mnemonic-key-mk-codec-v0.2.2`, `mnemonic-secret-ms-codec-v0.1.1`, plus `serde` + `serde_json` for the standalone-consumer toolkit example (no dep on `mnemonic-toolkit` itself — binary-only).
+  - 4 transcript pairs at `docs/technical-manual/transcripts/<crate>-codec-api-roundtrip.{cmd,out}`. Determinism gated: encoders pinned (e.g. mk-codec uses `encode_with_chunk_set_id` to avoid CSPRNG entropy; ms-codec uses canonical "abandon … about" entropy; toolkit uses a hardcoded schema-4 fixture).
+- **API-surface-coverage helper** at `tests/api-surface-coverage.sh` (was a Phase-1.0.3 stub). Hybrid bash + inline Python heuristic walks each crate's `lib.rs`, extracts the public top-level symbol names via regex over `pub use … {a, b as c}` blocks + `pub use … ::name;` re-exports + `pub fn|struct|enum|trait|const|type|static` items, then greps each against the relevant Part V chapter. Emits one warning per gap; exits 0 (hint, not gate, per SPEC §4.4). Binary-only `mnemonic-toolkit` is special-cased to check 7 JSON envelope types at `src/format.rs` against `54-mnemonic-toolkit-api.md`. v0.4 coverage at HEAD: **92/92** symbols across the 4 crates (md-codec 46, mk-codec 26, ms-codec 13, toolkit 7); zero warnings.
+- **Back-matter accretion**:
+  - Glossary: +23 entries (73 → 96; SPEC §7 A4 v1.0 target ≥80).
+  - Index table: +330 rows (200 → 530; SPEC §7 A5 v1.0 target ≥250).
+  - BIP cross-reference: 15 → 20 BIPs (BIP-38, BIP-44, BIP-45, BIP-49, BIP-85, BIP-86, BIP-87, BIP-340 added or extended; §V.* columns appended to BIP-32/39/44/48/84/93/173/341/388 rows where Part V cites them).
+  - Release-history row for `tech-manual-v0.3.0` added.
+- **cspell** allow-list entries (cumulative across cycle): `thiserror`, `usize`, `CHUNKABLE`, `getrandom`, `shibbolethnumskey`, `bijective`, `rustdoc`, `upstreamable`, `impls`, `serialise`, `serialised`, `canonicalised`, `canonicalises`, `keypath`, `Multisignature`, `reconstructor`.
+
+### Notable corrections folded inline during the cut
+
+- Phase 4.0 harvest (3-round reviewer cycle): md-codec Error variant count corrected to 43; mk-codec to 22; mnemonic-toolkit Notes attribution moved from a non-existent `synthesize::check_key_vector_distinctness` to the real `parse_descriptor::check_key_vector_distinctness:1104`; mk-codec stale `"md1"` doc-comments at `bch.rs:575,603` flagged; multiple module/symbol count corrections.
+- Phase 4.1 chapter review (2 rounds): inline `use md_codec::{...};` snippets that imported `render_codex32_grouped` and `SINGLE_STRING_PAYLOAD_BIT_LIMIT` from the crate root corrected to module-qualified paths (`md_codec::encode::*`, `md_codec::chunk::*`).
+- Phase 4.2 chapter review (2 rounds): `BchCode` and `CaseStatus` falsely claimed `#[non_exhaustive]`; corrected — those two enums are unmarked at HEAD `bch.rs:26,154`. The mk-codec marked set is 6 types (KeyCard / Error / StringLayerHeader / CorrectionResult / DecodedString / ChunkFragment); unmarked set is 4 (BchCode / CaseStatus / BytecodeHeader / XpubCompact).
+- Phase 4.3 chapter review (2 rounds): inline decode example `decode("ms10sentrqqq...")` was wire-invalid (`sent` in the id slot, `r` in the share-index slot). Replaced with the byte-exact transcript output. §V.3.5.2 step 3 was missing rule 5 from `discriminate`'s enforcement list — corrected to "rules 2–5, 8".
+- Phase 4.4 chapter review (3 rounds): ToolkitError taxonomy was missing the v0.8.1-phase-0-reserved `ExportWalletMissingFields` variant (HEAD `error.rs:109` has 26 variants, chapter said 25); added. §V.4.3.8 `wallet_export` row updated to include `taproot_multisig_unsupported_message` + `build_missing_fields_refusal` and the module path corrected from `wallet_export.rs` to `wallet_export/mod.rs` (split into a directory post v0.8.1 phase-0).
+- Final cycle-exit review (2 rounds): §V.4.8 + glossary `non_exhaustive` entry falsely claimed `md_codec::Error` is `#[non_exhaustive]`. Both sites corrected; `md_codec::Error` is the **exception** to the m-format-star non-exhaustive policy (derives `Debug, Error, PartialEq, Eq` only; the toolkit's `md_codec_exit_code` match at `error.rs:174` is consequently exhaustive).
+
+### SPEC §7 v1.0 acceptance criteria progress (cumulative)
+
+- **A2** (every public function referenced in Part V): 92/92 covered via `tests/api-surface-coverage.sh`. ✓
+- **A3** (every Error variant has a chapter row): 43 (md) + 22 (mk) + 10 (ms) + 26 (toolkit) = 101 variants tabled. ✓
+- **A4** (glossary ≥80): 96 entries. ✓
+- **A5** (index ≥250): 530 rows. ✓
+- **A7** (BIP cross-reference ≥12 BIPs): 20 BIPs. ✓
+- **A8** (worked examples verified): `make verify-examples` 15/15. ✓
+- **A9** (both mirror invariants green): `tech-manual-api-surface-mirror` spot-checked; `tech-manual-wire-format-mirror` no-op this cycle. ✓
+- **A10** (PDF ≥200pp): 242pp. ✓
+- **A11** (reproducible build): byte-identical across two clean `SOURCE_DATE_EPOCH=1746921600` builds. ✓
+
+Pending for v1.0 (Phase 5): A1 (every BIP-388-parseable shape has a bit-level walk in §II.1 + address-derivation walk in §III) — already met by v0.3 close, but Phase 5.6.2 will architect-sign-off; A6 (TOC complete) — pandoc-emitted, no action.
+
+### Open FOLLOWUPS (cross-repo, deferred to md1 work)
+
+- `cross-repo md1-wsh-multi-unsorted-integration-test` (filed v0.2 Phase 2.2).
+- `cross-repo md1-bip49-integration-test` (filed post-v0.2 tag).
+
+Both wait on md1 work; neither blocks v0.4 or v1.0.
+
+### Verification
+
+- `make lint` 6/6 green.
+- `make verify-examples` 15/15 transcripts (11 pre-existing + 4 new Part-V).
+- `cargo test --workspace --all-features`: all green.
+- PDF reproducibility: 242pp, 842,175 bytes, SHA256 `ffaa29b94e21a32aa583345965d2366b75d93895d1eac457ae99335417f580cf`, byte-identical across two clean `SOURCE_DATE_EPOCH=1746921600` builds.
+
 ## tech-manual [0.3.0] — 2026-05-11
 
 Part IV added — bundle formation end-to-end. 145pp PDF (was 119pp at v0.2 close, +26pp). Tag `tech-manual-v0.3.0`.

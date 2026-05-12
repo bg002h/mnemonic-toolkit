@@ -218,7 +218,7 @@ Nothing-Up-My-Sleeve. The BIP-341 H-point with no known discrete log, used as th
 
 ## non_exhaustive
 
-The `#[non_exhaustive]` Rust attribute applied uniformly to error enums and most public structs across the m-format-star (`md_codec::Error`, `mk_codec::Error`, `ms_codec::Error`, `ToolkitError`, `KeyCard`, `Payload`, `InspectReport`, `VerifyCheck`'s sibling structs). Forces external `match` arms to include `_ => ...` and prohibits brace-init from outside the crate, preserving forward-compatibility on minor version bumps. Discussed §V.1.3.9, §V.2.7, §V.3.7, §V.4.8.
+The `#[non_exhaustive]` Rust attribute applied to most error enums and public structs across the m-format-star (`mk_codec::Error`, `ms_codec::Error`, `ToolkitError`, `KeyCard`, `Payload`, `InspectReport`, `VerifyCheck`'s sibling structs). Forces external `match` arms to include `_ => ...` and prohibits brace-init from outside the crate, preserving forward-compatibility on minor version bumps. **`md_codec::Error` is the exception**: it is NOT `#[non_exhaustive]` (derives `Debug, Error, PartialEq, Eq` only; external `match` over its 43 variants is exhaustive — adding a new variant upstream is a compiler-detected breaking change). Discussed §V.1.3.9, §V.2.7, §V.3.7, §V.4.8.
 
 ## origin path
 
