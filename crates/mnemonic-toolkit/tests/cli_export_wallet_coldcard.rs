@@ -276,6 +276,67 @@ fn cell_6_coldcard_tr_multi_a_refuses() {
     );
 }
 
+/// SPEC §5.2 + Phase 1.11 N-1 — `--wallet-name` truncation must be safe for
+/// non-ASCII input. Earlier `name.truncate(20)` sliced at byte 20 and would
+/// panic when that byte landed mid-codepoint; `chars().take(20)` operates on
+/// scalar values. Regression guard: supply a wallet name composed of 4-byte
+/// codepoints (each `🤐` is U+1F910, 4 bytes UTF-8) and assert the emitter
+/// returns success rather than panicking. The wallet name appears verbatim
+/// in the multisig text's `Name:` line, truncated to 20 chars (=20 of the
+/// emoji, but only the first 20 chars matter — we just need to prove no
+/// panic).
+#[test]
+fn cell_7_coldcard_wallet_name_non_ascii_truncation_no_panic() {
+    let long_emoji_name = "\u{1F910}".repeat(25); // 25 chars, 100 bytes
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--wallet-name",
+            &long_emoji_name,
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            &format!("@2.fingerprint={COSIGNER_C_FP}"),
+            "--slot",
+            "@2.path=m/48'/0'/0'/2'",
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // 20 emoji × 4 bytes/emoji = 80 bytes after the leading "Name: " label.
+    let expected_name_line = format!("Name: {}", "\u{1F910}".repeat(20));
+    assert!(
+        stdout.lines().next() == Some(&expected_name_line),
+        "first line should be `Name: ` + first 20 emoji codepoints, got: {:?}",
+        stdout.lines().next(),
+    );
+}
+
 /// Sanity check: the TREZOR_24 fixture vector is consistent with the toolkit's
 /// own derivation pipeline. If `bitcoin` or `bip39` crate updates change the
 /// derived xpub, this test fails BEFORE the byte-exact test above (which

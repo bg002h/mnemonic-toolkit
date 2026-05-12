@@ -51,10 +51,12 @@ impl WalletFormatEmitter for ColdcardEmitter {
 
 /// Top-level Coldcard generic-export JSON shape. Field order matches the
 /// canonical upstream sample (`firmware/docs/generic-wallet-export.md`):
-/// `chain`, `xfp`, optionally `xpub`, `account`, one of `bipNN`. Using
-/// `#[derive(Serialize)]` (not `serde_json::Map`) so the output order is
-/// guaranteed regardless of whether the crate-level `preserve_order` feature
-/// is enabled.
+/// `chain`, `xfp`, optionally `xpub`, `account`, one of `bipNN`. SPEC v0.8 §5.1
+/// pins this order intentionally to mirror upstream byte-for-byte; emitting
+/// fields in any other order would still be valid JSON but would deviate from
+/// the reference sample that Coldcard firmware parses. Using `#[derive(Serialize)]`
+/// (not `serde_json::Map`) so the output order is guaranteed regardless of
+/// whether the crate-level `preserve_order` feature is enabled.
 #[derive(Serialize)]
 struct ColdcardGenericJson<'a> {
     chain: &'static str,
@@ -282,11 +284,12 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
         )));
     }
 
-    // Wallet name: SPEC §5.2 truncates to ≤20 chars.
-    let mut name = inputs.wallet_name.to_string();
-    if name.len() > 20 {
-        name.truncate(20);
-    }
+    // Wallet name: SPEC §5.2 truncates to ≤20 Unicode scalar values
+    // (chars). `.truncate(20)` would slice at byte 20 and panic when that
+    // byte lands inside a multi-byte UTF-8 sequence; `chars().take(20)`
+    // operates on scalar values and is safe for non-ASCII input. The result
+    // is the user-intuitive "first 20 characters".
+    let name: String = inputs.wallet_name.chars().take(20).collect();
 
     // Derivation line: shared origin path if all cosigners agree;
     // otherwise the `m/0'/0'` placeholder per Coldcard convention. The
