@@ -14,6 +14,13 @@ pub enum SlotSubkey {
     Phrase,
     Entropy,
     Xpub,
+    /// SPEC_export_wallet_v0_8.md §2 + §5.1 — depth-0 master xpub for slot
+    /// `@N`. Watch-only-class (BIP-32 base58, no secret material). Only
+    /// consumed by formats that publish a master xpub at the top level
+    /// (currently only Coldcard generic JSON §5.1). Optional in every
+    /// invocation. Derived `Ord` slots this AFTER `Xpub` so sorted
+    /// legal-sets read `[Xpub, MasterXpub, ...]`.
+    MasterXpub,
     Fingerprint,
     Path,
     Wif,
@@ -26,6 +33,7 @@ impl SlotSubkey {
             "phrase" => Self::Phrase,
             "entropy" => Self::Entropy,
             "xpub" => Self::Xpub,
+            "master_xpub" => Self::MasterXpub,
             "fingerprint" => Self::Fingerprint,
             "path" => Self::Path,
             "wif" => Self::Wif,
@@ -38,6 +46,7 @@ impl SlotSubkey {
             Self::Phrase => "phrase",
             Self::Entropy => "entropy",
             Self::Xpub => "xpub",
+            Self::MasterXpub => "master_xpub",
             Self::Fingerprint => "fingerprint",
             Self::Path => "path",
             Self::Wif => "wif",
@@ -48,7 +57,10 @@ impl SlotSubkey {
         matches!(self, Self::Phrase | Self::Entropy | Self::Xprv | Self::Wif)
     }
     pub fn is_watch_only(self) -> bool {
-        matches!(self, Self::Xpub | Self::Fingerprint | Self::Path)
+        matches!(
+            self,
+            Self::Xpub | Self::MasterXpub | Self::Fingerprint | Self::Path
+        )
     }
 }
 
@@ -214,8 +226,9 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
 }
 
 /// Caller pre-sorts; SlotSubkey's derived Ord is Phrase < Entropy < Xpub <
-/// Fingerprint < Path < Wif < Xprv, so only the canonical-order arms below
-/// are reachable.
+/// MasterXpub < Fingerprint < Path < Wif < Xprv, so only the canonical-order
+/// arms below are reachable. `MasterXpub` (SPEC_export_wallet_v0_8.md §2) is
+/// an optional add-on to any watch-only set that already includes `Xpub`.
 fn is_legal_set(set: &[SlotSubkey]) -> bool {
     use SlotSubkey::*;
     matches!(
@@ -225,9 +238,13 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
             | [Xpub]
             | [Wif]
             | [Xprv]
+            | [Xpub, MasterXpub]
             | [Xpub, Fingerprint]
+            | [Xpub, MasterXpub, Fingerprint]
             | [Xpub, Path]
+            | [Xpub, MasterXpub, Path]
             | [Xpub, Fingerprint, Path]
+            | [Xpub, MasterXpub, Fingerprint, Path]
     )
 }
 
@@ -265,6 +282,14 @@ mod tests {
         assert_eq!(
             parse_slot_input("@2.xpub=xpub-stub").unwrap(),
             slot(2, SlotSubkey::Xpub, "xpub-stub")
+        );
+    }
+    #[test]
+    fn parse_happy_master_xpub() {
+        // SPEC_export_wallet_v0_8.md §2 + §5.1 — depth-0 master xpub slot subkey.
+        assert_eq!(
+            parse_slot_input("@0.master_xpub=xpub6CUGRUo").unwrap(),
+            slot(0, SlotSubkey::MasterXpub, "xpub6CUGRUo")
         );
     }
     #[test]
@@ -389,6 +414,38 @@ mod tests {
             slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
         ])
         .unwrap();
+    }
+
+    #[test]
+    fn validate_xpub_master_xpub_passes() {
+        // SPEC_export_wallet_v0_8.md §2 — `[Xpub, MasterXpub]` is a legal set.
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Xpub, "x"),
+            slot(0, SlotSubkey::MasterXpub, "x_root"),
+        ])
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_xpub_master_xpub_fingerprint_path_passes() {
+        // SPEC_export_wallet_v0_8.md §2 — full Coldcard-input set is legal.
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Xpub, "x"),
+            slot(0, SlotSubkey::MasterXpub, "x_root"),
+            slot(0, SlotSubkey::Fingerprint, "deadbeef"),
+            slot(0, SlotSubkey::Path, "84'/0'/0'"),
+        ])
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_master_xpub_alone_rejected_invalid_set() {
+        // MasterXpub without Xpub is invalid: it carries no derivation context.
+        let e = validate_slot_set(&[slot(0, SlotSubkey::MasterXpub, "x_root")]).unwrap_err();
+        match e {
+            ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "invalid-set"),
+            other => panic!("unexpected variant {other:?}"),
+        }
     }
 
     #[test]
