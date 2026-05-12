@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "md-codec-v0.32.0" }
 mk-codec = { git = "https://github.com/bg002h/mnemonic-key", tag = "mnemonic-key-mk-codec-v0.2.2" }
+ms-codec = { git = "https://github.com/bg002h/mnemonic-secret", tag = "mnemonic-secret-ms-codec-v0.1.1" }
 bitcoin = "0.32"
 
 [[example]]
@@ -20,3 +21,7 @@ path = "examples/md-codec-api-roundtrip.rs"
 [[example]]
 name = "mk-codec-api-roundtrip"
 path = "examples/mk-codec-api-roundtrip.rs"
+
+[[example]]
+name = "ms-codec-api-roundtrip"
+path = "examples/ms-codec-api-roundtrip.rs"

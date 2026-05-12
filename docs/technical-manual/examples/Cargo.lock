@@ -100,6 +100,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "codex32"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d230935faa4d0521349d228f39aba4ff489cf2a8bcab4d84e31f4cbd6fe918e9"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,6 +170,7 @@ dependencies = [
  "bitcoin",
  "md-codec",
  "mk-codec",
+ "ms-codec",
 ]
 
 [[package]]
@@ -186,6 +193,14 @@ dependencies = [
  "bitcoin",
  "getrandom",
  "thiserror",
+]
+
+[[package]]
+name = "ms-codec"
+version = "0.1.1"
+source = "git+https://github.com/bg002h/mnemonic-secret?tag=mnemonic-secret-ms-codec-v0.1.1#a5a90919f8b4fe56ea30cb1646d6b5ff3249d27f"
+dependencies = [
+ "codex32",
 ]
 
 [[package]]

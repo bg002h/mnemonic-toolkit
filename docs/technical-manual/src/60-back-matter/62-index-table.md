@@ -79,6 +79,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `cross-card binding (bundle)` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `decode (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `decode (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `decode_bytecode` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `decode_md1_string` | [md-codec Rust API](#md-codec-rust-api) |
 | `decode_path` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -94,6 +95,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `distinct-key rule` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
 | `encode (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `encode (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `encode_5bit_to_string` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_bytecode` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_md1_string` | [md-codec Rust API](#md-codec-rust-api) |
@@ -103,6 +105,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `engraving card` | [Bundle Anatomy](#bundle-anatomy) |
 | `Error (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `Error (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Error::AddressDerivationFailed` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Error::AltCountOutOfRange` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::BchUncorrectable` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -122,6 +125,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Error::ChunkSetIdOutOfRange` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::ChunkSetIncomplete` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::ChunkSetInconsistent` | [md-codec Rust API](#md-codec-rust-api) |
+| `Error::Codex32` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Error::Codex32DecodeError` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::Codex32EncodeError` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::CrossChunkHashMismatch` | [mk1 Wire Format](#mk1-wire-format) |
@@ -177,6 +181,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Error::UnsupportedVersion (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `Error::VarintOverflow` | [md-codec Rust API](#md-codec-rust-api) |
 | `Error::WireVersionMismatch` | [md1 Wire Format](#md1-wire-format) |
+| `Error::WrongHrp` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `expand_per_at_n` | [md-codec Rust API](#md-codec-rust-api) |
 | `ExpandedKey` | [md-codec Rust API](#md-codec-rust-api) |
 | `EXPLICIT_PATH_INDICATOR` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -196,8 +201,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Header (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
 | `HRP` | [Conventions and Notation](#conventions-and-notation) |
 | `HRP (mk1)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `HRP (ms1)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `HRP-mixing` | [codex32 and BCH](#codex32-and-bch) |
 | `hrp_expand` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `inspect` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `InspectReport` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `interpolate_at (rust-codex32)` | [Future Shares](#future-shares) |
 | `is_nums` | [md1 Wire Format](#md1-wire-format) |
 | `key_index` | [md1 Wire Format](#md1-wire-format) |
@@ -267,9 +275,19 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `MK_REGULAR_CONST` | [mk1 Wire Format](#mk1-wire-format) |
 | `MkField` | [Bundle Anatomy](#bundle-anatomy) |
 | `mnemonic-toolkit` | [Introduction](#introduction) |
+| `ms-codec` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms-codec v0.1.1` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `ms1` | [ms1 Wire Format](#ms1-wire-format) |
 | `ms1 dense layout` | [Bundle Anatomy](#bundle-anatomy) |
 | `ms1 four-case table` | [Anti-Collision Invariants](#anti-collision-invariants) |
+| `ms_codec (crate)` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::consts` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::decode` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::encode` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::error` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::inspect` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::payload` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `ms_codec::tag` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `multi-family bodies` | [md1 Wire Format](#md1-wire-format) |
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -291,7 +309,9 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `PathComponent` | [md-codec Rust API](#md-codec-rust-api) |
 | `PathDecl` | [md-codec Rust API](#md-codec-rust-api) |
 | `PathDeclPaths` | [md-codec Rust API](#md-codec-rust-api) |
+| `Payload (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Payload::Entr` | [ms1 Wire Format](#ms1-wire-format) |
+| `PayloadKind` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `PBKDF2-HMAC-SHA512` | [ms1 Wire Format](#ms1-wire-format) |
 | `Phrase` | [md-codec Rust API](#md-codec-rust-api) |
 | `pkh` | [Shape Coverage](#shape-coverage) |
@@ -310,8 +330,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `render_codex32_grouped` | [md-codec Rust API](#md-codec-rust-api) |
 | `reserved-prefix byte (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
 | `reserved-prefix byte (v0.2)` | [Future Shares](#future-shares) |
+| `RESERVED_NOT_EMITTED_V01` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `RESERVED_PREFIX (ms1)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `RESERVED_TAG_TABLE` | [ms1 Wire Format](#ms1-wire-format) |
 | `Result (mk-codec)` | [mk-codec Rust API](#mk-codec-rust-api) |
+| `Result (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
 | `script (BIP-388)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `secp256k1` | [mk1 Wire Format](#mk1-wire-format) |
@@ -323,6 +346,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `sh(wpkh)` | [Shape Coverage](#shape-coverage) |
 | `SHA-256` | [md1 Wire Format](#md1-wire-format) |
 | `share-set grouping` | [Future Shares](#future-shares) |
+| `SHARE_INDEX_V01` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `single-string header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `SINGLE_STRING_PAYLOAD_BIT_LIMIT` | [md-codec Rust API](#md-codec-rust-api) |
 | `SingleSigFull` | [Bundle Anatomy](#bundle-anatomy) |
@@ -333,19 +357,21 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `string-layer header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `StringLayerHeader` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `Tag (md-codec)` | [md-codec Rust API](#md-codec-rust-api) |
+| `Tag (ms-codec)` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Tag (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
 | `Tag::Check` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::ENTR` | [ms1 Wire Format](#ms1-wire-format) |
 | `Tag::Multi` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::OriginPaths` | [md1 Wire Format](#md1-wire-format) |
-| `Tag::PkH` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Pkh` | [md1 Wire Format](#md1-wire-format) |
+| `Tag::PkH` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::PkK` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Sh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Thresh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Tr` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wpkh` | [md1 Wire Format](#md1-wire-format) |
 | `Tag::Wsh` | [md1 Wire Format](#md1-wire-format) |
+| `TAG_ENTR` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `Tap (script context)` | [Shape Coverage](#shape-coverage) |
 | `tap-leaf miniscript` | [Shape Coverage](#shape-coverage) |
 | `taproot internal key` | [md1 Wire Format](#md1-wire-format) |
@@ -355,11 +381,12 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Terminal::Multi` | [Shape Coverage](#shape-coverage) |
 | `testnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `Threshold (ms-codec v0.2)` | [Future Shares](#future-shares) |
+| `THRESHOLD_V01` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
 | `TLV_PUBKEYS` | [md-codec Rust API](#md-codec-rust-api) |
 | `TlvSection` | [md-codec Rust API](#md-codec-rust-api) |
-| `to_miniscript_descriptor` | [md-codec Rust API](#md-codec-rust-api) |
 | `to_miniscript_descriptor` | [Shape Coverage](#shape-coverage) |
+| `to_miniscript_descriptor` | [md-codec Rust API](#md-codec-rust-api) |
 | `tr (key-path)` | [Shape Coverage](#shape-coverage) |
 | `tr (multi-leaf)` | [Shape Coverage](#shape-coverage) |
 | `tr (NUMS)` | [Shape Coverage](#shape-coverage) |
@@ -370,6 +397,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `use-site-path declaration` | [md1 Wire Format](#md1-wire-format) |
 | `UseSitePath` | [md-codec Rust API](#md-codec-rust-api) |
 | `v0.1 → v0.2-shares migration` | [Future Shares](#future-shares) |
+| `VALID_ENTR_LENGTHS` | [ms-codec Rust API](#ms-codec-rust-api) |
+| `VALID_STR_LENGTHS` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `validate_presence_byte` | [md-codec Rust API](#md-codec-rust-api) |
 | `verify-bundle` | [Bundle Anatomy](#bundle-anatomy) |
 | `VerifyCheck` | [Bundle Anatomy](#bundle-anatomy) |
