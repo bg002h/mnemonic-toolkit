@@ -12,8 +12,8 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    ColdcardEmitter, EmitInputs, JadeEmitter, SparrowEmitter, TaprootInternalKey, TimestampArg,
-    WalletFormatEmitter,
+    ColdcardEmitter, EmitInputs, JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey,
+    TimestampArg, WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -156,10 +156,7 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     _stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // Specter stub (Phase 3 wires it). Sparrow is now real (Phase 2).
-    if matches!(args.format, CliExportFormat::Specter) {
-        return Err(ToolkitError::ExportWalletFormatStub("specter"));
-    }
+    // All six formats are now real (Phase 3 promoted Specter); no stubs.
 
     // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
     // inputs. The SPEC-mandated invariant ("runs on the resolved-slot set") is
@@ -394,7 +391,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
             CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
             CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
-            CliExportFormat::Specter => unreachable!("specter stubbed above"),
+            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -409,7 +406,7 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
         CliExportFormat::Jade => JadeEmitter::emit(&inputs),
         CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
-        CliExportFormat::Specter => unreachable!("specter stubbed above"),
+        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {

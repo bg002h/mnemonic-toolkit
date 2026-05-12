@@ -207,37 +207,10 @@ fn cell_3_phrase_slot_refusal_byte_exact() {
     assert_eq!(stderr, expected);
 }
 
-/// SPEC §9 cell 4: Specter stub refusal stderr. Byte-exact per §7.
-///
-/// v0.7 covered Sparrow + Specter as a single test cell; v0.8.1 Phase 2
-/// promoted Sparrow to a real format (see `tests/cli_export_wallet_sparrow.rs`)
-/// so this test now exercises only the remaining Specter stub. Specter is
-/// promoted in Phase 3, at which point this cell is deleted.
-#[test]
-fn cell_4_specter_stub_refusal_byte_exact() {
-    // Specter stub.
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args([
-            "export-wallet",
-            "--format",
-            "specter",
-            "--template",
-            "bip84",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.xpub={TREZOR_BIP84_XPUB}"),
-            "--slot",
-            &format!("@0.fingerprint={TREZOR_BIP84_FP}"),
-        ])
-        .assert()
-        .failure()
-        .code(2);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    let expected_specter = "error: --format <specter> is deferred to v0.8 if user demand surfaces; use --format bitcoin-core or --format bip388 instead.\n";
-    assert_eq!(stderr, expected_specter);
-}
+// v0.7's combined cell_4 sparrow+specter stub-refusal test was deleted in
+// v0.8.1 (Phase 2 promoted Sparrow; Phase 3 promoted Specter). Real-format
+// coverage now lives in `tests/cli_export_wallet_sparrow.rs` and
+// `tests/cli_export_wallet_specter.rs`.
 
 /// SPEC §9 cell 5: `--range 0,4999` override exercised in Bitcoin Core format.
 #[test]

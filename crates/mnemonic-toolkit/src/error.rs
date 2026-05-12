@@ -91,6 +91,11 @@ pub enum ToolkitError {
     /// xprv / wif slot supplied to `export-wallet`. Exit 2.
     ExportWalletSecretInput,
     /// SPEC_export_wallet_v0_7.md §7 — sparrow / specter format stub. Exit 2.
+    /// v0.8.1 Phase 2 + Phase 3 promoted Sparrow + Specter to real formats;
+    /// no construction site remains in the codebase. Variant retained for
+    /// future per-vendor stub introductions (would otherwise be a breaking
+    /// removal from a `#[non_exhaustive]` enum).
+    #[allow(dead_code)]
     ExportWalletFormatStub(&'static str),
     /// SPEC_export_wallet_v0_7.md §4 — taproot multisig templates
     /// (`tr-multi-a`, `tr-sortedmulti-a`) are not yet supported by
