@@ -22,6 +22,8 @@ pub(crate) use pipeline::{build_descriptor_string, descriptor_to_bip388_wallet_p
 use crate::error::ToolkitError;
 use crate::slot_input::{SlotInput, SlotSubkey};
 use crate::synthesize::ResolvedSlot;
+use crate::template::CliTemplate;
+use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use serde_json::{json, Value};
 
 /// SPEC §3 byte-exact refusal text for secret-bearing slot inputs.
@@ -115,5 +117,84 @@ impl TimestampArg {
             TimestampArg::Now => json!("now"),
             TimestampArg::Unix(n) => json!(n),
         }
+    }
+}
+
+/// SPEC v0.8 §12 — script-type enum local to `crate::wallet_export`. Richer
+/// than `crate::cmd::convert::ScriptType` (which is single-sig-only and scoped
+/// to the `(Xpub, Address)` derivation edge in `cmd/convert.rs`). The new
+/// per-format emitters dispatch on this enum (single vs multisig + envelope
+/// flavor) to decide `chain`/`format`/SLIP-132 variant per format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Phase 0 adds the enum; Phase 1+ emitters consume it.
+pub(crate) enum WalletScriptType {
+    P2pkh,          // bip44
+    P2shP2wpkh,     // bip49
+    P2wpkh,         // bip84
+    P2tr,           // bip86 (singlesig only — refused for Coldcard per SPEC §5.1)
+    P2shMulti,      // legacy multisig (sh(multi(...)) / sh(sortedmulti(...)))
+    P2shP2wshMulti, // sh-wsh-multi / sh-wsh-sortedmulti
+    P2wshMulti,     // wsh-multi / wsh-sortedmulti
+    P2trMulti,      // tr-multi-a / tr-sortedmulti-a
+}
+
+/// SPEC v0.8 §12 — map a `CliTemplate` to the corresponding `WalletScriptType`.
+/// Used by emitters that operate on the template path (`--template`).
+pub(crate) fn script_type_from_template(t: &CliTemplate) -> WalletScriptType {
+    match t {
+        CliTemplate::Bip44 => WalletScriptType::P2pkh,
+        CliTemplate::Bip49 => WalletScriptType::P2shP2wpkh,
+        CliTemplate::Bip84 => WalletScriptType::P2wpkh,
+        CliTemplate::Bip86 => WalletScriptType::P2tr,
+        CliTemplate::WshMulti | CliTemplate::WshSortedMulti => WalletScriptType::P2wshMulti,
+        CliTemplate::ShWshMulti | CliTemplate::ShWshSortedMulti => {
+            WalletScriptType::P2shP2wshMulti
+        }
+        CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => WalletScriptType::P2trMulti,
+    }
+}
+
+/// SPEC v0.8 §12 — map a parsed `Descriptor` to the corresponding
+/// `WalletScriptType`. Used by emitters that operate on the descriptor path
+/// (`--descriptor`). The detection looks at the outermost wrapper plus, for
+/// `tr(...)`, a substring check for `multi_a(` / `sortedmulti_a(` to discriminate
+/// `P2tr` from `P2trMulti`. Returns `BadInput` for bare scripts (outside the
+/// BIP-388 wallet-policy surface).
+pub(crate) fn script_type_from_descriptor(
+    d: &MsDescriptor<DescriptorPublicKey>,
+) -> Result<WalletScriptType, ToolkitError> {
+    use miniscript::descriptor::ShInner;
+    use miniscript::Descriptor::*;
+    match d {
+        Pkh(_) => Ok(WalletScriptType::P2pkh),
+        Wpkh(_) => Ok(WalletScriptType::P2wpkh),
+        Sh(s) => match s.as_inner() {
+            ShInner::Wpkh(_) => Ok(WalletScriptType::P2shP2wpkh),
+            ShInner::Wsh(_) => Ok(WalletScriptType::P2shP2wshMulti),
+            // Post-miniscript-#915, `sortedmulti` no longer has its own
+            // `ShInner` variant; it surfaces as `Terminal::SortedMulti` inside
+            // `ShInner::Ms`. Either way the wallet-format classification is
+            // the same legacy `P2shMulti` (e.g., `sh(multi(K,...))` or
+            // `sh(sortedmulti(K,...))`).
+            ShInner::Ms(_) => Ok(WalletScriptType::P2shMulti),
+        },
+        Wsh(_) => Ok(WalletScriptType::P2wshMulti),
+        Tr(t) => {
+            // Phase 0 heuristic: render the tr descriptor and check for
+            // `multi_a(` / `sortedmulti_a(` substrings to discriminate
+            // taproot-multisig from taproot-singlesig. Miniscript's Display
+            // is deterministic; structural walking can replace this in a
+            // later phase (Phase 4 Electrum / Phase 2 Sparrow) if a corner
+            // case demands it.
+            let rendered = t.to_string();
+            if rendered.contains("multi_a(") || rendered.contains("sortedmulti_a(") {
+                Ok(WalletScriptType::P2trMulti)
+            } else {
+                Ok(WalletScriptType::P2tr)
+            }
+        }
+        Bare(_) => Err(ToolkitError::DescriptorParse(
+            "wallet-export descriptor must have a top-level Pkh/Wpkh/Sh/Wsh/Tr wrapper (bare scripts are outside the BIP-388 wallet-policy surface)".into(),
+        )),
     }
 }
