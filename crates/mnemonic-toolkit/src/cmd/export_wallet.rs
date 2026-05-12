@@ -1,8 +1,7 @@
 //! `mnemonic export-wallet` subcommand.
 //!
-//! Realizes `design/SPEC_export_wallet_v0_7.md` §2 (grammar), §3 (refusal),
-//! §4 (descriptor pipeline), §5 (Bitcoin Core importdescriptors), §6 (BIP-388
-//! wallet_policy), §7 (Sparrow/Specter stubs).
+//! Realizes `design/SPEC_export_wallet_v0_8.md` (subcommand grammar, refusal
+//! contract, per-vendor format emitters).
 
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;

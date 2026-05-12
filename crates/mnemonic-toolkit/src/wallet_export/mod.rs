@@ -5,11 +5,17 @@
 //!   the `--descriptor` → BIP-388 `wallet_policy` interop pipeline.
 //! - `bitcoin_core` — Bitcoin Core `importdescriptors` JSON emitter.
 //! - `bip388` — BIP-388 `wallet_policy` JSON emitter.
+//! - `coldcard` — Coldcard generic-wallet JSON + multisig text emitter.
+//! - `jade` — Blockstream Jade multisig-text emitter.
+//! - `sparrow` — Sparrow wallet JSON emitter.
+//! - `specter` — Specter Desktop wallet JSON emitter.
+//! - `electrum` — Electrum wallet-file JSON emitter.
+//! - `green` — Blockstream Green text emitter.
 //!
 //! This module-root file holds the cross-format shared surface: byte-exact
-//! refusal text constants (§3 watch-only, §7 format-stub), watch-only
-//! validators, `TaprootInternalKey` / `TimestampArg` shared types, and the
-//! `NUMS_XONLY_HEX` BIP-341 reference NUMS point.
+//! refusal text constants, watch-only validators, `TaprootInternalKey` /
+//! `TimestampArg` shared types, and the `NUMS_XONLY_HEX` BIP-341 reference
+//! NUMS point.
 
 mod bip388;
 mod bitcoin_core;
@@ -39,7 +45,7 @@ use crate::template::CliTemplate;
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use serde_json::{json, Value};
 
-/// SPEC §3 byte-exact refusal text for secret-bearing slot inputs.
+/// v0.8 SPEC §3 byte-exact refusal text for secret-bearing slot inputs.
 pub const REFUSAL_SECRET_INPUT: &str =
     "mnemonic export-wallet is watch-only by definition; supply only xpub/fingerprint/path slots. To produce an artifact that includes secret material, use 'mnemonic bundle'.";
 
