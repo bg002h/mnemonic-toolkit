@@ -271,8 +271,12 @@ impl MissingField {
 pub(crate) fn build_missing_fields_refusal(format: &str, missing: &[MissingField]) -> String {
     let mut sorted: Vec<&MissingField> = missing.iter().collect();
     sorted.sort_by_key(|f| f.sort_key());
+    // NOTE: no leading `"error: "` — `ToolkitError::Display` (`error.rs:410`)
+    // prepends that prefix uniformly for every error. The SPEC §4 byte-exact
+    // shape pins a SINGLE prefix; including it here would produce
+    // `error: error: ...` once `ExportWalletMissingFields` is wired.
     let mut s = format!(
-        "error: mnemonic export-wallet --format {format} requires the following missing fields:\n"
+        "mnemonic export-wallet --format {format} requires the following missing fields:\n"
     );
     for f in sorted {
         s.push_str("  - ");

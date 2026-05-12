@@ -163,10 +163,14 @@ fn cell_4_jade_singlesig_refuses_byte_exact() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // SPEC §6 byte-exact stderr with a SINGLE `error:` prefix. R1-C1 fold:
+    // earlier test used `.contains(...)` which silently passed when the
+    // emitter source double-prefixed the message.
     let expected = "error: mnemonic export-wallet --format jade emits multisig wallet config only; for singlesig setups Jade reads the seed on-device. Use --format coldcard for a singlesig JSON or --format bitcoin-core for a descriptor.";
-    assert!(
-        stderr.contains(expected),
-        "Jade singlesig refusal must contain the SPEC §6 byte-exact pointer.\n--- got ---\n{stderr}"
+    assert_eq!(
+        stderr.trim_end(),
+        expected,
+        "Jade singlesig refusal must match SPEC §6 byte-exact (single `error:` prefix).\n--- got ---\n{stderr}"
     );
 }
 

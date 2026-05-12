@@ -48,7 +48,11 @@ impl WalletFormatEmitter for JadeEmitter {
             | CliTemplate::Bip49
             | CliTemplate::Bip84
             | CliTemplate::Bip86 => Err(ToolkitError::BadInput(
-                "error: mnemonic export-wallet --format jade emits multisig wallet config only; for singlesig setups Jade reads the seed on-device. Use --format coldcard for a singlesig JSON or --format bitcoin-core for a descriptor.".into(),
+                // `ToolkitError::Display` prepends `"error: "` — emit
+                // the message body only, so the final stderr has a
+                // single SPEC §6 prefix (not the doubled `error: error:`
+                // that would result from including the prefix here).
+                "mnemonic export-wallet --format jade emits multisig wallet config only; for singlesig setups Jade reads the seed on-device. Use --format coldcard for a singlesig JSON or --format bitcoin-core for a descriptor.".into(),
             )),
         }
     }
