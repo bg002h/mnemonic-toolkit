@@ -87,6 +87,14 @@ pub struct ExportWalletArgs {
     #[arg(long = "bitcoin-core-version", default_value = "25")]
     pub bitcoin_core_version: u8,
 
+    /// SPEC v0.8 §2 — wallet name/label for formats that publish one
+    /// (Coldcard generic JSON, Sparrow, Specter, Electrum). Optional;
+    /// defaults to `<template-human-name>-<account>` (e.g., `bip84-0`,
+    /// `wsh-sortedmulti-0`) when omitted. Ignored by formats that have
+    /// no name slot (Bitcoin Core / BIP-388 / Jade text / Green).
+    #[arg(long = "wallet-name")]
+    pub wallet_name: Option<String>,
+
     /// SPEC v0.8 §7 — Taproot internal-key designation for `tr-multi-a` /
     /// `tr-sortedmulti-a` templates. `nums` selects the BIP-341 reference
     /// NUMS x-only point. `@N` selects cosigner N's xpub as the key-path
@@ -328,13 +336,17 @@ pub fn run<W: Write, E: Write>(
         script_type_from_descriptor(&parsed)?
     };
 
-    // Phase 0: `--wallet-name` flag not yet exposed (added in Phase 1). Default
-    // is `<template-human-name>-<account>` for the template path, or
-    // `"imported-descriptor"` for the descriptor path. `wallet_name_was_user_supplied`
-    // is unconditionally `false` until Phase 1 wires the clap flag.
-    let wallet_name_default = match template_opt {
-        Some(t) => format!("{}-{}", t.human_name(), args.account),
-        None => "imported-descriptor".to_string(),
+    // SPEC v0.8 §2 — wallet name: user-supplied via `--wallet-name <STRING>`
+    // (Phase 1.7 wiring); falls back to `<template-human-name>-<account>` for
+    // the template path or `"imported-descriptor"` for the descriptor path.
+    // The `wallet_name_was_user_supplied` flag lets Phase 3 SpecterEmitter
+    // distinguish user-supplied from default — Specter requires explicit names.
+    let wallet_name_resolved: String = match args.wallet_name.as_ref() {
+        Some(name) => name.clone(),
+        None => match template_opt {
+            Some(t) => format!("{}-{}", t.human_name(), args.account),
+            None => "imported-descriptor".to_string(),
+        },
     };
 
     let inputs = EmitInputs {
@@ -345,8 +357,8 @@ pub fn run<W: Write, E: Write>(
         network: args.network,
         account: args.account,
         threshold: threshold_opt,
-        wallet_name: &wallet_name_default,
-        wallet_name_was_user_supplied: false,
+        wallet_name: &wallet_name_resolved,
+        wallet_name_was_user_supplied: args.wallet_name.is_some(),
         taproot_internal_key: args.taproot_internal_key,
         range: args.range,
         timestamp: args.timestamp.0,
