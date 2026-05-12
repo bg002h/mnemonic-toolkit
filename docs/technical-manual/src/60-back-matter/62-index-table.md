@@ -34,8 +34,13 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Body::KeyArg` | [md1 Wire Format](#md1-wire-format) |
 | `Body::MultiKeys` | [md1 Wire Format](#md1-wire-format) |
 | `Body::Variable` | [md1 Wire Format](#md1-wire-format) |
+| `bundle` | [Bundle Anatomy](#bundle-anatomy) |
+| `bundle envelope` | [Bundle Anatomy](#bundle-anatomy) |
+| `bundle JSON envelope` | [Bundle Anatomy](#bundle-anatomy) |
+| `bundle mode` | [Bundle Anatomy](#bundle-anatomy) |
 | `bytecode header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `canonicality rules` | [md1 Wire Format](#md1-wire-format) |
+| `chunk_set_id` | [Bundle Anatomy](#bundle-anatomy) |
 | `chunked header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
@@ -46,8 +51,10 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `cross-card binding` | [The m-format Star](#the-m-format-star) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `derivation (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `descriptor truncation` | [Bundle Anatomy](#bundle-anatomy) |
 | `DescriptorPublicKey` | [Shape Coverage](#shape-coverage) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
+| `engraving card` | [Bundle Anatomy](#bundle-anatomy) |
 | `Error::AddressDerivationFailed` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Error::ChainIndexOutOfRange` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Error::ChunkedHeaderMalformed` | [mk1 Wire Format](#mk1-wire-format) |
@@ -95,11 +102,17 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `mk1` | [mk1 Wire Format](#mk1-wire-format) |
 | `MK_LONG_CONST` | [mk1 Wire Format](#mk1-wire-format) |
 | `MK_REGULAR_CONST` | [mk1 Wire Format](#mk1-wire-format) |
+| `MkField` | [Bundle Anatomy](#bundle-anatomy) |
 | `mnemonic-toolkit` | [Introduction](#introduction) |
 | `ms1` | [ms1 Wire Format](#ms1-wire-format) |
+| `ms1 dense layout` | [Bundle Anatomy](#bundle-anatomy) |
 | `multi-family bodies` | [md1 Wire Format](#md1-wire-format) |
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `MultisigHybrid` | [Bundle Anatomy](#bundle-anatomy) |
+| `MultisigInfo` | [Bundle Anatomy](#bundle-anatomy) |
+| `MultisigMultiSource` | [Bundle Anatomy](#bundle-anatomy) |
+| `MultisigWatchOnly` | [Bundle Anatomy](#bundle-anatomy) |
 | `node_to_descriptor` | [Shape Coverage](#shape-coverage) |
 | `node_to_miniscript` | [Shape Coverage](#shape-coverage) |
 | `NUMS` | [md1 Wire Format](#md1-wire-format) |
@@ -121,12 +134,15 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `rust-codex32` | [ms1 Wire Format](#ms1-wire-format) |
 | `script (BIP-388)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `secp256k1` | [mk1 Wire Format](#mk1-wire-format) |
+| `secret-bearing slot` | [Bundle Anatomy](#bundle-anatomy) |
 | `Segwitv0 (script context)` | [Shape Coverage](#shape-coverage) |
 | `sh (legacy)` | [Shape Coverage](#shape-coverage) |
 | `sh(multi)` | [Shape Coverage](#shape-coverage) |
 | `sh(wpkh)` | [Shape Coverage](#shape-coverage) |
 | `SHA-256` | [md1 Wire Format](#md1-wire-format) |
 | `single-string header (md1)` | [md1 Wire Format](#md1-wire-format) |
+| `SingleSigFull` | [Bundle Anatomy](#bundle-anatomy) |
+| `SingleSigWatchOnly` | [Bundle Anatomy](#bundle-anatomy) |
 | `standard-path table (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `string-layer header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `Tag::Check` | [md1 Wire Format](#md1-wire-format) |
@@ -159,8 +175,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `Unshared Secret form` | [ms1 Wire Format](#ms1-wire-format) |
 | `use-site path` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `use-site-path declaration` | [md1 Wire Format](#md1-wire-format) |
+| `verify-bundle` | [Bundle Anatomy](#bundle-anatomy) |
+| `VerifyCheck` | [Bundle Anatomy](#bundle-anatomy) |
 | `walker normalisation` | [md1 Wire Format](#md1-wire-format) |
 | `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |
+| `watch-only slot` | [Bundle Anatomy](#bundle-anatomy) |
 | `wildcard (BIP-389)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `wire format` | [md1 Wire Format](#md1-wire-format) |
 | `wpkh` | [Shape Coverage](#shape-coverage) |
