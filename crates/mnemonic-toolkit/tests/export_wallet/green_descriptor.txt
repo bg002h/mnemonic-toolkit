@@ -1,0 +1,3 @@
+# Blockstream Green — Watch-only import (singlesig)
+# Help: https://help.blockstream.com/hc/en-us/articles/19340800530713-Set-up-watch-only-wallet
+wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere

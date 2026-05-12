@@ -1,0 +1,1 @@
+error: --format electrum does not yet support --template tr-multi-a — Electrum's wallet-db does not currently ingest taproot multisig (tracked by FOLLOWUPS electrum-tr-multi-a-pending-libsecp-taproot). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.

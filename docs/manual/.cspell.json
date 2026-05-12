@@ -118,7 +118,12 @@
     "tprv",
     "ypub",
     "zpub",
+    "upub",
+    "vpub",
+    "tpub",
     "Ypub",
-    "Zpub"
+    "Zpub",
+    "Upub",
+    "Vpub"
   ]
 }

@@ -10,9 +10,10 @@ use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
-    build_descriptor_string, descriptor_to_bip388_wallet_policy, format_bip388_wallet_policy,
-    format_bitcoin_core_importdescriptors, validate_watch_only, validate_watch_only_resolved,
-    TaprootInternalKey, TimestampArg,
+    build_descriptor_string, script_type_from_descriptor, script_type_from_template,
+    validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
+    ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter, JadeEmitter, SparrowEmitter,
+    SpecterEmitter, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -23,10 +24,18 @@ pub enum CliExportFormat {
     BitcoinCore,
     #[value(name = "bip388")]
     Bip388,
+    #[value(name = "coldcard")]
+    Coldcard,
+    #[value(name = "jade")]
+    Jade,
     #[value(name = "sparrow")]
     Sparrow,
     #[value(name = "specter")]
     Specter,
+    #[value(name = "electrum")]
+    Electrum,
+    #[value(name = "green")]
+    Green,
 }
 
 #[derive(Args, Debug)]
@@ -81,6 +90,14 @@ pub struct ExportWalletArgs {
     /// Bitcoin Core target version. 24 or 25 (default 25).
     #[arg(long = "bitcoin-core-version", default_value = "25")]
     pub bitcoin_core_version: u8,
+
+    /// SPEC v0.8 §2 — wallet name/label for formats that publish one
+    /// (Coldcard generic JSON, Sparrow, Specter, Electrum). Optional;
+    /// defaults to `<template-human-name>-<account>` (e.g., `bip84-0`,
+    /// `wsh-sortedmulti-0`) when omitted. Ignored by formats that have
+    /// no name slot (Bitcoin Core / BIP-388 / Jade text / Green).
+    #[arg(long = "wallet-name")]
+    pub wallet_name: Option<String>,
 
     /// SPEC v0.8 §7 — Taproot internal-key designation for `tr-multi-a` /
     /// `tr-sortedmulti-a` templates. `nums` selects the BIP-341 reference
@@ -143,22 +160,19 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     _stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // Sparrow/Specter stubs (SPEC §7) refuse before any work.
-    match args.format {
-        CliExportFormat::Sparrow => {
-            return Err(ToolkitError::ExportWalletFormatStub("sparrow"));
-        }
-        CliExportFormat::Specter => {
-            return Err(ToolkitError::ExportWalletFormatStub("specter"));
-        }
-        _ => {}
-    }
+    // All six formats are now real (Phase 3 promoted Specter); no stubs.
 
     // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
     // inputs. The SPEC-mandated invariant ("runs on the resolved-slot set") is
     // additionally enforced by `validate_watch_only_resolved` after
     // `resolve_slots` returns (see template branch below).
     validate_watch_only(&args.slot)?;
+
+    // v0.8.2 SPEC §5.1 — `master_xpub` slot subkey is now plumbed through
+    // `ResolvedSlot.master_xpub` and surfaced on `EmitInputs.master_xpub_at_0`
+    // for the Coldcard generic-JSON emitter. The Phase 1.9 refuse-on-supply
+    // guard is retired. Other formats silently ignore the subkey per the
+    // per-format ignored-input contract.
 
     // SPEC v0.8 §7 — `tr-multi-a` / `tr-sortedmulti-a` require
     // `--taproot-internal-key`. The flag designates the BIP-341 internal key
@@ -295,44 +309,108 @@ pub fn run<W: Write, E: Write>(
         canonical
     };
 
-    let value = match args.format {
-        CliExportFormat::BitcoinCore => format_bitcoin_core_importdescriptors(
-            &canonical,
-            args.range,
-            args.timestamp.0,
-            args.bitcoin_core_version,
-        )?,
-        CliExportFormat::Bip388 => {
-            if args.descriptor.is_some() {
-                // SPEC v0.8 §6 — `--descriptor` + `--format bip388`: extract
-                // `[fp/path]xpub` keys from the parsed descriptor; build
-                // wallet_policy by replacing each key with `@N/**` placeholder.
-                descriptor_to_bip388_wallet_policy(&canonical)?
-            } else {
-                // Template branch: render directly using `@N/**` placeholders.
-                let (resolved, template, k) = resolved_template.expect(
-                    "Bip388 template branch reached without resolved_template",
-                );
-                format_bip388_wallet_policy(
-                    template,
-                    &resolved,
-                    k,
-                    args.network,
-                    args.account,
-                    args.taproot_internal_key,
-                )?
-            }
-        }
-        CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
+    // Build EmitInputs once, after slot resolution + descriptor canonicalization
+    // + watch-only validation. Each WalletFormatEmitter borrows this struct.
+    // SPEC v0.8 §12 — trait dispatch replaces the per-format `Value` match
+    // (which was followed by `serde_json::to_string_pretty`). Each emitter now
+    // returns its final `String` directly; the v0.7 byte-exact fixtures for
+    // `bitcoin-core` / `bip388` remain valid because `to_string_pretty` is
+    // deterministic for a given input `Value`.
+    let (resolved_slots_ref, template_opt, threshold_opt): (
+        &[crate::synthesize::ResolvedSlot],
+        Option<CliTemplate>,
+        Option<u8>,
+    ) = match &resolved_template {
+        Some((slots, tmpl, k)) => (slots.as_slice(), Some(*tmpl), Some(*k)),
+        None => (&[], None, None),
     };
 
-    let serialized = serde_json::to_string_pretty(&value)
-        .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))?;
+    let script_type = if let Some(t) = template_opt {
+        script_type_from_template(&t)
+    } else {
+        // Descriptor path: parse once for script-type classification.
+        use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+        use std::str::FromStr;
+        let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("export-wallet script-type derive: {e}"))
+        })?;
+        script_type_from_descriptor(&parsed)?
+    };
+
+    // SPEC v0.8 §2 — wallet name: user-supplied via `--wallet-name <STRING>`
+    // (Phase 1.7 wiring); falls back to `<template-human-name>-<account>` for
+    // the template path or `"imported-descriptor"` for the descriptor path.
+    // The `wallet_name_was_user_supplied` flag lets Phase 3 SpecterEmitter
+    // distinguish user-supplied from default — Specter requires explicit names.
+    let wallet_name_resolved: String = match args.wallet_name.as_ref() {
+        Some(name) => name.clone(),
+        None => match template_opt {
+            Some(t) => format!("{}-{}", t.human_name(), args.account),
+            None => "imported-descriptor".to_string(),
+        },
+    };
+
+    // v0.8.2 SPEC §5.1 — master_xpub plumbing. Surface @0.master_xpub= into
+    // `EmitInputs.master_xpub_at_0` when slot 0 carries one (other slots'
+    // master_xpub fields are not consumed by any current emitter, but
+    // ResolvedSlot retains them for future per-cosigner needs).
+    let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
+
+    let inputs = EmitInputs {
+        canonical_descriptor: &canonical,
+        resolved_slots: resolved_slots_ref,
+        template: template_opt,
+        script_type,
+        network: args.network,
+        account: args.account,
+        threshold: threshold_opt,
+        threshold_user_supplied: args.threshold.is_some(),
+        wallet_name: &wallet_name_resolved,
+        wallet_name_was_user_supplied: args.wallet_name.is_some(),
+        taproot_internal_key: args.taproot_internal_key,
+        range: args.range,
+        timestamp: args.timestamp.0,
+        bitcoin_core_version: args.bitcoin_core_version,
+        master_xpub_at_0,
+    };
+
+    // SPEC §4 missing-info channel — every emitter exposes a per-format
+    // `collect_missing` predicate; non-empty result short-circuits to the
+    // deterministic refusal via `ToolkitError::ExportWalletMissingFields`
+    // (which routes through `build_missing_fields_refusal`).
+    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
+        match args.format {
+            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
+            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
+            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
+            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
+            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
+            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
+            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+        };
+    if !missing.is_empty() {
+        return Err(ToolkitError::ExportWalletMissingFields {
+            format: format_name,
+            missing,
+        });
+    }
+
+    let emitted: String = match args.format {
+        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
+        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
+        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
+        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
+        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
+        CliExportFormat::Green => GreenEmitter::emit(&inputs),
+    }?;
 
     if args.output == "-" {
-        let _ = writeln!(stdout, "{serialized}");
+        let _ = writeln!(stdout, "{emitted}");
     } else {
-        std::fs::write(&args.output, format!("{serialized}\n"))
+        std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
     }
     Ok(())

@@ -573,6 +573,12 @@ pub struct ResolvedSlot {
     pub path_raw: String,
     /// Some(entropy_bytes) for secret-bearing slots; None for watch-only.
     pub entropy: Option<Vec<u8>>,
+    /// v0.8.2 SPEC §5.1 — optional depth-0 master xpub supplied via
+    /// `@N.master_xpub=<base58>`. Consumed by `--format coldcard` singlesig
+    /// emitter to populate the top-level `xpub` field. `None` for every
+    /// resolution arm except `{Xpub, MasterXpub, ...}` where the user
+    /// supplied the subkey. Other emitters silently ignore.
+    pub master_xpub: Option<Xpub>,
 }
 
 impl ResolvedSlot {
@@ -1023,6 +1029,7 @@ mod tests {
                 path: path.clone(),
                 path_raw: path.to_string(),
                 entropy: None,
+                master_xpub: None,
             });
 
             let mut payload = [0u8; 65];
@@ -1171,6 +1178,7 @@ mod tests {
                 } else {
                     None
                 },
+                master_xpub: None,
             });
         }
         out

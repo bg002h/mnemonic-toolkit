@@ -31,7 +31,7 @@ mnemonic export-wallet \
   [--taproot-internal-key <NUMS|@N>]                  # v0.8 carry-in (existing flag from v0.8 phase-1)
 ```
 
-`--slot` parser is shared with `bundle` / `verify-bundle` via `crate::slot_input::parse_slot_input` (no change).
+`--slot` parser is shared with `bundle` / `verify-bundle` via `crate::slot_input::parse_slot_input`. This cycle adds **one new slot subkey** to the parser: `master_xpub` (the depth-0 root xpub for slot `@N`). It is watch-only-class (BIP-32 base58, no secret material), optional, and only consumed by formats that publish a master xpub at the top level — currently only Coldcard generic JSON (§5.1). Legal-set extensions in `crate::slot_input::is_legal_set`: `[Xpub, MasterXpub]`, `[Xpub, MasterXpub, Fingerprint]`, `[Xpub, MasterXpub, Path]`, `[Xpub, MasterXpub, Fingerprint, Path]`. Formats that do not publish a master xpub (Bitcoin Core, BIP-388, Coldcard multisig text, Jade, Sparrow, Specter, Electrum, Green) IGNORE the subkey if supplied.
 
 `--wallet-name` is **new** in this cycle: optional, defaults to `<template-human-name>-<account>` (e.g., `bip84-0`). Used as the wallet `name`/`label` field in Coldcard generic JSON, Sparrow, Specter, Electrum. Ignored by Bitcoin Core / BIP-388 / Jade text / Green (those formats have no name slot).
 
@@ -82,6 +82,10 @@ Two artifact flavors selected by the resolved template's multisig predicate:
 
 Format reference: <https://github.com/Coldcard/firmware/blob/master/docs/generic-wallet-export.md>.
 
+Upstream schema places three identity fields at the top level (`xfp` + `xpub` at depth 0, and `account`) alongside one or more per-derivation sub-objects (`bip44` / `bip49` / `bip84`, each carrying its own `xfp`/`xpub` at the BIP-32 account derivation depth). The toolkit always has the master fingerprint (it is the `@N.fingerprint=` slot input, which is the depth-0 root key's fingerprint per BIP-32 convention) but does NOT receive the depth-0 master xpub by default — `@N.xpub=` carries the **account-level** xpub (depth 3 for BIP-44/49/84). The toolkit emits the top-level `xpub` field **only** when the user explicitly supplies it via `--slot @0.master_xpub=<base58>`; otherwise the field is omitted from the JSON object.
+
+Example with master_xpub supplied (Coldcard's canonical shape):
+
 ```json
 {
   "chain": "BTC",
@@ -99,10 +103,29 @@ Format reference: <https://github.com/Coldcard/firmware/blob/master/docs/generic
 }
 ```
 
+Example with master_xpub omitted (most common toolkit use):
+
+```json
+{
+  "chain": "BTC",
+  "xfp": "ABCD1234",
+  "account": 0,
+  "bip84": {
+    "name": "p2wpkh",
+    "deriv": "m/84'/0'/0'",
+    "xfp": "DEADBEEF",
+    "xpub": "xpub6...",
+    "_pub": "zpub6...",
+    "first": "bc1q..."
+  }
+}
+```
+
 - `chain`: `"BTC"` (mainnet), `"XTN"` (testnet/signet), `"XRT"` (regtest).
-- `xfp`: top-level master fingerprint, 8 uppercase hex.
-- `xpub`: top-level master xpub (BIP-32 base58).
+- `xfp`: top-level master fingerprint, 8 uppercase hex. Sourced from the `@0.fingerprint=` slot input (depth-0 root key's fingerprint).
+- `xpub`: top-level master xpub at depth 0 (BIP-32 base58). **Optional in the toolkit's emission**: present iff the user supplied `--slot @0.master_xpub=<base58>`; absent (key entirely omitted from the JSON object) otherwise. Downstream Coldcard-format consumers vary in tolerance — many read only the per-derivation sub-objects and ignore top-level `xpub` entirely, but a strict consumer may warn or refuse if it expects depth=0 here.
 - `account`: integer account index (0-indexed; clap default 0).
+- Per-derivation `bipNN.xfp`: 8 uppercase hex, the fingerprint of the **parent** of the account xpub (depth-2 key for BIP-44/49/84, e.g., `m/84'/0'`). Derived from the supplied account xpub by extracting bytes 5–8 of the BIP-32 serialized form (the "parent fingerprint" field per BIP-32). NOT the same as top-level `xfp` (master fingerprint) — Coldcard's canonical example confirms the distinction (sample: top-level `xfp=0F056943`, `bip84.xfp=78CF94E5`).
 - Per-derivation sub-objects: `bip44` / `bip49` / `bip84` populated for the matching template only (single sub-object per emit). The upstream Coldcard `generic-wallet-export.md` documents these three sub-objects; **`bip86` is NOT in the upstream schema**. Until Coldcard firmware ships a documented `bip86` sub-object, `--template bip86 --format coldcard` REFUSES with the byte-exact pointer below (the emitted string has NO leading whitespace — the markdown-fenced-block indent under this bullet is presentation only):
 
   ```
@@ -183,7 +206,7 @@ Format reference: <https://github.com/sparrowwallet/drongo/blob/master/src/main/
 - `masterFingerprint`: lowercase 8-hex (Sparrow convention).
 - `extendedPublicKey`: BIP-32 xpub form (Sparrow refuses SLIP-132 in import path).
 
-Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`): supported by Sparrow as descriptor-passthrough; emit `miniscript.script` directly from canonical descriptor. Rides on existing v0.8 taproot-internal-key flag.
+Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`): supported by Sparrow as descriptor-passthrough; emit `miniscript.script` from the canonical descriptor with the BIP-380 `#<8-char-checksum>` suffix STRIPPED. Sparrow's `defaultPolicy.miniscript.script` field is a bare miniscript policy expression (matching the `wpkh(@0/**)` / `wsh(sortedmulti(K,...))` shape used for every non-taproot template); the checksum is not valid miniscript grammar and Sparrow's policy parser would reject it (Phase 2 R1 fold C-1). Rides on existing v0.8 taproot-internal-key flag.
 
 ## §8 Specter Desktop format (`--format specter`)
 
@@ -447,3 +470,4 @@ This section records SPEC-level reviewer-loop rounds. Plan-level R1 resolutions 
   - **N-1.** Added inline comment to the `WalletFormatEmitter` trait block distinguishing `collect_missing` (per-format predicate) from `build_missing_fields_refusal` (cross-format formatter).
   - Cross-fold from IMPLEMENTATION_PLAN R1 I-5: §13 fixture-table rows for `electrum_single.json` / `electrum_multi_2of4.json` still cited Coldcard's stale sample fixtures as Coverage authority; corrected to "pinned to Phase 4 step 0 spike-observed byte shape" to match §9's already-corrected narrative.
 - 2026-05-11 — SPEC-level architect review **R2** verified all 13 R1 resolutions resolved (`design/agent-reports/v0_8-spec-r2.md`). Two new findings surfaced (0C/0I/1L/1N): **L-4** — §4 per-slot ordering paragraph used "interleaved" terminology that contradicted the body's `(enum-discriminant, slot-index)` tuple-order rule and the example, which is actually grouped-by-discriminant. Reworded to "grouped by enum discriminant, then ordered by slot index within each discriminant (NOT interleaved across slots)" and extended the example to include a global `Threshold` entry so the global-first rule is observable. **N-2** — earlier `**C-2 / I-1 (cross-cut).**` review-log label conflated two unrelated R1 findings; the line-ref correction is mirrored in IMPLEMENTATION_PLAN R1 (not in SPEC I-1, which is the Sparrow `numSignaturesRequired` removal). Relabeled to `**C-2 (cross-cut with IMPLEMENTATION_PLAN R1 I-1).**`. Convergence: **0C/0I/0L/0N** after R2 folds applied.
+- 2026-05-11 — Phase 1 entry-work design discovery (pre-fixture-pinning). On close-read of Coldcard's canonical `generic-wallet-export.md` (fetched fresh from upstream master), the §5.1 schema places `xpub` at the top level **at depth 0** (master xpub), distinct from `bipNN.xpub` which is the BIP-32 **account-level** xpub (depth 3 for BIP-44/49/84). The toolkit's slot grammar receives only the account-level xpub via `@N.xpub=` — the depth-0 master xpub is NOT recoverable from a deeper xpub. Coldcard's canonical sample confirms the distinction (top-level `xfp=0F056943` is master; `bip84.xfp=78CF94E5` is the depth-2 parent of the BIP-84 account key, derivable from the account xpub via BIP-32 parent-fingerprint extraction). Resolution: (a) add a new slot subkey `master_xpub` (watch-only-class, BIP-32 base58, optional) to `crate::slot_input::SlotSubkey`; (b) emit top-level `xpub` only when `@0.master_xpub=` is supplied — otherwise omit the field entirely from the JSON object; (c) compute `bipNN.xfp` deterministically from the account xpub's BIP-32 serialization bytes 5–8 (the "parent fingerprint" field) — distinct from top-level `xfp` which remains the master fingerprint from `@N.fingerprint=`. §2 grammar paragraph + §5.1 prose + bullet list updated inline. No reviewer-loop required — this is a Phase 1 entry-work fold-in to lock the design before pinning byte-exact fixtures.

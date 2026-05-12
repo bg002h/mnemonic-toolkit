@@ -867,7 +867,42 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Why deferred:** v0.6.1 was a polish patch for `convert` + `bundle` UX. New subcommand or new bundle flag is its own minor scope. Brainstorm should resolve the format priority list (Bitcoin Core first vs BIP-388 first), the subcommand-vs-flag fork, and whether `range`/`timestamp` defaults need to be configurable.
 - **Status:** `resolved 3821f66`
 - **Resolution:** v0.7 Phase 5 — new `mnemonic export-wallet` subcommand shipped. Bitcoin Core `importdescriptors` JSON (default) + BIP-388 `wallet_policy` JSON. Sparrow / Specter formats stubbed (refuse with v0.8 deferral). `--range` / `--timestamp` / `--bitcoin-core-version` overrides. Watch-only enforced (refuses entropy/phrase slot input). New SPEC `design/SPEC_export_wallet_v0_7.md`.
+- **Resolution-extended (v0.8.1 Phase 1):** Coldcard generic JSON skeleton (singlesig bip44/bip49/bip84) + Coldcard multisig text (wsh / sh-wsh, sorted and unsorted) + Blockstream Jade multisig text (byte-identical to Coldcard's, delegated emitter) shipped. New `wallet_export/{coldcard,jade}.rs`. `CliExportFormat::Coldcard` + `CliExportFormat::Jade` variants. `--wallet-name <STRING>` clap flag for formats publishing wallet names (Coldcard generic JSON, Sparrow / Specter / Electrum land in subsequent phases). New slot subkey `@N.master_xpub=` (depth-0 root xpub, optional, watch-only-class). Coverage now 2/8 → 4/8 of the SPEC §11 priority list; Sparrow/Specter/Electrum/Green land in Phases 2-5.
+- **Resolution-extended (v0.8.1 Phase 5):** All six new vendor formats now shipped — `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`. The complete v0.8.1 SPEC §11 priority list (8 formats: `bitcoin-core`, `bip388`, `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`) is fully realized. New emitter modules: `wallet_export/{sparrow,specter,electrum,green}.rs`. New `CliExportFormat` variants: `Sparrow`, `Specter`, `Electrum`, `Green`. Per-format pinned byte-exact fixtures + SPEC §4 missing-info refusal channel exercised by Sparrow (Threshold) and Specter (WalletName). Status remains `resolved`.
 - **Tier:** `v0.6.2`
+
+### `coldcard-master-xpub-plumbing-pending` — `@N.master_xpub=` slot subkey parses but is dropped before reaching the Coldcard emitter
+
+- **Surfaced:** v0.8.1 Phase 1 R1 reviewer-loop fold (I-2).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs::ResolvedSlot` + `crates/mnemonic-toolkit/src/wallet_export/mod.rs::EmitInputs` + `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_generic_json`.
+- **What:** SPEC §2 + §5.1 ship two normative claims: (a) the slot grammar accepts `@N.master_xpub=<base58>` (shipped in Phase 1.1 via `SlotSubkey::MasterXpub`); (b) the Coldcard generic-JSON top-level `xpub` field is emitted iff `@0.master_xpub=` was supplied. Phase 1 shipped (a) but not (b); Phase 1.9.R1 added a refuse-on-supply guard in `cmd::export_wallet::run` so the gap was not silent.
+- **Status:** `resolved` (v0.8.2 plumbing cycle).
+- **Resolution:** v0.8.2 follow-up — `ResolvedSlot` gained a `master_xpub: Option<Xpub>` field populated in the `{Xpub, ...}` arm of `resolve_slots` via `crate::slip0132::normalize_xpub_prefix` + `Xpub::from_str`. `EmitInputs` gained `master_xpub_at_0: Option<Xpub>` plumbed from `resolved_slots[0].master_xpub` in `cmd::export_wallet::run`. `emit_coldcard_generic_json` now emits the top-level `xpub` field conditionally (`Some(x) → x.to_string()`, `None → field omitted via `#[serde(skip_serializing_if = "Option::is_none")]`). The Phase 1.9.R1 refuse-on-supply guard at `cmd::export_wallet::run:182-197` was retired. New byte-exact fixture `tests/export_wallet/coldcard_generic_bip84_mainnet_with_master_xpub.json`; new test cells `cell_8_coldcard_master_xpub_plumbing_byte_exact` (supplied case) and `cell_9_coldcard_master_xpub_absent_omits_top_level_xpub` (absent case). All other resolution arms (Phrase / Entropy / Wif / synthesize-test-helper / verify-bundle-rebuild) set `master_xpub: None` since master_xpub semantically only exists on user-supplied watch-only xpub slots.
+- **Tier:** `v0.8.2`
+
+### `coldcard-bip86-generic-export-pending-firmware` — `--template bip86 --format coldcard` refuses (BIP-86 not in upstream schema)
+
+- **Surfaced:** v0.8.1 Phase 1 (SPEC R1-I2 reviewer-loop fold).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_generic_json`.
+- **What:** Coldcard's canonical `generic-wallet-export.md` (upstream master) documents only `bip44` / `bip49` / `bip84` sub-objects. BIP-86 (P2TR singlesig) has no slot in the schema. The toolkit refuses `--template bip86 --format coldcard` with the SPEC §5.1 byte-exact pointer until Coldcard firmware extends the schema. Workaround: use `--format bitcoin-core` (descriptor passthrough) or `--format sparrow` (native P2TR support).
+- **Status:** open (pending Coldcard firmware). Last upstream-checked **2026-05-12**: `gh api repos/Coldcard/firmware/contents/docs/generic-wallet-export.md` — no `bip86` / `p2tr` / `taproot` mentions. `releases/ChangeLog.md` — no taproot / schnorr / bip86 entries.
+- **Tier:** `v1+`
+
+### `coldcard-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format coldcard`
+
+- **Surfaced:** v0.8.1 Phase 1.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_multisig_text`.
+- **What:** Coldcard's multisig text emitter ingests only `P2WSH` / `P2SH-P2WSH` / `P2SH` formats per the SPEC §5.2 `Format` field. Taproot-multisig (tr-multi-a / tr-sortedmulti-a) is not in the firmware's import surface. The toolkit refuses with a pointer at `--format bitcoin-core` (descriptor) / `--format sparrow` for taproot multisig watch-only setup. Companion: Jade has the same gap (`jade-tr-multi-a-pending-firmware` below).
+- **Status:** open (pending Coldcard firmware taproot-multisig support). Last upstream-checked **2026-05-12**: `releases/ChangeLog.md` — no taproot / schnorr entries; firmware most recent commit `ca06dfd2` 2026-04-25 is unrelated regression fix.
+- **Tier:** `v1+`
+
+### `jade-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format jade`
+
+- **Surfaced:** v0.8.1 Phase 1.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/jade.rs::JadeEmitter::emit`.
+- **What:** Blockstream Jade's `register_multisig.multisig_file` accepts the Coldcard §5.2 multisig text shape; taproot multisig is not yet in that surface. The toolkit refuses with a pointer at `--format bitcoin-core` / `--format sparrow` for taproot multisig. Companion: `coldcard-tr-multi-a-pending-firmware` above (Jade shares the schema; once Coldcard ships, Jade follows).
+- **Status:** open (pending Blockstream Jade firmware taproot-multisig support). Last upstream-checked **2026-05-12**: `Blockstream/Jade:CHANGELOG.md` — singlesig BIP-86 P2TR SHIPPED (`Add support for signing bip86 single-key p2tr inputs and for registering bip86 p2tr(key) descriptors`); taproot **multisig** (`multi_a` / `sortedmulti_a`) NOT yet shipped. Entry remains accurately open for the multisig case; singlesig P2TR is already a separate emitter path (Sparrow `tr(@0/**)`).
+- **Tier:** `v1+`
 
 ### `electrum-non-latin-wordlists` — Electrum native seed format hard-codes the English wordlist
 
@@ -1031,3 +1066,44 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved 2eef44b` (v0.8 Phase 1).
 - **Resolution:** v0.8 Phase 1 — new `--passphrase-stdin` flag with line-ending-only trim (preserves leading/trailing spaces + internal NULL). Both V3 ignored tests unignored and now active. Phase 1 review I1 added a separate `read_stdin_passphrase` helper distinct from `read_stdin_to_string` to prevent the trim issue.
 - **Tier:** `v0.8`
+
+### `electrum-seed-version-spike-pending` — Phase 4 step 0 interactive spike
+
+- **Surfaced:** v0.8.1 Phase 4 (`design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs:33` — `ELECTRUM_SEED_VERSION_PIN = 17`.
+- **What:** SPEC v0.8 §9 + IMPL_PLAN Phase 4 step 0 mandate an interactive spike against current Electrum (>= 4.5.x) to lock `ELECTRUM_SEED_VERSION_PIN` to a verified-cleanly-imports value.
+- **Status:** `resolved` (2026-05-12 spike against Electrum 4.5.5).
+- **Resolution:** Spike executed against Electrum 4.5.5 in `/tmp/electrum-spike-venv/`. Empirical result: a toolkit-emitted wallet file with `seed_version: 17` loads cleanly via `electrum --offline -w <file> listaddresses` (returns the expected BIP-84 receive set; Electrum migrates the in-memory state to FINAL_SEED_VERSION=59 on save). Source-code cross-check at `wallet_db.py:1195-1211` confirms `seed_version >= 12 → return seed_version` with no rejection at 17. Pin retained at 17 (the SPEC's "minimum cleanly-imports" specification matches 17; 59 is what Electrum WRITES, not the minimum it ACCEPTS). Full report: `design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`.
+- **Tier:** `v0.8.2`
+
+### `electrum-tr-multi-a-pending-libsecp-taproot` — `--template tr-multi-a` refuses under `--format electrum`
+
+- **Surfaced:** v0.8.1 Phase 4.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` `emit()` guard; refusal fixture `tests/export_wallet/electrum_tr_multi_a_refusal.stderr`.
+- **What:** Electrum's `wallet_db.py` does not currently ingest taproot multisig wallet shapes (pending libsecp-taproot integration in Electrum's signer surface). `--format electrum --template tr-multi-a` (or `tr-sortedmulti-a`) emits a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow` (which supports taproot multisig via descriptor-passthrough).
+- **Status:** `open` (last upstream-checked 2026-05-12 against Electrum 4.5.5 source; `grep -E "'p2tr'|p2tr" electrum/transaction.py` returns no matches in the script-type enum, confirming taproot script type not yet wired).
+- **Tier:** `v1+ / pending-electrum-firmware`
+
+### `electrum-final-seed-version-drift` — track Electrum FINAL_SEED_VERSION upstream
+
+- **Surfaced:** v0.8.1 Phase 4.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` — `ELECTRUM_SEED_VERSION_PIN` doc-comment.
+- **What:** Electrum's `wallet_db.py` `FINAL_SEED_VERSION` drifts upward over releases (4.5.5 = 59; the v0.8.1 SPEC §9 cited 71 from master at SPEC-write time). Toolkit pins to 17 (minimum cleanly-imports) and relies on Electrum's migration loader to walk forward. Track in case the loader ever drops support for old migration paths.
+- **Status:** `open` (no fix scheduled; tracking only).
+- **Tier:** `v1+ / informational`
+
+### `electrum-root-fingerprint-roundtrip-quirk` — Electrum nulls `root_fingerprint` on load
+
+- **Surfaced:** v0.8.1 Phase 4 step 0 spike (2026-05-12, Electrum 4.5.5).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` `emit_electrum_standard_json` + `electrum/keystore.py` `BIP32_KeyStore`.
+- **What:** The toolkit emits `keystore.root_fingerprint` per SPEC §9.1 (e.g., `"5436d724"`). Electrum 4.5.5's loader successfully imports the wallet, derives the correct BIP-84 addresses, but its re-serialized form has `"root_fingerprint": null` — the `_root_fingerprint` private attribute on the in-memory `BIP32_KeyStore` is not populated from the on-disk JSON field. Functionally inert for watch-only address derivation; required only for PSBT-with-origin flows. Likely an Electrum-side bug or intentional drop; cross-check against current master may surface a fix.
+- **Status:** `open` (informational).
+- **Tier:** `v1+ / informational`
+
+### `green-native-multisig-pending-server-support` — `--format green` refuses multisig
+
+- **Surfaced:** v0.8.1 Phase 5.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs` `emit()` guard; refusal fixture `tests/export_wallet/green_multisig_refusal.stderr`.
+- **What:** Blockstream Green's multisig surface is server-mediated (Green Multisig Shield + Liquid), not a direct file-import shape. `--format green` is therefore singlesig-only; multisig templates return a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow`. Resolves once Green publishes a self-custody multisig file-import format.
+- **Status:** `open`. Last upstream-checked **2026-05-12**: Green Help Center article `19340800530713-Set-up-watch-only-wallet` returns HTTP 403 to programmatic fetchers (Zendesk-hosted, browser-only). Status cannot be verified autonomously; entry remains open pending manual browser check.
+- **Tier:** `v1+ / pending-green-server-support`

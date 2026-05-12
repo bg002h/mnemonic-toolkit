@@ -185,6 +185,39 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.8.1] — 2026-05-12
+
+Additive minor release atop v0.8.0. **No breaking changes.** Six new vendor-targeted wallet-import formats added to `mnemonic export-wallet`: `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`. Per-emitter byte-exact fixtures pinned; SPEC §4 missing-info refusal channel exercised end-to-end (Sparrow's missing-threshold + Specter's missing-wallet-name). Internal `wallet_export.rs` reorganized into a `wallet_export/` submodule tree (one file per emitter). v0.7 stable `--format bitcoin-core` / `--format bip388` byte-exact fixtures continue to pass through the new submodule dispatch.
+
+### Added
+
+- **`--format coldcard`** (SPEC v0.8 §5). Coldcard generic JSON skeleton (singlesig BIP-44/49/84) and Coldcard multisig text (wsh / sh-wsh, sorted and unsorted). BIP-86 (P2TR) and `tr-multi-a` / `tr-sortedmulti-a` refuse with byte-exact pointer text per FOLLOWUPS `coldcard-bip86-generic-export-pending-firmware` + `coldcard-tr-multi-a-pending-firmware`.
+- **`--format jade`** (SPEC §6). Blockstream Jade `register_multisig.multisig_file` shape — byte-identical to Coldcard's multisig text per Jade's documented format, so the emitter delegates to `emit_coldcard_multisig_text` directly. Singlesig + `tr-multi-a` refuse with byte-exact pointer text.
+- **`--format sparrow`** (SPEC §7). Sparrow Wallet wallet-import JSON shape (`drongo/.../wallet/Wallet.java` canonical model). `policyType` from template; `scriptType` from `WalletScriptType`; `defaultPolicy.miniscript.script` built from `@N/**` placeholders for non-taproot templates or descriptor-passthrough (with `#checksum` stripped) for taproot multisig. `--threshold` is REQUIRED for multisig (per SPEC §4 missing-info channel — Sparrow publishes threshold in the miniscript expression and auto-defaulting K=N would emit a wallet that looks like K=N was intentional).
+- **`--format specter`** (SPEC §8). Specter Desktop import JSON shape: `{label, blockheight, descriptor, devices}` with canonical BIP-380 `descriptor` (including `#checksum`, contrast with Sparrow). `--wallet-name` is REQUIRED (SPEC §13 R1-L1 — Specter's UX requires explicit labels; defaulting produces a UI regression).
+- **`--format electrum`** (SPEC §9). Electrum `wallet_db.py` JSON shape with `seed_version`, `wallet_type`, `use_encryption: false`, and `keystore` (singlesig) or `x1/`..`xN/` (multisig). SLIP-132 conversion: zpub/ypub/upub/vpub for singlesig; capital Zpub/Ypub/Vpub/Upub for multisig. `ELECTRUM_SEED_VERSION_PIN = 17` (historically broadest-accept value; Phase 4 step 0 interactive spike deferred — FOLLOWUPS `electrum-seed-version-spike-pending`). `tr-multi-a` refuses pending Electrum libsecp-taproot support.
+- **`--format green`** (SPEC §10). Thin 3-line text file for Blockstream Green's "Import from file" dialog: 2 comment lines + canonical descriptor. Multisig refuses (Green's multisig surface is server-mediated via Green Multisig Shield, not a file-import shape) per FOLLOWUPS `green-native-multisig-pending-server-support`.
+- **`--wallet-name <STRING>`** clap flag for formats publishing a wallet label (Coldcard generic JSON, Sparrow, Specter, Electrum, Green). Defaults to `<template-human-name>-<account>` for the template path or `"imported-descriptor"` for descriptor passthrough. Truncated to 20 Unicode scalar values in Coldcard / Jade multisig text per the Coldcard reference format (codepoint-granularity truncation — non-ASCII names are not split mid-codepoint).
+- **`@N.master_xpub=<base58>`** slot subkey (depth-0 root xpub, watch-only-class). Parsed by `SlotSubkey::MasterXpub` and validated against `is_legal_set`. Currently refused under `--format coldcard` + singlesig templates pending v0.8.2 plumbing (FOLLOWUPS `coldcard-master-xpub-plumbing-pending`); other formats silently ignore per the per-format ignored-input contract.
+- **SPEC §4 missing-info refusal channel** wired end-to-end. Per-emitter `collect_missing` predicates return `MissingField` enum entries (`MasterFingerprint` / `DerivationPath` / `Xpub` / `ScriptType` / `Threshold` / `WalletName` / `IncompatibleFormatForTemplate`). `ToolkitError::ExportWalletMissingFields` routes through `build_missing_fields_refusal` for SPEC §4 byte-exact refusal shape with deterministic field ordering. First emitters to populate: Sparrow (Threshold) and Specter (WalletName).
+- **Module reorganization** (internal): `src/wallet_export.rs` → `src/wallet_export/` submodule tree with one file per emitter (`bip388.rs`, `bitcoin_core.rs`, `coldcard.rs`, `jade.rs`, `sparrow.rs`, `specter.rs`, `electrum.rs`, `green.rs`, `pipeline.rs`). The module-root `mod.rs` holds shared types (`WalletScriptType`, `MissingField`, `EmitInputs`, `WalletFormatEmitter` trait, `TaprootInternalKey`, `TimestampArg`) and watch-only validators. No external API changes; v0.7 byte-exact fixtures for `bitcoin-core` / `bip388` continue to pass through the new dispatch.
+- **Manual mirror**: `mnemonic export-wallet` flag table updated; new `### Notes` subsection documents the `--wallet-name` 20-char Unicode truncation, the `@N.master_xpub=` parse-but-refuse behavior, the `--threshold` requirement for `--format sparrow` multisig, and the `--wallet-name` requirement for `--format specter`.
+
+### FOLLOWUPS
+
+- New: `coldcard-bip86-generic-export-pending-firmware` (v1+), `coldcard-tr-multi-a-pending-firmware` (v1+), `jade-tr-multi-a-pending-firmware` (v1+), `coldcard-master-xpub-plumbing-pending` (v0.8.2), `electrum-seed-version-spike-pending` (v0.8.2), `electrum-tr-multi-a-pending-libsecp-taproot` (v1+), `electrum-final-seed-version-drift` (informational), `green-native-multisig-pending-server-support` (v1+).
+- Resolution-extended on `wallet-export-industry-formats` (entry stays `Status: resolved`; Phase 1 + Phase 5 extension lines added listing the six new formats shipped this cycle).
+
+### Reviewer-loop reports
+
+Persisted under `design/agent-reports/`:
+- `v0_8-spec-r1.md`, `v0_8-spec-r2.md` (SPEC promotion + R2 convergence).
+- `v0_8-impl-plan-r1.md`, `v0_8-impl-plan-r2.md` (plan promotion + R2 convergence).
+- `v0_8-phase-1-coldcard-jade-r1.md`, `v0_8-phase-1_11-r2.md` (Phase 1 R1 + R2 convergence).
+- `v0_8-phase-2-sparrow-r1.md`, `v0_8-phase-2-sparrow-r2.md` (Phase 2 R1 + R2 convergence).
+- `v0_8-phase-3-specter-r1.md` (Phase 3 R1 convergence).
+- `v0_8-phase-4-electrum-seed-version-spike.md` (Phase 4 step 0 deferral record).
+
 ## mnemonic-toolkit [0.8.0] — 2026-05-07 [BREAKING]
 
 Minor release atop v0.7.1. **Breaking change** to BIP-38 composite-edge passphrase semantics; new flags + new BIP-85 application + Electrum i18n + taproot multisig export. Two spike-driven deferrals (BIP-38 EC-mult encrypt → v0.8.1; BIP-85 RSA / RSA-GPG → v0.9 pending RUSTSEC-2023-0071 patch). 11 phases (0–10) shipped this cycle.

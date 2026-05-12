@@ -1,0 +1,1 @@
+error: --format jade does not yet support --template tr-multi-a — Blockstream Jade firmware does not currently ingest taproot multisig wallet config (tracked by FOLLOWUPS jade-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.

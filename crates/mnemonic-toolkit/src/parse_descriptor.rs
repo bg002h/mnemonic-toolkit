@@ -1153,6 +1153,7 @@ fn push_binding(
         path,
         path_raw,
         entropy: None,
+        master_xpub: None,
     });
 }
 
@@ -1716,6 +1717,7 @@ mod tests {
             // Default tests: path_raw == typed canonical form (legacy semantics).
             path_raw: p.to_string(),
             entropy: None,
+            master_xpub: None,
         }
     }
     /// Variant: explicitly set `path_raw` distinct from the typed path string
@@ -1728,6 +1730,7 @@ mod tests {
             path,
             path_raw: raw.to_string(),
             entropy: None,
+            master_xpub: None,
         }
     }
 
