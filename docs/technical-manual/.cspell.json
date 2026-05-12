@@ -23,6 +23,8 @@
     "auditable",
     "BCH",
     "andor",
+    "thiserror",
+    "usize",
     "Berlekamp",
     "bijectively",
     "bips",

@@ -1,0 +1,16 @@
+[package]
+name = "md-codec-examples"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Self-contained workspace so the toolkit's outer `[workspace]` at
+# `crates/mnemonic-toolkit/..` does not auto-attach this crate.
+[workspace]
+
+[dependencies]
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "md-codec-v0.32.0" }
+
+[[example]]
+name = "md-codec-api-roundtrip"
+path = "examples/md-codec-api-roundtrip.rs"
