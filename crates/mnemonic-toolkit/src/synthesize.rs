@@ -1029,6 +1029,7 @@ mod tests {
                 path: path.clone(),
                 path_raw: path.to_string(),
                 entropy: None,
+                master_xpub: None,
             });
 
             let mut payload = [0u8; 65];
