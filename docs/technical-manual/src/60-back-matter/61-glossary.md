@@ -28,6 +28,22 @@ The 32-character alphabet introduced by BIP-173 (SegWit addresses) and reused by
 
 Wallet-policy descriptor templates. The canonical JSON shape (`name`, `description_template`, `keys_info`) exchanged between hardware wallets and coordinators. md1 encodes BIP-388 wallet policies. First cited §I.1.
 
+## BIP-388 distinct-key rule
+
+The BIP-388 §"Specification" requirement that a wallet policy's key-information vector contain pairwise-distinct `(xpub, derivation_path)` tuples. Enforced symmetrically by the toolkit at bundle creation (exit 2) and verify-bundle (exit 4). Normalization domain at v0.5+ is typed `DerivationPath` equality (folds `h` ↔ `'`). Defined §IV.2.
+
+## bundle
+
+The toolkit's unit of engraving. Binds three sibling card formats — md1 (wallet policy), mk1 (per-cosigner xpub), ms1 (secret material) — together as one wallet's permanent backup. Synthesized by `synthesize_unified` (`crates/mnemonic-toolkit/src/synthesize.rs:593`); verified by `cmd::verify_bundle::run` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98`). Defined §IV.1.
+
+## bundle envelope
+
+The toolkit-emergent set `{md1, mk1[0..N], ms1[0..N]}` plus the binding rules (`chunk_set_id` cross-prefix agreement, BIP-388 distinctness, multiset `md1_xpub_match`). Not a separate wire format; serialized to JSON via `BundleJson` (`crates/mnemonic-toolkit/src/format.rs:119-145`) with `schema_version = "4"`. Defined §IV.1.
+
+## BundleMode
+
+Five-variant enum classifying a bundle by slot composition: `SingleSigFull` / `SingleSigWatchOnly` / `MultisigMultiSource` / `MultisigWatchOnly` / `MultisigHybrid`. Auto-detected from `--slot` inputs by `detect_bundle_mode` (`crates/mnemonic-toolkit/src/bundle_unified.rs:34-63`). Defined §IV.1.
+
 ## chain
 
 The multipath alternative selector argument to `Descriptor::derive_address`. For the canonical `<0;1>/*` use-site path, `chain = 0` is the receive branch and `chain = 1` is the change branch. Out-of-range or hardened values are pre-flight-rejected. Discussed §III.1.
@@ -44,6 +60,10 @@ BIP-32's "public parent key → public child key" function: given an xpub (chain
 
 20-bit per-encoding identifier carried in every mk1 chunked-card header. Opaque (CSPRNG by default; deterministic-from-stub also permitted). Cross-chunk integrity is enforced separately by the 4-byte `cross_chunk_hash`. Defined §II.2.
 
+## chunk_set_id binding (bundle)
+
+The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `bundle.rs:707`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `bundle.rs:724`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
+
 ## codex32
 
 BIP-93 — a Bitcoin-tuned 32-character alphabet with a BCH-style checksum and human-readable prefix. Adopted directly by ms1; the BCH plumbing is forked (not shared as a crate) by md1 and mk1. Primer at §I.3.
@@ -56,6 +76,10 @@ mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_
 
 4-byte trailer = `SHA-256(canonical_bytecode)[0..4]` appended to mk1's canonical bytecode before chunk-split. Defends content-integrity across the (opaque) `chunk_set_id`. Mismatch → `Error::CrossChunkHashMismatch`. Defined §II.2.
 
+## cosigner-mapping diagnostic
+
+The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`verify_bundle.rs:831-836`, two-pass at `:895-947`). Defined §IV.2.
+
 ## definite key
 
 A `DescriptorPublicKey` after multipath alt selection and wildcard `/*` resolution: the underlying xpub has been derived along the use-site path with a specific `(chain, index)` and reduced to a single secp256k1 point. The input rust-miniscript wants for `address()` rendering. Discussed §III.1.
@@ -67,6 +91,10 @@ rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `t
 ## divergent_paths
 
 1-bit flag in the md1 single-string header. `1` = per-`@N` divergent paths declared (one path per placeholder); `0` = one shared path applies to all placeholders. Defined §II.1.
+
+## engraving card
+
+A stderr-only emission from `mnemonic bundle` carrying a fixed-shape per-card identifier index (`# ms1: ...`, `# mk1: ...`, `# md1: ...`) plus template/threshold/cosigners metadata. Produced by `engraving_card_unified` (`crates/mnemonic-toolkit/src/format.rs:259-376`) from a `BundleInputForCard`. Not machine-readable; designed for physical alignment when stamping plates. Defined §IV.1.
 
 ## forked-BCH boundary
 
@@ -112,6 +140,10 @@ The four sibling formats — **md1**, **mk1**, **ms1**, and the `mnemonic-toolki
 
 The descriptor card. Encodes a BIP-388-style wallet policy. HRP `md`. Library crate `md-codec`; CLI binary `md`. Repo `bg002h/descriptor-mnemonic`. Wire format documented §II.1.
 
+## md1_xpub_match
+
+The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity (so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))`). Implementation at `verify_bundle.rs:1194-1232`. Defined §IV.2.
+
 ## Md1EncodingId
 
 The leading 16 bytes of `SHA-256(canonical bit-packed payload bytecode)` for an md1 encoding. Its leading 20 bits become `chunk_set_id (md1)`; the wire carries the prefix, the recomputation is deterministic from the canonical bytecode. Defined §II.1.
@@ -127,6 +159,10 @@ The key card. Encodes an xpub plus its BIP-32 origin (master fingerprint + deriv
 ## ms1
 
 The secret card. Encodes BIP-39 entropy (or a BIP-32 master seed). HRP `ms`. Library crate `ms-codec`; uses `rust-codex32` directly. Repo `bg002h/mnemonic-secret`. Wire format documented §II.3.
+
+## multiset
+
+A set with multiplicity — `{a, a, b}` differs from `{a, b}`. In the technical manual, the relevant case is `md1_xpub_match`, where the comparison must preserve multiplicity so degenerate templates (e.g., `wsh(multi(K,@0,@0))`) don't compare equal to non-degenerate ones. The toolkit implements multiset equality as sort-then-compare on `Vec<[u8; 65]>`. Discussed §IV.2.
 
 ## multipath
 
@@ -184,9 +220,17 @@ ms1's 5-entry curated table of payload-type tags (`entr` emit/accept; `seed`, `x
 
 The format-specific GF(32) constant the BCH polymod output is compared against. codex32 uses BIP-93's value; md1's `MD_REGULAR_CONST` derives from `SHA-256("shibbolethnums")`; mk1's `MK_REGULAR_CONST` derives from `SHA-256("shibbolethnumskey")`. Per-format target residues are what *fork* md1↔mk1 from codex32 — the generator polynomial is shared. Defined §I.3.
 
+## secret-bearing slot
+
+A bundle slot whose subkey set contains any of `phrase` / `entropy` / `xprv` / `wif` — the four secret-material subkey types. Discriminator: `SlotSubkey::is_secret_bearing` at `crates/mnemonic-toolkit/src/slot_input.rs:47-49`. Bundle synthesis emits a non-empty `ms1` card for each secret-bearing slot. Defined §IV.1.
+
 ## script context (rust-miniscript)
 
 rust-miniscript's type-class abstraction over the three valid contexts a miniscript expression can inhabit: `Legacy` (P2SH), `Segwitv0` (P2WSH), `Tap` (taproot script tree). Each context constrains which `Terminal` variants are admissible and the resource limits (key count, opcode count). md1's converter selects the context per shape and routes through `node_to_miniscript::<Ctx>` accordingly. Discussed §III.2.
+
+## share-set grouping
+
+The v0.2-shares ms1 read-side invariant: ms1 readers reassembling K-of-N shares must dispatch by the reserved-prefix byte before treating BIP-93's `id` field as a share-set group key. Prefix `0x00` → v0.1 single-string secret (never groups); prefix `0x01` → v0.2 entr share (groups by `id`); prefix `≥0x02` → kind-specific path required. Defined §IV.3 (forward-looking).
 
 ## SLIP-0132
 
@@ -216,6 +260,18 @@ The bit-aligned trailing region of md1's bytecode carrying optional metadata blo
 
 The BIP-389 multipath + BIP-32 wildcard segment applied at the descriptor placeholder position (e.g., `<0;1>/*`). Encoded inline in md1's use-site-path block; sparse per-`@N` overrides via TLV `0x00`. Consulted by address derivation: `chain` selects the multipath alt, `index` selects the wildcard child. Discussed §III.1.
 
+## v0.1 → v0.2-shares migration contract
+
+The four ms-codec invariants locked at v0.1 to ensure v0.2 K-of-N share encoding can ship additively without re-engraving v0.1 cards: (1) reserved-prefix byte `0x00` → type discriminator in v0.2, (2) prefix-byte gating of BIP-93 `id`-based share grouping, (3) v0.2 encoder anti-collision against v0.1's `RESERVED_TAG_TABLE`, (4) API back-compat — `encode_shares(tag, Threshold::ZERO, &[p])` wire-bit-identical to v0.1 `encode(tag, &p)`. Authority: `mnemonic-secret/design/SPEC_ms_v0_1.md:212-226`. Discussed §IV.3.
+
+## verify-bundle
+
+The toolkit subcommand that re-derives each card from the user's slot inputs, compares against supplied `--ms1` / `--mk1` / `--md1` (or `--bundle-json`), and emits per-check `VerifyCheck` rows. Entry `cmd::verify_bundle::run` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98-201`. Defined §IV.1.
+
+## VerifyCheck
+
+The per-check row struct in verify-bundle's output (`crates/mnemonic-toolkit/src/format.rs:165-183`). Carries `name`, `passed: bool`, `detail`, and conditional forensic fields (`expected`, `actual`, `diff_byte_offset`, `decode_error`) populated only on failure. Defined §IV.1.
+
 ## walker normalisation
 
 md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position (instead of wrapping with an explicit `Tag::Check`). The renderer reconstructs the `c:` wrapper at key-leaf positions; saves wire bits on a wrapper that is structurally implied. Defined §II.1.
@@ -224,6 +280,10 @@ md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position
 
 `SHA-256(canonical_bytecode || canonical_xpub_serialization)[0..16]`. The cryptographic identity bound at recovery time when a complete assembly's bytecode + xpubs are recomputed and compared against an externally-anchored expected value. Distinct from `policy_id_stub` (which is the 4-byte indexing aid). Defined §II.2.
 
+## watch-only slot
+
+A bundle slot whose subkey set contains only `xpub` / `fingerprint` / `path` — no secret material. Discriminator: `SlotSubkey::is_watch_only` at `crates/mnemonic-toolkit/src/slot_input.rs:50-52`. Bundle synthesis emits the `""` empty-string sentinel into `ms1[i]` for each watch-only slot per the SPEC §5.8 dense-MsField layout. Defined §IV.1.
+
 ## wildcard (BIP-389)
 
 The trailing `/*` (or `/*'` for hardened) in a use-site path that resolves to a child index at derivation time. md1 carries the wildcard hardenedness as a 1-bit field after the multipath block; hardened wildcards are pre-flight-rejected by `derive_address` (BIP-32 forbids hardened public derivation). Discussed §III.1.
@@ -231,3 +291,7 @@ The trailing `/*` (or `/*'` for hardened) in a use-site path that resolves to a 
 ## wire format
 
 The bit-level serialisation of a backup card. md1's current wire format is v0.30 (a clean break from v0.x — see `bg002h/descriptor-mnemonic/design/SPEC_v0_30_wire_format.md`). mk1's wire format mirrors md1's BCH plumbing but has its own primary-tag space. ms1's wire format is BIP-93 codex32 directly. Documented §II.
+
+## XpubNotInPolicy
+
+The third cosigner-mapping failure mode in verify-bundle: a supplied `--mk1` group decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. The wrong-key attack indicator (or evidence that a user supplied an mk1 card from a different wallet). Defined `verify_bundle.rs:835`; emission at `:1128-1131`; precedence rank highest among the three modes. Defined §IV.2.

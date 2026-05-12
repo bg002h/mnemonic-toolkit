@@ -91,10 +91,12 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `forked-BCH boundary` | [The m-format Star](#the-m-format-star) |
 | `generator polynomial` | [codex32 and BCH](#codex32-and-bch) |
 | `GF(32)` | [codex32 and BCH](#codex32-and-bch) |
+| `GF(32) interpolation` | [Future Shares](#future-shares) |
 | `h-notation` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `hardened apostrophe folding` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `HRP` | [Conventions and Notation](#conventions-and-notation) |
 | `HRP-mixing` | [codex32 and BCH](#codex32-and-bch) |
+| `interpolate_at (rust-codex32)` | [Future Shares](#future-shares) |
 | `is_nums` | [md1 Wire Format](#md1-wire-format) |
 | `KeyCard` | [mk1 Wire Format](#mk1-wire-format) |
 | `key_index` | [md1 Wire Format](#md1-wire-format) |
@@ -182,6 +184,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `template (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `Terminal::Multi` | [Shape Coverage](#shape-coverage) |
 | `testnet` | [mk1 Wire Format](#mk1-wire-format) |
+| `Threshold (ms-codec v0.2)` | [Future Shares](#future-shares) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
 | `to_miniscript_descriptor` | [Shape Coverage](#shape-coverage) |
 | `tr (key-path)` | [Shape Coverage](#shape-coverage) |
