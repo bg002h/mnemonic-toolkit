@@ -1107,3 +1107,11 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** Blockstream Green's multisig surface is server-mediated (Green Multisig Shield + Liquid), not a direct file-import shape. `--format green` is therefore singlesig-only; multisig templates return a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow`. Resolves once Green publishes a self-custody multisig file-import format.
 - **Status:** `open`. Last upstream-checked **2026-05-12**: Green Help Center article `19340800530713-Set-up-watch-only-wallet` returns HTTP 403 to programmatic fetchers (Zendesk-hosted, browser-only). Status cannot be verified autonomously; entry remains open pending manual browser check.
 - **Tier:** `v1+ / pending-green-server-support`
+
+### `mnemonic-gui-schema-mirror` — companion to `bg002h/mnemonic-gui` schema gate
+
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `mnemonic-gui-schema-mirror`; CI gate at `.github/workflows/schema-mirror.yml`.
+- **Where:** This CLI's clap-derive `Args` blocks (currently `cmd/{bundle,verify_bundle,convert,export_wallet,derive_child}.rs`).
+- **What:** The `mnemonic-gui` GUI mirrors this CLI's clap-derive flag surface at pinned tag `mnemonic-toolkit-v0.8.1`. Any flag add / remove / rename / `conflicts_with` / `required_unless_present_any` change in this repo's CLI surface must land in lockstep with a companion `mnemonic-gui` PR that bumps the schema + the `pinned-upstream.toml` tag for this CLI. The `mnemonic-gui` CI gate runs `cargo install --locked --git <this-repo> --tag <pin>` + `cargo test --test schema_mirror`, so drift surfaces as a CI failure. Additionally, the GUI's `build.rs` codegen reads `crates/mnemonic-toolkit/src/cmd/convert.rs::NodeType::is_secret_bearing()` and `crates/mnemonic-toolkit/src/slot_input.rs::SlotSubkey::is_secret_bearing()` via `syn::parse_file` to populate its `SECRET_*` constants — drift in those impls is also caught by a runtime source-audit test in the GUI repo.
+- **Status:** `open` (mirror-invariant; tracking only — every flag-surface PR carries this lockstep work).
+- **Tier:** `v1 / mirror-invariant`
