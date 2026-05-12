@@ -10,9 +10,9 @@ use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
-    build_descriptor_string, descriptor_to_bip388_wallet_policy, format_bip388_wallet_policy,
-    format_bitcoin_core_importdescriptors, validate_watch_only, validate_watch_only_resolved,
-    TaprootInternalKey, TimestampArg,
+    build_descriptor_string, script_type_from_descriptor, script_type_from_template,
+    validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
+    EmitInputs, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -295,44 +295,69 @@ pub fn run<W: Write, E: Write>(
         canonical
     };
 
-    let value = match args.format {
-        CliExportFormat::BitcoinCore => format_bitcoin_core_importdescriptors(
-            &canonical,
-            args.range,
-            args.timestamp.0,
-            args.bitcoin_core_version,
-        )?,
-        CliExportFormat::Bip388 => {
-            if args.descriptor.is_some() {
-                // SPEC v0.8 §6 — `--descriptor` + `--format bip388`: extract
-                // `[fp/path]xpub` keys from the parsed descriptor; build
-                // wallet_policy by replacing each key with `@N/**` placeholder.
-                descriptor_to_bip388_wallet_policy(&canonical)?
-            } else {
-                // Template branch: render directly using `@N/**` placeholders.
-                let (resolved, template, k) = resolved_template.expect(
-                    "Bip388 template branch reached without resolved_template",
-                );
-                format_bip388_wallet_policy(
-                    template,
-                    &resolved,
-                    k,
-                    args.network,
-                    args.account,
-                    args.taproot_internal_key,
-                )?
-            }
-        }
-        CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
+    // Build EmitInputs once, after slot resolution + descriptor canonicalization
+    // + watch-only validation. Each WalletFormatEmitter borrows this struct.
+    // SPEC v0.8 §12 — trait dispatch replaces the per-format `Value` match
+    // (which was followed by `serde_json::to_string_pretty`). Each emitter now
+    // returns its final `String` directly; the v0.7 byte-exact fixtures for
+    // `bitcoin-core` / `bip388` remain valid because `to_string_pretty` is
+    // deterministic for a given input `Value`.
+    let (resolved_slots_ref, template_opt, threshold_opt): (
+        &[crate::synthesize::ResolvedSlot],
+        Option<CliTemplate>,
+        Option<u8>,
+    ) = match &resolved_template {
+        Some((slots, tmpl, k)) => (slots.as_slice(), Some(*tmpl), Some(*k)),
+        None => (&[], None, None),
     };
 
-    let serialized = serde_json::to_string_pretty(&value)
-        .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))?;
+    let script_type = if let Some(t) = template_opt {
+        script_type_from_template(&t)
+    } else {
+        // Descriptor path: parse once for script-type classification.
+        use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+        use std::str::FromStr;
+        let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("export-wallet script-type derive: {e}"))
+        })?;
+        script_type_from_descriptor(&parsed)?
+    };
+
+    // Phase 0: `--wallet-name` flag not yet exposed (added in Phase 1). Default
+    // is `<template-human-name>-<account>` for the template path, or
+    // `"imported-descriptor"` for the descriptor path. `wallet_name_was_user_supplied`
+    // is unconditionally `false` until Phase 1 wires the clap flag.
+    let wallet_name_default = match template_opt {
+        Some(t) => format!("{}-{}", t.human_name(), args.account),
+        None => "imported-descriptor".to_string(),
+    };
+
+    let inputs = EmitInputs {
+        canonical_descriptor: &canonical,
+        resolved_slots: resolved_slots_ref,
+        template: template_opt,
+        script_type,
+        network: args.network,
+        account: args.account,
+        threshold: threshold_opt,
+        wallet_name: &wallet_name_default,
+        wallet_name_was_user_supplied: false,
+        taproot_internal_key: args.taproot_internal_key,
+        range: args.range,
+        timestamp: args.timestamp.0,
+        bitcoin_core_version: args.bitcoin_core_version,
+    };
+
+    let emitted: String = match args.format {
+        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
+        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
+    }?;
 
     if args.output == "-" {
-        let _ = writeln!(stdout, "{serialized}");
+        let _ = writeln!(stdout, "{emitted}");
     } else {
-        std::fs::write(&args.output, format!("{serialized}\n"))
+        std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
     }
     Ok(())

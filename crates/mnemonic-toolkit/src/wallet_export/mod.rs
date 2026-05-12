@@ -15,8 +15,8 @@ mod bip388;
 mod bitcoin_core;
 mod pipeline;
 
-pub(crate) use bip388::format_bip388_wallet_policy;
-pub(crate) use bitcoin_core::format_bitcoin_core_importdescriptors;
+pub(crate) use bip388::{format_bip388_wallet_policy, Bip388Emitter};
+pub(crate) use bitcoin_core::{format_bitcoin_core_importdescriptors, BitcoinCoreEmitter};
 pub(crate) use pipeline::{build_descriptor_string, descriptor_to_bip388_wallet_policy};
 
 use crate::error::ToolkitError;
@@ -279,8 +279,32 @@ pub(crate) fn build_missing_fields_refusal(format: &str, missing: &[MissingField
     s
 }
 
+/// SPEC v0.8 §12 — shared trait every `--format` emitter implements.
+///
+/// `collect_missing`: per-format predicate that walks `EmitInputs` and
+/// returns the set of `MissingField` entries this format requires but the
+/// inputs do not provide. Returning a non-empty `Vec` lets the caller surface
+/// the §4 byte-exact missing-info refusal (via
+/// `ToolkitError::ExportWalletMissingFields` → `build_missing_fields_refusal`).
+///
+/// `emit`: produce the final byte-exact output string for the wallet-import
+/// artifact. Returns `String` (not `Value`) because all six new formats and
+/// the two existing formats produce text; JSON formats thin-wrap their
+/// `serde_json::Value` builder with `to_string_pretty`. The caller writes
+/// the returned bytes directly to stdout / `--output <path>`.
+///
+/// `extension`: file-extension hint for `--output <path>` validation /
+/// suggestion. `"json"` for Bitcoin Core / BIP-388 / Sparrow / Specter /
+/// Electrum / Coldcard generic; `"txt"` for Coldcard multisig / Jade / Green.
+#[allow(dead_code)] // Phase 0 adds the trait; cmd::export_wallet::run wires it next.
+pub(crate) trait WalletFormatEmitter {
+    fn collect_missing(inputs: &EmitInputs) -> Vec<MissingField>;
+    fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError>;
+    fn extension() -> &'static str;
+}
+
 /// SPEC v0.8 §12 — single struct threaded through `WalletFormatEmitter::emit`
-/// (added in the next commit) carrying all data each per-format emitter needs.
+/// carrying all data each per-format emitter needs.
 /// Built in `cmd::export_wallet::run` after template + slot resolution and
 /// watch-only validation; the resulting reference is borrowed by emitters.
 #[allow(dead_code)] // Phase 0 adds the struct; Phase 1+ emitters consume it.

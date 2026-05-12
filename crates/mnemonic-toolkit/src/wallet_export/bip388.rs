@@ -1,12 +1,59 @@
 //! SPEC §6 + v0.8 §7 — BIP-388 `wallet_policy` JSON emitter.
 
-use super::pipeline::{key_origin_str, template_origin_path_no_m};
-use super::{TaprootInternalKey, NUMS_XONLY_HEX};
+use super::pipeline::{descriptor_to_bip388_wallet_policy, key_origin_str, template_origin_path_no_m};
+use super::{
+    EmitInputs, MissingField, TaprootInternalKey, WalletFormatEmitter, NUMS_XONLY_HEX,
+};
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::synthesize::ResolvedSlot;
 use crate::template::CliTemplate;
 use serde_json::{json, Value};
+
+/// SPEC v0.8 §12 — `WalletFormatEmitter` impl for `--format bip388`.
+/// Two paths:
+/// - Template path (`EmitInputs.template` is `Some`): render directly via
+///   `format_bip388_wallet_policy` using `@N/**` placeholders.
+/// - Descriptor passthrough (`EmitInputs.template` is `None`): re-extract
+///   `[fp/path]xpub` keys via `pipeline::descriptor_to_bip388_wallet_policy`.
+///
+/// Both branches return a `Value`; the trait emit pretty-prints to `String`.
+pub(crate) struct Bip388Emitter;
+
+impl WalletFormatEmitter for Bip388Emitter {
+    fn collect_missing(_inputs: &EmitInputs) -> Vec<MissingField> {
+        // BIP-388 wallet_policy is tolerant: the template path always has
+        // populated resolved_slots (validated upstream), and the descriptor
+        // path re-extracts keys deterministically. Missing pieces surface
+        // as descriptor / BadInput errors rather than §4 missing-info refusals.
+        Vec::new()
+    }
+
+    fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
+        let value = if let Some(template) = inputs.template {
+            // Template path: render using `@N/**` placeholders.
+            // Threshold defaults to 1 for singlesig (matches v0.7 behavior).
+            let k = inputs.threshold.unwrap_or(1);
+            format_bip388_wallet_policy(
+                template,
+                inputs.resolved_slots,
+                k,
+                inputs.network,
+                inputs.account,
+                inputs.taproot_internal_key,
+            )?
+        } else {
+            // Descriptor passthrough.
+            descriptor_to_bip388_wallet_policy(inputs.canonical_descriptor)?
+        };
+        serde_json::to_string_pretty(&value)
+            .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))
+    }
+
+    fn extension() -> &'static str {
+        "json"
+    }
+}
 
 /// SPEC §6 + v0.8 §7: emit BIP-388 `wallet_policy` JSON. `description_template`
 /// uses `@N/**` placeholders; `keys_info` is `[fp/path]xpub` strings in

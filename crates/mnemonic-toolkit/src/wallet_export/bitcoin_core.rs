@@ -1,10 +1,41 @@
 //! SPEC §5 — Bitcoin Core `importdescriptors` JSON emitter.
 
-use super::TimestampArg;
+use super::{EmitInputs, MissingField, TimestampArg, WalletFormatEmitter};
 use crate::error::ToolkitError;
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use serde_json::{json, Value};
 use std::str::FromStr;
+
+/// SPEC v0.8 §12 — `WalletFormatEmitter` impl for `--format bitcoin-core`.
+/// Thin-wraps `format_bitcoin_core_importdescriptors` (a `Value` builder) with
+/// `serde_json::to_string_pretty` to return the final `String`. The byte-exact
+/// v0.7 fixture for `--format bitcoin-core` remains valid because
+/// `to_string_pretty` is deterministic for a given `Value` input.
+pub(crate) struct BitcoinCoreEmitter;
+
+impl WalletFormatEmitter for BitcoinCoreEmitter {
+    fn collect_missing(_inputs: &EmitInputs) -> Vec<MissingField> {
+        // Bitcoin Core `importdescriptors` takes the canonical descriptor
+        // as-is; missing fields surface as descriptor-parse errors upstream
+        // rather than as §4 missing-info refusals.
+        Vec::new()
+    }
+
+    fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
+        let value = format_bitcoin_core_importdescriptors(
+            inputs.canonical_descriptor,
+            inputs.range,
+            inputs.timestamp,
+            inputs.bitcoin_core_version,
+        )?;
+        serde_json::to_string_pretty(&value)
+            .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))
+    }
+
+    fn extension() -> &'static str {
+        "json"
+    }
+}
 
 /// SPEC §5: emit Bitcoin Core `importdescriptors` JSON. Multipath `<0;1>`
 /// splits into 2 entries (receive `internal: false`, change `internal: true`).
