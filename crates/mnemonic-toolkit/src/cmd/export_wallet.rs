@@ -12,7 +12,7 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    ColdcardEmitter, EmitInputs, JadeEmitter, TaprootInternalKey, TimestampArg,
+    ColdcardEmitter, EmitInputs, JadeEmitter, SparrowEmitter, TaprootInternalKey, TimestampArg,
     WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
@@ -156,15 +156,9 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     _stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // Sparrow/Specter stubs (SPEC §7) refuse before any work.
-    match args.format {
-        CliExportFormat::Sparrow => {
-            return Err(ToolkitError::ExportWalletFormatStub("sparrow"));
-        }
-        CliExportFormat::Specter => {
-            return Err(ToolkitError::ExportWalletFormatStub("specter"));
-        }
-        _ => {}
+    // Specter stub (Phase 3 wires it). Sparrow is now real (Phase 2).
+    if matches!(args.format, CliExportFormat::Specter) {
+        return Err(ToolkitError::ExportWalletFormatStub("specter"));
     }
 
     // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
@@ -380,6 +374,7 @@ pub fn run<W: Write, E: Write>(
         network: args.network,
         account: args.account,
         threshold: threshold_opt,
+        threshold_user_supplied: args.threshold.is_some(),
         wallet_name: &wallet_name_resolved,
         wallet_name_was_user_supplied: args.wallet_name.is_some(),
         taproot_internal_key: args.taproot_internal_key,
@@ -388,12 +383,33 @@ pub fn run<W: Write, E: Write>(
         bitcoin_core_version: args.bitcoin_core_version,
     };
 
+    // SPEC §4 missing-info channel — every emitter exposes a per-format
+    // `collect_missing` predicate; non-empty result short-circuits to the
+    // deterministic refusal via `ToolkitError::ExportWalletMissingFields`
+    // (which routes through `build_missing_fields_refusal`).
+    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
+        match args.format {
+            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
+            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
+            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
+            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
+            CliExportFormat::Specter => unreachable!("specter stubbed above"),
+        };
+    if !missing.is_empty() {
+        return Err(ToolkitError::ExportWalletMissingFields {
+            format: format_name,
+            missing,
+        });
+    }
+
     let emitted: String = match args.format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
         CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
         CliExportFormat::Jade => JadeEmitter::emit(&inputs),
-        CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
+        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
+        CliExportFormat::Specter => unreachable!("specter stubbed above"),
     }?;
 
     if args.output == "-" {

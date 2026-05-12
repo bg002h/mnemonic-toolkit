@@ -16,12 +16,14 @@ mod bitcoin_core;
 mod coldcard;
 mod jade;
 mod pipeline;
+mod sparrow;
 
 pub(crate) use bip388::Bip388Emitter;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use coldcard::ColdcardEmitter;
 pub(crate) use jade::JadeEmitter;
 pub(crate) use pipeline::build_descriptor_string;
+pub(crate) use sparrow::SparrowEmitter;
 
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
@@ -331,6 +333,15 @@ pub(crate) struct EmitInputs<'a> {
     pub account: u32,
     /// `Some(K)` for multisig templates; `None` for singlesig.
     pub threshold: Option<u8>,
+    /// `true` when the user explicitly supplied `--threshold`. Phase 2's
+    /// `SparrowEmitter::collect_missing` checks this flag: Sparrow refuses
+    /// multisig templates without explicit threshold because its
+    /// `defaultPolicy.miniscript.script` field uses `multi(K, ...)` /
+    /// `sortedmulti(K, ...)` and silently defaulting `K = N` would publish
+    /// a single-no-threshold Sparrow wallet that bypasses the K-of-N
+    /// signing rule (UX rationale per SPEC §13 missing-threshold-refusal
+    /// fixture row).
+    pub threshold_user_supplied: bool,
     /// Resolved wallet name. For the template path, falls back to
     /// `<template-human-name>-<account>` when `--wallet-name` is absent;
     /// for the descriptor path, falls back to `"imported-descriptor"`.
