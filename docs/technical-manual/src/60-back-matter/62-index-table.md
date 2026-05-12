@@ -13,6 +13,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `base58check` | [Network and Addressing](#network-and-addressing) |
 | `BCH code` | [codex32 and BCH](#codex32-and-bch) |
 | `bech32` | [codex32 and BCH](#codex32-and-bch) |
+| `bifurcation (BIP-388 enforcement)` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `BIP 32 master fingerprint` | [mk1 Wire Format](#mk1-wire-format) |
 | `BIP-32` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP-44` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -24,6 +25,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `BIP-341` | [md1 Wire Format](#md1-wire-format) |
 | `BIP-380` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP-388` | [Introduction](#introduction) |
+| `BIP-388 distinct-key` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `BIP-389` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `BIP-389 multipath` | [Conventions and Notation](#conventions-and-notation) |
 | `BIP-39 entropy` | [ms1 Wire Format](#ms1-wire-format) |
@@ -40,7 +42,9 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `bundle mode` | [Bundle Anatomy](#bundle-anatomy) |
 | `bytecode header (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
 | `canonicality rules` | [md1 Wire Format](#md1-wire-format) |
+| `cascade-skip` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `chunk_set_id` | [Bundle Anatomy](#bundle-anatomy) |
+| `chunk_set_id binding` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `chunked header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `chunk_set_id (mk1)` | [mk1 Wire Format](#mk1-wire-format) |
@@ -48,11 +52,14 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `codex32` | [codex32 and BCH](#codex32-and-bch) |
 | `compact-73` | [mk1 Wire Format](#mk1-wire-format) |
 | `cosigner` | [Introduction](#introduction) |
+| `cosigner-mapping diagnostic` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `cross-card binding` | [The m-format Star](#the-m-format-star) |
+| `cross-card binding (bundle)` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `cross_chunk_hash` | [mk1 Wire Format](#mk1-wire-format) |
 | `derivation (md1)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `descriptor truncation` | [Bundle Anatomy](#bundle-anatomy) |
 | `DescriptorPublicKey` | [Shape Coverage](#shape-coverage) |
+| `distinct-key rule` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
 | `engraving card` | [Bundle Anatomy](#bundle-anatomy) |
 | `Error::AddressDerivationFailed` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
@@ -84,6 +91,8 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `forked-BCH boundary` | [The m-format Star](#the-m-format-star) |
 | `generator polynomial` | [codex32 and BCH](#codex32-and-bch) |
 | `GF(32)` | [codex32 and BCH](#codex32-and-bch) |
+| `h-notation` | [Anti-Collision Invariants](#anti-collision-invariants) |
+| `hardened apostrophe folding` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `HRP` | [Conventions and Notation](#conventions-and-notation) |
 | `HRP-mixing` | [codex32 and BCH](#codex32-and-bch) |
 | `is_nums` | [md1 Wire Format](#md1-wire-format) |
@@ -96,6 +105,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `LP4-ext varint` | [md1 Wire Format](#md1-wire-format) |
 | `mainnet` | [mk1 Wire Format](#mk1-wire-format) |
 | `md1` | [Introduction](#introduction) |
+| `md1_xpub_match` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `Md1EncodingId` | [md1 Wire Format](#md1-wire-format) |
 | `MD_REGULAR_CONST` | [codex32 and BCH](#codex32-and-bch) |
 | `m-format constellation` | [Introduction](#introduction) |
@@ -106,9 +116,12 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `mnemonic-toolkit` | [Introduction](#introduction) |
 | `ms1` | [ms1 Wire Format](#ms1-wire-format) |
 | `ms1 dense layout` | [Bundle Anatomy](#bundle-anatomy) |
+| `ms1 four-case table` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `multi-family bodies` | [md1 Wire Format](#md1-wire-format) |
 | `multipath` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `multipath alternative` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
+| `multiplicity (multiset)` | [Anti-Collision Invariants](#anti-collision-invariants) |
+| `multiset semantics` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `MultisigHybrid` | [Bundle Anatomy](#bundle-anatomy) |
 | `MultisigInfo` | [Bundle Anatomy](#bundle-anatomy) |
 | `MultisigMultiSource` | [Bundle Anatomy](#bundle-anatomy) |
@@ -185,3 +198,4 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `wpkh` | [Shape Coverage](#shape-coverage) |
 | `wsh (miniscript)` | [Shape Coverage](#shape-coverage) |
 | `xpub` | [Shape Coverage](#shape-coverage) |
+| `XpubNotInPolicy` | [Anti-Collision Invariants](#anti-collision-invariants) |
