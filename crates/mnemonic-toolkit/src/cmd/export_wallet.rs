@@ -12,7 +12,7 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    EmitInputs, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
+    ColdcardEmitter, EmitInputs, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -23,6 +23,8 @@ pub enum CliExportFormat {
     BitcoinCore,
     #[value(name = "bip388")]
     Bip388,
+    #[value(name = "coldcard")]
+    Coldcard,
     #[value(name = "sparrow")]
     Sparrow,
     #[value(name = "specter")]
@@ -351,6 +353,7 @@ pub fn run<W: Write, E: Write>(
     let emitted: String = match args.format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
         CliExportFormat::Sparrow | CliExportFormat::Specter => unreachable!("stubbed above"),
     }?;
 
