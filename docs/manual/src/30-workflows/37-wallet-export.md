@@ -1,10 +1,11 @@
-# Exporting to Bitcoin Core / BIP-388 / Sparrow / Specter
+# Exporting to Bitcoin Core / BIP-388 / vendor formats
 
 The bundle's md1 card carries the wallet policy (template + bound
 xpubs). To turn that into a watch-only wallet your monitoring
 software can import, run `mnemonic export-wallet`. The subcommand
-emits the same wallet in any of four interchange formats; pick the
-one your software wants.
+emits the same wallet in any of eight interchange formats (v0.8.1
+expanded the original four with `coldcard`, `jade`, `sparrow`,
+`specter`, `electrum`, `green`); pick the one your software wants.
 
 ## Format selection
 
@@ -12,13 +13,13 @@ one your software wants.
 flowchart LR
   A[Wallet policy<br/>md1 + mk1 set] --> B{Receiving<br/>software?}
   B -- Bitcoin Core 25+ --> C["--format bitcoin-core<br/>(importdescriptors JSON)"]
-  B -- Sparrow / Specter / Coldcard / Ledger --> D["--format bip388<br/>(wallet_policy JSON)"]
-  B -- Sparrow native --> E["--format sparrow<br/>(deferred stub)"]
-  B -- Specter native --> F["--format specter<br/>(deferred stub)"]
-  C --> G[bitcoin-cli importdescriptors '...']
-  D --> H[Import as wallet policy]
-  E --> H
-  F --> H
+  B -- Generic BIP-388 --> D["--format bip388<br/>(wallet_policy JSON)"]
+  B -- Coldcard --> E["--format coldcard<br/>(generic JSON or multisig text)"]
+  B -- Blockstream Jade --> F["--format jade<br/>(multisig text)"]
+  B -- Sparrow --> G["--format sparrow<br/>(wallet JSON)"]
+  B -- Specter Desktop --> H["--format specter<br/>(import JSON)"]
+  B -- Electrum --> I["--format electrum<br/>(wallet-db JSON)"]
+  B -- Blockstream Green --> J["--format green<br/>(descriptor text)"]
 ```
 
 ## Bitcoin Core (default format)
@@ -161,3 +162,81 @@ See [Taproot multisig](#taproot-multisig) for the design choice.
 - **Output redirect.** Use `--output file.json` (or `> file.json`)
   to keep the JSON out of your shell history and ready for
   piped import.
+
+## Coldcard multisig text (worked example)
+
+Coldcard's multisig wallet-import format is a small text file with
+exactly five line-types: `Name:`, `Policy:`, `Derivation:`,
+`Format:`, and one `<XFP>: xpub...` line per cosigner. The same
+shape is accepted byte-for-byte by Blockstream Jade
+(`--format jade` delegates to Coldcard's emitter).
+
+The 2-of-3 wsh-sortedmulti export below uses three Trezor-style test
+xpubs at the BIP-48 wsh path `m/48'/0'/0'/2'`:
+
+```sh
+mnemonic export-wallet \
+  --format coldcard \
+  --template wsh-sortedmulti \
+  --threshold 2 \
+  --multisig-path-family bip48 \
+  --network mainnet \
+  --wallet-name "VaultColdStorage" \
+  --slot @0.xpub=xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX \
+  --slot @0.fingerprint=b8688df1 \
+  --slot @0.path=m/48\'/0\'/0\'/2\' \
+  --slot @1.xpub=xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6 \
+  --slot @1.fingerprint=28645006 \
+  --slot @1.path=m/48\'/0\'/0\'/2\' \
+  --slot @2.xpub=xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx \
+  --slot @2.fingerprint=5436d724 \
+  --slot @2.path=m/48\'/0\'/0\'/2\' \
+  --output coldcard-multisig.txt
+```
+
+Output (`coldcard-multisig.txt`):
+
+```text
+Name: VaultColdStorage
+Policy: 2 of 3
+Derivation: m/48'/0'/0'/2'
+Format: P2WSH
+5436D724: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx
+28645006: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+B8688DF1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+```
+
+Vendor-specific details encoded here:
+
+- **Cosigner order.** For `wsh-sortedmulti` (and `sh-wsh-sortedmulti`)
+  the cosigner lines are sorted lexicographically by xpub, matching
+  Bitcoin Core's `sortedmulti` consensus rule. For the unsorted
+  variants (`wsh-multi` / `sh-wsh-multi`) cosigners appear in
+  slot-index order (`@0`, `@1`, `@2`).
+- **XFP case.** Coldcard expects uppercase 8-hex master fingerprints
+  on cosigner lines. The slot input `@N.fingerprint=` accepts
+  either case; the emitter upcases.
+- **xpub form.** BIP-32 base58 form (`xpub.../xprv...`); SLIP-132
+  variants (`Zpub` / `Vpub` — capital, multisig) are NOT used on
+  cosigner lines per the Coldcard format, even though the toolkit
+  accepts them on the slot input (and normalizes to BIP-32 internally).
+- **`Format:`.** `P2WSH` for `wsh-*` templates; `P2SH-P2WSH` for `sh-wsh-*`.
+- **`Derivation:`.** A single line whose value is the shared origin
+  path across cosigners (if all match); falls back to the Coldcard
+  convention `m/0'/0'` if cosigners disagree.
+- **`Name:` truncation.** Capped at 20 Unicode scalar values per the
+  Coldcard reference format; non-ASCII names are truncated at
+  codepoint granularity (not byte) so multi-byte sequences are not
+  split.
+
+The same text is byte-identical to Jade's
+`register_multisig.multisig_file` — switch `--format coldcard` to
+`--format jade` and the output is the same file. Both Coldcard and
+Jade firmware import this file via SD-card or QR-stream.
+
+Taproot multisig (`tr-multi-a` / `tr-sortedmulti-a`) is not yet
+supported by either Coldcard or Jade firmware (tracked under
+FOLLOWUPS `coldcard-tr-multi-a-pending-firmware` and
+`jade-tr-multi-a-pending-firmware`). For taproot multisig setup,
+use `--format bitcoin-core` (descriptor) or `--format sparrow`
+(which supports taproot multisig via descriptor-passthrough).
