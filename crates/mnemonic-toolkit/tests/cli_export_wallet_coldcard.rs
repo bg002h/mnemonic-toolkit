@@ -24,10 +24,33 @@ const TREZOR_24_MASTER_FP: &str = "5436d724";
 /// shape after `normalize_xpub_prefix` swaps version bytes).
 const TREZOR_24_BIP84_MAINNET_ZPUB: &str = "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S";
 
+/// BIP-49 testnet account-0 xpub at `m/49'/1'/0'` for TREZOR_24 (tpub form;
+/// derived via `mnemonic convert --to xpub --template bip49 --network testnet`).
+const TREZOR_24_BIP49_TESTNET_TPUB: &str = "tpubDDYhB7EGtNkJdeaPTacttc9jZ6aq7NWHiYy21ACcFx8g2zs9HNpQDondF7HQfemghZSEimBPHPRfs93UehvbFHZyHgWDBrY4KSCC183DAFw";
+
+/// BIP-44 mainnet account-0 xpub at `m/44'/0'/0'` for TREZOR_24.
+const TREZOR_24_BIP44_MAINNET_XPUB: &str = "xpub6CDwootAjK1YycduSmTrAAXjfW9A8bPhVamZeofd8wX6rvGm2vLz6qtnqx4FagbFeXJwFThkzDPGkErrjFpLpr1wsj7NXgHHkevPUxHYjUP";
+
 /// Path to the byte-exact fixture (relative to the integration-test binary's
 /// runtime working directory, which is the crate root).
 const FIXTURE_BIP84_MAINNET: &str =
     "tests/export_wallet/coldcard_generic_bip84_mainnet.json";
+const FIXTURE_BIP49_TESTNET: &str =
+    "tests/export_wallet/coldcard_generic_bip49_testnet.json";
+const FIXTURE_BIP44_MAINNET: &str =
+    "tests/export_wallet/coldcard_generic_bip44_mainnet.json";
+const FIXTURE_MULTISIG_2OF3_WSH: &str =
+    "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
+
+// Phase 1.4 multisig vectors (BIP-48 wsh, m/48'/0'/0'/2').
+// Cosigner A + B from cli_export_wallet.rs's existing fixtures.
+// Cosigner C derived from TREZOR_24 at the same BIP-48 wsh path.
+const COSIGNER_A_XPUB: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+const COSIGNER_A_FP: &str = "b8688df1";
+const COSIGNER_B_XPUB: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
+const COSIGNER_B_FP: &str = "28645006";
+const COSIGNER_C_XPUB: &str = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
+const COSIGNER_C_FP: &str = TREZOR_24_MASTER_FP;
 
 /// SPEC §5.1 Phase 1.2 RED → GREEN: `--format coldcard --template bip84
 /// --network mainnet --slot @0.xpub=zpub... --slot @0.fingerprint=5436d724`
@@ -62,6 +85,194 @@ fn cell_1_coldcard_generic_bip84_mainnet_byte_exact() {
     assert_eq!(
         stdout, expected,
         "Coldcard BIP-84 mainnet emission must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+}
+
+/// SPEC §5.1 Phase 1.3 — BIP-49 testnet singlesig (`chain: "XTN"`, SLIP-132
+/// `upub` form for `_pub`, p2sh-wrapped p2wpkh address starting with `2`).
+#[test]
+fn cell_2_coldcard_generic_bip49_testnet_byte_exact() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip49",
+            "--network",
+            "testnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP49_TESTNET_TPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_24_MASTER_FP}"),
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let expected = std::fs::read_to_string(FIXTURE_BIP49_TESTNET).expect(FIXTURE_BIP49_TESTNET);
+    assert_eq!(
+        stdout, expected,
+        "Coldcard BIP-49 testnet emission must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+}
+
+/// SPEC §5.1 Phase 1.3 — BIP-44 mainnet singlesig (legacy p2pkh; no `_pub`
+/// field per upstream Coldcard sample — legacy lacks a SLIP-132 variant).
+#[test]
+fn cell_3_coldcard_generic_bip44_mainnet_byte_exact() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip44",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP44_MAINNET_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_24_MASTER_FP}"),
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let expected = std::fs::read_to_string(FIXTURE_BIP44_MAINNET).expect(FIXTURE_BIP44_MAINNET);
+    assert_eq!(
+        stdout, expected,
+        "Coldcard BIP-44 mainnet emission must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+}
+
+/// SPEC §5.1 R1-I2 — `--template bip86 --format coldcard` REFUSES with the
+/// pinned pointer text (BIP-86 is not in the upstream Coldcard generic-export
+/// schema; tracked by FOLLOWUPS `coldcard-bip86-generic-export-pending-firmware`).
+#[test]
+fn cell_4_coldcard_bip86_refuses_byte_exact() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip86",
+            "--network",
+            "mainnet",
+            // Use the BIP-84 xpub as a placeholder — refusal fires before
+            // slot resolution, so the value is irrelevant.
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP84_MAINNET_ZPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_24_MASTER_FP}"),
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let expected = "--format coldcard does not yet support BIP-86 (P2TR) — Coldcard's generic-wallet-export schema documents only bip44/bip49/bip84. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup.";
+    assert!(
+        stderr.contains(expected),
+        "BIP-86 refusal stderr must contain the SPEC §5.1 pointer.\n--- got ---\n{stderr}"
+    );
+}
+
+/// SPEC §5.2 Phase 1.4 — Coldcard multisig text emitter, 2-of-3 wsh-sortedmulti.
+/// Cosigner order in the output is sorted by xpub lex (sortedmulti); Derivation
+/// line carries the shared `m/48'/0'/0'/2'` BIP-48 wsh path; XFPs uppercase;
+/// xpubs in BIP-32 base58 form (not SLIP-132).
+#[test]
+fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            &format!("@2.fingerprint={COSIGNER_C_FP}"),
+            "--slot",
+            "@2.path=m/48'/0'/0'/2'",
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let expected = std::fs::read_to_string(FIXTURE_MULTISIG_2OF3_WSH).expect(FIXTURE_MULTISIG_2OF3_WSH);
+    assert_eq!(
+        stdout, expected,
+        "Coldcard 2-of-3 wsh-sortedmulti multisig text must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
+    );
+}
+
+/// SPEC §5.2 — `tr-multi-a` template REFUSES under `--format coldcard` per
+/// FOLLOWUPS `coldcard-tr-multi-a-pending-firmware`. The byte-exact pointer
+/// is checked here.
+#[test]
+fn cell_6_coldcard_tr_multi_a_refuses() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "tr-multi-a",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip87",
+            "--network",
+            "mainnet",
+            "--taproot-internal-key",
+            "nums",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            &format!("@2.fingerprint={COSIGNER_C_FP}"),
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("coldcard-tr-multi-a-pending-firmware"),
+        "tr-multi-a refusal must cite the FOLLOWUPS slug.\n--- got ---\n{stderr}"
     );
 }
 

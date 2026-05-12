@@ -1,0 +1,12 @@
+{
+  "chain": "BTC",
+  "xfp": "5436D724",
+  "account": 0,
+  "bip44": {
+    "name": "p2pkh",
+    "deriv": "m/44'/0'/0'",
+    "xfp": "4DD2C55B",
+    "xpub": "xpub6CDwootAjK1YycduSmTrAAXjfW9A8bPhVamZeofd8wX6rvGm2vLz6qtnqx4FagbFeXJwFThkzDPGkErrjFpLpr1wsj7NXgHHkevPUxHYjUP",
+    "first": "1KBdbBJRVYffWHWWZ1moECfdVBSEnDpLHi"
+  }
+}

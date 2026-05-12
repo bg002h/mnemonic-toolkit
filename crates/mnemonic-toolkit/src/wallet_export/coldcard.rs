@@ -30,7 +30,18 @@ impl WalletFormatEmitter for ColdcardEmitter {
     }
 
     fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
-        emit_coldcard_generic_json(inputs)
+        use crate::template::CliTemplate;
+        match inputs.template {
+            Some(
+                CliTemplate::WshMulti
+                | CliTemplate::WshSortedMulti
+                | CliTemplate::ShWshMulti
+                | CliTemplate::ShWshSortedMulti
+                | CliTemplate::TrMultiA
+                | CliTemplate::TrSortedMultiA,
+            ) => emit_coldcard_multisig_text(inputs),
+            _ => emit_coldcard_generic_json(inputs),
+        }
     }
 
     fn extension() -> &'static str {
@@ -222,6 +233,122 @@ fn sub_clone<'a>(s: &ColdcardSubDerivation<'a>) -> ColdcardSubDerivation<'a> {
         first: s.first.clone(),
         _marker: std::marker::PhantomData,
     }
+}
+
+/// SPEC v0.8 §5.2 — Coldcard multisig text emitter. Format reference:
+/// <https://coldcard.com/docs/multisig>. Jade's `register_multisig.multisig_file`
+/// accepts byte-identical text (SPEC §6); Phase 1.5 wires `JadeEmitter` to
+/// delegate here directly.
+pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String, ToolkitError> {
+    use crate::template::CliTemplate;
+
+    let template = inputs.template.ok_or_else(|| {
+        ToolkitError::BadInput("--format coldcard multisig text requires --template".into())
+    })?;
+
+    // tr-multi-a / tr-sortedmulti-a — refuse pending Coldcard firmware support
+    // for BIP-388 / BIP-341 taproot multisig (track FOLLOWUPS entry
+    // `coldcard-tr-multi-a-pending-firmware`).
+    if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA) {
+        return Err(ToolkitError::BadInput(format!(
+            "--format coldcard does not yet support --template {} — Coldcard firmware does not currently ingest taproot multisig text exports (tracked by FOLLOWUPS coldcard-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
+            template.human_name(),
+        )));
+    }
+
+    // SPEC §5.2 `Format` field: P2WSH for wsh; P2SH-P2WSH for sh-wsh.
+    // The legacy P2SH (bare `sh(multi(...))`) row is reserved but not in
+    // the toolkit's current template set.
+    let format_str = match template {
+        CliTemplate::WshMulti | CliTemplate::WshSortedMulti => "P2WSH",
+        CliTemplate::ShWshMulti | CliTemplate::ShWshSortedMulti => "P2SH-P2WSH",
+        _ => unreachable!("non-multisig templates routed to generic JSON via emit()"),
+    };
+
+    let threshold = inputs.threshold.ok_or_else(|| {
+        ToolkitError::BadInput(
+            "--format coldcard multisig text requires --threshold <K>".into(),
+        )
+    })?;
+    let cosigner_count = inputs.resolved_slots.len();
+    if cosigner_count < 2 {
+        return Err(ToolkitError::BadInput(format!(
+            "--format coldcard multisig text requires at least 2 cosigners (--slot @0..@N); got {cosigner_count}",
+        )));
+    }
+    if (threshold as usize) < 1 || (threshold as usize) > cosigner_count {
+        return Err(ToolkitError::BadInput(format!(
+            "--threshold {threshold} out of range for {cosigner_count} cosigners",
+        )));
+    }
+
+    // Wallet name: SPEC §5.2 truncates to ≤20 chars.
+    let mut name = inputs.wallet_name.to_string();
+    if name.len() > 20 {
+        name.truncate(20);
+    }
+
+    // Derivation line: shared origin path if all cosigners agree;
+    // otherwise the `m/0'/0'` placeholder per Coldcard convention. The
+    // toolkit's per-slot `path_raw` carries the user-supplied origin or
+    // template-derived default; both forms are normalized to `m/...` here.
+    let normalize_path = |p: &str| -> String {
+        if p.starts_with("m/") {
+            p.to_string()
+        } else if p.starts_with('m') {
+            p.to_string()
+        } else if p.is_empty() {
+            String::new()
+        } else {
+            format!("m/{p}")
+        }
+    };
+    let derivations: Vec<String> = inputs
+        .resolved_slots
+        .iter()
+        .map(|s| normalize_path(&s.path_raw))
+        .collect();
+    let derivation = if !derivations.is_empty()
+        && derivations.windows(2).all(|w| w[0] == w[1])
+        && !derivations[0].is_empty()
+    {
+        derivations[0].clone()
+    } else {
+        "m/0'/0'".to_string()
+    };
+
+    // SPEC §5.2: sortedmulti → lex-sort cosigners by xpub; multi → slot-index order.
+    let mut cosigners: Vec<&crate::synthesize::ResolvedSlot> =
+        inputs.resolved_slots.iter().collect();
+    if matches!(
+        template,
+        CliTemplate::WshSortedMulti | CliTemplate::ShWshSortedMulti
+    ) {
+        cosigners.sort_by(|a, b| a.xpub.to_string().cmp(&b.xpub.to_string()));
+    }
+
+    // Assemble the text. SPEC §5.2 line order:
+    //   Name: ...
+    //   Policy: K of N
+    //   Derivation: m/...
+    //   Format: P2WSH | P2SH-P2WSH | P2SH
+    //   <XFP>: xpub6...   (one per cosigner)
+    //
+    // The trait emit contract is "return the text body; the call-site adds
+    // exactly one trailing newline via `writeln!`". So we join lines with
+    // `\n` and let the caller (`cmd::export_wallet::run`) terminate.
+    let mut lines: Vec<String> = Vec::with_capacity(4 + cosigners.len());
+    lines.push(format!("Name: {name}"));
+    lines.push(format!("Policy: {threshold} of {cosigner_count}"));
+    lines.push(format!("Derivation: {derivation}"));
+    lines.push(format!("Format: {format_str}"));
+    for cs in cosigners {
+        // XFP uppercase 8-hex; xpub in BIP-32 base58 form (NOT SLIP-132 per
+        // SPEC §5.2 bullet on cosigner-line shape).
+        let xfp = cs.fingerprint.to_string().to_uppercase();
+        lines.push(format!("{xfp}: {}", cs.xpub));
+    }
+    Ok(lines.join("\n"))
 }
 
 /// `chain` field value per Coldcard's canonical schema: BTC mainnet, XTN
