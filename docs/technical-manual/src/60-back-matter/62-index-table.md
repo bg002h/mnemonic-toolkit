@@ -141,6 +141,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `divergent_paths` | [md1 Wire Format](#md1-wire-format) |
 | `Electrum (wallet-export format)` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `ELECTRUM_SEED_VERSION_PIN` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
+| `EmitInputs` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `encode_5bit_to_string` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_bytecode` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `encode_md1_string` | [md-codec Rust API](#md-codec-rust-api) |
@@ -311,6 +312,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `MD_REGULAR_CONST` | [codex32 and BCH](#codex32-and-bch) |
 | `m-format constellation` | [Introduction](#introduction) |
 | `MIN_ALT_COUNT` | [md-codec Rust API](#md-codec-rust-api) |
+| `MissingField` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `mk1 chunked-card grouping` | [Future Shares](#future-shares) |
 | `mk1` | [mk1 Wire Format](#mk1-wire-format) |
 | `mk_codec::bytecode::decode` | [mk-codec Rust API](#mk-codec-rust-api) |
@@ -495,6 +497,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `TLV_FINGERPRINTS` | [md-codec Rust API](#md-codec-rust-api) |
 | `TLV_ORIGIN_PATH_OVERRIDES` | [md-codec Rust API](#md-codec-rust-api) |
 | `TLV_PUBKEYS` | [md-codec Rust API](#md-codec-rust-api) |
+| `TimestampArg` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `TLV section` | [md1 Wire Format](#md1-wire-format) |
 | `TlvSection` | [md-codec Rust API](#md-codec-rust-api) |
 | `TLV_USE_SITE_PATH_OVERRIDES` | [md-codec Rust API](#md-codec-rust-api) |
@@ -527,9 +530,11 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `walker normalisation` | [md1 Wire Format](#md1-wire-format) |
 | `walk_root` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `WalletDescriptorTemplateId` | [md-codec Rust API](#md-codec-rust-api) |
+| `WalletFormatEmitter` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `Wallet Instance ID` | [mk1 Wire Format](#mk1-wire-format) |
 | `WalletPolicyId` | [md-codec Rust API](#md-codec-rust-api) |
 | `WalletPolicyId::to_phrase` | [md-codec Rust API](#md-codec-rust-api) |
+| `WalletScriptType` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `watch-only slot` | [Bundle Anatomy](#bundle-anatomy) |
 | `wildcard (BIP-389)` | [Descriptor to Miniscript to Address](#descriptor-to-miniscript-to-address) |
 | `wire format` | [md1 Wire Format](#md1-wire-format) |

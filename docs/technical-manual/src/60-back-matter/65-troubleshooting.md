@@ -203,10 +203,10 @@ Source: `bg002h/mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs` (26 varia
 
 | Variant | Likely cause | Remediation pointer |
 |---|---|---|
-| `ExportWalletSecretInput` | Secret-bearing slot (phrase / entropy / xprv / wif) supplied to `export-wallet`. Watch-only refusal. | §V.4.4 row 20; pass an xpub-only slot, or use a different subcommand. |
-| `ExportWalletFormatStub(&'static str)` | Per-vendor stub format. Variant retained for future per-vendor stub introductions (Sparrow + Specter were promoted to real formats in v0.8.1). | §V.4.4 row 21; reserved variant. |
-| `ExportWalletTaprootMultisigUnsupported(&'static str)` | `tr-multi-a` / `tr-sortedmulti-a` template — taproot multisig requires picking an internal-key designation (NUMS vs key-path key); unreachable post-v0.8 NUMS lift. | §III.2 "Shape coverage"; use a non-taproot multisig template for `export-wallet`. |
-| `ExportWalletMissingFields { format, missing }` | A per-format emitter cannot synthesize a required field from the supplied slots/descriptor. Carries a `MissingField` list. | §IV.1 "Bundle formation"; populate the missing slot or pick a different export format. |
+| `ExportWalletSecretInput` | Secret-bearing slot (phrase / entropy / xprv / wif) supplied to `export-wallet`. Watch-only refusal. | §V.4.4 row 20; §V.4.5.9 (output shapes) — pass an xpub-only slot, or use `mnemonic bundle` for a secret-bearing artifact. |
+| `ExportWalletFormatStub(&'static str)` | Per-vendor stub format. Variant retained for future per-vendor stub introductions (Sparrow + Specter were promoted to real formats in v0.8.1). | §V.4.4 row 21; §V.4.5.9 enumerates the 8 shipped vendor emitters — none currently route through this variant. |
+| `ExportWalletTaprootMultisigUnsupported(&'static str)` | `tr-multi-a` / `tr-sortedmulti-a` template — taproot multisig requires picking an internal-key designation (NUMS vs key-path key); unreachable post-v0.8 NUMS lift. | §III.2 "Shape coverage"; §V.4.5.10 compatibility matrix — use a non-taproot multisig template, or supply `--taproot-internal-key <nums\|@N>` to a format that accepts taproot multisig (`bitcoin-core` / `bip388` / `sparrow` / `specter`). |
+| `ExportWalletMissingFields { format, missing }` | A per-format emitter cannot synthesize a required field from the supplied slots/descriptor. Carries a `MissingField` list. Constructed by `SparrowEmitter::collect_missing` (missing `--threshold`) and `SpecterEmitter::collect_missing` (missing `--wallet-name`) at HEAD. | §V.4.5.9 (per-vendor `collect_missing` semantics) and §V.4.5.10 (format × shape matrix with per-format required flags); populate the missing flag, or pick a different export format that accepts the same shape with weaker requirements. |
 
 ### `mnemonic derive-child` subcommand
 

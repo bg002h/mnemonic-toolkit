@@ -30,15 +30,15 @@ A Cargo crate exposing only a `[[bin]]` target with no `[lib]` target and no `sr
 
 ## bip388 (format alias)
 
-The `--format bip388` selector for `mnemonic export-wallet`, emitting a BIP-388 `wallet_policy` JSON object (vendor-neutral; consumed by hardware wallets that implement BIP-388 natively, such as Ledger). Emitter: `wallet_export/bip388.rs` (`pub(crate)`). Defined §V.4.3.8.
+The `--format bip388` selector for `mnemonic export-wallet`, emitting a BIP-388 `wallet_policy` JSON object (vendor-neutral; consumed by hardware wallets that implement BIP-388 natively, such as Ledger). Output is a JSON object with `name`, `description_template`, `keys_info`. Accepts every template and every BIP-388-parseable `--descriptor` with multipath `/<0;1>/*`. Emitter: `wallet_export/bip388.rs` (`pub(crate)`). Defined §V.4.5.9.2 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## Bitcoin Core (wallet-export format)
 
-The `--format bitcoin-core` selector for `mnemonic export-wallet`, emitting an `importdescriptors`-compatible JSON array. Emitter: `wallet_export/bitcoin_core.rs` (`pub(crate)`). Defined §V.4.3.8.
+The `--format bitcoin-core` selector for `mnemonic export-wallet`, emitting an `importdescriptors`-compatible JSON array. Multipath `<0;1>/*` splits into two entries (receive `internal: false`, change `internal: true`). Accepts every BIP-388-parseable shape; never refuses for shape reasons. Emitter: `wallet_export/bitcoin_core.rs` (`pub(crate)`). Defined §V.4.5.9.1 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## Blockstream Green (wallet-export format)
 
-The `--format green` selector for `mnemonic export-wallet`, emitting Blockstream Green's wallet-import JSON. Emitter: `wallet_export/green.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.3.8.
+The `--format green` selector for `mnemonic export-wallet`, emitting a 3-line text file (two comment lines pointing at the Green help URL plus the canonical descriptor). Singlesig only; multisig is refused (Green's multisig setup is server-mediated, not file-import). Emitter: `wallet_export/green.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.5.9.8 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## BIP-388
 
@@ -98,7 +98,7 @@ mk1's 73-byte canonical xpub serialization. Strips `xpub.depth` and `xpub.child_
 
 ## Coldcard (wallet-export format)
 
-The `--format coldcard` selector for `mnemonic export-wallet`, emitting a Coldcard wallet-import JSON (with master-xpub plumbing for offline-signer flows). Emitter: `wallet_export/coldcard.rs` (`pub(crate)`); shipped in v0.8.1, master-xpub wiring landed in v0.8.2. Defined §V.4.3.8.
+The `--format coldcard` selector for `mnemonic export-wallet`. Singlesig templates (`bip44` / `bip49` / `bip84`) emit Coldcard's generic-wallet-export JSON; multisig templates (`wsh` / `sh-wsh` family) emit a 4+N-line text shape byte-identical to the Coldcard multisig text Jade also ingests. Refuses `bip86` (Coldcard's schema documents only `bip44`/`bip49`/`bip84`) and `tr-multi-a` / `tr-sortedmulti-a` (pending firmware). Master-xpub is plumbed via `--slot @0.master_xpub=<base58>` (singlesig top-level `xpub` field). Emitter: `wallet_export/coldcard.rs` (`pub(crate)`); shipped in v0.8.1, master-xpub wiring landed in v0.8.1. Defined §V.4.5.9.3 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## compute_wallet_policy_id
 
@@ -134,11 +134,15 @@ rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `t
 
 ## Electrum (wallet-export format)
 
-The `--format electrum` selector for `mnemonic export-wallet`, emitting an Electrum wallet-file JSON. Emitter: `wallet_export/electrum.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.3.8.
+The `--format electrum` selector for `mnemonic export-wallet`, emitting an Electrum wallet-file JSON. Singlesig wraps a `keystore` object with `xpub` (SLIP-132 lowercase variant per script type) + `derivation` + `root_fingerprint` + `label`; multisig wraps `x1/`, `x2/`, ... cosigner objects with SLIP-132 uppercase variants (`Ypub` / `Zpub`). `seed_version` is pinned to `ELECTRUM_SEED_VERSION_PIN = 17`. Refuses `tr-multi-a` / `tr-sortedmulti-a` (pending libsecp-taproot upstream support). Emitter: `wallet_export/electrum.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.5.9.7 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## ELECTRUM_SEED_VERSION_PIN
 
-The `pub const u32 = 17` at `wallet_export/electrum.rs:37` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.3.8.
+The `pub const u32 = 17` at `wallet_export/electrum.rs:37` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.5.9.7.
+
+## EmitInputs
+
+The single struct (`crates/mnemonic-toolkit/src/wallet_export/mod.rs:327-369`, `pub(crate)`) threaded through every `WalletFormatEmitter::emit` call. Carries the canonical descriptor (with `#checksum`), resolved slots, template (or `None` for descriptor-passthrough), `WalletScriptType`, network, account, threshold (and a `threshold_user_supplied` flag), `master_xpub_at_0`, wallet name (and a `wallet_name_was_user_supplied` flag), taproot internal-key designation, range, timestamp, and Bitcoin Core target version. Constructed in `cmd::export_wallet::run` after watch-only validation. Defined §V.4.5.9.
 
 ## engraving card
 
@@ -178,7 +182,7 @@ The dependency-pinning pattern used by `mnemonic-toolkit` at `crates/mnemonic-to
 
 ## Jade (wallet-export format)
 
-The `--format jade` selector for `mnemonic export-wallet`, emitting a Blockstream Jade wallet-import JSON. Emitter: `wallet_export/jade.rs` (`pub(crate)`); shipped in v0.8.2. Defined §V.4.3.8.
+The `--format jade` selector for `mnemonic export-wallet`. Multisig templates (`wsh` / `sh-wsh` family) delegate byte-identical to Coldcard's multisig text (§V.4.5.9.3) — Jade's `register_multisig.multisig_file` ingests the same shape. Refuses every singlesig template (Jade reads the seed on-device for singlesig) and `tr-multi-a` / `tr-sortedmulti-a` (pending firmware). Emitter: `wallet_export/jade.rs` (`pub(crate)`); shipped in v0.8.1. Defined §V.4.5.9.4 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## JSON envelope (toolkit)
 
@@ -219,6 +223,10 @@ The leading 16 bytes of `SHA-256(canonical bit-packed payload bytecode)` for an 
 ## miniscript
 
 A subset of Bitcoin Script with type-checking and analysis properties (BIP-379). Each md1 descriptor body is a miniscript expression beneath the outer wrapper (`wsh()` / `tr()` / etc.). First cited §I.1.
+
+## MissingField
+
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:224-232` enumerating the seven SPEC §4 missing-info classes per-format emitters can surface via `WalletFormatEmitter::collect_missing`. Per-slot variants (`MasterFingerprint { slot }`, `DerivationPath { slot }`, `Xpub { slot }`) and globals (`ScriptType`, `Threshold`, `WalletName`, `IncompatibleFormatForTemplate`); deterministic sort key sorts globals first by enum discriminant 4 → 7, then per-slot grouped by discriminant 1 / 2 / 3 and ordered by slot index. Bullet construction is sole-sited at `build_missing_fields_refusal` (`wallet_export/mod.rs:279`). Defined §V.4.5.9.
 
 ## mk1
 
@@ -338,11 +346,11 @@ Alternative BIP-32 extended-key version bytes (`zpub`/`zprv`, `ypub`/`yprv`, `Zp
 
 ## Sparrow (wallet-export format)
 
-The `--format sparrow` selector for `mnemonic export-wallet`, emitting a Sparrow wallet-import JSON. Emitter: `wallet_export/sparrow.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.3.8.
+The `--format sparrow` selector for `mnemonic export-wallet`, emitting a Sparrow wallet-import JSON (`name`, `network`, `policyType`, `scriptType`, `defaultPolicy`, `keystores`). `policyType` is `"SINGLE"` / `"MULTI"`; `defaultPolicy.miniscript.script` carries the placeholder miniscript (e.g., `wsh(sortedmulti(2,@0/**,@1/**,@2/**))`) — for `tr-multi-a` / `tr-sortedmulti-a`, the canonical descriptor with `#checksum` stripped (Sparrow's policy parser substring-matches on `script`). Requires `--threshold` for multisig templates (refusal: `ExportWalletMissingFields { format: "sparrow", missing: [Threshold] }`). Emitter: `wallet_export/sparrow.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.5.9.5 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## Specter (wallet-export format)
 
-The `--format specter` selector for `mnemonic export-wallet`, emitting a Specter Desktop wallet-import JSON. Emitter: `wallet_export/specter.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.3.8.
+The `--format specter` selector for `mnemonic export-wallet`, emitting a Specter Desktop wallet-import JSON (`label`, `blockheight`, `descriptor`, `devices`). `descriptor` is the canonical BIP-380 form WITH `#checksum` suffix. Requires `--wallet-name <STRING>` (refusal: `ExportWalletMissingFields { format: "specter", missing: [WalletName] }`). Emitter: `wallet_export/specter.rs` (`pub(crate)`); promoted from a stub to a real emitter in v0.8.1. Defined §V.4.5.9.6 (output shape) and §V.4.5.10 (compatibility matrix).
 
 ## Tag::ENTR
 
@@ -362,7 +370,7 @@ A miniscript fragment embedded as a leaf in a TapTree. Type-checked under the `T
 
 ## TaprootInternalKey
 
-`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs:68` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.3.8.
+`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs:68` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.5.9.
 
 ## template (md1)
 
@@ -371,6 +379,10 @@ The BIP-388 wallet policy expression engraved on an md1 card — a typed AST plu
 ## TLV section
 
 The bit-aligned trailing region of md1's bytecode carrying optional metadata blocks (Fingerprints, Pubkeys, OriginPathOverrides, Unknown). TLV tags live in a **separate** 5-bit namespace from the bytecode 6-bit operator-tag space. Defined §II.1.
+
+## TimestampArg
+
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:121-125` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`cmd/export_wallet.rs:87`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
 
 ## to_miniscript_descriptor
 
@@ -402,7 +414,11 @@ md1 encoding convention: emit a bare `Tag::PkK` or `Tag::PkH` at a `c:`-position
 
 ## wallet-export
 
-The `mnemonic export-wallet` subcommand and its underlying `wallet_export` orchestration module. Emits a vendor-specific watch-only wallet-import artifact (Bitcoin Core / BIP-388 / Coldcard / Electrum / Green / Jade / Sparrow / Specter) from xpub-only slot inputs and a template or descriptor. Refuses secret-bearing inputs (`ExportWalletSecretInput`, exit 2). Defined §V.4.3.8.
+The `mnemonic export-wallet` subcommand and its underlying `wallet_export` orchestration module. Emits a vendor-specific watch-only wallet-import artifact (Bitcoin Core / BIP-388 / Coldcard / Electrum / Green / Jade / Sparrow / Specter) from xpub-only slot inputs and a template or descriptor. Refuses secret-bearing inputs (`ExportWalletSecretInput`, exit 2). Defined §V.4.5.9.
+
+## WalletFormatEmitter
+
+The `pub(crate) trait` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:316-320` every `--format` emitter implements. Three methods: `collect_missing(&EmitInputs) -> Vec<MissingField>` (SPEC §4 deterministic-refusal predicate), `emit(&EmitInputs) -> Result<String, ToolkitError>` (byte-exact output string), `extension() -> &'static str` (file-extension hint for `--output`). Eight impls ship at HEAD: `BitcoinCoreEmitter`, `Bip388Emitter`, `ColdcardEmitter`, `JadeEmitter`, `SparrowEmitter`, `SpecterEmitter`, `ElectrumEmitter`, `GreenEmitter`. `cmd::export_wallet::run` dispatches over `CliExportFormat` to the eight impls. Defined §V.4.5.9.
 
 ## WalletPolicyId
 
@@ -411,6 +427,10 @@ The `mnemonic export-wallet` subcommand and its underlying `wallet_export` orche
 ## Wallet Instance ID
 
 `SHA-256(canonical_bytecode || canonical_xpub_serialization)[0..16]`. The cryptographic identity bound at recovery time when a complete assembly's bytecode + xpubs are recomputed and compared against an externally-anchored expected value. Distinct from `policy_id_stub` (which is the 4-byte indexing aid). Defined §II.2.
+
+## WalletScriptType
+
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:143-152` enumerating the eight script-type classifications wallet-export emitters dispatch on: `P2pkh` / `P2shP2wpkh` / `P2wpkh` / `P2tr` (singlesig) and `P2shMulti` / `P2shP2wshMulti` / `P2wshMulti` / `P2trMulti` (multisig). Derived from `CliTemplate` via `script_type_from_template` (`wallet_export/mod.rs:156`) on the template path, or from the parsed `miniscript::Descriptor` via `script_type_from_descriptor` (`wallet_export/mod.rs:176`) on the descriptor-passthrough path. Defined §V.4.5.9.
 
 ## watch-only slot
 

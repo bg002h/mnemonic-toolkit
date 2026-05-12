@@ -6,6 +6,52 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## tech-manual [1.1.0] — 2026-05-12
+
+**v0.8.1 wallet-export drift fold.** Adds §V.4.5.9 (eight vendor-format output-shape sub-sub-sections) + §V.4.5.10 (8×8 format×shape compatibility matrix with 7 footnotes). 273pp PDF (up from 258 at v1.0). Tag `tech-manual-v1.1.0`.
+
+### Added
+
+- **§V.4.5.9** `export-wallet` output shapes (`50-rust-api/54-mnemonic-toolkit-api.md`): eight sub-sub-sections — `bitcoin-core` (V.4.5.9.1), `bip388` (V.4.5.9.2), `coldcard` (V.4.5.9.3), `jade` (V.4.5.9.4), `sparrow` (V.4.5.9.5), `specter` (V.4.5.9.6), `electrum` (V.4.5.9.7), `green` (V.4.5.9.8). Each documents the `--format <value>` selector, emitter source path (`wallet_export/<vendor>.rs`), output shape (JSON or text) with worked example, accepted descriptor shapes, refused shapes with refusal mode + variant (`BadInput` vs `ExportWalletMissingFields`), vendor-specific flags, and schema-version semantics. Selector-enum-declaration order matches `cmd/export_wallet.rs:21-39`.
+
+- **§V.4.5.10** `export-wallet` format × shape compatibility matrix: 8 rows (descriptor shapes: `wpkh`, `pkh`, `sh(wpkh)`, `tr(xpub)`, `wsh(multi|sortedmulti)`, `sh(wsh(multi|sortedmulti))`, `tr(NUMS,multi_a|sortedmulti_a)`, `tr(@N,multi_a|sortedmulti_a)`) × 8 columns (vendor formats) = 64 cells. Seven footnotes [a]–[g] enumerate per-emitter refusal sources. Three trailing prose bullets cross-reference §V.4.4 ToolkitError rows, the §III.2 BIP-388 shape ladder, and the SPEC §5.3 byte-exact missing-info refusal contract.
+
+- **Glossary** (`60-back-matter/61-glossary.md`): 433 → 453 lines. Five new `pub(crate)` symbol entries — `EmitInputs` (`wallet_export/mod.rs:327`), `MissingField` (`mod.rs:224`), `TimestampArg` (`mod.rs:122`), `WalletFormatEmitter` (`mod.rs:316`), `WalletScriptType` (`mod.rs:143`). All 8 existing vendor-format entries refined with accepted/refused shape lists + emitter source pointers.
+
+- **Index** (`60-back-matter/62-index-table.md`): 548 → 553 lines. +5 new rows mirroring the new glossary symbol entries.
+
+- **cspell** (`docs/technical-manual/.cspell.json`): +5 entries (`XONLY`, `blockheight`, `libsecp`, `singlesig`, `Singlesig`).
+
+### Changed
+
+- **§V.4.3.8 / §V.4.4 / §V.4.7** (`50-rust-api/54-mnemonic-toolkit-api.md`): cross-references and the `ExportWallet*` ToolkitError table rows refreshed to point readers to §V.4.5.9 + §V.4.5.10 for the authoritative per-vendor treatment.
+
+- **Troubleshooting** (`60-back-matter/65-troubleshooting.md`): 4 `ExportWallet*` rows (`ExportWalletSecretInput`, `ExportWalletFormatStub`, `ExportWalletTaprootMultisigUnsupported`, `ExportWalletMissingFields`) refined to point to §V.4.5.9 / §V.4.5.10 alongside the existing §V.4.4 / §III.2 / §IV.1 references.
+
+### Reviewer rounds
+
+- **r1** (architect, 2026-05-12): 0C / 2I / 0L / 1N. Folded inline: `ELECTRUM_SEED_VERSION_PIN` "Defined" pointer §V.4.3.8 → §V.4.5.9.7; Coldcard sibling cross-reference §V.4.5.9.6 → §V.4.5.9.4. Nit `XONLY` cspell removal reverted (empirically load-bearing).
+- **r2** (architect, 2026-05-12): 0C / 4I / 0L / 0N + 3 parent-caught stragglers. Folded inline: 4 glossary entries (`TaprootInternalKey` + `wallet-export` "Defined" pointers; Jade + Coldcard `v0.8.2` → `v0.8.1` tag attribution); 3 chapter prose references to non-existent `v0.8.2` tag collapsed to `v0.8.1`.
+- **r3** (architect, 2026-05-12): 0C / 0I / 0L / 0N. All folds verified; `TaprootInternalKey` `pub` visibility confirmed against `wallet_export/mod.rs:68`. Tag-ready.
+
+### Discipline observations
+
+- `zero_followups_from_release_cycles` held: every reviewer finding folded inline; zero new FOLLOWUPs filed by this cycle.
+- Three pre-existing toolkit-source doc-comment drifts surfaced during r1 (`wallet_export/mod.rs:1-12` mod-doc lists 3 of 8 submodules; `wallet_export/mod.rs:42-44` SPEC §3 mismatch; `cmd/export_wallet.rs:3-5` cites v0.7 SPEC despite v0.8 realisation). These are source-side hygiene items, not chapter findings; left for a future toolkit-side cleanup commit.
+- The `mnemonic-toolkit-v0.8.2` tag was referenced repeatedly in the initial draft but does not exist (`git tag --list 'mnemonic-toolkit-*'` returns v0.5.0 through v0.8.1 only). HEAD's `crates/mnemonic-toolkit/` content is byte-identical with the v0.8.1 tag for that crate. All "v0.8.2" attributions in the chapter were corrected to "v0.8.1" — the actual tagged version that contains this surface.
+
+### Acceptance criteria (SPEC §7 A1–A11)
+
+All 11 green (re-verified at v1.1 cycle exit):
+
+- A2 public-symbol coverage: 92/92 via `tests/api-surface-coverage.sh` (4 crates: md-codec 46 + mk-codec 26 + ms-codec 13 + mnemonic-toolkit 7 JSON envelope types).
+- A3 Error variants: 101 tabled (unchanged from v1.0 — `error.rs` counts unchanged).
+- A4 glossary: 112 entries (107 at v1.0 + 5 new symbol entries).
+- A5 index: 545 rows (540 at v1.0 + 5 new symbol rows).
+- A10 PDF: 273pp (up from 258 at v1.0).
+- A11 reproducible build: SHA256 `1cf73f9411f6926941015f8dc97b08617aaf4764a56c4cb8653196550af139f6`, 924,968 bytes, byte-identical across two clean `SOURCE_DATE_EPOCH=1746921600` builds.
+- A1, A6, A7, A8, A9: unchanged from v1.0 (no Part-structure changes, no new BIPs cited, no worked-example changes, both mirror invariants green).
+
 ## tech-manual [1.0.0] — 2026-05-12
 
 **v1.0 release.** Back-matter polish + architect sign-off on the "every aspect of the software" coverage claim. ~258pp PDF. Tag `tech-manual-v1.0.0`.
