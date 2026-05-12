@@ -49,8 +49,10 @@ The check fails with `passed: false` and populated forensic fields (`expected` a
 |---|---|---|---|---|---|
 | 1 | `""` (watch-only) | any | any | `passed: true`, `decode_error: "skipped: watch-only slot"` | `passed: true`, `decode_error: "skipped: watch-only slot"` |
 | 2 | non-empty | non-empty | `Ok(...)` | `passed: true` | `passed: true` if byte-equal; else `false` + forensic fields |
-| 3 | non-empty | non-empty | `Err(e)` | `passed: false`, `decode_error: <e>` | `passed: true`, `decode_error: "skipped: ms1 decode failed"` |
+| 3 | non-empty | non-empty | `Err(e)` | `passed: false`, `decode_error: <e>`† | `passed: true`, `decode_error: "skipped: ms1 decode failed"` |
 | 4 | non-empty | empty / missing | n/a | `passed: false`, `decode_error: "error: ms1[{i}] expected (full-mode bundle) but not supplied"` | `passed: false`, `decode_error: "skipped: ms1[{i}] not supplied"` |
+
+†Rows marked `<e>` or `<mk_codec error message>` carry the `format!("{:?}", e)` Debug representation of the underlying codec error (`verify_bundle.rs:1004`, `:877`), not the `Display` form.
 
 \index{cascade-skip}Three principles to internalize:
 
@@ -79,7 +81,7 @@ Each surfaces as a distinct `mk1_decode[i]` `detail` and `decode_error` (`verify
 | `MappingFailure` | `mk1_decode[i]` `passed` | `detail` (cosigner `i`) | `decode_error` |
 |---|---|---|---|
 | `NotSupplied` | `false` | `cosigner[i] mk1 not supplied` | `skipped: mk1[{i}] not supplied` |
-| `DecodeFailed(msg)` | `false` | `cosigner[i] mk1 decode failed` | `<mk_codec error message>` |
+| `DecodeFailed(msg)` | `false` | `cosigner[i] mk1 decode failed` | `<mk_codec error message>`† |
 | `XpubNotInPolicy` | `false` | `cosigner[i] supplied mk1 card xpub absent from descriptor policy` | `supplied mk1 card xpub absent from descriptor policy` |
 
 \index{XpubNotInPolicy}Each diagnostic encodes a different incident type. `NotSupplied` is a recoverable user error (forgot to type a `--mk1` flag). `DecodeFailed` is a card-stamping or transcription error (BCH checksum doesn't validate, malformed envelope, etc.). `XpubNotInPolicy` is the **wrong-key attack indicator** — a supplied mk1 card decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. That is the signature of an attacker substituting an attacker-controlled mk1 card into the user's bundle, OR of the user supplying an mk1 card from a different wallet by mistake.
@@ -106,13 +108,13 @@ for i in 0..cs.len() {
 }
 ```
 
-`cs[i].path: Option<DerivationPath>` compares via the typed `PartialEq` derived for `DerivationPath`, which is what folds `h` ↔ `'`.
+`cs[i].path: DerivationPath` compares via the typed `PartialEq` derived for `DerivationPath`, which is what folds `h` ↔ `'`.
 
 ### A bifurcation: template-mode bundle synthesis uses raw-string equality
 
 \index{bifurcation (BIP-388 enforcement)}Template-mode bundle synthesis (where the user supplies `--template <name>` + per-slot subkeys) goes through `check_resolved_slots_distinctness` at `bundle.rs:261-275`, which compares **`(xpub.to_string(), path_raw)`** — the user-supplied raw path string, not the parsed `DerivationPath`. The doc-comment at `bundle.rs:259-260` was written under v0.4 SPEC (raw-string) and has not been resynced to v0.5's typed-equality reversal.
 
-Practical consequence: under template-mode synthesis, two slots with `path_raw = "48h/0h/0h/2h"` and `path_raw = "48'/0'/0'/2'"` (and the same xpub) would *not* collide at synthesis (raw strings differ) but *would* collide at any subsequent verify-bundle (typed equality folds). In practice this is unreachable from real CLI usage — the template-mode bundle never accepts a user-supplied `--slot @N.path=...` for paths it derives itself (the path is computed from `--template` + `--account` + family), so `path_raw` always comes out as the canonical `'`-notation string written by `template.rs`. Descriptor-mode bundle synthesis (where the user supplies `--descriptor`) calls the typed-equality check (`bundle.rs:982`), keeping the asymmetry contained to the never-reached template-mode raw path.
+Practical consequence: under template-mode synthesis, two slots with `path_raw = "48h/0h/0h/2h"` and `path_raw = "48'/0'/0'/2'"` (and the same xpub) would *not* collide at synthesis (raw strings differ) but *would* collide at any subsequent verify-bundle (typed equality folds). For **phrase / entropy** slots this is unreachable: `path` and `path_raw` are computed from `--template` + `--account` + family by `template.rs`, so `path_raw` always comes out as the canonical `'`-notation string. For **xpub** slots, however, the bifurcation is live: template-mode accepts user-supplied `--slot @N.path=...` per `bundle.rs:355-363`, which preserves the raw user string into `path_raw`. A user who supplied the same xpub with `h`-notation in one slot and `'`-notation in another would create a bundle whose `check_resolved_slots_distinctness` does not fire (raw strings differ) but whose `verify-bundle` does (typed equality folds). That edge case is the live scope of the bifurcation. Descriptor-mode bundle synthesis (where the user supplies `--descriptor`) calls the typed-equality check (`bundle.rs:982`), so the asymmetry is confined to template-mode xpub-slot paths.
 
 ### Error surfacing
 
@@ -143,6 +145,6 @@ The diagnostic identifies the two colliding slot indices (`@0` and `@1`); for an
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:707` — md1 4-hex `chunk_set_id` format string.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:724` — mk1/ms1 5-hex `chunk_set_id` format string.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:42-44` — `derive_mk1_chunk_set_id` packing.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs:68-76` — `Bip388Distinctness` / `Bip388VerifyDistinctness` variants and exit-code mapping.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs:68-76` — `Bip388Distinctness` / `Bip388VerifyDistinctness` variants and exit-code mapping. The variant doc-comment at `error.rs:69-71` shares the same v0.4-era "raw-string equality" framing as `bundle.rs:259-260`; both lag the v0.5 SPEC reversal and resync at next release.
 - BIP-388 §"Specification" — wallet-policy template + distinct key-information vector requirement.
 - Toolkit SPEC v0.5 §4.11.b — typed `DerivationPath` equality (the deliberate v0.4 → v0.5 reversal). §5.7 — multiset `md1_xpub_match` + four-case ms1 table + mk1 cosigner-mapping diagnostic. §6.6 row 13 — `Bip388Distinctness` exit-2 row.
