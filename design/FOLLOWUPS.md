@@ -885,7 +885,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.8.1 Phase 1 (SPEC R1-I2 reviewer-loop fold).
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_generic_json`.
 - **What:** Coldcard's canonical `generic-wallet-export.md` (upstream master) documents only `bip44` / `bip49` / `bip84` sub-objects. BIP-86 (P2TR singlesig) has no slot in the schema. The toolkit refuses `--template bip86 --format coldcard` with the SPEC §5.1 byte-exact pointer until Coldcard firmware extends the schema. Workaround: use `--format bitcoin-core` (descriptor passthrough) or `--format sparrow` (native P2TR support).
-- **Status:** open (pending Coldcard firmware).
+- **Status:** open (pending Coldcard firmware). Last upstream-checked **2026-05-12**: `gh api repos/Coldcard/firmware/contents/docs/generic-wallet-export.md` — no `bip86` / `p2tr` / `taproot` mentions. `releases/ChangeLog.md` — no taproot / schnorr / bip86 entries.
 - **Tier:** `v1+`
 
 ### `coldcard-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format coldcard`
@@ -893,7 +893,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.8.1 Phase 1.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/coldcard.rs::emit_coldcard_multisig_text`.
 - **What:** Coldcard's multisig text emitter ingests only `P2WSH` / `P2SH-P2WSH` / `P2SH` formats per the SPEC §5.2 `Format` field. Taproot-multisig (tr-multi-a / tr-sortedmulti-a) is not in the firmware's import surface. The toolkit refuses with a pointer at `--format bitcoin-core` (descriptor) / `--format sparrow` for taproot multisig watch-only setup. Companion: Jade has the same gap (`jade-tr-multi-a-pending-firmware` below).
-- **Status:** open (pending Coldcard firmware taproot-multisig support).
+- **Status:** open (pending Coldcard firmware taproot-multisig support). Last upstream-checked **2026-05-12**: `releases/ChangeLog.md` — no taproot / schnorr entries; firmware most recent commit `ca06dfd2` 2026-04-25 is unrelated regression fix.
 - **Tier:** `v1+`
 
 ### `jade-tr-multi-a-pending-firmware` — `--template tr-multi-a` / `tr-sortedmulti-a` refuses under `--format jade`
@@ -901,7 +901,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.8.1 Phase 1.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/jade.rs::JadeEmitter::emit`.
 - **What:** Blockstream Jade's `register_multisig.multisig_file` accepts the Coldcard §5.2 multisig text shape; taproot multisig is not yet in that surface. The toolkit refuses with a pointer at `--format bitcoin-core` / `--format sparrow` for taproot multisig. Companion: `coldcard-tr-multi-a-pending-firmware` above (Jade shares the schema; once Coldcard ships, Jade follows).
-- **Status:** open (pending Blockstream Jade firmware taproot-multisig support).
+- **Status:** open (pending Blockstream Jade firmware taproot-multisig support). Last upstream-checked **2026-05-12**: `Blockstream/Jade:CHANGELOG.md` — singlesig BIP-86 P2TR SHIPPED (`Add support for signing bip86 single-key p2tr inputs and for registering bip86 p2tr(key) descriptors`); taproot **multisig** (`multi_a` / `sortedmulti_a`) NOT yet shipped. Entry remains accurately open for the multisig case; singlesig P2TR is already a separate emitter path (Sparrow `tr(@0/**)`).
 - **Tier:** `v1+`
 
 ### `electrum-non-latin-wordlists` — Electrum native seed format hard-codes the English wordlist
@@ -1081,7 +1081,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.8.1 Phase 4.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` `emit()` guard; refusal fixture `tests/export_wallet/electrum_tr_multi_a_refusal.stderr`.
 - **What:** Electrum's `wallet_db.py` does not currently ingest taproot multisig wallet shapes (pending libsecp-taproot integration in Electrum's signer surface). `--format electrum --template tr-multi-a` (or `tr-sortedmulti-a`) emits a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow` (which supports taproot multisig via descriptor-passthrough).
-- **Status:** `open`.
+- **Status:** `open` (last upstream-checked 2026-05-12 against Electrum 4.5.5 source; `grep -E "'p2tr'|p2tr" electrum/transaction.py` returns no matches in the script-type enum, confirming taproot script type not yet wired).
 - **Tier:** `v1+ / pending-electrum-firmware`
 
 ### `electrum-final-seed-version-drift` — track Electrum FINAL_SEED_VERSION upstream
@@ -1105,5 +1105,5 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** v0.8.1 Phase 5.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs` `emit()` guard; refusal fixture `tests/export_wallet/green_multisig_refusal.stderr`.
 - **What:** Blockstream Green's multisig surface is server-mediated (Green Multisig Shield + Liquid), not a direct file-import shape. `--format green` is therefore singlesig-only; multisig templates return a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow`. Resolves once Green publishes a self-custody multisig file-import format.
-- **Status:** `open`.
+- **Status:** `open`. Last upstream-checked **2026-05-12**: Green Help Center article `19340800530713-Set-up-watch-only-wallet` returns HTTP 403 to programmatic fetchers (Zendesk-hosted, browser-only). Status cannot be verified autonomously; entry remains open pending manual browser check.
 - **Tier:** `v1+ / pending-green-server-support`
