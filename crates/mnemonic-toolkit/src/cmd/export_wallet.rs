@@ -12,8 +12,8 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    ColdcardEmitter, ElectrumEmitter, EmitInputs, JadeEmitter, SparrowEmitter, SpecterEmitter,
-    TaprootInternalKey, TimestampArg, WalletFormatEmitter,
+    ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter, JadeEmitter, SparrowEmitter,
+    SpecterEmitter, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -34,6 +34,8 @@ pub enum CliExportFormat {
     Specter,
     #[value(name = "electrum")]
     Electrum,
+    #[value(name = "green")]
+    Green,
 }
 
 #[derive(Args, Debug)]
@@ -395,6 +397,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
+            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -411,6 +414,7 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
         CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
         CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
+        CliExportFormat::Green => GreenEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {

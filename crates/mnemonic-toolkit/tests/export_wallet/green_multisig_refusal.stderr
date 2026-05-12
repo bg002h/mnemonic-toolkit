@@ -1,0 +1,1 @@
+error: --format green does not support multisig — Blockstream Green's multisig setup is server-mediated (Green Multisig Shield) and not a file-import surface (tracked by FOLLOWUPS green-native-multisig-pending-server-support). Use --format bitcoin-core (descriptor) or --format sparrow for multisig watch-only.

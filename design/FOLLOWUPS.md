@@ -868,6 +868,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved 3821f66`
 - **Resolution:** v0.7 Phase 5 — new `mnemonic export-wallet` subcommand shipped. Bitcoin Core `importdescriptors` JSON (default) + BIP-388 `wallet_policy` JSON. Sparrow / Specter formats stubbed (refuse with v0.8 deferral). `--range` / `--timestamp` / `--bitcoin-core-version` overrides. Watch-only enforced (refuses entropy/phrase slot input). New SPEC `design/SPEC_export_wallet_v0_7.md`.
 - **Resolution-extended (v0.8.1 Phase 1):** Coldcard generic JSON skeleton (singlesig bip44/bip49/bip84) + Coldcard multisig text (wsh / sh-wsh, sorted and unsorted) + Blockstream Jade multisig text (byte-identical to Coldcard's, delegated emitter) shipped. New `wallet_export/{coldcard,jade}.rs`. `CliExportFormat::Coldcard` + `CliExportFormat::Jade` variants. `--wallet-name <STRING>` clap flag for formats publishing wallet names (Coldcard generic JSON, Sparrow / Specter / Electrum land in subsequent phases). New slot subkey `@N.master_xpub=` (depth-0 root xpub, optional, watch-only-class). Coverage now 2/8 → 4/8 of the SPEC §11 priority list; Sparrow/Specter/Electrum/Green land in Phases 2-5.
+- **Resolution-extended (v0.8.1 Phase 5):** All six new vendor formats now shipped — `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`. The complete v0.8.1 SPEC §11 priority list (8 formats: `bitcoin-core`, `bip388`, `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`) is fully realized. New emitter modules: `wallet_export/{sparrow,specter,electrum,green}.rs`. New `CliExportFormat` variants: `Sparrow`, `Specter`, `Electrum`, `Green`. Per-format pinned byte-exact fixtures + SPEC §4 missing-info refusal channel exercised by Sparrow (Threshold) and Specter (WalletName). Status remains `resolved`.
 - **Tier:** `v0.6.2`
 
 ### `coldcard-master-xpub-plumbing-pending` — `@N.master_xpub=` slot subkey parses but is dropped before reaching the Coldcard emitter
@@ -1089,3 +1090,11 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** Electrum's `wallet_db.py` `FINAL_SEED_VERSION` constant drifts upward over releases (currently `71` on master). The toolkit pins to a fixed value (`17` per the Phase 4 spike deferral) and relies on Electrum's migration loader to walk forward. Track upstream drift in case the loader ever drops support for old migration paths.
 - **Status:** `open` (no fix scheduled; tracking only).
 - **Tier:** `v1+ / informational`
+
+### `green-native-multisig-pending-server-support` — `--format green` refuses multisig
+
+- **Surfaced:** v0.8.1 Phase 5.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs` `emit()` guard; refusal fixture `tests/export_wallet/green_multisig_refusal.stderr`.
+- **What:** Blockstream Green's multisig surface is server-mediated (Green Multisig Shield + Liquid), not a direct file-import shape. `--format green` is therefore singlesig-only; multisig templates return a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow`. Resolves once Green publishes a self-custody multisig file-import format.
+- **Status:** `open`.
+- **Tier:** `v1+ / pending-green-server-support`
