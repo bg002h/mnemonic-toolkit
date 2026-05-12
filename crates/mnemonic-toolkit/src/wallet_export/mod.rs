@@ -14,6 +14,7 @@
 mod bip388;
 mod bitcoin_core;
 mod coldcard;
+mod electrum;
 mod jade;
 mod pipeline;
 mod sparrow;
@@ -22,6 +23,7 @@ mod specter;
 pub(crate) use bip388::Bip388Emitter;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use coldcard::ColdcardEmitter;
+pub(crate) use electrum::ElectrumEmitter;
 pub(crate) use jade::JadeEmitter;
 pub(crate) use pipeline::build_descriptor_string;
 pub(crate) use sparrow::SparrowEmitter;

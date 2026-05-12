@@ -1065,3 +1065,27 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved 2eef44b` (v0.8 Phase 1).
 - **Resolution:** v0.8 Phase 1 — new `--passphrase-stdin` flag with line-ending-only trim (preserves leading/trailing spaces + internal NULL). Both V3 ignored tests unignored and now active. Phase 1 review I1 added a separate `read_stdin_passphrase` helper distinct from `read_stdin_to_string` to prevent the trim issue.
 - **Tier:** `v0.8`
+
+### `electrum-seed-version-spike-pending` — Phase 4 step 0 interactive spike deferred
+
+- **Surfaced:** v0.8.1 Phase 4 (`design/agent-reports/v0_8-phase-4-electrum-seed-version-spike.md`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs:33` — `ELECTRUM_SEED_VERSION_PIN = 17`.
+- **What:** SPEC v0.8 §9 + IMPL_PLAN Phase 4 step 0 mandate an interactive spike against current Electrum (>= 4.5.x) to lock `ELECTRUM_SEED_VERSION_PIN` to a verified-cleanly-imports value. The v0.8.1 cut was produced autonomously without an Electrum install available; the constant is pinned to `17` (the long-standing Electrum-2.7+ broadest-accept value for new watch-only standard wallets) and Electrum's loader walks `_convert_version_<N>` migrations forward to FINAL_SEED_VERSION (=71 on master) on first save. Spike needs to run against current Electrum to confirm `17` is accepted; if not, re-pin upward.
+- **Status:** `open`.
+- **Tier:** `v0.8.2 / autonomous-cycle-deferral`
+
+### `electrum-tr-multi-a-pending-libsecp-taproot` — `--template tr-multi-a` refuses under `--format electrum`
+
+- **Surfaced:** v0.8.1 Phase 4.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` `emit()` guard; refusal fixture `tests/export_wallet/electrum_tr_multi_a_refusal.stderr`.
+- **What:** Electrum's `wallet_db.py` does not currently ingest taproot multisig wallet shapes (pending libsecp-taproot integration in Electrum's signer surface). `--format electrum --template tr-multi-a` (or `tr-sortedmulti-a`) emits a byte-exact refusal with pointer to `--format bitcoin-core` (descriptor) or `--format sparrow` (which supports taproot multisig via descriptor-passthrough).
+- **Status:** `open`.
+- **Tier:** `v1+ / pending-electrum-firmware`
+
+### `electrum-final-seed-version-drift` — track Electrum FINAL_SEED_VERSION upstream
+
+- **Surfaced:** v0.8.1 Phase 4.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/electrum.rs` — `ELECTRUM_SEED_VERSION_PIN` doc-comment.
+- **What:** Electrum's `wallet_db.py` `FINAL_SEED_VERSION` constant drifts upward over releases (currently `71` on master). The toolkit pins to a fixed value (`17` per the Phase 4 spike deferral) and relies on Electrum's migration loader to walk forward. Track upstream drift in case the loader ever drops support for old migration paths.
+- **Status:** `open` (no fix scheduled; tracking only).
+- **Tier:** `v1+ / informational`
