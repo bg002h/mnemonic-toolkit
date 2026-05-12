@@ -20,6 +20,7 @@ pub(crate) use bitcoin_core::format_bitcoin_core_importdescriptors;
 pub(crate) use pipeline::{build_descriptor_string, descriptor_to_bip388_wallet_policy};
 
 use crate::error::ToolkitError;
+use crate::network::CliNetwork;
 use crate::slot_input::{SlotInput, SlotSubkey};
 use crate::synthesize::ResolvedSlot;
 use crate::template::CliTemplate;
@@ -197,4 +198,117 @@ pub(crate) fn script_type_from_descriptor(
             "wallet-export descriptor must have a top-level Pkh/Wpkh/Sh/Wsh/Tr wrapper (bare scripts are outside the BIP-388 wallet-policy surface)".into(),
         )),
     }
+}
+
+/// SPEC v0.8 §4 — missing-info refusal field enumeration. Per the SPEC:
+/// per-slot fields are discriminants 1-3 (`MasterFingerprint`, `DerivationPath`,
+/// `Xpub`); globals are 4-7 (`ScriptType`, `Threshold`, `WalletName`,
+/// `IncompatibleFormatForTemplate`). The deterministic refusal order surfaces
+/// globals first (sorted by enum discriminant 4 → 5 → 6 → 7), then per-slot
+/// entries grouped by enum discriminant (1, 2, 3) and ordered by slot index
+/// within each discriminant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Phase 0 adds the enum; Phase 1+ emitters populate it.
+pub(crate) enum MissingField {
+    MasterFingerprint { slot: u8 },
+    DerivationPath { slot: u8 },
+    Xpub { slot: u8 },
+    ScriptType,
+    Threshold,
+    WalletName,
+    IncompatibleFormatForTemplate,
+}
+
+impl MissingField {
+    /// Sort key for the SPEC §4 deterministic-order rule:
+    /// `(group, enum_discriminant, slot)` where `group = 0` for globals
+    /// (sorted first) and `group = 1` for per-slot.
+    fn sort_key(&self) -> (u8, u8, u8) {
+        match self {
+            // Globals (group 0) — sorted by enum discriminant 4 → 7.
+            MissingField::ScriptType => (0, 4, 0),
+            MissingField::Threshold => (0, 5, 0),
+            MissingField::WalletName => (0, 6, 0),
+            MissingField::IncompatibleFormatForTemplate => (0, 7, 0),
+            // Per-slot (group 1) — sorted by (discriminant, slot).
+            MissingField::MasterFingerprint { slot } => (1, 1, *slot),
+            MissingField::DerivationPath { slot } => (1, 2, *slot),
+            MissingField::Xpub { slot } => (1, 3, *slot),
+        }
+    }
+
+    fn bullet_line(&self) -> String {
+        match self {
+            MissingField::MasterFingerprint { slot } => format!(
+                "master_fingerprint for slot @{slot} (supply via --slot @{slot}.fingerprint=<8-hex>)"
+            ),
+            MissingField::DerivationPath { slot } => format!(
+                "derivation_path for slot @{slot} (supply via --slot @{slot}.path=<m/...> or use --template)"
+            ),
+            MissingField::Xpub { slot } => format!(
+                "xpub for slot @{slot} (supply via --slot @{slot}.xpub=<base58>)"
+            ),
+            MissingField::ScriptType => "script_type (supply --template <bip44|bip49|bip84|bip86|wsh-sortedmulti|...> or --descriptor)".to_string(),
+            MissingField::Threshold => "threshold (multisig templates require --threshold <K>)".to_string(),
+            MissingField::WalletName => "wallet_name (supply --wallet-name <STRING>)".to_string(),
+            MissingField::IncompatibleFormatForTemplate => "format_template_compatibility (this format does not represent the resolved template)".to_string(),
+        }
+    }
+}
+
+/// SPEC v0.8 §4 — sole site of byte-exact missing-info refusal-text
+/// construction. `format` is the `--format <NAME>` string (e.g., `"coldcard"`).
+/// `missing` is the unsorted set of missing fields per the calling emitter's
+/// `collect_missing`; this function sorts deterministically and emits the
+/// SPEC-pinned refusal shape. `user_text()` for `ToolkitError::ExportWalletMissingFields`
+/// calls this directly and does NOT concatenate per-format header constants
+/// separately — the SPEC mandates this is the unique construction site.
+#[allow(dead_code)] // Phase 0 adds the function; Phase 1+ emitters route through ExportWalletMissingFields.
+pub(crate) fn build_missing_fields_refusal(format: &str, missing: &[MissingField]) -> String {
+    let mut sorted: Vec<&MissingField> = missing.iter().collect();
+    sorted.sort_by_key(|f| f.sort_key());
+    let mut s = format!(
+        "error: mnemonic export-wallet --format {format} requires the following missing fields:\n"
+    );
+    for f in sorted {
+        s.push_str("  - ");
+        s.push_str(&f.bullet_line());
+        s.push('\n');
+    }
+    s.push_str("Re-invoke with all missing fields supplied.");
+    s
+}
+
+/// SPEC v0.8 §12 — single struct threaded through `WalletFormatEmitter::emit`
+/// (added in the next commit) carrying all data each per-format emitter needs.
+/// Built in `cmd::export_wallet::run` after template + slot resolution and
+/// watch-only validation; the resulting reference is borrowed by emitters.
+#[allow(dead_code)] // Phase 0 adds the struct; Phase 1+ emitters consume it.
+pub(crate) struct EmitInputs<'a> {
+    /// Canonical descriptor with `#checksum` suffix (from `pipeline::build_descriptor_string`
+    /// for the template path, or pre-canonicalized for the `--descriptor` path).
+    pub canonical_descriptor: &'a str,
+    /// Resolved slots in slot-index order. Empty when `--descriptor` was used
+    /// without `--template` (descriptor-passthrough path).
+    pub resolved_slots: &'a [ResolvedSlot],
+    /// `None` when `--descriptor` was used without `--template`.
+    pub template: Option<CliTemplate>,
+    /// Derived via `script_type_from_template` or `script_type_from_descriptor`.
+    pub script_type: WalletScriptType,
+    pub network: CliNetwork,
+    pub account: u32,
+    /// `Some(K)` for multisig templates; `None` for singlesig.
+    pub threshold: Option<u8>,
+    /// Resolved wallet name. For the template path, falls back to
+    /// `<template-human-name>-<account>` when `--wallet-name` is absent;
+    /// for the descriptor path, falls back to `"imported-descriptor"`.
+    pub wallet_name: &'a str,
+    /// `true` when the user explicitly supplied `--wallet-name`. Phase 3's
+    /// `SpecterEmitter::collect_missing` checks this field: Specter requires
+    /// an explicit wallet name (UX rationale per SPEC §13 R1-L1 fold).
+    pub wallet_name_was_user_supplied: bool,
+    pub taproot_internal_key: Option<TaprootInternalKey>,
+    pub range: (u32, u32),
+    pub timestamp: TimestampArg,
+    pub bitcoin_core_version: u8,
 }

@@ -99,6 +99,17 @@ pub enum ToolkitError {
     /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
     /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
     ExportWalletTaprootMultisigUnsupported(&'static str),
+    /// SPEC_export_wallet_v0_8.md §4 — missing-info refusal. Each per-format
+    /// emitter's `collect_missing` returns the set of `MissingField` entries
+    /// it cannot synthesize from the supplied slots/descriptor; this variant
+    /// transports them to the `user_text()` arm which routes through
+    /// `crate::wallet_export::build_missing_fields_refusal` (the sole site of
+    /// message construction per §4). Exit 2.
+    #[allow(dead_code)] // Phase 0 adds the variant; Phase 1+ emitters return it.
+    ExportWalletMissingFields {
+        format: &'static str,
+        missing: Vec<crate::wallet_export::MissingField>,
+    },
     /// SPEC_derive_child_v0_7.md §7 — `--application rsa|rsa-gpg` deferred
     /// pending rsa-crate stability (RUSTSEC-2023-0071 unpatched as of v0.8.0).
     /// `dice` shipped in v0.8 Phase 7. Exit 2.
@@ -235,6 +246,7 @@ impl ToolkitError {
             | ToolkitError::ExportWalletSecretInput
             | ToolkitError::ExportWalletFormatStub(_)
             | ToolkitError::ExportWalletTaprootMultisigUnsupported(_)
+            | ToolkitError::ExportWalletMissingFields { .. }
             | ToolkitError::DeriveChildUnsupportedApp
             | ToolkitError::DeriveChildLengthOutOfRange { .. }
             | ToolkitError::DeriveChildLengthNotApplicable => 2,
@@ -277,6 +289,7 @@ impl ToolkitError {
             ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => {
                 "ExportWalletTaprootMultisigUnsupported"
             }
+            ToolkitError::ExportWalletMissingFields { .. } => "ExportWalletMissingFields",
             ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
             ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
             ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
@@ -333,6 +346,9 @@ impl ToolkitError {
             ToolkitError::ExportWalletFormatStub(name) => crate::wallet_export::format_stub_message(name),
             ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
                 crate::wallet_export::taproot_multisig_unsupported_message(name)
+            }
+            ToolkitError::ExportWalletMissingFields { format, missing } => {
+                crate::wallet_export::build_missing_fields_refusal(format, missing)
             }
             ToolkitError::DeriveChildUnsupportedApp => {
                 // SPEC_derive_child_v0_8.md §7 byte-exact stderr text. v0.8
