@@ -11,6 +11,10 @@
 //! `cli_secret_in_argv_warning.rs` cell 4 (asserts inline-xprv emits
 //! the secret-in-argv advisory).
 //!
+//! Future maintenance: when v0.5+ adds ms-codec XPRV-tag support and
+//! the `bundle.rs:470` reject branch is removed, add a 9th cell here
+//! mirroring cells 1-3 (`@0.xprv=-` + valid xprv on stdin → success).
+//!
 //! Authoritative reference: `design/SPEC_secret_memory_hygiene_v0_9_0.md`
 //! §1 item 1; survey §5 toolkit table.
 //!
