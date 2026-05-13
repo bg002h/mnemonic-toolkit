@@ -306,6 +306,20 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.9.0] — 2026-05-12
+
+Additive minor release atop v0.8.1. **No breaking changes.** Introduces `mnemonic gui-schema`, a developer-facing introspection subcommand emitting the SPEC §7 machine-readable flag-surface schema as JSON. Companion to the `mnemonic-gui` v0.2 Phase C.2 schema-mirror contract (`bg002h/mnemonic-gui` `FOLLOWUPS.md` mnemonic-gui-schema-mirror).
+
+### Added
+
+- **`mnemonic gui-schema`** subcommand. Walks the clap-derive `Command` tree via `clap::CommandFactory` and serializes a `{ version: 1, cli: "mnemonic", subcommands: [...] }` JSON document to stdout. Each subcommand carries `flags` (with `name`, `required`, `kind`, optional `choices`) and `positionals`. `kind` is one of `text` / `boolean` / `number` / `dropdown` / `path`; `choices` is non-null only when `kind == "dropdown"`. Self-reference suppression: the `gui-schema` subcommand itself is filtered out of its own output. Complex GUI-side variants (NodeValueComposite / TaggedOrIndexed / Range / Timestamp) map to `"text"` upstream per the SPEC §7 lossy-mapping contract; the GUI re-parses client-side.
+- **`cli_gui_schema.rs`** integration tests (16 cases). Pins the SPEC §7 contract: `version == 1`, `cli == "mnemonic"`, all 5 user-facing subcommands listed, self-reference suppression, per-flag `required` is bool, `choices` is non-null iff `kind == dropdown`, `kind` value set is exactly `{text, boolean, number, dropdown, path}`. Spot-checks bundle's `--network` dropdown choices, the 10-template enum, the 8-vendor `--format` enum, derive-child's four required flags, and verify-bundle's `--bundle-json` path classification.
+- **Manual mirror**: new `## mnemonic gui-schema` section in `docs/manual/src/40-cli-reference/41-mnemonic.md` documents the synopsis, single `--help` flag, and the SPEC §7 JSON output shape. `docs/manual/tests/cli-subcommands.list` adds `mnemonic gui-schema` so the `flag-coverage` lint covers the new subcommand.
+
+### FOLLOWUPS
+
+- Closes companion of `mnemonic-gui-schema-mirror` (this repo's `design/FOLLOWUPS.md` entry retains `Status: resolved` once `mnemonic-gui` v0.2 ships).
+
 ## mnemonic-toolkit [0.8.1] — 2026-05-12
 
 Additive minor release atop v0.8.0. **No breaking changes.** Six new vendor-targeted wallet-import formats added to `mnemonic export-wallet`: `coldcard`, `jade`, `sparrow`, `specter`, `electrum`, `green`. Per-emitter byte-exact fixtures pinned; SPEC §4 missing-info refusal channel exercised end-to-end (Sparrow's missing-threshold + Specter's missing-wallet-name). Internal `wallet_export.rs` reorganized into a `wallet_export/` submodule tree (one file per emitter). v0.7 stable `--format bitcoin-core` / `--format bip388` byte-exact fixtures continue to pass through the new submodule dispatch.
