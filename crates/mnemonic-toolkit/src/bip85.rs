@@ -97,6 +97,10 @@ pub(crate) fn format_hd_seed_wif(
     network: NetworkKind,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 2, &[], index)?;
+    // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
+    // has `non_secure_erase` but no Drop+Zeroize; tracked by FOLLOWUP
+    // `rust-secp256k1-secretkey-zeroize-upstream`. The 32-byte scalar
+    // lives in stack memory until function exit.
     let inner = bitcoin::secp256k1::SecretKey::from_slice(&entropy[..32])
         .map_err(|e| ToolkitError::BadInput(format!("BIP-85 hd-seed scalar parse: {e}")))?;
     let pk = bitcoin::PrivateKey {
@@ -121,6 +125,11 @@ pub(crate) fn format_xprv_child(
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 32, &[], index)?;
     let chain_code = bitcoin::bip32::ChainCode::from(<[u8; 32]>::try_from(&entropy[..32]).unwrap());
+    // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
+    // no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
+    // Plus `bitcoin::bip32::Xpriv` (already tracked at
+    // `rust-bitcoin-xpriv-zeroize-upstream`). Both stack-bound until
+    // function exit.
     let inner = bitcoin::secp256k1::SecretKey::from_slice(&entropy[32..])
         .map_err(|e| ToolkitError::BadInput(format!("BIP-85 xprv scalar parse: {e}")))?;
     let xprv = Xpriv {
