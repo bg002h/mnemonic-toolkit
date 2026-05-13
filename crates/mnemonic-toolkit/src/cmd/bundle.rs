@@ -341,13 +341,16 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive::derive_full(
                 phrase, pass, lang, network, template, account,
             )?;
-            let path_raw = acc.account_path.to_string();
+            // SPEC v0.9.0 §1 item 2 — DerivedAccount has `impl Drop`;
+            // use `into_parts` for the consuming move (E0509-safe).
+            let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let path_raw = path.to_string();
             out.push(ResolvedSlot {
-                xpub: acc.account_xpub,
-                fingerprint: acc.master_fingerprint,
-                path: acc.account_path,
+                xpub,
+                fingerprint,
+                path,
                 path_raw,
-                entropy: Some(acc.entropy),
+                entropy: Some(entropy),
                 master_xpub: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
@@ -437,11 +440,16 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive_slot::derive_bip32_from_entropy(
                 &entropy_bytes, pass, lang, network, template, account,
             )?;
-            let path_raw = acc.account_path.to_string();
+            // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+            // The derived `entropy` is discarded here (the user-supplied
+            // `entropy_bytes` is the canonical buffer for this slot);
+            // the Drop on `acc` will scrub the now-orphaned husk.
+            let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let path_raw = path.to_string();
             out.push(ResolvedSlot {
-                xpub: acc.account_xpub,
-                fingerprint: acc.master_fingerprint,
-                path: acc.account_path,
+                xpub,
+                fingerprint,
+                path,
                 path_raw,
                 entropy: Some(entropy_bytes),
                 master_xpub: None,

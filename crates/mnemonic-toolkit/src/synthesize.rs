@@ -743,7 +743,9 @@ mod tests {
 
     fn fixture_full(template: CliTemplate, network: CliNetwork) -> (Vec<u8>, Fingerprint, Xpub) {
         let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
-        (acc.entropy, acc.master_fingerprint, acc.account_xpub)
+        // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+        let (entropy, master_fingerprint, account_xpub, _xpriv, _path) = acc.into_parts();
+        (entropy, master_fingerprint, account_xpub)
     }
 
     #[test]
