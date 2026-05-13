@@ -19,12 +19,17 @@ use zeroize::Zeroizing;
 /// BIP-85 §"Specification" — derive 64 bytes of entropy from a master xprv
 /// at path `m/83696968'/<app_code>'/<app_params...>'/<index>'`, then
 /// HMAC-SHA512(key=`b"bip-entropy-from-k"`, msg=child.private_key).
+///
+/// Cycle B Phase 1: the 64-byte buffer is heap-resident (`Vec<u8>`) so that
+/// Phase 3's `MlockedZeroizing<Vec<u8>>` wrapper can pin its pages — mlock
+/// requires heap memory. Length is invariantly 64 (HMAC-SHA512 output);
+/// asserted via `debug_assert_eq!` before return.
 pub(crate) fn derive_entropy(
     master: &Xpriv,
     app_code: u32,
     app_params: &[u32],
     index: u32,
-) -> Result<Zeroizing<[u8; 64]>, ToolkitError> {
+) -> Result<Zeroizing<Vec<u8>>, ToolkitError> {
     let secp = Secp256k1::new();
     let mut components: Vec<ChildNumber> = Vec::with_capacity(3 + app_params.len());
     components.push(hardened(83_696_968)?);
@@ -44,8 +49,9 @@ pub(crate) fn derive_entropy(
     let mut engine = HmacEngine::<sha512::Hash>::new(b"bip-entropy-from-k");
     engine.input(&child.private_key.secret_bytes());
     let mac = Hmac::<sha512::Hash>::from_engine(engine);
-    let mut out = Zeroizing::new([0u8; 64]);
+    let mut out = Zeroizing::new(vec![0u8; 64]);
     out.copy_from_slice(mac.as_byte_array());
+    debug_assert_eq!(out.len(), 64, "BIP-85 entropy is 64-byte invariant");
     Ok(out)
 }
 
