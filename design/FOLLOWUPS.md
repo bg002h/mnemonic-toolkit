@@ -45,6 +45,33 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `bip-vector-adoption-v0_8` — cross-repo cycle: BIP-vector adoption v0.8.0
+
+- **Surfaced:** 2026-05-13. Cycle SPEC at `design/SPEC_test_vector_audit_v0_8_0.md`. Plan at `/home/bcg/.claude/plans/v0_8_0-bip-vector-adoption.md`. R1 review at `design/agent-reports/v0_8_0-phase-0-spec-plan-r1.md`.
+- **Where:** mnemonic-toolkit Phase 3 = BIP-85 v85.3 (24-word BIP-39) cell at `crates/mnemonic-toolkit/tests/cli_derive_child.rs::cell_2b_bip39_24_words_reference_vector`. BIP-39 Trezor English fill (the other v0.7.1 §5 carry-over named in SPEC §2) was already closed by `feat(v0.8-phase-8)` commit `85694b2` *before* this cycle started; SPEC §2 row updated to record this. Net new for this cycle from the toolkit side: +1 vector (v85.3) plus Phase 4 audit-matrix cross-repo lift + Phase 0 SPEC + plan landed at `d0e6afc`.
+- **What:** This repo's contribution to the v0.8.0 cross-repo vectors-only patch cycle. Closes when the cycle's audit-matrix successor doc lands at `design/agent-reports/v0_8_0-bip-test-vector-audit-matrix.md` (Phase 4) and the patch tag is cut at Phase E. Sibling-repo phases: descriptor-mnemonic Phase 1 (BIP-341, committed `b464f3f`); mnemonic-secret Phase 2 (BIP-93, committed `7101c16`).
+- **Status:** `open` (Phase 3 complete at `d269dda`; Phase 4 complete at `03b6e8d`; Phase E Cargo+CHANGELOG bumped at `5063777`. Awaiting cycle close: PR #15 merge + `mnemonic-toolkit-v0.9.1` tag push; sibling-repo PRs #7 #10 #30 merge in lockstep).
+- **Tier:** `cross-repo`
+- **Companion:** `descriptor-mnemonic/design/FOLLOWUPS.md`, `mnemonic-secret/design/FOLLOWUPS.md`, `mnemonic-key/design/FOLLOWUPS.md` — same `bip-vector-adoption-v0_8` short-id in each.
+
+### `bip340-schnorr-signing-surface-evaluation` — BIP-340 Schnorr test vectors deferred pending a signing surface
+
+- **Surfaced:** 2026-05-13, v0.8.0 Phase 0 (SPEC §3 OUT-OF-SCOPE classification).
+- **Where:** No file; cross-repo classification. No signing surface exists in any of the four sibling crates (grep for `schnorr` / `sign` / `signing_key` returns zero matches across `descriptor-mnemonic`, `mnemonic-toolkit`, `mnemonic-secret`, `mnemonic-key`).
+- **What:** BIP-340 ships a sidecar CSV at `bip-0340/test-vectors.csv` with Schnorr signature test vectors. None of the four sibling crates exposes a signing surface, so BIP-340 is OUT-OF-SCOPE-PER-LAYER for the v0.8.0 vectors-only cycle. If a future cycle introduces signing (e.g., a `mnemonic sign-message` BIP-322 surface, or hardware-signer integration), this FOLLOWUP closes by mirroring the CSV into the relevant repo.
+- **Status:** `open` (deferred until signing surface lands).
+- **Tier:** `v1+`
+- **Companion:** `descriptor-mnemonic/design/FOLLOWUPS.md` — `bip341-keypath-signing-vector-coverage` (the BIP-341 `keyPathSpending` corpus has the same gating).
+
+### `bip39-japanese-wordlist-support` — BIP-39 Japanese vectors require JP wordlist surface
+
+- **Surfaced:** 2026-05-13, v0.8.0 Phase 0 (SPEC §3 OUT-OF-SCOPE classification).
+- **Where:** `ms-codec` and `mnemonic-toolkit` are English-only at v0.8.x. The Trezor python-mnemonic repo also publishes a Japanese vector corpus at `https://github.com/bip32JP/bip32JP.github.io/blob/master/test_JP_BIP39.json`.
+- **What:** Extending BIP-39 support to the Japanese wordlist would add ~24 more Trezor-style vectors. Out-of-scope-per-product at v0.8.x; if a future cycle adds JP support, this FOLLOWUP closes by mirroring the JP vector file into `tests/`.
+- **Status:** `open` (deferred; product decision, not a regression).
+- **Tier:** `v1+`
+- **Companion:** None (single-repo concern; `ms-codec` carries the wordlist plumbing).
+
 ### `md-cli-unspendable-key-v0.19-error-string-stale-companion` — companion: md-cli error string still references "v0.19+"
 
 - **Surfaced:** 2026-05-11, toolkit-repo Phase 0.B audit review r1 (commit `713178c`). Surfaced from this repo's audit pass but the fix lives in the sibling `descriptor-mnemonic` repo.

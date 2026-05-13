@@ -76,6 +76,41 @@ fn cell_2_bip39_18_words_reference_vector() {
     );
 }
 
+/// v0.8.0 cycle Phase 3 — BIP-85 vector 85.3 (24-word BIP-39
+/// reference vector). Path m/83696968'/39'/0'/24'/0'. Closes the
+/// v0.7.1 SPEC §5 carry-over (BIP-85 7/9 → 8/9; only 85.9 DICE
+/// remains as a refusal cell).
+///
+/// Cycle SPEC: `mnemonic-toolkit/design/SPEC_test_vector_audit_v0_8_0.md` §2.
+#[test]
+fn cell_2b_bip39_24_words_reference_vector() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "24",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout,
+        "puppy ocean match cereal symbol another shed magic wrap hammer bulb intact gadget divorce twin tonight reason outdoor destroy simple truth cigar social volcano\n",
+    );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on stdout"),
+        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+    );
+}
+
 /// SPEC §6 cell 3 — BIP-85 HD-Seed WIF reference vector.
 /// Path m/83696968'/2'/0' → WIF Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp.
 /// `--length` is required at clap level for SPEC §2 grammar-uniformity but

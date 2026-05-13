@@ -55,7 +55,7 @@ published vectors (not test functions).
 
 | Repo | Spec | v0.7.1 covered | v0.8.0 target | Delta |
 |---|---|---|---|---|
-| `mnemonic-toolkit` | BIP-39 (Trezor) | 6 / 24 | 24 / 24 | +18 |
+| `mnemonic-toolkit` | BIP-39 (Trezor) | 6 / 24 | 24 / 24 | +18 (already shipped pre-cycle in commit `85694b2`; v0.7.1 §5 carry-over already closed by `feat(v0.8-phase-8)`) |
 | `mnemonic-toolkit` | BIP-85 | 7 / 9 | 8 / 9 | +1 (v85.3) |
 | `ms-codec` | BIP-93 valid | 1 / 5 (§93.4 only) | 5 / 5 | +4 |
 | `ms-codec` | BIP-93 invalid | 0 / 64 | 64 / 64 | +64 |
