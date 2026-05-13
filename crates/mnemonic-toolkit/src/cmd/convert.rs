@@ -1129,6 +1129,8 @@ fn compute_outputs(
             let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
             let (raw, compressed) = <str as Decrypt>::decrypt(value, scrypt_pp)
                 .map_err(map_bip38_error)?;
+            // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
+            // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
                 .map_err(|e| ToolkitError::BadInput(format!("BIP-38 decrypted key parse: {e}")))?;
             let pk = PrivateKey {
@@ -1237,6 +1239,8 @@ fn compute_outputs(
                 return Err(refusal_minikey_invalid_checksum());
             }
             let raw = sha256::Hash::hash(value.as_bytes()).to_byte_array();
+            // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
+            // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
                 .map_err(|e| ToolkitError::BadInput(format!("Casascius decoded scalar parse: {e}")))?;
             let pk = PrivateKey {

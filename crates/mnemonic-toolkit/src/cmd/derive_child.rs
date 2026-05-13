@@ -103,8 +103,10 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — read --passphrase from stdin when set.
     // Preserves NULL bytes; strips a single trailing `\r?\n`.
-    let stdin_passphrase: Option<String> = if args.passphrase_stdin {
-        let mut buf = String::new();
+    // SPEC v0.9.0 §1 item 2 — wrap the OWNED stdin buffer in Zeroizing so
+    // the BIP-39 passphrase scrubs on drop at function exit.
+    let stdin_passphrase: Option<zeroize::Zeroizing<String>> = if args.passphrase_stdin {
+        let mut buf: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
             .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
@@ -131,7 +133,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             let mnemonic = Mnemonic::parse_in(language.into(), from_value.as_str())
                 .map_err(ToolkitError::Bip39)?;
             let passphrase: &str = stdin_passphrase
-                .as_deref()
+                .as_ref()
+                .map(|z| z.as_str())
                 .or(args.passphrase.as_deref())
                 .unwrap_or("");
             let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);

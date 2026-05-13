@@ -49,6 +49,10 @@ const CALL_PATTERNS: &[&str] = &[
     "Mnemonic::from_entropy_in",
     "Xpriv::new_master",
     ".derive_priv(",
+    // SPEC v0.9.0 R1 fold I-2 — `secp256k1::SecretKey` is third-party-blocked
+    // (non_secure_erase only, no Drop+Zeroize). Per FOLLOWUP
+    // `rust-secp256k1-secretkey-zeroize-upstream`.
+    "SecretKey::from_slice",
 ];
 
 const SAFETY_NEEDLE: &str = "SAFETY: third-party-blocked";

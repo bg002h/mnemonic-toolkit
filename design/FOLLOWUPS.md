@@ -54,6 +54,14 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.9.2-nice-to-have`
 
+### `rust-secp256k1-secretkey-zeroize-upstream` — `secp256k1::SecretKey` has no Drop+Zeroize
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 R1 (Opus, finding I-2). The lint at `lint_safety_third_party_blocked.rs` now scans for `SecretKey::from_slice` patterns in addition to the original Mnemonic/Xpriv anchors.
+- **Where:** Upstream crate `bitcoin = "0.32"` (transitive `secp256k1`). Affects every `SecretKey::from_slice` construction in `crates/mnemonic-toolkit/src/{bip85,parse_descriptor,cmd/convert}.rs` — 5 production call sites. Each carries a `SAFETY: third-party-blocked` doc-comment pointing at this FOLLOWUP.
+- **What:** `secp256k1::SecretKey` is stack-bound, provides `non_secure_erase()` (which is best-effort and compiler-defeatable, per the upstream's own doc) but does NOT implement Drop with Zeroize. The toolkit's mitigation is lifetime minimization + SAFETY-anchored doc-comments at the construction sites; the residual gap is that the 32-byte scalar lives in stack memory until function exit unscrubbed. Closes when upstream `rust-secp256k1` ships a Drop+Zeroize impl for SecretKey (or when the toolkit migrates to a different curve library that does).
+- **Status:** `open` (upstream-blocked)
+- **Tier:** `external`
+
 ### `rust-bip39-mnemonic-zeroize-upstream` — `bip39::Mnemonic` has no Drop+Zeroize
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN — surfaced while landing the `SAFETY: third-party-blocked` doc-comment discipline at every `Mnemonic::parse_in` / `Mnemonic::from_entropy_in` call site in this repo.

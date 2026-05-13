@@ -774,6 +774,8 @@ pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String {
     seed_buf.push(depth);
     let seed = sha256::Hash::hash(&seed_buf);
     let chain_code = sha256::Hash::hash(&[b'c', b'c', i, depth]).to_byte_array();
+    // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
+    // no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
     let secret = SecretKey::from_slice(&seed.to_byte_array()).expect("hash is valid scalar");
     let pubkey = secret.public_key(&Secp256k1::new()).serialize();
     let mut bytes = [0u8; 78];

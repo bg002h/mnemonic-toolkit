@@ -396,8 +396,13 @@ pub fn synthesize_multisig_full(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     // 9. ms1.
-    let entropy = seed_mnemonic.to_entropy();
-    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy))
+    // SPEC v0.9.0 §1 item 2 — wrap entropy buffer before move-into-Payload.
+    // The ms_codec::Payload::Entr(Vec<u8>) public shape is unwrapped per
+    // SPEC §3 OOS-2; we clone the wrapped buffer's contents into the
+    // public Vec at the call boundary so the original Zeroizing wrap
+    // drops with scrubbing at function exit.
+    let entropy = zeroize::Zeroizing::new(seed_mnemonic.to_entropy());
+    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((*entropy).clone()))
         .map_err(ToolkitError::from)?;
 
     // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected

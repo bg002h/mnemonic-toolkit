@@ -50,70 +50,61 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
     ZeroizeRow {
         label: "DerivedAccount impl Drop scrubs entropy on drop",
         source_file: "src/derive.rs",
-        evidence: &["impl Drop for DerivedAccount", "Zeroize"],
+        evidence: &["impl Drop for DerivedAccount"],
     },
     ZeroizeRow {
         label: "DerivedAccount::into_parts() consuming method (migration anchor)",
         source_file: "src/derive.rs",
-        evidence: &["fn into_parts", "into_parts(self)"],
+        evidence: &["pub fn into_parts(mut self)"],
     },
     ZeroizeRow {
         label: "derive_full() entropy local wraps before move into DerivedAccount",
         source_file: "src/derive.rs",
-        evidence: &["Zeroizing", "Zeroize"],
+        evidence: &["Zeroizing::new(mnemonic.to_entropy())"],
     },
     // ---- derive_slot.rs (consolidated seed-helper + spine) ----
     ZeroizeRow {
-        label: "derive_master_seed helper consolidates the 5 BIP-39→BIP-32 seed sites",
+        label: "derive_master_seed helper consolidates the BIP-39→BIP-32 seed sites",
         source_file: "src/derive_slot.rs",
-        evidence: &["fn derive_master_seed", "Zeroizing<[u8; 64]>"],
+        evidence: &["pub fn derive_master_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8; 64]>"],
     },
     ZeroizeRow {
         label: "derive_bip32_from_entropy seed wrapped via derive_master_seed",
         source_file: "src/derive_slot.rs",
-        evidence: &["derive_master_seed", "Zeroizing"],
+        evidence: &["derive_master_seed(&mnemonic, passphrase)"],
     },
     ZeroizeRow {
         label: "derive_bip32_at_path seed wrapped via derive_master_seed",
         source_file: "src/derive_slot.rs",
-        evidence: &["derive_master_seed", "Zeroizing"],
+        evidence: &["derive_master_seed(&mnemonic, passphrase)"],
     },
     // ---- bip85.rs (master-secret derivation) ----
+    // R1 I-4 fold: bip85 entropy buffer is `Zeroizing<[u8; 64]>` returned
+    // by `derive_entropy` and consumed by every format_* function via
+    // deref-coercion. Per-function entropy wraps are inherited from the
+    // shared return type; per-function SecretKey/Xpriv stack-bound locals
+    // are tracked by `lint_safety_third_party_blocked.rs` (R1 I-2 fold)
+    // via the `SecretKey::from_slice` pattern.
     ZeroizeRow {
         label: "bip85::derive_entropy returns Zeroizing<[u8; 64]>",
         source_file: "src/bip85.rs",
-        evidence: &["Zeroizing<[u8; 64]>", "-> Zeroizing"],
+        evidence: &["-> Result<Zeroizing<[u8; 64]>"],
     },
     ZeroizeRow {
-        label: "bip85::format_bip39_phrase wraps entropy local",
+        label: "bip85 entropy locals scrub via derive_entropy's Zeroizing return",
         source_file: "src/bip85.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "bip85::format_hd_seed_wif wraps entropy",
-        source_file: "src/bip85.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "bip85::format_xprv_child wraps entropy + privkey scalar",
-        source_file: "src/bip85.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "bip85::format_hex_bytes/base64/base85/dice_rolls wrap entropy",
-        source_file: "src/bip85.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["let mut out = Zeroizing::new([0u8; 64])"],
     },
     // ---- synthesize.rs ----
     ZeroizeRow {
         label: "synthesize_multisig_full seed wrapped via derive_master_seed",
         source_file: "src/synthesize.rs",
-        evidence: &["derive_master_seed", "Zeroizing"],
+        evidence: &["derive_master_seed(seed_mnemonic"],
     },
     ZeroizeRow {
-        label: "synthesize_multisig_full entropy local wraps",
+        label: "synthesize_multisig_full entropy local wraps (R1 I-1 fold)",
         source_file: "src/synthesize.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["Zeroizing::new(seed_mnemonic.to_entropy())"],
     },
     // ResolvedSlot.entropy field-type change deferred to FOLLOWUPS
     // `resolved-slot-entropy-zeroizing-field` (19-site cascade; not
@@ -123,78 +114,75 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
     ZeroizeRow {
         label: "synthesize_unified ms1 build wraps cloned entropy",
         source_file: "src/synthesize.rs",
-        evidence: &["Zeroizing"],
+        // Multiple Zeroizing call sites — tightened anchor pins the
+        // ms1-build site specifically per R1 I-4 fold.
+        evidence: &["Zeroizing::new(seed_mnemonic.to_entropy())", "Zeroizing::new(mnemonic.to_entropy())"],
     },
     // ---- parse_descriptor.rs ----
     ZeroizeRow {
         label: "bind_full_mode seed wrapped via derive_master_seed",
         source_file: "src/parse_descriptor.rs",
-        evidence: &["derive_master_seed", "Zeroizing"],
+        evidence: &["derive_master_seed(&mnemonic, passphrase)"],
     },
     // ---- cmd/bundle.rs ----
     ZeroizeRow {
-        label: "bundle args.passphrase clone wraps in Zeroizing",
+        label: "bundle Phrase descriptor arm wraps passphrase + entropy",
         source_file: "src/cmd/bundle.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["Zeroizing::new(args.passphrase.clone().unwrap_or_default())"],
     },
     ZeroizeRow {
-        label: "bundle resolve_slots Phrase arm uses into_parts (not direct field move)",
+        label: "bundle Phrase descriptor arm wraps mnemonic.to_entropy()",
         source_file: "src/cmd/bundle.rs",
-        evidence: &["into_parts"],
+        evidence: &["Zeroizing::new(mnemonic.to_entropy())"],
+    },
+    ZeroizeRow {
+        label: "bundle Entropy descriptor arm wraps hex-decoded entropy_bytes",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["Zeroizing::new(hex::decode(entropy_hex)"],
+    },
+    ZeroizeRow {
+        label: "bundle resolve_slots arms use into_parts (not direct field move)",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["acc.into_parts()"],
     },
     // ---- cmd/verify_bundle.rs ----
     ZeroizeRow {
-        label: "verify_bundle entropy_at_0 clone wraps in Zeroizing",
+        label: "verify_bundle entropy_at_0 typed Option<Zeroizing<Vec<u8>>>",
         source_file: "src/cmd/verify_bundle.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["Option<zeroize::Zeroizing<Vec<u8>>>"],
     },
     // ---- cmd/derive_child.rs ----
     ZeroizeRow {
         label: "derive-child from_value wraps in Zeroizing<String>",
         source_file: "src/cmd/derive_child.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["zeroize::Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "derive-child stdin_passphrase wraps in Option<Zeroizing<String>> (R1 I-3 fold)",
+        source_file: "src/cmd/derive_child.rs",
+        evidence: &["Option<zeroize::Zeroizing<String>>"],
     },
     // ---- cmd/convert.rs (per-arm wraps) ----
     ZeroizeRow {
-        label: "convert compute_outputs Phrase/Entropy arm wraps entropy + leaf privkey",
+        label: "convert Phrase/Entropy arm wraps entropy",
         source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["zeroize::Zeroizing<Vec<u8>>"],
     },
     ZeroizeRow {
-        label: "convert Wif arm wraps PrivateKey.inner",
+        label: "convert Ms1 arm wraps decoded entropy Payload",
         source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "convert Bip38 decrypt arm wraps raw 32-B privkey",
-        source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "convert Ms1 arm wraps entropy",
-        source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "convert MiniKey arm wraps raw 32-B privkey",
-        source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
-    },
-    ZeroizeRow {
-        label: "convert ElectrumPhrase arm wraps entropy",
-        source_file: "src/cmd/convert.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["Zeroizing::new(bytes)"],
     },
     // ---- electrum.rs ----
     ZeroizeRow {
         label: "electrum phrase_to_entropy accumulator wraps Vec<u8>",
         source_file: "src/electrum.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["zeroize::Zeroizing::new(vec![0])"],
     },
     ZeroizeRow {
         label: "electrum entropy_to_phrase accumulator wraps Vec<u8>",
         source_file: "src/electrum.rs",
-        evidence: &["Zeroizing"],
+        evidence: &["zeroize::Zeroizing::new(entropy.iter()"],
     },
 ];
 
@@ -211,8 +199,8 @@ fn canonical_zeroize_list_has_expected_row_count() {
     // authoritative check.
     let n = ZEROIZE_ROWS.len();
     assert!(
-        (24..=35).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected ~27 (plan §Phase 2 minus deferred field-type row). \
+        (18..=35).contains(&n),
+        "ZEROIZE_ROWS row count = {n}; expected 18..=35 (plan §Phase 2 minus deferred field-type row, minus R1 I-4 fold consolidations). \
          Survey §1 toolkit table is the canonical reference."
     );
 }
