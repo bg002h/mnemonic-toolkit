@@ -30,14 +30,14 @@ Cycle A's Drop-zeroize discipline is preserved on every Cycle B path. mlock is a
 
 | # | Layer | What's new |
 |---|---|---|
-| 1 | API: wrapper type | `MlockedZeroizing<T>` (`Deref`/`DerefMut` to `T`; page-aligned allocator for the inner Box; mlock-on-construct; Drop = munlock + zeroize). Wraps `Zeroizing<T>` from Cycle A; strict superset behavior. |
-| 2 | API: slice fn | `pin_pages_for(buf: &[u8]) -> PinnedPageRange`. Page-granularity is explicit in the return type: `PinnedPageRange { start: *const u8, page_count: usize }` with `Drop` impl that munlocks. Pins the page range covering `buf` (start rounded down, end rounded up to page boundary). Callers accept page-residue from co-resident non-secret allocations (Cycle C addresses at allocator level — see §3 `OOS-page-residue-elimination`). |
+| 1 | API: wrapper type | `MlockedZeroizing<T: Zeroize>` (`Deref`/`DerefMut` to `T`; page-aligned allocator for an *owned* Box<T>; mlock-on-construct; Drop = munlock → `Zeroize::zeroize(&mut value)` in place → deallocate). **Behavioral superset** of Cycle A's `Zeroizing<T>` (every guarantee Cycle A's `Zeroizing<T>` gives, this gives plus mlock) but **NOT a compositional wrapper** of `Zeroizing<T>` — composition is "owns the buffer directly" (peer of `Zeroizing<T>`). Required to make the cfg(test) drop-probe ordering observable (Drop body manually orchestrates munlock → zeroize → optional probe → dealloc; see §6 G4). Implementation requires a small amount of `unsafe` for the manual zeroize-then-dealloc ordering; the `unsafe` is contained within `mlock.rs`, Miri-checked in CI (per §6 G4). |
+| 2 | API: slice fn | `pin_pages_for(buf: &[u8]) -> PinnedPageRange`. Page-granularity is explicit in the return type: `PinnedPageRange { start: *const u8, page_count: usize }` with `Drop` impl that munlocks. Pins the page range covering `buf`. **Page-rounding formula** (pinned to avoid ambiguity): `start = addr & !(PAGE_SIZE - 1)` (round down); `end = (addr + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)` (round up); `page_count = (end - start) / PAGE_SIZE`. A slice exactly fitting one page → `page_count = 1`; exactly two pages → `page_count = 2`. **Zero-length slice (`buf.len() == 0`) is a no-op**: returns `PinnedPageRange { start: ptr::null(), page_count: 0 }` whose Drop is also a no-op. No `mlock(2)` syscall is issued for zero-length (Linux `mlock(addr, 0)` returns EINVAL; macOS returns success; the no-op avoids both). Callers accept page-residue from co-resident non-secret allocations (Cycle C addresses at allocator level — see §3 `OOS-page-residue-elimination`). |
 | 3 | API: state singleton | `MlockState` — process-static via `std::sync::OnceLock<MlockState>`. Fields: `failure_count: AtomicUsize`, `total_bytes_unlocked: AtomicUsize`, `first_errno: OnceLock<i32>`. Thread-safe; lock-free reads on the hot path. |
 | 4 | API: end-of-process emit | `pub fn report_at_exit()`. Called from `main()` in both `mnemonic-toolkit` (bin) and `ms-cli` (bin). Emits a 2-line stderr summary iff `failure_count > 0`. Format pinned in §6 G2. |
 | 5 | Precursor refactor | `bip85::derive_entropy(index: u32) -> [u8; 64]` heap-promoted to `-> Zeroizing<Vec<u8>>`. 6 callees in `format_*` functions updated. P1-only; no new public API surface beyond the return-type change. |
 | 6 | Site applications | **Site 1 (toolkit)**: clap fields (passphrase / phrase / slot, ~12 fields across 6 cmd structs: `BundleArgs`, `VerifyBundleArgs`, `ConvertArgs`, `DeriveChildArgs`, `EncodeArgs`, `VerifyArgs`) — `pin_pages_for(...)` call after clap parse. **Site 2 (toolkit)**: `ResolvedSlot.entropy: Option<Zeroizing<Vec<u8>>>` → `Option<MlockedZeroizing<Vec<u8>>>`. **Site 3 (toolkit)**: `DerivedAccount.entropy: Zeroizing<Vec<u8>>` → `MlockedZeroizing<Vec<u8>>`. **Site 4 (toolkit)**: bip85's heap-promoted Vec wrapped. **Site 5 (ms-cli)**: `read_stdin()` String at `parse.rs:45` — `pin_pages_for(s.as_bytes())` post-receipt. The Site-1 collective handle expands to per-field enumeration in Phase 3a prose. |
 | 7 | Errno discipline | All errno classes soft-fail in release: `EPERM`, `ENOMEM` (RLIMIT_MEMLOCK or cgroup memory.lock_size), `EAGAIN` (per-process lock limit), `ENOTSUP`, others. `EINVAL` SHOULD be unreachable from the hybrid API by construction (wrapper allocates page-aligned; slice fn rounds to page boundary). If an `EINVAL` ever surfaces it indicates a bug in this module: debug builds trip `debug_assert!`; release builds soft-fail like the other errno classes. No `Result`-typed return at the user-facing API; mlock outcomes are reported via `MlockState`, not propagated to callers. |
-| 8 | Test surface | (a) `MlockState` aggregation unit tests; (b) `#[cfg(test)]` env-var hook `MNEMONIC_TEST_MLOCK_FAIL_MODE={eperm,enomem,einval,off}` for fault injection at every mlock callsite; (c) `#[cfg(test)]` drop-probe instrumentation on `MlockedZeroizing<T>` (see §6 G4); (d) CI invariant test comparing `pin_pages_for` impls across repos (see §5); (e) POSIX integration tests asserting page-locked state during scope + munlocked after Drop via `/proc/self/smaps` (Linux) and `mach_vm_region` (macOS) test-only helpers. |
+| 8 | Test surface | (a) `MlockState` aggregation unit tests; (b) `#[cfg(test)]` env-var hook `MNEMONIC_TEST_MLOCK_FAIL_MODE={eperm,enomem,einval,off}` for fault injection at every mlock callsite, cache shape pinned `OnceLock<FailMode>` (subprocess isolation required for per-test mode variation; see §4 P2); (c) `#[cfg(test)]` drop-probe instrumentation on `MlockedZeroizing<T>` with verifiable Drop ordering (see §6 G4); (d) CI invariant test enforcing the diff-manifest equivalence between toolkit's and ms-cli's `mlock.rs` (see §6 G6 + §5); (e) POSIX integration tests asserting page-locked state during scope + munlocked after Drop via `/proc/self/smaps` (Linux) and `mach_vm_region` (macOS) test-only helpers, covering single-page / multi-page / zero-length / page-aligned cases (see §6 G1.1-G1.4); (f) Miri pass on the `unsafe` blocks in `MlockedZeroizing::drop` via `cargo +nightly miri test -p mnemonic-toolkit mlock::` (see §6 G4 Miri gate). |
 
 Cross-repo coordination details are in §5 (not duplicated here).
 
@@ -81,16 +81,16 @@ This SPEC + reviewer-loop. Reviewer dispatch: Opus on `feature-dev:code-reviewer
 ### P2 (toolkit) — mlock module
 
 - New module at `crates/mnemonic-toolkit/src/mlock.rs`:
-  - `pub struct MlockedZeroizing<T>` with `pub fn new(value: T) -> Self`, `Deref`/`DerefMut` to `T`, `Drop` impl (munlock then drop the inner `Zeroizing<T>` which zeroizes).
-  - `pub fn pin_pages_for(buf: &[u8]) -> PinnedPageRange`.
-  - `pub struct PinnedPageRange { pub start: *const u8, pub page_count: usize }` with `Drop` impl (munlock).
-  - `MlockState` private struct + `static MLOCK_STATE: OnceLock<MlockState>` accessor.
-  - `pub fn report_at_exit()`.
+  - `pub struct MlockedZeroizing<T: Zeroize>` with `pub fn new(value: T) -> Self`, `Deref`/`DerefMut` to `T`. **Composition shape:** owns a page-aligned Box<T> directly (peer of `Zeroizing<T>`, NOT a wrapper around it). `Drop` impl manually orchestrates: (i) munlock the page range; (ii) `Zeroize::zeroize(&mut *self.value)` in place via `unsafe` deref of the owned ptr; (iii) optionally invoke the cfg(test) probe; (iv) deallocate the page-aligned Box. The `unsafe` for steps (ii)-(iv) is contained in this Drop impl and one helper; CI runs Miri on the relevant tests (`cargo +nightly miri test -p mnemonic-toolkit mlock::`) to verify no UB. See §6 G4.
+  - `pub fn pin_pages_for(buf: &[u8]) -> PinnedPageRange`. Zero-length is a no-op (returns empty range; no syscall); see §2 row 2 for the page-rounding formula.
+  - `pub struct PinnedPageRange { pub start: *const u8, pub page_count: usize }` with `Drop` impl (munlock when `page_count > 0`; no-op otherwise).
+  - `MlockState` private struct (fields: `failure_count: AtomicUsize`, `total_bytes_unlocked: AtomicUsize`, `first_errno: OnceLock<i32>`) + `static MLOCK_STATE: OnceLock<MlockState>` accessor + `fn record_failure(errno: i32, bytes: usize)` (idempotent on `first_errno`; monotonic on counters).
+  - `pub fn report_at_exit()`. Called from `main()` in both binaries.
 - `#[cfg(test)]` hooks:
-  - Env-var fault injection: every mlock callsite checks `std::env::var("MNEMONIC_TEST_MLOCK_FAIL_MODE")` once on first use (cached); supported values `eperm`, `enomem`, `einval`, `off`. Production code path is `cfg(not(test))` direct mlock; test path branches on the env var.
-  - Drop-probe constructor: `MlockedZeroizing::new_with_drop_probe<F: FnOnce(&[u8])>(value: T, probe: F) -> Self`. The probe is invoked AFTER munlock + zeroize but BEFORE deallocating the inner Box, allowing the test to inspect the zeroed buffer (no `unsafe` post-free read). Available only under `#[cfg(test)]`.
+  - **Env-var fault injection** with pinned cache shape: `static FAIL_MODE: OnceLock<FailMode> = OnceLock::new();` resolved at first mlock call via `std::env::var("MNEMONIC_TEST_MLOCK_FAIL_MODE").ok().and_then(parse)`. Supported values: `eperm`, `enomem`, `einval`, `off`. Production code path is `cfg(not(test))` direct mlock; test path branches on the cached `FAIL_MODE`. Cross-thread coherence: `OnceLock` guarantees first-writer-wins; all threads observe the same `FailMode` for the lifetime of the process. **Tests requiring per-test mode variation MUST use subprocess isolation** (`assert_cmd::Command::cargo_bin(...)` with per-invocation env), not `cargo test`'s default in-process parallelism (which would all share the first-resolved `FAIL_MODE`).
+  - **Drop-probe constructor:** `MlockedZeroizing::new_with_drop_probe<F: FnOnce(&[u8]) + 'static>(value: T, probe: F) -> Self`. Stores `probe` as `Option<Box<dyn FnOnce(&[u8])>>` on the struct. Drop body calls `probe(observed_buffer)` AFTER step (ii) (zeroize) and BEFORE step (iv) (dealloc), with `observed_buffer` being a `&[u8]` slice over the (now-zeroed) Box contents. This ordering is achievable because Drop owns the buffer directly (per Row 1 composition change); no UB. Available only under `#[cfg(test)]`.
 - Module is reviewable in isolation; no applications yet.
-- Approximate scope: ~250 LOC.
+- Approximate scope: ~270 LOC (10-20 LOC over the original estimate to absorb the owns-buffer-directly composition).
 
 ### P3 — apply at sites 1-5 (cross-repo)
 
@@ -127,9 +127,9 @@ This SPEC + reviewer-loop. Reviewer dispatch: Opus on `feature-dev:code-reviewer
 
 - **Companion FOLLOWUP.** Filed in `mnemonic-secret/design/FOLLOWUPS.md` at P0 SPEC ship. Same id `secret-memory-hygiene-cycle-b` in both repos (matches Cycle A's `secret-memory-hygiene-v0_9-cycle-a` cross-repo id convention). Reciprocal `Companion:` lines point each entry at the other.
 
-- **`pin_pages_for` inline-copy invariant.** Both repos' impls must remain functionally equivalent. Enforcement: a workspace-level test in toolkit reads both source files (toolkit's local copy + ms repo's copy via a path computed from a shared CI checkout), normalizes (strip whitespace, comments, doc-comments), asserts byte-equal. CI fails on drift. Mirror test in ms repo. Documented in both repos' `Companion:` lines.
+- **Inline-copy invariant (diff manifest).** The duplicated module surface is enumerated as a diff manifest in §6 G6: `{pin_pages_for, PinnedPageRange + Drop impl, MlockState + accessor + record_failure, report_at_exit, private errno-handling helpers}`. `MlockedZeroizing<T>` is toolkit-only and NOT in the manifest. Enforcement: workspace-level CI test in toolkit (and mirror in ms repo) compares the diff-manifest items by normalized source text (per G6's normalization rules: PRESERVE `use` statements and `#[cfg]` attributes; strip line comments and doc-comments at start-of-trimmed-line; preserve internal string-literal whitespace). The manifest itself is also under test (a static name-list assertion in the CI test) — adding a new item to one repo's `mlock.rs` without updating the manifest and the other repo fails the test (helper-fn-circumvention mitigation). Documented in both repos' `Companion:` lines.
 
-  Operational note: the test requires both repos to be checked out in the CI environment. The toolkit's CI workflow (`.github/workflows/`) adds a checkout step for `mnemonic-secret` alongside its own. ms repo's CI mirrors with a checkout step for `mnemonic-toolkit`.
+  Operational note: the test requires both repos to be checked out in the CI environment. The toolkit's CI workflow (`.github/workflows/`) adds a checkout step for `mnemonic-secret` at the matching tag (or `main` if no tag yet for the in-flight Cycle B PE). ms repo's CI mirrors with a checkout step for `mnemonic-toolkit`. P3b commit pins the exact `actions/checkout` configuration.
 
 - **Cross-repo cycle-close gates.** PE tags push within the same session; FOLLOWUPS resolutions commit with reciprocal SHA citations; CHANGELOG entries cross-cite.
 
@@ -143,11 +143,17 @@ Numbered gates with explicit-pass criteria. Mirrors Cycle A SPEC §6 pattern.
 
 ### G1 — Functional correctness
 
-Each of the 5 sites successfully mlocks under default test environment (`RLIMIT_MEMLOCK ≥ 64KiB`; no cgroup `memory.lock_size` restriction). Integration test asserts the relevant page range is locked during scope and unlocked after Drop.
+Each of the 5 sites successfully mlocks under default test environment (`RLIMIT_MEMLOCK ≥ 64KiB`; no cgroup `memory.lock_size` restriction). Integration tests cover the happy path plus three explicit edge cases:
 
-Verification mechanism (test-only):
+**Verification mechanism (test-only):**
 - **Linux**: parse `/proc/self/smaps` for the address range matching the buffer; assert `Locked > 0` for the entry. Test helper `mlock::tests::is_page_range_locked(addr: *const u8, len: usize) -> bool`.
-- **macOS**: `mach_vm_region_info` via the `mach` crate (already in transitive deps for some platforms; if not, a dev-only addition is acceptable). Assert region's `user_tag` reflects wired memory. Same test helper signature.
+- **macOS**: `mach_vm_region_info` via the `mach` crate (already in transitive deps for some platforms; if not, a dev-only addition is acceptable). Assert region's wired-memory accounting. Same test helper signature.
+
+**Test cases:**
+- **G1.1** Single-page case (length ≤ PAGE_SIZE): assert `PinnedPageRange.page_count == 1`; assert page is locked during scope; assert munlocked after Drop.
+- **G1.2** Multi-page case (length > PAGE_SIZE, e.g., `vec![0xAA; 2 * PAGE_SIZE]`): assert `PinnedPageRange.page_count >= 2`; assert all spanned pages report `Locked > 0` in `/proc/self/smaps`; assert all munlocked after Drop.
+- **G1.3** Zero-length no-op case (per §2 row 2): `pin_pages_for(&[])` returns `PinnedPageRange { start: ptr::null(), page_count: 0 }`; assert no `MlockState.failure_count` increment; assert no syscall (verify via `strace`-style instrumentation OR by setting `MNEMONIC_TEST_MLOCK_FAIL_MODE=einval` and confirming no fault is injected since no syscall runs); assert no panic.
+- **G1.4** Page-aligned slice exactly fitting one page: assert `page_count == 1` (rounding formula doesn't double-count an exactly-aligned end).
 
 ### G2 — Soft-fail coverage
 
@@ -176,22 +182,27 @@ CI matrix runs on:
 
 Both green required. Rationale: macOS coredump_filter behavior and mlock errno conventions differ from Linux; both code paths must compile and pass.
 
-### G4 — Cycle A discipline preserved (no `unsafe` post-free reads)
+### G4 — Cycle A discipline preserved (verifiable Drop ordering, no UB)
 
-Sites still Drop-zeroize when mlock fails. Verification via `#[cfg(test)]` drop-probe instrumentation (NOT post-free pointer reads — those are undefined behavior):
+Sites still Drop-zeroize when mlock fails. Verification via `#[cfg(test)]` drop-probe instrumentation. The ordering claim is achievable because `MlockedZeroizing<T>` owns its buffer directly (composition shape per §2 row 1, NOT a wrapper around `Zeroizing<T>`); the Drop body manually orchestrates munlock → zeroize → probe → dealloc.
 
 ```rust
 #[cfg(test)]
 impl<T: Zeroize> MlockedZeroizing<T> {
     pub fn new_with_drop_probe<F>(value: T, probe: F) -> Self
-    where F: FnOnce(&[u8]) + 'static { /* ... */ }
-    // The probe is invoked AFTER munlock + zeroize but BEFORE
-    // deallocating the inner allocation. The test inspects the
-    // zeroed buffer via the probe callback.
+    where F: FnOnce(&[u8]) + 'static { /* stores probe on struct */ }
+    // Drop body order (all four steps inside MlockedZeroizing::drop):
+    //   (i)   munlock the page range
+    //   (ii)  Zeroize::zeroize(&mut *value) in place
+    //   (iii) probe(observed_buffer) — probe sees the zeroed buffer
+    //   (iv)  deallocate the page-aligned Box
+    // No post-free read; no UB.
 }
 ```
 
-Test: hold a `MlockedZeroizing<Vec<u8>>::new_with_drop_probe([0xAA; 32], |buf| {...})` with known bytes under `MNEMONIC_TEST_MLOCK_FAIL_MODE=eperm`; force Drop (let-binding goes out of scope); probe callback asserts the observed buffer is all-zero.
+Test pattern: hold `MlockedZeroizing::<Vec<u8>>::new_with_drop_probe(vec![0xAA; 32], move |buf| { ... })` with known bytes under `MNEMONIC_TEST_MLOCK_FAIL_MODE=eperm` (subprocess-isolated per §4 P2 cache-shape note). Force Drop. Probe callback (captured `'static`) asserts the observed buffer is all-zero.
+
+**Miri gate:** CI runs `cargo +nightly miri test -p mnemonic-toolkit mlock::` on the drop-probe tests to verify the `unsafe` blocks in §4 P2 (manual zeroize-then-dealloc ordering) are UB-free. Miri failure fails G4.
 
 ### G5 — Cross-repo lockstep
 
@@ -199,9 +210,33 @@ Test: hold a `MlockedZeroizing<Vec<u8>>::new_with_drop_probe([0xAA; 32], |buf| {
 - CHANGELOG entries in both repos cross-cite each other's tag commit SHAs.
 - Companion FOLLOWUP resolution commits within 24h of each other.
 
-### G6 — Inline-copy equivalence
+### G6 — Inline-copy equivalence (diff manifest + name-export check)
 
-CI invariant test passes on every PR in both repos: toolkit's `mlock.rs::pin_pages_for` and ms-cli's `mlock.rs::pin_pages_for` functionally equivalent after normalization (strip whitespace, comments, doc-comments). Verification: byte-equal after normalization.
+The duplicated module surface is enumerated as a **diff manifest** (the binding list of items that must remain equivalent across repos):
+
+- `fn pin_pages_for(buf: &[u8]) -> PinnedPageRange`
+- `struct PinnedPageRange { start: *const u8, page_count: usize }` + its `impl Drop`
+- `struct MlockState` (fields, accessor `static MLOCK_STATE`, methods `record_failure(errno: i32, bytes: usize)`)
+- `fn report_at_exit()`
+- Any private errno-handling helpers used by the above (enumerated at P2 commit time)
+
+`MlockedZeroizing<T>` is **toolkit-only** and is NOT in the manifest.
+
+**CI invariant test (workspace-level; mirrored in ms repo).** Asserts on every PR in both repos:
+
+1. **Source-text equivalence** for every item in the diff manifest, normalized as:
+   - Strip leading/trailing whitespace per line
+   - Strip `//` line comments at start-of-trimmed-line only
+   - Strip `/// ` doc-comments
+   - Preserve internal whitespace inside string literals
+   - **PRESERVE** `use` statements (so `use crate::Foo` vs `use ms_cli::Foo` divergence fails loudly, forcing explicit alignment via re-exports or refactor)
+   - **PRESERVE** `#[cfg(target_os = "linux")]`, `#[cfg(target_os = "macos")]`, etc. (platform-divergence is intentional and must be loud)
+
+2. **Name-export parity:** toolkit's `mlock.rs` exports exactly `{diff_manifest_names ∪ {MlockedZeroizing}}`; ms-cli's `mlock.rs` exports exactly `{diff_manifest_names}`. Any name added to one repo's `mlock.rs` without the corresponding update in the other (or in the manifest exception list for `MlockedZeroizing`) fails the test.
+
+3. **Manifest under test:** the diff manifest itself is a static `&[&str]` list in the CI test code, asserted against the names extracted from both `mlock.rs` files. Adding a new fn or struct to one repo's `mlock.rs` without updating the manifest fails the test — this is the helper-fn-circumvention mitigation.
+
+Both repos' CI workflows must check out the other repo at the matching tag (or `main` if no tag yet) before running this test. Documented operationally in §5.
 
 ### G7 — No wire-format regression
 
