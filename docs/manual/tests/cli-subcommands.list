@@ -12,6 +12,7 @@ mnemonic verify-bundle
 mnemonic convert
 mnemonic export-wallet
 mnemonic derive-child
+mnemonic gui-schema
 
 # md
 md encode

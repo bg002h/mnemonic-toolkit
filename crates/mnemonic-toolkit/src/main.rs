@@ -20,7 +20,7 @@ mod template;
 mod wallet_export;
 mod wordlists;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use error::ToolkitError;
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -48,6 +48,8 @@ enum Command {
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
+    /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
+    GuiSchema(cmd::gui_schema::GuiSchemaArgs),
 }
 
 fn main() -> ExitCode {
@@ -73,6 +75,13 @@ fn main() -> ExitCode {
         }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
+        }
+        Command::GuiSchema(args) => {
+            // Re-derive the clap `Command` tree via CommandFactory so the
+            // schema reflects the canonical clap-derive surface (single
+            // source of truth — no parallel hand-maintained schema).
+            let root = Cli::command();
+            cmd::gui_schema::run(args, &root, stdout).map(|_| 0)
         }
     };
 
