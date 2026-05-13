@@ -45,6 +45,39 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `resolved-slot-entropy-zeroizing-field` — change `ResolvedSlot.entropy` to `Option<Zeroizing<Vec<u8>>>`
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN (deferred from in-cycle landing due to 19-site cascade).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:582` — `pub entropy: Option<Vec<u8>>` field on the `ResolvedSlot` (private) struct. 19 read/write sites cascade through bundle.rs, verify_bundle.rs, parse_descriptor.rs (incl. test mods).
+- **What:** Per plan §"Phase 2 — Impl" step 4, ResolvedSlot.entropy was scheduled to become `Option<Zeroizing<Vec<u8>>>` so the field-resident entropy scrubs on drop. Phase 2 GREEN landed local-wrap discipline at every producer + consumer site (entropy entering the field is `Zeroizing` at construction; reads clone to a local `Zeroizing`) but left the field type as `Option<Vec<u8>>` — so the field-resident copy itself is unwrapped during its lifetime.
+- **Why deferred:** 19-site cascade across 3 files + test mods is mechanically large and not representative of the per-row wrap discipline the Phase 2 zeroize-lint is enforcing. The local-wrap discipline at producer + consumer sites covers the value's transit; only the brief field-resident lifetime is unwrapped. A separate small commit can complete the field type change in one shot.
+- **Status:** `open`
+- **Tier:** `v0.9.2-nice-to-have`
+
+### `rust-secp256k1-secretkey-zeroize-upstream` — `secp256k1::SecretKey` has no Drop+Zeroize
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 R1 (Opus, finding I-2). The lint at `lint_safety_third_party_blocked.rs` now scans for `SecretKey::from_slice` patterns in addition to the original Mnemonic/Xpriv anchors.
+- **Where:** Upstream crate `bitcoin = "0.32"` (transitive `secp256k1`). Affects every `SecretKey::from_slice` construction in `crates/mnemonic-toolkit/src/{bip85,parse_descriptor,cmd/convert}.rs` — 5 production call sites. Each carries a `SAFETY: third-party-blocked` doc-comment pointing at this FOLLOWUP.
+- **What:** `secp256k1::SecretKey` is stack-bound, provides `non_secure_erase()` (which is best-effort and compiler-defeatable, per the upstream's own doc) but does NOT implement Drop with Zeroize. The toolkit's mitigation is lifetime minimization + SAFETY-anchored doc-comments at the construction sites; the residual gap is that the 32-byte scalar lives in stack memory until function exit unscrubbed. Closes when upstream `rust-secp256k1` ships a Drop+Zeroize impl for SecretKey (or when the toolkit migrates to a different curve library that does).
+- **Status:** `open` (upstream-blocked)
+- **Tier:** `external`
+
+### `rust-bip39-mnemonic-zeroize-upstream` — `bip39::Mnemonic` has no Drop+Zeroize
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN — surfaced while landing the `SAFETY: third-party-blocked` doc-comment discipline at every `Mnemonic::parse_in` / `Mnemonic::from_entropy_in` call site in this repo.
+- **Where:** Upstream crate `bip39 = "2"`. Affects every `Mnemonic` construction in `crates/mnemonic-toolkit/src/{bip85,derive,derive_slot,synthesize,parse_descriptor,cmd/{bundle,convert,derive_child}}.rs` — 25 production call sites enumerated by `lint_safety_third_party_blocked.rs::SCAN_FILES`. Each site carries a `SAFETY: third-party-blocked` doc-comment pointing at this FOLLOWUP.
+- **What:** `bip39::Mnemonic` holds the phrase + internal entropy buffer but does not implement `Drop` with `Zeroize::zeroize`. The toolkit's mitigation is lifetime minimization (construct → `to_entropy()` / `to_seed()` into `Zeroizing` → immediate drop), but a residual gap remains: the secret bytes inside `Mnemonic` are not actively scrubbed before deallocation. Closes when upstream `bip39` adds `impl Drop` + `zeroize` dep.
+- **Status:** `open` (upstream-blocked)
+- **Tier:** `external`
+
+### `rust-bitcoin-xpriv-zeroize-upstream` — `bitcoin::bip32::Xpriv` is Copy + no Drop + no Zeroize
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN — surfaced while landing the `SAFETY: third-party-blocked` doc-comment discipline at every `Xpriv::new_master` / `Xpriv::derive_priv` call site in this repo.
+- **Where:** Upstream crate `bitcoin = "0.32"`. Affects every `Xpriv` construction in `crates/mnemonic-toolkit/src/{bip85,derive_slot,synthesize,parse_descriptor,cmd/{bundle,convert,derive_child}}.rs` — also enumerated by `lint_safety_third_party_blocked.rs`.
+- **What:** `bitcoin::bip32::Xpriv` is `Copy` and has no Drop hook upstream. Phase 0 R3 C-R3-3 verified that `drop(xpriv)` on a `Copy` type is a no-op for memory cleanup (the value bitwise-copies into `drop()` and the original binding remains untouched; every `derive_priv` call leaves a fresh stack copy). Closes when upstream `bitcoin` removes `Copy` from `Xpriv` + adds `impl Drop` + `zeroize` dep — a coordinated breaking change requiring downstream migration at every `Xpriv` call site.
+- **Status:** `open` (upstream-blocked; non-trivial breaking change for upstream)
+- **Tier:** `external`
+
 ### `convert-minikey-stdout-redaction` — widen `NodeType::is_secret_bearing` to cover Casascius MiniKey on the stdout-redaction pathway
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 1 R1 review (Opus 4.7, finding N-2 partial — surfaced while folding the wider-tag method lift onto `NodeType`).

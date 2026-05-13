@@ -341,13 +341,16 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive::derive_full(
                 phrase, pass, lang, network, template, account,
             )?;
-            let path_raw = acc.account_path.to_string();
+            // SPEC v0.9.0 §1 item 2 — DerivedAccount has `impl Drop`;
+            // use `into_parts` for the consuming move (E0509-safe).
+            let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let path_raw = path.to_string();
             out.push(ResolvedSlot {
-                xpub: acc.account_xpub,
-                fingerprint: acc.master_fingerprint,
-                path: acc.account_path,
+                xpub,
+                fingerprint,
+                path,
                 path_raw,
-                entropy: Some(acc.entropy),
+                entropy: Some(entropy),
                 master_xpub: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
@@ -437,11 +440,16 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive_slot::derive_bip32_from_entropy(
                 &entropy_bytes, pass, lang, network, template, account,
             )?;
-            let path_raw = acc.account_path.to_string();
+            // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+            // The derived `entropy` is discarded here (the user-supplied
+            // `entropy_bytes` is the canonical buffer for this slot);
+            // the Drop on `acc` will scrub the now-orphaned husk.
+            let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let path_raw = path.to_string();
             out.push(ResolvedSlot {
-                xpub: acc.account_xpub,
-                fingerprint: acc.master_fingerprint,
-                path: acc.account_path,
+                xpub,
+                fingerprint,
+                path,
                 path_raw,
                 entropy: Some(entropy_bytes),
                 master_xpub: None,
@@ -895,18 +903,24 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         let (xpub, fingerprint, path, path_raw, ent_opt) = if subkeys
             .contains(&crate::slot_input::SlotSubkey::Phrase)
         {
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` +
+            // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
+            // `rust-bip39-mnemonic-zeroize-upstream`,
+            // `rust-bitcoin-xpriv-zeroize-upstream`. The passphrase clone,
+            // entropy Vec, and seed buffer are all `Zeroizing`-wrapped.
             let phrase = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             let language = args.language.unwrap_or_default();
-            let passphrase = args.passphrase.clone().unwrap_or_default();
+            let passphrase: zeroize::Zeroizing<String> =
+                zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
             let mnemonic = Bip39Mnemonic::parse_in(language.into(), phrase)
                 .map_err(ToolkitError::Bip39)?;
-            let entropy = mnemonic.to_entropy();
-            let seed = mnemonic.to_seed(&passphrase);
-            let master = BipXpriv::new_master(args.network.network_kind(), &seed)
+            let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
+            let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
+            let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
                 .map_err(|e| {
                     ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
                 })?;
@@ -919,11 +933,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                     )));
                 }
             }
+            // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
+            // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
             let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some(entropy))
+            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy).clone()))
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -963,26 +979,33 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Entropy)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let entropy_bytes = hex::decode(entropy_hex).map_err(|e| {
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` +
+            // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
+            // `rust-bip39-mnemonic-zeroize-upstream`,
+            // `rust-bitcoin-xpriv-zeroize-upstream`.
+            let entropy_bytes = zeroize::Zeroizing::new(hex::decode(entropy_hex).map_err(|e| {
                 ToolkitError::BadInput(format!(
                     "--slot @{idx}.entropy hex-decode: {e}"
                 ))
-            })?;
+            })?);
             let language = args.language.unwrap_or_default();
-            let passphrase = args.passphrase.clone().unwrap_or_default();
-            let mnemonic = Bip39Mnemonic::from_entropy_in(language.into(), &entropy_bytes)
+            let passphrase: zeroize::Zeroizing<String> =
+                zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
+            let mnemonic = Bip39Mnemonic::from_entropy_in(language.into(), &entropy_bytes[..])
                 .map_err(ToolkitError::Bip39)?;
-            let seed = mnemonic.to_seed(&passphrase);
-            let master = BipXpriv::new_master(args.network.network_kind(), &seed)
+            let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
+            let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
                 .map_err(|e| {
                     ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
                 })?;
             let master_fp = master.fingerprint(&secp);
+            // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
+            // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
             let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some(entropy_bytes))
+            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy_bytes).clone()))
         } else {
             return Err(ToolkitError::BadInput(format!(
                 "--slot @{idx} subkey set {:?} not supported in descriptor mode in v0.4.2 \

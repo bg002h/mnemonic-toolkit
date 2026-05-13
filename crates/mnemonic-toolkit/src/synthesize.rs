@@ -275,6 +275,8 @@ pub(crate) fn derive_xpub_at_path(
 ) -> Result<Xpub, ToolkitError> {
     let path = DerivationPath::from_str(path_str)
         .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
     let xpriv = master
         .derive_priv(secp, &path)
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
@@ -321,9 +323,12 @@ pub fn synthesize_multisig_full(
     }
 
     // 2. Master xpriv.
-    let seed = seed_mnemonic.to_seed(passphrase);
+    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`. The
+    // 64-byte seed is `Zeroizing<[u8; 64]>` via `derive_master_seed`.
+    let seed = crate::derive_slot::derive_master_seed(seed_mnemonic, passphrase);
     let secp = Secp256k1::new();
-    let master = Xpriv::new_master(network.network_kind(), &seed)
+    let master = Xpriv::new_master(network.network_kind(), &seed[..])
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 
@@ -391,8 +396,13 @@ pub fn synthesize_multisig_full(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     // 9. ms1.
-    let entropy = seed_mnemonic.to_entropy();
-    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy))
+    // SPEC v0.9.0 §1 item 2 — wrap entropy buffer before move-into-Payload.
+    // The ms_codec::Payload::Entr(Vec<u8>) public shape is unwrapped per
+    // SPEC §3 OOS-2; we clone the wrapped buffer's contents into the
+    // public Vec at the call boundary so the original Zeroizing wrap
+    // drops with scrubbing at function exit.
+    let entropy = zeroize::Zeroizing::new(seed_mnemonic.to_entropy());
+    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((*entropy).clone()))
         .map_err(ToolkitError::from)?;
 
     // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected
@@ -743,7 +753,9 @@ mod tests {
 
     fn fixture_full(template: CliTemplate, network: CliNetwork) -> (Vec<u8>, Fingerprint, Xpub) {
         let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
-        (acc.entropy, acc.master_fingerprint, acc.account_xpub)
+        // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+        let (entropy, master_fingerprint, account_xpub, _xpriv, _path) = acc.into_parts();
+        (entropy, master_fingerprint, account_xpub)
     }
 
     #[test]

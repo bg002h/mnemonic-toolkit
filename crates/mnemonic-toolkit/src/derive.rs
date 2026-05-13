@@ -10,6 +10,12 @@ use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
 
 /// Result of full-mode derivation.
+///
+/// SPEC v0.9.0 §1 item 2 — `impl Drop` scrubs `entropy` on drop.
+/// Adding `impl Drop` BLOCKS move-out destructuring (E0509): callers
+/// that consumed `DerivedAccount` via `let DerivedAccount { entropy,
+/// .. } = derived;` no longer compile. Use [`DerivedAccount::into_parts`]
+/// to consume the value cleanly. Field-borrow access is unaffected.
 #[derive(Debug)]
 pub struct DerivedAccount {
     pub entropy: Vec<u8>,
@@ -17,6 +23,38 @@ pub struct DerivedAccount {
     pub account_xpub: Xpub,
     pub account_xpriv: Xpriv,
     pub account_path: DerivationPath,
+}
+
+impl DerivedAccount {
+    /// Consume `self`, returning all five fields. `std::mem::take`
+    /// swaps the `entropy` Vec out of `self` (leaving an empty Vec
+    /// for the Drop husk), then clones the `account_path`; the
+    /// remaining three fields are `Copy`. The empty-Vec Drop is a
+    /// no-op for memory cleanup — the real bytes are now owned by
+    /// the caller, which is responsible for wrapping them in
+    /// `Zeroizing<Vec<u8>>` at the call site.
+    pub fn into_parts(mut self) -> (Vec<u8>, Fingerprint, Xpub, Xpriv, DerivationPath) {
+        let entropy = std::mem::take(&mut self.entropy);
+        let account_path = self.account_path.clone();
+        (
+            entropy,
+            self.master_fingerprint,
+            self.account_xpub,
+            self.account_xpriv,
+            account_path,
+        )
+    }
+}
+
+impl Drop for DerivedAccount {
+    fn drop(&mut self) {
+        // SPEC v0.9.0 §1 item 2 — scrub OWNED entropy buffer on drop.
+        // `account_xpriv` is `Copy` and has no Drop hook upstream; the
+        // residual gap is tracked at FOLLOWUPS:
+        // `rust-bitcoin-xpriv-zeroize-upstream`.
+        use zeroize::Zeroize;
+        self.entropy.zeroize();
+    }
 }
 
 pub fn derive_full(
@@ -27,8 +65,11 @@ pub fn derive_full(
     template: CliTemplate,
     account: u32,
 ) -> Result<DerivedAccount, ToolkitError> {
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize;
+    // tracked by FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`. Lifetime
+    // here is minimal: parse → to_entropy → drop on function return.
     let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
-    let entropy = mnemonic.to_entropy();
+    let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
     crate::derive_slot::derive_bip32_from_entropy(
         &entropy,
         passphrase,

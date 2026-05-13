@@ -881,14 +881,17 @@ fn compute_outputs(
     match from {
         Phrase | Entropy => {
             // BIP-39 source — derive once, project.
-            let entropy: Vec<u8> = if from == Phrase {
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
+            // Drop+Zeroize; tracked by FOLLOWUP
+            // `rust-bip39-mnemonic-zeroize-upstream`.
+            let entropy: zeroize::Zeroizing<Vec<u8>> = if from == Phrase {
                 let m = Mnemonic::parse_in(language.into(), value)
                     .map_err(ToolkitError::Bip39)?;
-                m.to_entropy()
+                zeroize::Zeroizing::new(m.to_entropy())
             } else {
-                hex::decode(value).map_err(|e| {
+                zeroize::Zeroizing::new(hex::decode(value).map_err(|e| {
                     ToolkitError::BadInput(format!("--from entropy hex-decode: {e}"))
-                })?
+                })?)
             };
 
             let needs_derive = targets
@@ -910,10 +913,15 @@ fn compute_outputs(
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
-                    Phrase => Mnemonic::from_entropy_in(language.into(), &entropy)
-                        .map_err(ToolkitError::Bip39)?
-                        .to_string(),
-                    Entropy => hex::encode(&entropy),
+                    Phrase => {
+                        // SAFETY: third-party-blocked — `bip39::Mnemonic`
+                        // has no Drop+Zeroize;
+                        // FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
+                        Mnemonic::from_entropy_in(language.into(), &entropy[..])
+                            .map_err(ToolkitError::Bip39)?
+                            .to_string()
+                    }
+                    Entropy => hex::encode(&entropy[..]),
                     Xpub => derived.as_ref().unwrap().account_xpub.to_string(),
                     Xprv => derived.as_ref().unwrap().account_xpriv.to_string(),
                     Fingerprint => derived
@@ -924,7 +932,7 @@ fn compute_outputs(
                         .to_lowercase(),
                     Ms1 => ms_codec::encode(
                         ms_codec::Tag::ENTR,
-                        &ms_codec::Payload::Entr(entropy.clone()),
+                        &ms_codec::Payload::Entr((*entropy).clone()),
                     )
                     .map_err(ToolkitError::from)?,
                     Wif => {
@@ -1121,6 +1129,8 @@ fn compute_outputs(
             let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
             let (raw, compressed) = <str as Decrypt>::decrypt(value, scrypt_pp)
                 .map_err(map_bip38_error)?;
+            // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
+            // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
                 .map_err(|e| ToolkitError::BadInput(format!("BIP-38 decrypted key parse: {e}")))?;
             let pk = PrivateKey {
@@ -1145,8 +1155,13 @@ fn compute_outputs(
         }
         Ms1 => {
             let (_tag, payload) = ms_codec::decode(value).map_err(ToolkitError::from)?;
-            let entropy = match payload {
-                ms_codec::Payload::Entr(bytes) => bytes,
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
+            // Drop+Zeroize; FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
+            // ms_codec::Payload::Entr ships a Vec<u8> the codec doesn't
+            // scrub (tracked at sibling FOLLOWUPS `secret-memory-hygiene-v0_9-cycle-a`
+            // ms-codec rows); the local wrap below protects the duplicate.
+            let entropy: zeroize::Zeroizing<Vec<u8>> = match payload {
+                ms_codec::Payload::Entr(bytes) => zeroize::Zeroizing::new(bytes),
                 _ => {
                     return Err(ToolkitError::BadInput(
                         "ms1 decoded to a non-Entr payload; v0.1 ms-codec emits only Entr".into(),
@@ -1156,10 +1171,15 @@ fn compute_outputs(
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
-                    Entropy => hex::encode(&entropy),
-                    Phrase => Mnemonic::from_entropy_in(language.into(), &entropy)
-                        .map_err(ToolkitError::Bip39)?
-                        .to_string(),
+                    Entropy => hex::encode(&entropy[..]),
+                    Phrase => {
+                        // SAFETY: third-party-blocked — `bip39::Mnemonic` has
+                        // no Drop+Zeroize; FOLLOWUP
+                        // `rust-bip39-mnemonic-zeroize-upstream`.
+                        Mnemonic::from_entropy_in(language.into(), &entropy[..])
+                            .map_err(ToolkitError::Bip39)?
+                            .to_string()
+                    }
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
                             "--from ms1 --to {} is not a defined edge",
@@ -1219,6 +1239,8 @@ fn compute_outputs(
                 return Err(refusal_minikey_invalid_checksum());
             }
             let raw = sha256::Hash::hash(value.as_bytes()).to_byte_array();
+            // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
+            // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
                 .map_err(|e| ToolkitError::BadInput(format!("Casascius decoded scalar parse: {e}")))?;
             let pk = PrivateKey {
