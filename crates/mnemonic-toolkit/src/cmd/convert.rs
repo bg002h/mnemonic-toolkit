@@ -181,6 +181,15 @@ pub struct ConvertArgs {
     #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
     pub passphrase_stdin: bool,
 
+    /// SPEC v0.9.0 §1 item 1 — read `--bip38-passphrase` from stdin (raw,
+    /// preserving NULL bytes; strips a single trailing `\r?\n`). Closes
+    /// the survey §5 argv-leakage gap for the BIP-38 Scrypt passphrase
+    /// channel. Mutually exclusive with `--bip38-passphrase` AND with
+    /// `--passphrase-stdin` AND with `--from <node>=-` (single stdin per
+    /// invocation).
+    #[arg(long = "bip38-passphrase-stdin", conflicts_with = "bip38_passphrase")]
+    pub bip38_passphrase_stdin: bool,
+
     #[arg(long, default_value = "0")]
     pub account: u32,
 
@@ -578,6 +587,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
+    emit_secret_in_argv_advisories(args, stderr);
+
     // 1) Single-from-value constraint (§5).
     let mut primaries: Vec<&FromInput> = args
         .from
@@ -602,19 +614,40 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
     let primary = primaries.pop().unwrap();
 
-    // 2.a) SPEC v0.8 §5.a — `--passphrase-stdin` populates the BIP-39 / direct
-    // BIP-38 passphrase from raw stdin (preserving NULL bytes). Mutually
-    // exclusive with `--from <node>=-` since a single stdin cannot serve both.
+    // 2.a) SPEC v0.8 §5.a + v0.9.0 §1 — single-stdin-per-invocation. The
+    // three potential stdin consumers (`--passphrase-stdin`,
+    // `--bip38-passphrase-stdin`, `--from <node>=-`) are pairwise mutually
+    // exclusive; clap-level locks cover `--{,bip38-}passphrase-stdin`
+    // against their inline counterparts, runtime locks cover the
+    // stdin-vs-stdin cases below.
     let primary_uses_stdin = primary.value == "-";
     if args.passphrase_stdin && primary_uses_stdin {
         return Err(ToolkitError::BadInput(
             "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv".into(),
         ));
     }
+    if args.bip38_passphrase_stdin && primary_uses_stdin {
+        return Err(ToolkitError::BadInput(
+            "--bip38-passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv".into(),
+        ));
+    }
+    if args.passphrase_stdin && args.bip38_passphrase_stdin {
+        return Err(ToolkitError::BadInput(
+            "--passphrase-stdin and --bip38-passphrase-stdin cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route".into(),
+        ));
+    }
     let effective_passphrase: Option<String> = if args.passphrase_stdin {
         Some(read_stdin_passphrase(stdin)?)
     } else {
         args.passphrase.clone()
+    };
+
+    // SPEC v0.9.0 §1 item 1 — `--bip38-passphrase-stdin` populates the
+    // BIP-38 Scrypt passphrase channel from stdin (preserves NULLs).
+    let effective_bip38_passphrase: Option<String> = if args.bip38_passphrase_stdin {
+        Some(read_stdin_passphrase(stdin)?)
+    } else {
+        args.bip38_passphrase.clone()
     };
 
     // 2.b) Stdin if `--from <node>=-`.
@@ -673,7 +706,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     //      (`--passphrase`, `--passphrase-stdin`, or `--bip38-passphrase`).
     let bip38_edge = primary.node == NodeType::Bip38
         || targets.iter().any(|t| *t == NodeType::Bip38);
-    if bip38_edge && effective_passphrase.is_none() && args.bip38_passphrase.is_none() {
+    if bip38_edge && effective_passphrase.is_none() && effective_bip38_passphrase.is_none() {
         return Err(refusal_bip38_no_passphrase());
     }
 
@@ -700,7 +733,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
     // SPEC v0.8 §12.b — `--bip38-passphrase` is BIP-38-only; warn if supplied
     // on a non-BIP-38 edge.
-    if args.bip38_passphrase.is_some() && !bip38_edge {
+    if effective_bip38_passphrase.is_some() && !bip38_edge {
         let _ = writeln!(
             stderr,
             "warning: --bip38-passphrase ignored on this edge (no BIP-38 source/target)",
@@ -717,7 +750,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // 8) Compute outputs.
     let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
-    let bip38_passphrase = args.bip38_passphrase.as_deref();
+    let bip38_passphrase = effective_bip38_passphrase.as_deref();
     let (mut outputs, input_variant, electrum_seed_version) = compute_outputs(
         primary.node,
         &primary_value,
@@ -1274,4 +1307,57 @@ fn network_from_xpub(xpub: &bip32::Xpub) -> CliNetwork {
         bitcoin::NetworkKind::Main => CliNetwork::Mainnet,
         bitcoin::NetworkKind::Test => CliNetwork::Testnet,
     }
+}
+
+// ============================================================================
+// SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers
+// ============================================================================
+
+/// `convert`'s per-occurrence advisory emission. Iterates `args.from`
+/// (a `Vec<FromInput>` via `ArgAction::Append`) and emits one advisory
+/// per inline-secret `--from <node>=` occurrence, plus advisories for
+/// `--passphrase <inline>` and `--bip38-passphrase <inline>`.
+///
+/// Note: MiniKey is treated as secret-bearing for argv-advisory purposes
+/// here, even though `NodeType::is_secret_bearing()` excludes it (the
+/// existing redaction + secret-on-stdout pathways at L769 / L796 don't
+/// treat MiniKey as a private-key carrier — a separate follow-up).
+/// Survey §5 lists `--from minikey=` as an argv-leakage flag-row.
+fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) {
+    use crate::secret_advisory::secret_in_argv_warning;
+    for f in &args.from {
+        if !from_node_is_argv_secret(f.node) {
+            continue;
+        }
+        if f.value == "-" {
+            continue;
+        }
+        let node = f.node.as_str();
+        let flag = format!("--from {node}=");
+        let alt = format!("--from {node}=-");
+        secret_in_argv_warning(stderr, &flag, &alt);
+    }
+    if args.passphrase.is_some() {
+        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    }
+    if args.bip38_passphrase.is_some() {
+        secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+    }
+}
+
+/// `NodeType` subset that constitutes argv-leakage hazards per survey §5.
+/// Differs from `NodeType::is_secret_bearing()` only in including
+/// `MiniKey` (Casascius mini-key — a private-key encoding).
+fn from_node_is_argv_secret(node: NodeType) -> bool {
+    matches!(
+        node,
+        NodeType::Phrase
+            | NodeType::Entropy
+            | NodeType::Xprv
+            | NodeType::Wif
+            | NodeType::Ms1
+            | NodeType::Bip38
+            | NodeType::MiniKey
+            | NodeType::ElectrumPhrase
+    )
 }

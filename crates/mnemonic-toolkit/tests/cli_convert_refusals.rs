@@ -22,10 +22,11 @@ fn refusal_xpub_to_entropy_one_way_barrier() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to entropy is cryptographically unrecoverable from --from xpub (one-way derivation barrier)\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to entropy is cryptographically unrecoverable from --from xpub (one-way derivation barrier)\n"
-    );
+    )
 }
 
 #[test]
@@ -43,10 +44,11 @@ fn refusal_xpub_to_xprv_one_way_barrier() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to xprv is cryptographically unrecoverable from --from xpub (one-way derivation barrier)\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to xprv is cryptographically unrecoverable from --from xpub (one-way derivation barrier)\n"
-    );
+    )
 }
 
 #[test]
@@ -64,10 +66,11 @@ fn refusal_ms1_to_mk1_sibling_pivot() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from ms1 --to mk1 is a sibling-format pivot, not a single-format conversion. Use 'mnemonic bundle' instead.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from ms1 --to mk1 is a sibling-format pivot, not a single-format conversion. Use 'mnemonic bundle' instead.\n"
-    );
+    )
 }
 
 #[test]
@@ -85,10 +88,11 @@ fn refusal_xpub_to_mk1_distinct_message() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --template ...' to emit a complete bundle.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --template ...' to emit a complete bundle.\n"
-    );
+    )
 }
 
 #[test]
@@ -110,10 +114,11 @@ fn refusal_wif_with_path_chain_code_destroyed() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from wif does not retain a chain code; --path-driven derivation is impossible.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from wif does not retain a chain code; --path-driven derivation is impossible.\n"
-    );
+    )
 }
 
 #[test]
@@ -131,10 +136,11 @@ fn refusal_wif_to_entropy_one_way() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to entropy is cryptographically unrecoverable from --from wif (one-way derivation barrier)\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to entropy is cryptographically unrecoverable from --from wif (one-way derivation barrier)\n"
-    );
+    )
 }
 
 // SPEC-A v0.6.1 — phrase/entropy → wif requires explicit --path.
@@ -159,10 +165,11 @@ fn refusal_phrase_to_wif_missing_path() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"
-    );
+    )
 }
 
 #[test]
@@ -182,10 +189,11 @@ fn refusal_entropy_to_wif_missing_path() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"
-    );
+    )
 }
 
 #[test]

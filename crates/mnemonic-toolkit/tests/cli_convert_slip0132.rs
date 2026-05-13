@@ -321,10 +321,11 @@ fn refusal_xpub_prefix_non_default_without_network() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).\n"
-    );
+    )
 }
 
 #[test]
@@ -343,10 +344,11 @@ fn refusal_unknown_extended_key_version_prefix() {
         .failure()
         .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: unknown extended-key version prefix: deadbeef\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: unknown extended-key version prefix: deadbeef\n"
-    );
+    )
 }
 
 #[test]

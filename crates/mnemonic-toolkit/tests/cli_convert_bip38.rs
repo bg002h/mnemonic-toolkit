@@ -375,10 +375,11 @@ fn refusal_wif_to_bip38_no_passphrase() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"
-    );
+    )
 }
 
 #[test]
@@ -396,10 +397,11 @@ fn refusal_bip38_to_wif_no_passphrase() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"
-    );
+    )
 }
 
 #[test]
@@ -419,10 +421,11 @@ fn refusal_bip38_to_wif_wrong_passphrase() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).\n"
-    );
+    )
 }
 
 #[test]
@@ -442,10 +445,11 @@ fn refusal_bip38_to_bip38_identity() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a different passphrase, decrypt to wif then re-encrypt.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a different passphrase, decrypt to wif then re-encrypt.\n"
-    );
+    )
 }
 
 // ============================================================================

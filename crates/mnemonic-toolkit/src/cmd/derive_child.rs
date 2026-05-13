@@ -17,7 +17,7 @@ use clap::Args;
 use std::io::{Read, Write};
 use std::str::FromStr;
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct DeriveChildArgs {
     /// Master source. v0.7 accepted `--from xprv=<value>` only; v0.8 also
     /// accepts `--from phrase=<bip39-mnemonic>` (combined with `--passphrase`
@@ -60,6 +60,14 @@ pub struct DeriveChildArgs {
     #[arg(long)]
     pub passphrase: Option<String>,
 
+    /// SPEC v0.9.0 §1 item 1 — read `--passphrase` from stdin (raw,
+    /// preserving NULL bytes; strips a single trailing `\r?\n`).
+    /// Mutually exclusive with `--passphrase` AND with any
+    /// `--from <node>=-` (single stdin per invocation).
+    /// Mirrors `convert.rs:181` precedent.
+    #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
+
     /// SPEC v0.8 §4 — number of sides for `--application dice`. Required
     /// when `--application dice`; ignored otherwise. Range: 2..=2^32-1.
     #[arg(long = "dice-sides")]
@@ -72,12 +80,43 @@ pub fn run<R: Read, W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
+    emit_secret_in_argv_advisories(args, stderr);
+
+    // SPEC v0.9.0 §1 item 1 — single-stdin-per-invocation. `--from <node>=-`
+    // and `--passphrase-stdin` both want stdin; refuse the combination.
+    if args.passphrase_stdin && args.from.value == "-" {
+        return Err(ToolkitError::BadInput(
+            "--passphrase-stdin cannot be used with --from <node>=- (single stdin per invocation)"
+                .into(),
+        ));
+    }
+
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
     let from_value = if args.from.value == "-" {
         read_stdin_to_string(stdin)?
     } else {
         args.from.value.clone()
     };
+
+    // SPEC v0.9.0 §1 item 1 — read --passphrase from stdin when set.
+    // Preserves NULL bytes; strips a single trailing `\r?\n`.
+    let stdin_passphrase: Option<String> = if args.passphrase_stdin {
+        let mut buf = String::new();
+        stdin
+            .read_to_string(&mut buf)
+            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+        if buf.ends_with('\n') {
+            buf.pop();
+            if buf.ends_with('\r') {
+                buf.pop();
+            }
+        }
+        Some(buf)
+    } else {
+        None
+    };
+
     let master = match args.from.node {
         NodeType::Xprv => Xpriv::from_str(&from_value)
             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,
@@ -85,7 +124,10 @@ pub fn run<R: Read, W: Write, E: Write>(
             let language = args.language.unwrap_or_default();
             let mnemonic = Mnemonic::parse_in(language.into(), &from_value)
                 .map_err(ToolkitError::Bip39)?;
-            let passphrase = args.passphrase.as_deref().unwrap_or("");
+            let passphrase: &str = stdin_passphrase
+                .as_deref()
+                .or(args.passphrase.as_deref())
+                .unwrap_or("");
             let seed = mnemonic.to_seed(passphrase);
             // BIP-85 spec test vectors are network-agnostic at the entropy
             // level; the master xprv's network field doesn't affect any
@@ -101,7 +143,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             )))
         }
     };
-    if args.passphrase.is_some() && args.from.node != NodeType::Phrase {
+    if (args.passphrase.is_some() || args.passphrase_stdin) && args.from.node != NodeType::Phrase {
         let _ = writeln!(
             stderr,
             "warning: --passphrase ignored on --from xprv (no BIP-39 mnemonic to extend)",
@@ -250,4 +292,25 @@ fn resolve_bip85_language(lang: CliLanguage) -> Result<(u32, bip39::Language), T
             ))
         }
     })
+}
+
+// ============================================================================
+// SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers
+// ============================================================================
+
+/// Per-occurrence `secret-in-argv` stderr advisory emission for
+/// `derive-child`. The two inline-secret sites are `--from <node>=<inline>`
+/// (xprv or phrase) and `--passphrase <inline>`; each fires its own
+/// advisory if the inline form is used.
+fn emit_secret_in_argv_advisories<E: Write>(args: &DeriveChildArgs, stderr: &mut E) {
+    use crate::secret_advisory::secret_in_argv_warning;
+    if args.from.value != "-" {
+        let node = args.from.node.as_str();
+        let flag = format!("--from {node}=");
+        let alt = format!("--from {node}=-");
+        secret_in_argv_warning(stderr, &flag, &alt);
+    }
+    if args.passphrase.is_some() {
+        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    }
 }

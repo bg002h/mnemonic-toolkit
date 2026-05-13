@@ -36,11 +36,12 @@ fn bip388_row13_fires_for_duplicate_slot_phrases() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n"),
+        "{}; got {:?}",
+        "stderr must match SPEC §6.6 row 13 byte-exactly",
         stderr,
-        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n",
-        "stderr must match SPEC §6.6 row 13 byte-exactly"
-    );
+    )
 }
 
 // v0.5 trap deletion: the v0.4.2 detect_removed_subcommand pre-clap trap was
