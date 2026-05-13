@@ -191,7 +191,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   - **Errno discipline:** all errnos soft-fail in release; `debug_assert!` on unreachable `EINVAL` in debug builds.
   - **Cross-repo sharing:** inline copy of `pin_pages_for` in both repos; CI invariant test diffs the two implementations (normalized) and fails on drift. No shared `mnemonic-mlock` crate; constellation stays at 4 crates.
 - **Why deferred:** v1.0 roadmap pass; user direction is to capture pre-SPEC scope state so a future SPEC-drafting session starts cold-but-informed rather than re-discovering the discrepancies.
-- **Status:** `resolved (this commit, 2026-05-13) — Cycle B SPEC drafted at design/SPEC_secret_memory_hygiene_v0_9_B.md (Phase 0 artifact; reviewer-loop pending). All 4 pre-SPEC questions plus 5 brainstorming-session questions dispositioned; resolutions inlined in the What block above.`
+- **Status:** `resolved by P0 ship (commit 0c02247, 2026-05-13) — Cycle B SPEC at design/SPEC_secret_memory_hygiene_v0_9_B.md; reviewer-loop CLEAR 0C/0I across R1 (design/agent-reports/v0_9_B-phase-0-spec-r1.md: 2C/3I folded) and R2 (design/agent-reports/v0_9_B-phase-0-spec-r2.md: 0C/0I confirmed). All 4 pre-SPEC questions plus 5 brainstorming-session questions dispositioned; resolutions inlined in the What block above. Companion FOLLOWUP secret-memory-hygiene-cycle-b filed in mnemonic-secret at P0 close per SPEC §5.`
 - **Tier:** `v0.9.x`
 - **Companion:** `secret-memory-hygiene-cycle-b` (parent cycle entry) at `design/FOLLOWUPS.md`. If Q2 resolves toward "ms-cli stdin is in scope," a companion entry in `mnemonic-secret/design/FOLLOWUPS.md` is needed at SPEC drafting time.
 
