@@ -306,6 +306,107 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.9.2] — 2026-05-13
+
+v0.9.0 cross-repo Cycle A (OWNED-buffer secret-memory hygiene), Phase E
+release rollup. Cycle SPEC at
+`design/SPEC_secret_memory_hygiene_v0_9_0.md`; cycle plan at
+`/home/bcg/.claude/plans/v0_9_0-secret-memory-hygiene.md`; cross-repo
+hygiene-matrix at `design/agent-reports/v0_9_0-secret-memory-hygiene-matrix.md`.
+
+### Added (Phase 1 — argv-leakage closure)
+
+9 new toolkit flag-rows now have a stdin route + advisory:
+
+- `bundle --passphrase-stdin`, `verify-bundle --passphrase-stdin`,
+  `derive-child --passphrase-stdin`, `convert --bip38-passphrase-stdin`
+  paired-flag closures (4 new `--*-stdin` flags).
+- `bundle --slot @N.<phrase|entropy|wif|xprv>=-` and
+  `verify-bundle --slot @N.<secret>=-` `=-` value carve-out (5 slot rows
+  via 1 parser extension at `slot_input.rs`).
+- `secret_advisory.rs` module emits a `warning: secret material on argv
+  (...) — pipe via ... to avoid /proc/$PID/cmdline exposure` stderr line
+  per-(flag, slot-index) occurrence whenever an inline secret is
+  detected on argv.
+- Multi-stdin refused at clap parse-time across all three (`bundle`,
+  `verify-bundle`, `derive-child`); per-command stdin source is
+  exclusive.
+
+### Added (Phase 2 — Zeroizing wrappers + SAFETY anchors)
+
+- `zeroize = "1.8"` dep.
+- ~30 toolkit OWNED-buffer secret allocations now wrapped in `Zeroizing<T>`
+  (enumerated by `tests/lint_zeroize_discipline.rs` at 38 row-cells
+  across `cmd/bundle.rs`, `cmd/verify_bundle.rs`, `cmd/derive_child.rs`,
+  `cmd/convert.rs`, `derive.rs`, `derive_slot.rs`, `bip85.rs`,
+  `synthesize.rs`, `parse_descriptor.rs`, `electrum.rs`).
+- `DerivedAccount::into_parts(mut self)` consuming method + `impl Drop
+  for DerivedAccount` (Phase 2 prereq; E0509-safe consumer migration of
+  3 internal move-out sites).
+- `derive_master_seed(&Mnemonic, &str) -> Zeroizing<[u8; 64]>` helper
+  consolidates 7 BIP-39→BIP-32 production spines into one site.
+- `bip85::derive_entropy` return-type widened to
+  `Result<Zeroizing<[u8; 64]>, ToolkitError>`.
+- 32 SAFETY-anchor doc-comments at upstream-blocked third-party sites
+  (Mnemonic / Xpriv / SecretKey) citing the corresponding FOLLOWUP slug.
+- New lint `tests/lint_safety_third_party_blocked.rs` scans source for
+  the third-party-blocked call patterns and enforces a SAFETY: anchor
+  within 3 preceding lines.
+- New lint `tests/lint_argv_secret_flags.rs` enumerates the 9 Phase 1
+  flag-row closures with per-row evidence.
+
+### Added (Phase 3 — cross-repo audit matrix)
+
+- `design/agent-reports/v0_9_0-secret-memory-hygiene-matrix.md` —
+  canonical cross-repo audit matrix (toolkit hub). §0 cross-repo
+  coverage; §0.5 "what this cycle does NOT close" (6 residual classes);
+  §1 OWNED-row status (CLEAR / PARTIAL-3RD-PARTY / OUT-OF-SCOPE) for
+  every survey-§1 row; §2 status for every survey-§5 flag-row; §3
+  14 SPEC-§3-OOS + 4 cycle-surfaced FOLLOWUPS forward-visibility;
+  §4 Cycle B carry-overs; §5 SPEC §6 cycle-close gates.
+- 9 new FOLLOWUPS in `design/FOLLOWUPS.md` (open):
+  `argv-overwrite-after-parse`, `clap-argv-pre-parse-residue`,
+  `allocator-pool-residue`, `pub-struct-drop-semver-risk-monitor`,
+  `dedicated-secret-arena`, `sha3-shake256-zeroize-upstream`,
+  `bip38-crate-internal-zeroize-upstream`, `secret-memory-hygiene-cycle-b`,
+  `md-mk-private-key-surface-watch`.
+
+### Changed
+
+- ms-codec git dep tag: `ms-codec-v0.1.0` → `ms-codec-v0.1.3` (picks up
+  cross-repo Phase 2 ms-codec Zeroizing discipline).
+
+### Known third-party residue
+
+- `bitcoin::bip32::Xpriv` is `Copy + !Drop` — FOLLOWUP
+  `rust-bitcoin-xpriv-zeroize-upstream` (external).
+- `bip39::Mnemonic` interior buffer not zeroize-aware — FOLLOWUP
+  `rust-bip39-mnemonic-zeroize-upstream` (external).
+- `secp256k1::SecretKey` no Drop+Zeroize — FOLLOWUP
+  `rust-secp256k1-secretkey-zeroize-upstream` (external).
+
+### Cycle review history
+
+- Phase 0: SPEC + plan + survey — R1-R5 architect-review (3 Sonnet + 2 Opus rounds) cleared 0C/0I after R3 SPLIT-CYCLE pushback + user decisions on impl-Drop approach + drop md/mk symmetry-stubs.
+- Phase 1: R1 Opus 0C/1I/2N — all folded; R2 Sonnet 0C/0I.
+- Phase 2: R1 Opus 0C/4I/5N — all 4 I folded; R2 Sonnet 0C/0I cross-repo.
+- Phase 3: R1 Opus 1C/1I/2N (FOLLOWUPS-cite C-1 + slug-rename I-1 + 2 editorial N) — all folded; R2 Sonnet 0C/0I.
+
+### Tests
+
+- 3 new lint tests green at every phase close.
+- `cargo test --workspace`: 43/43 green at Phase 2 close.
+- `cargo clippy --workspace --all-targets -- -D warnings`: clean.
+
+### What didn't change
+
+- All CLI flag surfaces preserved (additions only: 4 new `--*-stdin`
+  flags; no flag removals; no exit code changes).
+- v0.9.1 → v0.9.2 patch-tag compatibility maintained for external
+  library users that access `DerivedAccount.entropy` via borrow
+  (`&derived.entropy`); move-out destructure is the documented break
+  per `pub-struct-drop-semver-risk-monitor` FOLLOWUP.
+
 ## mnemonic-toolkit [0.9.1] — 2026-05-13
 
 v0.8.0 cross-repo BIP-vector adoption cycle, Phases 0 / 3 / 4. Cycle
