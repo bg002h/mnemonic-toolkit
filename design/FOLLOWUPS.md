@@ -162,6 +162,24 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open` (Cycle B SPEC drafting starts post-Cycle-A Phase E ship)
 - **Tier:** `v0.9.x`
 
+### `cycle-b-pre-spec-questions` — pre-SPEC scoping questions blocking Cycle B drafting
+
+- **Surfaced:** 2026-05-13, v1.0 roadmap-survey Bucket 1 drill-down (Opus scoping read-out, atop `mnemonic-toolkit-v0.9.2` ship). Companion to `secret-memory-hygiene-cycle-b`.
+- **Where:** Resolves into the eventual `design/SPEC_secret_memory_hygiene_v0_9_B.md` Phase 0 (not yet drafted). Source artifacts surveyed: `design/FOLLOWUPS.md` Cycle B entry; `design/SPEC_secret_memory_hygiene_v0_9_0.md` §3 OOS-mlock-cycle-b (lines 271-305); `design/agent-reports/v0_9_0-secret-memory-survey.md` §4 (lines 161-210); `design/agent-reports/v0_9_0-secret-memory-hygiene-matrix.md` §4 (lines 247-269); `design/agent-reports/v0_9_0-phase-0-spec-plan-r1.md` (R3 SPLIT-CYCLE + R1 mlock-module-shape seed).
+- **What:** Cycle B has enough material to start SPEC drafting, but 4 open questions + 1 architectural trap + ~4 unaddressed items must resolve before / during Phase 0 SPEC. Drafting paused until these are dispositioned.
+  1. **Canonical 5-site list reconciliation.** SPEC §3 OOS-mlock-cycle-b lists `{clap-args, ResolvedSlot.entropy, DerivedAccount.entropy, bip85 [u8;64], ms-cli stdin String}`. Hygiene-matrix §4 substitutes `secp256k1::SecretKey` + `bip39::Mnemonic` interiors for slots 2 and 3 (defense-in-depth reframing). The two lists overlap by ~3 sites only. SPEC list is canonical per R4 I-R4-4 fold; Cycle B SPEC must explicitly pick one enumeration and document the matrix's alternative as OOS or supplementary coverage.
+  2. **Toolkit-only scope vs ms-cli site #5.** Cycle B is framed "toolkit-only" (FOLLOWUPS + hygiene-matrix §4) but SPEC site #5 lives at `mnemonic-secret/.../ms-cli/parse.rs:45`. Either drop site #5 or revise scope to "toolkit + ms-cli stdin" (which makes Cycle B cross-repo, with a companion entry needed in `mnemonic-secret/design/FOLLOWUPS.md`).
+  3. **bip85 `[u8; 64]` heap-promotion ordering.** SPEC site #4 is stack-resident `[u8; 64]` today. Survey §4 lines 206-210 says "heap-promote first; mlock those *if* they get heap-promoted." Either Cycle B absorbs heap-promotion as a precursor Phase 1, or a separate predecessor cycle does it first. Affects Cycle B's plan shape.
+  4. **Platform commitment scope.** FOLLOWUPS commits to 3 platforms (Linux mlock + macOS mlock + Windows VirtualLock). Hygiene-matrix §4 narrows to "libc / Linux-specific." Pick one — the soft-fail abstraction shape (single backend with platform-gates vs three backends behind a trait) depends on this.
+
+  **Architectural trap on record (R3 I-R3-2, Phase 0 R1 report lines 188-260):** The Phase 0 R1 prototype `try_mlock_region(&[u8])` byte-slice API "traps callers into page-vs-byte granularity wastefulness." `mlock(2)` pins pages, not bytes; SPEC §3 OOS-secret-arena defers proper page-aligned allocation to a future Cycle C (`dedicated-secret-arena`). Cycle B accepts residual page-residue from co-allocated non-secret data on locked pages; SPEC must document this and pick a signature shape that doesn't pretend byte-granularity is real.
+
+  **Items not addressed in existing artifacts** (Phase 0 design decisions): soft-fail logging channel / level / format; `RLIMIT_MEMLOCK` exhaustion semantics (no soft-fail story beyond `EPERM` today); `CAP_IPC_LOCK` probe-up-front vs fail-per-call; cgroup memory limits.
+- **Why deferred:** v1.0 roadmap pass; user direction is to capture pre-SPEC scope state so a future SPEC-drafting session starts cold-but-informed rather than re-discovering the discrepancies.
+- **Status:** `open` (pre-SPEC; resolves when Cycle B SPEC Phase 0 disposes of each question above)
+- **Tier:** `v0.9.x`
+- **Companion:** `secret-memory-hygiene-cycle-b` (parent cycle entry) at `design/FOLLOWUPS.md`. If Q2 resolves toward "ms-cli stdin is in scope," a companion entry in `mnemonic-secret/design/FOLLOWUPS.md` is needed at SPEC drafting time.
+
 ### `md-mk-private-key-surface-watch` — reopen md/mk Cycle A participation if either repo grows a private-key surface
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 0 R3 architect-review I-R3-4 fold (drop md/mk symmetry-stubs); opened as standalone tracker entry per Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-md-mk` class.
