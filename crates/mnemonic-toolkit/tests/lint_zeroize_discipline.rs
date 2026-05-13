@@ -86,14 +86,14 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
     // are tracked by `lint_safety_third_party_blocked.rs` (R1 I-2 fold)
     // via the `SecretKey::from_slice` pattern.
     ZeroizeRow {
-        label: "bip85::derive_entropy returns Zeroizing<[u8; 64]>",
+        label: "bip85::derive_entropy returns Zeroizing<Vec<u8>>",
         source_file: "src/bip85.rs",
-        evidence: &["-> Result<Zeroizing<[u8; 64]>"],
+        evidence: &["-> Result<Zeroizing<Vec<u8>>"],
     },
     ZeroizeRow {
         label: "bip85 entropy locals scrub via derive_entropy's Zeroizing return",
         source_file: "src/bip85.rs",
-        evidence: &["let mut out = Zeroizing::new([0u8; 64])"],
+        evidence: &["let mut out = Zeroizing::new(vec![0u8; 64])"],
     },
     // ---- synthesize.rs ----
     ZeroizeRow {

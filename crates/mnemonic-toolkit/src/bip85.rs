@@ -407,4 +407,25 @@ mod tests {
         let r = format_dice_rolls(&master(), 1, 5, 0);
         assert!(matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2")));
     }
+
+    /// Cycle B Phase 1 lock — `derive_entropy` returns
+    /// `Result<Zeroizing<Vec<u8>>, ToolkitError>` (heap-promoted from the prior
+    /// `Zeroizing<[u8; 64]>` so Phase 3's `MlockedZeroizing<Vec<u8>>` wrapper
+    /// can pin the buffer's pages — mlock requires heap-resident memory).
+    /// Invariant: the inner Vec is always length 64.
+    #[test]
+    fn derive_entropy_returns_zeroizing_vec_of_64_bytes() {
+        let e: Zeroizing<Vec<u8>> = derive_entropy(&master(), 39, &[0, 12], 0).unwrap();
+        assert_eq!(e.len(), 64);
+    }
+
+    /// Cycle B Phase 1 byte-determinism guard — the return-type heap-promotion
+    /// must not perturb the derivation bytes. SPEC §6 G7 wire-format
+    /// invariant; mirrors `feedback_spike_before_locking_wire_format`.
+    #[test]
+    fn derive_entropy_is_byte_deterministic() {
+        let a = derive_entropy(&master(), 39, &[0, 12], 0).unwrap();
+        let b = derive_entropy(&master(), 39, &[0, 12], 0).unwrap();
+        assert_eq!(&a[..], &b[..]);
+    }
 }
