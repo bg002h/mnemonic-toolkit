@@ -848,6 +848,10 @@ type Output = (NodeType, String);
 // Edge-specific fallback rules: composite `(phrase|entropy, bip38)` does NOT
 // fall back to `pbkdf2_passphrase` (BREAKING CHANGE); direct `(wif, bip38)` /
 // `(bip38, wif)` falls back when unset.
+//
+// Return-shape tuple decoded as `ComputeOutputsResult` below.
+type ComputeOutputsResult = (Vec<Output>, Option<&'static str>, Option<SeedVersion>);
+
 fn compute_outputs(
     from: NodeType,
     value: &str,
@@ -855,7 +859,7 @@ fn compute_outputs(
     args: &ConvertArgs,
     pbkdf2_passphrase: &str,
     bip38_passphrase: Option<&str>,
-) -> Result<(Vec<Output>, Option<&'static str>, Option<SeedVersion>), ToolkitError> {
+) -> Result<ComputeOutputsResult, ToolkitError> {
     use NodeType::*;
     let language = args.language.unwrap_or_default();
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
@@ -1062,7 +1066,7 @@ fn compute_outputs(
                 .map_err(|e| ToolkitError::BadInput(format!("--from wif parse: {e}")))?;
             let pubkey = pk.public_key(&secp);
             let sentinel_xpub = bip32::Xpub {
-                network: network.network_kind().into(),
+                network: network.network_kind(),
                 depth: 0,
                 parent_fingerprint: bip32::Fingerprint::default(),
                 child_number: bip32::ChildNumber::Normal { index: 0 },

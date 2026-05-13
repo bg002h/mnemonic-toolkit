@@ -469,7 +469,7 @@ pub(crate) fn resolve_slots(
             // The KeyCard accepts this via the standard mk-codec encoder; the
             // resulting bundle's mk1 carries the wif's pubkey verbatim.
             let xpub = bitcoin::bip32::Xpub {
-                network: network.network_kind().into(),
+                network: network.network_kind(),
                 depth: 0,
                 parent_fingerprint: Fingerprint::default(),
                 child_number: bitcoin::bip32::ChildNumber::Normal { index: 0 },

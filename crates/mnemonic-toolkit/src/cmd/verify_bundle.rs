@@ -17,7 +17,6 @@ use crate::template::CliTemplate;
 use clap::Args;
 use std::io::Write;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 #[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
@@ -536,8 +535,6 @@ fn descriptor_mode_verify_run<W: Write>(
     Ok(if any_fail { 4 } else { 0 })
 }
 
-/// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize
-/// a VerifyBundleArgs with the extracted ms1/mk1/md1 vecs populated. Other
 // ============================================================================
 // SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers (mirror bundle.rs)
 // ============================================================================
@@ -593,6 +590,8 @@ fn apply_stdin_substitutions(
     Ok(owned)
 }
 
+/// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize
+/// a VerifyBundleArgs with the extracted ms1/mk1/md1 vecs populated. Other
 /// args (re-derivation flags --slot/--phrase/etc) are preserved from the
 /// caller's args. v0.5: schema-version peek-and-reject deleted; envelopes
 /// that don't match the v0.5 schema-4 shape fail at the underlying field
@@ -1023,6 +1022,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
     }
 
     // 6N per-cosigner emission.
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         let exp_ms1 = expected.ms1.get(i).map(|s| s.as_str()).unwrap_or("");
         let watch_only_slot = exp_ms1.is_empty();
@@ -1467,6 +1467,7 @@ mod helper_tests {
     use bip39::Mnemonic;
     use bitcoin::bip32::{Xpriv, Xpub};
     use bitcoin::secp256k1::Secp256k1;
+    use std::str::FromStr;
 
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 

@@ -281,6 +281,7 @@ pub(crate) fn derive_xpub_at_path(
     Ok(Xpub::from_priv(secp, &xpriv))
 }
 
+#[allow(dead_code)]
 /// Synthesize a full-mode multisig bundle (self-multisig: N cosigners derived
 /// from one seed at one path; all N xpubs are byte-identical).
 /// SPEC §4.1, §4.5 multisig, §4.6 multisig.
@@ -407,6 +408,7 @@ pub fn synthesize_multisig_full(
     })
 }
 
+#[allow(dead_code)]
 /// Synthesize a watch-only multisig bundle from cosigner xpubs.
 /// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig.
 #[allow(clippy::too_many_arguments)]
@@ -582,6 +584,7 @@ pub struct ResolvedSlot {
 }
 
 impl ResolvedSlot {
+    #[allow(dead_code)]
     pub fn is_secret_bearing(&self) -> bool {
         self.entropy.is_some()
     }

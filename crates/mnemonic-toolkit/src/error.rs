@@ -29,6 +29,7 @@ pub enum ToolkitError {
         card: String,
         message: String,
     },
+    #[allow(dead_code)]
     NetworkMismatch {
         xpub_network: &'static str,
         expected: &'static str,
@@ -97,6 +98,7 @@ pub enum ToolkitError {
     /// removal from a `#[non_exhaustive]` enum).
     #[allow(dead_code)]
     ExportWalletFormatStub(&'static str),
+    #[allow(dead_code)]
     /// SPEC_export_wallet_v0_7.md §4 — taproot multisig templates
     /// (`tr-multi-a`, `tr-sortedmulti-a`) are not yet supported by
     /// `mnemonic export-wallet` because constructing `tr(<internal-key>,
@@ -134,6 +136,7 @@ pub enum ToolkitError {
 #[derive(Debug)]
 pub enum BitcoinErrorKind {
     Bip32(bitcoin::bip32::Error),
+    #[allow(dead_code)]
     XpubParse(String),
     FingerprintParse(String),
 }
