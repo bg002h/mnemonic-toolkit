@@ -85,6 +85,39 @@ distribution image yet — see the [follow-up](#manual-coverage)
 on cargo-publishing the workspace; that's the prerequisite for
 official binary releases.
 
+## Path D — graphical interface (`mnemonic-gui`)
+
+If you prefer a graphical front-end over the four CLIs,
+`bg002h/mnemonic-gui` provides one. It is a cross-platform desktop
+application that drives the same four binaries underneath: every
+form maps 1:1 onto a CLI subcommand, the assembled command line is
+visible before you run it, and the GUI never substitutes its own
+implementation for the CLI behaviour. The CLIs remain the
+ground truth.
+
+Pre-built release artifacts for v0.2.0 are attached to the GitHub
+release:
+
+- `mnemonic-gui-v0.2.0-x86_64-linux.tar.gz`
+- `mnemonic-gui-v0.2.0-aarch64-linux.tar.gz`
+- `mnemonic-gui-v0.2.0-x86_64-macos.tar.gz`
+- `mnemonic-gui-v0.2.0-aarch64-macos.tar.gz`
+- `mnemonic-gui-v0.2.0-x86_64-windows.zip`
+
+Download from
+<https://github.com/bg002h/mnemonic-gui/releases/tag/mnemonic-gui-v0.2.0>,
+extract, and launch the `mnemonic-gui` (`mnemonic-gui.exe` on
+Windows) binary. The four CLIs from Paths A–C must still be on
+your `PATH` — the GUI invokes them as subprocesses. The binaries
+are currently unsigned on macOS and Windows; on first launch you
+will need to right-click → Open (macOS) or click "More info →
+Run anyway" past SmartScreen (Windows). Code-signing is a v0.3+
+deferred item.
+
+The GUI's source lives at `bg002h/mnemonic-gui`; a dedicated
+standalone paper covering the GUI in depth is planned separately.
+This manual continues with the CLI surface.
+
 ## Verifying your install
 
 A trivial smoke check that all four CLIs respond:

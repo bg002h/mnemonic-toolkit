@@ -38,8 +38,11 @@ After Part I, the parts can be read in any order. Cross-references between chapt
 | End-user manual | Workflow walkthroughs, CLI quick reference | `bg002h/mnemonic-toolkit/docs/manual/` |
 | **This manual** | Bit-level wire format + Rust API reference across all four repos | `bg002h/mnemonic-toolkit/docs/technical-manual/` |
 | Crate `cargo doc` | Auto-generated Rust API docs | `docs.rs/md-codec`, etc. |
+| `mnemonic-gui` | Cross-platform desktop front-end that drives the four CLIs as subprocesses | `bg002h/mnemonic-gui` |
 
 The BIPs and per-version SPECs are *authoritative* for protocol claims. This manual cites them; it does not replace them.
+
+The `mnemonic-gui` repository is an *external consumer* of the four CLIs rather than a fifth codec. It exposes one form per existing subcommand with a 1:1 flag-surface mapping, then `Command::spawn`s the CLI to do the work. Two cross-repo invariants connect this manual to that GUI: (a) the GUI's per-CLI flag schema is mirrored against `<cli> gui-schema` JSON output (the SPEC §7 schema-mirror contract), and (b) flag add/remove/rename in any of the four CLIs requires a companion `mnemonic-gui` PR that bumps the schema and the pinned-upstream tag — the mirror gate fails CI otherwise. A dedicated standalone paper on the GUI's architecture is planned separately; this manual covers the wire format and Rust API only.
 
 ## Version coverage
 

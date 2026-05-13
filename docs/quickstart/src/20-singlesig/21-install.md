@@ -42,4 +42,16 @@ flag set than the rest of this guide.
 The reference manual covers Docker and from-source build paths;
 this Quick Start sticks to the cargo path.
 
+## If you prefer a GUI
+
+A cross-platform graphical front-end, `mnemonic-gui`, drives the
+same three CLIs underneath and exposes every form 1:1 to a CLI
+subcommand. Pre-built v0.2.0 binaries for Linux (x86_64, aarch64),
+macOS (x86_64, aarch64), and Windows (x86_64) are attached to the
+GitHub release:
+<https://github.com/bg002h/mnemonic-gui/releases/tag/mnemonic-gui-v0.2.0>.
+You will still need the three CLIs installed (the GUI invokes them
+as subprocesses), so finish this chapter either way. The
+end-user manual's install chapter has the full details.
+
 Onward: generate the entropy you'll feed into your first bundle.
