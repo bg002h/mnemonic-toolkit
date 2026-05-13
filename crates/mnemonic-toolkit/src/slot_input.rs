@@ -3,9 +3,13 @@
 //! Locked by Phase 2 SPIKE-2 (`design/agent-reports/spike-toolkit-v0_4-pre-phaseA.md`).
 //! Phase C consumes `parse_slot_input` as the clap value-parser and `validate_slot_set`
 //! as the post-parse / pre-binding gate.
+//!
+//! v0.9.0 Cycle A Phase 1 — adds `apply_slot_stdin` (single-stdin consume
+//! step for `@N.<secret>=-` sentinels) per SPEC §1 item 1.
 #![allow(dead_code)] // parse_slot_input wired as a clap value-parser via bundle.rs / verify_bundle.rs.
 
 use std::collections::BTreeMap;
+use std::io::Read;
 
 use crate::error::ToolkitError;
 
@@ -69,6 +73,17 @@ pub struct SlotInput {
     pub index: u8,
     pub subkey: SlotSubkey,
     pub value: String,
+}
+
+impl SlotInput {
+    /// SPEC v0.9.0 §1 item 1 — is this slot a `@N.<secret>=-` stdin
+    /// sentinel? Returns true iff the subkey is secret-bearing AND the
+    /// value is the literal `-`. Watch-only subkeys (`xpub`/`fingerprint`/
+    /// `path`/`master_xpub`) NEVER consume stdin even if their value is
+    /// `-` — those values are public, no argv-leakage protection needed.
+    pub fn is_stdin_sentinel(&self) -> bool {
+        self.subkey.is_secret_bearing() && self.value == "-"
+    }
 }
 
 /// Clap value-parser error. Wraps a String so clap can format it under
@@ -144,6 +159,52 @@ pub fn parse_slot_input(s: &str) -> Result<SlotInput, ParseError> {
         subkey,
         value: value.to_string(),
     })
+}
+
+/// SPEC v0.9.0 §1 item 1 — consume stdin once for any `@N.<secret>=-`
+/// slot in `slots`, substituting the stdin-read value in place.
+///
+/// Invariants enforced (single-stdin-per-invocation):
+/// - At most ONE slot may carry `@N.<secret>=-` (refuse with
+///   `ToolkitError::BadInput` otherwise — exit 1).
+/// - Caller separately enforces that `--passphrase-stdin` (and any other
+///   stdin-consuming flag) is NOT set when a stdin-slot is present
+///   (callers do this at run() entry before calling
+///   `apply_slot_stdin`).
+///
+/// Trailing `\r?\n` is stripped per the `convert.rs::read_stdin_passphrase`
+/// precedent — preserves leading/trailing whitespace and internal NULL
+/// bytes (the BIP-38 V3 NULL-byte passphrase gap motivates this).
+pub fn apply_slot_stdin<R: Read + ?Sized>(
+    slots: &mut [SlotInput],
+    stdin: &mut R,
+) -> Result<(), ToolkitError> {
+    let stdin_idxs: Vec<usize> = slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| s.is_stdin_sentinel().then_some(i))
+        .collect();
+    match stdin_idxs.len() {
+        0 => Ok(()),
+        1 => {
+            let mut buf = String::new();
+            stdin
+                .read_to_string(&mut buf)
+                .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+            if buf.ends_with('\n') {
+                buf.pop();
+                if buf.ends_with('\r') {
+                    buf.pop();
+                }
+            }
+            slots[stdin_idxs[0]].value = buf;
+            Ok(())
+        }
+        _ => Err(ToolkitError::BadInput(
+            "at most one --slot @N.<secret>=- per invocation (single stdin per invocation)"
+                .into(),
+        )),
+    }
 }
 
 /// Validate the per-slot subkey set per SPEC §6.6.b validity matrix +

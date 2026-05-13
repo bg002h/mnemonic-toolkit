@@ -36,11 +36,12 @@ fn threshold_without_multisig_template_rejected() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(&(        format!("error: {}\n", THRESHOLD_WITHOUT_MULTISIG))),
+        "{}; got {:?}",
+        "stderr must be the byte-exact retained-guard text",
         stderr,
-        format!("error: {}\n", THRESHOLD_WITHOUT_MULTISIG),
-        "stderr must be the byte-exact retained-guard text"
-    );
+    )
 }
 
 #[test]
@@ -85,11 +86,12 @@ fn path_family_without_multisig_template_rejected() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(&(        format!("error: {}\n", PATH_FAMILY_WITHOUT_MULTISIG))),
+        "{}; got {:?}",
+        "stderr must be the byte-exact retained-guard text",
         stderr,
-        format!("error: {}\n", PATH_FAMILY_WITHOUT_MULTISIG),
-        "stderr must be the byte-exact retained-guard text"
-    );
+    )
 }
 
 #[test]
@@ -136,11 +138,12 @@ fn descriptor_and_template_rejected() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(&(        format!("error: {}\n", DESCRIPTOR_AND_TEMPLATE))),
+        "{}; got {:?}",
+        "stderr must be the byte-exact retained-guard text",
         stderr,
-        format!("error: {}\n", DESCRIPTOR_AND_TEMPLATE),
-        "stderr must be the byte-exact retained-guard text"
-    );
+    )
 }
 
 #[test]

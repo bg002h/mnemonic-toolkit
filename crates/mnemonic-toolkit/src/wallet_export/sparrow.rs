@@ -240,9 +240,8 @@ fn normalize_derivation(
     inputs: &EmitInputs,
 ) -> String {
     if template.is_multisig() {
-        if path_raw.starts_with("m/") {
-            path_raw.to_string()
-        } else if path_raw.starts_with('m') {
+        if path_raw.starts_with('m') {
+            // Covers both `m/...` and bare `m`.
             path_raw.to_string()
         } else if path_raw.is_empty() {
             // Fall back to the multisig family default (BIP-48 wsh or BIP-87).

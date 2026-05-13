@@ -12,6 +12,7 @@ use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
 
+#[allow(dead_code)]
 /// Resolve a flag value: `Some(s)` literal, `Some("-")` stdin, `None` error.
 /// Whitespace is collapsed via `normalize_phrase`.
 pub fn read_phrase_input(arg: Option<&str>, stdin: &mut dyn Read) -> Result<String, ToolkitError> {
@@ -28,6 +29,7 @@ pub fn read_phrase_input(arg: Option<&str>, stdin: &mut dyn Read) -> Result<Stri
     }
 }
 
+#[allow(dead_code)]
 /// Collapse runs of whitespace to single spaces; preserve word boundaries.
 fn normalize_phrase(s: &str) -> String {
     s.split_whitespace().collect::<Vec<&str>>().join(" ")
@@ -220,6 +222,7 @@ pub fn parse_cosigners_file(path: &Path) -> Result<Vec<CosignerSpec>, ToolkitErr
     Ok(out)
 }
 
+#[allow(dead_code)]
 /// Reject concurrent stdin reads across phrase + passphrase.
 pub fn check_no_concurrent_stdin(
     phrase: Option<&str>,

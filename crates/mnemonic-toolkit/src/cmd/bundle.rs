@@ -15,7 +15,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct BundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
@@ -40,6 +40,14 @@ pub struct BundleArgs {
 
     #[arg(long)]
     pub passphrase: Option<String>,
+
+    /// SPEC v0.9.0 §1 item 1 — read `--passphrase` from stdin (raw,
+    /// preserving NULL bytes; strips a single trailing `\r?\n`).
+    /// Mutually exclusive with `--passphrase` AND with any
+    /// `--slot @N.<secret>=-` (single stdin per invocation).
+    /// Mirrors `convert.rs:181` precedent.
+    #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
 
     /// BIP-32 account index (default 0). Non-zero values produce md1 with
     /// PathDeclPaths::Divergent per SPEC §4.2.
@@ -97,6 +105,19 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE any
+    // dispatch logic so the advisory fires uniformly regardless of
+    // downstream success/error (the xprv-slot rejection at L470+ still
+    // surfaces, but the user has already been warned about the leak).
+    emit_secret_in_argv_advisories(args, stderr);
+    let synthetic_args;
+    let args: &BundleArgs = if needs_stdin_substitution(args) {
+        synthetic_args = apply_stdin_substitutions(args, stdin)?;
+        &synthetic_args
+    } else {
+        args
+    };
+
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
     let multisig_template = args
         .template
@@ -448,7 +469,7 @@ pub(crate) fn resolve_slots(
             // The KeyCard accepts this via the standard mk-codec encoder; the
             // resulting bundle's mk1 carries the wif's pubkey verbatim.
             let xpub = bitcoin::bip32::Xpub {
-                network: network.network_kind().into(),
+                network: network.network_kind(),
                 depth: 0,
                 parent_fingerprint: Fingerprint::default(),
                 child_number: bitcoin::bip32::ChildNumber::Normal { index: 0 },
@@ -1146,4 +1167,66 @@ pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), Toolk
         }
     }
     Ok(())
+}
+
+// ============================================================================
+// SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers
+// ============================================================================
+
+/// Per-occurrence `secret-in-argv` stderr advisory emission. One advisory
+/// per inline-secret site (per (flag, slot-index) pair) so the user sees
+/// every leak site, not just the first. Emits to stderr only — no
+/// argv-leakage data is logged or persisted.
+fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &BundleArgs, stderr: &mut E) {
+    use crate::secret_advisory::secret_in_argv_warning;
+    for s in &args.slot {
+        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() {
+            let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
+            let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
+            secret_in_argv_warning(stderr, &flag, &alt);
+        }
+    }
+    if args.passphrase.is_some() {
+        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    }
+}
+
+/// Does the current invocation require stdin consumption for slot_stdin
+/// or passphrase_stdin? Returns false when no stdin work is needed,
+/// letting `run()` skip the clone-into-synthetic step.
+fn needs_stdin_substitution(args: &BundleArgs) -> bool {
+    args.passphrase_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+}
+
+/// Clone `args` into an owned `BundleArgs` and apply the stdin
+/// substitution(s) (single-stdin-per-invocation: at most one of
+/// `--passphrase-stdin` OR `--slot @N.<secret>=-` may be present).
+fn apply_stdin_substitutions(
+    args: &BundleArgs,
+    stdin: &mut dyn std::io::Read,
+) -> Result<BundleArgs, ToolkitError> {
+    let mut owned = args.clone();
+    let has_slot_stdin = owned.slot.iter().any(|s| s.is_stdin_sentinel());
+    if owned.passphrase_stdin && has_slot_stdin {
+        return Err(ToolkitError::BadInput(
+            "--passphrase-stdin cannot be used with --slot @N.<secret>=- (single stdin per invocation)"
+                .into(),
+        ));
+    }
+    if owned.passphrase_stdin {
+        let mut buf = String::new();
+        stdin
+            .read_to_string(&mut buf)
+            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+        if buf.ends_with('\n') {
+            buf.pop();
+            if buf.ends_with('\r') {
+                buf.pop();
+            }
+        }
+        owned.passphrase = Some(buf);
+    } else if has_slot_stdin {
+        crate::slot_input::apply_slot_stdin(&mut owned.slot, stdin)?;
+    }
+    Ok(owned)
 }

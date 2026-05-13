@@ -788,7 +788,9 @@ pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String {
 /// per-`@N` cosigner triples for `synthesize_descriptor`, and entropy if full mode.
 #[derive(Debug)]
 pub struct DescriptorBinding {
+    #[allow(dead_code)]
     pub keys: Vec<ParsedKey>,
+    #[allow(dead_code)]
     pub fingerprints: Vec<ParsedFingerprint>,
     pub cosigners: Vec<CosignerKeyInfo>,
     // v0.4.4 Phase S: bundle-level `entropy` field retired. Per-slot entropy
@@ -799,6 +801,7 @@ pub struct DescriptorBinding {
 }
 
 impl DescriptorBinding {
+    #[allow(dead_code)]
     /// v0.4.4 Phase S compatibility shim — returns the @0 slot's entropy
     /// for callers transitioning from the retired `binding.entropy` field.
     /// New code reads `binding.cosigners[0].entropy` directly.
@@ -807,6 +810,7 @@ impl DescriptorBinding {
     }
 }
 
+#[allow(dead_code)]
 /// SPEC §4.11 binding logic. Resolves the four descriptor-mode key sources:
 /// full single-sig (--phrase + n=1), watch-only single-sig (--xpub + n=1),
 /// full multisig (--phrase + n-1 cosigners), watch-only multisig (no phrase /
@@ -846,6 +850,7 @@ pub fn bind_descriptor_keys(
     }
 }
 
+#[allow(dead_code)]
 fn bind_full_mode(
     resolved: &ResolvedPlaceholders,
     network: CliNetwork,
@@ -938,6 +943,7 @@ fn bind_full_mode(
     })
 }
 
+#[allow(dead_code)]
 fn bind_watch_only_singlesig(
     resolved: &ResolvedPlaceholders,
     xpub_str: &str,
@@ -971,6 +977,7 @@ fn bind_watch_only_singlesig(
     })
 }
 
+#[allow(dead_code)]
 fn bind_watch_only_multisig(
     resolved: &ResolvedPlaceholders,
     cosigner_specs: &[CosignerSpec],
@@ -1010,6 +1017,7 @@ fn bind_watch_only_multisig(
     })
 }
 
+#[allow(dead_code)]
 fn path_from_decl(resolved: &ResolvedPlaceholders, i: u8) -> Result<DerivationPath, ToolkitError> {
     let origin = match &resolved.path_decl.paths {
         PathDeclPaths::Shared(p) => p,
@@ -1041,6 +1049,7 @@ fn path_from_decl(resolved: &ResolvedPlaceholders, i: u8) -> Result<DerivationPa
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))
 }
 
+#[allow(dead_code)]
 fn check_anno_match(
     resolved: &ResolvedPlaceholders,
     i: u8,
@@ -1116,6 +1125,7 @@ pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), 
     Ok(())
 }
 
+#[allow(dead_code)]
 fn push_binding(
     keys: &mut Vec<ParsedKey>,
     fps: &mut Vec<ParsedFingerprint>,

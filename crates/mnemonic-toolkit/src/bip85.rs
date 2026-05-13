@@ -262,8 +262,8 @@ fn base64_standard(input: &[u8]) -> String {
         let b1 = input[i + 1];
         let b2 = input[i + 2];
         out.push(ALPHA[(b0 >> 2) as usize] as char);
-        out.push(ALPHA[((b0 & 0x03) << 4 | b1 >> 4) as usize] as char);
-        out.push(ALPHA[((b1 & 0x0f) << 2 | b2 >> 6) as usize] as char);
+        out.push(ALPHA[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
+        out.push(ALPHA[(((b1 & 0x0f) << 2) | (b2 >> 6)) as usize] as char);
         out.push(ALPHA[(b2 & 0x3f) as usize] as char);
         i += 3;
     }
@@ -278,7 +278,7 @@ fn base64_standard(input: &[u8]) -> String {
         let b0 = input[i];
         let b1 = input[i + 1];
         out.push(ALPHA[(b0 >> 2) as usize] as char);
-        out.push(ALPHA[((b0 & 0x03) << 4 | b1 >> 4) as usize] as char);
+        out.push(ALPHA[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
         out.push(ALPHA[((b1 & 0x0f) << 2) as usize] as char);
         out.push('=');
     }
@@ -302,7 +302,7 @@ fn base85_btc(input: &[u8]) -> String {
     let mut out = String::with_capacity(input.len() / 4 * 5);
     for chunk in input.chunks_exact(4) {
         let mut n: u32 =
-            (chunk[0] as u32) << 24 | (chunk[1] as u32) << 16 | (chunk[2] as u32) << 8 | (chunk[3] as u32);
+            ((chunk[0] as u32) << 24) | ((chunk[1] as u32) << 16) | ((chunk[2] as u32) << 8) | (chunk[3] as u32);
         let mut group = [0u8; 5];
         for slot in group.iter_mut().rev() {
             *slot = ALPHA[(n % 85) as usize];

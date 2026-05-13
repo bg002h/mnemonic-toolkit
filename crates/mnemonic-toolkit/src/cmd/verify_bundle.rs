@@ -17,7 +17,6 @@ use crate::template::CliTemplate;
 use clap::Args;
 use std::io::Write;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 #[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
@@ -41,6 +40,14 @@ pub struct VerifyBundleArgs {
 
     #[arg(long)]
     pub passphrase: Option<String>,
+
+    /// SPEC v0.9.0 §1 item 1 — read `--passphrase` from stdin (raw,
+    /// preserving NULL bytes; strips a single trailing `\r?\n`).
+    /// Mutually exclusive with `--passphrase` AND with any
+    /// `--slot @N.<secret>=-` (single stdin per invocation).
+    /// Mirrors `convert.rs:181` precedent.
+    #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
 
     /// BIP-32 account index (default 0). Non-zero values produce md1 with
     /// PathDeclPaths::Divergent per SPEC §4.2.
@@ -102,6 +109,18 @@ pub fn run<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
+
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE bundle-json
+    // intake so the advisory fires uniformly even on the synthetic-args
+    // intake path.
+    emit_secret_in_argv_advisories(args, stderr);
+    let stdin_synth;
+    let args: &VerifyBundleArgs = if needs_stdin_substitution(args) {
+        stdin_synth = apply_stdin_substitutions(args, stdin)?;
+        &stdin_synth
+    } else {
+        args
+    };
 
     // v0.4.3 Phase Q: --bundle-json intake. Load JSON envelope, extract
     // ms1/mk1/md1 into a synthetic VerifyBundleArgs, then continue dispatch
@@ -514,6 +533,61 @@ fn descriptor_mode_verify_run<W: Write>(
         writeln!(stdout, "result: {}", result_str).ok();
     }
     Ok(if any_fail { 4 } else { 0 })
+}
+
+// ============================================================================
+// SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers (mirror bundle.rs)
+// ============================================================================
+
+/// Per-occurrence `secret-in-argv` stderr advisory emission for
+/// `verify-bundle`. Mirrors `cmd/bundle.rs` shape (one advisory per
+/// (flag, slot-index) site).
+fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &VerifyBundleArgs, stderr: &mut E) {
+    use crate::secret_advisory::secret_in_argv_warning;
+    for s in &args.slot {
+        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() {
+            let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
+            let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
+            secret_in_argv_warning(stderr, &flag, &alt);
+        }
+    }
+    if args.passphrase.is_some() {
+        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    }
+}
+
+fn needs_stdin_substitution(args: &VerifyBundleArgs) -> bool {
+    args.passphrase_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+}
+
+fn apply_stdin_substitutions(
+    args: &VerifyBundleArgs,
+    stdin: &mut dyn std::io::Read,
+) -> Result<VerifyBundleArgs, ToolkitError> {
+    let mut owned = args.clone();
+    let has_slot_stdin = owned.slot.iter().any(|s| s.is_stdin_sentinel());
+    if owned.passphrase_stdin && has_slot_stdin {
+        return Err(ToolkitError::BadInput(
+            "--passphrase-stdin cannot be used with --slot @N.<secret>=- (single stdin per invocation)"
+                .into(),
+        ));
+    }
+    if owned.passphrase_stdin {
+        let mut buf = String::new();
+        stdin
+            .read_to_string(&mut buf)
+            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+        if buf.ends_with('\n') {
+            buf.pop();
+            if buf.ends_with('\r') {
+                buf.pop();
+            }
+        }
+        owned.passphrase = Some(buf);
+    } else if has_slot_stdin {
+        crate::slot_input::apply_slot_stdin(&mut owned.slot, stdin)?;
+    }
+    Ok(owned)
 }
 
 /// v0.4.3 Phase Q: load a `bundle --json` envelope file and synthesize
@@ -948,6 +1022,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
     }
 
     // 6N per-cosigner emission.
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         let exp_ms1 = expected.ms1.get(i).map(|s| s.as_str()).unwrap_or("");
         let watch_only_slot = exp_ms1.is_empty();
@@ -1392,6 +1467,7 @@ mod helper_tests {
     use bip39::Mnemonic;
     use bitcoin::bip32::{Xpriv, Xpub};
     use bitcoin::secp256k1::Secp256k1;
+    use std::str::FromStr;
 
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 

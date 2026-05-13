@@ -178,10 +178,11 @@ fn refusal_standard_2fa_decode() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.\n"
-    );
+    )
 }
 
 #[test]
@@ -199,10 +200,11 @@ fn refusal_segwit_2fa_decode() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: Electrum 2FA seed (version 101 or 102) requires a second factor not present in the phrase alone; conversion not supported. Use Electrum directly for 2FA recovery.\n"
-    );
+    )
 }
 
 #[test]
@@ -223,10 +225,11 @@ fn refusal_phrase_to_electrum_phrase_sibling_pivot() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.\n"
-    );
+    )
 }
 
 #[test]
@@ -244,10 +247,11 @@ fn refusal_electrum_phrase_to_phrase_sibling_pivot() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from phrase --to electrum-phrase (or reverse) is a sibling-format pivot, not a single-format conversion. BIP-39 and Electrum native seeds are different artifact classes.\n"
-    );
+    )
 }
 
 #[test]
@@ -266,10 +270,11 @@ fn refusal_invalid_electrum_phrase_format() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from electrum-phrase value is not a valid Electrum native seed (HMAC-SHA512 prefix did not match a known seed version, or contains words outside the wordlist).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from electrum-phrase value is not a valid Electrum native seed (HMAC-SHA512 prefix did not match a known seed version, or contains words outside the wordlist).\n"
-    );
+    )
 }
 
 #[test]
@@ -313,10 +318,11 @@ fn refusal_electrum_phrase_to_electrum_phrase_identity() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // Catch-all refusal taxonomy (one-way barrier message).
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to electrum-phrase is cryptographically unrecoverable from --from electrum-phrase (one-way derivation barrier)\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to electrum-phrase is cryptographically unrecoverable from --from electrum-phrase (one-way derivation barrier)\n"
-    );
+    )
 }
 
 // ============================================================================

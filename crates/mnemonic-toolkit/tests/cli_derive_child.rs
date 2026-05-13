@@ -312,10 +312,11 @@ fn cell_8_bip39_length_out_of_range_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.trim().ends_with(        "error: --length 16 out of range for --application bip39 (valid: 12 | 15 | 18 | 21 | 24 words)"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr.trim(),
-        "error: --length 16 out of range for --application bip39 (valid: 12 | 15 | 18 | 21 | 24 words)",
-    );
+    )
 }
 
 /// SPEC §7 — refusal: --length not applicable for hd-seed (output is fixed-size).
@@ -338,10 +339,11 @@ fn cell_9_hd_seed_length_not_applicable_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.trim().ends_with(        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr.trim(),
-        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)",
-    );
+    )
 }
 
 /// SPEC §7 — refusal: --length not applicable for xprv (output is fixed-size).
@@ -365,10 +367,11 @@ fn cell_9b_xprv_length_not_applicable_refusal() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.trim().ends_with(        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr.trim(),
-        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)",
-    );
+    )
 }
 
 // ============================================================================

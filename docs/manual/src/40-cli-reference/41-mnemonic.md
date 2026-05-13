@@ -30,6 +30,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from a single-line UTF-8 file; mutually exclusive with `--descriptor` |
 | `--language <LANGUAGE>` | BIP-39 wordlist for the input phrase |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase |
+| `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index (default 0) |
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
@@ -37,7 +38,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
-| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `entropy`, `xpub`, `fingerprint`, `path`, `wif`, `xprv`) |
+| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `entropy`, `xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin |
 | `--help` | print help |
 
 ### Worked example
@@ -72,8 +73,9 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--privacy-preserving` | match a privacy-preserving mk1 emission |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic passphrase |
+| `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index |
-| `--slot <SLOT>` | repeating slot input |
+| `--slot <SLOT>` | repeating slot input; for secret-bearing subkeys `=-` reads from stdin |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card |
 | `--mk1 <STRING>` | repeating; one mk1 card |
@@ -113,6 +115,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
 | `--bip38-passphrase <BIP38_PASSPHRASE>` | distinct BIP-38 Scrypt passphrase channel (v0.8 BREAKING — separate from `--passphrase`) |
+| `--bip38-passphrase-stdin` | read `--bip38-passphrase` from stdin (raw, NULL-byte preserving); closes the BIP-38 V3 spec NULL-byte passphrase argv gap |
 | `--electrum-version <ELECTRUM_VERSION>` | Electrum seed-version selector for `(Entropy, ElectrumPhrase)` |
 | `--electrum-language <ELECTRUM_LANGUAGE>` | Electrum-specific wordlist (English + 4 non-English) |
 | `--fingerprint <FINGERPRINT>` | master fingerprint (input on certain edges) |
@@ -196,6 +199,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 | `--network <NETWORK>` | for `hd-seed` / `xprv` apps; defaults to mainnet |
 | `--language <LANGUAGE>` | BIP-39 wordlist + BIP-85 language code for `--application bip39` |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase, only for `--from phrase=…` |
+| `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^32-1` |
 | `--help` | print help |
 

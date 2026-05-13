@@ -227,6 +227,7 @@ pub struct BundleInputForCard {
     pub n: u8,
     pub language: Option<&'static str>,
     pub passphrase_used: bool,
+    #[allow(dead_code)]
     pub privacy_preserving: bool,
     pub per_slot: Vec<SlotCardBlock>,
     pub md1_chunk_set_id: String,
@@ -235,6 +236,7 @@ pub struct BundleInputForCard {
 #[derive(Debug, Clone)]
 pub enum TemplateOrDescriptor {
     Template(&'static str),
+    #[allow(dead_code)]
     Descriptor(String),
 }
 

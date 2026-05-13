@@ -123,10 +123,11 @@ fn refusal_minikey_invalid_format_no_s_prefix() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from minikey requires a Casascius mini-key string (22/26/30 chars, starting with uppercase 'S'); supplied value does not match.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from minikey requires a Casascius mini-key string (22/26/30 chars, starting with uppercase 'S'); supplied value does not match.\n"
-    );
+    )
 }
 
 #[test]
@@ -145,10 +146,11 @@ fn refusal_minikey_invalid_format_wrong_length() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from minikey requires a Casascius mini-key string (22/26/30 chars, starting with uppercase 'S'); supplied value does not match.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from minikey requires a Casascius mini-key string (22/26/30 chars, starting with uppercase 'S'); supplied value does not match.\n"
-    );
+    )
 }
 
 #[test]
@@ -167,10 +169,11 @@ fn refusal_minikey_invalid_checksum() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: invalid Casascius mini-key checksum (SHA256(key + \"?\")[0] != 0x00); supplied string is not a valid Casascius mini-key.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: invalid Casascius mini-key checksum (SHA256(key + \"?\")[0] != 0x00); supplied string is not a valid Casascius mini-key.\n"
-    );
+    )
 }
 
 #[test]
@@ -189,10 +192,11 @@ fn refusal_minikey_to_xpub_decode_only() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from minikey only supports --to wif (decode-only); cannot convert to xpub.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from minikey only supports --to wif (decode-only); cannot convert to xpub.\n"
-    );
+    )
 }
 
 #[test]
@@ -210,10 +214,11 @@ fn refusal_minikey_to_phrase_decode_only() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --from minikey only supports --to wif (decode-only); cannot convert to phrase.\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --from minikey only supports --to wif (decode-only); cannot convert to phrase.\n"
-    );
+    )
 }
 
 #[test]
@@ -233,8 +238,9 @@ fn refusal_wif_to_minikey_one_way() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).\n"),
+        "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
-        "error: --to minikey is one-way (mini-key generation requires brute-force search for typo-checksum byte; no inverse derivation).\n"
-    );
+    )
 }

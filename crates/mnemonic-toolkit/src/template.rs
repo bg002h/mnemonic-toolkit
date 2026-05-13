@@ -214,6 +214,7 @@ impl CliTemplate {
         }
     }
 
+    #[allow(dead_code)]
     /// BIP-48 script_type component (1=sh-wsh, 2=wsh, 3=tr-multi-a). `None` for
     /// non-multisig templates. SPEC §4.1 multisig path derivation.
     pub fn bip48_script_type(&self) -> Option<u32> {

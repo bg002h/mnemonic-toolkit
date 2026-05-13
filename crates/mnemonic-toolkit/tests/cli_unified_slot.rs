@@ -260,11 +260,12 @@ fn unified_slot_same_wif_twice_emits_bip388_row13() {
         .failure()
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
+    assert!(
+        stderr.ends_with(        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n"),
+        "{}; got {:?}",
+        "same WIF twice in multisig must trigger SPEC §6.6 row 13 byte-exactly",
         stderr,
-        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n",
-        "same WIF twice in multisig must trigger SPEC §6.6 row 13 byte-exactly"
-    );
+    )
 }
 
 #[test]

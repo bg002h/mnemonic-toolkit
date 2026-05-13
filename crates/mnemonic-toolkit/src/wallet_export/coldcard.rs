@@ -170,7 +170,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
             ))
         })?;
     let first_addr = match template {
-        CliTemplate::Bip44 => Address::p2pkh(&recv.to_pub(), inputs.network.network_kind()).to_string(),
+        CliTemplate::Bip44 => Address::p2pkh(recv.to_pub(), inputs.network.network_kind()).to_string(),
         CliTemplate::Bip49 => Address::p2shwpkh(&recv.to_pub(), inputs.network.network_kind()).to_string(),
         CliTemplate::Bip84 => Address::p2wpkh(&recv.to_pub(), inputs.network.known_hrp()).to_string(),
         _ => unreachable!("singlesig templates only by match-arm above"),
@@ -306,9 +306,8 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     // toolkit's per-slot `path_raw` carries the user-supplied origin or
     // template-derived default; both forms are normalized to `m/...` here.
     let normalize_path = |p: &str| -> String {
-        if p.starts_with("m/") {
-            p.to_string()
-        } else if p.starts_with('m') {
+        if p.starts_with('m') {
+            // Covers both `m/...` and bare `m` (Coldcard accepts both).
             p.to_string()
         } else if p.is_empty() {
             String::new()
