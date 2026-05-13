@@ -14,6 +14,7 @@ use bitcoin::secp256k1::Secp256k1;
 use bitcoin::NetworkKind;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
+use zeroize::Zeroizing;
 
 /// BIP-85 §"Specification" — derive 64 bytes of entropy from a master xprv
 /// at path `m/83696968'/<app_code>'/<app_params...>'/<index>'`, then
@@ -23,7 +24,7 @@ pub(crate) fn derive_entropy(
     app_code: u32,
     app_params: &[u32],
     index: u32,
-) -> Result<[u8; 64], ToolkitError> {
+) -> Result<Zeroizing<[u8; 64]>, ToolkitError> {
     let secp = Secp256k1::new();
     let mut components: Vec<ChildNumber> = Vec::with_capacity(3 + app_params.len());
     components.push(hardened(83_696_968)?);
@@ -33,6 +34,9 @@ pub(crate) fn derive_entropy(
     }
     components.push(hardened(index)?);
     let path = DerivationPath::from(components);
+    // SAFETY: third-party-blocked — `Xpriv::derive_priv` returns a `Copy`
+    // type with no Drop hook; tracked by FOLLOWUP
+    // `rust-bitcoin-xpriv-zeroize-upstream`.
     let child = master
         .derive_priv(&secp, &path)
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
@@ -40,7 +44,7 @@ pub(crate) fn derive_entropy(
     let mut engine = HmacEngine::<sha512::Hash>::new(b"bip-entropy-from-k");
     engine.input(&child.private_key.secret_bytes());
     let mac = Hmac::<sha512::Hash>::from_engine(engine);
-    let mut out = [0u8; 64];
+    let mut out = Zeroizing::new([0u8; 64]);
     out.copy_from_slice(mac.as_byte_array());
     Ok(out)
 }
@@ -70,6 +74,8 @@ pub(crate) fn format_bip39_phrase(
     let entropy = derive_entropy(master, 39, &[language_code, words], index)?;
     // BIP-39 entropy bytes = words * 4 / 3 (12→16, 15→20, 18→24, 21→28, 24→32).
     let bytes: usize = (words as usize) * 4 / 3;
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize;
+    // tracked by FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
     let mnemonic =
         Mnemonic::from_entropy_in(language, &entropy[..bytes]).map_err(ToolkitError::Bip39)?;
     Ok(mnemonic.to_string())
@@ -157,7 +163,7 @@ pub(crate) fn format_password_base64(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 707_764, &[length], index)?;
-    let encoded = base64_standard(&entropy);
+    let encoded = base64_standard(&entropy[..]);
     Ok(encoded[..length as usize].to_string())
 }
 
@@ -171,7 +177,7 @@ pub(crate) fn format_password_base85(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 707_785, &[length], index)?;
-    let encoded = base85_btc(&entropy);
+    let encoded = base85_btc(&entropy[..]);
     Ok(encoded[..length as usize].to_string())
 }
 
@@ -211,7 +217,7 @@ pub(crate) fn format_dice_rolls(
 
     // BIP85-DRNG-SHAKE256: seed a SHAKE256 stream with the 64-byte entropy.
     let mut shake = Shake256::default();
-    shake.update(&entropy);
+    shake.update(&entropy[..]);
     let mut reader = shake.finalize_xof();
 
     // bits_per_roll = ceil(log_2(sides)); bytes_per_roll = ceil(bits_per_roll / 8).

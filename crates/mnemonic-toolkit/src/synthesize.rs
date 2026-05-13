@@ -275,6 +275,8 @@ pub(crate) fn derive_xpub_at_path(
 ) -> Result<Xpub, ToolkitError> {
     let path = DerivationPath::from_str(path_str)
         .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
     let xpriv = master
         .derive_priv(secp, &path)
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
@@ -321,9 +323,12 @@ pub fn synthesize_multisig_full(
     }
 
     // 2. Master xpriv.
-    let seed = seed_mnemonic.to_seed(passphrase);
+    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`. The
+    // 64-byte seed is `Zeroizing<[u8; 64]>` via `derive_master_seed`.
+    let seed = crate::derive_slot::derive_master_seed(seed_mnemonic, passphrase);
     let secp = Secp256k1::new();
-    let master = Xpriv::new_master(network.network_kind(), &seed)
+    let master = Xpriv::new_master(network.network_kind(), &seed[..])
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 

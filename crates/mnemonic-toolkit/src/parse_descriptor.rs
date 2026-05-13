@@ -860,12 +860,17 @@ fn bind_full_mode(
     cosigner_specs: &[CosignerSpec],
 ) -> Result<DescriptorBinding, ToolkitError> {
     let n = resolved.n;
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` + `bitcoin::bip32::Xpriv`
+    // have no Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
+    // `rust-bitcoin-xpriv-zeroize-upstream`. The seed buffer is
+    // `Zeroizing<[u8; 64]>` via `derive_master_seed`; the entropy Vec is
+    // wrapped in `Zeroizing<Vec<u8>>` below.
     let mnemonic =
         bip39::Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
-    let entropy = mnemonic.to_entropy();
-    let seed = mnemonic.to_seed(passphrase);
+    let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
+    let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
     let secp = Secp256k1::new();
-    let master = Xpriv::new_master(network.network_kind(), &seed)
+    let master = Xpriv::new_master(network.network_kind(), &seed[..])
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
     let master_fp = master.fingerprint(&secp);
 
@@ -882,6 +887,8 @@ fn bind_full_mode(
         ));
     }
     let at0_path = path_from_decl(resolved, 0)?;
+    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
     let at0_xpriv = master
         .derive_priv(&secp, &at0_path)
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
@@ -934,7 +941,7 @@ fn bind_full_mode(
     // v0.4.4 Phase S: per-slot entropy on the @0 cosigner; bundle-level
     // entropy field retired.
     if let Some(c0) = cosigners.first_mut() {
-        c0.entropy = Some(entropy);
+        c0.entropy = Some((*entropy).clone());
     }
     Ok(DescriptorBinding {
         keys,
