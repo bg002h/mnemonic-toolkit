@@ -175,8 +175,23 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   **Architectural trap on record (R3 I-R3-2, Phase 0 R1 report lines 188-260):** The Phase 0 R1 prototype `try_mlock_region(&[u8])` byte-slice API "traps callers into page-vs-byte granularity wastefulness." `mlock(2)` pins pages, not bytes; SPEC §3 OOS-secret-arena defers proper page-aligned allocation to a future Cycle C (`dedicated-secret-arena`). Cycle B accepts residual page-residue from co-allocated non-secret data on locked pages; SPEC must document this and pick a signature shape that doesn't pretend byte-granularity is real.
 
   **Items not addressed in existing artifacts** (Phase 0 design decisions): soft-fail logging channel / level / format; `RLIMIT_MEMLOCK` exhaustion semantics (no soft-fail story beyond `EPERM` today); `CAP_IPC_LOCK` probe-up-front vs fail-per-call; cgroup memory limits.
+
+  **Resolutions (2026-05-13 session, user decisions):**
+  - **Q1 resolved:** SPEC §3 OOS-mlock-cycle-b 5-site list is canonical. Matrix's `secp256k1::SecretKey` + `bip39::Mnemonic` substitutions are out-of-Cycle-B supplementary coverage (filed in Cycle B SPEC §3 as `OOS-upstream-zeroize-mlock`); revisit when those upstreams gain Drop+Zeroize.
+  - **Q2 resolved (toward cross-repo):** ms-cli site #5 stays IN Cycle B's target list. Cycle B becomes cross-repo (toolkit + ms-cli). Companion FOLLOWUP `secret-memory-hygiene-cycle-b` to be filed in `mnemonic-secret/design/FOLLOWUPS.md` at P0 SPEC ship. The "toolkit-only" framing in earlier artifacts is superseded by this SPEC's §5 cross-repo coordination.
+  - **Q3 resolved:** Cycle B absorbs bip85 `[u8; 64]` heap-promotion as Phase 1 (P1 toolkit-only precursor refactor; P2 builds mlock module; P3a applies at toolkit sites; P3b applies at ms-cli; PE rollup).
+  - **Q4 resolved:** Linux + macOS (POSIX path) committed for Cycle B. Windows `VirtualLock` deferred to a separate future cycle once the POSIX soft-fail abstraction has settled. Filed in Cycle B SPEC §3 as `OOS-windows-virtuallock`.
+
+  **Architectural trap resolved (R3 I-R3-2):** Cycle B's `pin_pages_for(&[u8]) -> PinnedPageRange` returns the actual page range pinned (page-granularity explicit in the return type), NOT the byte-slice fiction. SPEC §3 `OOS-page-residue-elimination` documents that co-resident non-secret data on locked pages is incidentally pinned; full isolation deferred to Cycle C `dedicated-secret-arena`.
+
+  **Brainstorming-session resolutions (5 additional Qs, 2026-05-13):**
+  - **API shape:** hybrid — `MlockedZeroizing<T>` wrapper (sites 2/3/4) + `pin_pages_for(&[u8])` slice fn (sites 1/5). Matches libsodium's two-tier API.
+  - **Capability detection:** try-and-soft-fail per call (no upfront probe). `MlockState` process-static singleton aggregates failures into a single 2-line stderr summary at end of process via `report_at_exit()`.
+  - **Logging:** stderr plain-text, 2 lines, no suppression flag/env-var.
+  - **Errno discipline:** all errnos soft-fail in release; `debug_assert!` on unreachable `EINVAL` in debug builds.
+  - **Cross-repo sharing:** inline copy of `pin_pages_for` in both repos; CI invariant test diffs the two implementations (normalized) and fails on drift. No shared `mnemonic-mlock` crate; constellation stays at 4 crates.
 - **Why deferred:** v1.0 roadmap pass; user direction is to capture pre-SPEC scope state so a future SPEC-drafting session starts cold-but-informed rather than re-discovering the discrepancies.
-- **Status:** `open` (pre-SPEC; resolves when Cycle B SPEC Phase 0 disposes of each question above)
+- **Status:** `resolved (this commit, 2026-05-13) — Cycle B SPEC drafted at design/SPEC_secret_memory_hygiene_v0_9_B.md (Phase 0 artifact; reviewer-loop pending). All 4 pre-SPEC questions plus 5 brainstorming-session questions dispositioned; resolutions inlined in the What block above.`
 - **Tier:** `v0.9.x`
 - **Companion:** `secret-memory-hygiene-cycle-b` (parent cycle entry) at `design/FOLLOWUPS.md`. If Q2 resolves toward "ms-cli stdin is in scope," a companion entry in `mnemonic-secret/design/FOLLOWUPS.md` is needed at SPEC drafting time.
 
