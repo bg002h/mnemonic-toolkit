@@ -93,10 +93,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
-    let from_value = if args.from.value == "-" {
-        read_stdin_to_string(stdin)?
+    // SPEC v0.9.0 §1 item 2 — wrap the OWNED secret string in Zeroizing so
+    // it scrubs on drop after seed derivation.
+    let from_value: zeroize::Zeroizing<String> = if args.from.value == "-" {
+        zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
-        args.from.value.clone()
+        zeroize::Zeroizing::new(args.from.value.clone())
     };
 
     // SPEC v0.9.0 §1 item 1 — read --passphrase from stdin when set.
@@ -121,19 +123,25 @@ pub fn run<R: Read, W: Write, E: Write>(
         NodeType::Xprv => Xpriv::from_str(&from_value)
             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,
         NodeType::Phrase => {
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` +
+            // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
+            // `rust-bip39-mnemonic-zeroize-upstream`,
+            // `rust-bitcoin-xpriv-zeroize-upstream`.
             let language = args.language.unwrap_or_default();
-            let mnemonic = Mnemonic::parse_in(language.into(), &from_value)
+            let mnemonic = Mnemonic::parse_in(language.into(), from_value.as_str())
                 .map_err(ToolkitError::Bip39)?;
             let passphrase: &str = stdin_passphrase
                 .as_deref()
                 .or(args.passphrase.as_deref())
                 .unwrap_or("");
-            let seed = mnemonic.to_seed(passphrase);
+            let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
             // BIP-85 spec test vectors are network-agnostic at the entropy
             // level; the master xprv's network field doesn't affect any
             // BIP-85 derivation byte. Use Main as a stable internal default;
             // emission-side network is driven by `--network` per SPEC §4.
-            Xpriv::new_master(NetworkKind::Main, &seed)
+            // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
+            // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
+            Xpriv::new_master(NetworkKind::Main, &seed[..])
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
         }
         _ => {

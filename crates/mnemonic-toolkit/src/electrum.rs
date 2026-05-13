@@ -104,7 +104,11 @@ pub(crate) fn phrase_to_entropy(
     }
     let wl = wordlist.words();
     let base = wordlist.base();
-    let mut acc: Vec<u8> = vec![0]; // little-endian internally; reversed at end.
+    // SPEC v0.9.0 §1 item 2 — `acc` holds the secret integer during
+    // base-N decode; wrap so it scrubs on drop. We unwrap on return
+    // because the caller signature is `Vec<u8>` (callers wrap their
+    // copy separately per their site).
+    let mut acc: zeroize::Zeroizing<Vec<u8>> = zeroize::Zeroizing::new(vec![0]);
     for w in words.iter().rev() {
         let idx = wl
             .iter()
@@ -118,7 +122,7 @@ pub(crate) fn phrase_to_entropy(
         acc.pop();
     }
     acc.reverse();
-    Ok(acc)
+    Ok((*acc).clone())
 }
 
 /// Encode entropy → phrase at `version` and `wordlist`. Increments the
@@ -139,7 +143,10 @@ pub(crate) fn entropy_to_phrase(
     }
     let wl = wordlist.words();
     let base = wordlist.base();
-    let mut acc: Vec<u8> = entropy.iter().rev().copied().collect();
+    // SPEC v0.9.0 §1 item 2 — `acc` is the secret integer + per-step
+    // base-N digits; wrap in Zeroizing so it scrubs on drop.
+    let mut acc: zeroize::Zeroizing<Vec<u8>> =
+        zeroize::Zeroizing::new(entropy.iter().rev().copied().collect());
     let mut iterations: u64 = 0;
     loop {
         if iterations >= MAX_ENCODE_ITERATIONS {

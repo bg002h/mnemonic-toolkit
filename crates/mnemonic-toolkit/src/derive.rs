@@ -65,8 +65,11 @@ pub fn derive_full(
     template: CliTemplate,
     account: u32,
 ) -> Result<DerivedAccount, ToolkitError> {
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize;
+    // tracked by FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`. Lifetime
+    // here is minimal: parse → to_entropy → drop on function return.
     let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
-    let entropy = mnemonic.to_entropy();
+    let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
     crate::derive_slot::derive_bip32_from_entropy(
         &entropy,
         passphrase,

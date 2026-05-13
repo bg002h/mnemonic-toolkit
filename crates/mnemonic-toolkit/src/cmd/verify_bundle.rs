@@ -456,7 +456,9 @@ fn descriptor_mode_verify_run<W: Write>(
     let mut keys: Vec<ParsedKey> = Vec::with_capacity(n);
     let mut fingerprints: Vec<ParsedFingerprint> = Vec::with_capacity(n);
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
-    let mut entropy_at_0: Option<Vec<u8>> = None;
+    // SPEC v0.9.0 §1 item 2 — entropy_at_0 is the cloned @0 entropy
+    // used downstream for verification; wrap in Zeroizing.
+    let mut entropy_at_0: Option<zeroize::Zeroizing<Vec<u8>>> = None;
     for (i, slot) in resolved_slots.iter().enumerate() {
         keys.push(ParsedKey {
             i: i as u8,
@@ -475,7 +477,7 @@ fn descriptor_mode_verify_run<W: Write>(
             master_xpub: slot.master_xpub,
         });
         if i == 0 {
-            entropy_at_0 = slot.entropy.clone();
+            entropy_at_0 = slot.entropy.as_ref().map(|e| zeroize::Zeroizing::new(e.clone()));
         }
     }
 
@@ -498,7 +500,7 @@ fn descriptor_mode_verify_run<W: Write>(
     let expected = synthesize_descriptor(
         &descriptor,
         &cosigners,
-        entropy_at_0.as_deref(),
+        entropy_at_0.as_ref().map(|z| &z[..]),
         args.privacy_preserving,
     )?;
 
