@@ -136,7 +136,6 @@ pub fn synthesize_full(
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
-    debug_assert_eq!(&card.policy_id_stubs[0], &stub);
     debug_assert!(descriptor.is_wallet_policy());
 
     Ok(Bundle {
@@ -168,7 +167,6 @@ pub fn synthesize_watch_only(
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
-    debug_assert_eq!(&card.policy_id_stubs[0], &stub);
     debug_assert!(descriptor.is_wallet_policy());
 
     // SPEC §5.8: single-sig watch-only ms1 = [""] (length-N invariant; empty-string sentinel).

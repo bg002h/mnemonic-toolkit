@@ -95,7 +95,7 @@ No delta from v0.2.
 Toolkit-local file `crates/mnemonic-toolkit/src/parse_descriptor.rs` implements:
 
 1. **Read**: `--descriptor "<string>"` (UTF-8) or `--descriptor-file <path>` (read + trim trailing newline).
-2. **Lex placeholders**: identical regex to md-cli `parse/template.rs:19-27`: `@(\d+)((?:/\d+'?)*)(?:/<([0-9;]+)>)?(/\*(?:'|h)?)?`.
+2. **Lex placeholders**: identical regex to md-cli `parse/template.rs:25-27`: `@(\d+)((?:/\d+'?)*)(?:/<([0-9;]+)>)?(/\*(?:'|h)?)?`.
 3. **Resolve placeholders**: density check `0..n`; build `PathDecl` (Shared vs Divergent).
 4. **Substitute synthetic xpubs**: deterministic synthetic xpubs computed identically to md-cli's `synthetic_xpub_for` at `parse/template.rs:246-269`, with one normative change: the seed prefix is `b"toolkit-v0.3"` (not md-cli's `b"md-v0.15"`). Specifically: `seed = sha256(&[b"toolkit-v0.3", i, depth].concat())`; `chain_code = sha256(&[b"cc", i, depth].concat())`; pubkey is derived from `seed` as a secp256k1 secret key, serialized compressed; xpub assembled as a BIP-32 base58check string. Depth byte is 3 for `ScriptCtx::SingleSig` and 4 for `ScriptCtx::MultiSig` (matches md-cli). The prefix CHOICE is normative for fixture stability (test vectors must reproduce); the prefix VALUE does not affect encoded card strings (synthetic xpubs are looked up by string equality in `key_map` and replaced by real user-supplied keys before TLV encoding — verified by reading `lookup_key()` and TLV-population code in md-cli's `parse_template`).
 5. **`miniscript::Descriptor::from_str()`**: invoke rust-miniscript v13 parser.

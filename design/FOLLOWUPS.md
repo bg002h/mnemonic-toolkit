@@ -251,7 +251,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_1.md` §5.5.
 - **What:** SPEC §5.5 enumerates `"kind"` JSON values as `"BadInput" | "Bip39" | … | "ModeViolation"` but doesn't list `NetworkMismatch` and `FutureFormat`. The implementation correctly returns those discriminants; the SPEC prose is just incomplete.
 - **Why deferred:** SPEC-prose-only; no code change required. Update during the next SPEC revision.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — NetworkMismatch + FutureFormat added to §5.5 kind enum.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `mk-codec-chunked-visual-grouping-helper` — mk-codec lacks a per-string visual grouping helper
@@ -269,7 +269,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_1.md` Task 1.1, `spike_md_codec.rs` snippet (~line 232–260).
 - **What:** Plan-given snippet uses `[0x42; 65]` as `tlv.pubkeys` filler, which violates the SEC1-compressed-pubkey prefix invariant (must be 0x02/0x03) and panics with `InvalidXpubBytes`. Spike memo documents the working filler `[0x11; 32] || 0x02 || [0x22; 32]` from `md_codec::identity::deterministic_xpub`. Plan source not patched — future readers running the snippet verbatim will trip the same panic.
 - **Why deferred:** spike memo supersedes plan source; cosmetic plan-source bug.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — Task 1.1 snippet now uses 32B 0x11 chain_code || 0x02 SEC1 prefix || 32B 0x22 x-coordinate.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `plan-trezor-24-fingerprint-stale` — IMPLEMENTATION_PLAN has wrong 24-word zero-entropy master fingerprint
@@ -278,7 +278,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_1.md` Task 2.1 test assertion (~line 1540) + Task 2.3 commit-message body.
 - **What:** Plan asserts `73c5da0a` as the Trezor 24-word "abandon × 23 art" master fingerprint. That value is the **12-word** "abandon × 11 about" vector's fingerprint (rust-miniscript test corpus). Correct 24-word fingerprint is `5436d724`. Handoff doc was corrected during execution; plan source unpatched.
 - **Why deferred:** test code uses correct value; only plan documentation is stale.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — plan now references 5436d724 (24-word fingerprint) in all 3 sites.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `friendly-mk-codec-mixedcase-wording` — `friendly_mk_codec` `MixedCase` text word-order differs from SPEC §6.4.4
@@ -314,7 +314,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_1.md` §2.2.2 vs §5.4.
 - **What:** §2.2.2 lists 4 substantive watch-only checks; §5.4 schema (line 552) requires all 9 check-name slots populated, with `skipped` for non-applicable. Implementation follows §5.4 (correct). §2.2.2 prose should clarify "4 substantive (5 of the 9 schema slots are `skipped` per §5.4)".
 - **Why deferred:** SPEC-internal inconsistency; implementation behavior is correct per the schema.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — §2.2.2 prose clarified: "four substantive checks" with explicit §5.4 9-slot schema reference.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `bundle-mismatch-card-static-str-constraint` — `BundleMismatch.card: &'static str` constrains future runtime-id callers
@@ -348,7 +348,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/tests/cli_bundle_watch_only.rs`.
 - **What:** Test extracts the xpub from the mk1 fixture via `mk_codec::decode` (correct), but passes `"5436d724"` as the master-fingerprint argument literally. Works because the Trezor 24-word zero vector's fingerprint is constant; future vector swap requires updating the fingerprint in two places. Read it from `card.origin_fingerprint` instead.
 - **Why deferred:** works; two-place edit risk only.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — both tests read fp_hex from card.origin_fingerprint via .to_string(); cargo test --test cli_bundle_watch_only passes.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `changelog-sha-pin-no-reproduction-command` — CHANGELOG SHA pin doesn't document how to reproduce it
@@ -357,7 +357,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `CHANGELOG.md` Wire-format SHA pin section.
 - **What:** SHA `81828299c927783d915108f32c9752b3dbf815c1caba5b6f6e7ce7b810ddcbf6` is documented as `sha256(crates/mnemonic-toolkit/tests/vectors/v0_1/)` but doesn't specify the exact reproduction command (`shasum -a 256 *.txt | sort | shasum -a 256`). Verifiers may need to guess.
 - **Why deferred:** verifiers can re-derive; doc-only clarity gap.
-- **Status:** `open`
+- **Status:** `resolved (2026-05-13 survey verified moot) — CHANGELOG.md v0.2 section (lines 1296-1301) already includes the reproduction command \`shasum -a 256 ... | sort | shasum -a 256\` with explicit "(resolves v0.1 FOLLOWUPS N-1)" attribution; this FOLLOWUPS entry's status update was missed in the v0.2 cycle.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `cli-mode-violations-byte-exact-naming` — test names say "byte_exact" but use `str::contains`
@@ -366,7 +366,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/tests/cli_mode_violations.rs`.
 - **What:** Several test names use the suffix `_byte_exact` but the assertions use `predicate::str::contains(...)` (substring match). Tests are correct; naming overstates assertion strictness. Either rename to `_substring` or tighten the assertions to full-stderr equality (and pin the byte-exact stderr in fixtures).
 - **Why deferred:** assertion strength is sufficient for current SPEC pinning; naming is the only mismatch.
-- **Status:** `open`
+- **Status:** `resolved (2026-05-13 survey verified moot) — \`tests/cli_mode_violations.rs\` no longer exists; the \`_byte_exact\` naming pattern is now distributed across per-feature test files (cli_bundle_full, cli_export_wallet_*, etc.) where the original test's scope was absorbed.`
 - **Tier:** `v0.1-nice-to-have`
 
 ### `phase-2-review-byte-determinism-blind-spot` — process: byte-determinism invariants need a spike, not just a review
@@ -393,7 +393,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:99` (`debug_assert_eq!(&card.policy_id_stubs[0], &stub)`).
 - **What:** `stub` is computed from `policy_id.as_bytes()[..4]` and immediately passed as `policy_id_stubs[0]`. The assertion can never fail at the construction site. Phase 2 r1 originally flagged this as L-4. Pre-existing; meaningful assertion is invariant 2 (`is_wallet_policy()`).
 - **Why deferred:** v0.2 multisig will need a meaningful assertion that loops over all per-cosigner stubs; resolve as part of v0.2 Phase C.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — tautological debug_assert_eq removed from both single-sig synthesize paths in synthesize.rs (now lines 139, 171); the meaningful is_wallet_policy assert is retained. v0.2 multisig's proper looped assertion never materialized; removing the dead code rather than waiting indefinitely.`
 - **Tier:** `v0.2`
 
 ### `dead-inner-guard-bundle-watch-only` — redundant `--xpub`-needs-`--master-fingerprint` guard inside `bundle_watch_only`
@@ -429,7 +429,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §4.9 step 2.
 - **What:** Step 2 cites `descriptor-mnemonic/crates/md-cli/src/parse/template.rs:19-27` for the placeholder regex; the actual `Regex::new` call is at `:25-27` (line 19-24 are imports/doc-comments). Docs-only nit — implementation will read the actual regex from the source.
 - **Why deferred:** non-blocking; can be patched alongside any v0.3 SPEC revision.
-- **Status:** `open`
+- **Status:** `resolved (this commit, 2026-05-13) — §4.9 step 2 line range updated to \`parse/template.rs:25-27\`.`
 - **Tier:** `v0.3-nice-to-have`
 
 ### `unsupported-fragment-error-style` — SPEC v0.3 §6.8 error message text is verbose
@@ -473,7 +473,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_3.md` §8 deferred-items table (K-of-N row).
 - **What:** §8 cites v0.2 tier of K-of-N share encoding as "v0.3 (gates on ms-codec v0.2)". Verify against v0.2 SPEC §8 verbatim language at impl time for citation accuracy.
 - **Why deferred:** non-blocking; doc-only.
-- **Status:** `open`
+- **Status:** `resolved (2026-05-13 survey verified) — v0.3 SPEC §8 line 313 cites v0.2 tier of K-of-N as "v0.3 (gates on ms-codec v0.2)", matching v0.2 SPEC §8 line 582 outcome wording verbatim. Citation is accurate.`
 - **Tier:** `v0.3-nice-to-have`
 
 ### `ctx-for-descriptor-heuristic-misroutes` — Phase A `ctx_for_descriptor` is string-prefix heuristic

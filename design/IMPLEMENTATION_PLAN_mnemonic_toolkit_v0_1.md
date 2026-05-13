@@ -235,7 +235,15 @@ fn main() {
         tlv: TlvSection {
             use_site_path_overrides: None,
             fingerprints: Some(vec![(0, [0xDE, 0xAD, 0xBE, 0xEF])]),
-            pubkeys: Some(vec![(0, [0x42; 65])]),  // 32B chain_code || 33B pubkey
+            pubkeys: Some(vec![(0, {
+                // 32B chain_code || 33B SEC1-compressed pubkey.
+                // SEC1-compressed prefix MUST be 0x02 or 0x03 (was [0x42; 65] — panics InvalidXpubBytes).
+                let mut buf = [0u8; 65];
+                buf[..32].fill(0x11);   // chain_code
+                buf[32] = 0x02;          // SEC1 prefix
+                buf[33..].fill(0x22);    // x-coordinate
+                buf
+            })]),
             origin_path_overrides: None,
             unknown: Vec::new(),
         },
@@ -1536,8 +1544,8 @@ mod tests {
         let acc = derive_full(
             TREZOR_24, "", CliLanguage::English, CliNetwork::Mainnet, CliTemplate::Bip84,
         ).unwrap();
-        // Trezor 24-zero master fingerprint is well-known: 73c5da0a
-        assert_eq!(acc.master_fingerprint.to_string().to_lowercase(), "73c5da0a");
+        // Trezor 24-zero master fingerprint is well-known: 5436d724
+        assert_eq!(acc.master_fingerprint.to_string().to_lowercase(), "5436d724");
     }
 
     #[test]
@@ -1896,7 +1904,7 @@ derive.rs (SPEC §4.1):
   derive_full(phrase, passphrase, language, network, template) →
   DerivedAccount { entropy, master_fingerprint, account_xpub }.
   Belt-and-braces network cross-check on derived xpub (§4.3).
-  Tests use Trezor 24-word zero-entropy vector (master fp 73c5da0a).
+  Tests use Trezor 24-word zero-entropy vector (master fp 5436d724).
 
 synthesize.rs (SPEC §4.4-§4.7):
   build_descriptor() — typed-struct md-codec Descriptor construction

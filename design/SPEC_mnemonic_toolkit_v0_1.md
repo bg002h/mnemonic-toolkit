@@ -158,7 +158,7 @@ warning: claimed BIP path m/<purpose>'/<coin>'/0' (no master seed available
 warning: for re-derivation). Use --phrase mode for end-to-end verification.
 ```
 
-The four checks (resolves r1-I3):
+The four substantive checks (the §5.4 JSON schema populates 9 check-name slots; the 5 non-applicable slots render as `skipped` — resolves r1-I3):
 
 1. **mk1 parses + BCH valid** (`mk_codec::decode(&[&str])` succeeds).
 2. **md1 parses + BCH valid** (`md_codec::chunk::reassemble(&[&str])` succeeds).
@@ -561,7 +561,7 @@ Same shape as ms-cli SPEC §5.4:
 {
   "schema_version": "1",
   "error": {
-    "kind": "BadInput" | "Bip39" | "Bitcoin" | "MsCodec" | "MkCodec" | "MdCodec" | "BundleMismatch" | "ModeViolation",
+    "kind": "BadInput" | "Bip39" | "Bitcoin" | "MsCodec" | "MkCodec" | "MdCodec" | "BundleMismatch" | "ModeViolation" | "NetworkMismatch" | "FutureFormat",
     "exit_code": 1 | 2 | 3 | 4,
     "message": "...",
     "details": { ... } | null
