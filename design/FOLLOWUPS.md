@@ -45,6 +45,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `secret-memory-hygiene-v0_9-cycle-a` — cross-repo cycle: OWNED-buffer secret-memory hygiene v0.9.0 Cycle A
+
+- **Surfaced:** 2026-05-13. Cycle SPEC at `design/SPEC_secret_memory_hygiene_v0_9_0.md`. Plan at `/home/bcg/.claude/plans/v0_9_0-secret-memory-hygiene.md`. Survey precursor at `design/agent-reports/v0_9_0-secret-memory-survey.md`. R1+R2+R3+R4+R5 architect-review disposition at `design/agent-reports/v0_9_0-phase-0-spec-plan-r1.md` (5 rounds: Sonnet/Sonnet/Opus/Opus/Sonnet, cleared CLEAR 0C/0I after R3 SPLIT-CYCLE pushback + user decisions on impl-Drop approach + drop md/mk symmetry-stubs).
+- **Where:** mnemonic-toolkit Phases 1 (argv close: 9 toolkit flag-rows + 5 distinct impl changes), 2 (zeroize discipline: ~30 toolkit OWNED rows + `derive_master_seed` seed-step helper + `impl Drop for DerivedAccount` with `into_parts()` migration of 3 internal move-out sites at `bundle.rs:325-329`, `bundle.rs:421-425`, `synthesize.rs:741-744`), 3 (hygiene matrix file), E (rollup). Sibling participation: mnemonic-secret Phase 2 (ms-cli + ms-codec zeroize, 4 + 10 OWNED rows) + Phase 3 (matrix file).
+- **What:** OWNED-buffer first-pass at secret-memory hygiene. Closes argv leakage on toolkit's `bundle` / `verify-bundle` / `derive-child` / `convert --bip38-passphrase` flags (via new `--*-stdin` flags + `slot_input.rs` `=-` parser extension). Adds zeroize-on-drop semantics to every OWNED secret allocation in ms-codec + ms-cli + mnemonic-toolkit. Cycle B (mlock infrastructure) is a separate post-Cycle-A cycle per R3 SPLIT-CYCLE finding.
+- **Status:** `open` — Phase 0 deliverables committed; Phase 1 starting next. Closes when Cycle A Phase E lands (`ms-codec-v0.1.3` + `ms-cli-v0.1.X+1` + `mnemonic-toolkit-v0.9.2` patch tags) and the hygiene-matrix file ships in each touched repo.
+- **Tier:** `cross-repo`
+- **Companion:** `mnemonic-secret/design/FOLLOWUPS.md` — same `secret-memory-hygiene-v0_9-cycle-a` short-id. md / mk repos do NOT receive a companion entry this cycle (xpub-only material; SPEC §3 OOS-md-mk + R3 I-R3-4 fold).
+
 ### `bip-vector-adoption-v0_8` — cross-repo cycle: BIP-vector adoption v0.8.0
 
 - **Surfaced:** 2026-05-13. Cycle SPEC at `design/SPEC_test_vector_audit_v0_8_0.md`. Plan at `/home/bcg/.claude/plans/v0_8_0-bip-vector-adoption.md`. R1 review at `design/agent-reports/v0_8_0-phase-0-spec-plan-r1.md`.
