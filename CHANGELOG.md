@@ -339,9 +339,12 @@ Sibling-repo cycle work shipped in lockstep:
 
 - `bg002h/descriptor-mnemonic` v0.32.1 (md-codec): +7 BIP-341
   `scriptPubKey` cells + 2 invariants.
-- `bg002h/mnemonic-secret` v0.1.2 (ms-codec): +5 BIP-93 valid + 64
-  invalid cells + 1 invariant; v0.7.1 footnote "42 invalid" corrected
-  to 64.
+- `bg002h/mnemonic-secret` v0.1.2 (ms-codec): +4 net-new BIP-93
+  valid + 64 invalid cells + 1 parametric invariant. (§93.4 was
+  already pinned at v0.7.1 via `bip93_cross_format.rs`; v0.8.0 adds
+  §93.1–.3 + §93.5 in `bip93_inline_vectors.rs` plus an `invalid_corpus_length_is_64`
+  guard. v0.7.1 footnote "42 invalid" was an earlier-snapshot
+  artifact and is corrected to 64 at v0.8.0.)
 - `bg002h/mnemonic-key` (mk-codec): docs-only (no Cargo bump);
   cross-repo audit-matrix symmetry entry.
 
