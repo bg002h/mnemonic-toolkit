@@ -87,6 +87,91 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.9.1-nice-to-have` (small mechanical fix; can ship in a Phase E cycle-close patch or in Cycle B planning).
 
+### `argv-overwrite-after-parse` — rewrite `argv[]` post-clap to clear secret bytes from `/proc/$PID/cmdline`
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-2` (/proc/self/cmdline post-parse overwrite class).
+- **Where:** Hypothetical new module `crates/mnemonic-toolkit/src/argv_overwrite.rs` (does not yet exist). Touches every binary entry-point (`mnemonic`, `md`, `mk`, `ms`) to invoke the overwrite shim immediately after `clap::Parser::parse()` returns. The kernel-owned mirror lives in `/proc/$PID/cmdline`; on Linux a raw FFI write into the original `argv[][i]` byte ranges (via `libc::__progname`-adjacent pointer arithmetic, or the `set_proctitle`-style trick) is the only path that actually mutates the in-kernel copy.
+- **What:** Phase 1 added a stderr advisory whenever a secret is detected on argv but did NOT mutate argv. The residual gap: an attacker reading `/proc/$PID/cmdline` (same-UID; or any UID without `PR_SET_DUMPABLE=0`) sees the secret bytes for the lifetime of the process. Real fix is to (a) zero-overwrite the in-place argv slots immediately after clap consumes them, OR (b) call `prctl(PR_SET_DUMPABLE, 0)` to deny `/proc/$PID/cmdline` reads to other UIDs (narrower mitigation — does not protect same-UID reads or core dumps). Both are FFI-heavy and platform-specific.
+- **Why deferred:** Phase 1's `--*-stdin` paired-flag + `=-` route closes argv-leakage for documented usage; the residual covers users who ignore the warning. SPEC §3 explicitly defers this to a future cycle pending the raw-FFI route.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `clap-argv-pre-parse-residue` — libc `OsString` heap copies of `argv[]` live un-scrubbed before clap parses
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-libc-osstring` class.
+- **Where:** `std::env::args_os() -> Vec<OsString>` materialization, called by Rust startup before user code runs. The toolkit cannot intercept earlier than `main()` without replacing libc rt0 (or per-invocation raw-FFI argv intercept). Mirrors the `mnemonic-gui/secret_widget.rs` doc-comment caveat for cross-repo parity.
+- **What:** Phase 2's `std::mem::take(&mut args.phrase)` + `Zeroizing::new(...)` scrubs the clap-created `String` allocation but cannot reach the prior `OsString` heap allocation that libc materialized BEFORE clap parsed. Those `OsString` buffers drop un-scrubbed. Addressable only by libc replacement (e.g., musl + custom rt0) or per-invocation raw-FFI argv intercept before clap.
+- **Why deferred:** Outside the toolkit's reach (kernel/libc layer). Mirrors mnemonic-gui caveat for parity.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `allocator-pool-residue` — `Zeroizing<Vec<u8>>` drop-time scrub may be defeated by custom-allocator page retention
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-allocator-residue` class.
+- **Where:** Allocator-layer concern — applies to every `Zeroizing<Vec<u8>>` / `Zeroizing<String>` / `Zeroizing<Box<[u8]>>` allocation in the workspace when the binary is built against a non-default allocator (e.g., `jemallocator` with cache retention, `mimalloc` with retention, `tcmalloc`). The Cycle A test environment uses the system allocator (glibc malloc); custom allocators are NOT in scope.
+- **What:** When a `Zeroizing<Vec<u8>>` drops, the bytes are zeroed in-place by `zeroize::Zeroize` BEFORE the deallocation call returns the page to the allocator. With the system allocator this is sound — the zeroed pages are returned to the OS or to a free-list with the zeros intact. With a retention-class custom allocator (jemalloc with `lg_dirty_mult=-1` or `dirty_decay_ms=-1`, mimalloc with retain pools, etc.), the allocator may *re-zero* or *re-use* the page for an unrelated allocation in ways that briefly expose the secret bytes to in-process readers. Mitigation requires a secret-class-aware page management discipline (custom allocator hook) or a dedicated mmap'd secret arena ([[dedicated-secret-arena]]).
+- **Why deferred:** Defense-in-depth class; system allocator (default for `mnemonic`, `md`, `mk`, `ms` binaries) is sound. Custom allocators are an opt-in build configuration not in Cycle A scope.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `pub-struct-drop-semver-risk-monitor` — `impl Drop` on `DerivedAccount` breaks move-out destructure for external library users
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-pub-struct-drop` class.
+- **Where:** `crates/mnemonic-toolkit/src/derive.rs:14-66` — `pub struct DerivedAccount` with `impl Drop` (Phase 2 prereq landing at commit `16f64d7`). Rust E0509 forbids move-out destructuring (`let DerivedAccount { entropy, .. } = derived;` and `let entropy = derived.entropy;`) when the enclosing struct has `impl Drop`. Field-borrow access (`&derived.entropy`) and Deref-via-method-call (`derived.entropy.as_slice()`) remain compatible.
+- **What:** Cycle A chose `impl Drop` over changing the field type to `Zeroizing<Vec<u8>>` because the latter would force a v0.10.0 minor bump per the pre-1.0 SemVer convention. The trade-off is that any external library user with a move-out destructure pattern on `DerivedAccount` will get an E0509 compile error post-fold. We treat this as patch-tag-compatible (move-out is uncommon in external use; field-borrow is the typical access pattern). Monitor: if downstream library users surface complaints, the cycle re-tags retroactively as a minor bump (v0.10.0).
+- **Why deferred:** The fold itself shipped in Phase 2; this entry is the monitoring artifact for the residual semver risk.
+- **Status:** `open` (monitoring; closes if no downstream complaints land before v0.10.0 cycle, or with retroactive re-tag if complaints arrive)
+- **Tier:** `v1+`
+
+### `dedicated-secret-arena` — mmap-allocated page-aligned secret arena for secret-class allocations
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-secret-arena` class.
+- **Where:** Hypothetical new module pattern — would replace the default heap allocator for `Zeroizing`-wrapped allocations with a dedicated mmap'd region (à la rust `secrecy` / `secure_string` crates). Touches the GlobalAlloc surface or requires a typed allocator parameter on `Zeroizing<T, A>`-style wrappers.
+- **What:** `mlock(2)` pins pages, not bytes; future maintainers may need a dedicated mmap-allocated secret arena for page-aligned heap placement of secret-class allocations. This avoids both the page-vs-byte granularity trap (Cycle B mlock will hit this) and the allocator-pool residue ([[allocator-pool-residue]] becomes addressable via a dedicated allocator path). Out of scope for Cycles A and B both — this is the third-pass design class.
+- **Why deferred:** Design class — Cycle A is "first-pass at OWNED-buffer hygiene"; Cycle B is mlock; arena is the natural third cycle.
+- **Status:** `open`
+- **Tier:** `v1+`
+
+### `sha3-shake256-zeroize-upstream` — `sha3::Shake256` XOF reader state has no `Zeroize`
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 carry-over from survey §3.
+- **Where:** Upstream crate `sha3 = "0.10"`. Affects `crates/mnemonic-toolkit/src/bip85.rs` callees that use `Shake256::default()` + `.update()` + `.finalize_xof()` to derive BIP-85 child entropy. The XOF reader holds Keccak sponge state with BIP-85 child entropy mixed in until the reader drops.
+- **What:** `sha3::digest::ExtendableOutput` returns a `Shake256Reader` that reads the XOF stream lazily. The reader's internal Keccak state carries the absorbed entropy (the child secret) until the reader drops. Upstream `sha3` does not implement `Zeroize` on the Keccak state or the XOF reader. Toolkit mitigation: minimize XOF reader lifetime — call `.read(...)` into a Zeroizing<[u8; N]> output immediately and drop the reader. Residual gap: the Keccak state inside the reader is not actively scrubbed before deallocation. Closes when upstream `sha3` adds `impl Zeroize` on its core state types.
+- **Status:** `open` (upstream-blocked)
+- **Tier:** `external`
+
+### `bip38-crate-internal-zeroize-upstream` — `bip38` crate's scrypt intermediate state is not zeroize-aware
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 carry-over from survey §3.
+- **Where:** Upstream crate `bip38 = "1"`. Affects `crates/mnemonic-toolkit/src/cmd/convert.rs::Bip38` decrypt arm at `convert.rs:1135` (and the V3 NULL-byte-passphrase path closed in Phase 1).
+- **What:** The `bip38` crate's internal scrypt KDF intermediate state and the AES round buffers are not Zeroize-wrapped. Toolkit can `Zeroizing`-wrap the *returned* `(privkey_bytes, compressed_flag)` tuple but cannot reach into the crate's stack frames during decrypt. Residual gap: scrypt intermediate state (~1 MiB by default cost factor) lives un-scrubbed on the stack/heap during the decrypt call. Closes when upstream `bip38` adds Zeroize discipline (or when the toolkit replaces with an internally-controlled scrypt + AES implementation).
+- **Status:** `open` (upstream-blocked)
+- **Tier:** `external`
+
+### `secret-memory-hygiene-cycle-b` — `mlock(2)` / `VirtualLock` page-pinning infrastructure (Cycle B)
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 0 R3 architect-review SPLIT-CYCLE recommendation; opened as standalone tracker entry per Phase 3 hygiene-matrix R1 (Opus, finding C-1).
+- **Where:** Hypothetical new module `crates/mnemonic-toolkit/src/mlock.rs` (toolkit-only — ms-secret has no syscall layer; per SPEC §3 OOS-mlock-cycle-b). Touches the 5 mlock candidates named in SPEC §3:
+  1. `BundleArgs.passphrase` / `slot[i].value` and the equivalent clap fields on `VerifyBundleArgs`, `ConvertArgs`, `DeriveChildArgs`, `EncodeArgs`, `VerifyArgs`.
+  2. `ResolvedSlot.entropy` Vec in `synthesize.rs:582`.
+  3. `DerivedAccount.entropy` Vec in `derive.rs:14-66`.
+  4. `bip85::derive_entropy` returned `[u8; 64]` (requires heap-promotion first).
+  5. ms-cli `read_stdin()` String buffer in `parse.rs:45`.
+- **What:** Cycle B will add a cross-platform mlock module with capability-aware soft-fail (Linux mlock + macOS mlock + Windows VirtualLock, with `EPERM`/permission-denied → log-and-continue semantics). mlock is applied to the Zeroizing-wrapped heap buffers from Cycle A — Cycle A is a prerequisite. SPEC for Cycle B will be drafted after Cycle A ships.
+- **Why deferred:** R3 SPLIT-CYCLE finding — combining mlock with Zeroizing would have doubled Cycle A's review surface; splitting keeps each cycle's blast radius reviewable.
+- **Status:** `open` (Cycle B SPEC drafting starts post-Cycle-A Phase E ship)
+- **Tier:** `v0.9.x`
+
+### `md-mk-private-key-surface-watch` — reopen md/mk Cycle A participation if either repo grows a private-key surface
+
+- **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 0 R3 architect-review I-R3-4 fold (drop md/mk symmetry-stubs); opened as standalone tracker entry per Phase 3 hygiene-matrix R1 (Opus, finding C-1). SPEC §3 `OOS-md-mk` class.
+- **Where:** `descriptor-mnemonic` repo (md-codec + md-cli) and `mnemonic-key` repo (mk-codec + mk-cli). Currently both hold xpub-only / descriptor-only material with no private-key buffer.
+- **What:** Cycle A drops the no-scope-symmetry matrix stubs originally planned for md/mk repos because they have no secret material to audit. If either repo later gains a private-key surface (e.g., a future md-codec descriptor-binding with embedded xprv, or an mk-codec xprv passthrough), this FOLLOWUP fires and Cycle A's hygiene discipline (Zeroizing + SAFETY anchors + matrix delta) reopens for the affected sibling.
+- **Why deferred:** No secret material to audit today.
+- **Status:** `open` (monitoring; companion entries in `descriptor-mnemonic/design/FOLLOWUPS.md` and `mnemonic-key/design/FOLLOWUPS.md` will mirror if the surface appears)
+- **Tier:** `cross-repo`
+- **Companion:** `descriptor-mnemonic/design/FOLLOWUPS.md`, `mnemonic-key/design/FOLLOWUPS.md`, `mnemonic-secret/design/FOLLOWUPS.md` — same `md-mk-private-key-surface-watch` short-id.
+
 ### `secret-memory-hygiene-v0_9-cycle-a` — cross-repo cycle: OWNED-buffer secret-memory hygiene v0.9.0 Cycle A
 
 - **Surfaced:** 2026-05-13. Cycle SPEC at `design/SPEC_secret_memory_hygiene_v0_9_0.md`. Plan at `/home/bcg/.claude/plans/v0_9_0-secret-memory-hygiene.md`. Survey precursor at `design/agent-reports/v0_9_0-secret-memory-survey.md`. R1+R2+R3+R4+R5 architect-review disposition at `design/agent-reports/v0_9_0-phase-0-spec-plan-r1.md` (5 rounds: Sonnet/Sonnet/Opus/Opus/Sonnet, cleared CLEAR 0C/0I after R3 SPLIT-CYCLE pushback + user decisions on impl-Drop approach + drop md/mk symmetry-stubs).
