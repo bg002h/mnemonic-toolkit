@@ -306,6 +306,61 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.9.1] — 2026-05-13
+
+v0.8.0 cross-repo BIP-vector adoption cycle, Phases 0 / 3 / 4. Cycle
+SPEC at `design/SPEC_test_vector_audit_v0_8_0.md`; cycle plan at
+`/home/bcg/.claude/plans/v0_8_0-bip-vector-adoption.md`. Phase 0 lands
+the cycle artifacts; Phase 3 adds one missing reference cell; Phase 4
+lifts the audit matrix from toolkit-only to cross-repo first-class.
+
+### Added (tests-only; no library API change)
+
+- `tests/cli_derive_child.rs::cell_2b_bip39_24_words_reference_vector` —
+  BIP-85 vector 85.3 (24-word BIP-39 application, path
+  `m/83696968'/39'/0'/24'/0'`). Closes the v0.7.1 §5 carry-over for
+  BIP-85; coverage now 8/9 (only 85.9 DICE remains as a refusal cell).
+- `design/SPEC_test_vector_audit_v0_8_0.md` — cycle contract.
+- `design/agent-reports/v0_8_0-cross-repo-bip-vector-survey.md` — the
+  survey that surfaced the cycle's three high-ROI gaps.
+- `design/agent-reports/v0_8_0-phase-{0,3,4}-*-r1.md` — three phase
+  R1 disposition reports.
+- `design/agent-reports/v0_8_0-bip-test-vector-audit-matrix.md` — v0.8.0
+  audit matrix with new §0 cross-repo coverage table naming each
+  sibling repo's matrix file as first-class.
+- `design/FOLLOWUPS.md` — three entries: `bip-vector-adoption-v0_8`
+  (cycle companion), `bip340-schnorr-signing-surface-evaluation`
+  (SPEC §3 OOS-PER-LAYER), `bip39-japanese-wordlist-support` (SPEC §3
+  OOS-PER-PRODUCT).
+
+### Cross-repo cycle context
+
+Sibling-repo cycle work shipped in lockstep:
+
+- `bg002h/descriptor-mnemonic` v0.32.1 (md-codec): +7 BIP-341
+  `scriptPubKey` cells + 2 invariants.
+- `bg002h/mnemonic-secret` v0.1.2 (ms-codec): +5 BIP-93 valid + 64
+  invalid cells + 1 invariant; v0.7.1 footnote "42 invalid" corrected
+  to 64.
+- `bg002h/mnemonic-key` (mk-codec): docs-only (no Cargo bump);
+  cross-repo audit-matrix symmetry entry.
+
+Net cycle delta vs v0.7.1: **+94 vectors** across the constellation.
+
+### Corrected
+
+- v0.7.1 audit matrix was toolkit-only; sibling-repo coverage was
+  footnoted but not first-class. v0.8.0 matrix §0 cross-repo coverage
+  table names each sibling's matrix inline. v0.7.1 matrix carries a
+  SUPERSEDED forward-pointer.
+
+### What didn't change
+
+- Public CLI surface unchanged. No flag added or removed; no
+  subcommand changed. `mnemonic-gui` schema-mirror contract is
+  vectors-only and not impacted.
+- Library API surface unchanged.
+
 ## mnemonic-toolkit [0.9.0] — 2026-05-12
 
 Additive minor release atop v0.8.1. **No breaking changes.** Introduces `mnemonic gui-schema`, a developer-facing introspection subcommand emitting the SPEC §7 machine-readable flag-surface schema as JSON. Companion to the `mnemonic-gui` v0.2 Phase C.2 schema-mirror contract (`bg002h/mnemonic-gui` `FOLLOWUPS.md` mnemonic-gui-schema-mirror).
