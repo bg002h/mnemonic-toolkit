@@ -95,6 +95,19 @@ impl NodeType {
         )
     }
 
+    /// SPEC v0.9.0 §1 item 1 — superset of `is_secret_bearing()` that adds
+    /// MiniKey (Casascius mini-key — a private-key encoding). This widens
+    /// the secret-bearing tag specifically for the argv-leakage advisory:
+    /// MiniKey is part of survey §5 toolkit row "convert --from minikey=".
+    /// The narrower `is_secret_bearing()` predicate is preserved because
+    /// it gates separate stdout-redaction / secret-on-stdout machinery
+    /// (`convert.rs:769, 796`) whose MiniKey behavior is intentionally
+    /// distinct (a separate `convert-minikey-stdout-redaction` follow-up
+    /// covers widening THAT predicate).
+    pub fn is_argv_secret_bearing(self) -> bool {
+        self.is_secret_bearing() || matches!(self, Self::MiniKey)
+    }
+
     pub fn is_side_input_only(self) -> bool {
         matches!(self, Self::Path | Self::Fingerprint)
     }
@@ -1320,17 +1333,14 @@ fn network_from_xpub(xpub: &bip32::Xpub) -> CliNetwork {
 /// `convert`'s per-occurrence advisory emission. Iterates `args.from`
 /// (a `Vec<FromInput>` via `ArgAction::Append`) and emits one advisory
 /// per inline-secret `--from <node>=` occurrence, plus advisories for
-/// `--passphrase <inline>` and `--bip38-passphrase <inline>`.
-///
-/// Note: MiniKey is treated as secret-bearing for argv-advisory purposes
-/// here, even though `NodeType::is_secret_bearing()` excludes it (the
-/// existing redaction + secret-on-stdout pathways at L769 / L796 don't
-/// treat MiniKey as a private-key carrier — a separate follow-up).
-/// Survey §5 lists `--from minikey=` as an argv-leakage flag-row.
+/// `--passphrase <inline>` and `--bip38-passphrase <inline>`. The
+/// argv-secret tag is provided by `NodeType::is_argv_secret_bearing()`
+/// which widens `is_secret_bearing()` to include MiniKey (Casascius
+/// mini-key encoding) per survey §5 row "convert --from minikey=".
 fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) {
     use crate::secret_advisory::secret_in_argv_warning;
     for f in &args.from {
-        if !from_node_is_argv_secret(f.node) {
+        if !f.node.is_argv_secret_bearing() {
             continue;
         }
         if f.value == "-" {
@@ -1347,21 +1357,4 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
     if args.bip38_passphrase.is_some() {
         secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
     }
-}
-
-/// `NodeType` subset that constitutes argv-leakage hazards per survey §5.
-/// Differs from `NodeType::is_secret_bearing()` only in including
-/// `MiniKey` (Casascius mini-key — a private-key encoding).
-fn from_node_is_argv_secret(node: NodeType) -> bool {
-    matches!(
-        node,
-        NodeType::Phrase
-            | NodeType::Entropy
-            | NodeType::Xprv
-            | NodeType::Wif
-            | NodeType::Ms1
-            | NodeType::Bip38
-            | NodeType::MiniKey
-            | NodeType::ElectrumPhrase
-    )
 }
