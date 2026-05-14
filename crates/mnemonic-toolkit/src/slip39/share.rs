@@ -148,6 +148,13 @@ impl Share {
         }
     }
 
+    /// Read-only access to the secret-bearing share value bytes.
+    /// Crate-internal; needed by `crate::slip39::slip39_combine` (sibling
+    /// module) for the Shamir recovery primitive — `value` is private
+    /// to the `share` module's visibility scope.
+    pub(crate) fn value(&self) -> &[u8] {
+        &self.value
+    }
 }
 
 /// Manually-implemented Debug that REDACTS the share-value bytes —

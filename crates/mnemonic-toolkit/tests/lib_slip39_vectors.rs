@@ -2,7 +2,7 @@
 //!
 //! Loads `tests/fixtures/slip39_vectors.json` (45 canonical vectors
 //! from `python-shamir-mnemonic` @ commit `17fcce14`) via `include_str!`
-//! + `serde_json::from_str`. One `#[test]` per vector via a small
+//! and `serde_json::from_str`. One `#[test]` per vector via a small
 //! macro for per-vector failure granularity (a single broken vector
 //! does NOT mask the other 44).
 //!
