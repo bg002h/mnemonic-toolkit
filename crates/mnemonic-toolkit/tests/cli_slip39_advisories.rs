@@ -389,6 +389,13 @@ fn advisory_json_out_0o600_does_not_emit_row_4() {
 
 #[test]
 fn advisory_iteration_exponent_5_emits_g9_row_5() {
+    // R0 I-2 fold — byte-pin more of the stem (was 3 substrings; now 5)
+    // to guard against regressions that drop the Trezor reference or
+    // the E>=10 hardware warning. Plan §3.3 row 5 vs SPEC §2.6 row 5
+    // disagree on the `<iters> × ` (space) vs `<iters>×` (no space)
+    // form; this test pins the plan's space-separated form, and the
+    // plan §5 P2.2 GREEN SPEC-patches list grows a §2.6 row 5
+    // reconciliation patch (per R0 I-2 fold) to land in lockstep.
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -408,10 +415,16 @@ fn advisory_iteration_exponent_5_emits_g9_row_5() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        stderr.contains("--iteration-exponent E=5")
-            && stderr.contains("320000")
-            && stderr.contains("PBKDF2-HMAC-SHA-256"),
-        "E=5 must emit row 5 G9 advisory with 'E=5', '320000 iterations', and PBKDF2 phrase; got: {stderr}"
+        stderr.contains("warning: --iteration-exponent E=5 yields 320000 × PBKDF2-HMAC-SHA-256 iterations"),
+        "E=5 G9 advisory must byte-pin the lead phrase with the plan §3.3 space-separated form; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("Trezor's reference uses E=1 (20000 iters) as default"),
+        "G9 advisory must include the Trezor reference; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("E >= 10 may exceed 30s on weak hardware"),
+        "G9 advisory must include the E>=10 hardware warning; got: {stderr}"
     );
 }
 

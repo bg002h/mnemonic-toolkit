@@ -384,10 +384,24 @@ fn stdin_passphrase_stdin_preserves_trailing_whitespace_r0_note_2() {
         ])
         .output()
         .unwrap();
+    let combine_stderr = String::from_utf8(combine_out.stderr.clone()).unwrap();
+    // R0 I-3 fold — clap-delivery precondition: pin the inline
+    // combine's stderr contains the row-1e argv-leakage advisory,
+    // proving clap delivered the byte-exact `"secret-pass "` (with
+    // trailing space) to the handler. Without this precondition,
+    // clap auto-trimming the trailing argv space (unlikely but
+    // possible across clap versions) would render the entire test
+    // premise invalid AND silently mask the foot-gun.
+    assert!(
+        combine_stderr.contains("warning: secret material on argv (--passphrase)"),
+        "R0 I-3 precondition: inline --passphrase must surface row-1e \
+         argv-leakage advisory (proves clap delivered the value to the \
+         handler — if missing, clap may have stripped the trailing \
+         space and the silent-correctness pin is invalid); got: {combine_stderr}"
+    );
     assert!(
         combine_out.status.success(),
-        "combine with byte-identical passphrase must succeed (R0 Note 2 pin); stderr={:?}",
-        String::from_utf8(combine_out.stderr).unwrap()
+        "combine with byte-identical passphrase must succeed (R0 Note 2 pin); stderr={combine_stderr:?}"
     );
     let recovered = String::from_utf8(combine_out.stdout).unwrap();
     assert_eq!(recovered.lines().next().unwrap(), ABANDON_12);

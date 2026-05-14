@@ -352,6 +352,12 @@ fn refusal_row_11_digest_verification_failed() {
 #[test]
 fn refusal_row_12_insufficient_shares_member_level() {
     // V5: single share for a 2-of-3 scheme; need 2, got 1.
+    // The (group 0, need 2, got 1) tuple is derived from vectors.json #5
+    // "Basic sharing 2-of-3 (128 bits)" semantics + single-share input:
+    // group_idx=0 (single group encoded), member_threshold=2 (the "2" in
+    // 2-of-3), got=1 (one share provided). The lib variant
+    // `Slip39Error::InsufficientShares { group_idx: u8, needed: u8, got: u8 }`
+    // carries these exact bytes (N-4 fold from R0 review).
     let (_, stderr, exit) = combine(&["--share", V5_INSUFFICIENT_SINGLE]);
     assert_eq!(exit, 1, "exit; stderr={stderr:?}");
     assert!(
@@ -540,25 +546,28 @@ fn refusal_row_20_invalid_share_value_length() {
 
 #[test]
 fn refusal_row_21_share_value_length_mismatch() {
-    // Cross-share length divergence: a 20-word share (128-bit master)
-    // mixed with a 33-word share (256-bit master). V4 share 0 is
-    // 20-word; V44_EXT_FALSE_256 share equivalent — we don't have a
-    // non-extendable 256-bit vector in our extracted set, so re-use
-    // V45 share 0 (extendable=true 256-bit) which would BOTH trip
-    // row 21 AND row 22; assert row 21 is the surfacing class.
-    //
-    // NOTE: which mismatch surfaces first depends on the GREEN
-    // handler's check order. R0 review should verify the assertion
-    // text matches the handler's actual emit order.
+    // R0 I-1 fold — DISJUNCTIVE assertion accepting any of the three
+    // plausibly-firing class stems (value-length, ext-bit, or
+    // identifier). The test inputs trip multiple mismatch classes
+    // simultaneously: V4 share 0 (ext=false, 128-bit, 20-word) +
+    // V45 share 0 (ext=true, 256-bit, 33-word) differ on identifier,
+    // ext bit, AND value length. The GREEN handler's `slip39_combine`
+    // CHECK ORDER determines which fires first; the order is not
+    // pinned in plan §3.2 at RED, so this test accepts any of the
+    // three. R1 LOCK round will pin the order once the GREEN handler
+    // is in place and either tighten the assertion to the
+    // class-of-record OR re-issue isolated-mismatch fixtures.
     let v45_256_share = "western apart academic always artist resident briefing sugar woman oven coding club ajar merit pecan answer prisoner artist fraction amount desktop mild false necklace muscle photo wealthy alpha category unwrap spew losing making";
     let (_, stderr, exit) = combine(&["--share", V4_SHARE_0, "--share", v45_256_share]);
     assert_eq!(exit, 1, "exit; stderr={stderr:?}");
-    // Either row 21 stem (length mismatch) or row 22 stem (ext
-    // mismatch) is plausible; pin row 21 as the design-intended
-    // priority. Failure at GREEN → R1 surface for check-order audit.
+    let fires_row_21 = stderr.contains("slip39 combine: shares disagree on value length");
+    let fires_row_22 = stderr.contains("slip39 combine: shares disagree on the extendable bit");
+    let fires_row_7 = stderr.contains("slip39 combine: shares disagree on identifier");
     assert!(
-        stderr.contains("slip39 combine: shares disagree on value length"),
-        "expected row 21 stem; got: {stderr}"
+        fires_row_21 || fires_row_22 || fires_row_7,
+        "expected row 21 (value length), row 22 (ext bit), or row 7 \
+         (identifier) stem — handler check-order determines which \
+         fires first; got: {stderr}"
     );
 }
 
@@ -568,18 +577,22 @@ fn refusal_row_21_share_value_length_mismatch() {
 
 #[test]
 fn refusal_row_22_extendable_mismatch() {
-    // V43 (ext=true, 128-bit) + V4 share 0 (ext=false, 128-bit) →
-    // same value length, different ext bit. Row 22 should fire.
-    //
-    // NOTE: identifiers also differ across the two splits, so
-    // IdentifierMismatch (row 7) might surface first depending on
-    // the GREEN handler's check order. Pin row 22 as design-intended;
-    // R0 should verify or surface the priority mismatch.
+    // R0 I-1 fold — DISJUNCTIVE assertion accepting either the ext-bit
+    // stem (row 22, design-intended) OR the identifier stem (row 7,
+    // since V43 and V4 are from independent splits with different
+    // identifiers). Same value length on both sides (128-bit), so
+    // row 21 is NOT a candidate here. The GREEN handler's check
+    // order between identifier and ext-bit is not pinned in plan
+    // §3.2 at RED; R1 LOCK round will pin once the handler is in
+    // place.
     let (_, stderr, exit) = combine(&["--share", V43_EXT_TRUE, "--share", V4_SHARE_0]);
     assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    let fires_row_22 = stderr.contains("slip39 combine: shares disagree on the extendable bit");
+    let fires_row_7 = stderr.contains("slip39 combine: shares disagree on identifier");
     assert!(
-        stderr.contains("slip39 combine: shares disagree on the extendable bit"),
-        "expected row 22 stem; got: {stderr}"
+        fires_row_22 || fires_row_7,
+        "expected row 22 (ext bit) or row 7 (identifier) stem — \
+         handler check-order determines which fires first; got: {stderr}"
     );
 }
 
