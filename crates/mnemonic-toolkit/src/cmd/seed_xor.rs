@@ -15,7 +15,7 @@
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
-use crate::secret_advisory::secret_in_argv_warning;
+use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
 use bip39::Mnemonic;
 use clap::{Args, Subcommand};
 use mnemonic_toolkit::seed_xor::{
@@ -393,7 +393,7 @@ fn write_split_json<E: Write>(
     std::fs::write(path, &body)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
 
-    emit_world_readable_advisory(path, stderr);
+    warn_if_world_readable(path, stderr);
     Ok(())
 }
 
@@ -418,28 +418,7 @@ fn write_combine_json<E: Write>(
     std::fs::write(path, &body)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
 
-    emit_world_readable_advisory(path, stderr);
+    warn_if_world_readable(path, stderr);
     Ok(())
 }
 
-fn emit_world_readable_advisory<E: Write>(path: &std::path::Path, stderr: &mut E) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(meta) = std::fs::metadata(path) {
-            let mode = meta.permissions().mode();
-            if mode & 0o077 != 0 {
-                let _ = writeln!(
-                    stderr,
-                    "warning: --json-out {} inherits umask (file may be world-readable, mode {:o}); consider --json-out /dev/stdout or chmod 0600 the path before invoking",
-                    path.display(),
-                    mode & 0o777,
-                );
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (stderr, path);
-    }
-}

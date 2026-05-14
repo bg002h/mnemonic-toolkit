@@ -358,10 +358,11 @@ fn json_split_g4_anchor_1_sha_pin_with_test_rng_env_var() {
     use bitcoin::hashes::{sha256, Hash};
     let h = sha256::Hash::hash(body.as_bytes());
     let actual = format!("{}", h);
-    // Captured at GREEN — update with the actual SHA after the
-    // handler emits the envelope. RED placeholder: all zeros.
+    // Captured at GREEN 2026-05-14. ABANDON_12 phrase + identifier
+    // 12345 + TEST_RNG seed 0×64 + iteration_exponent 0 + group-thresh
+    // 1 + --group 3,2 → SHA below.
     const EXPECTED: &str =
-        "0000000000000000000000000000000000000000000000000000000000000000";
+        "df7f6cc9dadb52c51ca2b7889443142dd742e946e61104b76dd3d5e3dac96688";
     assert_eq!(
         actual, EXPECTED,
         "G4 SHA-pin drift anchor 1 (ABANDON_12, identifier=12345, TEST_RNG=0×64); if schema changed intentionally, update EXPECTED"
@@ -407,8 +408,11 @@ fn json_split_g4_anchor_2_sha_pin_different_env_vars() {
     use bitcoin::hashes::{sha256, Hash};
     let h = sha256::Hash::hash(body.as_bytes());
     let actual = format!("{}", h);
+    // Captured at GREEN 2026-05-14. ABANDON_12 + identifier 32767
+    // + TEST_RNG seed 0x11×64 + iteration_exponent 1 + group-thresh
+    // 1 + --group 3,2 → SHA below.
     const EXPECTED: &str =
-        "0000000000000000000000000000000000000000000000000000000000000000";
+        "33c28c6b828d7a3c48ff583884f9c65c0efd9616421bf61a64ef571fccad2e7c";
     assert_eq!(
         actual, EXPECTED,
         "G4 SHA-pin drift anchor 2 (ABANDON_12, identifier=32767, TEST_RNG=0x11×64, E=1)"

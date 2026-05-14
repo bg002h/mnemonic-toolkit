@@ -101,11 +101,15 @@ fn slip39_split_2_of_3_single_group_round_trip_via_entropy() {
 }
 
 #[test]
-fn slip39_split_minimal_1_of_2_member_threshold_round_trip() {
+fn slip39_split_minimal_2_of_2_member_threshold_round_trip() {
     // Plan §4.1 happy-path "1-of-1" interpretation: simplest non-refused
-    // config — single group, member_threshold=1, member_count=2 (any one
-    // of two shares recovers). `--group 1,1` is refused by SPEC §2.5
-    // row 5; `--group 2,1` is the closest minimal valid config.
+    // config. Note: the library accepts `--group N,T` only when
+    // `T >= 2` OR `(N=1, T=1)`; the `--group N,1` (N>1) case is lib-
+    // refused as "duplicate-share, no recovery benefit" (slip39/mod.rs:134),
+    // and `--group 1,1` is CLI-refused via SPEC §2.5 row 5. The minimal
+    // valid config is `--group 2,2` (2 of 2 members within a single
+    // group — both shares needed). The test asserts round-trip via
+    // BOTH shares (the minimal recovery set).
     let from_arg = format!("phrase={ABANDON_12}");
     let (stdout, _stderr, exit) = split(&[
         "--from",
@@ -113,7 +117,7 @@ fn slip39_split_minimal_1_of_2_member_threshold_round_trip() {
         "--group-threshold",
         "1",
         "--group",
-        "2,1",
+        "2,2",
     ]);
     assert_eq!(exit, 0);
     let groups = parse_split_stdout(&stdout);
@@ -122,6 +126,8 @@ fn slip39_split_minimal_1_of_2_member_threshold_round_trip() {
     let (recovered, _, exit2) = combine(&[
         "--share",
         &groups[0][0],
+        "--share",
+        &groups[0][1],
         "--to",
         "phrase",
         "--language",

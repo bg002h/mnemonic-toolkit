@@ -105,7 +105,7 @@ pub fn render_slip39_share(s: &Share) -> String;
 
 **Round-key buffer hygiene.** Each Feistel round derives an `n/2`-byte round-key via PBKDF2. The impl reuses a SINGLE `Zeroizing<Vec<u8>>` of length `master_secret.len() / 2`, refilled across 4 rounds — **one** `pin_pages_for` call per encryption pass, not four. Matches the `bip85.rs:52,84` precedent.
 
-**Per-share output pin discipline (O(1), not O(N)).** Naive impl pins each share's heap buffer separately → 11 pins for an 11-share config → 44 KB pinned which is within Linux default `ulimit -l` (64 KB) but tight; 256-share configs (16×16, the spec max) blow the budget → soft-failed pins → defeats the protection. Instead, the impl emits all rendered shares into a SINGLE `Zeroizing<Vec<String>>` whose backing heap is pinned ONCE. Lint anchor in `lint_zeroize_discipline.rs` checks the single-pin shape.
+**Per-share output pin discipline (O(N), not O(1)).** Updated at v0.13.0 P2.2 GREEN (Q6 fold): the original "O(1) single-pin" claim is structurally unachievable for the `Vec<Zeroizing<String>>` shape. The top-level Vec's backing buffer holds `String` headers (24 bytes each on 64-bit; non-secret); each `String`'s UTF-8 bytes live in a SEPARATE heap allocation (the actual share value). Pinning the Vec backing pins only the headers, NOT the per-share secret bytes. Production discipline is therefore an O(N) per-rendered-share loop: each iteration calls `mlock::pin_pages_for(share.as_bytes())` and the guard drops at end of iteration (pages stay locked until the next iteration completes). For 256 shares × ~32 bytes/share value = ~8 KB pinned at peak, well within Linux default `ulimit -l` (64 KB). Lint anchor in `lint_zeroize_discipline.rs` checks `cmd/slip39.rs` contains the `Zeroizing::new` wraps; the SPEC §5 row-12 `seed_xor.rs:157-164` cite is removed (seed-xor uses the same `Vec<Zeroizing<String>>` shape and is also NOT a single-pin precedent).
 
 **Algorithm summary** (per SLIP-0039 spec):
 1. **Encrypt** master secret S via 4-round Feistel with PBKDF2(passphrase, salt=identifier-derived) round keys → encrypted master secret (EMS).
@@ -205,7 +205,7 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 - `1` for runtime refusals (`ToolkitError::BadInput` / `Slip39` per `src/error.rs:244` precedent).
 - `64` reserved for clap parse errors.
 
-### §2.5 Refusals (23 classes; expanded 2026-05-14 from `python-shamir-mnemonic/vectors.json` audit covering negative-vector categories the original SPEC enumeration elided; further expanded at v0.13.0 P1c-E.1 GREEN with 5 combine-driver + parse-layer refusal rows for empty share lists, per-share + cross-share value-length consistency, extendable-bit consistency, and the python-parser `group_count >= group_threshold` mirror)
+### §2.5 Refusals (24 classes; expanded 2026-05-14 from `python-shamir-mnemonic/vectors.json` audit covering negative-vector categories the original SPEC enumeration elided; further expanded at v0.13.0 P1c-E.1 GREEN with 5 combine-driver + parse-layer refusal rows for empty share lists, per-share + cross-share value-length consistency, extendable-bit consistency, and the python-parser `group_count >= group_threshold` mirror; row 24 `MemberThresholdMismatch` added at v0.13.0 P2.2 GREEN per Q3 fold)
 
 | # | Input class | Exit | Stderr message stem |
 |---|---|---|---|
@@ -225,13 +225,14 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 | 14 | `combine` shares: mismatching group counts across shares (vectors.json #9, #28) | 1 | `slip39 combine: shares disagree on group_count` |
 | 15 | `combine` shares: duplicate member index within a single group (vectors.json #11, #30) | 1 | `slip39 combine: duplicate member index <I> in group <G>` |
 | 16 | Invalid padding bits in encoded share (vectors.json #3, #22) | 1 | `slip39 combine: share at position I has non-zero padding bits (encoding violation)` |
-| 17 | `--from` variant other than `phrase=` / `entropy=` | 1 | `slip39 split --from only accepts phrase=<value-or-> or entropy=<hex-or->` |
+| 17 | `--from` variant other than `phrase=` / `entropy=` | 1 | `slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got <node>=` |
 | 18 | Multi-stdin contention (passphrase-stdin + share-stdin OR two share-stdin) | 1 | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` |
 | 19 | `combine` called with empty share list (no `--share` and `--share-stdin` produced 0 shares) | 1 | `slip39 combine: at least one share required` |
 | 20 | `combine` shares: share at position I has value-byte length L not in {16,20,24,28,32} (vectors.json #40) | 1 | `slip39 combine: share at position I has value length L (must be 16/20/24/28/32 bytes)` |
 | 21 | `combine` shares: shares disagree on value-byte length (cross-share length divergence) | 1 | `slip39 combine: shares disagree on value length` |
 | 22 | `combine` shares: shares disagree on the `extendable` (ext) bit | 1 | `slip39 combine: shares disagree on the extendable bit` |
 | 23 | `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` (vectors.json #10, #29; mirrors `python-shamir-mnemonic/share.py:216-219` @ 17fcce14) | 1 | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
+| 24 | `combine` shares: shares within a single group disagree on `member_threshold` (vectors.json #12, #31; lib variant `MemberThresholdMismatch`; added at v0.13.0 P2.2 GREEN per Q3 fold — structurally distinct from row 15 `DuplicateMemberIndex` and row 12's member-level `InsufficientShares` branch) | 1 | `slip39 combine: shares within a group disagree on member_threshold` |
 
 (Refusal 18 covers the N+1 pairwise candidates explicitly.)
 
@@ -243,7 +244,8 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 | `split` AND stdout is TTY | **New advisory class (K-of-N parameterized — extends v0.12.0's multi-secret-on-stdout):** `warning: SLIP-39 shares on stdout — N=<n> shares emitted across <g> groups (group-threshold <G>); each share is independently secret material; distribute per your group/member-threshold policy; do not paste this output into a single untrusted tool` |
 | `combine` AND stdout is TTY | Reuse v0.11.0 pattern: `warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path | Reuse v0.11.0 `#[cfg(unix)]` permission-mode advisory at `cmd/final_word.rs:175-200` |
-| `--iteration-exponent E` where E >= 5 (PBKDF2 iterations >= 320K, ≈ 200–500ms wall-clock on commodity x86) | `warning: --iteration-exponent E=<E> yields <iters>×PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second). Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values. E >= 10 may exceed 30s on weak hardware.` |
+| `--iteration-exponent E` where E >= 5 (PBKDF2 iterations >= 320K, ≈ 200–500ms wall-clock on commodity x86) | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second). Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values. E >= 10 may exceed 30s on weak hardware.` |
+| Either `MNEMONIC_SLIP39_TEST_RNG` OR `MNEMONIC_SLIP39_TEST_IDENTIFIER` env-var set on a `split` invocation (always-on; NOT suppressible; added at v0.13.0 P2.2 GREEN per Q2 fold — see §6 for the env-vars' definitions) | `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` |
 
 ## §3 Out-of-scope (filed for explicit closure)
 
@@ -262,9 +264,9 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 | G1 — SLIP-0039 spec test vectors | Vendor `python-shamir-mnemonic/vectors.json` (45 canonical test vectors; verified at fetch 2026-05-14) into `crates/mnemonic-toolkit/tests/fixtures/slip39_vectors.json` (SHA-pinned against the upstream-commit SHA at fetch time). **15 positive vectors** (must recover the expected hex secret + match the expected BIP-32 xprv) + **30 negative vectors** (must refuse with the appropriate `Slip39Error` variant per the §2.5 refusal mapping). ALL 45 must pass byte-for-byte in `tests/lib_slip39_vectors.rs`. Vector shape: 4-tuple `[description, mnemonics_list, hex_secret, expected_xprv]`; positive vectors have non-empty `hex_secret`, negative have empty. |
 | G2 — Round-trip property tests | For each of 5 entropy sizes (16/20/24/28/32 bytes) × N group configurations: split → combine → byte-equal. Property test ≥ 50 vectors per shape. |
 | G3 — Plain stdout shape | `slip39 split ... --group 3,2 --group 3,2` emits exactly 6 lines + 1 blank separator; each line parseable as a SLIP-39 share. |
-| G4 — JSON envelope stability | SHA-pinned over 2 anchor vectors (deterministic identifier, fixed RNG seed). |
+| G4 — JSON envelope stability | SHA-pinned over 2 anchor vectors. Determinism is achieved at test time via the env-vars `MNEMONIC_SLIP39_TEST_RNG` (32-byte hex seed for ChaCha20Rng) and `MNEMONIC_SLIP39_TEST_IDENTIFIER` (decimal u16); both are inert in production (env-vars unset → `OsRng` + library-generated random identifier) and trigger an always-on insecurity advisory in stderr when set. The production `--help` surface does NOT mention these vars; they are documented in §6 only. |
 | G5 — Refusal coverage | All 23 refusal classes (§2.5) have CLI tests asserting exit code 1 + pinned stderr stem. The 30 negative vectors from G1 are exercised at the lib layer; CLI-level tests verify each stem surfaces byte-faithfully. |
-| G6 — Cycle A/B discipline | Cycle A: argv-leakage advisory + `Zeroizing<String>` wraps + new `lint_argv_secret_flags.rs` rows (`slip39 split --from phrase=`, `slip39 split --from entropy=`, `slip39 combine --share`, `slip39 split --passphrase`) — count 23 → 27. Cycle B: mlock Site 1 pins on parsed inputs + Feistel round-key buffer (single-buffer, single pin per encryption pass) + share-output buffer (single `Zeroizing<Vec<String>>` pinned ONCE). New `lint_zeroize_discipline.rs` rows. |
+| G6 — Cycle A/B discipline | Cycle A: argv-leakage advisory + `Zeroizing<String>` wraps + new `lint_argv_secret_flags.rs` rows (`slip39 split --from phrase=`, `slip39 split --from entropy=`, `slip39 split --passphrase`, `slip39 combine --share`, `slip39 combine --passphrase`) — count 23 → 28 (Q1 fold preserves the lint convention's one-row-per-(subcommand,flag) shape; v0.13.0 P2.2 GREEN). Cycle B: mlock Site 1 pins on parsed inputs + Feistel round-key buffer (single-buffer, single pin per encryption pass) + per-rendered-share output pins (O(N), one `mlock::pin_pages_for` call per share inside the stdout-emit loop per §2.1 patch). New `lint_zeroize_discipline.rs` rows. |
 | G7 — Manual chapter | `## mnemonic slip39` section in `41-mnemonic.md`; `cli-subcommands.list` adds `mnemonic slip39 split` + `mnemonic slip39 combine`; chapter intro bumps from 8 to 9 subcommands (8 user-facing + introspection-only `gui-schema`). |
 | G8 — Trezor interop smoke test (manual, post-tag) | Generate a SLIP-39 backup on a Trezor Model T (or via `python-shamir-mnemonic` CLI), combine via our CLI, verify byte-equal entropy recovery. Recipe lives at `docs/manual/src/40-cli-reference/41-mnemonic.md` under a new `### Trezor interop (manual smoke test)` H3 within the `## mnemonic slip39` section (authored at P3, validated at PE). NOT a CI gate (no Trezor in CI). |
 | G9 — Iteration-exponent advisory threshold | `E >= 5` advisory fires; below E=5, no advisory. Pinned via CLI test. (Threshold rationale: ≈ 200ms wall-clock on commodity x86; Trezor's reference default is E=1.) |
@@ -300,3 +302,16 @@ External SPEC references:
 - [SLIP-0039 specification](https://github.com/satoshilabs/slips/blob/master/slip-0039.md) — Encryption, Decryption, Checksum, Mnemonic encoding, Member threshold, Group threshold
 - [`python-shamir-mnemonic`](https://github.com/trezor/python-shamir-mnemonic) — MIT reference impl; algorithm-correctness oracle
 - [`vectors.json`](https://github.com/trezor/python-shamir-mnemonic/blob/master/vectors.json) — 45 test vectors (G1 acceptance gate fixture)
+
+## §6 Test-only environment variables
+
+Added at v0.13.0 P2.2 GREEN (per Q2 fold + Opus G4-architect consult). Two env-vars override `slip39 split`'s otherwise-non-deterministic identifier + RNG sources, enabling the §4 G4 SHA-pin tests in `tests/cli_slip39_json.rs` to assert byte-identical envelope output across runs. Both are runtime-gated (NOT compile-time `#[cfg]`-gated) so they exercise the same production code paths `cargo run` / `cargo install` users invoke. The production `--help` surface does NOT mention these vars — they live in the SPEC only.
+
+| Env-var | Type | Effect | Default (unset) |
+|---|---|---|---|
+| `MNEMONIC_SLIP39_TEST_RNG` | 32-byte hex (64 chars) | Seeds a `ChaCha20Rng::from_seed(…)` instead of `OsRng`; invalid hex / wrong length → refuse with a clear stem (NOT silent fallback) | `OsRng` |
+| `MNEMONIC_SLIP39_TEST_IDENTIFIER` | decimal u16 in 0..=32767 (15-bit) | Used as the `identifier` argument to `slip39_split`, overriding the RNG-derived random; out-of-range → refuse | library generates random |
+
+**Always-on insecurity advisory.** When EITHER env-var is set, `run_split` emits the SPEC §2.6 row 6 advisory `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` to stderr (NOT suppressible; loud-by-design — env-var misuse must be self-disclosing in any captured terminal log).
+
+**Stability disclaimer.** These env-vars are NOT part of the v0.13.0 user-facing contract. Names, semantics, default-when-unset behavior, and presence may change at any minor or patch release without a semver bump. They exist solely to enable CI-stable SHA-pin tests; external consumers MUST NOT rely on them.

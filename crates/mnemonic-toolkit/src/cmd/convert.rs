@@ -576,7 +576,7 @@ pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, Too
 /// `echo` or `printf '\n'`-terminated files, but preserves all other bytes —
 /// including leading/trailing spaces, internal NULL (BIP-38 V3 spec passphrase),
 /// and tabs that may be intentional in the user's passphrase.
-fn read_stdin_passphrase<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
+pub(crate) fn read_stdin_passphrase<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
     let mut buf = String::new();
     stdin
         .read_to_string(&mut buf)

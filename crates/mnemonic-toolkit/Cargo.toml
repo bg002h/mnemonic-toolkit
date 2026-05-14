@@ -23,6 +23,7 @@ md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic",  tag = "md-c
 hmac = "0.12"
 miniscript = { version = "13", default-features = false, features = ["std"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+rand_chacha = "0.3"
 rand_core = { version = "0.6", features = ["std", "getrandom"] }
 regex = "1"
 sha2 = "0.10"
@@ -41,5 +42,4 @@ zeroize = { version = "1.8", features = ["derive"] }
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
-rand_chacha = "0.3"
 tempfile = "3"

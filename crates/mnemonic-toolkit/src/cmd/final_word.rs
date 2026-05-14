@@ -12,7 +12,7 @@
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
-use crate::secret_advisory::secret_in_argv_warning;
+use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
 use clap::Args;
 use mnemonic_toolkit::final_word::{
     final_word_candidates, FinalWordError, FinalWordLanguage,
@@ -176,25 +176,7 @@ fn write_json_envelope<E: Write>(
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
 
     // SPEC §2.6 row 3 — world-readable permission-mode advisory.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(meta) = std::fs::metadata(path) {
-            let mode = meta.permissions().mode();
-            if mode & 0o077 != 0 {
-                let _ = writeln!(
-                    stderr,
-                    "warning: --json-out {} inherits umask (file may be world-readable, mode {:o}); consider --json-out /dev/stdout or chmod 0600 the path before invoking",
-                    path.display(),
-                    mode & 0o777,
-                );
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (stderr, path); // suppress unused warnings on non-Unix
-    }
+    warn_if_world_readable(path, stderr);
 
     Ok(())
 }
