@@ -45,6 +45,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `library-error-and-language-surface-promotion` — move `error` + `language` + `friendly` modules from main.rs to lib.rs
+
+- **Surfaced:** 2026-05-13, v0.11.0 Phase 1 R1 reviewer-loop. The P1 GREEN impl pivoted to a self-contained library surface (`FinalWordLanguage` + `FinalWordError` library-local enums) because exposing `error`/`language`/`friendly` from lib.rs today would require moving them out of `src/main.rs`'s private-module set — a cross-module refactor touching every binary file that imports `ToolkitError`. R1 reviewer endorsed the P1 pivot but recommended filing this FOLLOWUP for the future cleaner refactor.
+- **Where:** Move `crates/mnemonic-toolkit/src/{error,language,friendly}.rs` from main.rs-private to lib.rs-public. Audit every `crate::error::*` / `crate::language::*` / `crate::friendly::*` import in the binary tree and re-route to `mnemonic_toolkit::error::*` / `mnemonic_toolkit::language::*` / `mnemonic_toolkit::friendly::*`. Delete `FinalWordLanguage` + `FinalWordError` library-local types and route `final_word_candidates` through `CliLanguage` + `ToolkitError` directly.
+- **What:** Future cleaner crate-shape. Avoids the per-feature pattern of "library-local mirror enums" that v0.11.0 final-word and any future feature would need. Lowers boilerplate on every CLI-boundary wrapper.
+- **Why deferred:** Out-of-scope for v0.11.0 — this is a crate-shape refactor that affects every binary module, not a feature-localized change. The duplication cost in v0.11.0 (10 BIP-39 language variants + 2 error variants) is bounded and trivially stable; the refactor cost is the inverse. Defer to a focused crate-shape cycle.
+- **Status:** `open`
+- **Tier:** `v1+`-refactor (no user-facing impact; pure crate-hygiene)
+
 ### `bip39-final-word-completer` — `mnemonic final-word` subcommand (v0.11.0)
 
 - **Surfaced:** 2026-05-13, post-v0.10.1 user feature-request. New feature, not a deferral from a prior cycle. Plan + brainstorm at `~/.claude/plans/radiant-seeking-teacup.md`; SPEC at `design/SPEC_final_word_v0_11_0.md`.
