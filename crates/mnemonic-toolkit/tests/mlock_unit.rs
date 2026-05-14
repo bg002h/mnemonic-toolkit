@@ -79,11 +79,12 @@ fn g1_4_page_aligned_exactly_one_page_count_one() {
 // ============================================================================
 
 // ============================================================================
-// G6 — cross-repo diff manifest (full impl in Phase 3b; placeholder here)
+// G6 — cross-repo diff manifest (PE; impl at tests/mlock_g6_invariant.rs)
 // ============================================================================
 
-#[test]
-#[ignore = "P3b — cross-repo diff manifest test landing in Phase 3b"]
-fn g6_diff_manifest_matches_ms_repo_pin_pages_for() {
-    panic!("P3b deliverable; not implemented in Phase 2");
-}
+// G6 SPEC §6 invariant is implemented as a standalone integration test at
+// `tests/mlock_g6_invariant.rs`. Sibling-repo source discovery via the
+// SIBLING_REPO_PATH env var (set by `.github/workflows/rust.yml` after
+// `actions/checkout` of mnemonic-secret); falls back to an adjacent-dir
+// relative path for local-dev. See SPEC §6 G6 + cross-repo audit matrix
+// §5 G6.

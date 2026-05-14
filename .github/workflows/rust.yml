@@ -140,3 +140,30 @@ jobs:
 
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
+
+  g6-invariant:
+    # Cycle B SPEC §6 G6 — cross-repo mlock.rs inline-copy invariant.
+    # Checks out the sibling repo (mnemonic-secret) to a known runner path,
+    # then runs `tests/mlock_g6_invariant.rs` which asserts the normalized
+    # source of toolkit's `crates/mnemonic-toolkit/src/mlock.rs` and
+    # ms-cli's `crates/ms-cli/src/mlock.rs` are byte-equal across the
+    # diff manifest plus name-export parity. Test pulls the sibling path
+    # from $SIBLING_REPO_PATH.
+    name: "g6 invariant (cross-repo mlock.rs)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout own (mnemonic-toolkit)
+        uses: actions/checkout@v4
+        with:
+          path: mnemonic-toolkit
+      - name: Checkout sibling (mnemonic-secret)
+        uses: actions/checkout@v4
+        with:
+          repository: bg002h/mnemonic-secret
+          ref: master
+          path: mnemonic-secret
+      - name: cargo test --test mlock_g6_invariant
+        env:
+          SIBLING_REPO_PATH: ${{ github.workspace }}/mnemonic-secret
+        working-directory: mnemonic-toolkit
+        run: cargo test -p mnemonic-toolkit --test mlock_g6_invariant
