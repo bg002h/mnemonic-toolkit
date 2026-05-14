@@ -50,6 +50,7 @@ const MANIFEST: &[&str] = &[
 ];
 
 #[test]
+#[ignore = "G6 cross-repo invariant; needs SIBLING_REPO_PATH (CI g6-invariant job) or adjacent sibling repo on disk. Run via --include-ignored."]
 fn g6_mlock_normalized_source_byte_equal() {
     let own_path = own_mlock_path();
     let sibling_path = sibling_mlock_path();
@@ -79,6 +80,7 @@ fn g6_mlock_normalized_source_byte_equal() {
 }
 
 #[test]
+#[ignore = "G6 cross-repo invariant; needs SIBLING_REPO_PATH (CI g6-invariant job) or adjacent sibling repo on disk. Run via --include-ignored."]
 fn g6_mlock_name_exports_match_manifest() {
     let own_path = own_mlock_path();
     let sibling_path = sibling_mlock_path();

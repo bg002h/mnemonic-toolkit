@@ -166,4 +166,8 @@ jobs:
         env:
           SIBLING_REPO_PATH: ${{ github.workspace }}/mnemonic-secret
         working-directory: mnemonic-toolkit
-        run: cargo test -p mnemonic-toolkit --test mlock_g6_invariant
+        # G6 tests are #[ignore]-gated to keep the default `cargo test`
+        # step (which has no SIBLING_REPO_PATH set + no sibling checkout)
+        # from invoking them. --include-ignored opts them in for this job
+        # which DOES have both.
+        run: cargo test -p mnemonic-toolkit --test mlock_g6_invariant -- --include-ignored
