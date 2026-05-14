@@ -94,6 +94,27 @@ jobs:
           fi
           cargo test -p mnemonic-toolkit --lib mlock::tests::g2_4 -- --include-ignored
 
+  test-release-mlock-einval:
+    # Cycle B Phase 3a — release-build coverage for G2.3 EINVAL soft-fail.
+    # Per SPEC §6 G2.3 release branch: in release builds the debug_assert
+    # is compiled out, so EINVAL injection must soft-fail (record_failure)
+    # rather than panic. The g2_3_einval_release_soft_fails test asserts
+    # failure_count > 0 and first_errno == EINVAL. Linux-only because the
+    # release-build-coverage gate is sufficient on one platform; the
+    # cfg(test) FAIL_MODE branch is platform-uniform.
+    name: "test (release, ubuntu-latest, mlock einval)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show ulimit -l (diagnostic)
+        run: ulimit -l || true
+      - name: G2.3-release einval soft-fail
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "einval"
+        run: |
+          ulimit -l 65536 || true
+          cargo test --release -p mnemonic-toolkit --lib mlock::tests::g2_3 -- --include-ignored
+
   miri:
     name: miri (mlock unsafe)
     runs-on: ubuntu-latest

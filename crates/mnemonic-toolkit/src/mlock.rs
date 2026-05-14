@@ -480,13 +480,39 @@ mod tests {
     /// from the slice-fn API by construction; debug builds panic, release
     /// builds soft-fail). Requires `MNEMONIC_TEST_MLOCK_FAIL_MODE=einval`
     /// set in the env BEFORE this test process starts.
+    /// Gated on `debug_assertions` so the test only compiles/runs when the
+    /// debug_assert is active; release-build coverage lives in the
+    /// `g2_3_einval_release_soft_fails` sibling below (Cycle B Phase 3a).
     #[test]
+    #[cfg(debug_assertions)]
     #[ignore = "subprocess: requires MNEMONIC_TEST_MLOCK_FAIL_MODE=einval in env"]
     #[should_panic(expected = "EINVAL")]
     fn g2_3_einval_debug_panics() {
         let buf = vec![0u8; 64];
         let _pin = pin_pages_for(&buf);
         // unreachable in debug builds — debug_assert! fires inside pin_pages_for
+    }
+
+    /// G2.3-release — EINVAL fault injection in release builds soft-fails
+    /// (no panic; debug_assert is compiled out). Asserts `failure_count`
+    /// incremented and `first_errno` is `EINVAL`. Requires
+    /// `MNEMONIC_TEST_MLOCK_FAIL_MODE=einval` set in the env. Cycle B
+    /// Phase 3a addition (per SPEC §6 G2.3 release branch).
+    #[test]
+    #[cfg(not(debug_assertions))]
+    #[ignore = "subprocess: requires MNEMONIC_TEST_MLOCK_FAIL_MODE=einval in env"]
+    fn g2_3_einval_release_soft_fails() {
+        let buf = vec![0u8; 64];
+        let _pin = pin_pages_for(&buf);
+        assert!(
+            failure_count_for_test() > 0,
+            "FAIL_MODE=einval in release build must soft-fail (increment failure_count, no panic)",
+        );
+        assert_eq!(
+            first_errno_for_test(),
+            Some(libc::EINVAL),
+            "first_errno must be EINVAL after einval injection in release build",
+        );
     }
 
     /// G2.4 — control: FAIL_MODE=off must NOT synthesize failures. After
