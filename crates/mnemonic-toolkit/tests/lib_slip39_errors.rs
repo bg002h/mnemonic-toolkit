@@ -1,17 +1,18 @@
 //! v0.13.0 P1c — library tests for SLIP-39 `Slip39Error` enum.
 //!
-//! Per SPEC §2.5 (18 refusal classes; 15 library-mappable + 3 CLI-only).
+//! Per SPEC §2.5 (23 refusal classes; 21 library-mappable + 2 CLI-only;
+//! the v0.13.0 P1c-E.1 expansion added rows 19–23 atop the original 18).
 //! Each variant carries the diagnostic info the CLI handler needs to
-//! synthesize the SPEC §B.2.5 stderr stem at P2.
+//! synthesize the SPEC §2.5 stderr stem at P2.
 //!
 //! Coverage matrix:
-//!   - all 15 library variants constructible
+//!   - all 21 library variants constructible
 //!   - Display non-empty for each (CLI maps to `ToolkitError::BadInput`)
 //!   - `std::error::Error` implemented
 //!   - PartialEq + Eq + Clone + Debug derived (test ergonomics +
-//!     vector-harness assertions at P1c-F)
+//!     vector-harness assertions at P1c-E.2 G1)
 //!
-//! No Display-stem byte-pinning: the SPEC §B.2.5 stems are CLI-layer
+//! No Display-stem byte-pinning: the SPEC §2.5 stems are CLI-layer
 //! surfaces, pinned at P2's `cli_slip39_refusals.rs`. Here we pin only
 //! that each variant carries enough diagnostic info to drive the CLI
 //! mapping (e.g., InsufficientShares carries group_idx + needed + got).

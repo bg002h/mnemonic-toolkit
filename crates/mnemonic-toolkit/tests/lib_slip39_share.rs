@@ -24,12 +24,15 @@
 //!     ext = 0 ⇒ cs = b"shamir"
 //!     ext = 1 ⇒ cs = b"shamir_extendable"
 //!
-//! Parse-error ordering (per python `Share.from_mnemonic` and SPEC §2.5
-//! refusal rows 9 / 10 / 16):
+//! Parse-error ordering (per python `Share.from_mnemonic` @ 17fcce14
+//! and SPEC §2.5 refusal rows 9 / 10 / 16 / 23):
 //!   1. word-validity (any unknown word ⇒ `UnknownWord`)
-//!   2. word-count / pre-checksum padding sanity (≤ 8 leading bits)
-//!   3. RS1024 checksum (`InvalidChecksum`)
-//!   4. non-zero padding-bit check (`InvalidPadding`)
+//!   2. word-count gate (`< MIN_MNEMONIC_LENGTH_WORDS` ⇒ `InvalidPadding`)
+//!   3. pre-checksum padding sanity (`padding_bits > 8` ⇒ `InvalidPadding`)
+//!   4. RS1024 checksum (`InvalidChecksum`)
+//!   5. `group_count < group_threshold` ⇒ `GroupThresholdExceedsCount`
+//!      (P1c-E.1 expansion; mirrors python `share.py:216-219`)
+//!   6. non-zero leading padding bits in value field ⇒ `InvalidPadding`
 //!
 //! `parse_slip39_share` parses a SINGLE share; `share_idx` carried by
 //! `InvalidChecksum` / `UnknownWord` / `InvalidPadding` is therefore
