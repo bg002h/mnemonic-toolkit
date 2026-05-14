@@ -306,6 +306,192 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.10.0] — 2026-05-13
+
+v0.9.0 cross-repo Cycle B (`mlock(2)` page-pinning infrastructure),
+Phase E release rollup. Companion lockstep release: `ms-cli-v0.3.0`
+(mnemonic-secret). Cycle SPEC at
+`design/SPEC_secret_memory_hygiene_v0_9_B.md`; Path B-lite RESCOPE
+proposal at `~/.claude/plans/2026-05-13-cycle-b-phase-3a-rescope-proposal.md`;
+cross-repo audit matrix at
+`design/agent-reports/v0_9_B-secret-memory-hygiene-matrix.md`.
+
+POSIX-only (Linux + macOS); Windows `VirtualLock` deferred to a future
+cycle (SPEC §3 `OOS-windows-virtuallock`). New public-API surface: the
+`mnemonic_toolkit::mlock` module (lib + bin hybrid crate shape, SPEC §4
+P2). All errno classes soft-fail in release builds; debug builds trip
+`debug_assert!` on the unreachable `EINVAL` path. mlock failures (if
+any) emit a 2-line stderr summary at end-of-process per SPEC §6 G2.5.
+
+### Added (Phase 1 — bip85 heap-promote precursor)
+
+- `bip85::derive_entropy(index: u32) -> [u8; 64]` widened to
+  `-> Result<Zeroizing<Vec<u8>>, ToolkitError>`. 7 `format_*` callees
+  updated to consume the heap-promoted return (the original Phase 1
+  framing said "6 callees" — `format_dice_rolls` was the off-by-one
+  caught at Phase 1 R0).
+
+### Added (Phase 2 — mlock module + first Rust CI workflow)
+
+- New crate-shape: `crates/mnemonic-toolkit/src/lib.rs` exposes
+  `pub mod mlock;` (hybrid lib + bin per SPEC §4 P2 — Option C smallest
+  cascade). `[[bin]]` stays at `src/main.rs`; other modules remain
+  binary-private.
+- New module `crates/mnemonic-toolkit/src/mlock.rs` (~533 LOC). Surface
+  per SPEC §4 P2 + §6 G6 manifest:
+  - `pin_pages_for(buf: &[u8]) -> PinnedPageRange` slice-fn primitive
+    (Fix-B-only after Phase 2 R0 C-1 indirection-trap finding retired
+    the `MlockedZeroizing<T>` wrapper).
+  - `PinnedPageRange { start, page_count }` with munlock-on-Drop.
+    Page-rounding formula pinned in SPEC §2 row 1; zero-length is a
+    no-op (no syscall).
+  - `MlockState` process-static singleton (atomic counters +
+    OnceLock-tracked first errno).
+  - `report_at_exit()` end-of-process 2-line stderr emitter (called
+    from `main()`).
+  - Private `page_size()` cached in `OnceLock<usize>`; sourced via
+    `libc::sysconf(libc::_SC_PAGESIZE)`.
+  - `#[cfg(test)]` fault-injection harness:
+    `MNEMONIC_TEST_MLOCK_FAIL_MODE={eperm,enomem,einval,off}` parsed
+    into a OnceLock-cached `FailMode` for per-subprocess mode variation.
+- New `libc = "0.2"` dep.
+- `.github/workflows/rust.yml` (NEW): first Rust CI workflow for the
+  toolkit (`manual.yml` + `quickstart.yml` were docs-build only). Jobs:
+  `test` (Ubuntu + macOS matrix with `ulimit -l 65536` on Linux; +
+  3 fault-injection steps for G2.1/G2.3-debug/G2.4), `miri` (Ubuntu
+  nightly; cfg(miri) shim verifies the 2 unsafe blocks in
+  `pin_pages_for` + `PinnedPageRange::drop` per SPEC §6 G4.b), `clippy`
+  (`--all-targets -- -D warnings`).
+- New lint `tests/lint_safety_first_party_mlock.rs`: enforces a SAFETY:
+  comment within ±5 lines of every `unsafe {` opener in `src/mlock.rs`
+  (peer of Cycle A's `lint_safety_third_party_blocked.rs`).
+
+### Added (Phase 3a Path B-lite — apply sites 1+2+3+4 + main wire)
+
+Per Phase 3a R0 v3-fold RESCOPE (proposal
+`~/.claude/plans/2026-05-13-cycle-b-phase-3a-rescope-proposal.md`;
+reviewer reports `v0_9_B-phase-3a-rescope-r0{,-v3,-v3-fold}.md` LOCK
+0/0). Path B-lite carves the Cycle-A→Zeroizing field-type migration
+(`ResolvedSlot.entropy: Option<Vec<u8>>` and
+`DerivedAccount.entropy: Vec<u8>`) out to v0.10.1 patch via FOLLOWUP
+`resolved-slot-derived-account-zeroizing-field` (supersedes the Cycle A
+FOLLOWUP `resolved-slot-entropy-zeroizing-field`). All struct-sibling
+pins on ResolvedSlot + DerivedAccount are preserved; the Cycle A
+baseline ships UNCHANGED.
+
+- **Site 1** (per-handler clap-binding pins):
+  - `cmd/bundle.rs` + `cmd/verify_bundle.rs`: `pin_pages_for(&synthetic_args)`
+    re-binding immediately after `apply_stdin_substitutions()` returns.
+  - `cmd/convert.rs`: pins `effective_passphrase` + `effective_bip38_passphrase` +
+    `primary_value` after they're bound (no `apply_stdin_substitutions`
+    in convert — corrected from Path B-lite §3.1; SPEC §2 row 5).
+  - `cmd/derive_child.rs`: pins `from_value: Zeroizing<String>` +
+    `stdin_passphrase: Option<Zeroizing<String>>` post-binding.
+- **Site 2**: `ResolvedSlot` adds sibling field
+  `_entropy_pin: Option<Rc<PinnedPageRange>>` declared AFTER `entropy`.
+  `Rc` (not `Arc`) preserves the `derive(Clone)` semantics; `Arc` was
+  retracted post-clippy `arc_with_non_send_sync` flagged
+  `PinnedPageRange` as `!Send + !Sync` (commit `ddb371c`). 12 ctor
+  sites populated (`pub type CosignerKeyInfo = ResolvedSlot;` alias
+  adds 6 ctor sites — the recurring off-by-N pattern caught at
+  Phase 3a R0 v3-fold per `feedback_r0_must_read_source_off_by_n`):
+  `synthesize.rs:{1059,1213}`, `parse_descriptor.rs:{1176,1741,1755}`,
+  `cmd/bundle.rs:{371,441,475,518,1049,1099}`, `cmd/verify_bundle.rs:496`.
+- **Site 3**: `DerivedAccount` adds sibling field
+  `_entropy_pin: PinnedPageRange` declared AFTER `entropy` (plain, not
+  Rc — DerivedAccount is not Clone and is consumed via `into_parts`).
+  1 ctor site populated: `derive_slot.rs:89`. Cycle A's `impl Drop for
+  DerivedAccount` PRESERVED (zeroize-while-still-pinned ordering).
+- **Site 4**: bip85's 7 `format_*` functions add
+  `let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);`
+  immediately after the `derive_entropy(...)?` binding. Local-binding
+  drop order (Rust Reference §"destructors"): `_entropy_pin` munlocks
+  first then `entropy: Zeroizing<Vec<u8>>` zeroizes.
+- `main.rs:101`: `mnemonic_toolkit::mlock::report_at_exit();` wired
+  between the `match result` close and the `ExitCode` return.
+- **CI delta**: `.github/workflows/rust.yml` adds the
+  `test-release-mlock-einval` Linux-only release-build subprocess job
+  per SPEC §6 G2.3 release branch (G2.3-release coverage —
+  `debug_assert!` is compiled out in release, so EINVAL must soft-fail
+  via `record_failure` not panic).
+
+### Added (Phase 3b — cross-repo ms-cli participation)
+
+- mnemonic-secret `ms-cli-v0.3.0` ships the inline `mlock.rs` copy
+  (538 LOC; diff = `//!` mod-doc only after SPEC §6 G6 normalization)
+  + Site 5 pin (`parse.rs:65`) + main wire. Reviewer cleared at
+  `design/agent-reports/v0_9_B-phase-3b-r1.md`.
+
+### Added (PE — release rollup)
+
+- `design/agent-reports/v0_9_B-secret-memory-hygiene-matrix.md`:
+  cross-repo audit matrix (toolkit-side canonical hub per Cycle A
+  precedent). §0 cross-repo coverage; §0.5 6 residual classes; §1 SPEC
+  §2 site coverage per-site status; §2 Cycle A → Cycle B carry-overs
+  closed-out (5 candidates); §3 SPEC §3 FOLLOWUPS forward-visibility;
+  §4 Path B-lite v0.10.1 carve-out; §5 SPEC §6 cycle-close gates.
+- `tests/mlock_g6_invariant.rs` (NEW): SPEC §6 G6 cross-repo inline-copy
+  invariant test. Normalizes toolkit's `mlock.rs` + ms-cli's `mlock.rs`
+  (strip `//`, `///`, `//!` comment-only lines at start-of-trimmed-line;
+  preserve `use` statements + `#[cfg]` attributes), asserts byte-equal
+  + name-export parity against a 14-item static MANIFEST. Sibling-repo
+  path discovery via `SIBLING_REPO_PATH` env var with adjacent-dir
+  relative fallback.
+- `.github/workflows/rust.yml` adds `g6-invariant` job: checks out
+  mnemonic-secret at master and runs the G6 test with
+  `SIBLING_REPO_PATH=$GITHUB_WORKSPACE/mnemonic-secret`.
+- SPEC §2 row 5 + §4 P3b: `parse.rs:45` → `parse.rs:65` line-number
+  drift fix (post Cycle A's `Zeroizing<String>` shift).
+
+### Cycle review history
+
+- Phase 0: R1 Opus 2C/3I folded; R2 Opus 0C/0I.
+- Phase 1: R0 design lock; R1 post-impl CLEAR.
+- Phase 2: R0 Fix B trigger (C-1 indirection-trap → MlockedZeroizing<T>
+  retired; slice-fn-only design locked); R0 Fix-B verify; R1 0C/0I;
+  R2 0C/0I confirmed.
+- Phase 3a (rescope): R0 + R0-v3 + R0-v3-fold (3 rounds; Path B-lite
+  LOCK 0/0).
+- Phase 3a (impl): R1 CLEAR.
+- Phase 3b (cross-repo impl): R1 CLEAR.
+
+### Tests
+
+- 11 new mlock-module unit + subprocess tests in `mod tests` inside
+  `src/mlock.rs` (page-rounding + MlockState aggregation + g2_* fault-
+  injection arms matching SPEC §6 G2.1 / G2.3 (debug + release) / G2.4).
+- 4 new `tests/mlock_unit.rs` integration tests (SPEC §6 G1.1-G1.4
+  pin-residency + page-count checks).
+- 2 new G6 invariant tests in `tests/mlock_g6_invariant.rs`.
+- 1 new lint `tests/lint_safety_first_party_mlock.rs`.
+- `cargo test --workspace`: green at PE close.
+- `cargo clippy --all-targets -- -D warnings`: clean (Arc → Rc fix at
+  `ddb371c` closed the only Cycle-B clippy regression).
+- `cargo +nightly miri test -p mnemonic-toolkit mlock::`: green via
+  cfg(miri) syscall shims.
+
+### Known residue (carry-forward post-Cycle-B)
+
+Six residual classes per the audit matrix §0.5. The notable ones:
+- Live-RAM disclosure via `ptrace` / `/proc/PID/mem` / kernel debugger
+  (SPEC §1 "Threat model NOT addressed"; mlock does not defend).
+- Co-resident page-residue from non-secret data on pinned pages
+  (SPEC §3 `OOS-page-residue-elimination`; Cycle C `dedicated-secret-arena`).
+- Windows `VirtualLock` (SPEC §3 `OOS-windows-virtuallock`).
+- `ResolvedSlot.entropy` + `DerivedAccount.entropy` field-type migration
+  to `Zeroizing<Vec<u8>>` — Path B-lite carve-out to v0.10.1 patch via
+  FOLLOWUP `resolved-slot-derived-account-zeroizing-field`.
+
+### What didn't change
+
+- ms-codec / mk-codec / md-codec git-dep tags (no sibling-codec work in
+  Cycle B; toolkit continues to pin `ms-codec-v0.1.3`,
+  `mk-codec-v0.2.1`, `md-codec-v0.16.1`).
+- All CLI flag surfaces preserved (no flag additions / removals; exit
+  codes unchanged; JSON schemas unchanged).
+- v0.1 + v0.2 fixture-corpus SHA pins continue to hold (SPEC §6 G7 — no
+  wire-format regression).
+
 ## mnemonic-toolkit [0.9.2] — 2026-05-13
 
 v0.9.0 cross-repo Cycle A (OWNED-buffer secret-memory hygiene), Phase E
