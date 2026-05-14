@@ -1,6 +1,6 @@
 //! Embedded SLIP-0039 1024-word English wordlist.
 //!
-//! Vendored from `python-shamir-mnemonic/wordlists/wordlist.txt` at
+//! Vendored from `python-shamir-mnemonic/shamir_mnemonic/wordlist.txt` at
 //! upstream commit `17fcce14` (P1c data-files commit `310687c`,
 //! 2026-05-14). Author date of the upstream file: 2024-05-16.
 //!

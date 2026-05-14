@@ -57,6 +57,11 @@ pub fn polymod(values: &[u16]) -> u32 {
     let mut chk: u32 = 1;
     for &v in values {
         let b = chk >> 20;
+        // Defensive 10-bit mask: spec contract is `v in 0..1024` but
+        // Rust's `u16` allows up to 0xFFFF. The Python reference omits
+        // this since Python ints have no fixed width; for Rust we
+        // truncate to keep the LFSR state well-formed on malformed
+        // input rather than silently corrupting subsequent rounds.
         chk = ((chk & 0xf_ffff) << 10) ^ u32::from(v & 0x3ff);
         for (i, gen) in GEN.iter().enumerate() {
             if (b >> i) & 1 != 0 {

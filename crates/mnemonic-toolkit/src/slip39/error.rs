@@ -7,10 +7,16 @@
 //! `ToolkitError::BadInput(...)` formatted per the SPEC §B.2.5 stderr
 //! stems.
 //!
-//! Coverage: 15 of the 18 SPEC §2.5 refusal classes. The 3 omitted are
-//! CLI-only: `--from` variant other than `phrase=`/`entropy=`,
-//! multi-stdin contention, and `--passphrase` + `--passphrase-stdin`
-//! mutual exclusion (all rejected before reaching the library boundary).
+//! Coverage: 15 library variants spanning 16 of the 18 SPEC §B.2.5
+//! refusal classes. The 2 CLI-only rows (17, 18) — `--from` variant
+//! syntactically invalid; multi-stdin contention across `--share` /
+//! `--from` / `--passphrase-stdin` — are rejected at the CLI boundary
+//! before reaching the library. The fold from 16 rows to 15 variants
+//! is rows 4 and 5 (both group-spec policy refusals) collapsing into
+//! `BadGroupSpec`; the CLI handler distinguishes them at the
+//! `ToolkitError` mapping layer based on the carried (n, t) values
+//! (row 5 = `n == 1 && t == 1`; row 4 = all other group-spec
+//! violations).
 //!
 //! Display messages here are diagnostic, not user-facing — the CLI
 //! handler re-renders each variant into the SPEC §B.2.5 stem byte by
