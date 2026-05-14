@@ -306,6 +306,91 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.12.0] — 2026-05-14
+
+New feature: `mnemonic seed-xor` subcommand (`split` + `combine`
+sub-subcommands). Coldcard-compatible BIP-39 ↔ BIP-39 all-or-nothing
+XOR-based seed splitter. Given a single BIP-39 entropy (12/15/18/21/24
+words), split into N BIP-39 phrases such that bytewise XOR of all N
+entropies reconstitutes the master. Per-share BIP-39 checksum is
+recomputed so each share is itself a parseable, structurally-valid
+BIP-39 phrase. NOT a threshold scheme — ALL N shares required to
+reconstruct (for K-of-N use SLIP-39, planned for v0.13.0).
+
+Coldcard hardware interop at 12/18/24-word sizes (per `xor_seed.py`
+entropy lengths 16/24/32 bytes); 15/21-word are toolkit-only extensions.
+No MAC; share substitution is mathematically undetectable — verify
+recovered wallet's derived address before trusting.
+
+Toolkit-only minor bump. No cross-repo work; ms-cli unchanged. Closes
+FOLLOWUP `seed-xor-coldcard-compat`. First of two cycles in the
+share-splitting pair (paired with v0.13.0 SLIP-39, planned at
+`~/.claude/plans/radiant-seeking-teacup.md`).
+
+### Added
+
+- `mnemonic-toolkit` library: new module `mnemonic_toolkit::seed_xor`
+  exposing `seed_xor_split` (random via supplied CSPRNG),
+  `seed_xor_split_deterministic` (Coldcard SHA256d-deterministic
+  generation), and `seed_xor_combine`. Library-local `SeedXorError`
+  (3 variants: `BadEntropyLength` / `TooFewShares` /
+  `MismatchedShareLengths`) per the v0.11.0 final-word precedent.
+  Returns `Vec<Zeroizing<Vec<u8>>>` for shares + `Zeroizing<Vec<u8>>`
+  for recovered master.
+- `mnemonic seed-xor split` subcommand with flags `--from
+  <phrase=<value-or-->> --shares N [--language LANG]
+  [--deterministic-from-master] [--json-out PATH]`. Emits N BIP-39
+  phrases to stdout (one per line) with per-share checksum recompute
+  via `Mnemonic::from_entropy_in`.
+- `mnemonic seed-xor combine` subcommand with flags `--share
+  <phrase=<value-or-->> ... --shares N [--language LANG] [--json-out
+  PATH]`. Hard refusal on `--share` count vs `--shares` mismatch;
+  hard refusal on multi-stdin contention; per-share argv-leakage
+  advisory.
+- New advisory class: **multi-secret-on-stdout** for K-of-N share
+  emit (first toolkit use; SLIP-39 v0.13.0 will parameterize it).
+  Wording calls out share-substitution undetectability + N-physical-
+  location distribution discipline.
+- `#[cfg(unix)]` permission-mode advisory on `--json-out` when the
+  output file is world-readable (mode & 0o077 != 0).
+- 15/21-word + `--deterministic-from-master` toolkit-only advisory
+  (Coldcard hardware cannot round-trip those sizes).
+- JSON envelope v1 with `operation: "split"` / `"combine"` discriminator.
+  SHA-pinned anchors:
+  - abandon×12 N=2 deterministic: `d368c70aabb6d3bab7d75b79f8a61a8340db6ac94c57250db6354fe235861af3`
+  - Trezor legal×12 N=3 deterministic: `85d53f7e83db167b1223b8b23bbe2baca060e7aefad50f6034b5b65750883871`
+- 44 CLI tests across 5 files + 17 library tests (2000 round-trip
+  property-test pairs + Coldcard byte-pin anchor + length-validation
+  refusals + Zeroize-discipline type-binding check + RNG determinism).
+- Manual chapter section `## mnemonic seed-xor` in
+  `docs/manual/src/40-cli-reference/41-mnemonic.md` (Synopsis, dual
+  flag tables for split + combine, Worked example, JSON output schemas,
+  Refusals table, Advisories table).
+- `docs/manual/tests/cli-subcommands.list` adds `mnemonic seed-xor split`
+  + `mnemonic seed-xor combine` rows.
+
+### Changed
+
+- `Command` enum in `src/main.rs` gains a `SeedXor` variant + dispatch.
+- Manual chapter intro bumps from 7 to 8 subcommands.
+- Glossary `mnemonic` entry: Seven → Eight subcommands.
+- `lint_argv_secret_flags.rs`: 21 → 23 rows (+2 for `seed-xor split
+  --from phrase=` and `seed-xor combine --share phrase=`).
+- `lint_zeroize_discipline.rs`: +1 row for `seed_xor.rs` Zeroizing wrap
+  evidence.
+- `cli_gui_schema.rs`: 6 → 7 user-facing subcommands assertion.
+
+### Deps
+
+- `rand_core = "0.6"` (features `["std", "getrandom"]`) added as crate
+  dep (RustCrypto, MIT/Apache-2.0).
+- `rand_chacha = "0.3"` added as dev-dep (deterministic RNG for
+  property tests).
+
+### Resolved FOLLOWUPS
+
+- `seed-xor-coldcard-compat` → resolved at this tag.
+
 ## mnemonic-toolkit [0.11.0] — 2026-05-14
 
 New feature: `mnemonic final-word` subcommand. Given an N-1-word BIP-39
