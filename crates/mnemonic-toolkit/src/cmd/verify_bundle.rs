@@ -18,7 +18,7 @@ use clap::Args;
 use mnemonic_toolkit::mlock::pin_pages_for;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 
 #[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
@@ -485,7 +485,7 @@ fn descriptor_mode_verify_run<W: Write>(
             fp: slot.fingerprint.to_bytes(),
         });
         let entropy = slot.entropy.clone();
-        let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
+        let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub: slot.xpub,
             fingerprint: slot.fingerprint,

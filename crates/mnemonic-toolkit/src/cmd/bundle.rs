@@ -14,8 +14,8 @@ use clap::Args;
 use mnemonic_toolkit::mlock::pin_pages_for;
 use std::io::Write;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::Arc;
 
 #[derive(Args, Debug, Clone)]
 pub struct BundleArgs {
@@ -360,7 +360,7 @@ pub(crate) fn resolve_slots(
             // use `into_parts` for the consuming move (E0509-safe).
             let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
             let path_raw = path.to_string();
-            let entropy_pin = Some(Arc::new(pin_pages_for(&entropy[..])));
+            let entropy_pin = Some(Rc::new(pin_pages_for(&entropy[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
@@ -464,7 +464,7 @@ pub(crate) fn resolve_slots(
             // the Drop on `acc` will scrub the now-orphaned husk.
             let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
             let path_raw = path.to_string();
-            let entropy_pin = Some(Arc::new(pin_pages_for(&entropy_bytes[..])));
+            let entropy_pin = Some(Rc::new(pin_pages_for(&entropy_bytes[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
@@ -1038,7 +1038,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
 
         // v0.4.3 Phase N: per-slot entropy goes on the ResolvedSlot directly.
         let entropy = ent_opt.clone();
-        let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
+        let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub,
             fingerprint,
@@ -1088,7 +1088,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         .enumerate()
         .map(|(i, c)| {
             let entropy = if i == 0 { entropy_at_0.clone() } else { None };
-            let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
+            let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
             ResolvedSlot {
                 xpub: c.xpub,
                 fingerprint: c.fingerprint,

@@ -15,8 +15,8 @@ use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::use_site_path::UseSitePath;
 use md_codec::{Descriptor, TlvSection};
 use mnemonic_toolkit::mlock::PinnedPageRange;
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Bundle {
@@ -601,7 +601,7 @@ pub struct ResolvedSlot {
     /// A baseline; deferred to v0.10.1 per FOLLOWUP
     /// `resolved-slot-derived-account-zeroizing-field`) then `_entropy_pin`
     /// Arc final-drops and munlocks.
-    pub _entropy_pin: Option<Arc<PinnedPageRange>>,
+    pub _entropy_pin: Option<Rc<PinnedPageRange>>,
 }
 
 impl ResolvedSlot {
@@ -1202,7 +1202,7 @@ mod tests {
             };
             let entropy_pin = entropy_field
                 .as_ref()
-                .map(|e| Arc::new(mnemonic_toolkit::mlock::pin_pages_for(&e[..])));
+                .map(|e| Rc::new(mnemonic_toolkit::mlock::pin_pages_for(&e[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint: master_fp,
