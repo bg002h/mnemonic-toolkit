@@ -4,7 +4,8 @@
 //! the math primitives only (GF(256) field arithmetic + Lagrange
 //! interpolation). Encryption pipeline (Feistel + PBKDF2) ships at
 //! P1b. Share encoding (RS1024 + wordlist + bit-packing + parse/render)
-//! + the public `slip39_split` / `slip39_combine` surface ships at P1c.
+//! ships at P1c. The public `slip39_split` / `slip39_combine` surface
+//! follows in P1c-E.
 //!
 //! Library-local `Slip39Error` per the v0.11.0 / v0.12.0 precedent;
 //! tracked under FOLLOWUP `library-error-and-language-surface-promotion`
@@ -15,6 +16,8 @@ pub mod feistel;
 pub mod gf256;
 pub mod lagrange;
 pub mod rs1024;
+pub mod share;
 pub mod wordlist;
 
 pub use error::Slip39Error;
+pub use share::{parse_slip39_share, render_slip39_share, Share};
