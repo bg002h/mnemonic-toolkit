@@ -13,6 +13,8 @@ mnemonic convert
 mnemonic export-wallet
 mnemonic derive-child
 mnemonic final-word
+mnemonic seed-xor split
+mnemonic seed-xor combine
 mnemonic gui-schema
 
 # md

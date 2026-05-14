@@ -149,8 +149,8 @@ binary `ms`; library crate `ms-codec`. Repo `bg002h/mnemonic-secret`.
 ## mnemonic
 
 The integration CLI binary, shipped by the `mnemonic-toolkit` crate.
-Seven subcommands: `bundle`, `verify-bundle`, `convert`,
-`export-wallet`, `derive-child`, `final-word`, and `gui-schema`
+Eight subcommands: `bundle`, `verify-bundle`, `convert`, `export-wallet`,
+`derive-child`, `final-word`, `seed-xor`, and `gui-schema`
 (introspection-only). Multi-source seeds, xpubs, and related wallet
 inputs flow in via the uniform `--slot @N.<subkey>=<value>` shape
 (where `@N` is a cosigner index).

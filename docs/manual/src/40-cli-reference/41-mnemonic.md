@@ -1,12 +1,12 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Seven subcommands:
+The integration-layer CLI for the m-format constellation. Eight subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
-and [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
-semantics). Run any with `--help` for the latest flag set; this chapter
-mirrors v0.11.0.
+[`seed-xor`](#mnemonic-seed-xor), and [`gui-schema`](#mnemonic-gui-schema)
+(introspection only, no user-facing semantics). Run any with `--help` for
+the latest flag set; this chapter mirrors v0.12.0.
 
 ---
 
@@ -288,6 +288,131 @@ stdout-replacement).
 | Inline `--from phrase=<value>` | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
 | Stdout is a TTY AND candidate set non-empty | `warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools` |
 | `--json-out PATH` with world-readable file (Unix umask 022 default) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
+
+---
+
+## `mnemonic seed-xor`
+
+Coldcard-compatible BIP-39 ↔ BIP-39 all-or-nothing XOR-based seed splitter.
+Two sub-subcommands: `split` (master phrase → N BIP-39 shares) and `combine`
+(N shares → master phrase). NOT a threshold scheme — ALL N shares are
+required to reconstruct (for K-of-N use SLIP-39, planned for v0.13.0).
+
+**Coldcard interop:** native at 12/18/24-word sizes (per Coldcard
+`shared/xor_seed.py` accepting entropy lengths 16/24/32 bytes). 15/21-word
+sizes are toolkit-only extensions; Coldcard hardware cannot round-trip
+those two sizes.
+
+**Security caveat:** Seed XOR has no authentication tag. Substitution of
+a wrong-but-valid-BIP-39 share is mathematically undetectable — the
+recovered phrase will validate but derive the wrong wallet. Verify the
+recovered wallet's expected derived address before trusting.
+
+### Synopsis
+
+```sh
+mnemonic seed-xor split   --from <phrase=<value-or-->> --shares <N> [OPTIONS]
+mnemonic seed-xor combine --share <phrase=<value-or-->> ... --shares <N> [OPTIONS]
+```
+
+### `seed-xor split` flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <phrase=<value-or-->>` | master phrase as `phrase=<value>` (inline) or `phrase=-` to read from stdin; inline form emits a `/proc/$PID/cmdline` argv-leakage advisory on stderr |
+| `--shares <N>` | number of shares to emit; must be >= 2 |
+| `--language <LANGUAGE>` | BIP-39 wordlist: `english` (default) / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish` |
+| `--deterministic-from-master` | use Coldcard's SHA256d-deterministic share generation instead of OS CSPRNG; required for byte-equal Coldcard hardware interop |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope to PATH (does NOT replace stdout) |
+| `--help` | print help |
+
+### `seed-xor combine` flags
+
+| Flag | Purpose |
+|---|---|
+| `--share <phrase=<value-or-->>` | share phrase; repeating; at most ONE may be `phrase=-` (single stdin per invocation) |
+| `--shares <N>` | asserted share count; MUST equal the number of `--share` flags (hard refusal on mismatch — catches cardinality omissions, NOT substitution) |
+| `--language <LANGUAGE>` | BIP-39 wordlist of inputs + output (default `english`) |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope |
+| `--help` | print help |
+
+### Worked example
+
+```sh
+# Split a 24-word seed into 3 shares (deterministic, Coldcard-interop)
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic seed-xor split --from phrase=- --shares 3 --deterministic-from-master
+```
+
+Stdout: 3 lines, each a 24-word BIP-39 phrase. Reverse via:
+
+```sh
+mnemonic seed-xor combine \
+  --share "phrase=<share-1>" \
+  --share "phrase=<share-2>" \
+  --share "phrase=<share-3>" \
+  --shares 3
+```
+
+Stdout: the original 24-word phrase recovered.
+
+### JSON output
+
+`--json-out <PATH>` writes a versioned envelope. Schema `v1`. `split`
+shape:
+
+```json
+{
+  "schema_version": "1",
+  "operation": "split",
+  "language": "english",
+  "word_count": 12,
+  "share_count": 3,
+  "deterministic": false,
+  "shares": ["phrase-1 ...", "phrase-2 ...", "phrase-3 ..."]
+}
+```
+
+`combine` shape:
+
+```json
+{
+  "schema_version": "1",
+  "operation": "combine",
+  "language": "english",
+  "word_count": 12,
+  "share_count": 3,
+  "phrase": "reconstructed phrase ..."
+}
+```
+
+Field order is part of the schema (SHA-pinned in
+`tests/cli_seed_xor_json.rs`).
+
+### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| `split --from` phrase word-count not in {12,15,18,21,24} | `seed-xor split: phrase must be 12/15/18/21/24 words; got K` |
+| `split --shares` < 2 | `seed-xor split: --shares must be >= 2; got N` |
+| `combine --share` count mismatch vs `--shares` | `seed-xor combine: --shares N requires exactly N --share arguments; got K --share values for --shares N` |
+| `combine` mixed-length shares | `seed-xor combine: all shares must be the same word count; got mix of {K1, K2, ...}` |
+| `combine` share at position I has BIP-39 checksum failure | `seed-xor combine: share at position I has invalid BIP-39 checksum (...)` |
+| `combine` unknown word in share at position I | `seed-xor combine: share at position I: unknown BIP-39 word at index J ...` |
+| `--from` or `--share` variant other than `phrase=` | `seed-xor only accepts phrase=<value> or phrase=-` |
+| Two or more `--share phrase=-` (multi-stdin) | `seed-xor combine: at most one --share value may be \`-\` (single stdin per invocation)` |
+
+### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--from phrase=<v>` OR inline `--share phrase=<v>` | `warning: secret material on argv (--from phrase= OR --share phrase=) — pipe via phrase=- to avoid /proc/$PID/cmdline exposure` (per-occurrence) |
+| `split` AND stdout is a TTY | `warning: Seed XOR shares on stdout — each of the N=<n> lines is independently a complete BIP-39 phrase; ALL N shares are required to reconstruct the master; distribute them to N separate locations; do not paste this output into a single untrusted tool. Substitution of a wrong-but-valid-BIP-39 share is undetectable by Seed XOR — verify the recovered wallet's derived address before trusting it.` |
+| `combine` AND stdout is a TTY | `warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet` |
+| `split --deterministic-from-master` with 15/21-word input | `warning: --deterministic-from-master with 15-word input is toolkit-only — Coldcard's xor_seed.py natively supports 12/18/24 only; resulting shares will NOT round-trip a Coldcard device. For Coldcard interop, use 12/18/24-word input.` |
+| `--json-out <PATH>` with world-readable file (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
 ---
 
