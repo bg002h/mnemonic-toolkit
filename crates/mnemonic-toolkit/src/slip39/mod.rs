@@ -153,6 +153,10 @@ pub fn slip39_split<R: CryptoRng + RngCore>(
         identifier,
         extendable,
     );
+    // Pin EMS heap pages so the encrypted master cannot be swapped to disk
+    // during the (potentially nested) Shamir split below. The pin drops at
+    // function exit, after `ems` itself is no longer referenced.
+    let _ems_pin = crate::mlock::pin_pages_for(&ems[..]);
 
     // ----- Group-level Shamir split -----
     let group_shares = split_secret(group_threshold, group_count_u as u8, &ems, rng);
@@ -163,9 +167,15 @@ pub fn slip39_split<R: CryptoRng + RngCore>(
         let (gx, gval) = &group_shares[g_idx];
         let member_shares = split_secret(group.member_threshold, group.member_count, gval, rng);
         let mut group_out: Vec<Share> = Vec::with_capacity(group.member_count as usize);
-        for (m_idx, mval) in member_shares {
+        for (m_idx, mut mval) in member_shares {
+            // Move the Vec<u8> out of the Zeroizing wrapper into the Share.
+            // The drained Zeroizing wrapper then drops, scrubbing the empty
+            // Vec (no-op); Share's `#[derive(Zeroize, ZeroizeOnDrop)]` on
+            // the `value` field takes over Drop-time scrubbing of the
+            // moved-out bytes.
+            let inner: Vec<u8> = std::mem::take(&mut *mval);
             let share = Share::from_parts(
-                mval,
+                inner,
                 identifier,
                 extendable,
                 iteration_exponent,
@@ -243,7 +253,7 @@ pub fn slip39_combine(
 
     // Per-group: member_threshold uniformity, distinct member indices,
     // exact threshold count. Run group-level Shamir recovery on each.
-    let mut group_shares: Vec<(u8, Vec<u8>)> = Vec::with_capacity(by_group.len());
+    let mut group_shares: Vec<(u8, Zeroizing<Vec<u8>>)> = Vec::with_capacity(by_group.len());
     for (&group_idx, gs) in &by_group {
         let mt = gs[0].member_threshold;
         for s in gs.iter().skip(1) {
@@ -272,10 +282,13 @@ pub fn slip39_combine(
                 got: gs.len() as u8,
             });
         }
-        // Member-level Shamir recovery.
-        let pts: Vec<(u8, Vec<u8>)> = gs
+        // Member-level Shamir recovery. Per-share value clones land in
+        // Zeroizing<Vec<u8>> so the intermediate share-value copies
+        // scrub on Drop, mirroring the Share.value field's own
+        // ZeroizeOnDrop discipline.
+        let pts: Vec<(u8, Zeroizing<Vec<u8>>)> = gs
             .iter()
-            .map(|s| (s.member_index, s.value().to_vec()))
+            .map(|s| (s.member_index, Zeroizing::new(s.value().to_vec())))
             .collect();
         let gv = recover_secret(mt, &pts)?;
         group_shares.push((group_idx, gv));
@@ -294,6 +307,11 @@ pub fn slip39_combine(
 
     // Group-level Shamir recovery → EMS.
     let ems = recover_secret(gt, &group_shares)?;
+
+    // Pin EMS pages so the encrypted master is not swapped to disk during
+    // the PBKDF2-heavy Feistel decrypt below. The pin drops at function
+    // exit after `master` is moved into the return value.
+    let _ems_pin = crate::mlock::pin_pages_for(&ems[..]);
 
     // Feistel decrypt → master secret.
     let master = feistel::decrypt(
@@ -327,28 +345,31 @@ fn split_secret(
     share_count: u8,
     secret: &[u8],
     rng: &mut (impl CryptoRng + RngCore),
-) -> Vec<(u8, Vec<u8>)> {
+) -> Vec<(u8, Zeroizing<Vec<u8>>)> {
     debug_assert!(threshold >= 1 && threshold <= share_count, "split_secret invariant");
     debug_assert!(VALID_SECRET_LENGTHS.contains(&secret.len()), "secret length must be valid");
 
     if threshold == 1 {
         // Trivial replication. NO digest path; no RNG draws.
-        return (0..share_count).map(|i| (i, secret.to_vec())).collect();
+        return (0..share_count)
+            .map(|i| (i, Zeroizing::new(secret.to_vec())))
+            .collect();
     }
 
     let n = secret.len();
     let random_len = n - DIGEST_LENGTH;
 
-    // T - 2 random shares at indices 0..T-2.
-    let mut random_shares: Vec<(u8, Vec<u8>)> = Vec::with_capacity((threshold - 2) as usize);
+    // T - 2 random shares at indices 0..T-2 — each wrapped in Zeroizing.
+    let mut random_shares: Vec<(u8, Zeroizing<Vec<u8>>)> =
+        Vec::with_capacity((threshold - 2) as usize);
     for i in 0..(threshold - 2) {
-        let mut val = vec![0u8; n];
+        let mut val = Zeroizing::new(vec![0u8; n]);
         rng.fill_bytes(&mut val);
         random_shares.push((i, val));
     }
 
     // R = random_len random bytes; digest = HMAC-SHA256(R, secret)[..4].
-    let mut r = vec![0u8; random_len];
+    let mut r = Zeroizing::new(vec![0u8; random_len]);
     rng.fill_bytes(&mut r);
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&r)
         .expect("HMAC-SHA-256 accepts any key length");
@@ -357,27 +378,27 @@ fn split_secret(
 
     // digest_payload = digest (4 bytes) || R (n - 4 bytes).
     // R0 C1: order is `digest || R`, NOT `R || digest`.
-    let mut digest_payload = Vec::with_capacity(n);
+    let mut digest_payload = Zeroizing::new(Vec::with_capacity(n));
     digest_payload.extend_from_slice(&digest_full[..DIGEST_LENGTH]);
     digest_payload.extend_from_slice(&r);
 
     // Base shares: random_0..T-2, then (DIGEST_INDEX, digest_payload),
     // then (SECRET_INDEX, secret).
-    let mut base_shares: Vec<(u8, Vec<u8>)> = random_shares.clone();
+    let mut base_shares: Vec<(u8, Zeroizing<Vec<u8>>)> = random_shares.clone();
     base_shares.push((DIGEST_INDEX, digest_payload));
-    base_shares.push((SECRET_INDEX, secret.to_vec()));
+    base_shares.push((SECRET_INDEX, Zeroizing::new(secret.to_vec())));
 
     // Emit N shares at indices 0..share_count. For i < T-2 reuse the
     // already-generated random share; for i >= T-2 interpolate over
     // base_shares at x = i.
-    let mut out: Vec<(u8, Vec<u8>)> = Vec::with_capacity(share_count as usize);
+    let mut out: Vec<(u8, Zeroizing<Vec<u8>>)> = Vec::with_capacity(share_count as usize);
     let base_pts: Vec<(u8, &[u8])> =
         base_shares.iter().map(|(x, v)| (*x, v.as_slice())).collect();
     for i in 0..share_count {
         if i < threshold - 2 {
             out.push(random_shares[i as usize].clone());
         } else {
-            let v = lagrange::interpolate_secret_at(&base_pts, i);
+            let v = Zeroizing::new(lagrange::interpolate_secret_at(&base_pts, i));
             out.push((i, v));
         }
     }
@@ -395,8 +416,8 @@ fn split_secret(
 ///   [`Slip39Error::DigestVerificationFailed`].
 fn recover_secret(
     threshold: u8,
-    shares: &[(u8, Vec<u8>)],
-) -> Result<Vec<u8>, Slip39Error> {
+    shares: &[(u8, Zeroizing<Vec<u8>>)],
+) -> Result<Zeroizing<Vec<u8>>, Slip39Error> {
     debug_assert!(!shares.is_empty(), "recover_secret invariant: non-empty shares");
 
     if threshold == 1 {
@@ -405,8 +426,8 @@ fn recover_secret(
 
     let pts: Vec<(u8, &[u8])> =
         shares.iter().map(|(x, v)| (*x, v.as_slice())).collect();
-    let secret = lagrange::interpolate_secret_at(&pts, SECRET_INDEX);
-    let digest_payload = lagrange::interpolate_secret_at(&pts, DIGEST_INDEX);
+    let secret = Zeroizing::new(lagrange::interpolate_secret_at(&pts, SECRET_INDEX));
+    let digest_payload = Zeroizing::new(lagrange::interpolate_secret_at(&pts, DIGEST_INDEX));
 
     let (digest, random_part) = digest_payload.split_at(DIGEST_LENGTH);
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(random_part)
