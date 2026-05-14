@@ -21,7 +21,13 @@
 //!   `SeedXorError` per the same pattern as `final_word`. The CLI
 //!   handler in `src/cmd/seed_xor.rs` (P2) converts `SeedXorError`
 //!   into `ToolkitError` at the boundary.
+//! - `slip39` (v0.13.0): Trezor SLIP-0039 hierarchical K-of-N Shamir
+//!   Secret Sharing. Multi-module subdirectory. Defines a library-local
+//!   `Slip39Error` per the same pattern as `seed_xor`. The CLI handler
+//!   in `src/cmd/slip39.rs` (P2, future) converts `Slip39Error` into
+//!   `ToolkitError` at the boundary.
 
 pub mod final_word;
 pub mod mlock;
 pub mod seed_xor;
+pub mod slip39;
