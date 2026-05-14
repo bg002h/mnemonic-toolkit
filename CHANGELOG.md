@@ -306,6 +306,90 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.11.0] — 2026-05-14
+
+New feature: `mnemonic final-word` subcommand. Given an N-1-word BIP-39
+partial phrase, emits the lexicographically sorted set of wordlist
+entries that, when appended as the Nth word, yield a phrase with a
+valid BIP-39 checksum. Output set size is a function of N alone:
+128 (N=12), 64 (N=15), 32 (N=18), 16 (N=21), 8 (N=24). Use cases
+include paper-backup recovery (smudged last word), manual seed
+generation (compute the checksum-fixing word for a hand-rolled
+partial), and phrase-typo verification.
+
+Toolkit-only minor bump. No cross-repo work; ms-cli `v0.3.0` ships
+unchanged. Closes FOLLOWUP `bip39-final-word-completer`.
+
+### Added
+
+- `mnemonic-toolkit` library: new module `mnemonic_toolkit::final_word`
+  exposing `final_word_candidates(partial_phrase: &str, language:
+  FinalWordLanguage) -> Result<Vec<&'static str>, FinalWordError>`. The
+  library carries its own self-contained `FinalWordLanguage` (10 BIP-39
+  wordlists) and `FinalWordError` (`BadWordCount` / `UnknownWord`)
+  types so the lib surface does not pull in the binary-private
+  `ToolkitError`. Algorithm: naïve enumeration over the 2048-entry
+  wordlist with `bip39::Mnemonic::parse_in` as the correctness oracle
+  (~2048 SHA-256 ops; milliseconds per query). Tracks FOLLOWUP
+  `library-error-and-language-surface-promotion` for the future
+  crate-shape cleanup that would unify these with `CliLanguage` +
+  `ToolkitError`.
+- `mnemonic final-word` subcommand:
+  - `--from <phrase=<value-or-->>` (required): inline `phrase=<N-1 words>`
+    or `phrase=-` (stdin). Inline form emits the Cycle A argv-leakage
+    advisory via `secret_in_argv_warning`.
+  - `--language <LANGUAGE>` (default `english`): 10 BIP-39 wordlists
+    (`english`, `simplifiedchinese`, `traditionalchinese`, `czech`,
+    `french`, `italian`, `japanese`, `korean`, `portuguese`, `spanish`).
+  - `--json-out <PATH>` (optional): side-effect; writes a versioned
+    JSON envelope (schema_version `"1"`, fields `language`,
+    `partial_word_count`, `target_word_count`, `candidate_count`,
+    `candidates`) without replacing stdout. SHA-pinned in
+    `tests/cli_final_word_json.rs` over two anchor vectors (abandon×11,
+    beef×11).
+- Cycle A discipline on the new CLI handler: `Zeroizing<String>` over
+  the parsed partial; `secret_in_argv_warning` for inline secret;
+  lint row `final-word --from phrase=` added to
+  `tests/lint_argv_secret_flags.rs` (20→21 rows).
+- Cycle B discipline on the new CLI handler: mlock Site 1
+  `pin_pages_for(partial.as_bytes())` after wrap; lint row added to
+  `tests/lint_zeroize_discipline.rs`.
+- New advisory class **secret-on-stdout-TTY**: when the candidate set
+  is non-empty AND `std::io::stdout().is_terminal()`, emit
+  `warning: candidate list is secret material ...` to stderr. First
+  use of `std::io::IsTerminal` in the toolkit (stable since Rust 1.70;
+  no `atty` dep — RUSTSEC-2021-0145).
+- `#[cfg(unix)]` permission-mode advisory on `--json-out` when the
+  resulting file is world-readable (`mode & 0o077 != 0`).
+- Manual chapter section `## mnemonic final-word` in
+  `docs/manual/src/40-cli-reference/41-mnemonic.md` (Synopsis, Flags,
+  Worked example, JSON output, Refusals, Advisories).
+  `docs/manual/tests/cli-subcommands.list` updated; cspell dictionary
+  extended with `cmdline` + `simplifiedchinese` + `traditionalchinese`.
+- CLI `gui-schema` automatically picks up `final-word` via
+  `clap::CommandFactory` — no code change needed; test expectation
+  bumped from 5 to 6 user-facing subcommands.
+
+### Changed
+
+- `Command` enum in `src/main.rs` gains a `FinalWord` variant +
+  dispatch arm.
+- Glossary entry for `mnemonic` (`docs/manual/src/60-appendices/61-glossary.md`)
+  updated from "Five subcommands" to "Seven subcommands" (also adds
+  `gui-schema` to the previous pre-existing drift — was actually six
+  before this cycle).
+
+### Fixed (SPEC narrative)
+
+- `design/SPEC_final_word_v0_11_0.md` §2.4 / §2.5: refusal exit code
+  corrected from `64` to `1` (`ToolkitError::BadInput::exit_code()`
+  routes per `error.rs:244`). Tests were already tolerant; this is a
+  documentation correction only.
+
+### Resolved FOLLOWUPS
+
+- `bip39-final-word-completer` → resolved at this tag.
+
 ## mnemonic-toolkit [0.10.1] — 2026-05-13
 
 Cycle B Path B-lite carve-out completion: `ResolvedSlot.entropy` and

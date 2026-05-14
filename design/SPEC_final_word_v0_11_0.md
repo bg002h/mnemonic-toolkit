@@ -171,17 +171,18 @@ Note on `feature` namespace tag: R0 round 1 I4 considered adding a `feature: "fi
 
 Reuse `ToolkitError::exit_code()`:
 - `0` on success (candidates emitted)
-- `64` (`BadInput`) for wrong word count, unknown word, wrong language, ambiguous-language refusal
-- Other existing codes inherited from `ToolkitError` propagation (e.g., `74` for I/O when writing `--json-out`)
+- `1` (`BadInput`) for wrong word count, unknown word, wrong language, ambiguous-language refusal (per the toolkit precedent at `src/error.rs:244`; `BadInput` / `Bip39` / `Bitcoin` all route to exit code `1`)
+- `64` reserved for clap-level parse errors (handled by the main-fn parse override at `src/main.rs:62`)
+- Other existing codes inherited from `ToolkitError` propagation
 
 ### §2.5 Refusals (per-input-class)
 
 | Input class | Refusal exit code | Stderr message format |
 |---|---|---|
-| 0 words / empty partial | 64 | `final-word: empty partial phrase; need 11/14/17/20/23 words for a target of 12/15/18/21/24` |
-| Word count not in {11,14,17,20,23} | 64 | `final-word: got K words; expected one of [11, 14, 17, 20, 23] (target = K+1 must be in {12,15,18,21,24})` |
-| Unknown word | 64 | reuse existing `bip39::Error::UnknownWord` mapping via `friendly.rs`: `BIP-39 unknown-word at index I; not in selected wordlist (selected language: <L>; did you pick the right --language?)` |
-| `--from` variant other than `phrase=` | 64 | `final-word --from only accepts phrase=<value> or phrase=-` |
+| 0 words / empty partial | 1 | `final-word: empty partial phrase; need 11/14/17/20/23 words for a target of 12/15/18/21/24` |
+| Word count not in {11,14,17,20,23} | 1 | `final-word: got K words; expected one of [11, 14, 17, 20, 23] (target = K+1 must be in {12,15,18,21,24})` |
+| Unknown word | 1 | `final-word: unknown BIP-39 word at position I (not in selected wordlist; did you pick the right --language?)` |
+| `--from` variant other than `phrase=` | 1 | `final-word --from only accepts phrase=<value> or phrase=-` (suffixed by `; got <node>=` at runtime) |
 
 ### §2.6 Advisories (stderr, non-fatal)
 
@@ -212,7 +213,7 @@ Reuse `ToolkitError::exit_code()`:
 | G1 — Correctness on BIP-39 official vectors | For each of 5 N values, a BIP-39 official test vector from `tests/bip39_trezor_vectors.json` yields a candidate set of the expected size (per the §1 table — 128/64/32/16/8) including the canonical Nth word. (Per-N canonical zero-entropy ends: N=12→`about`, N=18→`agent`, N=24→`art`; N=15 and N=21 use non-zero-entropy entries.) PLUS two user-locked named anchor vectors must pass: (a) `abandon × 11 about` 12-word target — partial `abandon × 11` → 128 candidates including `"about"`; (b) `beef × 12` target — partial `beef × 11` → 128 candidates with SHA-pinned sorted output as the regression backstop (membership of `"beef"` in the candidate set is computed and pinned by the algorithm, not asserted a priori). Both fixtures plus their pinned SHAs ship in `tests/lib_final_word.rs` and are reused by the CLI integration tests in P2. |
 | G2 — Plain stdout output | `mnemonic final-word --from phrase=<23-words> --language english` emits exactly 8 lexicographically-sorted words, one per line, with a trailing newline; no other stdout content. |
 | G3 — JSON envelope schema stability | `--json-out <path>` writes the envelope; field set + order matches §2.3 byte-for-byte over the pinned vector corpus. Schema regression caught by `tests/cli_final_word_json.rs` SHA-pin. |
-| G4 — Refusal coverage | All 4 refusal classes in §2.5 surface their pinned stderr message with exit code 64. |
+| G4 — Refusal coverage | All 4 refusal classes in §2.5 surface their pinned stderr message with exit code 1 (`ToolkitError::BadInput`; tests assert non-zero exit, which is `1` in practice). |
 | G5 — Cycle A discipline | (a) inline secret-on-argv emits the advisory via `secret_in_argv_warning`; (b) `Zeroizing<String>` wraps the parsed partial; (c) `--from phrase=-` works end-to-end as the sole stdin path; (d) lint rows added to `lint_argv_secret_flags.rs` and `lint_zeroize_discipline.rs`. |
 | G6 — Cycle B discipline | mlock pin on parsed-partial bytes; lint anchor in `lint_safety_first_party_mlock.rs` if any new `unsafe` block (expect zero new unsafe). |
 | G7 — Manual mirror | New `docs/manual/src/40-cli-reference/47-mnemonic-final-word.md` chapter (or extension to `41-mnemonic.md`); `docs/manual/tests/lint.sh` passes for the new subcommand's flag set; `docs/manual/tests/cli-subcommands.list` includes `final-word`. |
