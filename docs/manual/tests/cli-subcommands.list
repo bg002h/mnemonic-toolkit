@@ -12,6 +12,7 @@ mnemonic verify-bundle
 mnemonic convert
 mnemonic export-wallet
 mnemonic derive-child
+mnemonic final-word
 mnemonic gui-schema
 
 # md

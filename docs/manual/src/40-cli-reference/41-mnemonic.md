@@ -1,11 +1,12 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Six subcommands:
+The integration-layer CLI for the m-format constellation. Seven subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
-[`derive-child`](#mnemonic-derive-child), and [`gui-schema`](#mnemonic-gui-schema)
-(introspection only, no user-facing semantics). Run any with `--help`
-for the latest flag set; this chapter mirrors v0.9.0.
+[`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
+and [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
+semantics). Run any with `--help` for the latest flag set; this chapter
+mirrors v0.11.0.
 
 ---
 
@@ -206,6 +207,87 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 ### Worked example
 
 See [Deterministic child secrets via BIP-85](#deterministic-child-secrets-via-bip-85).
+
+---
+
+## `mnemonic final-word`
+
+Given an N-1 word BIP-39 partial phrase, emit the lexicographically
+sorted set of wordlist entries that, when appended as the Nth word,
+yield a phrase with a valid BIP-39 checksum. Output set size is a
+function of N alone: 128 for N=12, 64 for N=15, 32 for N=18, 16 for
+N=21, 8 for N=24.
+
+Use cases include paper-backup recovery (a smudged last word), manual
+seed generation (compute the only-valid checksum-fixing word for a
+hand-rolled partial), and phrase-typo verification (look up whether
+your last word appears in the candidate set for the first N-1 you've
+written down).
+
+### Synopsis
+
+```sh
+mnemonic final-word --from <phrase=<value-or-->> [--language <LANGUAGE>] [--json-out <PATH>]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <phrase=<value-or-->>` | partial phrase as `phrase=<N-1 words>` (inline) or `phrase=-` to read from stdin; inline form emits a `/proc/$PID/cmdline` argv-leakage advisory on stderr |
+| `--language <LANGUAGE>` | BIP-39 wordlist; one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish` (default `english`) |
+| `--json-out <PATH>` | side-effect: write a versioned JSON envelope to `<PATH>` in addition to the plain candidate list on stdout; on Unix a world-readable result raises a permission-mode advisory |
+| `--help` | print help |
+
+### Worked example
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon" |
+  mnemonic final-word --from phrase=- --language english
+```
+
+Stdout: 8 sorted candidate words, one per line — including `art` (the
+canonical zero-entropy 24-word vector). For N=12 partial input
+(`abandon × 11`), the output is 128 lines including `about` (the
+canonical Trezor zero-entropy 12-word vector).
+
+### JSON output
+
+```json
+{
+  "schema_version": "1",
+  "language": "english",
+  "partial_word_count": 11,
+  "target_word_count": 12,
+  "candidate_count": 128,
+  "candidates": ["abandon", "ability", "above", "..."]
+}
+```
+
+Field order is part of the schema (SHA-pinned in
+`tests/cli_final_word_json.rs`). `candidates` is lexicographically
+sorted; `candidate_count == candidates.len()`. The plain stdout output
+is emitted in parallel (the JSON file is a side-effect, not a
+stdout-replacement).
+
+### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Partial word count not in `{11, 14, 17, 20, 23}` | `final-word: got K words; expected one of [11, 14, 17, 20, 23] ...` |
+| Empty partial (0 words after `split_whitespace`) | `final-word: empty partial phrase; need 11/14/17/20/23 words ...` |
+| Unknown word at position I | `final-word: unknown BIP-39 word at position I (not in selected wordlist; did you pick the right --language?)` |
+| `--from` variant other than `phrase=` | `final-word --from only accepts phrase=<value> or phrase=-` |
+
+### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--from phrase=<value>` | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
+| Stdout is a TTY AND candidate set non-empty | `warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools` |
+| `--json-out PATH` with world-readable file (Unix umask 022 default) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
 ---
 
