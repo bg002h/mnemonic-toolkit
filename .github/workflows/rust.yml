@@ -1,0 +1,90 @@
+name: rust
+
+# Cycle B Phase 2 P2.T4 — first Rust CI workflow for the toolkit.
+# Per SPEC §6 G3 (platform coverage: Ubuntu + macOS) and §6 G4.b (Miri on
+# mlock's unsafe blocks). Per Phase 2 R0 I-R0-1 fold (commit 8193e22):
+# the toolkit had no Rust CI workflow before this file (manual.yml +
+# quickstart.yml are docs-build only).
+#
+# Security note: this workflow uses only GitHub-provided trusted context
+# (matrix.os, runner.os). No interpolation of untrusted user input
+# (issue/PR titles, commit messages, etc.).
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rust.yml'
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show ulimit -l (diagnostic)
+        run: ulimit -l || true
+
+      - name: cargo build --tests
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo build --tests -p mnemonic-toolkit
+
+      - name: cargo test (default tests; G2.1 #[ignore]-gated)
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit
+
+      - name: cargo test --include-ignored g2_1 (fresh-process fault injection)
+        # Per SPEC §4 P2 + plan P2.T2: G2.1 (eperm fault injection) is
+        # #[ignore]-gated to avoid OnceLock<FailMode> pollution from
+        # concurrent G1.* tests. Run it separately so it gets a fresh process.
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --test mlock_unit -- --include-ignored g2_1
+
+  miri:
+    name: miri (mlock unsafe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly + miri component
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - name: cargo +nightly miri test mlock::
+        # Per SPEC §6 G4.b: Miri verifies the Rust-side safety of mlock's
+        # 2 unsafe blocks (libc::mlock in pin_pages_for; libc::munlock in
+        # PinnedPageRange::drop). cfg(miri) shims stub the syscalls.
+        run: cargo +nightly miri test -p mnemonic-toolkit --lib mlock::
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
