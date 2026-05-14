@@ -598,6 +598,7 @@ dependencies = [
  "bitcoin",
  "clap",
  "hex",
+ "libc",
  "md-codec",
  "miniscript",
  "mk-codec",
