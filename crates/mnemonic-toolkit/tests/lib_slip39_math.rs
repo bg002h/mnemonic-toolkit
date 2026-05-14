@@ -183,9 +183,9 @@ fn generator_is_three() {
 #[test]
 fn lagrange_interpolate_single_point_recovers_constant() {
     // Polynomial of degree 0: f(x) = c. Any single point recovers c.
-    assert_eq!(lagrange::interpolate_at_zero(&[(5, 42)]), 42);
-    assert_eq!(lagrange::interpolate_at_zero(&[(99, 0)]), 0);
-    assert_eq!(lagrange::interpolate_at_zero(&[(1, 255)]), 255);
+    assert_eq!(lagrange::interpolate_at(&[(5, 42)], 0), 42);
+    assert_eq!(lagrange::interpolate_at(&[(99, 0)], 0), 0);
+    assert_eq!(lagrange::interpolate_at(&[(1, 255)], 0), 255);
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn lagrange_interpolate_two_points_recovers_linear() {
     // recovers a.
     let f_at_1 = gf256::add(17, gf256::mul(42, 1));
     let f_at_2 = gf256::add(17, gf256::mul(42, 2));
-    let recovered = lagrange::interpolate_at_zero(&[(1, f_at_1), (2, f_at_2)]);
+    let recovered = lagrange::interpolate_at(&[(1, f_at_1), (2, f_at_2)], 0);
     assert_eq!(recovered, 17, "linear interp at x=0 recovers constant term");
 }
 
@@ -211,7 +211,7 @@ fn lagrange_interpolate_three_points_recovers_quadratic() {
         gf256::add(gf256::add(a, bx), cxx)
     };
     let pts = [(1u8, f_at(1)), (2u8, f_at(2)), (3u8, f_at(3))];
-    let recovered = lagrange::interpolate_at_zero(&pts);
+    let recovered = lagrange::interpolate_at(&pts, 0);
     assert_eq!(recovered, a, "quadratic interp at x=0 recovers constant term");
 }
 
@@ -232,7 +232,7 @@ fn lagrange_multi_byte_recovers_secret() {
     let s1 = make_share(1);
     let s2 = make_share(2);
     let pts: Vec<(u8, &[u8])> = vec![(1, &s1), (2, &s2)];
-    let recovered = lagrange::interpolate_secret_at_zero(&pts);
+    let recovered = lagrange::interpolate_secret_at(&pts, 0);
     assert_eq!(recovered.as_slice(), &secret, "2-share recovery byte-equal");
 }
 
@@ -258,11 +258,107 @@ fn lagrange_two_of_three_recovery_any_pair() {
         vec![(2, &s2[..]), (3, &s3[..])],
     ];
     for (i, pair) in pairs.iter().enumerate() {
-        let recovered = lagrange::interpolate_secret_at_zero(pair);
+        let recovered = lagrange::interpolate_secret_at(pair, 0);
         assert_eq!(
             recovered.as_slice(),
             &secret,
             "2-of-3 recovery via pair {i} must yield original secret",
+        );
+    }
+}
+
+// ============================================================================
+// Lagrange interpolation at non-zero x — required by SLIP-0039
+// §"Combining the shares": master secret is stored at x=255 and the
+// digest payload at x=254, neither of which is x=0.
+// ============================================================================
+
+#[test]
+fn lagrange_interpolate_at_x_255_recovers_secret_index() {
+    // f(x) = a + b*x over GF(256). Sample at x=1, x=2; interpolate at
+    // x=255 and assert byte-equal to the polynomial's true value at x=255.
+    let a = 100u8;
+    let b = 7u8;
+    let f_at = |x: u8| gf256::add(a, gf256::mul(b, x));
+    let recovered = lagrange::interpolate_at(&[(1, f_at(1)), (2, f_at(2))], 255);
+    assert_eq!(recovered, f_at(255), "interp at x=255 recovers f(255)");
+}
+
+#[test]
+fn lagrange_interpolate_at_x_254_recovers_digest_index() {
+    let a = 200u8;
+    let b = 33u8;
+    let f_at = |x: u8| gf256::add(a, gf256::mul(b, x));
+    let recovered = lagrange::interpolate_at(&[(1, f_at(1)), (3, f_at(3))], 254);
+    assert_eq!(recovered, f_at(254), "interp at x=254 recovers f(254)");
+}
+
+#[test]
+fn lagrange_interpolate_at_arbitrary_nonzero_x_quadratic() {
+    // Quadratic f(x) = a + b*x + c*x^2 over GF(256), evaluated at x=17
+    // (a non-special, non-power-of-2 point inside the field).
+    let a = 5u8;
+    let b = 11u8;
+    let c = 19u8;
+    let f_at = |x: u8| {
+        let bx = gf256::mul(b, x);
+        let cxx = gf256::mul(c, gf256::mul(x, x));
+        gf256::add(gf256::add(a, bx), cxx)
+    };
+    let pts = [(1u8, f_at(1)), (2u8, f_at(2)), (3u8, f_at(3))];
+    let recovered = lagrange::interpolate_at(&pts, 17);
+    assert_eq!(recovered, f_at(17), "quadratic interp at x=17 recovers f(17)");
+}
+
+#[test]
+fn lagrange_interpolate_secret_at_x_255_multi_byte() {
+    // 16-byte secret, 2-of-N split synthesized at x=1, x=2. Interpolate
+    // the multi-byte polynomial at x=255 and compare against the
+    // direct polynomial sample at x=255.
+    let secret = [0xAAu8; 16];
+    let b_coeffs = [0x33u8; 16];
+    let make_share = |x: u8| -> Vec<u8> {
+        (0..16)
+            .map(|i| gf256::add(secret[i], gf256::mul(b_coeffs[i], x)))
+            .collect()
+    };
+    let s1 = make_share(1);
+    let s2 = make_share(2);
+    let pts: Vec<(u8, &[u8])> = vec![(1, &s1), (2, &s2)];
+    let recovered = lagrange::interpolate_secret_at(&pts, 255);
+    assert_eq!(recovered, make_share(255), "multi-byte interp at x=255");
+}
+
+#[test]
+fn lagrange_interpolate_secret_at_x_254_three_of_five_quadratic() {
+    // 32-byte secret on a degree-2 polynomial: synthesize 5 shares at
+    // x=1..=5, take any 3, interpolate at x=254. The result must equal
+    // the polynomial's direct sample at x=254 for every chosen subset.
+    let secret = [0x5Au8; 32];
+    let b = [0x11u8; 32];
+    let c = [0x22u8; 32];
+    let make_share = |x: u8| -> Vec<u8> {
+        (0..32)
+            .map(|i| {
+                let bx = gf256::mul(b[i], x);
+                let cxx = gf256::mul(c[i], gf256::mul(x, x));
+                gf256::add(gf256::add(secret[i], bx), cxx)
+            })
+            .collect()
+    };
+    let shares: Vec<Vec<u8>> = (1u8..=5).map(make_share).collect();
+    let expected = make_share(254);
+
+    let triplets: [[usize; 3]; 3] = [[0, 1, 2], [0, 2, 4], [1, 3, 4]];
+    for triplet in &triplets {
+        let pts: Vec<(u8, &[u8])> = triplet
+            .iter()
+            .map(|&i| ((i + 1) as u8, &shares[i][..]))
+            .collect();
+        let recovered = lagrange::interpolate_secret_at(&pts, 254);
+        assert_eq!(
+            recovered, expected,
+            "3-of-5 quadratic interp at x=254 via triplet {triplet:?}",
         );
     }
 }

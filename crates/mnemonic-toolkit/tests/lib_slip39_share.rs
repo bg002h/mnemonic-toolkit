@@ -260,3 +260,46 @@ fn parse_disallowed_word_count_returns_invalid_padding() {
     let err = parse_slip39_share(&long).expect_err("21-word share must refuse");
     assert_eq!(err, Slip39Error::InvalidPadding { share_idx: 0 });
 }
+
+// ============================================================================
+// Negative — group_threshold > group_count (parse-time refusal).
+//
+// Per python-shamir-mnemonic `share.py` @ commit 17fcce14 lines 216-219:
+//
+//     if self.group_count < self.group_threshold:
+//         raise MnemonicError(...)
+//
+// The toolkit's parser must mirror this; the P1c-E.1 expansion folds in
+// a dedicated `Slip39Error::GroupThresholdExceedsCount` variant (plan
+// §2.3 + §8). Pins vectors.json entry #10 (the 128-bit case).
+//
+// Vector #10 share 1's share_params words are "acrobat acid" (wordlist
+// indices 4 and 1):
+//     share_params_int = (4 << 10) | 1 = 0x1001
+//       member_threshold = (0x1001 & 0xF) + 1 = 2
+//       member_index     = (0x1001 >> 4) & 0xF = 0
+//       group_count      = ((0x1001 >> 8) & 0xF) + 1 = 1
+//       group_threshold  = ((0x1001 >> 12) & 0xF) + 1 = 2
+//       group_index      = (0x1001 >> 16) & 0xF = 0
+//
+// So group_threshold(2) > group_count(1) — the parse must refuse with
+// the new variant carrying those values. The refusal fires AFTER the
+// RS1024 checksum check (the fixture's share has a valid checksum) and
+// AFTER share_params decoding, but BEFORE the value-decode step.
+// ============================================================================
+
+const VECTOR_10_SHARE_1: &str = "music husband acrobat acid artist finance center either graduate swimming object bike medical clothes station aspect spider maiden bulb welcome";
+
+#[test]
+fn parse_too_high_group_threshold_returns_group_threshold_exceeds_count() {
+    let err = parse_slip39_share(VECTOR_10_SHARE_1)
+        .expect_err("vector #10 share 1 must refuse (group_threshold > group_count)");
+    assert_eq!(
+        err,
+        Slip39Error::GroupThresholdExceedsCount {
+            share_idx: 0,
+            threshold: 2,
+            count: 1,
+        },
+    );
+}

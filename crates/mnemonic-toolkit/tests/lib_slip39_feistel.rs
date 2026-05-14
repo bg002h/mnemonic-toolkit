@@ -42,8 +42,8 @@ fn round_trip(secret_len_bytes: usize, iteration_exponent: u8) {
     let master = vec![0xA5u8; secret_len_bytes];
     let passphrase = b"";
     let identifier = 0x1234u16;
-    let ems = feistel::encrypt(&master, passphrase, iteration_exponent, identifier);
-    let recovered = feistel::decrypt(&ems, passphrase, iteration_exponent, identifier);
+    let ems = feistel::encrypt(&master, passphrase, iteration_exponent, identifier, false);
+    let recovered = feistel::decrypt(&ems, passphrase, iteration_exponent, identifier, false);
     assert_eq!(
         recovered.as_slice(),
         master.as_slice(),
@@ -83,8 +83,8 @@ fn round_trip_32_bytes() {
 #[test]
 fn empty_passphrase_round_trip() {
     let master = [0u8; 16];
-    let ems = feistel::encrypt(&master, b"", 0, 0xABCD);
-    let recovered = feistel::decrypt(&ems, b"", 0, 0xABCD);
+    let ems = feistel::encrypt(&master, b"", 0, 0xABCD, false);
+    let recovered = feistel::decrypt(&ems, b"", 0, 0xABCD, false);
     assert_eq!(recovered.as_slice(), &master);
 }
 
@@ -92,8 +92,8 @@ fn empty_passphrase_round_trip() {
 fn non_empty_passphrase_round_trip() {
     let master = [0xFFu8; 32];
     let pass = b"correct horse battery staple";
-    let ems = feistel::encrypt(&master, pass, 0, 0x4567);
-    let recovered = feistel::decrypt(&ems, pass, 0, 0x4567);
+    let ems = feistel::encrypt(&master, pass, 0, 0x4567, false);
+    let recovered = feistel::decrypt(&ems, pass, 0, 0x4567, false);
     assert_eq!(recovered.as_slice(), &master);
 }
 
@@ -105,8 +105,8 @@ fn wrong_passphrase_yields_different_secret() {
     // SLIP-39 design: the Feistel layer is purely cryptographic; the
     // digest check at the share layer detects the mismatch.
     let master = [0x42u8; 16];
-    let ems = feistel::encrypt(&master, b"correct", 0, 0x1111);
-    let recovered_wrong = feistel::decrypt(&ems, b"wrong", 0, 0x1111);
+    let ems = feistel::encrypt(&master, b"correct", 0, 0x1111, false);
+    let recovered_wrong = feistel::decrypt(&ems, b"wrong", 0, 0x1111, false);
     assert_ne!(
         recovered_wrong.as_slice(),
         &master,
@@ -133,8 +133,8 @@ fn iteration_exponent_changes_ems() {
     // Same master + passphrase + identifier but different
     // iteration_exponent → different EMS (PBKDF2 iters differ).
     let master = [0x33u8; 16];
-    let ems0 = feistel::encrypt(&master, b"", 0, 0xAABB);
-    let ems1 = feistel::encrypt(&master, b"", 1, 0xAABB);
+    let ems0 = feistel::encrypt(&master, b"", 0, 0xAABB, false);
+    let ems1 = feistel::encrypt(&master, b"", 1, 0xAABB, false);
     assert_ne!(ems0.as_slice(), ems1.as_slice());
 }
 
@@ -146,8 +146,8 @@ fn iteration_exponent_changes_ems() {
 fn identifier_mismatch_yields_different_ems() {
     let master = [0u8; 16];
     let pass = b"";
-    let ems_a = feistel::encrypt(&master, pass, 0, 0x1234);
-    let ems_b = feistel::encrypt(&master, pass, 0, 0x5678);
+    let ems_a = feistel::encrypt(&master, pass, 0, 0x1234, false);
+    let ems_b = feistel::encrypt(&master, pass, 0, 0x5678, false);
     assert_ne!(
         ems_a.as_slice(),
         ems_b.as_slice(),
@@ -158,8 +158,8 @@ fn identifier_mismatch_yields_different_ems() {
 #[test]
 fn identifier_zero_round_trip() {
     let master = [0u8; 16];
-    let ems = feistel::encrypt(&master, b"", 0, 0);
-    let recovered = feistel::decrypt(&ems, b"", 0, 0);
+    let ems = feistel::encrypt(&master, b"", 0, 0, false);
+    let recovered = feistel::decrypt(&ems, b"", 0, 0, false);
     assert_eq!(recovered.as_slice(), &master);
 }
 
@@ -171,7 +171,7 @@ fn identifier_zero_round_trip() {
 fn ems_length_equals_master_length() {
     for &len in &[16usize, 20, 24, 28, 32] {
         let master = vec![0u8; len];
-        let ems = feistel::encrypt(&master, b"", 0, 0);
+        let ems = feistel::encrypt(&master, b"", 0, 0, false);
         assert_eq!(ems.len(), len, "EMS length must equal master length for size {len}");
     }
 }
@@ -185,8 +185,8 @@ fn encrypt_is_deterministic() {
     let master = [0x77u8; 24];
     let pass = b"test phrase";
     let id = 0x0F0F;
-    let ems1 = feistel::encrypt(&master, pass, 0, id);
-    let ems2 = feistel::encrypt(&master, pass, 0, id);
+    let ems1 = feistel::encrypt(&master, pass, 0, id, false);
+    let ems2 = feistel::encrypt(&master, pass, 0, id, false);
     assert_eq!(ems1.as_slice(), ems2.as_slice(), "encrypt must be deterministic");
 }
 
@@ -197,8 +197,74 @@ fn encrypt_is_deterministic() {
 #[test]
 fn returns_zeroizing_vec() {
     let master = [0u8; 16];
-    let ems: zeroize::Zeroizing<Vec<u8>> = feistel::encrypt(&master, b"", 0, 0);
-    let recovered: zeroize::Zeroizing<Vec<u8>> = feistel::decrypt(&ems, b"", 0, 0);
+    let ems: zeroize::Zeroizing<Vec<u8>> = feistel::encrypt(&master, b"", 0, 0, false);
+    let recovered: zeroize::Zeroizing<Vec<u8>> = feistel::decrypt(&ems, b"", 0, 0, false);
     // Type-binding check; if return shape changes, this won't compile.
     let _ = (ems, recovered);
+}
+
+// ============================================================================
+// Extendable axis (SLIP-0039 §"Encryption of the master secret"):
+//   "If ext = 1, then salt_prefix is an empty string. If ext = 0, then
+//    salt_prefix = 'shamir' || id."
+// extendable=true paths bypass the `shamir`-prefix + identifier salt, so
+// the resulting EMS diverges from the ext=false EMS even with identical
+// (master, passphrase, iter_exp, identifier).
+// ============================================================================
+
+#[test]
+fn extendable_round_trip_16_bytes() {
+    let master = [0xA5u8; 16];
+    let pass = b"correct horse battery staple";
+    let ems = feistel::encrypt(&master, pass, 0, 0x1234, true);
+    let recovered = feistel::decrypt(&ems, pass, 0, 0x1234, true);
+    assert_eq!(
+        recovered.as_slice(),
+        &master,
+        "ext=true 16-byte round-trip must recover the master",
+    );
+}
+
+#[test]
+fn extendable_round_trip_32_bytes_non_empty_passphrase() {
+    let master = [0xFFu8; 32];
+    let ems = feistel::encrypt(&master, b"pw", 1, 0xCAFE, true);
+    let recovered = feistel::decrypt(&ems, b"pw", 1, 0xCAFE, true);
+    assert_eq!(
+        recovered.as_slice(),
+        &master,
+        "ext=true 32-byte round-trip must recover the master",
+    );
+}
+
+#[test]
+fn extendable_axis_non_interop_with_non_extendable() {
+    // Cross-axis: encrypt at ext=false, decrypt at ext=true. The salts
+    // differ across all 4 rounds, so decryption produces garbage — NOT
+    // the master. This is structural: SLIP-0039 designs the ext bit so
+    // the two axes are mutually unrecoverable even with matching
+    // (identifier, iter_exp).
+    let master = [0x42u8; 16];
+    let pass = b"";
+    let ems = feistel::encrypt(&master, pass, 0, 0xBEEF, false);
+    let recovered = feistel::decrypt(&ems, pass, 0, 0xBEEF, true);
+    assert_ne!(
+        recovered.as_slice(),
+        &master,
+        "ext=false encrypt must NOT round-trip through an ext=true decrypt",
+    );
+}
+
+#[test]
+fn extendable_axis_changes_ems_bytes() {
+    // Same inputs other than the ext bit ⇒ different EMS, because the
+    // salt_prefix flips between b"shamir" || id_be and the empty string.
+    let master = [0x11u8; 16];
+    let ems_false = feistel::encrypt(&master, b"", 0, 0x1234, false);
+    let ems_true = feistel::encrypt(&master, b"", 0, 0x1234, true);
+    assert_ne!(
+        ems_false.as_slice(),
+        ems_true.as_slice(),
+        "flipping the extendable bit must change the EMS bytes",
+    );
 }

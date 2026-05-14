@@ -131,6 +131,58 @@ fn variant_invalid_padding() {
 }
 
 // ============================================================================
+// New variants — P1c-E.1 driver-scope expansion (plan §8).
+//
+//   - EmptyShares: `slip39_combine` called with `&[]` (R0 §3.4 step 1).
+//   - InvalidShareValueLength: per-share value-byte-length sanity at
+//     combine entry (R0 I2; pins vector #40).
+//   - ShareValueLengthMismatch: cross-share value-byte-length divergence
+//     at combine (R0 I1; 6th invariant beyond the 5 metadata fields).
+//   - ExtendableMismatch: cross-share extendable-bit divergence at
+//     combine (R0 I1; orthogonal to IdentifierMismatch).
+//   - GroupThresholdExceedsCount: parse-time refusal when `group_count <
+//     group_threshold` on a single share (R0 I3; pins vectors #10 / #29).
+// ============================================================================
+
+#[test]
+fn variant_empty_shares() {
+    let e = Slip39Error::EmptyShares;
+    assert!(!format!("{e}").is_empty());
+}
+
+#[test]
+fn variant_invalid_share_value_length() {
+    let e = Slip39Error::InvalidShareValueLength { share_idx: 2, got: 19 };
+    let msg = format!("{e}");
+    assert!(msg.contains('2'));
+    assert!(msg.contains("19"));
+}
+
+#[test]
+fn variant_share_value_length_mismatch() {
+    let e = Slip39Error::ShareValueLengthMismatch;
+    assert!(!format!("{e}").is_empty());
+}
+
+#[test]
+fn variant_extendable_mismatch() {
+    let e = Slip39Error::ExtendableMismatch;
+    assert!(!format!("{e}").is_empty());
+}
+
+#[test]
+fn variant_group_threshold_exceeds_count() {
+    let e = Slip39Error::GroupThresholdExceedsCount {
+        share_idx: 0,
+        threshold: 3,
+        count: 2,
+    };
+    let msg = format!("{e}");
+    assert!(msg.contains('3'));
+    assert!(msg.contains('2'));
+}
+
+// ============================================================================
 // Trait impls
 // ============================================================================
 
