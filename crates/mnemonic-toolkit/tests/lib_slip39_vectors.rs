@@ -39,13 +39,13 @@
 //! | 8, 27            | mismatching group thresholds                        | GroupThresholdMismatch                                      |
 //! | 9, 28            | mismatching group counts                            | GroupCountMismatch                                          |
 //! | 10, 29           | greater group threshold than group counts           | GroupThresholdExceedsCount { share_idx: 0, threshold: 2, count: 1 } (parse-time) |
-//! | 11, 30           | duplicate member indices                            | DuplicateMemberIndex { .. } (shape; field values content-dependent) |
+//! | 11, 30           | duplicate member indices                            | DuplicateMemberIndex { group_idx: 0, member_idx: 2 } (pre-GREEN N1: both shares' share_params "academic always" → 0x21 → member_index=2, group_index=0) |
 //! | 12, 31           | mismatching member thresholds                       | MemberThresholdMismatch                                     |
 //! | 13, 32           | invalid digest                                      | DigestVerificationFailed                                    |
 //! | 14, 15, 33, 34   | Insufficient number of groups                       | InsufficientShares { .. } (group-level; field values content-dependent) |
 //! | 16, 35           | Threshold groups, insufficient members in one group | InsufficientShares { .. } (member-level; field values content-dependent) |
 //! | 39               | insufficient length                                 | InvalidPadding { share_idx: 0 } (P1c-D fold)                |
-//! | 40               | invalid master secret length                        | InvalidShareValueLength { share_idx: 0, got: <content-dep> } |
+//! | 40               | invalid master secret length                        | InvalidPadding { share_idx: 0 } (pre-GREEN C1 re-pin: 21 words → padding=140%16=12>8 → parser refuses at step 3 before combine's InvalidShareValueLength check can run; the variant is retained as defense-in-depth and exercised by a synthetic forged-share test in `mod tests`) |
 //!
 //! For the content-dependent fields (DuplicateMemberIndex's
 //! member_idx, InsufficientShares' needed/got, InvalidShareValueLength's
@@ -108,13 +108,13 @@ fn negative_expected(idx_1based: usize) -> ExpectedNegative {
             threshold: 2,
             count: 1,
         }),
-        11 | 30 => Shape(|e| matches!(e, DuplicateMemberIndex { .. })),
+        11 | 30 => Exact(DuplicateMemberIndex { group_idx: 0, member_idx: 2 }),
         12 | 31 => Exact(MemberThresholdMismatch),
         13 | 32 => Exact(DigestVerificationFailed),
         14 | 15 | 33 | 34 => Shape(|e| matches!(e, InsufficientShares { .. })),
         16 | 35 => Shape(|e| matches!(e, InsufficientShares { .. })),
         39 => Exact(InvalidPadding { share_idx: 0 }),
-        40 => Shape(|e| matches!(e, InvalidShareValueLength { share_idx: 0, .. })),
+        40 => Exact(InvalidPadding { share_idx: 0 }),
         _ => panic!("vector #{idx_1based} is not a negative vector"),
     }
 }
@@ -241,7 +241,7 @@ vector_test!(36, vector_36_threshold_case1_256);
 vector_test!(37, vector_37_threshold_case2_256);
 vector_test!(38, vector_38_threshold_case3_256);
 vector_test!(39, vector_39_insufficient_length);
-vector_test!(40, vector_40_invalid_master_secret_length);
+vector_test!(40, vector_40_invalid_master_secret_length_folds_to_invalid_padding);
 vector_test!(41, vector_41_modular_arithmetic_error_detection);
 vector_test!(42, vector_42_extendable_no_sharing_128);
 vector_test!(43, vector_43_extendable_basic_sharing_2of3_128);

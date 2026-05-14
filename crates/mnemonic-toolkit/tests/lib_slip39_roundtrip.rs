@@ -138,18 +138,29 @@ fn run_trial(
         );
     }
 
-    // Select `member_threshold` shares from the first `group_threshold`
-    // groups via the render → parse path (doubles as wire-format
-    // encoding coverage; avoids needing Clone on Share).
+    // Pick `group_threshold` groups via Fisher-Yates shuffle on group
+    // indices (deterministic per trial seed). This rotates which groups
+    // get round-tripped at combine — a driver bug that mis-indexes
+    // group-level Shamir x-coordinates for groups >= group_threshold
+    // would slip past if the test always picked groups [0..gt).
+    // (Pre-GREEN I1 fold.)
+    let mut group_indices: Vec<usize> = (0..groups.len()).collect();
+    shuffle(&mut group_indices, &mut rng);
+    let selected_group_indices = &group_indices[..group_threshold as usize];
+
+    // For each selected group, pick `member_threshold` shares via the
+    // render → parse path (doubles as wire-format encoding coverage;
+    // avoids needing Clone on Share).
     let mut selected: Vec<Share> = Vec::new();
-    for g_idx in 0..group_threshold as usize {
+    for &g_idx in selected_group_indices {
         let needed = groups[g_idx].0 as usize;
         for share in split_shares[g_idx].iter().take(needed) {
             let mnemonic = render_slip39_share(share);
             let parsed = parse_slip39_share(&mnemonic).unwrap_or_else(|e| {
                 panic!(
                     "G2 trial (entropy={entropy_size}, gt={group_threshold}, \
-                     groups={groups:?}, ext={extendable}, seed={seed:#x}): \
+                     groups={groups:?}, ext={extendable}, seed={seed:#x}, \
+                     selected_groups={selected_group_indices:?}): \
                      render/parse roundtrip on emitted share failed: {e:?}"
                 )
             });

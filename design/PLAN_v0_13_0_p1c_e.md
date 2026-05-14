@@ -186,7 +186,7 @@ Test layout: one `#[test]` per vector (using a macro or `paste!` for 45 named te
 | 14, 15, 33, 34 | Insufficient number of groups | `InsufficientShares { group_idx: <sentinel>, needed, got }` |
 | 16, 35 | Threshold groups but insufficient members | `InsufficientShares { group_idx, needed, got }` (member-level) |
 | 39 | Mnemonic with insufficient length | `InvalidPadding { share_idx: 0 }` (per P1c-D fold) |
-| 40 | Mnemonic with invalid master secret length | `InvalidShareValueLength { share_idx: 0, got: <actual> }` (NEW) |
+| 40 | Mnemonic with invalid master secret length | `InvalidPadding { share_idx: 0 }` (pre-GREEN C1 re-pin: vector is 21 words → `padding_bits = 140 % 16 = 12 > 8` → parser refuses at step 3 BEFORE the combine-layer `InvalidShareValueLength` check can run; the variant is retained as defense-in-depth and exercised by a synthetic forged-share test in `src/slip39/mod.rs::tests::combine_invalid_share_value_length_remaps_share_idx_to_input_position`) |
 
 Plus #5 / #24 and the "Basic sharing 2-of-3" duplicate description: dispatch by inspecting `mnemonics.len()`. If `mnemonics.len() == 1` and `mnemonics[0]` matches a share known to be from the 2-of-3 set → InsufficientShares.
 
@@ -196,9 +196,9 @@ R0 N2 fold: the pre-GREEN test-design review for P1c-E.2 takes this exact table 
 
 **Default `cargo test` shape — ~200 trials (target ≤ 5 seconds at iter_exp=0):**
 - 5 entropy sizes: {16, 20, 24, 28, 32}
-- 4 group configs:
+- 4 group configs (notation: `(group_threshold, [(member_threshold, member_count), ...])`):
   - `(1, [(1, 1)])` — 1-of-1 trivial
-  - `(2, [(2, 3)])` — single group 2-of-3
+  - `(1, [(2, 3)])` — single group 2-of-3 (pre-GREEN N3 typo fix: was `(2, [(2, 3)])` which violates `group_threshold ≤ groups.len()`)
   - `(1, [(2, 3), (3, 5)])` — 1-of-2 groups (either group reconstructs)
   - `(2, [(3, 3), (3, 5), (2, 5)])` — 2-of-3 groups, varied member configs
 - 2 ext-axes: {false, true}

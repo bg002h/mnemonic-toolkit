@@ -121,6 +121,54 @@ mod tests {
     }
 
     #[test]
+    fn combine_invalid_share_value_length_remaps_share_idx_to_input_position() {
+        // Pre-GREEN I2 fold: pin that `slip39_combine`'s per-share
+        // value-length check (plan §3.4 step 3) emits the INPUT POSITION
+        // as `share_idx`, not the parser's default 0. After the C1 fold
+        // (vector #40 now folds to InvalidPadding at parse), no G1
+        // fixture vector exercises this combine-time path — this
+        // synthetic forged-share test closes the gap and pins the
+        // `InvalidShareValueLength` variant's defense-in-depth role.
+        //
+        // Construct two shares with identical metadata except value
+        // length: share[0] has a valid 16-byte value; share[1] has an
+        // out-of-set 19-byte value. The per-share check must fire on
+        // share[1] BEFORE the cross-share consistency check at step 4
+        // (which would otherwise emit `ShareValueLengthMismatch`).
+        let share_0 = Share::from_parts(
+            vec![0u8; 16],
+            /* identifier */ 0x1234,
+            /* extendable */ false,
+            /* iteration_exponent */ 0,
+            /* group_index */ 0,
+            /* group_threshold */ 1,
+            /* group_count */ 1,
+            /* member_index */ 0,
+            /* member_threshold */ 1,
+        );
+        let share_1 = Share::from_parts(
+            vec![0u8; 19],
+            0x1234,
+            false,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+        );
+        let err = slip39_combine(&[share_0, share_1], b"").unwrap_err();
+        assert_eq!(
+            err,
+            Slip39Error::InvalidShareValueLength {
+                share_idx: 1,
+                got: 19,
+            },
+            "combine must report share_idx=1 (input position), not 0 (parser default)",
+        );
+    }
+
+    #[test]
     fn split_secret_t1_n5_replicates_secret_without_digest() {
         // T == 1 special case: ALL N shares equal the secret directly.
         // No digest computed; no random bytes consumed beyond what the
