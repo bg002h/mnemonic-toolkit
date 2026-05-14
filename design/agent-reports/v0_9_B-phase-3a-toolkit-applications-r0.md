@@ -6,7 +6,10 @@
 **Plan:** `~/.claude/plans/v0_9_B-secret-memory-hygiene-cycle-b.md` (R1 Fix-B; not in git)
 **Scope:** Phase 3a — apply slice-fn `pin_pages_for` at toolkit Sites 1-4 + wire `report_at_exit()` in main()
 **Phase 2 baseline:** commit `30cd0e6` (CI green: test matrix Ubuntu+macOS + miri + clippy)
-**Verdict:** **RE-DRAFT (4 Critical + 3 Important + 2 Nit; see §10)**
+**Re-dispatch (R0 v2):** lock C-3/C-4 resolution with full trade-off context; confirm I-1/I-2/I-3 alt locks.
+**Verdict:** **LOCK (proceed to P3a.T2 RED) — see §10c (R0 v2)**
+
+> **R0 v1 (commit `baf2e4a`)** returned RE-DRAFT pending C-3/C-4 lock + I-1/I-2/I-3 alt confirmation. **R0 v2 (this revision)** resolves all locks below. The §1-§9 body is unchanged from v1; §10 retained as historical record; §10b adds the C-3/C-4 lock and §10c adds the I-1/I-2/I-3 alt confirmations + final verdict.
 
 ---
 
@@ -290,3 +293,107 @@ mlock affects kernel page-pinning bookkeeping, not byte output. `pin_pages_for` 
 - Plan P3a.T2 (RED) + P3a.T3 (GREEN): split RED tests for Site 2/3 field-type-change-or-impl-Drop into named tests.
 
 Once fold lands and re-review returns 0C/0I, P3a.T2 RED may proceed.
+
+> **(R0 v1 verdict above superseded by §10b + §10c below.)**
+
+---
+
+## §10b — C-3/C-4 lock (R0 v2)
+
+### Decision: **Option (a) — convert to `Zeroizing<Vec<u8>>`; delete `impl Drop for DerivedAccount`.**
+
+Both `ResolvedSlot.entropy` and `DerivedAccount.entropy` migrate to the `Zeroizing<Vec<u8>>` form in Phase 3a, in lockstep with the new `_entropy_pin` siblings.
+
+**Field-type targets (locked):**
+
+```rust
+// crates/mnemonic-toolkit/src/synthesize.rs — ResolvedSlot
+pub struct ResolvedSlot {
+    pub xpub: Xpub,
+    pub fingerprint: Fingerprint,
+    pub path: DerivationPath,
+    pub path_raw: String,
+    pub entropy: Option<Zeroizing<Vec<u8>>>,          // CHANGED from Option<Vec<u8>>
+    pub _entropy_pin: Option<Arc<PinnedPageRange>>,   // NEW (per I-2 lock)
+    pub master_xpub: Option<Xpub>,
+}
+
+// crates/mnemonic-toolkit/src/derive.rs — DerivedAccount
+pub struct DerivedAccount {
+    pub entropy: Zeroizing<Vec<u8>>,                  // CHANGED from Vec<u8>
+    pub master_fingerprint: Fingerprint,
+    pub account_xpub: Xpub,
+    pub account_xpriv: Xpriv,
+    pub account_path: DerivationPath,
+    pub _entropy_pin: PinnedPageRange,                // NEW (not Arc — DerivedAccount has no Clone)
+}
+// DELETED: impl Drop for DerivedAccount { ... } (Zeroizing now carries the scrub responsibility)
+```
+
+### Why (a) over (b)
+
+**(1) The deferred-FOLLOWUP record decisively favors (a).** `design/FOLLOWUPS.md:48-55` contains an open entry `resolved-slot-entropy-zeroizing-field` (surfaced 2026-05-13, Cycle A Phase 2 GREEN) that explicitly schedules `ResolvedSlot.entropy` → `Option<Zeroizing<Vec<u8>>>` and notes deferral was due to "19-site cascade." It is tiered `v0.9.2-nice-to-have` with status `open`. Phase 3a is already touching every one of those 19 sites to add `_entropy_pin` siblings — the cascade cost is paid once. Landing the field-type change in the same commit is strictly cheaper than landing it as a separate `v0.9.2-nice-to-have`.
+
+**(2) G4.a invariant is structurally guaranteed under (a).** With `Zeroizing<Vec<u8>>` as the first declared field and `_entropy_pin` immediately after, RFC 1857 forward-drop ordering gives: `Zeroizing::drop` zeroizes bytes → `_entropy_pin` munlocks pages. The invariant is enforced by struct field declaration order plus the standard Zeroizing trait — no human-maintained `impl Drop` body to forget to update when a future contributor adds a sibling field. Under (b), the invariant lives inside the body of a hand-written `Drop::drop` that must continue to call `zeroize()` correctly even as fields are added.
+
+**(3) SPEC narrative cost is symmetric.** Both options require a SPEC §2 row 5 fold; (a) folds toward simpler eventual state.
+
+**(4) Cycle A audit-trail concern is manageable.** Option (a) requires three `lint_zeroize_discipline.rs` evidence anchors to update (lines 50-64):
+
+- Row "DerivedAccount impl Drop scrubs entropy on drop" → REPLACE with "DerivedAccount entropy field is Zeroizing<Vec<u8>>" (evidence `pub entropy: Zeroizing<Vec<u8>>`).
+- Row "DerivedAccount::into_parts() consuming method (migration anchor)" → UNCHANGED.
+- Row "derive_full() entropy local wraps before move into DerivedAccount" → UNCHANGED.
+
+The lint's docstring at lines 14-16 explicitly enumerates Zeroizing<>, return-type, helper, AND impl Drop as accepted anchors. Migrating one row from impl-Drop anchor to Zeroizing<> anchor is *within* the lint's existing taxonomy — not a discipline erasure.
+
+**(5) `into_parts` cross-boundary handoff is identical under (a) and (b).** Both options have the same I-3 issue.
+
+**Trade-off acknowledgment:** Option (a) erases the literal text "impl Drop for DerivedAccount" from `src/derive.rs`. Mitigated by:
+
+- Updating `lint_zeroize_discipline.rs` row label to "DerivedAccount entropy field is Zeroizing<Vec<u8>>".
+- Adding a CHANGELOG entry for Cycle B's release tag noting field-type migration and outward-API preservation of `into_parts`.
+- Closing the `resolved-slot-entropy-zeroizing-field` FOLLOWUP entry with a Companion line to the Cycle B Phase 3a commit.
+
+This trade is favorable: Cycle A's *intent* (entropy scrubs on drop) is preserved and strengthened; only the *mechanism* changes from impl-Drop to Zeroizing-wrapper, completing the deferred Cycle A action.
+
+### Implementation impact summary (delta from R0 v1)
+
+1. `derive.rs`: field `entropy: Vec<u8>` → `entropy: Zeroizing<Vec<u8>>`; new field `_entropy_pin: PinnedPageRange` declared AFTER entropy.
+2. `derive.rs`: DELETE `impl Drop for DerivedAccount { ... }` (lines 49-58).
+3. `derive.rs`: `into_parts(mut self) -> (Vec<u8>, ...)` body changes from `let entropy = std::mem::take(&mut self.entropy);` to `let entropy = std::mem::take(&mut *self.entropy);` (Deref through Zeroizing). Outward signature preserved.
+4. `derive_slot.rs:77`: `DerivedAccount` construction wraps entropy in `Zeroizing::new(...)` AND adds `_entropy_pin: pin_pages_for(&entropy_bytes[..])` initializer.
+5. `derive_full` (`derive.rs:60-81`): the existing `Zeroizing::new(mnemonic.to_entropy())` local flows into the struct field unchanged.
+6. `synthesize.rs`: field `entropy: Option<Vec<u8>>` → `entropy: Option<Zeroizing<Vec<u8>>>`; new field `_entropy_pin: Option<Arc<PinnedPageRange>>` declared AFTER entropy.
+7. All 6 `ResolvedSlot` construction sites updated to wrap `Some(entropy)` → `Some(Zeroizing::new(entropy))` and add the `_entropy_pin: Some(Arc::new(pin_pages_for(...)))` initializer (or `None` for watch-only/wif arms).
+8. Cascade: every read of `ResolvedSlot.entropy` previously getting `&Vec<u8>` now gets `&Zeroizing<Vec<u8>>` (Deref-coerces to `&[u8]` for slice consumers — most reads are slice-borrows, mechanical).
+9. `lint_zeroize_discipline.rs:50-54` row "DerivedAccount impl Drop scrubs entropy on drop" → relabel to "DerivedAccount entropy field is Zeroizing<Vec<u8>>" with evidence `pub entropy: Zeroizing<Vec<u8>>`.
+10. `lint_zeroize_discipline.rs` lines 109-113 comment block "ResolvedSlot.entropy field-type change deferred to FOLLOWUPS …" → DELETE (deferral resolved) and ADD a new row: "ResolvedSlot entropy field is Option<Zeroizing<Vec<u8>>>" with evidence `pub entropy: Option<Zeroizing<Vec<u8>>>` against `src/synthesize.rs`.
+11. `design/FOLLOWUPS.md` `resolved-slot-entropy-zeroizing-field` entry: transition `Status: open` → `Status: closed (Cycle B Phase 3a commit <sha>)`.
+12. SPEC §2 row 5 + §4 P3a: rewrite to reflect actual Cycle A → Cycle B transition. Suggested wording: "Cycle A Phase 2 GREEN landed `DerivedAccount.entropy: Vec<u8>` with `impl Drop` zeroize, and `ResolvedSlot.entropy: Option<Vec<u8>>` with local-wrap discipline at producers/consumers (per FOLLOWUP `resolved-slot-entropy-zeroizing-field`). Cycle B Phase 3a completes the migration to `Zeroizing<Vec<u8>>` (resp. `Option<Zeroizing<Vec<u8>>>`) field types AND adds `_entropy_pin` siblings (`PinnedPageRange` resp. `Option<Arc<PinnedPageRange>>`), achieving structural enforcement of the G4.a 'zeroize-then-munlock' drop ordering via RFC 1857 forward-drop semantics."
+
+---
+
+## §10c — Confirmation of already-locked decisions and final verdict (R0 v2)
+
+**Locked design decisions (per parent agent re-dispatch):**
+
+1. **I-2 (Arc-wrap):** `ResolvedSlot._entropy_pin: Option<Arc<PinnedPageRange>>`. `ResolvedSlot: Clone` is preserved; pin shared across clones via Arc refcount; final drop munlocks once. `DerivedAccount._entropy_pin: PinnedPageRange` (no Arc — DerivedAccount is not Clone and is consumed via `into_parts`).
+
+2. **I-3 alt (release CI job):** New CI job in `.github/workflows/rust.yml` running `cargo test --release --test cli_mlock_g2_subprocess`. Linux-only (gate to `ubuntu-latest`); verify the `MNEMONIC_TEST_MLOCK_FAIL_MODE` harness is `cfg(target_os = "linux")` in P3a.T2 RED.
+
+3. **I-1 (post-stdin-substitution pin):** Pin block lands AFTER `apply_stdin_substitutions` / `apply_slot_stdin` returns in each cmd handler. For `cmd::derive_child`'s pre-existing `Zeroizing<String>` locals, pin is `pin_pages_for(from_value.as_bytes())` / `pin_pages_for(stdin_passphrase.as_bytes())` after those locals are bound.
+
+4. **C-3/C-4 (option a):** Per §10b above.
+
+### Final verdict: **LOCK — proceed to P3a.T2 RED.**
+
+All four Critical findings (C-1, C-2, C-3, C-4) and all three Important findings (I-1, I-2, I-3 / I-3 alt) have explicit, source-grounded resolutions. The two Nits (N-1, N-2) are low-risk code-shape preferences and do not block RED.
+
+**Pre-RED checklist for the implementer:**
+
+- [ ] SPEC §2 row 5 + §4 P3a folded per §10b item 12.
+- [ ] Plan P3a.T1 enumerates the 4 cmd structs (not 6); plan P3a.T3 step 1 enumerates Site 2/3 field-type transitions per §10b items 1-8.
+- [ ] FOLLOWUP `resolved-slot-entropy-zeroizing-field` annotated with "scheduled for closure in Cycle B Phase 3a" until commit ships; then closed.
+- [ ] Lint anchor updates (§10b items 9-10) included in the same commit as the field-type changes (otherwise lint goes RED mid-cycle).
+- [ ] CHANGELOG entry drafted for Cycle B release tag noting `DerivedAccount.entropy` / `ResolvedSlot.entropy` field-type migration and outward-API preservation of `into_parts`.
+- [ ] Phase 3a CI delta includes the new `cargo test --release --test cli_mlock_g2_subprocess` job (Linux-only).
