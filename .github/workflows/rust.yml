@@ -60,7 +60,7 @@ jobs:
         # specific test name so the OnceLock<FailMode> initializes fresh
         # from MNEMONIC_TEST_MLOCK_FAIL_MODE in this step's env.
         env:
-          MNEMONIC_TEST_MLOCK_FAIL_MODE: eperm
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "eperm"
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
@@ -72,7 +72,7 @@ jobs:
         # EINVAL under fault injection. #[should_panic(expected = "EINVAL")]
         # asserts the panic message contains the substring.
         env:
-          MNEMONIC_TEST_MLOCK_FAIL_MODE: einval
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "einval"
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
@@ -83,8 +83,11 @@ jobs:
         # Per SPEC §6 G2.4: control case — FAIL_MODE=off must not synthesize
         # failures. Verifies the wrapper does not increment failure_count
         # spuriously in a healthy ulimit environment.
+        # NOTE: bare 'off' in YAML 1.1 is a boolean false; quote to force
+        # string interpretation (GitHub Actions rejects the workflow without
+        # quotes — first observed at run 25834458333 on 2026-05-14).
         env:
-          MNEMONIC_TEST_MLOCK_FAIL_MODE: off
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "off"
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
