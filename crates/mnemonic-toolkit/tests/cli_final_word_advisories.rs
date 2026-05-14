@@ -79,11 +79,12 @@ fn piped_stdout_does_not_emit_stdout_on_tty_advisory() {
 #[test]
 fn json_out_world_readable_emits_advisory() {
     use std::os::unix::fs::PermissionsExt;
-    // Create a temp file pre-chmod'd 0o644 (world-readable).
+    // Pre-create the file at 0o644 and KEEP it alive through the CLI
+    // invocation. `std::fs::write` opens the existing path with O_TRUNC
+    // (not O_CREAT-from-scratch), so the pre-set mode is preserved.
     let f = NamedTempFile::new().unwrap();
     let path = f.path().to_owned();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-    drop(f);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("final-word")
@@ -100,6 +101,7 @@ fn json_out_world_readable_emits_advisory() {
         stderr.contains("world-readable") || stderr.contains("umask"),
         "world-readable --json-out path must emit permission-mode advisory; got: {stderr}",
     );
+    drop(f);
 }
 
 #[cfg(unix)]
@@ -109,7 +111,7 @@ fn json_out_0o600_does_not_emit_advisory() {
     let f = NamedTempFile::new().unwrap();
     let path = f.path().to_owned();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    drop(f);
+    // Keep `f` alive so the path's 0o600 mode persists into the CLI call.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("final-word")
@@ -126,4 +128,5 @@ fn json_out_0o600_does_not_emit_advisory() {
         !stderr.contains("world-readable"),
         "0o600 --json-out path must NOT emit world-readable advisory; got: {stderr}",
     );
+    drop(f);
 }

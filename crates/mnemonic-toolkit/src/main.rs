@@ -49,6 +49,8 @@ enum Command {
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
+    /// emit the set of BIP-39 last words that yield a valid checksum for an N-1 partial phrase
+    FinalWord(cmd::final_word::FinalWordArgs),
     /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
     GuiSchema(cmd::gui_schema::GuiSchemaArgs),
 }
@@ -77,6 +79,7 @@ fn main() -> ExitCode {
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
         }
+        Command::FinalWord(args) => cmd::final_word::run(args, stdin, stdout, stderr),
         Command::GuiSchema(args) => {
             // Re-derive the clap `Command` tree via CommandFactory so the
             // schema reflects the canonical clap-derive surface (single

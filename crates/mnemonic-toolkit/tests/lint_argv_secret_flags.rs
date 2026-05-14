@@ -149,6 +149,12 @@ const CANONICAL_FLAG_ROWS: &[FlagRow] = &[
         source_file: "src/cmd/derive_child.rs",
         evidence: &["passphrase_stdin", "passphrase-stdin"],
     },
+    // ---- final-word (1 row) — v0.11.0 ----
+    FlagRow {
+        label: "final-word --from phrase=",
+        source_file: "src/cmd/final_word.rs",
+        evidence: &["phrase=-", "secret_in_argv_warning"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -158,12 +164,14 @@ fn crate_root() -> &'static Path {
 }
 
 #[test]
-fn canonical_list_has_twenty_rows() {
+fn canonical_list_has_twenty_one_rows() {
+    // v0.9.0 baseline = 20 rows; v0.11.0 adds `final-word --from phrase=` (+1).
     assert_eq!(
         CANONICAL_FLAG_ROWS.len(),
-        20,
-        "survey §5 toolkit subtable enumerates 20 secret-bearing flag-rows; \
-         the canonical list must match exactly. Adjust both in lockstep."
+        21,
+        "survey §5 toolkit subtable enumerates 21 secret-bearing flag-rows \
+         (20 v0.9.0 + 1 v0.11.0 final-word); the canonical list must match \
+         exactly. Adjust both in lockstep."
     );
 }
 

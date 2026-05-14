@@ -194,6 +194,12 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/electrum.rs",
         evidence: &["zeroize::Zeroizing::new(entropy.iter()"],
     },
+    // ---- cmd/final_word.rs (v0.11.0) ----
+    ZeroizeRow {
+        label: "final-word run() parsed partial wraps in Zeroizing<String>",
+        source_file: "src/cmd/final_word.rs",
+        evidence: &["zeroize::Zeroizing::new"],
+    },
 ];
 
 fn crate_root() -> &'static Path {

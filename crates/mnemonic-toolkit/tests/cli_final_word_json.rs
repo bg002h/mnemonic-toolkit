@@ -128,8 +128,10 @@ fn anchor_abandon_11_envelope_sha_pin() {
     use bitcoin::hashes::{sha256, Hash};
     let h = sha256::Hash::hash(trimmed.as_bytes());
     let actual = format!("{}", h);
-    // PIN POST-GREEN: replace placeholder with the captured SHA.
-    const EXPECTED: &str = "P2_PLACEHOLDER_PIN_AT_GREEN";
+    // Pinned at P2 GREEN (2026-05-14). If schema or sort changes
+    // intentionally, update EXPECTED and document the rationale in the
+    // commit message.
+    const EXPECTED: &str = "b74e0b4a6531c926d6f215e5037cf6b322d925fe2bd9ff7f05f626ceca146f02";
     assert_eq!(
         actual, EXPECTED,
         "JSON envelope SHA-pin drift for abandon×11; if schema or sort \
@@ -145,6 +147,7 @@ fn anchor_beef_11_envelope_sha_pin() {
     use bitcoin::hashes::{sha256, Hash};
     let h = sha256::Hash::hash(trimmed.as_bytes());
     let actual = format!("{}", h);
-    const EXPECTED: &str = "P2_PLACEHOLDER_PIN_AT_GREEN";
+    // Pinned at P2 GREEN (2026-05-14).
+    const EXPECTED: &str = "273ae8ac972ef0f9baefeab4f47668b4a678e80b0f7d241a5e85f1efd295f3fa";
     assert_eq!(actual, EXPECTED, "JSON envelope SHA-pin drift for beef×11");
 }
