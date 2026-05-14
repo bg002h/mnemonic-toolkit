@@ -604,6 +604,8 @@ dependencies = [
  "mk-codec",
  "ms-codec",
  "predicates",
+ "rand_chacha",
+ "rand_core",
  "regex",
  "serde",
  "serde_json",

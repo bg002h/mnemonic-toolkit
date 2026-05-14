@@ -16,6 +16,12 @@
 //!   surface does not pull in the binary-private `ToolkitError`. The CLI
 //!   handler in `src/cmd/final_word.rs` (P2) converts `FinalWordError`
 //!   into `ToolkitError` at the boundary.
+//! - `seed_xor` (v0.12.0 P1): Coldcard-compatible BIP-39 ↔ BIP-39
+//!   all-or-nothing XOR-based seed splitter. Defines a library-local
+//!   `SeedXorError` per the same pattern as `final_word`. The CLI
+//!   handler in `src/cmd/seed_xor.rs` (P2) converts `SeedXorError`
+//!   into `ToolkitError` at the boundary.
 
 pub mod final_word;
 pub mod mlock;
+pub mod seed_xor;
