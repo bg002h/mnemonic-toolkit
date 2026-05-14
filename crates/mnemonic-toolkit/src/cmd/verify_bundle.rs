@@ -15,8 +15,10 @@ use crate::parse::MultisigPathFamily;
 use crate::slot_input::SlotInput;
 use crate::template::CliTemplate;
 use clap::Args;
+use mnemonic_toolkit::mlock::pin_pages_for;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Args, Debug, Clone)]
 pub struct VerifyBundleArgs {
@@ -468,13 +470,16 @@ fn descriptor_mode_verify_run<W: Write>(
             i: i as u8,
             fp: slot.fingerprint.to_bytes(),
         });
+        let entropy = slot.entropy.clone();
+        let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub: slot.xpub,
             fingerprint: slot.fingerprint,
             path: slot.path.clone(),
             path_raw: slot.path_raw.clone(),
-            entropy: slot.entropy.clone(),
+            entropy,
             master_xpub: slot.master_xpub,
+            _entropy_pin: entropy_pin,
         });
         if i == 0 {
             entropy_at_0 = slot.entropy.as_ref().map(|e| zeroize::Zeroizing::new(e.clone()));

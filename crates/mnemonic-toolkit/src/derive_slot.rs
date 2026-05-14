@@ -74,12 +74,19 @@ pub(crate) fn derive_bip32_from_entropy(
         )));
     }
 
+    let entropy_bytes = entropy.to_vec();
+    // Cycle B Phase 3a Path B-lite Site 3 — pin BEFORE moving entropy_bytes
+    // into the struct. Vec keeps its heap-data pointer stable across the
+    // move, so the pin captured here remains valid for the lifetime of the
+    // returned DerivedAccount.
+    let entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy_bytes[..]);
     Ok(DerivedAccount {
-        entropy: entropy.to_vec(),
+        entropy: entropy_bytes,
         master_fingerprint,
         account_xpub,
         account_xpriv,
         account_path: path,
+        _entropy_pin: entropy_pin,
     })
 }
 

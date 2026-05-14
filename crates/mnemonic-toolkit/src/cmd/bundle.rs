@@ -11,9 +11,11 @@ use crate::parse::MultisigPathFamily;
 use crate::synthesize::Bundle;
 use crate::template::CliTemplate;
 use clap::Args;
+use mnemonic_toolkit::mlock::pin_pages_for;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Args, Debug, Clone)]
 pub struct BundleArgs {
@@ -345,6 +347,7 @@ pub(crate) fn resolve_slots(
             // use `into_parts` for the consuming move (E0509-safe).
             let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
             let path_raw = path.to_string();
+            let entropy_pin = Some(Arc::new(pin_pages_for(&entropy[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
@@ -352,6 +355,7 @@ pub(crate) fn resolve_slots(
                 path_raw,
                 entropy: Some(entropy),
                 master_xpub: None,
+                _entropy_pin: entropy_pin,
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
@@ -421,6 +425,7 @@ pub(crate) fn resolve_slots(
                 path_raw,
                 entropy: None,
                 master_xpub,
+                _entropy_pin: None,
             });
         } else if subkeys.contains(&SlotSubkey::Entropy) {
             // K.1: {entropy} — byte-identical to phrase resolution for the same
@@ -446,6 +451,7 @@ pub(crate) fn resolve_slots(
             // the Drop on `acc` will scrub the now-orphaned husk.
             let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
             let path_raw = path.to_string();
+            let entropy_pin = Some(Arc::new(pin_pages_for(&entropy_bytes[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
@@ -453,6 +459,7 @@ pub(crate) fn resolve_slots(
                 path_raw,
                 entropy: Some(entropy_bytes),
                 master_xpub: None,
+                _entropy_pin: entropy_pin,
             });
         } else if subkeys.contains(&SlotSubkey::Wif) {
             // K.3 (v0.4.2) + R (v0.4.3): {wif} — degenerate single-key. Parse
@@ -495,6 +502,7 @@ pub(crate) fn resolve_slots(
                 path_raw: String::new(),
                 entropy: None,
                 master_xpub: None,
+                _entropy_pin: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xprv) {
             // K.2: {xprv} — REJECTED in v0.4.2 per impl plan r1 review C-1.
@@ -1016,13 +1024,16 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         };
 
         // v0.4.3 Phase N: per-slot entropy goes on the ResolvedSlot directly.
+        let entropy = ent_opt.clone();
+        let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub,
             fingerprint,
             path,
             path_raw,
-            entropy: ent_opt.clone(),
+            entropy,
             master_xpub: None,
+            _entropy_pin: entropy_pin,
         });
         if idx == 0 {
             entropy_at_0 = ent_opt;
@@ -1062,13 +1073,18 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let resolved_slots: Vec<ResolvedSlot> = cosigners
         .iter()
         .enumerate()
-        .map(|(i, c)| ResolvedSlot {
-            xpub: c.xpub,
-            fingerprint: c.fingerprint,
-            path: c.path.clone(),
-            path_raw: c.path_raw.clone(),
-            entropy: if i == 0 { entropy_at_0.clone() } else { None },
-            master_xpub: None,
+        .map(|(i, c)| {
+            let entropy = if i == 0 { entropy_at_0.clone() } else { None };
+            let entropy_pin = entropy.as_ref().map(|e| Arc::new(pin_pages_for(&e[..])));
+            ResolvedSlot {
+                xpub: c.xpub,
+                fingerprint: c.fingerprint,
+                path: c.path.clone(),
+                path_raw: c.path_raw.clone(),
+                entropy,
+                master_xpub: None,
+                _entropy_pin: entropy_pin,
+            }
         })
         .collect();
 

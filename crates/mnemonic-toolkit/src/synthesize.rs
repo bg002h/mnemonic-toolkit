@@ -14,7 +14,9 @@ use bitcoin::secp256k1::Secp256k1;
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::use_site_path::UseSitePath;
 use md_codec::{Descriptor, TlvSection};
+use mnemonic_toolkit::mlock::PinnedPageRange;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Bundle {
@@ -589,6 +591,17 @@ pub struct ResolvedSlot {
     /// resolution arm except `{Xpub, MasterXpub, ...}` where the user
     /// supplied the subkey. Other emitters silently ignore.
     pub master_xpub: Option<Xpub>,
+    /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
+    /// buffer's pages. `Some(Arc::new(pin_pages_for(&entropy[..])))` when
+    /// `entropy` is `Some`; `None` for watch-only slots. Arc preserves the
+    /// `derive(Clone)` semantics (cosigner-bridging clones at
+    /// `cmd/bundle.rs:1062-1073` share the pin via Arc refcount; the final
+    /// clone's drop fires munlock exactly once). Declared LAST so that on
+    /// Drop, `entropy` field drops first (Vec dealloc — no scrub under Cycle
+    /// A baseline; deferred to v0.10.1 per FOLLOWUP
+    /// `resolved-slot-derived-account-zeroizing-field`) then `_entropy_pin`
+    /// Arc final-drops and munlocks.
+    pub _entropy_pin: Option<Arc<PinnedPageRange>>,
 }
 
 impl ResolvedSlot {
@@ -1043,6 +1056,7 @@ mod tests {
                 path_raw: path.to_string(),
                 entropy: None,
                 master_xpub: None,
+                _entropy_pin: None,
             });
 
             let mut payload = [0u8; 65];
@@ -1181,17 +1195,22 @@ mod tests {
             let path = DerivationPath::from_str(&path_str).unwrap();
             let xpriv = master.derive_priv(&secp, &path).unwrap();
             let xpub = Xpub::from_priv(&secp, &xpriv);
+            let entropy_field = if entropy_indices.contains(&i) {
+                Some(entropy.clone())
+            } else {
+                None
+            };
+            let entropy_pin = entropy_field
+                .as_ref()
+                .map(|e| Arc::new(mnemonic_toolkit::mlock::pin_pages_for(&e[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint: master_fp,
                 path: path.clone(),
                 path_raw: path_str,
-                entropy: if entropy_indices.contains(&i) {
-                    Some(entropy.clone())
-                } else {
-                    None
-                },
+                entropy: entropy_field,
                 master_xpub: None,
+                _entropy_pin: entropy_pin,
             });
         }
         out

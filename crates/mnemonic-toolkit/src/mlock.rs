@@ -54,6 +54,7 @@ fn page_size() -> usize {
 // ============================================================================
 
 /// Page range pinned by [`pin_pages_for`]. Drop munlocks the range.
+#[derive(Debug)]
 pub struct PinnedPageRange {
     pub start: *const u8,
     pub page_count: usize,

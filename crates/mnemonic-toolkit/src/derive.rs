@@ -8,6 +8,7 @@ use crate::network::CliNetwork;
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
+use mnemonic_toolkit::mlock::PinnedPageRange;
 
 /// Result of full-mode derivation.
 ///
@@ -23,6 +24,14 @@ pub struct DerivedAccount {
     pub account_xpub: Xpub,
     pub account_xpriv: Xpriv,
     pub account_path: DerivationPath,
+    /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
+    /// buffer's pages. No `Option`/`Arc` wrap (DerivedAccount is not Clone
+    /// and is consumed via `into_parts`). Declared LAST so on Drop, the
+    /// `impl Drop for DerivedAccount` zeroize fires first (page still
+    /// pinned), then field drops in declaration order: `entropy` Vec
+    /// dealloc → ... → `_entropy_pin` munlock. Strictest threat-model
+    /// ordering (zeroize-while-still-pinned).
+    pub _entropy_pin: PinnedPageRange,
 }
 
 impl DerivedAccount {

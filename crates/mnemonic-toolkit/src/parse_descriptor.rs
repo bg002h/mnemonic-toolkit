@@ -1173,6 +1173,7 @@ fn push_binding(
         path_raw,
         entropy: None,
         master_xpub: None,
+        _entropy_pin: None,
     });
 }
 
@@ -1737,6 +1738,7 @@ mod tests {
             path_raw: p.to_string(),
             entropy: None,
             master_xpub: None,
+            _entropy_pin: None,
         }
     }
     /// Variant: explicitly set `path_raw` distinct from the typed path string
@@ -1750,6 +1752,7 @@ mod tests {
             path_raw: raw.to_string(),
             entropy: None,
             master_xpub: None,
+            _entropy_pin: None,
         }
     }
 
