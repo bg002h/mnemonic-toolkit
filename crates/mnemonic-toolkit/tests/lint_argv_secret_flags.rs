@@ -155,6 +155,17 @@ const CANONICAL_FLAG_ROWS: &[FlagRow] = &[
         source_file: "src/cmd/final_word.rs",
         evidence: &["phrase=-", "secret_in_argv_warning"],
     },
+    // ---- seed-xor (2 rows) — v0.12.0 ----
+    FlagRow {
+        label: "seed-xor split --from phrase=",
+        source_file: "src/cmd/seed_xor.rs",
+        evidence: &["--from phrase=-", "secret_in_argv_warning"],
+    },
+    FlagRow {
+        label: "seed-xor combine --share phrase=",
+        source_file: "src/cmd/seed_xor.rs",
+        evidence: &["--share phrase=-", "secret_in_argv_warning"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -164,14 +175,14 @@ fn crate_root() -> &'static Path {
 }
 
 #[test]
-fn canonical_list_has_twenty_one_rows() {
-    // v0.9.0 baseline = 20 rows; v0.11.0 adds `final-word --from phrase=` (+1).
+fn canonical_list_has_twenty_three_rows() {
+    // v0.9.0 baseline = 20; v0.11.0 final-word +1; v0.12.0 seed-xor +2 = 23.
     assert_eq!(
         CANONICAL_FLAG_ROWS.len(),
-        21,
-        "survey §5 toolkit subtable enumerates 21 secret-bearing flag-rows \
-         (20 v0.9.0 + 1 v0.11.0 final-word); the canonical list must match \
-         exactly. Adjust both in lockstep."
+        23,
+        "survey §5 toolkit subtable enumerates 23 secret-bearing flag-rows \
+         (20 v0.9.0 + 1 v0.11.0 final-word + 2 v0.12.0 seed-xor); the \
+         canonical list must match exactly. Adjust both in lockstep."
     );
 }
 

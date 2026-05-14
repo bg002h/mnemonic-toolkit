@@ -200,6 +200,12 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/final_word.rs",
         evidence: &["zeroize::Zeroizing::new"],
     },
+    // ---- cmd/seed_xor.rs (v0.12.0) ----
+    ZeroizeRow {
+        label: "seed-xor run() parsed master + shares wrap in Zeroizing<String> / Zeroizing<Vec<u8>>",
+        source_file: "src/cmd/seed_xor.rs",
+        evidence: &["zeroize::Zeroizing::new"],
+    },
 ];
 
 fn crate_root() -> &'static Path {

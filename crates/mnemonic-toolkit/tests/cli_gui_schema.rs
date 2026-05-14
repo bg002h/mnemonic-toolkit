@@ -40,11 +40,11 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_six_subcommands() {
+fn gui_schema_lists_all_seven_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
-    // Sorted alphabetically by build_schema. v0.11.0 adds `final-word`.
+    // Sorted alphabetically by build_schema. v0.12.0 adds `seed-xor`.
     assert_eq!(
         names,
         vec![
@@ -53,9 +53,10 @@ fn gui_schema_lists_all_six_subcommands() {
             "derive-child",
             "export-wallet",
             "final-word",
+            "seed-xor",
             "verify-bundle",
         ],
-        "all 6 user-facing subcommands must appear; gui-schema + help are filtered out"
+        "all 7 user-facing subcommands must appear; gui-schema + help are filtered out"
     );
 }
 
