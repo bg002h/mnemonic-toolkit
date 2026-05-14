@@ -1,12 +1,13 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Eight subcommands:
+The integration-layer CLI for the m-format constellation. Nine subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
-[`seed-xor`](#mnemonic-seed-xor), and [`gui-schema`](#mnemonic-gui-schema)
-(introspection only, no user-facing semantics). Run any with `--help` for
-the latest flag set; this chapter mirrors v0.12.0.
+[`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39), and
+[`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
+semantics). Run any with `--help` for the latest flag set; this chapter
+mirrors v0.13.0.
 
 ---
 
@@ -413,6 +414,48 @@ Field order is part of the schema (SHA-pinned in
 | `combine` AND stdout is a TTY | `warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet` |
 | `split --deterministic-from-master` with 15/21-word input | `warning: --deterministic-from-master with 15-word input is toolkit-only — Coldcard's xor_seed.py natively supports 12/18/24 only; resulting shares will NOT round-trip a Coldcard device. For Coldcard interop, use 12/18/24-word input.` |
 | `--json-out <PATH>` with world-readable file (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
+
+---
+
+## `mnemonic slip39`
+
+SLIP-39 K-of-N share-splitter. Two sub-subcommands: `split` (master
+secret → groups × members of SLIP-39 mnemonic shares) and `combine`
+(≥K shares → master secret). Unlike `seed-xor` this IS a threshold
+scheme — any K-of-N subset reconstructs.
+
+*Canonical chapter content (worked example, JSON envelope schema,
+refusal taxonomy, advisory matrix, Trezor interop recipe) lands at
+v0.13.0 P3.* This stub mentions every flag the
+`mnemonic slip39 split --help` and `mnemonic slip39 combine --help`
+output emits so the manual `flag-coverage` lint passes; see
+`mnemonic slip39 --help` for the live synopsis.
+
+### `slip39 split` flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <phrase=…\|entropy=…>` | master secret as `phrase=<value-or->` or `entropy=<hex-or->`; `=-` reads from stdin |
+| `--passphrase <P>` | SLIP-39 passphrase (NOT the BIP-39 mnemonic-extension passphrase) |
+| `--passphrase-stdin` | read `--passphrase` from stdin (single stdin per invocation) |
+| `--group-threshold <G>` | groups required to reconstruct (1 ≤ G ≤ group count) |
+| `--group <N,T>` | repeating group spec (`<member_count>,<member_threshold>`); position in argv = SLIP-39 `group_idx` |
+| `--iteration-exponent <E>` | PBKDF2 cost; iterations = 10000 · 2^E (range 0..=15, default 0); E ≥ 5 emits a perf advisory |
+| `--language <LANGUAGE>` | BIP-39 wordlist of input phrase; ignored for `entropy=` inputs |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope to `<PATH>` (in addition to plain-stdout shares) |
+| `--help` | print help |
+
+### `slip39 combine` flags
+
+| Flag | Purpose |
+|---|---|
+| `--share <slip39-mnemonic-or->` | repeating share input; at most ONE may be `-` (stdin) |
+| `--passphrase <P>` | SLIP-39 passphrase used at split time |
+| `--passphrase-stdin` | read `--passphrase` from stdin (incompatible with any `--share -`) |
+| `--to <entropy\|phrase>` | output shape (default `entropy`); `phrase` emits a BIP-39 mnemonic per `--language` |
+| `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase`; ignored for `--to entropy` |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope to `<PATH>` (in addition to plain-stdout secret) |
+| `--help` | print help |
 
 ---
 
