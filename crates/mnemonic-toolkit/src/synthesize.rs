@@ -1331,4 +1331,25 @@ mod tests {
         };
         assert_eq!(json.schema_version, "4");
     }
+
+    // ========================================================================
+    // Path B-lite Site 2 — ResolvedSlot struct-sibling pin coverage.
+    // (See bip85.rs path_b_lite_pin_tests preamble for the attempts-counter
+    // observation rationale.)
+    // ========================================================================
+
+    /// Site 2 — `unified_fixture(1, &[0])` constructs one secret-bearing
+    /// `ResolvedSlot`. After GREEN, the construction populates
+    /// `_entropy_pin: Some(Arc::new(pin_pages_for(&entropy[..])))` which
+    /// invokes `pin_pages_for`. Asserts `attempts_for_test()` incremented.
+    #[test]
+    fn site_2_resolvedslot_construction_invokes_pin() {
+        let baseline = mnemonic_toolkit::mlock::attempts_for_test();
+        let _slots = unified_fixture(1, &[0]);
+        assert!(
+            mnemonic_toolkit::mlock::attempts_for_test() > baseline,
+            "unified_fixture(1, &[0]) constructs a secret-bearing ResolvedSlot whose \
+             _entropy_pin populates via pin_pages_for; attempts counter did not increment",
+        );
+    }
 }

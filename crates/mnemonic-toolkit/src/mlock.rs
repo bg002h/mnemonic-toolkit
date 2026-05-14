@@ -230,6 +230,19 @@ pub fn failure_count_for_test() -> usize {
         .unwrap_or(0)
 }
 
+/// Returns the current `attempts` count (atomic load) for the process-static
+/// mlock-state singleton. Increments on every `pin_pages_for` call regardless
+/// of mlock success/failure (record_attempt fires before sys_mlock_attempt),
+/// so this observer works uniformly across `cfg(test)` and production builds
+/// — useful for binary-crate tests that can't reach the library's
+/// `cfg(test)` FAIL_MODE harness (cfg(test) is per-crate-not-per-build).
+pub fn attempts_for_test() -> usize {
+    MLOCK_STATE
+        .get()
+        .map(|s| s.attempts.load(Ordering::Relaxed))
+        .unwrap_or(0)
+}
+
 /// Returns the first-recorded errno value, if any.
 pub fn first_errno_for_test() -> Option<i32> {
     MLOCK_STATE.get().and_then(|s| s.first_errno.get().copied())

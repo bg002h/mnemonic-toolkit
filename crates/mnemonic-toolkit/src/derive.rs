@@ -215,6 +215,35 @@ mod tests {
         assert_eq!(a.master_fingerprint, b.master_fingerprint);
     }
 
+    // ========================================================================
+    // Path B-lite Site 3 — DerivedAccount struct-sibling pin coverage.
+    // (See bip85.rs path_b_lite_pin_tests preamble for the attempts-counter
+    // observation rationale.)
+    // ========================================================================
+
+    /// Site 3 — `derive_full` returns a `DerivedAccount` whose construction
+    /// at `derive_slot.rs:77` invokes `pin_pages_for` on the entropy buffer
+    /// before moving it into the new `_entropy_pin: PinnedPageRange` sibling
+    /// field. Asserts `attempts_for_test()` incremented along the path.
+    #[test]
+    fn site_3_derive_full_invokes_pin_at_derivedaccount_construction() {
+        let baseline = mnemonic_toolkit::mlock::attempts_for_test();
+        let _acc = derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip84,
+            0,
+        )
+        .unwrap();
+        assert!(
+            mnemonic_toolkit::mlock::attempts_for_test() > baseline,
+            "derive_full -> derive_bip32_from_entropy -> DerivedAccount ctor \
+             must invoke pin_pages_for; attempts counter did not increment",
+        );
+    }
+
     #[test]
     fn bad_phrase_returns_bip39_error() {
         let e = derive_full(

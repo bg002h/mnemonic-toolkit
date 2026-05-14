@@ -325,3 +325,61 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &DeriveChildArgs, stderr: &mut
         secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
     }
 }
+
+// ============================================================================
+// Path B-lite Site 1 — derive-child handler-scope pin coverage.
+//
+// Tests assert `attempts_for_test() > baseline` after a production code path
+// that should pin. record_attempt fires unconditionally on every
+// pin_pages_for call (mlock.rs:97), independent of the FAIL_MODE harness
+// and cfg(test) gating (per-crate-not-per-build, RFC 1604).
+//
+// derive_child::run is the canonical Site 1 exemplar; bundle / verify_bundle
+// / convert handlers follow the same pattern (R1 reviewer verifies them by
+// reading source — they're 1-3 pin lines each per SPEC §2 row 5).
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test BIP-32 master xprv (BIP-32 §"Test Vectors" m at depth 0).
+    /// Stable; deterministically derives to a valid bip39 entropy at index 0.
+    const TEST_XPRV: &str =
+        "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
+
+    /// Site 1 — `derive_child::run` pins `from_value` and `stdin_passphrase`
+    /// after they're bound (post `derive_child.rs:122`). The cascading
+    /// Site 4 pin inside `format_bip39_phrase` also fires along this path.
+    /// The test only asserts `> baseline`, so any pin call along the path
+    /// passes — R1 reviewer separately verifies Site 1 pin specifically by
+    /// reading source.
+    #[test]
+    fn site_1_derive_child_run_invokes_pin() {
+        use std::io::Cursor;
+        let args = DeriveChildArgs {
+            from: FromInput {
+                node: NodeType::Xprv,
+                value: TEST_XPRV.to_string(),
+            },
+            application: "bip39".to_string(),
+            length: 12,
+            index: 0,
+            network: None,
+            language: None,
+            passphrase: None,
+            passphrase_stdin: false,
+            dice_sides: None,
+        };
+        let mut stdin = Cursor::new(Vec::<u8>::new());
+        let mut stdout = Vec::<u8>::new();
+        let mut stderr = Vec::<u8>::new();
+        let baseline = mnemonic_toolkit::mlock::attempts_for_test();
+        let _ = run(&args, &mut stdin, &mut stdout, &mut stderr);
+        assert!(
+            mnemonic_toolkit::mlock::attempts_for_test() > baseline,
+            "derive_child::run must invoke pin_pages_for along the cmd-handler path; \
+             attempts counter did not increment",
+        );
+    }
+}

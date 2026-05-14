@@ -387,6 +387,34 @@ mod tests {
         assert_eq!(rolls, "1,0,0,2,0,1,5,5,2,4");
     }
 
+    // ========================================================================
+    // Path B-lite Site 4 — bip85 function-local pin coverage.
+    //
+    // Tests assert `attempts_for_test() > baseline` after a production code
+    // path that should pin. record_attempt fires unconditionally on every
+    // pin_pages_for call (mlock.rs:97), independent of the FAIL_MODE harness
+    // and cfg(test) gating. This pattern works from binary-crate tests where
+    // the library's cfg(test) FAIL_MODE branch is NOT reachable (cfg(test)
+    // is per-crate-not-per-build, RFC 1604).
+    // ========================================================================
+
+    /// Site 4 — `format_bip39_phrase` invokes `pin_pages_for` on the bip85-
+    /// derived entropy buffer. After GREEN, the function body adds a
+    /// `let _pin = pin_pages_for(&entropy[..])` immediately after the
+    /// `derive_entropy(...)?` binding. R1 reviewer decides whether to
+    /// expand coverage to the other 6 `format_*` functions; the slice-fn
+    /// pin pattern is uniform across all 7.
+    #[test]
+    fn site_4_format_bip39_phrase_invokes_pin() {
+        let baseline = mnemonic_toolkit::mlock::attempts_for_test();
+        let _ = format_bip39_phrase(&master(), 0, bip39::Language::English, 12, 0);
+        assert!(
+            mnemonic_toolkit::mlock::attempts_for_test() > baseline,
+            "format_bip39_phrase must invoke pin_pages_for on derived entropy; \
+             attempts counter did not increment",
+        );
+    }
+
     /// Boundary: sides=2 (coin flip). bits_per_roll = 1; rolls are 0 or 1.
     #[test]
     fn dice_d2_rolls_in_range() {
