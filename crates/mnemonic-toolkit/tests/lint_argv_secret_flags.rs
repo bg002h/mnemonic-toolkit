@@ -166,6 +166,32 @@ const CANONICAL_FLAG_ROWS: &[FlagRow] = &[
         source_file: "src/cmd/seed_xor.rs",
         evidence: &["--share phrase=-", "secret_in_argv_warning"],
     },
+    // ---- slip39 (5 rows) — v0.13.0 ----
+    FlagRow {
+        label: "slip39 split --from phrase=",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["--from phrase=-", "secret_in_argv_warning"],
+    },
+    FlagRow {
+        label: "slip39 split --from entropy=",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["--from entropy=-", "secret_in_argv_warning"],
+    },
+    FlagRow {
+        label: "slip39 split --passphrase",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    FlagRow {
+        label: "slip39 combine --share",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["--share -", "secret_in_argv_warning"],
+    },
+    FlagRow {
+        label: "slip39 combine --passphrase",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -175,14 +201,21 @@ fn crate_root() -> &'static Path {
 }
 
 #[test]
-fn canonical_list_has_twenty_three_rows() {
-    // v0.9.0 baseline = 20; v0.11.0 final-word +1; v0.12.0 seed-xor +2 = 23.
+fn canonical_list_has_twenty_eight_rows() {
+    // v0.9.0 baseline = 20; v0.11.0 final-word +1; v0.12.0 seed-xor +2;
+    // v0.13.0 slip39 +5 = 28. The slip39 contribution adds 5 rows
+    // (one per (subcommand, flag) pair) — split: --from phrase=, --from
+    // entropy=, --passphrase; combine: --share, --passphrase — per
+    // PLAN_v0_13_0_p2.md §4.3 + Q1 fold (the SPEC §4 G6 enumeration
+    // ships +5, NOT the +4 that initial drafts suggested; the paired
+    // SPEC §4 G6 count `23 → 28` patch lands at P2.2 GREEN).
     assert_eq!(
         CANONICAL_FLAG_ROWS.len(),
-        23,
-        "survey §5 toolkit subtable enumerates 23 secret-bearing flag-rows \
-         (20 v0.9.0 + 1 v0.11.0 final-word + 2 v0.12.0 seed-xor); the \
-         canonical list must match exactly. Adjust both in lockstep."
+        28,
+        "survey §5 toolkit subtable enumerates 28 secret-bearing flag-rows \
+         (20 v0.9.0 + 1 v0.11.0 final-word + 2 v0.12.0 seed-xor + 5 \
+         v0.13.0 slip39); the canonical list must match exactly. \
+         Adjust both in lockstep."
     );
 }
 

@@ -236,6 +236,12 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         // refers to sibling lib modules via `crate::mlock::...`.
         evidence: &["crate::mlock::pin_pages_for"],
     },
+    // ---- cmd/slip39.rs (v0.13.0 P2.2) ----
+    ZeroizeRow {
+        label: "slip39 run() parsed --from + --share + --passphrase wrap in Zeroizing<String>",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["zeroize::Zeroizing::new"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
