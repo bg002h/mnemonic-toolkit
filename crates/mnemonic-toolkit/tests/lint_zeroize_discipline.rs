@@ -47,10 +47,14 @@ struct ZeroizeRow {
 /// allocation in `Zeroizing` (or return a `Zeroizing<...>`).
 const ZEROIZE_ROWS: &[ZeroizeRow] = &[
     // ---- derive.rs (DerivedAccount) ----
+    // v0.10.1: migrated from `impl Drop for DerivedAccount` (Cycle A v0.9.0
+    // baseline) to a typed `Zeroizing<Vec<u8>>` field. Drop-time scrub is
+    // now structurally guaranteed by the type; the hand-rolled `impl Drop`
+    // is deleted.
     ZeroizeRow {
-        label: "DerivedAccount impl Drop scrubs entropy on drop",
+        label: "DerivedAccount entropy field is Zeroizing<Vec<u8>>",
         source_file: "src/derive.rs",
-        evidence: &["impl Drop for DerivedAccount"],
+        evidence: &["pub entropy: zeroize::Zeroizing<Vec<u8>>"],
     },
     ZeroizeRow {
         label: "DerivedAccount::into_parts() consuming method (migration anchor)",
@@ -106,11 +110,17 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/synthesize.rs",
         evidence: &["Zeroizing::new(seed_mnemonic.to_entropy())"],
     },
-    // ResolvedSlot.entropy field-type change deferred to FOLLOWUPS
-    // `resolved-slot-entropy-zeroizing-field` (19-site cascade; not
-    // representative of the per-row wrap discipline this lint is
-    // enforcing — local wraps at producer + consumer sites cover the
-    // value's transit, only the field-resident copy is unwrapped).
+    // v0.10.1: ResolvedSlot.entropy field migrated from `Option<Vec<u8>>` to
+    // `Option<Zeroizing<Vec<u8>>>` (closes FOLLOWUP
+    // `resolved-slot-derived-account-zeroizing-field`). Drop-time scrub is
+    // now structurally guaranteed; the 12 ctor sites (including 6 via
+    // `pub type CosignerKeyInfo = ResolvedSlot;` alias) wrap at the
+    // field-write boundary.
+    ZeroizeRow {
+        label: "ResolvedSlot entropy field is Option<Zeroizing<Vec<u8>>>",
+        source_file: "src/synthesize.rs",
+        evidence: &["pub entropy: Option<zeroize::Zeroizing<Vec<u8>>>"],
+    },
     ZeroizeRow {
         label: "synthesize_unified ms1 build wraps cloned entropy",
         source_file: "src/synthesize.rs",
@@ -192,8 +202,10 @@ fn crate_root() -> &'static Path {
 
 #[test]
 fn canonical_zeroize_list_has_expected_row_count() {
-    // ~27 rows after deferring the ResolvedSlot.entropy field-type
-    // change to FOLLOWUPS `resolved-slot-entropy-zeroizing-field`.
+    // ~28 rows post-v0.10.1 migration (Cycle B Path B-lite carve-out
+    // completed: DerivedAccount.entropy + ResolvedSlot.entropy now
+    // Zeroizing<Vec<u8>> typed; closes FOLLOWUP
+    // `resolved-slot-derived-account-zeroizing-field`).
     // Loose bound (24..=35) so adding/removing a polished site doesn't
     // trip the lint; the per-row evidence test below is the
     // authoritative check.

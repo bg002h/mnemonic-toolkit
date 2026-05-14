@@ -356,8 +356,11 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive::derive_full(
                 phrase, pass, lang, network, template, account,
             )?;
-            // SPEC v0.9.0 §1 item 2 — DerivedAccount has `impl Drop`;
-            // use `into_parts` for the consuming move (E0509-safe).
+            // v0.10.1: DerivedAccount.entropy is Zeroizing<Vec<u8>>; the
+            // hand-rolled impl Drop is gone. `into_parts` remains the
+            // canonical consuming-move path (returns bare Vec<u8> per the
+            // caller-wrap contract — re-wrap below at the ResolvedSlot
+            // ctor boundary).
             let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
             let path_raw = path.to_string();
             let entropy_pin = Some(Rc::new(pin_pages_for(&entropy[..])));
@@ -366,7 +369,8 @@ pub(crate) fn resolve_slots(
                 fingerprint,
                 path,
                 path_raw,
-                entropy: Some(entropy),
+                // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
+                entropy: Some(zeroize::Zeroizing::new(entropy)),
                 master_xpub: None,
                 _entropy_pin: entropy_pin,
             });
@@ -458,7 +462,8 @@ pub(crate) fn resolve_slots(
             let acc = crate::derive_slot::derive_bip32_from_entropy(
                 &entropy_bytes, pass, lang, network, template, account,
             )?;
-            // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+            // v0.10.1: `into_parts` returns bare Vec<u8> per caller-wrap
+            // contract (Zeroizing-drives-scrub semantics live on the field).
             // The derived `entropy` is discarded here (the user-supplied
             // `entropy_bytes` is the canonical buffer for this slot);
             // the Drop on `acc` will scrub the now-orphaned husk.
@@ -470,7 +475,8 @@ pub(crate) fn resolve_slots(
                 fingerprint,
                 path,
                 path_raw,
-                entropy: Some(entropy_bytes),
+                // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
+                entropy: Some(zeroize::Zeroizing::new(entropy_bytes)),
                 master_xpub: None,
                 _entropy_pin: entropy_pin,
             });
@@ -1037,7 +1043,9 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         };
 
         // v0.4.3 Phase N: per-slot entropy goes on the ResolvedSlot directly.
-        let entropy = ent_opt.clone();
+        // v0.10.1: CosignerKeyInfo.entropy (aliased ResolvedSlot.entropy) is
+        // Option<Zeroizing<Vec<u8>>>; wrap at the field-write boundary.
+        let entropy = ent_opt.clone().map(zeroize::Zeroizing::new);
         let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub,
@@ -1087,7 +1095,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         .iter()
         .enumerate()
         .map(|(i, c)| {
-            let entropy = if i == 0 { entropy_at_0.clone() } else { None };
+            // v0.10.1: ResolvedSlot.entropy is Option<Zeroizing<Vec<u8>>>;
+            // wrap at the field-write boundary.
+            let entropy = if i == 0 {
+                entropy_at_0.clone().map(zeroize::Zeroizing::new)
+            } else {
+                None
+            };
             let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
             ResolvedSlot {
                 xpub: c.xpub,

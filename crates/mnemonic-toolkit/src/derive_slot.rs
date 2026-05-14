@@ -81,7 +81,7 @@ pub(crate) fn derive_bip32_from_entropy(
     // returned DerivedAccount.
     let entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy_bytes[..]);
     Ok(DerivedAccount {
-        entropy: entropy_bytes,
+        entropy: Zeroizing::new(entropy_bytes),
         master_fingerprint,
         account_xpub,
         account_xpriv,

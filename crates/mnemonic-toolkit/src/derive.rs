@@ -12,38 +12,40 @@ use mnemonic_toolkit::mlock::PinnedPageRange;
 
 /// Result of full-mode derivation.
 ///
-/// SPEC v0.9.0 §1 item 2 — `impl Drop` scrubs `entropy` on drop.
-/// Adding `impl Drop` BLOCKS move-out destructuring (E0509): callers
-/// that consumed `DerivedAccount` via `let DerivedAccount { entropy,
-/// .. } = derived;` no longer compile. Use [`DerivedAccount::into_parts`]
-/// to consume the value cleanly. Field-borrow access is unaffected.
+/// v0.10.1: `entropy` is `Zeroizing<Vec<u8>>` so the Drop-time scrub is
+/// structurally guaranteed by the type. The previous `impl Drop for
+/// DerivedAccount` (Cycle A v0.9.0) is deleted; `Zeroizing` now carries
+/// the scrub. Move-out destructuring (`let DerivedAccount { entropy, .. }
+/// = derived;`) is once again E0509-free. [`DerivedAccount::into_parts`]
+/// remains useful for consuming-move ergonomics and is the canonical
+/// path; it returns a bare `Vec<u8>` per the caller-wrap contract.
 #[derive(Debug)]
 pub struct DerivedAccount {
-    pub entropy: Vec<u8>,
+    pub entropy: zeroize::Zeroizing<Vec<u8>>,
     pub master_fingerprint: Fingerprint,
     pub account_xpub: Xpub,
     pub account_xpriv: Xpriv,
     pub account_path: DerivationPath,
-    /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
-    /// buffer's pages. No `Option`/`Arc` wrap (DerivedAccount is not Clone
-    /// and is consumed via `into_parts`). Declared LAST so on Drop, the
-    /// `impl Drop for DerivedAccount` zeroize fires first (page still
-    /// pinned), then field drops in declaration order: `entropy` Vec
-    /// dealloc → ... → `_entropy_pin` munlock. Strictest threat-model
-    /// ordering (zeroize-while-still-pinned).
+    /// Cycle B Phase 3a Path B-lite sibling pin for the `entropy` heap
+    /// buffer's pages. No `Option` / `Rc` wrap (DerivedAccount is not
+    /// Clone and is consumed via `into_parts`). Declared LAST so on Drop
+    /// the field order is `entropy` first (Zeroizing::drop scrubs the
+    /// inner Vec then deallocs) → then `_entropy_pin` munlock. Strictest
+    /// threat-model ordering (zeroize-while-still-pinned).
     pub _entropy_pin: PinnedPageRange,
 }
 
 impl DerivedAccount {
-    /// Consume `self`, returning all five fields. `std::mem::take`
-    /// swaps the `entropy` Vec out of `self` (leaving an empty Vec
-    /// for the Drop husk), then clones the `account_path`; the
-    /// remaining three fields are `Copy`. The empty-Vec Drop is a
-    /// no-op for memory cleanup — the real bytes are now owned by
-    /// the caller, which is responsible for wrapping them in
-    /// `Zeroizing<Vec<u8>>` at the call site.
+    /// Consume `self`, returning all five fields. `std::mem::take` swaps
+    /// the inner `Vec` out of `self.entropy` (the `Zeroizing` wrapper
+    /// stays, now wrapping an empty Vec whose Drop scrub is a no-op).
+    /// The returned bare `Vec<u8>` is the caller's responsibility per
+    /// the caller-wrap contract — wrap in `Zeroizing<Vec<u8>>` at the
+    /// call site if the consumer needs scrub-on-drop semantics. The
+    /// remaining four fields move out by value (three are `Copy`;
+    /// `account_path` clones).
     pub fn into_parts(mut self) -> (Vec<u8>, Fingerprint, Xpub, Xpriv, DerivationPath) {
-        let entropy = std::mem::take(&mut self.entropy);
+        let entropy = std::mem::take(&mut *self.entropy);
         let account_path = self.account_path.clone();
         (
             entropy,
@@ -52,17 +54,6 @@ impl DerivedAccount {
             self.account_xpriv,
             account_path,
         )
-    }
-}
-
-impl Drop for DerivedAccount {
-    fn drop(&mut self) {
-        // SPEC v0.9.0 §1 item 2 — scrub OWNED entropy buffer on drop.
-        // `account_xpriv` is `Copy` and has no Drop hook upstream; the
-        // residual gap is tracked at FOLLOWUPS:
-        // `rust-bitcoin-xpriv-zeroize-upstream`.
-        use zeroize::Zeroize;
-        self.entropy.zeroize();
     }
 }
 
@@ -107,7 +98,7 @@ mod tests {
             0,
         )
         .unwrap();
-        assert_eq!(acc.entropy, vec![0u8; 32]);
+        assert_eq!(*acc.entropy, vec![0u8; 32]);
     }
 
     #[test]

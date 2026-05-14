@@ -584,7 +584,13 @@ pub struct ResolvedSlot {
     pub path: DerivationPath,
     pub path_raw: String,
     /// Some(entropy_bytes) for secret-bearing slots; None for watch-only.
-    pub entropy: Option<Vec<u8>>,
+    ///
+    /// v0.10.1: migrated from `Option<Vec<u8>>` to `Option<Zeroizing<Vec<u8>>>`
+    /// so the entropy buffer scrubs on Drop without a hand-rolled `impl Drop`.
+    /// Field-declaration order is preserved (`entropy` BEFORE `_entropy_pin`);
+    /// RFC 1857 drop order: Zeroizing fires zeroize → Vec dealloc → then the
+    /// sibling `_entropy_pin` munlocks (Cycle B Phase 3a invariant).
+    pub entropy: Option<zeroize::Zeroizing<Vec<u8>>>,
     /// v0.8.2 SPEC §5.1 — optional depth-0 master xpub supplied via
     /// `@N.master_xpub=<base58>`. Consumed by `--format coldcard` singlesig
     /// emitter to populate the top-level `xpub` field. `None` for every
@@ -592,15 +598,14 @@ pub struct ResolvedSlot {
     /// supplied the subkey. Other emitters silently ignore.
     pub master_xpub: Option<Xpub>,
     /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
-    /// buffer's pages. `Some(Arc::new(pin_pages_for(&entropy[..])))` when
-    /// `entropy` is `Some`; `None` for watch-only slots. Arc preserves the
+    /// buffer's pages. `Some(Rc::new(pin_pages_for(&entropy[..])))` when
+    /// `entropy` is `Some`; `None` for watch-only slots. Rc preserves the
     /// `derive(Clone)` semantics (cosigner-bridging clones at
-    /// `cmd/bundle.rs:1062-1073` share the pin via Arc refcount; the final
+    /// `cmd/bundle.rs:1062-1073` share the pin via Rc refcount; the final
     /// clone's drop fires munlock exactly once). Declared LAST so that on
-    /// Drop, `entropy` field drops first (Vec dealloc — no scrub under Cycle
-    /// A baseline; deferred to v0.10.1 per FOLLOWUP
-    /// `resolved-slot-derived-account-zeroizing-field`) then `_entropy_pin`
-    /// Arc final-drops and munlocks.
+    /// Drop, `entropy` field drops first: Zeroizing::drop scrubs the inner
+    /// Vec then deallocs (v0.10.1 — closes the Cycle A bytes-may-persist
+    /// gap), then `_entropy_pin` Rc final-drops and munlocks.
     pub _entropy_pin: Option<Rc<PinnedPageRange>>,
 }
 
@@ -702,8 +707,12 @@ pub fn synthesize_unified(
     let mut ms1: MsField = Vec::with_capacity(n);
     for s in slots {
         match &s.entropy {
+            // v0.10.1: e: &Zeroizing<Vec<u8>>; double-deref + clone yields the
+            // inner Vec<u8> that Payload::Entr wants. Bare e.clone() would
+            // return Zeroizing<Vec<u8>> (Zeroizing's own Clone), which is a
+            // type mismatch.
             Some(e) => ms1.push(
-                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.clone()))
+                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((**e).clone()))
                     .map_err(ToolkitError::from)?,
             ),
             None => ms1.push(String::new()),
@@ -764,7 +773,8 @@ mod tests {
 
     fn fixture_full(template: CliTemplate, network: CliNetwork) -> (Vec<u8>, Fingerprint, Xpub) {
         let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
-        // SPEC v0.9.0 §1 item 2 — `into_parts` for E0509-safe move.
+        // v0.10.1: `into_parts` returns bare Vec<u8> per caller-wrap
+        // contract (Zeroizing-drives-scrub semantics live on the field).
         let (entropy, master_fingerprint, account_xpub, _xpriv, _path) = acc.into_parts();
         (entropy, master_fingerprint, account_xpub)
     }
@@ -1195,8 +1205,10 @@ mod tests {
             let path = DerivationPath::from_str(&path_str).unwrap();
             let xpriv = master.derive_priv(&secp, &path).unwrap();
             let xpub = Xpub::from_priv(&secp, &xpriv);
+            // v0.10.1: ResolvedSlot.entropy is Option<Zeroizing<Vec<u8>>>;
+            // wrap at construction.
             let entropy_field = if entropy_indices.contains(&i) {
-                Some(entropy.clone())
+                Some(zeroize::Zeroizing::new(entropy.clone()))
             } else {
                 None
             };

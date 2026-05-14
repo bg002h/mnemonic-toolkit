@@ -797,9 +797,12 @@ pub struct DescriptorBinding {
     pub cosigners: Vec<CosignerKeyInfo>,
     // v0.4.4 Phase S: bundle-level `entropy` field retired. Per-slot entropy
     // lives on `binding.cosigners[i].entropy` (added in v0.4.3 Phase N's
-    // CosignerKeyInfo→ResolvedSlot type alias merge). Callers that need
-    // "is binding @0 secret-bearing?" use
-    // `binding.cosigners.first().and_then(|c| c.entropy.as_deref())`.
+    // CosignerKeyInfo→ResolvedSlot type alias merge). v0.10.1: field type
+    // is `Option<Zeroizing<Vec<u8>>>`; callers that need "is binding @0
+    // secret-bearing?" use `DescriptorBinding::entropy_at_0()` (defined
+    // below), or `binding.cosigners.first().and_then(|c| c.entropy.as_ref()
+    // .map(|z| z.as_slice()))` directly — bare `.as_deref()` returns
+    // `Option<&Vec<u8>>` (single-step Zeroizing Deref).
 }
 
 impl DescriptorBinding {
@@ -808,7 +811,12 @@ impl DescriptorBinding {
     /// for callers transitioning from the retired `binding.entropy` field.
     /// New code reads `binding.cosigners[0].entropy` directly.
     pub fn entropy_at_0(&self) -> Option<&[u8]> {
-        self.cosigners.first().and_then(|c| c.entropy.as_deref())
+        // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
+        // `Option::as_deref` is single-step (Zeroizing::Deref::Target = Vec<u8>);
+        // chain through `.as_ref().map(|z| z.as_slice())` to reach &[u8].
+        self.cosigners
+            .first()
+            .and_then(|c| c.entropy.as_ref().map(|z| z.as_slice()))
     }
 }
 
@@ -942,8 +950,13 @@ fn bind_full_mode(
 
     // v0.4.4 Phase S: per-slot entropy on the @0 cosigner; bundle-level
     // entropy field retired.
+    //
+    // v0.10.1: c0.entropy is Option<Zeroizing<Vec<u8>>>. Local `entropy`
+    // here is owned Zeroizing<Vec<u8>> (bound earlier in this function via
+    // mnemonic.to_entropy() wrapped in Zeroizing::new); deref-clone yields
+    // a bare Vec<u8>, re-wrap to match the field type.
     if let Some(c0) = cosigners.first_mut() {
-        c0.entropy = Some((*entropy).clone());
+        c0.entropy = Some(zeroize::Zeroizing::new((*entropy).clone()));
     }
     Ok(DescriptorBinding {
         keys,

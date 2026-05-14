@@ -496,7 +496,9 @@ fn descriptor_mode_verify_run<W: Write>(
             _entropy_pin: entropy_pin,
         });
         if i == 0 {
-            entropy_at_0 = slot.entropy.as_ref().map(|e| zeroize::Zeroizing::new(e.clone()));
+            // v0.10.1: slot.entropy is now Option<Zeroizing<Vec<u8>>>; its
+            // clone matches entropy_at_0's declared type natively. No map.
+            entropy_at_0 = slot.entropy.clone();
         }
     }
 

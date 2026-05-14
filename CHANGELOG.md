@@ -306,6 +306,103 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.10.1] — 2026-05-13
+
+Cycle B Path B-lite carve-out completion: `ResolvedSlot.entropy` and
+`DerivedAccount.entropy` field-type migration to `Zeroizing<Vec<u8>>`.
+Closes FOLLOWUP `resolved-slot-derived-account-zeroizing-field` (the
+Path B-lite carve-out tracker, originally deferred from Cycle B Phase 3a)
+and FOLLOWUP `pub-struct-drop-semver-risk-monitor` (DerivedAccount-
+specific watch — the deletion of `impl Drop for DerivedAccount` removes
+the move-out destructure E0509 risk this monitor was watching for).
+
+Toolkit-only patch. No cross-repo work; ms-cli `v0.3.0` (mnemonic-secret
+`2e7c275`) ships unchanged.
+
+### Changed
+
+- `ResolvedSlot.entropy: Option<Vec<u8>>` → `Option<zeroize::Zeroizing<Vec<u8>>>`
+  (`crates/mnemonic-toolkit/src/synthesize.rs`). Drop-time scrub is now
+  structurally guaranteed by the type; the bytes-may-persist-on-heap-
+  after-dealloc gap from the Cycle A baseline (which had NO Drop scrub
+  on this field) is closed.
+- `DerivedAccount.entropy: Vec<u8>` → `zeroize::Zeroizing<Vec<u8>>`
+  (`crates/mnemonic-toolkit/src/derive.rs`). Same structural-Drop
+  semantics; replaces the v0.9.0 Cycle A `impl Drop for DerivedAccount`.
+- `DerivedAccount::into_parts()` body: `mem::take(&mut self.entropy)` →
+  `mem::take(&mut *self.entropy)`. Outer signature returning bare
+  `Vec<u8>` preserved per the existing caller-wrap contract.
+- 12 ctor sites wrap the entropy field at the field-write boundary
+  (6 direct `ResolvedSlot {` + 6 via `pub type CosignerKeyInfo = ResolvedSlot;`
+  alias trap): `cmd/bundle.rs:{364,435,469,513,1046,1102}`,
+  `cmd/verify_bundle.rs:489`, `parse_descriptor.rs:{1179,1743,1758}`,
+  `synthesize.rs:{1061,1217}`. The 6 alias-routed sites are the same
+  off-by-N pattern that `feedback_r0_must_read_source_off_by_n` warns
+  about; R0 round 1 caught this in the plan-write phase.
+- 1 ctor at `derive_slot.rs:84` wraps `Zeroizing::new(entropy_bytes)`.
+
+### Read-site adjustments (compile-driven, 7 sites)
+
+- `parse_descriptor.rs:814-820` (`DescriptorBinding::entropy_at_0`):
+  `Option::as_deref` is single-step Deref (returns `Option<&Vec<u8>>`);
+  chain through `.as_ref().map(|z| z.as_slice())` to reach `Option<&[u8]>`.
+- `synthesize.rs:715` (`synthesize_unified` ms1 build): `e.clone()` over
+  `&Zeroizing<Vec<u8>>` returns `Zeroizing<Vec<u8>>` (Zeroizing's own
+  Clone); use `(**e).clone()` to reach the inner Vec for `Payload::Entr`.
+- `cmd/verify_bundle.rs:500-502`: drop the `Zeroizing::new(e.clone())`
+  map (would double-wrap); `slot.entropy.clone()` matches `entropy_at_0`'s
+  declared type natively.
+- `derive.rs:108` (test): `assert_eq!(acc.entropy, vec![...])` →
+  `assert_eq!(*acc.entropy, vec![...])` (Zeroizing has no `PartialEq<T>`).
+- `parse_descriptor.rs:956`: `c0.entropy = Some((*entropy).clone())` →
+  `c0.entropy = Some(Zeroizing::new((*entropy).clone()))` (re-wrap).
+
+### Removed
+
+- `impl Drop for DerivedAccount` (`crates/mnemonic-toolkit/src/derive.rs`).
+  Zeroizing's Drop now carries the scrub responsibility. Re-enables
+  E0509-free move-out destructuring of `DerivedAccount`; `into_parts()`
+  remains the canonical consuming-move path.
+- Deferred-FOLLOWUP comment block at
+  `tests/lint_zeroize_discipline.rs:109-113` (referenced the obsolete
+  `resolved-slot-entropy-zeroizing-field` FOLLOWUP).
+
+### Audit (lint_zeroize_discipline.rs)
+
+- DerivedAccount row relabeled from "impl Drop scrubs entropy on drop"
+  → "DerivedAccount entropy field is Zeroizing<Vec<u8>>", anchor
+  `pub entropy: zeroize::Zeroizing<Vec<u8>>`.
+- New row "ResolvedSlot entropy field is Option<Zeroizing<Vec<u8>>>",
+  anchor `pub entropy: Option<zeroize::Zeroizing<Vec<u8>>>`.
+- Trailing row-count comment updated `~27 rows` → `~28 rows`.
+
+### What didn't change
+
+- mlock sibling-field discipline (Cycle B Phase 3a) preserved.
+  `_entropy_pin` declaration order unchanged on both structs; RFC 1857
+  drop order still: entropy field first (now Zeroizing-drives-scrub),
+  `_entropy_pin` munlock second.
+- Public-API signature on `DerivedAccount::into_parts()` (still returns
+  bare `Vec<u8>`).
+- All CLI flag surfaces; exit codes; JSON schemas.
+- v0.1 + v0.2 fixture-corpus SHA pins.
+- ms-codec / mk-codec / md-codec git-dep tags.
+
+### Cycle review history
+
+- R0 (plan review): 3 rounds. Round 1 REWORK (7 Critical + 4 Important):
+  off-by-N ctor-count + 7 read-site compile breaks the FOLLOWUP missed.
+  Round 2 LOCK with 9 Important narrative-accuracy folds + 2 nits.
+  Round 3 LOCK clean. Plan at `~/.claude/plans/v0_10_1-zeroizing-field-migration.md`.
+- R1 (impl review): see `design/agent-reports/v0_10_1-zeroizing-field-migration-r1.md`.
+
+### Tests
+
+- 620 tests green (`cargo test -p mnemonic-toolkit`).
+- 1 new lint row + 1 relabeled lint row in `tests/lint_zeroize_discipline.rs`.
+- `cargo clippy --all-targets -- -D warnings` clean.
+- `cargo +nightly miri test -p mnemonic-toolkit mlock::` green (no regression).
+
 ## mnemonic-toolkit [0.10.0] — 2026-05-13
 
 v0.9.0 cross-repo Cycle B (`mlock(2)` page-pinning infrastructure),
