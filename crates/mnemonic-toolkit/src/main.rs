@@ -86,12 +86,19 @@ fn main() -> ExitCode {
         }
     };
 
-    match result {
+    let exit = match result {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
             // Emit error per SPEC §6.5 + §5.5.
             let _ = writeln!(io::stderr(), "{}", e);
             ExitCode::from(e.exit_code())
         }
-    }
+    };
+
+    // Cycle B SPEC §2 row 3 + §6 G2.5 — emit a 2-line stderr summary iff
+    // any pin_pages_for call soft-failed during this invocation. No-op
+    // when failure_count == 0. Runs on both Ok and Err paths.
+    mnemonic_toolkit::mlock::report_at_exit();
+
+    exit
 }
