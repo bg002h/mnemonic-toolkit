@@ -168,16 +168,17 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 ### `secret-memory-hygiene-cycle-b` — `mlock(2)` / `VirtualLock` page-pinning infrastructure (Cycle B)
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 0 R3 architect-review SPLIT-CYCLE recommendation; opened as standalone tracker entry per Phase 3 hygiene-matrix R1 (Opus, finding C-1).
-- **Where:** Hypothetical new module `crates/mnemonic-toolkit/src/mlock.rs` (toolkit-only — ms-secret has no syscall layer; per SPEC §3 OOS-mlock-cycle-b). Touches the 5 mlock candidates named in SPEC §3:
-  1. `BundleArgs.passphrase` / `slot[i].value` and the equivalent clap fields on `VerifyBundleArgs`, `ConvertArgs`, `DeriveChildArgs`, `EncodeArgs`, `VerifyArgs`.
-  2. `ResolvedSlot.entropy` Vec in `synthesize.rs:582`.
-  3. `DerivedAccount.entropy` Vec in `derive.rs:14-66`.
-  4. `bip85::derive_entropy` returned `[u8; 64]` (requires heap-promotion first).
-  5. ms-cli `read_stdin()` String buffer in `parse.rs:45`.
-- **What:** Cycle B will add a cross-platform mlock module with capability-aware soft-fail (Linux mlock + macOS mlock + Windows VirtualLock, with `EPERM`/permission-denied → log-and-continue semantics). mlock is applied to the Zeroizing-wrapped heap buffers from Cycle A — Cycle A is a prerequisite. SPEC for Cycle B will be drafted after Cycle A ships.
+- **Where:** New module `crates/mnemonic-toolkit/src/mlock.rs` (533 LOC, Fix-B slice-fn-only design). Cross-repo: toolkit handles Sites 1-4; ms-cli handles Site 5 via inline copy. Sites realized:
+  1. **Site 1** (4 per-handler clap-binding pins): `cmd/bundle.rs:129+133` (passphrase + per-slot), `cmd/verify_bundle.rs:143-150` (same), `cmd/convert.rs:668+` (effective_passphrase / effective_bip38_passphrase / primary_value), `cmd/derive_child.rs:122+` (from_value + stdin_passphrase).
+  2. **Site 2** `ResolvedSlot._entropy_pin: Option<Rc<PinnedPageRange>>` at `synthesize.rs:604` (Rc not Arc per clippy `arc_with_non_send_sync` at `ddb371c`). 12 ctor sites populated (incl. `pub type CosignerKeyInfo = ResolvedSlot;` alias).
+  3. **Site 3** `DerivedAccount._entropy_pin: PinnedPageRange` at `derive.rs:34`. 1 ctor site at `derive_slot.rs:89`. Cycle A `impl Drop for DerivedAccount` PRESERVED.
+  4. **Site 4** bip85 7 function-local pins at `bip85.rs:{84,110,138,170,188,203,241}` (heap-promoted in Phase 1).
+  5. **Site 5** ms-cli `parse::read_stdin()` pin at `parse.rs:65` (post Cycle A `Zeroizing<String>` shift).
+- **What:** Phase 0 SPEC (`design/SPEC_secret_memory_hygiene_v0_9_B.md`) → Phase 1 (bip85 heap-promote precursor) → Phase 2 (mlock module Fix-B slice-fn-only + first Rust CI workflow + Miri) → Phase 3a Path B-lite (Sites 1-4 + main wire + release-build CI job; Cycle-A→Zeroizing field-type migration on ResolvedSlot/DerivedAccount carved out to v0.10.1 via [[resolved-slot-derived-account-zeroizing-field]]) → Phase 3b cross-repo (ms-cli inline mlock.rs copy + Site 5 + main wire) → PE (audit matrix + G6 invariant test + lockstep tags). POSIX-only (Linux + macOS); Windows VirtualLock deferred (SPEC §3 `OOS-windows-virtuallock`).
 - **Why deferred:** R3 SPLIT-CYCLE finding — combining mlock with Zeroizing would have doubled Cycle A's review surface; splitting keeps each cycle's blast radius reviewable.
-- **Status:** `open` (Cycle B SPEC drafting starts post-Cycle-A Phase E ship)
+- **Status:** `resolved 9f63e8e` — `mnemonic-toolkit-v0.10.0` tag pushed 2026-05-13. Companion lockstep tag: `ms-cli-v0.3.0` (mnemonic-secret `2e7c275`). All 7 SPEC §6 gates satisfied (G1 functional / G2 soft-fail / G3 platform / G4.a Cycle A Drop preserved + G4.b Miri / G5 lockstep tags / G6 inline-copy invariant test / G7 wire-format unchanged). Cycle-close artifacts: audit matrix `design/agent-reports/v0_9_B-secret-memory-hygiene-matrix.md`; PE R0 report `design/agent-reports/v0_9_B-PE-r0.md`. Open continuation: [[resolved-slot-derived-account-zeroizing-field]] (v0.10.1 patch).
 - **Tier:** `v0.9.x`
+- **Companion:** `mnemonic-secret/design/FOLLOWUPS.md` — same `secret-memory-hygiene-cycle-b` short-id (cross-repo cycle entry).
 
 ### `cycle-b-pre-spec-questions` — pre-SPEC scoping questions blocking Cycle B drafting
 
