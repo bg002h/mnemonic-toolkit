@@ -14,6 +14,7 @@ pub mod error;
 pub mod feistel;
 pub mod gf256;
 pub mod lagrange;
+pub mod rs1024;
 pub mod wordlist;
 
 pub use error::Slip39Error;
