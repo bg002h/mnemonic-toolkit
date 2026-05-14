@@ -121,6 +121,15 @@ pub fn run<R: Read, W: Write, E: Write>(
         None
     };
 
+    // Cycle B Phase 3a Site 1 — pin secret-bearing heap pages for the
+    // remainder of the handler scope. from_value and stdin_passphrase are
+    // both Zeroizing<String>; we pin the underlying String's heap data
+    // (via .as_bytes()), and rely on Zeroizing for scrub-on-drop.
+    let _pin_from = mnemonic_toolkit::mlock::pin_pages_for(from_value.as_bytes());
+    let _pin_pp = stdin_passphrase
+        .as_ref()
+        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
+
     let master = match args.from.node {
         NodeType::Xprv => Xpriv::from_str(&from_value)
             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,

@@ -135,6 +135,20 @@ pub fn run<W: Write, E: Write>(
         args
     };
 
+    // Cycle B Phase 3a Site 1 — pin argv-string secret heap pages for the
+    // remainder of the handler scope. Lands AFTER both apply_stdin_substitutions
+    // and load_bundle_json_into_args returns so the pin covers the final
+    // post-substitution buffers (per SPEC §4 P3a).
+    let _pin_passphrase = args
+        .passphrase
+        .as_ref()
+        .map(|p| pin_pages_for(p.as_bytes()));
+    let _pin_slot_values: Vec<_> = args
+        .slot
+        .iter()
+        .map(|s| pin_pages_for(s.value.as_bytes()))
+        .collect();
+
     // v0.3 descriptor-mode dispatch (escapes before template_unchecked).
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
     if descriptor_mode && args.template.is_some() {

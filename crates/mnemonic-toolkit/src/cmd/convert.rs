@@ -670,6 +670,20 @@ pub fn run<R: Read, W: Write, E: Write>(
         primary.value.clone()
     };
 
+    // Cycle B Phase 3a Site 1 — pin secret-bearing heap pages for the
+    // remainder of the handler scope. convert.rs has no apply_stdin_substitutions;
+    // instead three local secret-bearing String bindings (effective_passphrase,
+    // effective_bip38_passphrase, primary_value) are populated above. Pin
+    // each post-binding so the pin covers the actual secret bytes consumed
+    // downstream (per SPEC §4 P3a + per-handler anchor lock).
+    let _pin_pp = effective_passphrase
+        .as_ref()
+        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
+    let _pin_bip38 = effective_bip38_passphrase
+        .as_ref()
+        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
+    let _pin_primary = mnemonic_toolkit::mlock::pin_pages_for(primary_value.as_bytes());
+
     // 3) Parse `--to`.
     let mut targets: Vec<NodeType> = Vec::new();
     for chunk in &args.to {
