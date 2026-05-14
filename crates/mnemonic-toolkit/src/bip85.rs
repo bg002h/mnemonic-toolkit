@@ -78,6 +78,10 @@ pub(crate) fn format_bip39_phrase(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 39, &[language_code, words], index)?;
+    // Cycle B Phase 3a Site 4 — pin the bip85-derived entropy heap pages
+    // for the function-body lifetime. Drop order: _entropy_pin munlocks
+    // first, then `entropy: Zeroizing<Vec<u8>>` zeroizes (Phase 1).
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     // BIP-39 entropy bytes = words * 4 / 3 (12→16, 15→20, 18→24, 21→28, 24→32).
     let bytes: usize = (words as usize) * 4 / 3;
     // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize;
@@ -103,6 +107,7 @@ pub(crate) fn format_hd_seed_wif(
     network: NetworkKind,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 2, &[], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
     // has `non_secure_erase` but no Drop+Zeroize; tracked by FOLLOWUP
     // `rust-secp256k1-secretkey-zeroize-upstream`. The 32-byte scalar
@@ -130,6 +135,7 @@ pub(crate) fn format_xprv_child(
     network: NetworkKind,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 32, &[], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let chain_code = bitcoin::bip32::ChainCode::from(<[u8; 32]>::try_from(&entropy[..32]).unwrap());
     // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
     // no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
@@ -161,6 +167,7 @@ pub(crate) fn format_hex_bytes(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 128_169, &[num_bytes], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     Ok(hex::encode(&entropy[..num_bytes as usize]))
 }
 
@@ -178,6 +185,7 @@ pub(crate) fn format_password_base64(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 707_764, &[length], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let encoded = base64_standard(&entropy[..]);
     Ok(encoded[..length as usize].to_string())
 }
@@ -192,6 +200,7 @@ pub(crate) fn format_password_base85(
     index: u32,
 ) -> Result<String, ToolkitError> {
     let entropy = derive_entropy(master, 707_785, &[length], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let encoded = base85_btc(&entropy[..]);
     Ok(encoded[..length as usize].to_string())
 }
@@ -229,6 +238,7 @@ pub(crate) fn format_dice_rolls(
     }
 
     let entropy = derive_entropy(master, 89_101, &[sides, rolls], index)?;
+    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
 
     // BIP85-DRNG-SHAKE256: seed a SHAKE256 stream with the 64-byte entropy.
     let mut shake = Shake256::default();
