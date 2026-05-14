@@ -63,6 +63,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Tier:** `v0.11.0-feature`.
 - **Companion:** N/A (toolkit-only; no cross-repo work — ms-cli has no candidate insertion point per Phase 1 exploration in the plan).
 
+### `seed-xor-coldcard-compat` — `mnemonic seed-xor` Coldcard-compatible BIP-39 ↔ BIP-39 all-or-nothing splitter (v0.12.0)
+
+- **Surfaced:** 2026-05-14, post-v0.11.0 user feature-request. Filed at P0 alongside [[slip39-shamir-secret-sharing]] as the two-cycle pair planned in `~/.claude/plans/radiant-seeking-teacup.md`.
+- **Where:** New module `crates/mnemonic-toolkit/src/seed_xor.rs` (lib surface; library-local `SeedXorError`) + new `crates/mnemonic-toolkit/src/cmd/seed_xor.rs` (CLI surface; `Split` + `Combine` sub-subcommands) + new `Command::SeedXor` variant in `src/main.rs`. Library entry: `pub fn seed_xor_split(entropy: &[u8], n_shares: usize, rng: &mut (impl rand_core::CryptoRng + rand_core::RngCore)) -> Result<Vec<Zeroizing<Vec<u8>>>, SeedXorError>` + paired deterministic + combine functions. CLI: `mnemonic seed-xor split --from phrase=<v-or-> --shares N [--language LANG] [--deterministic-from-master] [--json-out PATH]` and `mnemonic seed-xor combine --share phrase=<v-or-> ... --shares N [--language LANG] [--json-out PATH]`.
+- **What:** Given a single BIP-39 entropy (12/15/18/21/24 words), split into N BIP-39 phrases such that bytewise XOR of all N entropies reconstitutes the master. Per-share BIP-39 checksum is recomputed so each share is itself a parseable, structurally-valid BIP-39 phrase. ALL-OR-NOTHING (not a threshold scheme — for K-of-N use SLIP-39 via [[slip39-shamir-secret-sharing]]). Coldcard-compatible at 12/18/24-word sizes (per `shared/xor_seed.py:assert len(raw_secret) in (16, 24, 32)`); 15/21 are toolkit-only extensions that Coldcard hardware cannot round-trip. No MAC; substitution of a wrong-but-valid-BIP-39 share is mathematically undetectable (per §A.2.6 advisory text). NEW advisory class introduced: multi-secret-on-stdout (K-of-N share emit pattern, first toolkit use).
+- **Status:** `open` (P0 SPEC in flight at this filing; closes at v0.12.0 PE tag).
+- **In flight:** v0.12.0 P0–PE.
+- **Tier:** `v0.12.0-feature`.
+- **Companion:** [[slip39-shamir-secret-sharing]] (the v0.13.0 cycle's larger K-of-N counterpart; two-cycle plan ships v0.12.0 first to validate the new advisory class then v0.13.0 to extend it parameterized).
+
 ### `resolved-slot-entropy-zeroizing-field` — change `ResolvedSlot.entropy` to `Option<Zeroizing<Vec<u8>>>`
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN (deferred from in-cycle landing due to 19-site cascade).
