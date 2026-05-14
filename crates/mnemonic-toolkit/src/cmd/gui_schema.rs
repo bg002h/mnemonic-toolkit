@@ -84,12 +84,39 @@ struct Positional {
 /// Walks `cmd.get_subcommands()` and, for each subcommand, partitions its
 /// arguments into named flags and positionals. The `gui-schema` subcommand
 /// is filtered out (self-reference suppression).
+///
+/// Nested-subcommand flattening (v0.13.0 P2.1): when a subcommand `S` is
+/// itself a `#[command(subcommand)]` parent (i.e. its own
+/// `get_subcommands()` returns non-empty entries after filtering the
+/// auto-generated `help`), its nested sub-subcommands are emitted as
+/// hyphenated entries (`S-sub_sub`) IN PLACE OF `S`. This repairs the
+/// pre-existing v0.12.0 seed-xor empty-flags rendering (where the
+/// per-sub-sub flag tables were invisible to `mnemonic-gui`) and
+/// generalizes to v0.13.0 slip39 + any future nested-subcommand parent.
+/// Schema `version` stays at 1 — the change is additive at the name set.
 fn build_schema(cmd: &Command) -> Schema {
-    let mut subs: Vec<Subcommand> = cmd
+    let mut subs: Vec<Subcommand> = Vec::new();
+    for s in cmd
         .get_subcommands()
         .filter(|s| s.get_name() != "gui-schema" && s.get_name() != "help")
-        .map(build_subcommand)
-        .collect();
+    {
+        let nested: Vec<&Command> = s
+            .get_subcommands()
+            .filter(|ss| ss.get_name() != "help")
+            .collect();
+        if nested.is_empty() {
+            subs.push(build_subcommand(s));
+        } else {
+            for ss in nested {
+                let flat = build_subcommand(ss);
+                subs.push(Subcommand {
+                    name: format!("{}-{}", s.get_name(), ss.get_name()),
+                    flags: flat.flags,
+                    positionals: flat.positionals,
+                });
+            }
+        }
+    }
 
     // Deterministic ordering by subcommand name (stable across clap versions).
     subs.sort_by(|a, b| a.name.cmp(&b.name));

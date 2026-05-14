@@ -53,6 +53,8 @@ enum Command {
     FinalWord(cmd::final_word::FinalWordArgs),
     /// split a BIP-39 phrase into N XOR shares OR combine N shares back into a phrase
     SeedXor(cmd::seed_xor::SeedXorArgs),
+    /// split a master secret into SLIP-39 K-of-N shares OR combine shares back (Trezor-compatible)
+    Slip39(cmd::slip39::Slip39Args),
     /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
     GuiSchema(cmd::gui_schema::GuiSchemaArgs),
 }
@@ -83,6 +85,7 @@ fn main() -> ExitCode {
         }
         Command::FinalWord(args) => cmd::final_word::run(args, stdin, stdout, stderr),
         Command::SeedXor(args) => cmd::seed_xor::run(args, stdin, stdout, stderr),
+        Command::Slip39(args) => cmd::slip39::run(args, stdin, stdout, stderr),
         Command::GuiSchema(args) => {
             // Re-derive the clap `Command` tree via CommandFactory so the
             // schema reflects the canonical clap-derive surface (single
