@@ -20,8 +20,7 @@
 use bip39::{Language, Mnemonic};
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash as _;
-use mnemonic_toolkit::final_word::final_word_candidates;
-use mnemonic_toolkit::language::CliLanguage;
+use mnemonic_toolkit::final_word::{final_word_candidates, FinalWordLanguage};
 
 // ============================================================================
 // SHA-pin helper
@@ -45,11 +44,12 @@ const ABANDON_11_PARTIAL: &str =
 /// User-locked anchor: full target phrase is `abandon × 11 about`
 /// (Trezor's canonical zero-entropy vector at `tests/bip39_trezor_vectors.json:5`).
 /// Pinned at GREEN time after running the algorithm.
-const ABANDON_11_EXPECTED_SHA: &str = "P0_PLACEHOLDER_PIN_AT_GREEN";
+const ABANDON_11_EXPECTED_SHA: &str =
+    "8de70f5b9e3dbac3592961468da23645f8fe84f90bf0e81a6ee0251f6a14ee32";
 
 #[test]
 fn anchor_abandon_11_size_is_128() {
-    let candidates = final_word_candidates(ABANDON_11_PARTIAL, CliLanguage::English)
+    let candidates = final_word_candidates(ABANDON_11_PARTIAL, FinalWordLanguage::English)
         .expect("abandon×11 should produce candidates");
     assert_eq!(
         candidates.len(),
@@ -60,7 +60,7 @@ fn anchor_abandon_11_size_is_128() {
 
 #[test]
 fn anchor_abandon_11_includes_about() {
-    let candidates = final_word_candidates(ABANDON_11_PARTIAL, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(ABANDON_11_PARTIAL, FinalWordLanguage::English).unwrap();
     assert!(
         candidates.contains(&"about"),
         "canonical Trezor zero-entropy 12-word phrase ends in 'about'; \
@@ -71,7 +71,7 @@ fn anchor_abandon_11_includes_about() {
 
 #[test]
 fn anchor_abandon_11_sha_pin() {
-    let candidates = final_word_candidates(ABANDON_11_PARTIAL, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(ABANDON_11_PARTIAL, FinalWordLanguage::English).unwrap();
     let actual = sha_of_candidates(&candidates);
     assert_eq!(
         actual, ABANDON_11_EXPECTED_SHA,
@@ -89,16 +89,22 @@ const BEEF_11_PARTIAL: &str =
 
 /// User-locked anchor: full target phrase is `beef × 12` (uniform-word
 /// pathological vector). Pinned at GREEN time.
-const BEEF_11_EXPECTED_SHA: &str = "P0_PLACEHOLDER_PIN_AT_GREEN";
+const BEEF_11_EXPECTED_SHA: &str =
+    "0ced39634ee741a5235116886ba81ce6b232ad97ad2bac332de02da772d1331d";
 
 /// Whether `beef` itself appears in the candidate set is computed and
 /// pinned by the algorithm (not asserted a priori). The test captures
 /// the verdict at GREEN time as a regression backstop.
-const BEEF_11_CANDIDATE_INCLUDES_BEEF: bool = false; // placeholder; revise post-GREEN
+/// Captured at GREEN-1 run 2026-05-13: `beef × 11` partial yields 128 candidates
+/// including `"beef"` itself. (This is the SHA-256 prefix of the partial's
+/// implied entropy bits matching the 4 checksum bits encoded by `beef`'s
+/// position in the wordlist; the algorithm is deterministic, so this membership
+/// is a stable regression backstop.)
+const BEEF_11_CANDIDATE_INCLUDES_BEEF: bool = true;
 
 #[test]
 fn anchor_beef_11_size_is_128() {
-    let candidates = final_word_candidates(BEEF_11_PARTIAL, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(BEEF_11_PARTIAL, FinalWordLanguage::English).unwrap();
     assert_eq!(
         candidates.len(),
         128,
@@ -108,7 +114,7 @@ fn anchor_beef_11_size_is_128() {
 
 #[test]
 fn anchor_beef_11_sha_pin() {
-    let candidates = final_word_candidates(BEEF_11_PARTIAL, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(BEEF_11_PARTIAL, FinalWordLanguage::English).unwrap();
     let actual = sha_of_candidates(&candidates);
     assert_eq!(
         actual, BEEF_11_EXPECTED_SHA,
@@ -118,7 +124,7 @@ fn anchor_beef_11_sha_pin() {
 
 #[test]
 fn anchor_beef_11_beef_membership_pinned() {
-    let candidates = final_word_candidates(BEEF_11_PARTIAL, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(BEEF_11_PARTIAL, FinalWordLanguage::English).unwrap();
     assert_eq!(
         candidates.contains(&"beef"),
         BEEF_11_CANDIDATE_INCLUDES_BEEF,
@@ -135,7 +141,7 @@ fn anchor_beef_11_beef_membership_pinned() {
 /// the full BIP-39 mnemonic, drop the last word, return (partial, last_word).
 fn partial_and_last_word(entropy: &[u8]) -> (String, String) {
     let m = Mnemonic::from_entropy_in(Language::English, entropy).unwrap();
-    let words: Vec<&str> = m.word_iter().collect();
+    let words: Vec<&str> = m.words().collect();
     let last = words.last().copied().unwrap().to_string();
     let partial = words[..words.len() - 1].join(" ");
     (partial, last)
@@ -143,7 +149,7 @@ fn partial_and_last_word(entropy: &[u8]) -> (String, String) {
 
 fn assert_completer_round_trip(entropy: &[u8], expected_size: usize) {
     let (partial, original_last_word) = partial_and_last_word(entropy);
-    let candidates = final_word_candidates(&partial, CliLanguage::English).unwrap();
+    let candidates = final_word_candidates(&partial, FinalWordLanguage::English).unwrap();
     assert_eq!(
         candidates.len(),
         expected_size,
@@ -191,7 +197,7 @@ fn happy_n24_zero_entropy_trezor_canonical() {
 
 #[test]
 fn refusal_empty_partial() {
-    let r = final_word_candidates("", CliLanguage::English);
+    let r = final_word_candidates("", FinalWordLanguage::English);
     assert!(r.is_err(), "empty partial must refuse");
     let msg = r.unwrap_err().to_string();
     assert!(
@@ -202,7 +208,7 @@ fn refusal_empty_partial() {
 
 #[test]
 fn refusal_wrong_word_count_too_few() {
-    let r = final_word_candidates("abandon abandon", CliLanguage::English);
+    let r = final_word_candidates("abandon abandon", FinalWordLanguage::English);
     assert!(r.is_err(), "2-word partial must refuse");
 }
 
@@ -210,7 +216,7 @@ fn refusal_wrong_word_count_too_few() {
 fn refusal_wrong_word_count_too_many() {
     // 25 words — exceeds the largest valid partial (23 → N=24).
     let twenty_five = "abandon ".repeat(25);
-    let r = final_word_candidates(twenty_five.trim(), CliLanguage::English);
+    let r = final_word_candidates(twenty_five.trim(), FinalWordLanguage::English);
     assert!(r.is_err(), "25-word partial must refuse");
 }
 
@@ -219,7 +225,7 @@ fn refusal_unknown_word_in_partial() {
     // 11 words but one is not in the English wordlist.
     let r = final_word_candidates(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon xyzzy",
-        CliLanguage::English,
+        FinalWordLanguage::English,
     );
     assert!(r.is_err(), "unknown-word partial must refuse");
     let msg = r.unwrap_err().to_string();
@@ -235,8 +241,8 @@ fn refusal_unknown_word_in_partial() {
 
 #[test]
 fn determinism_same_input_same_output_twice() {
-    let a = final_word_candidates(ABANDON_11_PARTIAL, CliLanguage::English).unwrap();
-    let b = final_word_candidates(ABANDON_11_PARTIAL, CliLanguage::English).unwrap();
+    let a = final_word_candidates(ABANDON_11_PARTIAL, FinalWordLanguage::English).unwrap();
+    let b = final_word_candidates(ABANDON_11_PARTIAL, FinalWordLanguage::English).unwrap();
     assert_eq!(a, b, "same input must yield identical output");
 }
 
@@ -248,10 +254,10 @@ fn determinism_same_input_same_output_twice() {
 fn cross_language_spanish_partial_yields_spanish_candidates() {
     // Construct a valid 12-word Spanish phrase from zero entropy.
     let m = Mnemonic::from_entropy_in(Language::Spanish, &[0u8; 16]).unwrap();
-    let words: Vec<&str> = m.word_iter().collect();
+    let words: Vec<&str> = m.words().collect();
     let partial = words[..11].join(" ");
     let last = words[11];
-    let candidates = final_word_candidates(&partial, CliLanguage::Spanish).unwrap();
+    let candidates = final_word_candidates(&partial, FinalWordLanguage::Spanish).unwrap();
     assert_eq!(candidates.len(), 128);
     assert!(
         candidates.contains(&last),
