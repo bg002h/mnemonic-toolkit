@@ -40,11 +40,15 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_seven_subcommands() {
+fn gui_schema_lists_all_ten_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
-    // Sorted alphabetically by build_schema. v0.12.0 adds `seed-xor`.
+    // Sorted alphabetically by build_schema. v0.13.0 P2.1 flattens nested
+    // clap subcommands into hyphenated names: `seed-xor` becomes
+    // `seed-xor-split` + `seed-xor-combine` (repairs v0.12.0 pre-existing
+    // empty-flags rendering); new `slip39` enters as `slip39-split` +
+    // `slip39-combine`. Schema version stays at 1 (additive name change).
     assert_eq!(
         names,
         vec![
@@ -53,10 +57,14 @@ fn gui_schema_lists_all_seven_subcommands() {
             "derive-child",
             "export-wallet",
             "final-word",
-            "seed-xor",
+            "seed-xor-combine",
+            "seed-xor-split",
+            "slip39-combine",
+            "slip39-split",
             "verify-bundle",
         ],
-        "all 7 user-facing subcommands must appear; gui-schema + help are filtered out"
+        "all 10 user-facing subcommands must appear (nested split/combine \
+         flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
 

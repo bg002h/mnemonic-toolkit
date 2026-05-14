@@ -1047,6 +1047,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Tier:** `v0.13.0-feature` (re-tiered from `v1+`).
 - **Companion:** [[seed-xor-coldcard-compat]] (the v0.12.0 cycle's all-or-nothing counterpart; closed at `mnemonic-toolkit-v0.12.0` tag `63b4503`; introduced the multi-secret-on-stdout advisory class that v0.13.0 parameterizes for K-of-N).
 
+### `slip39-cli-extendable-flag` — surface `--extendable` toggle on `mnemonic slip39 split`
+
+- **Surfaced:** v0.13.0 P1c-E.1 R0 Q1 resolution 2026-05-14; refiled at v0.13.0 P2.1 RED 2026-05-14 per plan `design/PLAN_v0_13_0_p2.md` §2.3 + §3.1.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/slip39.rs` (`Slip39SplitArgs` flag table + `run_split` forwarding); SPEC §2.2 split flag table; manual `docs/manual/src/40-cli-reference/41-mnemonic.md`.
+- **What:** v0.13.0 P2 hardcodes `extendable=false` for both `slip39 split` and `slip39 combine` per P1c-E.1 R0 Q1. The library's `slip39_split` and `slip39_combine` already accept `extendable: bool` (verified at P1c-E.2 LOCK; SPEC §2.5 row 22 `ExtendableMismatch` already exists for the combine-time refusal). v0.14 adds a user-facing `--extendable` CLI flag on `split` and a combine-time validation that all parsed shares share the bit. Refusal class is already wired at the library level so this is purely a CLI-surface add + manual mirror.
+- **Why deferred:** v0.13.0 priority is SLIP-39 K-of-N parity with Trezor's reference behavior (which defaults to `extendable=false`); adding a CLI flag at P2 would expand the user-facing surface beyond the SPEC §2.2 v0.13.0 contract. Library parameter is already plumbed so v0.14 is a small CLI-only delta.
+- **Status:** `open`
+- **Tier:** `v0.14-feature`
+- **Companion:** [[slip39-shamir-secret-sharing]] (the parent feature; this is a v0.14 follow-on that surfaces a library parameter already shipped at v0.13.0).
+
 ### `electrum-native-seed-format` — Electrum seed wordlist + version-prefix checksum
 
 - **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
