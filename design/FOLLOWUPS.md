@@ -72,6 +72,30 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Tier:** `v0.12.0-feature`.
 - **Companion:** [[slip39-shamir-secret-sharing]] (the v0.13.0 cycle's larger K-of-N counterpart; two-cycle plan ships v0.12.0 first to validate the new advisory class then v0.13.0 to extend it parameterized).
 
+### `seed-xor-coldcard-doc-test-vectors` — vendor Coldcard `docs/seed-xor.md` test vectors
+
+- **Surfaced:** 2026-05-14, post-v0.12.0 user request. v0.12.0 P1 already pins one Coldcard byte-pin anchor (`abandon × 12` deterministic share[0] in `tests/lib_seed_xor.rs::deterministic_split_abandon_12_share_0_byte_pin`) and the algorithm is byte-correct against `shared/xor_seed.py` (verified at P1 R1 LOCK). The Coldcard *documentation* additionally publishes two worked examples that demonstrate the algorithm by hand at the BIP-39-phrase level — these are valuable as end-to-end regression anchors at the **CLI surface** layer (not just the lib byte-XOR layer), since they exercise the full "BIP-39 phrase → entropy bytes → per-share recompute → BIP-39 phrase" round-trip with non-trivial master entropy (not the all-zeros `abandon × N` degenerate).
+- **Where:** `crates/mnemonic-toolkit/tests/cli_seed_xor_happy_paths.rs` — add `coldcard_doc_24_word_vector` + `coldcard_doc_12_word_vector` tests that invoke `mnemonic seed-xor combine --share <3-phrases> --shares 3` and assert byte-equality with the documented master. NO `split` half — the doc doesn't claim Coldcard's RNG-generated shares are derivable from the master (they're random) so we can only round-trip the combine direction.
+- **What:** Two worked-example vectors from <https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md>:
+
+  **Vector 1 (24-word, N=3):**
+  - Master: `silent toe meat possible chair blossom wait occur this worth option bag nurse find fish scene bench asthma bike wage world quit primary indoor`
+  - Share A: `romance wink lottery autumn shop bring dawn tongue range crater truth ability miss spice fitness easy legal release recall obey exchange recycle dragon room`
+  - Share B: `lion misery divide hurry latin fluid camp advance illegal lab pyramid unaware eager fringe sick camera series noodle toy crowd jeans select depth lounge`
+  - Share C: `vault nominee cradle silk own frown throw leg cactus recall talent worry gadget surface shy planet purpose coffee drip few seven term squeeze educate`
+
+  **Vector 2 (12-word, N=3):**
+  - Master: `cannon opinion leader nephew found yard metal galaxy crouch between real trade`
+  - Share A: `romance wink lottery autumn shop bring dawn tongue range crater truth ability`
+  - Share B: `boat unfair shell violin tree robust open ride visual forest vintage approve`
+  - Share C: `lion misery divide hurry latin fluid camp advance illegal lab pyramid unhappy`
+
+  Coldcard's docs caveat that the examples are "illustrative" rather than formally normative test vectors, but the BIP-39 phrases + the XOR algorithm + per-share checksum recompute uniquely determine the round-trip — they're verifiable.
+- **Why deferred:** v0.12.0 already ships a Coldcard byte-pin anchor on the deterministic-split share[0] computation (covers `Batshitoshi` prefix + SHA256d + slice-width regression). The doc-vectors are additive: end-to-end CLI round-trip evidence with non-trivial entropy. Skipped in v0.12.0 to keep P1/P2 scope tight; the patch cycle is free of any other open seed-xor work so it's a clean isolated bump.
+- **Status:** `open` (filed at v0.12.0 PE+1; closes at v0.12.1 PE).
+- **Tier:** `v0.12.1-patch`.
+- **Companion:** N/A (toolkit-only; doc-only upstream — no sibling-repo coordination).
+
 ### `resolved-slot-entropy-zeroizing-field` — change `ResolvedSlot.entropy` to `Option<Zeroizing<Vec<u8>>>`
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN (deferred from in-cycle landing due to 19-site cascade).
