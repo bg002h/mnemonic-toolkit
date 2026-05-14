@@ -206,6 +206,36 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/seed_xor.rs",
         evidence: &["zeroize::Zeroizing::new"],
     },
+    // ---- slip39/mod.rs (v0.13.0 P1c-E.3 G6 hygiene) ----
+    // The library cycle ships `slip39_combine` already returning
+    // `Zeroizing<Vec<u8>>` (master) and `Share` already `ZeroizeOnDrop`
+    // on its `value` field. P1c-E.3 closes the remaining gaps per plan
+    // §3.6: intermediate secret buffers wrapped in `Zeroizing<Vec<u8>>`
+    // and `mlock::pin_pages_for` called on the EMS in both split + combine.
+    ZeroizeRow {
+        label: "slip39 public surface (slip39_combine + recover_secret) returns Zeroizing<Vec<u8>>",
+        source_file: "src/slip39/mod.rs",
+        evidence: &["-> Result<Zeroizing<Vec<u8>>, Slip39Error>"],
+    },
+    ZeroizeRow {
+        label: "split_secret wraps RNG-derived random_part `r` in Zeroizing",
+        source_file: "src/slip39/mod.rs",
+        evidence: &["Zeroizing::new(vec![0u8; random_len])"],
+    },
+    ZeroizeRow {
+        label: "split_secret wraps digest_payload buffer in Zeroizing",
+        source_file: "src/slip39/mod.rs",
+        evidence: &["Zeroizing::new(Vec::with_capacity(n))"],
+    },
+    ZeroizeRow {
+        label: "slip39_split + slip39_combine pin EMS pages via mlock::pin_pages_for",
+        source_file: "src/slip39/mod.rs",
+        // `slip39` is a library-exposed module in `lib.rs`; the crate-name
+        // alias `mnemonic_toolkit::...` is unavailable from library code
+        // and only works from `main.rs` / integration tests. Lib code
+        // refers to sibling lib modules via `crate::mlock::...`.
+        evidence: &["crate::mlock::pin_pages_for"],
+    },
 ];
 
 fn crate_root() -> &'static Path {

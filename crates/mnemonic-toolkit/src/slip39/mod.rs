@@ -567,6 +567,80 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // P1c-E.3 G6 hygiene — mlock-attempts invariant tests.
+    //
+    // Mirror pattern of `derive::tests::site_3_derive_full_invokes_pin_at_*`
+    // and `bip85::tests::format_bip39_phrase_invokes_pin_pages_for`. Asserts
+    // that the public SLIP-39 driver functions invoke `pin_pages_for` on at
+    // least one secret-bearing buffer (the EMS in both directions) by
+    // observing the process-static `attempts_for_test()` counter. The
+    // counter increments on every `pin_pages_for` call regardless of mlock
+    // success/failure (record_attempt fires before sys_mlock_attempt), so
+    // this observer works uniformly across cfg(test) and production builds.
+    // ========================================================================
+
+    #[test]
+    fn slip39_split_invokes_pin_pages_for_on_ems() {
+        let baseline = crate::mlock::attempts_for_test();
+        let master = [0xA5u8; 16];
+        let mut rng = ChaCha20Rng::seed_from_u64(0x1CE3_5117_u64);
+        let shares = slip39_split(
+            &master,
+            b"",
+            1,
+            &[GroupSpec {
+                member_count: 1,
+                member_threshold: 1,
+            }],
+            0,
+            false,
+            None,
+            &mut rng,
+        )
+        .expect("1-of-1 split must succeed for 16-byte master");
+        assert_eq!(shares.len(), 1, "1 group requested");
+        assert_eq!(shares[0].len(), 1, "1 share in the group");
+        assert!(
+            crate::mlock::attempts_for_test() > baseline,
+            "slip39_split must invoke mlock::pin_pages_for on the EMS buffer; \
+             attempts counter did not increment from baseline = {baseline}",
+        );
+    }
+
+    #[test]
+    fn slip39_combine_invokes_pin_pages_for() {
+        let master = [0xB4u8; 16];
+        let mut rng = ChaCha20Rng::seed_from_u64(0x1CE3_C0B1_u64);
+        let shares = slip39_split(
+            &master,
+            b"",
+            1,
+            &[GroupSpec {
+                member_count: 1,
+                member_threshold: 1,
+            }],
+            0,
+            false,
+            None,
+            &mut rng,
+        )
+        .expect("1-of-1 split must succeed for 16-byte master");
+        let flat: Vec<Share> = shares.into_iter().flatten().collect();
+        let baseline = crate::mlock::attempts_for_test();
+        let recovered = slip39_combine(&flat, b"").expect("1-of-1 combine must succeed");
+        assert_eq!(
+            &recovered[..],
+            &master,
+            "1-of-1 round-trip must recover the master",
+        );
+        assert!(
+            crate::mlock::attempts_for_test() > baseline,
+            "slip39_combine must invoke mlock::pin_pages_for at least once; \
+             attempts counter did not increment from baseline = {baseline}",
+        );
+    }
+
     #[test]
     fn split_secret_t1_n5_replicates_secret_without_digest() {
         // T == 1 special case: ALL N shares equal the secret directly.
