@@ -105,11 +105,11 @@ jobs:
         with:
           components: miri
 
-      - name: cargo +nightly miri test mlock::
+      - name: "cargo +nightly miri test mlock::"
         # Per SPEC §6 G4.b: Miri verifies the Rust-side safety of mlock's
         # 2 unsafe blocks (libc::mlock in pin_pages_for; libc::munlock in
         # PinnedPageRange::drop). cfg(miri) shims stub the syscalls.
-        run: cargo +nightly miri test -p mnemonic-toolkit --lib mlock::
+        run: "cargo +nightly miri test -p mnemonic-toolkit --lib mlock::"
 
   clippy:
     name: clippy
