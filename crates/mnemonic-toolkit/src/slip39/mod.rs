@@ -10,6 +10,9 @@
 //! tracked under FOLLOWUP `library-error-and-language-surface-promotion`
 //! for the future crate-shape unification with `ToolkitError`.
 
+pub mod error;
 pub mod feistel;
 pub mod gf256;
 pub mod lagrange;
+
+pub use error::Slip39Error;
