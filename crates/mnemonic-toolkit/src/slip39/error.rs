@@ -7,16 +7,16 @@
 //! `ToolkitError::BadInput(...)` formatted per the SPEC §B.2.5 stderr
 //! stems.
 //!
-//! Coverage: 15 library variants spanning 16 of the 18 SPEC §B.2.5
-//! refusal classes. The 2 CLI-only rows (17, 18) — `--from` variant
-//! syntactically invalid; multi-stdin contention across `--share` /
-//! `--from` / `--passphrase-stdin` — are rejected at the CLI boundary
-//! before reaching the library. The fold from 16 rows to 15 variants
-//! is rows 4 and 5 (both group-spec policy refusals) collapsing into
-//! `BadGroupSpec`; the CLI handler distinguishes them at the
-//! `ToolkitError` mapping layer based on the carried (n, t) values
-//! (row 5 = `n == 1 && t == 1`; row 4 = all other group-spec
-//! violations).
+//! Coverage: 21 library variants spanning 21 of the 23 SPEC §2.5
+//! refusal classes (post v0.13.0 P1c-E.1 expansion). The 2 CLI-only
+//! rows (17, 18) — `--from` variant syntactically invalid; multi-stdin
+//! contention across `--share` / `--from` / `--passphrase-stdin` — are
+//! rejected at the CLI boundary before reaching the library. The fold
+//! that keeps the variant count at 21 (instead of 22) is rows 4 and 5
+//! (both group-spec policy refusals) collapsing into `BadGroupSpec`;
+//! the CLI handler distinguishes them at the `ToolkitError` mapping
+//! layer based on the carried (n, t) values (row 5 = `n == 1 && t == 1`;
+//! row 4 = all other group-spec violations).
 //!
 //! Display messages here are diagnostic, not user-facing — the CLI
 //! handler re-renders each variant into the SPEC §B.2.5 stem byte by
@@ -92,6 +92,35 @@ pub enum Slip39Error {
     /// the final partial 10-bit word (encoding violation per
     /// SLIP-0039 §3.1).
     InvalidPadding { share_idx: usize },
+
+    /// `slip39_combine` called with an empty share list. Distinct from
+    /// `InsufficientShares` (which fires when a non-empty list is short
+    /// of the required threshold for some group).
+    EmptyShares,
+
+    /// At combine time: the share at `share_idx` has a value-byte length
+    /// not in `{16, 20, 24, 28, 32}`. The parse layer (correctly) does
+    /// not enforce master-secret length per-share; combine checks each
+    /// parsed share at entry. Pins vectors.json #40.
+    InvalidShareValueLength { share_idx: usize, got: usize },
+
+    /// At combine time: shares disagree on value-byte length. The
+    /// SLIP-0039 spec requires all shares of one master secret to share
+    /// the same length (`len(EMS) == len(master_secret)`).
+    ShareValueLengthMismatch,
+
+    /// At combine time: shares disagree on the `extendable` bit. The
+    /// two ext-axes are orthogonal and use different salt_prefixes in
+    /// the Feistel layer, so mixed-axis combines are structurally
+    /// unrecoverable.
+    ExtendableMismatch,
+
+    /// Parse-time refusal: the share at `share_idx` encodes
+    /// `group_count < group_threshold`, which is structurally
+    /// inconsistent (the spec requires the threshold not to exceed the
+    /// number of groups). Mirrors `python-shamir-mnemonic`
+    /// `share.py:216-219` @ commit `17fcce14`. Pins vectors.json #10, #29.
+    GroupThresholdExceedsCount { share_idx: usize, threshold: u8, count: u8 },
 }
 
 impl std::fmt::Display for Slip39Error {
@@ -164,6 +193,28 @@ impl std::fmt::Display for Slip39Error {
                 f,
                 "slip39: share at position {share_idx} has non-zero padding bits \
                  (encoding violation)"
+            ),
+            Self::EmptyShares => write!(
+                f,
+                "slip39: combine called with empty share list"
+            ),
+            Self::InvalidShareValueLength { share_idx, got } => write!(
+                f,
+                "slip39: share at position {share_idx} has value length {got} \
+                 (must be 16/20/24/28/32 bytes)"
+            ),
+            Self::ShareValueLengthMismatch => write!(
+                f,
+                "slip39: shares disagree on value length"
+            ),
+            Self::ExtendableMismatch => write!(
+                f,
+                "slip39: shares disagree on the extendable (ext) bit"
+            ),
+            Self::GroupThresholdExceedsCount { share_idx, threshold, count } => write!(
+                f,
+                "slip39: share at position {share_idx}: group_threshold {threshold} \
+                 exceeds group_count {count}"
             ),
         }
     }

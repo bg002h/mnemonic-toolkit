@@ -14,11 +14,18 @@
 //!
 //! F(i, R) = PBKDF2-HMAC-SHA-256(
 //!     password = bytes([i]) || passphrase,
-//!     salt     = b"shamir" || identifier_be(2 bytes) || R,
+//!     salt     = salt_prefix || R,
 //!     iters    = (10000 << iteration_exponent) / 4,
 //!     dkLen    = n/2,
 //! )
+//!
+//! salt_prefix = b""                                 if extendable
+//!             = b"shamir" || identifier_be(2 bytes) otherwise
 //! ```
+//!
+//! Per SLIP-0039 §"Encryption of the master secret": "If ext = 1, then
+//! salt_prefix is an empty string." The `extendable` parameter routes
+//! both paths.
 //!
 //! Total iteration count across 4 rounds = `10000 * 2^iteration_exponent`.
 //!
@@ -48,23 +55,46 @@ pub const ROUND_COUNT: usize = 4;
 pub const CUSTOMIZATION_STRING: &[u8] = b"shamir";
 
 /// Encrypt master_secret via 4-round Feistel.
+///
+/// `extendable=true` switches to the SLIP-0039 ext=1 path, which uses an
+/// empty salt_prefix instead of `b"shamir" || identifier_be`.
 pub fn encrypt(
     master_secret: &[u8],
     passphrase: &[u8],
     iteration_exponent: u8,
     identifier: u16,
+    extendable: bool,
 ) -> zeroize::Zeroizing<Vec<u8>> {
-    feistel_run(master_secret, passphrase, iteration_exponent, identifier, false)
+    feistel_run(
+        master_secret,
+        passphrase,
+        iteration_exponent,
+        identifier,
+        extendable,
+        false,
+    )
 }
 
 /// Decrypt encrypted_master_secret via 4-round Feistel run in reverse.
+///
+/// `extendable` must match the value passed at encrypt time; mismatched
+/// axes produce garbage bytes (no error at this layer — the share-combine
+/// digest check at the higher layer catches the mismatch).
 pub fn decrypt(
     encrypted_master_secret: &[u8],
     passphrase: &[u8],
     iteration_exponent: u8,
     identifier: u16,
+    extendable: bool,
 ) -> zeroize::Zeroizing<Vec<u8>> {
-    feistel_run(encrypted_master_secret, passphrase, iteration_exponent, identifier, true)
+    feistel_run(
+        encrypted_master_secret,
+        passphrase,
+        iteration_exponent,
+        identifier,
+        extendable,
+        true,
+    )
 }
 
 /// Common Feistel driver. `reverse=false` encrypts; `reverse=true` decrypts.
@@ -73,6 +103,7 @@ fn feistel_run(
     passphrase: &[u8],
     iteration_exponent: u8,
     identifier: u16,
+    extendable: bool,
     reverse: bool,
 ) -> zeroize::Zeroizing<Vec<u8>> {
     let n = input.len();
@@ -89,7 +120,7 @@ fn feistel_run(
     // Single round-key buffer reused across rounds.
     let mut round_key = zeroize::Zeroizing::new(vec![0u8; half]);
 
-    let salt_prefix = build_salt_prefix(identifier);
+    let salt_prefix = build_salt_prefix(identifier, extendable);
 
     let round_order: Vec<u8> = if reverse {
         (0..ROUND_COUNT as u8).rev().collect()
@@ -125,12 +156,22 @@ fn feistel_run(
     out
 }
 
-/// Build the per-encryption salt prefix `b"shamir" || identifier_be(2)`.
-fn build_salt_prefix(identifier: u16) -> Vec<u8> {
-    let mut salt = Vec::with_capacity(CUSTOMIZATION_STRING.len() + 2);
-    salt.extend_from_slice(CUSTOMIZATION_STRING);
-    salt.extend_from_slice(&identifier.to_be_bytes());
-    salt
+/// Build the per-encryption salt prefix.
+///
+/// Per SLIP-0039 §"Encryption of the master secret":
+///   - `extendable == true`  ⇒ empty (the identifier is excluded from
+///     the salt so the share set is "extendable" — additional shares can
+///     be re-derived later from the master without re-encrypting).
+///   - `extendable == false` ⇒ `b"shamir" || identifier_be(2 bytes)`.
+fn build_salt_prefix(identifier: u16, extendable: bool) -> Vec<u8> {
+    if extendable {
+        Vec::new()
+    } else {
+        let mut salt = Vec::with_capacity(CUSTOMIZATION_STRING.len() + 2);
+        salt.extend_from_slice(CUSTOMIZATION_STRING);
+        salt.extend_from_slice(&identifier.to_be_bytes());
+        salt
+    }
 }
 
 /// Per-round F function: fills `out` with

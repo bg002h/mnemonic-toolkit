@@ -205,7 +205,7 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 - `1` for runtime refusals (`ToolkitError::BadInput` / `Slip39` per `src/error.rs:244` precedent).
 - `64` reserved for clap parse errors.
 
-### §2.5 Refusals (18 classes; expanded 2026-05-14 from `python-shamir-mnemonic/vectors.json` audit covering negative-vector categories the original SPEC enumeration elided)
+### §2.5 Refusals (23 classes; expanded 2026-05-14 from `python-shamir-mnemonic/vectors.json` audit covering negative-vector categories the original SPEC enumeration elided; further expanded at v0.13.0 P1c-E.1 GREEN with 5 combine-driver + parse-layer refusal rows for empty share lists, per-share + cross-share value-length consistency, extendable-bit consistency, and the python-parser `group_count >= group_threshold` mirror)
 
 | # | Input class | Exit | Stderr message stem |
 |---|---|---|---|
@@ -227,6 +227,11 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 | 16 | Invalid padding bits in encoded share (vectors.json #3, #22) | 1 | `slip39 combine: share at position I has non-zero padding bits (encoding violation)` |
 | 17 | `--from` variant other than `phrase=` / `entropy=` | 1 | `slip39 split --from only accepts phrase=<value-or-> or entropy=<hex-or->` |
 | 18 | Multi-stdin contention (passphrase-stdin + share-stdin OR two share-stdin) | 1 | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` |
+| 19 | `combine` called with empty share list (no `--share` and `--share-stdin` produced 0 shares) | 1 | `slip39 combine: at least one share required` |
+| 20 | `combine` shares: share at position I has value-byte length L not in {16,20,24,28,32} (vectors.json #40) | 1 | `slip39 combine: share at position I has value length L (must be 16/20/24/28/32 bytes)` |
+| 21 | `combine` shares: shares disagree on value-byte length (cross-share length divergence) | 1 | `slip39 combine: shares disagree on value length` |
+| 22 | `combine` shares: shares disagree on the `extendable` (ext) bit | 1 | `slip39 combine: shares disagree on the extendable bit` |
+| 23 | `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` (vectors.json #10, #29; mirrors `python-shamir-mnemonic/share.py:216-219` @ 17fcce14) | 1 | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
 
 (Refusal 18 covers the N+1 pairwise candidates explicitly.)
 
@@ -258,7 +263,7 @@ Field order is part of the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
 | G2 — Round-trip property tests | For each of 5 entropy sizes (16/20/24/28/32 bytes) × N group configurations: split → combine → byte-equal. Property test ≥ 50 vectors per shape. |
 | G3 — Plain stdout shape | `slip39 split ... --group 3,2 --group 3,2` emits exactly 6 lines + 1 blank separator; each line parseable as a SLIP-39 share. |
 | G4 — JSON envelope stability | SHA-pinned over 2 anchor vectors (deterministic identifier, fixed RNG seed). |
-| G5 — Refusal coverage | All 18 refusal classes (§2.5) have CLI tests asserting exit code 1 + pinned stderr stem. The 30 negative vectors from G1 are exercised at the lib layer; CLI-level tests verify each stem surfaces byte-faithfully. |
+| G5 — Refusal coverage | All 23 refusal classes (§2.5) have CLI tests asserting exit code 1 + pinned stderr stem. The 30 negative vectors from G1 are exercised at the lib layer; CLI-level tests verify each stem surfaces byte-faithfully. |
 | G6 — Cycle A/B discipline | Cycle A: argv-leakage advisory + `Zeroizing<String>` wraps + new `lint_argv_secret_flags.rs` rows (`slip39 split --from phrase=`, `slip39 split --from entropy=`, `slip39 combine --share`, `slip39 split --passphrase`) — count 23 → 27. Cycle B: mlock Site 1 pins on parsed inputs + Feistel round-key buffer (single-buffer, single pin per encryption pass) + share-output buffer (single `Zeroizing<Vec<String>>` pinned ONCE). New `lint_zeroize_discipline.rs` rows. |
 | G7 — Manual chapter | `## mnemonic slip39` section in `41-mnemonic.md`; `cli-subcommands.list` adds `mnemonic slip39 split` + `mnemonic slip39 combine`; chapter intro bumps from 8 to 9 subcommands (8 user-facing + introspection-only `gui-schema`). |
 | G8 — Trezor interop smoke test (manual, post-tag) | Generate a SLIP-39 backup on a Trezor Model T (or via `python-shamir-mnemonic` CLI), combine via our CLI, verify byte-equal entropy recovery. Recipe lives at `docs/manual/src/40-cli-reference/41-mnemonic.md` under a new `### Trezor interop (manual smoke test)` H3 within the `## mnemonic slip39` section (authored at P3, validated at PE). NOT a CI gate (no Trezor in CI). |

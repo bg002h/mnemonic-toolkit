@@ -33,7 +33,10 @@
 //!   3. pre-checksum padding gate (`padding_bits > 8`) ⇒
 //!      [`Slip39Error::InvalidPadding`]
 //!   4. RS1024 checksum ⇒ [`Slip39Error::InvalidChecksum`]
-//!   5. non-zero leading padding bits in the value field ⇒
+//!   5. `group_count < group_threshold` ⇒
+//!      [`Slip39Error::GroupThresholdExceedsCount`] (mirrors
+//!      `python-shamir-mnemonic/share.py:216-219` @ 17fcce14)
+//!   6. non-zero leading padding bits in the value field ⇒
 //!      [`Slip39Error::InvalidPadding`]
 //!
 //! [`parse_slip39_share`] is a SINGLE-share parser; the `share_idx`
@@ -236,7 +239,17 @@ pub fn parse_slip39_share(s: &str) -> Result<Share, Slip39Error> {
     let group_threshold = (((share_params_int >> 12) & 0xF) as u8) + 1;
     let group_index = ((share_params_int >> 16) & 0xF) as u8;
 
-    // 5. Decode value bytes — fails if the leading padding bits are
+    // 5. group_count >= group_threshold structural check (per python
+    //    `share.py:216-219` @ 17fcce14).
+    if group_count < group_threshold {
+        return Err(Slip39Error::GroupThresholdExceedsCount {
+            share_idx: 0,
+            threshold: group_threshold,
+            count: group_count,
+        });
+    }
+
+    // 6. Decode value bytes — fails if the leading padding bits are
     //    not all zero.
     let value_words = &indices[PREFIX_WORDS..indices.len() - CHECKSUM_WORDS];
     let value = decode_value(value_words, padding_bits, value_byte_count)
