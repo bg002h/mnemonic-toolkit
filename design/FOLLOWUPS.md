@@ -51,8 +51,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:582` — `pub entropy: Option<Vec<u8>>` field on the `ResolvedSlot` (private) struct. 19 read/write sites cascade through bundle.rs, verify_bundle.rs, parse_descriptor.rs (incl. test mods).
 - **What:** Per plan §"Phase 2 — Impl" step 4, ResolvedSlot.entropy was scheduled to become `Option<Zeroizing<Vec<u8>>>` so the field-resident entropy scrubs on drop. Phase 2 GREEN landed local-wrap discipline at every producer + consumer site (entropy entering the field is `Zeroizing` at construction; reads clone to a local `Zeroizing`) but left the field type as `Option<Vec<u8>>` — so the field-resident copy itself is unwrapped during its lifetime.
 - **Why deferred:** 19-site cascade across 3 files + test mods is mechanically large and not representative of the per-row wrap discipline the Phase 2 zeroize-lint is enforcing. The local-wrap discipline at producer + consumer sites covers the value's transit; only the brief field-resident lifetime is unwrapped. A separate small commit can complete the field type change in one shot.
-- **Status:** `open`
-- **Tier:** `v0.9.2-nice-to-have`
+- **Status:** `scheduled for closure in v0.9.0 Cycle B Phase 3a` (per SPEC `SPEC_secret_memory_hygiene_v0_9_B.md` §2 row 5 + §4 P3a, R0 v2 LOCK at commit `9be0f0f`). Phase 3a is already touching every one of the 19 cascade sites to add `_entropy_pin` siblings; landing the deferred field-type transition in lockstep amortizes the cascade cost. Transition: `open` → `closed` lands in Phase 3a's GREEN commit. **Companion:** the Cycle B Phase 3a commit will cite this FOLLOWUP closure with reciprocal SHA when shipped.
+- **Tier:** `v0.9.2-nice-to-have` (closure brought forward to Cycle B Phase 3a in v0.10.0)
 
 ### `rust-secp256k1-secretkey-zeroize-upstream` — `secp256k1::SecretKey` has no Drop+Zeroize
 
