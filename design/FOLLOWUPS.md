@@ -45,6 +45,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `bip39-final-word-completer` — `mnemonic final-word` subcommand (v0.11.0)
+
+- **Surfaced:** 2026-05-13, post-v0.10.1 user feature-request. New feature, not a deferral from a prior cycle. Plan + brainstorm at `~/.claude/plans/radiant-seeking-teacup.md`; SPEC at `design/SPEC_final_word_v0_11_0.md`.
+- **Where:** New module `crates/mnemonic-toolkit/src/final_word.rs` (lib surface) + new `crates/mnemonic-toolkit/src/cmd/final_word.rs` (CLI surface) + new `Command` variant in `src/main.rs`. Library entry: `pub fn final_word_candidates(partial_phrase: &str, language: CliLanguage) -> Result<Vec<&'static str>, ToolkitError>`. CLI: `mnemonic final-word --from phrase=<N-1-words> [--phrase-stdin] [--language <L>] [--json-out <path>]`. Touches 5 new CLI test files, 2 lint-row edits, 1 manual chapter, 1 CHANGELOG entry, 1 Cargo.toml version bump.
+- **What:** Given an incomplete BIP-39 mnemonic of length N-1 (N ∈ {12, 15, 18, 21, 24}) and a language, emit the complete set of wordlist entries that, when appended as the Nth word, yield a phrase with a valid BIP-39 checksum. Set size is deterministic: 2^(11 − N/3) ∈ {128, 64, 32, 16, 8}. Use cases: paper-backup recovery (smudged last word), manual entropy generation (dice/coin → N-1 words → checksum-fixing Nth word), verification (does my last word match what the checksum implies?). Algorithm: naïve enumeration over the 2048-entry wordlist with `bip39::Mnemonic::parse_in` as the correctness oracle.
+- **Status:** `open` (P0 SPEC in flight at this filing; closes at v0.11.0 PE tag).
+- **Tier:** `v0.11.0-feature`.
+- **Companion:** N/A (toolkit-only; no cross-repo work — ms-cli has no candidate insertion point per Phase 1 exploration in the plan).
+
 ### `resolved-slot-entropy-zeroizing-field` — change `ResolvedSlot.entropy` to `Option<Zeroizing<Vec<u8>>>`
 
 - **Surfaced:** 2026-05-13, v0.9.0 Cycle A Phase 2 GREEN (deferred from in-cycle landing due to 19-site cascade).
