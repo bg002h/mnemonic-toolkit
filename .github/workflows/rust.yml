@@ -53,15 +53,43 @@ jobs:
           fi
           cargo test -p mnemonic-toolkit
 
-      - name: cargo test --include-ignored g2_1 (fresh-process fault injection)
-        # Per SPEC §4 P2 + plan P2.T2: G2.1 (eperm fault injection) is
-        # #[ignore]-gated to avoid OnceLock<FailMode> pollution from
-        # concurrent G1.* tests. Run it separately so it gets a fresh process.
+      - name: G2.1 eperm fault injection (fresh subprocess; env set before cargo)
+        # Per SPEC §4 P2 + plan P2.T2: cfg(test) FAIL_MODE injection is only
+        # reachable from library unit tests (cfg(test) is per-crate-not-per-
+        # build, RFC 1604). G2.1 is #[ignore]-gated and filtered to the
+        # specific test name so the OnceLock<FailMode> initializes fresh
+        # from MNEMONIC_TEST_MLOCK_FAIL_MODE in this step's env.
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: eperm
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
           fi
-          cargo test -p mnemonic-toolkit --test mlock_unit -- --include-ignored g2_1
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_1 -- --include-ignored
+
+      - name: G2.3-debug einval debug_assert (fresh subprocess)
+        # Per SPEC §6 G2.3: debug builds trip debug_assert when mlock returns
+        # EINVAL under fault injection. #[should_panic(expected = "EINVAL")]
+        # asserts the panic message contains the substring.
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: einval
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_3 -- --include-ignored
+
+      - name: G2.4 off control (fresh subprocess)
+        # Per SPEC §6 G2.4: control case — FAIL_MODE=off must not synthesize
+        # failures. Verifies the wrapper does not increment failure_count
+        # spuriously in a healthy ulimit environment.
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: off
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_4 -- --include-ignored
 
   miri:
     name: miri (mlock unsafe)

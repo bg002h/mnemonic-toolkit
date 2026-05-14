@@ -417,4 +417,77 @@ mod tests {
         assert_eq!(v.len(), 0, "zeroize clears Vec len after scrubbing");
         drop(pin); // munlock after zeroize — strictest threat-model ordering
     }
+
+    // ========================================================================
+    // G2.x — fault-injection acceptance gates.
+    //
+    // These live as LIBRARY UNIT tests (not integration tests in tests/)
+    // because `cfg(test)` is per-crate-not-per-build (RFC 1604; flagged by
+    // Phase 2 R0 v1 I-R0-4): the `FAIL_MODE` injection hook in this module
+    // is only reachable when the LIBRARY itself is compiled with cfg(test),
+    // which only happens for the `--lib` test target.
+    //
+    // Each G2.x test is `#[ignore]`-gated. CI invokes them individually in
+    // separate cargo processes so `OnceLock<FailMode>` initializes from a
+    // fresh env-var read per process:
+    //
+    //   MNEMONIC_TEST_MLOCK_FAIL_MODE=eperm cargo test --lib mlock::tests::g2_1 -- --include-ignored
+    //   MNEMONIC_TEST_MLOCK_FAIL_MODE=einval cargo test --lib mlock::tests::g2_3 -- --include-ignored
+    //   MNEMONIC_TEST_MLOCK_FAIL_MODE=off cargo test --lib mlock::tests::g2_4 -- --include-ignored
+    //
+    // Filtering to the specific test name guarantees the test target's
+    // process runs exactly one mlock test, so the OnceLock doesn't get
+    // polluted by a prior call from a different test.
+    // ========================================================================
+
+    /// G2.1 — eperm fault injection. Asserts `MlockState.failure_count` is
+    /// incremented and `first_errno` is recorded as `EPERM` after exactly
+    /// one `pin_pages_for` call under `FAIL_MODE=eperm`. Requires
+    /// `MNEMONIC_TEST_MLOCK_FAIL_MODE=eperm` set in the env BEFORE this
+    /// test process starts.
+    #[test]
+    #[ignore = "subprocess: requires MNEMONIC_TEST_MLOCK_FAIL_MODE=eperm in env"]
+    fn g2_1_eperm_increments_failure_count() {
+        let buf = vec![0u8; 64];
+        let _pin = pin_pages_for(&buf);
+        assert!(
+            failure_count_for_test() > 0,
+            "FAIL_MODE=eperm must increment failure_count via record_failure",
+        );
+        assert_eq!(
+            first_errno_for_test(),
+            Some(libc::EPERM),
+            "first_errno must be EPERM after eperm injection",
+        );
+    }
+
+    /// G2.3-debug — EINVAL fault injection. Debug builds trip `debug_assert!`
+    /// inside `pin_pages_for` (SPEC §2 row 6: EINVAL should be unreachable
+    /// from the slice-fn API by construction; debug builds panic, release
+    /// builds soft-fail). Requires `MNEMONIC_TEST_MLOCK_FAIL_MODE=einval`
+    /// set in the env BEFORE this test process starts.
+    #[test]
+    #[ignore = "subprocess: requires MNEMONIC_TEST_MLOCK_FAIL_MODE=einval in env"]
+    #[should_panic(expected = "EINVAL")]
+    fn g2_3_einval_debug_panics() {
+        let buf = vec![0u8; 64];
+        let _pin = pin_pages_for(&buf);
+        // unreachable in debug builds — debug_assert! fires inside pin_pages_for
+    }
+
+    /// G2.4 — control: FAIL_MODE=off must NOT synthesize failures. After
+    /// one `pin_pages_for` call with sufficient ulimit, `failure_count`
+    /// remains 0. Requires `MNEMONIC_TEST_MLOCK_FAIL_MODE=off` (or unset)
+    /// + Linux `ulimit -l >= 64KiB` (CI sets this) or macOS default.
+    #[test]
+    #[ignore = "subprocess: requires MNEMONIC_TEST_MLOCK_FAIL_MODE=off + sufficient ulimit"]
+    fn g2_4_off_no_synthesized_failures() {
+        let buf = vec![0u8; 64];
+        let _pin = pin_pages_for(&buf);
+        assert_eq!(
+            failure_count_for_test(),
+            0,
+            "FAIL_MODE=off must not synthesize failures (test env requires ulimit -l >= 64KiB)",
+        );
+    }
 }

@@ -1,9 +1,19 @@
-//! Cycle B Phase 2 RED tests for the slice-fn mlock module (Fix B).
+//! Cycle B Phase 2 integration tests for the slice-fn mlock module (Fix B).
 //!
-//! See SPEC §6 G1.1-G1.4 (functional correctness) + §6 G2 (soft-fail
-//! coverage). Phase 2 retains G1.* + G2.1 + G2.3-debug + G2.4 in-process;
-//! G2.2, G2.3-release, G2.5 defer to Phase 3a (subprocess via real CLI
-//! callsites, none of which exist yet in Phase 2).
+//! See SPEC §6 G1.1-G1.4 (functional correctness — page-count contract).
+//!
+//! **G2.* fault-injection tests live in `src/mlock.rs`'s `#[cfg(test)] mod
+//! tests`, not here.** Integration tests in `tests/` link against the
+//! library's PROD build where `cfg(test)` is false; the `FAIL_MODE`
+//! injection hook is unreachable per RFC 1604 (`cfg(test)` is
+//! per-crate-not-per-build) — exactly the same constraint R0 v1 I-R0-4
+//! flagged for the cfg(test) drop-probe. CI invokes each G2.* unit test
+//! with `MNEMONIC_TEST_MLOCK_FAIL_MODE` set in the workflow `env:` block so
+//! `OnceLock<FailMode>` initializes correctly per subprocess.
+//!
+//! Phase 2 deferrals to Phase 3a (per SPEC §2 row 7): G2.2 (enomem),
+//! G2.3-release, G2.5 (stderr summary) — Phase 2 has no production mlock
+//! callsite for subprocess fault injection to invoke.
 
 use mnemonic_toolkit::mlock;
 
@@ -64,54 +74,9 @@ fn g1_4_page_aligned_exactly_one_page_count_one() {
 }
 
 // ============================================================================
-// G2 — soft-fail coverage (Phase 2 retained subset; subprocess tests defer
-// to Phase 3a)
+// G2 — moved to src/mlock.rs unit tests (cfg(test) reachability per RFC 1604).
+// See module-level comment + src/mlock.rs's #[cfg(test)] mod tests.
 // ============================================================================
-
-/// G2.1 — eperm fault injection. In-process single-shot per SPEC §4 P2 cache
-/// shape; sets `FAIL_MODE=eperm` via env var BEFORE the OnceLock initializes,
-/// then calls `pin_pages_for` and asserts `MlockState.failure_count` was
-/// incremented and `first_errno` was recorded as EPERM.
-///
-/// Marked `#[ignore]` because `OnceLock<FailMode>` is set process-wide; running
-/// it concurrently with G1.* would pollute their assertions. CI runs this
-/// separately via `cargo test --include-ignored g2_1`.
-#[test]
-#[ignore = "in-process FAIL_MODE pollution; run via --include-ignored or as subprocess"]
-fn g2_1_eperm_increments_failure_count() {
-    // SAFETY: env-var set is safe here; this test is gated #[ignore] so it
-    // only runs in isolation.
-    std::env::set_var("MNEMONIC_TEST_MLOCK_FAIL_MODE", "eperm");
-    let buf = vec![0u8; 64];
-    let _pin = mlock::pin_pages_for(&buf);
-    assert!(
-        mlock::failure_count_for_test() > 0,
-        "eperm fault injection must increment failure_count",
-    );
-    assert_eq!(
-        mlock::first_errno_for_test(),
-        Some(libc::EPERM),
-        "first_errno must be EPERM after eperm fault injection",
-    );
-}
-
-/// G2.4 — control: FAIL_MODE=off (or unset). No failure recorded after a
-/// normal `pin_pages_for(&buf)` call in a healthy test environment (ulimit -l
-/// sufficient or running as root). Skipped in environments without sufficient
-/// RLIMIT_MEMLOCK to avoid false-positive eperm injection.
-#[test]
-fn g2_4_off_control_no_failure_when_ulimit_sufficient() {
-    // Best-effort: if the environment doesn't have sufficient ulimit, the
-    // test is informational only (we don't assert failure_count == 0 because
-    // CI may run under restricted privileges).
-    let buf = vec![0u8; 64];
-    let _pin = mlock::pin_pages_for(&buf);
-    // No assertion on failure_count — depends on environment. The G2.4 gate
-    // verifies the contract: with FAIL_MODE=off, our wrapper does not
-    // synthesize spurious failures. Real ulimit-driven eperm/enomem
-    // failures are valid and not test failures.
-    let _ = mlock::failure_count_for_test();
-}
 
 // ============================================================================
 // G6 — cross-repo diff manifest (full impl in Phase 3b; placeholder here)
