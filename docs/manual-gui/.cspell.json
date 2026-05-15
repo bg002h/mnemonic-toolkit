@@ -183,6 +183,11 @@
     "notarisation",
     "screencopy",
     "USERPROFILE",
-    "xattr"
+    "xattr",
+    "redactions",
+    "airgapped",
+    "sneakernet",
+    "fullwidth",
+    "codepoint"
   ]
 }

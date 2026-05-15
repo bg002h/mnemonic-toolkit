@@ -45,6 +45,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `gui-run-confirm-modal-secret-redaction-manual-companion` — manual-prose lockstep companion to GUI run-confirm-modal redaction fix
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle M-P2.4 batch 4 R0 source-grep. The Defense-2 prose in `docs/manual-gui/src/10-foundations/14-secret-handling.md` (LOCKed in M-P2.4 batch 2) and the feature-2 description in `11-what-is-mnemonic-gui.md` both claim the run-confirm modal "shows the assembled argv with secret values replaced by `***`". `mnemonic-gui/src/main.rs:512-535` shows no such redaction; the modal renders each argv token verbatim. The manual prose was patched in the M-P2.4 batch-4 commit to honestly describe the actual (undesired) behavior + recommend cold-node-only operation as an operational mitigation.
+- **Where:** `docs/manual-gui/src/10-foundations/14-secret-handling.md` Defense-2 section; `docs/manual-gui/src/10-foundations/11-what-is-mnemonic-gui.md` feature-2 description; `docs/manual-gui/pinned-upstream.toml` (currently pinned to `mnemonic-gui-v0.3.0`, must bump to whatever GUI tag ships the redaction fix).
+- **What:** When the GUI ships the redaction fix (tracked at sibling `bg002h/mnemonic-gui` `FOLLOWUPS.md` `gui-run-confirm-modal-secret-redaction`), this manual must (i) revert the v1.0 honest-broken framing in chapters 11 + 14, (ii) restore the `***` redaction claim, (iii) drop the cold-node-only operational warning to a hover-tooltip-grade general-hygiene remark (still useful but no longer load-bearing for the security model), and (iv) bump `pinned-upstream.toml` to the GUI tag that ships the fix.
+- **Why deferred:** Surfaced AFTER M-P2.4 batches 1-2 LOCKed; the manual cannot fix the GUI behavior, only describe it. v1.0 manual ships with honest-broken framing + cold-node operational mitigation; v1.1 will close the loop in lockstep with the GUI fix.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-run-confirm-modal-secret-redaction`.
+
 ### `gui-manual-cross-refs-to-cli-manual` — bidirectional links between docs/manual-gui/ and docs/manual/ chapters where concepts overlap
 
 - **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.

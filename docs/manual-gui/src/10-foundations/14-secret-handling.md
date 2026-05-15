@@ -62,16 +62,56 @@ is the single source of truth for what counts as a secret.
 ## Defense 2 — run-confirm modal
 
 Before a subprocess fires for any form containing a secret-class
-flag, a modal pops up showing the assembled argv with secret values
-replaced by `***`. The modal has two buttons: **Run** (confirm) and
-**Cancel** (abort). This guards against:
+flag, a modal pops up showing the assembled argv as it will be
+passed to the subprocess. The modal has two buttons: **Run**
+(confirm) and **Cancel** (abort). The modal title is
+"Confirm secret-bearing run" and it is centered. There is no
+Escape-key affordance: you must click **Run** or **Cancel**
+explicitly to dismiss the modal. This is intentional under the
+security-relevant-modal threat model — an accidental Escape that
+fires a secret-bearing run would be a worse UX failure mode than
+requiring a deliberate click. This guards against:
 
 - Muscle-memory clicks on a pre-populated form.
 - Forms reloaded from disk that you'd forgotten contained a secret.
 - Unintentional invocations from a stuck **Run** button.
 
-The modal title is "Confirm secret-bearing run" and it is centered;
-**Cancel** is the default action if you press Escape.
+:::danger
+**At `mnemonic-gui` v0.3.0 the run-confirm modal renders secret-bearing
+argv tokens in plaintext, NOT as `***` redactions.** This means the
+literal BIP-39 phrase, `ms1` string, or passphrase you typed into a
+secret-class field is briefly displayed on screen between the **Run**
+click and your **Run** confirmation in the modal. Anything that can
+read the screen during that interval — a screen-recording tool, a
+shoulder-surfer, a remote screen-share session, an OS-level screenshot
+hotkey, a smartphone camera pointed at the monitor — can capture the
+secret. The redaction gap is tracked at the GUI repo's
+`gui-run-confirm-modal-secret-redaction` FOLLOWUP and at this manual's
+companion `gui-run-confirm-modal-secret-redaction-manual-companion`
+FOLLOWUP; v1.1 of this manual will close the loop in lockstep with
+the GUI fix.
+
+**Operational mitigation: only enter secret-bearing values from a
+cold / airgapped machine** — one whose network connection is
+physically disabled or non-existent, and whose screen is in a
+controlled environment. Two recommended cold-node patterns:
+
+- A dedicated offline machine that never connects to the internet,
+  with Bitcoin block updates delivered via sneakernet using
+  `bitcoind`'s `loadblock` startup option (download `blk*.dat` files
+  on a hot machine; transfer via removable media; load them on the
+  cold node).
+- A node that receives Bitcoin block updates one-way via a
+  Blockstream Satellite receiver (the satellite link is
+  receive-only at the radio layer; the node itself never speaks to
+  the internet).
+
+Until the redaction gap is closed, treat the GUI as you would a CLI
+invocation that places the secret in `/proc/<pid>/cmdline` — the
+secret is briefly observable to anything with access to the screen,
+and your operational defenses must therefore include physical
+isolation of the screen.
+:::
 
 ## Defense 3 — on-exit zeroize sweep
 

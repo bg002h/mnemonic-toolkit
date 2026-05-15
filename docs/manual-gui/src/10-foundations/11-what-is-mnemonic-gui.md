@@ -40,9 +40,13 @@ no CLI equivalent:
    [§14 Secret handling](#secret-handling) for the full list and
    the type-level never-persist invariant), the **Run** button does
    not invoke the subprocess immediately.
-   Instead a modal lists the full argv (with secrets visibly redacted
-   to `***`) and asks for explicit confirmation. This guards
-   against muscle-memory clicks on a form pre-populated from disk.
+   Instead a modal lists the full argv as it will be passed to the
+   subprocess, and asks for explicit **Run** / **Cancel**
+   confirmation. **At v0.3.0 the modal renders secret-bearing argv
+   tokens in plaintext** — see [§14 Secret handling](#secret-handling)
+   Defense 2 for the full security implication and operational
+   mitigation. Even with that gap the modal still guards against
+   muscle-memory clicks on a form pre-populated from disk.
 3. **`?` help-icons that deep-link into THIS manual.** Every
    Dropdown / NodeValueComposite / TaggedOrIndexed / repeating-field
    flag in the GUI renders with a `?` button next to its label;
