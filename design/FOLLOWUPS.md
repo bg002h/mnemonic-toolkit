@@ -45,6 +45,33 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `gui-manual-cross-refs-to-cli-manual` — bidirectional links between docs/manual-gui/ and docs/manual/ chapters where concepts overlap
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual-gui/src/ chapters that document concepts also covered in docs/manual/ (foundations, glossary terms, secret-bearing advisories, BIP-39 / BIP-32 primers). Currently no cross-links exist; the manuals are independent build units.
+- **What:** v1.1 enhancement (Option C in the v1 planning §1.1). Add bidirectional `[CLI manual: §X.Y](https://...manual.pdf#section)` links between the GUI manual's foundations chapter and the CLI manual's equivalent chapters. Both PDFs hosted; deep-links use stable kebab-case anchors. Concept-overlap zones: bundle/card/slot terminology, BIP-39 entropy primer, BIP-32 derivation primer, codex32 / BCH primers, m-format constellation glossary.
+- **Why deferred:** v1.0 cycle scope-locked to Option B (~165 pages, GUI-shaped only). Cross-references introduce bidirectional drift hazard because the CLI manual's chapters are NOT structured around the GUI's IA. Wait until both manuals are in steady state.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+
+### `cli-manual-html-target` — add HTML target + gh-pages deploy for the CLI manual
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual/Makefile (currently has `md` and `pdf` targets only; no `html`). docs/manual/Dockerfile.build (would need no changes — pandoc + xelatex already installed). .github/workflows/manual.yml (would need a gh-pages deploy job mirroring docs/manual-gui/.github/workflows/manual-gui.yml's pattern).
+- **What:** v1.1 enhancement. Add `make html` target producing `build/m-format-manual.html`, plus a gh-pages deploy step in `manual.yml` triggered on `manual-v*` tags. Output lands at `https://bg002h.github.io/mnemonic-toolkit/manual/` (parallel to the GUI manual at `/manual-gui/`). Enables in-app help-icon deep-linking for any future CLI-output-driven tooling (e.g., a `mnemonic --help <subcommand>` that emits a manual URL alongside the help text).
+- **Why deferred:** CLI manual is hand-curated and stable at v0.1; no current user-facing demand for HTML hosting. The GUI manual v1.0 cycle is the first time gh-pages infrastructure lands in this repo; CLI-manual HTML can piggyback once that's proven.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+
+### `gui-manual-localization` — non-English content support for the GUI manual
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual-gui/src/. Pandoc supports multi-language documents via the `lang` metadata field + Babel/Polyglossia LaTeX packages.
+- **What:** Translate the GUI manual into at least one additional language (likely Spanish, given the existing BIP-39 wordlist support for `spanish`). Add a language-selector to the GUI's help-icon URL helper to deep-link to localized anchors. Requires a translation infrastructure: per-language `src/` trees + a build matrix in CI + native-speaker review.
+- **Why deferred:** v1.0 ships English-only. Localization is a substantial undertaking (translation cost + per-language QA cost + ongoing drift maintenance). Defer until the manual stabilizes AND there's specific demand from a user community.
+- **Status:** `open`
+- **Tier:** `v2+`
+
 ### `library-error-and-language-surface-promotion` — move `error` + `language` + `friendly` modules from main.rs to lib.rs
 
 - **Surfaced:** 2026-05-13, v0.11.0 Phase 1 R1 reviewer-loop. The P1 GREEN impl pivoted to a self-contained library surface (`FinalWordLanguage` + `FinalWordError` library-local enums) because exposing `error`/`language`/`friendly` from lib.rs today would require moving them out of `src/main.rs`'s private-module set — a cross-module refactor touching every binary file that imports `ToolkitError`. R1 reviewer endorsed the P1 pivot but recommended filing this FOLLOWUP for the future cleaner refactor.

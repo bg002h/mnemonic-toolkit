@@ -1,0 +1,44 @@
+# Canonical enumeration of every <binary> <subcommand> pair the manual
+# documents. flag-coverage runs `${BIN} ${SUBCMD} --help` for each line
+# (skipping comments/blank lines) and asserts every flag in the output
+# appears in 40-cli-reference/.
+#
+# Adding a subcommand here forces a manual update; removing one without
+# touching the manual fails the lint.
+
+# mnemonic
+mnemonic bundle
+mnemonic verify-bundle
+mnemonic convert
+mnemonic export-wallet
+mnemonic derive-child
+mnemonic final-word
+mnemonic seed-xor split
+mnemonic seed-xor combine
+mnemonic slip39 split
+mnemonic slip39 combine
+mnemonic gui-schema
+
+# md
+md encode
+md decode
+md inspect
+md address
+md bytecode
+md compile
+md vectors
+md verify
+
+# ms
+ms encode
+ms decode
+ms inspect
+ms verify
+ms vectors
+
+# mk
+mk encode
+mk decode
+mk inspect
+mk verify
+mk vectors
