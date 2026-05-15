@@ -1,4 +1,4 @@
-# How the GUI relates to the four CLIs
+# How the GUI relates to the four CLIs {#relation-to-cli}
 
 The GUI requires the four CLIs to be **already installed on `$PATH`**.
 It does not bundle them. At launch, `mnemonic-gui` runs a `PATH`

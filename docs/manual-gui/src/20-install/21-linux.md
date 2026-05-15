@@ -1,4 +1,4 @@
-# Installing on Linux
+# Installing on Linux {#install-linux}
 
 `mnemonic-gui` runs on every mainstream Linux desktop (X11 and
 Wayland; GNOME, KDE Plasma, Sway, Hyprland, XFCE). It is a wgpu-based
