@@ -4,6 +4,7 @@
 **Predecessor LOCK:** `ea7c675` (P2.3 R1 LOCK round 1; Opus 0C/0I/0N/0n clean)
 **Brainstorm:** 2026-05-14 (5 clarifying questions answered + 1 outline-approval pass + 1 pre-decided-item nudge — `\index{}` markers now in scope)
 **Cadence:** R0 architect plan review (Opus, against this file) → GREEN single-commit chapter rewrite + index-marker additions → R1 LOCK reviewer (Opus, against final commit). Two reviewer checkpoints, no RED.
+**R0 fold (2026-05-14):** Opus R0 returned 1C/3I/5N/3n at `design/agent-reports/v0_13_0-slip39-p3-r0.md`. Folded inline into this revision: C1 (`\index{}` flat-marker scheme — see §3.2 + §8 fold notes); I1 (Trezor One drop + softened `--backup-type` flag — see §3.10 + §7 part 3); I2 (paired-SPEC-patch mandate on stem drift — see §10.4 + §11.3); I3 (0.3.0 ↔ commit-hash chapter-prose disclosure — see §7 part 2); N1 (`--iteration-exponent` perf advisory note in example 4); N2 (`--from entropy=` variant note in example 1); N3 (env-var advisory naming clarification in §6.2); N5 (§2.1 marker count 5→6). **Deferred:** N4 (LOC upper-bound LOCK criterion — defer to R1); n1 (asymmetric-groups example mention); n2 (§14 commit-count math precision); n3 (PE precedent cite for no-RED rationale).
 
 ## §1 Goal
 
@@ -23,7 +24,7 @@ The flag-coverage lint already passes after P2.3; P3 must NOT regress it.
 ### §2.1 Modified files (3)
 
 1. `docs/manual/src/40-cli-reference/41-mnemonic.md` — replace the P2.3 `## mnemonic slip39` stub (~42 LOC) with the canonical chapter (~305 LOC). Single contiguous H2 between `## mnemonic seed-xor` and `## mnemonic gui-schema`. NO touch to chapter intro or to other H2s.
-2. `docs/manual/src/60-appendices/69-index-table.md` — append rows for the `\index{}` markers added by §7 (5 rows; alphabetically positioned).
+2. `docs/manual/src/60-appendices/69-index-table.md` — append rows for the `\index{}` markers added by §8 (6 rows; alphabetically positioned).
 3. `crates/mnemonic-toolkit/Cargo.toml` — NO touch (PE bumps version, not P3).
 
 ### §2.2 No new files
@@ -65,7 +66,7 @@ Mirrors the manual's chapter-level `## Concept signposts` style. Defines (one sh
 - **Passphrase** — SLIP-39 passphrase (NOT the BIP-39 passphrase); empty string = SLIP-39 default.
 - **Extendable bit** — 1-bit flag controlling whether the identifier participates in the PBKDF2 salt.
 
-Add `\index{share!SLIP-39}` and `\index{group threshold}` and `\index{member threshold}` here.
+Add `\index{SLIP-39 share}` and `\index{group threshold}` and `\index{member threshold}` here. (R0 C1 fold: flat marker form, NOT LaTeX sub-entry `share!SLIP-39` — the lint's source-side normalizer does not strip `!` so the sub-entry form would fail bidirectional check.)
 
 ### §3.3 Synopsis H3 (~10 LOC)
 
@@ -104,7 +105,7 @@ Full SPEC §2.6 mirror — 6 rows, each one line. Two-column table: `Trigger | S
 
 ### §3.10 Trezor interop H3 (~30 LOC)
 
-Cross-impl smoke recipe via `python-shamir-mnemonic`. Detailed in §7.
+Cross-impl smoke recipe via `python-shamir-mnemonic`. Detailed in §7. (R0 I1 fold: chapter prose drops the Trezor One mention — SPEC §3 OOS row `OOS-slip39-import-trezor-onev-format` confirms Trezor One predates SLIP-39 — and softens the firmware-version-specific backup-type-flag claim.)
 
 ## §4 Worked-example detail
 
@@ -128,6 +129,8 @@ mnemonic slip39 combine --share "<share-1>"
 Stdout: the original 24-word `abandon × 23 + art` phrase recovered.
 
 Pedagogical point: shows the basic `split`/`combine` mechanic with the simplest possible threshold (degenerate). Sets expectations for share length (33 words for 32-byte master entropy at default iter_exp=0).
+
+R0 N2 fold — also include a one-line `--from entropy=` variant (cheap, closes the entropy-vs-phrase gap that all 4 examples otherwise leave): "alternative master input via raw hex entropy: `mnemonic slip39 split --from entropy=0102030405060708090a0b0c0d0e0f10 --group-threshold 1 --group 1,1` — produces a 20-word share (16-byte entropy at default iter_exp=0); the JSON envelope's `identifier` + `iteration_exponent` shape is the same regardless of `phrase=` vs `entropy=`".
 
 ### §4.2 Example 2: 1-of-1 with passphrase (~30 LOC)
 
@@ -195,6 +198,8 @@ mnemonic slip39 combine \
 ```
 
 Pedagogical point: the comprehensive case. Shows multi-group, separate thresholds, passphrase, and the recovery flexibility (2 of 3 groups, 2 of 3 members each → 4 of 9 total shares suffice; many such 4-share subsets are valid). Briefly notes `--group-threshold 2 --group 3,2 --group 3,2 --group 3,2` is "social-recovery"-style: 3 trustees each hold 3 shares; any 2 trustees with ≥2 of their 3 shares cooperate.
+
+R0 N1 fold — append a "Note:" paragraph: "to exercise the iteration-exponent perf advisory (§3.9), append `--iteration-exponent 5` to the `split` invocation; stderr will print `warning: --iteration-exponent E=5 yields 320000 × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow ...`. The exponent is encoded in each share's id_exp field, so the matching `combine` invocation needs no extra flag — it reads the exponent from the shares automatically." Closes the example-coverage gap on `--iteration-exponent` for ~3 LOC.
 
 This example's combine recipe is also the input to §3.10 Trezor interop.
 
@@ -267,6 +272,8 @@ Pull verbatim from SPEC §2.6. Same approach.
 
 The advisory row for `MNEMONIC_SLIP39_TEST_RNG` should be present even though it's a test-only env-var — readers may encounter the warning text via search and need to know what triggered it.
 
+R0 N3 fold — add a one-line note beside the advisory table: "The warning string names `MNEMONIC_SLIP39_TEST_RNG` even when only the companion `MNEMONIC_SLIP39_TEST_IDENTIFIER` is set — both env-vars trigger the same single-string advisory; see SPEC §6 for both env-var definitions."
+
 ## §7 Trezor interop recipe (§3.10 detail)
 
 Single H3 + ~30 LOC. Three parts:
@@ -285,7 +292,9 @@ Single H3 + ~30 LOC. Three parts:
 
    Reuses example 4's shares + passphrase. Output: the same 32-byte master entropy that `mnemonic slip39 combine` recovered. Note: `python-shamir-mnemonic` outputs hex entropy by default (not BIP-39 phrase); convert via `mnemonic convert --from entropy=<hex> --to phrase` if reader wants the phrase form.
 
-3. **Trezor hardware compatibility note** — informational paragraph: "Shares produced by `mnemonic slip39 split` are bit-identical to Trezor SLIP-0039. Users with a Trezor device can verify by importing via `trezorctl recovery-device --backup-type slip39-basic` (Trezor One) or the Trezor Suite recovery wizard (Trezor Model T). The toolkit does not ship Trezor hardware test recipes because their precise UI flow varies by firmware version."
+   R0 I3 fold — chapter prose MUST disclose the version-pin caveat: "Recipe pinned to `shamir-mnemonic==0.3.0` (latest released PyPI version at chapter-write 2026-05-14). The toolkit's library compatibility is verified against upstream commit `17fcce14`; if the recipe fails for you, the released PyPI version may have introduced a wire-format change since the toolkit's vendored test vectors. The version-pinned PyPI archive is at <https://pypi.org/project/shamir-mnemonic/0.3.0/>. File a toolkit issue with the failing share text + python error if encountered." Stronger fold (recommended): GREEN-write actually runs the recipe end-to-end against shares from `target/debug/mnemonic slip39 split` and converts the prose to "validated 2026-05-14 against shamir-mnemonic 0.3.0 on Linux x86_64".
+
+3. **Trezor hardware compatibility note** — informational paragraph (R0 I1 fold — drops Trezor One, softens backup-type-flag specificity, distinguishes basic vs advanced modes): "Shares produced by `mnemonic slip39 split` are bit-identical to Trezor SLIP-0039. Users with a Trezor Model T or Safe family device (NOT Trezor One — Trezor One predates SLIP-39 and uses raw BIP-39 only) can verify by importing through the Trezor Suite recovery wizard. SLIP-39 has two modes: `slip39-basic` for single-group splits (e.g., examples 1-3 above; the `2-of-3` shape) and `slip39-advanced` for multi-group splits (example 4's `2-of-3-of-2-of-3` shape). Consult Trezor's current docs for the exact `trezorctl recovery-device --backup-type` flag value, which has historically varied by firmware version."
 
 Add `\index{Trezor SLIP-0039 interop}` here.
 
@@ -293,10 +302,12 @@ Add `\index{Trezor SLIP-0039 interop}` here.
 
 Total: 6 `\index{}` markers; 6 corresponding rows in `69-index-table.md`.
 
+R0 C1 fold — all markers use FLAT form (no LaTeX `!` sub-entry). The lint's source-side normalizer at `lint.sh:124-125` strips `\_` → `_` only; `!` is not stripped, so any `\index{X!Y}` source-side resolves to literal `X!Y` and cannot match a `| `X, Y` |` table row. Flat form keeps source-side and table-side strings byte-identical.
+
 | Marker | Section | 69-index-table.md row |
 |---|---|---|
 | `\index{SLIP-39}` | §3.1 intro | `| `SLIP-39` | [mnemonic slip39](#mnemonic-slip39) |` |
-| `\index{share!SLIP-39}` | §3.2 concept signposts | `| `share, SLIP-39` | [mnemonic slip39](#mnemonic-slip39) |` |
+| `\index{SLIP-39 share}` | §3.2 concept signposts | `| `SLIP-39 share` | [mnemonic slip39](#mnemonic-slip39) |` |
 | `\index{group threshold}` | §3.2 concept signposts | `| `group threshold` | [mnemonic slip39](#mnemonic-slip39) |` |
 | `\index{member threshold}` | §3.2 concept signposts | `| `member threshold` | [mnemonic slip39](#mnemonic-slip39) |` |
 | `\index{K-of-N}` | §3.6 worked examples | `| `K-of-N` | [mnemonic slip39](#mnemonic-slip39) |` |
@@ -304,7 +315,7 @@ Total: 6 `\index{}` markers; 6 corresponding rows in `69-index-table.md`.
 
 The bidirectional lint check at `lint.sh` step 6/6 will enforce: every `\index{}` in `41-mnemonic.md` must match a row in `69-index-table.md`, and vice versa. NO partial migration — ship all markers + rows in the same commit.
 
-NOTE: `\index{share!SLIP-39}` uses LaTeX index-entry sub-entry syntax (`!` separator). The lint's regex is `\\index\{[^}]*\}` which captures the full `share!SLIP-39` inner string; the table row's `Term` cell must match that exact string with the LaTeX backslash-escape stripping applied (`\_` → `_`, but no `!` escape in markdown table). Verify the lint behavior at GREEN-write time before transcribing.
+NOTE (post R0 C1 fold): the `\index{share!SLIP-39}` LaTeX sub-entry approach was rejected at R0 because `lint.sh:124-125` does not normalize `!`; the marker scheme is now FLAT (no sub-entries) — see fold rationale above the marker table. Three alternatives were considered: (a) literal `\index{share, SLIP-39}` with comma in marker (rejected — `makeindex` PDF render misinterprets the comma as part of the term not a sub-entry); (b) flat `\index{SLIP-39 share}` (CHOSEN — trivial source/table match, no lint patches, no PDF render issues); (c) patching `lint.sh` to strip `!` to `, ` (rejected — out of P3 scope per §2.3, sets non-obvious convention). Future chapter authors adding markers MUST use flat form unless `lint.sh` is extended.
 
 ## §9 Phase split
 
@@ -336,7 +347,7 @@ If R1 returns C or I findings → fold inline (or in a fold-commit), re-dispatch
 1. `docs/manual/src/40-cli-reference/41-mnemonic.md` `## mnemonic slip39` section is ≥ 250 LOC and contains all 10 H3 subsections per §3.
 2. The chapter's split-flags table contains all 8 flag strings the live `slip39 split --help` emits (lint flag-coverage; already passing post-P2.3 — must NOT regress).
 3. The chapter's combine-flags table contains all 6 flag strings the live `slip39 combine --help` emits.
-4. Refusals table has 24 rows mirroring SPEC §2.5 byte-faithfully.
+4. Refusals table has 24 rows mirroring SPEC §2.5 byte-faithfully AND mirroring `cli_slip39_refusals.rs` byte-faithfully (R0 I2 fold: lib-AND-SPEC byte-faithful agreement required; if lib and SPEC drifted at GREEN-write time, the GREEN commit MUST also patch SPEC §2.5 — no defer-via-FOLLOWUP). At plan-time R0 verified zero drift between SPEC and lib; the criterion is forward-looking.
 5. Advisories table has 6 rows mirroring SPEC §2.6 byte-faithfully.
 6. JSON envelope examples for `split` + `combine` are byte-faithful with the SHA-pinned `cli_slip39_json.rs` field names + ordering.
 7. Trezor interop H3 includes the runnable `python-shamir-mnemonic` recipe + the hardware compatibility note.
@@ -351,7 +362,7 @@ If R1 returns C or I findings → fold inline (or in a fold-commit), re-dispatch
 
 2. **JSON field name drift** — chapter's `split` envelope shows `"groups": [{"member_threshold": ..., "shares": [...]}]`. If the actual SHA-pinned shape uses different field names (e.g. `"per_group_member_threshold"` or flat `"shares_by_group_idx"`), chapter is wrong. Mitigation: at GREEN-write time, transcribe directly from `cli_slip39_json.rs::EXPECTED` constants; do NOT copy from this plan's §5 sketch.
 
-3. **Refusal stem byte-drift** — SPEC §2.5 row stems are the canonical reference, but the actual emitted stems are in `cmd/slip39.rs` and verified by `cli_slip39_refusals.rs`. If SPEC and emitted text drifted post-P2.2 fold, chapter could mirror the stale SPEC. Mitigation: at GREEN-write time, cross-check SPEC table rows against `cli_slip39_refusals.rs::EXPECTED_STEMS` (or equivalent). If drift exists, file as a SPEC-reconciliation FOLLOWUP and use the LIB stem (lib is the source of truth, not SPEC).
+3. **Refusal stem byte-drift** — SPEC §2.5 row stems are the canonical reference, but the actual emitted stems are in `cmd/slip39.rs` and verified by `cli_slip39_refusals.rs`. If SPEC and emitted text drifted post-P2.2 fold, chapter could mirror the stale SPEC. R0 verified at plan-time that no drift currently exists (all 24 stems byte-match between SPEC and `cli_slip39_refusals.rs`); the risk is forward-looking. Mitigation (R0 I2 fold; tightened from "lib-wins-on-drift + FOLLOWUP defer"): at GREEN-write time, cross-check SPEC table rows against `cli_slip39_refusals.rs::stderr.contains` assertions. **If lib and SPEC drift detected, the P3 GREEN commit MUST also patch SPEC §2.5 in the same commit** — mirrors P2.2 GREEN's `d40eb0c` 8-SPEC-patch precedent. Do NOT defer SPEC reconciliation to a separate FOLLOWUP — that produces a stale-SPEC trap for the next phase's R0 reviewer.
 
 4. **`python-shamir-mnemonic` API drift** — recipe pins `pip install shamir-mnemonic==0.3.0`. If the upstream API changes between writing and a reader running the recipe, recipe is wrong. Mitigation: pin the version exactly; note in chapter prose that `0.3.0` is the version verified at chapter-write time. R0 reviewer should verify the pinned version matches `python-shamir-mnemonic@17fcce14` SemVer.
 
