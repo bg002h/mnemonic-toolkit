@@ -61,6 +61,12 @@ The widget treats inline values as paste-warn-eligible per [§14
 Defense 4](#secret-handling) when the typed/pasted content
 exceeds 8 characters.
 
+### `phrase` {#mnemonic-final-word-from-phrase}
+
+The only valid node for `--from`. The value is the partial
+N-1 word phrase per the body above. Schema-`secret: true` at the
+node level (the BIP-39 phrase is secret-bearing).
+
 ## `--language` {#mnemonic-final-word-language}
 
 The BIP-39 wordlist used to interpret the partial AND to choose

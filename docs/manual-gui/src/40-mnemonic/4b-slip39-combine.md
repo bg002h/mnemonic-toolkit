@@ -1,0 +1,197 @@
+# `mnemonic slip39-combine` {#mnemonic-slip39-combine}
+
+The reconstruction companion to
+[`mnemonic slip39-split`](#mnemonic-slip39-split). Combines K
+SLIP-39 share mnemonics back into the master secret. The K shares
+must satisfy the threshold structure declared at split time
+(per-group `member_threshold` AND group-layer `group_threshold`).
+
+The same SLIP-39 passphrase used at split time MUST be supplied
+here; without it (or with a wrong one), the reconstruction
+produces a *different* valid master secret per SLIP-39's
+plausible-deniability feature.
+
+:::danger
+The shares pasted here AND the reconstructed master are
+secret-class material. The §14 Defense 2 cold-node operational
+warning applies. The reconstructed master appears in the output
+panel on stdout — same screen-observation threat surface as the
+share inputs.
+:::
+
+## Outline {#mnemonic-slip39-combine-outline}
+
+- [`--share`](#mnemonic-slip39-combine-share) — SLIP-39 share mnemonic (required, repeating; at most one stdin)
+- [`--passphrase`](#mnemonic-slip39-combine-passphrase) — SLIP-39 passphrase used at split time (XOR with `--passphrase-stdin`)
+- [`--passphrase-stdin`](#mnemonic-slip39-combine-passphrase-stdin) — read `--passphrase` from stdin
+- [`--to`](#mnemonic-slip39-combine-to) — output shape (default `entropy`)
+- [`--language`](#mnemonic-slip39-combine-language) — BIP-39 wordlist (output-side; only for `--to phrase`)
+- [`--json-out`](#mnemonic-slip39-combine-json-out) — write JSON envelope to PATH (side-effect)
+
+## `--share` {#mnemonic-slip39-combine-share}
+
+A SLIP-39 share mnemonic. Plain Text widget (NOT NodeValueComposite
+— SLIP-39 shares are bare mnemonics, not `node=value` form).
+Required. Repeating — pass one occurrence per share (the count
+must be sufficient to satisfy both group and member thresholds).
+Schema-`secret: true`.
+
+At most ONE share may use the literal `-` as its value (stdin
+sentinel); a second stdin-form share is refused
+(single-stdin-per-invocation).
+
+The GUI renders this as a multi-row text widget. Each row's
+value is the bare 20-word (or 33-word) SLIP-39 mnemonic — no
+`phrase=` prefix.
+
+## `--passphrase` {#mnemonic-slip39-combine-passphrase}
+
+The SLIP-39 passphrase used at split time. Schema-`secret: true`.
+XOR with `--passphrase-stdin`. Must match the split-time
+passphrase exactly (including empty — empty is the default
+passphrase, not the absence of a passphrase).
+
+A wrong passphrase produces a *different valid master* per
+SLIP-39's plausible-deniability design. The combiner cannot
+detect a wrong passphrase intrinsically; the user must verify
+the reconstructed master against an out-of-band reference (e.g.,
+re-derive a known address and compare).
+
+## `--passphrase-stdin` {#mnemonic-slip39-combine-passphrase-stdin}
+
+Boolean. Read SLIP-39 passphrase from stdin (raw, NULL-byte
+preserving). Schema-`secret: true`. XOR with `--passphrase`.
+Single-stdin-per-invocation: mutually exclusive with any
+`--share -` row.
+
+## `--to` {#mnemonic-slip39-combine-to}
+
+Output shape Dropdown. Default `entropy` (raw hex bytes on
+stdout). Two valid values.
+
+### Outline {#mnemonic-slip39-combine-to-outline}
+
+- [`entropy`](#mnemonic-slip39-combine-to-entropy)
+- [`phrase`](#mnemonic-slip39-combine-to-phrase)
+
+### `entropy` {#mnemonic-slip39-combine-to-entropy}
+
+Emit raw hex entropy bytes on stdout (16 / 20 / 24 / 28 / 32
+bytes). Default. Use this for downstream tooling that consumes
+hex entropy directly.
+
+### `phrase` {#mnemonic-slip39-combine-to-phrase}
+
+Emit a BIP-39 mnemonic phrase on stdout. The `--language` flag
+selects the BIP-39 wordlist; default `english`. Use this for
+re-engraving the master as a BIP-39 phrase (the typical
+recovery path).
+
+## `--language` {#mnemonic-slip39-combine-language}
+
+BIP-39 wordlist for `--to phrase` output. Default `english`.
+**Ignored for `--to entropy`** (the conditional-visibility
+engine hides the flag when `--to` is `entropy` or unset). Same
+10 values as [`mnemonic bundle --language`](#mnemonic-bundle-language).
+
+### Outline {#mnemonic-slip39-combine-language-outline}
+
+- [`english`](#mnemonic-slip39-combine-language-english)
+- [`simplifiedchinese`](#mnemonic-slip39-combine-language-simplifiedchinese)
+- [`traditionalchinese`](#mnemonic-slip39-combine-language-traditionalchinese)
+- [`czech`](#mnemonic-slip39-combine-language-czech)
+- [`french`](#mnemonic-slip39-combine-language-french)
+- [`italian`](#mnemonic-slip39-combine-language-italian)
+- [`japanese`](#mnemonic-slip39-combine-language-japanese)
+- [`korean`](#mnemonic-slip39-combine-language-korean)
+- [`portuguese`](#mnemonic-slip39-combine-language-portuguese)
+- [`spanish`](#mnemonic-slip39-combine-language-spanish)
+
+### `english` {#mnemonic-slip39-combine-language-english}
+
+See [`mnemonic bundle --language english`](#mnemonic-bundle-language-english).
+
+### `simplifiedchinese` {#mnemonic-slip39-combine-language-simplifiedchinese}
+
+See [`mnemonic bundle --language simplifiedchinese`](#mnemonic-bundle-language-simplifiedchinese).
+
+### `traditionalchinese` {#mnemonic-slip39-combine-language-traditionalchinese}
+
+See [`mnemonic bundle --language traditionalchinese`](#mnemonic-bundle-language-traditionalchinese).
+
+### `czech` {#mnemonic-slip39-combine-language-czech}
+
+See [`mnemonic bundle --language czech`](#mnemonic-bundle-language-czech).
+
+### `french` {#mnemonic-slip39-combine-language-french}
+
+See [`mnemonic bundle --language french`](#mnemonic-bundle-language-french).
+
+### `italian` {#mnemonic-slip39-combine-language-italian}
+
+See [`mnemonic bundle --language italian`](#mnemonic-bundle-language-italian).
+
+### `japanese` {#mnemonic-slip39-combine-language-japanese}
+
+See [`mnemonic bundle --language japanese`](#mnemonic-bundle-language-japanese).
+
+### `korean` {#mnemonic-slip39-combine-language-korean}
+
+See [`mnemonic bundle --language korean`](#mnemonic-bundle-language-korean).
+
+### `portuguese` {#mnemonic-slip39-combine-language-portuguese}
+
+See [`mnemonic bundle --language portuguese`](#mnemonic-bundle-language-portuguese).
+
+### `spanish` {#mnemonic-slip39-combine-language-spanish}
+
+See [`mnemonic bundle --language spanish`](#mnemonic-bundle-language-spanish).
+
+## `--json-out` {#mnemonic-slip39-combine-json-out}
+
+Optional. Writes a versioned JSON envelope to PATH in addition to
+plain master output on stdout. Schema includes `schema_version`,
+`output_shape`, `master` (the reconstructed value), and metadata
+fields.
+
+World-readable-path advisory on Unix.
+
+## Worked example — combine 2 of 3 shares back to master
+
+1. **mnemonic** tab; pick **SLIP-39 Combine (reconstruct from
+   shares)**.
+2. Add 2 `--share` rows; paste 2 of the 3 SLIP-39 shares produced
+   by `slip39-split`'s 2-of-3 worked example (any 2 of the 3
+   will work).
+3. Leave `--passphrase` empty (default empty passphrase).
+4. Leave `--to` at default `entropy`.
+5. Click **Run**. The run-confirm modal appears (each share row
+   is secret-class). Click **Run** in the modal.
+
+The output panel renders 32 hex characters on stdout —
+the 16-byte master entropy (the all-`abandon` canonical entropy
+is `00000000000000000000000000000000`).
+
+To recover the BIP-39 master phrase instead, set `--to` to
+`phrase` and pick `english` for `--language`. Output:
+
+```text
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
+
+## Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Insufficient shares to satisfy thresholds | byte-exact per `cmd/slip39.rs:678-683`: `slip39 combine: insufficient shares for group <groups>: need <N>, got <M>` (group-level sentinel) OR `slip39 combine: insufficient shares for group <i>: need <N>, got <M>` (per-group) |
+| Shares from inconsistent split sets (different identifiers / iteration-exponents) | SLIP-39 library refusal at the share-set-inconsistency check |
+| More than one `--share -` | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` |
+| `--passphrase` AND `--passphrase-stdin` | clap-level `conflicts_with` |
+
+## Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--share <value>` | `warning: secret material on argv (--share) — pipe via --share - to avoid /proc/$PID/cmdline exposure` (one per inline share) |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Stdout is a TTY AND reconstruction succeeded | byte-exact per `cmd/slip39.rs:595-598`: `warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting` |
