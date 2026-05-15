@@ -500,39 +500,46 @@ recognition); share text is shown as `<share-N>` placeholders because
 `split` is CSPRNG-driven (run the commands locally to see actual
 share text).
 
-#### Example 1 — degenerate 1-of-1 single group, no passphrase
+#### Example 1 — smallest legal 2-of-2 single group, no passphrase
 
-Smallest possible split. Demonstrates the basic `split`/`combine`
-mechanic.
+Smallest legal split (the toolkit refuses `--group 1,1` per refusals
+row 5 AND `--group N,1` with N>1 per row 25 — the python `split_ems`
+algorithm replicates the group share to all N members so any T=1
+spec is degenerate; `--group 2,2` is the smallest non-degenerate
+form). Two shares, BOTH required to recover.
 
 ```sh
 echo "abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon art" |
-  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 1,1
+  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 2,2
 ```
 
-Stdout: 1 share — a 33-word SLIP-39 mnemonic (33 words for the 32-byte
-master entropy at default `iter_exp=0`). Reverse:
+Stdout: 2 shares, each a 33-word SLIP-39 mnemonic (33 words for the
+32-byte master entropy at default `iter_exp=0`). Reverse with both:
 
 ```sh
-mnemonic slip39 combine --share "<share-1>"
+mnemonic slip39 combine --share "<share-1>" --share "<share-2>" \
+  --to phrase --language english
 ```
 
-Stdout: the original `abandon × 23 + art` 24-word phrase.
+Stdout: the original `abandon × 23 + art` 24-word phrase. (Without
+`--to phrase`, `combine` defaults to `--to entropy` and emits 64 hex
+chars — `0000000000000000000000000000000000000000000000000000000000000000`
+for the canonical zero-vector master.)
 
 > Alternative master input via raw hex entropy:
 >
 > ```sh
 > mnemonic slip39 split --from entropy=0102030405060708090a0b0c0d0e0f10 \
->   --group-threshold 1 --group 1,1
+>   --group-threshold 1 --group 2,2
 > ```
 >
-> Produces a 20-word share (16-byte entropy maps to 20-word shares).
-> The JSON envelope's `identifier` + `iteration_exponent` shape is the
-> same regardless of `phrase=` vs `entropy=` input.
+> Produces 2 shares of 20 words each (16-byte entropy maps to 20-word
+> shares). The JSON envelope's `identifier` + `iteration_exponent`
+> shape is the same regardless of `phrase=` vs `entropy=` input.
 
-#### Example 2 — 1-of-1 single group, with passphrase
+#### Example 2 — 2-of-2 single group, with passphrase
 
 Adds a SLIP-39 passphrase. Same threshold shape as example 1; only
 the passphrase differs.
@@ -541,14 +548,15 @@ the passphrase differs.
 echo "abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon art" |
-  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 1,1 \
+  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 2,2 \
     --passphrase TREZOR
 ```
 
-Stdout: 1 share. Reverse with the matching passphrase:
+Stdout: 2 shares. Reverse with both + the matching passphrase:
 
 ```sh
-mnemonic slip39 combine --share "<share-1>" --passphrase TREZOR
+mnemonic slip39 combine --share "<share-1>" --share "<share-2>" \
+  --passphrase TREZOR --to phrase --language english
 ```
 
 Stdout: the original 24-word phrase.
@@ -585,11 +593,13 @@ Stdout: 3 shares `<share-1>`, `<share-2>`, `<share-3>`. Reverse with
 any 2:
 
 ```sh
-mnemonic slip39 combine --share "<share-1>" --share "<share-2>"
+mnemonic slip39 combine --share "<share-1>" --share "<share-2>" \
+  --to phrase --language english
 ```
 
 Equivalent recoveries with `--share "<share-1>" --share "<share-3>"`
-or `--share "<share-2>" --share "<share-3>"`.
+or `--share "<share-2>" --share "<share-3>"`. (Without `--to phrase`,
+`combine` defaults to `--to entropy` and emits 64 hex chars.)
 
 > Attempting recovery with only 1 share: `mnemonic slip39 combine
 > --share "<share-1>"` exits 1 with stderr `slip39 combine: insufficient
@@ -616,15 +626,19 @@ abandon abandon abandon abandon abandon abandon abandon art" |
     --passphrase TREZOR
 ```
 
-Stdout: 9 shares in group-major order:
+Stdout: 9 shares in group-major order, with a blank-line separator
+between groups (the Trezor interop recipe below relies on this layout
+when slicing shares with `sed -n`):
 
 ```text
 <g0-m0>
 <g0-m1>
 <g0-m2>
+
 <g1-m0>
 <g1-m1>
 <g1-m2>
+
 <g2-m0>
 <g2-m1>
 <g2-m2>
@@ -637,11 +651,12 @@ unused — the group threshold of 2 is satisfied by groups 0 + 1):
 mnemonic slip39 combine \
   --share "<g0-m0>" --share "<g0-m1>" \
   --share "<g1-m0>" --share "<g1-m1>" \
-  --passphrase TREZOR
+  --passphrase TREZOR --to phrase --language english
 ```
 
 Stdout: the original 24-word phrase. Many valid 4-share subsets exist
-(any 2 from 2 of the 3 groups).
+(any 2 from 2 of the 3 groups). (Without `--to phrase`, `combine`
+defaults to `--to entropy`.)
 
 > **Note:** to exercise the iteration-exponent perf advisory below,
 > append `--iteration-exponent 5` to the `split` invocation; stderr
@@ -722,7 +737,11 @@ permission advisory on stderr (advisories table below).
 ### Refusals
 
 All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
-(24 classes; expanded at v0.13.0 P2.2 GREEN per Q3 fold).
+(25 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
+added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
+`--group N,T` with `T==1 AND N>1` — surfaced when chapter examples
+1+2 attempted `--group 2,1` and the lib refused per the python
+`split_ems` rule).
 
 | Trigger | Refusal stem |
 |---|---|
@@ -750,6 +769,7 @@ All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
 | `combine` shares: shares disagree on the `extendable` (ext) bit | `slip39 combine: shares disagree on the extendable bit` |
 | `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
 | `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` |
+| Any `--group N,T` with `T==1 AND N>1` (toolkit policy; python `split_ems` rule — algorithm replicates the group share to all N members so T=1+N>1 is degenerate; jointly with row 5 means smallest legal split is `--group 2,2`) | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
 
 ### Advisories
 
@@ -794,11 +814,15 @@ printf 'TREZOR' | mnemonic slip39 split \
   --passphrase-stdin > /tmp/shares.txt
 
 # Recover via shamir-mnemonic — pipe 4 shares (2 from group 0, 2 from
-# group 1), then the passphrase twice (shamir prompts for confirmation)
+# group 1), then the passphrase twice (shamir prompts for confirmation).
+# NOTE: multi-group split output is group-major with a BLANK LINE
+# between groups; for 3 groups of 3 members each the file layout is
+# lines 1-3 = group 0, line 4 = blank, lines 5-7 = group 1, line 8 =
+# blank, lines 9-11 = group 2.
 SHARE_G0_M0=$(sed -n 1p /tmp/shares.txt)
 SHARE_G0_M1=$(sed -n 2p /tmp/shares.txt)
-SHARE_G1_M0=$(sed -n 4p /tmp/shares.txt)
-SHARE_G1_M1=$(sed -n 5p /tmp/shares.txt)
+SHARE_G1_M0=$(sed -n 5p /tmp/shares.txt)
+SHARE_G1_M1=$(sed -n 6p /tmp/shares.txt)
 printf '%s\n%s\n%s\n%s\nTREZOR\nTREZOR\n' \
   "$SHARE_G0_M0" "$SHARE_G0_M1" "$SHARE_G1_M0" "$SHARE_G1_M1" |
   shamir recover -p
