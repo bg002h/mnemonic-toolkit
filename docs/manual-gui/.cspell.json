@@ -191,6 +191,7 @@
     "codepoint",
     "materialises",
     "pubkeys",
-    "normalised"
+    "normalised",
+    "greppable"
   ]
 }
