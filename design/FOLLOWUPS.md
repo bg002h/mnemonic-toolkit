@@ -1430,3 +1430,13 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **v0.2 update (2026-05-12, mnemonic-toolkit v0.9.0):** `mnemonic gui-schema` introspection subcommand shipped (SPEC §7 contract). The GUI consumes its JSON output instead of (or alongside) the `syn` codegen path. `cli_gui_schema.rs` (16 tests) pins the SPEC §7 contract on this side. The companion `mnemonic-gui` v0.2 Phase C.2 PR consumes the schema via `cargo run -p mnemonic-toolkit -- gui-schema` at build time.
 - **Status:** `open` (mirror-invariant; tracking only — every flag-surface PR carries this lockstep work).
 - **Tier:** `v1 / mirror-invariant`
+
+### `mk-vectors-pretty-out-help-mismatch` — `mk vectors --pretty` help-text vs source behavior drift
+
+- **Surfaced:** manual-gui v1.0 cycle batch 8 R0 review (2026-05-15), filed at toolkit `63397ef`+. Cited in `docs/manual-gui/src/70-mk/76-vectors.md` and `docs/manual-gui/src/90-appendices/94-release-history.md`.
+- **Where:** `mk-cli` source at `crates/mk-cli/src/cmd/vectors.rs:23` (help-text doc-comment) and the mirror at `mnemonic-gui/src/schema/mk.rs:208` (schema help-text).
+- **What:** `mk vectors --help` advertises `--pretty: Ignored when --out is supplied`. Source (vectors.rs:70-74 in the `write_per_fixture_files` arm) actually honors `--pretty` — each per-fixture .json file is written via `serde_json::to_string_pretty` when `pretty=true`. The manual-gui v1.0 manual sides with source-truth and notes the help-text drift.
+- **Why deferred:** Source-side fix lives in the `bg002h/mnemonic-key` repo (mk-cli `cmd/vectors.rs`); the schema-mirror lives in the `bg002h/mnemonic-gui` repo. Three-cite fix at v1.1 cycle close.
+- **Status:** `open`.
+- **Tier:** `v1+ / cross-repo`
+- **Companion:** intended companion entries in `bg002h/mnemonic-key/design/FOLLOWUPS.md` and `bg002h/mnemonic-gui/FOLLOWUPS.md` at the matching short-id; both currently missing (file with this entry at next cross-repo cycle).
