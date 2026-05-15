@@ -1,34 +1,51 @@
 #!/usr/bin/env bash
 # tests/lint.sh
 #
-# Single linter entry point for the manual. Calls in sequence:
+# Single linter entry point for the GUI manual. Calls in sequence:
 #   1. markdownlint-cli2 (style)
 #   2. cspell (spelling)
 #   3. lychee --offline (link integrity)
-#   4. flag-coverage  (every CLI flag in cli-subcommands.list is documented)
-#   5. glossary-coverage (every defined term has a glossary entry)
-#   6. index bidirectional (\index{X} markers ↔ 69-index-table.md entries)
+#   4. gui-schema-coverage (every SubcommandSchema / FlagSchema /
+#      Dropdown variant / NodeValueComposite node / TaggedOrIndexed
+#      tag in mnemonic-gui source has a matching `id="..."` anchor
+#      in the rendered HTML; bidirectional — schema-shaped HTML
+#      anchors must also have a schema entry. Per SPEC §2.1 G1.)
+#   5. outline-coverage (every subcommand section with >=2 flags has
+#      an `### Outline {#<sub>-outline}` heading with N bullets; every
+#      enumerated flag with >=2 variants has a `#### Outline
+#      {#<flag>-outline}` with V bullets. Per SPEC §2.1 G2 / §2.3.)
+#   6. glossary-coverage (every defined term has a glossary entry)
+#   7. index bidirectional (\index{X} markers ↔ 99-index-table.md entries)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
-#   SRC_DIR       — absolute path to src/
-#   TESTS_DIR     — absolute path to tests/
-#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings.
+#   SRC_DIR                 — absolute path to src/
+#   BUILD_DIR               — absolute path to build/
+#   TESTS_DIR               — absolute path to tests/
+#   MANUAL_GUI_UPSTREAM_ROOT — absolute path to mnemonic-gui repo checkout
+#                              at the pinned tag (per SPEC §2.5).
+#   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings
+#                              (unused by gui-schema-coverage; reserved
+#                              for future GUI-side worked-example phases).
 
 set -euo pipefail
 
 for arg in "$@"; do
   case "$arg" in
-    SRC_DIR=*)      SRC_DIR="${arg#*=}" ;;
-    TESTS_DIR=*)    TESTS_DIR="${arg#*=}" ;;
-    MNEMONIC_BIN=*) MNEMONIC_BIN="${arg#*=}" ;;
-    MD_BIN=*)       MD_BIN="${arg#*=}" ;;
-    MS_BIN=*)       MS_BIN="${arg#*=}" ;;
-    MK_BIN=*)       MK_BIN="${arg#*=}" ;;
+    SRC_DIR=*)                  SRC_DIR="${arg#*=}" ;;
+    BUILD_DIR=*)                BUILD_DIR="${arg#*=}" ;;
+    TESTS_DIR=*)                TESTS_DIR="${arg#*=}" ;;
+    MANUAL_GUI_UPSTREAM_ROOT=*) MANUAL_GUI_UPSTREAM_ROOT="${arg#*=}" ;;
+    MNEMONIC_BIN=*)             MNEMONIC_BIN="${arg#*=}" ;;
+    MD_BIN=*)                   MD_BIN="${arg#*=}" ;;
+    MS_BIN=*)                   MS_BIN="${arg#*=}" ;;
+    MK_BIN=*)                   MK_BIN="${arg#*=}" ;;
   esac
 done
 
 : "${SRC_DIR:?SRC_DIR is required}"
+: "${BUILD_DIR:?BUILD_DIR is required}"
 : "${TESTS_DIR:?TESTS_DIR is required}"
+: "${MANUAL_GUI_UPSTREAM_ROOT:?MANUAL_GUI_UPSTREAM_ROOT is required}"
 
 fail=0
 step() { printf '\n[lint] === %s ===\n' "$1"; }
@@ -36,7 +53,7 @@ warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
 # 1. markdownlint
-step "1/6 markdownlint"
+step "1/7 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
 else
@@ -44,65 +61,63 @@ else
 fi
 
 # 2. cspell
-step "2/6 cspell"
+step "2/7 cspell"
 if command -v cspell >/dev/null; then
-  cspell --no-progress "$SRC_DIR/**/*.md" || err "cspell reported issues"
+  # `--no-must-find-files` keeps cspell from exiting 1 when src/ is
+  # empty (the baseline state at P1; SPEC §2.1 G3 says all three
+  # markdown phases must pass-clean on an empty manual).
+  cspell --no-progress --no-must-find-files "$SRC_DIR/**/*.md" \
+    || err "cspell reported issues"
 else
   warn "cspell not on PATH; skipping"
 fi
 
 # 3. lychee
-step "3/6 lychee"
+step "3/7 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
 else
   warn "lychee not on PATH; skipping"
 fi
 
-# 4. flag-coverage
-step "4/6 flag-coverage"
-LIST="$TESTS_DIR/cli-subcommands.list"
-CLI_REF_DIR="$SRC_DIR/40-cli-reference"
-if [ ! -f "$LIST" ]; then
-  err "$LIST missing"
+# 4. gui-schema-coverage
+step "4/7 gui-schema-coverage"
+CHECKER="$TESTS_DIR/check_gui_schema_coverage.py"
+HTML="$BUILD_DIR/m-format-gui-manual.html"
+if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
+  err "MANUAL_GUI_UPSTREAM_ROOT not a directory: $MANUAL_GUI_UPSTREAM_ROOT (set the env var or override on the command line; SPEC §2.5)"
+elif [ ! -x "$CHECKER" ] && [ ! -f "$CHECKER" ]; then
+  err "$CHECKER missing"
 else
-  while IFS= read -r line; do
-    case "$line" in '' | '#'*) continue ;; esac
-    bin="${line%% *}"; sub="${line#* }"
-    case "$bin" in
-      mnemonic)   cmd="$MNEMONIC_BIN $sub --help" ; chapter="$CLI_REF_DIR/41-mnemonic.md" ;;
-      md)         cmd="$MD_BIN $sub --help"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
-      ms)         cmd="$MS_BIN $sub --help"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
-      mk|mk-cli)  cmd="$MK_BIN $sub --help"       ; chapter="$CLI_REF_DIR/44-mk-cli.md" ;;
-      *) err "unknown binary in cli-subcommands.list: $bin"; continue ;;
-    esac
-    if [ ! -f "$chapter" ]; then
-      warn "chapter $chapter missing; skipping flag-coverage for $bin $sub"
-      continue
-    fi
-    # shellcheck disable=SC2086
-    flags=$(eval $cmd 2>&1 | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
-    if [ -z "$flags" ]; then
-      warn "no flags parsed from \`$cmd\`; skipping"
-      continue
-    fi
-    while read -r flag; do
-      # `--` end-of-options marker prevents grep from interpreting the
-      # flag string itself as an option to grep (which causes grep to
-      # spam its --help output and exit non-zero).
-      if ! grep -qF -- "$flag" "$chapter"; then
-        err "flag $flag for \`$bin $sub\` is not documented in $(basename "$chapter")"
-      fi
-    done <<<"$flags"
-  done <"$LIST"
+  python3 "$CHECKER" \
+      --upstream-root "$MANUAL_GUI_UPSTREAM_ROOT" \
+      --html "$HTML" \
+    || err "gui-schema-coverage reported anchor parity errors"
 fi
 
-# 5. glossary-coverage
-step "5/6 glossary-coverage"
-GLOSSARY="$SRC_DIR/60-appendices/61-glossary.md"
+# 5. outline-coverage
+step "5/7 outline-coverage"
+OUTLINE_CHECKER="$TESTS_DIR/check_outline_coverage.py"
+if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
+  err "MANUAL_GUI_UPSTREAM_ROOT not a directory (see phase 4 above)"
+elif [ ! -f "$OUTLINE_CHECKER" ]; then
+  err "$OUTLINE_CHECKER missing"
+else
+  python3 "$OUTLINE_CHECKER" \
+      --upstream-root "$MANUAL_GUI_UPSTREAM_ROOT" \
+      --src-dir "$SRC_DIR" \
+    || err "outline-coverage reported missing or mismatched outlines"
+fi
+
+# 6. glossary-coverage
+step "6/7 glossary-coverage"
+# GUI manual appendices live under 90-appendices/ per SPEC §1.4 (the
+# numbering deviates from the CLI manual's 60-appendices/ scheme so
+# the two manuals never share an anchor namespace). Token list will
+# grow as P2 content writes land; kept minimal at P1.
+GLOSSARY="$SRC_DIR/90-appendices/91-glossary.md"
 if [ -f "$GLOSSARY" ]; then
-  # Token list — keep deliberately small; expand by curating, not by regex.
-  for term in "m-format constellation" "ms1" "mk1" "md1" "card" "bundle" "slot" "policy_id_stub" "codex32" "BCH" "BIP-388"; do
+  for term in "m-format constellation" "ms1" "mk1" "md1" "card" "bundle" "slot" "SubcommandSchema" "FlagSchema" "NodeValueComposite"; do
     if ! grep -qiF "$term" "$GLOSSARY"; then
       err "glossary missing entry for term: $term"
     fi
@@ -111,9 +126,9 @@ else
   warn "$GLOSSARY missing; skipping glossary-coverage"
 fi
 
-# 6. index bidirectional
-step "6/6 index bidirectional"
-INDEX_TABLE="$SRC_DIR/60-appendices/69-index-table.md"
+# 7. index bidirectional
+step "7/7 index bidirectional"
+INDEX_TABLE="$SRC_DIR/90-appendices/99-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
   # The index table file itself is excluded from the source-side scan
@@ -121,7 +136,7 @@ if [ -f "$INDEX_TABLE" ]; then
   # prose may legitimately reference \index{} as documentation).
   # Strip LaTeX escape backslashes (e.g. \_ in \index{policy\_id\_stub}) so
   # the comparison is by semantic term, not by escape form.
-  src_terms=$(grep -rohE --exclude='69-index-table.md' '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sed -E 's/\\_/_/g' | sort -u || true)
+  src_terms=$(grep -rohE --exclude='99-index-table.md' '\\index\{[^}]*\}' "$SRC_DIR" | sed -E 's/^\\index\{([^}]*)\}$/\1/' | sed -E 's/\\_/_/g' | sort -u || true)
   tbl_terms=$(grep -oE '^\| `[^`]+`' "$INDEX_TABLE" | sed -E 's/^\| `([^`]*)`$/\1/' | sort -u || true)
   while read -r t; do
     [ -z "$t" ] && continue

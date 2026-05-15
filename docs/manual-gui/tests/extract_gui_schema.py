@@ -153,24 +153,26 @@ def _classify_kind(block: str) -> tuple[str, list[str]]:
     """Classify FlagKind and extract variants (for Dropdown / NodeValueComposite /
     TaggedOrIndexed). Returns ("kind", ["v1", "v2", ...]).
     """
-    # Dropdown(CONST) — variants are values of CONST (resolved by caller).
+    # Source schema uses tuple-struct invocation form for every FlagKind
+    # variant: Dropdown(CONST), NodeValueComposite(CONST) /
+    # NodeValueComposite(&[...]), TaggedOrIndexed(&[...]). Struct-literal
+    # forms (e.g. `NodeValueComposite { nodes: ... }`) are NOT used in the
+    # mnemonic-gui source; the earlier P0 regex of that shape never
+    # matched, leaving all 6 NodeValueComposite flag-variants empty.
+    # Dropdown(CONST)
     m = re.search(r"FlagKind::Dropdown\(\s*([A-Z][A-Z0-9_]+)\s*\)", block)
     if m:
         return ("Dropdown", [m.group(1)])  # caller resolves
     # NodeValueComposite(CONST)
-    m = re.search(
-        r"FlagKind::NodeValueComposite\s*\{\s*nodes:\s*([A-Z][A-Z0-9_]+)\s*\}", block
-    )
+    m = re.search(r"FlagKind::NodeValueComposite\(\s*([A-Z][A-Z0-9_]+)\s*\)", block)
     if m:
         return ("NodeValueComposite", [m.group(1)])  # caller resolves
     # NodeValueComposite(&[...])
-    m = re.search(
-        r'FlagKind::NodeValueComposite\s*\{\s*nodes:\s*&\[\s*([^\]]+)\]\s*\}', block
-    )
+    m = re.search(r'FlagKind::NodeValueComposite\(\s*&\[\s*([^\]]+)\]\s*\)', block)
     if m:
         values = re.findall(r'"([^"]*)"', m.group(1))
         return ("NodeValueComposite", values)
-    # TaggedOrIndexed(&["nums"])
+    # TaggedOrIndexed(&[...])
     m = re.search(r'FlagKind::TaggedOrIndexed\(\s*&\[\s*([^\]]+)\]\s*\)', block)
     if m:
         values = re.findall(r'"([^"]*)"', m.group(1))

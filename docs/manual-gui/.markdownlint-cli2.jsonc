@@ -1,0 +1,37 @@
+{
+  // markdownlint-cli2 config for the m-format constellation GUI manual.
+  //
+  // Rules disabled or relaxed below are documented inline so authors
+  // know when a rule was deliberately suppressed vs. waiting for an
+  // active fix.
+  "config": {
+    // MD013 — line length. Pandoc and the manual prose use long lines
+    // intentionally (tables, prose paragraphs). Disabled.
+    "line-length": false,
+
+    // MD051 — link-fragments. The manual is concatenated from many
+    // src/**/*.md files via pandoc; cross-file fragment links are
+    // valid in the concatenated build but markdownlint cannot resolve
+    // them per-file. Disabled.
+    "link-fragments": false,
+
+    // MD041 — first-line h1. The GUI manual's chapter structure puts
+    // each subcommand in its own `.md` file under tab directories
+    // (40-mnemonic/, 50-md/, 60-ms/, 70-mk/ per SPEC §1.4); each
+    // such per-subcommand file's first line is an H2 by design
+    // (`## \`<tab> <subcommand>\` {#tab-subcommand}` per SPEC §2.3),
+    // not H1. The CLI manual gets away with MD041=on because it uses
+    // one-file-per-binary (each starting with H1); the GUI manual's
+    // per-subcommand-file split deviates. Disabled.
+    "first-line-heading": false,
+
+    // MD024 — no-duplicate-headings. Allow duplicate H3/H4 headings as
+    // long as their parent H2 is distinct (CLI-reference chapters have
+    // many subcommands each with `### Flags`, `### Synopsis`, etc.).
+    "no-duplicate-heading": { "siblings_only": true }
+  },
+  "ignores": [
+    "build/**",
+    "tests/fixtures/**"
+  ]
+}

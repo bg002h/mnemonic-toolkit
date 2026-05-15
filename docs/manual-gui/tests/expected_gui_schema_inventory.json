@@ -558,7 +558,21 @@
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
-              "variants": []
+              "variants": [
+                "phrase",
+                "entropy",
+                "xpub",
+                "xprv",
+                "wif",
+                "fingerprint",
+                "path",
+                "ms1",
+                "mk1",
+                "bip38",
+                "minikey",
+                "electrum-phrase",
+                "address"
+              ]
             },
             {
               "kind": "Dropdown",
@@ -716,7 +730,10 @@
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
-              "variants": []
+              "variants": [
+                "xprv",
+                "phrase"
+              ]
             },
             {
               "kind": "Dropdown",
@@ -941,7 +958,9 @@
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
-              "variants": []
+              "variants": [
+                "phrase"
+              ]
             },
             {
               "kind": "Dropdown",
@@ -976,7 +995,9 @@
               "kind": "NodeValueComposite",
               "name": "--share",
               "repeating": true,
-              "variants": []
+              "variants": [
+                "phrase"
+              ]
             },
             {
               "kind": "Number",
@@ -1019,7 +1040,9 @@
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
-              "variants": []
+              "variants": [
+                "phrase"
+              ]
             },
             {
               "kind": "Number",
@@ -1124,7 +1147,10 @@
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
-              "variants": []
+              "variants": [
+                "phrase",
+                "entropy"
+              ]
             },
             {
               "kind": "Text",

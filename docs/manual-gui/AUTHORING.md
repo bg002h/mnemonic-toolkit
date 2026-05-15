@@ -113,7 +113,7 @@ The markdown render strips `\index{}` markers via the
 `makeindex` builds a page-numbered alphabetical index.
 
 **Every `\index{TERM}` must have a matching row** in
-`src/60-appendices/69-index-table.md`. The bidirectional consistency
+`src/90-appendices/99-index-table.md`. The bidirectional consistency
 check in `tests/lint.sh` verifies both directions: a missing row OR a
 missing source-side marker fails the lint with a direction-specific
 diagnostic.
@@ -124,7 +124,7 @@ When you add a new index marker:
    `policy_id_stub`, not `bip 32` or `Policy ID Stub`). Lowercase
    common nouns; preserve case for proper-noun-style identifiers.
 2. Add `\index{TERM}` after the term's first definitional use.
-3. Add a row to `69-index-table.md`:
+3. Add a row to `99-index-table.md`:
 
    ```markdown
    | `TERM` | [Section title](#section-anchor) |
@@ -165,7 +165,7 @@ the seed in the same chapter do not need to repeat it.
 ## Glossary
 
 Every acronym or m-format-specific term used anywhere in the manual
-must have an entry in `src/60-appendices/61-glossary.md`. A subset
+must have an entry in `src/90-appendices/91-glossary.md`. A subset
 of these is enforced by `glossary-coverage` in `tests/lint.sh` (the
 hot list). Add to the lint hot list if a term you've added becomes
 foundational (used in 3+ chapters).
