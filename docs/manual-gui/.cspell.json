@@ -167,6 +167,8 @@
     "monospaced",
     "RepaintCause",
     "ViewportBuilder",
-    "clipboard"
+    "clipboard",
+    "affordance",
+    "affordances"
   ]
 }

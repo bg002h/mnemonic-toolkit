@@ -55,6 +55,18 @@ end
 -- keeps \brktt (and therefore \seqsplit) out of moving-argument contexts
 -- like \section{}, \caption{}, and \hypertarget{} where seqsplit's
 -- \futurelet machinery cannot survive .aux/.toc/.out re-reads.
+--
+-- Format gate: \brktt is a LaTeX-only macro. Emitting it via
+-- pandoc.RawInline('latex', ...) is correct under the PDF pipeline
+-- (xelatex consumes the raw-LaTeX inline + \seqsplit-wraps the token).
+-- Under the HTML / GFM pipelines, raw-LaTeX inlines are silently
+-- dropped by the html5 / gfm writers — which would strip every
+-- ≥MIN_RUN-char code span from the rendered output. So the Code +
+-- CodeBlock handlers must no-op outside latex. (Pattern mirrors
+-- primer-box.lua:28 — the project-canonical format-gate idiom.) The
+-- HTML render gets line-break behavior for free from the browser's
+-- <code> wrapping; the CodeBlock-chunking is also LaTeX-only because
+-- mid-token line breaks change visible output.
 return {
   {
     traverse = 'topdown',
@@ -63,7 +75,11 @@ return {
     Header = function(el) return el, false end,
 
     -- Process inline `Code` nodes only. Skip if no long unbreakable run.
+    -- Skip entirely on non-LaTeX writers (HTML / GFM); raw-LaTeX inlines
+    -- would be silently dropped, stripping every long backticked token
+    -- from the rendered output (see file header for full rationale).
     Code = function(el)
+      if not FORMAT:match("latex") then return nil end
       if not has_long_run(el.text) then return nil end
       local escaped = tex_escape(el.text)
       return pandoc.RawInline('latex', '\\brktt{' .. escaped .. '}')
@@ -74,8 +90,10 @@ return {
     -- Highlighting environment honors real newlines in Verbatim content
     -- (each becomes a wrap point), so the long mk1q…/xpub6… single-line
     -- tokens that overflow by 150pt+ get split into multiple visible
-    -- wrapped lines instead.
+    -- wrapped lines instead. LaTeX-only: HTML's <pre><code> wraps
+    -- naturally and mid-token line breaks would change visible output.
     CodeBlock = function(el)
+      if not FORMAT:match("latex") then return nil end
       local changed = false
       local out_lines = {}
       for line in (el.text .. '\n'):gmatch('(.-)\n') do
