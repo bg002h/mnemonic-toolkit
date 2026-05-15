@@ -1,0 +1,350 @@
+# `mnemonic derive-child` {#mnemonic-derive-child}
+
+BIP-85 deterministic child-secret derivation. From a master
+secret (BIP-32 xprv or BIP-39 phrase) plus an `--application` +
+`--length` + `--index` triple, derive an independent child
+secret deterministically. Use cases include separating
+ecosystem-specific secrets from a single master backup
+(per-application BIP-39 phrases for multiple wallets, BIP-85
+HD-seeds for derived xprvs, password generation, dice-roll
+emission).
+
+The toolkit ships 9 BIP-85 application tokens (per
+`mnemonic-gui/src/schema/mnemonic.rs::BIP85_APPLICATIONS`); 7
+are functional; 2 (`rsa`, `rsa-gpg`) are reserved by the spec
+but **refused at runtime** per Phase 6's RSA-crate security
+spike (RUSTSEC-2023-0071 unpatched at the time of v0.13.0; see
+`crates/mnemonic-toolkit/src/cmd/derive_child.rs::DeriveChildUnsupportedApp`).
+
+:::danger
+The worked example below uses the canonical all-`abandon`
+BIP-39 vector as the master input. The derived child secrets
+inherit the master's catastrophic-on-leak status: every child
+secret derived from this master can be re-derived by anyone
+who knows the master phrase + the application/length/index
+triple. **Never engrave or fund** a wallet derived from these
+children. The [§14 Defense 2](#secret-handling) cold-node
+operational warning applies in full to every derive-child
+invocation that uses a real master.
+:::
+
+## Outline {#mnemonic-derive-child-outline}
+
+- [`--from`](#mnemonic-derive-child-from) — master source: `xprv=<value>` or `phrase=<value>` (required)
+- [`--application`](#mnemonic-derive-child-application) — BIP-85 application token (required)
+- [`--length`](#mnemonic-derive-child-length) — per-app length (required; 0 for `xprv` / `hd-seed`)
+- [`--index`](#mnemonic-derive-child-index) — hardened child index 0..2^31 (required)
+- [`--network`](#mnemonic-derive-child-network) — Bitcoin network (default `mainnet`; for `hd-seed` / `xprv` apps)
+- [`--language`](#mnemonic-derive-child-language) — BIP-39 wordlist (default `english`; for `--application bip39`)
+- [`--passphrase`](#mnemonic-derive-child-passphrase) — BIP-39 passphrase (XOR with `--passphrase-stdin`; only for `--from phrase=`)
+- [`--passphrase-stdin`](#mnemonic-derive-child-passphrase-stdin) — read `--passphrase` from stdin
+- [`--dice-sides`](#mnemonic-derive-child-dice-sides) — required for `--application dice` (range 2..2^32-1)
+
+## `--from` {#mnemonic-derive-child-from}
+
+The master source. NodeValueComposite with two valid nodes:
+`xprv` (a BIP-32 extended private key) or `phrase` (a BIP-39
+mnemonic). Required. Schema-`secret: false` but secrecy is
+value-dependent — both `xprv` and `phrase` nodes are
+secret-class, so the GUI's `should_confirm_run` predicate fires
+for any non-empty value here.
+
+Suffix `=-` reads the value from stdin. The single-stdin-per-
+invocation rule applies: `--from xprv=-` (or `phrase=-`) is
+mutually exclusive with `--passphrase-stdin`.
+
+### Outline {#mnemonic-derive-child-from-outline}
+
+- [`xprv`](#mnemonic-derive-child-from-xprv)
+- [`phrase`](#mnemonic-derive-child-from-phrase)
+
+### `xprv` {#mnemonic-derive-child-from-xprv}
+
+A BIP-32 extended private key (`xprv...` prefix). Secret-bearing.
+Use when the master is already in xprv form.
+
+### `phrase` {#mnemonic-derive-child-from-phrase}
+
+A BIP-39 mnemonic phrase (12 / 15 / 18 / 21 / 24 words).
+Secret-bearing. Use when the master is a BIP-39 phrase. Pair
+with `--language` (default `english`) and optionally
+`--passphrase` (the BIP-39 PBKDF2 extension).
+
+## `--application` {#mnemonic-derive-child-application}
+
+BIP-85 application token. Dropdown widget. Required.
+
+### Outline {#mnemonic-derive-child-application-outline}
+
+- [`bip39`](#mnemonic-derive-child-application-bip39)
+- [`hd-seed`](#mnemonic-derive-child-application-hd-seed)
+- [`xprv`](#mnemonic-derive-child-application-xprv)
+- [`hex`](#mnemonic-derive-child-application-hex)
+- [`password-base64`](#mnemonic-derive-child-application-password-base64)
+- [`password-base85`](#mnemonic-derive-child-application-password-base85)
+- [`dice`](#mnemonic-derive-child-application-dice)
+- [`rsa`](#mnemonic-derive-child-application-rsa)
+- [`rsa-gpg`](#mnemonic-derive-child-application-rsa-gpg)
+
+### `bip39` {#mnemonic-derive-child-application-bip39}
+
+Emit a child BIP-39 mnemonic phrase. `--length` is the word count:
+12, 15, 18, 21, or 24. `--language` selects the BIP-39 wordlist.
+The most common derivation: a master phrase split into multiple
+per-purpose child phrases.
+
+### `hd-seed` {#mnemonic-derive-child-application-hd-seed}
+
+Emit a child HD-seed (an xprv at depth 0). `--length` must be 0
+(the seed length is fixed). `--network` selects mainnet vs
+testnet xprv prefix.
+
+### `xprv` {#mnemonic-derive-child-application-xprv}
+
+Emit a child xprv at depth 0 (effectively the same as `hd-seed`
+under a slightly different application slot). `--length` must
+be 0. `--network` selects the prefix.
+
+### `hex` {#mnemonic-derive-child-application-hex}
+
+Emit raw child entropy as hex bytes. `--length` is the byte count
+(16..64).
+
+### `password-base64` {#mnemonic-derive-child-application-password-base64}
+
+Emit a base64-encoded child password. `--length` is the character
+count (20..86).
+
+### `password-base85` {#mnemonic-derive-child-application-password-base85}
+
+Emit a base85-encoded child password. `--length` is the character
+count (10..80).
+
+### `dice` {#mnemonic-derive-child-application-dice}
+
+Emit a sequence of dice rolls (BIP-85 v1.3.0). `--length` is the
+roll count; `--dice-sides` selects the die (2..2^32-1, e.g. 6,
+20, 100).
+
+### `rsa` {#mnemonic-derive-child-application-rsa}
+
+**REFUSED at v0.13.0.** Per Phase 6's RSA-crate security spike
+(`crates/mnemonic-toolkit/src/cmd/derive_child.rs::DeriveChildUnsupportedApp`),
+the toolkit exits non-zero immediately rather than emit an RSA
+key from an unpatched RSA crate (RUSTSEC-2023-0071). The schema
+includes the token because BIP-85 reserves it; the runtime
+refuses use.
+
+### `rsa-gpg` {#mnemonic-derive-child-application-rsa-gpg}
+
+**REFUSED at v0.13.0.** Same rationale as `rsa`.
+
+## `--length` {#mnemonic-derive-child-length}
+
+Per-application length validator. Required. Number widget; range
+0..8192. Per-application semantics:
+
+| Application | `--length` meaning | Valid range |
+|---|---|---|
+| `bip39` | word count | 12 / 15 / 18 / 21 / 24 |
+| `hd-seed` | (ignored — must be 0) | 0 |
+| `xprv` | (ignored — must be 0) | 0 |
+| `hex` | byte count | 16..64 |
+| `password-base64` | character count | 20..86 |
+| `password-base85` | character count | 10..80 |
+| `dice` | roll count | 1..* (validator-enforced) |
+| `rsa` / `rsa-gpg` | unused (refused) | n/a |
+
+Out-of-range values are refused with an application-specific
+length-validation error.
+
+## `--index` {#mnemonic-derive-child-index}
+
+Hardened child index. Required. Range 0..2_147_483_647 (the
+2^31-1 hardened-derivation upper bound). Each `--index` value
+yields an independent child secret; index 0 is the conventional
+"first child" but any index is valid.
+
+## `--network` {#mnemonic-derive-child-network}
+
+Same 4 values + descriptions as
+[`mnemonic bundle --network`](#mnemonic-bundle-network). Default
+`mainnet`. Used by the `hd-seed` and `xprv` applications to
+select the emitted xprv's network prefix.
+
+### Outline {#mnemonic-derive-child-network-outline}
+
+- [`mainnet`](#mnemonic-derive-child-network-mainnet)
+- [`testnet`](#mnemonic-derive-child-network-testnet)
+- [`signet`](#mnemonic-derive-child-network-signet)
+- [`regtest`](#mnemonic-derive-child-network-regtest)
+
+### `mainnet` {#mnemonic-derive-child-network-mainnet}
+
+See [`mnemonic bundle --network mainnet`](#mnemonic-bundle-network-mainnet).
+
+### `testnet` {#mnemonic-derive-child-network-testnet}
+
+See [`mnemonic bundle --network testnet`](#mnemonic-bundle-network-testnet).
+
+### `signet` {#mnemonic-derive-child-network-signet}
+
+See [`mnemonic bundle --network signet`](#mnemonic-bundle-network-signet).
+
+### `regtest` {#mnemonic-derive-child-network-regtest}
+
+See [`mnemonic bundle --network regtest`](#mnemonic-bundle-network-regtest).
+
+## `--language` {#mnemonic-derive-child-language}
+
+BIP-39 wordlist for `--application bip39`. Default `english`.
+Same 10 values as [`mnemonic bundle --language`](#mnemonic-bundle-language).
+Note: this language applies to the **emitted child phrase**, not
+to the master phrase passed via `--from phrase=` — the latter is
+parsed using the same `--language` value, so a master in
+`spanish` paired with `--application bip39` emits a child phrase
+in `spanish`.
+
+### Outline {#mnemonic-derive-child-language-outline}
+
+- [`english`](#mnemonic-derive-child-language-english)
+- [`simplifiedchinese`](#mnemonic-derive-child-language-simplifiedchinese)
+- [`traditionalchinese`](#mnemonic-derive-child-language-traditionalchinese)
+- [`czech`](#mnemonic-derive-child-language-czech)
+- [`french`](#mnemonic-derive-child-language-french)
+- [`italian`](#mnemonic-derive-child-language-italian)
+- [`japanese`](#mnemonic-derive-child-language-japanese)
+- [`korean`](#mnemonic-derive-child-language-korean)
+- [`portuguese`](#mnemonic-derive-child-language-portuguese)
+- [`spanish`](#mnemonic-derive-child-language-spanish)
+
+### `english` {#mnemonic-derive-child-language-english}
+
+See [`mnemonic bundle --language english`](#mnemonic-bundle-language-english).
+
+### `simplifiedchinese` {#mnemonic-derive-child-language-simplifiedchinese}
+
+See [`mnemonic bundle --language simplifiedchinese`](#mnemonic-bundle-language-simplifiedchinese).
+
+### `traditionalchinese` {#mnemonic-derive-child-language-traditionalchinese}
+
+See [`mnemonic bundle --language traditionalchinese`](#mnemonic-bundle-language-traditionalchinese).
+
+### `czech` {#mnemonic-derive-child-language-czech}
+
+See [`mnemonic bundle --language czech`](#mnemonic-bundle-language-czech).
+
+### `french` {#mnemonic-derive-child-language-french}
+
+See [`mnemonic bundle --language french`](#mnemonic-bundle-language-french).
+
+### `italian` {#mnemonic-derive-child-language-italian}
+
+See [`mnemonic bundle --language italian`](#mnemonic-bundle-language-italian).
+
+### `japanese` {#mnemonic-derive-child-language-japanese}
+
+See [`mnemonic bundle --language japanese`](#mnemonic-bundle-language-japanese).
+
+### `korean` {#mnemonic-derive-child-language-korean}
+
+See [`mnemonic bundle --language korean`](#mnemonic-bundle-language-korean).
+
+### `portuguese` {#mnemonic-derive-child-language-portuguese}
+
+See [`mnemonic bundle --language portuguese`](#mnemonic-bundle-language-portuguese).
+
+### `spanish` {#mnemonic-derive-child-language-spanish}
+
+See [`mnemonic bundle --language spanish`](#mnemonic-bundle-language-spanish).
+
+## `--passphrase` {#mnemonic-derive-child-passphrase}
+
+The BIP-39 PBKDF2 passphrase used when the master is supplied
+via `--from phrase=` (ignored when `--from xprv=`). Schema-
+`secret: true`. XOR with `--passphrase-stdin` (the conditional-
+visibility engine disables one when the other has a value).
+
+## `--passphrase-stdin` {#mnemonic-derive-child-passphrase-stdin}
+
+Boolean. Read `--passphrase` from stdin (raw, NULL-byte
+preserving). Schema-`secret: true`. XOR with `--passphrase`.
+Single-stdin-per-invocation: mutually exclusive with `--from
+<node>=-`.
+
+## `--dice-sides` {#mnemonic-derive-child-dice-sides}
+
+Number of sides on the emitted die. Number widget; range
+2..4_294_967_295 (2^32-1). **Required for `--application
+dice`** (per the toolkit's run-time validator); ignored for
+other applications.
+
+Common values: 6 (cubic die), 10 (decahedral), 20 (icosahedral),
+100 (percentile).
+
+## Worked example — derive a child BIP-39 phrase
+
+1. **mnemonic** tab; pick **Derive Child (BIP-85)**.
+2. `--from`: pick `phrase` from the node Dropdown; paste the
+   canonical master phrase
+   `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`.
+3. `--application`: pick `bip39`.
+4. `--length`: `12` (emit a 12-word child phrase).
+5. `--index`: `0` (first child).
+6. Leave `--language` at default (`english`); leave
+   `--passphrase` empty.
+7. Click **Run**. The run-confirm modal appears (the `phrase`
+   node is secret-class). Click **Run** in the modal.
+
+The output panel renders the child phrase on stdout (one phrase
+per line; for index 0 with `--length 12`, this is a deterministic
+child of the master):
+
+```text
+girl mad pet galaxy egg matter matrix prison refuse sense ordinary nose
+```
+
+(The exact words are deterministic given the master + index +
+application + length quadruple.) Re-derive the same child by
+re-running with the same arguments; derive an independent child
+by changing `--index`.
+
+## Worked example — derive a 6-sided dice roll sequence
+
+1. `--from phrase=<canonical master>` (as above).
+2. `--application`: `dice`.
+3. `--length`: `100` (emit 100 rolls).
+4. `--dice-sides`: `6`.
+5. `--index`: `0`.
+6. **Run** + modal confirm.
+
+Output: 100 lines, one digit `1`-`6` per line — deterministic
+random rolls. Use case: BIP-85 dice for hand-rolling further
+secrets in a deterministic-but-auditable way.
+
+## Refusals
+
+All `--*` strings below are byte-exact mirrors of the
+corresponding constants / format strings in
+`crates/mnemonic-toolkit/src/error.rs` (per `// SPEC_derive_child_v0_8.md §7 byte-exact stderr text`)
+and `crates/mnemonic-toolkit/src/cmd/{convert,derive_child}.rs`.
+
+| Trigger | Refusal |
+|---|---|
+| `--application rsa` or `rsa-gpg` | `--application <rsa\|rsa-gpg> is out-of-scope: the rsa crate has unpatched timing-attack advisory RUSTSEC-2023-0071 and BIP-85 RSA / RSA-GPG demand is limited; deferred pending crate stability + user demand.` (byte-exact per `error.rs:366-369` `DeriveChildUnsupportedApp`) |
+| `--from <node>=-` AND `--passphrase-stdin` | `--passphrase-stdin cannot be used with --from <node>=- (single stdin per invocation)` (per `cmd/derive_child.rs:88-92`) |
+| `--length` out of per-application range | `--length <N> out of range for --application bip39 (valid: 12 \| 15 \| 18 \| 21 \| 24 words)` (per `error.rs::DeriveChildLengthOutOfRange` format; per-app validators at `cmd/derive_child.rs:186, 207, 218, 229, 240`) |
+| Unknown `--from` node token (e.g. `--from foo=bar`) | `unknown --from node "<token>"; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address` (parser-level refusal per `cmd/convert.rs:135-140`, shared with `mnemonic convert`) |
+| Recognized but derive-child-unsupported `--from` node (e.g. `--from wif=…`) | post-parse handler refusal per `cmd/derive_child.rs:159-164`: only `xprv=<master-xprv>` or `phrase=<mnemonic>` are accepted by derive-child specifically |
+| `--application dice` without `--dice-sides` | dice-validator missing-info error |
+| `--passphrase` AND `--passphrase-stdin` | clap-level `conflicts_with` |
+
+## Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--from <secret-class>=<value>` (xprv or phrase) | `warning: secret material on argv (--from <name>=) — pipe via --from <name>=- to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+
+The advisories use the byte-exact `pipe via` format from
+`crates/mnemonic-toolkit/src/secret_advisory.rs::secret_in_argv_warning`.

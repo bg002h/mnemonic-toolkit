@@ -192,6 +192,8 @@
     "materialises",
     "pubkeys",
     "normalised",
-    "greppable"
+    "greppable",
+    "subkeys",
+    "codepoints"
   ]
 }
