@@ -306,6 +306,196 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.13.0] — 2026-05-14
+
+New feature: `mnemonic slip39` subcommand (`split` + `combine`
+sub-subcommands). Trezor SLIP-0039 K-of-N threshold share-splitter
+for cryptocurrency seeds. Splits a master secret (BIP-39 phrase or
+raw entropy of 16/20/24/28/32 bytes) into groups × members of SLIP-39
+mnemonic shares; ANY K-of-N subset of shares (per the configured
+group + member thresholds) reconstructs. Unlike v0.12.0's `seed-xor`
+all-N XOR, this IS a true threshold scheme — share loss within
+threshold is recoverable; share substitution is detected by an
+internal HMAC digest at `combine` time (refusal row 11). Bit-identical
+to Trezor SLIP-0039 reference shares; verified against
+`python-shamir-mnemonic@17fcce14` (45 fixture vectors); Trezor Model T
++ Safe family hardware compatible (Trezor One predates SLIP-39 and
+uses raw BIP-39 only). Cross-impl smoke recipe in the manual chapter
+validates against `shamir-mnemonic` 0.3.0 PyPI release.
+
+Second of the two-cycle share-splitting pair planned at
+`~/.claude/plans/radiant-seeking-teacup.md`; closes the K-of-N gap
+v0.12.0's seed-xor explicitly deferred.
+
+Toolkit-only major-feature minor bump (~2000 LOC of hand-rolled SLIP-39
+library + ~700 LOC CLI handler + 443-LOC canonical manual chapter).
+No cross-repo work in this tag; sibling-codecs (md/ms/mk) unchanged.
+Adjacent `mnemonic-gui` working tree carries an uncommitted FOLLOWUP
+(`slip39-gui-schema-flattening-companion`) gated on this tag shipping;
+that closure lands in the GUI repo separately as PE+1.
+
+### Added
+
+- **`mnemonic-toolkit` library: new module
+  `mnemonic_toolkit::slip39`** — full hand-rolled SLIP-39 reference
+  implementation across 7 sub-modules: `gf256` (GF(2^8) arithmetic),
+  `lagrange` (Shamir interpolation), `feistel` (4-round PBKDF2-keyed
+  Feistel for the SLIP-39 encryption layer), `wordlist` (1024-word
+  SLIP-39 wordlist), `rs1024` (Reed-Solomon-style RS1024 checksum),
+  `share` (parse + render of SLIP-39 mnemonic shares), and the
+  top-level `slip39_split` + `slip39_combine` driver entry points.
+  Library-local `Slip39Error` with 21 variants (8 unit, 5 single-field,
+  5 named-fields, 3 mixed-shape) per the v0.11.0 final-word +
+  v0.12.0 seed-xor library-error precedent. Returns `Vec<Vec<Share>>`
+  for split (one inner Vec per group); `Zeroizing<Vec<u8>>` for
+  recovered master entropy. Memory hygiene: `Zeroizing` on
+  intermediates throughout; `mlock::pin_pages_for` pins on the
+  Feistel round-key buffer + per-share-emit (O(N) one-pin-per-share).
+- **`mnemonic slip39 split` subcommand** with flags `--from
+  <phrase=…|entropy=…> --group-threshold <G> --group <N,T>...
+  [--passphrase <P>|--passphrase-stdin] [--iteration-exponent <E>]
+  [--language <LANG>] [--json-out <PATH>]`. Emits SLIP-39 mnemonic
+  shares to stdout, group-major with blank-line separators between
+  groups. Per-share argv-leakage advisory; multi-stdin contention
+  refusal; toolkit-policy refusals on `--group 1,1` (row 5) and
+  `--group N,T` with `T==1 AND N>1` (row 25; python `split_ems` rule
+  mirror) — smallest legal group is `--group 2,2`.
+- **`mnemonic slip39 combine` subcommand** with flags `--share
+  <slip39-mnemonic-or-> ... [--passphrase <P>|--passphrase-stdin]
+  [--to <entropy|phrase>] [--language <LANG>] [--json-out <PATH>]`.
+  Defaults to `--to entropy` (hex on stdout); `--to phrase --language
+  english` emits the recovered BIP-39 master phrase.
+- **JSON envelope v1** with `operation: "split"` / `"combine"`
+  discriminator. SHA-pinned via env-var wedge
+  (`MNEMONIC_SLIP39_TEST_RNG` + `MNEMONIC_SLIP39_TEST_IDENTIFIER`,
+  always-on stderr advisory, NOT suppressible). Split envelope:
+  `{schema_version, operation, identifier, iteration_exponent,
+  group_threshold, groups: [{member_count, member_threshold,
+  shares}]}`. Combine envelope: `{schema_version, operation,
+  identifier, iteration_exponent, output_shape, entropy_hex|null,
+  phrase|null}` with `entropy_hex` + `phrase` always present (one
+  carries value, other is `null`, selected by `output_shape`).
+- **Reused advisory class** from v0.12.0: multi-secret-on-stdout
+  K-of-N parameterized variant ("SLIP-39 shares on stdout — N=<n>
+  shares emitted across <g> groups (group-threshold <G>); each share
+  is independently secret material; ...").
+- **New advisory class**: `--iteration-exponent E` perf advisory at
+  E ≥ 5 (PBKDF2 iterations ≥ 320K; ≈ 200-500ms wall-clock on
+  commodity x86; Trezor's reference uses E=1 = 20000 iters as
+  default).
+- **Test-only env-var class**: `MNEMONIC_SLIP39_TEST_RNG` (32-byte
+  hex CSPRNG override) + `MNEMONIC_SLIP39_TEST_IDENTIFIER` (decimal
+  u16 identifier override; range 0..=32767 for the 15-bit field).
+  Always-on `INSECURE` stderr advisory; documented in SPEC §6 +
+  manual chapter §3.9.
+- **Extracted helper**: `secret_advisory::warn_if_world_readable` —
+  factored from the 3 `--json-out` callsites (final-word, seed-xor,
+  slip39) into a single shared helper. Lockstep verified via
+  `lint_world_readable_helper.rs` partial-migration guard.
+- **CLI test surface**: 5 `cli_slip39_*.rs` files (~1100 LOC) +
+  74 tests across happy-paths, refusals (24-class coverage; 25 with
+  P3 R1 add — but row 25 reuses row 4 stem so substring assertions
+  cover both), advisories (8-row coverage), JSON envelope SHA-pins,
+  and stdin-route variants. Aggregate test growth post-v0.12.0:
+  ~870 → 978 (+108 tests; net ~ -50 from sibling-test refactoring +
+  ~ +160 from new SLIP-39 surface).
+- **Lint surface bumps**: `lint_argv_secret_flags.rs` 23 → 28 rows
+  (+5 for slip39); `lint_zeroize_discipline.rs` +1 row for slip39
+  Zeroizing wrap evidence; `cli_gui_schema.rs` 7 → 10 user-facing
+  subcommands assertion (slip39 contributes 2 leaf names via the
+  gui-schema flattening fix below; seed-xor's pre-existing 2 leaves
+  also surface for the first time).
+- **Manual chapter `## mnemonic slip39`** in
+  `docs/manual/src/40-cli-reference/41-mnemonic.md` (443 LOC): intro
+  + concept signposts + synopsis + dual flag tables + 4 progressive
+  worked examples (2-of-2 no-pass; 2-of-2 with-pass; 2-of-3 no-pass;
+  2-of-3 of 2-of-3 with-pass) + JSON output schemas + 25-row refusals
+  table mirroring SPEC §2.5 + 6-row advisories table mirroring SPEC
+  §2.6 + Trezor interop H3 with cross-impl `shamir-mnemonic` 0.3.0
+  smoke recipe (validated end-to-end at chapter-write 2026-05-14
+  on Linux x86_64).
+- **Manual index markers**: 6 `\index{}` markers + 6 matching
+  `69-index-table.md` rows (`SLIP-39`, `SLIP-39 share`, `group
+  threshold`, `member threshold`, `K-of-N`, `Trezor SLIP-0039
+  interop`). Sets new convention for 40-cli-reference chapters which
+  previously carried 0 markers each — flat marker form (no LaTeX `!`
+  sub-entries; `lint.sh:124-125` source-side normalizer doesn't
+  strip `!`).
+- **`docs/manual/tests/cli-subcommands.list` adds** `mnemonic slip39
+  split` + `mnemonic slip39 combine` rows.
+- **cspell additions**: `onev` (from SPEC OOS row name
+  `OOS-slip39-import-trezor-onev-format`) + `trezorctl`.
+
+### Changed
+
+- `Command` enum in `src/main.rs` gains a `Slip39` variant + dispatch.
+- `cmd/gui_schema.rs::build_schema` gains recursive nested-subcommand
+  flattening — emits hyphenated leaf names (`seed-xor-split`,
+  `seed-xor-combine`, `slip39-split`, `slip39-combine`) for any
+  parent command containing `#[command(subcommand)]`. Repairs the
+  pre-existing v0.12.0 `seed-xor` empty-flags rendering as a
+  side-effect. Schema `version: 1` preserved (mirror contract is
+  forward-compatible).
+- Manual chapter intro bumps from 8 to 9 subcommands; cross-link list
+  adds `[`slip39`](#mnemonic-slip39)`; mirror-version line v0.12.0 →
+  v0.13.0.
+- `SPEC_slip39_v0_13_0.md` accumulated 9 SPEC patches across the
+  cycle: 8 at P2.2 GREEN (`19f00a5` — §2.1 per-share-pin O(N)
+  clarification, §2.5 row 17 wording reconciliation, §2.5 row 24 add
+  per Q3, §2.6 row 5 reconciliation per plan §3.3 space form, §2.6
+  row 6 add for TEST_RNG advisory, §4 G4 env-var language, §4 G6
+  count 23→28 update, NEW §6 test-only-env-vars subsection) + 1 at
+  P3 R1 fold (`b90c436` — §2.5 row 25 add for the T=1+N>1
+  toolkit-policy refusal class per python `split_ems` rule;
+  paired-SPEC-patch mandate per P3 R0 I2). Plus 2 mini-folds at
+  P2.2 R1 LOCK (`d40eb0c` — N-1 row 7 stem cleanup + N-2 G5 count
+  23→24).
+
+### Deps
+
+- `hmac = "0.12"` added (PBKDF2-HMAC-SHA-256 for the SLIP-39
+  encryption layer's PBKDF2 key derivation).
+- `pbkdf2 = "0.12"` (default-features = false, features = ["hmac"])
+  added.
+- `sha2 = "0.10"` already present (used by hmac/pbkdf2 chain).
+
+### Resolved FOLLOWUPS
+
+- `slip39-shamir-secret-sharing` → resolved at this tag (the
+  feature itself).
+- `slip39-cli-extendable-flag` → still open as `v0.14-feature` tier
+  per design/FOLLOWUPS.md:1050; not closed by this tag.
+
+### Reviewer rounds (cycle aggregate)
+
+- Library cycle (P0/P1a/P1b/P1c-A through P1c-E.3): 11 reviewer
+  reports across 8 sub-phases.
+- CLI cycle (P2.1 + P2.2 + P2.3): 5 reports including 1 R0 plan
+  review + 4 LOCKs.
+- Manual cycle (P3): 3 reports — R0 architect plan-review (1C/3I/5N/3n;
+  caught lint.sh `!` foot-gun + Trezor One mention contradicting SPEC
+  + paired-SPEC-patch mandate + 0.3.0 disclosure recommendation),
+  R1 LOCK (3C/1I ITERATE; caught toolkit-refuses-1,1 collision with
+  examples + Trezor recipe sed-index off-by-blank-separator +
+  combine-default-mode prose error), R2 LOCK (clean).
+- 18 reviewer reports total persisted in `design/agent-reports/`.
+
+### Discipline observations
+
+- **`feedback-r0-must-read-source-off-by-n` pattern recurred at every
+  P3 review checkpoint**: R0 caught the `lint.sh` `!` foot-gun by
+  source-reading the normalizer pipeline; R1 caught the
+  toolkit-refuses-1,1 contradiction by source-running the binary
+  against chapter examples; R2 verified end-to-end via the corrected
+  Trezor recipe. Architect lens must extend to "run the prose's own
+  commands", not just "verify the prose's claims against
+  documentation". Memory captures this as a forward-looking note.
+- **Paired-SPEC-patch mandate triggered exactly once** (P3 R1 fold
+  added SPEC §2.5 row 25). The R0 I2 fold introduced this as a
+  forward-looking constraint; R1 was the first phase to actually
+  trigger it. Mirrors P2.2 GREEN's 8-SPEC-patch precedent at
+  `d40eb0c`.
+
 ## mnemonic-toolkit [0.12.0] — 2026-05-14
 
 New feature: `mnemonic seed-xor` subcommand (`split` + `combine`
