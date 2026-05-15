@@ -376,6 +376,14 @@ N as the key-path internal key)`. Refused for non-Taproot
 templates: `--taproot-internal-key applies only to --template
 tr-multi-a / tr-sortedmulti-a`.
 
+### `nums` {#mnemonic-export-wallet-taproot-internal-key-nums}
+
+The enumerated-tag form. Designates a BIP-341 NUMS-point
+unspendable internal key as the Taproot internal key. The
+`@N` form (cosigner-N designation) is handled by the same flag
+but goes through the `Indexed` half of the `TaggedOrIndexed`
+widget — the GUI's Number spinner accompanies the dropdown.
+
 ## `--wallet-name` {#mnemonic-export-wallet-wallet-name}
 
 Wallet label. Optional for most formats (defaults to
