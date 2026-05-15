@@ -1,4 +1,4 @@
-# Migrating from BIP-39-only to the m-format constellation
+# Migrating from BIP-39 to the m-format
 
 If you already keep your wallet on a BIP-39 phrase — engraved on
 steel, stamped on washers, or memorised in your head — the m-format
@@ -43,10 +43,10 @@ Look in your wallet's settings or descriptor export. Common cases:
 
 | Wallet UI says | Template flag |
 |---|---|
-| "Native SegWit (bech32)" / `bc1q…` addresses | `--template bip84` |
-| "Taproot (bech32m)" / `bc1p…` addresses | `--template bip86` |
-| "Nested SegWit" / `3…` addresses | `--template bip49` |
-| "Legacy" / `1…` addresses | `--template bip44` |
+| "Native SegWit" / `bc1q…` | `--template bip84` |
+| "Taproot" / `bc1p…` | `--template bip86` |
+| "Nested SegWit" / `3…` | `--template bip49` |
+| "Legacy" / `1…` | `--template bip44` |
 | Multisig (any) | `--template wsh-sortedmulti` (most common) |
 
 If your wallet exports a BIP-388 wallet policy or a descriptor

@@ -1,4 +1,4 @@
-# m-format constellation vs SLIP-39 vs naked BIP-39 vs Shamir
+# m-format vs SLIP-39 vs naked BIP-39 vs Shamir
 
 Bitcoin self-custody has a small handful of mature seed-backup
 standards. None is universally best; each has a use case for which
@@ -73,12 +73,12 @@ For a wallet meant to outlive the operator (estate planning, family
 trusts), favour standards that are widely re-implemented and
 unlikely to disappear:
 
-| Likelihood of long-term software support | Standard |
+| Long-term support outlook | Standard |
 |---|---|
 | highest | BIP-39 (universal) |
 | high | SLIP-39 (Trezor + others) |
 | high | BIP-93 codex32 (BIP-tracked) |
-| medium | m-format constellation (one toolkit, BIP-draft underway) |
+| medium | m-format (one toolkit, BIP-draft underway) |
 
 A hybrid approach — e.g., naked BIP-39 phrase plus an m-format
 bundle as the "self-describing" supplement — minimises the bet on

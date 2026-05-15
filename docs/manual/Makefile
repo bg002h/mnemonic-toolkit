@@ -72,7 +72,7 @@ PDF_SRC := $(MD_SRC) $(SRC_DIR)/99-build-banner.md
 # ---------------------------------------------------------------------------
 # `make md` runs strip-latex + primer-box(md mode); `make pdf*` runs primer-box(pdf mode) only.
 MD_FILTER_ARGS  := --lua-filter $(FILTERS_DIR)/strip-latex-from-md.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
-PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/primer-box.lua
+PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/primer-box.lua --lua-filter $(FILTERS_DIR)/wrap-long-code.lua
 
 ifeq ($(MERMAID_FILTER),on)
 	PDF_FILTER_ARGS += --filter mermaid-filter

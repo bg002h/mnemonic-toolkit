@@ -24,6 +24,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # `texlive-xetex` and friends pull in xelatex + makeindex.
 # `texlive-fonts-extra` brings DejaVu (matches metadata.yaml mainfont).
 # `texlive-luatex` is included for fallback only.
+# `texlive-science` brings seqsplit (used by preamble.tex's \brktt for
+# breaking long monospace identifiers in `Code` AST nodes); xurl ships
+# with texlive-latex-recommended (URL line-breaking).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -37,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         texlive-fonts-recommended \
         texlive-fonts-extra \
         texlive-extra-utils \
+        texlive-science \
         nodejs \
         npm \
     && rm -rf /var/lib/apt/lists/*

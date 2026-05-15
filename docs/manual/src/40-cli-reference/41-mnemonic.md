@@ -129,7 +129,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 ### Worked example
 
 See [Minimal recovery walkthrough](#minimal-recovery-walkthrough)
-and [Migrating from BIP-39-only to the m-format constellation](#migrating-from-bip-39-only-to-the-m-format constellation).
+and [Migrating from BIP-39 to the m-format](#migrating-from-bip-39-to-the-m-format).
 
 ---
 

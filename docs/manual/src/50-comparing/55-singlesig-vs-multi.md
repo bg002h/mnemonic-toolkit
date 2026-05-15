@@ -1,4 +1,4 @@
-# Single-sig vs multisig vs threshold-secret decision tree
+# Single-sig vs multisig vs threshold-secret
 
 Three orthogonal axes for backing up Bitcoin: how many *seeds* are
 involved (single vs many), how many *signatures* are needed (single
