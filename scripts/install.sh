@@ -31,13 +31,13 @@ component_info() {
             echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.13.0|no"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.0|yes"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.1|yes"
             ;;
         ms)
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.2.1|yes"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.1|yes"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.2|yes"
             ;;
         mnemonic-gui)
             echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.3.0|yes"
