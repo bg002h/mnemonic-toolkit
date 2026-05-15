@@ -2,39 +2,45 @@
 # m-format constellation installer
 #
 # Installs the four constellation CLIs (mnemonic / md / ms / mk) and the
-# mnemonic-gui overlay at the pinned-tag set that mnemonic-gui v0.3.0
-# expects from sibling repos. Pins below are kept in lockstep with
-# `mnemonic-gui/pinned-upstream.toml`'s `[mnemonic|md|ms|mk].tag` fields;
-# when a new toolkit / GUI cycle ships, update the `component_info`
-# match arms.
+# mnemonic-gui overlay. By default, components install from crates.io
+# (cargo install <pkg>); the toolkit `mnemonic` binary is the exception
+# — it stays on git+tag until its upstream miniscript dependency
+# `[patch.crates-io]` is resolved (see `bg002h/mnemonic-toolkit`
+# FOLLOWUPS for the blocker). The `--from-git` flag forces git+tag for
+# every component, matching the pre-crates.io installer behavior; pins
+# below mirror `mnemonic-gui/pinned-upstream.toml`'s `[mnemonic|md|ms|mk].tag`
+# fields. When a new toolkit / GUI cycle ships, update the
+# `component_info` match arms in lockstep.
 #
-# All components install via `cargo install --git --tag` into
-# `$CARGO_INSTALL_ROOT` (defaults to `~/.cargo/bin`). No system files
-# touched; no sudo required.
+# All components install into `$CARGO_INSTALL_ROOT` (defaults to
+# `~/.cargo/bin`). No system files touched; no sudo required.
 
 set -eu
 
 # ── Component table ─────────────────────────────────────────────────────
-# `component_info <short-name>` echoes `<git-url>|<tag>|<cargo-package>`
-# (tab-/pipe-separated). The short names match the installed binary
-# names. The cargo-package is the workspace member name (last positional
-# to `cargo install`), distinct from the bin name when they differ.
+# `component_info <short-name>` echoes
+# `<cargo-package>|<git-url>|<git-tag>|<cratesio>` where `<cratesio>` is
+# `yes` (component is published on crates.io and will install via the
+# default crates.io path) or `no` (must use git+tag). Short names match
+# the installed binary names; the cargo-package is the workspace member
+# name (last positional to `cargo install`), distinct from the bin name
+# when they differ.
 component_info() {
     case "$1" in
         mnemonic)
-            echo "https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.13.0|mnemonic-toolkit"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.13.0|no"
             ;;
         md)
-            echo "https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.0|md-cli"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.0|yes"
             ;;
         ms)
-            echo "https://github.com/bg002h/mnemonic-secret|ms-cli-v0.2.1|ms-cli"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.2.1|yes"
             ;;
         mk)
-            echo "https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.1|mk-cli"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.1|yes"
             ;;
         mnemonic-gui)
-            echo "https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.3.0|mnemonic-gui"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.3.0|yes"
             ;;
         *)
             return 1
@@ -50,6 +56,7 @@ EXCLUDE=""
 FORCE=""
 DRY_RUN=""
 LOCKED="--locked"
+FROM_GIT=""
 
 # ── Help ────────────────────────────────────────────────────────────────
 usage() {
@@ -66,6 +73,13 @@ INSTALLS (default — all 5):
     mk             CLI: mk1 xpub codec (mnemonic-key)
     mnemonic-gui   GUI: cross-platform overlay for the 4 CLIs
 
+SOURCE (default behavior):
+    Components on crates.io install via 'cargo install <pkg>' (latest
+    published version). The 'mnemonic' (mnemonic-toolkit) binary
+    currently stays on git+tag — it's not on crates.io yet (blocked by
+    rust-miniscript [patch.crates-io] in the toolkit workspace).
+    Override with --from-git below.
+
 OPTIONS:
     --only LIST       Install only the comma-separated components
                       (e.g., --only mnemonic,mnemonic-gui)
@@ -73,26 +87,30 @@ OPTIONS:
                       (e.g., --exclude mnemonic-gui)
     --no-gui          Alias for --exclude mnemonic-gui
     --cli-only        Alias for --exclude mnemonic-gui
-    --force           Re-install even if the same tag is already
+    --from-git        Force git+tag installs for ALL selected
+                      components (pinned tags match
+                      mnemonic-gui/pinned-upstream.toml). Slower
+                      (compiles from source) but reproducible.
+    --force           Re-install even if the same version is already
                       installed (cargo install --force)
     --no-locked       Do NOT pass --locked to cargo install
                       (default: --locked, for reproducibility)
     --dry-run         Print the cargo install commands without executing
-    --list            Print the component table + pinned tags and exit
+    --list            Print the component table + sources and exit
     -h, --help        Show this help and exit
 
 EXAMPLES:
-    install.sh                            # install all 5
+    install.sh                            # install all 5 (mixed source)
+    install.sh --from-git                 # install all 5 from git+tag
     install.sh --no-gui                   # install 4 CLIs only
-    install.sh --only mnemonic-gui        # install GUI only (assumes
-                                          # siblings already on PATH)
+    install.sh --only mnemonic-gui        # install GUI only
     install.sh --exclude md,ms,mk         # install mnemonic + GUI
     install.sh --force                    # reinstall all 5
     install.sh --dry-run --only mk        # see what would run
 
 REQUIREMENTS:
     - cargo (Rust toolchain; rustup recommended: https://rustup.rs/)
-    - git (cargo install --git uses git under the hood)
+    - git (cargo install --git uses git under the hood; --from-git only)
     - C toolchain (some transitive deps build C code: cc, pkg-config)
     - Linux only: a few system libs for the GUI's wgpu/egui graphics
       stack; see the mnemonic-gui README for the distro-specific list.
@@ -119,6 +137,8 @@ while [ $# -gt 0 ]; do
             EXCLUDE="${1#*=}"; shift ;;
         --no-gui|--cli-only)
             EXCLUDE="${EXCLUDE}${EXCLUDE:+,}mnemonic-gui"; shift ;;
+        --from-git|--from-source)
+            FROM_GIT="1"; shift ;;
         --force)
             FORCE="--force"; shift ;;
         --no-locked)
@@ -126,13 +146,19 @@ while [ $# -gt 0 ]; do
         --dry-run)
             DRY_RUN="1"; shift ;;
         --list)
-            printf '%-15s %-50s %s\n' "COMPONENT" "TAG" "CARGO_PACKAGE"
-            printf '%-15s %-50s %s\n' "---------" "---" "-------------"
+            printf '%-15s %-20s %-12s %s\n' "COMPONENT" "CARGO_PACKAGE" "DEFAULT" "GIT_TAG"
+            printf '%-15s %-20s %-12s %s\n' "---------" "-------------" "-------" "-------"
             for n in $ALL; do
                 info=$(component_info "$n") || continue
-                tag=$(echo "$info" | cut -d'|' -f2)
-                pkg=$(echo "$info" | cut -d'|' -f3)
-                printf '%-15s %-50s %s\n' "$n" "$tag" "$pkg"
+                pkg=$(echo "$info" | cut -d'|' -f1)
+                tag=$(echo "$info" | cut -d'|' -f3)
+                cratesio=$(echo "$info" | cut -d'|' -f4)
+                if [ "$cratesio" = "yes" ]; then
+                    source="crates.io"
+                else
+                    source="git (only)"
+                fi
+                printf '%-15s %-20s %-12s %s\n' "$n" "$pkg" "$source" "$tag"
             done
             exit 0 ;;
         -h|--help)
@@ -205,6 +231,11 @@ installed_count=0
 failed_count=0
 echo "m-format constellation installer"
 echo "install root: ${CARGO_INSTALL_ROOT:-$HOME/.cargo/bin}"
+if [ -n "$FROM_GIT" ]; then
+    echo "source: git+tag (--from-git)"
+else
+    echo "source: crates.io (default; mnemonic-toolkit stays on git+tag)"
+fi
 echo
 
 for name in $ALL; do
@@ -213,23 +244,40 @@ for name in $ALL; do
         continue
     fi
     info=$(component_info "$name")
-    url=$(echo "$info" | cut -d'|' -f1)
-    tag=$(echo "$info" | cut -d'|' -f2)
-    pkg=$(echo "$info" | cut -d'|' -f3)
-    printf 'install  %s (%s)\n' "$name" "$tag"
+    pkg=$(echo "$info" | cut -d'|' -f1)
+    url=$(echo "$info" | cut -d'|' -f2)
+    tag=$(echo "$info" | cut -d'|' -f3)
+    cratesio=$(echo "$info" | cut -d'|' -f4)
+
     # shellcheck disable=SC2086
     # $LOCKED / $FORCE intentionally unquoted: they are either empty or
     # a single literal flag with no whitespace. Quoting would pass an
     # empty positional which `cargo install` rejects.
-    if [ -n "$DRY_RUN" ]; then
-        echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $FORCE $pkg"
-        installed_count=$((installed_count + 1))
-    else
-        if cargo install $LOCKED --git "$url" --tag "$tag" $FORCE "$pkg"; then
+    if [ "$cratesio" = "yes" ] && [ -z "$FROM_GIT" ]; then
+        printf 'install  %s (crates.io: %s)\n' "$name" "$pkg"
+        if [ -n "$DRY_RUN" ]; then
+            echo "  [dry-run] cargo install $LOCKED $FORCE $pkg"
             installed_count=$((installed_count + 1))
         else
-            echo "  FAILED" >&2
-            failed_count=$((failed_count + 1))
+            if cargo install $LOCKED $FORCE "$pkg"; then
+                installed_count=$((installed_count + 1))
+            else
+                echo "  FAILED" >&2
+                failed_count=$((failed_count + 1))
+            fi
+        fi
+    else
+        printf 'install  %s (git: %s)\n' "$name" "$tag"
+        if [ -n "$DRY_RUN" ]; then
+            echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $FORCE $pkg"
+            installed_count=$((installed_count + 1))
+        else
+            if cargo install $LOCKED --git "$url" --tag "$tag" $FORCE "$pkg"; then
+                installed_count=$((installed_count + 1))
+            else
+                echo "  FAILED" >&2
+                failed_count=$((failed_count + 1))
+            fi
         fi
     fi
 done
