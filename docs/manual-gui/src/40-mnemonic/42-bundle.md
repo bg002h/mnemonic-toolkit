@@ -212,7 +212,7 @@ The BIP-39 wordlist used to interpret any phrase passed via
 10 allowed values as in [`mnemonic final-word
 --language`](#mnemonic-final-word-language); the cross-tab
 naming convention applies (`simplifiedchinese` etc., no hyphen
-— compare `ms encode --lang chinese-simplified`).
+— compare `ms encode --language chinese-simplified`).
 
 ### Outline {#mnemonic-bundle-language-outline}
 
@@ -236,8 +236,8 @@ The BIP-39 English wordlist (2048 entries). Default when
 
 BIP-39 Simplified Chinese wordlist (UTF-8). The `mnemonic` tab
 joins the qualifier as a single token. Cross-tab divergence with
-`ms encode --lang chinese-simplified` is documented at
-[`ms encode --lang`](#ms-encode-lang).
+`ms encode --language chinese-simplified` is documented at
+[`ms encode --language`](#ms-encode-language).
 
 ### `traditionalchinese` {#mnemonic-bundle-language-traditionalchinese}
 

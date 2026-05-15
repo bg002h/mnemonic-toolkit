@@ -74,7 +74,7 @@ candidate words. Optional; defaults to `english`. Ten allowed
 values; the wordlist names match the BIP-39 specification verbatim
 (note: the `mnemonic` tab uses the names below; the `ms` tab uses
 a different naming convention — see [`ms encode`'s
-`--lang`](#ms-encode-lang) for the divergence and the per-language
+`--language`](#ms-encode-language) for the divergence and the per-language
 mapping table).
 
 The GUI renders this flag as a Dropdown widget. The `?` help-icon
@@ -105,7 +105,7 @@ required). Note the spelling: this tab joins the qualifier to the
 language name as a single token. The `ms` tab uses
 `chinese-simplified` (hyphen-separated). The two GUI tabs do NOT
 share a single wordlist enum; the divergence is documented at
-[`ms encode --lang`](#ms-encode-lang).
+[`ms encode --language`](#ms-encode-language).
 
 ### `traditionalchinese` {#mnemonic-final-word-language-traditionalchinese}
 
