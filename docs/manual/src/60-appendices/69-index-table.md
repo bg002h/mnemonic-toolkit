@@ -19,12 +19,18 @@ without adding the row (or vice versa) fails the lint.
 | `codex32` | [Concept signposts](#concept-signposts) |
 | `cross-binding` | [Single-sig steel-engraved backup](#single-sig-steel-engraved-backup) |
 | `descriptor` | [Concept signposts](#concept-signposts) |
+| `group threshold` | [mnemonic slip39](#mnemonic-slip39) |
 | `HMAC-SHA-512` | [Deterministic child secrets via BIP-85](#deterministic-child-secrets-via-bip-85) |
+| `K-of-N` | [mnemonic slip39](#mnemonic-slip39) |
 | `m-format constellation` | [About this manual](#about-this-manual) |
 | `md1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
+| `member threshold` | [mnemonic slip39](#mnemonic-slip39) |
 | `mk1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `mnemonic-toolkit` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `ms1` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
 | `multisig` | [Concept signposts](#concept-signposts) |
 | `policy_id_stub` | [Welcome to the m-format constellation](#welcome-to-the-m-format constellation) |
+| `SLIP-39` | [mnemonic slip39](#mnemonic-slip39) |
+| `SLIP-39 share` | [mnemonic slip39](#mnemonic-slip39) |
 | `slot` | [Concept signposts](#concept-signposts) |
+| `Trezor SLIP-0039 interop` | [mnemonic slip39](#mnemonic-slip39) |

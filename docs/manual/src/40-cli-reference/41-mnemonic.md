@@ -419,17 +419,50 @@ Field order is part of the schema (SHA-pinned in
 
 ## `mnemonic slip39`
 
-SLIP-39 K-of-N share-splitter. Two sub-subcommands: `split` (master
-secret → groups × members of SLIP-39 mnemonic shares) and `combine`
-(≥K shares → master secret). Unlike `seed-xor` this IS a threshold
-scheme — any K-of-N subset reconstructs.
+SLIP-39\index{SLIP-39} (Trezor's `SLIP-0039`) is the K-of-N threshold
+share-splitting standard for cryptocurrency seeds. Two sub-subcommands:
+`split` (master secret → groups × members of SLIP-39 mnemonic shares)
+and `combine` (≥K shares → master secret). Unlike the all-N XOR
+scheme in [`seed-xor`](#mnemonic-seed-xor), this IS a true threshold
+scheme — any K-of-N subset of shares reconstructs.
 
-*Canonical chapter content (worked example, JSON envelope schema,
-refusal taxonomy, advisory matrix, Trezor interop recipe) lands at
-v0.13.0 P3.* This stub mentions every flag the
-`mnemonic slip39 split --help` and `mnemonic slip39 combine --help`
-output emits so the manual `flag-coverage` lint passes; see
-`mnemonic slip39 --help` for the live synopsis.
+Shares are SLIP-39 mnemonics (NOT BIP-39 — different 1024-word
+wordlist, longer length, RS1024 checksum). Toolkit shares are
+bit-identical to Trezor SLIP-0039 reference shares; cross-impl
+verification recipe in [Trezor interop](#trezor-interop) below.
+
+### Concept signposts
+
+- **Master secret** — the BIP-39 phrase or raw entropy that `split`
+  consumes / `combine` recovers. Sizes: 16/20/24/28/32 bytes
+  (12/15/18/21/24 BIP-39 words).
+- **Share**\index{SLIP-39 share} — a single SLIP-39 mnemonic produced
+  by `split`. Each share is independently secret material; substitution
+  with a wrong-but-valid share is undetectable until the digest check
+  at `combine` (refusal row 11 in the table below).
+- **Group / member** — a group is a partition of shares; a member is
+  one share within a group.
+- **Group threshold (`G`)**\index{group threshold} — how many groups
+  must contribute ≥ their member threshold of shares to reconstruct.
+- **Member threshold (`T`)**\index{member threshold} — per-group: how
+  many of that group's `N` shares must combine to reconstruct that
+  group's secret.
+- **Identifier** — random 15-bit per-secret tag shared across all
+  shares of one split; mismatch on `combine` → refusal row 7.
+- **Iteration exponent (`E`)** — PBKDF2 cost; iterations = 10000 ×
+  2^E. Trezor default E=1 (20000 iters); E ≥ 5 emits a perf advisory.
+- **Passphrase** — SLIP-39 passphrase (NOT the BIP-39 passphrase);
+  empty string is the SLIP-39 default.
+- **Extendable bit** — 1-bit flag controlling whether the identifier
+  participates in the PBKDF2 salt. Toolkit emits the extendable form;
+  `combine` accepts both (refusal row 22 catches mixed shares).
+
+### Synopsis
+
+```sh
+mnemonic slip39 split   --from <phrase=…|entropy=…> --group-threshold G --group N,T [--group N,T]... [OPTIONS]
+mnemonic slip39 combine --share <slip39-mnemonic-or-> ... [OPTIONS]
+```
 
 ### `slip39 split` flags
 
@@ -456,6 +489,350 @@ output emits so the manual `flag-coverage` lint passes; see
 | `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase`; ignored for `--to entropy` |
 | `--json-out <PATH>` | side-effect: write versioned JSON envelope to `<PATH>` (in addition to plain-stdout secret) |
 | `--help` | print help |
+
+### Worked examples
+
+The four examples below build progressively from the simplest case to
+a realistic multi-group setup. All use the canonical zero-entropy
+24-word master `abandon × 23 + art` (matching the
+[`seed-xor` chapter's](#mnemonic-seed-xor) precedent for reader
+recognition); share text is shown as `<share-N>` placeholders because
+`split` is CSPRNG-driven (run the commands locally to see actual
+share text).
+
+#### Example 1 — degenerate 1-of-1 single group, no passphrase
+
+Smallest possible split. Demonstrates the basic `split`/`combine`
+mechanic.
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 1,1
+```
+
+Stdout: 1 share — a 33-word SLIP-39 mnemonic (33 words for the 32-byte
+master entropy at default `iter_exp=0`). Reverse:
+
+```sh
+mnemonic slip39 combine --share "<share-1>"
+```
+
+Stdout: the original `abandon × 23 + art` 24-word phrase.
+
+> Alternative master input via raw hex entropy:
+>
+> ```sh
+> mnemonic slip39 split --from entropy=0102030405060708090a0b0c0d0e0f10 \
+>   --group-threshold 1 --group 1,1
+> ```
+>
+> Produces a 20-word share (16-byte entropy maps to 20-word shares).
+> The JSON envelope's `identifier` + `iteration_exponent` shape is the
+> same regardless of `phrase=` vs `entropy=` input.
+
+#### Example 2 — 1-of-1 single group, with passphrase
+
+Adds a SLIP-39 passphrase. Same threshold shape as example 1; only
+the passphrase differs.
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 1,1 \
+    --passphrase TREZOR
+```
+
+Stdout: 1 share. Reverse with the matching passphrase:
+
+```sh
+mnemonic slip39 combine --share "<share-1>" --passphrase TREZOR
+```
+
+Stdout: the original 24-word phrase.
+
+> **Passphrase has no authentication tag.** `combine` with the WRONG
+> passphrase silently recovers a DIFFERENT entropy — the digest check
+> (refusal row 11) only fires when the recovered secret fails its
+> internal HMAC, which the wrong-passphrase result will pass for any
+> non-empty input. Same security model as the BIP-39 passphrase. Always
+> verify the recovered wallet's expected derived address before
+> trusting.
+>
+> **Argv-leakage advisory:** `--passphrase TREZOR` is on argv and
+> visible in `/proc/$PID/cmdline`; the toolkit emits
+> `warning: secret material on argv (--passphrase) — pipe via
+> --passphrase-stdin to avoid /proc/$PID/cmdline exposure` on stderr.
+> For sensitive use, pipe via `--passphrase-stdin`.
+
+#### Example 3 — standard 2-of-3 single group, no passphrase
+
+Introduces the K-of-N\index{K-of-N} threshold (the headline SLIP-39
+feature). 1 group with 3 members at threshold 2: any 2 shares
+reconstruct; losing 1 share is recoverable; losing 2 of 3 is total
+loss.
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic slip39 split --from phrase=- --group-threshold 1 --group 3,2
+```
+
+Stdout: 3 shares `<share-1>`, `<share-2>`, `<share-3>`. Reverse with
+any 2:
+
+```sh
+mnemonic slip39 combine --share "<share-1>" --share "<share-2>"
+```
+
+Equivalent recoveries with `--share "<share-1>" --share "<share-3>"`
+or `--share "<share-2>" --share "<share-3>"`.
+
+> Attempting recovery with only 1 share: `mnemonic slip39 combine
+> --share "<share-1>"` exits 1 with stderr `slip39 combine: insufficient
+> shares for group 0: need 2, got 1` (refusal row 12).
+
+#### Example 4 — multi-group 2-of-3 of 2-of-3, with passphrase
+
+The comprehensive case: 3 groups, each with 3 members at 2-of-3 member
+threshold; 2 of 3 groups required (group threshold). 9 shares total.
+
+This shape is "social-recovery"-style: 3 trustees each hold 3 shares;
+any 2 trustees with ≥2 of their 3 shares can cooperate. A trustee
+losing 1 share is not catastrophic; an entire trustee being unavailable
+is also recoverable as long as the other 2 trustees can each contribute
+their 2-of-3.
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic slip39 split --from phrase=- \
+    --group-threshold 2 \
+    --group 3,2 --group 3,2 --group 3,2 \
+    --passphrase TREZOR
+```
+
+Stdout: 9 shares in group-major order:
+
+```text
+<g0-m0>
+<g0-m1>
+<g0-m2>
+<g1-m0>
+<g1-m1>
+<g1-m2>
+<g2-m0>
+<g2-m1>
+<g2-m2>
+```
+
+Reverse with 2 shares from group 0 + 2 shares from group 1 (group 2
+unused — the group threshold of 2 is satisfied by groups 0 + 1):
+
+```sh
+mnemonic slip39 combine \
+  --share "<g0-m0>" --share "<g0-m1>" \
+  --share "<g1-m0>" --share "<g1-m1>" \
+  --passphrase TREZOR
+```
+
+Stdout: the original 24-word phrase. Many valid 4-share subsets exist
+(any 2 from 2 of the 3 groups).
+
+> **Note:** to exercise the iteration-exponent perf advisory below,
+> append `--iteration-exponent 5` to the `split` invocation; stderr
+> will print `warning: --iteration-exponent E=5 yields 320000 ×
+> PBKDF2-HMAC-SHA-256 iterations; ...`. The exponent is encoded in
+> each share's `id_exp` field, so the matching `combine` invocation
+> needs no extra flag — it reads the exponent from the shares
+> automatically.
+
+This example's combine recipe is also the input to the
+[Trezor interop](#trezor-interop) cross-impl recipe below.
+
+### JSON output
+
+`--json-out <PATH>` writes a versioned JSON envelope (in addition to
+the plain-stdout shares/secret). Schema `v1`. Field order is part of
+the schema (SHA-pinned in `tests/cli_slip39_json.rs`).
+
+`split` envelope (using example 4's shape):
+
+```json
+{
+  "schema_version": "1",
+  "operation": "split",
+  "identifier": <u64>,
+  "iteration_exponent": 0,
+  "group_threshold": 2,
+  "groups": [
+    {"member_count": 3, "member_threshold": 2, "shares": ["<g0-m0>", "<g0-m1>", "<g0-m2>"]},
+    {"member_count": 3, "member_threshold": 2, "shares": ["<g1-m0>", "<g1-m1>", "<g1-m2>"]},
+    {"member_count": 3, "member_threshold": 2, "shares": ["<g2-m0>", "<g2-m1>", "<g2-m2>"]}
+  ]
+}
+```
+
+Each group entry is `{member_count, member_threshold, shares}` in that
+exact order (mirrors the `seed_xor` envelope precedent). NO top-level
+`language` field, NO `master_word_count` field — those are conveyed
+via the `--language` and `--from` CLI flags out of band.
+
+`combine` envelope (`--to entropy` shape, default):
+
+```json
+{
+  "schema_version": "1",
+  "operation": "combine",
+  "identifier": <u64>,
+  "iteration_exponent": 0,
+  "output_shape": "entropy",
+  "entropy_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+  "phrase": null
+}
+```
+
+`combine` envelope (`--to phrase` shape):
+
+```json
+{
+  "schema_version": "1",
+  "operation": "combine",
+  "identifier": <u64>,
+  "iteration_exponent": 0,
+  "output_shape": "phrase",
+  "entropy_hex": null,
+  "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+}
+```
+
+Both `entropy_hex` and `phrase` are always present; one carries the
+value, the other is `null`, selected by `output_shape`. The
+`--language` flag controls which BIP-39 wordlist `phrase` uses
+(English / Czech / Korean / etc.) but is not itself reflected in the
+envelope.
+
+`--json-out` to a Unix world-readable path triggers the `mode 644`
+permission advisory on stderr (advisories table below).
+
+### Refusals
+
+All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
+(24 classes; expanded at v0.13.0 P2.2 GREEN per Q3 fold).
+
+| Trigger | Refusal stem |
+|---|---|
+| `--from phrase` word-count not in {12,15,18,21,24} | `slip39 split: input phrase must be 12/15/18/21/24 words; got K` |
+| `--from entropy=` hex not parseable / odd length / length not in {16,20,24,28,32} bytes | `slip39 split: entropy hex must decode to 16/20/24/28/32 bytes; got K bytes` |
+| `--group-threshold` outside `1..=group_count` | `slip39 split: --group-threshold must be in 1..=K (number of --group flags); got G` |
+| `--group N,T` with `T > N` OR `T < 1` OR `N > 16` | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
+| Any `--group 1,1` (toolkit usability policy) | `slip39 split: 1-of-1 group offers no recovery benefit; use --group N,T with N >= 2 (toolkit policy)` |
+| `--iteration-exponent` outside 0..=15 | `slip39 split: --iteration-exponent must be 0..=15 (4-bit field); got E` |
+| `combine` shares: identifier mismatch across shares | `slip39 combine: shares disagree on identifier; shares must come from the same secret` |
+| `combine` shares: iteration-exponent mismatch | `slip39 combine: shares disagree on iteration-exponent` |
+| `combine` shares: RS1024 checksum failure on share I | `slip39 combine: share at position I has invalid SLIP-39 checksum (RS1024)` |
+| `combine` shares: unknown SLIP-39 word at position I in share J | `slip39 combine: share at position J: word at index I not in SLIP-39 wordlist` |
+| `combine` shares: digest verification failure | `slip39 combine: reconstructed master digest mismatch — wrong --passphrase OR a share was substituted` |
+| `combine` shares: insufficient share count for one or more required groups | `slip39 combine: insufficient shares for group <idx>: need <member_threshold>, got <K>` |
+| `combine` shares: mismatching group thresholds across shares | `slip39 combine: shares disagree on group_threshold` |
+| `combine` shares: mismatching group counts across shares | `slip39 combine: shares disagree on group_count` |
+| `combine` shares: duplicate member index within a single group | `slip39 combine: duplicate member index <I> in group <G>` |
+| Invalid padding bits in encoded share | `slip39 combine: share at position I has non-zero padding bits (encoding violation)` |
+| `--from` variant other than `phrase=` / `entropy=` | `slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got <node>=` |
+| Multi-stdin contention (e.g. `--passphrase-stdin` + `--share -`) | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` |
+| `combine` called with empty share list | `slip39 combine: at least one share required` |
+| `combine` shares: share at position I has value-byte length L not in {16,20,24,28,32} | `slip39 combine: share at position I has value length L (must be 16/20/24/28/32 bytes)` |
+| `combine` shares: shares disagree on value-byte length | `slip39 combine: shares disagree on value length` |
+| `combine` shares: shares disagree on the `extendable` (ext) bit | `slip39 combine: shares disagree on the extendable bit` |
+| `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
+| `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` |
+
+### Advisories
+
+Stderr advisories are non-fatal and do not change exit code (0 on
+success). Mirror of SPEC §2.6 (6 rows).
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline secret on argv (`--from`, `--share`, `--passphrase`) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
+| `split` AND stdout is a TTY | `warning: SLIP-39 shares on stdout — N=<n> shares emitted across <g> groups (group-threshold <G>); each share is independently secret material; distribute per your group/member-threshold policy; do not paste this output into a single untrusted tool` |
+| `combine` AND stdout is a TTY | `warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting` |
+| `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
+| `--iteration-exponent E` where E ≥ 5 | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second); Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values; E ≥ 10 may exceed 30s on weak hardware` |
+| Either `MNEMONIC_SLIP39_TEST_RNG` OR `MNEMONIC_SLIP39_TEST_IDENTIFIER` env-var set on a `split` invocation (always-on; not suppressible) | `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` |
+
+> **Note:** the warning string names `MNEMONIC_SLIP39_TEST_RNG` even
+> when only the companion `MNEMONIC_SLIP39_TEST_IDENTIFIER` is set —
+> both env-vars trigger the same single-string advisory; see SPEC §6
+> for both env-var definitions.
+
+### Trezor interop
+
+Toolkit shares are bit-identical to Trezor SLIP-0039
+interop\index{Trezor SLIP-0039 interop}. The recipe below proves this
+via cross-implementation verification against `shamir-mnemonic`, the
+Python reference implementation maintained by the Trezor team
+(reproduces without hardware).
+
+**Recipe** (validated 2026-05-14 against `shamir-mnemonic` 0.3.0 on
+Linux x86_64; toolkit reference baseline is `python-shamir-mnemonic`
+upstream commit `17fcce14`):
+
+```sh
+pipx install 'shamir-mnemonic[cli]==0.3.0'
+
+# Produce shares with the toolkit (using example 4's shape: multi-group
+# 2-of-3 of 2-of-3 with passphrase=TREZOR, master = abandon × 23 + art)
+printf 'TREZOR' | mnemonic slip39 split \
+  --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art" \
+  --group-threshold 2 \
+  --group 3,2 --group 3,2 --group 3,2 \
+  --passphrase-stdin > /tmp/shares.txt
+
+# Recover via shamir-mnemonic — pipe 4 shares (2 from group 0, 2 from
+# group 1), then the passphrase twice (shamir prompts for confirmation)
+SHARE_G0_M0=$(sed -n 1p /tmp/shares.txt)
+SHARE_G0_M1=$(sed -n 2p /tmp/shares.txt)
+SHARE_G1_M0=$(sed -n 4p /tmp/shares.txt)
+SHARE_G1_M1=$(sed -n 5p /tmp/shares.txt)
+printf '%s\n%s\n%s\n%s\nTREZOR\nTREZOR\n' \
+  "$SHARE_G0_M0" "$SHARE_G0_M1" "$SHARE_G1_M0" "$SHARE_G1_M1" |
+  shamir recover -p
+```
+
+Expected output (last 2 lines):
+
+```text
+SUCCESS!
+Your master secret is: 0000000000000000000000000000000000000000000000000000000000000000
+```
+
+That hex (32 zero bytes) is the BIP-39 entropy of `abandon × 23 + art`
+— the same master `mnemonic slip39 combine` recovers from the same
+shares + passphrase. Convert to phrase form via
+`mnemonic convert --from entropy=00...00 --to phrase` if desired.
+
+**Version-pin caveat:** the recipe pins `shamir-mnemonic==0.3.0` (the
+latest released PyPI version at chapter-write 2026-05-14). The
+toolkit's library bit-exact verification baseline is upstream commit
+`17fcce14`; if the recipe fails for you, the released PyPI version
+may have diverged. The version-pinned PyPI archive is at
+<https://pypi.org/project/shamir-mnemonic/0.3.0/>; file a toolkit
+issue with the failing share text + python error if encountered.
+
+**Trezor hardware compatibility note:** SLIP-39 is supported on
+Trezor Model T and the Trezor Safe family — NOT on Trezor One (which
+predates SLIP-39 and uses raw BIP-39 only, per SPEC §3 OOS row
+`OOS-slip39-import-trezor-onev-format`). SLIP-39 has two backup-type
+modes: `slip39-basic` for single-group splits (examples 1-3 above)
+and `slip39-advanced` for multi-group splits (example 4 above).
+Consult Trezor's current docs for the exact `trezorctl
+recovery-device --backup-type` flag value, which has historically
+varied by firmware version.
 
 ---
 
