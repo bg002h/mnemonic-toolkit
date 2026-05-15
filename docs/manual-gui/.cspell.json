@@ -188,6 +188,9 @@
     "airgapped",
     "sneakernet",
     "fullwidth",
-    "codepoint"
+    "codepoint",
+    "materialises",
+    "pubkeys",
+    "normalised"
   ]
 }
