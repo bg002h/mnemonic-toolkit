@@ -100,7 +100,15 @@ def collect_html_ids(html_path: Path) -> set[str]:
 
 def is_schema_shaped(anchor: str, shapes: set[str]) -> bool:
     """An HTML anchor is schema-shaped if its ID equals or starts with
-    `<tab>-<sub>` for a known (tab, sub) pair."""
+    `<tab>-<sub>` for a known (tab, sub) pair.
+
+    SPEC §2.3 outline anchors (`<parent>-outline`) are derived from
+    schema anchors via the `-outline` suffix and therefore look
+    schema-shaped, but they are required by phase-5 outline-coverage
+    rather than schema-derived. Exempt them from the orphan check so
+    the two phases do not contradict each other."""
+    if anchor.endswith("-outline"):
+        return False
     for shape in shapes:
         if anchor == shape or anchor.startswith(shape + "-"):
             return True
