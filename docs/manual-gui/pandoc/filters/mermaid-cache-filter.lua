@@ -47,6 +47,17 @@ check_metadata()
 
 function CodeBlock(block)
   if not block.classes:includes("mermaid") then return nil end
+  -- Format gate: \includegraphics is a LaTeX-only command. Emitting it
+  -- via pandoc.RawBlock('latex', ...) is correct for the PDF pipeline,
+  -- but the html5 and gfm writers silently drop raw-LaTeX blocks. So
+  -- under non-LaTeX writers, return nil to keep the original CodeBlock
+  -- (renders as <pre><code class="mermaid">...</code></pre> in HTML,
+  -- which GitHub-flavored markdown renders natively per AUTHORING.md
+  -- §"Mermaid diagrams"; pandoc standalone HTML doesn't auto-render
+  -- mermaid client-side — see FOLLOWUP `gui-manual-html-mermaid-svg`).
+  -- Mirrors the format-gate idiom in `primer-box.lua:28` and
+  -- `wrap-long-code.lua:82,96`.
+  if not FORMAT:match("latex") then return nil end
   local sha = sha256.hex(block.text)
   local pdf_path = cache_dir .. "/" .. sha .. ".pdf"
   local f = io.open(pdf_path, "r")

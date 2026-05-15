@@ -169,6 +169,13 @@
     "ViewportBuilder",
     "clipboard",
     "affordance",
-    "affordances"
+    "affordances",
+    "codegen",
+    "DXGI",
+    "memorise",
+    "memorising",
+    "serde",
+    "serialise",
+    "zeroize"
   ]
 }
