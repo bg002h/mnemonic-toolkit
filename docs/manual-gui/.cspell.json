@@ -176,6 +176,13 @@
     "memorising",
     "serde",
     "serialise",
-    "zeroize"
+    "zeroize",
+    "EXCLUDEFROMCAPTURE",
+    "MSRV",
+    "MSVC",
+    "notarisation",
+    "screencopy",
+    "USERPROFILE",
+    "xattr"
   ]
 }
