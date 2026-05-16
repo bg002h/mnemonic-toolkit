@@ -281,7 +281,7 @@ Rows 1-14 in §6.6 plus rows 15-17 in §6.7 are the canonical byte-exact texts. 
 
 ## §6.10 Conditional-applicability projection in gui-schema JSON
 
-**Added in v0.5 GUI conditional-applicability v1 cycle (toolkit v0.16.0 + mnemonic-gui v0.5.0 lockstep, with `mnemonic-gui v0.4.3` as a scope-isolated prerequisite toolkit-pin catchup from v0.14.2 → v0.15.0).** §6.10 is the canonical home for the GUI projection of CLI mutex/conditional rules; it sits alongside §6.6 (template-mode mode-violation ladder) and §6.9 (byte-exact error reference), cross-citing both, but does NOT modify either. The §6.6 table retains its v0.5 row IDs (2, 3, 4, 8, 9, 9.5, 10, 11, 12, 13, 14, T1, T2) verbatim, and the v0.3-NEW byte-exact consts at `crates/mnemonic-toolkit/src/cmd/bundle.rs:120-129` (`DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `DESCRIPTOR_WITH_THRESHOLD`, `DESCRIPTOR_WITH_PATH_FAMILY`, `DESCRIPTOR_WITH_NONZERO_ACCOUNT`) remain runtime-enforced and byte-exact-test-pinned. The pre-existing SPEC drift between §6.6's row enumeration and the v0.3-NEW descriptor-mode consts is filed independently at FOLLOWUP `spec-v0_5-missing-v0_3-descriptor-mode-rows` and is **out of scope for this cycle**.
+**Added in v0.5 GUI conditional-applicability v1 cycle (toolkit v0.16.0 + mnemonic-gui v0.5.0 lockstep, with `mnemonic-gui v0.4.3` as a scope-isolated prerequisite toolkit-pin catchup from v0.14.2 → v0.15.0).** **Extended in v0.6 cycle (toolkit v0.17.0 + mnemonic-gui v0.6.0 lockstep)** with three new Predicate kinds (`slot_count_eq` / `slot_count_gte` / `slot_count_lte` — §6.10.2), one new Visibility variant (`pin_value` — §6.10.3 + §6.10.4 emission table), per-subcommand `meta.template_groups` (§6.10.8 — NEW), and a schema-version bump `2 → 3` (§6.10.6). §6.10 is the canonical home for the GUI projection of CLI mutex/conditional rules; it sits alongside §6.6 (template-mode mode-violation ladder) and §6.9 (byte-exact error reference), cross-citing both, but does NOT modify either. The §6.6 table retains its v0.5 row IDs (2, 3, 4, 8, 9, 9.5, 10, 11, 12, 13, 14, T1, T2) verbatim, and the v0.3-NEW byte-exact consts at `crates/mnemonic-toolkit/src/cmd/bundle.rs:120-129` (`DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `DESCRIPTOR_WITH_THRESHOLD`, `DESCRIPTOR_WITH_PATH_FAMILY`, `DESCRIPTOR_WITH_NONZERO_ACCOUNT`) remain runtime-enforced and byte-exact-test-pinned. The pre-existing SPEC drift between §6.6's row enumeration and the v0.3-NEW descriptor-mode consts is filed independently at FOLLOWUP `spec-v0_5-missing-v0_3-descriptor-mode-rows` and is **out of scope for this cycle**.
 
 ### §6.10.1 Purpose
 
@@ -297,6 +297,12 @@ The `mnemonic gui-schema` JSON document gains a per-subcommand `conditional_rule
 {"kind": "all_of", "predicates": [P1, P2, ...]}
 {"kind": "any_of", "predicates": [P1, P2, ...]}
 {"kind": "not", "predicate": P}
+
+// Added in v0.6 cycle (toolkit v0.17.0 + mnemonic-gui v0.6.0 lockstep)
+// — schema version bumped 2 → 3. See §6.10.6.
+{"kind": "slot_count_eq",  "value": N}
+{"kind": "slot_count_gte", "value": N}
+{"kind": "slot_count_lte", "value": N}
 ```
 
 Predicate semantics:
@@ -305,11 +311,16 @@ Predicate semantics:
 - **`composite_node_is`** — flag's Composite variant's selected node token equals the listed string.
 - **`positional_present`** — `state.positionals[index]` is non-empty.
 - **`all_of` / `any_of` / `not`** — boolean combinators.
+- **`slot_count_eq` / `slot_count_gte` / `slot_count_lte`** (v0.6 cycle) — compares the form's total slot count to a literal `N`. The slot count is sourced from `FormState::slot_count()` (= `slot_state.rows.len()` for subcommands with the GUI slot-grid infrastructure; `0` for subcommands without slot infrastructure). Predicates over slot count are how the projection encodes §6.6 rows 10 (single-sig with N > 1) and 11 (multisig with N == 1) — both deferred from v1 per the closing paragraph of §6.10.7. Cross-slot-equality predicates (rows 13 + 14 — BIP-388 distinct-key, per-`@N` annotation consistency) remain deferred — they require richer relational predicate types (e.g., `all_distinct(flag-list)`) tracked at FOLLOWUP `gui-schema-cross-slot-predicate-projection`.
 
 ### §6.10.3 Effect
 
 ```json
+// Bare-string Visibility (v1 cycle / schema v2 — back-compat preserved on the wire):
 {"flag": "--name", "visibility": "hidden" | "disabled" | "required"}
+
+// Tagged-object Visibility (added in v0.6 cycle / schema v3):
+{"flag": "--name", "visibility": {"pin_value": {"value": <JSON>}}}
 ```
 
 `Visibility::Visible` is the implicit default and never appears as an Effect value. Effect grammar:
@@ -317,10 +328,28 @@ Predicate semantics:
 - **`hidden`** — flag widget is structurally non-applicable to the current mode (e.g., `--threshold` when template ∈ single-sig). Rendered as hidden; emission suppressed by the visibility gate at `mnemonic-gui/src/form/invocation.rs::assemble_argv`.
 - **`disabled`** — flag is sibling-mutex-conflicted by user choice (e.g., user enabled `--passphrase-stdin` so `--passphrase` grays out). Rendered visible-but-grayed; widget state retained so toggling the mutex restores the value; emission suppressed.
 - **`required`** — flag is decoratively-marked required by the current mode (e.g., `--mk1` required unless `--bundle-json` supplied in verify-bundle). Rendered with a `*` marker; no emission effect.
+- **`pin_value(V)`** (v0.6 cycle) — flag widget is coerced to the pinned JSON value `V` and rendered read-only with a tooltip explaining the pin. **Unlike `hidden`/`disabled` (suppress emission), the GUI MUST emit the argv pair `--name <V>` using the pinned value**, regardless of any pre-pin user-typed value. Closes the "value-coerced-to-zero" Effect vocabulary gap previously noted as DEFERRED in §6.10.7 for `DESCRIPTOR_WITH_NONZERO_ACCOUNT`. See §6.10.4 for the emission-mapping table.
+
+Wire-format details for v3:
+- The bare-string forms continue to round-trip as their original `VisibilityProjection::*` unit variants (v1-cycle wire shape preserved bit-for-bit; no v2-consumer breakage at the rule-shape level).
+- The new `pin_value` form uses a tagged-object shape (`{"pin_value": {"value": <JSON>}}`), making `Visibility` a sum-type of `Simple(VisibilityProjection)` ∪ `PinValue { value }`. The toolkit-side serialization (`crates/mnemonic-toolkit/src/cmd/gui_schema.rs`) and the GUI-side deserialization (`mnemonic-gui/src/schema_check.rs`) provide custom `Serialize` / `Deserialize` impls so the bare-string and tagged-object shapes co-exist on the wire.
+- The pinned `value` field accepts any JSON value — typically a number (e.g., `0` for `--account`) but the type-spec is intentionally permissive so future pin-coercions over Dropdown/Text values can use the same Effect without grammar churn.
 
 ### §6.10.4 Semantics — first-rule-wins
 
 When a FormState satisfies a rule's predicate, the rule's effect overrides the target flag's visibility for that frame. Multiple rules may target the same flag; effects compose **first-rule-wins** per the existing GUI engine at `mnemonic-gui/src/main.rs:391-394` which uses `Iterator::find` (returning the first match). The JSON projection MUST emit rules in priority-descending order per target flag. Authors hand-encoding rules must order more-specific predicates BEFORE less-specific ones.
+
+**Visibility-to-emission mapping** (the visibility gate at `mnemonic-gui/src/form/invocation.rs::assemble_argv`):
+
+| Visibility    | Widget render | Argv emission |
+|---|---|---|
+| `Visible` (implicit default) | normal | normal (per FormState) |
+| `hidden`      | hidden | suppressed |
+| `disabled`    | visible, grayed, value retained | suppressed |
+| `required`    | normal + `*` marker | normal (decorative only) |
+| `pin_value(V)` (v0.6) | locked to `V` + tooltip | `--name <V>` (REPLACES any prior user-typed value) |
+
+The `pin_value` row is the only effect that produces argv emission with a value distinct from the user's input. When a flag matches multiple rules whose effects diverge between suppress (hidden/disabled) and emit-with-pin (`pin_value`), first-rule-wins still applies — authors must order more-specific predicates first per the existing discipline.
 
 ### §6.10.5 Drift invariant
 
@@ -330,11 +359,32 @@ A failure of the drift gate is a **release blocker** — either the toolkit or t
 
 ### §6.10.6 Schema version contract
 
-The `version` field at the top of the gui-schema JSON bumps `1 → 2`. The bump is **additive** — v1 consumers that parse only the per-flag set (name, kind, choices) and ignore unknown fields continue to work on v2 documents. The `conditional_rules` consumer (the new drift gate test) gates on `version >= 2` and is the sole consumer that requires the bump.
+**v0.5 cycle bump (`1 → 2`):** The `version` field at the top of the gui-schema JSON bumps `1 → 2`. The bump is **additive** — v1 consumers that parse only the per-flag set (name, kind, choices) and ignore unknown fields continue to work on v2 documents. The `conditional_rules` consumer (the v0.5 drift gate test) gates on `version >= 2` and is the sole consumer that requires the bump.
+
+**v0.6 cycle bump (`2 → 3`):** Bumped to v3 by `mnemonic-toolkit-v0.17.0`. The new content under v3:
+- Three new Predicate kinds (`slot_count_eq` / `slot_count_gte` / `slot_count_lte`; see §6.10.2).
+- One new Visibility variant (`pin_value`; see §6.10.3) using a tagged-object wire shape that co-exists with the bare-string shape for the v2 variants.
+- Per-subcommand `meta.template_groups` block (see §6.10.8 below) for subcommands that consume the `--template` flag.
+
+Back-compatibility with v2 consumers:
+- The bare-string Visibility shape is preserved bit-for-bit, so a v2 consumer parsing rules whose effects use `hidden`/`disabled`/`required` continues to round-trip those rules correctly on a v3 document.
+- A v2 consumer encountering a rule whose effect uses the new tagged-object shape (`{"pin_value": ...}`) or whose predicate uses one of the new `slot_count_*` kinds will fail to deserialize that specific rule. The toolkit's gui-schema emitter emits new-content rules at the END of each subcommand's `conditional_rules` array so v2 consumers parsing sequentially can recover the prefix even if the suffix fails. v2 consumers SHOULD treat unknown predicate kinds / visibility variants as "skip this rule" rather than "fail the entire document".
+- The `meta.template_groups` block is purely additive at the subcommand level (no v2 consumer reads it). v2 consumers that don't reach for `meta` continue working unchanged.
+
+In practice the v3 schema's consumer is `mnemonic-gui-v0.6.0`, shipped in lockstep with the toolkit bump. The `pinned-upstream.toml` mechanism (toolkit pin tracks upstream tag) ensures the GUI's schema-consumer-version matches the toolkit's schema-producer-version; v2-consumer back-compat is theoretical concern only.
+
+The drift gate (`tests/gui_schema_conditional_drift.rs`) gates on `version >= 2` for the v1-cycle rules and `version >= 3` for any rule using v3-cycle content.
 
 ### §6.10.7 gui_projection mapping table
 
-Each row in the table below identifies one rule in the §6.6 table or one of the v0.3-NEW `bundle.rs::mode_text` consts, plus its projection into the gui-schema JSON. The "v1 cycle" column marks whether the rule is encoded in toolkit v0.16.0 + gui v0.5.0 or deferred to a follow-up.
+Each row in the table below identifies one rule in the §6.6 table or one of the v0.3-NEW `bundle.rs::mode_text` consts, plus its projection into the gui-schema JSON. The right-most column carries per-row cycle status:
+
+- `ENCODED` — encoded in toolkit v0.16.0 + gui v0.5.0 (v1 cycle).
+- `ENCODED (pre-existing)` — encoded in the v1 cycle but the projection logic predates §6.10 (e.g., a clap-derived mutex already enforced by `clap::ArgGroup`).
+- `ENCODED v2` — encoded in toolkit v0.17.0 + gui v0.6.0 (v2 cycle). Distinguished from v1 only for changelog auditing; the consumer treats them identically at runtime.
+- `DEFERRED → <followup>` — projection intentionally not yet emitted; FOLLOWUP entry tracks the work.
+
+The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for historical-diff continuity. Future cycles should add per-cycle ENCODED prefixes ("ENCODED v3" etc.) following the same pattern.
 
 | Subcommand | SPEC ref | bundle.rs::mode_text ref | Predicate (informal) | Effect | v1 cycle |
 |---|---|---|---|---|---|
@@ -344,7 +394,7 @@ Each row in the table below identifies one rule in the §6.6 table or one of the
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_AND_DESCRIPTOR_FILE` | `--descriptor` present | `--descriptor-file → disabled` (mutex pair) | ENCODED (pre-existing) |
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_THRESHOLD` | `--descriptor` present | `--threshold → disabled` | ENCODED |
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_PATH_FAMILY` | `--descriptor` present | `--multisig-path-family → disabled` | ENCODED |
-| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_NONZERO_ACCOUNT` | `--descriptor` present AND `--account != 0` | (deferred — Effect vocabulary for "value-coerced-to-zero" not in §6.10.3) | DEFERRED → `gui-schema-numeric-flag-value-pin-effect` |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_NONZERO_ACCOUNT` | `--descriptor` present | `--account → pin_value(0)` (REPLACE-value semantic per §6.10.4 emission table) | ENCODED v2 |
 | verify-bundle | §6.6 row T1 (mirror) | `THRESHOLD_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--threshold → disabled` | ENCODED |
 | verify-bundle | §6.6 row T2 (mirror) | `PATH_FAMILY_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--multisig-path-family → disabled` | ENCODED |
 | verify-bundle | §6.6 row 2 (mirror) | `DESCRIPTOR_AND_TEMPLATE` (mirror) | `--descriptor` present | `--template → disabled` | ENCODED |
@@ -355,9 +405,36 @@ Each row in the table below identifies one rule in the §6.6 table or one of the
 | convert | (subcommand-local rule) | (n/a — runtime check) | `--xpub-prefix` non-default | `--network → required` | ENCODED |
 | derive-child | (subcommand-local rule) | (n/a — runtime check) | `--application` value == `dice` | `--dice-sides → required` | ENCODED |
 
-**Runtime-deferred rules (out of v1 cycle):** §6.6 rows 8 (slot-index contiguity), 9 (T-in-range), 10 (single-sig template with N > 1 slots), 11 (multisig template with N == 1), 13 (BIP-388 distinct-key), 14 (per-`@N` annotation inconsistency). These depend on slot count or post-binding state not knowable until the form is filled; they surface at Run time via the CLI's typed error. Tracked at FOLLOWUP `gui-schema-runtime-conditional-projection`.
+**Runtime-deferred rules:**
+
+- **Closed in v2 cycle (this row's `Cycle status` column reads `ENCODED v2`):** §6.6 row 12 (`DESCRIPTOR_WITH_NONZERO_ACCOUNT`) — uses the new `pin_value` Effect (§6.10.3).
+- **Predicate-machinery available, full encoding deferred:** §6.6 row 9 (T-in-range), row 10 (single-sig template with N > 1 slots), row 11 (multisig template with N == 1). The v2 cycle's `slot_count_*` predicates (§6.10.2) make the slot-count side of these rules expressible; the *effect* side (which would need a dropdown-option-disable vocabulary to disable `--template` values rather than the whole flag) remains v2-incomplete. Implementation deferred to a future cycle that extends the Effect grammar to target dropdown options. Tracked at FOLLOWUP `gui-schema-effect-on-dropdown-options-vocab`.
+- **Still deferred (predicate-machinery missing):** §6.6 row 8 (slot-index contiguity), row 13 (BIP-388 distinct-key), row 14 (per-`@N` annotation inconsistency). These require richer relational predicate types (cross-slot equality, all-distinct) not in the v3 grammar. Tracked at FOLLOWUP `gui-schema-cross-slot-predicate-projection` (new in v2 cycle; companion to the existing `gui-schema-runtime-conditional-projection`).
+
+All of the above continue to surface at Run time via the CLI's typed error — the GUI's pre-run projection is best-effort, not exhaustive.
 
 **Cross-citation discipline:** any future addition to §6.6 (e.g., closing the `spec-v0_5-missing-v0_3-descriptor-mode-rows` FOLLOWUP by enumerating the v0.3-NEW rows in the §6.6 table proper) MUST also update §6.10.7's mapping table in the same patch. The §6.6 ↔ §6.10.7 ↔ `bundle.rs::mode_text` triple is the canonical source-of-truth braid.
+
+### §6.10.8 Per-subcommand meta-fields (v2 cycle, schema v3)
+
+In addition to the per-subcommand `conditional_rules` array (v1 cycle / v2 schema), schema v3 introduces an optional per-subcommand `meta` object. The object's contents are intended as machine-readable classifications that inform the GUI's runtime behavior without being themselves rules.
+
+Initial v2-cycle field:
+
+```json
+"meta": {
+  "template_groups": {
+    "single_sig": ["bip44", "bip49", "bip84", "bip86"],
+    "multisig":   ["wsh-multi",  "wsh-sortedmulti",  "tr-multi-a", "tr-sortedmulti-a"]
+  }
+}
+```
+
+The `template_groups` block is emitted for subcommands that consume the `--template` flag (bundle / verify-bundle / export-wallet / derive-child). Source-of-truth: `crates/mnemonic-toolkit/src/template.rs::CliTemplate::is_multisig()`. The toolkit's gui-schema emitter walks the variant set and partitions by `is_multisig()` per `Subcommand`.
+
+GUI-side consumption: `mnemonic-gui/src/form/conditional.rs` retires its hand-coded `SINGLE_SIG_TEMPLATES: &[&str]` const (line 23) in favor of reading `meta.template_groups.single_sig` from the bundled gui-schema JSON. The drift gate (`tests/gui_schema_conditional_drift.rs`) enforces parity between toolkit `is_multisig()` and the GUI's runtime classification.
+
+Future `meta` fields are additive-only at the field level (additive means: adding a new key under `meta` is back-compat with v3 consumers that don't read it). Predicate-AST extensions and Effect-grammar extensions still require a schema-version bump per §6.10.6 because they affect the rule-deserialization contract; `meta` extensions do not.
 
 ## §8 Out of scope (DELTA)
 
