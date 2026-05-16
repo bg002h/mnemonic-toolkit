@@ -1526,3 +1526,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `cross-repo`
 - **Companion:** `convert-minikey-stdout-redaction` (toolkit FOLLOWUP that tracks the narrow/wide asymmetry inside the toolkit); `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-run-confirm-modal-secret-redaction` (the GUI-side use case that would consume the wider set).
+
+### `secret-taxonomy-feature-gate-toolkit-lib` — feature-gate the toolkit lib so consumers can pull `secret_taxonomy` without the heavy dep tree
+
+- **Surfaced:** 2026-05-16, post-v0.14.0 architect-audit (Important #4). Surfaced separately from `secret-taxonomy-public-api-promotion` because the architect's original Option A blueprint contemplated it as an optional follow-up risk #1 mitigation, but no concrete FOLLOWUP was filed at v0.14.0 ship time.
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml` (`[features]` block, currently absent); `crates/mnemonic-toolkit/src/lib.rs` (`pub mod` declarations); downstream `mnemonic-gui/Cargo.toml` (`[dependencies] mnemonic-toolkit` — would add `default-features = false, features = ["secret-taxonomy"]`).
+- **What:** Today `mnemonic-gui` v0.4.0+ depends on this crate as a regular cargo dep for `pub mod secret_taxonomy`. That pulls the toolkit's full dep tree into the GUI's cargo graph: `bitcoin`, `miniscript`, `bip39`, `bip38`, `clap`, `secp256k1`, `bech32`, `hmac`, `sha2`, `pbkdf2`, plus the new git-deps on `ms-codec` / `mk-codec` / `md-codec`. None of these are referenced from `secret_taxonomy`, but the cargo dep graph links them in. Cold-build cost for the GUI grew by ~30-60s on first-time builds (the architect's risk #1). Feature-gate the heavy modules behind a default-on `cli` feature; expose `secret-taxonomy` as a default-off small-surface feature. GUI depends with `default-features = false, features = ["secret-taxonomy"]`; toolkit's own bin builds with the default features (no change). Lib API for `secret_taxonomy` is preserved as-is.
+- **Why deferred:** Architect risk #1 was flagged as optional ("Optional; can defer if compile cost is acceptable"). The v0.14.1 cfg-gate of `mlock` already unblocked the Windows compile failure that motivated this audit; the dep-tree cost is purely a quality-of-life issue for GUI cold builds, not a correctness gap.
+- **Status:** `open`
+- **Tier:** `v0.15` / `nice-to-have`
+- **Companion:** Architect's "non-obvious risks" #1 from the resolved `secret-taxonomy-public-api-promotion` entry.

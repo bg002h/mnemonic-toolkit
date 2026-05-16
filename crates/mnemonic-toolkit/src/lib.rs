@@ -41,6 +41,17 @@
 //!   `mnemonic-gui` v0.4.0+.
 
 pub mod final_word;
+// `mlock` uses POSIX `libc::mlock` / `libc::munlock` / `libc::sysconf` /
+// `_SC_PAGESIZE`. None of those symbols exist in `libc`'s Windows
+// surface (Windows has `VirtualLock`; libc-rs's Windows surface is
+// CRT-only). Pre-v0.14.0 the toolkit was binary-only and never
+// compiled on Windows. v0.14.0 promoted `secret_taxonomy` to public
+// lib API for `mnemonic-gui` consumption, which transitively required
+// the entire lib to compile on every platform the GUI targets —
+// including Windows. Cfg-gate keeps `mlock` available on Unix
+// (its existing consumer surface) while letting the lib compile on
+// Windows. Closes the architect-flagged Critical at GUI v0.4.0 CI.
+#[cfg(unix)]
 pub mod mlock;
 pub mod secret_taxonomy;
 pub mod seed_xor;

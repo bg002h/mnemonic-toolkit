@@ -141,6 +141,39 @@ jobs:
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
 
+  lib-cross-platform:
+    # v0.14.1 — added after the v0.14.0 release because the GUI's Windows
+    # build matrix (mnemonic-gui v0.4.0+ depends on this crate's lib for
+    # `pub mod secret_taxonomy`) caught a Windows-incompat: `pub mod mlock`
+    # uses POSIX `libc::mlock` / `libc::sysconf` / `_SC_PAGESIZE`, none of
+    # which exist in libc's Windows surface. The architect's risk-#5 (lib
+    # platform compat audit) was satisfied previously only by the binary's
+    # CI matrix [ubuntu, macos]; this job extends compile-only coverage to
+    # the lib for the platforms downstream consumers actually target.
+    name: lib cross-platform check
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+          - target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install-rust + target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: cargo check --lib (cross-platform)
+        # Compile-only (no test execution); the bin target is intentionally
+        # excluded — `mnemonic` CLI is unix-only by virtue of mlock.
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo check --lib --target "$TARGET" -p mnemonic-toolkit
+
   g6-invariant:
     # Cycle B SPEC §6 G6 — cross-repo mlock.rs inline-copy invariant.
     # Checks out the sibling repo (mnemonic-secret) to a known runner path,

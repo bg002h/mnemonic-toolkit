@@ -306,6 +306,50 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.14.1] — 2026-05-16
+
+### Bug fix — `pub mod mlock` cfg-gated for Windows
+
+`pub mod mlock` (declared in `crates/mnemonic-toolkit/src/lib.rs`) is
+now `#[cfg(unix)]`. The mlock implementation uses POSIX
+`libc::mlock` / `libc::munlock` / `libc::sysconf` / `_SC_PAGESIZE` —
+none of which exist in `libc`'s Windows surface. Pre-v0.14.0 the
+toolkit was binary-only and the binary's Unix-only CI matrix
+masked this; v0.14.0 promoted `secret_taxonomy` to public lib API
+for `mnemonic-gui` consumption, transitively requiring the entire
+lib to compile on every platform the GUI targets — including
+Windows. `mnemonic-gui v0.4.0` CI surfaced the regression at
+`https://github.com/bg002h/mnemonic-gui/actions/runs/25951528124`
+(`x86_64-pc-windows-msvc` job failure).
+
+The binary (`mnemonic` CLI) remains Unix-only; the bin target is
+not compiled when downstream consumers (like the GUI) depend on
+this crate as a lib dep.
+
+### Added — `lib-cross-platform` CI job
+
+`rust.yml` gains a `lib-cross-platform` matrix job that runs
+`cargo check --lib --target <target>` for `x86_64-pc-windows-msvc`
++ `aarch64-unknown-linux-gnu`. Compile-only (no test execution);
+exists specifically to catch Windows / aarch64 incompat at
+toolkit-CI time rather than at downstream-consumer-CI time.
+Addresses architect risk #5 from the
+`secret-taxonomy-public-api-promotion` FOLLOWUP.
+
+### Added — FOLLOWUP `secret-taxonomy-feature-gate-toolkit-lib`
+
+Filed in `design/FOLLOWUPS.md`. Tracks the architect's risk #1
+mitigation: split the toolkit lib into a default-on `cli` feature
+covering the heavy modules (`mlock`, `bitcoin`/`miniscript`/`bip39`
+deps) versus a default-off small-surface `secret-taxonomy`-only
+feature for GUI-class consumers. Optional; the v0.14.1 cfg-gate
+on `mlock` alone unblocks Windows builds.
+
+### Companion
+
+`mnemonic-gui v0.4.1` bumps the toolkit dep tag from v0.14.0 to
+v0.14.1.
+
 ## mnemonic-toolkit [0.14.0] — 2026-05-16
 
 ### Added — `secret_taxonomy` public module
@@ -400,6 +444,37 @@ constants).
 
 Closes FOLLOWUPS `secret-taxonomy-public-api-promotion` (the toolkit
 half of the cross-repo lockstep work).
+
+### Reviewer trail
+
+(Backfilled in v0.14.1 — architect-audit Important #3 surfaced that
+this section was omitted at v0.14.0 ship time.)
+
+- R0 (architect dispatch, opus): produced the Option A migration sketch
+  documented in `design/FOLLOWUPS.md` entry
+  `secret-taxonomy-public-api-promotion`.
+- R1 (opus): **1 Critical + 6 Importants**. Critical: original
+  closure+driver design for `every_*_variant()` was not load-bearing
+  — a contributor extending `is_secret_bearing()` with a new variant
+  could land the change with only an arm extension; the parity test
+  loop would skip the new variant silently. 6 Importants spanned doc
+  path correctness (`cmd::convert::tests` → `secret_taxonomy_parity_tests`),
+  CHANGELOG over-claim of enforcement, missing
+  `is_argv_secret_bearing()` public mirror (deferred via new
+  FOLLOWUP `secret-taxonomy-argv-superset-promotion`),
+  `SlotSubkey::from_token` private/`pub` asymmetry with
+  `NodeType::from_token`, `lib.rs` missing stability-contract
+  sentence, and a redundant CHANGELOG cite that R1 self-withdrew.
+- R2 (opus): LOCK with-1-folded. Critical was improved but left a
+  residual gap (the count-pin assertion could not catch arm-only
+  extension because driver-list and `EXPECTED_VARIANT_COUNT` were
+  separately hand-maintained).
+- R3 fold (informal): replaced closure+driver entirely with a
+  declarative `declare_*_variants!` macro that emits BOTH the
+  `ALL_*_VARIANTS` array AND a non-wildcard `_exhaustiveness_check`
+  match from a single input list — the two outputs cannot diverge by
+  construction. 5/5 secret_taxonomy tests green; full suite 983
+  passed / 0 failed.
 
 ## mnemonic-toolkit [0.13.1] — 2026-05-15
 
