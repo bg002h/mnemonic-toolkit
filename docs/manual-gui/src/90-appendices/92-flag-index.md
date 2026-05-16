@@ -170,7 +170,6 @@ syntax and refusal table at the matching per-flag section.
 ### `md verify` {#flag-index-md-verify}
 
 [`--fingerprint`](#md-verify-fingerprint) ·
-[`--json`](#md-verify-json) ·
 [`--key`](#md-verify-key) ·
 [`--network`](#md-verify-network) ·
 [`--template`](#md-verify-template)

@@ -457,7 +457,7 @@ the bottom of the form (visible because `bundle` has
 - A **value** text field whose width and obscuration depend on
   the subkey choice (secret-bearing subkeys render as
   `SecretLineEdit`).
-- An **✕** remove button.
+- An **×** remove button.
 - A **+ Add slot** button below the last row.
 
 The repeating-flag `?` help-icon for `--slot` lives at the

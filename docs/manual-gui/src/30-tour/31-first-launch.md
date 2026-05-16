@@ -26,7 +26,7 @@ first launch the window opens with three panels:
 |   --multisig-path-family [ bip87 ▾ ]                          |  ← central form
 |   ...                                                          |
 |   Slot rows:  ?                                                |
-|     @ [0] . [ xpub ▾ ] = [             ] [✕]                   |
+|     @ [0] . [ xpub ▾ ] = [             ] [×]                   |
 |     [ + Add slot ]                                             |
 |   ----                                                         |
 |   [ Copy command (POSIX) ] [ Copy command (Windows) ] [ Run ]  |

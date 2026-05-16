@@ -58,7 +58,7 @@ no CLI equivalent:
 
 The chapters following this one cover, in order:
 
-- [Relation to the four CLIs](#how-the-gui-relates-to-the-four-clis)
+- [Relation to the four CLIs](#relation-to-cli)
   — how the GUI invokes them, where pinning matters, the
   subprocess-runner contract.
 - [Bundle / card / slot mental model](#the-bundle-card-slot-mental-model)
@@ -70,6 +70,6 @@ The chapters following this one cover, in order:
   GUI-side defenses).
 
 If you already know the m-format constellation from the CLI manual,
-[§12](#how-the-gui-relates-to-the-four-clis) is the only chapter
+[§12](#relation-to-cli) is the only chapter
 that adds GUI-specific load-bearing facts. If you don't, read all
 four in order.
