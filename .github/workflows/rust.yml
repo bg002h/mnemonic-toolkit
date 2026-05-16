@@ -169,12 +169,24 @@ jobs:
         uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
+      - name: install aarch64-linux cross-compiler (linux target only)
+        # A C dep in the toolkit's transitive graph (e.g., ring / sha2-asm
+        # via secp256k1) needs `aarch64-linux-gnu-gcc` for cross-compile.
+        # GitHub's ubuntu-latest runner has the package available via apt
+        # but doesn't install it by default. windows-latest doesn't need
+        # an explicit cross-compiler (MSVC is preinstalled).
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: cargo check --lib (cross-platform)
         # Compile-only (no test execution); the bin target is intentionally
         # excluded — `mnemonic` CLI is unix-only by virtue of mlock.
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
+          # Point cc-rs at the cross-compiler installed above.
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo check --lib --target "$TARGET" -p mnemonic-toolkit
 
   g6-invariant:
