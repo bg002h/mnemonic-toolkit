@@ -1536,3 +1536,18 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.15` / `nice-to-have`
 - **Companion:** Architect's "non-obvious risks" #1 from the resolved `secret-taxonomy-public-api-promotion` entry.
+
+### `mnemonic-toolkit-cratesio-publish` — swap codec git deps for crates.io versions; publish toolkit to crates.io
+
+- **Surfaced:** 2026-05-16, post-v0.14.2 crates.io publish audit (the cycle that yanked the vulnerable mnemonic-gui v0.3.0/v0.3.1 + published md-codec v0.33.1 + md-cli v0.5.2).
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml` (lines 20-22: `ms-codec` / `mk-codec` / `md-codec` are all `{ git = ..., tag = ... }`); the codec crate names already exist on crates.io (`ms-codec` v0.1.3, `mk-codec` v0.3.0, `md-codec` v0.33.1).
+- **What:** `mnemonic-toolkit` cannot currently be published to crates.io because its three codec dependencies (`ms-codec`, `mk-codec`, `md-codec`) are git-only deps. crates.io's publish rules require version-or-version+git/path deps; pure-git deps are forbidden in published crates. The codec siblings are already on crates.io at versions that satisfy or supersede the toolkit's git pins:
+   - `ms-codec`: toolkit pins git@v0.1.3; crates.io has v0.1.3 (✓ aligned)
+   - `mk-codec`: toolkit pins git@v0.2.1; crates.io has v0.3.0 (newer — likely breaking; needs audit)
+   - `md-codec`: toolkit pins git@v0.16.1; crates.io has v0.33.1 (significantly newer — multiple breaking minors; needs substantial audit)
+
+   Work: bump toolkit's codec deps from git to crates.io versions in lockstep with whatever code changes those minor-bumps require, then `cargo publish --dry-run` and `cargo publish`. Once toolkit is on crates.io, `mnemonic-gui` can drop its git dep too (see `mnemonic-gui-cratesio-publish` companion).
+- **Why deferred:** Significant lift — bumping `md-codec` from v0.16.1 to v0.33.1 is 17 minor versions of API drift to audit. Currently working around via the constellation's `install.sh` script (`cratesio=no` for toolkit). Only matters for users running `cargo install mnemonic-toolkit` directly (without `--git`); install-script users + GUI consumers (who pull via the script-managed git+tag path) are unaffected.
+- **Status:** `open`
+- **Tier:** `v1+ / nice-to-have`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` companion entry `mnemonic-gui-cratesio-publish` (blocked by this).
