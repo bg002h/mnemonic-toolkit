@@ -306,6 +306,138 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.17.0] — 2026-05-16
+
+### Added — SPEC §6.10 v2-cycle extensions to `gui-schema` JSON
+
+Schema `version` bumps `2 → 3`. v2 cycle extensions to the SPEC §6.10
+conditional-applicability projection landed in v0.16.0:
+
+- **Predicate AST (§6.10.2)** gains three new tagged-union kinds:
+  `slot_count_eq` / `slot_count_gte` / `slot_count_lte`, each carrying
+  a `value: N` payload. Predicate semantics: the form's total slot
+  count (= `FormState::slot_count()` on the GUI side, exposed in v2)
+  compared to literal N. Predicate-machinery only at this release —
+  no v0.17 emitted rule consumes them; consumers exist for future
+  rule additions per the §6.10.7 closing list (rows 9/10/11 deferred
+  pending a dropdown-option-disable Effect grammar).
+
+- **Effect Visibility (§6.10.3)** gains the `pin_value` variant with
+  a tagged-object wire shape:
+    `{"visibility": {"pin_value": {"value": <JSON>}}}`.
+  Unlike `hidden`/`disabled` (suppress emission), the GUI emits
+  `--name <V>` using the pinned value V regardless of any pre-pin
+  user-typed value, per the §6.10.4 emission-mapping table.
+  Closes the v1-cycle DEFERRED row 12 entry in §6.10.7
+  (`DESCRIPTOR_WITH_NONZERO_ACCOUNT` → `--account → pin_value(0)`).
+
+- **Per-subcommand `meta` block (§6.10.8 — NEW)** with initial
+  `template_groups: { single_sig, multisig }` field. Emitted for
+  subcommands that consume `--template` (bundle / verify-bundle /
+  export-wallet / derive-child). Source-of-truth:
+  `CliTemplate::is_multisig()` in `crates/mnemonic-toolkit/
+  src/template.rs:46-56`. Empty meta serializes as omitted (no
+  `meta` key in JSON) so subcommands without meta surfaces remain
+  byte-identical with v2 docs.
+
+Wire-format details:
+
+- Bare-string Visibility shapes preserve their v2 wire layout
+  bit-for-bit (v3 back-compat per SPEC §6.10.6). The new
+  `pin_value` form uses the tagged-object shape only.
+- v2 consumers encountering a tagged-object `visibility` or a
+  `slot_count_*` predicate will fail to deserialize that specific
+  rule; the toolkit emits new-content rules at the END of each
+  subcommand's `conditional_rules` array so v2 consumers can
+  recover the prefix.
+- In practice the v3 consumer is `mnemonic-gui v0.6.0` shipped in
+  lockstep; v2-consumer back-compat is theoretical concern only
+  since the `pinned-upstream.toml` mechanism keeps consumer-version
+  in sync with producer-version.
+
+### Added — 1 new rule in `bundle.conditional_rules`
+
+- **Row 12 — `DESCRIPTOR_WITH_NONZERO_ACCOUNT`**: when `--descriptor`
+  is present, projects `--account → pin_value(0)`. The GUI coerces
+  any nonzero user-typed account value to 0 and emits
+  `--account 0` regardless of widget input, mirroring the CLI's
+  byte-exact rejection at `bundle.rs::mode_text::
+  DESCRIPTOR_WITH_NONZERO_ACCOUNT`.
+
+Existing rules (descriptor mutex, single-sig template
+disable-pairs, etc.) ship unchanged.
+
+### Changed
+
+- `crates/mnemonic-toolkit/src/cmd/gui_schema.rs`:
+  - `Schema.version`: `2 → 3`.
+  - `Predicate` enum: 3 new variants (`SlotCountEq`,
+    `SlotCountGte`, `SlotCountLte`), all `#[allow(dead_code)]`.
+  - `VisibilityProjection` enum: new `PinValue { value:
+    serde_json::Value }` variant. **Dropped `Copy` derive**
+    (Value isn't Copy). Manual `Serialize` impl preserves
+    bare-string shape for unit variants; emits tagged-object for
+    PinValue.
+  - `Subcommand` struct: new `meta: BTreeMap<String,
+    serde_json::Value>` field, omitted from JSON when empty via
+    `#[serde(skip_serializing_if = "BTreeMap::is_empty")]`.
+  - New helpers: `multisig_template_values()`,
+    `build_subcommand_meta(name)`.
+
+### SPEC patch
+
+- `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10 extended with
+  v0.6-cycle banner (preamble); §6.10.2 (slot_count predicates);
+  §6.10.3 (`pin_value` Visibility + wire-format details);
+  §6.10.4 (Visibility-to-emission mapping table);
+  §6.10.6 (v2→v3 bump prose + back-compat guarantee);
+  §6.10.7 (row 12 flipped DEFERRED → ENCODED v2; closing list
+  regrouped into "closed-in-v2" / "predicate-machinery-available"
+  / "still-deferred" partitions);
+  §6.10.8 — NEW — meta.template_groups documentation.
+
+### Companion
+
+`mnemonic-gui v0.6.0` (cross-repo lockstep) consumes the schema-v3
+extensions: mirrors the Predicate variant additions, mirrors the
+`pin_value` Visibility variant on the consumer side, retires the
+hand-coded `SINGLE_SIG_TEMPLATES: &[&str]` const in favor of
+reading `meta.template_groups.single_sig`, and adds `FormState::
+slot_count()` accessor. See `mnemonic-gui CHANGELOG.md [0.6.0]`.
+
+### Verification
+
+- `cargo test --offline --workspace`: all suites pass, 0 failures.
+- `cargo test --test cli_gui_schema_v3_extensions --offline`:
+  8 passed (new tests covering pin_value rule shape +
+  meta.template_groups per template-consuming subcommand).
+- Existing v1-era assertions (rule shapes, priority order,
+  Predicate kind enumeration) preserved as regression guards
+  with v3 folds for the new Visibility shape.
+
+### Closes FOLLOWUPS
+
+The cycle-close commit (master HEAD after v0.6.0 release) flips
+these toolkit-side entries from `open` to `resolved <SHA>`:
+
+- `gui-schema-template-groups-meta-field` (cross-repo) — meta
+  block source-of-truth shifts to toolkit; GUI retires
+  `SINGLE_SIG_TEMPLATES` const.
+- `gui-schema-numeric-flag-value-pin-effect` (cross-repo) —
+  `pin_value` Visibility variant + row 12 rule emission.
+- `gui-schema-runtime-conditional-projection` (cross-repo) —
+  partial: predicate-machinery (slot_count_*) shipped; full
+  encoding still deferred per §6.10.7 closing list.
+
+Also files NEW FOLLOWUPS this cycle:
+
+- `gui-schema-effect-on-dropdown-options-vocab` — dropdown-option-
+  disable Effect grammar needed to close §6.6 rows 9/10/11
+  encoding. Unblocked by this cycle's predicate-machinery.
+- `gui-schema-cross-slot-predicate-projection` — relational
+  predicate types (cross-slot equality, all-distinct) needed to
+  close §6.6 rows 8/13/14.
+
 ## mnemonic-toolkit [0.16.0] — 2026-05-16
 
 ### Added — SPEC §6.10 conditional-applicability projection in `gui-schema` JSON
