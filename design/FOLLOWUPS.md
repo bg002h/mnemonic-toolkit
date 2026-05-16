@@ -51,9 +51,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (P1 target — emit `conditional_rules` array, version bump 1→2); `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10 (P0 canonical home — Predicate AST + Effect + drift invariant); `mnemonic-gui/src/form/conditional.rs` (P2 — ~14 new rules); `mnemonic-gui/src/form/invocation.rs` (P3 — visibility gate); `mnemonic-gui/tests/gui_schema_conditional_drift.rs` (P4 — NEW drift gate); `mnemonic-gui/src/main.rs:197-211` (P5 — remove bad default seed).
 - **What:** Cross-repo mechanism + comprehensive rule coverage. Adds machine-readable `conditional_rules` to `mnemonic gui-schema` JSON; GUI's `assemble_argv` gains a visibility gate (Hidden + Disabled suppress emission, Required does not); drift gate test enforces parity between toolkit JSON and GUI hand-coded `conditional.rs`. v1 encodes ~17 enforceable visibility rules across `bundle`, `verify-bundle`, `export-wallet`, `convert`, `derive-child`. Runtime/slot-count-dependent rules deferred; see companion `gui-schema-runtime-conditional-projection`.
 - **Why deferred:** in-progress this cycle (toolkit v0.16.0 + mnemonic-gui v0.5.0 lockstep; `mnemonic-gui v0.4.3` cut first as scope-isolated v0.15.0 wire-format catchup per plan §4 prerequisite).
-- **Status:** `open` (in-progress this cycle)
+- **Status:** `resolved 519bcfc` — shipped at `mnemonic-toolkit v0.16.0` (2026-05-16). SPEC §6.10 added; gui_schema.rs JSON projection emitted (schema v2); 1001/1001 workspace tests green. Lockstep GUI release at `mnemonic-gui v0.5.0` (commit `7b7e07d`) ships the consumer side.
 - **Tier:** `cross-repo`
-- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-conditional-applicability-drift-fix`.
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-conditional-applicability-drift-fix` (resolved at GUI v0.5.0 commit `7b7e07d`).
 
 ### `gui-schema-runtime-conditional-projection` — project SPEC §6.6 slot-count-dependent + runtime rules into gui-schema JSON
 
