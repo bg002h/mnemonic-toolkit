@@ -306,6 +306,43 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.13.1] — 2026-05-15
+
+Patch: enumerate accepted values in `--help` output for `convert`,
+`bundle`, `verify-bundle`, `derive-child`, and `export-wallet`
+subcommands. User-reported gap: `mnemonic convert --from <FROM> --to
+<TO>` `--help` did not list the 13 accepted node types; the GUI
+dropdown was the only discoverable enumeration. Doc-comment-only
+patch — no flag behavior change, no manual updates required (mirror
+invariant gates flag presence, not help-text content).
+
+Affected flags:
+- `convert`: `--from`, `--to`, `--xpub-prefix`, `--electrum-version`,
+  `--electrum-language`, `--script-type`, `--path`. `--to` now also
+  uses `PossibleValuesParser` + `value_delimiter = ','` (previous
+  comma-separated parsing preserved via clap's `value_delimiter`).
+  `gui-schema` for `--to` now emits `kind: "dropdown"` (was `"text"`)
+  — a mirror improvement, not a contract break.
+- `bundle`: `--slot` 7-subkey grammar (phrase, entropy, xpub,
+  fingerprint, path, wif, xprv); empty `--passphrase`, `--json`,
+  `--no-engraving-card`, `--privacy-preserving`, `--self-check`,
+  `--threshold` descriptions filled in.
+- `verify-bundle`: `--passphrase`, `--ms1`, `--mk1`, `--md1`, `--json`
+  descriptions filled in.
+- `derive-child`: `--from` node tags (xprv, phrase); `--application`
+  full 9-app enumeration including SPEC §7 REFUSED set (dice, rsa,
+  rsa-gpg).
+- `export-wallet`: `--slot` 7-subkey grammar (mirrors `bundle`);
+  `--taproot-internal-key` two forms (`nums`, `@N`).
+
+Companion: `descriptor-mnemonic@md-cli-v0.5.2` filled the same gap on
+`md decode --json` and `md inspect --json` (the only `md` flag with an
+empty description before this patch).
+
+Mechanically: switched the multi-line enumerations to
+`verbatim_doc_comment` so clap preserves the aligned plain-text
+formatting (clap-derive collapses markdown bullets by default).
+
 ## mnemonic-toolkit [0.13.0] — 2026-05-14
 
 New feature: `mnemonic slip39` subcommand (`split` + `combine`
