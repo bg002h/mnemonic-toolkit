@@ -43,7 +43,8 @@
 //! filtered out of its own output.
 
 use crate::error::ToolkitError;
-use clap::{Args, Command};
+use crate::template::CliTemplate;
+use clap::{Args, Command, ValueEnum};
 use serde::Serialize;
 use std::io::Write;
 
@@ -62,6 +63,76 @@ struct Subcommand {
     name: String,
     flags: Vec<Flag>,
     positionals: Vec<Positional>,
+    /// SPEC §6.10 conditional-applicability projection. Empty array for
+    /// subcommands without per-frame visibility constraints. Always present
+    /// (never omitted) so v2 consumers can rely on the field's presence.
+    conditional_rules: Vec<ConditionalRule>,
+}
+
+/// SPEC §6.10 ConditionalRule projection. See SPEC §6.10.1–§6.10.7.
+#[derive(Serialize, Debug)]
+struct ConditionalRule {
+    rationale: String,
+    spec_ref: String,
+    when: Predicate,
+    effect: Effect,
+}
+
+/// SPEC §6.10.2 Predicate AST. Tagged JSON union via serde's internal tag.
+#[derive(Serialize, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum Predicate {
+    FlagPresent {
+        flag: String,
+    },
+    DropdownValueIn {
+        flag: String,
+        values: Vec<String>,
+    },
+    #[allow(dead_code)]
+    CompositeNodeIs {
+        flag: String,
+        node: String,
+    },
+    #[allow(dead_code)]
+    PositionalPresent {
+        index: usize,
+    },
+    #[allow(dead_code)]
+    AllOf {
+        predicates: Vec<Predicate>,
+    },
+    #[allow(dead_code)]
+    AnyOf {
+        predicates: Vec<Predicate>,
+    },
+    Not {
+        predicate: Box<Predicate>,
+    },
+}
+
+/// SPEC §6.10.3 Effect.
+#[derive(Serialize, Debug)]
+struct Effect {
+    flag: String,
+    visibility: VisibilityProjection,
+}
+
+/// SPEC §6.10.3 VisibilityProjection. `Visible` is the implicit default and
+/// never appears as an Effect value.
+///
+/// v1 cycle uses `Disabled` exclusively to match the existing GUI hand-coding
+/// pattern (`mnemonic-gui/src/form/conditional.rs` uses `Visibility::Disabled`
+/// for both structurally-inapplicable and user-mutex cases). `Hidden` is
+/// reserved for a future cycle that distinguishes the two UX classes per
+/// SPEC §6.10.3's "Hidden = structurally non-applicable" framing.
+#[derive(Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum VisibilityProjection {
+    #[allow(dead_code)]
+    Hidden,
+    Disabled,
+    Required,
 }
 
 #[derive(Serialize, Debug)]
@@ -77,6 +148,568 @@ struct Positional {
     name: String,
     required: bool,
     repeating: bool,
+}
+
+/// SPEC §6.10.7-derived single-sig template list. Derived from
+/// `CliTemplate::is_multisig()` (source-of-truth at `template.rs:46-56`) so the
+/// projection stays in sync with template-enum additions automatically. Used
+/// by `dropdown_value_in("--template", SINGLE_SIG)` predicates in
+/// bundle/verify-bundle/export-wallet rules.
+fn single_sig_template_values() -> Vec<String> {
+    CliTemplate::value_variants()
+        .iter()
+        .filter(|t| !t.is_multisig())
+        .filter_map(|t| t.to_possible_value().map(|p| p.get_name().to_string()))
+        .collect()
+}
+
+/// SPEC §6.10.7-derived taproot multi-leaf template list. Identifies templates
+/// that REQUIRE a separate internal key (`--taproot-internal-key`) when
+/// emitting export-wallet vendor surfaces. Hardcoded here; future template
+/// additions in this class should land in lockstep via Template enum +
+/// `is_taproot_with_internal_key()` predicate.
+fn taproot_internal_key_template_values() -> Vec<String> {
+    vec!["tr-multi-a".to_string(), "tr-sortedmulti-a".to_string()]
+}
+
+/// SPEC §6.10 — hand-encoded `conditional_rules` per subcommand. Returns the
+/// rules in priority-descending order per target flag (§6.10.4 first-rule-wins
+/// requires this). Subcommands without rules return an empty Vec.
+fn build_subcommand_conditional_rules(name: &str) -> Vec<ConditionalRule> {
+    match name {
+        "bundle" => bundle_conditional_rules(),
+        "verify-bundle" => verify_bundle_conditional_rules(),
+        "export-wallet" => export_wallet_conditional_rules(),
+        "convert" => convert_conditional_rules(),
+        "derive-child" => derive_child_conditional_rules(),
+        _ => Vec::new(),
+    }
+}
+
+fn bundle_conditional_rules() -> Vec<ConditionalRule> {
+    let single_sig = single_sig_template_values();
+    vec![
+        // --template Required-unless-descriptor (existing GUI encoding).
+        // SPEC §6.6 "Required first-class flag" framing; cmd/bundle.rs:25
+        // clap-derive `required_unless_present_any`.
+        ConditionalRule {
+            rationale: "--template is required unless --descriptor or \
+                        --descriptor-file is supplied (bundle's primary-mode \
+                        selection invariant)."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 3 (negative form); cmd/bundle.rs clap-derive".to_string(),
+            when: Predicate::Not {
+                predicate: Box::new(Predicate::AnyOf {
+                    predicates: vec![
+                        Predicate::FlagPresent {
+                            flag: "--descriptor".to_string(),
+                        },
+                        Predicate::FlagPresent {
+                            flag: "--descriptor-file".to_string(),
+                        },
+                    ],
+                }),
+            },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::Required,
+            },
+        },
+        // --descriptor ↔ --descriptor-file mutex (existing GUI encoding;
+        // cmd/bundle.rs::mode_text::DESCRIPTOR_AND_DESCRIPTOR_FILE).
+        ConditionalRule {
+            rationale: "--descriptor and --descriptor-file are mutually exclusive."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 2 sibling; bundle.rs::mode_text::\
+                       DESCRIPTOR_AND_DESCRIPTOR_FILE"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor-file".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--descriptor and --descriptor-file are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 2 sibling; bundle.rs::mode_text::\
+                       DESCRIPTOR_AND_DESCRIPTOR_FILE"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor-file".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --passphrase ↔ --passphrase-stdin mutex (existing GUI encoding;
+        // cmd/bundle.rs:51 conflicts_with).
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive \
+                        (secret-source selection)."
+                .to_string(),
+            spec_ref: "cmd/bundle.rs:51 clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase-stdin".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/bundle.rs:51 clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase-stdin".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --template disabled when --descriptor present (NEW v0.16.0;
+        // cmd/bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE).
+        ConditionalRule {
+            rationale: "--template is incompatible with --descriptor; descriptor \
+                        passthrough mode supplies its own wallet structure."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 2; bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --threshold disabled when --descriptor present (NEW v0.16.0;
+        // priority-1 of two --threshold rules — more-specific predicate).
+        ConditionalRule {
+            rationale: "--threshold is incompatible with --descriptor; descriptor \
+                        encodes its own threshold."
+                .to_string(),
+            spec_ref: "bundle.rs::mode_text::DESCRIPTOR_WITH_THRESHOLD".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--threshold".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --threshold disabled when template is single-sig (NEW v0.16.0;
+        // priority-2 of two --threshold rules — less-specific predicate).
+        ConditionalRule {
+            rationale: "--threshold is meaningful only with a multisig --template; \
+                        single-sig templates ignore threshold."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row T1; bundle.rs::mode_text::THRESHOLD_WITHOUT_MULTISIG"
+                .to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: single_sig.clone(),
+            },
+            effect: Effect {
+                flag: "--threshold".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --multisig-path-family disabled when --descriptor present (NEW v0.16.0;
+        // priority-1 of two --multisig-path-family rules).
+        ConditionalRule {
+            rationale: "--multisig-path-family is incompatible with --descriptor; \
+                        descriptor encodes paths directly via @i/path syntax."
+                .to_string(),
+            spec_ref: "bundle.rs::mode_text::DESCRIPTOR_WITH_PATH_FAMILY".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--multisig-path-family".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --multisig-path-family disabled when template is single-sig (NEW v0.16.0;
+        // priority-2 of two rules).
+        ConditionalRule {
+            rationale: "--multisig-path-family is meaningful only with a multisig \
+                        --template; single-sig templates ignore it."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row T2; bundle.rs::mode_text::PATH_FAMILY_WITHOUT_MULTISIG"
+                .to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: single_sig,
+            },
+            effect: Effect {
+                flag: "--multisig-path-family".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+    ]
+}
+
+fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
+    let single_sig = single_sig_template_values();
+    vec![
+        // --template Required-unless-descriptor (existing GUI encoding).
+        ConditionalRule {
+            rationale: "--template is required unless --descriptor or \
+                        --descriptor-file is supplied."
+                .to_string(),
+            spec_ref: "SPEC §6.7; cmd/verify_bundle.rs clap-derive".to_string(),
+            when: Predicate::Not {
+                predicate: Box::new(Predicate::AnyOf {
+                    predicates: vec![
+                        Predicate::FlagPresent {
+                            flag: "--descriptor".to_string(),
+                        },
+                        Predicate::FlagPresent {
+                            flag: "--descriptor-file".to_string(),
+                        },
+                    ],
+                }),
+            },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::Required,
+            },
+        },
+        // --descriptor ↔ --descriptor-file mutex (existing).
+        ConditionalRule {
+            rationale: "--descriptor and --descriptor-file are mutually exclusive."
+                .to_string(),
+            spec_ref: "cmd/verify_bundle.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor-file".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--descriptor and --descriptor-file are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/verify_bundle.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor-file".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --bundle-json XOR (--ms1, --mk1, --md1) (existing GUI encoding).
+        ConditionalRule {
+            rationale: "--bundle-json is mutually exclusive with the explicit \
+                        --ms1/--mk1/--md1 triplet; supplies the same data via \
+                        JSON envelope."
+                .to_string(),
+            spec_ref: "SPEC §6.7 v0.4.3 amendment; cmd/verify_bundle.rs:67 \
+                       conflicts_with_all"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--bundle-json".to_string(),
+            },
+            effect: Effect {
+                flag: "--ms1".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--bundle-json is mutually exclusive with --mk1."
+                .to_string(),
+            spec_ref: "SPEC §6.7 v0.4.3 amendment; cmd/verify_bundle.rs:67 \
+                       conflicts_with_all"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--bundle-json".to_string(),
+            },
+            effect: Effect {
+                flag: "--mk1".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--bundle-json is mutually exclusive with --md1."
+                .to_string(),
+            spec_ref: "SPEC §6.7 v0.4.3 amendment; cmd/verify_bundle.rs:67 \
+                       conflicts_with_all"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--bundle-json".to_string(),
+            },
+            effect: Effect {
+                flag: "--md1".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --passphrase ↔ --passphrase-stdin mutex (existing).
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
+                .to_string(),
+            spec_ref: "cmd/verify_bundle.rs:51 clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase-stdin".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/verify_bundle.rs:51 clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase-stdin".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --threshold disabled when template is single-sig (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--threshold is meaningful only with a multisig --template."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row T1 (mirror for verify-bundle)".to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: single_sig,
+            },
+            effect: Effect {
+                flag: "--threshold".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --template disabled when --descriptor present (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--template is incompatible with --descriptor."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 2 (mirror); cmd/verify_bundle.rs \
+                       conflicts_with"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+    ]
+}
+
+fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
+    let single_sig = single_sig_template_values();
+    let tr_internal_key = taproot_internal_key_template_values();
+    vec![
+        // --template ↔ --descriptor mutex (existing GUI encoding).
+        ConditionalRule {
+            rationale: "--template and --descriptor are mutually exclusive in \
+                        export-wallet (mirrors bundle)."
+                .to_string(),
+            spec_ref: "cmd/export_wallet.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--template".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--template and --descriptor are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/export_wallet.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --taproot-internal-key required when template ∈ tr-{multi-a, sortedmulti-a}
+        // (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--taproot-internal-key is required for taproot multi-leaf \
+                        templates (tr-multi-a / tr-sortedmulti-a)."
+                .to_string(),
+            spec_ref: "cmd/export_wallet.rs clap-derive required_if_eq_any".to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: tr_internal_key.clone(),
+            },
+            effect: Effect {
+                flag: "--taproot-internal-key".to_string(),
+                visibility: VisibilityProjection::Required,
+            },
+        },
+        // --taproot-internal-key disabled when template ∉ tr-{multi-a, sortedmulti-a}
+        // (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--taproot-internal-key is meaningful only for taproot \
+                        multi-leaf templates."
+                .to_string(),
+            spec_ref: "cmd/export_wallet.rs clap-derive".to_string(),
+            when: Predicate::Not {
+                predicate: Box::new(Predicate::DropdownValueIn {
+                    flag: "--template".to_string(),
+                    values: tr_internal_key,
+                }),
+            },
+            effect: Effect {
+                flag: "--taproot-internal-key".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --threshold disabled when template is single-sig (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--threshold is meaningful only with a multisig --template."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row T1 (mirror for export-wallet)".to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: single_sig.clone(),
+            },
+            effect: Effect {
+                flag: "--threshold".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --multisig-path-family disabled when template is single-sig (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--multisig-path-family is meaningful only with a multisig \
+                        --template."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row T2 (mirror for export-wallet)".to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--template".to_string(),
+                values: single_sig,
+            },
+            effect: Effect {
+                flag: "--multisig-path-family".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+    ]
+}
+
+fn convert_conditional_rules() -> Vec<ConditionalRule> {
+    vec![
+        // --passphrase ↔ --passphrase-stdin mutex (existing).
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
+                .to_string(),
+            spec_ref: "cmd/convert.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase-stdin".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/convert.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase-stdin".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --bip38-passphrase ↔ --bip38-passphrase-stdin mutex (existing).
+        ConditionalRule {
+            rationale: "--bip38-passphrase and --bip38-passphrase-stdin are \
+                        mutually exclusive."
+                .to_string(),
+            spec_ref: "cmd/convert.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--bip38-passphrase".to_string(),
+            },
+            effect: Effect {
+                flag: "--bip38-passphrase-stdin".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--bip38-passphrase and --bip38-passphrase-stdin are \
+                        mutually exclusive (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/convert.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--bip38-passphrase-stdin".to_string(),
+            },
+            effect: Effect {
+                flag: "--bip38-passphrase".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+    ]
+}
+
+fn derive_child_conditional_rules() -> Vec<ConditionalRule> {
+    vec![
+        // --passphrase ↔ --passphrase-stdin mutex (existing).
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
+                .to_string(),
+            spec_ref: "cmd/derive_child.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase-stdin".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive \
+                        (symmetric direction)."
+                .to_string(),
+            spec_ref: "cmd/derive_child.rs clap-derive conflicts_with".to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--passphrase-stdin".to_string(),
+            },
+            effect: Effect {
+                flag: "--passphrase".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --dice-sides required when --application == "dice" (NEW v0.16.0).
+        ConditionalRule {
+            rationale: "--dice-sides is required when --application is set to dice."
+                .to_string(),
+            spec_ref: "cmd/derive_child.rs clap-derive required_if_eq".to_string(),
+            when: Predicate::DropdownValueIn {
+                flag: "--application".to_string(),
+                values: vec!["dice".to_string()],
+            },
+            effect: Effect {
+                flag: "--dice-sides".to_string(),
+                visibility: VisibilityProjection::Required,
+            },
+        },
+    ]
 }
 
 /// Build the SPEC §7 schema from a clap `Command` tree.
@@ -109,10 +742,13 @@ fn build_schema(cmd: &Command) -> Schema {
         } else {
             for ss in nested {
                 let flat = build_subcommand(ss);
+                let flat_name = format!("{}-{}", s.get_name(), ss.get_name());
+                let conditional_rules = build_subcommand_conditional_rules(&flat_name);
                 subs.push(Subcommand {
-                    name: format!("{}-{}", s.get_name(), ss.get_name()),
+                    name: flat_name,
                     flags: flat.flags,
                     positionals: flat.positionals,
+                    conditional_rules,
                 });
             }
         }
@@ -122,7 +758,7 @@ fn build_schema(cmd: &Command) -> Schema {
     subs.sort_by(|a, b| a.name.cmp(&b.name));
 
     Schema {
-        version: 1,
+        version: 2,
         cli: "mnemonic".to_string(),
         subcommands: subs,
     }
@@ -164,10 +800,13 @@ fn build_subcommand(sub: &Command) -> Subcommand {
     // Deterministic ordering: flags by long name, positionals by declaration order.
     flags.sort_by(|a, b| a.name.cmp(&b.name));
 
+    let conditional_rules = build_subcommand_conditional_rules(sub.get_name());
+
     Subcommand {
         name: sub.get_name().to_string(),
         flags,
         positionals,
+        conditional_rules,
     }
 }
 
