@@ -1440,3 +1440,79 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`.
 - **Tier:** `v1+ / cross-repo`
 - **Companion:** intended companion entries in `bg002h/mnemonic-key/design/FOLLOWUPS.md` and `bg002h/mnemonic-gui/FOLLOWUPS.md` at the matching short-id; both currently missing (file with this entry at next cross-repo cycle).
+
+### `secret-taxonomy-public-api-promotion` — promote `SECRET_*` to public toolkit crate API; retire `mnemonic-gui` build.rs source-walker
+
+- **Surfaced:** 2026-05-16, during the `mnemonic-gui` v0.3.3 emergency security fix (closed at sibling `bg002h/mnemonic-gui` commit `6851d1b`). Architect-vetted in this session — see "Suggested fix" below.
+- **Where:** New module `crates/mnemonic-toolkit/src/secret_taxonomy.rs` (proposed). Existing private modules at `crates/mnemonic-toolkit/src/cmd/convert.rs::NodeType::is_secret_bearing` (line 85) and `crates/mnemonic-toolkit/src/slot_input.rs::SlotSubkey::is_secret_bearing` (line 60). `crates/mnemonic-toolkit/src/lib.rs` (currently exposes `final_word`/`mlock`/`seed_xor`/`slip39`; would add `pub mod secret_taxonomy`).
+- **What:** The `mnemonic-gui` repo's `build.rs` parses this toolkit's private `cmd/convert.rs` + `slot_input.rs` via `syn::parse_file` to extract the `is_secret_bearing()` match-arm sets and codegen `SECRET_NODE_TYPES` + `SECRET_SLOT_SUBKEYS` constants. The codegen is the GUI's workaround for the fact that these security-class taxonomies live in *private* toolkit modules (neither is `pub mod` in `main.rs` or re-exported from `lib.rs`), so the GUI has no versioned, addressable contract to depend on. Every fragility of the codegen path (cargo install sandbox having no adjacent toolkit checkout → empty `&[]` stub fallback → silent disable of `persistence::redact_for_persistence` → BIP-39 phrases leaking to `~/.config/mnemonic-gui/state.json` in plaintext; HIGH-severity bug in GUI v0.3.0..v0.3.2) descends from that contract gap. The GUI v0.3.3 tactical patch (committed canonical fallback in `build.rs` + drift gate) pins a second source of truth that must be manually kept in sync; the root issue remains.
+- **Why deferred:** GUI v0.3.3 tactical fix is shipped + verified + released. Long-term fix requires a coordinated minor bump on both sides (toolkit `v0.14.0` + GUI `v0.4.0` lockstep). Filed here as the durable architectural cleanup; aim is the v0.4.x mnemonic-gui cycle.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui/design/FOLLOWUPS.md` companion entry `secret-taxonomy-public-api-consumption`; both repos cite each other.
+- **Related memory:** `feedback_build_rs_stub_fallback_security_audit` (the pattern-class lesson) + `feedback_default_cargo_test_runs_sibling_dependent_tests` (same install-path-vs-CI-path divergence trap, opposite direction).
+
+#### Suggested fix (architect-vetted, 2026-05-16)
+
+##### Root structural issue
+
+The GUI treats two safety-critical security predicates as **derivable from upstream source text at the GUI's build time**, with a degradation ladder that ends in a silent fallback. The taxonomy is owned by the toolkit binary's *private* modules — the GUI has no versioned, addressable contract to depend on. Codegen-from-source is the workaround for the missing contract; every fragility descends from that gap. The v0.3.3 patch added a second source of truth (committed `CANONICAL_FALLBACK_*` arrays) but did not fix the contract gap.
+
+##### Recommended option: A — promote `SECRET_*` to public toolkit crate API
+
+Toolkit exports `pub const SECRET_NODE_TYPES: &[&str]` and `pub const SECRET_SLOT_SUBKEYS: &[&str]` (string slices, **not** enum re-exports — avoids leaking enum semver surface) from a new `pub mod secret_taxonomy` re-exported by `lib.rs`. GUI depends on `mnemonic-toolkit` as a regular git dep and `use mnemonic_toolkit::secret_taxonomy::*`. No build.rs codegen.
+
+**Why A wins (vs. the four alternatives evaluated):**
+- **Eliminates the empty-array failure mode by construction.** GUI compile fails outright if the toolkit lib does not export the consts; no degradation ladder, no silent fallback.
+- **`cargo install --git` works with zero ceremony.** Cargo's resolver pulls the toolkit lib through the normal dependency graph; no env vars, no clone scripts, no source-walker.
+- **No load-bearing network call at install time** (unlike Option B: auto-clone by default).
+- **Schema-mirror invariant becomes a stronger version-pin gate.** The drift question becomes "GUI's pinned `mnemonic-toolkit` git tag must include the secret-taxonomy module" — easier to enforce and reason about than parse-and-compare against private impl shape.
+
+Alternatives considered + rejected: B (auto-clone always-on; load-bearing network), C (strict-mode build.rs; breaks `cargo install` for everyone), D (keep v0.3.3 tactical patch; preserves the codegen architecture + second source of truth), E (runtime JSON manifest via `mnemonic secret-taxonomy --json`; reintroduces silent-failure on a different axis).
+
+##### Toolkit-side migration (v0.14.0)
+
+1. New file `crates/mnemonic-toolkit/src/secret_taxonomy.rs`:
+   ```rust
+   //! Public secret-class taxonomy. Source of truth for the
+   //! `is_secret_bearing()` predicates on `NodeType` / `SlotSubkey`,
+   //! exposed for downstream tools (e.g., mnemonic-gui's persistence
+   //! redaction) that cannot import the private enum modules.
+   //!
+   //! Drift-gated: see unit tests in `cmd/convert.rs` and `slot_input.rs`
+   //! that assert `Self::as_str()` of every secret-bearing variant ∈
+   //! these slices.
+
+   pub const SECRET_NODE_TYPES: &[&str] = &[
+       "phrase", "entropy", "xprv", "wif", "ms1", "bip38", "electrum-phrase",
+   ];
+
+   pub const SECRET_SLOT_SUBKEYS: &[&str] = &["phrase", "entropy", "xprv", "wif"];
+   ```
+2. `crates/mnemonic-toolkit/src/lib.rs`: add `pub mod secret_taxonomy;`.
+3. In `cmd/convert.rs::NodeType::is_secret_bearing` and `slot_input.rs::SlotSubkey::is_secret_bearing`, add `#[cfg(test)]` unit tests that walk every variant `V` where `V.is_secret_bearing() == true` and assert `secret_taxonomy::SECRET_*_TYPES.contains(&V.as_str())`. This makes the in-tree predicate and the public constants a single source of truth, enforced at toolkit test time.
+4. Update SPEC + manual chapter; minor bump to `v0.14.0` (new pub surface; pre-1.0 0.X-axis bump per repo policy).
+
+##### GUI-side migration (v0.4.0)
+
+1. `Cargo.toml`: add `mnemonic-toolkit = { git = "...", tag = "mnemonic-toolkit-v0.14.0" }` under `[dependencies]`.
+2. **Delete** `build.rs` entirely (and the `[build-dependencies]` block).
+3. `src/secrets.rs`: replace `include!(concat!(env!("OUT_DIR"), "/secrets_generated.rs"));` with `use mnemonic_toolkit::secret_taxonomy::{SECRET_NODE_TYPES, SECRET_SLOT_SUBKEYS};` (and `pub use` for crate-internal callers).
+4. Delete `tests/secrets_canonical_fallback.rs`. Add a one-test backstop `tests/secret_taxonomy_pin.rs` asserting non-empty + minimum-membership (mirrors the v0.3.3 always-on guard).
+5. `pinned-upstream.toml`: tag becomes documentary; load-bearing version pin lives in `Cargo.toml`.
+6. `.github/workflows/schema-mirror.yml`: remove the `cargo-test-secrets-canonical-fallback` step; keep the flag-name parity job.
+7. `install.sh`: no changes required.
+8. GUI minor bump to `v0.4.0`.
+
+##### One-cycle overlap (recommended)
+
+In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a compile-time assertion that they equal `mnemonic_toolkit::secret_taxonomy::SECRET_*`. Drop the fallback in `v0.5.0`. This catches a malformed-upstream-tag class of regression during the cycle where contributors still expect the old contract.
+
+##### Non-obvious risks
+
+1. **Toolkit dep tree bloats GUI compile** (bitcoin, miniscript, bip39, clap, etc. — none called from `secret_taxonomy`, all linked into the GUI's cargo graph; ~30-60s cold compile cost). Mitigation: feature-gate heavy modules under a `cli` default-on feature; GUI depends with `default-features = false, features = ["secret-taxonomy"]`. Optional; can defer if compile cost is acceptable.
+2. **Toolkit becomes a load-bearing library API surface.** Renaming or relocating `secret_taxonomy` is now a semver event. Document in `lib.rs` and FOLLOWUPS.
+3. **GUI git-dep pin must stay current** with toolkit's taxonomy releases. If `mnemonic-toolkit-v0.15` adds `ElectrumEntropy` as secret-bearing but GUI still pins `v0.14`, GUI silently lacks the new class. Mitigation: the CI flag-name schema-mirror gate (already running against the live `mnemonic` binary) catches the toolkit-side widening; add a parallel gate that asserts the GUI's pinned-toolkit `SECRET_*` equals the locally-installed `mnemonic`'s reported taxonomy (a future `mnemonic gui-schema` extension can emit it).
+4. **`pub const &[&str]` vs `pub use SECRET_NODE_TYPES`.** Resist re-exporting `NodeType` / `SlotSubkey` enums — string slices are a far smaller semver surface and decouple GUI compile from internal enum shape (which evolves with every new node type).
+5. **`mnemonic-toolkit` lib platform-compat audit.** Verify the lib builds cleanly on GUI's full platform matrix (macOS, Windows, Linux × x86_64 + aarch64) before the v0.14.0 release; `mlock.rs` uses `libc` and may need cfg-gating audit (already in place but should be revisited).
+6. **One-shot lockstep required.** The toolkit v0.14.0 tag and the GUI v0.4.0 PR must be planned together (mirroring the manual-gui v1.0 lockstep pattern). Surface in both repos' FOLLOWUPS with `Companion:` lines per repo convention in `CLAUDE.md`.
