@@ -15,11 +15,11 @@ mk1qp nd2wp pha4q c2sv8 g58zq cpswt 0zfsz a3lk2 37tx7 xeg8e
 vycay wffzk 5r3hc ma55t 0u0d8 3tguz
 
 # md1 (wallet policy)
-md1zsx9cpqqqpm6jzzqqvqz6q4pk6ujp2sgjgspzlz05qcqz4ph4vvymc87ksfszyh4
-md1zsx9cpqf2uet68wj6rc0ql6de2h4zdgtyk7950yzqwwt76sv9gywukw8jte47mee
-md1zsx9cpq58g58zqcpswt0zfsza3lk237tx7xeg8evycaywffzk5qumlqgarplmgs9
+md1fqn8upqpqpm6jzzqqvqpdq2smdwfq4gyfygq30386qvqp2sm6kyg2hlv7p2s3hx7
+md1fqn8upqv4wv4arhfdpu8s0axu4t63x59jt0z68jpq889ldgxz5qwe3va3zkyv70a
+md1fqn8upqkr52r3qvqc89h3ycpwclm9gl9n0rv5rukzvwj8y53t2qyhdtjfzvjl3tw
 
-md1zs-x9cpq-qqpm6-jzzqq-vqz6q-4pk6u-jp2sg-jgspz-lz05q-cqz4p-h4vvy-mc87k-sfszy-h4
-md1zs-x9cpq-f2uet-68wj6-rc0ql-6de2h-4zdgt-yk795-0yzqw-wt76s-v9gyw-ukw8j-te47m-ee
-md1zs-x9cpq-58g58-zqcps-wt0zf-sza3l-k237t-x7xeg-8evyc-aywff-zk5qu-mlqga-rplmg-s9
+md1fq-n8upq-pqpm6-jzzqq-vqpdq-2smdw-fq4gy-fygq3-0386q-vqp2s-m6kyg-2hlv7-p2s3h-x7
+md1fq-n8upq-v4wv4-arhfd-pu8s0-axu4t-63x59-jt0z6-8jpq8-89ldg-xz5qw-e3va3-zkyv7-0a
+md1fq-n8upq-kr52r-3qvqc-89h3y-cpwcl-m9gl9-n0rv5-rukzv-wj8y5-3t2qy-hdtjf-zvjl3-tw
 

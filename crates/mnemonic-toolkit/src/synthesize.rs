@@ -916,6 +916,58 @@ mod tests {
         assert_eq!(&decoded.policy_id_stubs[0], &pid.as_bytes()[..4]);
     }
 
+    /// Phase 3 pin (md-codec catchup v0.16.1 → v0.33.1): a 2-of-3
+    /// `WshSortedMulti` bundle round-trips through `chunk::split` +
+    /// `chunk::reassemble` and the reassembled inner `Tag::SortedMulti`
+    /// node carries `Body::MultiKeys { k, indices: [0, 1, 2] }` — the v0.30
+    /// Phase-C wire shape — NOT the pre-v0.30 `Body::Variable` shape.
+    /// Guards against regression to the old per-leaf `Tag::PkK` emission
+    /// that produces v0.30-incompatible bytes.
+    #[test]
+    fn multisig_wsh_sortedmulti_2_of_3_round_trips_v0_30_body_multikeys() {
+        use bip39::Mnemonic;
+        use md_codec::tree::{Body, Node};
+        use md_codec::tag::Tag;
+
+        let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let bundle = synthesize_multisig_full(
+            &m,
+            "",
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            3,
+            0,
+            MultisigPathFamily::Bip87,
+            false,
+        )
+        .unwrap();
+
+        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
+        assert!(desc.is_wallet_policy(), "wallet-policy expected post-roundtrip");
+        assert!(matches!(desc.tree.tag, Tag::Wsh), "root must be Wsh");
+
+        let inner: &Node = match &desc.tree.body {
+            Body::Children(kids) => &kids[0],
+            other => panic!("Wsh body must be Children, got {other:?}"),
+        };
+        assert!(matches!(inner.tag, Tag::SortedMulti));
+        match &inner.body {
+            Body::MultiKeys { k, indices } => {
+                assert_eq!(*k, 2, "2-of-3 threshold");
+                assert_eq!(indices, &vec![0u8, 1, 2], "indices must round-trip as 0..n");
+            }
+            other => panic!(
+                "v0.30 SPEC §4 requires SortedMulti → Body::MultiKeys, got {other:?}"
+            ),
+        }
+
+        // Cross-binding still holds.
+        let pid = md_codec::compute_wallet_policy_id(&desc).unwrap();
+        assert!(!pid.as_bytes().is_empty());
+    }
+
     #[test]
     fn multisig_watch_only_distinct_xpubs_emits_distinct_card_sets() {
         // Build 2 cosigners from 2 different seeds (different fp/xpub).

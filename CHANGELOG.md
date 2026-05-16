@@ -306,6 +306,89 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.15.0] — 2026-05-16
+
+### Breaking — `md-codec` catchup v0.16.1 → v0.33.1; `mk-codec` catchup v0.2.1 → v0.3.0
+
+Unblocks `cargo publish`: both sibling-codec deps swap from git tags
+to crates.io versions. Tracking issue + plan:
+`design/PLAN_md_codec_catchup_v0_15.md`.
+
+#### Wire-format clean break (md-codec v0.30+)
+
+The md1 wire payload changes shape — pre-v0.15 toolkit-emitted md1
+strings are forward-incompatible. v0.15 md1 decoders return
+`Error::WireVersionMismatch { got: 1 }` against any md1 emitted by
+the toolkit at v0.14.x or earlier. **Engraved bundles emitted by
+v0.14.x or earlier are NOT readable by v0.15+** — they remain
+self-contained (the ms1 + mk1 + pre-v0.30 md1 cards verify against
+each other under a pre-v0.15 binary), but the toolkit's verify-bundle
+will refuse a v0.30 wire-version mismatch.
+
+This is the *intended* forward-incompatibility contract for
+SPEC §6.4.5 routing — versions are a load-bearing axis.
+
+#### `md_codec::Error` variant churn
+
+**Removed** at md-codec v0.30 (toolkit no longer maps these):
+- `ReservedHeaderBitSet`
+- `UnsupportedVersion { got }` — semantic replacement is `WireVersionMismatch`
+- `UnknownPrimaryTag(u8)`
+- `UnknownExtensionTag(u8)`
+
+**Removed** at md-codec v0.32:
+- `UnsupportedDerivationShape` — semantic replacement is `AddressDerivationFailed { detail }`
+
+**Added** (toolkit's `MdCodecExitCode` + `friendly_md_codec` both route exhaustively):
+- `WireVersionMismatch { got }` → exit 3 via `FutureFormat` (was `UnsupportedVersion`'s old routing point)
+- `MalformedHeader { detail }` → exit 2
+- `TagOutOfRange { primary }` → exit 2 (replaces `UnknownPrimaryTag` + `UnknownExtensionTag`)
+- `NUMSSentinelConflict` → exit 2
+- `OperatorContextViolation { tag, context: ContextKind }` → exit 2
+- `DecodeRecursionDepthExceeded { depth, max }` → exit 2 (added at v0.19, late-routed here)
+- `AddressDerivationFailed { detail }` → exit 2
+
+#### `Body::Variable` → `Body::MultiKeys` for multi-family tags (md-codec v0.30 §4)
+
+`Tag::Multi`, `Tag::SortedMulti`, `Tag::MultiA`, `Tag::SortedMultiA`
+previously serialized as `Body::Variable { k, children: <N PkK
+leaves> }` (per-child `Tag::PkK` + `Body::KeyArg`); now serialize as
+`Body::MultiKeys { k, indices: Vec<u8> }` (flat indices, `kiw` bits
+per index on the wire). `Body::Variable` is now reserved exclusively
+for `Tag::Thresh`. Affected sites in this release:
+
+- `template.rs::wrapper_node` — all 3 multi-family constructors (`WshMulti`/`WshSortedMulti`, `ShWshMulti`/`ShWshSortedMulti`, `TrMultiA`/`TrSortedMultiA`).
+- `parse_descriptor.rs::build_multi_node` — switched to indices-only construction.
+
+#### `Body::Tr.is_nums: bool` field (md-codec v0.18+)
+
+`Body::Tr` gained an explicit `is_nums` flag (SPEC §7). The toolkit
+emits `is_nums: false` at all 3 construction sites (BIP-86,
+`TrMultiA`/`TrSortedMultiA` wrapper, `parse_descriptor::walk_tr`).
+FOLLOWUP `toolkit-trmultia-nums-internal-key` tracks the open
+question of whether BIP-388 script-path-only taproot multisig wallets
+SHOULD emit `is_nums: true` — out of scope for v0.15; revisit when
+authoring the v1.0 BRAINSTORM scope-lock.
+
+#### `mk-codec` v0.2.1 → v0.3.0
+
+Additive: new `pub mod test_vectors` (toolkit doesn't consume it).
+Single-line bump.
+
+#### Fixtures regenerated
+
+`tests/vectors/v0_1/*.txt` (16 single-sig bundles) +
+`tests/vectors/v0_2/bip84-mainnet-0-false-true.txt` (self-check
+fixture) regenerated against the v0.30 wire format. The md1 strings
+now begin with the `md1fqn8upq…` prefix (was `md1zsx9cpq…` under
+v0.16.1).
+
+### Companion
+
+- `descriptor-mnemonic` `md-codec` already on crates.io v0.33.1 (no companion bump needed).
+- `mnemonic-key` `mk-codec` already on crates.io v0.3.0 (no companion bump needed).
+- `mnemonic-gui` will pick this up at its next release cycle by bumping its `mnemonic-toolkit` dep from git tag `v0.14.2` to crates.io `0.15`.
+
 ## mnemonic-toolkit [0.14.2] — 2026-05-16
 
 ### Bug fix — v0.14.1 incomplete; lib-internal slip39 still references mlock unconditionally

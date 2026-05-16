@@ -107,7 +107,7 @@ impl CliTemplate {
 
     /// md-codec wrapper Node for this template (SPEC §4.6.3).
     /// Single-sig variants ignore `k`/`n` (assert n==1); multisig variants
-    /// construct `Body::Variable { k, children: <N PkK leaves> }` per PLAN B.1.
+    /// construct `Body::MultiKeys { k, indices: 0..n }` per md-codec SPEC v0.30 §4.
     pub fn wrapper_node(&self, k: u8, n: usize) -> Node {
         match self {
             CliTemplate::Bip44 => {
@@ -143,6 +143,10 @@ impl CliTemplate {
                 Node {
                     tag: Tag::Tr,
                     body: Body::Tr {
+                        // v0.30+ Body::Tr gained an explicit is_nums flag (SPEC §7).
+                        // BIP-86 single-sig uses the user's real key as the
+                        // internal key — never the BIP-341 NUMS H-point.
+                        is_nums: false,
                         key_index: 0,
                         tree: None,
                     },
@@ -158,9 +162,9 @@ impl CliTemplate {
                     tag: Tag::Wsh,
                     body: Body::Children(vec![Node {
                         tag: inner_tag,
-                        body: Body::Variable {
+                        body: Body::MultiKeys {
                             k,
-                            children: pk_k_leaves(0, n),
+                            indices: (0..n as u8).collect(),
                         },
                     }]),
                 }
@@ -175,9 +179,9 @@ impl CliTemplate {
                     tag: Tag::Wsh,
                     body: Body::Children(vec![Node {
                         tag: inner_tag,
-                        body: Body::Variable {
+                        body: Body::MultiKeys {
                             k,
-                            children: pk_k_leaves(0, n),
+                            indices: (0..n as u8).collect(),
                         },
                     }]),
                 };
@@ -192,20 +196,22 @@ impl CliTemplate {
                 } else {
                     Tag::SortedMultiA
                 };
-                // tr(multi_a(K, @0, ..., @N-1)): all N placeholders are signing
-                // keys in the script-path leaf. key_index=0 here is the Body::Tr
-                // wrapper's internal-key reference; md-codec interprets it per
-                // BIP-388 wallet-policy semantics for taproot script-path-only
-                // wallets.
                 Node {
                     tag: Tag::Tr,
                     body: Body::Tr {
+                        // v0.30+ NUMS-vs-real-key flag. Toolkit's TrMultiA /
+                        // TrSortedMultiA templates currently use key_index: 0
+                        // (first real key in the table) as the internal key.
+                        // FOLLOWUP `toolkit-trmultia-nums-internal-key` filed
+                        // to revisit whether BIP-388 script-path-only wallets
+                        // SHOULD emit is_nums: true here.
+                        is_nums: false,
                         key_index: 0,
                         tree: Some(Box::new(Node {
                             tag: inner_tag,
-                            body: Body::Variable {
+                            body: Body::MultiKeys {
                                 k,
-                                children: pk_k_leaves(0, n),
+                                indices: (0..n as u8).collect(),
                             },
                         })),
                     },
@@ -240,18 +246,6 @@ impl CliTemplate {
             CliTemplate::TrSortedMultiA => "tr-sortedmulti-a",
         }
     }
-}
-
-/// Build N `PkK` leaves with key indices `[start, start + n)`.
-fn pk_k_leaves(start: u8, n: usize) -> Vec<Node> {
-    (0..n)
-        .map(|i| Node {
-            tag: Tag::PkK,
-            body: Body::KeyArg {
-                index: start + i as u8,
-            },
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -331,6 +325,7 @@ mod tests {
         assert!(matches!(
             n.body,
             Body::Tr {
+                is_nums: false,
                 key_index: 0,
                 tree: None
             }
@@ -358,14 +353,13 @@ mod tests {
         };
         assert_eq!(children.len(), 1);
         assert!(matches!(children[0].tag, Tag::SortedMulti));
-        let Body::Variable { k, ref children } = children[0].body else {
-            panic!("inner sortedmulti body must be Variable");
+        let Body::MultiKeys { k, ref indices } = children[0].body else {
+            panic!("inner sortedmulti body must be MultiKeys");
         };
         assert_eq!(k, 2);
-        assert_eq!(children.len(), 3);
-        for (i, c) in children.iter().enumerate() {
-            assert!(matches!(c.tag, Tag::PkK));
-            assert!(matches!(c.body, Body::KeyArg { index } if index as usize == i));
+        assert_eq!(indices.len(), 3);
+        for (i, idx) in indices.iter().enumerate() {
+            assert_eq!(*idx as usize, i);
         }
     }
 
@@ -385,12 +379,14 @@ mod tests {
         let n = CliTemplate::TrMultiA.wrapper_node(2, 2);
         assert!(matches!(n.tag, Tag::Tr));
         let Body::Tr {
+            is_nums,
             key_index,
             ref tree,
         } = n.body
         else {
             panic!("tr body must be Tr");
         };
+        assert!(!is_nums, "TrMultiA wrapper currently uses key_index=0 (real key), not NUMS sentinel");
         assert_eq!(key_index, 0);
         let leaf = tree.as_deref().expect("tr-multi-a must have tree");
         assert!(matches!(leaf.tag, Tag::MultiA));

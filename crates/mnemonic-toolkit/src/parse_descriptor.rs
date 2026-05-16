@@ -330,21 +330,15 @@ fn build_multi_node(
     keys: &[&DescriptorPublicKey],
     km: &BTreeMap<String, u8>,
 ) -> Result<Node, ToolkitError> {
-    let children: Vec<Node> = keys
+    let indices: Vec<u8> = keys
         .iter()
-        .map(|kk| {
-            let index = lookup_key(&kk.to_string(), km)?;
-            Ok(Node {
-                tag: Tag::PkK,
-                body: Body::KeyArg { index },
-            })
-        })
+        .map(|kk| lookup_key(&kk.to_string(), km))
         .collect::<Result<_, ToolkitError>>()?;
     Ok(Node {
         tag,
-        body: Body::Variable {
+        body: Body::MultiKeys {
             k: k as u8,
-            children,
+            indices,
         },
     })
 }
@@ -426,7 +420,17 @@ fn walk_tr(
     };
     Ok(Node {
         tag: Tag::Tr,
-        body: Body::Tr { key_index, tree },
+        body: Body::Tr {
+            // v0.30+ NUMS flag. parse_descriptor reconstructs the AST from a
+            // user-supplied descriptor string — the internal key is the
+            // explicit `@key_index` from the descriptor, never NUMS. md-codec
+            // would error with NUMSSentinelConflict if is_nums=false and
+            // key_index were out-of-range; key_index is guaranteed in-range
+            // by the wallet-policy parser upstream.
+            is_nums: false,
+            key_index,
+            tree,
+        },
     })
 }
 
@@ -1409,11 +1413,11 @@ mod tests {
             panic!("expected Wsh+Children");
         };
         assert_eq!(children[0].tag, Tag::SortedMulti);
-        let Body::Variable { k, children: subs } = &children[0].body else {
-            panic!("expected SortedMulti Variable body");
+        let Body::MultiKeys { k, indices } = &children[0].body else {
+            panic!("expected SortedMulti MultiKeys body");
         };
         assert_eq!(*k, 2);
-        assert_eq!(subs.len(), 2);
+        assert_eq!(indices.len(), 2);
     }
 
     #[test]
@@ -1464,9 +1468,15 @@ mod tests {
     fn walk_tr_keypath_root() {
         let root = parse_and_walk("tr(@0/<0;1>/*)", ScriptCtx::SingleSig);
         assert_eq!(root.tag, Tag::Tr);
-        let Body::Tr { key_index, tree } = &root.body else {
+        let Body::Tr {
+            is_nums,
+            key_index,
+            tree,
+        } = &root.body
+        else {
             panic!("expected Tr body");
         };
+        assert!(!is_nums, "BIP-86 single-sig uses a real key, not NUMS");
         assert_eq!(*key_index, 0);
         assert!(tree.is_none());
     }
@@ -2003,11 +2013,11 @@ mod tests {
         // Layer-1 arm. Wire output unchanged from v0.3.0.
         let inner = wsh_inner("wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))");
         assert_eq!(inner.tag, Tag::SortedMulti);
-        let Body::Variable { k, children } = inner.body else {
-            panic!("expected SortedMulti Variable body");
+        let Body::MultiKeys { k, indices } = inner.body else {
+            panic!("expected SortedMulti MultiKeys body");
         };
         assert_eq!(k, 2);
-        assert_eq!(children.len(), 2);
+        assert_eq!(indices.len(), 2);
     }
 
     #[test]
@@ -2025,11 +2035,11 @@ mod tests {
         };
         let leaf = tree.as_ref().expect("expected single tap leaf");
         assert_eq!(leaf.tag, Tag::SortedMultiA);
-        let Body::Variable { k, children } = &leaf.body else {
-            panic!("expected SortedMultiA Variable body");
+        let Body::MultiKeys { k, indices } = &leaf.body else {
+            panic!("expected SortedMultiA MultiKeys body");
         };
         assert_eq!(*k, 2);
-        assert_eq!(children.len(), 2);
+        assert_eq!(indices.len(), 2);
     }
 
     #[test]
@@ -2467,11 +2477,11 @@ mod tests {
             panic!("expected Wsh+Children");
         };
         assert_eq!(children[0].tag, Tag::Multi);
-        let Body::Variable { k, children: subs } = &children[0].body else {
-            panic!("expected Multi Variable");
+        let Body::MultiKeys { k, indices } = &children[0].body else {
+            panic!("expected Multi MultiKeys body");
         };
         assert_eq!(*k, 2);
-        assert_eq!(subs.len(), 2);
+        assert_eq!(indices.len(), 2);
     }
 
     #[test]
@@ -2523,11 +2533,11 @@ mod tests {
         };
         let leaf = tree.as_ref().unwrap();
         assert_eq!(leaf.tag, Tag::MultiA);
-        let Body::Variable { k, children } = &leaf.body else {
-            panic!("expected MultiA Variable body");
+        let Body::MultiKeys { k, indices } = &leaf.body else {
+            panic!("expected MultiA MultiKeys body");
         };
         assert_eq!(*k, 3);
-        assert_eq!(children.len(), 3);
+        assert_eq!(indices.len(), 3);
     }
 
     // ---- Phase F (v0.4): walk_tap_tree multi-leaf round-trips ----
@@ -2623,7 +2633,12 @@ mod tests {
             ScriptCtx::MultiSig,
         );
         assert_eq!(root.tag, Tag::Tr);
-        let Body::Tr { key_index: _, tree } = &root.body else {
+        let Body::Tr {
+            is_nums: _,
+            key_index: _,
+            tree,
+        } = &root.body
+        else {
             panic!("expected Tr body");
         };
         let leaf = tree.as_ref().expect("expected single tap leaf");

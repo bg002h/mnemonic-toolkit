@@ -189,18 +189,26 @@ fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
 }
 
 /// SPEC §6.4.5 routing. md_codec::Error is NOT `#[non_exhaustive]`; match is exhaustive.
-/// `UnsupportedVersion` is intercepted by `From` to `FutureFormat` (exit 3).
+/// `WireVersionMismatch` is intercepted by `From` to `FutureFormat` (exit 3).
+///
+/// v0.30 wire-format clean break (md-codec) removed `ReservedHeaderBitSet`,
+/// `UnsupportedVersion`, `UnknownPrimaryTag`, `UnknownExtensionTag`. v0.32
+/// removed `UnsupportedDerivationShape`. Replacements: `WireVersionMismatch`
+/// (semantic replacement for UnsupportedVersion; same exit-3 routing),
+/// `TagOutOfRange` (replaces both Unknown*Tag variants), `MalformedHeader`,
+/// `NUMSSentinelConflict`, `OperatorContextViolation`,
+/// `DecodeRecursionDepthExceeded`, `AddressDerivationFailed` (replaces
+/// UnsupportedDerivationShape).
 fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
     match e {
         md_codec::Error::Codex32DecodeError(_) | md_codec::Error::Codex32EncodeError(_) => 1,
         md_codec::Error::BitStreamTruncated { .. }
-        | md_codec::Error::ReservedHeaderBitSet
+        | md_codec::Error::MalformedHeader { .. }
         | md_codec::Error::PathDepthExceeded { .. }
         | md_codec::Error::KeyCountOutOfRange { .. }
         | md_codec::Error::DivergentPathCountMismatch { .. }
         | md_codec::Error::AltCountOutOfRange { .. }
-        | md_codec::Error::UnknownPrimaryTag(_)
-        | md_codec::Error::UnknownExtensionTag(_)
+        | md_codec::Error::TagOutOfRange { .. }
         | md_codec::Error::ThresholdOutOfRange { .. }
         | md_codec::Error::ChildCountOutOfRange { .. }
         | md_codec::Error::KGreaterThanN { .. }
@@ -213,6 +221,7 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::PlaceholderFirstOccurrenceOutOfOrder { .. }
         | md_codec::Error::MultipathAltCountMismatch { .. }
         | md_codec::Error::ForbiddenTapTreeLeaf { .. }
+        | md_codec::Error::OperatorContextViolation { .. }
         | md_codec::Error::ChunkCountOutOfRange { .. }
         | md_codec::Error::ChunkIndexOutOfRange { .. }
         | md_codec::Error::ChunkSetIdOutOfRange { .. }
@@ -230,9 +239,11 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::MissingPubkey { .. }
         | md_codec::Error::ChainIndexOutOfRange { .. }
         | md_codec::Error::HardenedPublicDerivation
-        | md_codec::Error::UnsupportedDerivationShape => 2,
-        // UnsupportedVersion is intercepted by From → FutureFormat.
-        md_codec::Error::UnsupportedVersion { .. } => 3,
+        | md_codec::Error::AddressDerivationFailed { .. }
+        | md_codec::Error::NUMSSentinelConflict
+        | md_codec::Error::DecodeRecursionDepthExceeded { .. } => 2,
+        // WireVersionMismatch is intercepted by From → FutureFormat.
+        md_codec::Error::WireVersionMismatch { .. } => 3,
     }
 }
 
@@ -463,7 +474,10 @@ impl From<mk_codec::Error> for ToolkitError {
 impl From<md_codec::Error> for ToolkitError {
     fn from(e: md_codec::Error) -> Self {
         match e {
-            md_codec::Error::UnsupportedVersion { got } => ToolkitError::FutureFormat {
+            // v0.30 renamed UnsupportedVersion -> WireVersionMismatch.
+            // Same exit-3 routing; user-facing detail message kept as
+            // "unsupported version N" for CLI message stability.
+            md_codec::Error::WireVersionMismatch { got } => ToolkitError::FutureFormat {
                 source: "md_codec",
                 detail: format!("unsupported version {}", got),
             },
@@ -574,8 +588,14 @@ mod tests {
     #[test]
     fn md_codec_inner_variant_routing() {
         // Exit-2 (format-violation) variants per SPEC §6.4.5.
+        // Note: ReservedHeaderBitSet was removed in md-codec v0.30; the
+        // semantic replacement for malformed-header conditions is
+        // `MalformedHeader { detail }`.
         assert_eq!(
-            ToolkitError::MdCodec(md_codec::Error::ReservedHeaderBitSet).exit_code(),
+            ToolkitError::MdCodec(md_codec::Error::MalformedHeader {
+                detail: "test".into()
+            })
+            .exit_code(),
             2,
         );
         assert_eq!(
@@ -594,6 +614,60 @@ mod tests {
         assert_eq!(
             ToolkitError::MdCodec(md_codec::Error::Codex32EncodeError("bar".into())).exit_code(),
             1,
+        );
+    }
+
+    /// v0.30/v0.31/v0.32 added 7 new md-codec variants. This cell pins
+    /// the exit-code routing for each — 1 routes via From → FutureFormat
+    /// (exit 3); the other 6 route to MdCodec → exit 2 per SPEC §6.4.5.
+    #[test]
+    fn md_codec_v0_30_new_variant_routing() {
+        // exit-3: WireVersionMismatch is the v0.30 semantic replacement
+        // for the v0.x UnsupportedVersion variant; both route via From →
+        // FutureFormat.
+        let tk: ToolkitError = md_codec::Error::WireVersionMismatch { got: 99 }.into();
+        assert_eq!(tk.exit_code(), 3);
+        assert_eq!(tk.kind(), "FutureFormat");
+
+        // exit-2: the six remaining new variants must route to MdCodec.
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::MalformedHeader {
+                detail: "test".into()
+            })
+            .exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::TagOutOfRange { primary: 0xAB })
+                .exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::NUMSSentinelConflict).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::DecodeRecursionDepthExceeded {
+                depth: 33,
+                max: 32
+            })
+            .exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::AddressDerivationFailed {
+                detail: "test".into()
+            })
+            .exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MdCodec(md_codec::Error::OperatorContextViolation {
+                tag: md_codec::tag::Tag::Multi,
+                context: md_codec::error::ContextKind::TopLevel,
+            })
+            .exit_code(),
+            2,
         );
     }
 

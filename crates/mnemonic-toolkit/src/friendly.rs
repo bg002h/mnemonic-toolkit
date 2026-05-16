@@ -136,10 +136,15 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             "md1 bitstream truncated: requested {} bits, {} available",
             requested, available,
         ),
-        E::ReservedHeaderBitSet => "md1 reserved header bit set".to_string(),
-        // UnsupportedVersion routes via From → FutureFormat
-        E::UnsupportedVersion { got } => {
-            format!("md1 unsupported version {} (route via FutureFormat)", got)
+        // v0.30 wire-format break removed ReservedHeaderBitSet; replaced
+        // by the more general MalformedHeader { detail }.
+        E::MalformedHeader { detail } => format!("md1 malformed header: {}", detail),
+        // v0.30 renamed UnsupportedVersion -> WireVersionMismatch.
+        // Routes via From → FutureFormat (exit 3); arm retained for
+        // exhaustiveness with a defensive message in case the routing
+        // is ever bypassed (e.g., direct construction in a test).
+        E::WireVersionMismatch { got } => {
+            format!("md1 wire-version mismatch: got {} (route via FutureFormat)", got)
         }
         E::PathDepthExceeded { got, max } => {
             format!("md1 path depth {} exceeds max {}", got, max)
@@ -152,8 +157,11 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         E::AltCountOutOfRange { got } => {
             format!("md1 multipath alt-count {} out of range (2..=9)", got)
         }
-        E::UnknownPrimaryTag(t) => format!("md1 unknown primary tag 0x{:02x}", t),
-        E::UnknownExtensionTag(t) => format!("md1 unknown extension tag 0x{:02x}", t),
+        // v0.30 collapsed UnknownPrimaryTag(u8) + UnknownExtensionTag(u8)
+        // into a single TagOutOfRange { primary } variant.
+        E::TagOutOfRange { primary } => {
+            format!("md1 tag value 0x{:02x} out of range", primary)
+        }
         E::ThresholdOutOfRange { k } => {
             format!("md1 threshold k={} out of range (1..=32)", k)
         }
@@ -239,9 +247,28 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             chain, alt_count,
         ),
         E::HardenedPublicDerivation => "md1 hardened public-key derivation forbidden".to_string(),
-        E::UnsupportedDerivationShape => {
-            "md1 unsupported wrapper shape for address derivation".to_string()
+        // v0.32 replaced UnsupportedDerivationShape with the more general
+        // AddressDerivationFailed { detail: String }.
+        E::AddressDerivationFailed { detail } => {
+            format!("md1 address derivation failed: {}", detail)
         }
+        // v0.30 NUMS sentinel rule on Body::Tr — see SPEC §7 + §11.
+        E::NUMSSentinelConflict => {
+            "md1 NUMS sentinel conflict: is_nums=false with key_index out of range".to_string()
+        }
+        // v0.31 operator-context enforcement (e.g., a Multi-family tag
+        // appearing as a top-level operator instead of inside a wrapper).
+        E::OperatorContextViolation { tag, context } => {
+            format!(
+                "md1 operator {:?} not allowed in context {:?}",
+                tag, context
+            )
+        }
+        // v0.19 decode-side recursion-depth hardening.
+        E::DecodeRecursionDepthExceeded { depth, max } => format!(
+            "md1 decode recursion depth {} exceeds maximum {}",
+            depth, max
+        ),
     }
 }
 
