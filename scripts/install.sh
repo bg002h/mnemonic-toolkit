@@ -19,28 +19,29 @@ set -eu
 
 # ── Component table ─────────────────────────────────────────────────────
 # `component_info <short-name>` echoes
-# `<cargo-package>|<git-url>|<git-tag>|<cratesio>` where `<cratesio>` is
-# `yes` (component is published on crates.io and will install via the
-# default crates.io path) or `no` (must use git+tag). Short names match
-# the installed binary names; the cargo-package is the workspace member
-# name (last positional to `cargo install`), distinct from the bin name
-# when they differ.
+# `<cargo-package>|<git-url>|<git-tag>|<cratesio>|<features>` where
+# `<cratesio>` is `yes` (published on crates.io; default install path) or
+# `no` (must use git+tag), and `<features>` is a comma-separated list of
+# Cargo features to enable (empty for default). Short names match the
+# installed binary names; the cargo-package is the workspace member name
+# (last positional to `cargo install`), distinct from the bin name when
+# they differ.
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.13.0|no"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.13.0|no|"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.1|yes"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.5.1|yes|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.2.1|yes"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.2.1|yes|"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.2|yes"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.2|yes|"
             ;;
         mnemonic-gui)
-            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.3.0|yes"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.3.0|yes|"
             ;;
         *)
             return 1
@@ -146,19 +147,20 @@ while [ $# -gt 0 ]; do
         --dry-run)
             DRY_RUN="1"; shift ;;
         --list)
-            printf '%-15s %-20s %-12s %s\n' "COMPONENT" "CARGO_PACKAGE" "DEFAULT" "GIT_TAG"
-            printf '%-15s %-20s %-12s %s\n' "---------" "-------------" "-------" "-------"
+            printf '%-15s %-20s %-12s %-14s %s\n' "COMPONENT" "CARGO_PACKAGE" "DEFAULT" "FEATURES" "GIT_TAG"
+            printf '%-15s %-20s %-12s %-14s %s\n' "---------" "-------------" "-------" "--------" "-------"
             for n in $ALL; do
                 info=$(component_info "$n") || continue
                 pkg=$(echo "$info" | cut -d'|' -f1)
                 tag=$(echo "$info" | cut -d'|' -f3)
                 cratesio=$(echo "$info" | cut -d'|' -f4)
+                features=$(echo "$info" | cut -d'|' -f5)
                 if [ "$cratesio" = "yes" ]; then
                     source="crates.io"
                 else
                     source="git (only)"
                 fi
-                printf '%-15s %-20s %-12s %s\n' "$n" "$pkg" "$source" "$tag"
+                printf '%-15s %-20s %-12s %-14s %s\n' "$n" "$pkg" "$source" "${features:-(none)}" "$tag"
             done
             exit 0 ;;
         -h|--help)
@@ -248,18 +250,25 @@ for name in $ALL; do
     url=$(echo "$info" | cut -d'|' -f2)
     tag=$(echo "$info" | cut -d'|' -f3)
     cratesio=$(echo "$info" | cut -d'|' -f4)
+    features=$(echo "$info" | cut -d'|' -f5)
+    if [ -n "$features" ]; then
+        feat_args="--features $features"
+    else
+        feat_args=""
+    fi
 
     # shellcheck disable=SC2086
-    # $LOCKED / $FORCE intentionally unquoted: they are either empty or
-    # a single literal flag with no whitespace. Quoting would pass an
-    # empty positional which `cargo install` rejects.
+    # $LOCKED / $FORCE / $feat_args intentionally unquoted: each is
+    # either empty or a sequence of literal CLI flag tokens with no
+    # embedded whitespace. Quoting would pass an empty positional which
+    # `cargo install` rejects.
     if [ "$cratesio" = "yes" ] && [ -z "$FROM_GIT" ]; then
         printf 'install  %s (crates.io: %s)\n' "$name" "$pkg"
         if [ -n "$DRY_RUN" ]; then
-            echo "  [dry-run] cargo install $LOCKED $FORCE $pkg"
+            echo "  [dry-run] cargo install $LOCKED $feat_args $FORCE $pkg"
             installed_count=$((installed_count + 1))
         else
-            if cargo install $LOCKED $FORCE "$pkg"; then
+            if cargo install $LOCKED $feat_args $FORCE "$pkg"; then
                 installed_count=$((installed_count + 1))
             else
                 echo "  FAILED" >&2
@@ -269,10 +278,10 @@ for name in $ALL; do
     else
         printf 'install  %s (git: %s)\n' "$name" "$tag"
         if [ -n "$DRY_RUN" ]; then
-            echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $FORCE $pkg"
+            echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $feat_args $FORCE $pkg"
             installed_count=$((installed_count + 1))
         else
-            if cargo install $LOCKED --git "$url" --tag "$tag" $FORCE "$pkg"; then
+            if cargo install $LOCKED --git "$url" --tag "$tag" $feat_args $FORCE "$pkg"; then
                 installed_count=$((installed_count + 1))
             else
                 echo "  FAILED" >&2
