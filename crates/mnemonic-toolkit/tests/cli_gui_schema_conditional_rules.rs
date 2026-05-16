@@ -1,9 +1,18 @@
 //! `mnemonic gui-schema` SPEC §6.10 conditional-applicability projection tests.
 //!
-//! v0.16.0 GUI conditional-applicability v1 cycle. Pins the
-//! per-subcommand `conditional_rules` array shape, the Predicate AST tagged
-//! union per §6.10.2, the Effect grammar per §6.10.3, the first-rule-wins
-//! emission order per §6.10.4, and the v2 schema version bump per §6.10.6.
+//! v0.16.0 GUI conditional-applicability v1 cycle pinned per-subcommand
+//! `conditional_rules` array shape, the Predicate AST tagged union per
+//! §6.10.2, the Effect grammar per §6.10.3, the first-rule-wins emission
+//! order per §6.10.4, and the v2 schema version bump per §6.10.6.
+//!
+//! v0.17.0 GUI conditional-applicability v2 cycle extends this with three
+//! new Predicate kinds (slot_count_eq / slot_count_gte / slot_count_lte —
+//! §6.10.2), one new Visibility variant (pin_value — §6.10.3 + §6.10.4
+//! emission table), per-subcommand `meta.template_groups` (§6.10.8 — NEW),
+//! and a schema-version bump 2 → 3 (§6.10.6). v3-specific surfaces have
+//! their own test file at `cli_gui_schema_v3_extensions.rs`; the
+//! assertions here update for the v3 version bump + the new row 12
+//! (`DESCRIPTOR_WITH_NONZERO_ACCOUNT`) rule emission in `bundle`.
 
 use assert_cmd::Command;
 use serde_json::Value;
@@ -37,11 +46,13 @@ fn conditional_rules<'a>(v: &'a Value, sub_name: &str) -> &'a Vec<Value> {
 // ── §6.10.6 schema version bump ────────────────────────────────────────
 
 #[test]
-fn schema_version_is_two_after_v0_16_0_bump() {
+fn schema_version_is_three_after_v0_17_0_bump() {
     let v = run_gui_schema();
     assert_eq!(
-        v["version"], 2,
-        "SPEC §6.10.6: gui-schema JSON version bumps 1→2 in v0.16.0"
+        v["version"], 3,
+        "SPEC §6.10.6: gui-schema JSON version bumps 2→3 in v0.17.0 \
+         (v2 cycle — slot_count_* predicates + pin_value Visibility + \
+         meta.template_groups)"
     );
 }
 
@@ -66,12 +77,17 @@ fn every_subcommand_has_conditional_rules_array() {
 fn bundle_emits_conditional_rules() {
     let v = run_gui_schema();
     let rules = conditional_rules(&v, "bundle");
-    // Bundle has 10 rules: template required-unless, descriptor↔descriptor-file
-    // mutex (2 dir), passphrase↔passphrase-stdin mutex (2 dir), template
-    // disabled when descriptor, threshold/multisig-path-family disabled when
-    // descriptor (2), threshold/multisig-path-family disabled when single-sig
-    // template (2).
-    assert_eq!(rules.len(), 10, "bundle v0.16.0 rule count");
+    // v0.16.0: Bundle has 10 rules: template required-unless,
+    // descriptor↔descriptor-file mutex (2 dir), passphrase↔passphrase-stdin
+    // mutex (2 dir), template disabled when descriptor,
+    // threshold/multisig-path-family disabled when descriptor (2),
+    // threshold/multisig-path-family disabled when single-sig template (2).
+    //
+    // v0.17.0 (v2 cycle): adds 1 new rule —
+    // `DESCRIPTOR_WITH_NONZERO_ACCOUNT` pins `--account` to 0 when
+    // `--descriptor` is present (uses the new pin_value Effect per §6.10.3).
+    // Detailed pin_value assertions live in cli_gui_schema_v3_extensions.rs.
+    assert_eq!(rules.len(), 11, "bundle v0.17.0 rule count (v0.16.0 + 1 pin_value rule)");
 }
 
 #[test]
@@ -346,19 +362,44 @@ fn check_predicate_kinds(predicate: &Value, allowed: &[&str]) {
 #[test]
 fn effect_visibilities_are_in_allowed_set() {
     let v = run_gui_schema();
-    // §6.10.3 says Visible never appears as an Effect value; only Hidden/
-    // Disabled/Required are allowed. v1 cycle uses Disabled + Required
-    // exclusively (Hidden reserved for future cycle).
-    let allowed = ["hidden", "disabled", "required"];
+    // §6.10.3 says Visible never appears as an Effect value. v1 cycle vocab:
+    // bare-string Hidden/Disabled/Required. v2 cycle (v0.17.0 / schema v3)
+    // adds the tagged-object pin_value variant. This assertion accepts both
+    // wire shapes; pin_value's inner `value` payload is intentionally
+    // permissive per §6.10.3 wire-format details (any JSON value), so we
+    // only assert structural shape, not the value's type.
+    let bare_allowed = ["hidden", "disabled", "required"];
     for sub in v["subcommands"].as_array().unwrap() {
         for rule in sub["conditional_rules"].as_array().unwrap() {
-            let vis = rule["effect"]["visibility"].as_str().unwrap();
-            assert!(
-                allowed.contains(&vis),
-                "Effect visibility `{vis}` not in §6.10.3 vocabulary"
-            );
-            // §6.10.3: Visible is the implicit default and MUST NOT appear.
-            assert_ne!(vis, "visible", "Visible cannot be an Effect value");
+            let vis = &rule["effect"]["visibility"];
+            if let Some(s) = vis.as_str() {
+                assert!(
+                    bare_allowed.contains(&s),
+                    "bare-string Visibility `{s}` not in §6.10.3 vocabulary"
+                );
+                assert_ne!(s, "visible", "Visible cannot be an Effect value");
+            } else if let Some(obj) = vis.as_object() {
+                // v3 tagged-object: must have exactly one known tag.
+                let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+                assert_eq!(
+                    keys.len(),
+                    1,
+                    "tagged-object Visibility must have exactly one tag; got: {keys:?}"
+                );
+                assert!(
+                    keys[0] == "pin_value",
+                    "tagged-object Visibility tag `{}` not in §6.10.3 v3 vocabulary",
+                    keys[0]
+                );
+                // pin_value payload must be an object with a `value` field.
+                let pin = &obj["pin_value"];
+                assert!(
+                    pin.is_object() && pin.get("value").is_some(),
+                    "pin_value payload must be {{\"value\": <JSON>}}; got: {pin:?}"
+                );
+            } else {
+                panic!("Visibility must be string or object; got: {vis:?}");
+            }
         }
     }
 }

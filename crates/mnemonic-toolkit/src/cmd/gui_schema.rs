@@ -45,7 +45,8 @@
 use crate::error::ToolkitError;
 use crate::template::CliTemplate;
 use clap::{Args, Command, ValueEnum};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
+use std::collections::BTreeMap;
 use std::io::Write;
 
 #[derive(Args, Debug)]
@@ -67,6 +68,15 @@ struct Subcommand {
     /// subcommands without per-frame visibility constraints. Always present
     /// (never omitted) so v2 consumers can rely on the field's presence.
     conditional_rules: Vec<ConditionalRule>,
+    /// SPEC §6.10.8 (NEW v3) per-subcommand meta-fields block. Currently
+    /// contains the `template_groups` block for subcommands that consume
+    /// `--template`; future v3 cycles add more fields here additively
+    /// (additive at the field level — no schema-version bump required for
+    /// new meta keys; only Predicate/Effect changes bump the version).
+    /// Empty BTreeMap serializes as omitted (no `meta` key in JSON) so
+    /// subcommands without meta surfaces remain byte-identical with v2.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    meta: BTreeMap<String, serde_json::Value>,
 }
 
 /// SPEC §6.10 ConditionalRule projection. See SPEC §6.10.1–§6.10.7.
@@ -79,6 +89,11 @@ struct ConditionalRule {
 }
 
 /// SPEC §6.10.2 Predicate AST. Tagged JSON union via serde's internal tag.
+///
+/// v0.17.0 / schema v3 adds the three slot_count_* variants for slot-grid-
+/// dependent predicates. These exist as predicate-machinery for future Effect-
+/// grammar extensions; no v0.17 rule currently uses them. See SPEC §6.10.2
+/// closing paragraph + §6.10.7 closing list for the deferred-effect status.
 #[derive(Serialize, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Predicate {
@@ -109,6 +124,18 @@ enum Predicate {
     Not {
         predicate: Box<Predicate>,
     },
+    #[allow(dead_code)]
+    SlotCountEq {
+        value: usize,
+    },
+    #[allow(dead_code)]
+    SlotCountGte {
+        value: usize,
+    },
+    #[allow(dead_code)]
+    SlotCountLte {
+        value: usize,
+    },
 }
 
 /// SPEC §6.10.3 Effect.
@@ -121,18 +148,49 @@ struct Effect {
 /// SPEC §6.10.3 VisibilityProjection. `Visible` is the implicit default and
 /// never appears as an Effect value.
 ///
-/// v1 cycle uses `Disabled` exclusively to match the existing GUI hand-coding
-/// pattern (`mnemonic-gui/src/form/conditional.rs` uses `Visibility::Disabled`
-/// for both structurally-inapplicable and user-mutex cases). `Hidden` is
-/// reserved for a future cycle that distinguishes the two UX classes per
-/// SPEC §6.10.3's "Hidden = structurally non-applicable" framing.
-#[derive(Serialize, Debug, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
+/// v1 cycle (v0.16.0) used `Disabled` exclusively to match the existing GUI
+/// hand-coding pattern (`mnemonic-gui/src/form/conditional.rs` uses
+/// `Visibility::Disabled` for both structurally-inapplicable and user-mutex
+/// cases). `Hidden` is reserved for a future cycle that distinguishes the two
+/// UX classes per SPEC §6.10.3's "Hidden = structurally non-applicable"
+/// framing.
+///
+/// v2 cycle (v0.17.0) adds `PinValue { value }` — a data-carrying variant
+/// with REPLACE-value emission semantic (the GUI emits `--name <V>` using the
+/// pinned value V, distinct from hidden/disabled which suppress emission).
+/// `Copy` is dropped from the derive set because `serde_json::Value` is not
+/// `Copy`. Custom `Serialize` impl preserves the bare-string wire shape for
+/// `Hidden`/`Disabled`/`Required` (v2 back-compat per SPEC §6.10.6) and emits
+/// `PinValue` as a tagged-object `{"pin_value": {"value": V}}`.
+#[derive(Debug, Clone)]
 enum VisibilityProjection {
     #[allow(dead_code)]
     Hidden,
     Disabled,
     Required,
+    PinValue {
+        value: serde_json::Value,
+    },
+}
+
+impl Serialize for VisibilityProjection {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Hidden => ser.serialize_str("hidden"),
+            Self::Disabled => ser.serialize_str("disabled"),
+            Self::Required => ser.serialize_str("required"),
+            Self::PinValue { value } => {
+                // Wire shape per SPEC §6.10.3 v3:
+                //   {"pin_value": {"value": V}}
+                let mut outer = ser.serialize_map(Some(1))?;
+                let mut inner = serde_json::Map::new();
+                inner.insert("value".to_string(), value.clone());
+                outer.serialize_entry("pin_value", &inner)?;
+                outer.end()
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -161,6 +219,43 @@ fn single_sig_template_values() -> Vec<String> {
         .filter(|t| !t.is_multisig())
         .filter_map(|t| t.to_possible_value().map(|p| p.get_name().to_string()))
         .collect()
+}
+
+/// SPEC §6.10.8-derived multisig template list. Mirror of
+/// `single_sig_template_values` for the multisig partition. Used by the
+/// per-subcommand `meta.template_groups` emission (v0.17.0 / schema v3).
+fn multisig_template_values() -> Vec<String> {
+    CliTemplate::value_variants()
+        .iter()
+        .filter(|t| t.is_multisig())
+        .filter_map(|t| t.to_possible_value().map(|p| p.get_name().to_string()))
+        .collect()
+}
+
+/// SPEC §6.10.8 — per-subcommand `meta` block. Returns the meta map for
+/// subcommands that have one (currently: any subcommand that consumes
+/// `--template`); empty map for the rest (which serializes as omitted).
+///
+/// Source-of-truth for the template-consumer list: this match is hand-coded
+/// to mirror the subcommands whose clap-derive `#[arg]` set includes
+/// `--template`. Adding a new template-consuming subcommand requires
+/// extending this match in lockstep — the drift gate
+/// (`mnemonic-gui/tests/gui_schema_conditional_drift.rs`) catches divergence.
+fn build_subcommand_meta(name: &str) -> BTreeMap<String, serde_json::Value> {
+    let mut meta = BTreeMap::new();
+    if matches!(
+        name,
+        "bundle" | "verify-bundle" | "export-wallet" | "derive-child"
+    ) {
+        meta.insert(
+            "template_groups".to_string(),
+            serde_json::json!({
+                "single_sig": single_sig_template_values(),
+                "multisig":   multisig_template_values(),
+            }),
+        );
+    }
+    meta
 }
 
 /// SPEC §6.10.7-derived taproot multi-leaf template list. Identifies templates
@@ -352,6 +447,33 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
             effect: Effect {
                 flag: "--multisig-path-family".to_string(),
                 visibility: VisibilityProjection::Disabled,
+            },
+        },
+        // --account pinned to 0 when --descriptor present (NEW v0.17.0;
+        // SPEC §6.6 row 12 — DESCRIPTOR_WITH_NONZERO_ACCOUNT). Uses the
+        // v3-cycle pin_value Effect: GUI emits `--account 0` regardless of
+        // user input, coercing nonzero values to 0 per §6.10.4 emission
+        // table. Closes the v1-cycle DEFERRED entry in §6.10.7.
+        ConditionalRule {
+            rationale: "--account is incompatible with --descriptor; descriptor \
+                        encodes account in its @i/origin path. The GUI pins \
+                        --account to 0 (coercing any user-typed nonzero value) \
+                        rather than disabling the widget entirely, so the \
+                        emitted argv is descriptor-compatible without user \
+                        intervention. See SPEC §6.10.4 emission-mapping table \
+                        for pin_value semantics."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 12; bundle.rs::mode_text::\
+                       DESCRIPTOR_WITH_NONZERO_ACCOUNT"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--account".to_string(),
+                visibility: VisibilityProjection::PinValue {
+                    value: serde_json::json!(0),
+                },
             },
         },
     ]
@@ -744,11 +866,13 @@ fn build_schema(cmd: &Command) -> Schema {
                 let flat = build_subcommand(ss);
                 let flat_name = format!("{}-{}", s.get_name(), ss.get_name());
                 let conditional_rules = build_subcommand_conditional_rules(&flat_name);
+                let meta = build_subcommand_meta(&flat_name);
                 subs.push(Subcommand {
                     name: flat_name,
                     flags: flat.flags,
                     positionals: flat.positionals,
                     conditional_rules,
+                    meta,
                 });
             }
         }
@@ -758,7 +882,7 @@ fn build_schema(cmd: &Command) -> Schema {
     subs.sort_by(|a, b| a.name.cmp(&b.name));
 
     Schema {
-        version: 2,
+        version: 3,
         cli: "mnemonic".to_string(),
         subcommands: subs,
     }
@@ -801,12 +925,14 @@ fn build_subcommand(sub: &Command) -> Subcommand {
     flags.sort_by(|a, b| a.name.cmp(&b.name));
 
     let conditional_rules = build_subcommand_conditional_rules(sub.get_name());
+    let meta = build_subcommand_meta(sub.get_name());
 
     Subcommand {
         name: sub.get_name().to_string(),
         flags,
         positionals,
         conditional_rules,
+        meta,
     }
 }
 

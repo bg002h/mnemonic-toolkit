@@ -28,14 +28,14 @@ fn gui_schema_exits_zero_and_parses_as_json() {
 }
 
 #[test]
-fn gui_schema_top_level_version_is_two() {
+fn gui_schema_top_level_version_is_three() {
     let v = run_gui_schema();
-    // v0.16.0 bump: SPEC §6.10.6 — schema version 1 → 2 (additive change;
-    // v1 consumers parse v2 docs ignoring unknown fields via serde-default).
-    // GUI's relaxed parse_gui_schema_json accepts version >= 1 (mnemonic-gui
-    // src/schema_check.rs); parse_gui_schema_conditional_rules requires
-    // version >= 2.
-    assert_eq!(v["version"], 2, "SPEC §6.10.6: version pin v0.16.0");
+    // v0.17.0 bump: SPEC §6.10.6 — schema version 2 → 3 (v2 cycle adds
+    // slot_count_* predicates + pin_value Visibility + meta.template_groups).
+    // Earlier bumps: v1→v2 at v0.16.0 (conditional_rules added).
+    // GUI's relaxed parse_gui_schema_json accepts version >= 1; rules /
+    // pin_value consumers gate on version >= 3.
+    assert_eq!(v["version"], 3, "SPEC §6.10.6: version pin v0.17.0");
 }
 
 #[test]

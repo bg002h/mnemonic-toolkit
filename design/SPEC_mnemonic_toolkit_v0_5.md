@@ -425,7 +425,9 @@ Initial v2-cycle field:
 "meta": {
   "template_groups": {
     "single_sig": ["bip44", "bip49", "bip84", "bip86"],
-    "multisig":   ["wsh-multi",  "wsh-sortedmulti",  "tr-multi-a", "tr-sortedmulti-a"]
+    "multisig":   ["sh-wsh-multi", "sh-wsh-sortedmulti",
+                   "wsh-multi", "wsh-sortedmulti",
+                   "tr-multi-a", "tr-sortedmulti-a"]
   }
 }
 ```
