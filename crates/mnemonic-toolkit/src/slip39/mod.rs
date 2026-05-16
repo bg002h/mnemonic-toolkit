@@ -155,7 +155,12 @@ pub fn slip39_split<R: CryptoRng + RngCore>(
     );
     // Pin EMS heap pages so the encrypted master cannot be swapped to disk
     // during the (potentially nested) Shamir split below. The pin drops at
-    // function exit, after `ems` itself is no longer referenced.
+    // function exit, after `ems` itself is no longer referenced. v0.14.1:
+    // `mlock` is `#[cfg(unix)]` (POSIX syscall; no Windows equivalent in
+    // libc-rs); on non-unix the pin is a no-op. The slip39 algorithm
+    // itself is platform-uniform — only the swap-protection sidecar is
+    // unix-only.
+    #[cfg(unix)]
     let _ems_pin = crate::mlock::pin_pages_for(&ems[..]);
 
     // ----- Group-level Shamir split -----
@@ -310,7 +315,9 @@ pub fn slip39_combine(
 
     // Pin EMS pages so the encrypted master is not swapped to disk during
     // the PBKDF2-heavy Feistel decrypt below. The pin drops at function
-    // exit after `master` is moved into the return value.
+    // exit after `master` is moved into the return value. v0.14.1:
+    // unix-only (see split-side comment above).
+    #[cfg(unix)]
     let _ems_pin = crate::mlock::pin_pages_for(&ems[..]);
 
     // Feistel decrypt → master secret.
@@ -601,6 +608,7 @@ mod tests {
     // this observer works uniformly across cfg(test) and production builds.
     // ========================================================================
 
+    #[cfg(unix)]
     #[test]
     fn slip39_split_invokes_pin_pages_for_on_ems() {
         let baseline = crate::mlock::attempts_for_test();
@@ -629,6 +637,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn slip39_combine_invokes_pin_pages_for() {
         let master = [0xB4u8; 16];

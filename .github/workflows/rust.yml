@@ -162,8 +162,11 @@ jobs:
             runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: install-rust + target
-        uses: dtolnay/rust-toolchain@stable
+      - name: install-rust pinned toolchain
+        # Use the toolkit's pinned `rust-toolchain.toml` channel (1.85.0)
+        # so the cross-platform check matches the version used by the
+        # primary [ubuntu, macos] test matrix.
+        uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
       - name: cargo check --lib (cross-platform)

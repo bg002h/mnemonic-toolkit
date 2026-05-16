@@ -306,6 +306,40 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.14.2] — 2026-05-16
+
+### Bug fix — v0.14.1 incomplete; lib-internal slip39 still references mlock unconditionally
+
+v0.14.1 cfg-gated `pub mod mlock;` in `lib.rs` but missed four
+call sites inside `src/slip39/mod.rs` that reference
+`crate::mlock::*` directly (lines 159 + 314 for production pin
+calls; tests `slip39_split_invokes_pin_pages_for_on_ems` +
+`slip39_combine_invokes_pin_pages_for` on lines 604 + 632). The
+v0.14.1 CI's new `lib-cross-platform` Windows job caught it; the
+GUI v0.4.1 Windows build (`mnemonic-gui` run 25952017502) also
+caught it once it picked up the v0.14.1 toolkit tag.
+
+This release cfg-gates the four call sites:
+- The two production `crate::mlock::pin_pages_for(&ems[..])` calls
+  in `slip39_split` + `slip39_combine` get `#[cfg(unix)]`. On
+  non-unix the pin is a no-op; the slip39 algorithm itself is
+  platform-uniform — only the swap-protection sidecar is unix-only.
+- The two `*_invokes_pin_pages_for*` tests (which read
+  `crate::mlock::attempts_for_test()` to verify the pin fired) are
+  cfg-gated entirely; their semantic invariant doesn't apply on
+  platforms where mlock is a no-op.
+
+Also fixes the `lib-cross-platform` job's `aarch64-unknown-linux-gnu`
+failure: the job was using `dtolnay/rust-toolchain@stable` which
+installed `aarch64` target to the wrong toolchain (rustup later
+respected the repo-pinned `rust-toolchain.toml@1.85.0` without the
+target installed). Pinned the action to `@1.85.0` to match the
+toolkit's rust-toolchain.toml.
+
+### Companion
+
+`mnemonic-gui v0.4.2` bumps the toolkit dep tag from v0.14.1 to v0.14.2.
+
 ## mnemonic-toolkit [0.14.1] — 2026-05-16
 
 ### Bug fix — `pub mod mlock` cfg-gated for Windows
