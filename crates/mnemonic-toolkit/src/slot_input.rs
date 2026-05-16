@@ -32,7 +32,7 @@ pub enum SlotSubkey {
 }
 
 impl SlotSubkey {
-    fn from_token(tok: &str) -> Option<Self> {
+    pub fn from_token(tok: &str) -> Option<Self> {
         Some(match tok {
             "phrase" => Self::Phrase,
             "entropy" => Self::Entropy,
@@ -312,12 +312,93 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mnemonic_toolkit::secret_taxonomy::SECRET_SLOT_SUBKEYS;
 
     fn slot(index: u8, subkey: SlotSubkey, value: &str) -> SlotInput {
         SlotInput {
             index,
             subkey,
             value: value.to_string(),
+        }
+    }
+
+    // ---- secret_taxonomy parity ----
+
+    /// Declare the complete list of `SlotSubkey` variants exactly once.
+    /// See the equivalent macro doc in
+    /// `cmd::convert::secret_taxonomy_parity_tests` for the full
+    /// rationale: the macro produces BOTH
+    /// `ALL_SLOT_SUBKEY_VARIANTS` and a `_exhaustiveness_check` whose
+    /// match is non-exhaustive iff a new enum variant is added without
+    /// extending the macro's input list — so the variant list and the
+    /// exhaustiveness check share a single source of truth.
+    macro_rules! declare_slot_subkey_variants {
+        ( $( $variant:ident ),* $(,)? ) => {
+            const ALL_SLOT_SUBKEY_VARIANTS: &[SlotSubkey] =
+                &[ $( SlotSubkey::$variant ),* ];
+
+            #[allow(dead_code)]
+            fn _exhaustiveness_check(s: SlotSubkey) {
+                match s {
+                    $( SlotSubkey::$variant )|* => (),
+                }
+            }
+        };
+    }
+
+    declare_slot_subkey_variants!(
+        Phrase,
+        Entropy,
+        Xpub,
+        MasterXpub,
+        Fingerprint,
+        Path,
+        Wif,
+        Xprv,
+    );
+
+    #[test]
+    fn secret_taxonomy_parity_with_is_secret_bearing() {
+        for &v in ALL_SLOT_SUBKEY_VARIANTS {
+            let predicate = v.is_secret_bearing();
+            let in_taxonomy = SECRET_SLOT_SUBKEYS.contains(&v.as_str());
+            assert_eq!(
+                predicate, in_taxonomy,
+                "drift: SlotSubkey::{:?}.is_secret_bearing()={} but \
+                 secret_taxonomy::SECRET_SLOT_SUBKEYS.contains({:?})={}. \
+                 If you added a SlotSubkey variant, the macro expansion \
+                 above means `ALL_SLOT_SUBKEY_VARIANTS` already includes \
+                 it — so this assertion is firing because the variant's \
+                 secret-class status disagrees between \
+                 `is_secret_bearing()` (`slot_input.rs`) and \
+                 `secret_taxonomy::SECRET_SLOT_SUBKEYS` \
+                 (`src/secret_taxonomy.rs`). Bring them into agreement.",
+                v,
+                predicate,
+                v.as_str(),
+                in_taxonomy,
+            );
+        }
+    }
+
+    #[test]
+    fn secret_taxonomy_entries_round_trip_via_from_token() {
+        for &token in SECRET_SLOT_SUBKEYS {
+            let parsed = SlotSubkey::from_token(token).unwrap_or_else(|| {
+                panic!(
+                    "secret_taxonomy::SECRET_SLOT_SUBKEYS entry {:?} does \
+                     not parse as a SlotSubkey via from_token — drift",
+                    token
+                )
+            });
+            assert_eq!(parsed.as_str(), token);
+            assert!(
+                parsed.is_secret_bearing(),
+                "secret_taxonomy::SECRET_SLOT_SUBKEYS contains {:?} but \
+                 SlotSubkey::{:?}.is_secret_bearing()=false — drift",
+                token,
+                parsed,
+            );
         }
     }
 

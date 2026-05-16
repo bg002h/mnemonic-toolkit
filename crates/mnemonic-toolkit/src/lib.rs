@@ -26,8 +26,22 @@
 //!   `Slip39Error` per the same pattern as `seed_xor`. The CLI handler
 //!   in `src/cmd/slip39.rs` (P2, future) converts `Slip39Error` into
 //!   `ToolkitError` at the boundary.
+//! - `secret_taxonomy` (v0.14.0): public `pub const &[&str]` arrays of
+//!   secret-class node / slot-subkey token strings. Mirrors the
+//!   private `NodeType::is_secret_bearing` /
+//!   `SlotSubkey::is_secret_bearing` predicates; downstream consumers
+//!   (e.g., `mnemonic-gui`'s `persistence::redact_for_persistence`)
+//!   import these instead of source-scraping at build time. Single
+//!   source of truth enforced at toolkit test time via parity tests
+//!   on `cmd::convert::NodeType` and `slot_input::SlotSubkey`.
+//!   **Stability contract:** these slices form load-bearing public
+//!   API for the GUI's persistence redaction. Renaming, reordering,
+//!   or removing entries is a semver-minor event (pre-1.0 0.X-axis
+//!   bump); adding entries is additive and minor-safe. Consumed by
+//!   `mnemonic-gui` v0.4.0+.
 
 pub mod final_word;
 pub mod mlock;
+pub mod secret_taxonomy;
 pub mod seed_xor;
 pub mod slip39;

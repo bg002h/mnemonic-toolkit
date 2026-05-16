@@ -1491,3 +1491,117 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
         secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
     }
 }
+
+#[cfg(test)]
+mod secret_taxonomy_parity_tests {
+    use super::NodeType;
+    use mnemonic_toolkit::secret_taxonomy::SECRET_NODE_TYPES;
+
+    /// Declare the complete list of `NodeType` variants exactly once.
+    /// This macro produces BOTH (a) the `ALL_NODE_TYPE_VARIANTS` const
+    /// array and (b) a `#[cfg(test)] fn _exhaustiveness_check` that
+    /// pattern-matches every variant via `|`-alternatives — no wildcard.
+    ///
+    /// **Why this shape**: the array literal and the match share a
+    /// single source-of-truth list. Adding a new `NodeType::FooBar`
+    /// variant to the enum makes `_exhaustiveness_check`'s match
+    /// non-exhaustive → **compile error**. The contributor MUST
+    /// extend the macro's input list to fix the compile error, which
+    /// AUTOMATICALLY extends `ALL_NODE_TYPE_VARIANTS` too (same input
+    /// expands to both outputs). The parity tests then iterate
+    /// `ALL_NODE_TYPE_VARIANTS` — guaranteed to include every enum
+    /// variant — and assert each variant's `as_str()` membership in
+    /// `SECRET_NODE_TYPES` matches its `is_secret_bearing()` predicate.
+    ///
+    /// Net guarantee: a future contributor cannot add a secret-bearing
+    /// `NodeType` variant without also updating `SECRET_NODE_TYPES` in
+    /// `secret_taxonomy.rs`. The parity-test assertion fires.
+    macro_rules! declare_node_type_variants {
+        ( $( $variant:ident ),* $(,)? ) => {
+            const ALL_NODE_TYPE_VARIANTS: &[NodeType] =
+                &[ $( NodeType::$variant ),* ];
+
+            #[allow(dead_code)]
+            fn _exhaustiveness_check(v: NodeType) {
+                match v {
+                    $( NodeType::$variant )|* => (),
+                }
+            }
+        };
+    }
+
+    declare_node_type_variants!(
+        Phrase,
+        Entropy,
+        Xpub,
+        Xprv,
+        Wif,
+        Fingerprint,
+        Path,
+        Ms1,
+        Mk1,
+        Bip38,
+        MiniKey,
+        ElectrumPhrase,
+        Address,
+    );
+
+    #[test]
+    fn secret_taxonomy_parity_with_is_secret_bearing() {
+        for &v in ALL_NODE_TYPE_VARIANTS {
+            let predicate = v.is_secret_bearing();
+            let in_taxonomy = SECRET_NODE_TYPES.contains(&v.as_str());
+            assert_eq!(
+                predicate, in_taxonomy,
+                "drift: NodeType::{:?}.is_secret_bearing()={} but \
+                 secret_taxonomy::SECRET_NODE_TYPES.contains({:?})={}. \
+                 If you added a NodeType variant, the macro expansion \
+                 above means `ALL_NODE_TYPE_VARIANTS` already includes \
+                 it — so this assertion is firing because the variant's \
+                 secret-class status disagrees between \
+                 `is_secret_bearing()` (`cmd/convert.rs`) and \
+                 `secret_taxonomy::SECRET_NODE_TYPES` \
+                 (`src/secret_taxonomy.rs`). Bring them into agreement.",
+                v,
+                predicate,
+                v.as_str(),
+                in_taxonomy,
+            );
+        }
+    }
+
+    #[test]
+    fn secret_taxonomy_entries_round_trip_via_from_token() {
+        for &token in SECRET_NODE_TYPES {
+            let parsed = NodeType::from_token(token).unwrap_or_else(|| {
+                panic!(
+                    "secret_taxonomy::SECRET_NODE_TYPES entry {:?} does \
+                     not parse as a NodeType via from_token — drift",
+                    token
+                )
+            });
+            assert_eq!(parsed.as_str(), token);
+            assert!(
+                parsed.is_secret_bearing(),
+                "secret_taxonomy::SECRET_NODE_TYPES contains {:?} but \
+                 NodeType::{:?}.is_secret_bearing()=false — drift",
+                token,
+                parsed,
+            );
+        }
+    }
+
+    /// MiniKey is intentionally excluded from `SECRET_NODE_TYPES` even
+    /// though `is_argv_secret_bearing()` includes it — see
+    /// SPEC_secret_memory_hygiene §1 and the
+    /// `convert-minikey-stdout-redaction` FOLLOWUP. This test pins the
+    /// intentional asymmetry so a future refactor that widens
+    /// `is_secret_bearing()` to include MiniKey forces a coordinated
+    /// update of the persistence-class consumers.
+    #[test]
+    fn minikey_intentionally_excluded_from_persistence_taxonomy() {
+        assert!(!NodeType::MiniKey.is_secret_bearing());
+        assert!(NodeType::MiniKey.is_argv_secret_bearing());
+        assert!(!SECRET_NODE_TYPES.contains(&"minikey"));
+    }
+}
