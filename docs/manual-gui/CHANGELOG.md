@@ -6,6 +6,31 @@ The manual is a separate artifact from the CLI manual under
 (`manual-gui-v*` vs `manual-v*`) and track independent version
 numbers.
 
+## [1.0.1] - 2026-05-15
+
+**Patch — post-ship cosmetic fixes.** Surfaced by a fresh local
+rebuild after v1.0.0 shipped.
+
+- **PDF glyph fix.** Replaced U+2715 (✕ multiplication-X) with
+  U+00D7 (× multiplication sign) in 2 locations
+  (`src/30-tour/31-first-launch.md` and
+  `src/40-mnemonic/42-bundle.md`). DejaVu Serif Bold lacks U+2715,
+  so the ✕ rendered as a "?" replacement char in the v1.0.0 PDF.
+- **2 stale intra-document cross-references** fixed (LaTeX
+  hyperref caught them; the lint suite's lychee phase doesn't
+  validate intra-document anchors):
+  - `src/10-foundations/11-what-is-mnemonic-gui.md`: 2 links to
+    `#how-the-gui-relates-to-the-four-clis` updated to
+    `#relation-to-cli` (the v1.0 cycle's batch-9 named-anchor
+    add).
+  - `src/90-appendices/92-flag-index.md`: removed fabricated
+    `md verify --json` link — schema's `VERIFY_FLAGS` does NOT
+    include `--json` (verified against
+    `mnemonic-gui/src/schema/md.rs:183-216`).
+
+No content changes; identical anchor set; lint still 7/7 GREEN.
+PDF stays at 223 pages.
+
 ## [1.0.0] - 2026-05-15
 
 **First release.** Complete coverage of the `mnemonic-gui` v0.3.0
