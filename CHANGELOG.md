@@ -306,6 +306,119 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.16.0] — 2026-05-16
+
+### Added — SPEC §6.10 conditional-applicability projection in `gui-schema` JSON
+
+`mnemonic gui-schema` JSON gains a per-subcommand
+`conditional_rules: [ConditionalRule]` array that projects the
+CLI's §6.6/§6.9 mutex/conditional rule manifest into a
+machine-readable form. The GUI overlay consumes this via the
+`mnemonic-gui v0.5.0` companion release; drift between the JSON
+projection and the GUI's hand-coded conditional fns is enforced
+by the new drift gate at `mnemonic-gui/tests/
+gui_schema_conditional_drift.rs`.
+
+The schema `version` bumps `1 → 2`. The bump is **additive**:
+v1 consumers that parse only the per-flag set (name, kind,
+choices) and ignore unknown fields continue to work on v2 docs.
+The GUI's `parse_gui_schema_json` relaxes its version gate from
+`!= 1` to `< 1` to honour this in lockstep.
+
+Predicate AST (SPEC §6.10.2 — tagged JSON union, snake_case
+kind values):
+
+- `flag_present` — flag has a non-empty value
+- `dropdown_value_in` — flag's Dropdown value is in a set
+- `composite_node_is` — flag's Composite node token matches
+- `positional_present` — positional[index] is non-empty
+- `all_of` / `any_of` / `not` — boolean combinators
+
+Effect (SPEC §6.10.3): `(flag, hidden | disabled | required)`.
+`visible` is the implicit default and never appears as an
+Effect value.
+
+v1 rule coverage (~17 enforceable rules across 5 subcommands):
+
+- bundle: 10 rules (template required-unless,
+  descriptor↔descriptor-file mutex × 2 dirs, passphrase mutex
+  × 2 dirs, template/threshold/multisig-path-family disabled
+  under descriptor-mode, threshold/multisig-path-family
+  disabled under single-sig template)
+- verify-bundle: 10 rules (mirror of bundle's descriptor +
+  passphrase rules; bundle-json XOR --ms1/--mk1/--md1 × 3;
+  threshold disabled under single-sig; template disabled
+  under descriptor)
+- export-wallet: 6 rules (template ↔ descriptor mutex × 2
+  dirs; taproot-internal-key Required + Disabled
+  rules; threshold/multisig-path-family disabled under
+  single-sig)
+- convert: 4 rules (passphrase + bip38-passphrase mutex pairs)
+- derive-child: 3 rules (passphrase mutex + dice-sides
+  Required when application = dice)
+
+First-rule-wins emission order per SPEC §6.10.4: rules
+targeting the same flag are emitted with more-specific
+predicates first (e.g., bundle's `--threshold`: descriptor-mode
+rule precedes single-sig-template rule).
+
+Runtime/dynamic rules deferred to FOLLOWUP
+`gui-schema-runtime-conditional-projection` (slot-count
+predicates, BIP-388 distinct-key, per-`@N` annotation
+consistency).
+
+### SPEC
+
+New §6.10 (subsections 1–7) added to
+`design/SPEC_mnemonic_toolkit_v0_5.md` as the canonical home for
+the GUI projection, alongside §6.6 (template-mode mode-violation
+ladder) and §6.9 (byte-exact error reference). §6.6 remains
+untouched per scope-isolation discipline; the pre-existing SPEC
+drift between §6.6 enumeration and the v0.3-NEW descriptor-mode
+consts at `bundle.rs:120-129` is tracked independently at
+FOLLOWUP `spec-v0_5-missing-v0_3-descriptor-mode-rows`.
+
+### Tests
+
+32 new test cells in
+`crates/mnemonic-toolkit/tests/cli_gui_schema_conditional_rules.rs`:
+
+- Schema version bump (v2)
+- Per-subcommand rule counts
+- Predicate priority order per target flag
+- Predicate AST `kind` vocabulary lint
+- Effect visibility vocabulary lint
+- Rationale + spec_ref presence per rule
+- Single-sig dropdown values match `CliTemplate::is_multisig()`
+  source-of-truth
+
+Full workspace test: 1001 passed, 0 failed, 8 ignored.
+
+### Companion / lockstep
+
+- `bg002h/mnemonic-gui v0.5.0` ships the consumer side:
+  `parse_gui_schema_conditional_rules` parser, ~14 new
+  conditional rules in `src/form/conditional.rs`,
+  `assemble_argv` visibility gate at
+  `src/form/invocation.rs` (suppresses Hidden + Disabled
+  flags from emission), removal of the
+  `--multisig-path-family bip87` default seed at
+  `src/main.rs:203`, and the new drift gate test.
+- toolkit FOLLOWUP `gui-schema-conditional-rules-v1` flips
+  open → resolved at v0.16.0 tag commit.
+- mnemonic-gui FOLLOWUP
+  `gui-conditional-applicability-drift-fix` flips open →
+  resolved at v0.5.0 tag commit.
+- mnemonic-gui FOLLOWUP
+  `gui-bundle-multisig-flags-conditional` (the motivating
+  bug; surfaced 2026-05-15 during the manual-gui v1.0 cycle)
+  resolved at mnemonic-gui v0.5.0 cycle commits.
+
+### Predecessor
+
+- `mnemonic-toolkit v0.15.0` (md-codec catchup; wire-format
+  clean break) is the unchanged baseline.
+
 ## mnemonic-toolkit [0.15.0] — 2026-05-16
 
 ### Breaking — `md-codec` catchup v0.16.1 → v0.33.1; `mk-codec` catchup v0.2.1 → v0.3.0
