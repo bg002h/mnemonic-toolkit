@@ -1,0 +1,25 @@
+# Pinned upstream tags for the mnemonic-gui user manual v1.0.
+#
+# This file is read by:
+#   - tests/lint.sh::gui-schema-coverage (verifies the rendered HTML's
+#     anchors match the SubcommandSchema in mnemonic-gui at the pinned
+#     tag).
+#   - .github/workflows/manual-gui.yml (clones the pinned mnemonic-gui
+#     ref before running lint).
+#
+# The four CLI-tag fields below mirror exactly what mnemonic-gui-v0.3.0
+# pinned at its own pinned-upstream.toml (lines 41/48/55 of that file).
+# A v1.1 cycle bumping the GUI tag must re-pin all four in lockstep.
+#
+# Source-path resolution for the lint:
+#   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
+#   default `../mnemonic-gui` relative to docs/manual-gui/.
+
+[mnemonic-gui]
+tag = "mnemonic-gui-v0.3.0"
+
+[manual-gui]
+toolkit-tag-implied = "mnemonic-toolkit-v0.13.0"
+md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.5.0"
+ms-cli-tag-implied  = "ms-cli-v0.2.1"
+mk-cli-tag-implied  = "mk-cli-v0.3.1"

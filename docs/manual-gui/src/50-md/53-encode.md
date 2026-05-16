@@ -1,0 +1,230 @@
+# `md encode` {#md-encode}
+
+Emit an `md1` card from a BIP-388 wallet-policy template (or
+compile from a higher-level sub-Miniscript-Policy expression via
+`--from-policy`). The encoder binds concrete xpubs and master
+fingerprints to the template's `@i` placeholders and produces a
+chunked `md1` string suitable for engraving.
+
+The largest md-tab subcommand: 11 flags + 1 positional.
+Two-mode input: either the **`[TEMPLATE]` positional** OR
+**`--from-policy <expr>`** (mutually-required-one-of, mutually
+exclusive). The conditional-visibility engine at
+`mnemonic-gui/src/form/conditional::md_encode` enforces both
+sides: when neither is set, both are marked `Required`; when one
+has a value, the other is `Disabled` (positional) or `Hidden`
+(`--context`, `--unspendable-key` hide when the positional path
+is chosen).
+
+## Outline {#md-encode-outline}
+
+- [`--from-policy`](#md-encode-from-policy) — sub-Miniscript-Policy expression (XOR with `[TEMPLATE]` positional)
+- [`--context`](#md-encode-context) — script context for `--from-policy` (conditionally Required when `--from-policy` is set; Hidden when positional `[TEMPLATE]` is set)
+- [`--unspendable-key`](#md-encode-unspendable-key) — Tap-context fallback unspendable internal key (Disabled when `--context segwitv0`)
+- [`--path`](#md-encode-path) — origin-path override (named / hex / literal `m/...`)
+- [`--key`](#md-encode-key) — concrete xpub for placeholder `@i` (repeating)
+- [`--fingerprint`](#md-encode-fingerprint) — master fingerprint for `@i` (repeating)
+- [`--network`](#md-encode-network) — Bitcoin network (default `mainnet`)
+- [`--force-chunked`](#md-encode-force-chunked) — force chunked encoding even for short policies
+- [`--force-long-code`](#md-encode-force-long-code) — force the long BCH code even when regular suffices
+- [`--policy-id-fingerprint`](#md-encode-policy-id-fingerprint) — print the freshly-computed PolicyId fingerprint after the phrase
+- [`--json`](#md-encode-json) — emit JSON output
+
+## `--from-policy` {#md-encode-from-policy}
+
+A sub-Miniscript-Policy expression that the encoder compiles to
+a BIP-388 template before encoding. Mutually exclusive with the
+`[TEMPLATE]` positional argument. When set, `--context` becomes
+Required (the encoder needs to know whether to compile to
+SegWit-v0 or Taproot output).
+
+The conditional-visibility engine marks this flag as Disabled
+when the `[TEMPLATE]` positional has a value, and as Required
+when neither input mode has been chosen.
+
+## `--context` {#md-encode-context}
+
+Script context for `--from-policy` compilation. Dropdown widget;
+2 valid values. Conditionally **Required when `--from-policy` is
+set**; Hidden when the `[TEMPLATE]` positional is used (the
+positional path does not need context disambiguation).
+
+### Outline {#md-encode-context-outline}
+
+- [`tap`](#md-encode-context-tap)
+- [`segwitv0`](#md-encode-context-segwitv0)
+
+### `tap` {#md-encode-context-tap}
+
+Taproot context. Compiles the policy via `compile_tr` (Taproot
+script-tree compilation). Pairs with `--unspendable-key` for the
+internal-key designation (defaults to BIP-341 NUMS H-point if
+`--unspendable-key` is omitted).
+
+### `segwitv0` {#md-encode-context-segwitv0}
+
+SegWit v0 context (P2WSH). Compiles via `compile_wsh`.
+**`--unspendable-key` is Disabled** when this value is chosen
+(the conditional-visibility engine inspects the dropdown value
+per `form/conditional.rs:25-27` and disables the flag —
+historically the first dropdown-value-inspect conditional in
+the codebase per D.1 finding #2).
+
+## `--unspendable-key` {#md-encode-unspendable-key}
+
+Tap-context only: a fallback unspendable internal key for
+`compile_tr`. Defaults to BIP-341 NUMS H-point when omitted.
+**Disabled by the conditional-visibility engine when
+`--context segwitv0` is chosen** (the engine inspects the
+dropdown value, not just presence).
+
+The same flag exists on [`md compile`](#md-compile-unspendable-key)
+with identical semantics.
+
+## `--path` {#md-encode-path}
+
+Origin-path override. Single shared path that overrides the
+encoder's inferred per-placeholder paths. Three accepted forms:
+
+- **Named:** `bip44`, `bip48`, `bip49`, `bip84`, `bip86`.
+- **Hex:** `0xNN` (raw purpose byte).
+- **Literal:** `m/...` (full BIP-32 path string).
+
+Plain Text widget. The encoder applies this same override to
+every `@i` placeholder; per-placeholder distinct paths require
+the more verbose explicit-template form.
+
+## `--key` {#md-encode-key}
+
+Concrete xpub for placeholder `@i` substitution. Format
+`@<index>=<xpub>`. Repeating. The GUI renders this as a multi-row
+text widget; one row per `@i=xpub` binding. For a 2-of-3
+multisig template, you need 3 `--key` rows (`@0=...`, `@1=...`,
+`@2=...`).
+
+## `--fingerprint` {#md-encode-fingerprint}
+
+Master-key fingerprint for placeholder `@i`. Format
+`@<index>=<8-hex-chars>`. Repeating. Pairs with `--key` rows to
+provide complete origin metadata for the encoded card.
+
+## `--network` {#md-encode-network}
+
+Bitcoin network for xpub validation and JSON output labeling.
+Default `mainnet`. Same 4 values as
+[`mnemonic bundle --network`](#mnemonic-bundle-network).
+
+### Outline {#md-encode-network-outline}
+
+- [`mainnet`](#md-encode-network-mainnet)
+- [`testnet`](#md-encode-network-testnet)
+- [`signet`](#md-encode-network-signet)
+- [`regtest`](#md-encode-network-regtest)
+
+### `mainnet` {#md-encode-network-mainnet}
+
+See [`mnemonic bundle --network mainnet`](#mnemonic-bundle-network-mainnet).
+
+### `testnet` {#md-encode-network-testnet}
+
+See [`mnemonic bundle --network testnet`](#mnemonic-bundle-network-testnet).
+
+### `signet` {#md-encode-network-signet}
+
+See [`mnemonic bundle --network signet`](#mnemonic-bundle-network-signet).
+
+### `regtest` {#md-encode-network-regtest}
+
+See [`mnemonic bundle --network regtest`](#mnemonic-bundle-network-regtest).
+
+## `--force-chunked` {#md-encode-force-chunked}
+
+Boolean. Forces chunked-encoding output even when the policy
+is short enough for the unchunked single-string form. Default
+off (the encoder picks chunked only when the policy exceeds the
+single-chunk size threshold).
+
+Use case: cross-implementation conformance testing — verifies
+that downstream parsers accept the multi-chunk form even when
+the canonical encoding would have used a single chunk.
+
+## `--force-long-code` {#md-encode-force-long-code}
+
+Boolean. **No-op since md-cli v0.12.0** — the long-code mode was
+dropped upstream. The flag is accepted for forward-compat but
+has no effect (status: wont-fix at md-cli v0.15.2 per
+`crates/md-cli/src/cmd/encode.rs:90-94`). Default off.
+
+Originally intended to force the long BCH error-correcting code
+variant even when the policy fit within the regular-code budget;
+the regular code is now used unconditionally.
+
+## `--policy-id-fingerprint` {#md-encode-policy-id-fingerprint}
+
+Boolean. Prints the freshly-computed `policy_id_fingerprint`
+after the encoded phrase on stdout. Default off.
+
+The `policy_id_fingerprint` is a SHA-256-derived 8-hex-char
+identifier for the wallet-policy template + bound xpubs + bound
+fingerprints triple — used downstream by `mk encode --from-md1`
+and the bundle's cross-binding metadata. Print it here when you
+want to record it alongside the engraved card.
+
+## `--json` {#md-encode-json}
+
+Boolean. Emit JSON output instead of plain text. Default off.
+
+## Positional `[TEMPLATE]`
+
+A BIP-388 template string, e.g. `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
+for a 2-of-2 native-SegWit multisig. **Optional** at the clap
+level (because `--from-policy` is the alternate input mode), but
+the runtime pre-check refuses if NEITHER the positional NOR
+`--from-policy` is set. The conditional-visibility engine surfaces
+this constraint by marking both `--from-policy` and the positional
+slot as Required when neither is filled.
+
+## Worked example — encode a single-sig BIP-84 template
+
+1. **md** tab; pick **Encode (template → md1)**.
+2. Template positional: paste `wpkh(@0/<0;1>/*)` into the
+   positional field at the bottom of the form.
+3. Add `--key` row: `@0=xpub6CatWdiZi...VMrjPC7PW6V` (the
+   canonical mainnet BIP-84 xpub).
+4. Add `--fingerprint` row: `@0=73c5da0a`.
+5. Set `--path bip84` (named-path override).
+6. Leave `--network` at default (`mainnet`).
+7. Click **Run**. No run-confirm modal (no secret-class flag).
+
+The output panel renders the encoded `md1` string on stdout.
+For the canonical template + xpub + fingerprint combination,
+the output should match one of the canonical 3 `md1` strings
+documented in [§51](#md-per-tab-reference) (the bundle emission
+splits md1 into 3 chunks; this single-template invocation
+emits the chunk corresponding to the supplied template).
+
+## Worked example — compile from policy
+
+1. **md** tab; pick **Encode (template → md1)**.
+2. Leave the positional `[TEMPLATE]` empty.
+3. `--from-policy`: paste `pk(@0)`.
+4. `--context`: pick `tap`.
+5. Add `--key` row: `@0=xpub6CatWdiZi...VMrjPC7PW6V`.
+6. **Run**.
+
+The encoder compiles the policy `pk(@0)` to the Taproot template
+`tr(@0/<0;1>/*)`, binds the xpub to `@0`, and emits the
+corresponding `md1`.
+
+## Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Neither positional `[TEMPLATE]` nor `--from-policy` set | runtime pre-check (per `md-cli/src/main.rs:291`): `encode: TEMPLATE required (or use --from-policy with cli-compiler)` |
+| Both positional `[TEMPLATE]` and `--from-policy` set | clap-level `conflicts_with` refusal (per `md-cli/src/main.rs:66`'s `conflicts_with = "template"` on `from_policy`) |
+| `--from-policy` set without `--context` | runtime pre-check (per `md-cli/src/main.rs:263`): `--from-policy requires --context tap\|segwitv0` |
+| `--context segwitv0` AND `--unspendable-key <value>` | value-inspect refusal (per `md-cli/src/main.rs:270`): `--unspendable-key is only valid for --context tap (segwitv0 has no internal key)` |
+| `--unspendable-key` set WITHOUT `--from-policy` (i.e. with positional template) | runtime pre-check (per `md-cli/src/main.rs:284-287`): `--unspendable-key is only meaningful with --from-policy`. Not normally reachable from the GUI because the conditional-visibility engine Hides the flag when the positional path is chosen. |
+| `--key @i=<value>` not parseable | md-cli format error |
+| `--fingerprint @i=<value>` not 8 hex chars | md-cli format error |
+| Network mismatch between `--network` and the supplied xpub prefix | md-cli mismatch error |

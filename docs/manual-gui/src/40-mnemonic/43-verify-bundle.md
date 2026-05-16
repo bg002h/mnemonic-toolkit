@@ -1,0 +1,408 @@
+# `mnemonic verify-bundle` {#mnemonic-verify-bundle}
+
+The round-trip companion to [`mnemonic bundle`](#mnemonic-bundle).
+Re-derives expected card content from the input set (a master
+seed plus optional cosigner cards) and reports per-card pass/fail
+plus an overall verdict. Two input modes: **cards mode** (pass
+`--ms1` / `--mk1` / `--md1` strings directly) and **bundle-json
+mode** (pass a `--bundle-json PATH` from a previous
+`bundle --json` invocation). The two modes are mutually
+exclusive — the conditional-visibility engine disables one set
+when the other has any value.
+
+:::danger
+The worked examples reuse the canonical all-`abandon` BIP-39 test
+vector. **Never engrave or fund** the wallets verified here — the
+phrase is public. The
+[§14 Defense 2](#secret-handling) cold-node operational warning
+applies to every secret-bearing slot row (the master `ms1` and
+any `--passphrase` field render in the run-confirm modal in
+plaintext at v0.3.0).
+:::
+
+## Outline {#mnemonic-verify-bundle-outline}
+
+- [`--network`](#mnemonic-verify-bundle-network) — Bitcoin network (required)
+- [`--template`](#mnemonic-verify-bundle-template) — pre-built descriptor template (required unless `--descriptor*`)
+- [`--descriptor`](#mnemonic-verify-bundle-descriptor) — user-supplied BIP-388 descriptor (XOR with `--descriptor-file`)
+- [`--descriptor-file`](#mnemonic-verify-bundle-descriptor-file) — descriptor read from file
+- [`--language`](#mnemonic-verify-bundle-language) — BIP-39 wordlist (default `english`)
+- [`--passphrase`](#mnemonic-verify-bundle-passphrase) — BIP-39 mnemonic passphrase (XOR with `--passphrase-stdin`)
+- [`--passphrase-stdin`](#mnemonic-verify-bundle-passphrase-stdin) — read `--passphrase` from stdin
+- [`--account`](#mnemonic-verify-bundle-account) — BIP-32 account index (default 0)
+- [`--ms1`](#mnemonic-verify-bundle-ms1) — repeating; one ms1 card per slot (XOR with `--bundle-json`)
+- [`--mk1`](#mnemonic-verify-bundle-mk1) — repeating; one mk1 card per slot (XOR with `--bundle-json`; required without it)
+- [`--md1`](#mnemonic-verify-bundle-md1) — repeating; one md1 card per slot (XOR with `--bundle-json`; required without it)
+- [`--bundle-json`](#mnemonic-verify-bundle-bundle-json) — path to a JSON envelope from `bundle --json` (XOR with `--ms1`/`--mk1`/`--md1`)
+- [`--json`](#mnemonic-verify-bundle-json) — emit JSON-shaped output
+- [`--multisig-path-family`](#mnemonic-verify-bundle-multisig-path-family) — `bip48` or `bip87`
+- [`--privacy-preserving`](#mnemonic-verify-bundle-privacy-preserving) — expect mk1 to omit master fingerprint
+- [`--threshold`](#mnemonic-verify-bundle-threshold) — multisig threshold K
+- [`--slot`](#mnemonic-verify-bundle-slot) — repeating slot input (master seed + optional cosigner public material)
+
+## `--network` {#mnemonic-verify-bundle-network}
+
+The Bitcoin network the bundle was emitted under. Required.
+Determines BIP-32 chain coin-type, address HRP, BCH-code variant.
+Same 4 values + descriptions as
+[`mnemonic bundle --network`](#mnemonic-bundle-network).
+
+### Outline {#mnemonic-verify-bundle-network-outline}
+
+- [`mainnet`](#mnemonic-verify-bundle-network-mainnet)
+- [`testnet`](#mnemonic-verify-bundle-network-testnet)
+- [`signet`](#mnemonic-verify-bundle-network-signet)
+- [`regtest`](#mnemonic-verify-bundle-network-regtest)
+
+### `mainnet` {#mnemonic-verify-bundle-network-mainnet}
+
+See [`mnemonic bundle --network mainnet`](#mnemonic-bundle-network-mainnet).
+
+### `testnet` {#mnemonic-verify-bundle-network-testnet}
+
+See [`mnemonic bundle --network testnet`](#mnemonic-bundle-network-testnet).
+
+### `signet` {#mnemonic-verify-bundle-network-signet}
+
+See [`mnemonic bundle --network signet`](#mnemonic-bundle-network-signet).
+
+### `regtest` {#mnemonic-verify-bundle-network-regtest}
+
+See [`mnemonic bundle --network regtest`](#mnemonic-bundle-network-regtest).
+
+## `--template` {#mnemonic-verify-bundle-template}
+
+The descriptor template the bundle was emitted under. Same 10
+values as [`mnemonic bundle --template`](#mnemonic-bundle-template).
+Marked `Required` by the conditional-visibility engine when
+neither `--descriptor` nor `--descriptor-file` is set.
+
+### Outline {#mnemonic-verify-bundle-template-outline}
+
+- [`bip44`](#mnemonic-verify-bundle-template-bip44)
+- [`bip49`](#mnemonic-verify-bundle-template-bip49)
+- [`bip84`](#mnemonic-verify-bundle-template-bip84)
+- [`bip86`](#mnemonic-verify-bundle-template-bip86)
+- [`wsh-multi`](#mnemonic-verify-bundle-template-wsh-multi)
+- [`wsh-sortedmulti`](#mnemonic-verify-bundle-template-wsh-sortedmulti)
+- [`sh-wsh-multi`](#mnemonic-verify-bundle-template-sh-wsh-multi)
+- [`sh-wsh-sortedmulti`](#mnemonic-verify-bundle-template-sh-wsh-sortedmulti)
+- [`tr-multi-a`](#mnemonic-verify-bundle-template-tr-multi-a)
+- [`tr-sortedmulti-a`](#mnemonic-verify-bundle-template-tr-sortedmulti-a)
+
+### `bip44` {#mnemonic-verify-bundle-template-bip44}
+
+See [`mnemonic bundle --template bip44`](#mnemonic-bundle-template-bip44).
+
+### `bip49` {#mnemonic-verify-bundle-template-bip49}
+
+See [`mnemonic bundle --template bip49`](#mnemonic-bundle-template-bip49).
+
+### `bip84` {#mnemonic-verify-bundle-template-bip84}
+
+See [`mnemonic bundle --template bip84`](#mnemonic-bundle-template-bip84).
+
+### `bip86` {#mnemonic-verify-bundle-template-bip86}
+
+See [`mnemonic bundle --template bip86`](#mnemonic-bundle-template-bip86).
+
+### `wsh-multi` {#mnemonic-verify-bundle-template-wsh-multi}
+
+See [`mnemonic bundle --template wsh-multi`](#mnemonic-bundle-template-wsh-multi).
+
+### `wsh-sortedmulti` {#mnemonic-verify-bundle-template-wsh-sortedmulti}
+
+See [`mnemonic bundle --template wsh-sortedmulti`](#mnemonic-bundle-template-wsh-sortedmulti).
+
+### `sh-wsh-multi` {#mnemonic-verify-bundle-template-sh-wsh-multi}
+
+See [`mnemonic bundle --template sh-wsh-multi`](#mnemonic-bundle-template-sh-wsh-multi).
+
+### `sh-wsh-sortedmulti` {#mnemonic-verify-bundle-template-sh-wsh-sortedmulti}
+
+See [`mnemonic bundle --template sh-wsh-sortedmulti`](#mnemonic-bundle-template-sh-wsh-sortedmulti).
+
+### `tr-multi-a` {#mnemonic-verify-bundle-template-tr-multi-a}
+
+See [`mnemonic bundle --template tr-multi-a`](#mnemonic-bundle-template-tr-multi-a).
+
+### `tr-sortedmulti-a` {#mnemonic-verify-bundle-template-tr-sortedmulti-a}
+
+See [`mnemonic bundle --template tr-sortedmulti-a`](#mnemonic-bundle-template-tr-sortedmulti-a).
+
+## `--descriptor` {#mnemonic-verify-bundle-descriptor}
+
+User-supplied BIP-388 descriptor for the re-parse path. XOR with
+`--descriptor-file` (the GUI disables one when the other has a
+value). Mutually-required-one-of with `--template`. Same semantics
+as [`mnemonic bundle --descriptor`](#mnemonic-bundle-descriptor).
+
+## `--descriptor-file` {#mnemonic-verify-bundle-descriptor-file}
+
+Path to a single-line UTF-8 descriptor file. XOR with
+`--descriptor`. Same semantics as
+[`mnemonic bundle --descriptor-file`](#mnemonic-bundle-descriptor-file).
+
+## `--language` {#mnemonic-verify-bundle-language}
+
+BIP-39 wordlist for any phrase passed via slot input. Same 10
+values as [`mnemonic bundle --language`](#mnemonic-bundle-language).
+
+### Outline {#mnemonic-verify-bundle-language-outline}
+
+- [`english`](#mnemonic-verify-bundle-language-english)
+- [`simplifiedchinese`](#mnemonic-verify-bundle-language-simplifiedchinese)
+- [`traditionalchinese`](#mnemonic-verify-bundle-language-traditionalchinese)
+- [`czech`](#mnemonic-verify-bundle-language-czech)
+- [`french`](#mnemonic-verify-bundle-language-french)
+- [`italian`](#mnemonic-verify-bundle-language-italian)
+- [`japanese`](#mnemonic-verify-bundle-language-japanese)
+- [`korean`](#mnemonic-verify-bundle-language-korean)
+- [`portuguese`](#mnemonic-verify-bundle-language-portuguese)
+- [`spanish`](#mnemonic-verify-bundle-language-spanish)
+
+### `english` {#mnemonic-verify-bundle-language-english}
+
+See [`mnemonic bundle --language english`](#mnemonic-bundle-language-english).
+
+### `simplifiedchinese` {#mnemonic-verify-bundle-language-simplifiedchinese}
+
+See [`mnemonic bundle --language simplifiedchinese`](#mnemonic-bundle-language-simplifiedchinese).
+
+### `traditionalchinese` {#mnemonic-verify-bundle-language-traditionalchinese}
+
+See [`mnemonic bundle --language traditionalchinese`](#mnemonic-bundle-language-traditionalchinese).
+
+### `czech` {#mnemonic-verify-bundle-language-czech}
+
+See [`mnemonic bundle --language czech`](#mnemonic-bundle-language-czech).
+
+### `french` {#mnemonic-verify-bundle-language-french}
+
+See [`mnemonic bundle --language french`](#mnemonic-bundle-language-french).
+
+### `italian` {#mnemonic-verify-bundle-language-italian}
+
+See [`mnemonic bundle --language italian`](#mnemonic-bundle-language-italian).
+
+### `japanese` {#mnemonic-verify-bundle-language-japanese}
+
+See [`mnemonic bundle --language japanese`](#mnemonic-bundle-language-japanese).
+
+### `korean` {#mnemonic-verify-bundle-language-korean}
+
+See [`mnemonic bundle --language korean`](#mnemonic-bundle-language-korean).
+
+### `portuguese` {#mnemonic-verify-bundle-language-portuguese}
+
+See [`mnemonic bundle --language portuguese`](#mnemonic-bundle-language-portuguese).
+
+### `spanish` {#mnemonic-verify-bundle-language-spanish}
+
+See [`mnemonic bundle --language spanish`](#mnemonic-bundle-language-spanish).
+
+## `--passphrase` {#mnemonic-verify-bundle-passphrase}
+
+The BIP-39 mnemonic-extension passphrase the bundle was emitted
+with. Same semantics as
+[`mnemonic bundle --passphrase`](#mnemonic-bundle-passphrase) —
+schema-`secret: true`; XOR with `--passphrase-stdin`. The
+verifier needs the same passphrase that produced the original
+bundle, otherwise the re-derivation drifts and the verifier
+reports a mismatch.
+
+## `--passphrase-stdin` {#mnemonic-verify-bundle-passphrase-stdin}
+
+Boolean. Read passphrase from stdin (raw, NULL-byte preserving).
+Schema-`secret: true`. XOR with `--passphrase`.
+
+## `--account` {#mnemonic-verify-bundle-account}
+
+BIP-32 account index (default 0). Range 0..2_147_483_647. Number
+widget; no `?` help-icon (Number widgets are not in the
+help-icon class).
+
+## `--ms1` {#mnemonic-verify-bundle-ms1}
+
+Per-slot `ms1` card. Repeating flag — one occurrence per slot.
+Schema-`secret: true`. The card encodes the BIP-39 entropy plus a
+checksum; pasting the plaintext into a text field exposes it on
+screen at v0.3.0 (the run-confirm modal renders it verbatim).
+
+The empty string is the **watch-only sentinel** (`--ms1 ""` for
+schema-2/3 single-use and per-slot for schema-4 length-N): it
+marks a slot whose secret material is intentionally absent and
+the verifier should re-derive only the public mk1+md1 fields for
+that slot.
+
+XOR with `--bundle-json` (the conditional-visibility engine
+disables `--ms1` when `--bundle-json` has a value).
+
+## `--mk1` {#mnemonic-verify-bundle-mk1}
+
+Per-slot `mk1` card. Repeating flag. Schema-`secret: false`
+(public material). The conditional-visibility engine marks this
+flag `Required` when `--bundle-json` is empty (every cards-mode
+verification needs at least one mk1).
+
+XOR with `--bundle-json`.
+
+## `--md1` {#mnemonic-verify-bundle-md1}
+
+Per-slot `md1` card. Repeating flag. Schema-`secret: false`.
+Marked `Required` when `--bundle-json` is empty. XOR with
+`--bundle-json`.
+
+## `--bundle-json` {#mnemonic-verify-bundle-bundle-json}
+
+Path to a JSON envelope previously written by
+`mnemonic bundle --json`. Mutually exclusive with the cards-mode
+flags `--ms1`, `--mk1`, `--md1` (the conditional-visibility
+engine disables all three when this has a value, and disables
+this when any of the three has a value).
+
+The envelope must follow the schema documented at
+[`mnemonic bundle --json`](#mnemonic-bundle-json) (`schema_version`
+`"4"`; 14 fields in canonical order). The verifier reads the
+file, hydrates a `BundleJson` struct, and re-derives expected
+card content from the master seed (or from the cards' public
+material if no `ms1` is present).
+
+The GUI renders this as a Path widget. Note that the upstream
+toolkit does **not** support `--bundle-json -` (stdin
+sentinel); the schema's `stdio_sentinel: false` setting reflects
+this — the GUI cannot accidentally emit a stdin-form argv that
+the upstream would reject.
+
+## `--json` {#mnemonic-verify-bundle-json}
+
+Boolean. Emit verifier output as JSON instead of human-readable
+per-card pass/fail text. The JSON envelope mirrors the
+`bundle --json` schema with an added `verdict` field per card
+(`pass` / `fail` / `omitted`) and an overall `verdict` at top
+level.
+
+## `--multisig-path-family` {#mnemonic-verify-bundle-multisig-path-family}
+
+`bip48` or `bip87`. Same semantics as
+[`mnemonic bundle --multisig-path-family`](#mnemonic-bundle-multisig-path-family);
+the verifier needs the same path family the bundle was emitted
+under.
+
+### Outline {#mnemonic-verify-bundle-multisig-path-family-outline}
+
+- [`bip48`](#mnemonic-verify-bundle-multisig-path-family-bip48)
+- [`bip87`](#mnemonic-verify-bundle-multisig-path-family-bip87)
+
+### `bip48` {#mnemonic-verify-bundle-multisig-path-family-bip48}
+
+See [`mnemonic bundle --multisig-path-family bip48`](#mnemonic-bundle-multisig-path-family-bip48).
+
+### `bip87` {#mnemonic-verify-bundle-multisig-path-family-bip87}
+
+See [`mnemonic bundle --multisig-path-family bip87`](#mnemonic-bundle-multisig-path-family-bip87).
+
+## `--privacy-preserving` {#mnemonic-verify-bundle-privacy-preserving}
+
+Boolean. When set, the verifier expects the input `mk1` cards to
+have been emitted under `--privacy-preserving` (i.e., master
+fingerprint is omitted from the card payload). Without this flag,
+the verifier expects the fingerprint to be present and reports a
+mismatch on a privacy-preserving card.
+
+## `--threshold` {#mnemonic-verify-bundle-threshold}
+
+Multisig threshold K. Same semantics as
+[`mnemonic bundle --threshold`](#mnemonic-bundle-threshold).
+Required for multisig templates; refused for single-sig templates
+with the same `mode_text::THRESHOLD_WITHOUT_MULTISIG` mirror as
+bundle.
+
+## `--slot` {#mnemonic-verify-bundle-slot}
+
+The repeating slot-input flag, identical grammar to
+[`mnemonic bundle --slot`](#mnemonic-bundle-slot). For
+verify-bundle, slot rows carry the **master seed material** that
+should re-derive the cards (typically a single `@0.phrase=<value>`
+row for single-sig verification, or N cosigner rows for
+multisig). The slot editor renders identically.
+
+## Worked example — verify the canonical single-sig bundle
+
+1. Switch to **mnemonic** tab; pick **Verify Bundle (round-trip)**.
+2. Set `--network` to `mainnet`, `--template` to `bip84`.
+3. Clear `--multisig-path-family` (same single-sig caveat as
+   bundle; FOLLOWUP `gui-bundle-multisig-flags-conditional`).
+4. In the slot editor, change the seeded `@0.xpub` row to
+   `@0.phrase=` and paste the canonical phrase
+   `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`.
+5. Add three rows to the form (or paste into the repeating
+   `--ms1` / `--mk1` / `--md1` text fields if rendered as
+   text rather than slot editor):
+
+   ```text
+   --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+   --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
+   --md1 md1zsxdspqqqpm6jzzqqvqz6qu79mg9p2sgfff6p2eph8wftp5uf6gqnlgzqqqnymv0
+   --md1 md1zsxdspq259s3jnsrcrhnlagpftrf9apnc3m9fy8uqfc85cha4nqnh5k67ey2hzyc
+   --md1 md1zsxdspqjd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nvqhuuyvzgaejah6
+   ```
+
+6. Click **Run**. The run-confirm modal appears (the `@0.phrase=`
+   slot row is secret-class). Click **Run** in the modal.
+
+The output panel renders the SPEC §5.4 9-element check schema on
+stdout (one line per named check, format `<name>: ok|fail [detail]`,
+plus a final `result: ok|mismatch` line):
+
+```text
+ms1_decode: ok decoded successfully
+ms1_entropy_match: ok ms1 byte-identical
+mk1_decode: ok decoded successfully
+mk1_xpub_match: ok xpub matches
+mk1_fingerprint_match: ok fingerprint matches
+mk1_path_match: ok path matches
+md1_decode: ok decoded successfully
+md1_wallet_policy: ok wallet-policy mode confirmed
+md1_xpub_match: ok 65-byte xpub matches expected
+result: ok
+```
+
+(Note: a single-sig bundle's wire format is 2 mk1 strings + 3
+md1 strings — the multi-string serialization is one card per
+output line in `mnemonic bundle`'s stdout, but the verifier's
+9-element check schema operates per-named-check, NOT per-string.
+Multisig invocations use the per-cosigner-interleaved
+`6N + 3` schema variant per `verify_bundle.rs::run_multisig`.)
+
+A real bundle that has drifted from its master (passphrase typo,
+wrong template, wrong account index) reports `fail` on the
+relevant check rows plus an overall `result: mismatch`. The exit
+code is 0 for `result: ok` and 4 for `result: mismatch` (per
+`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:235`'s
+`Ok(if any_fail { 4 } else { 0 })`).
+
+## Refusals
+
+Most refusals are inherited from `bundle` (the descriptor-mode and
+single-sig-template constraints apply identically). The
+verify-bundle-specific refusal is the cards-vs-bundle-json XOR:
+
+| Trigger | Refusal |
+|---|---|
+| `--bundle-json` AND any of `--ms1` / `--mk1` / `--md1` | clap-level `conflicts_with` error |
+| `--bundle-json` is `-` (stdin sentinel) | upstream `verify-bundle` does not implement a `-`/stdin sentinel for `--bundle-json` (it calls `std::fs::read_to_string(path)` unconditionally — a literal `-` becomes a filesystem-path lookup and fails as a generic I/O error). The GUI's `stdio_sentinel: false` schema setting prevents this argv from being assembled. |
+| missing `--mk1` and `--md1` (without `--bundle-json`) | clap-level `required_unless_present` error |
+
+Plus the descriptor-mode and single-sig-template refusals from
+[`mnemonic bundle`](#mnemonic-bundle); see the bundle Refusals
+table for the byte-exact `mode_text::*` strings.
+
+## Advisories
+
+The verifier surfaces the same argv-leakage advisories as bundle
+for inline secret-bearing slot input or inline `--passphrase`.
+Plus, for cards-mode verification, the verdict line itself is the
+operationally relevant signal — the `PASS` / `FAIL` words are
+greppable from CI scripts.

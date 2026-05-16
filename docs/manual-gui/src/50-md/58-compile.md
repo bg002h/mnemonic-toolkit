@@ -1,0 +1,75 @@
+# `md compile` {#md-compile}
+
+Translate a sub-Miniscript-Policy expression into a BIP-388
+wallet-policy template. Use when you want to specify a
+spend-condition policy in higher-level Miniscript-Policy notation
+(threshold-of, time-locks, multi-key conditions) and have the
+toolkit produce the matching template that `md encode` would emit.
+
+## Outline {#md-compile-outline}
+
+- [`--context`](#md-compile-context) — script context (required; `tap` or `segwitv0`)
+- [`--unspendable-key`](#md-compile-unspendable-key) — Tap-context fallback unspendable internal key
+- [`--json`](#md-compile-json) — emit JSON output
+
+## `--context` {#md-compile-context}
+
+The script context for compilation. Dropdown widget; **required**
+at the clap level.
+
+### Outline {#md-compile-context-outline}
+
+- [`tap`](#md-compile-context-tap)
+- [`segwitv0`](#md-compile-context-segwitv0)
+
+### `tap` {#md-compile-context-tap}
+
+Taproot context. Compiles the policy expression for `compile_tr`
+output (Taproot script-tree compilation). Pairs with
+`--unspendable-key` for the internal-key designation.
+
+### `segwitv0` {#md-compile-context-segwitv0}
+
+SegWit v0 context (P2WSH). Compiles via the standard
+`compile_wsh` path. **Refuses `--unspendable-key`** (the flag
+applies only to `tap` context).
+
+## `--unspendable-key` {#md-compile-unspendable-key}
+
+Tap-context only: fallback unspendable internal key for
+`compile_tr`. Defaults to BIP-341 NUMS H-point when omitted.
+**Rejected when `--context segwitv0`** (per `md-cli`'s
+value-inspect of the `--context` value, NOT a clap conflict).
+
+## `--json` {#md-compile-json}
+
+Boolean. Emit JSON output. Default off.
+
+## Positional `expr`
+
+The sub-Miniscript-Policy expression to compile. Required,
+single (not repeating). Syntax follows the Miniscript-Policy
+spec; e.g. `pk(KEY)`, `or(50@pk(A),50@pk(B))`,
+`thresh(2,pk(A),pk(B),pk(C))`.
+
+## Worked example
+
+1. **md** tab; pick **Compile (policy → template)**.
+2. `--context`: pick `tap`.
+3. `expr`: paste a simple policy, e.g. `pk(@0)` (single-key
+   Taproot).
+4. **Run**.
+
+The output panel renders the compiled BIP-388 template on
+stdout. Use the result as input to [`md encode`](#md-encode)
+or downstream descriptor-aware tooling.
+
+## Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Missing `--context` | clap-level `required` error |
+| Missing `expr` positional | clap-level `required` error |
+| `--context segwitv0` AND `--unspendable-key <value>` | md-cli value-inspect refusal: `--unspendable-key applies only under --context tap` |
+| `expr` not parseable as Miniscript-Policy | rust-miniscript parse error |
+| Policy not compilable under chosen `--context` | rust-miniscript compile error |

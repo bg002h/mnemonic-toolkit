@@ -45,6 +45,43 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `gui-run-confirm-modal-secret-redaction-manual-companion` — manual-prose lockstep companion to GUI run-confirm-modal redaction fix
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle M-P2.4 batch 4 R0 source-grep. The Defense-2 prose in `docs/manual-gui/src/10-foundations/14-secret-handling.md` (LOCKed in M-P2.4 batch 2) and the feature-2 description in `11-what-is-mnemonic-gui.md` both claim the run-confirm modal "shows the assembled argv with secret values replaced by `***`". `mnemonic-gui/src/main.rs:512-535` shows no such redaction; the modal renders each argv token verbatim. The manual prose was patched in the M-P2.4 batch-4 commit to honestly describe the actual (undesired) behavior + recommend cold-node-only operation as an operational mitigation.
+- **Where:** `docs/manual-gui/src/10-foundations/14-secret-handling.md` Defense-2 section; `docs/manual-gui/src/10-foundations/11-what-is-mnemonic-gui.md` feature-2 description; `docs/manual-gui/pinned-upstream.toml` (currently pinned to `mnemonic-gui-v0.3.0`, must bump to whatever GUI tag ships the redaction fix).
+- **What:** When the GUI ships the redaction fix (tracked at sibling `bg002h/mnemonic-gui` `FOLLOWUPS.md` `gui-run-confirm-modal-secret-redaction`), this manual must (i) revert the v1.0 honest-broken framing in chapters 11 + 14, (ii) restore the `***` redaction claim, (iii) drop the cold-node-only operational warning to a hover-tooltip-grade general-hygiene remark (still useful but no longer load-bearing for the security model), and (iv) bump `pinned-upstream.toml` to the GUI tag that ships the fix.
+- **Why deferred:** Surfaced AFTER M-P2.4 batches 1-2 LOCKed; the manual cannot fix the GUI behavior, only describe it. v1.0 manual ships with honest-broken framing + cold-node operational mitigation; v1.1 will close the loop in lockstep with the GUI fix.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-run-confirm-modal-secret-redaction`.
+
+### `gui-manual-cross-refs-to-cli-manual` — bidirectional links between docs/manual-gui/ and docs/manual/ chapters where concepts overlap
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual-gui/src/ chapters that document concepts also covered in docs/manual/ (foundations, glossary terms, secret-bearing advisories, BIP-39 / BIP-32 primers). Currently no cross-links exist; the manuals are independent build units.
+- **What:** v1.1 enhancement (Option C in the v1 planning §1.1). Add bidirectional `[CLI manual: §X.Y](https://...manual.pdf#section)` links between the GUI manual's foundations chapter and the CLI manual's equivalent chapters. Both PDFs hosted; deep-links use stable kebab-case anchors. Concept-overlap zones: bundle/card/slot terminology, BIP-39 entropy primer, BIP-32 derivation primer, codex32 / BCH primers, m-format constellation glossary.
+- **Why deferred:** v1.0 cycle scope-locked to Option B (~165 pages, GUI-shaped only). Cross-references introduce bidirectional drift hazard because the CLI manual's chapters are NOT structured around the GUI's IA. Wait until both manuals are in steady state.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+
+### `cli-manual-html-target` — add HTML target + gh-pages deploy for the CLI manual
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual/Makefile (currently has `md` and `pdf` targets only; no `html`). docs/manual/Dockerfile.build (would need no changes — pandoc + xelatex already installed). .github/workflows/manual.yml (would need a gh-pages deploy job mirroring docs/manual-gui/.github/workflows/manual-gui.yml's pattern).
+- **What:** v1.1 enhancement. Add `make html` target producing `build/m-format-manual.html`, plus a gh-pages deploy step in `manual.yml` triggered on `manual-v*` tags. Output lands at `https://bg002h.github.io/mnemonic-toolkit/manual/` (parallel to the GUI manual at `/manual-gui/`). Enables in-app help-icon deep-linking for any future CLI-output-driven tooling (e.g., a `mnemonic --help <subcommand>` that emits a manual URL alongside the help text).
+- **Why deferred:** CLI manual is hand-curated and stable at v0.1; no current user-facing demand for HTML hosting. The GUI manual v1.0 cycle is the first time gh-pages infrastructure lands in this repo; CLI-manual HTML can piggyback once that's proven.
+- **Status:** `open`
+- **Tier:** `v1.1+`
+
+### `gui-manual-localization` — non-English content support for the GUI manual
+
+- **Surfaced:** 2026-05-15, manual-gui v1.0 cycle planning. Filed per the v1.0 cycle plan (in-flight; to be archived at PE close to `design/PLAN_manual_gui_v1.md`) §2.7.
+- **Where:** docs/manual-gui/src/. Pandoc supports multi-language documents via the `lang` metadata field + Babel/Polyglossia LaTeX packages.
+- **What:** Translate the GUI manual into at least one additional language (likely Spanish, given the existing BIP-39 wordlist support for `spanish`). Add a language-selector to the GUI's help-icon URL helper to deep-link to localized anchors. Requires a translation infrastructure: per-language `src/` trees + a build matrix in CI + native-speaker review.
+- **Why deferred:** v1.0 ships English-only. Localization is a substantial undertaking (translation cost + per-language QA cost + ongoing drift maintenance). Defer until the manual stabilizes AND there's specific demand from a user community.
+- **Status:** `open`
+- **Tier:** `v2+`
+
 ### `library-error-and-language-surface-promotion` — move `error` + `language` + `friendly` modules from main.rs to lib.rs
 
 - **Surfaced:** 2026-05-13, v0.11.0 Phase 1 R1 reviewer-loop. The P1 GREEN impl pivoted to a self-contained library surface (`FinalWordLanguage` + `FinalWordError` library-local enums) because exposing `error`/`language`/`friendly` from lib.rs today would require moving them out of `src/main.rs`'s private-module set — a cross-module refactor touching every binary file that imports `ToolkitError`. R1 reviewer endorsed the P1 pivot but recommended filing this FOLLOWUP for the future cleaner refactor.
@@ -1393,3 +1430,13 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **v0.2 update (2026-05-12, mnemonic-toolkit v0.9.0):** `mnemonic gui-schema` introspection subcommand shipped (SPEC §7 contract). The GUI consumes its JSON output instead of (or alongside) the `syn` codegen path. `cli_gui_schema.rs` (16 tests) pins the SPEC §7 contract on this side. The companion `mnemonic-gui` v0.2 Phase C.2 PR consumes the schema via `cargo run -p mnemonic-toolkit -- gui-schema` at build time.
 - **Status:** `open` (mirror-invariant; tracking only — every flag-surface PR carries this lockstep work).
 - **Tier:** `v1 / mirror-invariant`
+
+### `mk-vectors-pretty-out-help-mismatch` — `mk vectors --pretty` help-text vs source behavior drift
+
+- **Surfaced:** manual-gui v1.0 cycle batch 8 R0 review (2026-05-15), filed at toolkit `63397ef`+. Cited in `docs/manual-gui/src/70-mk/76-vectors.md` and `docs/manual-gui/src/90-appendices/94-release-history.md`.
+- **Where:** `mk-cli` source at `crates/mk-cli/src/cmd/vectors.rs:23` (help-text doc-comment) and the mirror at `mnemonic-gui/src/schema/mk.rs:208` (schema help-text).
+- **What:** `mk vectors --help` advertises `--pretty: Ignored when --out is supplied`. Source (vectors.rs:70-74 in the `write_per_fixture_files` arm) actually honors `--pretty` — each per-fixture .json file is written via `serde_json::to_string_pretty` when `pretty=true`. The manual-gui v1.0 manual sides with source-truth and notes the help-text drift.
+- **Why deferred:** Source-side fix lives in the `bg002h/mnemonic-key` repo (mk-cli `cmd/vectors.rs`); the schema-mirror lives in the `bg002h/mnemonic-gui` repo. Three-cite fix at v1.1 cycle close.
+- **Status:** `open`.
+- **Tier:** `v1+ / cross-repo`
+- **Companion:** intended companion entries in `bg002h/mnemonic-key/design/FOLLOWUPS.md` and `bg002h/mnemonic-gui/FOLLOWUPS.md` at the matching short-id; both currently missing (file with this entry at next cross-repo cycle).
