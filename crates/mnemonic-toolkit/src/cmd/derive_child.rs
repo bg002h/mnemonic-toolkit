@@ -19,17 +19,46 @@ use std::str::FromStr;
 
 #[derive(Args, Debug, Clone)]
 pub struct DeriveChildArgs {
-    /// Master source. v0.7 accepted `--from xprv=<value>` only; v0.8 also
-    /// accepts `--from phrase=<bip39-mnemonic>` (combined with `--passphrase`
-    /// + `--language`). Both forms accept `=-` to read from stdin.
-    #[arg(long = "from", value_parser = parse_from_input, required = true)]
+    /// Master source — shape `<node>=<value>`.
+    ///
+    /// `<node>` is one of:
+    ///   xprv    BIP-32 extended private key (secret)
+    ///   phrase  BIP-39 mnemonic (secret; combine with --passphrase
+    ///           and --language)
+    ///
+    /// `<value>` is the node's text form, or `-` to read from stdin.
+    #[arg(
+        long = "from",
+        value_parser = parse_from_input,
+        required = true,
+        verbatim_doc_comment,
+    )]
     pub from: FromInput,
 
-    /// BIP-85 application. The 6 in-scope tokens map to apps `39'`, `2'`,
-    /// `32'`, `128169'`, `707764'`, `707785'`. The 3 out-of-scope tokens
-    /// (`rsa`, `rsa-gpg`, `dice`) parse here and surface the SPEC §7
-    /// byte-exact refusal at runtime (per SPEC §5 + plan deviation note).
-    #[arg(long = "application", required = true)]
+    /// BIP-85 application. Accepted values:
+    ///
+    ///   bip39             BIP-85 application 39' — derives a child
+    ///                     BIP-39 mnemonic of `--length` words (12 /
+    ///                     18 / 24)
+    ///   hd-seed           BIP-85 application 32' — derives a 32-byte
+    ///                     BIP-32 seed (`--length 0`)
+    ///   xprv              BIP-85 application 32' alt — derives a
+    ///                     child xprv directly (`--length 0`)
+    ///   hex               BIP-85 application 128169' — derives
+    ///                     `--length` bytes of hex (16..=64)
+    ///   password-base64   BIP-85 application 707764' — derives
+    ///                     `--length` chars of base64 password (20..=86)
+    ///   password-base85   BIP-85 application 707785' — derives
+    ///                     `--length` chars of base85 password (10..=80)
+    ///   dice              BIP-85 application 89101' — derives
+    ///                     `--length` dice rolls (1..=99 each
+    ///                     `--dice-sides`-sided); REFUSED at runtime
+    ///   rsa               BIP-85 application 828365' — RSA key
+    ///                     derivation; REFUSED at runtime
+    ///                     (RUSTSEC-2023-0071)
+    ///   rsa-gpg           BIP-85 application 828366' — RSA-GPG;
+    ///                     REFUSED at runtime
+    #[arg(long = "application", required = true, verbatim_doc_comment)]
     pub application: String,
 
     /// Per-app `--length` validator (range varies; see SPEC §4).

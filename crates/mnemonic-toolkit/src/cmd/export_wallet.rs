@@ -66,8 +66,27 @@ pub struct ExportWalletArgs {
     #[arg(long, default_value = "0")]
     pub account: u32,
 
-    /// `@N.<subkey>=<value>` slot input, repeating.
-    #[arg(long = "slot", action = clap::ArgAction::Append, value_parser = crate::slot_input::parse_slot_input)]
+    /// Slot input — shape `@N.<subkey>=<value>`. Repeating.
+    ///
+    /// `<subkey>` is one of:
+    ///   phrase       BIP-39 mnemonic (secret)
+    ///   entropy      raw entropy hex (secret)
+    ///   xpub         BIP-32 extended public key
+    ///   fingerprint  4-byte master fingerprint (hex)
+    ///   path         BIP-32 derivation path
+    ///   wif          Wallet Import Format private key (secret)
+    ///   xprv         BIP-32 extended private key (secret)
+    ///
+    /// `<value>` is the subkey's text form, or `-` to read from
+    /// stdin. The 7 subkeys mirror `mnemonic bundle --slot`. For a
+    /// watch-only export only `xpub` and `fingerprint` are required;
+    /// secret subkeys are accepted but unnecessary.
+    #[arg(
+        long = "slot",
+        action = clap::ArgAction::Append,
+        value_parser = crate::slot_input::parse_slot_input,
+        verbatim_doc_comment,
+    )]
     pub slot: Vec<crate::slot_input::SlotInput>,
 
     /// Output format. Default bitcoin-core.
@@ -98,11 +117,23 @@ pub struct ExportWalletArgs {
     #[arg(long = "wallet-name")]
     pub wallet_name: Option<String>,
 
-    /// SPEC v0.8 §7 — Taproot internal-key designation for `tr-multi-a` /
-    /// `tr-sortedmulti-a` templates. `nums` selects the BIP-341 reference
-    /// NUMS x-only point. `@N` selects cosigner N's xpub as the key-path
-    /// internal key (cosigner N is then removed from the multi_a leaf set).
-    #[arg(long = "taproot-internal-key", value_parser = parse_taproot_internal_key_arg)]
+    /// SPEC v0.8 §7 — Taproot internal-key designation for
+    /// `tr-multi-a` / `tr-sortedmulti-a` templates.
+    ///
+    /// Accepted values:
+    ///   nums  BIP-341 reference NUMS x-only point (unspendable
+    ///         internal key; common default)
+    ///   @N    cosigner N's xpub as the key-path internal key
+    ///         (cosigner N is then removed from the multi_a leaf
+    ///         set; N is a decimal index 0..=N-1)
+    ///
+    /// Required under `tr-multi-a` / `tr-sortedmulti-a`; refused
+    /// for non-Taproot templates.
+    #[arg(
+        long = "taproot-internal-key",
+        value_parser = parse_taproot_internal_key_arg,
+        verbatim_doc_comment,
+    )]
     pub taproot_internal_key: Option<TaprootInternalKey>,
 }
 

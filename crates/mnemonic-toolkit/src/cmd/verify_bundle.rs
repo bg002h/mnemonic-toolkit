@@ -40,6 +40,9 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub language: Option<CliLanguage>,
 
+    /// BIP-39 mnemonic-extension passphrase used during the
+    /// original `mnemonic bundle` emission. Empty (default) is the
+    /// common case. Mutually exclusive with `--passphrase-stdin`.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -56,16 +59,24 @@ pub struct VerifyBundleArgs {
     #[arg(long, default_value = "0")]
     pub account: u32,
 
-    /// v0.4.1 J.5: schema-4 repeating-flag for per-slot ms1 cards. For
-    /// schema-2/3 single-sig invocations, supply once (`--ms1 <s>`); for
-    /// schema-4 multi-source multisig, repeat per slot (`--ms1 "" --ms1
-    /// <s2>`...). Empty string `""` is the watch-only sentinel per SPEC §5.8.
+    /// Per-slot `ms1` card(s) to verify. Single-sig: supply once
+    /// (`--ms1 <s>`). Multisig: repeat per slot — `--ms1 <s1>
+    /// --ms1 ""` lets a multisig verifier check only one cosigner's
+    /// seed (empty string `""` is the watch-only sentinel per SPEC
+    /// §5.8). Mutually exclusive with `--bundle-json`.
     #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
 
+    /// The `mk1` xpub card(s) to verify. Single-sig: one `--mk1`.
+    /// Multisig: one `--mk1` per cosigner, in slot order. Mutually
+    /// exclusive with `--bundle-json`.
     #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
     pub mk1: Vec<String>,
 
+    /// The `md1` wallet-policy card(s) to verify. Single-sig
+    /// templates emit one md1; multisig templates emit one md1
+    /// total (the policy is shared). Mutually exclusive with
+    /// `--bundle-json`.
     #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
     pub md1: Vec<String>,
 
@@ -76,6 +87,9 @@ pub struct VerifyBundleArgs {
     #[arg(long = "bundle-json", conflicts_with_all = ["ms1", "mk1", "md1"])]
     pub bundle_json: Option<PathBuf>,
 
+    /// Emit a single JSON object on stdout instead of the multi-line
+    /// `OK / mismatch` text form. The JSON envelope includes
+    /// per-slot match details for multisig verifications.
     #[arg(long)]
     pub json: bool,
 

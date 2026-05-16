@@ -40,6 +40,9 @@ pub struct BundleArgs {
     #[arg(long)]
     pub language: Option<CliLanguage>,
 
+    /// BIP-39 mnemonic-extension passphrase ("25th word"). Empty
+    /// (default) is the common case. Mutually exclusive with
+    /// `--passphrase-stdin`.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -56,9 +59,14 @@ pub struct BundleArgs {
     #[arg(long, default_value = "0")]
     pub account: u32,
 
+    /// Emit a single JSON object on stdout instead of the multi-line
+    /// `ms1: ... / mk1: ... / md1: ...` text form.
     #[arg(long)]
     pub json: bool,
 
+    /// Suppress the human-readable engraving-card panel on stderr.
+    /// The stdout `ms1` / `mk1` / `md1` output is unchanged. Use for
+    /// piping into other tooling.
     #[arg(long = "no-engraving-card")]
     pub no_engraving_card: bool,
 
@@ -66,24 +74,44 @@ pub struct BundleArgs {
     #[arg(long = "multisig-path-family", value_enum)]
     pub multisig_path_family: Option<MultisigPathFamily>,
 
-    /// v0.2 privacy mode: suppress master fingerprint from mk1 + engraving card.
+    /// v0.2 privacy mode: suppress master fingerprint from the
+    /// emitted mk1 cards + engraving card.
     #[arg(long, default_value = "false")]
     pub privacy_preserving: bool,
 
-    /// v0.2 self-check: re-parse the emitted bundle and verify it round-trips.
+    /// v0.2 self-check: after emission, re-parse the emitted bundle
+    /// and verify it round-trips to the same xpubs + policy.
     #[arg(long, default_value = "false")]
     pub self_check: bool,
 
-    /// v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16).
+    /// v0.2 multisig threshold K (1 ≤ K ≤ N ≤ 16). Required for
+    /// multisig templates (`wsh-*`, `sh-wsh-*`, `tr-*`); refused
+    /// under single-sig templates.
     #[arg(long)]
     pub threshold: Option<u8>,
 
     /// v0.4 unified slot input. Repeating flag — one occurrence per
-    /// (slot, subkey) tuple. Grammar: `@N.<subkey>=<value>` where N is
-    /// the slot index (u8) and subkey is one of phrase / entropy / xpub /
-    /// fingerprint / path / wif / xprv. Phase B lands the parser; Phase C
-    /// wires it into the unified `bundle_run` dispatch.
-    #[arg(long = "slot", action = clap::ArgAction::Append, value_parser = crate::slot_input::parse_slot_input)]
+    /// (slot, subkey) tuple.
+    ///
+    /// Grammar: `@N.<subkey>=<value>`, where N is the slot index
+    /// (u8) and `<subkey>` is one of:
+    ///   phrase       BIP-39 mnemonic (secret)
+    ///   entropy      raw entropy hex (secret)
+    ///   xpub         BIP-32 extended public key
+    ///   fingerprint  4-byte master fingerprint (hex)
+    ///   path         BIP-32 derivation path
+    ///   wif          Wallet Import Format private key (secret)
+    ///   xprv         BIP-32 extended private key (secret)
+    ///
+    /// `<value>` is the subkey's text form, or `-` to read from
+    /// stdin. Single-sig templates expect `@0` only; multisig
+    /// templates expect `@0..@N-1`.
+    #[arg(
+        long = "slot",
+        action = clap::ArgAction::Append,
+        value_parser = crate::slot_input::parse_slot_input,
+        verbatim_doc_comment,
+    )]
     pub slot: Vec<crate::slot_input::SlotInput>,
 }
 
