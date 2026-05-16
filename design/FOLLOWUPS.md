@@ -45,6 +45,75 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `gui-schema-conditional-rules-v1` — project SPEC §6.6/§6.9 mutex/conditional rules into gui-schema JSON (drift-gated)
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle (`design/IMPLEMENTATION_PLAN_gui_conditional_applicability_v1.md`). Motivating bug: GUI bundle form default state (template = `bip84`, single-sig) emits `--threshold 1 --multisig-path-family bip48` which CLI rejects with SPEC §6.6 byte-exact errors (`crates/mnemonic-toolkit/src/cmd/bundle.rs:120`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (P1 target — emit `conditional_rules` array, version bump 1→2); `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10 (P0 canonical home — Predicate AST + Effect + drift invariant); `mnemonic-gui/src/form/conditional.rs` (P2 — ~14 new rules); `mnemonic-gui/src/form/invocation.rs` (P3 — visibility gate); `mnemonic-gui/tests/gui_schema_conditional_drift.rs` (P4 — NEW drift gate); `mnemonic-gui/src/main.rs:197-211` (P5 — remove bad default seed).
+- **What:** Cross-repo mechanism + comprehensive rule coverage. Adds machine-readable `conditional_rules` to `mnemonic gui-schema` JSON; GUI's `assemble_argv` gains a visibility gate (Hidden + Disabled suppress emission, Required does not); drift gate test enforces parity between toolkit JSON and GUI hand-coded `conditional.rs`. v1 encodes ~17 enforceable visibility rules across `bundle`, `verify-bundle`, `export-wallet`, `convert`, `derive-child`. Runtime/slot-count-dependent rules deferred; see companion `gui-schema-runtime-conditional-projection`.
+- **Why deferred:** in-progress this cycle (toolkit v0.16.0 + mnemonic-gui v0.5.0 lockstep; `mnemonic-gui v0.4.3` cut first as scope-isolated v0.15.0 wire-format catchup per plan §4 prerequisite).
+- **Status:** `open` (in-progress this cycle)
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-conditional-applicability-drift-fix`.
+
+### `gui-schema-runtime-conditional-projection` — project SPEC §6.6 slot-count-dependent + runtime rules into gui-schema JSON
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle. Filed at cycle open per plan §1.4 + §7 item 1.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (toolkit side — extend `Predicate` AST + `conditional_rules` emitter with slot-count-aware predicates); `mnemonic-gui/src/form/conditional.rs` (gui side — slot-count signal from `FormState` to conditional engine); SPEC §6.6 rows 8, 9, 10, 11, 13, 14 (cross-cite into §6.10.7's "Runtime-deferred rules" block).
+- **What:** v1 cycle deferred slot-count-dependent and post-binding rules because the GUI's conditional engine consumes `FormState` snapshots that don't natively expose `len(slots)` or `max(@N)+1`. A future cycle will plumb a slot-count signal through `FormState` + extend the `Predicate` AST with `slot_count_op` / `slot_count_min` / etc. variants. Concrete rules to add: §6.6 row 9 (T-in-range vs N), row 10 (single-sig with N > 1), row 11 (multisig with N == 1), row 13 (BIP-388 distinct-key), row 14 (per-`@N` annotation inconsistency).
+- **Why deferred:** Out of v1 scope per plan §1.4 — these rules need a dynamic slot count signal not knowable until the form is filled, and surface naturally at Run time via the CLI's typed error. v1 ships argv-level submission + lets the CLI emit the error.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-runtime-conditional-projection` (to be filed at cycle close).
+
+### `gui-number-widget-unset-sentinel` — Number/Range/Timestamp/TaggedOrIndexed widgets lack a "no value" sentinel
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle, plan §7 item 2 + plan §1.4 third bullet. Cross-referenced here for cycle bookkeeping; primary tracking lives in `bg002h/mnemonic-gui` `FOLLOWUPS.md`.
+- **Where:** `mnemonic-gui/src/schema/mod.rs:263-268` (`flag_value_is_present` always returns true for Number/Range/Timestamp/TaggedOrIndexed); `mnemonic-gui/src/form/widget.rs:101-126` (`default_flag_value_for` seeds Number widgets to `min` regardless of user interaction).
+- **What:** Number/Range/Timestamp/TaggedOrIndexed widgets currently have no "no value" sentinel — once seeded by `default_flag_value_for`, the value is always-present per `flag_value_is_present`. v1 sidesteps this via the §6.10 visibility gate (Hidden + Disabled flags don't emit regardless of widget value). A future cycle may add an explicit unset state for UX clarity (e.g., a "clear" affordance next to numeric widgets so users can explicitly opt out of supplying a numeric flag).
+- **Why deferred:** Out of v1 scope per plan §1.4 — the visibility gate makes this unnecessary for the motivating bug. UX-quality improvement, not a correctness gap.
+- **Status:** `open`
+- **Tier:** `cross-repo` (gui-impact-only; cross-referenced for cycle completeness)
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-number-widget-unset-sentinel` (primary tracking, to be filed at cycle close).
+
+### `gui-default-form-state-template-aware-seed` — replace static default-state seed with template-aware seed
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle, plan §7 item 3. Natural successor to P5 (the v1 cycle's static seed cleanup at `mnemonic-gui/src/main.rs:203`). Cross-referenced here for cycle bookkeeping; primary tracking lives in `bg002h/mnemonic-gui` `FOLLOWUPS.md`.
+- **Where:** `mnemonic-gui/src/main.rs:197-211` (default form-state seed; v1's P5 removes the `--multisig-path-family bip87` line but leaves the static structure intact).
+- **What:** Replace the static screenshot-mode default seed with a template-aware default. When the user picks a multisig template (e.g., `wsh-sortedmulti`), the form auto-seeds multisig defaults (e.g., `--multisig-path-family bip87`, `--threshold` to a reasonable default); when the user picks single-sig, the form omits those flags entirely.
+- **Why deferred:** Out of v1 scope per plan §7 — optional follow-on. The v1 P5 cleanup removes the unconditionally-wrong seed; the template-aware version is a UX enhancement.
+- **Status:** `open`
+- **Tier:** `cross-repo` (gui-impact-only; cross-referenced for cycle completeness)
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-default-form-state-template-aware-seed` (primary tracking, to be filed at cycle close).
+
+### `gui-schema-numeric-flag-value-pin-effect` — add `pin_value` Effect variant for §6.6 row 12 ("--account != 0 when --descriptor present") projection
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle, R1 I3 reviewer fold. Plan §2.1 row 12 + §3 manifest rule 7 + §6.10.7 mapping table all marked DEFERRED for this rule.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.3 (Effect vocabulary); `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (Effect enum + serializer); `crates/mnemonic-toolkit/src/cmd/bundle.rs:200-205` (the rule the projection encodes — `DESCRIPTOR_WITH_NONZERO_ACCOUNT`); `mnemonic-gui/src/form/conditional.rs` (consumer — Number widget value-coerce-to-zero handler).
+- **What:** Add a `pin_value: { flag, value }` Effect variant to the §6.10.3 vocabulary so the GUI can coerce `--account` to 0 (or any pinned numeric value) when `--descriptor` is present, mirroring SPEC §6.6 row 12's CLI rejection at `bundle.rs:200-205`. Without this, the GUI's Number widget for `--account` defaults to `0` (per `default_flag_value_for`), which is the safe value; the rule only fires when the user actively types a nonzero value, in which case the CLI's byte-exact error suffices for v1.
+- **Why deferred:** Out of v1 scope per R1 I3 reviewer fold — the GUI default of 0 makes this rare misuse; the CLI error is informative. Adding a `pin_value` Effect requires SPEC §6.10.3 expansion + GUI Number-widget coercion semantics not warranted by user evidence.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-numeric-flag-value-pin-effect` (to be filed at cycle close).
+
+### `gui-schema-template-groups-meta-field` — emit per-subcommand `meta.template_groups` to retire `SINGLE_SIG_TEMPLATES` const
+
+- **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle, R1 I4 reviewer fold. Plan §7 item 5.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (toolkit side — emit `meta.template_groups: { single_sig: [..], multisig: [..] }` block sourced from `Template::is_multisig()`); `mnemonic-gui/src/form/conditional.rs` (gui side — replace module-level `SINGLE_SIG_TEMPLATES: &[&str] = &["bip44", "bip49", "bip84", "bip86"]` with parse from JSON `meta.template_groups`); `crates/mnemonic-toolkit/src/template.rs:46-56` (`is_multisig()` source-of-truth — unchanged).
+- **What:** v1 cycle replicates the single-sig template set client-side as a module-level `SINGLE_SIG_TEMPLATES` const in `conditional.rs`. The drift gate test detects divergence, but a future cleanup cycle can collapse the const by having the toolkit emit `meta.template_groups` in the gui-schema JSON.
+- **Why deferred:** Out of v1 scope — the drift gate suffices for parity enforcement. Cleanup-class change.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-template-groups-meta-field` (to be filed at cycle close).
+
+### `spec-v0_5-missing-v0_3-descriptor-mode-rows` — SPEC §6.6 table missing the v0.3-NEW descriptor-mode rows
+
+- **Surfaced:** 2026-05-16, during the GUI conditional-applicability v1 cycle (P0 SPEC read, pre-write phase). Discovered while reading `design/SPEC_mnemonic_toolkit_v0_5.md` §6.6 (lines 189-217) to draft the §6.10 GUI-projection subsection.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.6 table (lines 199-213); `crates/mnemonic-toolkit/src/cmd/bundle.rs:124-129` (the comment at line 124 reads "v0.3 NEW rows (SPEC §6.9). Byte-exact.")
+- **What:** Four byte-exact error consts at `bundle.rs:124-129` — `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `DESCRIPTOR_WITH_THRESHOLD`, `DESCRIPTOR_WITH_PATH_FAMILY`, `DESCRIPTOR_WITH_NONZERO_ACCOUNT` — were tagged "v0.3 NEW rows" in the source, but the v0.5 SPEC §6.6 table does NOT enumerate them. They are runtime-enforced at `bundle.rs:179-205` and pinned byte-exactly by `tests/cli_mode_violations_v0_5.rs`, so runtime behavior is correct; the gap is purely SPEC documentation drift. §6.9's text "Rows 1-14 in §6.6 plus rows 15-17 in §6.7" undercounts: actual enforced rows include the four missing descriptor-mode rules above. A future SPEC-cleanup cycle should add them to the §6.6 table (e.g., as rows 12.1/12.2/12.3/12.4 between the existing row 12 descriptor-threshold conflict and row 13 BIP-388 distinct-key) with cross-citations to `bundle.rs::mode_text::*`.
+- **Why deferred:** Surfaced mid-cycle on an unrelated patch (GUI conditional-applicability v1 added a NEW §6.10 next to §6.6 and deliberately did NOT modify §6.6 itself to keep this drift fix decoupled from the cycle's scope). Independent SPEC-only fix.
+- **Status:** `open`
+- **Tier:** `v1+`
+
 ### `gui-run-confirm-modal-secret-redaction-manual-companion` — manual-prose lockstep companion to GUI run-confirm-modal redaction fix
 
 - **Surfaced:** 2026-05-15, manual-gui v1.0 cycle M-P2.4 batch 4 R0 source-grep. The Defense-2 prose in `docs/manual-gui/src/10-foundations/14-secret-handling.md` (LOCKed in M-P2.4 batch 2) and the feature-2 description in `11-what-is-mnemonic-gui.md` both claim the run-confirm modal "shows the assembled argv with secret values replaced by `***`". `mnemonic-gui/src/main.rs:512-535` shows no such redaction; the modal renders each argv token verbatim. The manual prose was patched in the M-P2.4 batch-4 commit to honestly describe the actual (undesired) behavior + recommend cold-node-only operation as an operational mitigation.

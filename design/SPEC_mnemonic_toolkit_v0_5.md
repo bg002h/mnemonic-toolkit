@@ -279,6 +279,86 @@ verify-bundle's exit codes: `0` (all checks pass), `4` (bundle decode failure or
 
 Rows 1-14 in §6.6 plus rows 15-17 in §6.7 are the canonical byte-exact texts. Implementation must use these strings verbatim (consts, not format strings except for the bracketed substitutions). SPEC author copies into impl directly; tests assert byte-exact.
 
+## §6.10 Conditional-applicability projection in gui-schema JSON
+
+**Added in v0.5 GUI conditional-applicability v1 cycle (toolkit v0.16.0 + mnemonic-gui v0.5.0 lockstep, with `mnemonic-gui v0.4.3` as a scope-isolated prerequisite toolkit-pin catchup from v0.14.2 → v0.15.0).** §6.10 is the canonical home for the GUI projection of CLI mutex/conditional rules; it sits alongside §6.6 (template-mode mode-violation ladder) and §6.9 (byte-exact error reference), cross-citing both, but does NOT modify either. The §6.6 table retains its v0.5 row IDs (2, 3, 4, 8, 9, 9.5, 10, 11, 12, 13, 14, T1, T2) verbatim, and the v0.3-NEW byte-exact consts at `crates/mnemonic-toolkit/src/cmd/bundle.rs:124-129` (`DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `DESCRIPTOR_WITH_THRESHOLD`, `DESCRIPTOR_WITH_PATH_FAMILY`, `DESCRIPTOR_WITH_NONZERO_ACCOUNT`) remain runtime-enforced and byte-exact-test-pinned. The pre-existing SPEC drift between §6.6's row enumeration and the v0.3-NEW descriptor-mode consts is filed independently at FOLLOWUP `spec-v0_5-missing-v0_3-descriptor-mode-rows` and is **out of scope for this cycle**.
+
+### §6.10.1 Purpose
+
+The `mnemonic gui-schema` JSON document gains a per-subcommand `conditional_rules: [ConditionalRule]` array. Each `ConditionalRule` projects one §6.6 / §6.9 mutex/conditional rule (or one of the v0.3-NEW descriptor-mode consts at `bundle.rs::mode_text`) into the GUI's per-frame visibility computation. The projection is machine-readable and drift-gated, replacing the prior hand-coded-only `mnemonic-gui/src/form/conditional.rs` source-of-truth.
+
+### §6.10.2 Predicate AST (tagged JSON union)
+
+```json
+{"kind": "flag_present", "flag": "--name"}
+{"kind": "dropdown_value_in", "flag": "--name", "values": ["a", "b"]}
+{"kind": "composite_node_is", "flag": "--name", "node": "x"}
+{"kind": "positional_present", "index": N}
+{"kind": "all_of", "predicates": [P1, P2, ...]}
+{"kind": "any_of", "predicates": [P1, P2, ...]}
+{"kind": "not", "predicate": P}
+```
+
+Predicate semantics:
+- **`flag_present`** — flag is Text/Dropdown/Path/Composite; its `FormState::has_value` returns true.
+- **`dropdown_value_in`** — flag's Dropdown variant value is a member of the listed set.
+- **`composite_node_is`** — flag's Composite variant's selected node token equals the listed string.
+- **`positional_present`** — `state.positionals[index]` is non-empty.
+- **`all_of` / `any_of` / `not`** — boolean combinators.
+
+### §6.10.3 Effect
+
+```json
+{"flag": "--name", "visibility": "hidden" | "disabled" | "required"}
+```
+
+`Visibility::Visible` is the implicit default and never appears as an Effect value. Effect grammar:
+
+- **`hidden`** — flag widget is structurally non-applicable to the current mode (e.g., `--threshold` when template ∈ single-sig). Rendered as hidden; emission suppressed by the visibility gate at `mnemonic-gui/src/form/invocation.rs::assemble_argv`.
+- **`disabled`** — flag is sibling-mutex-conflicted by user choice (e.g., user enabled `--passphrase-stdin` so `--passphrase` grays out). Rendered visible-but-grayed; widget state retained so toggling the mutex restores the value; emission suppressed.
+- **`required`** — flag is decoratively-marked required by the current mode (e.g., `--mk1` required unless `--bundle-json` supplied in verify-bundle). Rendered with a `*` marker; no emission effect.
+
+### §6.10.4 Semantics — first-rule-wins
+
+When a FormState satisfies a rule's predicate, the rule's effect overrides the target flag's visibility for that frame. Multiple rules may target the same flag; effects compose **first-rule-wins** per the existing GUI engine at `mnemonic-gui/src/main.rs:391-394` which uses `Iterator::find` (returning the first match). The JSON projection MUST emit rules in priority-descending order per target flag. Authors hand-encoding rules must order more-specific predicates BEFORE less-specific ones.
+
+### §6.10.5 Drift invariant
+
+For every rule in the gui-schema JSON's `conditional_rules`, the corresponding hand-coded `conditional` fn in `mnemonic-gui/src/form/conditional.rs` MUST return the declared visibility when given an exemplar `FormState` satisfying the predicate. The drift gate test at `mnemonic-gui/tests/gui_schema_conditional_drift.rs` (NEW in this cycle) enforces this byte-exactly: it shells out to `<MNEMONIC_BIN> gui-schema`, parses `conditional_rules`, synthesizes a `FormState` per predicate, and asserts the hand-coded fn's output matches both the satisfied and the unsatisfied polarity.
+
+A failure of the drift gate is a **release blocker** — either the toolkit or the GUI must update in lockstep so that the next tag pair (`mnemonic-toolkit-vX.Y.0` + `mnemonic-gui-vA.B.0`) restores parity.
+
+### §6.10.6 Schema version contract
+
+The `version` field at the top of the gui-schema JSON bumps `1 → 2`. The bump is **additive** — v1 consumers that parse only the per-flag set (name, kind, choices) and ignore unknown fields continue to work on v2 documents. The `conditional_rules` consumer (the new drift gate test) gates on `version >= 2` and is the sole consumer that requires the bump.
+
+### §6.10.7 gui_projection mapping table
+
+Each row in the table below identifies one rule in the §6.6 table or one of the v0.3-NEW `bundle.rs::mode_text` consts, plus its projection into the gui-schema JSON. The "v1 cycle" column marks whether the rule is encoded in toolkit v0.16.0 + gui v0.5.0 or deferred to a follow-up.
+
+| Subcommand | SPEC ref | bundle.rs::mode_text ref | Predicate (informal) | Effect | v1 cycle |
+|---|---|---|---|---|---|
+| bundle | §6.6 row T1 | `THRESHOLD_WITHOUT_MULTISIG` | template ∈ single-sig | `--threshold → disabled` | ENCODED |
+| bundle | §6.6 row T2 | `PATH_FAMILY_WITHOUT_MULTISIG` | template ∈ single-sig | `--multisig-path-family → disabled` | ENCODED |
+| bundle | §6.6 row 2 | `DESCRIPTOR_AND_TEMPLATE` | `--descriptor` present | `--template → disabled` (mutex pair) | ENCODED |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_AND_DESCRIPTOR_FILE` | `--descriptor` present | `--descriptor-file → disabled` (mutex pair) | ENCODED (pre-existing) |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_THRESHOLD` | `--descriptor` present | `--threshold → disabled` | ENCODED |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_PATH_FAMILY` | `--descriptor` present | `--multisig-path-family → disabled` | ENCODED |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_NONZERO_ACCOUNT` | `--descriptor` present AND `--account != 0` | (deferred — Effect vocabulary for "value-coerced-to-zero" not in §6.10.3) | DEFERRED → `gui-schema-numeric-flag-value-pin-effect` |
+| verify-bundle | §6.6 row T1 (mirror) | `THRESHOLD_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--threshold → disabled` | ENCODED |
+| verify-bundle | §6.6 row T2 (mirror) | `PATH_FAMILY_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--multisig-path-family → disabled` | ENCODED |
+| verify-bundle | §6.6 row 2 (mirror) | `DESCRIPTOR_AND_TEMPLATE` (mirror) | `--descriptor` present | `--template → disabled` | ENCODED |
+| export-wallet | §6.6 row T1 (mirror) | `THRESHOLD_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--threshold → disabled` | ENCODED |
+| export-wallet | §6.6 row T2 (mirror) | `PATH_FAMILY_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--multisig-path-family → disabled` | ENCODED |
+| export-wallet | (subcommand-local rule) | (n/a — clap `requires` annotation) | template ∈ `{tr-multi-a, tr-sortedmulti-a}` | `--taproot-internal-key → required` | ENCODED |
+| export-wallet | (subcommand-local rule) | (n/a — clap `requires` annotation) | template ∉ `{tr-multi-a, tr-sortedmulti-a}` | `--taproot-internal-key → disabled` | ENCODED |
+| convert | (subcommand-local rule) | (n/a — runtime check) | `--xpub-prefix` non-default | `--network → required` | ENCODED |
+| derive-child | (subcommand-local rule) | (n/a — runtime check) | `--application` value == `dice` | `--dice-sides → required` | ENCODED |
+
+**Runtime-deferred rules (out of v1 cycle):** §6.6 rows 8 (slot-index contiguity), 9 (T-in-range), 10 (single-sig template with N > 1 slots), 11 (multisig template with N == 1), 13 (BIP-388 distinct-key), 14 (per-`@N` annotation inconsistency). These depend on slot count or post-binding state not knowable until the form is filled; they surface at Run time via the CLI's typed error. Tracked at FOLLOWUP `gui-schema-runtime-conditional-projection`.
+
+**Cross-citation discipline:** any future addition to §6.6 (e.g., closing the `spec-v0_5-missing-v0_3-descriptor-mode-rows` FOLLOWUP by enumerating the v0.3-NEW rows in the §6.6 table proper) MUST also update §6.10.7's mapping table in the same patch. The §6.6 ↔ §6.10.7 ↔ `bundle.rs::mode_text` triple is the canonical source-of-truth braid.
+
 ## §8 Out of scope (DELTA)
 
 Carry-forward from v0.3 §8 plus v0.4 additions:
