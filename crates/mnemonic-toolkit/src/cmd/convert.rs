@@ -156,10 +156,61 @@ pub fn parse_from_input(s: &str) -> Result<FromInput, String> {
 
 #[derive(Args, Debug)]
 pub struct ConvertArgs {
-    #[arg(long = "from", action = clap::ArgAction::Append, value_parser = parse_from_input, required = true)]
+    /// Input node descriptor — shape `<node>=<value>`. Repeating.
+    ///
+    /// `<node>` is one of:
+    ///   phrase           BIP-39 mnemonic (secret)
+    ///   entropy          raw entropy hex (secret)
+    ///   xpub             BIP-32 extended public key
+    ///   xprv             BIP-32 extended private key (secret)
+    ///   wif              Wallet Import Format private key (secret)
+    ///   fingerprint      4-byte master fingerprint (hex)
+    ///   path             BIP-32 derivation path
+    ///   ms1              m-format constellation ms1 seed-card string (secret)
+    ///   mk1              m-format constellation mk1 xpub-card string
+    ///   bip38            BIP-38 encrypted private key (secret with passphrase)
+    ///   minikey          Casascius mini-private-key (secret)
+    ///   electrum-phrase  Electrum-format seed phrase (secret)
+    ///   address          on-chain Bitcoin address
+    ///
+    /// `<value>` is the node's text form, or `-` to read from stdin
+    /// (one stdin reader per invocation).
+    #[arg(
+        long = "from",
+        action = clap::ArgAction::Append,
+        value_parser = parse_from_input,
+        required = true,
+        verbatim_doc_comment,
+    )]
     pub from: Vec<FromInput>,
 
-    #[arg(long, action = clap::ArgAction::Append, required = true)]
+    /// Output node type. Repeating — emit the same input across
+    /// multiple targets in one invocation. Two equivalent forms:
+    ///   --to xpub --to xprv
+    ///   --to xpub,xprv
+    /// Valid values mirror `--from` (see above).
+    #[arg(
+        long,
+        action = clap::ArgAction::Append,
+        required = true,
+        value_delimiter = ',',
+        value_parser = clap::builder::PossibleValuesParser::new([
+            "phrase",
+            "entropy",
+            "xpub",
+            "xprv",
+            "wif",
+            "fingerprint",
+            "path",
+            "ms1",
+            "mk1",
+            "bip38",
+            "minikey",
+            "electrum-phrase",
+            "address",
+        ]),
+        verbatim_doc_comment,
+    )]
     pub to: Vec<String>,
 
     #[arg(long)]
@@ -168,12 +219,22 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub template: Option<CliTemplate>,
 
-    #[arg(long)]
+    /// BIP-32 derivation path. Accepts:
+    ///   named:    `bip44` / `bip49` / `bip84` / `bip86`
+    ///   hex:      `0xNN` (raw purpose byte)
+    ///   literal:  `m/...` (full BIP-32 path string)
+    ///
+    /// Required for `--to wif` (no template-implied path) and for
+    /// `(xpub, address)` derivation when no `--template` is supplied.
+    #[arg(long, verbatim_doc_comment)]
     pub path: Option<String>,
 
     #[arg(long)]
     pub language: Option<CliLanguage>,
 
+    /// BIP-39 mnemonic-extension passphrase. Empty (default) is the
+    /// common case. Mutually exclusive with `--passphrase-stdin`. For
+    /// BIP-38 encryption-key passphrase use `--bip38-passphrase`.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -203,38 +264,74 @@ pub struct ConvertArgs {
     #[arg(long = "bip38-passphrase-stdin", conflicts_with = "bip38_passphrase")]
     pub bip38_passphrase_stdin: bool,
 
+    /// BIP-32 account index (default 0). Used to compute the
+    /// template-derived path when `--path` is omitted.
     #[arg(long, default_value = "0")]
     pub account: u32,
 
+    /// Master-key fingerprint (8 lowercase hex chars). Used by output
+    /// targets that record origin metadata (e.g., `--to mk1`).
     #[arg(long)]
     pub fingerprint: Option<String>,
 
-    /// SPEC v0.6.1 §11.a — emit `xpub` targets with a SLIP-0132 prefix.
-    /// Requires explicit `--network` when non-default (`xpub`).
-    #[arg(long = "xpub-prefix", value_parser = parse_xpub_prefix_arg)]
+    /// Emit `xpub` targets with a SLIP-0132 prefix instead of the
+    /// canonical `xpub` (mainnet) / `tpub` (testnet) prefixes.
+    ///
+    /// Accepted values:
+    ///   xpub  canonical mainnet legacy/segwit prefix (default)
+    ///   ypub  BIP-49 nested-segwit single-sig
+    ///   Ypub  BIP-48 nested-segwit multisig
+    ///   zpub  BIP-84 native-segwit single-sig
+    ///   Zpub  BIP-48 native-segwit multisig
+    ///
+    /// Requires explicit `--network` when non-default. (SPEC v0.6.1 §11.a)
+    #[arg(long = "xpub-prefix", value_parser = parse_xpub_prefix_arg, verbatim_doc_comment)]
     pub xpub_prefix: Option<XpubPrefix>,
 
-    /// SPEC v0.7 §14 — Electrum seed-version selector for `(Entropy, ElectrumPhrase)` encode.
-    /// Default: `standard`. 2FA versions (`101`, `102`) are REFUSED at the
-    /// encode layer; cannot be selected here.
-    #[arg(long = "electrum-version", value_parser = parse_electrum_version_arg)]
+    /// Electrum seed-version selector for `(entropy, electrum-phrase)`
+    /// encode.
+    ///
+    /// Accepted values:
+    ///   standard  v1 SegWit-v0 seed-version (default)
+    ///   segwit    v2 native-SegWit seed-version
+    ///
+    /// 2FA versions (`standard-2fa`, `segwit-2fa`, `101`, `102`) are
+    /// REFUSED at the encode layer (Electrum 2FA requires an
+    /// out-of-band second factor). (SPEC v0.7 §14)
+    #[arg(long = "electrum-version", value_parser = parse_electrum_version_arg, verbatim_doc_comment)]
     pub electrum_version: Option<SeedVersion>,
 
-    /// SPEC v0.8 §14 — Electrum wordlist for the `(Entropy, ElectrumPhrase)`
-    /// and `(ElectrumPhrase, Entropy)` arms. Distinct from `--language`
-    /// (BIP-39 wordlist set diverges from Electrum's). On Electrum arms,
-    /// `--electrum-language` wins; `--language` is silently ignored.
-    /// Default: `english`.
-    #[arg(long = "electrum-language", value_parser = parse_electrum_language_arg)]
+    /// Electrum wordlist for the `(entropy, electrum-phrase)` and
+    /// `(electrum-phrase, entropy)` arms. Distinct from `--language`
+    /// (BIP-39 wordlist set diverges from Electrum's). On Electrum
+    /// arms, `--electrum-language` wins; `--language` is silently
+    /// ignored.
+    ///
+    /// Accepted values:
+    ///   english             default
+    ///   spanish             also accepts `es`
+    ///   japanese            also accepts `ja`
+    ///   portuguese          also accepts `pt`
+    ///   chinese-simplified  also accepts `zh-hans` / `zh`
+    ///
+    /// (SPEC v0.8 §14)
+    #[arg(long = "electrum-language", value_parser = parse_electrum_language_arg, verbatim_doc_comment)]
     pub electrum_language: Option<ElectrumWordlist>,
 
-    /// SPEC v0.7 §10.a — script-type selector for `(Xpub, Address)` derivation.
-    /// Values: `p2wpkh | p2sh-p2wpkh | p2tr`. If absent and `--template` is
-    /// supplied, inferred from the template (`bip84` → p2wpkh, `bip49` →
-    /// p2sh-p2wpkh, `bip86` → p2tr); else refused.
-    #[arg(long = "script-type", value_parser = parse_script_type_arg)]
+    /// Script-type selector for `(xpub, address)` derivation.
+    ///
+    /// Accepted values:
+    ///   p2wpkh       native-segwit single-sig
+    ///   p2sh-p2wpkh  nested-segwit single-sig
+    ///   p2tr         taproot single-sig
+    ///
+    /// If absent and `--template` is supplied, inferred from the
+    /// template (`bip84` → p2wpkh, `bip49` → p2sh-p2wpkh, `bip86` →
+    /// p2tr); else refused. (SPEC v0.7 §10.a)
+    #[arg(long = "script-type", value_parser = parse_script_type_arg, verbatim_doc_comment)]
     pub script_type: Option<ScriptType>,
 
+    /// Emit a single JSON object on stdout instead of multi-line text.
     #[arg(long)]
     pub json: bool,
 }

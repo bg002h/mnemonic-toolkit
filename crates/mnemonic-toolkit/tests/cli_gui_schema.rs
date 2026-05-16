@@ -165,9 +165,14 @@ fn bundle_subcommand_has_path_descriptor_file() {
 }
 
 #[test]
-fn convert_subcommand_has_required_from_and_to_as_text() {
-    // --from and --to use custom value_parsers (FromInput / ToInput), so
-    // SPEC §7's lossy mapping collapses them to "text". The GUI re-parses.
+fn convert_subcommand_has_required_from_text_and_to_dropdown() {
+    // --from uses a custom value_parser (FromInput parsing `<node>=<value>`),
+    // so SPEC §7's lossy mapping collapses it to "text"; the GUI re-parses.
+    //
+    // --to was upgraded (mnemonic-toolkit post-v0.13.0) from a free-form
+    // `Vec<String>` to a `PossibleValuesParser` over the 13 NODE_TYPE
+    // tokens. gui-schema introspection now emits "dropdown" with the
+    // choices list, matching the GUI's `schema/mnemonic.rs::NODE_TYPES`.
     let v = run_gui_schema();
     let convert = find_sub(&v, "convert");
     let from = find_flag(convert, "--from");
@@ -175,7 +180,27 @@ fn convert_subcommand_has_required_from_and_to_as_text() {
     assert_eq!(from["kind"], "text");
     let to = find_flag(convert, "--to");
     assert_eq!(to["required"], true);
-    assert_eq!(to["kind"], "text");
+    assert_eq!(to["kind"], "dropdown");
+    let choices = to["choices"].as_array().expect("--to choices is an array");
+    let choice_strs: Vec<&str> = choices.iter().filter_map(|c| c.as_str()).collect();
+    assert_eq!(
+        choice_strs,
+        vec![
+            "phrase",
+            "entropy",
+            "xpub",
+            "xprv",
+            "wif",
+            "fingerprint",
+            "path",
+            "ms1",
+            "mk1",
+            "bip38",
+            "minikey",
+            "electrum-phrase",
+            "address",
+        ]
+    );
 }
 
 #[test]
