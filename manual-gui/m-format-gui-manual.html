@@ -1613,9 +1613,9 @@ tooltips, not deep-links).</li>
 chapter</h2>
 <p>The chapters following this one cover, in order:</p>
 <ul>
-<li><a href="#how-the-gui-relates-to-the-four-clis">Relation to the four
-CLIs</a> — how the GUI invokes them, where pinning matters, the
-subprocess-runner contract.</li>
+<li><a href="#relation-to-cli">Relation to the four CLIs</a> — how the
+GUI invokes them, where pinning matters, the subprocess-runner
+contract.</li>
 <li><a href="#the-bundle-card-slot-mental-model">Bundle / card / slot
 mental model</a> — the three engravable cards (<code>ms1</code>,
 <code>mk1</code>, <code>md1</code>), their cross-binding, what a
@@ -1625,9 +1625,9 @@ run-confirm modal, on-exit zeroize sweep, OS-snapshot occlusion (the
 four GUI-side defenses).</li>
 </ul>
 <p>If you already know the m-format constellation from the CLI manual,
-<a href="#how-the-gui-relates-to-the-four-clis">§12</a> is the only
-chapter that adds GUI-specific load-bearing facts. If you don’t, read
-all four in order.</p>
+<a href="#relation-to-cli">§12</a> is the only chapter that adds
+GUI-specific load-bearing facts. If you don’t, read all four in
+order.</p>
 <h1 id="relation-to-cli">How the GUI relates to the four CLIs</h1>
 <p>The GUI requires the four CLIs to be <strong>already installed on
 <code>$PATH</code></strong>. It does not bundle them. At launch,
@@ -2447,7 +2447,7 @@ launcher). On first launch the window opens with three panels:</p>
 |   --multisig-path-family [ bip87 ▾ ]                          |  ← central form
 |   ...                                                          |
 |   Slot rows:  ?                                                |
-|     @ [0] . [ xpub ▾ ] = [             ] [✕]                   |
+|     @ [0] . [ xpub ▾ ] = [             ] [×]                   |
 |     [ + Add slot ]                                             |
 |   ----                                                         |
 |   [ Copy command (POSIX) ] [ Copy command (Windows) ] [ Run ]  |
@@ -3408,7 +3408,7 @@ table at the bottom of the form (visible because <code>bundle</code> has
 <li>A <strong>value</strong> text field whose width and obscuration
 depend on the subkey choice (secret-bearing subkeys render as
 <code>SecretLineEdit</code>).</li>
-<li>An <strong>✕</strong> remove button.</li>
+<li>An <strong>×</strong> remove button.</li>
 <li>A <strong>+ Add slot</strong> button below the last row.</li>
 </ul>
 <p>The repeating-flag <code>?</code> help-icon for <code>--slot</code>
@@ -9481,7 +9481,7 @@ syntax and refusal table at the matching per-flag section.</p>
 <h3 id="flag-index-md-decode"><code>md decode</code></h3>
 <p><a href="#md-decode-json"><code>--json</code></a></p>
 <h3 id="flag-index-md-verify"><code>md verify</code></h3>
-<p><a href="#md-verify-fingerprint"><code>--fingerprint</code></a> · <a href="#md-verify-json"><code>--json</code></a> · <a href="#md-verify-key"><code>--key</code></a> · <a href="#md-verify-network"><code>--network</code></a> · <a href="#md-verify-template"><code>--template</code></a></p>
+<p><a href="#md-verify-fingerprint"><code>--fingerprint</code></a> · <a href="#md-verify-key"><code>--key</code></a> · <a href="#md-verify-network"><code>--network</code></a> · <a href="#md-verify-template"><code>--template</code></a></p>
 <h3 id="flag-index-md-bytecode"><code>md bytecode</code></h3>
 <p><a href="#md-bytecode-json"><code>--json</code></a></p>
 <h3 id="flag-index-md-vectors"><code>md vectors</code></h3>
@@ -10037,8 +10037,8 @@ hygiene</a></td>
 </tbody>
 </table>
 <h1 id="build-banner">Build banner</h1>
-<p>Built from commit <code>a17dfbd</code> on
-<code>2026-05-16T00:04:13Z</code>.</p>
+<p>Built from commit <code>d43db81</code> on
+<code>2026-05-16T00:24:46Z</code>.</p>
 <p><em>This page is included in the PDF render only.</em></p>
 </body>
 </html>
