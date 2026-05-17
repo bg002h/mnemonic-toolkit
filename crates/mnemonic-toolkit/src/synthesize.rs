@@ -242,7 +242,8 @@ pub fn synthesize_descriptor(
                 c.path.clone(),
                 c.xpub,
             );
-            let csi = derive_mk1_chunk_set_id(&stubs[0]);
+            let fp_bytes: [u8; 4] = c.xpub.fingerprint().to_bytes();
+            let csi = derive_mk1_chunk_set_id(&fp_bytes);
             let chunks =
                 mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
             per_cosigner.push(chunks);
@@ -374,7 +375,7 @@ pub fn synthesize_multisig_full(
 
     // 6+7. Build N KeyCards + emit per-cosigner mk1.
     let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(cosigner_count);
-    for i in 0..cosigner_count {
+    for _ in 0..cosigner_count {
         let card = mk_codec::KeyCard::new(
             stubs.clone(),
             if privacy_preserving {
@@ -387,7 +388,8 @@ pub fn synthesize_multisig_full(
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        let csi = derive_mk1_chunk_set_id(&stubs[i]);
+        let fp_bytes: [u8; 4] = xpub.fingerprint().to_bytes();
+        let csi = derive_mk1_chunk_set_id(&fp_bytes);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
     }
@@ -556,7 +558,8 @@ pub fn synthesize_multisig_watch_only(
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        let csi = derive_mk1_chunk_set_id(&stubs[i]);
+        let fp_bytes: [u8; 4] = c.xpub.fingerprint().to_bytes();
+        let csi = derive_mk1_chunk_set_id(&fp_bytes);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
     }
@@ -748,7 +751,8 @@ pub fn synthesize_unified(
                 s.path.clone(),
                 s.xpub,
             );
-            let csi = derive_mk1_chunk_set_id(&stubs[0]);
+            let fp_bytes: [u8; 4] = s.xpub.fingerprint().to_bytes();
+            let csi = derive_mk1_chunk_set_id(&fp_bytes);
             let chunks =
                 mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
             per_cosigner.push(chunks);

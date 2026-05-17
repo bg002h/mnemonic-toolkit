@@ -952,13 +952,51 @@ filtered out (self-reference suppression).
 
 ```sh
 mnemonic gui-schema
+mnemonic gui-schema --classify-descriptor <DESCRIPTOR>
 ```
 
 ### Flags
 
 | Flag | Purpose |
 |---|---|
+| `--classify-descriptor <DESCRIPTOR>` | diagnostic: print `canonical` or `non-canonical` for `<DESCRIPTOR>` per md-codec's canonical-origin table; suppresses JSON schema |
 | `--help` | print help |
+
+### `--classify-descriptor`
+
+When `--classify-descriptor <DESCRIPTOR>` is supplied, the JSON schema
+is suppressed and a single line is printed to stdout:
+
+- `canonical\n` (exit 0) — the descriptor maps to one of the canonical
+  shapes in md-codec's `canonical_origin` table (`pkh / wpkh / tr (keypath-only) /
+  wsh(multi|sortedmulti) / sh(wsh(multi|sortedmulti))`); its origin path is
+  inferred from BIP-44/49/84/86 or BIP-48 conventions.
+- `non-canonical\n` (exit 0) — the descriptor parses but does not map to a
+  canonical shape. The `mnemonic bundle` default-path inference per
+  SPEC §4.12.b applies (BIP-48 cosigner path `m/48'/<coin>'/<account>'/2'`).
+- exit 2 with empty stdout — descriptor failed to parse
+  (`DescriptorParse` error variant).
+
+```sh
+$ mnemonic gui-schema --classify-descriptor 'pkh(@0)'
+canonical
+$ echo $?
+0
+$ mnemonic gui-schema --classify-descriptor 'wsh(andor(pkh(@0),after(12000000),pk(@1)))'
+non-canonical
+$ echo $?
+0
+$ mnemonic gui-schema --classify-descriptor 'this is not a descriptor'
+$ echo $?
+2
+```
+
+This is the toolkit-side authority used by `mnemonic-gui` v0.8.1 (and
+later) to detect non-canonical descriptors and surface the appropriate
+default-path-inference banner + slot-editor placeholder. The drift gate
+at `mnemonic-gui/tests/canonicity_drift.rs` pins agreement between the
+GUI's regex classifier and this toolkit verdict on every canonicity-corpus
+fixture.
 
 ### Output shape
 

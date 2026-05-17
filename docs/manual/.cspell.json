@@ -36,6 +36,7 @@
     "Hocquenghem",
     "HMAC",
     "keypairs",
+    "keypath",
     "importdescriptors",
     "lockstep",
     "memorised",

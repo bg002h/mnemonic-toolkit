@@ -50,7 +50,15 @@ use std::collections::BTreeMap;
 use std::io::Write;
 
 #[derive(Args, Debug)]
-pub struct GuiSchemaArgs {}
+pub struct GuiSchemaArgs {
+    /// v0.20.0 F2 — classify a descriptor as `canonical` or `non-canonical` per
+    /// md-codec's `canonical_origin` table. Mutually exclusive with the default
+    /// JSON-schema emission; when set, the JSON schema is suppressed and a
+    /// single line of stdout (`canonical\n` or `non-canonical\n`) is printed.
+    /// Exit 0 on parse success; exit 2 on parse failure.
+    #[arg(long, value_name = "DESCRIPTOR")]
+    pub classify_descriptor: Option<String>,
+}
 
 #[derive(Serialize, Debug)]
 struct Schema {
@@ -1058,10 +1066,24 @@ fn classify_kind(arg: &clap::Arg) -> (String, Option<Vec<String>>) {
 /// as a single JSON line (no trailing newline, matching `--json` envelope
 /// conventions elsewhere in the toolkit).
 pub fn run<W: Write>(
-    _args: &GuiSchemaArgs,
+    args: &GuiSchemaArgs,
     root: &Command,
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
+    // v0.20.0 F2 — `--classify-descriptor` diagnostic surface. Per
+    // `bundle.rs:931-933` precedent: probe-parse with empty keys/fingerprints
+    // (only the tree is consulted), then test `canonical_origin(&tree).is_some()`.
+    if let Some(input) = args.classify_descriptor.as_deref() {
+        let desc = crate::parse_descriptor::parse_descriptor(input, &[], &[])?;
+        let verdict = if md_codec::canonical_origin::canonical_origin(&desc.tree).is_some() {
+            "canonical"
+        } else {
+            "non-canonical"
+        };
+        writeln!(stdout, "{verdict}").ok();
+        return Ok(());
+    }
+
     let schema = build_schema(root);
     // Schema is a closed type tree with no untrusted input; serialization is
     // infallible in practice. Match the `.ok()` pattern used by `bundle --json`
