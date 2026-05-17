@@ -1627,7 +1627,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.3 (Effect vocabulary extension); `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::VisibilityProjection` (toolkit emitter); `mnemonic-gui/src/schema_check.rs::VisibilityProjection` (GUI consumer); `mnemonic-gui/src/form/widget.rs` (Dropdown widget — per-option-disable rendering).
 - **What:** SPEC §6.6 rows 9/10/11 need a per-option Effect — e.g., row 9 disables `--threshold` values > N when slot-count is N; row 10 disables single-sig templates when N > 1; row 11 disables multisig templates when N == 1. v3 grammar offers `hidden` / `disabled` / `required` / `pin_value` — all acting on the whole flag. New variant candidate: `disable_options: { values: [...] }` for Dropdown FlagKind, paired with the `slot_count_*` Predicates already in v3.
 - **Why deferred:** Predicate-machinery shipped in v3 unblocks the predicate side; Effect grammar extension is the next half. Out of v0.6.0 cycle scope; would need SPEC §6.10.3 extension + Dropdown widget rendering refactor.
-- **Status:** `open`
+- **Status:** `in-progress` — Batch B-1 cycle (`mnemonic-toolkit-v0.18.0` + `mnemonic-gui-v0.7.0`) lands the `disable_options` Effect grammar (rows 10/11) + GUI-internal `NumberMax::FromSlotCount` FlagKind extension (row 9). Row 9 closes GUI-side without a toolkit wire-format change (single-consumer pragma; promotable to a toolkit-emitted Effect if a second `gui-schema` consumer ever appears). Plan-doc: `2026-05-16-batch-b1-effect-grammar-v0_18_0-v0_7_0.md`.
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-effect-on-dropdown-options-vocab`.
 

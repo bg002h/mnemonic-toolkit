@@ -214,6 +214,8 @@ v0.5 deletes the legacy CLI flags entirely. The unified `--slot @N.<subkey>=<val
 
 Rows 2-12 fire pre-synthesis; rows 13-14 fire post-binding. Rows T1-T2 are the v0.5 retained guards on first-class flags that conflict with single-sig template selection.
 
+**Row 9 N-equivalence note (v0.7 cycle):** the row 9 stderr literal `"N={N} cosigners"` uses "cosigners" as a user-facing term. For gui-schema projection purposes, `N` equals `slot_count` (the cardinality of `--slot @<index>...` entries). In valid configurations the equivalence is exact because rows 10 + 11 reject mixed template/slot-count configurations BEFORE row 9 fires, so by the time row 9 evaluates, all slots are cosigner slots. GUI projection authors targeting row 9 can therefore treat `N` and `state.slot_count()` interchangeably.
+
 **Removed in v0.5 (rows 1, 5, 6, 7 from v0.4):** the trap row, `--cosigner-count` consistency, `--phrase`/`--slot` conflict, `--cosigner`/`--slot` conflict — all gated legacy flags that no longer exist.
 
 ### §6.6.a Legacy flag deletion (v0.5 — table removed)
@@ -321,6 +323,9 @@ Predicate semantics:
 
 // Tagged-object Visibility (added in v0.6 cycle / schema v3):
 {"flag": "--name", "visibility": {"pin_value": {"value": <JSON>}}}
+
+// Tagged-object Visibility (added in v0.7 cycle / schema v4):
+{"flag": "--name", "visibility": {"disable_options": {"values": [<string>, ...]}}}
 ```
 
 `Visibility::Visible` is the implicit default and never appears as an Effect value. Effect grammar:
@@ -329,11 +334,13 @@ Predicate semantics:
 - **`disabled`** — flag is sibling-mutex-conflicted by user choice (e.g., user enabled `--passphrase-stdin` so `--passphrase` grays out). Rendered visible-but-grayed; widget state retained so toggling the mutex restores the value; emission suppressed.
 - **`required`** — flag is decoratively-marked required by the current mode (e.g., `--mk1` required unless `--bundle-json` supplied in verify-bundle). Rendered with a `*` marker; no emission effect.
 - **`pin_value(V)`** (v0.6 cycle) — flag widget is coerced to the pinned JSON value `V` and rendered read-only with a tooltip explaining the pin. **Unlike `hidden`/`disabled` (suppress emission), the GUI MUST emit the argv pair `--name <V>` using the pinned value**, regardless of any pre-pin user-typed value. Closes the "value-coerced-to-zero" Effect vocabulary gap previously noted as DEFERRED in §6.10.7 for `DESCRIPTOR_WITH_NONZERO_ACCOUNT`. See §6.10.4 for the emission-mapping table.
+- **`disable_options(values)`** (v0.7 cycle) — applies to Dropdown FlagKind only. The listed dropdown option values are rendered greyed-out and non-selectable in the widget. Schema-time only: argv emission is unaffected (if `state.values` already holds a now-disabled value from a prior frame, argv still emits it; CLI's mode-violation ladder catches the residual case at run time). Applying `disable_options` to a non-Dropdown flag is undefined behavior — the toolkit MUST NOT emit such a rule, and v0.7+ GUI consumers MAY warn-and-skip. Closes the §6.10.7 row-9/10/11 "Effect vocabulary gap" previously tracked as `gui-schema-effect-on-dropdown-options-vocab`. See §6.10.4 for the emission-mapping table.
 
-Wire-format details for v3:
+Wire-format details for v3 + v4:
 - The bare-string forms continue to round-trip as their original `VisibilityProjection::*` unit variants (v1-cycle wire shape preserved bit-for-bit; no v2-consumer breakage at the rule-shape level).
-- The new `pin_value` form uses a tagged-object shape (`{"pin_value": {"value": <JSON>}}`), making `Visibility` a sum-type of `Simple(VisibilityProjection)` ∪ `PinValue { value }`. The toolkit-side serialization (`crates/mnemonic-toolkit/src/cmd/gui_schema.rs`) and the GUI-side deserialization (`mnemonic-gui/src/schema_check.rs`) provide custom `Serialize` / `Deserialize` impls so the bare-string and tagged-object shapes co-exist on the wire.
+- The v3 `pin_value` form uses a tagged-object shape (`{"pin_value": {"value": <JSON>}}`), making `Visibility` a sum-type of `Simple(VisibilityProjection)` ∪ `PinValue { value }`. The toolkit-side serialization (`crates/mnemonic-toolkit/src/cmd/gui_schema.rs`) and the GUI-side deserialization (`mnemonic-gui/src/schema_check.rs`) provide custom `Serialize` / `Deserialize` impls so the bare-string and tagged-object shapes co-exist on the wire.
 - The pinned `value` field accepts any JSON value — typically a number (e.g., `0` for `--account`) but the type-spec is intentionally permissive so future pin-coercions over Dropdown/Text values can use the same Effect without grammar churn.
+- The v4 `disable_options` form uses the same tagged-object family (`{"disable_options": {"values": [<string>, ...]}}`). The inner-key `{"values": [...]}` wrapper (rather than a bare-array `[...]`) mirrors the v3 `pin_value` precedent and leaves room for future per-Effect metadata (e.g., per-option tooltips) without a wire-shape break.
 
 ### §6.10.4 Semantics — first-rule-wins
 
@@ -348,8 +355,11 @@ When a FormState satisfies a rule's predicate, the rule's effect overrides the t
 | `disabled`    | visible, grayed, value retained | suppressed |
 | `required`    | normal + `*` marker | normal (decorative only) |
 | `pin_value(V)` (v0.6) | locked to `V` + tooltip | `--name <V>` (REPLACES any prior user-typed value) |
+| `disable_options(values)` (v0.7) | Dropdown options in `values` greyed-out + non-selectable | **no impact** (schema-time only — argv unaffected; pre-set state value emits even if now-disabled) |
 
 The `pin_value` row is the only effect that produces argv emission with a value distinct from the user's input. When a flag matches multiple rules whose effects diverge between suppress (hidden/disabled) and emit-with-pin (`pin_value`), first-rule-wins still applies — authors must order more-specific predicates first per the existing discipline.
+
+The `disable_options` row's argv-emission impact is "no impact". The user cannot NEWLY-select a disabled value, but if `state.values` already contains a now-disabled value (carried over from a prior frame where it wasn't disabled), the visibility gate still emits it. This is a deliberate design choice: projecting a "stale disabled value" suppression would create a class of silently-lost-user-value bugs. The CLI's run-time mode-violation ladder (§6.6 rows 10/11) is the residual safety net.
 
 ### §6.10.5 Drift invariant
 
@@ -375,6 +385,21 @@ In practice the v3 schema's consumer is `mnemonic-gui-v0.6.0`, shipped in lockst
 
 The drift gate (`tests/gui_schema_conditional_drift.rs`) gates on `version >= 2` for the v1-cycle rules and `version >= 3` for any rule using v3-cycle content.
 
+**v0.7 cycle bump (`3 → 4`):** Bumped to v4 by `mnemonic-toolkit-v0.18.0`. The new content under v4:
+- One new Visibility variant (`disable_options`; see §6.10.3) using a tagged-object wire shape that co-exists with the bare-string + v3 `pin_value` shapes.
+- Two new bundle rules emitted with this Visibility (rows 10 + 11 of the §6.6 ladder — see §6.10.7).
+- No new Predicate kinds (the v3 `slot_count_*` predicates already cover the predicate side; v4 closes the effect side that v3 left as `gui-schema-effect-on-dropdown-options-vocab`).
+- No `meta` block extensions.
+
+Back-compatibility with v3 consumers:
+- The v3 wire shapes (bare-string + `pin_value` tagged-object + `slot_count_*` predicates) are preserved bit-for-bit.
+- A v3 consumer encountering the new `{"disable_options": ...}` tagged-object form **fails CLOSED** at deserialization: the v0.6.x custom `Deserialize` impl at `mnemonic-gui/src/schema_check.rs::VisibilityProjection` only accepts bare-string + `pin_value` tagged-object and explicitly errs on any other tagged-object key. Although the SPEC's prior v2→v3 guidance ("v2 consumers SHOULD treat unknown variants as 'skip this rule'") still applies as the ideal contract, the v0.6.x reference implementation does not honor it. **Lockstep release with `mnemonic-gui-v0.7.0` is therefore mandatory.**
+- No FlagKind wire-format change in v4 (the v0.7 cycle's GUI-internal `NumberMax::FromSlotCount` extension closes §6.6 row 9 entirely GUI-side; the toolkit's Number flag emission is unchanged from v3).
+
+In practice the v4 schema's consumer is `mnemonic-gui-v0.7.0`, shipped in lockstep with the toolkit bump. Same `pinned-upstream.toml` discipline applies; v3-consumer back-compat is theoretical-only.
+
+The drift gate (`tests/gui_schema_conditional_drift.rs`) gates on `version >= 2` for v1-cycle rules, `version >= 3` for v3-cycle content (`pin_value` + `slot_count_*`), and `version >= 4` for any rule using v4-cycle content (`disable_options`).
+
 ### §6.10.7 gui_projection mapping table
 
 Each row in the table below identifies one rule in the §6.6 table or one of the v0.3-NEW `bundle.rs::mode_text` consts, plus its projection into the gui-schema JSON. The right-most column carries per-row cycle status:
@@ -382,6 +407,8 @@ Each row in the table below identifies one rule in the §6.6 table or one of the
 - `ENCODED` — encoded in toolkit v0.16.0 + gui v0.5.0 (v1 cycle).
 - `ENCODED (pre-existing)` — encoded in the v1 cycle but the projection logic predates §6.10 (e.g., a clap-derived mutex already enforced by `clap::ArgGroup`).
 - `ENCODED v2` — encoded in toolkit v0.17.0 + gui v0.6.0 (v2 cycle). Distinguished from v1 only for changelog auditing; the consumer treats them identically at runtime.
+- `ENCODED v3` — encoded in toolkit v0.18.0 + gui v0.7.0 (v3 cycle).
+- `ENCODED v3 (GUI-internal)` — closed GUI-side without a toolkit wire-format change (e.g., GUI's `NumberMax::FromSlotCount` FlagKind extension binds `--threshold` max to `state.slot_count()`). Cycle-tagged for changelog auditing only.
 - `DEFERRED → <followup>` — projection intentionally not yet emitted; FOLLOWUP entry tracks the work.
 
 The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for historical-diff continuity. Future cycles should add per-cycle ENCODED prefixes ("ENCODED v3" etc.) following the same pattern.
@@ -404,12 +431,15 @@ The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for h
 | export-wallet | (subcommand-local rule) | (n/a — clap `requires` annotation) | template ∉ `{tr-multi-a, tr-sortedmulti-a}` | `--taproot-internal-key → disabled` | ENCODED |
 | convert | (subcommand-local rule) | (n/a — runtime check) | `--xpub-prefix` non-default | `--network → required` | ENCODED |
 | derive-child | (subcommand-local rule) | (n/a — runtime check) | `--application` value == `dice` | `--dice-sides → required` | ENCODED |
+| bundle | §6.6 row 9 | (n/a — GUI-internal) | (GUI-internal: `--threshold` max binds to `state.slot_count()`) | (n/a — GUI-internal FlagKind extension via `NumberMax::FromSlotCount`) | ENCODED v3 (GUI-internal) |
+| bundle | §6.6 row 10 | (n/a — slot_count-driven) | `slot_count_gte: 2` | `--template → disable_options(single-sig template values)` | ENCODED v3 |
+| bundle | §6.6 row 11 | (n/a — slot_count-driven) | `slot_count_eq: 1` | `--template → disable_options(multisig template values)` | ENCODED v3 |
 
 **Runtime-deferred rules:**
 
-- **Closed in v2 cycle (this row's `Cycle status` column reads `ENCODED v2`):** §6.6 row 12 (`DESCRIPTOR_WITH_NONZERO_ACCOUNT`) — uses the new `pin_value` Effect (§6.10.3).
-- **Predicate-machinery available, full encoding deferred:** §6.6 row 9 (T-in-range), row 10 (single-sig template with N > 1 slots), row 11 (multisig template with N == 1). The v2 cycle's `slot_count_*` predicates (§6.10.2) make the slot-count side of these rules expressible; the *effect* side (which would need a dropdown-option-disable vocabulary to disable `--template` values rather than the whole flag) remains v2-incomplete. Implementation deferred to a future cycle that extends the Effect grammar to target dropdown options. Tracked at FOLLOWUP `gui-schema-effect-on-dropdown-options-vocab`.
-- **Still deferred (predicate-machinery missing):** §6.6 row 8 (slot-index contiguity), row 13 (BIP-388 distinct-key), row 14 (per-`@N` annotation inconsistency). These require richer relational predicate types (cross-slot equality, all-distinct) not in the v3 grammar. Tracked at FOLLOWUP `gui-schema-cross-slot-predicate-projection` (new in v2 cycle; companion to the existing `gui-schema-runtime-conditional-projection`).
+- **Closed in v2 cycle (this row's `Cycle status` column reads `ENCODED v2`):** §6.6 row 12 (`DESCRIPTOR_WITH_NONZERO_ACCOUNT`) — uses the v3-schema `pin_value` Effect (§6.10.3).
+- **Closed in v3 cycle (this row's `Cycle status` column reads `ENCODED v3` or `ENCODED v3 (GUI-internal)`):** §6.6 rows 9, 10, 11. Row 9 closes GUI-side via the `NumberMax::FromSlotCount` FlagKind extension in `mnemonic-gui/src/schema/mod.rs` (no toolkit wire-format change; the GUI's Number widget binds `--threshold`'s resolved max to `state.slot_count()` at render time). Rows 10 + 11 close via the new `disable_options` Effect (§6.10.3) — the toolkit emits bundle rules that target `--template`'s Dropdown options based on `slot_count_gte: 2` / `slot_count_eq: 1` predicates. If a second `gui-schema` consumer ever appears, row 9 MAY be promoted to a toolkit-emitted Effect rule (e.g., `ConstrainNumberMax { from_slot_count: true }`); the current single-consumer assumption keeps the v0.18.0 wire-format narrowly scoped to dropdown-option-disable.
+- **Still deferred (predicate-machinery missing):** §6.6 row 8 (slot-index contiguity), row 13 (BIP-388 distinct-key), row 14 (per-`@N` annotation inconsistency). These require richer relational predicate types (cross-slot equality, all-distinct) not in the v3/v4 grammar. Tracked at FOLLOWUP `gui-schema-cross-slot-predicate-projection` (open since v2 cycle; companion to the existing `gui-schema-runtime-conditional-projection`).
 
 All of the above continue to surface at Run time via the CLI's typed error — the GUI's pre-run projection is best-effort, not exhaustive.
 
