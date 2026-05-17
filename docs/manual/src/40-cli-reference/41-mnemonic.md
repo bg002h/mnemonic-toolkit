@@ -49,6 +49,83 @@ See [Your first bundle](#your-first-bundle) for a single-sig
 walkthrough; [Multi-source 2-of-3 multisig](#multi-source-2-of-3-multisig)
 for multisig.
 
+### Non-canonical descriptor mode
+
+A descriptor is **canonical** when it matches one of the five wrapper
+shapes md-codec's `canonical_origin` table recognises — `pkh(@N)`,
+`wpkh(@N)`, `tr(@N)` key-path-only, `wsh(multi/sortedmulti(...))`, or
+`sh(wsh(multi/sortedmulti(...)))`. Anything else — bare `wsh(@N)`,
+miniscript bodies like `wsh(andor(...))`, taproot trees with leaves
+(`tr(@N, <TapTree>)`), legacy `sh(sortedmulti(...))` — is
+**non-canonical**.
+
+Non-canonical descriptors typically lack per-`@N` origin paths in the
+descriptor string itself. The toolkit handles this two ways:
+
+1. **Default path inference** — when an `@N` has no inline
+   `[fingerprint/path]@N` annotation AND no `--slot @N.path=` CLI input,
+   the toolkit assigns the BIP-48 cosigner path
+   `m/48'/<coin>'/<account>'/2'` (Liana / Specter de-facto convention).
+   `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
+   `<account>` consumes `--account N` (defaults to `0'`). A stderr info
+   notice lists the `@N` indices that received the default.
+2. **Explicit per-`@N` override** — either inline BIP-380 syntax
+   `[deadbeef/48'/0'/0'/2']@N` embedded in the descriptor, or
+   `--slot @N.path=m/48'/0'/0'/2'` on the CLI. Either takes precedence
+   over the default. The slot-CLI form is most useful when the user
+   wants distinct paths per cosigner without re-typing the descriptor.
+
+#### Example: 3-key time-locked inheritance wallet
+
+```sh
+mnemonic bundle --network mainnet --account 0 \
+  --descriptor 'wsh(andor(pkh(@0), after(12000000),
+                          or_i(and_v(v:pkh(@1), older(4032)),
+                               and_v(v:pkh(@2), older(32768)))))' \
+  --language english \
+  --slot '@0.phrase=…' \
+  --slot '@1.phrase=…' \
+  --slot '@2.phrase=…'
+```
+
+Cosigners `@0`, `@1`, `@2` each derive at `m/48'/0'/0'/2'` from their
+respective BIP-39 phrases. The descriptor expresses an inheritance
+flow: `@0` can spend unconditionally after block 12,000,000; `@1` can
+spend after 4032 blocks relative timelock; `@2` after 32,768 blocks.
+The toolkit prints the info notice to stderr before bundle emission:
+
+```text
+info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+```
+
+#### Example: script-path-only P2TR wallet (NUMS sentinel)
+
+```sh
+mnemonic bundle --network mainnet \
+  --descriptor 'tr(NUMS, and_v(v:pk(@0), after(12000000)))' \
+  --language english \
+  --slot '@0.phrase=…'
+```
+
+`NUMS` is a literal token the toolkit substitutes with the BIP-341
+unspendable internal-key hex
+`50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`
+before rust-miniscript parses. The resulting wallet is P2TR (bech32m
+addresses) with key-path spending intentionally disabled — only the
+tap-script path is spendable. The leaf-key `@0` derives at the BIP-48
+default per the inference rule above.
+
+#### Refusal cases
+
+| Trigger | Stderr |
+|---|---|
+| Bare `tr(<miniscript>)` (no internal key) | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
+| Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
+| `--slot @N.fingerprint=X` AND inline `[Y/...]@N` disagree | `error: slot @{N} fingerprint mismatch: --slot says X, descriptor inline [Y/...] disagrees; supply consistent values.` |
+| Phrase-derived fingerprint disagrees with inline `[Y/...]@N` | `error: slot @{N} phrase-derived fingerprint X does not match descriptor inline [Y/...]; verify the phrase or correct the descriptor.` |
+| `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
+| Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
+
 ---
 
 ## `mnemonic verify-bundle`
