@@ -45,6 +45,26 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `gui-schema-global-flag-emission` — `mnemonic gui-schema` JSON omits global flags from per-subcommand schemas
+
+- **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle Phase A.1 execution (mnemonic-gui v0.9.0 catchup). Realized R7 risk from `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §5. mnemonic-gui v0.9.0 attempted to mirror `--no-auto-repair` into its 10 per-subcommand `*_FLAGS` arrays and the schema-mirror drift gate hard-failed: the toolkit's `cmd::gui_schema` v4 JSON emitter does not include global flags in any subcommand's `flags` array; only clap's per-subcommand `--help` TEXT propagates them.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (the v4 emitter); downstream consumers across `mnemonic-gui` (currently the only known consumer). GUI workaround at `mnemonic-gui/src/runner.rs::prepend_no_auto_repair` + `MnemonicGuiApp.no_auto_repair` field + action-bar checkbox in `mnemonic-gui/src/main.rs` (load-bearing fallback shipped at `mnemonic-gui-v0.9.0`; ~30 LOC).
+- **What:** Extend `cmd::gui_schema`'s emitter to include global flags (e.g. `--no-auto-repair`, `--debug`) per-subcommand so downstream consumers can mirror them in their per-subcommand schemas without inventing fallbacks. Either (a) duplicate the global-flag entries into every subcommand's `flags` array, or (b) add a sibling top-level `global_flags` array consumed alongside per-subcommand flags. Bump schema version per SPEC §6.10.6 additive-bump policy if needed.
+- **Why deferred:** the GUI's R7 fallback (action-bar checkbox prepending the flag to argv) is functionally complete at v0.9.0; the toolkit-side emitter fix is a future cycle's mechanical extension. UX improvement (per-subcommand native vs top-level affordance) but not a correctness gap.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-global-flag-emission`.
+
+### `toolkit-mnemonic-force-tty-promote-from-test-only` — promote `MNEMONIC_FORCE_TTY` env-var from test-only to first-class public contract
+
+- **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle D23 lock execution (mnemonic-gui v0.9.0 catchup). Realized R1 risk from `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §5.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run` doc-comment (currently classifies the env-var as test-only); `crates/mnemonic-toolkit/src/cmd/convert.rs` + `crates/mnemonic-toolkit/src/cmd/inspect.rs` (same env-var consumed via the `is_terminal()` gate); downstream consumer at `mnemonic-gui/src/runner.rs::run` (sets `MNEMONIC_FORCE_TTY=1` on subprocess spawn at `mnemonic-gui-v0.9.0`).
+- **What:** mnemonic-gui v0.9.0 sets `MNEMONIC_FORCE_TTY=1` in the toolkit subprocess env so that the toolkit's `std::io::stdout().is_terminal() && !no_auto_repair` auto-fire gate fires for GUI-spawned invocations (GUI subprocesses are piped, not TTY — without the env override the GUI would never see auto-fire repair reports from `convert` / `inspect` / `verify-bundle`). The env-var is currently documented test-only in `verify_bundle::run` doc-comment. GUI consumption creates a load-bearing dependency on the env-var's behavior; promotion to a first-class public contract (with explicit semver guarantee on its semantics) would harden the GUI side against silent toolkit-internal refactors. Update doc-comment in lockstep to reflect public-contract status; consider adding to the manual's "environment variables" section.
+- **Why deferred:** functional risk is documentary, not behavioral; the env-var works correctly at v0.22.1. Toolkit-side promotion is a future cycle's documentation + semver-contract addition.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `toolkit-mnemonic-force-tty-promote-from-test-only`.
+
 ### `verify-bundle-auto-fire-helper-refactor` — wire BCH auto-fire short-circuit into `verify-bundle` decode failures (v0.22.1 patch)
 
 - **Surfaced:** 2026-05-17, v0.22.0 cycle Phase 5 scope-reduction.
