@@ -263,7 +263,21 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
         let has_secret = subkeys.iter().any(|s| s.is_secret_bearing());
         let has_watch = subkeys.iter().any(|s| s.is_watch_only());
 
-        if has_secret && has_watch {
+        // v0.19.0 SPEC §6.6.b exception: `{phrase, path}` and
+        // `{phrase, fingerprint, path}` are legal in non-canonical
+        // descriptor mode (carries explicit per-`@N` origin path with
+        // optional fingerprint attestation). Exempt these specific subkey
+        // sets from the secret+watch-only conflict refusal; the
+        // canonical-mode rejection is enforced post-parse in
+        // `cmd::bundle::bundle_run_unified_descriptor` once
+        // `canonical_origin(&tree)` is known.
+        let exempted_v0_19_0 = matches!(
+            subkeys.as_slice(),
+            [SlotSubkey::Phrase, SlotSubkey::Path]
+                | [SlotSubkey::Phrase, SlotSubkey::Fingerprint, SlotSubkey::Path]
+        );
+
+        if has_secret && has_watch && !exempted_v0_19_0 {
             return Err(ToolkitError::SlotInputViolation {
                 kind: "conflict",
                 message: format!(
@@ -290,6 +304,12 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
 /// MasterXpub < Fingerprint < Path < Wif < Xprv, so only the canonical-order
 /// arms below are reachable. `MasterXpub` (SPEC_export_wallet_v0_8.md §2) is
 /// an optional add-on to any watch-only set that already includes `Xpub`.
+/// v0.19.0 (SPEC §6.6.b extension): `[Phrase, Path]` and
+/// `[Phrase, Fingerprint, Path]` are added for non-canonical descriptor
+/// mode (explicit per-`@N` origin path overrides the §4.12.b default).
+/// Canonical-mode rejection of these pairs is enforced post-parse in
+/// `cmd::bundle::bundle_run_unified_descriptor` after the descriptor's
+/// canonicity verdict is known.
 fn is_legal_set(set: &[SlotSubkey]) -> bool {
     use SlotSubkey::*;
     matches!(
@@ -306,6 +326,8 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
             | [Xpub, MasterXpub, Path]
             | [Xpub, Fingerprint, Path]
             | [Xpub, MasterXpub, Fingerprint, Path]
+            | [Phrase, Path]
+            | [Phrase, Fingerprint, Path]
     )
 }
 
@@ -660,6 +682,84 @@ mod tests {
         .unwrap_err();
         match e {
             ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "duplicate-subkey"),
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    // ---- v0.19.0 SPEC §6.6.b extension: [Phrase, Path] + [Phrase, Fingerprint, Path] ----
+
+    #[test]
+    fn validate_phrase_plus_path_passes_v0_19_0() {
+        // SPEC §6.6.b v0.19.0 — non-canonical-descriptor explicit-origin form.
+        // Slot grammar accepts the pair; canonical-mode rejection is enforced
+        // post-parse in cmd::bundle (this layer is structural).
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Phrase, "word word word"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_phrase_plus_fingerprint_plus_path_passes_v0_19_0() {
+        // SPEC §6.6.b v0.19.0 — phrase + per-`@N` origin attestation
+        // (fingerprint + path).
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Phrase, "word word word"),
+            slot(0, SlotSubkey::Fingerprint, "deadbeef"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_phrase_plus_fingerprint_without_path_still_conflict() {
+        // Narrowing of the v0.19.0 exemption: [Phrase, Fingerprint] (no Path)
+        // is NOT in the exempted set; the conflict refusal still fires.
+        // Distinguishes "phrase with origin attestation" (Path required) from
+        // "phrase with bare fingerprint annotation" (ambiguous; rejected).
+        let e = validate_slot_set(&[
+            slot(0, SlotSubkey::Phrase, "x"),
+            slot(0, SlotSubkey::Fingerprint, "deadbeef"),
+        ])
+        .unwrap_err();
+        match e {
+            ToolkitError::SlotInputViolation { kind, message } => {
+                assert_eq!(kind, "conflict");
+                assert!(message.contains(
+                    "slot @0 has both secret-bearing input and watch-only input; pick one per slot."
+                ));
+            }
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_phrase_plus_xpub_still_conflict_v0_19_0() {
+        // The v0.19.0 exemption is narrow: only Path + optionally Fingerprint
+        // pair with Phrase. Xpub-class peers still trigger the conflict.
+        let e = validate_slot_set(&[
+            slot(0, SlotSubkey::Phrase, "x"),
+            slot(0, SlotSubkey::Xpub, "y"),
+        ])
+        .unwrap_err();
+        match e {
+            ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "conflict"),
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_entropy_plus_path_still_rejected_v0_19_0() {
+        // The v0.19.0 exemption applies to Phrase only, not Entropy. Users
+        // wanting entropy + custom path must convert entropy → phrase first.
+        let e = validate_slot_set(&[
+            slot(0, SlotSubkey::Entropy, "0102030405060708090a0b0c0d0e0f10"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap_err();
+        match e {
+            ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "conflict"),
             other => panic!("unexpected variant {other:?}"),
         }
     }
