@@ -306,6 +306,58 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.17.1] — 2026-05-16
+
+### Fixed — drop spurious `meta.template_groups` from `derive-child` gui-schema
+
+`crates/mnemonic-toolkit/src/cmd/gui_schema.rs::build_subcommand_meta`
+previously listed `derive-child` in its match arm and emitted a
+`meta.template_groups` block for that subcommand. But `derive_child.rs`
+has zero `--template` references — the block was spurious. v0.17.1
+removes `derive-child` from the match arm so the meta block is emitted
+only for the three subcommands that actually consume `--template`:
+`bundle`, `verify-bundle`, `export-wallet`.
+
+The bug was silent (no GUI consumer reads derive-child's meta block) but
+the emitted JSON was wrong; the matching SPEC §6.10.8 prose enumerated
+derive-child in error; and the toolkit test
+`derive_child_emits_meta_template_groups` enshrined the wrong invariant.
+
+Surfaced by the `mnemonic-toolkit-v0.17.0` cycle-close opus reviewer
+audit (confidence 95). Tracked at FOLLOWUP
+`gui-schema-derive-child-meta-template-groups-spurious` (resolved at
+this release).
+
+### Changed
+
+- `crates/mnemonic-toolkit/src/cmd/gui_schema.rs`:
+  `build_subcommand_meta` match arm drops `| "derive-child"`.
+- `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.8 paragraph 2:
+  `derive-child` removed from the template-consumer enumeration;
+  parenthetical noting the v0.17.1 correction added.
+- `crates/mnemonic-toolkit/tests/cli_gui_schema_v3_extensions.rs`:
+  cell `derive_child_emits_meta_template_groups` deleted;
+  replacement negative-cell `derive_child_omits_meta_template_groups`
+  added as a regression guard against re-introduction.
+
+### Verification
+
+- TDD discipline: negative cell ran RED against unmodified source
+  (panic message showed the spurious `multisig: [...], single_sig:
+  [...]` block); GREEN after the match-arm fix.
+- `cargo test --offline --workspace`: 30 test binaries pass, no
+  regressions vs v0.17.0 (was 30 at v0.17.0; same count + one cell
+  replaced in v3_extensions).
+
+### Companion
+
+GUI-side bump in lockstep: `mnemonic-gui v0.6.1` re-pins to
+`mnemonic-toolkit-v0.17.1` in both `pinned-upstream.toml [mnemonic].tag`
+and `Cargo.toml [dependencies] mnemonic-toolkit`. The v0.6.1 patch also
+folds two GUI-only defense-in-depth findings from the same cycle-close
+reviewer audit (canary tests for `#[serde(other)]` behavior + drift gate
+per-subcommand floors + `--slot` PinValue debug_assert).
+
 ## mnemonic-toolkit [0.17.0] — 2026-05-16
 
 ### Added — SPEC §6.10 v2-cycle extensions to `gui-schema` JSON
