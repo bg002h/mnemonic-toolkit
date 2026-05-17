@@ -189,13 +189,23 @@ fn export_wallet_emits_meta_template_groups() {
 }
 
 #[test]
-fn derive_child_emits_meta_template_groups() {
-    // derive-child consumes --template; meta block must be present.
+fn derive_child_omits_meta_template_groups() {
+    // v0.17.1 P0: derive-child does NOT consume `--template` (the subcommand
+    // has zero `--template` references in `crates/mnemonic-toolkit/src/cmd/
+    // derive_child.rs`). The previous test cell at this position
+    // (`derive_child_emits_meta_template_groups`) enshrined the wrong
+    // invariant — `build_subcommand_meta`'s spurious match-arm inclusion of
+    // `derive-child` emitted a meta.template_groups block on a subcommand
+    // with no `--template` widget. The v0.17.1 fix removes the match arm;
+    // this negative cell guards against re-introduction.
+    // Tracks FOLLOWUP `gui-schema-derive-child-meta-template-groups-spurious`.
     let v = run_gui_schema();
-    let groups = meta_template_groups(&v, "derive-child");
+    let derive_child = find_sub(&v, "derive-child");
+    let template_groups = &derive_child["meta"]["template_groups"];
     assert!(
-        groups.is_object(),
-        "derive-child.meta.template_groups MUST be an object"
+        template_groups.is_null() || derive_child["meta"].is_null(),
+        "derive-child subcommand MUST NOT emit meta.template_groups (no \
+         --template flag in derive_child.rs). Got: {template_groups:?}"
     );
 }
 

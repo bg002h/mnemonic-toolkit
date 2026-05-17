@@ -243,10 +243,12 @@ fn multisig_template_values() -> Vec<String> {
 /// (`mnemonic-gui/tests/gui_schema_conditional_drift.rs`) catches divergence.
 fn build_subcommand_meta(name: &str) -> BTreeMap<String, serde_json::Value> {
     let mut meta = BTreeMap::new();
-    if matches!(
-        name,
-        "bundle" | "verify-bundle" | "export-wallet" | "derive-child"
-    ) {
+    // v0.17.1 P0: derive-child REMOVED from this match arm. Although v0.17.0
+    // emitted a meta.template_groups block for derive-child, that subcommand
+    // has zero `--template` references in `crates/mnemonic-toolkit/src/cmd/
+    // derive_child.rs` — the block was spurious. Negative-cell guard at
+    // `tests/cli_gui_schema_v3_extensions.rs::derive_child_omits_meta_template_groups`.
+    if matches!(name, "bundle" | "verify-bundle" | "export-wallet") {
         meta.insert(
             "template_groups".to_string(),
             serde_json::json!({

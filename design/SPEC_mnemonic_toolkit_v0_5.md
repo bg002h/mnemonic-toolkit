@@ -432,7 +432,7 @@ Initial v2-cycle field:
 }
 ```
 
-The `template_groups` block is emitted for subcommands that consume the `--template` flag (bundle / verify-bundle / export-wallet / derive-child). Source-of-truth: `crates/mnemonic-toolkit/src/template.rs::CliTemplate::is_multisig()`. The toolkit's gui-schema emitter walks the variant set and partitions by `is_multisig()` per `Subcommand`.
+The `template_groups` block is emitted for subcommands that consume the `--template` flag (bundle / verify-bundle / export-wallet). Source-of-truth: `crates/mnemonic-toolkit/src/template.rs::CliTemplate::is_multisig()`. The toolkit's gui-schema emitter walks the variant set and partitions by `is_multisig()` per `Subcommand`. (v0.17.1 P0 corrected this enumeration — v0.17.0 mistakenly listed `derive-child`, but that subcommand has no `--template` flag.)
 
 GUI-side consumption: `mnemonic-gui/src/form/conditional.rs` retires its hand-coded `SINGLE_SIG_TEMPLATES: &[&str]` const (line 23) in favor of reading `meta.template_groups.single_sig` from the bundled gui-schema JSON. The drift gate (`tests/gui_schema_conditional_drift.rs`) enforces parity between toolkit `is_multisig()` and the GUI's runtime classification.
 
