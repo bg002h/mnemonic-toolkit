@@ -96,7 +96,117 @@ recipe readable while preserving that constraint:
 
 ```sh
 DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))'
+```
 
+##### Default text-form output
+
+Running `bundle` without `--json` prints the cards directly to stdout
+in a human-readable form — each card appears both as a dense
+bech32-string and as a 5-character-group line break suitable for
+steel engraving:
+
+```sh
+mnemonic bundle --network mainnet --account 0 \
+  --descriptor "$DESC" \
+  --language english \
+  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
+  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
+```
+
+Stdout (the cards):
+
+```text
+# ms1[0] (entropy, BCH-checksummed)
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+
+ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qp40rrpqqspsrg8ml5q6p7laqxs0hltnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgymxvy4lntk6efgf0
+mk1qp40rrpp8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2vkk2nlqmlvch5n4shwf72fwktdlqfhxtswupfxql3
+
+mk1qp 40rrp qqsps rg8ml 5q6p7 laqxs 0hltn chdq5 pgy3z epu88
+jjutt hgx8e gtq4p cwl6u 5p2us 6r6zs nl2rd 0q6gg hvalg ymxvy
+4lntk 6efgf 0
+mk1qp 40rrp p8lph ut2hv vpp5w l4l0m n058n dxfl6 3kufy fsjwl
+t2vkk 2nlqm lvch5 n4shw f72fw ktdlq fhxts wupfx ql3
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qpxj36pqqspsrg8ml5q6p7laqxs0hldcdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkggq4j8pde6hkmw0
+mk1qpxj36ppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8c56a5k72ndqgmdftljqt
+
+mk1qp xj36p qqsps rg8ml 5q6p7 laqxs 0hldc dzxlz pgy3z epal7
+ec5v6 wv58d a6c23 hjuw4 ypg96 ztz75 f8wrr ussm5 9fetn kggq4
+j8pde 6hkmw 0
+mk1qp xj36p pag0z r8gh9 upnju gr26j fvunv s35jv gdjkm 3kghw
+nt0qq ymzc0 utyzx yhny9 pu8c5 6a5k7 2ndqg mdftl jqt
+
+# mk1[2] (cosigner 2 xpub + origin)
+mk1qpl7wlpqqspsrg8ml5q6p7laqxs0hlfgv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqncct596tqv5z420v4
+mk1qpl7wlpprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5j35p6p2c22v0s30tv0s2u
+
+mk1qp l7wlp qqsps rg8ml 5q6p7 laqxs 0hlfg v3gqv pgy3z epugv
+evsxp z2zll 50ju3 dcmgh txtfv 0y025 ltk2v c8a3e x8yqn cct59
+6tqv5 z420v 4
+mk1qp l7wlp prja8 93lkx up4z7 tw6q2 yvs4f k9pjh xf00s 49uge
+x8rue 307wd slgcj 5r8x9 t5j35 p6p2c 22v0s 30tv0 s2u
+
+# md1 (multisig wallet policy)
+md1fu39yrq9qjtvyyy5jmppp9ykcggfgp9fskxcqkudsqefnfskhqqqq8uqnxnpwwqqqtggjse9txaz6v
+md1fu39yrqfqqqp0npeutks2dcdzxlrzsezsqc27rchwsv0jskp2rsal4egz4ep5859pnmq8wpsfncwhr
+md1fu39yrq3l4pkhsdyytkwl5z8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2v3d70kcz8a3r42
+md1fu39yrqa4j5lcxlmx9ayav9mj0jj6wv58da6c23hjuw4ypg96ztz75f8wrrussm598ryfkw5ey8h6p
+md1fu39yrpzw2ua7583pn5tj7qeewyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jpmwaykdyahtr0v
+md1fu39yrpgcj7vs58sls39p0l68ewgkud5t4n95k8j84204m9xvr7cunrjqfurja8939xk8j47ndpq63
+md1fu39yrpha3hqdghjmksz3ry92d3gv4ejtmu9f0zxf3clxvtlnnv86xy4qee32ay5q0e3ty49zaan43
+
+md1fu-39yrq-9qjtv-yyy5j-mppp9-ykcgg-fgp9f-skxcq-kudsq-efnfs-khqqq-q8uqn-xnpww-qqqtg-gjse9-txaz6-v
+md1fu-39yrq-fqqqp-0npeu-tks2d-cdzxl-rzsez-sqc27-rchws-v0jsk-p2rsa-l4egz-4ep58-59pnm-q8wps-fncwh-r
+md1fu-39yrq-3l4pk-hsdyy-tkwl5-z8lph-ut2hv-vpp5w-l4l0m-n058n-dxfl6-3kufy-fsjwl-t2v3d-70kcz-8a3r4-2
+md1fu-39yrq-a4j5l-cxlmx-9ayav-9mj0j-j6wv5-8da6c-23hju-w4ypg-96ztz-75f8w-rruss-m598r-yfkw5-ey8h6-p
+md1fu-39yrp-zw2ua-7583p-n5tj7-qeewy-p4dfy-kwfkg-g6fxy-xetdc-mythf-4hsqz-d3v87-9jpmw-aykdy-ahtr0-v
+md1fu-39yrp-gcj7v-s58sl-s39p0-l68ew-gkud5-t4n95-k8j84-204m9-xvr7c-unrjq-furja-8939x-k8j47-ndpq6-3
+md1fu-39yrp-ha3hq-dghjm-ksz3r-y92d3-gv4ej-tmu9f-0zxf3-clxvt-lnnv8-6xy4q-ee32a-y5q0e-3ty49-zaan4-3
+```
+
+Note the two-form layout per card type: the toolkit emits a dense
+single-line bech32 form first (for copy-paste and machine
+consumption), then a blank line, then the same content broken into
+5-character groups (for steel-plate engraving and reading aloud
+during verification). The grouping separators are non-load-bearing —
+either form decodes back to the same payload.
+
+Stderr (info notice + bundle-summary engraving card):
+
+```text
+info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+# === Wallet bundle: descriptor, mainnet ===
+# Threshold: 3 of 3
+# Cosigners:
+#   @0: ms1:01a0f,mk1:01a0f (73c5da0a @ 48'/0'/0'/2')
+#   @1: (no ms1; watch-only),mk1:01a0f (b8688df1 @ 48'/0'/0'/2')
+#   @2: (no ms1; watch-only),mk1:01a0f (28645006 @ 48'/0'/0'/2')
+# Template: descriptor
+# md1: 01a0
+# Recovery: any 3 of 3 signing keys + md1 (template card).
+# Language: english
+```
+
+The engraving-card block on stderr is a wallet-level summary the user
+copies onto a separate piece of paper kept with the bundle; it lists
+the threshold, per-cosigner fingerprint+origin triples, and the
+recovery rule. The `01a0f` / `01a0` short tags are chunk-set-id hex
+prefixes for the corresponding cards, useful when matching a
+recovered card-set back to its bundle.
+
+##### JSON envelope form (`--json`)
+
+For programmatic consumption — and crucially for the verify-bundle
+round-trip in the next section — re-run the same invocation with
+`--json` and redirect stdout to a file. Stderr is unchanged.
+
+```sh
 mnemonic bundle --network mainnet --account 0 \
   --descriptor "$DESC" \
   --language english \
@@ -104,12 +214,6 @@ mnemonic bundle --network mainnet --account 0 \
   --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
   --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
   --json > /tmp/inheritance-bundle.json
-```
-
-The toolkit prints the info notice to stderr before bundle emission:
-
-```text
-info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
 ```
 
 The resulting `/tmp/inheritance-bundle.json` envelope (pretty-printed
