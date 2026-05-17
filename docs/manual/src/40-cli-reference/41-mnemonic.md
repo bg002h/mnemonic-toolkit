@@ -293,11 +293,39 @@ Things to notice in the envelope:
 - **`origin_path`** = `m/48'/0'/0'/2'` — the default-inferred BIP-48
   cosigner path, applied to every `@N` placeholder that lacked an
   inline `[fp/path]@N` annotation or `--slot @N.path=` override.
-- **`ms1`** is a 3-element array with one populated entry and two
-  `""` sentinels. Descriptor mode binds entropy to `@0` only per SPEC
-  §5.8 schema-4; cosigner `@1` / `@2` ms1 cards travel separately
-  (each cosigner runs their own `bundle` invocation in a real
-  deployment).
+- **`ms1`** is a 3-element array with **only `ms1[0]` populated**;
+  the `@1` and `@2` entries are `""` sentinels even though the
+  invocation supplied phrases for all three slots. This is per the
+  SPEC §5.8 v0.3 "descriptor-mode contract": when `--descriptor` is
+  in play, exactly one slot may bind entropy (slot `@0`), and the
+  remaining slots are treated as watch-only for ms1 emission. The
+  `@1` and `@2` phrases ARE consumed — their xpubs land in
+  `mk1[1]` / `mk1[2]` and `multisig.cosigners[1]` /
+  `multisig.cosigners[2]` — but their entropy is intentionally not
+  encoded into this bundle. (Contrast with template mode
+  (`--template wsh-sortedmulti`), which emits per-slot ms1 for every
+  phrase-bearing slot — see
+  [Multi-source 2-of-3 multisig](#multi-source-2-of-3-multisig).)
+  In a real-world multi-cosigner deployment each cosigner generates
+  their own ms1 card directly from their phrase (no bundle needed):
+
+  ```sh
+  # Cosigner @1 generates their personal ms1 backup
+  mnemonic convert \
+    --from phrase='legal winner thank year wave sausage worth useful legal winner thank yellow' \
+    --to ms1
+  # → ms1: ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6
+
+  # Cosigner @2 generates theirs
+  mnemonic convert \
+    --from phrase='letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+    --to ms1
+  # → ms1: ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
+  ```
+
+  Each cosigner physically holds (engraves, geographically separates)
+  only THEIR own ms1 card alongside the shared `md1` wallet-policy
+  card and all three `mk1` watch-only cards.
 - **`mk1`** is a `Vec<Vec<String>>` — outer per cosigner, inner per
   bech32-chunk. The two-chunk shape per cosigner is the canonical
   mk1 chunking for the wrapped key card. v0.20.0's F1 fix gave each
