@@ -42,5 +42,6 @@ ms vectors
 mk encode
 mk decode
 mk inspect
+mk repair
 mk verify
 mk vectors

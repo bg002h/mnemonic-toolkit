@@ -89,7 +89,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
 - **Where:** `mnemonic-key/crates/mk-cli/src/cmd/` (NEW subcommand; cross-repo).
 - **What:** Add `mk repair <mk1>...` for mk1 BCH error-correction (regular + long codes). `mk-codec` already does internal correction within `decode`, so this is mostly a UX-parity feature.
-- **Status:** open (unblocked — mk-codec primitives already public per v0.3.1)
+- **Status:** `resolved 2026-05-17` — `mk-cli-v0.4.0` shipped at `bg002h/mnemonic-key` `0ecbf1a` (mnemonic-toolkit v0.22.x follow-ups cycle Phase A.3'; plan `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §2.A.2).
+- **Resolution:** new `mk-cli/src/cmd/repair.rs` consumes `mk_codec::string_layer::decode_string` (already-public BCH primitive per `mk-codec-v0.3.1`); surfaces full `DecodedString` (`code`/`corrections_applied`/`corrected_positions`/`corrected_char_at`); exit 5 = REPAIR_APPLIED per D26; JSON envelope byte-matches toolkit's `RepairJson` schema per D27. 7 new integration cells. D25 handler-signature cascade (6 handlers `Result<()> → Result<u8>`) shipped in the same release commit. Companion FOLLOWUP closure at `bg002h/mnemonic-key` `design/FOLLOWUPS.md` `mk-cli-repair-flag` lockstep.
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-key`
 

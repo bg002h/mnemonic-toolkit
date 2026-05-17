@@ -38,7 +38,7 @@ component_info() {
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.3.0|yes|"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.3.2|yes|"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.4.0|yes|"
             ;;
         mnemonic-gui)
             echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.8.1|no|"

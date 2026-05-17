@@ -1,7 +1,7 @@
 # `mk` (mk-cli) reference
 
 The standalone CLI for the mk1 format (mnemonic-key / mk-codec).
-Five subcommands. Most users will use `mnemonic bundle` and
+Six subcommands. Most users will use `mnemonic bundle` and
 `mnemonic verify-bundle` instead; `mk` is for direct key-card
 inspection, mk1-plate recovery from an air-gapped machine without
 shipping the secret-material code paths of the toolkit, or when
@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.4.0 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -168,6 +168,131 @@ xpub_fingerprint:    73c5da0a
 
 JSON mode adds `xpub_fingerprint`, `origin_path_components` (array of
 strings), and `chunk_variants` (array of `"regular"|"long"`).
+
+---
+
+## `mk repair`
+
+BCH error-correct one or more corrupted mk1 strings. Both BCH code
+variants are supported: the regular `BCH(93,80,8)` code for data-parts
+of 14–93 symbols (short mk1 chunks) and the long `BCH(108,93,8)` code
+for data-parts of 96–108 symbols (the xpub-bearing first chunk of
+typical mk1 emissions). Both correct up to four substitution errors
+per chunk (singleton bound `t=4`).
+
+`mk repair` is the per-codec sibling of toolkit's `mnemonic repair`
+(see `41-mnemonic.md` `## mnemonic repair`). The two surfaces share
+the same `RepairJson` envelope schema byte-exact (cross-CLI parser
+reuse — D27 of the toolkit v0.22.x follow-ups cycle plan); the only
+differences are that `mk repair` operates exclusively on the `mk` HRP
+(no `--ms1`/`--mk1`/`--md1` selector flag) and emits no Levenshtein-1
+"did you mean" suggestion on HRP mismatch (single-HRP context).
+
+Note that `mk decode` already performs internal BCH correction within
+the same `t=4` capacity during normal decode. `mk repair` is the
+explicit-fix-with-report counterpart: it surfaces which character
+positions were corrected, what the original symbols were, and what
+the repaired symbols are — useful for recovery of a corroded engraving
+(one or two letters unreadable), salvage of a hand-copied card with a
+single typo, or sanity-checking a freshly engraved card against its
+source bundle before committing to steel.
+
+### Synopsis
+
+```sh
+mk repair [OPTIONS] [MK1_STRINGS]...
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `[MK1_STRINGS]...` | one or more mk1 strings to attempt to repair; use `-` to read one string per line from stdin |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form report; schema byte-matches `mnemonic repair --json`'s `RepairJson` shape |
+| `--help` | print help |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
+| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = repair report + corrected strings |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch) |
+| `1` | I/O error or other generic failure |
+
+The exit-5 `REPAIR_APPLIED` code is consistent across all four CLIs
+(`mnemonic`, `mk`, `ms`, `md`) per D26 of the v0.22.x follow-ups
+cycle, so wrapper scripts can use a uniform `exit == 5` signal.
+
+### Worked example
+
+```sh
+# A valid mk1 chunk with one character substituted at position 17:
+mk repair mk1qprsqhpqqsqzcqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+```
+
+Stdout (the corrected string is on the LAST line; comment lines
+describe the fix):
+
+```text
+# Repair report
+#   mk1 chunk 0: 1 correction at position 17: 'z' -> '3'
+mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+```
+
+Exit code: `5`.
+
+### JSON output
+
+`mk repair --json` byte-matches toolkit's `RepairJson` envelope
+(`kind` is `"mk1"`):
+
+```json
+{
+  "schema_version": "1",
+  "kind": "mk1",
+  "corrected_chunks": ["mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4"],
+  "repairs": [
+    {
+      "chunk_index": 0,
+      "original_chunk": "mk1qprsqhpqqsqzcqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4",
+      "corrected_chunk": "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4",
+      "corrected_positions": [{"position": 17, "was": "z", "now": "3"}]
+    }
+  ]
+}
+```
+
+### Stdin via `-`
+
+Pass a single `-` token in place of any positional string to read mk1
+strings from stdin, one per line:
+
+```sh
+printf '%s\n%s\n' "$BAD_MK1_FIRST" "$BAD_MK1_SECOND" | mk repair -
+```
+
+This composes with shell pipelines and is the recommended path when
+the corrupted strings are large or already in a file.
+
+### Per-chunk atomic semantics
+
+When multiple mk1 strings are supplied (typical for chunked mk1
+emissions of multi-chunk xpub material), if ANY chunk fails to repair
+(more than four substitution errors), the WHOLE call fails with the
+offending chunk index named. Partial repair of sibling chunks is NOT
+returned — this avoids surfacing a half-fixed key-card that could
+mislead the user into committing it.
+
+### Regular vs long BCH variant
+
+Each input is auto-classified by data-part length: data-parts of
+14–93 symbols use the regular `BCH(93,80,8)` code; data-parts of
+96–108 symbols use the long `BCH(108,93,8)` code. The decoded code
+variant is surfaced as `code` in the JSON envelope's per-repair
+detail (when present in mk-codec's `DecodedString`). Mixed-variant
+inputs in the same call are supported — each chunk is decoded
+independently.
 
 ---
 
