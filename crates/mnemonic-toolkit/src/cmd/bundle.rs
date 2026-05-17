@@ -1038,17 +1038,17 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let user_origin = derivation_path_to_origin(&user_path);
             // Row 19: if inline `[fp/path]@N` AND `--slot @N.path=` both
             // supplied AND non-empty AND differ → refuse.
-            if !defaulted_indices.contains(idx) && !new_paths[*idx as usize].components.is_empty()
+            if !defaulted_indices.contains(idx)
+                && !new_paths[*idx as usize].components.is_empty()
+                && new_paths[*idx as usize] != user_origin
             {
-                if new_paths[*idx as usize] != user_origin {
-                    let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
-                    return Err(ToolkitError::SlotInputViolation {
-                        kind: "path-mismatch",
-                        message: format!(
-                            "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
-                        ),
-                    });
-                }
+                let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
+                return Err(ToolkitError::SlotInputViolation {
+                    kind: "path-mismatch",
+                    message: format!(
+                        "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
+                    ),
+                });
             }
             new_paths[*idx as usize] = user_origin;
             // Slot-supplied path takes precedence; if it was a default,
