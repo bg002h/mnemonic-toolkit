@@ -451,69 +451,204 @@ fn descriptor_mode_verify_run<W: Write>(
         lex_placeholders(&descriptor_str).map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
-    let descriptor_resolved =
+    let mut descriptor_resolved =
         resolve_placeholders(&occs).map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
     let n = descriptor_resolved.n as usize;
 
     crate::slot_input::validate_slot_set(&args.slot)?;
-    let template = args
-        .template
-        .unwrap_or(crate::template::CliTemplate::Bip84);
-    // verify-bundle does not surface SLIP-0132 input-normalization signals.
-    // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
-    // semantics suppress info-lines to avoid breaking script callers parsing
-    // VERIFIED/MISMATCH stderr line-by-line.
-    let (resolved_slots, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
-        &args.slot,
-        template,
-        args.network,
-        args.account,
-        args.language,
-        args.passphrase.as_deref(),
-    )?;
 
-    if resolved_slots.len() != n {
-        return Err(ToolkitError::DescriptorReparseFailed {
-            detail: format!(
-                "descriptor has n={n} placeholders but --slot vec covers {} slots",
-                resolved_slots.len()
-            ),
-        });
+    // v0.19.0 SPEC §4.12 — canonicity-aware verify-bundle round-trip.
+    // Mirror bundle.rs's descriptor-mode binding logic so default-inferred
+    // bundles round-trip correctly. Without this, verify-bundle would
+    // re-derive xpubs at the template path (BIP-84 default) instead of
+    // the inferred BIP-48 cosigner path, and md-codec's
+    // validate_explicit_origin_required would refuse the wire.
+    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[])
+        .map_err(|e| ToolkitError::DescriptorReparseFailed { detail: e.message() })?;
+    let is_non_canonical =
+        md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
+
+    // Apply default-inference + slot-path-override mutations to path_decl
+    // (mirror of bundle.rs Phase 4 logic). Caller does NOT emit the stderr
+    // info notice — verify-bundle is read-only, the original bundle emit
+    // already produced the notice.
+    if is_non_canonical {
+        let default_path = crate::cmd::bundle::compute_default_origin_path(
+            args.network,
+            args.account,
+        );
+        let mut new_paths: Vec<md_codec::origin_path::OriginPath> = match
+            &descriptor_resolved.path_decl.paths
+        {
+            md_codec::origin_path::PathDeclPaths::Shared(op) => {
+                if op.components.is_empty() {
+                    (0..n).map(|_| default_path.clone()).collect()
+                } else {
+                    (0..n).map(|_| op.clone()).collect()
+                }
+            }
+            md_codec::origin_path::PathDeclPaths::Divergent(v) => v
+                .iter()
+                .map(|op| {
+                    if op.components.is_empty() {
+                        default_path.clone()
+                    } else {
+                        op.clone()
+                    }
+                })
+                .collect(),
+        };
+        // Apply per-slot --slot @N.path= overrides for phrase-bearing slots.
+        let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
+            std::collections::BTreeMap::new();
+        for s in &args.slot {
+            if s.subkey == crate::slot_input::SlotSubkey::Path {
+                by_index_path.insert(s.index, s);
+            }
+        }
+        let mut by_index_subkeys: std::collections::BTreeMap<
+            u8,
+            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+        > = std::collections::BTreeMap::new();
+        for s in &args.slot {
+            by_index_subkeys.entry(s.index).or_default().insert(s.subkey);
+        }
+        for (idx, slot_path) in &by_index_path {
+            let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
+            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
+                continue;
+            }
+            let user_path = bitcoin::bip32::DerivationPath::from_str(&slot_path.value)
+                .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
+            new_paths[*idx as usize] = crate::cmd::bundle::derivation_path_to_origin(&user_path);
+        }
+        descriptor_resolved.path_decl.paths =
+            md_codec::origin_path::PathDeclPaths::Divergent(new_paths);
     }
 
+    // Per-slot descriptor-mode binding loop using mutated path_decl as the
+    // per-`@N` anno_path source. Mirror of bundle.rs:939-1099.
+    use bitcoin::bip32::{Xpriv as BipXpriv, Xpub as BipXpub};
+    use bitcoin::secp256k1::Secp256k1;
+    use std::str::FromStr;
+    let mut by_index_inputs: std::collections::BTreeMap<u8, Vec<&crate::slot_input::SlotInput>> =
+        std::collections::BTreeMap::new();
+    for s in &args.slot {
+        by_index_inputs.entry(s.index).or_default().push(s);
+    }
+    let secp = Secp256k1::new();
     let mut keys: Vec<ParsedKey> = Vec::with_capacity(n);
     let mut fingerprints: Vec<ParsedFingerprint> = Vec::with_capacity(n);
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
-    // SPEC v0.9.0 §1 item 2 — entropy_at_0 is the cloned @0 entropy
-    // used downstream for verification; wrap in Zeroizing.
     let mut entropy_at_0: Option<zeroize::Zeroizing<Vec<u8>>> = None;
-    for (i, slot) in resolved_slots.iter().enumerate() {
-        keys.push(ParsedKey {
-            i: i as u8,
-            payload: xpub_to_65(&slot.xpub),
-        });
-        fingerprints.push(ParsedFingerprint {
-            i: i as u8,
-            fp: slot.fingerprint.to_bytes(),
-        });
-        let entropy = slot.entropy.clone();
+
+    for idx in 0..(n as u8) {
+        let slot_inputs = by_index_inputs
+            .get(&idx)
+            .ok_or_else(|| ToolkitError::DescriptorReparseFailed {
+                detail: format!("--slot @{idx} missing for descriptor with n={n} placeholders"),
+            })?;
+        let subkeys: std::collections::BTreeSet<crate::slot_input::SlotSubkey> =
+            slot_inputs.iter().map(|s| s.subkey).collect();
+
+        let anno_path: bitcoin::bip32::DerivationPath =
+            match &descriptor_resolved.path_decl.paths {
+                md_codec::origin_path::PathDeclPaths::Shared(op) => {
+                    crate::cmd::bundle::origin_to_derivation_path(op)?
+                }
+                md_codec::origin_path::PathDeclPaths::Divergent(v) => {
+                    crate::cmd::bundle::origin_to_derivation_path(&v[idx as usize])?
+                }
+            };
+
+        let (xpub, fingerprint, path, path_raw, ent_opt): (
+            BipXpub,
+            bitcoin::bip32::Fingerprint,
+            bitcoin::bip32::DerivationPath,
+            String,
+            Option<Vec<u8>>,
+        ) = if subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
+            let phrase = slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let language = args.language.unwrap_or_default();
+            let passphrase: zeroize::Zeroizing<String> =
+                zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
+            let mnemonic = bip39::Mnemonic::parse_in(language.into(), phrase)
+                .map_err(ToolkitError::Bip39)?;
+            let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
+            let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
+            let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
+            let master_fp = master.fingerprint(&secp);
+            let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
+                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+            })?;
+            let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
+            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy).clone()))
+        } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
+            let xpub_str = slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Xpub)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let (xpub_str, _) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
+            let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
+                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
+            })?;
+            let fp = slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
+                .and_then(|s| bitcoin::bip32::Fingerprint::from_str(&s.value).ok())
+                .unwrap_or_default();
+            let (path, path_raw) = match slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Path)
+            {
+                Some(p) => {
+                    let parsed = bitcoin::bip32::DerivationPath::from_str(&p.value).map_err(|e| {
+                        ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+                    })?;
+                    (parsed, p.value.clone())
+                }
+                None => (anno_path.clone(), anno_path.to_string()),
+            };
+            (xpub, fp, path, path_raw, None)
+        } else {
+            return Err(ToolkitError::DescriptorReparseFailed {
+                detail: format!(
+                    "--slot @{idx} subkey set {:?} not supported in descriptor verify-bundle path",
+                    subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+                ),
+            });
+        };
+
+        let entropy = ent_opt.clone().map(zeroize::Zeroizing::new);
         let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
-            xpub: slot.xpub,
-            fingerprint: slot.fingerprint,
-            path: slot.path.clone(),
-            path_raw: slot.path_raw.clone(),
+            xpub,
+            fingerprint,
+            path,
+            path_raw,
             entropy,
-            master_xpub: slot.master_xpub,
+            master_xpub: None,
             _entropy_pin: entropy_pin,
         });
-        if i == 0 {
-            // v0.10.1: slot.entropy is now Option<Zeroizing<Vec<u8>>>; its
-            // clone matches entropy_at_0's declared type natively. No map.
-            entropy_at_0 = slot.entropy.clone();
+        if idx == 0 {
+            entropy_at_0 = ent_opt.map(zeroize::Zeroizing::new);
         }
+        keys.push(ParsedKey {
+            i: idx,
+            payload: xpub_to_65(&xpub),
+        });
+        fingerprints.push(ParsedFingerprint {
+            i: idx,
+            fp: fingerprint.to_bytes(),
+        });
     }
 
     let binding = DescriptorBinding {
@@ -528,10 +663,17 @@ fn descriptor_mode_verify_run<W: Write>(
         return Err(ToolkitError::Bip388VerifyDistinctness);
     }
 
-    let descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)
+    let mut descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)
         .map_err(|e| ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
         })?;
+    // v0.19.0 SPEC §4.11.c symmetric verify-bundle — propagate the
+    // mutated path_decl into the freshly-parsed MdDescriptor so md-codec
+    // wire validation passes for default-inferred non-canonical bundles.
+    // Mirror of bundle.rs:1260-1262.
+    if is_non_canonical {
+        descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
+    }
     let expected = synthesize_descriptor(
         &descriptor,
         &cosigners,

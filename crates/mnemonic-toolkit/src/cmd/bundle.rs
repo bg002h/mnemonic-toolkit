@@ -1320,8 +1320,10 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
 /// `m/48'/<coin>'/<account>'/2'` for non-canonical descriptors with bare
 /// `@N` placeholders. `<coin>` derives from `--network` (mainnet → `0'`,
 /// testnet/signet/regtest → `1'` per BIP-44); `<account>` consumes
-/// `--account N`.
-fn compute_default_origin_path(
+/// `--account N`. Public so verify-bundle's descriptor mode can mirror
+/// the same default-inference per SPEC §4.11.c (symmetric verify-bundle
+/// enforcement).
+pub fn compute_default_origin_path(
     network: crate::network::CliNetwork,
     account: u32,
 ) -> md_codec::origin_path::OriginPath {
@@ -1350,8 +1352,9 @@ fn compute_default_origin_path(
 
 /// Convert a `bitcoin::bip32::DerivationPath` to `md_codec::origin_path::OriginPath`.
 /// Used to fold `--slot @N.path=` user input into `path_decl.paths` for
-/// non-canonical-descriptor default-inference override.
-fn derivation_path_to_origin(
+/// non-canonical-descriptor default-inference override. Public for the
+/// same symmetric-verify-bundle reason as `compute_default_origin_path`.
+pub fn derivation_path_to_origin(
     dp: &DerivationPath,
 ) -> md_codec::origin_path::OriginPath {
     use bitcoin::bip32::ChildNumber;
@@ -1400,8 +1403,10 @@ fn emit_default_path_notice<E: Write>(
 
 /// Convert a md-codec OriginPath to bitcoin::bip32::DerivationPath. Required
 /// because the resolved descriptor placeholder carries the path in md-codec
-/// shape but the binding logic operates on bitcoin types.
-fn origin_to_derivation_path(
+/// shape but the binding logic operates on bitcoin types. Public for
+/// symmetric verify-bundle (§4.11.c) which mirrors the descriptor-mode
+/// binding loop and needs the same conversion.
+pub fn origin_to_derivation_path(
     op: &md_codec::origin_path::OriginPath,
 ) -> Result<DerivationPath, ToolkitError> {
     let s = if op.components.is_empty() {

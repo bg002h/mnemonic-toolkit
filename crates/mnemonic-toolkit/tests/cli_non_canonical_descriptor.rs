@@ -221,6 +221,60 @@ fn canonical_descriptor_does_not_emit_default_path_notice() {
     );
 }
 
+/// SPEC §4.11.c symmetric verify-bundle — a non-canonical default-inferred
+/// bundle must round-trip through `bundle --self-check` (which re-parses
+/// the emitted md1/mk1/ms1 cards and re-derives the descriptor + cosigner
+/// signature, asserting byte-equal). This pins the C1 fix from end-of-cycle
+/// opus review: verify-bundle (and self-check) mirrors bundle's
+/// canonicity-aware default-path inference in `descriptor_mode_verify_run`.
+#[test]
+fn non_canonical_default_path_self_check_round_trips() {
+    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--language",
+            "english",
+            "--account",
+            "0",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--slot",
+            &format!("@2.phrase={BIP39_TEST_3}"),
+            "--self-check",
+        ])
+        .assert()
+        .success();
+}
+
+/// Same round-trip test for `tr(NUMS, <ms>)` + bare-`@N` (default-path
+/// inference + NUMS substitution + tap-leaf walker round-trip).
+#[test]
+fn tr_nums_default_path_self_check_round_trips() {
+    let descriptor = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--self-check",
+        ])
+        .assert()
+        .success();
+}
+
 /// SPEC §6.6 row 4 (canonical-mode rejection of v0.19.0 phrase-with-origin
 /// pairs) — canonical descriptors refuse `[Phrase, Path]` and
 /// `[Phrase, Fingerprint, Path]` subkey sets. The Phase-2 grammar relaxation
