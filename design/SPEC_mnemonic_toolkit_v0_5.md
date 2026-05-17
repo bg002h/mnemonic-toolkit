@@ -58,6 +58,72 @@ Verify-bundle re-runs `check_key_vector_distinctness` on every parsed bundle (te
 
 CHANGELOG callout: users with v0.2 self-multisig bundles must regenerate using the v0.4 unified `bundle` command with `--slot @N.phrase=...` per cosigner (multi-source full multisig) or `--slot @N.xpub=... --slot @N.fingerprint=... --slot @N.path=...` per cosigner (watch-only multisig). The mock multisig pattern is no longer supported.
 
+## §4.12 Non-canonical descriptor mode (NEW — v0.19.0 cycle)
+
+The toolkit accepts miniscript descriptors beyond md-codec's canonical-template set, with phrase-bearing slots producing wire-correct bundles via default BIP-48 path inference.
+
+### §4.12.a Canonicity classification
+
+A descriptor is **canonical** iff `md_codec::canonical_origin::canonical_origin(&tree).is_some()`. The 5 canonical wrapper shapes (verbatim from `descriptor-mnemonic/crates/md-codec/src/canonical_origin.rs:45-79`):
+
+| Wrapper shape                                | Canonical origin path  |
+|----------------------------------------------|------------------------|
+| `pkh(@N)` single-key                         | `m/44'/0'/0'`          |
+| `wpkh(@N)` single-key                        | `m/84'/0'/0'`          |
+| `tr(@N)` key-path only (no TapTree)          | `m/86'/0'/0'`          |
+| `wsh(multi/sortedmulti(...))`                | `m/48'/0'/0'/2'`       |
+| `sh(wsh(multi/sortedmulti(...)))`            | `m/48'/0'/0'/1'`       |
+
+Any other wrapper shape — including bare `wsh(@N)`, `wsh(<miniscript-body>)` (e.g., `wsh(andor(...))`), `sh(sortedmulti(...))` legacy, and `tr(@N, <TapTree>)` (multi-leaf or script-path-enabled) — is **non-canonical**.
+
+### §4.12.b Default origin path inference
+
+For non-canonical descriptors, when an `@N` placeholder lacks an explicit origin path source (no inline `[fp/path]@N` BIP-380 annotation AND no `--slot @N.path=` CLI input), the toolkit assigns the default path:
+
+```
+m/48'/<coin>'/<account>'/2'
+```
+
+where `<coin>` derives from `--network` (mainnet → `0'`; testnet/signet/regtest → `1'` per BIP-44) and `<account>` derives from `--account N` (defaults to `0'`). The default is applied uniformly to all non-canonical wrappers (wsh, sh-wsh, tr) and uniformly to multisig and singlesig (n=1) non-canonical descriptors.
+
+**Rationale:** matches Liana / Specter de-facto practice for wsh-miniscript cosigner wallets. The BIP-48-cosigner-style path is the predominant convention in time-locked / inheritance / vault descriptor ecosystems.
+
+### §4.12.c Per-`@N` origin source priority
+
+For each `@N` in a non-canonical descriptor, the effective origin path is resolved in priority order:
+
+1. `--slot @N.path=m/...` (CLI input) — highest precedence
+2. inline `[fingerprint/origin-path]@N` (BIP-380 syntax embedded in the descriptor)
+3. default `m/48'/<coin>'/<account>'/2'` — applied iff (1) and (2) both absent
+
+When (1) AND (2) are both supplied for the same `@N` AND they disagree, the toolkit refuses with §6.6 row 19. Fingerprint-source mismatch (slot vs inline vs phrase-derived) is refused per §6.6 rows 17/18.
+
+### §4.12.d Stderr info notice
+
+On bundle emission, when one or more `@N` received the default path per (3), the toolkit prints a one-line stderr info notice naming the affected placeholders and the default path computed. This makes the assumption auditable. Format (byte-exact):
+
+```
+info: non-canonical descriptor; defaulting origin path for @{idx-list} to m/48'/<coin>'/<account>'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+```
+
+where `{idx-list}` is the comma-separated list of `@N` indices that received the default (e.g., `@0,@1,@2` when all three placeholders defaulted).
+
+### §4.12.e `tr(NUMS, <ms>)` sentinel
+
+The literal token `NUMS` (case-sensitive, ASCII) appearing as the first argument of a `tr(...)` wrapper is recognized by the toolkit and substituted with the BIP-341 unspendable internal-key hex `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0` before rust-miniscript parses the descriptor. The result is a script-path-only P2TR wallet (key-path spending is cryptographically disabled by construction).
+
+Bare `tr(<miniscript>)` (no internal key) is refused per §6.6 row 16.
+
+`tr(<hex-or-@N>, <ms>)` with a non-NUMS internal key is accepted unchanged (the descriptor parses to a full taproot wallet with both key-path and script-path spending).
+
+### §4.12.f BIP-388 distinct-key invariance
+
+§4.11.b's distinct-`(xpub, path)` rule applies unchanged to non-canonical descriptors. When all `@N` placeholders receive the same default path (BIP-48 cosigner) AND all phrases differ, distinctness is satisfied via xpub-only divergence (3 distinct phrases → 3 distinct xpubs → tuples differ pairwise). When phrases match across `@N` AND paths default to the same value, distinctness FAILS at row 13 (existing gate; correct behavior).
+
+### §4.12.g `--account != 0` is meaningful in non-canonical mode
+
+The existing `DESCRIPTOR_WITH_NONZERO_ACCOUNT` refusal at `bundle.rs:200-206` (rejecting `--account != 0` in descriptor mode) is relaxed for non-canonical descriptors: the `--account N` value is consumed by §4.12.b's default-path inference. Canonical descriptor mode preserves the existing refusal (the canonical_origin table already supplies the per-shape default; a user-supplied account value would be redundant).
+
 ## §5.8 `MsField` type definition (NEW)
 
 ```rust
@@ -209,10 +275,17 @@ v0.5 deletes the legacy CLI flags entirely. The unified `--slot @N.<subkey>=<val
 | 12 | Descriptor mode AND `--threshold` supplied (descriptor encodes its own threshold) | 2 | `error: --threshold conflicts with --descriptor (descriptor encodes its own threshold)` |
 | 13 | BIP-388 violation: any two slots resolve to the same (xpub, path) tuple per §4.11.b typed-DerivationPath equality | 2 | `error: BIP-388 distinct-key violation: slot @{i} and slot @{j} resolve to identical (xpub, path)` |
 | 14 | Per-`@N` annotation inconsistency (descriptor mode) | 2 | `error: descriptor placeholder @{N} has inconsistent annotations across occurrences` |
+| 15 | **RESERVED (v0.19.0 cycle)** — was non-canonical-missing-origin in V4 plan-doc; folded into §4.12.b default-path inference in V5. Row number reserved to preserve ladder index stability across cycles. | — | (no error; default-path advisory only — see §4.12.d) |
+| 16 | Bare `tr(<miniscript>)` with no internal key (descriptor mode) | 2 | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
+| 17 | Phrase slot has `--slot @N.fingerprint=` AND inline `[<fp>/path]@N` in descriptor AND values disagree | 2 | `error: slot @{N} fingerprint mismatch: --slot says {fp_slot}, descriptor inline [{fp_descriptor}/...] disagrees; supply consistent values.` |
+| 18 | Phrase slot's derived master fingerprint disagrees with inline `[<fp>/path]@N` | 2 | `error: slot @{N} phrase-derived fingerprint {fp_derived} does not match descriptor inline [{fp_inline}/...]; verify the phrase or correct the descriptor.` |
+| 19 | Phrase slot has `--slot @N.path=` AND inline `[<fp>/path]@N` in descriptor AND paths disagree | 2 | `error: slot @{N} path mismatch: --slot says {path_slot}, descriptor inline [.../{path_descriptor}] disagrees; supply consistent values or remove one source.` |
 | T1 | `--threshold` supplied with single-sig `--template` (no multisig context) | 2 | `error: --threshold supplied but --template '{template}' is single-sig` |
 | T2 | `--multisig-path-family` supplied with single-sig `--template` | 2 | `error: --multisig-path-family supplied but --template '{template}' is single-sig` |
 
-Rows 2-12 fire pre-synthesis; rows 13-14 fire post-binding. Rows T1-T2 are the v0.5 retained guards on first-class flags that conflict with single-sig template selection.
+Rows 2-12 fire pre-synthesis; rows 13-14 fire post-binding. Row 15 is reserved (V5 fold). Row 16 fires pre-parse via NUMS-sentinel detection's bare-tr scan OR (fallback) post-parse via rust-miniscript's error captured by `friendly.rs`. Rows 17/19 fire post-parse pre-binding (both values known after lex+resolve). Row 18 fires during phrase binding (post-derive). Rows T1-T2 are the v0.5 retained guards on first-class flags that conflict with single-sig template selection.
+
+**`DESCRIPTOR_WITH_NONZERO_ACCOUNT` guard relaxation (v0.19.0 cycle):** the existing `bundle.rs:200-206` refusal of `--account != 0` in descriptor mode is gated on canonicity: refusal fires only when `canonical_origin(&desc.tree).is_some()`. Non-canonical descriptor mode consumes `--account N` for §4.12.b default-path inference. Guard is restructured from pre-`bundle_run_unified` to inside `bundle_run_unified_descriptor` post-`parse_descriptor`.
 
 **Row 9 N-equivalence note (v0.7 cycle):** the row 9 stderr literal `"N={N} cosigners"` uses "cosigners" as a user-facing term. For gui-schema projection purposes, `N` equals `slot_count` (the cardinality of `--slot @<index>...` entries). In valid configurations the equivalence is exact because rows 10 + 11 reject mixed template/slot-count configurations BEFORE row 9 fires, so by the time row 9 evaluates, all slots are cosigner slots. GUI projection authors targeting row 9 can therefore treat `N` and `state.slot_count()` interchangeably.
 
@@ -231,8 +304,9 @@ Each slot's subkey set must be one of the following exact shapes (any other comb
 - `{xprv}` → secret-bearing, xpriv-direct
 - `{xpub}`, `{xpub, fingerprint}`, `{xpub, path}`, `{xpub, fingerprint, path}` → watch-only with origin metadata at the granularity supplied
 - `{wif}` → degenerate single-key (no ms1, no extended-key derivation)
+- **`{phrase, path}`, `{phrase, fingerprint, path}` (v0.19.0+; non-canonical descriptor mode only)** → secret-bearing with explicit per-`@N` origin path. The `path` subkey supplies the BIP-32 derivation path applied to the phrase-derived master xpub; the optional `fingerprint` subkey provides an attestation cross-checked against the phrase-derived master fingerprint (§6.6 row 18) and any inline `[<fp>/...]@N` annotation (§6.6 row 17). Legal ONLY when the descriptor classifies as non-canonical per §4.12.a. In template mode OR canonical descriptor mode, these subkey sets remain illegal (§6.6 row 4 conflict).
 
-**Conflict cases** (REJECT exit 2 row 4): any slot with both a secret-bearing subkey AND a watch-only subkey.
+**Conflict cases** (REJECT exit 2 row 4): any slot with both a secret-bearing subkey AND a watch-only subkey (`xpub` / `master_xpub` / `fingerprint` without a `phrase`/`entropy`/`xprv`/`wif` peer ambiguity). **Exception (v0.19.0+):** `{phrase, path}` and `{phrase, fingerprint, path}` are legal in non-canonical descriptor mode per the bullet above; `path` and `fingerprint` are not treated as watch-only-mix for these specific sets. This narrows the row-4 conflict rule from "any secret + any watch-only" to "any secret + `xpub`/`master_xpub`."
 
 **Mixed-types-across-slots is fine (hybrid):** slot 0 with `{phrase}` and slot 1 with `{xpub, fingerprint, path}` is a legitimate hybrid (own seed + watch-only cosigner) — auto-detected as hybrid mode.
 
@@ -279,7 +353,7 @@ verify-bundle's exit codes: `0` (all checks pass), `4` (bundle decode failure or
 
 ## §6.9 Byte-exact error text reference
 
-Rows 1-14 in §6.6 plus rows 15-17 in §6.7 are the canonical byte-exact texts. Implementation must use these strings verbatim (consts, not format strings except for the bracketed substitutions). SPEC author copies into impl directly; tests assert byte-exact.
+Rows 1-14 + 16-19 in §6.6 (row 15 reserved per v0.19.0 cycle), plus rows 15-17 in §6.7, are the canonical byte-exact texts. Implementation must use these strings verbatim (consts, not format strings except for the bracketed substitutions). SPEC author copies into impl directly; tests assert byte-exact.
 
 ## §6.10 Conditional-applicability projection in gui-schema JSON
 
@@ -421,7 +495,7 @@ The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for h
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_AND_DESCRIPTOR_FILE` | `--descriptor` present | `--descriptor-file → disabled` (mutex pair) | ENCODED (pre-existing) |
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_THRESHOLD` | `--descriptor` present | `--threshold → disabled` | ENCODED |
 | bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_PATH_FAMILY` | `--descriptor` present | `--multisig-path-family → disabled` | ENCODED |
-| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_NONZERO_ACCOUNT` | `--descriptor` present | `--account → pin_value(0)` (REPLACE-value semantic per §6.10.4 emission table) | ENCODED v2 |
+| bundle | (cross-cite §6.6 row 2 sibling) | `DESCRIPTOR_WITH_NONZERO_ACCOUNT` | `--descriptor` present | `--account → pin_value(0)` (REPLACE-value semantic per §6.10.4 emission table) | ENCODED v2 — **v0.19.0 Option-A canonicity override**: GUI's `mnemonic-gui/src/form/conditional.rs::bundle()` wraps the pin push in a canonicity gate so non-canonical descriptors retain the user-typed `--account` value (consumed by §4.12.b default-path inference). Schema vocabulary unchanged (no new Predicate). Drift-gate cell at `cli_gui_schema_v3_extensions.rs` carries a documented exception for the canonicity-conditional case. |
 | verify-bundle | §6.6 row T1 (mirror) | `THRESHOLD_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--threshold → disabled` | ENCODED |
 | verify-bundle | §6.6 row T2 (mirror) | `PATH_FAMILY_WITHOUT_MULTISIG` (mirror) | template ∈ single-sig | `--multisig-path-family → disabled` | ENCODED |
 | verify-bundle | §6.6 row 2 (mirror) | `DESCRIPTOR_AND_TEMPLATE` (mirror) | `--descriptor` present | `--template → disabled` | ENCODED |
@@ -435,6 +509,11 @@ The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for h
 | bundle | §6.6 row 10 | (n/a — GUI-internal warning) | (GUI-internal: warning banner when template ∈ single-sig AND slot_count >= 2) | (n/a — GUI-internal `template_slot_count_warning` helper) | ENCODED v3 (GUI-internal warning) |
 | bundle | §6.6 row 11 | (n/a — GUI-internal warning) | (GUI-internal: warning banner when template ∈ multisig AND slot_count < 2) | (n/a — GUI-internal `template_slot_count_warning` helper) | ENCODED v3 (GUI-internal warning) |
 | bundle | §6.6 row 8 | (n/a — GUI-internal) | (GUI-internal: slot-grid knows indices) | (n/a — GUI-internal `detect_slot_index_gaps` + inline warning banner) | ENCODED v3 (GUI-internal) |
+| bundle | §6.6 row 15 | (n/a — RESERVED) | (n/a — V4 plan-doc proposed non-canonical-missing-origin refusal; V5 folded to §4.12.b default-path inference) | (n/a — replaced by §4.12.d stderr info notice; GUI-internal `descriptor_non_canonical_default_path_notice` helper renders an info banner adjacent to slot grid) | ENCODED v4 (GUI-internal info) — Option-A pattern (no schema encoding) |
+| bundle | §6.6 row 16 | (n/a — pre-parse refusal) | (n/a — CLI-only; GUI's descriptor text field accepts any string, runtime parses) | (n/a) | NOT-ENCODED (CLI-rejection-sufficient) |
+| bundle | §6.6 row 17 | (n/a — CLI-only) | (CLI-only: fingerprint slot-vs-inline cross-check needs descriptor parsing GUI-side) | (n/a) | NOT-ENCODED (CLI-rejection-sufficient; same rationale as rows 13/14 wontfix) |
+| bundle | §6.6 row 18 | (n/a — CLI-only) | (CLI-only: phrase-derived vs inline fingerprint cross-check needs derivation GUI-side) | (n/a) | NOT-ENCODED (CLI-rejection-sufficient) |
+| bundle | §6.6 row 19 | (n/a — CLI-only) | (CLI-only: slot-path vs inline-path cross-check needs descriptor parsing GUI-side) | (n/a) | NOT-ENCODED (CLI-rejection-sufficient) |
 
 **Runtime-deferred rules:**
 
@@ -445,7 +524,8 @@ The column-header literal "v1 cycle" is preserved from the v0.5 SPEC patch for h
   - **Rows 10 + 11**: `form/conditional.rs::template_slot_count_warning` helper + inline warning banner adjacent to slot grid (rendered alongside row 8's contiguity warning). Suggests both directions of fix in the warning text.
 
   v0.18.0 originally encoded rows 10 + 11 as toolkit-emitted `disable_options` Effect rules (greying invalid template values in the Dropdown). v0.18.1 + v0.7.2 reverted this: row 11 had a UX flaw (slot_count == 1 is the natural transient state when building UP to multisig; disabling multisig templates at that transient state blocked the user from selecting their intended template before completing slot setup). Row 10 had the symmetric flaw on multisig→single-sig template switches. The grammar variant `disable_options` (§6.10.3) remains defined for forward-compat; no rule emits it after the rollback. If a second `gui-schema` consumer ever appears, rows 8 / 9 / 10 / 11 MAY be promoted to toolkit-emitted Effect rules; the current single-consumer assumption keeps all four GUI-internal.
-- **CLI-rejection-sufficient (wontfix per Batch B-2 close, 2026-05-16):** §6.6 row 13 (BIP-388 distinct-key) + row 14 (per-`@N` annotation inconsistency). Row 13 requires resolving each slot's effective `(xpub, derivation_path)` tuple — for phrase-bearing slots that means duplicating the toolkit's binding logic GUI-side, which is high-cost low-value (CLI's pairwise distinctness check via `check_key_vector_distinctness` is the authoritative gate). Row 14 requires descriptor-string parsing + cross-slot annotation cross-reference — similarly high-cost low-value. Both surface authoritatively at CLI run-time per §6.6 rows 13/14. Tracked + closed at FOLLOWUP `gui-schema-cross-slot-predicate-projection` (row 8 resolved Option A; 13/14 wontfix with this rationale).
+- **Closed in v4 cycle (cycle status reads `ENCODED v4 (GUI-internal info)`):** §6.6 row 15 (non-canonical-descriptor default-path advisory) — closes GUI-side via Option-A pattern: `descriptor_non_canonical_default_path_notice` helper + inline info banner adjacent to slot grid; slot_editor path-field placeholder text shows the default path when empty. No toolkit wire-format emission. The toolkit's existing `gui_schema.rs::DESCRIPTOR_WITH_NONZERO_ACCOUNT` rule is preserved at the schema level; the GUI's `conditional.rs::bundle()` wraps the resulting `--account → pin_value(0)` push in a canonicity gate so non-canonical descriptors retain the user-typed `--account` value (consumed by §4.12.b default-path inference). See `descriptor-canonicity-classifier-shared` FOLLOWUP for the potential future extraction of a shared canonicity classifier crate.
+- **CLI-rejection-sufficient (wontfix per Batch B-2 close, 2026-05-16):** §6.6 row 13 (BIP-388 distinct-key) + row 14 (per-`@N` annotation inconsistency) + §6.6 rows 16/17/18/19 (v0.19.0 cycle non-canonical refusals; same rationale — each requires descriptor parsing OR phrase derivation GUI-side). Row 13 requires resolving each slot's effective `(xpub, derivation_path)` tuple — for phrase-bearing slots that means duplicating the toolkit's binding logic GUI-side, which is high-cost low-value (CLI's pairwise distinctness check via `check_key_vector_distinctness` is the authoritative gate). Row 14 requires descriptor-string parsing + cross-slot annotation cross-reference — similarly high-cost low-value. Both surface authoritatively at CLI run-time per §6.6 rows 13/14. Tracked + closed at FOLLOWUP `gui-schema-cross-slot-predicate-projection` (row 8 resolved Option A; 13/14 wontfix with this rationale).
 
 All of the above continue to surface at Run time via the CLI's typed error — the GUI's pre-run projection is best-effort, not exhaustive.
 

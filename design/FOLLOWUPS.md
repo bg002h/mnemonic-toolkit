@@ -1175,11 +1175,11 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 ### `miniscript-beyond-bip388` — accept full miniscript policies beyond BIP-388's descriptor-template subset
 
 - **Surfaced:** v0.6.1 post-release wallet-types audit 2026-05-06.
-- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified_descriptor`; descriptor-input handling in `parse_descriptor.rs`.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified_descriptor`; descriptor-input handling in `parse_descriptor.rs`; new SPEC §4.12 (v0.19.0 cycle); plan-doc at `design/PLAN_v0_19_0_non_canonical_descriptors.md`.
 - **What:** v0.5+ accepts BIP-388-conformant descriptors (placeholder-template form `wpkh(@0/<0;1>/*)`, multipath, sortedmulti, etc.). The full miniscript language has many additional policies the toolkit doesn't surface as supported wallet types: `andor`, `thresh`, `pk_h`, time-locked branches via `older` / `after`, hash-locked `hash160` / `sha256` / `ripemd160`, `multi_a` (taproot multi without sortedness), arbitrary `tr` taproot trees with multi-leaf miniscript. Rust-miniscript supports parsing these; the gap is the toolkit's wallet-policy validation and the engraving-card / verify-bundle UX.
-- **Why deferred:** Open-ended scope. Each new miniscript shape may have its own UX implications (verify-bundle parity check counts; engraving-card rendering; BIP-388 distinct-key extensions). Brainstorm should pick a small subset (e.g., `thresh`, `andor`, `tr` with single-leaf miniscript) rather than open-ended "all of miniscript." v0.7 cycle did not pick this up; v0.8 cycle re-tiered to v1+: doesn't fit alongside the locked BIP-38/BIP-85/Electrum/export-wallet menu and the open-ended scope deserves its own dedicated brainstorm.
-- **Status:** `open`
-- **Tier:** `v1+`
+- **v0.19.0 cycle scope (locked 2026-05-16):** plan-doc V6 converged 0C/0I across opus R0-R5 + user-direction Q1-reversal at R4. Locked design: (Q1) silent default-path inference `m/48'/<coin>'/<account>'/2'` (BIP-48 cosigner path) for non-canonical wsh/sh-wsh/tr wrappers; (Q2) `tr(NUMS, <ms>)` sentinel substitution for script-path-only P2TR wallets; (Q3) trust rust-miniscript for fragment validity (toolkit gates wrapper class + per-`@N` origin coverage + slot grammar); (Q4) GUI Option-A inline `conditional.rs::bundle()` rules including canonicity-aware override of the existing `--account → pin_value(0)` rule. Lockstep release `mnemonic-toolkit-v0.19.0` + `mnemonic-gui-v0.8.0`.
+- **Status:** `in-progress (v0.19.0 cycle)` — Phase 1 (SPEC patches + FOLLOWUPS reclassification) in flight 2026-05-16.
+- **Tier:** `v0.19-feature` (re-tiered from `v1+` per user direction 2026-05-16; user reclassified after the 2026-05-16 Bucket 5 v1.0 drill marked this `v1.1+`-deferred).
 
 ### `vault-construction-covenant-based` — accept covenant-based vault descriptors (CTV / OP_CAT / OP_VAULT)
 
