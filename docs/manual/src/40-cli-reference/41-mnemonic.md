@@ -112,6 +112,103 @@ The toolkit prints the info notice to stderr before bundle emission:
 info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
 ```
 
+The resulting `/tmp/inheritance-bundle.json` envelope (pretty-printed
+via `python3 -m json.tool`):
+
+```json
+{
+  "schema_version": "4",
+  "mode": "full",
+  "network": "mainnet",
+  "template": null,
+  "descriptor": "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))",
+  "account": 0,
+  "origin_path": "m/48'/0'/0'/2'",
+  "origin_paths": null,
+  "master_fingerprint": null,
+  "ms1": [
+    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+    "",
+    ""
+  ],
+  "mk1": [
+    [
+      "mk1qp40rrpqqspsrg8ml5q6p7laqxs0hltnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgymxvy4lntk6efgf0",
+      "mk1qp40rrpp8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2vkk2nlqmlvch5n4shwf72fwktdlqfhxtswupfxql3"
+    ],
+    [
+      "mk1qpxj36pqqspsrg8ml5q6p7laqxs0hldcdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkggq4j8pde6hkmw0",
+      "mk1qpxj36ppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8c56a5k72ndqgmdftljqt"
+    ],
+    [
+      "mk1qpl7wlpqqspsrg8ml5q6p7laqxs0hlfgv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqncct596tqv5z420v4",
+      "mk1qpl7wlpprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5j35p6p2c22v0s30tv0s2u"
+    ]
+  ],
+  "md1": [
+    "md1fu39yrq9qjtvyyy5jmppp9ykcggfgp9fskxcqkudsqefnfskhqqqq8uqnxnpwwqqqtggjse9txaz6v",
+    "md1fu39yrqfqqqp0npeutks2dcdzxlrzsezsqc27rchwsv0jskp2rsal4egz4ep5859pnmq8wpsfncwhr",
+    "md1fu39yrq3l4pkhsdyytkwl5z8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2v3d70kcz8a3r42",
+    "md1fu39yrqa4j5lcxlmx9ayav9mj0jj6wv58da6c23hjuw4ypg96ztz75f8wrrussm598ryfkw5ey8h6p",
+    "md1fu39yrpzw2ua7583pn5tj7qeewyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jpmwaykdyahtr0v",
+    "md1fu39yrpgcj7vs58sls39p0l68ewgkud5t4n95k8j84204m9xvr7cunrjqfurja8939xk8j47ndpq63",
+    "md1fu39yrpha3hqdghjmksz3ry92d3gv4ejtmu9f0zxf3clxvtlnnv86xy4qee32ay5q0e3ty49zaan43"
+  ],
+  "multisig": {
+    "template": "descriptor",
+    "threshold": 3,
+    "cosigner_count": 3,
+    "path_family": "bip87",
+    "cosigners": [
+      {
+        "index": 0,
+        "master_fingerprint": "73c5da0a",
+        "origin_path": "m/48'/0'/0'/2'",
+        "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+      },
+      {
+        "index": 1,
+        "master_fingerprint": "b8688df1",
+        "origin_path": "m/48'/0'/0'/2'",
+        "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
+      },
+      {
+        "index": 2,
+        "master_fingerprint": "28645006",
+        "origin_path": "m/48'/0'/0'/2'",
+        "xpub": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"
+      }
+    ]
+  },
+  "privacy_preserving": false
+}
+```
+
+Things to notice in the envelope:
+
+- **`origin_path`** = `m/48'/0'/0'/2'` — the default-inferred BIP-48
+  cosigner path, applied to every `@N` placeholder that lacked an
+  inline `[fp/path]@N` annotation or `--slot @N.path=` override.
+- **`ms1`** is a 3-element array with one populated entry and two
+  `""` sentinels. Descriptor mode binds entropy to `@0` only per SPEC
+  §5.8 schema-4; cosigner `@1` / `@2` ms1 cards travel separately
+  (each cosigner runs their own `bundle` invocation in a real
+  deployment).
+- **`mk1`** is a `Vec<Vec<String>>` — outer per cosigner, inner per
+  bech32-chunk. The two-chunk shape per cosigner is the canonical
+  mk1 chunking for the wrapped key card. v0.20.0's F1 fix gave each
+  cosigner's chunk-set its own `chunk_set_id` (xpub-fingerprint-
+  derived) so the verify-bundle intake can correctly group chunks
+  back per cosigner before mk-codec decode.
+- **`md1`** is a 7-chunk wallet-policy descriptor card, shared across
+  all three cosigners (the descriptor body is the same — only the
+  cosigner xpubs and origins differ).
+- **`multisig.cosigners[]`** carries the three master-fingerprint /
+  origin-path / xpub triples the toolkit derived from the supplied
+  BIP-39 phrases at the inferred path. These are the watch-only
+  binding records used by external wallets (Sparrow, Specter, etc.)
+  when importing the descriptor.
+
 #### Verifying the inheritance bundle (v0.20.0+)
 
 Round-trip the emitted JSON envelope through `verify-bundle` to
