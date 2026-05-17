@@ -61,7 +61,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (toolkit side — extend `Predicate` AST + `conditional_rules` emitter with slot-count-aware predicates); `mnemonic-gui/src/form/conditional.rs` (gui side — slot-count signal from `FormState` to conditional engine); SPEC §6.6 rows 8, 9, 10, 11, 13, 14 (cross-cite into §6.10.7's "Runtime-deferred rules" block).
 - **What:** v1 cycle deferred slot-count-dependent and post-binding rules because the GUI's conditional engine consumes `FormState` snapshots that don't natively expose `len(slots)` or `max(@N)+1`. A future cycle will plumb a slot-count signal through `FormState` + extend the `Predicate` AST with `slot_count_op` / `slot_count_min` / etc. variants. Concrete rules to add: §6.6 row 9 (T-in-range vs N), row 10 (single-sig with N > 1), row 11 (multisig with N == 1), row 13 (BIP-388 distinct-key), row 14 (per-`@N` annotation inconsistency).
 - **Why deferred:** Out of v1 scope per plan §1.4 — these rules need a dynamic slot count signal not knowable until the form is filled, and surface naturally at Run time via the CLI's typed error. v1 ships argv-level submission + lets the CLI emit the error.
-- **Status:** `open`
+- **Status:** `partially resolved 4758168` — v2-cycle (`mnemonic-toolkit-v0.17.0`, 2026-05-16) shipped the **predicate-machinery** half: schema v3 +`SlotCountEq`/`SlotCountGte`/`SlotCountLte` Predicate variants (`gui_schema.rs::Predicate`, `#[allow(dead_code)]` until a future rule consumes them); SPEC §6.10.2 documents the grammar (`a26c809`). GUI consumer + drift gate `synthesize_satisfying` arms in lockstep at `mnemonic-gui-v0.6.0` (`9d447d0`). §6.10.7 row 12 also closes via the separate `pin_value` Effect. **Still deferred** — rows 9/10/11 need a new dropdown-option-disable Effect grammar (new FOLLOWUP `gui-schema-effect-on-dropdown-options-vocab`); rows 8/13/14 need cross-slot relational predicates (new FOLLOWUP `gui-schema-cross-slot-predicate-projection`).
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-runtime-conditional-projection` (to be filed at cycle close).
 
@@ -71,7 +71,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `mnemonic-gui/src/schema/mod.rs:263-268` (`flag_value_is_present` always returns true for Number/Range/Timestamp/TaggedOrIndexed); `mnemonic-gui/src/form/widget.rs:101-126` (`default_flag_value_for` seeds Number widgets to `min` regardless of user interaction).
 - **What:** Number/Range/Timestamp/TaggedOrIndexed widgets currently have no "no value" sentinel — once seeded by `default_flag_value_for`, the value is always-present per `flag_value_is_present`. v1 sidesteps this via the §6.10 visibility gate (Hidden + Disabled flags don't emit regardless of widget value). A future cycle may add an explicit unset state for UX clarity (e.g., a "clear" affordance next to numeric widgets so users can explicitly opt out of supplying a numeric flag).
 - **Why deferred:** Out of v1 scope per plan §1.4 — the visibility gate makes this unnecessary for the motivating bug. UX-quality improvement, not a correctness gap.
-- **Status:** `open`
+- **Status:** `resolved 84a69b8` — `mnemonic-gui-v0.6.0` P3 (2026-05-16; GUI-only, no toolkit code touched). +`FlagValue::Unset` variant with `#[serde(other)]` for forward-compat; argv assembler treats Unset as absent uniformly. See companion entry in `bg002h/mnemonic-gui` for full closure notes + caveat about serde-other on externally-tagged enums.
 - **Tier:** `cross-repo` (gui-impact-only; cross-referenced for cycle completeness)
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-number-widget-unset-sentinel` (primary tracking, to be filed at cycle close).
 
@@ -81,7 +81,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `mnemonic-gui/src/main.rs:197-211` (default form-state seed; v1's P5 removes the `--multisig-path-family bip87` line but leaves the static structure intact).
 - **What:** Replace the static screenshot-mode default seed with a template-aware default. When the user picks a multisig template (e.g., `wsh-sortedmulti`), the form auto-seeds multisig defaults (e.g., `--multisig-path-family bip87`, `--threshold` to a reasonable default); when the user picks single-sig, the form omits those flags entirely.
 - **Why deferred:** Out of v1 scope per plan §7 — optional follow-on. The v1 P5 cleanup removes the unconditionally-wrong seed; the template-aware version is a UX enhancement.
-- **Status:** `open`
+- **Status:** `resolved 538dc70` — `mnemonic-gui-v0.6.0` P4 (2026-05-16; GUI-only, no toolkit code touched). `form::conditional::template_defaults_for(template)` returns canonical multisig defaults (`--threshold = 2`, `--multisig-path-family = bip48`) for non-single-sig templates; per-frame egui hook applies them via seed-on-empty discipline. See companion entry in `bg002h/mnemonic-gui` for full closure notes.
 - **Tier:** `cross-repo` (gui-impact-only; cross-referenced for cycle completeness)
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-default-form-state-template-aware-seed` (primary tracking, to be filed at cycle close).
 
@@ -91,7 +91,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.3 (Effect vocabulary); `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (Effect enum + serializer); `crates/mnemonic-toolkit/src/cmd/bundle.rs:200-205` (the rule the projection encodes — `DESCRIPTOR_WITH_NONZERO_ACCOUNT`); `mnemonic-gui/src/form/conditional.rs` (consumer — Number widget value-coerce-to-zero handler).
 - **What:** Add a `pin_value: { flag, value }` Effect variant to the §6.10.3 vocabulary so the GUI can coerce `--account` to 0 (or any pinned numeric value) when `--descriptor` is present, mirroring SPEC §6.6 row 12's CLI rejection at `bundle.rs:200-205`. Without this, the GUI's Number widget for `--account` defaults to `0` (per `default_flag_value_for`), which is the safe value; the rule only fires when the user actively types a nonzero value, in which case the CLI's byte-exact error suffices for v1.
 - **Why deferred:** Out of v1 scope per R1 I3 reviewer fold — the GUI default of 0 makes this rare misuse; the CLI error is informative. Adding a `pin_value` Effect requires SPEC §6.10.3 expansion + GUI Number-widget coercion semantics not warranted by user evidence.
-- **Status:** `open`
+- **Status:** `resolved 4758168` — `mnemonic-toolkit-v0.17.0` P0+P1 (2026-05-16). SPEC §6.10.3 v3 grammar extension: `pin_value` Visibility variant with wire shape `{"pin_value": {"value": V}}` (`a26c809`); §6.10.4 NEW emission table enumerates PinValue's REPLACE-user-value semantic (distinct from Hidden/Disabled which suppress); §6.10.7 row 12 flipped DEFERRED → ENCODED v2; `gui_schema.rs::VisibilityProjection +PinValue` + manual `Serialize` impl preserving v2 bare-string back-compat (Copy dropped); `bundle_conditional_rules` emits the row 12 rule (`76db841`). GUI consumer + custom Deserialize accepting both v2 + v3 wire shapes + `assemble_argv` PinValue emission path at `mnemonic-gui-v0.6.0` (`9d447d0`).
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-numeric-flag-value-pin-effect` (to be filed at cycle close).
 
@@ -101,7 +101,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (toolkit side — emit `meta.template_groups: { single_sig: [..], multisig: [..] }` block sourced from `Template::is_multisig()`); `mnemonic-gui/src/form/conditional.rs` (gui side — replace module-level `SINGLE_SIG_TEMPLATES: &[&str] = &["bip44", "bip49", "bip84", "bip86"]` with parse from JSON `meta.template_groups`); `crates/mnemonic-toolkit/src/template.rs:46-56` (`is_multisig()` source-of-truth — unchanged).
 - **What:** v1 cycle replicates the single-sig template set client-side as a module-level `SINGLE_SIG_TEMPLATES` const in `conditional.rs`. The drift gate test detects divergence, but a future cleanup cycle can collapse the const by having the toolkit emit `meta.template_groups` in the gui-schema JSON.
 - **Why deferred:** Out of v1 scope — the drift gate suffices for parity enforcement. Cleanup-class change.
-- **Status:** `open`
+- **Status:** `resolved 4758168` — `mnemonic-toolkit-v0.17.0` P0+P1 (2026-05-16). SPEC §6.10.8 NEW per-subcommand `meta` block documentation (`a26c809`); `gui_schema.rs::build_subcommand_meta` emits `meta.template_groups: { single_sig, multisig }` sourced from `CliTemplate::is_multisig()` (`76db841`). GUI-side `SINGLE_SIG_TEMPLATES` const promoted `pub(crate) → pub` + new parity test `tests/schema_mirror.rs::single_sig_templates_const_matches_meta_template_groups` (MNEMONIC_BIN-gated) at `mnemonic-gui-v0.6.0` `9d447d0`. Pair-of-checks posture (drift gate for per-rule projection + const-vs-meta for the bulk list) closes without coupling conditional-fn purity to a runtime subprocess fetch. **Defect carried forward**: `build_subcommand_meta` emits the meta block for `derive-child` but derive-child has no `--template` flag (toolkit-side bug surfaced by opus reviewer at cycle close) — tracked at new FOLLOWUP `gui-schema-derive-child-meta-template-groups-spurious`.
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-template-groups-meta-field` (to be filed at cycle close).
 
@@ -1620,3 +1620,33 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v1+ / nice-to-have`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` companion entry `mnemonic-gui-cratesio-publish` (blocked by this).
+
+### `gui-schema-effect-on-dropdown-options-vocab` — dropdown-option-disable Effect grammar for SPEC §6.6 rows 9/10/11
+
+- **Surfaced:** 2026-05-16, GUI v0.6.0 cycle (`mnemonic-toolkit-v0.17.0` + `mnemonic-gui-v0.6.0`) close. Filed per the §6.10.7 closing list — unblocked by the v3 SlotCount* predicate-machinery (now expressible) but the *effect* side requires a new Effect grammar.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.3 (Effect vocabulary extension); `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::VisibilityProjection` (toolkit emitter); `mnemonic-gui/src/schema_check.rs::VisibilityProjection` (GUI consumer); `mnemonic-gui/src/form/widget.rs` (Dropdown widget — per-option-disable rendering).
+- **What:** SPEC §6.6 rows 9/10/11 need a per-option Effect — e.g., row 9 disables `--threshold` values > N when slot-count is N; row 10 disables single-sig templates when N > 1; row 11 disables multisig templates when N == 1. v3 grammar offers `hidden` / `disabled` / `required` / `pin_value` — all acting on the whole flag. New variant candidate: `disable_options: { values: [...] }` for Dropdown FlagKind, paired with the `slot_count_*` Predicates already in v3.
+- **Why deferred:** Predicate-machinery shipped in v3 unblocks the predicate side; Effect grammar extension is the next half. Out of v0.6.0 cycle scope; would need SPEC §6.10.3 extension + Dropdown widget rendering refactor.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-effect-on-dropdown-options-vocab`.
+
+### `gui-schema-cross-slot-predicate-projection` — cross-slot relational predicate types for SPEC §6.6 rows 8/13/14
+
+- **Surfaced:** 2026-05-16, GUI v0.6.0 cycle close. Filed per the §6.10.7 closing list — these rows need predicate types beyond the v3 `slot_count_*` extensions.
+- **Where:** `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.2 (Predicate AST extension); `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::Predicate` (toolkit emitter); `mnemonic-gui/src/schema_check.rs::Predicate` (GUI consumer); `mnemonic-gui/tests/gui_schema_conditional_drift.rs::synthesize_satisfying` (drift gate extension).
+- **What:** §6.6 row 8 (cross-slot equality, e.g., "two slots must NOT share an xpub"), row 13 (BIP-388 distinct-key — pairwise distinctness across `@i` slots), row 14 (per-`@N` annotation consistency — e.g., if `@1.xpub` is `external`, all `@1.*` annotations must agree). Candidate Predicate variants: `slot_subkey_distinct: { subkey: "xpub" }`, `slot_annotation_consistent: { annotation: "external" }`.
+- **Why deferred:** Predicate-machinery for relational predicates is missing in v3; full design requires SPEC §6.10.2 grammar extension. Out of v0.6.0 cycle scope.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-cross-slot-predicate-projection`.
+
+### `gui-schema-derive-child-meta-template-groups-spurious` — toolkit emits `meta.template_groups` on a subcommand with no `--template` flag
+
+- **Surfaced:** 2026-05-16, GUI v0.6.0 cycle-close opus reviewer audit. Important finding (confidence 95): `crates/mnemonic-toolkit/src/cmd/gui_schema.rs:244-259` `build_subcommand_meta` matches `name == "derive-child"` and emits a `template_groups` block, but `crates/mnemonic-toolkit/src/cmd/derive_child.rs` has ZERO `--template` references (grep-confirmed). SPEC §6.10.8 also lists derive-child as a template-consumer in error; toolkit test `derive_child_emits_meta_template_groups` enshrines the wrong invariant. Recurring `[feedback-r0-must-read-source-off-by-n]` failure mode.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs:244-259` (the spurious match arm); `design/SPEC_mnemonic_toolkit_v0_5.md` §6.10.8 (matching mis-claim); `crates/mnemonic-toolkit/tests/cli_gui_schema_v3_extensions.rs` (`derive_child_emits_meta_template_groups`).
+- **What:** Either (a) remove `derive-child` from the `build_subcommand_meta` match arm + delete the matching test cell + correct SPEC §6.10.8 prose, or (b) consciously document why derive-child gets the meta block despite having no `--template` widget. (a) is the source-faithful fix.
+- **Why deferred:** Cosmetic — no GUI consumer reads derive-child's meta block today; the spurious emission is silent. Folding into the next toolkit cycle is lower-churn than cutting `mnemonic-toolkit-v0.17.1`.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-derive-child-meta-template-groups-spurious`.
