@@ -306,6 +306,67 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.18.1] — 2026-05-16
+
+### Fixed — revert v0.18.0 rows 10/11 `disable_options` emissions (UX flaw)
+
+v0.18.0 introduced two `disable_options` rules on bundle's
+`--template` flag: row 10 (`slot_count_gte: 2` → disable single-sig
+options) + row 11 (`slot_count_eq: 1` → disable multisig options).
+**Row 11 was a design flaw**: `slot_count == 1` is the natural
+*transient* state when a user is building UP to multisig (slots get
+added one at a time, passing through 1 on the way to 2+). Disabling
+multisig templates at that transient state prevents the user from
+selecting their intended template before completing slot setup —
+the user can only ever pick from single-sig, even when they meant
+to build a multisig wallet. Row 10 suffered the symmetric issue
+during multisig→single-sig template switches (slot_count >= 2
+disabled single-sig until the user removed slots first).
+
+v0.18.1 reverts both rules. The template/slot_count mismatch UX
+migrates to a **GUI-internal warning banner** in `mnemonic-gui
+v0.7.2` (Option A pattern matching the v0.7.1 row-8 slot-contiguity
+check) — render the dropdown normally; show an inline warning when
+the chosen template + slot_count combination would fail CLI rows
+10/11 at runtime, with suggested-fix text. The CLI remains the
+authoritative gate per §6.6 rows 10/11 stderr.
+
+### Changed
+
+- `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::bundle_conditional_rules`:
+  two `ConditionalRule` entries deleted (row 10 + row 11 disable_options).
+  Bundle rule count `13 → 11` (back to v0.17.1 baseline).
+- `crates/mnemonic-toolkit/tests/cli_gui_schema_v4_extensions.rs`:
+  rewritten. Old assertions (`bundle_emits_disable_options_rule_row_10/11_*`,
+  `disable_options_wire_shape_uses_inner_values_key`,
+  `v4_schema_includes_all_v3_cycle_surfaces`) replaced with
+  `bundle_emits_no_disable_options_rules_after_v0_18_1_rollback`
+  (anti-regression guard against re-introduction) +
+  `v4_schema_version_pinned_after_v0_18_1_rollback` +
+  `bundle_conditional_rules_count_is_eleven_at_v0_18_1`. Bare-string
+  + pin_value v4 round-trips preserved.
+- `crates/mnemonic-toolkit/tests/cli_gui_schema_conditional_rules.rs`:
+  `bundle_emits_conditional_rules` count assertion `13 → 11`.
+
+### Schema version
+
+`4` (unchanged from v0.18.0). The `disable_options` Visibility
+variant remains a defined v4 grammar surface (`§6.10.3`); no rule
+emits it after the rollback. Future cycles may identify contexts
+where greying dropdown options serves UX better than an inline
+warning; the grammar stays available.
+
+### Companion
+
+GUI-side bump in lockstep: `mnemonic-gui v0.7.2` drops the matching
+`bundle()` conditional-fn visibility pushes + adds the warning-
+banner helper + adds the slot-grid-adjacent warning render.
+
+### Closes
+
+(No FOLLOWUP closures; this is a same-cycle bugfix for a v0.18.0
+design issue surfaced by user report.)
+
 ## mnemonic-toolkit [0.18.0] — 2026-05-16
 
 ### Added — SPEC §6.10 v3-cycle extensions to `gui-schema` JSON

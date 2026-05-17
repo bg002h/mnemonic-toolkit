@@ -171,6 +171,12 @@ enum VisibilityProjection {
     PinValue {
         value: serde_json::Value,
     },
+    // v0.18.1 — DisableOptions remains a defined v4 grammar variant
+    // even after the row 10/11 rollback (no rule currently constructs
+    // it). Kept for forward-compat: future cycles may identify
+    // contexts where greying dropdown options serves UX better than
+    // an inline warning. SPEC §6.10.3 documents the wire shape.
+    #[allow(dead_code)]
     DisableOptions {
         values: Vec<String>,
     },
@@ -501,60 +507,27 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
                 },
             },
         },
-        // --template disable single-sig options when slot_count >= 2 (NEW
-        // v0.18.0; SPEC §6.6 row 10 — SINGLE_SIG_TEMPLATE_WITH_MULTISIG_SLOTS).
-        // Uses the v4-cycle disable_options Effect: GUI greys out single-sig
-        // values in the --template Dropdown so the user can't select e.g.
-        // bip84 with 3 slots. Schema-time only (no argv-emission impact per
-        // §6.10.4); CLI row 10 is the residual surface. Closes v2-cycle
-        // DEFERRED entry in §6.10.7 (Effect side of the rows-9/10/11 trio).
-        ConditionalRule {
-            rationale: "Single-sig --template values (bip44/49/84/86) require \
-                        exactly one slot. When the user has supplied 2+ slots, \
-                        single-sig template options are invalid — the GUI greys \
-                        them out in the Dropdown so the user can't select one. \
-                        Schema-time only: argv emission is unaffected (stale \
-                        pre-disabled values still emit; CLI row 10 catches them \
-                        at run time). See SPEC §6.10.4 emission-mapping table \
-                        for disable_options semantics."
-                .to_string(),
-            spec_ref: "SPEC §6.6 row 10; bundle.rs::mode_text::\
-                       SINGLE_SIG_TEMPLATE_WITH_MULTISIG_SLOTS"
-                .to_string(),
-            when: Predicate::SlotCountGte { value: 2 },
-            effect: Effect {
-                flag: "--template".to_string(),
-                visibility: VisibilityProjection::DisableOptions {
-                    values: single_sig_template_values(),
-                },
-            },
-        },
-        // --template disable multisig options when slot_count == 1 (NEW
-        // v0.18.0; SPEC §6.6 row 11 — MULTISIG_TEMPLATE_WITH_SINGLE_SLOT).
-        // Mirror of row 10; greys out multisig values when only 1 slot is
-        // present. Schema-time only per §6.10.4.
-        ConditionalRule {
-            rationale: "Multisig --template values (wsh-multi/sortedmulti, \
-                        sh-wsh-multi/sortedmulti, tr-multi-a/sortedmulti-a) \
-                        require 2+ slots. When the user has supplied exactly 1 \
-                        slot, multisig template options are invalid — the GUI \
-                        greys them out in the Dropdown so the user can't \
-                        select one. Schema-time only: argv emission is \
-                        unaffected (stale pre-disabled values still emit; CLI \
-                        row 11 catches them at run time). See SPEC §6.10.4 \
-                        emission-mapping table for disable_options semantics."
-                .to_string(),
-            spec_ref: "SPEC §6.6 row 11; bundle.rs::mode_text::\
-                       MULTISIG_TEMPLATE_WITH_SINGLE_SLOT"
-                .to_string(),
-            when: Predicate::SlotCountEq { value: 1 },
-            effect: Effect {
-                flag: "--template".to_string(),
-                visibility: VisibilityProjection::DisableOptions {
-                    values: multisig_template_values(),
-                },
-            },
-        },
+        // v0.18.1 — rows 10 + 11 disable_options emission REMOVED.
+        // v0.18.0 introduced two rules: slot_count_gte: 2 → disable
+        // single-sig --template options (row 10); slot_count_eq: 1 →
+        // disable multisig --template options (row 11). Row 11 was a
+        // design flaw: slot_count==1 is the natural transient state
+        // when building UP to multisig (user adds slots one at a time),
+        // and disabling multisig at that transient state prevents the
+        // user from selecting their intended template before completing
+        // the slot setup. Symmetry made row 10 face the same UX
+        // friction during multisig→single-sig template switches.
+        // v0.18.1 + GUI v0.7.2 replace both with a GUI-internal warning
+        // banner (Option A pattern, like row 8 contiguity check):
+        // dropdown renders all options normally; an inline warning fires
+        // when the chosen --template + slot_count combination is
+        // invalid, with text suggesting which side to adjust. CLI rows
+        // 10 + 11 remain the authoritative gate per §6.6.
+        //
+        // VisibilityProjection::DisableOptions remains a valid v4
+        // grammar variant; just unused by any rule until a future cycle
+        // identifies a context where greying dropdown options serves UX
+        // better than an inline warning.
     ]
 }
 

@@ -92,15 +92,18 @@ fn bundle_emits_conditional_rules() {
     // `--descriptor` is present (uses the new pin_value Effect per §6.10.3).
     // Detailed pin_value assertions live in cli_gui_schema_v3_extensions.rs.
     //
-    // v0.18.0 (v3 cycle): adds 2 new rules — rows 10 (slot_count_gte: 2 →
-    // disable single-sig --template options) + 11 (slot_count_eq: 1 →
-    // disable multisig --template options). Both use the new
-    // disable_options Effect per §6.10.3. Detailed assertions live in
-    // cli_gui_schema_v4_extensions.rs.
+    // v0.18.0 (v3 cycle): added 2 new rules (rows 10/11 disable_options).
+    // v0.18.1 (v3-cycle bugfix): REVERTED both rules — row 11 disabled
+    // multisig at slot_count==1, the natural transient state when
+    // building UP to multisig; row 10 had symmetric issues during
+    // multisig→single-sig template switches. Replaced with a GUI-
+    // internal warning banner in mnemonic-gui v0.7.2. Rule count is
+    // back to the v0.17.1 baseline of 11.
     assert_eq!(
         rules.len(),
-        13,
-        "bundle v0.18.0 rule count (v0.17.0 11 + 2 disable_options rules)"
+        11,
+        "bundle v0.18.1 rule count (v0.17.1 baseline; v0.18.0's +2 \
+         disable_options rules reverted)"
     );
 }
 
