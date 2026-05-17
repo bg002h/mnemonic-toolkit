@@ -131,6 +131,27 @@ pub enum ToolkitError {
     /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
     /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
     DeriveChildLengthNotApplicable,
+    /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
+    /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
+    /// UnparseableInput).
+    Repair(crate::repair::RepairError),
+    /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
+    /// Synthesized by `repair::try_repair_and_short_circuit` on
+    /// repair-success; `?`-propagated through the helper hierarchy up to
+    /// the run() boundary; main.rs special-cases this variant to suppress
+    /// the Display impl from writing to stderr (per plan-doc R2 I1 — the
+    /// repair report already wrote a clean stderr summary; appending the
+    /// Display text would be confusing noise).
+    RepairShortCircuit { exit_code: u8 },
+    /// v0.22.0 repair feature — std::io::Error from emit_repair_report
+    /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
+    Io(std::io::Error),
+}
+
+impl From<crate::repair::RepairError> for ToolkitError {
+    fn from(e: crate::repair::RepairError) -> Self {
+        ToolkitError::Repair(e)
+    }
 }
 
 #[derive(Debug)]
@@ -268,11 +289,14 @@ impl ToolkitError {
             | ToolkitError::ExportWalletMissingFields { .. }
             | ToolkitError::DeriveChildUnsupportedApp
             | ToolkitError::DeriveChildLengthOutOfRange { .. }
-            | ToolkitError::DeriveChildLengthNotApplicable => 2,
+            | ToolkitError::DeriveChildLengthNotApplicable
+            | ToolkitError::Repair(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
             | ToolkitError::Bip388VerifyDistinctness => 4,
+            ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
+            ToolkitError::Io(_) => 1,
             ToolkitError::MultisigConfig { .. }
             | ToolkitError::CosignerSpec { .. }
             | ToolkitError::CosignersFile { .. } => 1,
@@ -312,6 +336,9 @@ impl ToolkitError {
             ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
             ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
             ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
+            ToolkitError::Repair(_) => "Repair",
+            ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::Io(_) => "Io",
         }
     }
 
@@ -390,6 +417,14 @@ impl ToolkitError {
                 "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
                     .to_string()
             }
+            ToolkitError::Repair(e) => format!("{e}"),
+            ToolkitError::RepairShortCircuit { .. } => {
+                // R2 I1: main.rs special-cases this variant to skip
+                // writing this message to stderr (the repair report
+                // already emitted its own clean stderr summary).
+                String::new()
+            }
+            ToolkitError::Io(e) => format!("I/O error: {e}"),
         }
     }
 

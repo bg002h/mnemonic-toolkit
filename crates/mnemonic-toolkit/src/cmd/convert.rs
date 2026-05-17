@@ -696,6 +696,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
+    no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
     emit_secret_in_argv_advisories(args, stderr);
@@ -875,14 +876,52 @@ pub fn run<R: Read, W: Write, E: Write>(
     // 8) Compute outputs.
     let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
     let bip38_passphrase = effective_bip38_passphrase.as_deref();
-    let (mut outputs, input_variant, electrum_seed_version) = compute_outputs(
+    let computed = compute_outputs(
         primary.node,
         &primary_value,
         &targets,
         args,
         pbkdf2_passphrase,
         bip38_passphrase,
-    )?;
+    );
+    let (mut outputs, input_variant, electrum_seed_version) = match computed {
+        Ok(o) => o,
+        Err(orig) => {
+            // v0.22.0 auto-fire — on Ms1 / Mk1 sibling-codec decode failures,
+            // attempt BCH correction and short-circuit with exit 5 on success.
+            // Falls through to typed `orig` if repair fails or the original
+            // error wasn't a decode-class failure. Per D6 / §2.5 standalone
+            // `repair` subcommand ignores --no-auto-repair; here we honor it.
+            if !no_auto_repair {
+                let repair_kind = match primary.node {
+                    NodeType::Ms1 => Some(crate::repair::CardKind::Ms1),
+                    NodeType::Mk1 => Some(crate::repair::CardKind::Mk1),
+                    _ => None,
+                };
+                let is_codec_decode_err = matches!(
+                    &orig,
+                    ToolkitError::MsCodec(_) | ToolkitError::MkCodec(_)
+                );
+                if let (Some(kind), true) = (repair_kind, is_codec_decode_err) {
+                    let chunks: Vec<String> = if kind == crate::repair::CardKind::Mk1 {
+                        primary_value
+                            .split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect()
+                    } else {
+                        vec![primary_value.clone()]
+                    };
+                    // try_repair_and_short_circuit is always-Err on
+                    // repair-success; `?` propagates RepairShortCircuit
+                    // (exit 5) up to main.rs's special-case.
+                    crate::repair::try_repair_and_short_circuit(
+                        kind, &chunks, stdout, stderr,
+                    )?;
+                }
+            }
+            return Err(orig);
+        }
+    };
 
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {

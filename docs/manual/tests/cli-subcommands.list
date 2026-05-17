@@ -18,6 +18,8 @@ mnemonic seed-xor combine
 mnemonic slip39 split
 mnemonic slip39 combine
 mnemonic gui-schema
+mnemonic repair
+mnemonic inspect
 
 # md
 md encode

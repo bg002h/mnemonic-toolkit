@@ -45,6 +45,103 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `verify-bundle-auto-fire-helper-refactor` — wire BCH auto-fire short-circuit into `verify-bundle` decode failures (v0.22.1 patch)
+
+- **Surfaced:** 2026-05-17, v0.22.0 cycle Phase 5 scope-reduction.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — 8 sites: `:887` `:937` `:1096` `:1101` `:1122` `:1127` `:1219` `:1532`. Helpers `emit_verify_checks` (`:856`), `emit_multisig_checks` (`:1083`), `emit_md1_checks` (`:1526`) need signature change `Vec<VerifyCheck>` → `Result<Vec<VerifyCheck>, ToolkitError>` so `?` propagation can short-circuit. 4 production callers (`:283`, `:338`, `:420`, `:682`) + 6 in-file test callers (`:1671`, `:1718`, `:1748`, `:1822`, `:1924`, `:1999`) need updates.
+- **What:** v0.22.0 shipped auto-fire on `convert` (sites #9, #10) and `inspect` (site #11) but DEFERRED the `verify-bundle` helper refactor because the signature cascade through 10 callers (including v0.20/v0.21 round-trip regression cells) was high-risk for a single-shot tag window.
+- **Why deferred:** scope discipline; the 3 sites already shipped cover the highest-frequency user-visible decode paths (`mnemonic convert --from ms1=… --to phrase` and `mnemonic inspect`). `verify-bundle` keeps its current UX (decode failures still surface as `VerifyCheck { passed: false, decode_error: Some(...) }` rows) until v0.22.1.
+- **Status:** open
+- **Tier:** `v0.22.1`
+
+### `ms-codec-decode-with-correction-public-api` — promote `ms_codec::decode_with_correction` for downstream BCH consumers
+
+- **Surfaced:** 2026-05-17, v0.22.0 brainstorm + R0.
+- **Where:** `mnemonic-secret/crates/ms-codec/src/decode.rs` (cross-repo).
+- **What:** Add `pub fn decode_with_correction(s: &str) -> Result<(Tag, Payload, Vec<RepairDetail>)>` that internally runs BCH correction within t=4 capacity before the existing decode pipeline. This lets the toolkit's `repair.rs` consume the sibling-codec native API instead of replicating BCH primitives.
+- **Why deferred:** v0.22.0 toolkit-side launch first; consume sibling-codec native APIs once promoted.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-secret`
+
+### `md-codec-decode-with-correction-public-api` — promote BCH primitives + `decode_with_correction` for md HRP
+
+- **Surfaced:** 2026-05-17, v0.22.0 R0.
+- **Where:** `descriptor-mnemonic/crates/md-codec/src/bch.rs` (currently `pub(crate)`; cross-repo).
+- **What:** Promote `bch::polymod_run` / `bch::hrp_expand` / `bch::MD_REGULAR_CONST` to `pub`, OR add a `pub fn decode_with_correction(strings: &[&str]) -> Result<Descriptor>` wrapper. Either path lets the toolkit's `repair.rs` consume md-codec primitives instead of vendoring `MD_NUMS_TARGET`.
+- **Why deferred:** v0.22.0 vendored the constant + drift-gates it via `#[cfg(test)]` against an md1 stability suite.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/descriptor-mnemonic`
+
+### `ms-cli-repair-flag` — `ms repair` subcommand mirroring toolkit's `mnemonic repair`
+
+- **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
+- **Where:** `mnemonic-secret/crates/ms-cli/src/cmd/` (NEW subcommand; cross-repo).
+- **What:** Add `ms repair <ms1>` for ms1 BCH error-correction. Mirrors `mnemonic repair --ms1`. Blocked on `ms-codec-decode-with-correction-public-api`.
+- **Status:** open (blocked)
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-secret`
+
+### `mk-cli-repair-flag` — `mk repair` subcommand mirroring toolkit's `mnemonic repair`
+
+- **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
+- **Where:** `mnemonic-key/crates/mk-cli/src/cmd/` (NEW subcommand; cross-repo).
+- **What:** Add `mk repair <mk1>...` for mk1 BCH error-correction (regular + long codes). `mk-codec` already does internal correction within `decode`, so this is mostly a UX-parity feature.
+- **Status:** open (unblocked — mk-codec primitives already public per v0.3.1)
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-key`
+
+### `md-cli-repair-flag` — `md repair` subcommand mirroring toolkit's `mnemonic repair`
+
+- **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
+- **Where:** `descriptor-mnemonic/crates/md-cli/src/cmd/` (NEW subcommand; cross-repo).
+- **What:** Add `md repair <md1>...` for md1 BCH error-correction. Blocked on `md-codec-decode-with-correction-public-api`.
+- **Status:** open (blocked)
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/descriptor-mnemonic`
+
+### `toolkit-repair-consume-native-codec-api` — replace toolkit-side BCH replication with sibling-codec native APIs
+
+- **Surfaced:** 2026-05-17, v0.22.0 R1.
+- **Where:** `crates/mnemonic-toolkit/src/repair.rs`.
+- **What:** Once `ms-codec` + `md-codec` expose native `decode_with_correction` (siblings to mk-codec's existing internal correction), refactor `repair.rs` to delegate per-HRP to each codec's native correction primitive instead of parameterizing the toolkit's own polymod calls. Cleaner layering; one BCH implementation per codec instead of toolkit-side parameter-juggling.
+- **Why deferred:** cross-repo dep chain; awaits items #2 and #3.
+- **Status:** open (blocked)
+- **Tier:** `cross-repo`
+
+### `hrp-correction-heuristics` — Levenshtein-1 HRP-typo auto-suggestion
+
+- **Surfaced:** 2026-05-17, v0.22.0 brainstorm §9 open question.
+- **Where:** `crates/mnemonic-toolkit/src/repair.rs::RepairError::HrpMismatch` site.
+- **What:** When the user supplies `ns1…` / `mz1…` / `mb1…` etc., compute Levenshtein-1 over `{"ms", "mk", "md"}` and suggest the closest valid HRP in the error message. Today the user gets `expected 'ms', found 'ns'` but no "did you mean 'ms'?" prompt.
+- **Status:** open
+- **Tier:** `v0.23-nice-to-have`
+
+### `repair-json-short-circuit-output` — JSON envelope for auto-fire short-circuit when `--json` was requested
+
+- **Surfaced:** 2026-05-17, v0.22.0 D14 decision.
+- **Where:** `crates/mnemonic-toolkit/src/repair.rs::emit_repair_report`.
+- **What:** When auto-fire fires under a `convert --json` / `inspect --json` invocation, today the repair report is emitted as TEXT-form even though the calling context expected JSON. v0.23 should detect the JSON context and emit a structured JSON envelope wrapping the repair report.
+- **Status:** open
+- **Tier:** `v0.23-nice-to-have`
+
+### `bech32-correction-api-version-pin` — track upstream `bech32` crate correction API stability
+
+- **Surfaced:** 2026-05-17, v0.22.0 Phase 0 (rust-bech32 v0.11.1 had no public `Corrector` API; vendored via mk-codec primitives instead).
+- **Where:** monitor `bech32` crate releases.
+- **What:** If/when `bech32 v0.12+` publishes a stable `primitives::correction::Corrector` API, evaluate migrating `repair.rs` off mk-codec primitives onto upstream. Probably blocked indefinitely; mk-codec primitives are stable and serve all 3 HRPs.
+- **Status:** open
+- **Tier:** `v1+`
+
+### `verify-bundle-auto-fire-feature-flag-survey` — survey users on default-on vs default-off for verify-bundle auto-fire
+
+- **Surfaced:** 2026-05-17, v0.22.0 R6 risk.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (once helper refactor ships per `verify-bundle-auto-fire-helper-refactor`).
+- **What:** Auto-fire on `verify-bundle` decode failures changes UX from "VerifyCheck row" to "exit-5 short-circuit + repair report." Survey users whether default-on (helpful) or default-off (preserves existing automation expectations) is preferable. Inform v0.22.1 default.
+- **Status:** open (blocked on `verify-bundle-auto-fire-helper-refactor`)
+- **Tier:** `v0.22.1-nice-to-have`
+
 ### `gui-schema-conditional-rules-v1` — project SPEC §6.6/§6.9 mutex/conditional rules into gui-schema JSON (drift-gated)
 
 - **Surfaced:** 2026-05-16, GUI conditional-applicability v1 cycle (`design/IMPLEMENTATION_PLAN_gui_conditional_applicability_v1.md`). Motivating bug: GUI bundle form default state (template = `bip84`, single-sig) emits `--threshold 1 --multisig-path-family bip48` which CLI rejects with SPEC §6.6 byte-exact errors (`crates/mnemonic-toolkit/src/cmd/bundle.rs:120`).

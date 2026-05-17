@@ -1338,3 +1338,205 @@ fixture.
 GUI-side variants (NodeValueComposite, TaggedOrIndexed, Range,
 Timestamp) intentionally collapse to `"text"` upstream and are
 re-parsed client-side per the SPEC §7 lossy-mapping contract.
+
+---
+
+## `mnemonic repair`
+
+BCH error-correct a corrupted m-format card (`ms1` / `mk1` / `md1`).
+All three formats share the BIP-93 codex32 BCH code family — regular
+`BCH(93,80,8)` for data-parts of 14–93 symbols (every `ms1`, every
+`md1`, and short `mk1` chunks), long `BCH(108,93,8)` for data-parts of
+96–108 symbols (the xpub-bearing first chunk of typical `mk1`
+emissions). Both codes correct up to four substitution errors per
+chunk (singleton bound `t=4`).
+
+Use cases include recovery of a corroded engraving (one or two letters
+unreadable), salvage of a hand-copied card with a single typo, or
+sanity-checking a freshly engraved card against its source bundle
+before committing to steel.
+
+### Synopsis
+
+```sh
+mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1 <MD1>...]} [--json]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--ms1 <MS1>` | single `ms1` chunk to repair; use `-` to read one chunk from stdin; mutually exclusive with `--mk1` / `--md1` |
+| `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--md1` |
+| `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--mk1` |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
+| `--help` | print help |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
+| `5` | at least one chunk corrected (`REPAIR_APPLIED`); stdout = repair report + corrected chunks |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`) |
+| `1` | I/O error or other generic failure |
+
+### Worked example
+
+```sh
+# A valid ms1 chunk with one character corrupted (position 17 'q' → 'z'):
+mnemonic repair --ms1 ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f
+```
+
+Stdout (the corrected chunk is on the LAST line; comment lines describe the fix):
+
+```text
+# Repair report
+#   ms1 chunk 0: 1 correction at position 17: 'z' -> 'q'
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+```
+
+Stderr:
+
+```text
+repair: applied 1 correction across 1 chunk
+warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+```
+
+Exit code: `5`.
+
+### JSON output
+
+```json
+{
+  "schema_version": "1",
+  "kind": "ms1",
+  "corrected_chunks": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
+  "repairs": [
+    {
+      "chunk_index": 0,
+      "original_chunk": "ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_chunk": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_positions": [{"position": 17, "was": "z", "now": "q"}]
+    }
+  ]
+}
+```
+
+### Per-chunk atomic semantics
+
+For multi-chunk inputs (`--mk1 <c0> --mk1 <c1> --mk1 <c2>` or the `md1`
+analog), if ANY chunk fails to repair (e.g. > 4 errors), the WHOLE
+call fails with the offending `chunk_index` named. Partial repair of
+sibling chunks is NOT returned — this avoids surfacing a half-fixed
+card that could mislead the user into committing it. Re-run with
+better data for the failing chunk.
+
+### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| `chunk_index N` has more than 4 substitutions | `repair: chunk N has too many errors to correct uniquely (exceeds singleton bound = 8); cannot suggest correction` |
+| `chunk_index N` HRP is not the expected one | `repair: chunk N HRP mismatch — expected 'XX', found 'YY' (HRP is not BCH-protected; re-type the prefix)` |
+| `chunk_index N` data-part length is 94 or 95 | `repair: chunk N data-part length L is in BIP-93's reserved-invalid band [94, 95]; re-type the chunk` |
+| `chunk_index N` data-part length triggers long code for an HRP whose codec doesn't define one (`ms` / `md`) | `repair: chunk N data-part length L would require the long BCH code, which is not defined for HRP 'X' in this codec version` |
+| No chunks supplied | `repair: no chunks supplied` |
+
+### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Corrected `ms1` emitted to stdout | `warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '\| age -e ...')` |
+| Repair fired and emitted ≥ 1 correction | `repair: applied K correction(s) across J chunk(s)` |
+
+### `--no-auto-repair` interaction
+
+The standalone `mnemonic repair` subcommand IGNORES the global
+`--no-auto-repair` flag (the whole point of this subcommand IS repair).
+The flag applies only to the auto-fire short-circuit on the OTHER
+subcommands (`convert`, `inspect`).
+
+---
+
+## `mnemonic inspect`
+
+Describe the contents of an m-format card without performing any
+conversion. Per kind:
+
+- `ms1` — tag (`entr` for v0.1 ms-codec), payload kind, byte length,
+  bit strength (= 8 × bytes). Entropy hex is suppressed by default
+  (sensitive material); pass `--reveal-secret` to print it.
+- `mk1` — policy-id-stub count, origin fingerprint (or `<absent>`
+  for the privacy-preserving emission mode), origin path, xpub.
+- `md1` — placeholder count (`n`), root-tree tag (`Wpkh` / `Tr` /
+  `Wsh` / …), wallet-policy-mode flag, path-decl shape (`Shared` vs
+  `Divergent`).
+
+### Synopsis
+
+```sh
+mnemonic inspect {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1 <MD1>...]} [--json] [--reveal-secret]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--ms1 <MS1>` | single `ms1` chunk to inspect; use `-` to read one chunk from stdin; mutually exclusive with `--mk1` / `--md1` |
+| `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` for stdin |
+| `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` for stdin |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form report |
+| `--reveal-secret` | reveal `ms1` entropy hex on stdout (no effect for `mk1` / `md1`, which carry no secret material) |
+| `--help` | print help |
+
+### Worked example
+
+```sh
+mnemonic inspect --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+```
+
+Stdout:
+
+```text
+kind: ms1
+tag: entr
+payload_kind: Entr
+byte_length: 16
+bit_strength: 128
+entropy_hex: <suppressed; pass --reveal-secret to print>
+```
+
+Stderr:
+
+```text
+warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+```
+
+### Auto-fire short-circuit
+
+When a corrupted card is supplied to `inspect`, the sibling-codec
+decode fails and v0.22.0 auto-fire kicks in: instead of surfacing the
+typed decode error, the toolkit attempts BCH correction and — on
+success — prints the corrected card and exits with code `5`. Pass
+the global `--no-auto-repair` flag to opt out and restore the
+pre-v0.22 behavior (typed sibling-codec error, exit `1` or `2`).
+
+For `mk1` specifically, the toolkit's auto-fire is essentially
+redundant: `mk-codec` performs INTERNAL BCH correction at the same
+`t=4` capacity inside `mk_codec::decode`, so corrupted `mk1` chunks
+within capacity are silently fixed before reaching the auto-fire
+boundary. Auto-fire is the user-visible repair path for `ms1`
+(codex32-delegated; no internal correction) and `md1` (no internal
+correction in `md-codec`).
+
+### Refusals
+
+`inspect` surfaces whatever the underlying sibling-codec `decode`
+returns; consult the per-codec chapters (`md`, `ms`, `mk-cli`) for
+the full per-error taxonomy.
+
+### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: secret material on stdout — consider redirecting ...` |

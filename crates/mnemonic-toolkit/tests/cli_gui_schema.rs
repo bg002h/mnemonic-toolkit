@@ -46,7 +46,7 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_ten_subcommands() {
+fn gui_schema_lists_all_twelve_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
@@ -54,7 +54,8 @@ fn gui_schema_lists_all_ten_subcommands() {
     // clap subcommands into hyphenated names: `seed-xor` becomes
     // `seed-xor-split` + `seed-xor-combine` (repairs v0.12.0 pre-existing
     // empty-flags rendering); new `slip39` enters as `slip39-split` +
-    // `slip39-combine`. Schema version stays at 1 (additive name change).
+    // `slip39-combine`. v0.22.0 adds `repair` (BCH error-correction) and
+    // `inspect` (describe-card-contents). gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
@@ -63,13 +64,15 @@ fn gui_schema_lists_all_ten_subcommands() {
             "derive-child",
             "export-wallet",
             "final-word",
+            "inspect",
+            "repair",
             "seed-xor-combine",
             "seed-xor-split",
             "slip39-combine",
             "slip39-split",
             "verify-bundle",
         ],
-        "all 10 user-facing subcommands must appear (nested split/combine \
+        "all 12 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

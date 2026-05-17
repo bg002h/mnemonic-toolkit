@@ -235,6 +235,24 @@ planned for ms-codec v0.2.
 The descriptor outer wrapper for a taproot output: `tr(internal_key,
 {leaf1, leaf2, …})`.
 
+## repair (BCH error-correction)
+
+A `mnemonic` subcommand introduced in v0.22.0 that uses the BIP-93
+codex32 BCH code family to fix up to four substitution errors per
+chunk in any `ms1` / `mk1` / `md1` card. Documented in chapter
+*`mnemonic` reference*, section *`mnemonic repair`*. Also fires
+automatically (`auto-fire short-circuit`, exit code `5`) on decode
+failures in `convert` and `inspect`; opt out with the global
+`--no-auto-repair` flag.
+
+## inspect (card-contents summary)
+
+A `mnemonic` subcommand introduced in v0.22.0 that decodes any
+`ms1` / `mk1` / `md1` card and prints a per-kind summary (tag /
+bit-strength for `ms1`; xpub / fingerprint / origin path for `mk1`;
+placeholder count / tree tag / wallet-policy mode for `md1`). Sensitive
+`ms1` entropy hex is suppressed by default; `--reveal-secret` opts in.
+
 ## verify-bundle
 
 A `mnemonic` subcommand that re-derives expected card content from a

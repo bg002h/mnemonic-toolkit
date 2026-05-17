@@ -13,6 +13,7 @@ mod language;
 mod network;
 mod parse;
 mod parse_descriptor;
+mod repair;
 mod secret_advisory;
 mod slip0132;
 mod slot_input;
@@ -33,6 +34,15 @@ use std::process::ExitCode;
     version
 )]
 struct Cli {
+    /// v0.22.0 — skip auto-fire repair on decode failures; preserve
+    /// pre-v0.22 exit policy. Global flag; honored by `convert` and
+    /// `inspect` (which auto-fire on sibling-codec decode failures).
+    /// Standalone `repair` ignores this flag (the whole point of that
+    /// subcommand IS repair). `verify-bundle` auto-fire is deferred to
+    /// v0.22.1 (FOLLOWUP `verify-bundle-auto-fire-helper-refactor`).
+    #[arg(long, global = true)]
+    no_auto_repair: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -57,6 +67,10 @@ enum Command {
     Slip39(cmd::slip39::Slip39Args),
     /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
     GuiSchema(cmd::gui_schema::GuiSchemaArgs),
+    /// BCH error-correct a corrupted m-format card (ms1 / mk1 / md1)
+    Repair(cmd::repair::RepairArgs),
+    /// describe the contents of an m-format card (ms1 / mk1 / md1)
+    Inspect(cmd::inspect::InspectArgs),
 }
 
 fn main() -> ExitCode {
@@ -76,7 +90,7 @@ fn main() -> ExitCode {
     let result: Result<u8, ToolkitError> = match &cli.command {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
         Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr),
-        Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr),
+        Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
         }
@@ -93,10 +107,17 @@ fn main() -> ExitCode {
             let root = Cli::command();
             cmd::gui_schema::run(args, &root, stdout).map(|_| 0)
         }
+        Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
+        Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
     };
 
     let exit = match result {
         Ok(code) => ExitCode::from(code),
+        // R2 I1: short-circuit fires a clean repair report on stderr inside
+        // the helper; do NOT also emit the ToolkitError Display impl (which
+        // would tack on "error: " noise). The exit code is carried in the
+        // variant itself.
+        Err(error::ToolkitError::RepairShortCircuit { exit_code }) => ExitCode::from(exit_code),
         Err(e) => {
             // Emit error per SPEC §6.5 + §5.5.
             let _ = writeln!(io::stderr(), "{}", e);

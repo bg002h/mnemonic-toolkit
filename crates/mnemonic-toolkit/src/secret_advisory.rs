@@ -38,6 +38,22 @@ pub fn secret_in_argv_warning<W: Write>(stderr: &mut W, flag: &str, alternative:
     );
 }
 
+/// Emit a `secret-on-stdout` advisory when sensitive card material is
+/// being written to stdout (ms1 = BIP-39 entropy). Mirrors the bundle
+/// command's secret-on-stdout warning emission. Errors writing to
+/// `stderr` are silently swallowed (advisory is best-effort).
+///
+/// Added v0.22.0 for the `repair` + `inspect` features per plan D9.
+/// No-op for kinds other than `Ms1` (mk1 / md1 are not secret-bearing).
+pub fn secret_on_stdout_warning<W: Write>(kind: crate::repair::CardKind, stderr: &mut W) {
+    if matches!(kind, crate::repair::CardKind::Ms1) {
+        let _ = writeln!(
+            stderr,
+            "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"
+        );
+    }
+}
+
 /// Emit a `--json-out <path>` world-readable / group-readable advisory
 /// if the file at `path` has permissions outside the user-private mask
 /// (i.e. `mode & 0o077 != 0`). Unix-only; no-op on non-Unix platforms.
