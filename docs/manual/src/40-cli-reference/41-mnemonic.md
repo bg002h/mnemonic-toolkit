@@ -485,6 +485,32 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 
 See [Verifying a bundle](#verifying-a-bundle).
 
+### Auto-fire on decode failure (v0.22.1)
+
+When `verify-bundle` encounters a `ms_codec` / `mk_codec` / `md_codec`
+decode failure on the SUPPLIED side of the bundle (corrupted engraving
+re-typed into `--ms1` / `--mk1` / `--md1` or supplied via
+`--bundle-json`), the BCH error-correction primitive from `mnemonic
+repair` auto-fires — but only when stdout is attached to a TTY (the
+v0.22.1 D18 default). The behavior matrix:
+
+| TTY? | `--no-auto-repair`? | Outcome |
+|---|---|---|
+| yes | no | Auto-fire (exit 5 + repair report on stderr; corrected chunk on stdout) |
+| yes | yes | Legacy VerifyCheck row + `result: mismatch` + exit 4 |
+| no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 4 (preserves automation contract) |
+| no | yes | Legacy VerifyCheck row + exit 4 |
+
+The TTY gate exists so scripts that parse the `VerifyCheck` array (or
+the JSON envelope's `checks` field) don't see a single corrupted chunk
+silently short-circuit the entire check matrix. Interactive users see
+the helpful auto-fire UX; piped consumers see the v0.22.0-and-earlier
+behavior unchanged.
+
+Under `--json` calling context (any of `convert --json`, `inspect
+--json`, `verify-bundle --json`), the auto-fire emits a structured JSON
+envelope per v0.22.1 D20 — see `mnemonic repair` below for the schema.
+
 ---
 
 ## `mnemonic convert`
@@ -1454,7 +1480,66 @@ better data for the failing chunk.
 The standalone `mnemonic repair` subcommand IGNORES the global
 `--no-auto-repair` flag (the whole point of this subcommand IS repair).
 The flag applies only to the auto-fire short-circuit on the OTHER
-subcommands (`convert`, `inspect`).
+subcommands (`convert`, `inspect`, `verify-bundle`).
+
+### HRP "did you mean" (v0.22.1)
+
+When the user supplies a chunk whose human-readable prefix is one
+substitution away from a known HRP, the `HrpMismatch` error appends a
+`; did you mean '<suggestion>'?` suffix:
+
+```sh
+mnemonic repair --ms1 ns10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+# stderr: error: repair: chunk 0 HRP mismatch — expected 'ms', found 'ns'
+#   (HRP is not BCH-protected; re-type the prefix); did you mean 'ms'?
+```
+
+The suggestion is OMITTED when the input is ambiguous (e.g., `mb` is
+1-sub from all three known HRPs) or has no Levenshtein-1 neighbor in
+`{"ms", "mk", "md"}`. The HRP is not part of the BCH-protected payload,
+so the suggestion is purely informational — the user must re-type the
+prefix manually.
+
+**Scope:** D19 is observable via the standalone `mnemonic repair`
+error path only. Auto-fire (`convert` / `inspect` / `verify-bundle`)
+falls through to the typed sibling-codec error on repair-failure (per
+the v0.22.0 fall-through discipline), so the auto-fire path surfaces
+the codec's own message — NOT this suggestion.
+
+### JSON-context auto-fire envelope (v0.22.1 D20)
+
+When auto-fire fires under any `--json` calling context (`convert
+--json`, `inspect --json`, `verify-bundle --json`), the stdout is a
+structured JSON envelope instead of the text-form repair report. Schema:
+
+```json
+{
+  "schema_version": "1",
+  "auto_repair_short_circuit": true,
+  "exit_code": 5,
+  "kind": "ms1",
+  "corrected_chunks": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
+  "repairs": [
+    {
+      "chunk_index": 0,
+      "original_chunk": "ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_chunk": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_positions": [{"position": 17, "was": "z", "now": "q"}]
+    }
+  ]
+}
+```
+
+The two top-level fields `auto_repair_short_circuit: true` and
+`exit_code: 5` discriminate the envelope from the standalone
+`mnemonic repair --json` envelope (which is structurally similar but
+omits those fields). Stderr summary and D9 sensitive-secret warning
+remain identical regardless of stdout format.
+
+The standalone `mnemonic repair --json` invocation still emits the
+v0.22.0 `RepairJson` envelope (without the D20 discriminator fields) —
+the discriminator marks emission as "auto-fire short-circuit" vs
+"user-invoked repair subcommand."
 
 ---
 

@@ -139,16 +139,55 @@ pub enum RepairError {
     },
 }
 
+/// v0.22.1 D19 — the m-format constellation HRPs that the toolkit's repair
+/// primitive recognizes. Used by `suggest_hrp` for Levenshtein-1 typo
+/// detection in `RepairError::HrpMismatch` Display.
+const KNOWN_HRPS: &[&str] = &["ms", "mk", "md"];
+
+/// True iff `a` and `b` are equal under exactly one character substitution.
+/// Tailored to the 2-char HRP domain — does NOT handle insertion/deletion
+/// (HRP length is fixed at 2 in the codex32 family, so length-mismatched
+/// inputs are short-circuited to false rather than producing misleading
+/// suggestions).
+fn hrp_lev1(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.chars().zip(b.chars()).filter(|(x, y)| x != y).count() == 1
+}
+
+/// Returns `Some(suggested_hrp)` iff exactly one of `KNOWN_HRPS` is
+/// Levenshtein-1 from `found`. Returns `None` when zero or 2+ neighbors
+/// exist (ambiguous — silence beats a guess). Used by
+/// `RepairError::HrpMismatch` Display to append a "did you mean" suffix.
+fn suggest_hrp(found: &str) -> Option<&'static str> {
+    let neighbors: Vec<&'static str> = KNOWN_HRPS
+        .iter()
+        .filter(|&&known| hrp_lev1(known, found))
+        .copied()
+        .collect();
+    if neighbors.len() == 1 {
+        Some(neighbors[0])
+    } else {
+        None
+    }
+}
+
 // Hand-rolled Display per the toolkit convention (cf. `final_word.rs`,
 // `seed_xor.rs` library-error enums — no thiserror dep).
 impl std::fmt::Display for RepairError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RepairError::EmptyInput => write!(f, "repair: no chunks supplied"),
-            RepairError::HrpMismatch { chunk_index, expected, found } => write!(
-                f,
-                "repair: chunk {chunk_index} HRP mismatch — expected '{expected}', found '{found}' (HRP is not BCH-protected; re-type the prefix)"
-            ),
+            RepairError::HrpMismatch { chunk_index, expected, found } => {
+                let suggestion_suffix = suggest_hrp(found)
+                    .map(|s| format!("; did you mean '{s}'?"))
+                    .unwrap_or_default();
+                write!(
+                    f,
+                    "repair: chunk {chunk_index} HRP mismatch — expected '{expected}', found '{found}' (HRP is not BCH-protected; re-type the prefix){suggestion_suffix}"
+                )
+            }
             RepairError::TooManyErrors { chunk_index, bound } => write!(
                 f,
                 "repair: chunk {chunk_index} has too many errors to correct uniquely (exceeds singleton bound = {bound}); cannot suggest correction"
@@ -379,12 +418,16 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
 /// returns `Err(ToolkitError::RepairShortCircuit { 5 })` on repair-success
 /// (caller's `?` short-circuits to exit 5).
 ///
-/// Per D14: emits TEXT-form repair report regardless of `--json` context.
-pub fn try_repair_and_short_circuit<O: Write, E: Write>(
+/// `json_context = true` (v0.22.1 D20) routes the stdout report through
+/// `emit_repair_report_json` so callers invoked with `--json` get a
+/// structured envelope instead of text-form. Stderr summary + D9 advisory
+/// remain identical regardless of context.
+pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     kind: CardKind,
     chunks: &[String],
     stdout: &mut O,
     stderr: &mut E,
+    json_context: bool,
 ) -> Result<(), ToolkitError> {
     let outcome = match repair_card(kind, chunks) {
         Ok(o) => o,
@@ -398,17 +441,50 @@ pub fn try_repair_and_short_circuit<O: Write, E: Write>(
         return Ok(());
     }
 
-    emit_repair_report(&outcome, stdout, stderr).map_err(ToolkitError::Io)?;
+    emit_repair_report(&outcome, stdout, stderr, json_context).map_err(ToolkitError::Io)?;
     Err(ToolkitError::RepairShortCircuit { exit_code: 5 })
 }
 
-/// Render the text-form repair report. Stdout = comment lines + corrected
-/// chunks. Stderr = repair-summary including D9 sensitive-secret warning when
-/// kind is Ms1.
-pub fn emit_repair_report<O: Write, E: Write>(
+/// Render the repair report. Stdout = either the text-form comment lines +
+/// corrected chunks (default), or a JSON envelope (v0.22.1 D20, when
+/// `json_context = true`). Stderr = repair-summary including D9
+/// sensitive-secret warning when kind is Ms1 — identical regardless of
+/// stdout format.
+pub fn emit_repair_report<O: Write + ?Sized, E: Write + ?Sized>(
     outcome: &RepairOutcome,
     stdout: &mut O,
     stderr: &mut E,
+    json_context: bool,
+) -> std::io::Result<()> {
+    if json_context {
+        emit_repair_report_json(outcome, stdout)?;
+    } else {
+        emit_repair_report_text(outcome, stdout)?;
+    }
+
+    let total_corrections: usize = outcome.repairs.iter().map(|r| r.corrected_positions.len()).sum();
+    writeln!(
+        stderr,
+        "repair: applied {} correction{} across {} chunk{}",
+        total_corrections,
+        if total_corrections == 1 { "" } else { "s" },
+        outcome.repairs.len(),
+        if outcome.repairs.len() == 1 { "" } else { "s" },
+    )?;
+
+    // D9: sensitive-secret stderr warning when ms1 is being emitted to stdout.
+    if matches!(outcome.kind, CardKind::Ms1) {
+        crate::secret_advisory::secret_on_stdout_warning(outcome.kind, stderr);
+    }
+
+    Ok(())
+}
+
+/// Text-form report (v0.22.0 default). Comment lines + corrected chunks
+/// one per line.
+fn emit_repair_report_text<O: Write + ?Sized>(
+    outcome: &RepairOutcome,
+    stdout: &mut O,
 ) -> std::io::Result<()> {
     writeln!(stdout, "# Repair report")?;
     for repair in &outcome.repairs {
@@ -435,23 +511,85 @@ pub fn emit_repair_report<O: Write, E: Write>(
     for chunk in &outcome.corrected_chunks {
         writeln!(stdout, "{chunk}")?;
     }
-
-    let total_corrections: usize = outcome.repairs.iter().map(|r| r.corrected_positions.len()).sum();
-    writeln!(
-        stderr,
-        "repair: applied {} correction{} across {} chunk{}",
-        total_corrections,
-        if total_corrections == 1 { "" } else { "s" },
-        outcome.repairs.len(),
-        if outcome.repairs.len() == 1 { "" } else { "s" },
-    )?;
-
-    // D9: sensitive-secret stderr warning when ms1 is being emitted to stdout.
-    if matches!(outcome.kind, CardKind::Ms1) {
-        crate::secret_advisory::secret_on_stdout_warning(outcome.kind, stderr);
-    }
-
     Ok(())
+}
+
+/// JSON-envelope report (v0.22.1 D20). Schema reuses the standalone
+/// `cmd/repair.rs::RepairJson` shape (schema_version: "1", kind,
+/// corrected_chunks, repairs) plus two discriminator fields
+/// (`auto_repair_short_circuit: true`, `exit_code: 5`) marking the
+/// envelope as an auto-fire emission rather than a standalone subcommand
+/// invocation.
+fn emit_repair_report_json<O: Write + ?Sized>(
+    outcome: &RepairOutcome,
+    stdout: &mut O,
+) -> std::io::Result<()> {
+    let kind_str = match outcome.kind {
+        CardKind::Ms1 => "ms1",
+        CardKind::Mk1 => "mk1",
+        CardKind::Md1 => "md1",
+    };
+    let envelope = AutoFireRepairJson {
+        schema_version: "1",
+        auto_repair_short_circuit: true,
+        exit_code: 5,
+        kind: kind_str,
+        corrected_chunks: &outcome.corrected_chunks,
+        repairs: outcome
+            .repairs
+            .iter()
+            .map(|r| AutoFireRepairJsonDetail {
+                chunk_index: r.chunk_index,
+                original_chunk: &r.original_chunk,
+                corrected_chunk: &r.corrected_chunk,
+                corrected_positions: r
+                    .corrected_positions
+                    .iter()
+                    .map(|(p, w, n)| AutoFireRepairJsonPosition {
+                        position: *p,
+                        was: w.to_string(),
+                        now: n.to_string(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    };
+    let body = serde_json::to_string(&envelope)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    writeln!(stdout, "{body}")?;
+    Ok(())
+}
+
+// v0.22.1 D20 — JSON envelope shape for auto-fire short-circuit emissions.
+// Field order is part of the schema (serde preserves struct field order
+// in the default JSON serializer). The two top-level discriminator fields
+// (`auto_repair_short_circuit`, `exit_code`) mark the envelope as an
+// auto-fire emission vs the standalone `mnemonic repair --json` envelope
+// (which uses the parallel `RepairJson` shape in `cmd/repair.rs` without
+// these fields).
+#[derive(serde::Serialize)]
+struct AutoFireRepairJson<'a> {
+    schema_version: &'static str,
+    auto_repair_short_circuit: bool,
+    exit_code: u8,
+    kind: &'static str,
+    corrected_chunks: &'a [String],
+    repairs: Vec<AutoFireRepairJsonDetail<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct AutoFireRepairJsonDetail<'a> {
+    chunk_index: usize,
+    original_chunk: &'a str,
+    corrected_chunk: &'a str,
+    corrected_positions: Vec<AutoFireRepairJsonPosition>,
+}
+
+#[derive(serde::Serialize)]
+struct AutoFireRepairJsonPosition {
+    position: usize,
+    was: String,
+    now: String,
 }
 
 #[cfg(test)]
@@ -858,5 +996,78 @@ mod tests {
         let _ = MK_REGULAR_TARGET; // suppress unused warning
         let _ = MK_LONG_TARGET;
         // TODO Phase 1 R0: implement parity smoke against tests/fixtures/v0_20_0_single_sig_bip84_bundle.json
+    }
+
+    // ============================================================================
+    // v0.22.1 D19 — HRP Levenshtein-1 "did you mean" cells
+    // ============================================================================
+
+    /// `ns` is 1-sub from `ms` (`n→m`) and 2-sub from `mk`/`md` — unique
+    /// neighbor → suggest "ms".
+    #[test]
+    fn hrp_lev1_ns_yields_ms() {
+        assert_eq!(suggest_hrp("ns"), Some("ms"));
+    }
+
+    /// `mb` is 1-sub from ALL THREE known HRPs (`ms`/`mk`/`md` — the
+    /// second character differs in each case). Three-way ambiguous →
+    /// no suggestion.
+    #[test]
+    fn hrp_lev1_mb_is_ambiguous_three_way() {
+        assert_eq!(suggest_hrp("mb"), None);
+        // Sanity: hrp_lev1 returns true for ALL three candidates.
+        assert!(hrp_lev1("ms", "mb"), "ms vs mb: s→b is 1 sub");
+        assert!(hrp_lev1("mk", "mb"), "mk vs mb: k→b is 1 sub");
+        assert!(hrp_lev1("md", "mb"), "md vs mb: d→b is 1 sub");
+    }
+
+    /// `xy` is 2-sub from every known HRP — no neighbors → no suggestion.
+    #[test]
+    fn hrp_lev1_xy_no_neighbor() {
+        assert_eq!(suggest_hrp("xy"), None);
+        assert!(!hrp_lev1("ms", "xy"));
+        assert!(!hrp_lev1("mk", "xy"));
+        assert!(!hrp_lev1("md", "xy"));
+    }
+
+    /// Length-mismatch short-circuits the check (HRP is fixed at 2 chars
+    /// in the codex32 family; longer/shorter inputs are out-of-domain).
+    #[test]
+    fn hrp_lev1_wrong_length_no_neighbor() {
+        assert_eq!(suggest_hrp("m"), None, "1-char input never suggests");
+        assert_eq!(suggest_hrp("mss"), None, "3-char input never suggests");
+        assert_eq!(suggest_hrp(""), None, "empty input never suggests");
+    }
+
+    /// End-to-end Display integration — the suggestion suffix actually
+    /// reaches the formatted message for a unique-neighbor case.
+    #[test]
+    fn hrp_mismatch_display_includes_suggestion_for_unique_neighbor() {
+        let e = RepairError::HrpMismatch {
+            chunk_index: 0,
+            expected: "ms",
+            found: "ns".to_string(),
+        };
+        let msg = format!("{e}");
+        assert!(
+            msg.contains("did you mean 'ms'?"),
+            "Display should append did-you-mean suffix; got: {msg}"
+        );
+    }
+
+    /// End-to-end Display integration — the suggestion suffix is OMITTED
+    /// when no unique neighbor exists (ambiguous case).
+    #[test]
+    fn hrp_mismatch_display_omits_suggestion_when_ambiguous() {
+        let e = RepairError::HrpMismatch {
+            chunk_index: 0,
+            expected: "ms",
+            found: "mb".to_string(),
+        };
+        let msg = format!("{e}");
+        assert!(
+            !msg.contains("did you mean"),
+            "Display should NOT append suffix for ambiguous neighbor; got: {msg}"
+        );
     }
 }

@@ -80,8 +80,10 @@ pub fn run<R: Read, W: Write, E: Write>(
                         | ToolkitError::MdCodec(_)
                 );
                 if is_codec_decode_err {
+                    // v0.22.1 D20: pass args.json so the auto-fire emits
+                    // a JSON envelope on stdout when --json was requested.
                     crate::repair::try_repair_and_short_circuit(
-                        kind, &chunks, stdout, stderr,
+                        kind, &chunks, stdout, stderr, args.json,
                     )?;
                 }
             }

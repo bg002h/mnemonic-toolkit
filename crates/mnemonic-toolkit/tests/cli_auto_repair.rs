@@ -198,3 +198,328 @@ fn cell_23_bundle_self_check_does_not_auto_fire() {
         .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains("repair:").not());
 }
+
+// ============================================================================
+// v0.22.1 D20 — JSON-context auto-fire output cells
+// ============================================================================
+
+/// Cell 24: convert --json + corrupted ms1 → auto-fire emits a JSON
+/// envelope on stdout (NOT text-form) with the D20 discriminator fields.
+#[test]
+fn cell_24_convert_json_context_auto_fire_emits_json_envelope() {
+    let bad = flip_at(VALID_MS1, 17);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--json",
+            "--from",
+            &format!("ms1={bad}"),
+            "--to",
+            "phrase",
+        ])
+        .assert()
+        .code(5)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    // Should NOT contain text-form report markers.
+    assert!(!s.contains("# Repair report"), "JSON context must not emit text-form headers; got: {s}");
+    // Should parse as a single JSON envelope.
+    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
+    assert_eq!(v["schema_version"], "1");
+    assert_eq!(v["auto_repair_short_circuit"], true);
+    assert_eq!(v["exit_code"], 5);
+    assert_eq!(v["kind"], "ms1");
+    assert_eq!(v["corrected_chunks"][0], VALID_MS1);
+    assert_eq!(v["repairs"][0]["chunk_index"], 0);
+    assert_eq!(v["repairs"][0]["corrected_positions"][0]["position"], 17);
+}
+
+/// Cell 25: inspect --json + corrupted md1 → auto-fire emits a JSON
+/// envelope on stdout. (md1 is the auto-fire-observable kind for inspect
+/// because md-codec has no internal correction; the mk1 path is preempted
+/// by mk-codec's internal correction per cell 20a.)
+#[test]
+fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
+    let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "inspect",
+            "--json",
+            "--md1",
+            &bad_chunk0,
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
+        ])
+        .assert()
+        .code(5)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(!s.contains("# Repair report"));
+    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
+    assert_eq!(v["schema_version"], "1");
+    assert_eq!(v["auto_repair_short_circuit"], true);
+    assert_eq!(v["exit_code"], 5);
+    assert_eq!(v["kind"], "md1");
+    assert_eq!(v["corrected_chunks"][0], VALID_MD1_CHUNK0);
+    assert_eq!(v["repairs"][0]["chunk_index"], 0);
+    assert_eq!(v["repairs"][0]["corrected_positions"][0]["position"], 20);
+}
+
+/// Cell 26: D20 schema pin. Verify full envelope structure (all 6
+/// top-level fields present with the documented types) for a known-shape
+/// invocation. Distinct from cells 24/25 which assert specific FIELD
+/// values — this cell asserts the SCHEMA itself stays stable.
+#[test]
+fn cell_26_d20_json_envelope_schema_v1_pin() {
+    let bad = flip_at(VALID_MS1, 17);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--json",
+            "--from",
+            &format!("ms1={bad}"),
+            "--to",
+            "phrase",
+        ])
+        .assert()
+        .code(5)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(s.trim()).unwrap();
+
+    // Type assertions for each top-level field (presence + type, NOT order —
+    // serde_json::Value is BTreeMap-backed and loses key order on parse).
+    assert!(v["schema_version"].is_string());
+    assert!(v["auto_repair_short_circuit"].is_boolean());
+    assert!(v["exit_code"].is_number());
+    assert!(v["kind"].is_string());
+    assert!(v["corrected_chunks"].is_array());
+    assert!(v["repairs"].is_array());
+    // Exhaustive field-set check — fails if a future change ADDS or REMOVES
+    // a top-level field without updating the schema-pin.
+    let obj = v.as_object().unwrap();
+    let mut keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec![
+            "auto_repair_short_circuit",
+            "corrected_chunks",
+            "exit_code",
+            "kind",
+            "repairs",
+            "schema_version",
+        ],
+        "D20 schema-v1 top-level field-set pin (alphabetically sorted)"
+    );
+
+    // Per-detail field-set check.
+    let detail = &v["repairs"][0];
+    let mut detail_keys: Vec<&str> = detail.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+    detail_keys.sort();
+    assert_eq!(
+        detail_keys,
+        vec!["chunk_index", "corrected_chunk", "corrected_positions", "original_chunk"],
+        "D20 repair-detail field-set pin (alphabetically sorted)"
+    );
+
+    let pos = &detail["corrected_positions"][0];
+    let mut pos_keys: Vec<&str> = pos.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+    pos_keys.sort();
+    assert_eq!(pos_keys, vec!["now", "position", "was"], "D20 position field-set pin");
+
+    // Serialized field-order pin (the raw output IS ordered per serde
+    // struct-field order). schema_version must come first; the discriminator
+    // pair (auto_repair_short_circuit + exit_code) follows; the data fields
+    // (kind, corrected_chunks, repairs) close.
+    let raw_order_check = |needle_a: &str, needle_b: &str| {
+        let ia = s.find(needle_a).expect(needle_a);
+        let ib = s.find(needle_b).expect(needle_b);
+        ia < ib
+    };
+    assert!(raw_order_check("\"schema_version\"", "\"auto_repair_short_circuit\""));
+    assert!(raw_order_check("\"auto_repair_short_circuit\"", "\"exit_code\""));
+    assert!(raw_order_check("\"exit_code\"", "\"kind\""));
+    assert!(raw_order_check("\"kind\"", "\"corrected_chunks\""));
+    assert!(raw_order_check("\"corrected_chunks\"", "\"repairs\""));
+}
+
+// ============================================================================
+// v0.22.1 Phase 4 — verify-bundle auto-fire with TTY-conditional D18 default
+// ============================================================================
+
+/// Helper: synthesize a clean bundle JSON for the canonical test phrase,
+/// then corrupt the ms1[0] chunk at the given position. Returns the
+/// corrupted JSON as a String suitable for `--bundle-json /dev/stdin`.
+fn synth_corrupted_bundle_json(corrupt_pos: usize) -> String {
+    let clean_json = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--account",
+            "0",
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let mut v: serde_json::Value = serde_json::from_slice(&clean_json).unwrap();
+    let ms1_arr = v["ms1"].as_array().unwrap();
+    let chunk = ms1_arr[0].as_str().unwrap().to_string();
+    let corrupted = flip_at(&chunk, corrupt_pos);
+    v["ms1"][0] = serde_json::Value::String(corrupted);
+    serde_json::to_string(&v).unwrap()
+}
+
+fn write_temp_json(body: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "mnemonic_v0_22_1_bundle_{}.json",
+        std::process::id()
+    ));
+    std::fs::write(&path, body).unwrap();
+    path
+}
+
+/// Cell 27: verify-bundle auto-fire happy-path under TTY. The corrupted
+/// ms1[0] chunk triggers the D18 TTY-gated auto-fire; output is the D20
+/// JSON envelope (we use --json to also exercise that pairing).
+#[test]
+fn cell_27_verify_bundle_auto_fire_happy_path_tty() {
+    let bad_json = synth_corrupted_bundle_json(17);
+    let path = write_temp_json(&bad_json);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args([
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains("# Repair report"))
+        .stdout(predicate::str::contains(
+            "ms1 chunk 0: 1 correction at position 17",
+        ));
+}
+
+/// Cell 28: --no-auto-repair hard override even under TTY. Falls back to
+/// legacy VerifyCheck row + exit 4.
+#[test]
+fn cell_28_verify_bundle_no_auto_repair_forced_off() {
+    let bad_json = synth_corrupted_bundle_json(17);
+    let path = write_temp_json(&bad_json);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args([
+            "--no-auto-repair",
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ])
+        .assert()
+        .code(4)
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stdout(predicate::str::contains("ms1_decode: fail"));
+}
+
+/// Cell 29: piped (non-TTY) preserves legacy VerifyCheck behavior — no
+/// auto-fire even though --no-auto-repair was NOT set. Verifies the D18
+/// invariant that pipe-context preserves automation contract.
+#[test]
+fn cell_29_verify_bundle_piped_preserves_legacy() {
+    let bad_json = synth_corrupted_bundle_json(17);
+    let path = write_temp_json(&bad_json);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        // MNEMONIC_FORCE_TTY=0 explicitly forces non-TTY (cargo test stdout
+        // is already non-TTY but this makes intent unambiguous).
+        .env("MNEMONIC_FORCE_TTY", "0")
+        .args([
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ])
+        .assert()
+        .code(4)
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stdout(predicate::str::contains("ms1_decode: fail"));
+}
+
+/// Cell 30: --json + TTY + corrupted bundle → D20 JSON envelope (NOT the
+/// VerifyBundleJson check-array envelope; the auto-fire envelope short-
+/// circuits before the verify check array is built).
+#[test]
+fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
+    let bad_json = synth_corrupted_bundle_json(17);
+    let path = write_temp_json(&bad_json);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args([
+            "verify-bundle",
+            "--json",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ])
+        .assert()
+        .code(5)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
+    // Auto-fire envelope discriminators (D20).
+    assert_eq!(v["schema_version"], "1");
+    assert_eq!(v["auto_repair_short_circuit"], true);
+    assert_eq!(v["exit_code"], 5);
+    assert_eq!(v["kind"], "ms1");
+    // Should NOT be the VerifyBundleJson schema (which has `result`+`checks`).
+    assert!(v["result"].is_null(), "should not be VerifyBundleJson envelope");
+    assert!(v["checks"].is_null(), "should not be VerifyBundleJson envelope");
+}

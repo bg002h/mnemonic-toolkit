@@ -35,11 +35,15 @@ use std::process::ExitCode;
 )]
 struct Cli {
     /// v0.22.0 — skip auto-fire repair on decode failures; preserve
-    /// pre-v0.22 exit policy. Global flag; honored by `convert` and
-    /// `inspect` (which auto-fire on sibling-codec decode failures).
+    /// pre-v0.22 exit policy. Global flag. Honored by `convert`,
+    /// `inspect`, and (v0.22.1+) `verify-bundle`. For `verify-bundle`,
+    /// auto-fire is additionally gated on `std::io::stdout().is_terminal()`
+    /// to preserve the legacy VerifyCheck-row behavior when output is
+    /// piped or captured (per v0.22.1 D18 — TTY-conditional default).
     /// Standalone `repair` ignores this flag (the whole point of that
-    /// subcommand IS repair). `verify-bundle` auto-fire is deferred to
-    /// v0.22.1 (FOLLOWUP `verify-bundle-auto-fire-helper-refactor`).
+    /// subcommand IS repair). Under `--json` calling contexts the
+    /// auto-fire emits a structured JSON envelope on stdout (per v0.22.1
+    /// D20) instead of text-form.
     #[arg(long, global = true)]
     no_auto_repair: bool,
 
@@ -89,7 +93,7 @@ fn main() -> ExitCode {
 
     let result: Result<u8, ToolkitError> = match &cli.command {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
-        Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr),
+        Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)

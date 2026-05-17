@@ -913,9 +913,11 @@ pub fn run<R: Read, W: Write, E: Write>(
                     };
                     // try_repair_and_short_circuit is always-Err on
                     // repair-success; `?` propagates RepairShortCircuit
-                    // (exit 5) up to main.rs's special-case.
+                    // (exit 5) up to main.rs's special-case. v0.22.1 D20:
+                    // pass `args.json` so the auto-fire emits a JSON
+                    // envelope on stdout when the caller expected JSON.
                     crate::repair::try_repair_and_short_circuit(
-                        kind, &chunks, stdout, stderr,
+                        kind, &chunks, stdout, stderr, args.json,
                     )?;
                 }
             }

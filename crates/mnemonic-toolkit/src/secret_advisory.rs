@@ -45,7 +45,7 @@ pub fn secret_in_argv_warning<W: Write>(stderr: &mut W, flag: &str, alternative:
 ///
 /// Added v0.22.0 for the `repair` + `inspect` features per plan D9.
 /// No-op for kinds other than `Ms1` (mk1 / md1 are not secret-bearing).
-pub fn secret_on_stdout_warning<W: Write>(kind: crate::repair::CardKind, stderr: &mut W) {
+pub fn secret_on_stdout_warning<W: Write + ?Sized>(kind: crate::repair::CardKind, stderr: &mut W) {
     if matches!(kind, crate::repair::CardKind::Ms1) {
         let _ = writeln!(
             stderr,

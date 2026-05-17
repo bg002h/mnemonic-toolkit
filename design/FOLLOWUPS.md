@@ -51,7 +51,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — 8 sites: `:887` `:937` `:1096` `:1101` `:1122` `:1127` `:1219` `:1532`. Helpers `emit_verify_checks` (`:856`), `emit_multisig_checks` (`:1083`), `emit_md1_checks` (`:1526`) need signature change `Vec<VerifyCheck>` → `Result<Vec<VerifyCheck>, ToolkitError>` so `?` propagation can short-circuit. 4 production callers (`:283`, `:338`, `:420`, `:682`) + 6 in-file test callers (`:1671`, `:1718`, `:1748`, `:1822`, `:1924`, `:1999`) need updates.
 - **What:** v0.22.0 shipped auto-fire on `convert` (sites #9, #10) and `inspect` (site #11) but DEFERRED the `verify-bundle` helper refactor because the signature cascade through 10 callers (including v0.20/v0.21 round-trip regression cells) was high-risk for a single-shot tag window.
 - **Why deferred:** scope discipline; the 3 sites already shipped cover the highest-frequency user-visible decode paths (`mnemonic convert --from ms1=… --to phrase` and `mnemonic inspect`). `verify-bundle` keeps its current UX (decode failures still surface as `VerifyCheck { passed: false, decode_error: Some(...) }` rows) until v0.22.1.
-- **Status:** open
+- **Resolution:** SHIPPED in v0.22.1 (2026-05-17). 3 helpers refactored to `Result<_, ToolkitError>`; 8 originally-planned sites resolved to 6 actual supplied-side wire-ups (Phase 0 R0 caught the plan's double-count of 2 expected-side decodes at original `:1096`/`:1101`). TTY-conditional default per D18 — auto-fire fires under `is_terminal() && !no_auto_repair`; pipe-context preserves the legacy VerifyCheck row behavior.
+- **Status:** resolved v0.22.1 cycle
 - **Tier:** `v0.22.1`
 
 ### `ms-codec-decode-with-correction-public-api` — promote `ms_codec::decode_with_correction` for downstream BCH consumers
@@ -115,16 +116,18 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 brainstorm §9 open question.
 - **Where:** `crates/mnemonic-toolkit/src/repair.rs::RepairError::HrpMismatch` site.
 - **What:** When the user supplies `ns1…` / `mz1…` / `mb1…` etc., compute Levenshtein-1 over `{"ms", "mk", "md"}` and suggest the closest valid HRP in the error message. Today the user gets `expected 'ms', found 'ns'` but no "did you mean 'ms'?" prompt.
-- **Status:** open
-- **Tier:** `v0.23-nice-to-have`
+- **Resolution:** SHIPPED in v0.22.1 (2026-05-17) per D19. Vendored 10-line `hrp_lev1` + `suggest_hrp` in `repair.rs`; extended `RepairError::HrpMismatch` Display arm. Ambiguous inputs (`mb` is 1-sub from all three known HRPs) silently omit the suffix.
+- **Status:** resolved v0.22.1 cycle
+- **Tier:** `v0.22.1`
 
 ### `repair-json-short-circuit-output` — JSON envelope for auto-fire short-circuit when `--json` was requested
 
 - **Surfaced:** 2026-05-17, v0.22.0 D14 decision.
 - **Where:** `crates/mnemonic-toolkit/src/repair.rs::emit_repair_report`.
 - **What:** When auto-fire fires under a `convert --json` / `inspect --json` invocation, today the repair report is emitted as TEXT-form even though the calling context expected JSON. v0.23 should detect the JSON context and emit a structured JSON envelope wrapping the repair report.
-- **Status:** open
-- **Tier:** `v0.23-nice-to-have`
+- **Resolution:** SHIPPED in v0.22.1 (2026-05-17) per D20. `try_repair_and_short_circuit` extended with `json_context: bool` param; new `emit_repair_report_json` body emits the AutoFireRepairJson schema with `auto_repair_short_circuit: true` + `exit_code: 5` discriminator fields. Applies to all 3 auto-fire surfaces (convert / inspect / verify-bundle).
+- **Status:** resolved v0.22.1 cycle
+- **Tier:** `v0.22.1`
 
 ### `bech32-correction-api-version-pin` — track upstream `bech32` crate correction API stability
 
@@ -139,8 +142,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 R6 risk.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (once helper refactor ships per `verify-bundle-auto-fire-helper-refactor`).
 - **What:** Auto-fire on `verify-bundle` decode failures changes UX from "VerifyCheck row" to "exit-5 short-circuit + repair report." Survey users whether default-on (helpful) or default-off (preserves existing automation expectations) is preferable. Inform v0.22.1 default.
-- **Status:** open (blocked on `verify-bundle-auto-fire-helper-refactor`)
-- **Tier:** `v0.22.1-nice-to-have`
+- **Resolution:** RESOLVED in v0.22.1 (2026-05-17) via D18 TTY-conditional default: auto-fire under TTY, legacy behavior when piped. This middle path obviates the user survey — interactive users get the helpful UX while scripts/CI keep the automation contract. No survey was conducted; the TTY split is the answer.
+- **Status:** resolved v0.22.1 cycle
+- **Tier:** `v0.22.1`
 
 ### `gui-schema-conditional-rules-v1` — project SPEC §6.6/§6.9 mutex/conditional rules into gui-schema JSON (drift-gated)
 

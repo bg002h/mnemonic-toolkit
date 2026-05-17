@@ -123,8 +123,23 @@ pub fn run<W: Write, E: Write>(
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
     stderr: &mut E,
+    no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
+    use std::io::IsTerminal;
+
+    // v0.22.1 D18 — TTY-conditional auto-fire. Test harness may set
+    // `MNEMONIC_FORCE_TTY=1` to force the TTY-positive path under cargo
+    // test (where stdout is never a real terminal). `MNEMONIC_FORCE_TTY=0`
+    // forces the opposite. NOT exposed via --help (env vars are not part
+    // of the clap-derive surface) or gui-schema. Documented test-only.
+    let tty = match std::env::var("MNEMONIC_FORCE_TTY").ok().as_deref() {
+        Some("1") => true,
+        Some("0") => false,
+        _ => std::io::stdout().is_terminal(),
+    };
+    let effective_no_auto_repair = no_auto_repair || !tty;
+    let json_context = args.json;
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE bundle-json
     // intake so the advisory fires uniformly even on the synthetic-args
@@ -173,7 +188,7 @@ pub fn run<W: Write, E: Write>(
         });
     }
     if descriptor_mode {
-        return descriptor_mode_verify_run(args, stdin, stdout);
+        return descriptor_mode_verify_run(args, stdin, stdout, stderr, effective_no_auto_repair, json_context);
     }
 
     let multisig = args.template_unchecked().is_multisig();
@@ -210,16 +225,16 @@ pub fn run<W: Write, E: Write>(
 
     let mut checks: Vec<VerifyCheck> = Vec::new();
     if multisig {
-        run_multisig(args, &mut checks, stderr)?;
+        run_multisig(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
     } else {
         let secret_bearing_at_0 = args
             .slot
             .iter()
             .any(|s| s.index == 0 && s.subkey.is_secret_bearing());
         if secret_bearing_at_0 {
-            run_full(args, &mut checks)?;
+            run_full(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
         } else {
-            run_watch_only(args, &mut checks, stderr)?;
+            run_watch_only(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
         }
     }
 
@@ -249,9 +264,13 @@ pub fn run<W: Write, E: Write>(
     Ok(if any_fail { 4 } else { 0 })
 }
 
-fn run_full(
+fn run_full<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     checks: &mut Vec<VerifyCheck>,
+    stdout: &mut W,
+    stderr: &mut E,
+    no_auto_repair: bool,
+    json_context: bool,
 ) -> Result<(), ToolkitError> {
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
@@ -280,14 +299,17 @@ fn run_full(
         mk1: &args.mk1,
         md1: &args.md1,
     };
-    checks.extend(emit_verify_checks(&expected, &supplied, false));
+    checks.extend(emit_verify_checks(&expected, &supplied, false, no_auto_repair, json_context, stdout, stderr)?);
     Ok(())
 }
 
-fn run_watch_only<E: Write>(
+fn run_watch_only<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     checks: &mut Vec<VerifyCheck>,
+    stdout: &mut W,
     stderr: &mut E,
+    no_auto_repair: bool,
+    json_context: bool,
 ) -> Result<(), ToolkitError> {
     // SPEC §2.2.2 watch-only-cannot-verify-path warning. Emitted before any
     // parse error so the user always sees it, even if the supplied xpub is
@@ -335,7 +357,7 @@ fn run_watch_only<E: Write>(
         mk1: &args.mk1,
         md1: &args.md1,
     };
-    checks.extend(emit_verify_checks(&expected, &supplied, false));
+    checks.extend(emit_verify_checks(&expected, &supplied, false, no_auto_repair, json_context, stdout, stderr)?);
     Ok(())
 }
 
@@ -353,10 +375,13 @@ fn run_watch_only<E: Write>(
 ///
 /// Watch-only / wif slots (`expected.ms1[i] == ""`) short-circuit ms1_decode[i]
 /// and ms1_entropy_match[i] with `passed: true + decode_error: "skipped: watch-only slot"`.
-fn run_multisig<E: Write>(
+fn run_multisig<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     checks: &mut Vec<VerifyCheck>,
+    stdout: &mut W,
     stderr: &mut E,
+    no_auto_repair: bool,
+    json_context: bool,
 ) -> Result<(), ToolkitError> {
     let any_secret = args
         .slot
@@ -417,7 +442,7 @@ fn run_multisig<E: Write>(
         md1: &args.md1,
     };
 
-    checks.extend(emit_verify_checks(&expected, &supplied, true));
+    checks.extend(emit_verify_checks(&expected, &supplied, true, no_auto_repair, json_context, stdout, stderr)?);
     Ok(())
 }
 
@@ -425,10 +450,13 @@ fn run_multisig<E: Write>(
 /// expected Bundle, then compare each card against the supplied --ms1/--mk1/--md1.
 /// Emits the same VerifyBundleJson schema as template-mode verify (per SPEC §5.7
 /// the check schema is structurally unchanged; only the source of truth differs).
-fn descriptor_mode_verify_run<W: Write>(
+fn descriptor_mode_verify_run<W: Write, E: Write>(
     args: &VerifyBundleArgs,
     _stdin: &mut dyn std::io::Read,
     stdout: &mut W,
+    stderr: &mut E,
+    no_auto_repair: bool,
+    json_context: bool,
 ) -> Result<u8, ToolkitError> {
     use crate::parse_descriptor::{
         check_key_vector_distinctness, lex_placeholders, parse_descriptor, resolve_placeholders,
@@ -679,7 +707,7 @@ fn descriptor_mode_verify_run<W: Write>(
         mk1: &args.mk1,
         md1: &args.md1,
     };
-    let checks = emit_verify_checks(&expected, &supplied, descriptor.n > 1);
+    let checks = emit_verify_checks(&expected, &supplied, descriptor.n > 1, no_auto_repair, json_context, stdout, stderr)?;
 
     let any_fail = checks.iter().any(|c| !c.passed);
     let result_str = if any_fail { "mismatch" } else { "ok" };
@@ -857,11 +885,14 @@ pub fn emit_verify_checks(
     expected: &Bundle,
     supplied: &SuppliedCards,
     is_multisig: bool,
-) -> Vec<VerifyCheck> {
+    no_auto_repair: bool,
+    json_context: bool,
+    stdout: &mut dyn std::io::Write,
+    stderr: &mut dyn std::io::Write,
+) -> Result<Vec<VerifyCheck>, ToolkitError> {
     if is_multisig {
-        return emit_multisig_checks(expected, supplied);
+        return emit_multisig_checks(expected, supplied, no_auto_repair, json_context, stdout, stderr);
     }
-
     let mut checks = Vec::with_capacity(9);
     let watch_only = expected.ms1.first().map(|s| s.is_empty()).unwrap_or(true);
 
@@ -913,6 +944,16 @@ pub fn emit_verify_checks(
                 }
             }
             Err(e) => {
+                // v0.22.1 Phase 4 site #1 — auto-fire on supplied ms1 decode-fail.
+                if !no_auto_repair {
+                    crate::repair::try_repair_and_short_circuit(
+                        crate::repair::CardKind::Ms1,
+                        &[supplied_ms1.to_string()],
+                        stdout,
+                        stderr,
+                        json_context,
+                    )?;
+                }
                 let err_msg = format!("{:?}", e);
                 checks.push(VerifyCheck {
                     name: "ms1_decode".into(),
@@ -945,6 +986,17 @@ pub fn emit_verify_checks(
             });
         }
         Err(e) => {
+            // v0.22.1 Phase 4 site #2 — auto-fire on supplied mk1 (single-sig) decode-fail.
+            if !no_auto_repair {
+                let chunks: Vec<String> = supplied.mk1.to_vec();
+                crate::repair::try_repair_and_short_circuit(
+                    crate::repair::CardKind::Mk1,
+                    &chunks,
+                    stdout,
+                    stderr,
+                    json_context,
+                )?;
+            }
             let err_msg = format!("{:?}", e);
             checks.push(VerifyCheck {
                 name: "mk1_decode".into(),
@@ -964,8 +1016,8 @@ pub fn emit_verify_checks(
                 });
             }
             // Try md1 anyway for diagnostic completeness.
-            emit_md1_checks(expected, supplied, &mut checks);
-            return checks;
+            emit_md1_checks(expected, supplied, &mut checks, no_auto_repair, json_context, stdout, stderr)?;
+            return Ok(checks);
         }
     }
     let mk_card = mk_card_result.expect("Ok branch handled above");
@@ -1056,9 +1108,9 @@ pub fn emit_verify_checks(
     }
 
     // 7+8+9: md1.
-    emit_md1_checks(expected, supplied, &mut checks);
+    emit_md1_checks(expected, supplied, &mut checks, no_auto_repair, json_context, stdout, stderr)?;
 
-    checks
+    Ok(checks)
 }
 
 /// SPEC §5.7 multisig 3+6N emission.
@@ -1080,7 +1132,14 @@ enum MappingFailure {
     XpubNotInPolicy,
 }
 
-fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<VerifyCheck> {
+fn emit_multisig_checks(
+    expected: &Bundle,
+    supplied: &SuppliedCards,
+    no_auto_repair: bool,
+    json_context: bool,
+    stdout: &mut dyn std::io::Write,
+    stderr: &mut dyn std::io::Write,
+) -> Result<Vec<VerifyCheck>, ToolkitError> {
     let n = expected.ms1.len();
     let mut checks: Vec<VerifyCheck> = Vec::with_capacity(6 * n + 3);
 
@@ -1117,14 +1176,47 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         }
     }
     let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
+    // v0.22.1 Phase 4 site #5 — auto-fire on per-group supplied mk1 decode-fail.
+    // The closure-return is `Result<Result<KeyCard, String>, ToolkitError>`:
+    // outer Result threads RepairShortCircuit via `?` after collect; inner
+    // Result preserves the per-group diagnostic message for MappingFailure.
     let supplied_decoded: Vec<Result<mk_codec::KeyCard, String>> = groups
         .iter()
-        .map(|g| mk_codec::decode(g).map_err(|e| format!("{:?}", e)))
-        .collect();
+        .map(|g| -> Result<Result<mk_codec::KeyCard, String>, ToolkitError> {
+            match mk_codec::decode(g) {
+                Ok(card) => Ok(Ok(card)),
+                Err(e) => {
+                    if !no_auto_repair {
+                        let chunk_strs: Vec<String> =
+                            g.iter().map(|s| (*s).to_string()).collect();
+                        crate::repair::try_repair_and_short_circuit(
+                            crate::repair::CardKind::Mk1,
+                            &chunk_strs,
+                            stdout,
+                            stderr,
+                            json_context,
+                        )?;
+                    }
+                    Ok(Err(format!("{:?}", e)))
+                }
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Decode supplied.md1 once for cosigner-mapping by tlv.pubkeys.
+    // v0.22.1 Phase 4 site #6 — auto-fire on supplied md1 (multisig) decode-fail.
     let supplied_md1_strs: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
     let supplied_md_decoded = md_codec::chunk::reassemble(&supplied_md1_strs);
+    if supplied_md_decoded.is_err() && !no_auto_repair {
+        let chunks: Vec<String> = supplied.md1.to_vec();
+        crate::repair::try_repair_and_short_circuit(
+            crate::repair::CardKind::Md1,
+            &chunks,
+            stdout,
+            stderr,
+            json_context,
+        )?;
+    }
 
     // B.2: positional fallback condition refactored to match for clarity.
     let needs_positional_fallback = match supplied_md_decoded.as_ref() {
@@ -1246,6 +1338,16 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
                     }
                 }
                 Err(e) => {
+                    // v0.22.1 Phase 4 site #7 — auto-fire on per-cosigner supplied ms1 decode-fail.
+                    if !no_auto_repair {
+                        crate::repair::try_repair_and_short_circuit(
+                            crate::repair::CardKind::Ms1,
+                            &[s.to_string()],
+                            stdout,
+                            stderr,
+                            json_context,
+                        )?;
+                    }
                     // Case 3: full-mode, supplied present, decodes Err.
                     let err_msg = format!("{:?}", e);
                     checks.push(VerifyCheck {
@@ -1519,7 +1621,7 @@ fn emit_multisig_checks(expected: &Bundle, supplied: &SuppliedCards) -> Vec<Veri
         }
     }
 
-    checks
+    Ok(checks)
 }
 
 /// Emit md1_decode + md1_wallet_policy + md1_xpub_match (checks 7-9 of SPEC §5.7).
@@ -1527,7 +1629,11 @@ fn emit_md1_checks(
     expected: &Bundle,
     supplied: &SuppliedCards,
     checks: &mut Vec<VerifyCheck>,
-) {
+    no_auto_repair: bool,
+    json_context: bool,
+    stdout: &mut dyn std::io::Write,
+    stderr: &mut dyn std::io::Write,
+) -> Result<(), ToolkitError> {
     let supplied_md1: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
     match md_codec::chunk::reassemble(&supplied_md1) {
         Ok(desc) => {
@@ -1601,6 +1707,17 @@ fn emit_md1_checks(
             }
         }
         Err(e) => {
+            // v0.22.1 Phase 4 site #8 — auto-fire on supplied md1 decode-fail.
+            if !no_auto_repair {
+                let chunks: Vec<String> = supplied.md1.to_vec();
+                crate::repair::try_repair_and_short_circuit(
+                    crate::repair::CardKind::Md1,
+                    &chunks,
+                    stdout,
+                    stderr,
+                    json_context,
+                )?;
+            }
             let err_msg = format!("{:?}", e);
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
@@ -1625,6 +1742,7 @@ fn emit_md1_checks(
             });
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1668,7 +1786,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, false);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
         assert_eq!(checks.len(), 9, "single-sig must emit 9 checks per SPEC §5.7");
         let names: Vec<&str> = checks.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
@@ -1715,7 +1835,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, false);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
         // Either mk1_decode fails (BCH checksum mismatch) OR mk1_xpub_match fails.
         let mk1_decode = checks
             .iter()
@@ -1745,7 +1867,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, false);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
         assert_eq!(checks.len(), 9);
         // ms1_decode and ms1_entropy_match are skipped per SPEC §5.7.
         let ms1_decode = &checks[0];
@@ -1819,7 +1943,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, true);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
         assert_eq!(
             checks.len(),
             6 * n + 3,
@@ -1921,7 +2047,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, true);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
         assert_eq!(checks.len(), 6 * n + 3, "multisig must emit 3+6N checks (N={n})");
         // Substantive ms1 happy-path: case 2 (decodes Ok + byte-equal) for both slots.
         for i in 0..n {
@@ -1996,7 +2124,9 @@ mod helper_tests {
             mk1: &supplied_mk1,
             md1: &supplied_md1,
         };
-        let checks = emit_verify_checks(&expected, &supplied, true);
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
         for i in 0..2 {
             let dec = checks.iter().find(|c| c.name == format!("ms1_decode[{i}]")).unwrap();
             assert!(!dec.passed, "case 4 ms1_decode[{i}] must fail (passed=false)");
