@@ -197,13 +197,14 @@ pub fn run<W: Write, E: Write>(
             message: mode_text::DESCRIPTOR_WITH_PATH_FAMILY,
         });
     }
-    if descriptor_mode && args.account != 0 {
-        return Err(ToolkitError::ModeViolation {
-            mode: "descriptor",
-            flag: "--account",
-            message: mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT,
-        });
-    }
+    // v0.19.0 SPEC §4.12.g — `DESCRIPTOR_WITH_NONZERO_ACCOUNT` guard is
+    // canonicity-gated. The check moved into `bundle_run_unified_descriptor`
+    // post-parse so canonical descriptors still refuse `--account != 0`
+    // (canonical_origin's per-shape default supplies the path; user-supplied
+    // account is redundant), while non-canonical descriptors consume
+    // `--account N` for §4.12.b default-path inference. Pre-bundle_run_unified
+    // site retains the other descriptor-mode guards (--template, --threshold,
+    // --multisig-path-family) which apply uniformly regardless of canonicity.
     if args.threshold.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
             mode: "single-sig",
@@ -911,7 +912,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     };
 
     let occs = lex_placeholders(&descriptor_str)?;
-    let resolved_placeholders = resolve_placeholders(&occs)?;
+    let mut resolved_placeholders = resolve_placeholders(&occs)?;
     let n = resolved_placeholders.n as usize;
 
     if slots.iter().map(|s| s.index as usize + 1).max().unwrap_or(0) != n {
@@ -919,6 +920,143 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             "descriptor has n={n} placeholders but --slot vec covers {} slots",
             slots.iter().map(|s| s.index as usize + 1).max().unwrap_or(0)
         )));
+    }
+
+    // v0.19.0 SPEC §4.12 — early canonicity classification. Probe-parse the
+    // descriptor (empty keys/fingerprints — only the tree is consulted) so
+    // canonicity is known before slot binding. The full parse_descriptor
+    // call later (line ~1112) re-runs with populated keys/fingerprints; the
+    // probe-parse is cheap because rust-miniscript caches nothing per-call
+    // and the substituted form is small.
+    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[])?;
+    let is_non_canonical =
+        md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
+
+    // v0.19.0 SPEC §4.12.g — DESCRIPTOR_WITH_NONZERO_ACCOUNT canonicity-gated.
+    if !is_non_canonical && args.account != 0 {
+        return Err(ToolkitError::ModeViolation {
+            mode: "descriptor",
+            flag: "--account",
+            message: mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT,
+        });
+    }
+
+    // v0.19.0 SPEC §6.6 row 4 canonical-mode rejection of [Phrase, Path] /
+    // [Phrase, Fingerprint, Path] subkey sets. Phase 2 slot grammar accepts
+    // these pairs structurally; canonical descriptors refuse them here.
+    if !is_non_canonical {
+        let mut by_index_check: std::collections::BTreeMap<u8, Vec<&crate::slot_input::SlotInput>> =
+            std::collections::BTreeMap::new();
+        for s in slots {
+            by_index_check.entry(s.index).or_default().push(s);
+        }
+        for (idx, slot_inputs) in &by_index_check {
+            let subkeys: std::collections::BTreeSet<crate::slot_input::SlotSubkey> =
+                slot_inputs.iter().map(|s| s.subkey).collect();
+            let has_phrase = subkeys.contains(&crate::slot_input::SlotSubkey::Phrase);
+            let has_path = subkeys.contains(&crate::slot_input::SlotSubkey::Path);
+            if has_phrase && has_path {
+                return Err(ToolkitError::SlotInputViolation {
+                    kind: "conflict",
+                    message: format!(
+                        "slot @{idx} has both secret-bearing input and watch-only input; pick one per slot."
+                    ),
+                });
+            }
+        }
+    }
+
+    // v0.19.0 SPEC §4.12.b — default-path inference for non-canonical
+    // descriptors. For each `@N` whose path_decl entry is empty AND that
+    // has no `--slot @N.path=` override, assign `m/48'/<coin>'/<account>'/2'`
+    // (BIP-48 cosigner path). The mutation produces `Divergent(vec)` with
+    // `vec.len() == n`. `--slot @N.path=` overrides happen later in the
+    // per-slot loop (lines 1018-1029 already handle Xpub slots; Phase 4
+    // extends to Phrase slots via the canonical-mode guard above).
+    let mut defaulted_indices: Vec<u8> = Vec::new();
+    if is_non_canonical {
+        let default_path = compute_default_origin_path(args.network, args.account);
+        let mut new_paths: Vec<md_codec::origin_path::OriginPath> = match
+            &resolved_placeholders.path_decl.paths
+        {
+            PathDeclPaths::Shared(op) => {
+                if op.components.is_empty() {
+                    // All slots default.
+                    defaulted_indices.extend(0..(n as u8));
+                    (0..n).map(|_| default_path.clone()).collect()
+                } else {
+                    // Shared non-empty: no defaulting; lift to Divergent
+                    // for uniform downstream handling.
+                    (0..n).map(|_| op.clone()).collect()
+                }
+            }
+            PathDeclPaths::Divergent(v) => v
+                .iter()
+                .enumerate()
+                .map(|(i, op)| {
+                    if op.components.is_empty() {
+                        defaulted_indices.push(i as u8);
+                        default_path.clone()
+                    } else {
+                        op.clone()
+                    }
+                })
+                .collect(),
+        };
+
+        // Apply per-slot `--slot @N.path=` overrides (phrase slots only;
+        // the Xpub branch in the binding loop has its own path-override
+        // handling). Refuse on inline-vs-slot path mismatch (row 19).
+        let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
+            std::collections::BTreeMap::new();
+        for s in slots {
+            if s.subkey == crate::slot_input::SlotSubkey::Path {
+                by_index_path.insert(s.index, s);
+            }
+        }
+        let mut by_index_subkeys: std::collections::BTreeMap<
+            u8,
+            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+        > = std::collections::BTreeMap::new();
+        for s in slots {
+            by_index_subkeys
+                .entry(s.index)
+                .or_default()
+                .insert(s.subkey);
+        }
+        for (idx, slot_path) in &by_index_path {
+            let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
+            // Only phrase-bearing slots route through this override path.
+            // Xpub-bearing slots are handled by the per-slot binding loop's
+            // existing override logic at bundle.rs:1018-1029.
+            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
+                continue;
+            }
+            let user_path = DerivationPath::from_str(&slot_path.value).map_err(|e| {
+                ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+            })?;
+            let user_origin = derivation_path_to_origin(&user_path);
+            // Row 19: if inline `[fp/path]@N` AND `--slot @N.path=` both
+            // supplied AND non-empty AND differ → refuse.
+            if !defaulted_indices.contains(idx) && !new_paths[*idx as usize].components.is_empty()
+            {
+                if new_paths[*idx as usize] != user_origin {
+                    let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
+                    return Err(ToolkitError::SlotInputViolation {
+                        kind: "path-mismatch",
+                        message: format!(
+                            "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
+                        ),
+                    });
+                }
+            }
+            new_paths[*idx as usize] = user_origin;
+            // Slot-supplied path takes precedence; if it was a default,
+            // remove from the notice list.
+            defaulted_indices.retain(|i| i != idx);
+        }
+
+        resolved_placeholders.path_decl.paths = PathDeclPaths::Divergent(new_paths);
     }
 
     // Resolve each @i slot using the per-@i annotation path from the descriptor.
@@ -1109,7 +1247,20 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     crate::parse_descriptor::check_key_vector_distinctness(&dummy_binding)?;
 
     // Build md-codec Descriptor + synthesize.
-    let descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)?;
+    let mut descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)?;
+
+    // v0.19.0 SPEC §4.12.b/c — propagate the locally-mutated `path_decl`
+    // (default-inference + slot-path overrides applied above) into the
+    // freshly-parsed `MdDescriptor`. `parse_descriptor` re-runs
+    // `resolve_placeholders` internally and would otherwise reset the
+    // path_decl to its descriptor-string-derived form (empty Shared for
+    // bare-`@N` non-canonical descriptors), losing the default-inference
+    // mutation that `md_codec::validate_explicit_origin_required` needs to
+    // accept the wire.
+    if is_non_canonical {
+        descriptor.path_decl.paths = resolved_placeholders.path_decl.paths.clone();
+    }
+
     let bundle = synthesize_descriptor(
         &descriptor,
         &cosigners,
@@ -1143,6 +1294,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         })
         .collect();
 
+    // v0.19.0 SPEC §4.12.d — stderr info notice on default-path application.
+    // Printed BEFORE the bundle to surface the assumption legibly. Suppressed
+    // when no `@N` received the default (defaulted_indices is empty).
+    emit_default_path_notice(stderr, &defaulted_indices, args.network, args.account)?;
+
     emit_unified(
         args,
         &bundle,
@@ -1157,6 +1313,88 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         self_check_bundle(&bundle, args)?;
     }
 
+    Ok(())
+}
+
+/// v0.19.0 SPEC §4.12.b — compute the default origin path
+/// `m/48'/<coin>'/<account>'/2'` for non-canonical descriptors with bare
+/// `@N` placeholders. `<coin>` derives from `--network` (mainnet → `0'`,
+/// testnet/signet/regtest → `1'` per BIP-44); `<account>` consumes
+/// `--account N`.
+fn compute_default_origin_path(
+    network: crate::network::CliNetwork,
+    account: u32,
+) -> md_codec::origin_path::OriginPath {
+    use md_codec::origin_path::{OriginPath, PathComponent};
+    OriginPath {
+        components: vec![
+            PathComponent {
+                hardened: true,
+                value: 48,
+            },
+            PathComponent {
+                hardened: true,
+                value: network.coin_type(),
+            },
+            PathComponent {
+                hardened: true,
+                value: account,
+            },
+            PathComponent {
+                hardened: true,
+                value: 2,
+            },
+        ],
+    }
+}
+
+/// Convert a `bitcoin::bip32::DerivationPath` to `md_codec::origin_path::OriginPath`.
+/// Used to fold `--slot @N.path=` user input into `path_decl.paths` for
+/// non-canonical-descriptor default-inference override.
+fn derivation_path_to_origin(
+    dp: &DerivationPath,
+) -> md_codec::origin_path::OriginPath {
+    use bitcoin::bip32::ChildNumber;
+    use md_codec::origin_path::{OriginPath, PathComponent};
+    OriginPath {
+        components: dp
+            .into_iter()
+            .map(|c| match c {
+                ChildNumber::Normal { index } => PathComponent {
+                    hardened: false,
+                    value: *index,
+                },
+                ChildNumber::Hardened { index } => PathComponent {
+                    hardened: true,
+                    value: *index,
+                },
+            })
+            .collect(),
+    }
+}
+
+/// v0.19.0 SPEC §4.12.d — emit the stderr info notice naming the `@N`
+/// indices that received the default path. Format byte-exact per SPEC.
+fn emit_default_path_notice<E: Write>(
+    stderr: &mut E,
+    defaulted_indices: &[u8],
+    network: crate::network::CliNetwork,
+    account: u32,
+) -> Result<(), ToolkitError> {
+    if defaulted_indices.is_empty() {
+        return Ok(());
+    }
+    let idx_list = defaulted_indices
+        .iter()
+        .map(|i| format!("@{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let coin = network.coin_type();
+    writeln!(
+        stderr,
+        "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
+    )
+    .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())
 }
 
