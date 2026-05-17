@@ -1,0 +1,57 @@
+name: install-pin-check
+
+# Fires on every `mnemonic-toolkit-v*` tag push. Asserts that
+# `scripts/install.sh`'s `mnemonic-toolkit` component_info pin matches the
+# tag being built. Catches the drift mode where a release commit bumps
+# Cargo.toml's version + tags the release without also bumping
+# install.sh's self-pin (the curl|sh install path silently regresses to
+# the prior release otherwise).
+#
+# Scope: self-pin only. Cross-repo pins (mnemonic-gui, md-cli, ms-cli,
+# mk-cli) are tracked manually via `design/RELEASE_CHECKLIST.md` — the
+# CI gate can't reach those without cross-repo network calls.
+#
+# Filed 2026-05-16 after empirically discovering install.sh's toolkit
+# pin had silently lagged 4 releases (v0.14.2 vs v0.18.0).
+#
+# Recovery if this fails: bump scripts/install.sh's mnemonic-toolkit
+# pin to match the tag, commit, force-push the tag to the new commit
+# (or delete + re-create the tag and re-push). GitHub Releases that
+# auto-created on the original tag push need rebuilding via re-tag.
+#
+# Security: TAG is passed via env: from github.ref_name (trusted
+# context — tag names cannot contain shell metacharacters that git
+# would accept for tag creation, but env: passing is the GitHub-
+# recommended pattern regardless).
+
+on:
+  push:
+    tags:
+      - 'mnemonic-toolkit-v*'
+
+jobs:
+  self-pin-matches-tag:
+    name: install.sh self-pin matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify install.sh self-pin matches tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          # Extract the mnemonic-toolkit pin from install.sh's component_info.
+          # The line format is:
+          #   echo "mnemonic-toolkit|<url>|mnemonic-toolkit-vX.Y.Z|no|"
+          # grep the first match (toolkit arm is the first arm in the table).
+          PIN=$(grep -oE 'mnemonic-toolkit-v[0-9]+\.[0-9]+\.[0-9]+' scripts/install.sh | head -n1)
+          echo "tag: $TAG"
+          echo "install.sh self-pin: $PIN"
+          if [ "$TAG" != "$PIN" ]; then
+            echo "::error::install.sh self-pin '$PIN' does not match tag '$TAG'"
+            echo "::error::Update scripts/install.sh component_info('mnemonic')"
+            echo "::error::then force-push the tag to the new commit."
+            exit 1
+          fi
+          echo "OK install.sh self-pin is current"
