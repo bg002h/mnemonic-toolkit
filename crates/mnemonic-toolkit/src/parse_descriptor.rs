@@ -255,6 +255,57 @@ fn to_origin_path(p: Option<&DerivationPath>) -> OriginPath {
     OriginPath { components }
 }
 
+/// BIP-341 NUMS H-point as x-only hex (32 bytes). Used by:
+/// (1) `substitute_nums_sentinel` to replace the user-facing `NUMS` token,
+/// (2) `walk_tr` to detect the NUMS internal key and set `Body::Tr.is_nums = true`.
+/// Mirrors md-codec's `NUMS_H_POINT_X_ONLY_HEX` (`to_miniscript.rs`).
+pub const NUMS_H_POINT_X_ONLY_HEX: &str =
+    "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+/// v0.19.0 SPEC §4.12.e — substitute the literal token `NUMS` appearing as
+/// the first argument of `tr(...)` with the BIP-341 unspendable-key hex.
+///
+/// Word-boundary regex `tr\(NUMS\b` ensures only exact-token matches replace
+/// (e.g., `tr(NUMSOMETHING...)` is NOT substituted; `tr(NUMS,...)` and
+/// `tr(NUMS)` both are). Called at the top of `parse_descriptor` BEFORE
+/// `lex_placeholders` AND `substitute_synthetic` so the substituted form
+/// flows through the entire pipeline.
+///
+/// Returns the input unchanged if no `tr(NUMS` token is present.
+pub fn substitute_nums_sentinel(input: &str) -> String {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"tr\(NUMS\b").expect("static regex compiles"));
+    re.replace_all(input, format!("tr({NUMS_H_POINT_X_ONLY_HEX}").as_str())
+        .into_owned()
+}
+
+/// v0.19.0 SPEC §6.6 row 16 — detect a bare `tr(<miniscript>)` (no internal
+/// key) by matching `tr(` followed by a lowercase-identifier followed by `(`
+/// (i.e., a miniscript-fragment function call like `andor`, `and_v`, `pk`,
+/// `pkh`, `multi`, `thresh`, etc.).
+///
+/// Valid internal-key forms are NOT matched: hex pubkey (`tr(0x...)`),
+/// xpub (`tr(xpub6...)` — `xpub` is lowercase but followed by digits not
+/// `(`), placeholder (`tr(@N)`), annotated key (`tr([fp/path]@N)`), or
+/// NUMS-substituted hex (`tr(50929b...)`).
+///
+/// Run AFTER `substitute_nums_sentinel` (so the NUMS hex form bypasses the
+/// detector) but BEFORE rust-miniscript's `MsDescriptor::from_str` so the
+/// toolkit emits the SPEC §6.6 row 16 byte-exact text instead of
+/// rust-miniscript's lower-level parse error.
+pub fn detect_bare_tr(input: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(r"^tr\([a-z][a-z_0-9]*\(").expect("static regex compiles")
+    });
+    re.is_match(input)
+}
+
+/// SPEC §6.6 row 16 byte-exact stderr text. Used by `parse_descriptor` to
+/// refuse bare `tr(<miniscript>)` with no internal key. NOT including the
+/// `error: ` prefix (the CLI display layer adds it).
+pub const BARE_TR_NO_KEY_MSG: &str = "tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.";
+
 /// Substitute every `@i[fp/path]/<multi>/*` token with a bare synthetic xpub.
 /// The annotation/multipath/wildcard suffix is dropped — the structural walker
 /// only needs the xpub identity. Annotations + use-site paths flow through
@@ -413,7 +464,18 @@ fn walk_tr(
     t: &miniscript::descriptor::Tr<DescriptorPublicKey>,
     km: &BTreeMap<String, u8>,
 ) -> Result<Node, ToolkitError> {
-    let key_index = lookup_key(&t.internal_key().to_string(), km)?;
+    // v0.19.0 SPEC §4.12.e — when the internal key is the BIP-341 NUMS H-point
+    // (substituted into the descriptor by `substitute_nums_sentinel`), set
+    // `Body::Tr.is_nums = true` and skip the key_map lookup. `key_index` is
+    // ignored by md-codec when `is_nums = true` (per validate.rs:85-96 +
+    // to_miniscript.rs:161-165 — `is_nums=true` triggers `build_nums_internal_key()`
+    // which constructs the NUMS DescriptorPublicKey from the same hex constant).
+    let internal_key_str = t.internal_key().to_string();
+    let (is_nums, key_index) = if internal_key_str == NUMS_H_POINT_X_ONLY_HEX {
+        (true, 0u8)
+    } else {
+        (false, lookup_key(&internal_key_str, km)?)
+    };
     let tree: Option<Box<Node>> = match t.tap_tree() {
         None => None,
         Some(tt) => Some(Box::new(walk_tap_tree(tt, km)?)),
@@ -421,13 +483,7 @@ fn walk_tr(
     Ok(Node {
         tag: Tag::Tr,
         body: Body::Tr {
-            // v0.30+ NUMS flag. parse_descriptor reconstructs the AST from a
-            // user-supplied descriptor string — the internal key is the
-            // explicit `@key_index` from the descriptor, never NUMS. md-codec
-            // would error with NUMSSentinelConflict if is_nums=false and
-            // key_index were out-of-range; key_index is guaranteed in-range
-            // by the wallet-policy parser upstream.
-            is_nums: false,
+            is_nums,
             key_index,
             tree,
         },
@@ -693,6 +749,18 @@ pub fn parse_descriptor(
     keys: &[ParsedKey],
     fingerprints: &[ParsedFingerprint],
 ) -> Result<MdDescriptor, ToolkitError> {
+    // v0.19.0 SPEC §4.12.e — NUMS sentinel substitution + §6.6 row 16
+    // bare-tr refusal. Both run BEFORE `lex_placeholders` and
+    // `substitute_synthetic` so the rest of the pipeline sees the
+    // substituted form (NUMS hex) and the bare-tr case is rejected
+    // with the friendly row-16 text before rust-miniscript runs.
+    let nums_substituted = substitute_nums_sentinel(input);
+    let input: &str = nums_substituted.as_str();
+
+    if detect_bare_tr(input) {
+        return Err(ToolkitError::DescriptorParse(BARE_TR_NO_KEY_MSG.to_string()));
+    }
+
     let occs = lex_placeholders(input)?;
     let resolved = resolve_placeholders(&occs)?;
     // SPEC §4.10 mode-determination drives ScriptCtx for synthetic xpub depth.
@@ -2663,5 +2731,127 @@ mod tests {
         };
         let err = resolve_placeholders(&[occ_a, occ_b]).unwrap_err();
         assert!(err.message().contains("inconsistent"));
+    }
+
+    // ---- v0.19.0 Phase 3: NUMS sentinel + bare-tr detection ----
+
+    #[test]
+    fn substitute_nums_sentinel_replaces_tr_nums_with_hex() {
+        let input = "tr(NUMS,and_v(v:pk([deadbeef/86h/0h/0h]@0),after(12000000)))";
+        let out = substitute_nums_sentinel(input);
+        let expected = format!(
+            "tr({NUMS_H_POINT_X_ONLY_HEX},and_v(v:pk([deadbeef/86h/0h/0h]@0),after(12000000)))"
+        );
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn substitute_nums_sentinel_replaces_tr_nums_no_second_arg() {
+        // Degenerate case: tr(NUMS) with no tap-tree. Substitutes; rust-miniscript
+        // may still accept or reject downstream — the substitution itself is
+        // pattern-only.
+        let input = "tr(NUMS)";
+        let out = substitute_nums_sentinel(input);
+        let expected = format!("tr({NUMS_H_POINT_X_ONLY_HEX})");
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn substitute_nums_sentinel_preserves_descriptors_without_tr_nums() {
+        let input = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+        let out = substitute_nums_sentinel(input);
+        assert_eq!(out, input);
+    }
+
+    #[test]
+    fn substitute_nums_sentinel_does_not_match_nums_in_identifier() {
+        // Word-boundary regex: `tr(NUMSOMETHING` MUST NOT substitute because
+        // NUMS is followed by `O` (a word char), violating `\b`.
+        let input = "tr(NUMSOMETHING)";
+        let out = substitute_nums_sentinel(input);
+        assert_eq!(out, input);
+    }
+
+    #[test]
+    fn substitute_nums_sentinel_does_not_match_outside_tr() {
+        // The regex anchors `tr(` prefix, so a NUMS reference outside tr()
+        // (which shouldn't occur in practice; this is defensive) is preserved.
+        let input = "wsh(NUMS,pk(@0))";
+        let out = substitute_nums_sentinel(input);
+        assert_eq!(out, input);
+    }
+
+    #[test]
+    fn detect_bare_tr_recognizes_miniscript_fragments() {
+        // SPEC §6.6 row 16 — `tr(<miniscript-fragment>(...))` is bare-tr.
+        assert!(detect_bare_tr("tr(andor(pkh(@0),after(12000000),pk(@1)))"));
+        assert!(detect_bare_tr("tr(and_v(v:pk(@0),after(12000000)))"));
+        assert!(detect_bare_tr("tr(pk(@0))"));
+        assert!(detect_bare_tr("tr(pkh(@0))"));
+        assert!(detect_bare_tr("tr(multi(2,@0,@1,@2))"));
+        assert!(detect_bare_tr("tr(thresh(2,pk(@0),pk(@1),pk(@2)))"));
+    }
+
+    #[test]
+    fn detect_bare_tr_rejects_valid_internal_key_forms() {
+        // After NUMS substitution: hex internal key.
+        assert!(!detect_bare_tr(&format!("tr({NUMS_H_POINT_X_ONLY_HEX},pk(@0))")));
+        // Placeholder internal key.
+        assert!(!detect_bare_tr("tr(@0)"));
+        assert!(!detect_bare_tr("tr(@0,pk(@1))"));
+        // Annotated placeholder.
+        assert!(!detect_bare_tr("tr([deadbeef/86h/0h/0h]@0,pk(@1))"));
+        // xpub-style (lowercase but followed by digits, not `(`).
+        assert!(!detect_bare_tr("tr(xpub6CUGRUo,pk(@0))"));
+        // Canonical bare-tr keypath.
+        assert!(!detect_bare_tr("tr(@0/<0;1>/*)"));
+    }
+
+    #[test]
+    fn detect_bare_tr_rejects_non_tr_descriptors() {
+        // Should only match `tr(...)` root; other wrappers ignored.
+        assert!(!detect_bare_tr("wsh(andor(pkh(@0),after(12000000),pk(@1)))"));
+        assert!(!detect_bare_tr("pkh(@0)"));
+        assert!(!detect_bare_tr("wpkh(@0)"));
+        assert!(!detect_bare_tr("sh(wsh(multi(2,@0,@1)))"));
+    }
+
+    #[test]
+    fn parse_descriptor_refuses_bare_tr_with_row_16_message() {
+        // SPEC §6.6 row 16 — byte-exact friendly text.
+        let err = parse_descriptor(
+            "tr(andor(pkh(@0),after(12000000),pk(@1)))",
+            &[],
+            &[],
+        )
+        .unwrap_err();
+        match err {
+            ToolkitError::DescriptorParse(msg) => {
+                assert_eq!(msg, BARE_TR_NO_KEY_MSG);
+            }
+            other => panic!("unexpected variant {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_descriptor_accepts_tr_nums_with_taproot_leaf_ms() {
+        // V5 Q2 fold — NUMS substitution + rust-miniscript tap-leaf parse.
+        // Phase 3 R0 fixture parse-check per `[[feedback-architect-must-run-prose-commands]]`.
+        // Minimal tr(NUMS, <tapscript-ms>) shape with a placeholder leaf-key
+        // so the toolkit can resolve via Phase 4 phrase derivation.
+        //
+        // If this assertion fails, rust-miniscript rejected the substituted
+        // descriptor — pin the working alternative HERE before Phase 4 builds
+        // golden bundles atop this shape.
+        let result = parse_descriptor(
+            "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))",
+            &[],
+            &[],
+        );
+        assert!(
+            result.is_ok(),
+            "expected tr(NUMS, and_v(v:pk(@0), after(N))) to parse; got {:?}",
+            result.err()
+        );
     }
 }
