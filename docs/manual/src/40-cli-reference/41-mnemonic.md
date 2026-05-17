@@ -77,26 +77,98 @@ descriptor string itself. The toolkit handles this two ways:
 
 #### Example: 3-key time-locked inheritance wallet
 
+This descriptor expresses an inheritance flow: `@0` can spend
+unconditionally after Bitcoin block 12,000,000; `@1` can spend after
+a 4032-block relative timelock; `@2` after 32,768 blocks. Cosigners
+`@0`, `@1`, `@2` each derive at the BIP-48 default
+`m/48'/0'/0'/2'` from their respective BIP-39 phrases.
+
+:::danger
+The three BIP-39 phrases below are public test vectors; chain
+watchers have long since swept anything ever derived from them.
+**Never engrave or fund a wallet built from these phrases.** Generate
+fresh entropy for real wallets (see
+[Test seeds and example data](#appendix-f-test-seeds-and-example-data)).
+:::
+
+The miniscript body is single-line; using a shell variable keeps the
+recipe readable while preserving that constraint:
+
 ```sh
+DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))'
+
 mnemonic bundle --network mainnet --account 0 \
-  --descriptor 'wsh(andor(pkh(@0), after(12000000),
-                          or_i(and_v(v:pkh(@1), older(4032)),
-                               and_v(v:pkh(@2), older(32768)))))' \
+  --descriptor "$DESC" \
   --language english \
-  --slot '@0.phrase=…' \
-  --slot '@1.phrase=…' \
-  --slot '@2.phrase=…'
+  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
+  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+  --json > /tmp/inheritance-bundle.json
 ```
 
-Cosigners `@0`, `@1`, `@2` each derive at `m/48'/0'/0'/2'` from their
-respective BIP-39 phrases. The descriptor expresses an inheritance
-flow: `@0` can spend unconditionally after block 12,000,000; `@1` can
-spend after 4032 blocks relative timelock; `@2` after 32,768 blocks.
 The toolkit prints the info notice to stderr before bundle emission:
 
 ```text
 info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
 ```
+
+#### Verifying the inheritance bundle (v0.20.0+)
+
+Round-trip the emitted JSON envelope through `verify-bundle` to
+confirm every card decodes back to the seed at the inferred path.
+The `--bundle-json` intake reads the same three-card vector the
+preceding `bundle` invocation just wrote:
+
+```sh
+mnemonic verify-bundle --network mainnet --account 0 \
+  --descriptor "$DESC" \
+  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
+  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+  --bundle-json /tmp/inheritance-bundle.json
+```
+
+Expected output (one block per cosigner; final `result: ok`):
+
+```text
+ms1_decode[0]: ok cosigner[0] ms1 decoded
+ms1_entropy_match[0]: ok cosigner[0] ms1 byte-identical
+mk1_decode[0]: ok cosigner[0] mk1 decoded
+mk1_xpub_match[0]: ok cosigner[0] xpub matches
+mk1_fingerprint_match[0]: ok cosigner[0] fingerprint matches
+mk1_path_match[0]: ok cosigner[0] path matches
+ms1_decode[1]: ok skipped: watch-only slot
+ms1_entropy_match[1]: ok skipped: watch-only slot
+mk1_decode[1]: ok cosigner[1] mk1 decoded
+mk1_xpub_match[1]: ok cosigner[1] xpub matches
+mk1_fingerprint_match[1]: ok cosigner[1] fingerprint matches
+mk1_path_match[1]: ok cosigner[1] path matches
+ms1_decode[2]: ok skipped: watch-only slot
+ms1_entropy_match[2]: ok skipped: watch-only slot
+mk1_decode[2]: ok cosigner[2] mk1 decoded
+mk1_xpub_match[2]: ok cosigner[2] xpub matches
+mk1_fingerprint_match[2]: ok cosigner[2] fingerprint matches
+mk1_path_match[2]: ok cosigner[2] path matches
+md1_decode: ok decoded successfully
+md1_wallet_policy: ok wallet-policy mode confirmed
+md1_xpub_match: ok all 3 pubkeys match expected (multiset)
+result: ok
+```
+
+Per SPEC §5.8 schema-4 layout, descriptor mode binds entropy to the
+first slot only; cosigner `@1` and `@2` ms1 cards are empty-string
+sentinels in the bundle, so the round-trip reports them as
+`skipped: watch-only slot` rather than failing. In a real-world
+deployment each cosigner runs `bundle` independently for their own
+slot, so all three would receive a fully-engraved card-set.
+
+`verify-bundle` re-applies the same canonicity-aware default-path
+inference on the descriptor before binding the supplied cards, so the
+round-trip works without re-typing the inferred path on the CLI.
+
+Prior to v0.20.0, this multi-cosigner round-trip failed with
+`ChunkedHeaderMalformed`; the bugfix shipped in `mnemonic-toolkit-v0.20.0`
+(FOLLOWUP `verify-bundle-multi-cosigner-mk1-chunk-assembly`).
 
 #### Example: script-path-only P2TR wallet (NUMS sentinel)
 
