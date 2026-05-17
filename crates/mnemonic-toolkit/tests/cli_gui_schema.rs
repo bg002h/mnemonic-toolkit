@@ -28,14 +28,15 @@ fn gui_schema_exits_zero_and_parses_as_json() {
 }
 
 #[test]
-fn gui_schema_top_level_version_is_three() {
+fn gui_schema_top_level_version_is_four() {
     let v = run_gui_schema();
-    // v0.17.0 bump: SPEC §6.10.6 — schema version 2 → 3 (v2 cycle adds
-    // slot_count_* predicates + pin_value Visibility + meta.template_groups).
-    // Earlier bumps: v1→v2 at v0.16.0 (conditional_rules added).
+    // v0.18.0 bump: SPEC §6.10.6 — schema version 3 → 4 (v3 cycle adds
+    // disable_options Visibility for rows 10/11).
+    // Earlier bumps: v1→v2 at v0.16.0 (conditional_rules added); v2→v3 at
+    // v0.17.0 (slot_count_* + pin_value + meta.template_groups).
     // GUI's relaxed parse_gui_schema_json accepts version >= 1; rules /
-    // pin_value consumers gate on version >= 3.
-    assert_eq!(v["version"], 3, "SPEC §6.10.6: version pin v0.17.0");
+    // disable_options consumers gate on version >= 4.
+    assert_eq!(v["version"], 4, "SPEC §6.10.6: version pin v0.18.0");
 }
 
 #[test]

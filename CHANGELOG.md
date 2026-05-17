@@ -306,6 +306,83 @@ md-codec v0.32.0, md-cli v0.4.3, mk-codec v0.2.2, ms-codec v0.1.1, ms-cli v0.1.0
 - Pre-Draft, AI + reference implementation, awaiting human review. Wire-format claims, BCH-math claims, canonicality rules, and cross-card invariants may be wrong; cross-implementation work is the most valuable bug-finding activity at this stage.
 - Two open FOLLOWUPS at tag time, tracked via `docs/technical-manual/FOLLOWUPS.md`: `bibliography-bip-author-canonical-verification` (tier `tech-manual-v1.0-nice-to-have`) and `troubleshooting-mk-codec-variant-coverage-audit` (tier `tech-manual-v0.4`). Both filed during mid-cycle Phase 1.5 per the cycle-discipline rules.
 
+## mnemonic-toolkit [0.18.0] — 2026-05-16
+
+### Added — SPEC §6.10 v3-cycle extensions to `gui-schema` JSON
+
+Schema `version` bumps `3 → 4`. v3 cycle extensions to the SPEC §6.10
+conditional-applicability projection close the v2-cycle deferred rows
+9/10/11 partition (effect side of the §6.10.7 closing list):
+
+- **VisibilityProjection (§6.10.3)** gains one new tagged-object variant:
+  `disable_options { values: Vec<String> }` — applies to Dropdown
+  FlagKind only; greys out specific dropdown options at render time
+  while leaving argv emission unchanged. Wire shape mirrors the v3
+  `pin_value` inner-key convention:
+  `{"disable_options": {"values": [<string>, ...]}}`.
+- **Emission table (§6.10.4)** gains a `disable_options(values)` row
+  with explicit "no impact" argv contract + accompanying prose. Stale
+  state values whose dropdown option was disabled mid-session still
+  emit on argv; CLI mode-violation rows 10/11 are the residual safety
+  net. Silently suppressing them would create silently-lost-user-value
+  bugs.
+- **Bundle rules (`bundle_conditional_rules`)** gain two entries —
+  total 11 → 13:
+  - Row 10 (`slot_count_gte: 2`): disables single-sig template options
+    (`bip44`, `bip49`, `bip84`, `bip86`) on `--template`.
+  - Row 11 (`slot_count_eq: 1`): disables multisig template options
+    (the 6-value set from `CliTemplate::is_multisig()`) on `--template`.
+- **Mapping table (§6.10.7)** flips 3 rows from deferred → encoded:
+  bundle row 9 (closes GUI-side via `NumberMax::FromSlotCount`
+  FlagKind extension — no toolkit wire-format change), row 10, row 11.
+  Legend gains `ENCODED v3` + `ENCODED v3 (GUI-internal)` cycle
+  prefixes.
+- **Row 9 N-equivalence note (§6.6)** added — for GUI projection
+  authors, `N` in the row-9 stderr literal equals `slot_count`
+  (rows 10/11 reject mixed configs before row 9 fires, so the
+  equivalence holds in valid configurations).
+
+### Schema version
+
+`3 → 4`. The bump is **additive** but v3 GUI consumers (v0.6.x) fail
+CLOSED on the new `{"disable_options": ...}` tagged-object variant
+(per the v0.6.0 custom `Deserialize` impl at
+`mnemonic-gui/src/schema_check.rs::VisibilityProjection` which only
+accepts bare-string + `pin_value`). Lockstep release with
+`mnemonic-gui-v0.7.0` is mandatory.
+
+### Closes FOLLOWUPS
+
+- `gui-schema-effect-on-dropdown-options-vocab` (cross-repo) — Batch
+  B-1 lands the toolkit emitter side. Row 9 closes GUI-side without a
+  toolkit wire change (single-consumer pragma; promotable to a
+  toolkit-emitted Effect if a second `gui-schema` consumer ever
+  appears).
+
+### Verification
+
+- TDD discipline: new test file
+  `tests/cli_gui_schema_v4_extensions.rs` (7 cells) RED against
+  unmodified source (5 of 7 expected failures: row-10 + row-11 rule
+  shape, wire-shape inner-key, count==13, version==4); 2 of 7
+  already-passing back-compat cells (bare-string + pin_value
+  round-trip on v4 doc). GREEN after `VisibilityProjection`
+  extension + `bundle_conditional_rules` additions + version bump.
+- Allowlist extensions: `predicate_kinds_emitted_in_snake_case`
+  gains `slot_count_{eq,gte,lte}` (v3-cycle Predicate variants now
+  actually emitted); `effect_visibilities_are_in_allowed_set` gains
+  the `disable_options` tagged-object arm with inner-payload shape
+  validation.
+- `cargo test --offline --workspace`: 30 test binaries pass, no
+  regressions vs v0.17.1.
+
+### Companion
+
+GUI-side bump in lockstep: `mnemonic-gui v0.7.0` re-pins to
+`mnemonic-toolkit-v0.18.0` and adds the `disable_options` consumer +
+GUI-internal `NumberMax::FromSlotCount` FlagKind extension closing
+row 9.
+
 ## mnemonic-toolkit [0.17.1] — 2026-05-16
 
 ### Fixed — drop spurious `meta.template_groups` from `derive-child` gui-schema

@@ -229,12 +229,18 @@ fn subcommands_without_template_flag_omit_meta_template_groups() {
 // ── §6.10.6 v3 schema-version regression guard ──────────────────────────────
 
 #[test]
-fn v3_schema_includes_all_v2_cycle_surfaces() {
-    // Smoke test that the v3-cycle features ship together. Catches the case
-    // where someone bumps version 2→3 but forgets one of the new emissions
-    // (e.g., bumps version but doesn't add meta.template_groups).
+fn v3_cycle_surfaces_still_present_on_current_schema() {
+    // Smoke test that the v3-cycle features remain present on the current
+    // schema version (>= 3). v0.17.0 introduced v3; v0.18.0 bumped to v4
+    // additively. This assertion guards against a future regression that
+    // would drop a v3-cycle feature (pin_value rule, meta.template_groups)
+    // while bumping the version.
     let v = run_gui_schema();
-    assert_eq!(v["version"], 3, "schema version must be v3");
+    let version = v["version"].as_u64().expect("schema version must be a number");
+    assert!(
+        version >= 3,
+        "schema version must be >= 3 to carry v3-cycle features; got: {version}"
+    );
     // pin_value rule on bundle:
     let bundle = find_sub(&v, "bundle");
     let rules = bundle["conditional_rules"].as_array().unwrap();

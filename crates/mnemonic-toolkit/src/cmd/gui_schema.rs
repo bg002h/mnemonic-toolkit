@@ -171,6 +171,9 @@ enum VisibilityProjection {
     PinValue {
         value: serde_json::Value,
     },
+    DisableOptions {
+        values: Vec<String>,
+    },
 }
 
 impl Serialize for VisibilityProjection {
@@ -187,6 +190,26 @@ impl Serialize for VisibilityProjection {
                 let mut inner = serde_json::Map::new();
                 inner.insert("value".to_string(), value.clone());
                 outer.serialize_entry("pin_value", &inner)?;
+                outer.end()
+            }
+            Self::DisableOptions { values } => {
+                // Wire shape per SPEC §6.10.3 v4:
+                //   {"disable_options": {"values": [<string>, ...]}}
+                // The inner-key form (rather than bare-array) mirrors the v3
+                // pin_value precedent and leaves room for future per-Effect
+                // metadata without a wire-shape break.
+                let mut outer = ser.serialize_map(Some(1))?;
+                let mut inner = serde_json::Map::new();
+                inner.insert(
+                    "values".to_string(),
+                    serde_json::Value::Array(
+                        values
+                            .iter()
+                            .map(|v| serde_json::Value::String(v.clone()))
+                            .collect(),
+                    ),
+                );
+                outer.serialize_entry("disable_options", &inner)?;
                 outer.end()
             }
         }
@@ -475,6 +498,60 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
                 flag: "--account".to_string(),
                 visibility: VisibilityProjection::PinValue {
                     value: serde_json::json!(0),
+                },
+            },
+        },
+        // --template disable single-sig options when slot_count >= 2 (NEW
+        // v0.18.0; SPEC §6.6 row 10 — SINGLE_SIG_TEMPLATE_WITH_MULTISIG_SLOTS).
+        // Uses the v4-cycle disable_options Effect: GUI greys out single-sig
+        // values in the --template Dropdown so the user can't select e.g.
+        // bip84 with 3 slots. Schema-time only (no argv-emission impact per
+        // §6.10.4); CLI row 10 is the residual surface. Closes v2-cycle
+        // DEFERRED entry in §6.10.7 (Effect side of the rows-9/10/11 trio).
+        ConditionalRule {
+            rationale: "Single-sig --template values (bip44/49/84/86) require \
+                        exactly one slot. When the user has supplied 2+ slots, \
+                        single-sig template options are invalid — the GUI greys \
+                        them out in the Dropdown so the user can't select one. \
+                        Schema-time only: argv emission is unaffected (stale \
+                        pre-disabled values still emit; CLI row 10 catches them \
+                        at run time). See SPEC §6.10.4 emission-mapping table \
+                        for disable_options semantics."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 10; bundle.rs::mode_text::\
+                       SINGLE_SIG_TEMPLATE_WITH_MULTISIG_SLOTS"
+                .to_string(),
+            when: Predicate::SlotCountGte { value: 2 },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::DisableOptions {
+                    values: single_sig_template_values(),
+                },
+            },
+        },
+        // --template disable multisig options when slot_count == 1 (NEW
+        // v0.18.0; SPEC §6.6 row 11 — MULTISIG_TEMPLATE_WITH_SINGLE_SLOT).
+        // Mirror of row 10; greys out multisig values when only 1 slot is
+        // present. Schema-time only per §6.10.4.
+        ConditionalRule {
+            rationale: "Multisig --template values (wsh-multi/sortedmulti, \
+                        sh-wsh-multi/sortedmulti, tr-multi-a/sortedmulti-a) \
+                        require 2+ slots. When the user has supplied exactly 1 \
+                        slot, multisig template options are invalid — the GUI \
+                        greys them out in the Dropdown so the user can't \
+                        select one. Schema-time only: argv emission is \
+                        unaffected (stale pre-disabled values still emit; CLI \
+                        row 11 catches them at run time). See SPEC §6.10.4 \
+                        emission-mapping table for disable_options semantics."
+                .to_string(),
+            spec_ref: "SPEC §6.6 row 11; bundle.rs::mode_text::\
+                       MULTISIG_TEMPLATE_WITH_SINGLE_SLOT"
+                .to_string(),
+            when: Predicate::SlotCountEq { value: 1 },
+            effect: Effect {
+                flag: "--template".to_string(),
+                visibility: VisibilityProjection::DisableOptions {
+                    values: multisig_template_values(),
                 },
             },
         },
@@ -884,7 +961,7 @@ fn build_schema(cmd: &Command) -> Schema {
     subs.sort_by(|a, b| a.name.cmp(&b.name));
 
     Schema {
-        version: 3,
+        version: 4,
         cli: "mnemonic".to_string(),
         subcommands: subs,
     }

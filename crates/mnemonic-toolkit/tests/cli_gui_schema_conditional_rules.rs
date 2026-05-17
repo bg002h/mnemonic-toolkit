@@ -10,9 +10,14 @@
 //! §6.10.2), one new Visibility variant (pin_value — §6.10.3 + §6.10.4
 //! emission table), per-subcommand `meta.template_groups` (§6.10.8 — NEW),
 //! and a schema-version bump 2 → 3 (§6.10.6). v3-specific surfaces have
-//! their own test file at `cli_gui_schema_v3_extensions.rs`; the
-//! assertions here update for the v3 version bump + the new row 12
-//! (`DESCRIPTOR_WITH_NONZERO_ACCOUNT`) rule emission in `bundle`.
+//! their own test file at `cli_gui_schema_v3_extensions.rs`.
+//!
+//! v0.18.0 GUI conditional-applicability v3 cycle adds one new Visibility
+//! variant (disable_options — §6.10.3 + §6.10.4 emission table), two new
+//! bundle rules (rows 10 + 11 from §6.10.7 closing list), and a
+//! schema-version bump 3 → 4 (§6.10.6). v4-specific surfaces have their
+//! own test file at `cli_gui_schema_v4_extensions.rs`; the assertions
+//! here update for the v4 version bump + the new rule count.
 
 use assert_cmd::Command;
 use serde_json::Value;
@@ -46,13 +51,12 @@ fn conditional_rules<'a>(v: &'a Value, sub_name: &str) -> &'a Vec<Value> {
 // ── §6.10.6 schema version bump ────────────────────────────────────────
 
 #[test]
-fn schema_version_is_three_after_v0_17_0_bump() {
+fn schema_version_is_four_after_v0_18_0_bump() {
     let v = run_gui_schema();
     assert_eq!(
-        v["version"], 3,
-        "SPEC §6.10.6: gui-schema JSON version bumps 2→3 in v0.17.0 \
-         (v2 cycle — slot_count_* predicates + pin_value Visibility + \
-         meta.template_groups)"
+        v["version"], 4,
+        "SPEC §6.10.6: gui-schema JSON version bumps 3→4 in v0.18.0 \
+         (v3 cycle — disable_options Visibility for rows 10/11)"
     );
 }
 
@@ -87,7 +91,17 @@ fn bundle_emits_conditional_rules() {
     // `DESCRIPTOR_WITH_NONZERO_ACCOUNT` pins `--account` to 0 when
     // `--descriptor` is present (uses the new pin_value Effect per §6.10.3).
     // Detailed pin_value assertions live in cli_gui_schema_v3_extensions.rs.
-    assert_eq!(rules.len(), 11, "bundle v0.17.0 rule count (v0.16.0 + 1 pin_value rule)");
+    //
+    // v0.18.0 (v3 cycle): adds 2 new rules — rows 10 (slot_count_gte: 2 →
+    // disable single-sig --template options) + 11 (slot_count_eq: 1 →
+    // disable multisig --template options). Both use the new
+    // disable_options Effect per §6.10.3. Detailed assertions live in
+    // cli_gui_schema_v4_extensions.rs.
+    assert_eq!(
+        rules.len(),
+        13,
+        "bundle v0.18.0 rule count (v0.17.0 11 + 2 disable_options rules)"
+    );
 }
 
 #[test]
@@ -324,6 +338,11 @@ fn predicate_kinds_emitted_in_snake_case() {
         "all_of",
         "any_of",
         "not",
+        // v3 cycle (v0.17.0) — slot_count_* added to Predicate AST but not
+        // emitted until v0.18.0's rows 10/11 wired them through.
+        "slot_count_eq",
+        "slot_count_gte",
+        "slot_count_lte",
     ];
     let mut visited = 0_usize;
     for sub in v["subcommands"].as_array().unwrap() {
@@ -364,11 +383,13 @@ fn effect_visibilities_are_in_allowed_set() {
     let v = run_gui_schema();
     // §6.10.3 says Visible never appears as an Effect value. v1 cycle vocab:
     // bare-string Hidden/Disabled/Required. v2 cycle (v0.17.0 / schema v3)
-    // adds the tagged-object pin_value variant. This assertion accepts both
-    // wire shapes; pin_value's inner `value` payload is intentionally
-    // permissive per §6.10.3 wire-format details (any JSON value), so we
-    // only assert structural shape, not the value's type.
+    // adds the tagged-object pin_value variant. v3 cycle (v0.18.0 / schema
+    // v4) adds the tagged-object disable_options variant. This assertion
+    // accepts all wire shapes; the inner payloads are intentionally
+    // permissive per §6.10.3 wire-format details, so we only assert
+    // structural shape, not the value's type.
     let bare_allowed = ["hidden", "disabled", "required"];
+    let tagged_allowed = ["pin_value", "disable_options"];
     for sub in v["subcommands"].as_array().unwrap() {
         for rule in sub["conditional_rules"].as_array().unwrap() {
             let vis = &rule["effect"]["visibility"];
@@ -379,24 +400,42 @@ fn effect_visibilities_are_in_allowed_set() {
                 );
                 assert_ne!(s, "visible", "Visible cannot be an Effect value");
             } else if let Some(obj) = vis.as_object() {
-                // v3 tagged-object: must have exactly one known tag.
+                // Tagged-object: must have exactly one known tag.
                 let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
                 assert_eq!(
                     keys.len(),
                     1,
                     "tagged-object Visibility must have exactly one tag; got: {keys:?}"
                 );
+                let tag = keys[0];
                 assert!(
-                    keys[0] == "pin_value",
-                    "tagged-object Visibility tag `{}` not in §6.10.3 v3 vocabulary",
-                    keys[0]
+                    tagged_allowed.contains(&tag),
+                    "tagged-object Visibility tag `{tag}` not in §6.10.3 vocabulary \
+                     (v3 + v4 allow: {tagged_allowed:?})"
                 );
-                // pin_value payload must be an object with a `value` field.
-                let pin = &obj["pin_value"];
-                assert!(
-                    pin.is_object() && pin.get("value").is_some(),
-                    "pin_value payload must be {{\"value\": <JSON>}}; got: {pin:?}"
-                );
+                match tag {
+                    "pin_value" => {
+                        let pin = &obj["pin_value"];
+                        assert!(
+                            pin.is_object() && pin.get("value").is_some(),
+                            "pin_value payload must be {{\"value\": <JSON>}}; got: {pin:?}"
+                        );
+                    }
+                    "disable_options" => {
+                        let payload = &obj["disable_options"];
+                        assert!(
+                            payload.is_object() && payload.get("values").is_some(),
+                            "disable_options payload must be \
+                             {{\"values\": [<string>...]}}; got: {payload:?}"
+                        );
+                        assert!(
+                            payload["values"].is_array(),
+                            "disable_options.values must be an array; got: {:?}",
+                            payload["values"]
+                        );
+                    }
+                    _ => unreachable!("tag already validated above"),
+                }
             } else {
                 panic!("Visibility must be string or object; got: {vis:?}");
             }
