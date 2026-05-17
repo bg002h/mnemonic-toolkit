@@ -1650,6 +1650,26 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-derive-child-meta-template-groups-spurious`.
 
+### `gui-schema-classify-descriptor-subcommand` — diagnostic subcommand for the GUI canonicity-classifier drift gate
+
+- **Surfaced:** 2026-05-16, v0.19.0 cycle Phase 7 end-of-cycle opus review I1.
+- **Where:** new flag on `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::run` (`--classify-descriptor <STR>`); manual chapter row in `docs/manual/src/40-cli-reference/41-mnemonic.md` under `mnemonic gui-schema`; mnemonic-gui's `tests/canonicity_drift.rs` (drift-gate kittest that shells out to the new flag).
+- **What:** The GUI's `classify_descriptor_canonicity` (5-regex wrapper-form matcher at `mnemonic-gui-v0.8.0` `src/form/conditional.rs:99-126`) mirrors md-codec's `canonical_origin` table verbatim. To keep the GUI and toolkit views drift-free as md-codec evolves (e.g., adds a new canonical shape), the toolkit should expose a `mnemonic gui-schema --classify-descriptor <STR>` flag that prints `canonical` or `non-canonical` (exit 0 on success, exit 2 on parse failure). A new GUI kittest cell shells out to this flag for each fixture in the canonicity-corpus and asserts the verdict matches the GUI's classifier.
+- **Why deferred:** Out of v0.19.0 scope per Phase 7 escalation gate. The GUI classifier is small (~50 LOC) and mirrors md-codec's 5 shapes verbatim today — drift risk is real but bounded; the cycle ships v0.19.0 + v0.8.0 without the drift gate. Closing this FOLLOWUP adds ~20 LOC toolkit + ~80 LOC GUI test + 1 manual chapter row.
+- **Status:** `open`
+- **Tier:** `v0.20-feature` (small scope; can ride along with any v0.20+ patch).
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `canonicity-drift-gate-via-toolkit-classify-subcommand` (to file in lockstep).
+
+### `gui-non-canonical-descriptor-banner-and-placeholder` — info banner + slot_editor path-placeholder for default-inferred non-canonical descriptors
+
+- **Surfaced:** 2026-05-16, v0.19.0 cycle Phase 7 end-of-cycle opus review I2; predecessor lesson at `[[project-v0-18-1-v0-7-2-b1-bugfix-closed]]` (UX flaw missed by reviewer-loop + only caught by user-running-the-feature).
+- **Where:** `mnemonic-gui-v0.8.0` `src/form/conditional.rs` (new `descriptor_non_canonical_default_path_notice` helper); `mnemonic-gui-v0.8.0` `src/form/slot_editor.rs:191` (path-field placeholder via egui `hint_text`); `mnemonic-gui-v0.8.0` `src/main.rs` (banner-render site adjacent to slot grid).
+- **What:** v0.19.0 ships the canonicity-aware `--account` pin lift in `mnemonic-gui-v0.8.0` `src/form/conditional.rs::bundle()` (so the user's typed `--account N` flows through to the toolkit's default-path inference). What did NOT ship: (a) an inline info banner stating "non-canonical descriptor; @{N} will use default path m/48'/<coin>'/<account>'/2'"; (b) a `hint_text` placeholder in the slot_editor's path field showing the computed default. CLI users see the stderr info notice; GUI users get the correct behavior but NO visual cue that a default was assumed. Per the predecessor cycle's user-running-the-feature reviewer-dimension lesson, this surface is load-bearing for UX-perceptibility.
+- **Why deferred:** Out of v0.19.0 scope per Phase 7 escalation. The canonicity-aware override behaves correctly; the perceptibility surface is a follow-on cosmetic. Targets a v0.8.1 GUI patch.
+- **Status:** `open`
+- **Tier:** `v0.8.1-gui-patch`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-non-canonical-descriptor-banner-and-placeholder` (to file in lockstep).
+
 ### `verify-bundle-multi-cosigner-mk1-chunk-assembly` — verify-bundle's --mk1 / --bundle-json intake fails to reassemble multi-chunk cosigner mk1 cards
 
 - **Surfaced:** 2026-05-16, v0.19.0 cycle Phase 7 end-of-cycle opus review C1-followup investigation. Pre-existing (not introduced by v0.19.0); confirmed by reproducing the same failure shape against a CANONICAL `wsh(sortedmulti(2,@0,@1))` descriptor (whose verify-bundle round-trip should have worked since v0.4.x).
