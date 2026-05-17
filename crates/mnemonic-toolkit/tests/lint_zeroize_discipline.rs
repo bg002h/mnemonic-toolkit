@@ -155,12 +155,6 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/bundle.rs",
         evidence: &["acc.into_parts()"],
     },
-    // ---- cmd/verify_bundle.rs ----
-    ZeroizeRow {
-        label: "verify_bundle entropy_at_0 typed Option<Zeroizing<Vec<u8>>>",
-        source_file: "src/cmd/verify_bundle.rs",
-        evidence: &["Option<zeroize::Zeroizing<Vec<u8>>>"],
-    },
     // ---- cmd/derive_child.rs ----
     ZeroizeRow {
         label: "derive-child from_value wraps in Zeroizing<String>",

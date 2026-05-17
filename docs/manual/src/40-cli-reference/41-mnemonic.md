@@ -114,13 +114,23 @@ mnemonic bundle --network mainnet --account 0 \
   --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
 ```
 
-Stdout (the cards):
+Stdout (the cards — under v0.21.0+ SPEC §5.8 per-slot emission, all three cosigners now get their own ms1 card when phrases are supplied for all three slots):
 
 ```text
 # ms1[0] (entropy, BCH-checksummed)
 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+
+# ms1[1] (entropy, BCH-checksummed)
+ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6
+
+ms10e ntrsq plh7l ml0al h7lml 0alh7 lml0a ls5cc lar2z mksh6
+
+# ms1[2] (entropy, BCH-checksummed)
+ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
+
+ms10e ntrsq zqgpq yqszq gpqyq szqgp qyqsz qqlfm 7mep8 4hunu
 
 # mk1[0] (cosigner 0 xpub + origin)
 mk1qp40rrpqqspsrg8ml5q6p7laqxs0hltnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgymxvy4lntk6efgf0
@@ -185,8 +195,8 @@ info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/
 # Threshold: 3 of 3
 # Cosigners:
 #   @0: ms1:01a0f,mk1:01a0f (73c5da0a @ 48'/0'/0'/2')
-#   @1: (no ms1; watch-only),mk1:01a0f (b8688df1 @ 48'/0'/0'/2')
-#   @2: (no ms1; watch-only),mk1:01a0f (28645006 @ 48'/0'/0'/2')
+#   @1: ms1:01a0f,mk1:01a0f (b8688df1 @ 48'/0'/0'/2')
+#   @2: ms1:01a0f,mk1:01a0f (28645006 @ 48'/0'/0'/2')
 # Template: descriptor
 # md1: 01a0
 # Recovery: any 3 of 3 signing keys + md1 (template card).
@@ -232,8 +242,8 @@ via `python3 -m json.tool`):
   "master_fingerprint": null,
   "ms1": [
     "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
-    "",
-    ""
+    "ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6",
+    "ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu"
   ],
   "mk1": [
     [
@@ -293,21 +303,26 @@ Things to notice in the envelope:
 - **`origin_path`** = `m/48'/0'/0'/2'` — the default-inferred BIP-48
   cosigner path, applied to every `@N` placeholder that lacked an
   inline `[fp/path]@N` annotation or `--slot @N.path=` override.
-- **`ms1`** is a 3-element array with **only `ms1[0]` populated**;
-  the `@1` and `@2` entries are `""` sentinels even though the
-  invocation supplied phrases for all three slots. This is per the
-  SPEC §5.8 v0.3 "descriptor-mode contract": when `--descriptor` is
-  in play, exactly one slot may bind entropy (slot `@0`), and the
-  remaining slots are treated as watch-only for ms1 emission. The
-  `@1` and `@2` phrases ARE consumed — their xpubs land in
-  `mk1[1]` / `mk1[2]` and `multisig.cosigners[1]` /
-  `multisig.cosigners[2]` — but their entropy is intentionally not
-  encoded into this bundle. (Contrast with template mode
-  (`--template wsh-sortedmulti`), which emits per-slot ms1 for every
-  phrase-bearing slot — see
-  [Multi-source 2-of-3 multisig](#multi-source-2-of-3-multisig).)
-  In a real-world multi-cosigner deployment each cosigner generates
-  their own ms1 card directly from their phrase (no bundle needed):
+- **`ms1`** is a 3-element array with **all three entries populated**
+  — per SPEC §5.8 emission rule (added in toolkit-v0.21.0; uniform
+  across all bundle modes), every phrase-bearing slot's entropy is
+  encoded as that slot's ms1 card independently. The byte values for
+  `ms1[0]`, `ms1[1]`, `ms1[2]` correspond 1:1 to the
+  `--slot @0.phrase=` / `--slot @1.phrase=` / `--slot @2.phrase=`
+  inputs above. In a real-world multi-cosigner deployment each
+  cosigner generates their own ms1 card on their own machine from
+  their own phrase (they never see the other cosigners' phrases);
+  the consolidated 3-entry `ms1` array shown here is what happens
+  when a single operator runs the bundle with all three phrases at
+  once — the typical inheritance-rehearsal or backup-audit case.
+  If a slot is supplied as watch-only (e.g., `--slot @i.xpub=...`),
+  its `ms1[i]` entry is `""` per §5.8 (the "hybrid" example in the
+  SPEC). Each cosigner physically holds (engraves, geographically
+  separates) only THEIR own ms1 card alongside the shared `md1`
+  wallet-policy card and all three `mk1` watch-only cards.
+
+  Equivalent per-cosigner conversion (each cosigner runs this on
+  their own machine; produces the same `ms1[i]` byte content):
 
   ```sh
   # Cosigner @1 generates their personal ms1 backup
@@ -323,9 +338,6 @@ Things to notice in the envelope:
   # → ms1: ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
   ```
 
-  Each cosigner physically holds (engraves, geographically separates)
-  only THEIR own ms1 card alongside the shared `md1` wallet-policy
-  card and all three `mk1` watch-only cards.
 - **`mk1`** is a `Vec<Vec<String>>` — outer per cosigner, inner per
   bech32-chunk. The two-chunk shape per cosigner is the canonical
   mk1 chunking for the wrapped key card. v0.20.0's F1 fix gave each
@@ -366,14 +378,14 @@ mk1_decode[0]: ok cosigner[0] mk1 decoded
 mk1_xpub_match[0]: ok cosigner[0] xpub matches
 mk1_fingerprint_match[0]: ok cosigner[0] fingerprint matches
 mk1_path_match[0]: ok cosigner[0] path matches
-ms1_decode[1]: ok skipped: watch-only slot
-ms1_entropy_match[1]: ok skipped: watch-only slot
+ms1_decode[1]: ok cosigner[1] ms1 decoded
+ms1_entropy_match[1]: ok cosigner[1] ms1 byte-identical
 mk1_decode[1]: ok cosigner[1] mk1 decoded
 mk1_xpub_match[1]: ok cosigner[1] xpub matches
 mk1_fingerprint_match[1]: ok cosigner[1] fingerprint matches
 mk1_path_match[1]: ok cosigner[1] path matches
-ms1_decode[2]: ok skipped: watch-only slot
-ms1_entropy_match[2]: ok skipped: watch-only slot
+ms1_decode[2]: ok cosigner[2] ms1 decoded
+ms1_entropy_match[2]: ok cosigner[2] ms1 byte-identical
 mk1_decode[2]: ok cosigner[2] mk1 decoded
 mk1_xpub_match[2]: ok cosigner[2] xpub matches
 mk1_fingerprint_match[2]: ok cosigner[2] fingerprint matches
@@ -384,12 +396,15 @@ md1_xpub_match: ok all 3 pubkeys match expected (multiset)
 result: ok
 ```
 
-Per SPEC §5.8 schema-4 layout, descriptor mode binds entropy to the
-first slot only; cosigner `@1` and `@2` ms1 cards are empty-string
-sentinels in the bundle, so the round-trip reports them as
-`skipped: watch-only slot` rather than failing. In a real-world
-deployment each cosigner runs `bundle` independently for their own
-slot, so all three would receive a fully-engraved card-set.
+Per SPEC §5.8 emission rule (v0.21.0+), descriptor mode populates
+`ms1[i]` for every phrase-bearing slot, so the round-trip reports
+all three slots as `ok` on both `ms1_decode` and `ms1_entropy_match`.
+The `skipped: watch-only slot` report appears only when a slot was
+bound via `--slot @i.xpub=` rather than `@i.phrase=` (the "hybrid"
+case in SPEC §5.8). Pre-v0.21.0 bundles — where `ms1[1+]` was `""`
+despite phrases being supplied for those slots — are rejected by
+v0.21.0 verify-bundle with `ms1_decode[i]: fail` per SPEC §5.7
+case 4; the v0.21.0 migration note in SPEC §5.8 explains.
 
 `verify-bundle` re-applies the same canonicity-aware default-path
 inference on the descriptor before binding the supplied cards, so the
@@ -397,7 +412,10 @@ round-trip works without re-typing the inferred path on the CLI.
 
 Prior to v0.20.0, this multi-cosigner round-trip failed with
 `ChunkedHeaderMalformed`; the bugfix shipped in `mnemonic-toolkit-v0.20.0`
-(FOLLOWUP `verify-bundle-multi-cosigner-mk1-chunk-assembly`).
+(FOLLOWUP `verify-bundle-multi-cosigner-mk1-chunk-assembly`). v0.21.0
+followed with the SPEC §5.8 per-slot ms1 emission fix that this
+example illustrates (FOLLOWUP `synthesize-descriptor-deduplicate-with-unified`
+tracks the next-step refactor opportunity).
 
 #### Example: script-path-only P2TR wallet (NUMS sentinel)
 

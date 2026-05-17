@@ -542,7 +542,6 @@ fn descriptor_mode_verify_run<W: Write>(
     let mut keys: Vec<ParsedKey> = Vec::with_capacity(n);
     let mut fingerprints: Vec<ParsedFingerprint> = Vec::with_capacity(n);
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
-    let mut entropy_at_0: Option<zeroize::Zeroizing<Vec<u8>>> = None;
 
     for idx in 0..(n as u8) {
         let slot_inputs = by_index_inputs
@@ -627,7 +626,7 @@ fn descriptor_mode_verify_run<W: Write>(
             });
         };
 
-        let entropy = ent_opt.clone().map(zeroize::Zeroizing::new);
+        let entropy = ent_opt.map(zeroize::Zeroizing::new);
         let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
         cosigners.push(CosignerKeyInfo {
             xpub,
@@ -638,9 +637,6 @@ fn descriptor_mode_verify_run<W: Write>(
             master_xpub: None,
             _entropy_pin: entropy_pin,
         });
-        if idx == 0 {
-            entropy_at_0 = ent_opt.map(zeroize::Zeroizing::new);
-        }
         keys.push(ParsedKey {
             i: idx,
             payload: xpub_to_65(&xpub),
@@ -674,12 +670,7 @@ fn descriptor_mode_verify_run<W: Write>(
     if is_non_canonical {
         descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
     }
-    let expected = synthesize_descriptor(
-        &descriptor,
-        &cosigners,
-        entropy_at_0.as_ref().map(|z| &z[..]),
-        args.privacy_preserving,
-    )?;
+    let expected = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving)?;
 
     // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
     // is_multisig := descriptor.n > 1.

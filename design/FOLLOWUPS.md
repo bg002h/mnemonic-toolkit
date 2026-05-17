@@ -1701,3 +1701,63 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.20+-test-hygiene`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry to file in lockstep.
+
+### `descriptor-mode-all-or-nothing-slot-set` — should descriptor mode reject mixed phrase/watch-only slot sets?
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 1.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs:1077-1237` (per-slot resolver loop). UX question raised by the v0.21.0 SPEC §5.8 per-slot emission rule: when a user supplies `--slot @0.phrase=X --slot @1.xpub=Y --slot @2.phrase=Z`, the toolkit happily emits a "hybrid" bundle with `ms1 = ["pop", "", "pop"]`. Is that ever a meaningful real-world configuration, or should the CLI refuse mixed-mode slot sets?
+- **What:** The SPEC §5.8 emission rule defines the wire-format encoding for hybrid bundles, but doesn't take a position on whether the toolkit should EMIT them. A bundle where slots are inconsistently configured (some phrase-bearing, some watch-only) is hard to reason about in a real deployment: inheritance ceremonies typically want either "I have all phrases, just emit everything" OR "I have NONE of the phrases, this is watch-only". Mixed-mode is most plausibly a user error. A future cycle could add a CLI refusal guard (`error: descriptor mode requires either all-phrase or all-watch-only slot bindings; got mixed`) gated behind a `--allow-hybrid` opt-in flag for advanced use cases.
+- **Why deferred:** UX question, not a correctness gap. The v0.21.0 cycle's scope was conformance to SPEC §5.8 emission, not slot-binding policy. Filing for the v0.22+-feature tier so a future cycle can revisit with full UX-research context.
+- **Status:** `open`
+- **Tier:** `v0.22+-feature`
+- **Companion:** none.
+
+### `synthesize-descriptor-deduplicate-with-unified` — refactor synthesize_descriptor and synthesize_unified into a shared helper
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 2.
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:200-275` (`synthesize_descriptor` body) + `crates/mnemonic-toolkit/src/synthesize.rs:709-774` (`synthesize_unified` body). After v0.21.0's per-slot ms1 emission fix, both functions now iterate `cosigners`/`slots` and emit ms1/mk1 the same way (cf. plan §2.2 mirror-comment at synthesize.rs:255-257 vs synthesize.rs:710-723).
+- **What:** The two synthesis paths now share most of their logic (ms1 per-slot emission + mk1 per-cosigner chunking + md1 splitting). A shared helper `fn emit_unified_cards(descriptor, cosigners, privacy_preserving) -> Result<Bundle>` would deduplicate the bodies and reduce the maintenance surface. Pre-v0.21.0, the divergent ms1 emission rule (ms1[0]-only-for-descriptor vs per-slot-for-unified) blocked this refactor; the per-slot fix unlocks it.
+- **Why deferred:** Pure refactor; no user-visible behavior change. v0.21.0 scope was the SPEC §5.8 conformance fix + manual regen; deduplication is a separate concern. The two call sites (cmd/bundle.rs:1259 + cmd/verify_bundle.rs:673) currently distinguish descriptor-mode vs template-mode via the calling code path, which a refactor could preserve via a `mode: BundleMode` enum dispatch inside the shared helper.
+- **Status:** `open`
+- **Tier:** `v0.22+-refactor`
+- **Companion:** none.
+
+### `inheritance-example-transcript-coverage` — add `41-inheritance.{cmd,out}` transcript fixture to `docs/manual/tests/transcripts/`
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 3.
+- **Where:** `docs/manual/src/40-cli-reference/41-mnemonic.md:209-216` (bundle command) + `:351-357` (verify-bundle command) — the inheritance worked example. Today's `make verify-examples` lint pass at `docs/manual/Makefile` doesn't cover chapter 41's `wsh(andor(...))` recipe.
+- **What:** Add a transcript pair `docs/manual/tests/transcripts/41-inheritance.cmd` + `41-inheritance.out` that drives the chapter-41 bundle + verify-bundle commands end-to-end against the installed `mnemonic` binary, diffs the captured stdout against expected, and fails CI if the manual's documented output drifts from the binary's actual output. This would catch a future regression to the SPEC §5.8 per-slot emission (or any other example-block drift) at lint time instead of at user-complaint time.
+- **Why deferred:** Phase 4 architect-must-run-prose discipline caught the post-v0.21.0 ms1 strings byte-exact in this cycle; the CI gap is real but the manual content is currently correct. Adding transcript coverage is test-hygiene work that can be done in a dedicated docs cycle.
+- **Status:** `open`
+- **Tier:** `v0.22+-test-hygiene`
+- **Companion:** none.
+
+### `pre-v0_21-bundle-shape-detection` — verify-bundle stderr advisory when supplied bundle matches pre-v0.21.0 broken descriptor-mode shape
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 4.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (case-4 ms1 emission at lines ~1273-1276) + SPEC §5.8 v0.21.0 migration note paragraph at `design/SPEC_mnemonic_toolkit_v0_5.md:153`.
+- **What:** When v0.21.0 verify-bundle encounters a bundle where `ms1[0]` is populated but `ms1[1+]` are all `""` AND the supplied slots are all `--slot @i.phrase=` (signaling the user thinks the bundle was full-mode), the failure mode is `ms1_decode[i]: fail cosigner[i] ms1 expected (full-mode bundle) but not supplied` per SPEC §5.7 case 4. The error is cryptic without context. A future enhancement: detect this specific shape (pre-v0.21.0 descriptor-mode bundle with phrases for @1+) and print a stderr advisory `info: bundle ms1 shape matches pre-v0.21.0 descriptor-mode @0-only emission. Regenerate with v0.21.0+ to fix per SPEC §5.8 emission rule.` before the check output.
+- **Why deferred:** UX improvement; the SPEC migration note + the GitHub release notes already document the migration. The error message itself is technically accurate per SPEC §5.7 case 4. A stderr advisory would be a nice-to-have for users replaying old bundles but is not load-bearing.
+- **Status:** `open`
+- **Tier:** `v0.22+-ux`
+- **Companion:** none.
+
+### `self-check-ms1-iteration-audit` — should `self_check_bundle` iterate ms1 like verify-bundle now does?
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 5. Companion to v0.20.0 cycle's `feedback-self-check-bypasses-csi-grouping` memo.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::self_check_bundle::MkField::Multi` (at bundle.rs:1478-1504 per [[feedback-self-check-bypasses-csi-grouping]] anchor); ms1 iteration is similarly skipped in self-check.
+- **What:** The `--self-check` flag at `mnemonic bundle` only validates per-cosigner mk1 chunks decode; it does NOT iterate ms1 to validate the per-slot emission rule. Post-v0.21.0, this gap is more visible: self-check could regress to the @0-only emission pattern silently. Audit: should `self_check_bundle` add an ms1 iteration that asserts every phrase-bearing slot's ms1 decodes back to the supplied entropy? This would make self-check a regression guard for the SPEC §5.8 emission rule, complementing the verify-bundle --bundle-json round-trip in the new Cell 7 integration test.
+- **Why deferred:** Test-coverage gap, not a correctness gap. The v0.21.0 Cell 7 (`descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21`) and the SPEC §5.8 amendment together cover the user-facing regression surface; self-check is an internal sanity check. Audit + fix is a separate cycle.
+- **Status:** `open`
+- **Tier:** `v0.22+-test-coverage`
+- **Companion:** none.
+
+### `api-harvest-drift-on-synthesize-descriptor-signature` — technical-manual API table documents the dropped 3rd arg
+
+- **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 6 + R0 I7 fold.
+- **Where:** `docs/technical-manual/transcripts/api-harvest-mnemonic-toolkit.md:261` documents the v0.20.x signature `synthesize_descriptor(descriptor, cosigners, entropy, privacy_preserving)`. Post-v0.21.0 the function is `synthesize_descriptor(descriptor, cosigners, privacy_preserving)` (3-arg).
+- **What:** The technical manual's API harvest table is generated from a stale snapshot of the public surface. After v0.21.0 drops `entropy: Option<&[u8]>` from `synthesize_descriptor`, the doc line drifts. Closing this FOLLOWUP requires either (a) regenerating the API harvest at the next technical-manual cycle (which already has its own update cadence per the project's `docs/manual/` vs `docs/technical-manual/` distinction), or (b) adding a CI lint that grep-asserts each documented signature exists verbatim in the live source.
+- **Why deferred:** `docs/technical-manual/` is a distinct surface from `docs/manual/` per CLAUDE.md. The v0.21.0 cycle's mirror invariant covers `docs/manual/` only. Technical-manual updates ride a separate cadence and shouldn't block toolkit releases.
+- **Status:** `open`
+- **Tier:** `v0.22+-doc-hygiene`
+- **Companion:** none.

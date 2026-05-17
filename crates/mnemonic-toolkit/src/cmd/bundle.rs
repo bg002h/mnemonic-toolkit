@@ -1067,7 +1067,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     }
 
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
-    let mut entropy_at_0: Option<Vec<u8>> = None;
     let mut keys: Vec<crate::parse_descriptor::ParsedKey> = Vec::with_capacity(n);
     let mut fingerprints: Vec<crate::parse_descriptor::ParsedFingerprint> = Vec::with_capacity(n);
     // SPEC v0.6.2 §5.5.a — accumulate SLIP-0132 input-normalization signals.
@@ -1222,9 +1221,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             master_xpub: None,
             _entropy_pin: entropy_pin,
         });
-        if idx == 0 {
-            entropy_at_0 = ent_opt;
-        }
 
         keys.push(crate::parse_descriptor::ParsedKey {
             i: idx,
@@ -1238,7 +1234,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
 
     // SPEC §4.11.b BIP-388 distinct-key check (use bridging path: cosigners
     // already carry path_raw + entropy per slot post-v0.4.3 N alias merge).
-    let _ = &entropy_at_0; // entropy is on cosigners[0] already; remove this binding
     let dummy_binding = crate::parse_descriptor::DescriptorBinding {
         keys: keys.clone(),
         fingerprints: fingerprints.clone(),
@@ -1261,33 +1256,24 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         descriptor.path_decl.paths = resolved_placeholders.path_decl.paths.clone();
     }
 
-    let bundle = synthesize_descriptor(
-        &descriptor,
-        &cosigners,
-        entropy_at_0.as_deref(),
-        args.privacy_preserving,
-    )?;
+    let bundle = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving)?;
 
     // Reuse emit_unified renderer (resolved must be reconstructed as
     // ResolvedSlot vec for engraving card; entropy field tracks per-slot).
+    // SPEC §5.8 per-slot emission: clone entropy from each cosigners[i] so the
+    // engraving-card cosigner-summary block reflects ms1 emission for every
+    // phrase-bearing slot (not just @0). master_xpub: None preserves the
+    // descriptor-mode invariant established above at the cosigner push.
     let resolved_slots: Vec<ResolvedSlot> = cosigners
         .iter()
-        .enumerate()
-        .map(|(i, c)| {
-            // v0.10.1: ResolvedSlot.entropy is Option<Zeroizing<Vec<u8>>>;
-            // wrap at the field-write boundary.
-            let entropy = if i == 0 {
-                entropy_at_0.clone().map(zeroize::Zeroizing::new)
-            } else {
-                None
-            };
-            let entropy_pin = entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
+        .map(|c| {
+            let entropy_pin = c.entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
             ResolvedSlot {
                 xpub: c.xpub,
                 fingerprint: c.fingerprint,
                 path: c.path.clone(),
                 path_raw: c.path_raw.clone(),
-                entropy,
+                entropy: c.entropy.clone(),
                 master_xpub: None,
                 _entropy_pin: entropy_pin,
             }

@@ -193,10 +193,13 @@ pub type CosignerKeyInfo = ResolvedSlot;
 /// cosigner key info. Dispatches to single-card mk1 (n=1) or n-card mk1 (n≥2)
 /// per SPEC §4.10. Annotation cross-checks + BIP-388 distinctness enforcement
 /// run inside `descriptor_mode_run` (cmd/bundle.rs).
+///
+/// Per SPEC §5.8 emission rule (v0.21.0): `ms1[i]` is populated independently
+/// from `cosigners[i].entropy` for every slot. Watch-only slots (`entropy:
+/// None`) get the `""` sentinel.
 pub fn synthesize_descriptor(
     descriptor: &Descriptor,
     cosigners: &[CosignerKeyInfo],
-    entropy: Option<&[u8]>,
     privacy_preserving: bool,
 ) -> Result<Bundle, ToolkitError> {
     let n = descriptor.n as usize;
@@ -251,14 +254,18 @@ pub fn synthesize_descriptor(
         MkField::Multi(per_cosigner)
     };
 
-    // SPEC §5.8 schema-4 ms1 layout: dense Vec of length N, "" sentinel for
-    // watch-only slots. Descriptor mode binds entropy ONLY to @0 (single
-    // secret-bearing slot per the v0.3 descriptor mode contract). N-1
-    // remaining slots are watch-only cosigner xpubs → "".
-    let mut ms1: MsField = vec![String::new(); n];
-    if let Some(e) = entropy {
-        ms1[0] = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(e.to_vec()))
-            .map_err(ToolkitError::from)?;
+    // SPEC §5.8 emission rule: ms1[i] is populated per-slot from
+    // cosigners[i].entropy. Watch-only slots → "" sentinel. Mirrors
+    // synthesize_unified:710-723 — same rule across all bundle modes.
+    let mut ms1: MsField = Vec::with_capacity(n);
+    for c in cosigners {
+        match &c.entropy {
+            Some(e) => ms1.push(
+                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((**e).clone()))
+                    .map_err(ToolkitError::from)?,
+            ),
+            None => ms1.push(String::new()),
+        }
     }
 
     debug_assert!(descriptor.is_wallet_policy());
@@ -775,6 +782,18 @@ mod tests {
 
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+    // SPEC §5.8 emission-rule regression-test constants (v0.21.0 cycle).
+    // Mirror of cli_verify_bundle_multi_cosigner_mk1.rs:21-26; declared
+    // locally here because the integration-test crate's `const` block is
+    // not importable into the library's internal `mod tests` (separate
+    // compilation units).
+    const TREZOR_12_ZERO: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const BIP39_TEST_2: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    const BIP39_TEST_3: &str =
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+
     fn fixture_full(template: CliTemplate, network: CliNetwork) -> (Vec<u8>, Fingerprint, Xpub) {
         let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
         // v0.10.1: `into_parts` returns bare Vec<u8> per caller-wrap
@@ -1141,12 +1160,13 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_full_singlesig_shape() {
-        let (descriptor, cosigners, entropy) = descriptor_fixture(
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
             "wpkh(@0/<0;1>/*)",
             crate::parse_descriptor::ScriptCtx::SingleSig,
             1,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
         assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1161,7 +1181,7 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::SingleSig,
             1,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
         assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1169,12 +1189,13 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_full_multisig_shape() {
-        let (descriptor, cosigners, entropy) = descriptor_fixture(
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
             "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, Some(&entropy), false).unwrap();
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
         assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
         assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
@@ -1187,7 +1208,7 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, None, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
         assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
         assert_eq!(multi.len(), 2);
@@ -1202,8 +1223,84 @@ mod tests {
         );
         // descriptor has n=2 but we only pass 1 cosigner → error
         let one = vec![cosigners[0].clone()];
-        let err = synthesize_descriptor(&descriptor, &one, None, false).unwrap_err();
+        let err = synthesize_descriptor(&descriptor, &one, false).unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
+    }
+
+    /// SPEC §5.8 emission rule (v0.21.0): a descriptor-mode multi-cosigner
+    /// bundle emits one populated `ms1` string per phrase-bearing slot, and
+    /// the empty-string sentinel only for watch-only slots. Regression guard
+    /// against the legacy "v0.3 descriptor-mode contract" that pinned ms1
+    /// emission to slot @0. Hybrid arm exercises the per-slot sentinel rule.
+    #[test]
+    fn synthesize_descriptor_emits_per_slot_ms1_for_phrase_bearing_slots() {
+        use crate::parse_descriptor::{parse_descriptor, ParsedFingerprint, ParsedKey};
+
+        // Build a 3-cosigner fixture from 3 DISTINCT BIP-39 mnemonics — cannot
+        // use `descriptor_fixture` here (it shares one TREZOR_24 seed across
+        // slots and would violate BIP-388 §4.11.b distinctness for the
+        // descriptor's pkh(@0..2) leaves).
+        let phrases = [TREZOR_12_ZERO, BIP39_TEST_2, BIP39_TEST_3];
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("48'/0'/0'/2'").unwrap();
+        let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(3);
+        let mut keys: Vec<ParsedKey> = Vec::with_capacity(3);
+        let mut fps: Vec<ParsedFingerprint> = Vec::with_capacity(3);
+        for (i, phrase) in phrases.iter().enumerate() {
+            let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, *phrase).unwrap();
+            let entropy = mnemonic.to_entropy();
+            let seed = mnemonic.to_seed("");
+            let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+            let master_fp = master.fingerprint(&secp);
+            let xpriv = master.derive_priv(&secp, &path).unwrap();
+            let xpub = Xpub::from_priv(&secp, &xpriv);
+
+            cosigners.push(CosignerKeyInfo {
+                xpub,
+                fingerprint: master_fp,
+                path: path.clone(),
+                path_raw: path.to_string(),
+                entropy: Some(zeroize::Zeroizing::new(entropy)),
+                master_xpub: None,
+                _entropy_pin: None,
+            });
+
+            let mut payload = [0u8; 65];
+            payload[0..32].copy_from_slice(&xpub.chain_code.to_bytes());
+            payload[32..65].copy_from_slice(&xpub.public_key.serialize());
+            keys.push(ParsedKey { i: i as u8, payload });
+            fps.push(ParsedFingerprint {
+                i: i as u8,
+                fp: master_fp.to_bytes(),
+            });
+        }
+
+        let descriptor = parse_descriptor(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+            &keys,
+            &fps,
+        )
+        .unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        assert_eq!(bundle.ms1.len(), 3, "ms1 dense vec len == n");
+        assert!(bundle.ms1[0].starts_with("ms1"), "ms1[0] populated; got {:?}", bundle.ms1[0]);
+        assert!(bundle.ms1[1].starts_with("ms1"), "ms1[1] populated; got {:?}", bundle.ms1[1]);
+        assert!(bundle.ms1[2].starts_with("ms1"), "ms1[2] populated; got {:?}", bundle.ms1[2]);
+        // All 3 must be DISTINCT (each ms1 carries that slot's own entropy bytes).
+        assert_ne!(bundle.ms1[0], bundle.ms1[1]);
+        assert_ne!(bundle.ms1[1], bundle.ms1[2]);
+        assert_ne!(bundle.ms1[0], bundle.ms1[2]);
+
+        // Hybrid arm — slot 0 phrase, slots 1-2 watch-only (entropy: None)
+        // → ms1 = [populated, "", ""] per SPEC §5.8 example at line 141.
+        let mut cosigners_hybrid = cosigners.clone();
+        cosigners_hybrid[1].entropy = None;
+        cosigners_hybrid[2].entropy = None;
+        let bundle_hybrid = synthesize_descriptor(&descriptor, &cosigners_hybrid, false).unwrap();
+        assert_eq!(bundle_hybrid.ms1.len(), 3);
+        assert!(bundle_hybrid.ms1[0].starts_with("ms1"));
+        assert_eq!(bundle_hybrid.ms1[1], "");
+        assert_eq!(bundle_hybrid.ms1[2], "");
     }
 
     #[test]

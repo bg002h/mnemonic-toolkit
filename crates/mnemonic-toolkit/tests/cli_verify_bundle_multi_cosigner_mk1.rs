@@ -353,3 +353,89 @@ fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
         .assert()
         .success();
 }
+
+/// Cell 7 — v0.21.0 SPEC §5.8 per-slot ms1 emission regression guard.
+/// Descriptor-mode 3-of-3 wsh(andor(...)) bundle with phrases supplied for ALL
+/// three slots must emit `ms1[i]` populated for i ∈ {0, 1, 2} (no `""`
+/// sentinels). Pre-v0.21.0 emitted `ms1 = ["ms1...", "", ""]` per the legacy
+/// "v0.3 descriptor-mode contract" pinning to @0 only; SPEC §5.8 emission rule
+/// now mandates per-slot emission. Exercises the full bundle → verify-bundle
+/// --bundle-json round-trip per `[[feedback-verify-bundle-round-trip-per-phase-r0-scope]]`.
+#[test]
+fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
+    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    let bundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--language",
+            "english",
+            "--account",
+            "0",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--slot",
+            &format!("@2.phrase={BIP39_TEST_3}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
+    let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("bundle is valid JSON");
+
+    // SPEC §5.8 emission rule — ms1 dense vec of length N with every
+    // phrase-bearing slot populated; no empty-string sentinels.
+    let ms1 = bundle["ms1"].as_array().expect("ms1 is an array");
+    assert_eq!(ms1.len(), 3, "descriptor-mode 3-cosigner bundle emits len-3 ms1");
+    for (i, entry) in ms1.iter().enumerate() {
+        let s = entry.as_str().expect("ms1[i] is a string");
+        assert!(
+            s.starts_with("ms1"),
+            "ms1[{i}] must be a populated ms1 string per SPEC §5.8; got {s:?}"
+        );
+    }
+    // The 3 entries must be distinct (each slot carries its own entropy bytes).
+    assert_ne!(ms1[0], ms1[1]);
+    assert_ne!(ms1[1], ms1[2]);
+    assert_ne!(ms1[0], ms1[2]);
+
+    // Round-trip via verify-bundle --bundle-json — all 3+6N = 21 checks must
+    // pass (ms1_decode[0..2] + ms1_entropy_match[0..2] now all `ok`, not
+    // `skipped: watch-only slot`).
+    let tmpdir = tempfile::tempdir().unwrap();
+    let path = tmpdir.path().join("bundle.json");
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(stdout.as_bytes())
+        .unwrap();
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--language",
+            "english",
+            "--account",
+            "0",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--slot",
+            &format!("@2.phrase={BIP39_TEST_3}"),
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+}

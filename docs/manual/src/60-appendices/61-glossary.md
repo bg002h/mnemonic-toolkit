@@ -145,6 +145,11 @@ library crate `mk-codec`. Repo `bg002h/mnemonic-key`.
 
 The secret card. Encodes BIP-39 entropy (recovers the seed). CLI
 binary `ms`; library crate `ms-codec`. Repo `bg002h/mnemonic-secret`.
+Emitted per-slot in any bundle mode whenever the slot is
+secret-bearing (supplied via `--slot @i.phrase=`, `entropy=`,
+`wif=`, or `xprv=`). Watch-only slots have empty-string sentinels —
+see SPEC §5.8 emission rule (mode-uniform across single-sig,
+template multisig, descriptor multisig, multi-source, and hybrid).
 
 ## mnemonic
 

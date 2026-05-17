@@ -1969,13 +1969,7 @@ mod tests {
         )
         .unwrap();
         let descriptor = parse_descriptor(template, &binding.keys, &binding.fingerprints).unwrap();
-        crate::synthesize::synthesize_descriptor(
-            &descriptor,
-            &binding.cosigners,
-            binding.entropy_at_0(),
-            false,
-        )
-        .unwrap()
+        crate::synthesize::synthesize_descriptor(&descriptor, &binding.cosigners, false).unwrap()
     }
 
     #[test]
@@ -2185,13 +2179,8 @@ mod tests {
         )
         .unwrap();
         let parsed = parse_descriptor(&descriptor, &binding.keys, &binding.fingerprints).unwrap();
-        let descriptor_bundle = crate::synthesize::synthesize_descriptor(
-            &parsed,
-            &binding.cosigners,
-            binding.entropy_at_0(),
-            false,
-        )
-        .unwrap();
+        let descriptor_bundle =
+            crate::synthesize::synthesize_descriptor(&parsed, &binding.cosigners, false).unwrap();
 
         assert_eq!(
             descriptor_bundle.md1, template_bundle.md1,
