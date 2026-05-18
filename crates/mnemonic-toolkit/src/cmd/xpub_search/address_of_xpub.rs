@@ -166,12 +166,15 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
     // 1) Read xpub value.
     let xpub_value = read_xpub_value(args, stdin)?;
 
-    // 2) Detect multisig SLIP-0132 prefix BEFORE resolve_target_xpub (which
-    //    rejects them at base58-decode for unknown-version). Multisig SLIP-
-    //    0132 variants ARE recognized by `normalize_xpub_prefix`, but they
-    //    represent cosigner xpubs at multisig paths; single-sig address
-    //    derivation from them is semantically wrong (the address would be a
-    //    single-sig address built from a multisig cosigner key).
+    // 2) Detect multisig SLIP-0132 prefix BEFORE resolve_target_xpub.
+    //    `slip0132::normalize_xpub_prefix` ACCEPTS the multisig variants
+    //    (Ypub/Zpub/Upub/Vpub) and silently maps them to neutral xpub/tpub —
+    //    so without this short-circuit the input would normalize through and
+    //    we'd derive single-sig addresses from a multisig-cosigner xpub
+    //    (semantically wrong; the full descriptor is required for multisig
+    //    address materialization). This short-circuit is the LOAD-BEARING
+    //    refusal point; the pointer to `account-of-descriptor` here is the
+    //    user's path forward.
     if !xpub_value.starts_with("mk1") {
         // The multisig prefixes start with a capital letter (uppercase ASCII).
         // bech32 mk1 cards start with "mk1" so this short-circuit is safe.

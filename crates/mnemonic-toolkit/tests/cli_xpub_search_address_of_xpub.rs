@@ -296,12 +296,13 @@ fn no_match_within_gap_limit_returns_exit_4() {
 #[test]
 fn external_only_skips_internal_chain() {
     // Target on internal chain m/1/3. With --external-only, internal chain
-    // is skipped → no match.
+    // is skipped → no match. Also pin the JSON-envelope's scanned_internal:0
+    // payload that the manual prose advertises.
     let acct = account_xpub_at("m/84'/0'/0'");
     let zpub = xpub_as_zpub(&acct);
     let target = p2wpkh_addr(&child_at(&acct, 1, 3), NetworkKind::Main);
 
-    Command::cargo_bin("mnemonic")
+    let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "xpub-search",
@@ -311,10 +312,23 @@ fn external_only_skips_internal_chain() {
             "--target-address",
             &target,
             "--external-only",
+            "--json",
         ])
         .assert()
         .failure()
         .code(4);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
+    let r0 = &json["results"][0];
+    assert_eq!(r0["result"], "no_match");
+    assert_eq!(
+        r0["scanned_external"], 20,
+        "external scan covers the default gap_limit=20 window"
+    );
+    assert_eq!(
+        r0["scanned_internal"], 0,
+        "--external-only suppresses internal-chain scanning"
+    );
 }
 
 #[test]
@@ -449,8 +463,8 @@ fn multisig_zpub_prefix_refused_exit_1() {
         .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("single-sig only") || stderr.contains("multisig"),
-        "expected multisig refusal message: {stderr}"
+        stderr.contains("single-sig only"),
+        "expected the load-bearing 'single-sig only' wording in the refusal: {stderr}"
     );
     assert!(
         stderr.contains("account-of-descriptor"),
@@ -520,6 +534,47 @@ fn network_inference_from_tpub_prefix() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
     assert_eq!(json["results"][0]["result"], "match");
+}
+
+#[test]
+fn network_signet_override_disambiguates_testnet_version_byte() {
+    // The xpub version byte collapses testnet / signet / regtest into one
+    // family; `--network signet` overrides the inferred testnet default.
+    // Address rendering is byte-identical for the signet / testnet HRP
+    // (both use `tb1` for native segwit), so the match-rendered address
+    // is unchanged — but the override codepath at
+    // `address_of_xpub.rs::run_address_of_xpub` step 5 IS exercised.
+    let acct = account_xpub_at_testnet("m/84'/1'/0'");
+    let tpub = {
+        let raw = acct.encode();
+        let mut swapped = raw.to_vec();
+        swapped[0..4].copy_from_slice(&[0x04, 0x35, 0x87, 0xCF]);
+        base58::encode_check(&swapped)
+    };
+    let target = p2wpkh_addr(&child_at(&acct, 0, 0), NetworkKind::Test);
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "xpub-search",
+            "address-of-xpub",
+            "--xpub",
+            &tpub,
+            "--target-address",
+            &target,
+            "--address-type",
+            "p2wpkh",
+            "--network",
+            "signet",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
+    assert_eq!(json["results"][0]["result"], "match");
+    assert_eq!(json["results"][0]["chain"], "external");
+    assert_eq!(json["results"][0]["index"], 0);
 }
 
 #[test]
