@@ -1981,6 +1981,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - (b) **Add an explicit `--watch-only-cosigner-index N` flag** that takes an integer index, marking the Nth cosigner as watch-only without needing any ms1 value at all. More expressive but adds flag surface.
   - (c) **Relax `validate_flag_hrp` to accept empty strings as the SPEC §5.8 sentinel** (with a separate check that rejects non-empty non-`ms1`-HRP values). Restores pre-v0.24.0 behavior but creates a hidden empty-string-special-case in the validator.
 - **Why deferred:** v0.25.0 Phase 4's doc-comment fix is sufficient for the cycle close; the deeper SPEC reconciliation OR flag-surface change is a v0.26+ design question. No correctness regression — the new convention works.
-- **Status:** `open`
-- **Tier:** `v0.26+`
+- **Resolution:** RESOLVED in v0.25.1 (chose option (c) per user direction — relax `validate_flag_hrp` to accept empty strings, with explicit NOTICE-on-stderr to guard the accidental-empty-shell-variable footgun, plus option (a) SPEC §5.8 wording clarification documenting both equivalent CLI input forms). Restores the pre-v0.24.0 positional empty-string sentinel convention so middle-cosigner watch-only (e.g., `--ms1 <s0> --ms1 "" --ms1 <s2>`) is expressible — flag-omission alone can't represent this case. Mechanism: `crate::repair::validate_flag_hrp` early-returns `Ok(())` on `value.is_empty()` (alongside the existing `"-"` stdin exemption); `cmd::verify_bundle::run` iterates `args.ms1` and emits the NOTICE per skipped cosigner; SPEC §5.8 gains a new "CLI input forms" subsection. 1 new cell `watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice` exercises middle-cosigner skip (un-expressible via flag omission alone). Released 2026-05-18 as v0.25.1 (single-FOLLOWUP patch).
+- **Status:** resolved v0.25.1 cycle
+- **Tier:** `v0.25.1`
 - **Companion:** none.

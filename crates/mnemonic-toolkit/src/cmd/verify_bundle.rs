@@ -61,11 +61,17 @@ pub struct VerifyBundleArgs {
 
     /// Per-slot `ms1` card(s) to verify. Single-sig: supply once
     /// (`--ms1 <s>`). Multisig: repeat per slot — `--ms1 <s1>
-    /// --ms1 <s2>` for full-path; OMIT `--ms1` for cosigners you
-    /// only want to verify watch-only (the v0.24.0 strict per-flag
-    /// HRP gate rejects empty-string `--ms1 ""` values; per SPEC §5.8
-    /// watch-only sentinel semantics are now expressed via flag
-    /// omission, not empty-string). Mutually exclusive with
+    /// --ms1 <s2>` for full-path. For watch-only cosigners, two
+    /// equivalent forms are accepted per SPEC §5.8 (v0.25.1 restored
+    /// the empty-string sentinel that v0.24.0 §2.C.1 accidentally
+    /// broke): (1) **flag omission** — supply `--ms1` only for the
+    /// full-path cosigners; positional vec naturally stops at the
+    /// last full-path index (`--ms1 <s0>` skips cosigners 1+). Works
+    /// only for trailing cosigners. (2) **empty-string sentinel
+    /// `--ms1 ""`** — each `""` value marks the positionally-aligned
+    /// cosigner as watch-only; required for middle-cosigner skips
+    /// (`--ms1 <s0> --ms1 "" --ms1 <s2>`); emits a one-line stderr
+    /// NOTICE per skipped cosigner. Mutually exclusive with
     /// `--bundle-json`.
     #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
@@ -161,8 +167,19 @@ pub fn run<W: Write, E: Write>(
     // subcommands enforce mismatched-HRP rejection uniformly (architect
     // review C1 fold — previously verify-bundle dropped through to sibling
     // codec parse errors with no flag-name attribution).
-    for v in &args.ms1 {
+    for (idx, v) in args.ms1.iter().enumerate() {
         crate::repair::validate_flag_hrp("--ms1", "ms", v)?;
+        // v0.25.1 fix: empty-string positional watch-only sentinel per SPEC §5.8.
+        // Emit an expressive NOTICE so the user sees the intent (catches the
+        // accidental-empty-from-unset-shell-variable footgun while preserving
+        // the intentional middle / trailing-cosigner skip convention).
+        if v.is_empty() {
+            let _ = writeln!(
+                stderr,
+                "notice: cosigner[{idx}] marked watch-only via empty `--ms1` \
+                 sentinel (SPEC §5.8); no seed will be derived for this slot"
+            );
+        }
     }
     for v in &args.mk1 {
         crate::repair::validate_flag_hrp("--mk1", "mk", v)?;

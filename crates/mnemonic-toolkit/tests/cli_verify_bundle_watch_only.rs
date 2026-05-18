@@ -636,3 +636,103 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
             "notice: cosigner[0] mk1 parent_fingerprint",
         ).not());
 }
+
+/// v0.25.1 cell — empty-string `--ms1 ""` sentinel restores pre-v0.24.0
+/// positional watch-only convention per SPEC §5.8. v0.24.0 §2.C.1's strict
+/// HRP gate hard-failed `--ms1 ""` (no HRP prefix); v0.25.1 patches
+/// `validate_flag_hrp` to special-case empty strings + verify-bundle emits
+/// a one-line NOTICE per skipped cosigner. Resolves FOLLOWUP
+/// `verify-bundle-empty-ms1-watch-only-sentinel-or-explicit-flag`.
+///
+/// This cell exercises a use case that flag-omission alone CANNOT express:
+/// "skip cosigner 0, full-path for cosigner 1". (With flag omission, the
+/// single `--ms1` would land at index 0, not index 1.) Empty-string
+/// sentinel at index 0 makes the positional intent explicit.
+#[test]
+fn watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice() {
+    let bundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
+    let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
+    let ms1_arr = bundle["ms1"].as_array().expect("ms1 array");
+    let ms1_cos1 = ms1_arr[1].as_str().unwrap().to_string();
+
+    let mut mk1: Vec<String> = Vec::new();
+    for inner in bundle["mk1"].as_array().expect("mk1 array") {
+        for chunk in inner.as_array().expect("inner mk1 array") {
+            mk1.push(chunk.as_str().unwrap().to_string());
+        }
+    }
+    let md1: Vec<String> = bundle["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
+        "--slot".into(),
+        format!("@1.phrase={BIP39_TEST_2}"),
+        // Empty-string sentinel at index 0 (cosigner 0 watch-only);
+        // ms1_cos1 at index 1 (cosigner 1 full-path). This positional
+        // pattern is un-expressible via flag omission.
+        "--ms1".into(),
+        "".into(),
+        "--ms1".into(),
+        ms1_cos1,
+    ];
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        // The v0.25.1 NOTICE — proves the empty-string sentinel was
+        // accepted by validate_flag_hrp (not rejected as a parse error).
+        .stderr(predicate::str::contains(
+            "notice: cosigner[0] marked watch-only via empty `--ms1` sentinel",
+        ))
+        // And cosigner[1]'s full-path parent_fp check fires silently
+        // (derived from cosigner[1]'s ms1 matches the claimed mk1[1]
+        // parent_fingerprint).
+        .stderr(predicate::str::contains(
+            "warning: cosigner[1]",
+        ).not())
+        // Belt-and-suspenders: cosigner[1] is non-empty so the empty-sentinel
+        // NOTICE must NOT fire for it. Pins the `if v.is_empty()` guard.
+        .stderr(predicate::str::contains(
+            "notice: cosigner[1]",
+        ).not());
+}

@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.25.1] — 2026-05-18
+
+### Fixed
+
+- **Restore pre-v0.24.0 empty-string `--ms1 ""` watch-only sentinel** per SPEC §5.8. v0.24.0 §2.C.1's strict per-flag HRP gate (`validate_flag_hrp`) accidentally hard-failed empty strings on `--ms1` (and by symmetry on `--mk1` / `--md1`), breaking the positional middle-cosigner watch-only convention. v0.25.1 special-cases empty strings in `validate_flag_hrp` to pass through (alongside the existing `"-"` stdin sentinel). `verify-bundle` emits a one-line stderr NOTICE per empty-`--ms1` cosigner (`notice: cosigner[N] marked watch-only via empty --ms1 sentinel (SPEC §5.8); no seed will be derived for this slot`) — guards the accidental-empty-from-unset-shell-variable footgun by making the intent visible.
+
+  Two equivalent CLI forms for watch-only cosigners (both grounded in SPEC §5.8's wire-level invariant `ms1[i] == ""`):
+  - **Middle / trailing skip — empty-string sentinel** `--ms1 <s0> --ms1 "" --ms1 <s2>` (canonical; required for middle-cosigner watch-only).
+  - **Trailing skip — flag omission** `--ms1 <s0>` (shorthand; positional vec naturally stops at the last full-path index; works only for trailing cosigners).
+
+  Resolves FOLLOWUP `verify-bundle-empty-ms1-watch-only-sentinel-or-explicit-flag` (filed during v0.25.0 end-of-cycle architect review). SPEC §5.8 prose updated with explicit "CLI input forms" subsection documenting both forms.
+
 ## mnemonic-toolkit [0.25.0] — 2026-05-18
 
 ### Added

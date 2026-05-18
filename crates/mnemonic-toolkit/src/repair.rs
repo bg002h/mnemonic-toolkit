@@ -114,10 +114,22 @@ pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
 ///
 /// `flag` is the user-facing flag name (e.g. `"--ms1"`), `canonical` is the
 /// lowercase canonical HRP (`"ms"` / `"mk"` / `"md"`), and `value` is the
-/// raw user-supplied string. The special sentinel `"-"` (stdin) is exempt;
-/// callers expand it after this check.
+/// raw user-supplied string. Two special-case values are exempt from HRP
+/// validation:
+///   - `"-"` (stdin sentinel) — callers expand it after this check.
+///   - `""` (empty-string positional watch-only sentinel per SPEC §5.8;
+///     v0.25.1 fix) — for `--ms1` only, an empty string marks that cosigner
+///     as watch-only without supplying a seed. The caller emits a stderr
+///     NOTICE per cosigner; this validator just lets the value through.
+///     Restores the pre-v0.24.0 convention that v0.24.0 §2.C.1's strict gate
+///     accidentally broke. Without this exemption, `--ms1 ""` would hard-fail
+///     here at clap-parse-time and the SPEC §5.8 sentinel would be
+///     un-expressible at index ≥ 1 (i.e., middle / trailing cosigners in a
+///     multisig bundle). See FOLLOWUP
+///     `verify-bundle-empty-ms1-watch-only-sentinel-or-explicit-flag` for
+///     the v0.26+ design discussion that selected this path.
 ///
-/// Three cases:
+/// Three cases for non-sentinel values:
 ///   1. `value.starts_with(canonical)` → `Ok(())`.
 ///   2. Case-mismatch (`value.to_lowercase().starts_with(canonical)` but the
 ///      raw value does not) → returns `HrpMismatch` with a `got` field that
@@ -131,6 +143,16 @@ pub(crate) fn validate_flag_hrp(
     value: &str,
 ) -> Result<(), ToolkitError> {
     if value == "-" {
+        return Ok(());
+    }
+    // v0.25.1 fix: empty-string sentinel exemption. SPEC §5.8 documents that
+    // `--ms1 ""` marks a cosigner as watch-only at a specific positional
+    // index (needed for middle / trailing-cosigner skips in multisig bundles).
+    // v0.24.0 §2.C.1 strict-HRP gate accidentally broke this convention; the
+    // exemption restores it. Empty `--mk1 ""` / `--md1 ""` are also accepted
+    // for symmetry (the bundle's per-slot ms1/mk1/md1 lists are
+    // position-aligned; empty entries occur in symmetric positions).
+    if value.is_empty() {
         return Ok(());
     }
     // Match against the canonical `<hrp>1` prefix (e.g. "ms1") to preserve
