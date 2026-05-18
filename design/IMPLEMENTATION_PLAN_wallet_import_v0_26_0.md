@@ -583,7 +583,7 @@ These 5 SPEC + BRAINSTORM edits are flagged as `pre-execution-amendments` to be 
 - [ ] **§7.1 Amend `design/SPEC_mnemonic_toolkit_v0_5.md`:**
   - Add `## §5.11 CLI value-source sentinels (NEW)` per SPEC `§3.4`.
   - Add `## §6.11 import-wallet CLI grammar (NEW)` mirroring §6.7 structure.
-  - Add `## §7 wallet_import round-trip discipline (NEW)` as new top-level.
+  - Add `## §6.11.a wallet_import round-trip discipline (NEW)` as sub-section of §6.11 (NOT a new top-level §7; preserves v0.5 SPEC's delta-only ordering convention per §7.0.b; mirrors `§4.12.a-g` precedent from v0.19.0).
   - Bump v0.5 SPEC version line if needed (delta-only ordering preserved).
 
 - [ ] **§7.2 File 13 new FOLLOWUPs in `design/FOLLOWUPS.md`** per BRAINSTORM §6. Verify entries match BRAINSTORM list; cite SPEC sections.
