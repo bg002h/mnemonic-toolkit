@@ -6,6 +6,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.25.0] — 2026-05-18
+
+### Added
+
+- **`verify-bundle` ms1-driven `parent_fingerprint` defense-in-depth check at depth ≥ 2** (extends v0.24.0 A.1's depth 0/1 structural checks via a new helper `emit_full_path_parent_fingerprint_check` in `cmd/verify_bundle.rs`). For each cosigner with `path.len() >= 2`:
+  - **Full-path mode (ms1 supplied):** decode ms1 → derive parent xpub at `path[..N-1]` from the ms1's master seed → compute fingerprint → compare against the claimed `mk1.xpub.parent_fingerprint`. Emit stderr warning on mismatch (catches card-print errors where cosigner mk1s are spliced from different wallets). Passphrase-aware via `--passphrase`; language-aware via `--language`; network-aware via `--network`.
+  - **Watch-only mode (no ms1 for this cosigner):** emit explicit stderr notice `notice: cosigner[{idx}] mk1 parent_fingerprint at depth {N} unverified (requires ms1 to derive parent xpub)`. Cryptographic ceiling per BIP-32 child→parent one-wayness — cannot be checked without seed access. Explicit wontfix partition for the depth-≥-2 watch-only case.
+
+  Failure mode: stderr WARNING / NOTICE only; verify-bundle exit code and `result: ok / mismatch` verdict UNCHANGED (permissive-input / expressive-output). Resolves FOLLOWUP `verify-bundle-xpub-parent-fingerprint-derivation` — the original "derive parent from supplied mk1" framing was structurally impossible (BIP-32 `derive_pub` is parent→child only); corrected to ms1-driven derivation with an explicit wontfix partition for the watch-only ceiling. 5 new integration cells (2 watch-only in `tests/cli_verify_bundle_watch_only.rs`; 3 full-path in `tests/cli_verify_bundle_full.rs`).
+
+### Changed
+
+- **`convert` and `inspect` BCH auto-fire short-circuit is now TTY-gated** (matching `verify-bundle`'s v0.22.1 D18 contract). Piped consumers (no TTY) of `mnemonic convert --from ms1=...` and `mnemonic inspect --ms1=...` no longer see auto-fire short-circuit (exit 5) on corrupted card decode by default; they see the typed decode error instead. Interactive users (real TTY) continue to see the helpful auto-fire UX. Piped consumers who want auto-fire (e.g., CI / scripts) opt back in via `MNEMONIC_FORCE_TTY=1` — same mechanism `verify-bundle` has used since v0.22.1, and the same env-var `mnemonic-gui` v0.9.0+ already sets globally on every toolkit subprocess.
+
+  Before (v0.24.0):
+  ```sh
+  $ echo "" | mnemonic convert --from ms1=ms1corruptedstring --to phrase
+  # auto-fired BCH repair; printed repair report; exit 5
+  ```
+
+  After (v0.25.0):
+  ```sh
+  $ echo "" | mnemonic convert --from ms1=ms1corruptedstring --to phrase
+  # typed decode error on stderr; exit ≠ 5
+  $ MNEMONIC_FORCE_TTY=1 echo "" | mnemonic convert --from ms1=ms1corruptedstring --to phrase
+  # auto-fired (same as v0.24.0); exit 5
+  ```
+
+  Resolves FOLLOWUP `convert-inspect-auto-fire-tty-gate-asymmetry`.
+
+### Internal
+
+- Extract shared `pub(crate)` card-arg helpers (`count_dashes`, `expand_dashes`, `resolve_groups`) + new TTY helper (`resolve_no_auto_repair`) from `cmd/repair.rs` + `cmd/inspect.rs` into `crate::repair`. Joins `classify_hrp_prefix` + `validate_flag_hrp` from v0.24.0 C.1-fold. `pub(crate) trait CardArgs` parameterizes the dedup. Net -19 LOC across the cmd files. Resolves FOLLOWUP `cmd-repair-inspect-helper-duplication`.
+- Add `debug_assert!` for global-vs-local flag-id disjointness in `gui_schema.rs::build_subcommand`. Defensive guard against future global-flag additions whose names collide with subcommand-local flags (B.1 architect review surfaced this as dead defense via the pre-existing `seen_flag_names` HashSet; the debug_assert makes the invariant load-bearing). Positive-invariant test cell runs in both debug + release; `#[cfg(debug_assertions)]`-gated negative-control cell exercises the assert in debug only. Resolves FOLLOWUP `gui-schema-global-flag-id-disjointness-debug-assert`.
+
 ## mnemonic-toolkit [0.24.0] — 2026-05-17
 
 v0.24.x cycle: three-tranche follow-up release folding 9 items across

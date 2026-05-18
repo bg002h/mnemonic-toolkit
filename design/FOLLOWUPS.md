@@ -1919,11 +1919,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 ### `verify-bundle-xpub-parent-fingerprint-derivation` — extend xpub-vs-md1 parent_fingerprint check to depth ≥ 2
 
 - **Surfaced:** 2026-05-17, v0.24.0 Tranche A.1 end-of-phase architect review (folded `verify-bundle-watch-only-xpub-path-internal-consistency` as stderr-warning helper, but architect noted the parent_fingerprint check is narrower than plan).
-- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — `emit_watch_only_xpub_path_cross_check` parent_fingerprint branch around `:1796-1799`. Plan §2.A.1 said "compare mk1's xpub parent_fingerprint vs derived-parent-fingerprint of md1's path (requires deriving the parent xpub from supplied mk1 + comparing fingerprints)." Implementation does structural sanity only: depth-0 enforces BIP-32 all-zeros invariant; depth-1 compares against claimed master fingerprint (mk1 origin_fingerprint or md1 TLV fingerprints); depth ≥ 2 SKIPS the parent_fingerprint check entirely. Doc-comment is honest about the narrowing.
-- **What:** Extend the parent_fingerprint check to depth ≥ 2 by deriving the parent xpub from the supplied mk1 (`xpub.derive_pub(parent_path)`-style) and computing its fingerprint, then comparing against `xpub.parent_fingerprint`. Eliminates the depth-≥-2 blind spot. Cheap (no seed required; mk1 carries the xpub).
-- **Why deferred:** Common BIP-84 watch-only bundles are depth-3 (`m/84'/0'/0'`); the current check skips them silently. Not a correctness regression (existing behavior matches the stderr disclaimer at `:317-:331`), but extends the defense-in-depth value of the cross-check. Out-of-scope for v0.24.0 A.1 since the parent-xpub derivation adds complexity (BIP-32 derive_pub call chain) the plan didn't budget. Pair with future verify-bundle hardening.
-- **Status:** `open`
-- **Tier:** `v1+`
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — `emit_watch_only_xpub_path_cross_check` parent_fingerprint branch around `:1996-2029`. v0.24.0 implementation did structural sanity only: depth-0 enforces BIP-32 all-zeros invariant; depth-1 compares against claimed master fingerprint (mk1 origin_fingerprint or md1 TLV fingerprints); depth ≥ 2 was SKIPPED.
+- **What:** Original framing said "derive parent xpub from supplied mk1" — this is **structurally impossible**: BIP-32 `derive_pub` is parent→child only; child→parent is the cryptographic one-way step. v0.25.0 corrects the mechanism: derive the parent xpub from the supplied **ms1** (seed) — `ms_codec::decode → entropy → BIP-39 → seed → master xpriv → derive_priv at path[..N-1] → from_priv → fingerprint`. New helper `emit_full_path_parent_fingerprint_check` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (after `emit_watch_only_xpub_path_cross_check`). Wired into `run_full`, `run_watch_only`, and `run_multisig`. Reuses passphrase / language / network from `VerifyBundleArgs` (no NOTICE-and-skip fallback). For the watch-only depth ≥ 2 case (no ms1 supplied for that cosigner), emits an explicit stderr NOTICE `notice: cosigner[{idx}] mk1 parent_fingerprint at depth {N} unverified (requires ms1 to derive parent xpub)` — explicit wontfix partition documenting the BIP-32 one-wayness ceiling. Failure mode: stderr WARNING / NOTICE only; verify-bundle exit code unchanged (permissive-input / expressive-output).
+- **Status:** `RESOLVED in v0.25.0` (mechanism correction + ms1-driven derivation + watch-only NOTICE partition).
+- **Tier:** `v0.25.0` (promoted from `v1+` per user direction).
 - **Companion:** none.
 
 ### `gui-schema-global-flag-id-disjointness-debug-assert` — guard against future global-vs-local flag-id collision in v5+ emitter
@@ -1932,8 +1931,9 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs:1029-1031` skips args by `global_ids` set lookup; `:1042-1047` then re-emits globals via explicit list. `seen_flag_names` HashSet at `:1043` is dead defense — only the `global_ids` skip is load-bearing. Works correctly today because the only global flag is `--no-auto-repair` (boolean, no naming collision risk against subcommand-local flags). If a future cycle adds a global flag whose long-name collides with a subcommand-local flag of a DIFFERENT clap ID, the global would shadow the local.
 - **What:** Add either (a) a debug-assert in `emit_flag` confirming `global_ids` IDs are disjoint from each subcommand's local `arg.get_id()` set, OR (b) a one-shot test cell asserting the same invariant. Optionally remove the `seen_flag_names` dead defense or rewrite it to be load-bearing (e.g., assert no name collisions across global-and-local rather than skip silently).
 - **Why deferred:** Not a current correctness issue (no global flags besides `--no-auto-repair` today). Cheap to fix later; safer to file than to fold mid-cycle without expanding scope.
-- **Status:** `open`
-- **Tier:** `v0.25+`
+- **Resolution:** RESOLVED in v0.25.0 Phase 3 — added `pub(crate) fn assert_global_local_id_disjointness` helper in `cmd/gui_schema.rs` (load-bearing debug_assert; called from `build_subcommand` before global propagation). Deleted dead `seen_flag_names` defense per option (a) + supplementary cleanup. Cells: `global_local_id_disjointness_invariant_holds_in_current_schema` (integration, both debug + release) + `global_local_collision_triggers_debug_assert` (`#[cfg(debug_assertions)]`-gated `#[should_panic]` unittest).
+- **Status:** resolved v0.25.0 cycle
+- **Tier:** `v0.25.0`
 - **Companion:** none.
 
 ### `cmd-repair-inspect-helper-duplication` — extract `count_dashes` / `expand_dashes` / `resolve_groups` shared between `cmd/repair.rs` and `cmd/inspect.rs`
@@ -1945,8 +1945,9 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `validate_flag_hrp` already extracted to `crates/mnemonic-toolkit/src/repair.rs` in the C.1 D34/I5 fold (this FOLLOWUP picks up the remaining `cmd/`-local helpers).
 - **What:** Move the three shared helpers to a new `crates/mnemonic-toolkit/src/cmd/_shared_card_args.rs` (or co-locate next to `validate_flag_hrp` in `src/repair.rs`). Signature for `resolve_groups` would need to be parameterized over the per-subcommand error-prefix string (`"repair"` vs `"inspect"`) and the args-struct shape — likely cleanest via a small trait or a free function consuming `(Option<String>, &[String], &[String], &[String])` (ms1/mk1/md1/extra_strings + a `&'static str` subcommand-name for error messages). Update both `cmd::repair::run` + `cmd::inspect::run` to delegate. Subsumes any future verify-bundle equivalent if positional intake grows beyond the three-flag set.
 - **Why deferred:** Tranche C.1 architect review surfaced this as Important #3 alongside D34 (Critical) + I5 (Important — confusing case-mismatch error). The D34/I5 folds were on the critical path for v0.24.0 ship; the helper-extraction refactor is purely DRY (no correctness gap) and was deferred to keep C.1's diff focused. Pattern is well-known: `synthesize_unified` extraction was the analogous earlier cycle (see CLAUDE.md memory `synthesize-unified-is-cli-hotpath`); duplicated helpers between sibling `cmd/` modules carry the same maintenance-drift risk.
-- **Status:** `open`
-- **Tier:** `v0.25+`
+- **Resolution:** RESOLVED in v0.25.0 Phase 1 — co-located next to `validate_flag_hrp` in `crates/mnemonic-toolkit/src/repair.rs` (option B). Added `pub(crate) trait CardArgs` with `ms1()`/`mk1()`/`md1()`/`extra_strings()` accessors; implemented for both `RepairArgs` + `InspectArgs`. Three helpers (`count_dashes`, `expand_dashes`, `resolve_groups`) now consume `&impl CardArgs`. `resolve_groups` parameterized over `subcmd_name: &'static str` for the 2 error-message substrings. Net -19 LOC across the cmd files; 1142 baseline tests preserved.
+- **Status:** resolved v0.25.0 cycle
+- **Tier:** `v0.25.0`
 - **Companion:** none.
 
 ### `convert-inspect-auto-fire-tty-gate-asymmetry` — convert/inspect auto-fire lacks TTY gate; design-intent says interactive-only
@@ -1963,6 +1964,23 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - (b) **Document the asymmetry intentionally.** Update the manual at `:505-508` to explicitly note convert/inspect auto-fire is unconditional regardless of TTY (existing behavior is preserved; the doc just reads as design-intent).
   - User+architect choice; (a) is the more principled fix, (b) is the cheaper backfill.
 - **Why deferred:** Latent issue, not a correctness regression. v0.24.0 A.1's scope was force-tty doc-promote, NOT TTY-gate-mechanism extension. Folding (a) would require expanding A.1 scope mid-cycle. Filing for future-cycle resolution; folding (b) is cheap if user prefers that approach.
+- **Resolution:** RESOLVED in v0.25.0 Phase 2 — chose option (a). Single-gate-at-entry pattern: `let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);` at top of `cmd/convert.rs::run` + `cmd/inspect.rs::run`; downstream `try_repair_and_short_circuit` sites thread `effective_no_auto_repair`. Mirror verify_bundle.rs:168-173 pattern. Manual L504-541 hoist + revert: A.1's narrowing paragraph reverted; new shared `### Auto-fire behavior (all three subcommands) (v0.25.0)` H3 section above `## mnemonic convert`. Behavior change documented in CHANGELOG `### Changed` with before/after example. 6 cli_auto_repair cells updated with `MNEMONIC_FORCE_TTY=1`; 3 new cells lock TTY-negative legacy path. Piped users opt back in via `MNEMONIC_FORCE_TTY=1` — same mechanism the GUI uses globally.
+- **Status:** resolved v0.25.0 cycle
+- **Tier:** `v0.25.0`
+- **Companion:** none.
+
+### `verify-bundle-empty-ms1-watch-only-sentinel-or-explicit-flag` — pre-v0.24.0 `--ms1 ""` watch-only sentinel hard-fails v0.24.0 strict-HRP gate
+
+- **Surfaced:** 2026-05-18, v0.25.0 Phase 4 R0 architect review. The pre-v0.24.0 multi-cosigner watch-only convention was `--ms1 <s1> --ms1 ""` (empty string `""` per SPEC §5.8 as the watch-only sentinel for a specific cosigner). v0.24.0 §2.C.1 added a strict per-flag HRP validation gate (`crate::repair::validate_flag_hrp` called from `cmd/verify_bundle.rs::run` at `:162`) which rejects empty-string `--ms1` values for the "HRP must be lowercase canonical 'ms'" check. v0.25.0 Phase 4 worked around this by omitting the flag entirely for watch-only cosigners (`supplied_ms1.get(idx).map(...).unwrap_or("")` falls through cleanly), and updated the `cmd/verify_bundle.rs:62-67` doc-comment to describe omission as the new sentinel convention. But the SPEC §5.8 reference text still describes empty-string-as-sentinel; this FOLLOWUP captures the design question.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:62-67` — doc-comment now describes omission (correct post-v0.25.0); historical pre-v0.24.0 doc said empty-string.
+  - `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:162` — `validate_flag_hrp("--ms1", "ms", v)?` rejects `""` strings at clap-parse-time.
+  - SPEC §5.8 prose — describes empty-string sentinel; needs reconciliation OR explicit version-fork note.
+- **What:** Choose one of:
+  - (a) **Document the omission-as-sentinel convention canonically in SPEC §5.8.** Update SPEC to remove the empty-string-sentinel claim; add omission-as-sentinel description with `--ms1 <s1>` (skip cosigner) examples. Cheapest fix; treats the strict-HRP gate as authoritative.
+  - (b) **Add an explicit `--watch-only-cosigner-index N` flag** that takes an integer index, marking the Nth cosigner as watch-only without needing any ms1 value at all. More expressive but adds flag surface.
+  - (c) **Relax `validate_flag_hrp` to accept empty strings as the SPEC §5.8 sentinel** (with a separate check that rejects non-empty non-`ms1`-HRP values). Restores pre-v0.24.0 behavior but creates a hidden empty-string-special-case in the validator.
+- **Why deferred:** v0.25.0 Phase 4's doc-comment fix is sufficient for the cycle close; the deeper SPEC reconciliation OR flag-surface change is a v0.26+ design question. No correctness regression — the new convention works.
 - **Status:** `open`
-- **Tier:** `v0.25+`
+- **Tier:** `v0.26+`
 - **Companion:** none.

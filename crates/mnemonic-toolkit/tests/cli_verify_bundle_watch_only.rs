@@ -474,3 +474,165 @@ fn cross_check_multi_cosigner_one_inconsistent_lists_index() {
         .stderr(predicate::str::contains("cosigner[0]"))
         .stderr(predicate::str::contains("does not match"));
 }
+
+// ============================================================================
+// v0.25.0 §2.D — watch-only depth ≥ 2 parent_fingerprint NOTICE cells.
+// ============================================================================
+
+/// v0.25.0 §2.D cell — multi-cosigner watch-only at depth ≥ 2 emits an
+/// explicit stderr NOTICE that the parent_fingerprint is unverified-by-design
+/// (no ms1 → cannot derive parent xpub). Cryptographic ceiling per BIP-32
+/// child→parent one-wayness; permissive-input / expressive-output per project
+/// philosophy.
+///
+/// Cell exercises the depth ≥ 2 watch-only branch on a 2-of-2 wsh-sortedmulti
+/// bundle (multisig templates produce depth-3 paths via the BIP-87 default
+/// purpose). Both cosigners are watch-only (no ms1) so the NOTICE fires for
+/// both indices.
+#[test]
+fn watch_only_depth_3_emits_unverified_parent_fp_notice() {
+    let (mk1, md1) = gen_bundle_json_multisig(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "wsh-sortedmulti",
+        "--threshold",
+        "2",
+        "--slot",
+        &format!("@0.phrase={TREZOR_24}"),
+        "--slot",
+        &format!("@1.phrase={BIP39_TEST_2}"),
+        "--json",
+    ]);
+    // Decode mk1 chunks per cosigner to extract xpubs.
+    let mk_refs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
+    let cos0 = mk_codec::decode(&mk_refs[..2]).expect("cos0 decodes");
+    let cos1 = mk_codec::decode(&mk_refs[2..]).expect("cos1 decodes");
+    let cos0_xpub = cos0.xpub.to_string();
+    let cos1_xpub = cos1.xpub.to_string();
+    let cos0_fp = cos0.origin_fingerprint.unwrap().to_string().to_lowercase();
+    let cos1_fp = cos1.origin_fingerprint.unwrap().to_string().to_lowercase();
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.xpub={cos0_xpub}"),
+        "--slot".into(),
+        format!("@0.fingerprint={cos0_fp}"),
+        "--slot".into(),
+        format!("@1.xpub={cos1_xpub}"),
+        "--slot".into(),
+        format!("@1.fingerprint={cos1_fp}"),
+    ];
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .stderr(predicate::str::contains(
+            "notice: cosigner[0] mk1 parent_fingerprint at depth 3 unverified (requires ms1 to derive parent xpub)",
+        ))
+        .stderr(predicate::str::contains(
+            "notice: cosigner[1] mk1 parent_fingerprint at depth 3 unverified (requires ms1 to derive parent xpub)",
+        ));
+}
+
+/// v0.25.0 §2.D cell — partial-watch-only multisig: ms1 supplied for
+/// cosigner[0] only (consistent with the supplied mk1[0]). For cosigner[1]
+/// without ms1, the helper emits NOTICE (depth ≥ 2 + no seed); for
+/// cosigner[0] the full-path check fires silently (derived matches claimed).
+#[test]
+fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only() {
+    // Reuse the same multisig bundle as the depth-3 cell.
+    let bundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
+    let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
+    let ms1_arr = bundle["ms1"].as_array().expect("ms1 array");
+    let ms1_cos0 = ms1_arr[0].as_str().unwrap().to_string();
+    // ms1_arr[1] intentionally NOT supplied; empty string is the watch-only sentinel.
+
+    let mut mk1: Vec<String> = Vec::new();
+    for inner in bundle["mk1"].as_array().expect("mk1 array") {
+        for chunk in inner.as_array().expect("inner mk1 array") {
+            mk1.push(chunk.as_str().unwrap().to_string());
+        }
+    }
+    let md1: Vec<String> = bundle["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
+        "--slot".into(),
+        format!("@1.phrase={BIP39_TEST_2}"),
+        // ms1 for cosigner[0] only; cosigner[1] has no --ms1 flag (vec
+        // get(1) → None in the new helper, treated as the watch-only
+        // sentinel for the depth-≥-2 NOTICE branch).
+        "--ms1".into(),
+        ms1_cos0,
+    ];
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .stderr(predicate::str::contains(
+            "notice: cosigner[1] mk1 parent_fingerprint at depth 3 unverified",
+        ))
+        // cosigner[0] full-path check fires silently when ms1 + mk1 are consistent;
+        // assert NO notice fires for cosigner[0].
+        .stderr(predicate::str::contains(
+            "notice: cosigner[0] mk1 parent_fingerprint",
+        ).not());
+}

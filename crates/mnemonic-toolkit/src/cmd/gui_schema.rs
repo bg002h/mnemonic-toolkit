@@ -996,14 +996,6 @@ fn build_schema(cmd: &Command) -> Schema {
 fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
     let mut flags: Vec<Flag> = Vec::new();
     let mut positionals: Vec<Positional> = Vec::new();
-    // Track flag long-form names already emitted so we don't double-list a
-    // global flag that clap's own `_propagate_global_args` may have already
-    // copied into `sub.get_arguments()`. The toolkit-side global propagation
-    // below treats the explicit root-args list as authoritative for the
-    // `global: true` annotation regardless of which path put the arg into
-    // the subcommand's flag set.
-    let mut seen_flag_names: std::collections::BTreeSet<String> =
-        std::collections::BTreeSet::new();
     // IDs of the global args we'll propagate explicitly. Used to recognize
     // clap-propagated copies in `sub.get_arguments()` and re-route them
     // through the same emit_flag helper (so they pick up `global: true`).
@@ -1011,6 +1003,23 @@ fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
         .iter()
         .map(|a| a.get_id().as_str().to_string())
         .collect();
+
+    // v0.25.0 Phase 3 — collect the IDs of args clap reports as LOCAL on this
+    // subcommand (excluding positionals, the auto-generated --help flag, and
+    // anything clap has copied in via `_propagate_global_args` — those are
+    // recognized via `is_global_set()`). The disjointness check below ensures
+    // no future global-flag addition silently shadows a subcommand-local
+    // flag with the same clap-derive identifier. Crucially we do NOT filter
+    // local_ids by `global_ids` here: doing so would make the assertion
+    // vacuously true. See `assert_global_local_id_disjointness`.
+    let local_ids: std::collections::BTreeSet<String> = sub
+        .get_arguments()
+        .filter(|a| !a.is_positional())
+        .filter(|a| a.get_id().as_str() != "help")
+        .filter(|a| !a.is_global_set())
+        .map(|a| a.get_id().as_str().to_string())
+        .collect();
+    assert_global_local_id_disjointness(&global_ids, &local_ids, sub.get_name());
 
     for arg in sub.get_arguments() {
         if arg.is_positional() {
@@ -1035,7 +1044,6 @@ fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
                 continue;
             }
             let flag = emit_flag(arg, /*is_global=*/ false);
-            seen_flag_names.insert(flag.name.clone());
             flags.push(flag);
         }
     }
@@ -1043,12 +1051,13 @@ fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
     // v0.24.0 Tranche B.1 — append parent-Command globals into this
     // subcommand's flag set. Each is marked `global: true` so GUI
     // consumers can render it under a top-level action-bar or repeat
-    // it per-subcommand as they prefer.
+    // it per-subcommand as they prefer. v0.25.0 Phase 3 — the
+    // `assert_global_local_id_disjointness` invariant above guarantees
+    // these IDs do not collide with the local emissions, so we can append
+    // unconditionally (the pre-v0.25.0 `seen_flag_names` long-name dedup
+    // was dead-defense per v0.24.0 B.1 architect review).
     for ga in global_args {
-        let flag = emit_flag(ga, /*is_global=*/ true);
-        if seen_flag_names.insert(flag.name.clone()) {
-            flags.push(flag);
-        }
+        flags.push(emit_flag(ga, /*is_global=*/ true));
     }
 
     // Deterministic ordering: flags by long name, positionals by declaration order.
@@ -1064,6 +1073,47 @@ fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
         conditional_rules,
         meta,
     }
+}
+
+/// v0.25.0 Phase 3 — debug-only invariant guard for the gui-schema
+/// global-vs-local flag-ID partition.
+///
+/// `global_ids` are the clap-derive identifiers of every arg the root
+/// `Cli` declares with `global = true` (currently just `--no-auto-repair`).
+/// `local_ids` are the identifiers of args declared directly on a
+/// subcommand AFTER filtering out positionals, the auto-generated `help`
+/// flag, and anything clap copied in via `_propagate_global_args`
+/// (recognized via `is_global_set()`). `local_ids` is intentionally NOT
+/// pre-filtered against `global_ids` — doing so would make this
+/// disjointness check vacuously true.
+///
+/// The invariant: the two sets are disjoint. If a future global addition
+/// re-uses a subcommand-local identifier, the emitter would silently double-
+/// emit (one entry with `global: true`, one without) — the GUI's schema
+/// consumer would then surface a flag-duplication bug somewhere downstream.
+/// The debug-assert catches this at toolkit-build time before the schema
+/// ever reaches a GUI consumer.
+///
+/// This is `pub(crate)` for direct unit testability (see
+/// `cli_gui_schema_v5_extensions.rs`'s negative-control cell) — driving the
+/// invariant through a synthetic `clap::Command` tree would require leaking
+/// emitter internals into tests; calling the helper directly is cleaner.
+///
+/// Resolves FOLLOWUP `gui-schema-global-flag-id-disjointness-debug-assert`
+/// (filed v0.24.0 Tranche B.1 architect review; the pre-v0.25.0
+/// `seen_flag_names` long-name dedup in `build_subcommand` was a dead-
+/// defense that this debug-assert promotes to a load-bearing invariant).
+pub(crate) fn assert_global_local_id_disjointness(
+    global_ids: &std::collections::BTreeSet<String>,
+    local_ids: &std::collections::BTreeSet<String>,
+    subcmd_name: &str,
+) {
+    debug_assert!(
+        global_ids.is_disjoint(local_ids),
+        "global flag id collides with local id in subcommand `{}`: shared ids = {:?}",
+        subcmd_name,
+        global_ids.intersection(local_ids).collect::<Vec<_>>()
+    );
 }
 
 /// v0.24.0 Tranche B.1 — assemble a `Flag` entry from a clap `Arg`, populating
@@ -1230,4 +1280,47 @@ pub fn run<W: Write>(
     serde_json::to_writer(&mut *stdout, &schema).ok();
     writeln!(stdout).ok();
     Ok(())
+}
+
+// v0.25.0 Phase 3 — unit-test side of the `assert_global_local_id_disjointness`
+// invariant. The companion positive-invariant cell
+// `global_local_id_disjointness_invariant_holds_in_current_schema` lives in
+// the integration suite at
+// `crates/mnemonic-toolkit/tests/cli_gui_schema_v5_extensions.rs` (it asserts
+// the end-to-end wire shape). This negative-control cell calls the
+// `pub(crate)` helper directly, which is not reachable from the integration
+// test crate.
+#[cfg(test)]
+mod tests {
+    #[cfg(debug_assertions)]
+    use super::assert_global_local_id_disjointness;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "collides with local id")]
+    fn global_local_collision_triggers_debug_assert() {
+        // Construct a synthetic global-vs-local ID partition with a deliberate
+        // collision (`my_test_flag` declared as both global and local) and
+        // assert that `assert_global_local_id_disjointness`'s `debug_assert!`
+        // fires with the expected message substring.
+        //
+        // Gated to `#[cfg(debug_assertions)]` builds: `debug_assert!()`
+        // compiles out in release builds, so the helper becomes a no-op there
+        // and `#[should_panic]` would record a false-positive failure
+        // (`test did not panic`) on `cargo test --release`. The positive-
+        // invariant integration cell runs in both debug and release; this
+        // unit cell is debug-only by design.
+        //
+        // Driving the invariant through a synthetic `clap::Command` tree
+        // would require leaking emitter internals; calling the `pub(crate)`
+        // helper directly is the cleaner pattern (architect-review-approved
+        // alternative path per the Phase 3 kickoff).
+        let mut global_ids: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        global_ids.insert("my_test_flag".to_string());
+        let mut local_ids: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        local_ids.insert("my_test_flag".to_string());
+        assert_global_local_id_disjointness(&global_ids, &local_ids, "synthetic-subcmd");
+    }
 }

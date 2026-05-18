@@ -61,9 +61,12 @@ pub struct VerifyBundleArgs {
 
     /// Per-slot `ms1` card(s) to verify. Single-sig: supply once
     /// (`--ms1 <s>`). Multisig: repeat per slot — `--ms1 <s1>
-    /// --ms1 ""` lets a multisig verifier check only one cosigner's
-    /// seed (empty string `""` is the watch-only sentinel per SPEC
-    /// §5.8). Mutually exclusive with `--bundle-json`.
+    /// --ms1 <s2>` for full-path; OMIT `--ms1` for cosigners you
+    /// only want to verify watch-only (the v0.24.0 strict per-flag
+    /// HRP gate rejects empty-string `--ms1 ""` values; per SPEC §5.8
+    /// watch-only sentinel semantics are now expressed via flag
+    /// omission, not empty-string). Mutually exclusive with
+    /// `--bundle-json`.
     #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
 
@@ -139,38 +142,12 @@ pub fn run<W: Write, E: Write>(
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     use crate::cmd::bundle::mode_text;
-    use std::io::IsTerminal;
 
-    // v0.22.1 D18 — TTY-conditional auto-fire. The `MNEMONIC_FORCE_TTY`
-    // environment variable is a **first-class public-API contract**
-    // (semver-stable as of v0.24.0; previously classified test-only at
-    // v0.22.1 D23, promoted per FOLLOWUP
-    // `toolkit-mnemonic-force-tty-promote-from-test-only`).
-    //
-    // Semantics:
-    //   - `MNEMONIC_FORCE_TTY=1` forces the TTY-positive auto-fire path.
-    //   - `MNEMONIC_FORCE_TTY=0` forces the TTY-negative legacy path.
-    //   - unset / any other value → falls back to `is_terminal()` runtime
-    //     detection.
-    //
-    // Known consumers (must continue working through future toolkit
-    // refactors per the public-API contract):
-    //   - `mnemonic-gui` v0.9.0+ subprocess spawn env (the GUI's stdin/stdout
-    //     pipes are not real TTYs, so without the env override the toolkit
-    //     would never auto-fire repair under GUI invocations).
-    //   - the toolkit's own integration test suite, which sets =1 to force
-    //     auto-fire under `cargo test` (cargo's test harness pipes stdout).
-    //
-    // NOT exposed via clap `--help` (environment variables are not part of
-    // the clap-derive surface) or `mnemonic gui-schema` JSON. Documented in
-    // the user manual at `docs/manual/src/40-cli-reference/41-mnemonic.md`
-    // under the verify-bundle / repair auto-fire section.
-    let tty = match std::env::var("MNEMONIC_FORCE_TTY").ok().as_deref() {
-        Some("1") => true,
-        Some("0") => false,
-        _ => std::io::stdout().is_terminal(),
-    };
-    let effective_no_auto_repair = no_auto_repair || !tty;
+    // v0.22.1 D18 — TTY-conditional auto-fire. See
+    // `crate::repair::resolve_no_auto_repair` (v0.25.0 §2.A D4 fold) for the
+    // full public-API contract: `MNEMONIC_FORCE_TTY={0,1}` forces the gate;
+    // unset → runtime `is_terminal()` detection.
+    let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
     let json_context = args.json;
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE bundle-json
@@ -362,6 +339,19 @@ fn run_full<W: Write, E: Write>(
         mk1: &args.mk1,
         md1: &args.md1,
     };
+    // v0.25.0 §2.D — ms1-driven parent_fingerprint check at depth ≥ 2.
+    // Extends v0.24.0 D30 to the depth-≥-2 blind spot. Full-path single-sig:
+    // ms1 supplied → derive parent xpub from seed; mismatch → stderr warning.
+    emit_full_path_parent_fingerprint_check(
+        &args.ms1,
+        &args.mk1,
+        &args.md1,
+        false,
+        args.passphrase.as_deref(),
+        args.language.unwrap_or_default(),
+        args.network,
+        stderr,
+    );
     checks.extend(emit_verify_checks(&expected, &supplied, false, no_auto_repair, json_context, stdout, stderr)?);
     Ok(())
 }
@@ -396,6 +386,19 @@ fn run_watch_only<W: Write, E: Write>(
     // v0.24.0 D30 — defense-in-depth cross-check between supplied mk1 xpub
     // fields and md1's claimed OriginPath. Warns (not errors) on mismatch.
     emit_watch_only_xpub_path_cross_check(&args.mk1, &args.md1, false, stderr);
+
+    // v0.25.0 §2.D — watch-only NOTICE at depth ≥ 2 (no ms1 → cannot derive
+    // parent xpub; per BIP-32 child→parent one-wayness).
+    emit_full_path_parent_fingerprint_check(
+        &args.ms1,
+        &args.mk1,
+        &args.md1,
+        false,
+        args.passphrase.as_deref(),
+        args.language.unwrap_or_default(),
+        args.network,
+        stderr,
+    );
 
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
@@ -482,6 +485,22 @@ fn run_multisig<W: Write, E: Write>(
         // xpub fields and md1's claimed OriginPath, per-cosigner.
         emit_watch_only_xpub_path_cross_check(&args.mk1, &args.md1, true, stderr);
     }
+
+    // v0.25.0 §2.D — ms1-driven parent_fingerprint check at depth ≥ 2.
+    // Fires regardless of watch_only_multi: full-path multisig has ms1 for
+    // every cosigner (warning on mismatch); partial-watch-only multisig has
+    // ms1 for some cosigners (warning on those; notice on the empty/missing
+    // ones).
+    emit_full_path_parent_fingerprint_check(
+        &args.ms1,
+        &args.mk1,
+        &args.md1,
+        true,
+        args.passphrase.as_deref(),
+        args.language.unwrap_or_default(),
+        args.network,
+        stderr,
+    );
 
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
@@ -2061,6 +2080,203 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
 /// constructing the `Vec<&str>` inline at the match arm.
 fn mk1_strs_to_str_refs(v: &[String]) -> Vec<&str> {
     v.iter().map(|s| s.as_str()).collect()
+}
+
+// ============================================================================
+// v0.25.0 §2.D Tranche #1 — ms1-driven parent_fingerprint check at depth ≥ 2.
+// ============================================================================
+
+/// Defense-in-depth check that extends v0.24.0's `emit_watch_only_xpub_path_cross_check`
+/// at depth ≥ 2, where the parent xpub cannot be recovered from the supplied
+/// mk1 alone (BIP-32 child→parent derivation is one-way). For each cosigner
+/// with `path.len() >= 2`:
+///
+/// * **Full-path mode (ms1 supplied + non-empty):** decode ms1 → BIP-39
+///   mnemonic in the bundle's language → master seed (passphrase-aware) →
+///   master xpriv at the bundle's network → derive parent xpriv at the
+///   `path[..N-1]` prefix → compute the parent xpub's fingerprint → compare
+///   against the claimed `mk1.xpub.parent_fingerprint`. Emit a stderr WARNING
+///   on mismatch.
+/// * **Watch-only mode (ms1 absent / empty for this cosigner):** emit a
+///   stderr NOTICE marking the parent_fingerprint as unverified-by-design
+///   (cryptographic ceiling per BIP-32 child→parent one-wayness; no seed →
+///   no derivation possible).
+///
+/// Failure mode: stderr WARNING / NOTICE (not hard error). The verify-bundle
+/// exit code and `result: ok / mismatch` verdict are UNCHANGED — matches the
+/// permissive-input / expressive-output philosophy + the existing v0.24.0
+/// cross-check pattern.
+///
+/// Closes FOLLOWUP `verify-bundle-xpub-parent-fingerprint-derivation` (the
+/// original "derive parent from mk1" framing was structurally impossible;
+/// corrected to ms1-driven derivation, with explicit wontfix partition for
+/// the watch-only ceiling).
+#[allow(clippy::too_many_arguments)]
+fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
+    supplied_ms1: &[String],
+    supplied_mk1: &[String],
+    supplied_md1: &[String],
+    is_multisig: bool,
+    passphrase: Option<&str>,
+    language: CliLanguage,
+    network: CliNetwork,
+    stderr: &mut E,
+) {
+    use bitcoin::bip32::{Xpriv, Xpub};
+    use bitcoin::secp256k1::Secp256k1;
+
+    // Decode md1; bail silently on failure — regular `md1_decode` check path
+    // surfaces decode errors via the VerifyCheck schema.
+    let md1_strs: Vec<&str> = supplied_md1.iter().map(|s| s.as_str()).collect();
+    let desc = match md_codec::chunk::reassemble(&md1_strs) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    // Map of cosigner index → md1's OriginPath. Mirrors the lookup pattern in
+    // `emit_watch_only_xpub_path_cross_check`.
+    let n = desc.n as usize;
+    let md_path_for = |idx: usize| -> Option<md_codec::origin_path::OriginPath> {
+        if let Some(overrides) = &desc.tlv.origin_path_overrides {
+            if let Some((_, op)) = overrides.iter().find(|(i, _)| *i as usize == idx) {
+                return Some(op.clone());
+            }
+        }
+        match &desc.path_decl.paths {
+            md_codec::origin_path::PathDeclPaths::Shared(op) => Some(op.clone()),
+            md_codec::origin_path::PathDeclPaths::Divergent(v) => v.get(idx).cloned(),
+        }
+    };
+
+    // Decode supplied mk1 cards, grouping by chunk_set_id for multisig
+    // (mirror `emit_watch_only_xpub_path_cross_check`'s grouping logic).
+    let mk_cards: Vec<(usize, mk_codec::KeyCard)> = if is_multisig {
+        use std::collections::BTreeMap;
+        let mut chunked: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
+        let mut singles: Vec<Vec<&str>> = Vec::new();
+        for s in supplied_mk1 {
+            match chunk_set_id_extract(s) {
+                Some(csi) => chunked.entry(csi).or_default().push(s.as_str()),
+                None => singles.push(vec![s.as_str()]),
+            }
+        }
+        let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
+        let mut out: Vec<(usize, mk_codec::KeyCard)> = Vec::new();
+        let pubkeys = desc.tlv.pubkeys.as_ref();
+        let mut assigned = vec![false; n];
+        for (gi, g) in groups.iter().enumerate() {
+            let card = match mk_codec::decode(g) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let want = crate::synthesize::xpub_to_65(&card.xpub);
+            let mut placed_idx: Option<usize> = None;
+            if let Some(pubs) = pubkeys {
+                if let Some((slot, _)) = pubs.iter().find(|(slot, b)| {
+                    b == &want && (*slot as usize) < n && !assigned[*slot as usize]
+                }) {
+                    placed_idx = Some(*slot as usize);
+                }
+            }
+            if placed_idx.is_none() && gi < n && !assigned[gi] {
+                placed_idx = Some(gi);
+            }
+            if let Some(idx) = placed_idx {
+                assigned[idx] = true;
+                out.push((idx, card));
+            }
+        }
+        out
+    } else {
+        match mk_codec::decode(&mk1_strs_to_str_refs(supplied_mk1)) {
+            Ok(card) => vec![(0, card)],
+            Err(_) => Vec::new(),
+        }
+    };
+
+    let secp = Secp256k1::new();
+
+    for (i, card) in &mk_cards {
+        let md_path = match md_path_for(*i) {
+            Some(p) => p,
+            None => continue,
+        };
+        if md_path.components.len() < 2 {
+            // Depth 0/1 handled by `emit_watch_only_xpub_path_cross_check`'s
+            // structural sanity branch; nothing to add here.
+            continue;
+        }
+
+        let ms1_str = supplied_ms1.get(*i).map(|s| s.as_str()).unwrap_or("");
+
+        if ms1_str.is_empty() {
+            // Watch-only at depth ≥ 2: emit expressive notice (cryptographic
+            // ceiling per BIP-32 child→parent one-wayness).
+            writeln!(
+                stderr,
+                "notice: cosigner[{}] mk1 parent_fingerprint at depth {} unverified (requires ms1 to derive parent xpub)",
+                i,
+                md_path.components.len()
+            )
+            .ok();
+            continue;
+        }
+
+        // Full-path: ms1 supplied — derive parent xpub from seed.
+        // ms_codec::decode → Entr payload bytes.
+        let entropy: Vec<u8> = match ms_codec::decode(ms1_str) {
+            Ok((_tag, ms_codec::Payload::Entr(bytes))) => bytes,
+            // ms1 didn't decode or decoded to a non-Entr payload — the regular
+            // ms1_decode check surfaces decode errors via VerifyCheck; skip
+            // silently here so we don't double-report.
+            Ok(_) | Err(_) => continue,
+        };
+
+        // entropy → mnemonic → seed → master xpriv. Mirrors descriptor-mode
+        // verify path at `verify_bundle.rs:644-664` and production
+        // `derive_slot::derive_bip32_from_entropy`.
+        let mnemonic = match bip39::Mnemonic::from_entropy_in(language.into(), &entropy) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let seed = mnemonic.to_seed(passphrase.unwrap_or(""));
+        let master = match Xpriv::new_master(network.network_kind(), &seed[..]) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        // Convert md1 OriginPath → bitcoin DerivationPath, then truncate to
+        // path[..N-1] for the parent.
+        let full_path = match crate::cmd::bundle::origin_to_derivation_path(&md_path) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let full_components: Vec<bitcoin::bip32::ChildNumber> = full_path.into_iter().copied().collect();
+        let parent_components: Vec<bitcoin::bip32::ChildNumber> = full_components
+            [..full_components.len() - 1]
+            .to_vec();
+        let parent_path = bitcoin::bip32::DerivationPath::from(parent_components);
+
+        let parent_xpriv = match master.derive_priv(&secp, &parent_path) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let parent_xpub = Xpub::from_priv(&secp, &parent_xpriv);
+        let derived_fp = parent_xpub.fingerprint().to_bytes();
+        let claimed_fp = card.xpub.parent_fingerprint.to_bytes();
+
+        if derived_fp != claimed_fp {
+            writeln!(
+                stderr,
+                "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) does not match derived parent fingerprint ({}) from ms1 at depth {}; cards are internally inconsistent",
+                i,
+                hex::encode(claimed_fp),
+                hex::encode(derived_fp),
+                md_path.components.len()
+            )
+            .ok();
+        }
+    }
 }
 
 #[cfg(test)]

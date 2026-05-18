@@ -698,6 +698,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
+    // v0.25.0 §2.B — TTY-conditional auto-fire (mirrors verify_bundle's
+    // v0.22.1 D18 contract). See `crate::repair::resolve_no_auto_repair` for
+    // the full public-API contract: `MNEMONIC_FORCE_TTY={0,1}` forces the
+    // gate; unset → runtime `is_terminal()` detection. Computed once at
+    // function entry and threaded to the downstream auto-fire call so
+    // piped consumers (no TTY) see the typed decode error instead of
+    // exit 5 short-circuit.
+    let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
+
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
     emit_secret_in_argv_advisories(args, stderr);
 
@@ -892,7 +901,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // Falls through to typed `orig` if repair fails or the original
             // error wasn't a decode-class failure. Per D6 / §2.5 standalone
             // `repair` subcommand ignores --no-auto-repair; here we honor it.
-            if !no_auto_repair {
+            // v0.25.0 §2.B — use `effective_no_auto_repair` (TTY-aware) so
+            // piped invocations skip auto-fire by default; see top-of-fn.
+            if !effective_no_auto_repair {
                 let repair_kind = match primary.node {
                     NodeType::Ms1 => Some(crate::repair::CardKind::Ms1),
                     NodeType::Mk1 => Some(crate::repair::CardKind::Mk1),

@@ -15,7 +15,7 @@
 //! instead of failing loudly.
 
 use crate::error::ToolkitError;
-use crate::repair::{CardKind, classify_hrp_prefix, validate_flag_hrp};
+use crate::repair::{self, CardArgs, CardKind};
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -70,6 +70,21 @@ pub struct InspectArgs {
     pub extra_strings: Vec<String>,
 }
 
+impl CardArgs for InspectArgs {
+    fn ms1(&self) -> Option<&String> {
+        self.ms1.as_ref()
+    }
+    fn mk1(&self) -> &[String] {
+        &self.mk1
+    }
+    fn md1(&self) -> &[String] {
+        &self.md1
+    }
+    fn extra_strings(&self) -> &[String] {
+        &self.extra_strings
+    }
+}
+
 pub fn run<R: Read, W: Write, E: Write>(
     args: &InspectArgs,
     stdin: &mut R,
@@ -77,7 +92,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
-    let groups = resolve_groups(args, stdin)?;
+    // v0.25.0 §2.B — TTY-conditional auto-fire (mirrors verify_bundle's
+    // v0.22.1 D18 contract). See `crate::repair::resolve_no_auto_repair` for
+    // the full public-API contract: `MNEMONIC_FORCE_TTY={0,1}` forces the
+    // gate; unset → runtime `is_terminal()` detection. Computed once at
+    // function entry and threaded to the downstream auto-fire call so
+    // piped consumers (no TTY) see the typed decode error instead of
+    // exit 5 short-circuit.
+    let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
+
+    let groups = repair::resolve_groups(args, "inspect", stdin)?;
     let mut any_ms1 = false;
 
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic
@@ -95,7 +119,9 @@ pub fn run<R: Read, W: Write, E: Write>(
                 // sibling-codec decode failure, attempt BCH correction and
                 // short-circuit with exit 5. Falls through to typed `orig` if
                 // repair fails or the error wasn't a decode-class failure.
-                if !no_auto_repair {
+                // v0.25.0 §2.B — use `effective_no_auto_repair` (TTY-aware)
+                // so piped invocations skip auto-fire by default; see top-of-fn.
+                if !effective_no_auto_repair {
                     let is_codec_decode_err = matches!(
                         &orig,
                         ToolkitError::MsCodec(_)
@@ -151,100 +177,6 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
         CardKind::Mk1 => Ok(InspectPayload::Mk1(mk_codec::decode(chunks)?)),
         CardKind::Md1 => Ok(InspectPayload::Md1(md_codec::reassemble(chunks)?)),
     }
-}
-
-/// v0.24.0 §2.C.1 — gather all input strings into per-kind groups,
-/// merging typed-flag form with positional `<STRING>...` (HRP-autodetect routed).
-/// Returns groups in fixed `(Ms1, Mk1, Md1)` order; empty groups omitted.
-///
-/// Mismatched-HRP flag values return `ToolkitError::HrpMismatch` (D34/I5).
-/// Unknown-HRP positional values return `ToolkitError::UnknownHrp`.
-fn resolve_groups<R: Read>(
-    args: &InspectArgs,
-    stdin: &mut R,
-) -> Result<Vec<(CardKind, Vec<String>)>, ToolkitError> {
-    // D34/I5 — strict per-flag HRP validation.
-    if let Some(v) = &args.ms1 {
-        validate_flag_hrp("--ms1", "ms", v)?;
-    }
-    for v in &args.mk1 {
-        validate_flag_hrp("--mk1", "mk", v)?;
-    }
-    for v in &args.md1 {
-        validate_flag_hrp("--md1", "md", v)?;
-    }
-
-    // Seed per-kind buckets from flag-form values (flag-form first per plan).
-    let mut ms1_vec: Vec<String> = args.ms1.clone().map(|s| vec![s]).unwrap_or_default();
-    let mut mk1_vec: Vec<String> = args.mk1.clone();
-    let mut md1_vec: Vec<String> = args.md1.clone();
-
-    for s in &args.extra_strings {
-        match classify_hrp_prefix(s)? {
-            CardKind::Ms1 => ms1_vec.push(s.clone()),
-            CardKind::Mk1 => mk1_vec.push(s.clone()),
-            CardKind::Md1 => md1_vec.push(s.clone()),
-        }
-    }
-
-    if ms1_vec.is_empty() && mk1_vec.is_empty() && md1_vec.is_empty() {
-        return Err(ToolkitError::BadInput(
-            "inspect: at least one of --ms1 / --mk1 / --md1 (or positional STRING) is required".into(),
-        ));
-    }
-
-    let total_dashes = count_dashes(&ms1_vec) + count_dashes(&mk1_vec) + count_dashes(&md1_vec);
-    if total_dashes > 1 {
-        return Err(ToolkitError::BadInput(
-            "inspect: at most one `-` (stdin) value across all inspect inputs".into(),
-        ));
-    }
-    if total_dashes == 1 {
-        let mut buf = String::new();
-        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
-        let stdin_chunks: Vec<String> = buf
-            .lines()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect();
-        if stdin_chunks.is_empty() {
-            return Err(ToolkitError::BadInput(
-                "inspect: stdin (`-`) yielded no non-blank chunks".into(),
-            ));
-        }
-        ms1_vec = expand_dashes(&ms1_vec, &stdin_chunks);
-        mk1_vec = expand_dashes(&mk1_vec, &stdin_chunks);
-        md1_vec = expand_dashes(&md1_vec, &stdin_chunks);
-    }
-
-    let mut out: Vec<(CardKind, Vec<String>)> = Vec::with_capacity(3);
-    if !ms1_vec.is_empty() {
-        out.push((CardKind::Ms1, ms1_vec));
-    }
-    if !mk1_vec.is_empty() {
-        out.push((CardKind::Mk1, mk1_vec));
-    }
-    if !md1_vec.is_empty() {
-        out.push((CardKind::Md1, md1_vec));
-    }
-    Ok(out)
-}
-
-fn count_dashes(v: &[String]) -> usize {
-    v.iter().filter(|s| s.as_str() == "-").count()
-}
-
-fn expand_dashes(input: &[String], stdin_chunks: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(input.len());
-    for c in input {
-        if c == "-" {
-            out.extend(stdin_chunks.iter().cloned());
-        } else {
-            out.push(c.clone());
-        }
-    }
-    out
 }
 
 fn emit_inspect_text<W: Write>(

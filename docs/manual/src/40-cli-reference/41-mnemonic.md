@@ -503,9 +503,9 @@ v0.22.1 D18 default). The behavior matrix:
 
 The TTY gate exists so scripts that parse the `VerifyCheck` array (or
 the JSON envelope's `checks` field) don't see a single corrupted chunk
-silently short-circuit the entire check matrix. Interactive users see
-the helpful auto-fire UX; piped consumers see the v0.22.0-and-earlier
-behavior unchanged.
+silently short-circuit the entire check matrix. See the shared
+[Auto-fire behavior (all three subcommands)](#auto-fire-behavior-all-three-subcommands-v0250)
+section below for the cross-subcommand summary.
 
 Under `--json` calling context (any of `convert --json`, `inspect
 --json`, `verify-bundle --json`), the auto-fire emits a structured JSON
@@ -534,11 +534,33 @@ work through future toolkit refactors):
 - The toolkit's own integration test suite sets it to `1` to force
   auto-fire under `cargo test` (cargo's test harness pipes stdout).
 
-The env-var applies to `verify-bundle`'s TTY-conditional auto-fire
-only. `convert` and `inspect` auto-fire unconditionally when
-`--no-auto-repair=false` (no TTY gate); the env-var has no effect on
-those surfaces. It is not part of the clap `--help` surface (env-vars
-are not part of clap-derive) nor the `mnemonic gui-schema` JSON.
+The env-var applies uniformly to all three TTY-conditional auto-fire
+surfaces — `convert`, `inspect`, and `verify-bundle` — since v0.25.0
+extended the v0.22.1 D18 gate to `convert` and `inspect`. It is not
+part of the clap `--help` surface (env-vars are not part of
+clap-derive) nor the `mnemonic gui-schema` JSON.
+
+---
+
+### Auto-fire behavior (all three subcommands) (v0.25.0)
+
+The TTY-conditional auto-fire contract documented above for
+`verify-bundle` applies identically to `convert` and `inspect` since
+v0.25.0:
+
+| Subcommand | Trigger | TTY-positive default | TTY-negative default |
+|---|---|---|---|
+| `convert` | `ms_codec` / `mk_codec` decode failure on `--from ms1=…` or `--from mk1=…` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `inspect` | `ms_codec` / `mk_codec` / `md_codec` decode failure on any `--ms1` / `--mk1` / `--md1` input | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `verify-bundle` | as above, plus the `--bundle-json` intake path | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
+
+The TTY gate exists so scripts that parse the typed error envelope
+(or, for `verify-bundle`, the `VerifyCheck` array / JSON envelope's
+`checks` field) don't see a single corrupted chunk silently
+short-circuit the entire flow. Interactive users see the helpful
+auto-fire UX; piped consumers see the v0.22.0-and-earlier behavior
+unchanged. Set `MNEMONIC_FORCE_TTY=1` in CI / scripts to opt back into
+auto-fire under pipes (same mechanism `mnemonic-gui` uses).
 
 ---
 

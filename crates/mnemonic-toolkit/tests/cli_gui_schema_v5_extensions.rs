@@ -304,3 +304,60 @@ fn secret_flag_enumeration_matches_authoritative_predicate() {
         }
     }
 }
+
+// ── §7 v5 global-vs-local flag-id disjointness invariant (v0.25.0 Phase 3) ──
+
+#[test]
+fn global_local_id_disjointness_invariant_holds_in_current_schema() {
+    // v0.25.0 Phase 3 — the gui-schema emitter's
+    // `assert_global_local_id_disjointness` debug-assert enforces that no
+    // subcommand declares a local flag whose clap-derive identifier
+    // collides with a root-level `global = true` flag. The toolkit-internal
+    // helper checks IDs; this test exercises the END-TO-END wire shape via
+    // the emitted JSON: for every subcommand, the set of `global: true`
+    // flag names must be disjoint from the set of `global: false / omitted`
+    // flag names.
+    //
+    // This positive-invariant cell runs in BOTH debug AND release builds —
+    // it does NOT depend on `debug_assertions` to fire. It validates the
+    // shipped wire contract regardless of how the emitter implements the
+    // partition internally.
+    //
+    // The companion negative-control cell
+    // (`global_local_collision_triggers_debug_assert`) is
+    // `#[cfg(debug_assertions)]`-gated and exercises the actual
+    // `debug_assert!` panic path.
+    let v = run_gui_schema();
+    for sub in v["subcommands"].as_array().unwrap() {
+        let mut globals: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        let mut locals: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for flag in sub["flags"].as_array().unwrap() {
+            let name = flag["name"].as_str().unwrap().to_string();
+            let is_global = flag
+                .get("global")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if is_global {
+                globals.insert(name);
+            } else {
+                locals.insert(name);
+            }
+        }
+        let intersection: Vec<&String> = globals.intersection(&locals).collect();
+        assert!(
+            intersection.is_empty(),
+            "subcommand `{}`: global flag names overlap local flag names: {:?}",
+            sub["name"],
+            intersection
+        );
+    }
+}
+
+// The negative-control cell `global_local_collision_triggers_debug_assert`
+// lives as a unit test inside `crates/mnemonic-toolkit/src/cmd/gui_schema.rs`
+// — it must call the `pub(crate) assert_global_local_id_disjointness`
+// helper directly, which is not reachable from this integration-test crate.
+// The helper's `pub(crate)` visibility is intentional (the function is an
+// internal invariant guard, not public API).

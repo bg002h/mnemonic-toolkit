@@ -49,6 +49,10 @@ fn cell_19_convert_auto_fire_ms1_one_substitution() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — convert's auto-fire is now TTY-gated like
+        // verify-bundle's v0.22.1 D18. Force the gate so cargo test (which
+        // pipes stdout) still exercises the TTY-positive path.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
         .assert()
         .code(5)
@@ -101,6 +105,10 @@ fn cell_20b_inspect_auto_fire_md1_one_substitution() {
     let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated like
+        // verify-bundle's v0.22.1 D18. Force the gate so cargo test
+        // exercises the TTY-positive path.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "inspect",
             "--md1",
@@ -126,6 +134,10 @@ fn cell_18b_inspect_auto_fire_on_corrupted_ms1() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated like
+        // verify-bundle's v0.22.1 D18. Force the gate so cargo test
+        // exercises the TTY-positive path.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args(["inspect", "--ms1", &bad])
         .assert()
         .code(5)
@@ -210,6 +222,8 @@ fn cell_24_convert_json_context_auto_fire_emits_json_envelope() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — convert's auto-fire is now TTY-gated; force on.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "convert",
             "--json",
@@ -246,6 +260,8 @@ fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
     let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated; force on.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "inspect",
             "--json",
@@ -282,6 +298,8 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        // v0.25.0 §2.B — convert's auto-fire is now TTY-gated; force on.
+        .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "convert",
             "--json",
@@ -522,4 +540,66 @@ fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
     // Should NOT be the VerifyBundleJson schema (which has `result`+`checks`).
     assert!(v["result"].is_null(), "should not be VerifyBundleJson envelope");
     assert!(v["checks"].is_null(), "should not be VerifyBundleJson envelope");
+}
+
+// ============================================================================
+// v0.25.0 §2.B — TTY-negative legacy-path cells for convert + inspect.
+//
+// These cells lock the v0.25.0 behavior change: piped consumers (no TTY) of
+// `convert --from ms1=…` and `inspect --ms1=…` no longer see auto-fire
+// short-circuit (exit 5) on corrupted card decode by default; they see the
+// typed decode error instead. Parallels verify-bundle's cell 29 from
+// v0.22.1.
+// ============================================================================
+
+/// Cell 31: convert with MNEMONIC_FORCE_TTY=0 (piped) → typed decode error,
+/// NOT exit 5; no repair report on stdout. Verifies the v0.25.0 §2.B gate
+/// extension to convert.
+#[test]
+fn cell_31_convert_piped_no_auto_fire_under_tty_zero() {
+    let bad = flip_at(VALID_MS1, 17);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "0")
+        .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
+        .assert()
+        .failure()
+        .code(predicate::ne(5))
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stderr(predicate::str::contains("# Repair report").not());
+}
+
+/// Cell 32: inspect with MNEMONIC_FORCE_TTY=0 (piped) → typed decode error,
+/// NOT exit 5; no repair report. Mirrors cell 31 for the inspect surface.
+#[test]
+fn cell_32_inspect_piped_no_auto_fire_under_tty_zero() {
+    let bad = flip_at(VALID_MS1, 17);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "0")
+        .args(["inspect", "--ms1", &bad])
+        .assert()
+        .failure()
+        .code(predicate::ne(5))
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stderr(predicate::str::contains("# Repair report").not());
+}
+
+/// Cell 33: convert with NO MNEMONIC_FORCE_TTY env-var set → default
+/// `is_terminal()` detection. Under `cargo test`, stdout is piped (not a
+/// real TTY), so the auto-fire is skipped without needing the explicit
+/// `=0`. Locks the default-pipe behavior, complementing cell 31.
+#[test]
+fn cell_33_convert_default_pipe_no_auto_fire() {
+    let bad = flip_at(VALID_MS1, 17);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        // Intentionally NO .env("MNEMONIC_FORCE_TTY", ...) — relies on
+        // cargo test's default piped stdout being is_terminal() == false.
+        .env_remove("MNEMONIC_FORCE_TTY")
+        .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
+        .assert()
+        .failure()
+        .code(predicate::ne(5))
+        .stdout(predicate::str::contains("# Repair report").not());
 }

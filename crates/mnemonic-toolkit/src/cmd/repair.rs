@@ -15,7 +15,7 @@
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
-use crate::repair::{self, CardKind, RepairOutcome, classify_hrp_prefix, validate_flag_hrp};
+use crate::repair::{self, CardArgs, CardKind, RepairOutcome};
 use crate::secret_advisory::secret_on_stdout_warning;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -71,13 +71,28 @@ pub struct RepairArgs {
     pub extra_strings: Vec<String>,
 }
 
+impl CardArgs for RepairArgs {
+    fn ms1(&self) -> Option<&String> {
+        self.ms1.as_ref()
+    }
+    fn mk1(&self) -> &[String] {
+        &self.mk1
+    }
+    fn md1(&self) -> &[String] {
+        &self.md1
+    }
+    fn extra_strings(&self) -> &[String] {
+        &self.extra_strings
+    }
+}
+
 pub fn run<R: Read, W: Write, E: Write>(
     args: &RepairArgs,
     stdin: &mut R,
     stdout: &mut W,
     _stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
-    let groups = resolve_groups(args, stdin)?;
+    let groups = repair::resolve_groups(args, "repair", stdin)?;
 
     let mut total_repairs = 0usize;
     let mut any_ms1 = false;
@@ -105,111 +120,6 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     Ok(if total_repairs == 0 { 0 } else { 5 })
-}
-
-/// v0.24.0 §2.C.1 — gather all input strings into per-kind groups,
-/// merging the typed flag form (`--ms1` / `--mk1` / `--md1`) with the
-/// positional `<STRING>...` form (HRP-autodetect routed). Returns groups
-/// in fixed `(Ms1, Mk1, Md1)` order; empty groups are omitted from the
-/// returned vector.
-///
-/// Mismatched-HRP flag values (`--ms1 mk1xxx`) return `ToolkitError::HrpMismatch`
-/// per D34/I5 (toolkit-internal validation, not a clap parser callback).
-/// Unknown-HRP positional values return `ToolkitError::UnknownHrp`.
-///
-/// Storage merge order: flag-form first, then positional (per plan).
-fn resolve_groups<R: Read>(
-    args: &RepairArgs,
-    stdin: &mut R,
-) -> Result<Vec<(CardKind, Vec<String>)>, ToolkitError> {
-    // D34/I5 — strict per-flag HRP validation. `--ms1 mk1xxx` rejects with
-    // `ToolkitError::HrpMismatch { flag: "--ms1", expected: "ms", got: "mk" }`.
-    // `-` (stdin sentinel) is exempt; expanded after this check.
-    if let Some(v) = &args.ms1 {
-        validate_flag_hrp("--ms1", "ms", v)?;
-    }
-    for v in &args.mk1 {
-        validate_flag_hrp("--mk1", "mk", v)?;
-    }
-    for v in &args.md1 {
-        validate_flag_hrp("--md1", "md", v)?;
-    }
-
-    // Seed per-kind buckets from flag-form values (flag-form first per plan).
-    let mut ms1_vec: Vec<String> = args.ms1.clone().map(|s| vec![s]).unwrap_or_default();
-    let mut mk1_vec: Vec<String> = args.mk1.clone();
-    let mut md1_vec: Vec<String> = args.md1.clone();
-
-    // Route positional `extra_strings` by HRP prefix.
-    for s in &args.extra_strings {
-        match classify_hrp_prefix(s)? {
-            CardKind::Ms1 => ms1_vec.push(s.clone()),
-            CardKind::Mk1 => mk1_vec.push(s.clone()),
-            CardKind::Md1 => md1_vec.push(s.clone()),
-        }
-    }
-
-    if ms1_vec.is_empty() && mk1_vec.is_empty() && md1_vec.is_empty() {
-        return Err(ToolkitError::BadInput(
-            "repair: at least one of --ms1 / --mk1 / --md1 (or positional STRING) is required".into(),
-        ));
-    }
-
-    // Per-kind stdin (`-`) expansion. At most one `-` across the whole
-    // invocation (across both flag-form and positional combined; stdin is
-    // a single non-replayable stream).
-    let total_dashes = count_dashes(&ms1_vec) + count_dashes(&mk1_vec) + count_dashes(&md1_vec);
-    if total_dashes > 1 {
-        return Err(ToolkitError::BadInput(
-            "repair: at most one `-` (stdin) value across all repair inputs".into(),
-        ));
-    }
-    if total_dashes == 1 {
-        let mut buf = String::new();
-        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
-        let stdin_chunks: Vec<String> = buf
-            .lines()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect();
-        if stdin_chunks.is_empty() {
-            return Err(ToolkitError::BadInput(
-                "repair: stdin (`-`) yielded no non-blank chunks".into(),
-            ));
-        }
-        ms1_vec = expand_dashes(&ms1_vec, &stdin_chunks);
-        mk1_vec = expand_dashes(&mk1_vec, &stdin_chunks);
-        md1_vec = expand_dashes(&md1_vec, &stdin_chunks);
-    }
-
-    let mut out: Vec<(CardKind, Vec<String>)> = Vec::with_capacity(3);
-    if !ms1_vec.is_empty() {
-        out.push((CardKind::Ms1, ms1_vec));
-    }
-    if !mk1_vec.is_empty() {
-        out.push((CardKind::Mk1, mk1_vec));
-    }
-    if !md1_vec.is_empty() {
-        out.push((CardKind::Md1, md1_vec));
-    }
-    Ok(out)
-}
-
-fn count_dashes(v: &[String]) -> usize {
-    v.iter().filter(|s| s.as_str() == "-").count()
-}
-
-fn expand_dashes(input: &[String], stdin_chunks: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(input.len());
-    for c in input {
-        if c == "-" {
-            out.extend(stdin_chunks.iter().cloned());
-        } else {
-            out.push(c.clone());
-        }
-    }
-    out
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {

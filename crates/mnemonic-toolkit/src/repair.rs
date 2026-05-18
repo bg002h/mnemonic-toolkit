@@ -29,7 +29,7 @@ use mk_codec::string_layer::bch::{
     bch_code_for_length, hrp_expand, polymod_run,
 };
 use mk_codec::string_layer::bch_decode::{decode_long_errors, decode_regular_errors};
-use std::io::Write;
+use std::io::{IsTerminal, Read, Write};
 
 use crate::error::ToolkitError;
 
@@ -164,6 +164,179 @@ pub(crate) fn validate_flag_hrp(
         expected: canonical,
         got: got_hrp,
     })
+}
+
+/// v0.25.0 §2.A (D4 fold) — read-only accessor surface over the two
+/// card-input argument structs (`cmd::repair::RepairArgs` +
+/// `cmd::inspect::InspectArgs`). Lets `resolve_groups` / `count_dashes` /
+/// `expand_dashes` operate uniformly across both subcommands. The four
+/// fields have identical clap-derive shapes on both structs:
+///   - `ms1: Option<String>` (single value)
+///   - `mk1: Vec<String>` (repeating flag)
+///   - `md1: Vec<String>` (repeating flag)
+///   - `extra_strings: Vec<String>` (positional `<STRING>...`)
+pub(crate) trait CardArgs {
+    fn ms1(&self) -> Option<&String>;
+    fn mk1(&self) -> &[String];
+    fn md1(&self) -> &[String];
+    fn extra_strings(&self) -> &[String];
+}
+
+/// v0.25.0 §2.A — count `-` (stdin sentinel) occurrences across the three
+/// typed-flag fields. The positional `extra_strings` cannot contain `-`
+/// because `classify_hrp_prefix` rejects any input lacking a known HRP
+/// prefix, so the pre-merge sum equals the post-merge sum.
+pub(crate) fn count_dashes(args: &impl CardArgs) -> usize {
+    let ms1_count = args.ms1().iter().filter(|s| s.as_str() == "-").count();
+    let mk1_count = args.mk1().iter().filter(|s| s.as_str() == "-").count();
+    let md1_count = args.md1().iter().filter(|s| s.as_str() == "-").count();
+    ms1_count + mk1_count + md1_count
+}
+
+/// v0.25.0 §2.A — replace `-` (stdin sentinel) occurrences in `input` with
+/// the stdin chunks. Pure transform: each `-` in `input` is replaced by
+/// the full `stdin_chunks` slice (1-to-N expansion). Non-dash entries pass
+/// through unchanged. Called per-kind by `resolve_groups` after the single
+/// stdin read.
+pub(crate) fn expand_dashes(input: &[String], stdin_chunks: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(input.len());
+    for c in input {
+        if c == "-" {
+            out.extend(stdin_chunks.iter().cloned());
+        } else {
+            out.push(c.clone());
+        }
+    }
+    out
+}
+
+/// v0.24.0 §2.C.1 (D34/I5 fold) + v0.25.0 §2.A (D4 fold) — gather all input
+/// strings into per-kind groups, merging the typed-flag form (`--ms1` /
+/// `--mk1` / `--md1`) with the positional `<STRING>...` form (HRP-autodetect
+/// routed). Returns groups in fixed `(Ms1, Mk1, Md1)` order; empty groups
+/// are omitted from the returned vector.
+///
+/// `subcmd_name` is the subcommand's user-visible name (`"repair"` or
+/// `"inspect"`) — used as the error-message prefix for the three
+/// `ToolkitError::BadInput` paths in this helper. Distinct messages let
+/// the user identify which subcommand emitted the error.
+///
+/// Mismatched-HRP flag values (`--ms1 mk1xxx`) return `ToolkitError::HrpMismatch`
+/// per D34/I5 (toolkit-internal validation, not a clap parser callback).
+/// Unknown-HRP positional values return `ToolkitError::UnknownHrp`.
+///
+/// Storage merge order: flag-form first, then positional (per plan).
+pub(crate) fn resolve_groups<R: Read>(
+    args: &impl CardArgs,
+    subcmd_name: &'static str,
+    stdin: &mut R,
+) -> Result<Vec<(CardKind, Vec<String>)>, ToolkitError> {
+    // D34/I5 — strict per-flag HRP validation. `--ms1 mk1xxx` rejects with
+    // `ToolkitError::HrpMismatch { flag: "--ms1", expected: "ms", got: "mk" }`.
+    // `-` (stdin sentinel) is exempt; expanded after this check.
+    if let Some(v) = args.ms1() {
+        validate_flag_hrp("--ms1", "ms", v)?;
+    }
+    for v in args.mk1() {
+        validate_flag_hrp("--mk1", "mk", v)?;
+    }
+    for v in args.md1() {
+        validate_flag_hrp("--md1", "md", v)?;
+    }
+
+    // Seed per-kind buckets from flag-form values (flag-form first per plan).
+    let mut ms1_vec: Vec<String> = args.ms1().cloned().map(|s| vec![s]).unwrap_or_default();
+    let mut mk1_vec: Vec<String> = args.mk1().to_vec();
+    let mut md1_vec: Vec<String> = args.md1().to_vec();
+
+    // Route positional `extra_strings` by HRP prefix.
+    for s in args.extra_strings() {
+        match classify_hrp_prefix(s)? {
+            CardKind::Ms1 => ms1_vec.push(s.clone()),
+            CardKind::Mk1 => mk1_vec.push(s.clone()),
+            CardKind::Md1 => md1_vec.push(s.clone()),
+        }
+    }
+
+    if ms1_vec.is_empty() && mk1_vec.is_empty() && md1_vec.is_empty() {
+        return Err(ToolkitError::BadInput(format!(
+            "{subcmd_name}: at least one of --ms1 / --mk1 / --md1 (or positional STRING) is required"
+        )));
+    }
+
+    // Per-kind stdin (`-`) expansion. At most one `-` across the whole
+    // invocation (across both flag-form and positional combined; stdin is
+    // a single non-replayable stream).
+    let total_dashes = count_dashes(args);
+    if total_dashes > 1 {
+        return Err(ToolkitError::BadInput(format!(
+            "{subcmd_name}: at most one `-` (stdin) value across all {subcmd_name} inputs"
+        )));
+    }
+    if total_dashes == 1 {
+        let mut buf = String::new();
+        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
+        let stdin_chunks: Vec<String> = buf
+            .lines()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        if stdin_chunks.is_empty() {
+            return Err(ToolkitError::BadInput(format!(
+                "{subcmd_name}: stdin (`-`) yielded no non-blank chunks"
+            )));
+        }
+        ms1_vec = expand_dashes(&ms1_vec, &stdin_chunks);
+        mk1_vec = expand_dashes(&mk1_vec, &stdin_chunks);
+        md1_vec = expand_dashes(&md1_vec, &stdin_chunks);
+    }
+
+    let mut out: Vec<(CardKind, Vec<String>)> = Vec::with_capacity(3);
+    if !ms1_vec.is_empty() {
+        out.push((CardKind::Ms1, ms1_vec));
+    }
+    if !mk1_vec.is_empty() {
+        out.push((CardKind::Mk1, mk1_vec));
+    }
+    if !md1_vec.is_empty() {
+        out.push((CardKind::Md1, md1_vec));
+    }
+    Ok(out)
+}
+
+/// v0.25.0 §2.A (D4 fold) — resolve the effective auto-repair gate by
+/// consulting `MNEMONIC_FORCE_TTY` (or falling back to stdout TTY detection)
+/// and OR'ing with the caller's explicit `--no-auto-repair` flag.
+///
+/// **Public-API contract (v0.24.0+):** the `MNEMONIC_FORCE_TTY` environment
+/// variable is a first-class semver-stable contract (promoted from test-only
+/// at v0.22.1 D23 per FOLLOWUP `toolkit-mnemonic-force-tty-promote-from-test-only`).
+///
+/// Semantics:
+///   - `MNEMONIC_FORCE_TTY=1` forces the TTY-positive auto-fire path.
+///   - `MNEMONIC_FORCE_TTY=0` forces the TTY-negative legacy path.
+///   - unset / any other value → falls back to `is_terminal()` runtime detection.
+///
+/// Known consumers (must continue working through future toolkit refactors
+/// per the public-API contract):
+///   - `mnemonic-gui` v0.9.0+ subprocess spawn env (the GUI's stdin/stdout
+///     pipes are not real TTYs, so without the env override the toolkit would
+///     never auto-fire repair under GUI invocations).
+///   - the toolkit's own integration test suite, which sets =1 to force
+///     auto-fire under `cargo test` (cargo's test harness pipes stdout).
+///
+/// NOT exposed via clap `--help` (environment variables are not part of
+/// the clap-derive surface) or `mnemonic gui-schema` JSON. Documented in
+/// the user manual at `docs/manual/src/40-cli-reference/41-mnemonic.md`
+/// under the verify-bundle / repair auto-fire section.
+pub(crate) fn resolve_no_auto_repair(no_auto_repair: bool) -> bool {
+    let tty = match std::env::var("MNEMONIC_FORCE_TTY").ok().as_deref() {
+        Some("1") => true,
+        Some("0") => false,
+        _ => std::io::stdout().is_terminal(),
+    };
+    no_auto_repair || !tty
 }
 
 /// Per-chunk correction report. `original_chunk` and `corrected_chunk` are
