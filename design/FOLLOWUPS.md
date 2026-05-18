@@ -2115,7 +2115,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:26-27,140-145` — implementation calls `miniscript::descriptor::checksum::verify_checksum` explicitly up-front because `parse_descriptor::substitute_synthetic` (`parse_descriptor.rs:776`) swaps `@N` placeholders for synthetic xpubs BEFORE `MsDescriptor::from_str`, so the concrete-keys checksum never reaches `from_str`.
 - **What:** Phase 7 SPEC-amend: rewrite §4.4 to describe the actual mechanism — "BIP-380 8-character polymod checksum. Validated UP-FRONT by `wallet_import::bsms::parse` via `miniscript::descriptor::checksum::verify_checksum` on the concrete-keys descriptor body, BEFORE the `concrete_keys_to_placeholders` adapter rewrites the body to `@N` placeholder form for `parse_descriptor`. The downstream `MsDescriptor::from_str` inside `parse_descriptor` operates on the synthetic-xpub-substituted form and cannot reach the original checksum." The implementation is correct; only the SPEC wording is wrong.
 - **Why deferred:** Documentation-only fix; can ride the Phase 7 cycle-close SPEC-amend commit. No correctness change needed in code.
-- **Status:** open
+- **Status:** resolved (Phase 7 cycle-close commit; SPEC §4.4 amended with the up-front-validation prose; implementation unchanged at `wallet_import/bsms.rs:26-27,140-145`).
 - **Tier:** `v0.26.0-cycle-close`
 - **Companion:** none.
 

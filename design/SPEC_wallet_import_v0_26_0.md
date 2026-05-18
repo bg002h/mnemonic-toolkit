@@ -169,7 +169,9 @@ BSMS 1.0
 
 ### §4.4 Checksum
 
-BIP-380 8-character polymod checksum. Auto-validated when `MsDescriptor::from_str` is called by `parse_descriptor`. Toolkit code does NOT call `verify_checksum` directly; trust the miniscript-side validation.
+BIP-380 8-character polymod checksum. **Validated UP-FRONT by `wallet_import::bsms::parse` via `miniscript::descriptor::checksum::verify_checksum` on the concrete-keys descriptor body, BEFORE the `concrete_keys_to_placeholders` adapter rewrites the body to `@N` placeholder form for `parse_descriptor`.** The downstream `MsDescriptor::from_str` inside `parse_descriptor` operates on the synthetic-xpub-substituted form (per `parse_descriptor::substitute_synthetic` at `parse_descriptor.rs:776`) and cannot reach the original checksum — so up-front validation is the load-bearing path.
+
+(Resolves FOLLOWUP `wallet-import-bsms-checksum-delegation-note` per Phase 2 R0 architect-review wording fix. The prior SPEC wording "auto-validated when `MsDescriptor::from_str` is called by `parse_descriptor`" was structurally inaccurate; the implementation at `wallet_import/bsms.rs:26-27,140-145` has been correct since Phase 2 close.)
 
 ## §5 Bitcoin Core `listdescriptors` parser
 
