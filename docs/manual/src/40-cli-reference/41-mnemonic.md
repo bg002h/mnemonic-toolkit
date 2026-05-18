@@ -1698,3 +1698,144 @@ the full per-error taxonomy.
 | Trigger | Stderr advisory |
 |---|---|
 | Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: secret material on stdout — consider redirecting ...` |
+
+## `mnemonic xpub-search` (v0.26.0)
+
+Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — given a seed (or xpub), find which derivation produces a target xpub / descriptor / address / passphrase. v0.26.0 ships the first of four planned modes:
+
+- **`path-of-xpub`** — given seed + target xpub (or mk1 card), find the BIP-32 path under the seed that produces it.
+- `account-of-descriptor` *(planned)* — given seed + descriptor, find the cosigner role + account index.
+- `address-of-xpub` *(planned)* — given xpub + address, scan child indices to a gap limit.
+- `passphrase-of-xpub` *(planned)* — given seed + passphrase + target xpub, verify match.
+
+### `mnemonic xpub-search path-of-xpub`
+
+Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set.
+
+#### Synopsis
+
+```sh
+mnemonic xpub-search path-of-xpub \
+    {--phrase <BIP39> | --phrase-stdin | --ms1 <MS1> | --ms1-stdin | <positional MS1>} \
+    [--passphrase <P> | --passphrase-stdin] \
+    --target-xpub <XPUB-OR-MK1> \
+    [--language <LANG>] [--network <NET>] \
+    [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
+    [--add-path <TEMPLATE>]... \
+    [--json]
+```
+
+#### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--phrase <PHRASE>` | master BIP-39 phrase (inline); emits argv-leakage advisory; prefer `--phrase-stdin` |
+| `--phrase-stdin` | read master BIP-39 phrase from stdin |
+| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
+| `--ms1-stdin` | read ms1 card from stdin (single chunk) |
+| `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
+| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory |
+| `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped) |
+| `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
+| `--language <LANGUAGE>` | BIP-39 wordlist (default `english`; same options as `seed-xor`) |
+| `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
+| `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
+| `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)` |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
+| `--json` | emit JSON envelope on stdout instead of text-form |
+| `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
+| `-h, --help` | print help |
+
+Seed-intake mutex: exactly one of `{--phrase, --phrase-stdin, --ms1, --ms1-stdin, positional}` is required. Auto-fire BCH repair applies ONLY to the `--ms1` decode-failure path (BIP-39 phrase parse failure routes direct exit 1 — phrases have no BCH primitive).
+
+#### Worked example
+
+```sh
+# Test BIP-39 phrase (12-word vector from BIP-39 spec)
+PHRASE="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+# Derive the BIP-84 account-0 xpub for this seed (via mnemonic bundle or external tool); call it ZPUB.
+
+# Find the path under the seed that produces ZPUB:
+mnemonic xpub-search path-of-xpub --phrase "$PHRASE" --target-xpub "$ZPUB"
+```
+
+Stdout (text form):
+
+```text
+match: m/84'/0'/0'  (template=bip84, account=0)
+target-xpub: xpub6... (normalized from zpub; variant=zpub)
+searched: 7 templates × 20 accounts = 140 paths
+```
+
+#### JSON output
+
+`--json` emits a versioned envelope. Schema `v1`. Match shape:
+
+```json
+{
+  "schema_version": "1",
+  "mode": "path-of-xpub",
+  "result": "match",
+  "path": "m/84'/0'/0'",
+  "template": "bip84",
+  "account": 0,
+  "target_xpub_canonical": "xpub6...",
+  "target_xpub_variant": "zpub",
+  "searched_count": 140
+}
+```
+
+No-match shape:
+
+```json
+{
+  "schema_version": "1",
+  "mode": "path-of-xpub",
+  "result": "no_match",
+  "target_xpub_canonical": "xpub6...",
+  "target_xpub_variant": "zpub",
+  "searched_count": 140
+}
+```
+
+`target_xpub_variant` serializes as `null` when the target was supplied in canonical xpub/tpub form (no SLIP-0132 alt-prefix swap occurred). The field is always emitted (not skipped) to keep the JSON envelope structurally stable across runs.
+
+**Envelope tag deviation:** `xpub-search` uses `tag = "mode"` (not the project's `tag = "kind"` used by `InspectJson` / `RepairJson`). Rationale: `mode` is the natural domain term for `xpub-search`'s four sub-modes; `kind` would conflict with `RepairJson`'s `kind: "ms1"|"mk1"|"md1"` per-card-type semantic.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Match found |
+| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure outside the auto-fire path, ms1 decode failure with `--no-auto-repair` or on no-TTY) |
+| 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch`) |
+| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated; same contract as `convert` / `inspect` / `verify-bundle`) |
+| 64 | Clap arg-parse error |
+
+#### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Positional argument with no `ms1` HRP (e.g., a BIP-39 phrase typed positionally) | `BIP-39 phrase must be supplied via --phrase or --phrase-stdin (no HRP for positional autodetect)` |
+| Multiple seed-intake flags supplied (`--phrase` AND `--ms1`, etc.) | clap mutex error |
+| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 1) |
+
+#### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <v>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+
+#### Candidate path set
+
+The default candidate set is the cross-product of:
+
+- **Templates:** BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at `script_type ∈ {1', 2', 3'}` (sh-wsh / wsh / tr-multi-a multisig) — seven templates, fixed order
+- **Accounts:** half-open range `[min_account, max(min_account + number_of_accounts, max_account + 1))`
+- **Add-paths:** each `--add-path <TEMPLATE>` iterated over the same account range (or once if the template contains no `account` token)
+
+Iteration is deterministic: templates in fixed lexical order, accounts ascending, add-paths in user-supplied order. First match wins. The matching template name is one of `bip44` / `bip49` / `bip84` / `bip86` / `bip48-sh-wsh` / `bip48-wsh` / `bip48-tr-multi-a` for standard templates, or the literal user-supplied template string (e.g. `m/87'/0'/account'`) for `--add-path` entries. The `account` field is `null` when the matched template carries no `account` token (e.g., a fully-literal `--add-path m/9999'/0'/0'`).

@@ -165,6 +165,18 @@ pub enum ToolkitError {
     /// v0.22.0 repair feature — std::io::Error from emit_repair_report
     /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
     Io(std::io::Error),
+    /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
+    /// candidate set. Exit 4 (sibling to `BundleMismatch` /
+    /// `Bip388VerifyDistinctness` — search-target mismatch class).
+    /// `mode` distinguishes which xpub-search mode emitted (one of
+    /// `"path-of-xpub"`, `"account-of-descriptor"`, `"address-of-xpub"`,
+    /// `"passphrase-of-xpub"`); `searched` is the candidate count exhausted
+    /// (paths × accounts × cosigners for descriptor mode; addresses ×
+    /// chains × gap-limit for address mode).
+    XpubSearchNoMatch {
+        mode: &'static str,
+        searched: usize,
+    },
 }
 
 impl From<crate::repair::RepairError> for ToolkitError {
@@ -318,7 +330,8 @@ impl ToolkitError {
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
-            | ToolkitError::Bip388VerifyDistinctness => 4,
+            | ToolkitError::Bip388VerifyDistinctness
+            | ToolkitError::XpubSearchNoMatch { .. } => 4,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::Io(_) => 1,
             ToolkitError::MultisigConfig { .. }
@@ -365,6 +378,7 @@ impl ToolkitError {
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
             ToolkitError::Io(_) => "Io",
+            ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
         }
     }
 
@@ -464,6 +478,11 @@ impl ToolkitError {
                 String::new()
             }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
+                "no match in searched set: mode={mode}, paths searched={searched}; \
+                 widen the range with --max-account / --number-of-accounts, or supply \
+                 additional templates via --add-path"
+            ),
         }
     }
 

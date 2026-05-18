@@ -6,6 +6,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.26.0] — UNRELEASED
+
+### Added
+
+- **`mnemonic xpub-search path-of-xpub`** — new umbrella subcommand `xpub-search` with the first of four planned modes shipped. Given a seed (BIP-39 phrase OR ms1 card) + a target xpub (any SLIP-0132 prefix, or an mk1 bech32 card), searches the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set (literal token `account'` or `account` substituted per iterated account; templates without an `account` token are searched once at the literal path).
+
+  Seed intake: `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` / positional ms1 (HRP-autodetect; BIP-39 phrase text rejected positionally — no HRP). BCH auto-fire repair applies ONLY to the `--ms1` decode-failure path (TTY-gated via `MNEMONIC_FORCE_TTY`); `--phrase` BIP-39 parse failure routes direct exit 1.
+
+  `--passphrase` / `--passphrase-stdin` plumbed through to `derive_master_seed`. Target intake accepts both SLIP-0132 xpubs (normalized to canonical xpub/tpub form internally; original variant preserved in output) AND `mk1` bech32 cards carrying an xpub.
+
+  Exit codes: 0 match / 1 bad input / 4 no match / 5 auto-fire short-circuit / 64 clap. New `ToolkitError::XpubSearchNoMatch { mode, searched }` variant routes to exit 4.
+
+  `--json` envelope shape (`tag = "mode"` — deviates from project's `tag = "kind"` convention because "mode" is the natural domain term for `xpub-search`'s four sub-modes; "kind" would conflict with `RepairJson`'s `kind: "ms1"|"mk1"|"md1"` per-card-type semantic):
+
+  ```json
+  {
+    "schema_version": "1",
+    "mode": "path-of-xpub",
+    "result": "match",
+    "path": "m/84'/0'/0'",
+    "template": "bip84",
+    "account": 0,
+    "target_xpub_canonical": "xpub6...",
+    "target_xpub_variant": "zpub",
+    "searched_count": 140
+  }
+  ```
+
+  `target_xpub_variant` always emitted (`null` when the target was supplied in canonical xpub/tpub form); structural stability across runs. The top-level `schema_version: "1"` field is new on `XpubSearchJson`; parallel addition to `InspectJson` is filed as FOLLOWUP `inspect-json-schema-version-backfill` for v0.27+.
+
+  Implementation: 6 new files under `cmd/xpub_search/` (umbrella `mod.rs` + per-mode `path_of_xpub.rs` + shared helpers `candidate_paths.rs` / `path_search.rs` / `seed_intake.rs` / `target_intake.rs`); per-mode-file split enables parallel-disjoint follow-on commits for the remaining 3 modes. 19 new integration cells (`tests/cli_xpub_search_path_of_xpub.rs`) + 8 unit cells.
+
+  Plan: `design/PLAN_v0_26_0_xpub_search.md` (C6 release commit will copy from the plan-mode source-of-truth).
+
 ## mnemonic-toolkit [0.25.1] — 2026-05-18
 
 ### Fixed

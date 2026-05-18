@@ -75,6 +75,8 @@ enum Command {
     Repair(cmd::repair::RepairArgs),
     /// describe the contents of an m-format card (ms1 / mk1 / md1)
     Inspect(cmd::inspect::InspectArgs),
+    /// search for a target (xpub, descriptor, address, or passphrase) under a seed or xpub
+    XpubSearch(cmd::xpub_search::XpubSearchArgs),
 }
 
 fn main() -> ExitCode {
@@ -113,6 +115,9 @@ fn main() -> ExitCode {
         }
         Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
         Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::XpubSearch(args) => {
+            cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
     };
 
     let exit = match result {

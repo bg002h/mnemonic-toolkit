@@ -11,3 +11,4 @@ pub mod repair;
 pub mod seed_xor;
 pub mod slip39;
 pub mod verify_bundle;
+pub mod xpub_search;

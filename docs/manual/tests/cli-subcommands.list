@@ -20,6 +20,7 @@ mnemonic slip39 combine
 mnemonic gui-schema
 mnemonic repair
 mnemonic inspect
+mnemonic xpub-search path-of-xpub
 
 # md
 md encode
