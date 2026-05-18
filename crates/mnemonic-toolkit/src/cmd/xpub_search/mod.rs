@@ -28,7 +28,10 @@ use clap::{Args, Subcommand};
 use serde::Serialize;
 use std::io::{Read, Write};
 
+pub mod account_of_descriptor;
+pub mod account_search;
 pub mod candidate_paths;
+pub mod descriptor_intake;
 pub mod path_of_xpub;
 pub mod path_search;
 pub mod seed_intake;
@@ -36,6 +39,7 @@ pub mod target_intake;
 
 // Re-export the per-mode result struct so the unit-cell-in-tests reaches it
 // via `mnemonic_toolkit::cmd::xpub_search::PathOfXpubResult`.
+pub use account_of_descriptor::AccountOfDescriptorResult;
 pub use path_of_xpub::PathOfXpubResult;
 
 /// Umbrella `xpub-search` args. Defers to `XpubSearchCommand` for the
@@ -51,6 +55,9 @@ pub enum XpubSearchCommand {
     /// Given a seed + target xpub, find the BIP-32 path under the seed that
     /// produces the xpub.
     PathOfXpub(path_of_xpub::PathOfXpubArgs),
+    /// Given a seed + descriptor, identify which cosigner role(s) and
+    /// account(s) the seed plays in the descriptor.
+    AccountOfDescriptor(account_of_descriptor::AccountOfDescriptorArgs),
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -63,6 +70,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     match &args.command {
         XpubSearchCommand::PathOfXpub(a) => {
             path_of_xpub::run_path_of_xpub(a, stdin, stdout, stderr, no_auto_repair)
+        }
+        XpubSearchCommand::AccountOfDescriptor(a) => {
+            account_of_descriptor::run_account_of_descriptor(
+                a,
+                stdin,
+                stdout,
+                stderr,
+                no_auto_repair,
+            )
         }
     }
 }
@@ -89,6 +105,7 @@ pub struct XpubSearchEnvelope {
 #[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum XpubSearchJson {
     PathOfXpub(PathOfXpubResult),
+    AccountOfDescriptor(AccountOfDescriptorResult),
 }
 
 #[cfg(test)]

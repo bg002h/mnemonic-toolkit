@@ -47,7 +47,7 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_thirteen_subcommands() {
+fn gui_schema_lists_all_fourteen_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
@@ -58,8 +58,8 @@ fn gui_schema_lists_all_thirteen_subcommands() {
     // `slip39-combine`. v0.22.0 adds `repair` (BCH error-correction) and
     // `inspect` (describe-card-contents). v0.26.0 adds the `xpub-search`
     // umbrella; each mode is flattened (C1 ships `xpub-search-path-of-xpub`;
-    // C2/C3/C4 extend with the remaining 3 modes). gui-schema + help
-    // filtered out.
+    // C2 adds `xpub-search-account-of-descriptor`; C3/C4 extend with the
+    // remaining 2 modes). gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
@@ -75,6 +75,7 @@ fn gui_schema_lists_all_thirteen_subcommands() {
             "slip39-combine",
             "slip39-split",
             "verify-bundle",
+            "xpub-search-account-of-descriptor",
             "xpub-search-path-of-xpub",
         ],
         "all user-facing subcommands must appear (nested split/combine \

@@ -1839,3 +1839,99 @@ The default candidate set is the cross-product of:
 - **Add-paths:** each `--add-path <TEMPLATE>` iterated over the same account range (or once if the template contains no `account` token)
 
 Iteration is deterministic: templates in fixed lexical order, accounts ascending, add-paths in user-supplied order. First match wins. The matching template name is one of `bip44` / `bip49` / `bip84` / `bip86` / `bip48-sh-wsh` / `bip48-wsh` / `bip48-tr-multi-a` for standard templates, or the literal user-supplied template string (e.g. `m/87'/0'/account'`) for `--add-path` entries. The `account` field is `null` when the matched template carries no `account` token (e.g., a fully-literal `--add-path m/9999'/0'/0'`).
+
+### `mnemonic xpub-search account-of-descriptor`
+
+Given a seed (BIP-39 phrase OR ms1 card) + a wallet descriptor, identify which cosigner role(s) the seed plays in the descriptor and at which account index. Searches the same candidate-path set as `path-of-xpub`, run once per cosigner.
+
+#### Synopsis
+
+```sh
+mnemonic xpub-search account-of-descriptor \
+    {--phrase <BIP39> | --phrase-stdin | --ms1 <MS1> | --ms1-stdin | <positional MS1>} \
+    [--passphrase <P> | --passphrase-stdin] \
+    {--descriptor <VALUE> | --descriptor-from <NODE>=<VALUE>} \
+    [--language <LANG>] [--network <NET>] \
+    [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
+    [--add-path <TEMPLATE>]... \
+    [--json]
+```
+
+#### Descriptor input shapes (auto-detect tie-break order)
+
+| Shape | Detection rule | Source |
+|---|---|---|
+| BIP-388 wallet-policy JSON | input (after `trim_start`) begins with `{` | reversed via `wallet_export/pipeline.rs:160-205` emitter; substitution rule `@N/**` → `keys_info[N] + "/<0;1>/*"` |
+| md1 card(s) | input begins with `md1` HRP (single inline) OR `--descriptor-from md1=-` stdin (one chunk per line) | `md_codec::chunk::reassemble` tree-walk on `desc.tlv` xpub material (pubkeys + fingerprints + origin-path overrides) + `desc.path_decl.paths` |
+| Toolkit `@N`-placeholder descriptor | regex `@\d+` outside string-literal context | REFUSED (synthetic xpubs are non-searchable; supply a literal-xpub descriptor / md1 card / BIP-388 JSON instead) |
+| External literal-xpub descriptor | else | `rust_miniscript::Descriptor::<DescriptorPublicKey>::from_str` + `iter_pk()` walk (precedent `wallet_export/pipeline.rs:177`) |
+
+Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `literal` / `md1` / `bip388`; `<value>` is a literal string or `-` for stdin.
+
+#### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` / `<positional MS1>` | seed-intake mutex (same as `path-of-xpub`) |
+| `--passphrase` / `--passphrase-stdin` | optional BIP-39 passphrase |
+| `--descriptor <VALUE>` | wallet descriptor; shape auto-detected per tie-break order |
+| `--descriptor-from <NODE>=<VALUE>` | explicit shape override (`literal=` / `md1=` / `bip388=`; `-` for stdin) |
+| `--language` / `--network` | BIP-39 wordlist + network selector (same defaults as `path-of-xpub`) |
+| `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`; search runs once per cosigner) |
+| `--json` | emit JSON envelope on stdout |
+| `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure |
+| `-h, --help` | print help |
+
+#### v0.19.0 silent-default-path inference
+
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger silent BIP-48 default path (`m/48'/<coin>'/<account>'/2'`) + a stderr `info:` notice mirroring `mnemonic bundle` v0.19.0 behavior. Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+
+#### NUMS sentinel
+
+A cosigner xpub matching the BIP-341 unspendable internal-key NUMS H point (`50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`) is skipped — search does not run for that cosigner — and reported in the JSON envelope's `unspendable_internal_keys` array.
+
+#### Output (text, multisig match)
+
+```text
+match: cosigner @0  m/48'/0'/0'/2'  (template=bip48-wsh, account=0)
+descriptor: wsh(sortedmulti(2, [fp1/48h/0h/0h/2h]xpub1.../0/*, ...))
+cosigners total: 3
+matched cosigner indices: [0]
+searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
+```
+
+#### Output (`--json`)
+
+```json
+{
+  "schema_version": "1",
+  "mode": "account-of-descriptor",
+  "result": "match",
+  "matched_cosigners": [
+    {"cosigner_index": 0, "path": "m/48'/0'/0'/2'", "template": "bip48-wsh", "account": 0}
+  ],
+  "cosigners_total": 3,
+  "searched_count_per_cosigner": 140,
+  "descriptor_shape": "literal_xpub",
+  "unspendable_internal_keys": []
+}
+```
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | At least one cosigner matched |
+| 1 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error) |
+| 4 | No cosigner matched (`ToolkitError::XpubSearchNoMatch`) |
+| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure |
+| 64 | Clap arg-parse error |
+
+#### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Toolkit `@N`-placeholder descriptor (e.g. `wsh(sortedmulti(2, @0[fp/...], @1[fp/...]))`) | `toolkit @N descriptors carry synthetic xpubs; supply a literal-xpub descriptor, md1 card, or BIP-388 wallet-policy JSON instead` |
+| Descriptor containing no extended keys (all raw public keys) | `descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners` |
+| Bare `tr(...)` with no key form | rust-miniscript parse error (exit 1) |
+| `--descriptor-from <unknown>=...` | `--descriptor-from: <node> must be one of literal / md1 / bip388` |
