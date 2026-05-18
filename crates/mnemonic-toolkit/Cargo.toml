@@ -17,9 +17,9 @@ name = "mnemonic"
 path = "src/main.rs"
 
 [dependencies]
-ms-codec = { path = "/scratch/code/shibboleth-wt/ms-codec-v0.2-ms-cli-v0.4/crates/ms-codec" }
+ms-codec = "0.2.0"
 mk-codec = "0.3.1"
-md-codec = { path = "/scratch/code/shibboleth-wt/md-codec-v0.34-md-cli-v0.6/crates/md-codec" }
+md-codec = "0.34.0"
 hmac = "0.12"
 miniscript = { version = "13", default-features = false, features = ["std"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
