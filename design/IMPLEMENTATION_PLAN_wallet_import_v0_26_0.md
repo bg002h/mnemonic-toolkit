@@ -116,7 +116,7 @@ Each phase: TDD per cell + per-phase opus architect R0/R1+ until 0 Critical / 0 
 
 **Tasks:**
 
-- [ ] **§0.1 Verify wallet_export lexsort claim empirically.** Run:
+- [x] **§0.1 Verify wallet_export lexsort claim empirically.** (Phase 0 executed 2026-05-18.) Run with the existing wallet-export test-fixture xpubs (`COSIGNER_{A,B,C}_XPUB` in `tests/cli_export_wallet_jade.rs`):
   ```bash
   cargo run --release --bin mnemonic -- export-wallet \
       --format bitcoin-core --template wsh-sortedmulti \
@@ -124,56 +124,47 @@ Each phase: TDD per cell + per-phase opus architect R0/R1+ until 0 Critical / 0 
       --slot @0.xpub=<xpub-A> --slot @0.fingerprint=<fp-A> --slot @0.path="m/48'/0'/0'/2'" \
       --slot @1.xpub=<xpub-B> --slot @1.fingerprint=<fp-B> --slot @1.path="m/48'/0'/0'/2'" \
       --slot @2.xpub=<xpub-C> --slot @2.fingerprint=<fp-C> --slot @2.path="m/48'/0'/0'/2'" \
-      2>&1 | tee /tmp/lexsort-empirical.txt
+      2>&1 | tee /tmp/lexsort-forward.txt
   ```
-  Then reverse slot order (@2, @1, @0) and rerun. Assert byte-equality across the two outputs OR document the actual lexsort behavior. Expected per architect-review: byte-identical output (no toolkit-side lexsort).
+  Then reverse slot order (@0=C, @1=B, @2=A) and rerun. **Empirically confirmed (Phase 0 R0 R2 fold):** outputs DIFFER — toolkit preserves declaration order in the `sortedmulti(...)` argument list. Bitcoin's `sortedmulti` performs key-sort at SIGNATURE-MATERIALIZATION time, not at descriptor construction. Plan-doc's prior "byte-identical" expectation was incorrect. The import-side `@N` adapter must mirror this discipline (declaration-order preservation); round-trip byte-identical equality will fail for any BSMS blob whose cosigner order differs from toolkit's slot-index order, making semantic round-trip + unified-diff WARNING (SPEC §7.2) the load-bearing path.
 
-- [ ] **§0.2 Verify `md_codec::Descriptor` has no `cosigner_order` TLV.** Run:
+- [x] **§0.2 Verify `md_codec::Descriptor` has no `cosigner_order` TLV.** (Phase 0 executed 2026-05-18 via direct source inspection of `descriptor-mnemonic/crates/md-codec/src/{encode.rs,tlv.rs}`.) Confirmed `Descriptor` fields: `{n, path_decl, use_site_path, tree, tlv}`. Confirmed `TlvSection` fields (per Phase 0 R0 R3 fold — plan-doc field-list was incomplete): `{use_site_path_overrides, fingerprints, pubkeys, origin_path_overrides, unknown}`. **NO `cosigner_order` field.** Phase 2 R0 checklist item: confirm `wallet_import/pipeline.rs` populates `origin_path_overrides` correctly when BSMS cosigners use non-default BIP-48 account paths.
+
+- [x] **§0.3 Verify `gui_schema` `secret` field flow.** (Phase 0 executed 2026-05-18.) Plan-doc had `--classify-flags` — flag does NOT exist (only `--classify-descriptor` per `gui_schema.rs:1262`). Correct command (bare `gui-schema` emits the full JSON envelope):
   ```bash
-  cargo doc --no-deps --open -p md-codec
+  cargo run --release --bin mnemonic -- gui-schema 2>/dev/null | jq -c '.subcommands[] | {name, secret_flags: [.flags[] | select(.secret == true) | .name]}'
   ```
-  Search `Descriptor` + `TlvSection` field lists. Confirm fields are exactly: `n`, `path_decl`, `use_site_path`, `tree`, `tlv`. Confirm `TlvSection` fields are exactly: `fingerprints`, `pubkeys`, `use_site_path_overrides`. NO `cosigner_order`.
+  **Empirically confirmed:** `--ms1` (verify-bundle, inspect, repair), `--passphrase` (bundle, convert, derive-child, slip39-{combine,split}, verify-bundle), `--bip38-passphrase` (convert), `--share` (seed-xor-combine, slip39-combine) all flow `secret: true`. This is the load-bearing pre-check for I9 per SPEC §9.5.
 
-- [ ] **§0.3 Verify `gui_schema` `secret` field flow.** Run:
-  ```bash
-  cargo run --release --bin mnemonic -- gui-schema --classify-flags 2>&1 | jq '.subcommands[] | {name, secret_flags: [.flags[] | select(.secret == true) | .name]}'
-  ```
-  Confirm `--ms1`, `--passphrase`, `--bip38-passphrase`, `--share` flow as `secret: true`. This is the load-bearing pre-check for I9 per SPEC §9.5.
+- [x] **§0.4 Verify mnemonic-gui run-confirm-modal renders argv verbatim** (Phase 0 executed 2026-05-18; pre-confirms architect's C2 from Section 4 review). Confirmed `mnemonic-gui/src/main.rs:686-688` renders verbatim via `for tok in &argv { ui.monospace(format!("  {}", tok)); }`. All `redact*` matches live in `persistence.rs` (on-disk JSON state redaction, not argv display) or `form/secret_widget.rs` (TextEdit input-masking). This guides Phase 6 design: env-var sentinel obviates argv-redaction need for v0.11.0.
 
-- [ ] **§0.4 Verify mnemonic-gui run-confirm-modal renders argv verbatim** (pre-confirms architect's C2 from Section 4 review). Read `mnemonic-gui/src/main.rs:680-695`. Confirm `ui.monospace(format!("  {}", tok))` pattern present; confirm no `redact` / `mask` / `*` transformation. This guides Phase 6 design (env-var sentinel obviates argv-redaction need for v0.11.0).
+- [x] **§0.5 Verify v0.25.1 empty-string sentinel semantics still active.** (Phase 0 executed 2026-05-18.) Confirmed `watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice` passes (1153-cell baseline at v0.25.1).
 
-- [ ] **§0.5 Verify v0.25.1 empty-string sentinel semantics still active.** Run:
-  ```bash
-  cargo test -p mnemonic-toolkit --test cli_verify_bundle_watch_only -- empty_ms1 2>&1 | tail -20
-  ```
-  Confirm `watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice` passes (1153-cell baseline at v0.25.1).
-
-- [ ] **§0.6 Empirically verify the BSMS seed-case parses today.** Run `rust-miniscript` against the user's blob:
+- [x] **§0.6 Empirically verify the BSMS seed-case parses today.** (Phase 0 executed 2026-05-18; GO/NO-GO **GO**.) Plan-doc command `convert --from descriptor=<line2>` is REJECTED (`descriptor` is not a valid `NodeType`; `convert.rs:66-83`). Correct command:
   ```bash
   cat <<'EOF' > /tmp/bsms-seedcase.txt
   BSMS 1.0
   wsh(thresh(2,pkh([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*),s:pk([97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*),sln:older(32768)))#zh0duts0
   EOF
+  DESC_LINE=$(sed -n '2p' /tmp/bsms-seedcase.txt)
+  cargo run --release --bin mnemonic -- export-wallet --descriptor "$DESC_LINE" --network testnet --format bitcoin-core
   ```
-  Extract line 2; pipe to `cargo run -- convert --from descriptor=<line2>` to confirm parse. Document any rust-miniscript surprises (e.g., does it accept `sln:older(N)` in this position?).
+  **Empirically confirmed:** Exit 0; toolkit emits Bitcoin Core `importdescriptors` JSON, auto-splitting multipath `<0;1>/*` into receive `/0/*` + change `/1/*` pairs (re-checksummed `#ld0r6z6d` / `#7qqz5h4m`). rust-miniscript v13.0 accepts: `sln:` compound wrapper (Swap + OrI(False,_) + ZeroNotEqual), `tpub` testnet keys, BIP-389 multipath, BIP-380 checksum.
 
-  **GO/NO-GO GATE:** If parse fails, **PAUSE THE CYCLE**. The user's flagship seed-case is the cycle's driving user-value — without it, Phase 2 ships a parser that cannot handle the showcased blob. File an upstream `rust-miniscript` investigation FOLLOWUP; reconvene with options: (a) bump miniscript dep, (b) vendor a small wrapper, (c) document the limitation + adjust the SPEC. Do NOT proceed to Phase 2 dispatch on a parse failure.
+  **§0.6.b — I1 fold (Phase 0 R0 architect-review).** The `export-wallet --descriptor` path uses only `MsDescriptor::from_str` (`export_wallet.rs:257-263`); it does NOT exercise the Phase 2 SPEC §4.2 step 7 pipeline (`pipeline::concrete_keys_to_placeholders` → `parse_descriptor::parse_descriptor` → `walk_root` over the full AST). To close the architect's I1 finding, a regression test was added at `parse_descriptor.rs::tests::phase0_i1_bsms_decaying_multisig_walks_end_to_end` exercising `wsh(thresh(2, pkh(@0/<0;1>/*), s:pk(@1/<0;1>/*), sln:older(32768)))` end-to-end through the full pipeline. **Empirically passes.** All required walker arms (`PkH`, `PkK`, `Check`, `Swap`, `OrI`, `ZeroNotEqual`, `Older`, `False`, `Thresh`) compose correctly.
 
-- [ ] **§0.6.a Paired checksum-tamper check.** With the same fixture, tamper one character in `#zh0duts0` (e.g., `#zh0duts1`); rerun `cargo run -- convert --from descriptor=<tampered>`. Assert parse FAILS with checksum-mismatch error. Removes the load-bearing assumption that `MsDescriptor::from_str` validates BIP-380 checksums automatically.
-
-- [ ] **§0.7 Verify `slip0132` exports a network-inference function.** Run:
+- [x] **§0.6.a Paired checksum-tamper check.** (Phase 0 executed 2026-05-18.) Plan-doc command was identical to §0.6's defective form. Correct:
   ```bash
-  grep -n "pub fn\|pub(crate) fn" /scratch/code/shibboleth/mnemonic-toolkit/crates/mnemonic-toolkit/src/slip0132.rs
+  TAMPERED=$(echo "$DESC_LINE" | sed 's/#zh0duts0/#zh0duts1/')
+  cargo run --release --bin mnemonic -- export-wallet --descriptor "$TAMPERED" --network testnet --format bitcoin-core
   ```
-  Actual surface (verified 2026-05-18): `XpubPrefix::is_default`, `parse_xpub_prefix_arg`, `normalize_xpub_prefix`, `apply_xpub_prefix`, `neutral_for`, `render_slip0132_info_line`. **NO existing `detect_network` function.** Plan-amendment: Phase 2 §2.3 must either (a) use the existing `XpubPrefix` infrastructure to determine network (xpub prefix → SLIP-132 variant → BIP-43 coin-type → mainnet/testnet) by adding a small `infer_network_from_xpub_str(xpub: &str) -> bitcoin::Network` helper to `slip0132.rs` (~15 LOC), or (b) network-detect from the `[fp/path]` coin-type (1 = testnet, 0 = mainnet) which is simpler. **Lock decision in Phase 0 recon report.**
+  **Confirmed:** Stderr `error: export-wallet --descriptor: invalid checksum zh0duts1; expected zh0duts0` (toolkit-side BIP-380 check fires before miniscript parse).
 
-- [ ] **§0.8 Verify `similar` crate is NOT already in workspace.** Run:
-  ```bash
-  grep -rn "^similar\b\|\"similar\"" /scratch/code/shibboleth/mnemonic-toolkit/Cargo.toml /scratch/code/shibboleth/mnemonic-toolkit/crates/*/Cargo.toml
-  ```
-  Expected: no matches (confirmed by architect-review). Phase 4 commits to **`similar = "2"` as workspace dep** (130+ crates on crates.io depend on it; MIT/Apache-2.0; well-maintained). Plan-doc §4.2 updated.
+- [x] **§0.7 Verify `slip0132` exports a network-inference function.** (Phase 0 executed 2026-05-18.) Actual surface confirmed: `XpubPrefix::is_default`, `parse_xpub_prefix_arg`, `normalize_xpub_prefix`, `apply_xpub_prefix`, `neutral_for`, `render_slip0132_info_line`. **NO `detect_network` function exists.** **Decision LOCKED: option (b)** — extract `coin_type` (BIP-48 path component index 1) from the `[fp/path]` origin annotation: hardened `0'` → `bitcoin::Network::Bitcoin`, hardened `1'` → `bitcoin::Network::Testnet`. Rationale: option (a)'s xpub-prefix path collapses on `tpub`-canonicalized inputs (same false-mainnet trap); option (b) reads the authoritative BIP-48 coin-type signal. **Architect R0 I2 fold:** signet and regtest are not distinguishable from testnet via origin-path inspection in either BIP-129 BSMS or Bitcoin Core `listdescriptors` — both use coin-type `1`. The toolkit's canonical interpretation is `bitcoin::Network::Testnet`; users running signet/regtest workflows must supply `--network signet|regtest` post-import. FOLLOWUP: `wallet-import-signet-regtest-disambiguation` (v0.27+). Cosigner-to-cosigner coin-type heterogeneity → exit 2 `ImportWalletParse`. SPEC §4.2 step 8 amendment text captured in §7.0.a (Phase 1 first-commit).
 
-- [ ] **§0.9 Recon report.** Write `/tmp/phase-0-recon.md` summarizing all 8 verification outputs + slip0132 inference-method decision. Pass: green = baseline OK; yellow = surprises to fold; red = SPEC violations requiring SPEC patch.
+- [x] **§0.8 Verify `similar` crate is NOT already in workspace.** (Phase 0 executed 2026-05-18.) 0 matches confirmed. Phase 4 §4.2 adds `similar = "2"` as toolkit-crate-level dep.
+
+- [x] **§0.9 Recon report.** (Phase 0 executed 2026-05-18.) Recon report committed at `design/agent-reports/phase-0-recon.md`; opus architect R0 review at `design/agent-reports/phase-0-r0-review.md`. **Verdict: GREEN-after-fold** — 0 Critical / 2 Important folded inline (I1 + I2).
 
 **Architect-review (Phase 0):** R0 — dispatch opus `feature-dev:code-architect` to review the `/tmp/phase-0-recon.md` against the SPEC's load-bearing assumptions. R1+ until 0 Critical.
 

@@ -2506,6 +2506,26 @@ mod tests {
         assert_eq!(children.len(), 3);
     }
 
+    #[test]
+    fn phase0_i1_bsms_decaying_multisig_walks_end_to_end() {
+        // Phase 0 R0 architect-review I1 fold: verify the user's flagship BSMS
+        // decaying-multisig AST (pkh + s:pk + sln:older composition) walks through
+        // the full `parse_descriptor` pipeline (lex → resolve → substitute_synthetic
+        // → MsDescriptor::from_str → walk_root → md_codec::Descriptor). The shape
+        // is `wsh(thresh(2, pkh(@0/...), s:pk(@1/...), sln:older(32768)))` — the
+        // unique composition is `sln:` = Swap + OrI(False, ZeroNotEqual(Older(N)))
+        // plus pkh as a Thresh child (existing arm_thresh uses pk, not pkh).
+        let inner = wsh_inner(
+            "wsh(thresh(2,pkh(@0/<0;1>/*),s:pk(@1/<0;1>/*),sln:older(32768)))",
+        );
+        assert_eq!(inner.tag, Tag::Thresh);
+        let Body::Variable { k, children } = inner.body else {
+            panic!("expected Thresh Variable body");
+        };
+        assert_eq!(k, 2);
+        assert_eq!(children.len(), 3);
+    }
+
     // ---- A.5: dedicated Layer 2 carry tests (5 tests) ----
 
     #[test]
