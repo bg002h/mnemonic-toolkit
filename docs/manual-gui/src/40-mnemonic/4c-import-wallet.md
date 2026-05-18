@@ -205,7 +205,7 @@ embedded in the descriptor's key sources.
    - If a `--ms1` or secret-bearing `--slot` row is filled, the
      run-confirm modal opens and renders the argv verbatim (per
      `[[feedback-run-confirm-modal-renders-argv-verbatim]]`). To
-     pre-empt the seed appearing in the modal AND in `ps` output,
+     prevent the seed appearing in the modal AND in `ps` output,
      type `@env:MY_MS1_0` rather than the literal seed (with
      `MY_MS1_0` exported in the shell that launched the GUI).
      Confirm.

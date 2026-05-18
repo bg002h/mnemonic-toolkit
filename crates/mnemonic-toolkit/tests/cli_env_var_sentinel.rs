@@ -710,23 +710,41 @@ fn env_var_lifecycle_no_leak_to_argv() {
     let mut child = cargo_run.spawn().expect("spawn mnemonic child");
     let pid = child.id();
 
-    // Poll /proc/<pid>/cmdline until populated (kernel writes cmdline
-    // post-execve; a fresh fork() may show an empty cmdline transiently).
-    // Cap at ~2s — far more than enough on any reasonable system.
+    // Poll /proc/<pid>/cmdline until the FULL argv is populated.
+    //
+    // Two procfs races to defend against:
+    //   (a) Between fork() and execve(), /proc/<pid>/cmdline reflects the
+    //       parent's argv (the test runner) — must not break out on that.
+    //   (b) During execve(), the kernel updates cmdline. Linux pre-2024
+    //       releases on heavily-loaded CI runners can return partial reads
+    //       (argv[0] populated; argv[1..] still being written). Must not
+    //       break out on a partial cmdline that has the binary path but
+    //       not the args.
+    //
+    // The robust break condition is a token that appears LATE in argv and
+    // is unique to this invocation: the sentinel literal itself
+    // (`@env:WALLET_PP`). If the sentinel never appears, the deadline
+    // expires and the assertion below fires with a useful diagnostic —
+    // which is exactly the failure mode (argv-leak) we're testing for.
+    //
+    // Cap at ~5s on CI: cmdline write completes within tens of ms locally
+    // but procfs reads under heavy CI load can take longer.
     let cmdline_path = format!("/proc/{pid}/cmdline");
     let mut cmdline = String::new();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while std::time::Instant::now() < deadline {
         cmdline.clear();
         if let Ok(mut f) = std::fs::File::open(&cmdline_path) {
             let _ = f.read_to_string(&mut cmdline);
         }
-        // execve completed once the cmdline reflects the new argv (we
-        // look for our binary path segment OR our sentinel literal).
-        if cmdline.contains("@env:WALLET_PP") || cmdline.contains("mnemonic") {
+        // Break ONLY when the sentinel literal has reached cmdline (proves
+        // execve completed AND argv-side substitution did NOT expand the
+        // sentinel to the secret value). If the sentinel never appears,
+        // poll until deadline + let the assertion fire.
+        if cmdline.contains("@env:WALLET_PP") {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 
     // Critical assertions BEFORE closing stdin (so any panic doesn't
