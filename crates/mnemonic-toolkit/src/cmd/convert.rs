@@ -321,13 +321,14 @@ pub struct ConvertArgs {
     /// Script-type selector for `(xpub, address)` derivation.
     ///
     /// Accepted values:
+    ///   p2pkh        legacy single-sig (BIP-44; mainnet `1...`, testnet `m/n...`)
     ///   p2wpkh       native-segwit single-sig
     ///   p2sh-p2wpkh  nested-segwit single-sig
     ///   p2tr         taproot single-sig
     ///
     /// If absent and `--template` is supplied, inferred from the
-    /// template (`bip84` → p2wpkh, `bip49` → p2sh-p2wpkh, `bip86` →
-    /// p2tr); else refused. (SPEC v0.7 §10.a)
+    /// template (`bip44` → p2pkh, `bip84` → p2wpkh, `bip49` → p2sh-p2wpkh,
+    /// `bip86` → p2tr); else refused. (SPEC v0.7 §10.a; P2PKH added v0.26.0)
     #[arg(long = "script-type", value_parser = parse_script_type_arg, verbatim_doc_comment)]
     pub script_type: Option<ScriptType>,
 
@@ -337,10 +338,12 @@ pub struct ConvertArgs {
 }
 
 /// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
-/// Single-sig variants only in v0.7; multisig templates do not infer to a
-/// single-sig script-type.
+/// Single-sig variants only; multisig templates do not infer to a single-sig
+/// script-type. P2PKH (BIP-44) added v0.26.0 to round out the four standard
+/// single-sig address types (closes the v0.26.0 xpub-search P3 5-site gap).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptType {
+    P2pkh,
     P2wpkh,
     P2shP2wpkh,
     P2tr,
@@ -348,26 +351,27 @@ pub enum ScriptType {
 
 pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
     match s {
+        "p2pkh" => Ok(ScriptType::P2pkh),
         "p2wpkh" => Ok(ScriptType::P2wpkh),
         "p2sh-p2wpkh" => Ok(ScriptType::P2shP2wpkh),
         "p2tr" => Ok(ScriptType::P2tr),
         _ => Err(format!(
-            "--script-type must be one of: p2wpkh, p2sh-p2wpkh, p2tr; got {:?}",
+            "--script-type must be one of: p2pkh, p2wpkh, p2sh-p2wpkh, p2tr; got {:?}",
             s,
         )),
     }
 }
 
 /// SPEC v0.7 §10.a — infer script-type from `--template` when `--script-type`
-/// is absent. Single-sig templates (`bip49` / `bip84` / `bip86`) map cleanly;
-/// `bip44` and any multisig template return None (refused upstream as
+/// is absent. Single-sig templates (`bip44` / `bip49` / `bip84` / `bip86`)
+/// map cleanly; multisig templates return None (refused upstream as
 /// `refusal_address_script_type_unknown_template`).
 fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
     match template {
+        CliTemplate::Bip44 => Some(ScriptType::P2pkh),
         CliTemplate::Bip84 => Some(ScriptType::P2wpkh),
         CliTemplate::Bip49 => Some(ScriptType::P2shP2wpkh),
         CliTemplate::Bip86 => Some(ScriptType::P2tr),
-        // Bip44 (P2PKH) is not in the v0.7 single-sig script-type set.
         // Multisig templates don't reduce to a single-sig script-type.
         _ => None,
     }
@@ -543,13 +547,13 @@ fn refusal_address_no_path() -> ToolkitError {
 
 fn refusal_address_no_script_type() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--to address requires --script-type <p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
+        "--to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
     )
 }
 
 fn refusal_address_script_type_unknown_template() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--template does not infer a single-sig --script-type for --to address (bip49/bip84/bip86 supported; multisig templates and bip44 require explicit --script-type).".into(),
+        "--template does not infer a single-sig --script-type for --to address (bip44/bip49/bip84/bip86 supported; multisig templates require explicit --script-type).".into(),
     )
 }
 
@@ -1489,6 +1493,7 @@ fn build_address_from_xpub<C: bitcoin::secp256k1::Verification>(
     network: CliNetwork,
 ) -> String {
     match script_type {
+        ScriptType::P2pkh => Address::p2pkh(child.to_pub(), network.network_kind()).to_string(),
         ScriptType::P2wpkh => Address::p2wpkh(&child.to_pub(), network.known_hrp()).to_string(),
         ScriptType::P2shP2wpkh => {
             Address::p2shwpkh(&child.to_pub(), network.network_kind()).to_string()

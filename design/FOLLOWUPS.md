@@ -45,6 +45,100 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `inspect-json-schema-version-backfill` — backfill `schema_version: "1"` field on `InspectJson` envelope to match `XpubSearchJson`
+
+- **Surfaced:** 2026-05-18, v0.26.0 C1 (path-of-xpub) — `XpubSearchEnvelope` introduces a top-level `schema_version: "1"` field for forward-compat versioning of the per-mode tagged-union body. `InspectJson` (and `RepairJson`) carry no equivalent field; consumers that learn to read `schema_version` from `xpub-search` JSON have no parallel signal on inspect/repair envelopes.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/inspect.rs` `InspectJson` struct; `crates/mnemonic-toolkit/src/repair.rs` `RepairJson` struct.
+- **What:** Add a top-level `schema_version: "1"` (or fresh integer initializer) to both `InspectJson` and `RepairJson` envelopes; document the SemVer compatibility policy (`Major.Minor.Patch` shape; additive fields require a Minor bump). Coordinate with mnemonic-gui consumer paths.
+- **Why deferred:** scope discipline at C1; the existing consumers parse the existing envelope shape and would break on the additive field unless their parsers tolerate unknown top-level keys. v0.27+ touch.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-passphrase-bruteforce` — brute-force passphrase scanning over a candidates file / wordlist for `xpub-search passphrase-of-xpub`
+
+- **Surfaced:** 2026-05-18, v0.26.0 C4 (passphrase-of-xpub MVP scope). The C4 mode verifies a SINGLE passphrase; brute-force scanning is a deliberate MVP exclusion.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/passphrase_of_xpub.rs` + new `passphrase_search.rs` for the iterator/streaming.
+- **What:** Three modes to consider: (a) `--passphrases-file <path>` newline-delimited candidates; (b) `--passphrases-stdin` streamed candidates; (c) generated wordlists (e.g. EFF Long, common passphrases). Per-candidate stderr-advisory budget; rate-limit / progress reporting; deterministic iteration order; abort-on-first-match. Engineering surface includes resource-bounding (memory + time) and a clear "give-up" exit code.
+- **Why deferred:** scope discipline at C4; the single-passphrase verification covers the common-case forensic question ("does X passphrase produce this xpub?"). Brute-force needs a careful UX + rate-limit story to avoid foot-guns.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-manual-gui-chapters` — `mnemonic-gui` user manual chapters for the 4 new `xpub-search` modes
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 cycle-close — manual-gui chapters were deferred per user direction during the C5→C6 boundary check.
+- **Where:** `docs/manual-gui/src/40-mnemonic/4c-xpub-search-path-of-xpub.md` (and 4d/4e/4f for the other 3 modes); `docs/manual-gui/tests/expected_gui_schema_inventory.json` (regenerate from extract_gui_schema.py); `docs/manual-gui/pinned-upstream.toml` (bump mnemonic-gui pin to v0.11.0 once tagged).
+- **What:** Four new chapters mirroring the existing `4b-slip39-combine.md` pattern (~200-500 LOC each): synopsis, per-flag anchor sections with `id="mnemonic-<sub>-<flag>"`, NodeValueComposite node enumerations (where applicable), dropdown variant anchors, exit-codes table, warnings + secret-class material disclaimers. Drives the `gui-schema-coverage` lint gate (bidirectional anchor parity vs the GUI's `SubcommandSchema` source at the pinned tag).
+- **Why deferred:** user direction during C5→C6 boundary — 4 chapters × ~200-500 LOC each (~800-2000 LOC total prose). Out-of-band cycle.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `mlock-g1-1-test-page-alignment-luck` — `mlock_unit::g1_1_single_page_pin_has_page_count_one` flakes under parallel test execution
+
+- **Surfaced:** 2026-05-18, v0.26.0 C1 cycle observation. After C1's binary-layout shift the test fails under `cargo test`'s default parallel test runner because the heap allocator's bump pointer for a fresh `Box<[u8; 64]>` happens to straddle a page boundary; passes single-threaded (`cargo test -- --test-threads=1`). Pre-existing brittleness pattern (heap-allocator-luck), not a regression introduced by xpub-search.
+- **Where:** `crates/mnemonic-toolkit/tests/mlock_unit.rs:28` (assertion site); `crates/mnemonic-toolkit/src/mlock.rs::pin_pages_for` (page-count derivation).
+- **What:** Pin the test buffer at a known page-aligned address (e.g., `std::alloc::alloc` with a Layout that forces alignment to `*PAGE_SIZE*`) so the assertion is invariant across parallel-execution heap states. Alternative: relax the assertion to `>= 1 && <= 2` and add a paired test that uses an aligned allocator to pin the exact-page-count guarantee.
+- **Why deferred:** non-regression (single-threaded passes; the v0.10.0 mlock cycle landed under this pre-existing flake too — see `feedback-default-cargo-test-runs-sibling-dependent-tests` memory). v0.27+ touch.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-gui-bespoke-hub-pane` — discoverable umbrella hub UI for `xpub-search` modes
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 plan-vs-codebase recon. Plan §7.2 enumerated a "hub" navigation pane with nav cards linking to the 4 mode panes. The GUI has no pane abstraction — every subcommand is a flat row in the subcommand-name ComboBox.
+- **Where:** `mnemonic-gui/src/main.rs:346-602` (central panel renderer; net-new per-pane dispatch branch); `mnemonic-gui/src/schema/mnemonic.rs` (a new `SubcommandSchema` entry for the hub itself, or a sibling navigation manifest).
+- **What:** Introduce a "hub" pseudo-pane visible when the user picks the umbrella `xpub-search` from a dropdown above the subcommand selector. Hub renders 4 cards (one per mode) with mode-name + 1-line description + click-through. v0.12.0 UI polish; not a v0.11.0 blocker.
+- **Why deferred:** C5 plan-vs-codebase recon revealed plan §7.2's "pane" architecture was overspecified; v0.11.0 ships the 4 modes via the generic flag-renderer + the existing subcommand-name ComboBox.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-bespoke-hub-pane`.
+
+### `xpub-search-gui-bespoke-widgets` — per-mode composite widgets (TargetXpubField / DescriptorIntakeField / TargetAddressField / etc.)
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 plan-vs-codebase recon. Plan §7.3 enumerated `SeedIntakeWidget`, `TargetXpubField`, `DescriptorIntakeField`, `TargetAddressField`, `AddPathRepeater`, `XpubSearchResultRenderer` as net-new widgets. GUI codebase has NO `PhraseField` / `PassphraseField` / `Ms1Field` named types; the plan's "widget reuse" framing was wrong.
+- **Where:** `mnemonic-gui/src/form/` (new modules).
+- **What:** Per-mode composite widgets with affordances beyond the generic `widget::render` dispatch: TargetXpubField with prefix-detect badge; AddressTypeField that auto-suggests from xpub prefix; DescriptorIntakeField with multi-line textarea + shape-detect badge; AddPathRepeater with +/− buttons. v0.12.0 polish.
+- **Why deferred:** v0.11.0 ships via the generic FlagKind dispatcher; the bespoke widgets are UX polish, not functional blockers.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-bespoke-widgets`.
+
+### `xpub-search-gui-positional-intake` — positional ms1 (HRP-autodetect) routing in mnemonic-gui
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5. The toolkit accepts a positional ms1 (HRP-autodetect) on P1/P2/P4; the GUI's argv assembler does not surface this affordance — the GUI forces users into `--ms1` explicitly.
+- **Where:** `mnemonic-gui/src/form/invocation.rs::assemble_argv`; `mnemonic-gui/src/schema/mnemonic.rs` `positional_args: NO_POSITIONALS` on the 4 xpub-search entries.
+- **What:** Add a "drop any card" textarea/file-drop affordance that auto-routes via HRP detection (`ms1` → positional, `mk1`/`md1` → would be future modes' surfaces). v0.12.0 polish.
+- **Why deferred:** v0.11.0 keeps GUI argv assembly simple; positional intake is a polish item.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-positional-intake`.
+
+### `xpub-search-descriptor-md1-detection-bech32-validate` — md1 tie-break uses `starts_with("md1")` not full bech32 validation
+
+- **Surfaced:** 2026-05-18, v0.26.0 holistic architect review (C2 R0 m2 carry-forward). `crates/mnemonic-toolkit/src/cmd/xpub_search/descriptor_intake.rs:167` routes any tokens-list whose entries all start with the literal `"md1"` prefix into the md1 chunk-assembly funnel. A garbage token like `md1xxx` routes there and fails at `md_codec::chunk::reassemble` with a clear typed error rather than falling through to literal-xpub.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/descriptor_intake.rs:167`.
+- **What:** Tighten the tie-break to a real bech32 syntactic validation (e.g. `bech32::decode(t).is_ok() && t.starts_with("md1")` — even a shape-only check would be tighter). Defensible to leave as-is (the md1 HRP is unambiguous and false-positives surface as typed errors); fold or defer based on appetite for tightening.
+- **Why deferred:** v0.26.0 behavior is correct (false-positives produce clean error messages, not silent misroutes); not a v0.26.0 blocker.
+- **Status:** open
+- **Tier:** `v0.27-nice-to-have`
+
+### `xpub-search-address-of-xpub-searched-count-semantic` — P3 `XpubSearchNoMatch.searched` over-reports candidates
+
+- **Surfaced:** 2026-05-18, v0.26.0 holistic architect review (C3 R0 m2 carry-forward). `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293` computes the `searched` count for `ToolkitError::XpubSearchNoMatch` as `num_targets × gap_limit × chains`. The actual candidate-set is `gap_limit × chains` (one shared rendered-address Vec; see `address_search.rs:75-90` for the shared-build). For 3 targets / gap_limit=20 / 2 chains: reports 120 truth-is-40.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293`.
+- **What:** Decide on the canonical semantic — "total candidate-comparisons performed" (current; correct under that read) vs "unique child-addresses derived" (truth: `gap_limit * chains`). Either fix the count or document the chosen semantic inline. The per-target JSON envelope's `scanned_external` + `scanned_internal` fields are already correct for the per-target perspective.
+- **Why deferred:** semantic-debate, not a correctness regression; the per-target JSON envelope fields are correct. v0.26.0 ships the slightly-over-reported aggregate.
+- **Status:** open
+- **Tier:** `v0.27-nice-to-have`
+
+### `xpub-search-gui-flag-mutex-visibility` — cross-flag conditional visibility for `xpub-search` mutex groups
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5. The 4 xpub-search SubcommandSchema entries set `conditional: None` for v0.11.0; cross-flag mutex visibility (e.g., greying `--ms1` when `--phrase` is filled in) is open.
+- **Where:** `mnemonic-gui/src/form/conditional.rs` (new per-subcommand functions following the existing pattern at `slip39_split` / `slip39_combine` / `repair` / `inspect` / `derive_child` / etc.).
+- **What:** Per-subcommand `fn(&FormState) -> FlagVisibility` functions that grey/hide flags based on cross-flag state. For xpub-search modes: enforce the seed-intake mutex visually (only one of `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` interactive at a time); surface the P4 mandatory-passphrase requirement before run-confirm; flag the multi-`--target-address` repeating affordance in P3. v0.12.0 polish.
+- **Why deferred:** v0.11.0 ships with `conditional: None`; the user sees all flags simultaneously and clap-side handles the mutex at exec. The GUI's run-confirm modal will surface clap errors verbatim — functional but not ideal UX.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-flag-mutex-visibility`.
+
 ### `verify-bundle-watch-only-xpub-path-internal-consistency` — watch-only verify-bundle does not cross-check mk1 xpub byte-level fields against md1's claimed OriginPath
 
 - **Surfaced:** 2026-05-17, Q&A session in `descriptor-mnemonic` repo while explaining xpub↔keypath semantics. User asked whether `verify-bundle` cross-checks md1 and mk1 internal claims; code-read confirmed it does not.
