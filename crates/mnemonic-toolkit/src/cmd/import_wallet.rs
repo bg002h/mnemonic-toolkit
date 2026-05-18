@@ -1,12 +1,14 @@
-//! `mnemonic import-wallet` — Phase 2 scaffold.
+//! `mnemonic import-wallet` — Phase 3 scaffold.
 //!
-//! v0.26.0 Phase 2: thin CLI scaffold exposing the BSMS Round-2 parser for
-//! end-to-end integration tests. The full clap surface (`--ms1`, `--slot`,
-//! `--select-descriptor`, `--json`, sniff dispatcher) lands in Phase 5.
+//! v0.26.0 Phase 2 added the BSMS Round-2 parser scaffold. Phase 3 extends
+//! the dispatch to `--format bitcoin-core` and adds the `--select-descriptor`
+//! filter helper. The full clap surface (`--ms1`, `--slot`, `--json`, sniff
+//! dispatcher) lands in Phase 5.
 //!
 //! Current surface:
-//!   --blob <FILE|->        required; `-` reads stdin
-//!   --format <bsms>        required for Phase 2 (sniff is Phase 5)
+//!   --blob <FILE|->                                              required; `-` reads stdin
+//!   --format <bsms|bitcoin-core>                                 required for Phase 3 (sniff is Phase 5)
+//!   --select-descriptor <N|active-receive|active-change|all>     optional; default `all`
 //!
 //! Stdout shape (intentionally minimal; Phase 5 replaces with the canonical
 //! card or JSON envelope):
@@ -15,13 +17,23 @@
 //!   bundles[<i>].network=<mainnet|testnet|...>
 //!   bundles[<i>].threshold=<K|none>
 //!   bundles[<i>].bsms_audit=<some|none>
-//!   bundles[<i>].cosigners[<j>].fingerprint=<hex>
 //!   bundles[<i>].entropy=<none|some>
+//!   bundles[<i>].source_metadata=<some|none>
+//!   bundles[<i>].cosigners[<j>].fingerprint=<hex>
+//!   cosigners[<j>].fingerprint=<hex>          // top-level alias
+//!   cosigners=<N>                              // top-level alias
+//!   network=<mainnet|testnet|...>             // top-level alias
+//!   threshold=<K|none>                         // top-level alias
+//!   bsms_audit=<some|none>                     // top-level alias
+//!   entropy=<none|some>                        // top-level alias
 //!
 //! Stderr: WARNINGs / NOTICEs from per-format `parse()` impls.
 
 use crate::error::ToolkitError;
-use crate::wallet_import::{bsms::BsmsParser, WalletFormatParser};
+use crate::wallet_import::{
+    apply_select_descriptor, bitcoin_core::BitcoinCoreParser, bsms::BsmsParser, ParsedImport,
+    SelectDescriptor, WalletFormatParser,
+};
 use clap::Args;
 use std::fs;
 use std::io::{Read, Write};
@@ -33,10 +45,23 @@ pub struct ImportWalletArgs {
     #[arg(long = "blob", value_name = "FILE|-", required = true)]
     pub blob: PathBuf,
 
-    /// Format override. v0.26.0 Phase 2 supports `bsms` only; Phase 3 adds
-    /// `bitcoin-core`; Phase 5 adds the sniff (default) dispatcher.
-    #[arg(long = "format", value_name = "bsms", required = true)]
+    /// Format override. v0.26.0 Phase 3 supports `bsms` + `bitcoin-core`;
+    /// Phase 5 adds the sniff (default) dispatcher.
+    #[arg(long = "format", value_name = "bsms|bitcoin-core", required = true)]
     pub format: String,
+
+    /// Multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3).
+    /// Accepts an integer (`0`, `1`, ...), `active-receive`, `active-change`,
+    /// or `all` (default). Has no effect on BSMS blobs (which carry a single
+    /// descriptor) — Phase 5 emits a NOTICE when a non-default value is
+    /// supplied alongside `--format bsms`; Phase 3 silently treats it as
+    /// `all` for BSMS.
+    #[arg(
+        long = "select-descriptor",
+        value_name = "N|active-receive|active-change|all",
+        default_value = "all"
+    )]
+    pub select_descriptor: String,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -49,13 +74,51 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     let parsed = match args.format.as_str() {
         "bsms" => BsmsParser::parse(&blob, stderr)?,
+        "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
         other => {
             return Err(ToolkitError::BadInput(format!(
-                "import-wallet --format {other} is not supported in v0.26.0 Phase 2 (bsms only; bitcoin-core arrives in Phase 3)"
+                "import-wallet --format {other} is not supported in v0.26.0 (bsms + bitcoin-core only)"
             )));
         }
     };
 
+    // SPEC §5.3 — `--select-descriptor` filter. For BSMS, parsed.len() == 1
+    // and the only valid filter outcomes are `all` / `0` / a failing
+    // active-*-filter (no source_metadata). Phase 5 adds the
+    // NOTICE-and-coerce-to-all behavior for BSMS + non-default; Phase 3 just
+    // applies the filter as-is so the helper's exit-code routing is testable.
+    let select = parse_select(&args.select_descriptor)?;
+    let parsed = match args.format.as_str() {
+        // Per SPEC §5.3: BSMS coerces any non-default value to `all`.
+        "bsms" => match select {
+            SelectDescriptor::All => apply_select_descriptor(parsed, SelectDescriptor::All)?,
+            _ => parsed,
+        },
+        _ => apply_select_descriptor(parsed, select)?,
+    };
+
+    emit_summary(stdout, &parsed)?;
+    Ok(0)
+}
+
+fn parse_select(s: &str) -> Result<SelectDescriptor, ToolkitError> {
+    match s {
+        "all" => Ok(SelectDescriptor::All),
+        "active-receive" => Ok(SelectDescriptor::ActiveReceive),
+        "active-change" => Ok(SelectDescriptor::ActiveChange),
+        other => {
+            // Accept bare integer N.
+            if let Ok(n) = other.parse::<usize>() {
+                return Ok(SelectDescriptor::ByIndex(n));
+            }
+            Err(ToolkitError::BadInput(format!(
+                "--select-descriptor: invalid value `{other}`; expected `N` (integer), `active-receive`, `active-change`, or `all`"
+            )))
+        }
+    }
+}
+
+fn emit_summary<W: Write>(stdout: &mut W, parsed: &[ParsedImport]) -> Result<(), ToolkitError> {
     writeln!(stdout, "import-wallet: bundles={}", parsed.len()).map_err(ToolkitError::Io)?;
     for (i, b) in parsed.iter().enumerate() {
         writeln!(stdout, "bundles[{i}].cosigners={}", b.cosigners.len())
@@ -85,18 +148,24 @@ pub fn run<R: Read, W: Write, E: Write>(
             "none"
         };
         writeln!(stdout, "bundles[{i}].entropy={entropy_str}").map_err(ToolkitError::Io)?;
+        let src_meta_str = if b.source_metadata.is_some() {
+            "some"
+        } else {
+            "none"
+        };
+        writeln!(stdout, "bundles[{i}].source_metadata={src_meta_str}")
+            .map_err(ToolkitError::Io)?;
+        if let Some(m) = &b.source_metadata {
+            writeln!(stdout, "bundles[{i}].active={}", m.active).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "bundles[{i}].internal={}", m.internal).map_err(ToolkitError::Io)?;
+        }
         for (j, c) in b.cosigners.iter().enumerate() {
-            // For top-level convenience (the smoke checks use the simpler
-            // form), emit both bracketed and unbracketed lines.
             writeln!(
                 stdout,
                 "bundles[{i}].cosigners[{j}].fingerprint={}",
                 hex_lower(&c.fingerprint.to_bytes())
             )
             .map_err(ToolkitError::Io)?;
-            // The shorter alias `cosigners[<j>].fingerprint=<hex>` lets
-            // direction-agnostic assertions match without parsing a
-            // bundle index.
             writeln!(
                 stdout,
                 "cosigners[{j}].fingerprint={}",
@@ -104,15 +173,13 @@ pub fn run<R: Read, W: Write, E: Write>(
             )
             .map_err(ToolkitError::Io)?;
         }
-        // Append a "cosigners=N" line in the simpler form too, so tests
-        // can match either form.
         writeln!(stdout, "cosigners={}", b.cosigners.len()).map_err(ToolkitError::Io)?;
         writeln!(stdout, "network={network_name}").map_err(ToolkitError::Io)?;
         writeln!(stdout, "threshold={threshold_str}").map_err(ToolkitError::Io)?;
         writeln!(stdout, "bsms_audit={audit_str}").map_err(ToolkitError::Io)?;
         writeln!(stdout, "entropy={entropy_str}").map_err(ToolkitError::Io)?;
     }
-    Ok(0)
+    Ok(())
 }
 
 fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Vec<u8>, ToolkitError> {

@@ -210,6 +210,7 @@ impl WalletFormatParser for BsmsParser {
             network,
             threshold,
             bsms_audit: audit,
+            source_metadata: None,
         }])
     }
 }
