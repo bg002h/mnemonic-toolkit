@@ -45,6 +45,19 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `verify-bundle-watch-only-xpub-path-internal-consistency` — watch-only verify-bundle does not cross-check mk1 xpub byte-level fields against md1's claimed OriginPath
+
+- **Surfaced:** 2026-05-17, Q&A session in `descriptor-mnemonic` repo while explaining xpub↔keypath semantics. User asked whether `verify-bundle` cross-checks md1 and mk1 internal claims; code-read confirmed it does not.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — `run_watch_only` at `:306`, watch-only multisig branch in `run_multisig` at `:386–:413`, and the comparison sites in `emit_verify_checks` (`mk1_path_match` at `:1087–:1108`, `mk1_fingerprint_match` at `:1058–:1085`) and `emit_md1_checks` (`md1_xpub_match` at `:1654–:1691`). All checks currently compare supplied cards against a synthesized `expected` Bundle built from `--slot @N.xpub=` + template + canonical BIP path; none read mk1's `KeyCard.xpub` byte-level fields (depth, child_number, parent_fingerprint) for direct comparison against md1's `Descriptor.tlv.origin_paths` length/last-element/parent-fingerprint.
+- **What:** Add a no-seed-required internal-consistency cross-check between the supplied mk1 xpub and the supplied md1 `OriginPath`. Three byte-comparison assertions (all derivable from already-decoded structs, no key derivation):
+  1. `xpub.depth == origin_path.len()` (path length matches BIP-32 depth field).
+  2. `xpub.child_number == origin_path.last()` (final index matches, with hardened-bit comparison preserved).
+  3. For multisig: cross-cosigner `parent_fingerprint` consistency where the same parent is claimed.
+  Emit as new checks (e.g., `mk1_md1_path_internal_consistency[i]`) in the SPEC §5.4 / §5.7 schema; SPEC bump per the schema-version policy. Closes the daylight between the existing stderr warning ("watch-only … does not verify --slot @0.xpub= is actually at the claimed BIP path") and the broader claim that watch-only mode can catch *internally* inconsistent bundles even without seed access.
+- **Why deferred:** not a correctness regression — current behavior matches the disclaimed warning at `:317–:331`. No concrete bundle-mismatch report driving urgency. Touching the SPEC §5.4 / §5.7 check schema (additive but version-bumping) is non-trivial scope for an unscheduled enhancement; better folded into a future verify-bundle hardening cycle than bolted on as a patch.
+- **Status:** open
+- **Tier:** `v1+`
+
 ### `gui-schema-global-flag-emission` — `mnemonic gui-schema` JSON omits global flags from per-subcommand schemas
 
 - **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle Phase A.1 execution (mnemonic-gui v0.9.0 catchup). Realized R7 risk from `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §5. mnemonic-gui v0.9.0 attempted to mirror `--no-auto-repair` into its 10 per-subcommand `*_FLAGS` arrays and the schema-mirror drift gate hard-failed: the toolkit's `cmd::gui_schema` v4 JSON emitter does not include global flags in any subcommand's `flags` array; only clap's per-subcommand `--help` TEXT propagates them.
