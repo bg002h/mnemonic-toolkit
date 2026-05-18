@@ -2131,3 +2131,29 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.27`
 - **Companion:** none.
+
+### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
+
+- **Surfaced:** 2026-05-18, Phase 4 implementer (commit `120e6b4`) noted at the "Phase 5 deferrals" section of the commit body; corroborated at Phase 4 R0 architect review.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/export_wallet.rs` — current emitter enumeration lacks `bsms`; the toolkit has only Bitcoin Core JSON + descriptor-passthrough surfaces at v0.25.x.
+  - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §4.5 (lines 308-318) — bundle round-trip BSMS direction is **structurally blocked** without the emitter.
+  - `design/SPEC_wallet_import_v0_26_0.md` §7.1 — round-trip discipline assumes both formats can emit; BSMS direction was acknowledged blocked at Phase 4 R0.
+- **What:** Implement the BSMS Round-2 export-side emitter so that `mnemonic export-wallet --format bsms` produces a BIP-129 lenient 2-line (or 6-line, with `--coordinator-hmac-key` for the optional MAC) output. Pairs with v0.26.0's import-side surface to close the bundle round-trip discipline cells deferred in §4.5. The 6-line shape additionally depends on `bsms-verify-signatures` (HMAC key material plumbing).
+- **Why deferred:** Outside v0.26.0 scope; the cycle goal was import-side correctness + round-trip discipline. The 2-line emitter is feasible standalone (no HMAC required); 6-line emitter pairs with `bsms-verify-signatures`. Splitting into two FOLLOWUPs (2-line in v0.27.x, 6-line bundled with `bsms-verify-signatures`) is a viable plan.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none. (Pairs in spirit with `bsms-verify-signatures` for the 6-line shape.)
+
+### `wallet-import-fixture-corpus-expansion` — broaden BSMS + Bitcoin Core fixture coverage to SPEC §10.1/§10.2 full set
+
+- **Surfaced:** 2026-05-18, Phase 4 R0 architect review I1 (commit `120e6b4` under review).
+- **Where:**
+  - `crates/mnemonic-toolkit/tests/fixtures/wallet_import/` — v0.26.0 ships 8 BSMS + 5 Bitcoin Core fixtures (post-Phase-4-fold close M3 adds `bsms-2line-multi-2of3.txt` for declaration-order discipline).
+  - `design/SPEC_wallet_import_v0_26_0.md` §10.1 / §10.2 — full corpus enumerated (12-15 per format); §10.1 amended post-Phase-4-fold to lock the v0.26.0 shipped subset + cite this FOLLOWUP.
+  - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §4.3 / §4.4 — full fixture list.
+- **What:** v0.27+: ship remaining fixtures per SPEC §10.1/§10.2 — BSMS decay-4032, 6-line sortedmulti-2of3, sortedmulti-3of5, mainnet+ypub, mainnet+zpub, tr(NUMS,...) taproot; Core BIP-44 P2PKH, BIP-86 P2TR, wsh-sortedmulti 3-of-5, native `<0;1>/*` multipath, explicit `active: false` cell name. Each new fixture pairs with a per-fixture canonicalize-idempotency cell + a sniff cell.
+- **Why deferred:** v0.26.0's shipped subset exercises the load-bearing canonicalize + idempotency + Core envelope-shape branches + declaration-order preservation invariant. Missing fixtures are coverage-expansion targets, not load-bearing for v0.26.0's correctness contract. Phase 4 implementer's commit body explicitly flagged the corpus reduction; the architect review confirmed the load-bearing paths are covered and the missing fixtures are expansion-class rather than correctness-class.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.

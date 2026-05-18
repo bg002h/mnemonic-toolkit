@@ -149,6 +149,8 @@ BSMS 1.0
 - First-address verification: **deferred to v0.27+ per Phase 2 I1 fold.** `<FIRST_ADDRESS>` is preserved verbatim in `ParsedImport.bsms_audit.first_address` for the `--json` envelope; toolkit-side derivation + mismatch WARNING tracked in FOLLOWUP `bsms-first-address-verify`. Rationale: descriptor-at-derivation-path → address rendering is non-trivial absent a derivation helper that doesn't exist in v0.26.0 toolkit surface; the WARNING was informational-only (not hard-error), so deferral does not weaken the import-path correctness contract — concrete-keys checksum (BIP-380) + xpub parse (`MsDescriptor::from_str`) + watch-only invariant remain load-bearing.
 - `<TOKEN>` + `<SIGNATURE>` preserved in `ParsedImport.bsms_audit` for `--json` envelope; not verified in v0.26.0 (FOLLOWUP `bsms-verify-signatures`).
 
+**Note on the 6-line shape vs BIP-129 (Phase 4 R0 M4 fold).** BIP-129 §6 specifies a 4-line Round-2 plaintext (version + descriptor + derivation_path + first_address); the HMAC token + signature live OUTSIDE the plaintext (in the encryption envelope). The toolkit's 6-line shape above is a **toolkit-specific lenient input shape** consolidating the BIP-129 plaintext lines + the envelope-side HMAC/signature into a single flat blob, so an importer that doesn't decrypt the envelope can still preserve and audit those fields. The lenient consolidation is sound for v0.26.0's parse-only contract; full BIP-129 §5 HMAC token + signature verification (which requires the coordinator's HMAC key material) is tracked at FOLLOWUP `bsms-verify-signatures` and will revisit this shape if verification needs a stricter input form.
+
 ### §4.2 Parse pipeline
 
 1. Split blob bytes on `\n`. Normalize CRLF → LF before split.
@@ -451,6 +453,13 @@ Format diversity:
 
 **Per-format budget clarification:** "12-15 per round-trip side" means **12-15 distinct input fixtures**, each exercised in BOTH the bundle round-trip (§7.1) AND the semantic blob round-trip (§7.2) directions — so 12-15 inputs × 2 directions = 24-30 round-trip cells per format (matches Phase 4 budget in BRAINSTORM §5).
 
+**v0.26.0 shipped subset (per Phase 4 R0 fold).** v0.26.0 ships a reduced fixture corpus selected for the load-bearing canonicalize / round-trip paths:
+
+- BSMS (8 fixtures shipped): 2-line decay-32768 (kickoff seed-case), 2-line decay-144, 2-line sortedmulti-2of2, 2-line sortedmulti-2of3, 2-line multi-2of2, 2-line multi-2of3 (declaration-order assertion — Phase 4 fold close M3), testnet-tpub-2of2, sh(wsh)-2of3 legacy + 1-of-1 single-sig.
+- Bitcoin Core (5 fixtures shipped): BIP-84 P2WPKH single-sig (mainnet), BIP-49 P2SH-P2WPKH (mainnet), wsh-sortedmulti 2-of-3 (mainnet), receive+change BIP-84 pair (mainnet, ×4 entries), testnet BIP-84.
+
+Items deferred to FOLLOWUP `wallet-import-fixture-corpus-expansion`: BSMS decay-4032, 6-line sortedmulti-2of3, sortedmulti-3of5, mainnet+ypub, mainnet+zpub, tr(NUMS,...) taproot; Core BIP-44 P2PKH, BIP-86 P2TR, wsh-sortedmulti 3-of-5, native `<0;1>/*` multipath shape, explicit `active: false` cell name. Rationale: shipped subset exercises the canonicalize discipline + idempotency + both Core envelope shapes (object + bare-array) + declaration-order preservation invariant; missing fixtures are coverage-expansion targets, not load-bearing for v0.26.0's correctness contract. Full corpus tracked at v0.27+.
+
 ### §10.2 Bitcoin Core fixtures (12-15 per round-trip side)
 
 - Single-sig P2PKH (BIP-44), P2WPKH (BIP-84), P2SH-P2WPKH (BIP-49), P2TR (BIP-86) (×4)
@@ -459,6 +468,8 @@ Format diversity:
 - Receive + change pairs (4 entries per wallet) (×1)
 - `active: true` and `active: false` mix (×1)
 - Mainnet + testnet (×2)
+
+**See §10.1 v0.26.0 shipped subset note** for the actual v0.26.0 Bitcoin Core fixture set + deferral list.
 
 ### §10.3 Negative-path fixtures
 

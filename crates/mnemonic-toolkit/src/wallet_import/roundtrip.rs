@@ -54,8 +54,9 @@ pub(crate) fn canonicalize_bsms(blob: &[u8]) -> Result<String, ToolkitError> {
         .collect();
 
     // Drop trailing empty entries (a trailing `\n` yields a single empty
-    // tail element). Empty lines in the middle of the blob are a parse
-    // error caught earlier; here we just tolerate the trailing newline.
+    // tail element). Empty lines in the middle of the blob will cause the
+    // 2/6 line-count match below to fail; here we just tolerate the
+    // trailing newline.
     let mut tail_idx = lines.len();
     while tail_idx > 0 && lines[tail_idx - 1].is_empty() {
         tail_idx -= 1;
@@ -77,7 +78,7 @@ pub(crate) fn canonicalize_bsms(blob: &[u8]) -> Result<String, ToolkitError> {
 
     // Step 3: locate the descriptor body. 2-line shape: line 1.
     // 6-line shape: line 2 (line 1 is the token, line 2 is the
-    // descriptor). Audit lines 0/1/3/4/5 (i.e., token + path + first-
+    // descriptor). Audit lines 1/3/4/5 (i.e., token + path + first-
     // address + signature) are dropped per step 4.
     let descriptor_with_csum = match lines.len() {
         2 => lines[1],
@@ -493,6 +494,51 @@ mod tests {
         let blob = read_fixture("bsms-2line-multi-2of2.txt");
         let c = canonicalize_bsms(&blob).unwrap();
         assert!(c.contains("sh(multi(2,"));
+    }
+
+    #[test]
+    fn fixture_bsms_2line_multi_2of3_canonicalize_preserves_declaration_order() {
+        // R0 M3 gap-fill: bare `multi(...)` 2-of-3 with cosigners declared
+        // in NON-lex order. The canonicalize helper must preserve the
+        // declaration order (re-rendering via miniscript's `Display`
+        // emits keys in their parsed order for bare `multi(...)`; only
+        // `sortedmulti` lex-sorts).
+        //
+        // Declared xpub-string order in the fixture:
+        //   xpub6F... (b8688df1), xpub6B... (5436d724), xpub6D... (28645006)
+        // Lex order on xpub byte-strings would be:
+        //   xpub6B... < xpub6D... < xpub6F...
+        // i.e. lex order = 5436d724, 28645006, b8688df1. The fixture's
+        // declaration order differs from lex order in every position;
+        // canonicalize must NOT sort.
+        let blob = read_fixture("bsms-2line-multi-2of3.txt");
+        let c = canonicalize_bsms(&blob).unwrap();
+
+        // Locate each xpub byte-string in the canonical output; assert
+        // they appear in DECLARATION order (NOT lex order).
+        let pos_xpub_f = c
+            .find("xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX")
+            .unwrap_or_else(|| panic!("expected xpub6F... in canonical output; got: {c}"));
+        let pos_xpub_b = c
+            .find("xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx")
+            .unwrap_or_else(|| panic!("expected xpub6B... in canonical output; got: {c}"));
+        let pos_xpub_d = c
+            .find("xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6")
+            .unwrap_or_else(|| panic!("expected xpub6D... in canonical output; got: {c}"));
+
+        // Declaration order: F < B < D (positionally in the canonical
+        // string). Lex order would have been B < D < F.
+        assert!(
+            pos_xpub_f < pos_xpub_b && pos_xpub_b < pos_xpub_d,
+            "canonicalize must preserve declaration order for bare multi(); got positions F={pos_xpub_f}, B={pos_xpub_b}, D={pos_xpub_d}"
+        );
+
+        // Idempotency: canon(canon(x)) == canon(x).
+        let c2 = canonicalize_bsms(c.as_bytes()).unwrap();
+        assert_eq!(c, c2, "canonicalize must be idempotent");
+
+        // 3 cosigner origin annotations present.
+        assert_eq!(c.matches('[').count(), 3, "expected 3 origin annotations; got: {c}");
     }
 
     #[test]

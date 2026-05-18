@@ -108,6 +108,40 @@ fn fixture_bsms_2line_multi_2of2_parses_clean() {
 }
 
 #[test]
+fn fixture_bsms_2line_multi_2of3_preserves_declaration_order() {
+    // R0 M3 gap-fill: `multi(...)` 2-of-3 fixture with cosigners in
+    // NON-lex declaration order. Demonstrates that the import pipeline
+    // preserves the descriptor's declaration order (as required by bare
+    // `multi(...)` semantics — order is load-bearing for the resulting
+    // scriptPubKey).
+    //
+    // Fixture declares cosigners as: b8688df1, 5436d724, 28645006.
+    // Lex order on the xpub byte-strings would be:
+    //   xpub6B... (5436d724) < xpub6D... (28645006) < xpub6F... (b8688df1)
+    // i.e. lex order = 5436d724, 28645006, b8688df1.
+    // The fixture's declaration order (b8688df1, 5436d724, 28645006)
+    // differs from lex order in EVERY position.
+    let p = fixture_path("bsms-2line-multi-2of3.txt");
+    let out = run_import_file(&p, "bsms").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("cosigners=3"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=2"));
+
+    // Assert positional order matches the fixture's DECLARATION order
+    // (NOT lex order on xpub byte-strings).
+    let idx_pos0 = stdout
+        .find("cosigners[0].fingerprint=b8688df1")
+        .unwrap_or_else(|| panic!("expected @0=b8688df1; stdout: {stdout}"));
+    let idx_pos1 = stdout
+        .find("cosigners[1].fingerprint=5436d724")
+        .unwrap_or_else(|| panic!("expected @1=5436d724; stdout: {stdout}"));
+    let idx_pos2 = stdout
+        .find("cosigners[2].fingerprint=28645006")
+        .unwrap_or_else(|| panic!("expected @2=28645006; stdout: {stdout}"));
+    assert!(idx_pos0 < idx_pos1 && idx_pos1 < idx_pos2);
+}
+
+#[test]
 fn fixture_bsms_2line_decay_144_parses_clean() {
     // Decaying-multisig N=144 (1-day fallback). Testnet (704c7836).
     let p = fixture_path("bsms-2line-decay-144.txt");
