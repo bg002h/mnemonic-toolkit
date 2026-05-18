@@ -1,8 +1,9 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Nine subcommands:
+The integration-layer CLI for the m-format constellation. Ten subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
+[`import-wallet`](#mnemonic-import-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
 [`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
@@ -648,6 +649,225 @@ mnemonic export-wallet [OPTIONS]
 ### Worked example
 
 See [Exporting to Bitcoin Core / BIP-388 / Sparrow / Specter](#exporting-to-bitcoin-core-bip-388-sparrow-specter).
+
+---
+
+## `mnemonic import-wallet`
+
+Import a third-party wallet blob into an m-format bundle. Parses a
+foreign wallet export (BSMS Round-2 per BIP-129, or Bitcoin Core's
+`listdescriptors` JSON), reconstructs the equivalent watch-only
+bundle, and round-trips it back through the toolkit canonicalizer
+to surface byte-exact vs semantic-only equivalence (see [foreign
+wallet formats](#foreign-wallet-formats) for the format taxonomy).
+
+v0.26.0 ships two source formats — `bsms` and `bitcoin-core` —
+selectable via `--format` or auto-detected by sniff. Both formats
+are watch-only by design; the resulting bundle's cosigners carry no
+secret material unless the user supplies an `--ms1` / `--slot
+@N.phrase=` seed overlay (see [seed overlay](#mnemonic-import-wallet-seed-overlay)).
+Bitcoin Core blobs containing `xprv` extended private keys are
+refused (re-run `bitcoin-cli listdescriptors` without the `true`
+flag to obtain xpub-only output).
+
+### Synopsis
+
+```sh
+mnemonic import-wallet --blob <FILE|-> [OPTIONS]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--blob <FILE\|->` | path to the third-party wallet blob; `-` reads from stdin (required) |
+| `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
+| `--format <bsms\|bitcoin-core>` | format override; if absent, auto-detected via sniff (SPEC §6) |
+| `--select-descriptor <N\|active-receive\|active-change\|all>` | multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3); accepts integer index, `active-receive`, `active-change`, or `all` (default); BSMS blobs coerce non-default values to `all` with stderr NOTICE |
+| `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel |
+| `--slot <@N.phrase=<phrase>>` | per-slot seed overlay; equivalent to `--ms1` but the phrase is converted to entropy and the derived xpub at the cosigner's origin path is compared against the blob's xpub; mutually exclusive with `--ms1[N]` for the same N; accepts `@env:VAR`; only the `phrase` subkey is accepted on `import-wallet` in v0.26.0 |
+| `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary |
+| `--help` | print help |
+
+### Description
+
+The default mode emits the synthesized engraving card(s) on stdout
+— the same byte-shape `mnemonic bundle` produces — separated by
+`\n;\n` when a single invocation yields multiple bundles (Bitcoin
+Core blobs with `--select-descriptor all` and N ≥ 2 entries). Round-
+trip discipline (SPEC §7) runs canonicalize-on-input vs canonicalize-
+on-re-emit; if the comparison yields a non-byte-exact / semantic-only
+match, a unified diff is printed to stderr.
+
+`--json` mode replaces the engraving-card stdout with a JSON array,
+one envelope per emitted bundle. Each envelope carries:
+
+- `bundle` — parse-side summary of the shape `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` (v0.26.0 ships this summary; the full toolkit-native `BundleJson` shape is FOLLOWUP `wallet-import-json-envelope-full-bundle`, v0.27+).
+- `source_format` — `"bsms"` or `"bitcoin-core"`.
+- `roundtrip` — `{byte_exact: bool, semantic_match: bool, diff: Option<String>, status: "ok" | "blocked_no_emitter" | "canonicalize_failed"}`. The `diff` field is `Some(...)` iff `byte_exact == false`; under `--json` the diff lives in the envelope only (stderr is silent).
+- `bsms_audit?` — BSMS source only: `{token, signature, first_address, derivation_path, signature_verified: false}`. v0.26.0 preserves these fields verbatim from the Round-2 blob but does not verify the signature (FOLLOWUP `bsms-verify-signatures`) or the first-address (FOLLOWUP `bsms-first-address-verify`).
+- `source_metadata?` — Bitcoin Core source only: per-entry `active` / `internal` / `range` / `wallet_name` preserved from the input.
+
+### `--ms1` / `--slot @N.phrase=` seed overlay {#mnemonic-import-wallet-seed-overlay}
+
+By default, `import-wallet` produces a watch-only bundle: each
+cosigner carries its blob-declared xpub and origin path but no
+entropy. To re-attach secret material to a known cosigner, pass
+`--ms1 <ms1-string>` (or `--slot @N.phrase=<BIP-39 phrase>`) at the
+positional cosigner-index. The toolkit derives the xpub from the
+supplied entropy at the cosigner's declared origin path and asserts
+equality against the blob's declared xpub. Mismatch returns exit 4
+with stderr `error: import-wallet: cosigner <N>: supplied seed
+produces xpub <X> at path <P>; blob declares <Y>`.
+
+The `@env:<VAR>` sentinel (SPEC §3) resolves at clap-parse time via
+`std::env::var(VAR)`. Whole-value only — `--ms1 prefix@env:VAR` is
+treated as literal text. Missing or unset env-var → exit 1 with
+`error: --ms1: env-var VAR referenced by sentinel is not set`. The
+GUI's run-confirm modal exploits this sentinel to keep seeds out of
+the spawned subprocess argv (see [GUI walkthrough](#mnemonic-import-wallet-gui)).
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | success (round-trip ok; may emit WARNING for semantic-only match) |
+| `1` | `ImportWalletAmbiguousFormat`, `ImportWalletFormatMismatch`, `EnvVarMissing` — user-input or generic |
+| `2` | `ImportWalletParse`, `ImportWalletXprvForbidden`, `ImportWalletWatchOnlyViolation` — format-violation / refusal |
+| `3` | future-format refusal (e.g., `BSMS 2.0`) — via existing `FutureFormat` From-impl |
+| `4` | `ImportWalletSeedMismatch` — supplied seed does not match blob's declared xpub at the cosigner's origin path |
+| `5` | repair short-circuit — BCH-correctable BSMS descriptor `mk1` chunk; see [auto-fire on decode failure](#auto-fire-on-decode-failure-v0221) |
+
+### Stderr templates
+
+| Class | Template |
+|---|---|
+| WARNING (exit 0) | `warning: import-wallet: bsms: 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form` |
+| WARNING (exit 0) | `warning: import-wallet: bsms: signature present but not verified in v0.26.0; see FOLLOWUP \`bsms-verify-signatures\`` |
+| WARNING (exit 0) | `warning: import-wallet: roundtrip not byte-exact; semantic equivalent; diff below` (+ unified-diff body on stderr OR in `--json` envelope, never both) |
+| NOTICE (exit 0) | `notice: import-wallet: bsms: --select-descriptor <X> has no effect; BSMS Round-2 carries a single descriptor` |
+| NOTICE (exit 0) | `notice: import-wallet: bitcoin-core: dropped wallet-state fields <fields>: not preserved in bundle output (key-state only)` |
+| Error (exit 1) | `error: import-wallet: could not detect format; supply --format <bsms\|bitcoin-core>` |
+| Error (exit 1) | `error: import-wallet: --format <X> supplied but blob looks like <Y>` |
+| Error (exit 1) | `error: <flag>: env-var <VAR> referenced by sentinel is not set` |
+| Error (exit 2) | `error: import-wallet: <format>: parse error: <detail>` |
+| Error (exit 2) | `error: import-wallet: bitcoin-core: xprv-bearing descriptor refused; re-run \`bitcoin-cli listdescriptors\` without \`true\` to get xpub-only output` |
+| Error (exit 3) | `error: future format: bsms: version "<V>"; toolkit supports "1.0"` |
+| Error (exit 4) | `error: import-wallet: cosigner <N>: supplied seed produces xpub <X> at path <P>; blob declares <Y>` |
+
+The first-address-mismatch WARNING is deferred to v0.27+ (FOLLOWUP
+`bsms-first-address-verify`): the audit field is preserved verbatim
+in `--json` envelope's `bsms_audit.first_address` for the user to
+re-verify externally, but toolkit-side derivation requires a Phase-4
+derivation helper not present in v0.26.0.
+
+### Worked example — BSMS Round-2 decaying-multisig import
+
+The kickoff seed-case for v0.26.0: a BSMS Round-2 2-line excerpt
+emitted by a coordinator for a `wsh(thresh(...))` decaying-multisig
+descriptor (flagship use case per SPEC §10.1).
+
+```sh
+cat > /tmp/decay-32768.bsms <<'EOF'
+BSMS 1.0
+wsh(thresh(2,pk([73c5da0a/48h/0h/0h/2h]xpub6E.../<0;1>/*),s:pk([4e1f...]xpub6F.../<0;1>/*),sln:older(32768)))#abcdefgh
+EOF
+mnemonic import-wallet --blob /tmp/decay-32768.bsms
+```
+
+Stdout (the synthesized engraving cards; the bundle is watch-only,
+so the `ms1` line is the watch-only sentinel `""`):
+
+```text
+ms1: ""
+mk1[0]: mk10... (cosigner @0 origin [73c5da0a/48h/0h/0h/2h])
+mk1[1]: mk10... (cosigner @1 origin [4e1f.../...])
+md1: md10... (decaying-multisig descriptor)
+```
+
+Stderr:
+
+```text
+warning: import-wallet: bsms: 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form
+```
+
+Exit code: `0`. Append `--ms1 <ms1-string>` (or `--slot
+@0.phrase=...`) to attach entropy to cosigner @0; the toolkit will
+derive the xpub at the declared origin path and assert match
+against the blob's xpub.
+
+### Worked example — Bitcoin Core `listdescriptors` multipath import
+
+Bitcoin Core 25+ emits `listdescriptors` output with the
+`<0;1>/*` multipath shape on the canonical receive/change pair.
+Importing this directly yields one bundle per descriptor entry
+(use `--select-descriptor active-receive` to filter to just the
+external chain).
+
+```sh
+bitcoin-cli listdescriptors > /tmp/core-export.json
+mnemonic import-wallet --blob /tmp/core-export.json --select-descriptor active-receive --json
+```
+
+Stdout (one envelope per emitted bundle; `[...]` collapsed for
+brevity):
+
+```json
+[
+  {
+    "bundle": {
+      "cosigners": [{"fingerprint": "73c5da0a", "path_raw": "[73c5da0a/84h/0h/0h]", "xpub": "xpub6CatWdi...", "has_entropy": false}],
+      "network": "mainnet",
+      "threshold": null
+    },
+    "source_format": "bitcoin-core",
+    "source_metadata": {"wallet_name": "mywallet", "active": true, "internal": false, "range": [0, 999]},
+    "roundtrip": {"byte_exact": true, "semantic_match": true, "diff": null, "status": "ok"}
+  }
+]
+```
+
+Stderr is silent under `--json` (the diff lives in the envelope).
+Re-run without `--json` to get the human-readable engraving card
+on stdout + the round-trip status on stderr.
+
+### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Bitcoin Core blob contains `xprv` | exit 2 — see `xprv-bearing descriptor refused` stderr template above |
+| Cosigner in `ParsedImport.cosigners` carries entropy post-parse | exit 2 — `error: import-wallet: cosigner <N> has entropy populated post-parse; watch-only invariant violated (internal bug)` |
+| BSMS line 1 is not `BSMS 1.0` | exit 2 `ImportWalletParse` |
+| BSMS version > 1.0 (e.g., `BSMS 2.0`) | exit 3 via existing `FutureFormat` From-impl |
+| Sniff finds no match AND no `--format` supplied | exit 1 — see `could not detect format` stderr template |
+| Sniff finds positive match for format X AND `--format Y` supplied | exit 1 — see `--format X supplied but blob looks like Y` template |
+| Auto-detect ambiguity (≥2 parsers' sniff return true) | exit 1 — `blob matches multiple format heuristics; supply --format <X>` |
+| Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 4 `ImportWalletSeedMismatch` (see template above) |
+| `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
+| Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
+
+### Advisories
+
+The `--ms1` / `--slot @N.phrase=` overlay flags carry secret material
+on argv; pipe entropy via `@env:VAR` sentinel to avoid argv leakage
+(GUI does this automatically per [§9.3](#mnemonic-import-wallet-gui)).
+Re-emitted Bitcoin Core blobs DROP `timestamp` / `next` / `next_index`
+fields (wallet-state, not key-state); the dropped-fields NOTICE
+template above fires when input carries any of these. BSMS Round-2
+re-emission via `mnemonic export-wallet --format bsms` is FOLLOWUP
+`wallet-export-bsms-emitter` (blocks the BSMS bundle round-trip
+discipline; `--json` envelope reports `status: "blocked_no_emitter"`
+in the interim).
+
+### What's NOT supported
+
+v0.26.0 ships two source formats only. Sparrow's `.json`, Specter's
+`.json`, Electrum's wallet file, and Coldcard's generic JSON / multisig-
+text are NOT yet importable. See [foreign wallet
+formats](#foreign-wallet-formats) for the full coverage matrix and
+the FOLLOWUPs queued for v0.27+ (`wallet-import-sparrow`,
+`wallet-import-specter`, `wallet-import-electrum`,
+`wallet-import-coldcard`).
 
 ---
 

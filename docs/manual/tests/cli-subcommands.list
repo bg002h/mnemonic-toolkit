@@ -11,6 +11,7 @@ mnemonic bundle
 mnemonic verify-bundle
 mnemonic convert
 mnemonic export-wallet
+mnemonic import-wallet
 mnemonic derive-child
 mnemonic final-word
 mnemonic seed-xor split
