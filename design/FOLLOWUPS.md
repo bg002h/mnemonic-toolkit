@@ -2145,6 +2145,19 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.27`
 - **Companion:** none. (Pairs in spirit with `bsms-verify-signatures` for the 6-line shape.)
 
+### `wallet-import-json-envelope-full-bundle` — `--json` envelope `bundle:` field is a parse-side summary, not the full toolkit-native `BundleJson`
+
+- **Surfaced:** 2026-05-18, Phase 5 R0 architect review I2 (commit `ff1c85c` under review).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:336-359` — `emit_json_envelope` hand-builds a summary `bundle_view: { cosigners: [...], network, threshold }`.
+  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:59` — `ParsedImport.descriptor: md_codec::Descriptor` is parsed but never read by `cmd::import_wallet::run` (carries a narrow `#[allow(dead_code)]` per Phase 5 fold pointing at this FOLLOWUP).
+  - `design/SPEC_wallet_import_v0_26_0.md` §2.2 — post-Phase-5-fold lock: v0.26.0 ships the summary shape; full BundleJson tracked here.
+- **What:** v0.27+: wire the `--json` envelope's `bundle:` field to emit the full toolkit-native `BundleJson` shape (the same `verify-bundle --bundle-json` consumes — with synthesized ms1/mk1/md1 cards). This requires invoking the synthesizer post-parse against the supplied / overlayed seeds; for watch-only cosigners, emit the ms1/mk1 sentinel forms per SPEC §5.8. The `descriptor: md_codec::Descriptor` field on `ParsedImport` becomes load-bearing in this wire-up (currently unused).
+- **Why deferred:** v0.26.0's scope was parse + watch-only invariant + round-trip discipline; envelope-side synthesis is a distinct integration with `crate::synthesize` that exceeds the cycle budget. The summary shape is forward-compatible with v0.27: the envelope key remains `bundle`, the shape itself extends. Downstream consumers encoding against v0.26.0 should target the summary; v0.27 will treat the legacy summary as a strict subset of the full shape.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
 ### `wallet-import-fixture-corpus-expansion` — broaden BSMS + Bitcoin Core fixture coverage to SPEC §10.1/§10.2 full set
 
 - **Surfaced:** 2026-05-18, Phase 4 R0 architect review I1 (commit `120e6b4` under review).

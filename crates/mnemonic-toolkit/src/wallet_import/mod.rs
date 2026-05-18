@@ -54,8 +54,8 @@ pub(crate) trait WalletFormatParser {
 /// Ok. The invariant holds at construction time; the seed overlay is a
 /// distinct downstream step.
 #[derive(Debug)]
-#[allow(dead_code)] // Phase 2 constructs; Phase 5 consumes descriptor + bsms_audit.
 pub(crate) struct ParsedImport {
+    #[allow(dead_code)] // ParsedImport.descriptor: pending FOLLOWUP wallet-import-json-envelope-full-bundle (v0.27+)
     pub(crate) descriptor: md_codec::Descriptor,
     pub(crate) cosigners: Vec<ResolvedSlot>,
     pub(crate) network: bitcoin::Network,
@@ -74,7 +74,6 @@ pub(crate) struct ParsedImport {
 /// present in the source entry but dropped from the bundle output (drives the
 /// stderr NOTICE per SPEC §2.4).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Phase 5 consumes `range` + `wallet_name` for round-trip emit.
 pub(crate) struct CoreSourceMetadata {
     pub(crate) active: bool,
     pub(crate) internal: bool,
@@ -93,7 +92,6 @@ pub(crate) struct CoreSourceMetadata {
 /// clap surface (`<N|active-receive|active-change|all>`); Phase 3 exposes the
 /// programmatic helper used by tests + future clap glue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Phase 5 wires the full clap parser.
 pub(crate) enum SelectDescriptor {
     All,
     ByIndex(usize),
@@ -175,7 +173,6 @@ pub(crate) fn apply_select_descriptor(
 /// emission; `signature_verified` is always `false` in v0.26.0 (FOLLOWUP
 /// `bsms-verify-signatures`).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Phase 5 consumes for --json envelope emission.
 pub(crate) struct BsmsAuditFields {
     pub(crate) token: String,
     pub(crate) signature: String,

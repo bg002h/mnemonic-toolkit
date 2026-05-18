@@ -56,7 +56,11 @@ pub struct ImportWalletArgs {
 
     /// Format override. If absent, the blob is auto-detected via sniff
     /// (SPEC §6). Supported values: `bsms`, `bitcoin-core`.
-    #[arg(long = "format", value_name = "bsms|bitcoin-core")]
+    #[arg(
+        long = "format",
+        value_name = "bsms|bitcoin-core",
+        value_parser = clap::builder::PossibleValuesParser::new(["bsms", "bitcoin-core"]),
+    )]
     pub format: Option<String>,
 
     /// Multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3).
@@ -259,8 +263,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     Ok(0)
 }
 
-/// Build a positional Option<String> vector from `--ms1` repeats. Already
-/// in the right shape; helper kept for future passthrough symmetry.
+/// Parse the `--select-descriptor` flag value into a SelectDescriptor variant.
+/// Accepts `all`, `active-receive`, `active-change`, or an integer (mapped to
+/// `ByIndex(N)`).
 fn parse_select(s: &str) -> Result<SelectDescriptor, ToolkitError> {
     match s {
         "all" => Ok(SelectDescriptor::All),
@@ -361,28 +366,40 @@ fn emit_json_envelope<W: Write>(
         // Round-trip per SPEC §7.4 + §7.3.
         let roundtrip = match format_str {
             "bitcoin-core" => {
-                let canon = canon_orig.clone().unwrap_or_default();
                 // For Bitcoin Core, we re-canonicalize the same blob (no
                 // separate emit step in v0.26.0 — emit-from-bundle is the
                 // sibling `mnemonic export-wallet --format bitcoin-core`
                 // pipeline). The byte-exact check is original-bytes-vs-
-                // canonical; semantic_match is always true (canonicalize
-                // succeeded). This pins the envelope contract while the
-                // bundle-side emit + re-import round-trip is exercised
-                // by `tests/cli_import_wallet_roundtrip.rs`.
-                let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
-                let byte_exact = original_text == canon;
-                let diff_val = if byte_exact {
-                    serde_json::Value::Null
-                } else {
-                    serde_json::Value::String(unified_diff(&original_text, &canon))
-                };
-                json!({
-                    "byte_exact": byte_exact,
-                    "semantic_match": true,
-                    "diff": diff_val,
-                    "status": "ok",
-                })
+                // canonical; semantic_match is true ONLY when canonicalize
+                // succeeded. If canonicalize failed (e.g., exotic descriptor
+                // that `BitcoinCoreParser::parse` accepted but the
+                // canonicalize path rejected), surface that explicitly via
+                // `status: "canonicalize_failed"` rather than silently
+                // claiming success.
+                match canon_orig.clone() {
+                    Some(canon) => {
+                        let original_text =
+                            std::str::from_utf8(blob).unwrap_or("").to_string();
+                        let byte_exact = original_text == canon;
+                        let diff_val = if byte_exact {
+                            serde_json::Value::Null
+                        } else {
+                            serde_json::Value::String(unified_diff(&original_text, &canon))
+                        };
+                        json!({
+                            "byte_exact": byte_exact,
+                            "semantic_match": true,
+                            "diff": diff_val,
+                            "status": "ok",
+                        })
+                    }
+                    None => json!({
+                        "byte_exact": false,
+                        "semantic_match": false,
+                        "diff": serde_json::Value::Null,
+                        "status": "canonicalize_failed",
+                    }),
+                }
             }
             "bsms" => {
                 // SPEC §7.3.1 policy: BSMS export emitter does not exist

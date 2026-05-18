@@ -15,7 +15,7 @@
 //! fingerprint `5436d724`. Known xpubs (verified live):
 //!
 //!   - `m/48'/0'/0'/2'` (BIP-48 multisig segwit, account 0):
-//!     `xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx`
+//!     `xpub6E79FaRWLSJCAgA2jDHRvyrWKwT6aSmR685zptzyYPvmUd44omcxZ1NAzDtbdFBvEADjcVbV4NzTDwQeU6oiSV9KGiMSWhjANZjbfUHkm3Y`
 //!
 //! The ms1-encoded form of the 32-zero entropy:
 //!   `ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w`
@@ -288,6 +288,85 @@ fn seed_overlay_slot_non_phrase_subkey_rejected() {
     assert!(
         stderr.contains("only the `phrase` subkey is supported"),
         "expected import-wallet subkey gate, got: {stderr}"
+    );
+}
+
+// ============================================================================
+// Cell 8 — multi-cosigner skip-middle: --ms1 a --ms1 "" --ms1 c on 2-of-3 blob.
+// Plan §5.10: 3-cosigner blob; supply --ms1 for cosigner 0 + 2 only; assert
+// cosigner 1 stays watch-only. Exercises the multi-cosigner-with-middle-skip
+// case that the empty-string-sentinel-on-1-of-1 cell above does not cover.
+//
+// Provenance of the three BIP-39 seeds:
+//   - "abandon × 11 about" → fp `73c5da0a` → ms10entrsqqqqq...cj9sxraq34v7f
+//     (BIP-39 12-word test vector; appears in tests/cli_verify_bundle_multi_cosigner_mk1.rs:21)
+//   - "legal winner × ... thank yellow" → fp `b8688df1` → ms10entrsqplh7lml...
+//     (BIP-39 12-word test vector; same file:24)
+//   - "letter advice × ... cage above" → fp `28645006` → ms10entrsqzqgpq...
+//     (BIP-39 12-word test vector; same file:26)
+//
+// Xpubs at BIP-87 path `m/87'/0'/0'` derived live via
+//   `mnemonic bundle --template wsh-sortedmulti --multisig-path-family bip87
+//    --slot @N.phrase=... --json` (see `cosigners[]` in the output). BSMS
+// blob below is hand-rolled at the same path family; BIP-380 checksum
+// `4wup4at0` discovered via the toolkit's "expected <csum>" stderr template.
+// ============================================================================
+
+const SKIP_MIDDLE_MS1_0: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+const SKIP_MIDDLE_MS1_2: &str = "ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu";
+
+fn skip_middle_3of3_blob() -> String {
+    let body = "wsh(sortedmulti(2,\
+[73c5da0a/87'/0'/0']xpub6DBjiYnc4ewKti13Q1L35bqdodw5z3VGJnf516B3icHrEGEUcCuCG5GVQDZtH8Xmsyt3Fs9YDNwLaqjUbbRidwXZ6sxufZcr4VqqzrXvicM/<0;1>/*,\
+[b8688df1/87'/0'/0']xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qpatZjUuPGTyxf5TYU1vA34YFE9FHB4TvfYmokYLVsyEFZFt9/<0;1>/*,\
+[28645006/87'/0'/0']xpub6DB7HNqw6CZojxN85NuFTPWZhi2FagSnexPS1rv3nYQhngkmdHgb7iebYvTFmFKKDA3ozf5yezDsCH6cXAw3WZijviSZtZC2hjHn2uazz4z/<0;1>/*))";
+    bsms_2line(body)
+}
+
+#[test]
+fn seed_overlay_multi_cosigner_skip_middle() {
+    let blob = skip_middle_3of3_blob();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            SKIP_MIDDLE_MS1_0,
+            "--ms1",
+            "",
+            "--ms1",
+            SKIP_MIDDLE_MS1_2,
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let cosigners = val.as_array().unwrap()[0]["bundle"]["cosigners"]
+        .as_array()
+        .expect("bundle.cosigners array")
+        .clone();
+    assert_eq!(cosigners.len(), 3, "expected 3 cosigners");
+    let has_entropy: Vec<bool> = cosigners
+        .iter()
+        .map(|c| c["has_entropy"].as_bool().unwrap())
+        .collect();
+    assert_eq!(
+        has_entropy,
+        vec![true, false, true],
+        "expected [true, false, true]; got {has_entropy:?}; cosigners={cosigners:?}"
+    );
+    // Sanity: middle cosigner stays watch-only via the empty-string sentinel.
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("cosigner 1 ms1 supplied as empty-string sentinel")
+            || stderr.contains("treated as watch-only"),
+        "expected v0.25.1 empty-sentinel NOTICE for cosigner 1, got: {stderr}"
     );
 }
 

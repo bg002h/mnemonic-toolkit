@@ -484,7 +484,6 @@ fn origin_capture_regex() -> &'static Regex {
     })
 }
 
-#[allow(dead_code)] // consumed by `sniff`; same Phase 5 wiring rationale as VENDOR_MARKER_KEYS.
 fn trim_leading_ws(blob: &[u8]) -> &[u8] {
     let mut i = 0;
     while i < blob.len()
