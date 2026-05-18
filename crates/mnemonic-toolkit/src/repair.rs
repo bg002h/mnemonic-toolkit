@@ -2,18 +2,20 @@
 //!
 //! All three formats share the BIP-93 codex32 BCH generator polynomials
 //! (regular `BCH(93,80,8)` + long `BCH(108,93,8)`); only the per-HRP +
-//! per-code target-residue NUMS constants differ. This module calls
-//! mk-codec's public BCH primitives (since mk-codec v0.3.1 promoted them
-//! per the Phase 0.5 lockstep release) parameterized per HRP and per
-//! code-variant, rather than vendoring ~870 LOC of the BM/Forney decoder.
+//! per-code target-residue NUMS constants differ.
 //!
-//! Per-HRP × per-code target constants:
-//!   - ms regular: `0x962958058f2c192a` (empirical; codex32 `SECRETSHARE32`
-//!     transported into the mk-codec polymod frame)
+//! **v0.23.0 — D29 migration:** the Ms1 + Md1 branches now delegate to the
+//! sibling codecs' native BCH-correction APIs (`ms_codec::decode_with_correction`
+//! / `md_codec::decode_with_correction`, both added in their respective
+//! v0.2.0 / v0.34.0 releases). The Mk1 branch continues to consume
+//! mk-codec's promoted BCH primitives (`bch::*` + `bch_decode::*`) directly.
+//! This deletes the previously-vendored `MS_NUMS_TARGET` + `MD_NUMS_TARGET`
+//! constants in favor of the sibling codecs' authoritative implementations.
+//!
+//! Per-HRP × per-code target constants (mk1 only, since Ms1/Md1 are now
+//! delegated):
 //!   - mk regular: `mk_codec::MK_REGULAR_CONST = 0x1062435f91072fa5c` (imported)
 //!   - mk long:    `mk_codec::MK_LONG_CONST    = 0x41890d7e441cbe97273` (imported)
-//!   - md regular: `0x0815c07747a3392e7` (vendored; md-codec's `bch` module is
-//!     module-private; cross-repo FOLLOWUP tracks promotion)
 //!
 //! `ms` and `md` do not define long-code variants in v0.1 of their respective
 //! codecs, so length-detected long-code chunks for those HRPs error.
@@ -32,17 +34,10 @@ use std::io::Write;
 use crate::error::ToolkitError;
 
 // Per-HRP × per-code target-residue NUMS constants. mk imported from
-// mk-codec; ms/md vendored with #[cfg(test)] drift-gate recomputation.
-//
-// MS_NUMS_TARGET is codex32's "SECRETSHARE32" Fe-vec packed in big-endian
-// 5-bit chunks (the natural u128 representation that mk-codec's
-// `polymod_run` produces against `hrp_expand("ms") + data_with_checksum`
-// for a valid ms1 input). Empirically verified stable across 3 distinct
-// valid ms1 strings — see `ms_nums_target_is_stable_across_distinct_valid_strings`.
-pub(crate) const MS_NUMS_TARGET: u128 = 0x962958058f2c192a;
+// mk-codec. (v0.23.0: ms/md constants deleted per D29 migration; their
+// repair paths delegate to sibling codecs' native APIs.)
 pub(crate) const MK_REGULAR_TARGET: u128 = mk_codec::MK_REGULAR_CONST;
 pub(crate) const MK_LONG_TARGET: u128 = mk_codec::MK_LONG_CONST;
-pub(crate) const MD_NUMS_TARGET: u128 = 0x0815c07747a3392e7;
 
 /// Singleton bound for BCH(93,80,8) regular code: 2t = 8 (correct up to t=4
 /// substitutions). Reported in `RepairError::TooManyErrors` for user
@@ -68,16 +63,20 @@ impl CardKind {
         }
     }
 
-    /// Per-HRP × per-code target residue. Returns `None` for an HRP/code
-    /// pair the upstream codec does not define (e.g. `ms` + long, `md` +
-    /// long — neither codec emits long-code variants in v0.1).
+    /// Per-HRP × per-code target residue for the Mk1 branch (the only
+    /// branch that still uses the toolkit-side `polymod_residue` path).
+    /// Returns `None` for an HRP/code pair the upstream codec does not
+    /// define. Post-v0.23.0 the Ms1 + Md1 arms are removed because those
+    /// branches delegate to the sibling codecs' native APIs and never call
+    /// this helper.
     fn target_residue(self, code: BchCode) -> Option<u128> {
         match (self, code) {
-            (Self::Ms1, BchCode::Regular) => Some(MS_NUMS_TARGET),
             (Self::Mk1, BchCode::Regular) => Some(MK_REGULAR_TARGET),
             (Self::Mk1, BchCode::Long) => Some(MK_LONG_TARGET),
-            (Self::Md1, BchCode::Regular) => Some(MD_NUMS_TARGET),
-            (Self::Ms1, BchCode::Long) | (Self::Md1, BchCode::Long) => None,
+            // Ms1 + Md1 never call this helper post-v0.23.0; if a future
+            // refactor reintroduces a direct call, the None return triggers
+            // `UnsupportedCodeVariant` which is a safe-fail path.
+            (Self::Ms1, _) | (Self::Md1, _) => None,
         }
     }
 }
@@ -136,6 +135,17 @@ pub enum RepairError {
         chunk_index: usize,
         hrp: &'static str,
         data_part_len: usize,
+    },
+    /// v0.23.0 (D29 + Q1/Q2 locks). Catch-all for orphan §4-rule decoder
+    /// errors surfaced by sibling-codec full-decode chains
+    /// (`ms_codec::decode_with_correction` / `md_codec::decode_with_correction`)
+    /// that the toolkit-side helper translation table did NOT enumerate
+    /// individually. `chunk_index` is `None` when atomic-fail context lost
+    /// the offending chunk's position; `Some(i)` when the helper preserved
+    /// it. `detail` is the upstream codec's `Display`-rendered error.
+    PostCorrectionDecodeFailed {
+        chunk_index: Option<usize>,
+        detail: String,
     },
 }
 
@@ -204,6 +214,10 @@ impl std::fmt::Display for RepairError {
                 f,
                 "repair: chunk {chunk_index} data-part length {data_part_len} would require the long BCH code, which is not defined for HRP '{hrp}' in this codec version"
             ),
+            RepairError::PostCorrectionDecodeFailed { chunk_index, detail } => match chunk_index {
+                Some(i) => write!(f, "repair: chunk {i} post-correction decode failed: {detail}"),
+                None => write!(f, "repair: post-correction decode failed: {detail}"),
+            },
         }
     }
 }
@@ -386,31 +400,274 @@ fn repair_chunk_one(
 /// Primary entry point. Per-chunk atomic per D8: if ANY chunk fails, returns
 /// `Err` naming that chunk's index; partially-repaired sibling chunks are NOT
 /// returned.
+///
+/// **v0.23.0 — D29 migration:** Ms1 dispatches per-chunk through
+/// `repair_via_ms_codec` (a thin wrapper over `ms_codec::decode_with_correction`);
+/// Md1 dispatches whole-set atomically through `repair_via_md_codec` (a thin
+/// wrapper over `md_codec::decode_with_correction`); Mk1 continues to use
+/// the toolkit-native `repair_chunk_one` path consuming mk-codec's promoted
+/// BCH primitives directly.
 pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, RepairError> {
     if chunks.is_empty() {
         return Err(RepairError::EmptyInput);
     }
 
-    let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
-    let mut repairs: Vec<RepairDetail> = Vec::new();
+    match kind {
+        CardKind::Mk1 => {
+            let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+            let mut repairs: Vec<RepairDetail> = Vec::new();
+            for (i, chunk) in chunks.iter().enumerate() {
+                match repair_chunk_one(kind, i, chunk)? {
+                    Some(detail) => {
+                        corrected_chunks.push(detail.corrected_chunk.clone());
+                        repairs.push(detail);
+                    }
+                    None => corrected_chunks.push(chunk.clone()),
+                }
+            }
+            Ok(RepairOutcome {
+                kind,
+                corrected_chunks,
+                repairs,
+            })
+        }
+        CardKind::Ms1 => {
+            // ms1 is single-chunk per codex32 spec, but `repair_card` is
+            // kind-agnostic across chunk-count — preserve the per-chunk loop
+            // by calling the sibling-codec helper once per supplied chunk.
+            let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+            let mut repairs: Vec<RepairDetail> = Vec::new();
+            for (i, chunk) in chunks.iter().enumerate() {
+                // Pre-gate via parse_chunk to preserve the toolkit's
+                // pre-existing precise error variants (HrpMismatch with
+                // suggestion suffix, ReservedInvalidLength, the
+                // UnparseableInput parse-step messages) — sibling-codec
+                // errors are coarser. Reject long-code variants explicitly
+                // (ms-codec doesn't define them in v0.1) BEFORE delegating.
+                let (values, code) = parse_chunk(chunk, i, kind)?;
+                if matches!(code, BchCode::Long) {
+                    return Err(RepairError::UnsupportedCodeVariant {
+                        chunk_index: i,
+                        hrp: "ms",
+                        data_part_len: values.len(),
+                    });
+                }
+                match repair_via_ms_codec(chunk, i)? {
+                    Some(detail) => {
+                        corrected_chunks.push(detail.corrected_chunk.clone());
+                        repairs.push(detail);
+                    }
+                    None => corrected_chunks.push(chunk.clone()),
+                }
+            }
+            Ok(RepairOutcome {
+                kind,
+                corrected_chunks,
+                repairs,
+            })
+        }
+        CardKind::Md1 => {
+            // md1 is multi-chunk; the sibling codec's
+            // `decode_with_correction(&[&str])` returns atomic per D28.
+            // Pre-gate every chunk through parse_chunk for the same
+            // precise-error-variant preservation reason as Ms1; explicitly
+            // reject long-code variants (md-codec doesn't define them in
+            // v0.1) BEFORE delegating.
+            for (i, chunk) in chunks.iter().enumerate() {
+                let (values, code) = parse_chunk(chunk, i, kind)?;
+                if matches!(code, BchCode::Long) {
+                    return Err(RepairError::UnsupportedCodeVariant {
+                        chunk_index: i,
+                        hrp: "md",
+                        data_part_len: values.len(),
+                    });
+                }
+            }
+            repair_via_md_codec(chunks)
+        }
+    }
+}
 
-    for (i, chunk) in chunks.iter().enumerate() {
-        match repair_chunk_one(kind, i, chunk)? {
-            Some(detail) => {
-                corrected_chunks.push(detail.corrected_chunk.clone());
-                repairs.push(detail);
+/// **v0.23.0 — D29 migration helper.** Delegate ms1 chunk repair to
+/// `ms_codec::decode_with_correction` (full-decode semantics per Q1 lock);
+/// translate the codec's `Error` taxonomy back into toolkit `RepairError`
+/// variants per the §2.B.4 D29 error-mapping table (Q2 absorption lock).
+///
+/// Returns `Ok(Some(detail))` on repair-applied, `Ok(None)` on already-valid,
+/// `Err(_)` on unrecoverable. The full-decode chain runs the parsed
+/// `(Tag, Payload)` internally; this helper discards both since
+/// `repair_card`'s public contract is "corrected string + correction
+/// details" only.
+fn repair_via_ms_codec(chunk: &str, chunk_index: usize) -> Result<Option<RepairDetail>, RepairError> {
+    use ms_codec::Error as MsErr;
+    match ms_codec::decode_with_correction(chunk) {
+        Ok((_tag, _payload, corrections)) => {
+            if corrections.is_empty() {
+                return Ok(None);
             }
-            None => {
-                corrected_chunks.push(chunk.clone());
+            let (corrected_chunk, corrected_positions) =
+                apply_ms_corrections(chunk, &corrections);
+            Ok(Some(RepairDetail {
+                chunk_index,
+                original_chunk: chunk.to_string(),
+                corrected_chunk,
+                corrected_positions,
+            }))
+        }
+        Err(MsErr::TooManyErrors { bound }) => Err(RepairError::TooManyErrors {
+            chunk_index,
+            bound: bound as usize,
+        }),
+        Err(MsErr::WrongHrp { got }) => Err(RepairError::HrpMismatch {
+            chunk_index,
+            expected: "ms",
+            found: got,
+        }),
+        Err(MsErr::Codex32(e)) => Err(RepairError::UnparseableInput {
+            chunk_index,
+            detail: format!("{e:?}"),
+        }),
+        Err(other) => Err(RepairError::PostCorrectionDecodeFailed {
+            chunk_index: Some(chunk_index),
+            detail: other.to_string(),
+        }),
+    }
+}
+
+/// Apply ms-codec `CorrectionDetail` entries to the input chunk string,
+/// producing the corrected string + the toolkit's `(position, was, now)`
+/// triple form. The two `CorrectionDetail` types (ms-codec's vs the
+/// toolkit's `RepairDetail.corrected_positions`) differ only in
+/// presentation — both carry the same logical information.
+fn apply_ms_corrections(
+    chunk: &str,
+    corrections: &[ms_codec::CorrectionDetail],
+) -> (String, Vec<(usize, char, char)>) {
+    let lower = chunk.to_lowercase();
+    let sep = lower.rfind('1').expect("ms-codec already validated prefix");
+    let (prefix, rest) = lower.split_at(sep + 1);
+    let mut chars: Vec<char> = rest.chars().collect();
+    let mut positions: Vec<(usize, char, char)> = Vec::with_capacity(corrections.len());
+    for c in corrections {
+        positions.push((c.position, c.was, c.now));
+        if c.position < chars.len() {
+            chars[c.position] = c.now;
+        }
+    }
+    let mut corrected = String::from(prefix);
+    for ch in chars {
+        corrected.push(ch);
+    }
+    (corrected, positions)
+}
+
+/// **v0.23.0 — D29 migration helper.** Delegate md1 chunk-set repair to
+/// `md_codec::decode_with_correction` (full-decode semantics per Q1 lock;
+/// atomic per D28). Translate the codec's `Error` taxonomy back into
+/// toolkit `RepairError` variants per the §2.B.4 D29 error-mapping table.
+///
+/// Returns the full `RepairOutcome` rather than a per-chunk `Option`,
+/// because the sibling helper operates on the whole chunk set atomically.
+fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> {
+    use md_codec::Error as MdErr;
+    let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+    match md_codec::decode_with_correction(&refs) {
+        Ok((_descriptor, corrections)) => {
+            let (corrected_chunks, repairs) = apply_md_corrections(chunks, &corrections);
+            Ok(RepairOutcome {
+                kind: CardKind::Md1,
+                corrected_chunks,
+                repairs,
+            })
+        }
+        Err(MdErr::TooManyErrors { chunk_index, bound }) => Err(RepairError::TooManyErrors {
+            chunk_index,
+            bound: bound as usize,
+        }),
+        Err(MdErr::ChunkSetEmpty) => Err(RepairError::EmptyInput),
+        Err(MdErr::Codex32DecodeError(s)) => {
+            // Try to extract chunk_index from md-codec's "chunk N: …" pattern
+            // (which `parse_chunk_symbols` emits). Otherwise default to 0.
+            let chunk_index = parse_md_chunk_index(&s).unwrap_or(0);
+            // Use HrpMismatch only when the message explicitly cites the
+            // HRP-mismatch shape; otherwise route to UnparseableInput.
+            if s.contains("does not start with HRP md1") {
+                Err(RepairError::HrpMismatch {
+                    chunk_index,
+                    expected: "md",
+                    found: String::new(),
+                })
+            } else {
+                Err(RepairError::UnparseableInput {
+                    chunk_index,
+                    detail: s,
+                })
             }
+        }
+        Err(other) => Err(RepairError::PostCorrectionDecodeFailed {
+            chunk_index: None,
+            detail: other.to_string(),
+        }),
+    }
+}
+
+/// Extract `chunk_index` from md-codec's `"chunk N: …"` error-string
+/// prefix. Returns `None` if the prefix isn't present or unparseable.
+fn parse_md_chunk_index(detail: &str) -> Option<usize> {
+    // Look for the literal "chunk " prefix in detail; the next whitespace
+    // or ':' bounds the number.
+    let after = detail.strip_prefix("chunk ")?;
+    let n_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    n_str.parse::<usize>().ok()
+}
+
+/// Apply md-codec `CorrectionDetail` entries (sorted by chunk_index +
+/// position) to the input chunk set, producing the corrected chunks
+/// vector + per-chunk `RepairDetail` entries.
+fn apply_md_corrections(
+    chunks: &[String],
+    corrections: &[md_codec::CorrectionDetail],
+) -> (Vec<String>, Vec<RepairDetail>) {
+    // Index corrections by chunk_index for O(N+M) assembly.
+    let mut per_chunk: Vec<Vec<&md_codec::CorrectionDetail>> = vec![Vec::new(); chunks.len()];
+    for c in corrections {
+        if c.chunk_index < per_chunk.len() {
+            per_chunk[c.chunk_index].push(c);
         }
     }
 
-    Ok(RepairOutcome {
-        kind,
-        corrected_chunks,
-        repairs,
-    })
+    let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+    let mut repairs: Vec<RepairDetail> = Vec::new();
+    for (i, chunk) in chunks.iter().enumerate() {
+        if per_chunk[i].is_empty() {
+            corrected_chunks.push(chunk.clone());
+            continue;
+        }
+        // Apply this chunk's corrections.
+        let lower = chunk.to_lowercase();
+        let sep = lower.rfind('1').expect("md-codec already validated prefix");
+        let (prefix, rest) = lower.split_at(sep + 1);
+        let mut chars: Vec<char> = rest.chars().collect();
+        let mut positions: Vec<(usize, char, char)> = Vec::with_capacity(per_chunk[i].len());
+        for c in &per_chunk[i] {
+            positions.push((c.position, c.was, c.now));
+            if c.position < chars.len() {
+                chars[c.position] = c.now;
+            }
+        }
+        let mut corrected = String::from(prefix);
+        for ch in chars {
+            corrected.push(ch);
+        }
+        corrected_chunks.push(corrected.clone());
+        repairs.push(RepairDetail {
+            chunk_index: i,
+            original_chunk: chunk.clone(),
+            corrected_chunk: corrected,
+            corrected_positions: positions,
+        });
+    }
+    (corrected_chunks, repairs)
 }
 
 /// Auto-fire convenience wrapper. Returns `Ok(())` on repair-failure (caller
@@ -817,31 +1074,14 @@ mod tests {
         assert_eq!(MK_LONG_TARGET, mk_codec::MK_LONG_CONST);
     }
 
-    #[test]
-    fn drift_gate_ms_nums_target_locked_to_codex32_standard() {
-        // codex32's "SECRETSHARE32" Fe-vec, packed in big-endian 5-bit chunks
-        // (the natural u128 representation that mk-codec's `polymod_run`
-        // produces for a valid ms1 input). Avoids pulling rust-codex32 in
-        // as a direct toolkit dep just for this constant.
-        //
-        // Derivation rationale: codex32 and mk-codec use IDENTICAL polymod
-        // arithmetic (same generator, same hrp_expand, same initial residue),
-        // but compare results differently — codex32 against a Vec<Fe> equal
-        // to `[S, E, C, R, E, T, S, H, A, R, E, 3, 2]`; mk-codec against a
-        // u128 via XOR. The u128 form of that Fe-vec (each Fe = its 5-bit
-        // bech32 alphabet value, packed big-endian) is the value asserted here.
-        // Empirical stability across distinct valid ms1 strings is checked by
-        // `ms_nums_target_is_stable_across_distinct_valid_strings`.
-        assert_eq!(MS_NUMS_TARGET, 0x962958058f2c192a);
-    }
-
-    #[test]
-    fn drift_gate_md_nums_target_locked_to_md_codec_internal() {
-        // From md-codec/src/bch.rs:17 (module-private; vendored here).
-        // Cross-repo FOLLOWUP `md-codec-promote-bch-to-pub` tracks promotion;
-        // once promoted we replace this literal with the imported const.
-        assert_eq!(MD_NUMS_TARGET, 0x0815c07747a3392e7);
-    }
+    // v0.23.0 (D29): drift-gate tests for the previously-vendored
+    // MS_NUMS_TARGET / MD_NUMS_TARGET constants are deleted along with the
+    // constants themselves. The authoritative invariants now live in
+    // ms-codec (`ms_codec::bch::MS_REGULAR_CONST` + the `decode_with_correction`
+    // round-trip cells) and md-codec (`md_codec::bch::MD_REGULAR_CONST` +
+    // its `decode_with_correction` cells). The ms_nums_target_is_stable_…
+    // and md_nums_target_is_stable_… stability tests below are also deleted
+    // since they tested the toolkit-internal constants.
 
     /// Fixture sanity: VALID_MS1 must be accepted by ms_codec::decode.
     /// Catches a class of latent-fixture-rot bugs (e.g., a typo that breaks
@@ -876,36 +1116,10 @@ mod tests {
         }
     }
 
-    /// Stability test: 3 distinct valid ms1 strings (each generated by
-    /// `mnemonic convert --to ms1` from distinct phrases) must all reduce
-    /// under the polymod to the SAME value. That value IS the canonical
-    /// MS_NUMS_TARGET — codex32's "SECRETSHARE32" Fe-vec packed in
-    /// big-endian 5-bit chunks, the value mk-codec's polymod_run produces
-    /// for any valid ms1 input.
-    ///
-    /// Why ms1 needs empirical derivation (vs the codex32-standard literal
-    /// `0x10ce0795c2fd1e62a`): codex32's polymod initializes residue = 1,
-    /// but mk-codec's `polymod_run` initializes residue = 0x23181b3
-    /// (BIP-93). The polynomial arithmetic that follows is identical,
-    /// but the constant offset shifts the final residue by the difference
-    /// in initial values transported through the generator. The empirical
-    /// value below is the mk-codec-frame equivalent of codex32's literal.
-    #[test]
-    fn ms_nums_target_is_stable_across_distinct_valid_strings() {
-        const VALID_MS1_A: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
-        const VALID_MS1_B: &str = "ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6";
-        const VALID_MS1_C: &str = "ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu";
-
-        let pa = raw_polymod(VALID_MS1_A);
-        let pb = raw_polymod(VALID_MS1_B);
-        let pc = raw_polymod(VALID_MS1_C);
-        assert_eq!(pa, pb, "ms1 polymod target diverges between A/B (A=0x{pa:x}, B=0x{pb:x})");
-        assert_eq!(pb, pc, "ms1 polymod target diverges between B/C (B=0x{pb:x}, C=0x{pc:x})");
-        assert_eq!(
-            pa, MS_NUMS_TARGET,
-            "MS_NUMS_TARGET drift: empirical=0x{pa:x}, declared=0x{MS_NUMS_TARGET:x}"
-        );
-    }
+    // v0.23.0 (D29): `ms_nums_target_is_stable_across_distinct_valid_strings`
+    // was deleted because MS_NUMS_TARGET no longer exists in the toolkit.
+    // The equivalent invariant is enforced upstream by ms-codec's own test
+    // suite (`ms_codec::decode_with_correction` + bch::MS_REGULAR_CONST).
 
     /// Stability test: 3 distinct valid LONG-code mk1 strings (chunk 0 of
     /// a typical bundle, carrying the xpub) must all reduce to the SAME
@@ -955,32 +1169,10 @@ mod tests {
         );
     }
 
-    /// Stability test: 3 distinct valid md1 strings must reduce to the
-    /// SAME polymod value, equal to the vendored MD_NUMS_TARGET. md-codec
-    /// and mk-codec share identical polymod arithmetic (same generator,
-    /// same `POLYMOD_INIT = 0x23181b3`, same hrp_expand), so the vendored
-    /// literal from `md-codec/src/bch.rs::MD_REGULAR_CONST` is directly
-    /// correct. This test catches any future drift if md-codec changes
-    /// its constant.
-    #[test]
-    fn md_nums_target_is_stable_across_distinct_valid_strings() {
-        // Generated 2026-05-17 by `mnemonic bundle --template bip84
-        // --network mainnet --slot @0.phrase=... --json --no-engraving-card`
-        // for 3 distinct BIP-39 test phrases.
-        const VALID_MD1_A: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
-        const VALID_MD1_B: &str = "md1f78rfpqpqpm6jzzqqvqpdqhp5gmug4gyw8wu9ztdtpvtn9nde4y5jucx7d0ah88n";
-        const VALID_MD1_C: &str = "md1f4fcgpqpqpm6jzzqqvqpdq9pj9qps4gyqswch5auak39arxww2ynnfspqrygc2fd";
-
-        let pa = raw_polymod(VALID_MD1_A);
-        let pb = raw_polymod(VALID_MD1_B);
-        let pc = raw_polymod(VALID_MD1_C);
-        assert_eq!(pa, pb, "md1 polymod target diverges between A/B (A=0x{pa:x}, B=0x{pb:x})");
-        assert_eq!(pb, pc, "md1 polymod target diverges between B/C (B=0x{pb:x}, C=0x{pc:x})");
-        assert_eq!(
-            pa, MD_NUMS_TARGET,
-            "MD_NUMS_TARGET drift: empirical=0x{pa:x}, declared=0x{MD_NUMS_TARGET:x}"
-        );
-    }
+    // v0.23.0 (D29): `md_nums_target_is_stable_across_distinct_valid_strings`
+    // was deleted because MD_NUMS_TARGET no longer exists in the toolkit.
+    // The equivalent invariant is enforced upstream by md-codec's own test
+    // suite (`md_codec::decode_with_correction` + bch::MD_REGULAR_CONST).
 
     /// R1 N1 parity smoke: toolkit's repair_card(Mk1, …) must produce the
     /// same correction as mk_codec::string_layer::bch_correct_regular for any

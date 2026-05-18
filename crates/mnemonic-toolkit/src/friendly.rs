@@ -269,6 +269,14 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             "md1 decode recursion depth {} exceeds maximum {}",
             depth, max
         ),
+        // v0.34.0 BCH-error-correction (Phase B.2): chunk uncorrectable.
+        // Typically intercepted by the toolkit's repair-helper translation
+        // table (Phase B.7) BEFORE this arm fires; retained for
+        // exhaustiveness in case a direct codec call bypasses the helper.
+        E::TooManyErrors { chunk_index, bound } => format!(
+            "md1 chunk {} uncorrectable (exceeds singleton bound = {})",
+            chunk_index, bound,
+        ),
     }
 }
 

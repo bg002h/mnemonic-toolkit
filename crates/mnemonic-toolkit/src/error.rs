@@ -262,7 +262,10 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::HardenedPublicDerivation
         | md_codec::Error::AddressDerivationFailed { .. }
         | md_codec::Error::NUMSSentinelConflict
-        | md_codec::Error::DecodeRecursionDepthExceeded { .. } => 2,
+        | md_codec::Error::DecodeRecursionDepthExceeded { .. }
+        // v0.34.0 BCH-error-correction variant (Phase B.2): uncorrectable chunk
+        // → exit 2 (Repair error class, matches RepairError::TooManyErrors).
+        | md_codec::Error::TooManyErrors { .. } => 2,
         // WireVersionMismatch is intercepted by From → FutureFormat.
         md_codec::Error::WireVersionMismatch { .. } => 3,
     }

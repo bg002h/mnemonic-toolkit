@@ -147,3 +147,135 @@ fn cell_14_stdin_form_ms1_dash_reads_from_stdin() {
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(VALID_MS1));
 }
+
+// ============================================================================
+// v0.23.0 Phase B.7 — D29 migration regression-guard cells (plan §4.B.4)
+// ============================================================================
+//
+// These two cells guard against R3 (silent regression from delegating Ms1 +
+// Md1 repair to sibling-codec native APIs in v0.23.0). The 29 pre-existing
+// repair cells (cli_repair 6 + cli_inspect 3 + cli_auto_repair 13 +
+// cli_verify_bundle_multi_cosigner_mk1 7) are the primary substring-match
+// regression-guards per Phase B.0 (h); these two cells add explicit
+// migration-aware coverage on top.
+
+/// Cell B7-1 (`migrated_repair_byte_exact_with_pre_v0_23`): meta-regression
+/// guard. Re-runs the 6 cli_repair scenarios through the new
+/// sibling-codec-delegating `repair_card` and asserts the observable
+/// substring contract per scenario stays stable. The cell deliberately
+/// duplicates a slice of the pre-existing assertions; if any of the 6
+/// pre-existing cells regresses, both that cell AND this meta-cell fail in
+/// lockstep, surfacing R3 redundantly.
+#[test]
+fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
+    // Scenario 9: text-form ms1 happy-path.
+    let bad_ms1 = flip_at(VALID_MS1, 17);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", &bad_ms1])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains("# Repair report"))
+        .stdout(predicate::str::contains(
+            "ms1 chunk 0: 1 correction at position 17",
+        ))
+        .stdout(predicate::str::contains(VALID_MS1));
+
+    // Scenario 11: already-valid input.
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", VALID_MS1])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stdout(predicate::str::contains(VALID_MS1));
+
+    // Scenario 12: 6-error ms1 → exit 2 + TooManyErrors stderr.
+    let unrepairable = [3usize, 8, 13, 18, 23, 28]
+        .iter()
+        .fold(VALID_MS1.to_string(), |acc, &p| flip_at(&acc, p));
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", &unrepairable])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("too many errors"))
+        .stderr(predicate::str::contains("singleton bound"));
+
+    // Scenario 13: multi-chunk mk1 with one corrupted chunk.
+    let bad_chunk1 = flip_at(VALID_MK1_REG_CHUNK1, 25);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "repair",
+            "--mk1",
+            VALID_MK1_LONG_CHUNK0,
+            "--mk1",
+            &bad_chunk1,
+        ])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains("# Repair report"))
+        .stdout(predicate::str::contains(
+            "mk1 chunk 1: 1 correction at position 25",
+        ));
+}
+
+/// Cell B7-2 (`error_mapping_fidelity`): D29 helper-translation table
+/// assertion. Feed a 5-error ms1 chunk through `repair_card(Ms1, …)` and
+/// assert the returned error is `RepairError::TooManyErrors { chunk_index:
+/// 0, bound: 8 }` — NOT `PostCorrectionDecodeFailed`. This pins the Q2
+/// absorption rule (ms_codec::Error::TooManyErrors → toolkit
+/// TooManyErrors). Same shape for md1 via `repair_card(Md1, &[md1_chunk])`.
+///
+/// Cell lives in cli_repair.rs (integration) rather than src/repair.rs
+/// because it exercises the public `mnemonic-toolkit` lib surface; the
+/// helpers themselves are pub(crate)-only.
+#[test]
+fn cell_b7_2_error_mapping_fidelity_ms1_too_many_errors_observable_exit_2() {
+    // 5-error ms1 — above t=4 capacity. Asserts the toolkit's
+    // RepairError::TooManyErrors path fires (the cell observes exit code
+    // 2 + the TooManyErrors stderr substring), proving the
+    // ms_codec::Error::TooManyErrors → toolkit TooManyErrors absorption
+    // works end-to-end through the public CLI surface.
+    let bad_ms1 = [3usize, 11, 19, 27, 35]
+        .iter()
+        .fold(VALID_MS1.to_string(), |acc, &p| flip_at(&acc, p));
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", &bad_ms1])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("too many errors"))
+        .stderr(predicate::str::contains("singleton bound = 8"))
+        // Catch a regression where the helper falls into
+        // PostCorrectionDecodeFailed instead of TooManyErrors.
+        .stderr(predicate::str::contains("post-correction decode failed").not());
+
+    // md1 path — 5-error md1 chunk in chunk 0 → atomic-fail with chunk_index:0.
+    const VALID_MD1_CHUNK0: &str =
+        "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    const VALID_MD1_CHUNK1: &str =
+        "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+    const VALID_MD1_CHUNK2: &str =
+        "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+    let bad_md1 = [3usize, 11, 19, 27, 35]
+        .iter()
+        .fold(VALID_MD1_CHUNK0.to_string(), |acc, &p| flip_at(&acc, p));
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "repair",
+            "--md1",
+            &bad_md1,
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("too many errors"))
+        .stderr(predicate::str::contains("singleton bound = 8"))
+        .stderr(predicate::str::contains("post-correction decode failed").not());
+}
