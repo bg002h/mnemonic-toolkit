@@ -172,10 +172,12 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
     // 1) Resolve seed (mutex + parse + ms1 auto-fire short-circuit).
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;
 
-    // 2) Resolve passphrase. Inline emits argv-leak advisory.
-    let passphrase: String = if args.passphrase_stdin {
+    // 2) Resolve passphrase. Inline emits argv-leak advisory. Wrapped in
+    //    Zeroizing<String> so the heap buffer scrubs on drop (plan §3.6
+    //    secret hygiene; mirrors `derive_child.rs:137-151` precedent).
+    let passphrase: zeroize::Zeroizing<String> = if args.passphrase_stdin {
         // Re-use convert's stdin reader (preserves embedded NULL bytes).
-        let mut buf = String::new();
+        let mut buf: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
             .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
@@ -188,10 +190,12 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
         buf
     } else if let Some(p) = &args.passphrase {
         secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-        p.clone()
+        zeroize::Zeroizing::new(p.clone())
     } else {
-        String::new()
+        zeroize::Zeroizing::new(String::new())
     };
+    // Pin passphrase heap pages for handler scope (mirrors derive_child.rs:159).
+    let _passphrase_pin = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
 
     // 3) Resolve target xpub (mk1-or-slip0132 dispatch).
     let (target_xpub, target_variant) = resolve_target_xpub(&args.target_xpub)?;
@@ -199,7 +203,7 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
     let target_xpub_canonical = target_xpub.to_string();
 
     // 4) Derive master xprv from (mnemonic, passphrase).
-    let seed = derive_master_seed(&mnemonic, &passphrase);
+    let seed = derive_master_seed(&mnemonic, passphrase.as_str());
     let master_xprv = Xpriv::new_master(args.network.network_kind(), &seed[..])
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
 
@@ -214,8 +218,9 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
     let searched_count = candidates.len();
 
     // 6) Pin entropy bytes for the candidate-iteration phase. mlock the
-    //    seed buffer for the loop lifetime per plan §9.2.
-    #[cfg(unix)]
+    //    seed buffer for the loop lifetime per plan §9.2 (mirrors
+    //    derive_slot.rs:82 precedent; works cross-platform via
+    //    `mlock::pin_pages_for`'s no-op fallback on non-unix).
     let _seed_pin = mnemonic_toolkit::mlock::pin_pages_for(&seed[..]);
 
     // 7) Search.

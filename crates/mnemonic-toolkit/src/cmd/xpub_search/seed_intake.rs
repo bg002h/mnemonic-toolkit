@@ -18,6 +18,7 @@ use crate::repair::{self, CardKind};
 use crate::secret_advisory::secret_in_argv_warning;
 use bip39::Mnemonic;
 use std::io::{Read, Write};
+use zeroize::Zeroizing;
 
 /// Read-only accessor over a `*Args` struct's seed-intake fields. Each
 /// per-mode struct (P1: `PathOfXpubArgs`, future P2/P4: `*Args`) implements
@@ -73,32 +74,34 @@ where
         ));
     }
 
-    // 2) Resolve to (kind, value).
+    // 2) Resolve to (kind, value). Source values carry `Zeroizing<String>`
+    //    so the phrase/ms1 heap buffer scrubs on drop (plan §3.6 secret
+    //    hygiene; mirrors `derive_child.rs:127-131` precedent).
     enum Source {
-        Phrase(String),
-        Ms1(String),
+        Phrase(Zeroizing<String>),
+        Ms1(Zeroizing<String>),
     }
 
     let source: Source = if let Some(p) = args.phrase() {
         secret_in_argv_warning(stderr, "--phrase", "--phrase-stdin");
-        Source::Phrase(normalize_phrase(p))
+        Source::Phrase(Zeroizing::new(normalize_phrase(p)))
     } else if args.phrase_stdin() {
-        let mut buf = String::new();
+        let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
             .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        Source::Phrase(normalize_phrase(&buf))
+        Source::Phrase(Zeroizing::new(normalize_phrase(&buf)))
     } else if let Some(m) = args.ms1() {
         secret_in_argv_warning(stderr, "--ms1", "--ms1-stdin");
         // HRP validation (strict; v0.24.0 D34 pattern).
         crate::repair::validate_flag_hrp("--ms1", "ms", m)?;
-        Source::Ms1(m.to_string())
+        Source::Ms1(Zeroizing::new(m.to_string()))
     } else if args.ms1_stdin() {
-        let mut buf = String::new();
+        let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
             .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        let trimmed = buf.trim().to_string();
+        let trimmed: Zeroizing<String> = Zeroizing::new(buf.trim().to_string());
         crate::repair::validate_flag_hrp("--ms1-stdin", "ms", &trimmed)?;
         Source::Ms1(trimmed)
     } else {
@@ -115,7 +118,7 @@ where
         // HRP-autodetect: only ms1 is accepted positionally. BIP-39 phrase
         // text has no HRP and is rejected with a clear pointer to --phrase.
         match repair::classify_hrp_prefix(v) {
-            Ok(CardKind::Ms1) => Source::Ms1(v.clone()),
+            Ok(CardKind::Ms1) => Source::Ms1(Zeroizing::new(v.clone())),
             Ok(CardKind::Mk1) | Ok(CardKind::Md1) => {
                 return Err(ToolkitError::BadInput(format!(
                     "xpub-search seed-intake positional requires an ms1 card; got HRP for `{}` \
@@ -134,18 +137,30 @@ where
         }
     };
 
-    // 3) Parse the source into a Mnemonic.
+    // 3) Pin the source heap-buffer for the remainder of resolve_seed scope
+    //    (mirrors `derive_child.rs:157-160` precedent). The owned-String
+    //    inside Zeroizing keeps its heap-data pointer stable across this
+    //    function's lifetime; the pin captured here covers the parse step.
+    let _source_pin = match &source {
+        Source::Phrase(p) => mnemonic_toolkit::mlock::pin_pages_for(p.as_bytes()),
+        Source::Ms1(m) => mnemonic_toolkit::mlock::pin_pages_for(m.as_bytes()),
+    };
+
+    // 4) Parse the source into a Mnemonic.
     match source {
         Source::Phrase(p) => {
             // Mnemonic::parse_in handles BIP-39 word-validation. No
             // auto-fire applies — there's no BCH primitive for plain text.
-            Mnemonic::parse_in(args.language().into(), &p).map_err(ToolkitError::Bip39)
+            Mnemonic::parse_in(args.language().into(), p.as_str()).map_err(ToolkitError::Bip39)
         }
         Source::Ms1(card) => {
-            match ms_codec::decode(&card) {
+            match ms_codec::decode(card.as_str()) {
                 Ok((_tag, payload)) => {
-                    let entropy = payload.as_bytes().to_vec();
-                    Mnemonic::from_entropy_in(args.language().into(), &entropy)
+                    // Entropy bytes wrapped in Zeroizing to scrub on drop at
+                    // function exit. Mirrors `derive_slot.rs:77-84` precedent.
+                    let entropy: Zeroizing<Vec<u8>> = Zeroizing::new(payload.as_bytes().to_vec());
+                    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
+                    Mnemonic::from_entropy_in(args.language().into(), &entropy[..])
                         .map_err(ToolkitError::Bip39)
                 }
                 Err(decode_err) => {
@@ -157,7 +172,7 @@ where
                         // via Err(RepairShortCircuit) when correction succeeds.
                         crate::repair::try_repair_and_short_circuit(
                             CardKind::Ms1,
-                            &[card.clone()],
+                            &[card.as_str().to_string()],
                             stdout,
                             stderr,
                             false, // text-form report (caller's --json is mode-level)
