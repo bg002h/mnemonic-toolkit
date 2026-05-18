@@ -595,7 +595,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--electrum-language <ELECTRUM_LANGUAGE>` | Electrum-specific wordlist (English + 4 non-English) |
 | `--fingerprint <FINGERPRINT>` | master fingerprint (input on certain edges) |
 | `--xpub-prefix <XPUB_PREFIX>` | SLIP-0132 prefix selector for emitted xpubs (e.g. zpub, ypub) |
-| `--script-type <SCRIPT_TYPE>` | `p2wpkh` / `p2sh-p2wpkh` / `p2tr` for `(Xpub, Address)` derivation |
+| `--script-type <SCRIPT_TYPE>` | `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr` for `(Xpub, Address)` derivation (v0.26.0: `p2pkh` added) |
 | `--json` | JSON output |
 | `--help` | print help |
 
@@ -1701,11 +1701,11 @@ the full per-error taxonomy.
 
 ## `mnemonic xpub-search` (v0.26.0)
 
-Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — given a seed (or xpub), find which derivation produces a target xpub / descriptor / address / passphrase. v0.26.0 ships the first of four planned modes:
+Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — given a seed (or xpub), find which derivation produces a target xpub / descriptor / address / passphrase. v0.26.0 ships four modes:
 
 - **`path-of-xpub`** — given seed + target xpub (or mk1 card), find the BIP-32 path under the seed that produces it.
-- `account-of-descriptor` *(planned)* — given seed + descriptor, find the cosigner role + account index.
-- `address-of-xpub` *(planned)* — given xpub + address, scan child indices to a gap limit.
+- **`account-of-descriptor`** — given seed + descriptor, find the cosigner role + account index.
+- **`address-of-xpub`** — given xpub + address, scan child indices to a gap limit.
 - `passphrase-of-xpub` *(planned)* — given seed + passphrase + target xpub, verify match.
 
 ### `mnemonic xpub-search path-of-xpub`
@@ -1935,3 +1935,122 @@ searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
 | Descriptor containing no extended keys (all raw public keys) | `descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners` |
 | Bare `tr(...)` with no key form | rust-miniscript parse error (exit 1) |
 | `--descriptor-from <unknown>=...` | `--descriptor-from: <node> must be one of literal / md1 / bip388` |
+
+### `mnemonic xpub-search address-of-xpub`
+
+Given a parent xpub (or an mk1 card carrying an xpub) plus one or more target addresses, scan child receive (`chain=0`) and change (`chain=1`) addresses across the gap-limit window and report which targets matched at which `(chain, index)`. Takes **no seed material** — auto-fire BCH repair does not apply, and there is no argv-leakage surface beyond the (non-secret) xpub itself.
+
+The script-type used to render each child address comes from the xpub's SLIP-0132 prefix where unambiguous (`ypub`/`upub` → P2SH-P2WPKH; `zpub`/`vpub` → P2WPKH); for neutral `xpub`/`tpub` (and any override), supply `--address-type` explicitly. Multisig SLIP-0132 prefixes (`Ypub`/`Zpub`/`Upub`/`Vpub`) are refused — use `account-of-descriptor` instead, since single-sig address derivation from a multisig cosigner xpub is semantically wrong.
+
+#### Synopsis
+
+```sh
+mnemonic xpub-search address-of-xpub \
+    {--xpub <XPUB-OR-MK1> | --xpub-stdin} \
+    --target-address <ADDR> [--target-address <ADDR>]... \
+    [--gap-limit 20] \
+    [--external-only] \
+    [--address-type <p2pkh|p2sh-p2wpkh|p2wpkh|p2tr>] \
+    [--network <NET>] \
+    [--json]
+```
+
+#### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--xpub <XPUB-OR-MK1>` | parent xpub (any SLIP-0132 single-sig prefix: `xpub`/`tpub`/`ypub`/`upub`/`zpub`/`vpub`) OR an `mk1...` bech32 card carrying an xpub. Multisig prefixes (`Ypub`/`Zpub`/`Upub`/`Vpub`) refused |
+| `--xpub-stdin` | read parent xpub from stdin (single line, trailing newline stripped); mutex with `--xpub` |
+| `--target-address <ADDR>` | target address to search for; repeatable; at least one required |
+| `--gap-limit <N>` | per-chain scan window, indices `0..N`. Default `20` |
+| `--external-only` | restrict scan to the external (receive) chain; skip change chain. Default scans both |
+| `--address-type <TYPE>` | explicit script-type for child-address rendering (`p2pkh` / `p2sh-p2wpkh` / `p2wpkh` / `p2tr`). Required for neutral `xpub`/`tpub`; overrides prefix-inferred type otherwise |
+| `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Default inferred from the xpub version byte; `--network signet`/`--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte |
+| `--json` | emit JSON envelope on stdout instead of text-form report |
+| `-h, --help` | print help |
+
+#### Worked example
+
+```sh
+# Take an externally-supplied account-level zpub and an address you suspect
+# was derived from it. Confirm by index:
+ZPUB="zpub6r..."           # account-0 zpub from a BIP-84 wallet
+ADDR="bc1q..."             # candidate child address
+
+mnemonic xpub-search address-of-xpub \
+    --xpub "$ZPUB" \
+    --target-address "$ADDR"
+```
+
+Stdout (text form, match):
+
+```text
+match: bc1q... → 0/5  (script_type=p2wpkh, chain=external, index=5)
+targets: 1; matched: 1; unmatched: 0
+```
+
+Stdout (text form, no match):
+
+```text
+no match: bc1q... (searched 0/0..19 + 1/0..19)
+targets: 1; matched: 0; unmatched: 1
+```
+
+The summary line reports total / matched / unmatched counts after all per-target lines.
+
+#### JSON output
+
+`--json` emits a versioned envelope. Schema `v1`. The `results` array carries one entry per `--target-address` in user-supplied order. Mixed match / no-match payloads are supported; the envelope shape stays stable.
+
+Match entry:
+
+```json
+{
+  "schema_version": "1",
+  "mode": "address-of-xpub",
+  "results": [
+    {"target": "bc1q...", "result": "match", "chain": "external", "index": 5, "script_type": "p2wpkh"}
+  ],
+  "xpub_canonical": "xpub6...",
+  "xpub_variant": "zpub",
+  "gap_limit": 20
+}
+```
+
+No-match entry (single target):
+
+```json
+{
+  "schema_version": "1",
+  "mode": "address-of-xpub",
+  "results": [
+    {"target": "bc1q...", "result": "no_match", "scanned_external": 20, "scanned_internal": 20}
+  ],
+  "xpub_canonical": "xpub6...",
+  "xpub_variant": "zpub",
+  "gap_limit": 20
+}
+```
+
+`xpub_variant` serializes as `null` when the input was already-canonical `xpub`/`tpub` or an mk1 card (no SLIP-0132 alt-prefix swap occurred). When `--external-only` is supplied, `scanned_internal` is `0` for no-match entries.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | All targets matched |
+| 1 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
+| 4 | At least one target unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) |
+| 64 | Clap arg-parse error |
+
+P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
+
+#### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Multisig SLIP-0132 prefix on `--xpub` (`Ypub` / `Zpub` / `Upub` / `Vpub`) | `address-of-xpub is single-sig only; the <Ypub\|Zpub\|Upub\|Vpub> prefix is a multisig SLIP-0132 variant. Multisig address derivation requires the full descriptor — use xpub-search account-of-descriptor to find the matching account.` |
+| Neutral `xpub`/`tpub` with no `--address-type` | `xpub has no SLIP-0132 single-sig prefix signal — supply --address-type <p2pkh\|p2sh-p2wpkh\|p2wpkh\|p2tr>.` |
+| Both `--xpub` and `--xpub-stdin` supplied | clap mutex error |
+| Neither `--xpub` nor `--xpub-stdin` supplied | `supply --xpub <VALUE> or --xpub-stdin` |
+| No `--target-address` supplied | clap `required` error |

@@ -30,6 +30,8 @@ use std::io::{Read, Write};
 
 pub mod account_of_descriptor;
 pub mod account_search;
+pub mod address_of_xpub;
+pub mod address_search;
 pub mod candidate_paths;
 pub mod descriptor_intake;
 pub mod path_of_xpub;
@@ -40,6 +42,7 @@ pub mod target_intake;
 // Re-export the per-mode result struct so the unit-cell-in-tests reaches it
 // via `mnemonic_toolkit::cmd::xpub_search::PathOfXpubResult`.
 pub use account_of_descriptor::AccountOfDescriptorResult;
+pub use address_of_xpub::AddressOfXpubResult;
 pub use path_of_xpub::PathOfXpubResult;
 
 /// Umbrella `xpub-search` args. Defers to `XpubSearchCommand` for the
@@ -58,6 +61,9 @@ pub enum XpubSearchCommand {
     /// Given a seed + descriptor, identify which cosigner role(s) and
     /// account(s) the seed plays in the descriptor.
     AccountOfDescriptor(account_of_descriptor::AccountOfDescriptorArgs),
+    /// Given a single-sig xpub + one or more target addresses, find the
+    /// chain/index under the xpub that produces each address.
+    AddressOfXpub(address_of_xpub::AddressOfXpubArgs),
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -79,6 +85,9 @@ pub fn run<R: Read, W: Write, E: Write>(
                 stderr,
                 no_auto_repair,
             )
+        }
+        XpubSearchCommand::AddressOfXpub(a) => {
+            address_of_xpub::run_address_of_xpub(a, stdin, stdout, stderr, no_auto_repair)
         }
     }
 }
@@ -106,6 +115,7 @@ pub struct XpubSearchEnvelope {
 pub enum XpubSearchJson {
     PathOfXpub(PathOfXpubResult),
     AccountOfDescriptor(AccountOfDescriptorResult),
+    AddressOfXpub(AddressOfXpubResult),
 }
 
 #[cfg(test)]

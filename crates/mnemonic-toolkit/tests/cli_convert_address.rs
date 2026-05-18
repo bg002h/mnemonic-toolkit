@@ -301,6 +301,7 @@ fn refusal_address_no_path() {
 #[test]
 fn refusal_address_no_script_type() {
     // SPEC §10.a byte-pin: --to address requires --script-type or --template.
+    // v0.26.0: error message now includes p2pkh in the script-type list.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -318,34 +319,37 @@ fn refusal_address_no_script_type() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --to address requires --script-type <p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).\n"
+        "error: --to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).\n"
     );
 }
 
 #[test]
-fn refusal_address_script_type_unknown_template_bip44() {
-    // SPEC §10.a byte-pin: bip44 (P2PKH) does not infer to a v0.7 single-sig
-    // script-type; user must supply --script-type explicitly.
+fn bip44_template_infers_p2pkh_v0_26_0() {
+    // v0.26.0 P3 5-site gap-fix: bip44 now infers ScriptType::P2pkh.
+    // Trezor 12-word seed, mainnet, BIP-44 first receive address.
+    // Reference: BIP-44 derivation for "abandon × 11 about" at m/44'/0'/0'/0/0
+    // → P2PKH address `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` (computed via
+    // `mnemonic convert --template bip44`).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "convert",
             "--from",
-            &format!("xpub={BIP84_ACCOUNT_ZPUB}"),
+            &format!("phrase={TREZOR_12}"),
             "--to",
             "address",
             "--path",
-            "m/0/0",
+            "m/44'/0'/0'/0/0",
             "--template",
             "bip44",
         ])
         .assert()
-        .failure()
-        .code(2);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr,
-        "error: --template does not infer a single-sig --script-type for --to address (bip49/bip84/bip86 supported; multisig templates and bip44 require explicit --script-type).\n"
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // BIP-44 address starts with '1' on mainnet.
+    assert!(
+        stdout.starts_with("address: 1"),
+        "expected mainnet P2PKH address starting with '1'; got: {stdout}"
     );
 }
 
@@ -395,8 +399,9 @@ fn refusal_address_one_way_to_phrase() {
 
 #[test]
 fn refusal_invalid_script_type_value() {
-    // Value-parser refusal: --script-type p2pkh (legacy) is not in the v0.7
-    // single-sig set.
+    // Value-parser refusal: gibberish script-type is rejected. v0.26.0
+    // added p2pkh to the accepted set; this cell pins the value-parser
+    // refusal path with a definitely-invalid value.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -408,14 +413,45 @@ fn refusal_invalid_script_type_value() {
             "--path",
             "m/0/0",
             "--script-type",
-            "p2pkh",
+            "p2sh-multisig",
         ])
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("--script-type must be one of: p2wpkh, p2sh-p2wpkh, p2tr"),
+        stderr.contains("--script-type must be one of: p2pkh, p2wpkh, p2sh-p2wpkh, p2tr"),
         "stderr was: {stderr}"
+    );
+}
+
+#[test]
+fn xpub_to_address_p2pkh_explicit_script_type_v0_26_0() {
+    // v0.26.0 P3 5-site gap-fix: explicit --script-type p2pkh now works.
+    // BIP-44 path m/44'/0'/0' account-level xpub, derive m/0/0 → mainnet
+    // P2PKH address (starts with '1').
+    //
+    // Account-level xpub for Trezor 12-word seed at m/44'/0'/0' computed
+    // via `mnemonic convert --template bip44`.
+    const BIP44_ACCOUNT_XPUB: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={BIP44_ACCOUNT_XPUB}"),
+            "--to",
+            "address",
+            "--path",
+            "m/0/0",
+            "--script-type",
+            "p2pkh",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.starts_with("address: 1"),
+        "expected mainnet P2PKH address starting with '1'; got: {stdout}"
     );
 }
 

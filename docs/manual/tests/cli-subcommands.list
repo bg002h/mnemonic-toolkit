@@ -22,6 +22,7 @@ mnemonic repair
 mnemonic inspect
 mnemonic xpub-search path-of-xpub
 mnemonic xpub-search account-of-descriptor
+mnemonic xpub-search address-of-xpub
 
 # md
 md encode
