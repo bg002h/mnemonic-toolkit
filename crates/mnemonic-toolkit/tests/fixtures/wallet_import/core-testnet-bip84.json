@@ -1,0 +1,11 @@
+{
+  "wallet_name": "testnet_bip84",
+  "descriptors": [
+    {
+      "desc": "wpkh([704c7836/84'/1'/0']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)#r486umak",
+      "active": true,
+      "internal": false,
+      "range": [0, 1000]
+    }
+  ]
+}

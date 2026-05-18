@@ -24,6 +24,7 @@ use std::io::Write;
 pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod pipeline;
+pub(crate) mod roundtrip;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
