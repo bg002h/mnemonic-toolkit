@@ -135,6 +135,17 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before argv-leakage
+    // advisories + downstream consumption. Skipped when no sentinel is
+    // present to avoid an unnecessary `args.clone()`.
+    let env_resolved_owned;
+    let args: &BundleArgs = if needs_env_sentinel_resolution(args) {
+        env_resolved_owned = resolve_env_sentinels(args)?;
+        &env_resolved_owned
+    } else {
+        args
+    };
+
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE any
     // dispatch logic so the advisory fires uniformly regardless of
     // downstream success/error (the xprv-slot rejection at L470+ still
@@ -1519,6 +1530,39 @@ fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &BundleArgs, stderr: 
 /// letting `run()` skip the clone-into-synthetic step.
 fn needs_stdin_substitution(args: &BundleArgs) -> bool {
     args.passphrase_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+}
+
+/// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `bundle`'s
+/// secret-bearing flag surfaces (`--passphrase`, secret-bearing `--slot`).
+fn needs_env_sentinel_resolution(args: &BundleArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let slot = args
+        .slot
+        .iter()
+        .any(|s| s.subkey.is_secret_bearing() && s.value.starts_with("@env:"));
+    pp || slot
+}
+
+/// v0.26.0 §3 — resolve `@env:<VAR>` sentinels across `bundle`'s
+/// secret-bearing flag surfaces. Non-secret slot subkeys are NOT resolved
+/// per SPEC §3.2 (opt-in per-callsite).
+fn resolve_env_sentinels(args: &BundleArgs) -> Result<BundleArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    for s in owned.slot.iter_mut() {
+        if s.subkey.is_secret_bearing() {
+            let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
+            s.value = resolve_env_var_sentinel(&s.value, &flag)?;
+        }
+    }
+    Ok(owned)
 }
 
 /// Clone `args` into an owned `BundleArgs` and apply the stdin

@@ -6,6 +6,7 @@ mod cmd;
 mod derive;
 mod derive_slot;
 mod electrum;
+mod env_sentinel;
 mod error;
 mod format;
 mod friendly;

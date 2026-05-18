@@ -109,6 +109,17 @@ pub fn run<R: Read, W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--passphrase` and
+    // secret-bearing `--from <node>=` values before argv-leakage advisory
+    // and downstream consumption.
+    let env_resolved_owned;
+    let args: &DeriveChildArgs = if needs_env_sentinel_resolution(args) {
+        env_resolved_owned = resolve_env_sentinels(args)?;
+        &env_resolved_owned
+    } else {
+        args
+    };
+
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
     emit_secret_in_argv_advisories(args, stderr);
 
@@ -362,6 +373,34 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &DeriveChildArgs, stderr: &mut
     if args.passphrase.is_some() {
         secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
     }
+}
+
+/// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `derive-child`'s
+/// secret-bearing flag surfaces (`--passphrase`, secret-bearing
+/// `--from <node>=`).
+fn needs_env_sentinel_resolution(args: &DeriveChildArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let from = args.from.node.is_secret_bearing() && args.from.value.starts_with("@env:");
+    pp || from
+}
+
+/// v0.26.0 §3 — resolve `@env:<VAR>` sentinels across `derive-child`'s
+/// secret-bearing flag surfaces.
+fn resolve_env_sentinels(args: &DeriveChildArgs) -> Result<DeriveChildArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    if owned.from.node.is_secret_bearing() {
+        let flag = format!("--from {}=", owned.from.node.as_str());
+        owned.from.value = resolve_env_var_sentinel(&owned.from.value, &flag)?;
+    }
+    Ok(owned)
 }
 
 // ============================================================================

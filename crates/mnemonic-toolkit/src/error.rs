@@ -165,6 +165,17 @@ pub enum ToolkitError {
     /// v0.22.0 repair feature — std::io::Error from emit_repair_report
     /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
     Io(std::io::Error),
+    /// v0.26.0 wallet-import cycle — cross-cutting `@env:<VAR>` sentinel
+    /// resolution failed. Either the env-var was unset (`Unset`) or the
+    /// `<VAR>` token failed POSIX env-var-name validation (`InvalidName`).
+    /// Exit 1 (Tier-1, user-input class) per SPEC_wallet_import_v0_26_0.md §2.3.
+    /// Carries the offending `--flag` name for stderr disambiguation across
+    /// the 6 secret-flag surfaces enumerated in SPEC §3.1.
+    EnvVarMissing {
+        flag: String,
+        var: String,
+        reason: EnvVarMissingReason,
+    },
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
     /// candidate set. Exit 4 (sibling to `BundleMismatch` /
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
@@ -177,6 +188,18 @@ pub enum ToolkitError {
         mode: &'static str,
         searched: usize,
     },
+}
+
+/// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
+/// two distinct stderr message templates per SPEC_wallet_import_v0_26_0.md §2.4.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnvVarMissingReason {
+    /// The `@env:VAR` syntax was well-formed but `std::env::var(VAR)` failed
+    /// (variable is unset or not valid UTF-8).
+    Unset,
+    /// The `<VAR>` token failed the POSIX env-var-name regex
+    /// `[A-Z_][A-Z0-9_]*` (e.g., `@env:foo bar`, `@env:1FOO`, `@env:lowercase`).
+    InvalidName,
 }
 
 impl From<crate::repair::RepairError> for ToolkitError {
@@ -337,6 +360,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. }
             | ToolkitError::CosignerSpec { .. }
             | ToolkitError::CosignersFile { .. } => 1,
+            ToolkitError::EnvVarMissing { .. } => 1,
         }
     }
 
@@ -378,6 +402,7 @@ impl ToolkitError {
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
             ToolkitError::Io(_) => "Io",
+            ToolkitError::EnvVarMissing { .. } => "EnvVarMissing",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
         }
     }
@@ -478,6 +503,14 @@ impl ToolkitError {
                 String::new()
             }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
+                EnvVarMissingReason::Unset => format!(
+                    "{flag}: env-var {var} referenced by sentinel is not set"
+                ),
+                EnvVarMissingReason::InvalidName => {
+                    format!("{flag}: invalid env-var name `{var}`")
+                }
+            },
             ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
                 "no match in searched set: mode={mode}, paths searched={searched}; \
                  widen the range with --max-account / --number-of-accounts, or supply \
