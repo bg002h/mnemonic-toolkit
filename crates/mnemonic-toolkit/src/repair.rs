@@ -586,23 +586,22 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
         }),
         Err(MdErr::ChunkSetEmpty) => Err(RepairError::EmptyInput),
         Err(MdErr::Codex32DecodeError(s)) => {
-            // Try to extract chunk_index from md-codec's "chunk N: …" pattern
-            // (which `parse_chunk_symbols` emits). Otherwise default to 0.
+            // md-codec's Codex32DecodeError wraps stringy errors from the
+            // codex32 wire-format parser, which doesn't expose a structured
+            // HrpMismatch variant (the found-HRP is embedded in prose, not
+            // a field). Toolkit's pre-gate `parse_chunk` in repair_card's
+            // Md1 branch catches the common cases (HrpMismatch + Lev1
+            // suggestion, ReservedInvalidLength, UnsupportedCodeVariant)
+            // with rich error structure BEFORE this helper fires. If we
+            // reach here, md-codec's wire-format parser surfaced a case the
+            // pre-gate didn't recognize — route to UnparseableInput with
+            // the original detail string rather than synthesizing a
+            // degraded HrpMismatch with `found: String::new()`. See
+            // FOLLOWUP `md-codec-decode-with-correction-supports-non-chunked-md1`
+            // for the upstream enhancement path that would let us preserve
+            // the rich error shape here.
             let chunk_index = parse_md_chunk_index(&s).unwrap_or(0);
-            // Use HrpMismatch only when the message explicitly cites the
-            // HRP-mismatch shape; otherwise route to UnparseableInput.
-            if s.contains("does not start with HRP md1") {
-                Err(RepairError::HrpMismatch {
-                    chunk_index,
-                    expected: "md",
-                    found: String::new(),
-                })
-            } else {
-                Err(RepairError::UnparseableInput {
-                    chunk_index,
-                    detail: s,
-                })
-            }
+            Err(RepairError::UnparseableInput { chunk_index, detail: s })
         }
         Err(other) => Err(RepairError::PostCorrectionDecodeFailed {
             chunk_index: None,
@@ -612,11 +611,12 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
 }
 
 /// Extract `chunk_index` from md-codec's `"chunk N: …"` error-string
-/// prefix. Returns `None` if the prefix isn't present or unparseable.
+/// pattern. Robust to mid-string occurrences (md-codec's error wrappers
+/// may prefix the message before the `chunk N:` clause). Returns `None`
+/// if no `chunk N` substring is found.
 fn parse_md_chunk_index(detail: &str) -> Option<usize> {
-    // Look for the literal "chunk " prefix in detail; the next whitespace
-    // or ':' bounds the number.
-    let after = detail.strip_prefix("chunk ")?;
+    let idx = detail.find("chunk ")?;
+    let after = &detail[idx + "chunk ".len()..];
     let n_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
     n_str.parse::<usize>().ok()
 }
