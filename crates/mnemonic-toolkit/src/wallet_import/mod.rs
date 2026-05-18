@@ -73,12 +73,18 @@ pub(crate) struct ParsedImport {
 /// present in the source entry but dropped from the bundle output (drives the
 /// stderr NOTICE per SPEC §2.4).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Phase 5 consumes `range` for round-trip emit.
+#[allow(dead_code)] // Phase 5 consumes `range` + `wallet_name` for round-trip emit.
 pub(crate) struct CoreSourceMetadata {
     pub(crate) active: bool,
     pub(crate) internal: bool,
     pub(crate) range: Option<(u64, u64)>,
     pub(crate) dropped_fields: Vec<String>,
+    /// SPEC §5.1 + Phase 3 R0 I2 fold: top-level `wallet_name` from the
+    /// `listdescriptors` envelope, preserved for Phase 4
+    /// `canonicalize_bitcoin_core` semantic round-trip + Phase 5 `--json`
+    /// envelope emit. Same value on every entry within a single parse
+    /// invocation (envelope is one-per-blob).
+    pub(crate) wallet_name: Option<String>,
 }
 
 /// SPEC §5.3 — `--select-descriptor` filter applied at the CLI dispatch layer

@@ -118,6 +118,14 @@ impl WalletFormatParser for BitcoinCoreParser {
                     .to_string(),
             )
         })?;
+        // SPEC §5.1 + Phase 3 R0 I2 fold: extract `wallet_name` from envelope
+        // (metadata-only; preserved for Phase 4 canonicalize + Phase 5 --json
+        // envelope). Absent / non-string → None.
+        let wallet_name = obj
+            .get("wallet_name")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
         let descriptors = obj
             .get("descriptors")
             .and_then(|v| v.as_array())
@@ -137,6 +145,8 @@ impl WalletFormatParser for BitcoinCoreParser {
         // SPEC §5.2 step 2.d: aggregate dropped-field names across all entries
         // and emit ONE stderr NOTICE if any are present (avoids N notices for
         // an N-entry blob; the field-set is uniform per Core output anyway).
+        // Phase 3 R0 M2 fold: join(", ") instead of {:?} Debug for clean
+        // user-facing stderr (no brackets/double-quotes).
         let mut aggregate_dropped: Vec<&'static str> = Vec::new();
         for entry in descriptors {
             let eobj = entry.as_object().ok_or_else(|| {
@@ -154,8 +164,8 @@ impl WalletFormatParser for BitcoinCoreParser {
         if !aggregate_dropped.is_empty() {
             writeln!(
                 stderr,
-                "notice: import-wallet: bitcoin-core: dropped wallet-state fields {:?}: not preserved in bundle output (key-state only)",
-                aggregate_dropped
+                "notice: import-wallet: bitcoin-core: dropped wallet-state fields {}: not preserved in bundle output (key-state only)",
+                aggregate_dropped.join(", ")
             )
             .map_err(ToolkitError::Io)?;
         }
@@ -163,13 +173,17 @@ impl WalletFormatParser for BitcoinCoreParser {
         // SPEC §5.2 step 2: per-entry parse loop.
         let mut out: Vec<ParsedImport> = Vec::with_capacity(descriptors.len());
         for (i, entry) in descriptors.iter().enumerate() {
-            out.push(parse_entry(i, entry)?);
+            out.push(parse_entry(i, entry, wallet_name.clone())?);
         }
         Ok(out)
     }
 }
 
-fn parse_entry(idx: usize, entry: &Value) -> Result<ParsedImport, ToolkitError> {
+fn parse_entry(
+    idx: usize,
+    entry: &Value,
+    wallet_name: Option<String>,
+) -> Result<ParsedImport, ToolkitError> {
     let eobj = entry.as_object().ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bitcoin-core: parse error: descriptors[{idx}] is not an object"
@@ -185,11 +199,20 @@ fn parse_entry(idx: usize, entry: &Value) -> Result<ParsedImport, ToolkitError> 
             ))
         })?;
 
-    // SPEC §5.2 step 2.a: refuse xprv-bearing descriptors. Substring match is
-    // sufficient — xprv... base58 strings cannot collide with the rest of a
-    // legitimate xpub descriptor body (xpub-prefix variants are `xpub|tpub|
-    // ypub|Ypub|zpub|Zpub|upub|Upub|vpub|Vpub`; none contain `xprv`).
-    if desc_with_csum.contains("xprv") {
+    // SPEC §5.2 step 2.a (Phase 3 R0 architect C1+I1 folds): refuse any
+    // extended-private-key prefix, not just literal "xprv". Bitcoin Core's
+    // `listdescriptors true` on testnet/signet/regtest emits `tprv`; SLIP-132
+    // defines `yprv|Yprv|zprv|Zprv|uprv|Uprv|vprv|Vprv` private-key prefix
+    // variants. None were caught by the prior `contains("xprv")` check.
+    // Strip the BIP-380 `#<csum>` trailer before the substring scan so the
+    // checksum's bech32-style alphabet (which can contain the 4-char run
+    // `xprv` stochastically at probability ~5e-6 per descriptor) cannot
+    // false-positive a benign xpub descriptor.
+    let body_for_xprv_check = match desc_with_csum.rsplit_once('#') {
+        Some((body, _csum)) => body,
+        None => desc_with_csum,
+    };
+    if xprv_prefix_regex().is_match(body_for_xprv_check) {
         return Err(ToolkitError::ImportWalletXprvForbidden);
     }
 
@@ -270,6 +293,7 @@ fn parse_entry(idx: usize, entry: &Value) -> Result<ParsedImport, ToolkitError> 
         internal,
         range,
         dropped_fields,
+        wallet_name,
     });
 
     Ok(ParsedImport {
@@ -437,6 +461,20 @@ fn extract_threshold(descriptor_body: &str) -> Option<u8> {
     re.captures(descriptor_body)
         .and_then(|c| c.get(1))
         .and_then(|m| m.as_str().parse::<u8>().ok())
+}
+
+/// Match any extended-private-key prefix per BIP-32 + SLIP-132 (Phase 3 R0
+/// architect C1 fold). Mainnet `xprv`, testnet `tprv`, SLIP-132
+/// `yprv|Yprv|zprv|Zprv|uprv|Uprv|vprv|Vprv`. The trailing
+/// `[A-HJ-NP-Za-km-z1-9]+` ensures we match an actual base58check key body
+/// rather than the literal 4-char prefix substring (BIP-380 checksum
+/// false-positive guard, I1 fold).
+fn xprv_prefix_regex() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        Regex::new(r"[xtyzuvYZUV]prv[A-HJ-NP-Za-km-z1-9]+")
+            .expect("xprv_prefix_regex is a fixed string literal")
+    })
 }
 
 fn origin_capture_regex() -> &'static Regex {

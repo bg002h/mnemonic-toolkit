@@ -363,6 +363,72 @@ fn core_xprv_rejected_exit_2() {
 }
 
 // ============================================================================
+// Phase 3 R0 architect C1 fold — testnet `tprv` must also be refused
+// ============================================================================
+
+#[test]
+fn phase3_c1_fold_core_tprv_rejected_exit_2() {
+    // `bitcoin-cli -signet listdescriptors true` emits `tprv...` keys, not
+    // `xprv...`. The prior `desc.contains("xprv")` check let `tprv` slip
+    // through (downstream parse failed with a misleading "no xpub keys
+    // found" message). Post-fold: any extended-private-key prefix
+    // (xprv/tprv/yprv/Yprv/zprv/Zprv/uprv/Uprv/vprv/Vprv) must hit the
+    // helpful `ImportWalletXprvForbidden` template.
+    let blob = "{\n  \"wallet_name\": \"signet\",\n  \"descriptors\": [\n    {\n      \"desc\": \"wpkh([b8688df1/84'/1'/0']tprvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/<0;1>/*)#bbbbbbbb\",\n      \"active\": true,\n      \"internal\": false\n    }\n  ]\n}\n";
+    let assert = run_core_stdin(blob).failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let code = assert.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "tprv must hit ImportWalletXprvForbidden (exit 2); stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("listdescriptors") && stderr.contains("without `true`"),
+        "expected helpful rerun template even for tprv; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn phase3_c1_fold_core_slip132_zprv_rejected_exit_2() {
+    // SLIP-132 BIP-84-private-form prefix `zprv` — also refused.
+    let blob = "{\n  \"wallet_name\": \"sk\",\n  \"descriptors\": [\n    {\n      \"desc\": \"wpkh([b8688df1/84'/0'/0']zprvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/<0;1>/*)#cccccccc\",\n      \"active\": true,\n      \"internal\": false\n    }\n  ]\n}\n";
+    let assert = run_core_stdin(blob).failure();
+    let code = assert.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "zprv must also be refused");
+}
+
+// ============================================================================
+// Phase 3 R0 architect I1 fold — xprv substring in BIP-380 checksum must NOT
+// false-positive (checksum alphabet contains x/p/r/v independently).
+// ============================================================================
+
+#[test]
+fn phase3_i1_fold_xprv_substring_in_checksum_does_not_false_positive() {
+    // Build a benign xpub descriptor whose checksum field is set to a
+    // hand-crafted string containing the 4-char run `xprv`. Since the
+    // checksum is invalid, the parse will fail — but with the BIP-380
+    // checksum-validation error, NOT with `ImportWalletXprvForbidden`.
+    // The fold strips `#<csum>` before the substring scan so the
+    // checksum cannot trigger the xprv-refusal path.
+    let blob = "{\n  \"wallet_name\": \"sk\",\n  \"descriptors\": [\n    {\n      \"desc\": \"wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#xprvqzzz\",\n      \"active\": true,\n      \"internal\": false\n    }\n  ]\n}\n";
+    let assert = run_core_stdin(blob).failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let code = assert.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "expected parse-error tier; stderr: {stderr}");
+    // Must NOT route through the xprv-refusal template — that would be
+    // the false-positive class this regression cell defends against.
+    assert!(
+        !stderr.contains("listdescriptors") || !stderr.contains("without `true`"),
+        "BIP-380 checksum substring `xprv` must not false-positive ImportWalletXprvForbidden; stderr: {stderr}"
+    );
+    // Should route through the BIP-380 checksum-validation error path.
+    assert!(
+        stderr.contains("BIP-380") || stderr.contains("checksum"),
+        "expected BIP-380 checksum-validation error; stderr: {stderr}"
+    );
+}
+
+// ============================================================================
 // §3.10 — core_dropped_fields_notice
 // ============================================================================
 
