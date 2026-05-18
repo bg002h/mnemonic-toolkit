@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
-## mnemonic-toolkit [0.26.0] — UNRELEASED
+## mnemonic-toolkit [0.26.0] — 2026-05-18
 
 ### Added
 
@@ -30,7 +30,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
   `--json` envelope shape: `{"schema_version":"1","mode":"address-of-xpub","results":[{"target":"…","result":"match","chain":"external|internal","index":N,"script_type":"p2pkh|p2sh-p2wpkh|p2wpkh|p2tr"} | {"target":"…","result":"no_match","scanned_external":N,"scanned_internal":N}, ...],"xpub_canonical":"xpub…","xpub_variant":"zpub|ypub|…|null","gap_limit":N}`. Mixed match / no-match payloads supported; envelope shape stays stable. Exit codes: 0 all matched / 1 bad input (xpub parse error, multisig prefix, missing `--address-type` for neutral xpub) / 4 any unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) / 64 clap.
 
-  New files: `cmd/xpub_search/address_of_xpub.rs`, `cmd/xpub_search/address_search.rs`. 16 new integration cells (`tests/cli_xpub_search_address_of_xpub.rs`). Umbrella `cmd/xpub_search/mod.rs` extended with the `AddressOfXpub` variant + dispatch arm.
+  New files: `cmd/xpub_search/address_of_xpub.rs`, `cmd/xpub_search/address_search.rs`. 17 new integration cells (`tests/cli_xpub_search_address_of_xpub.rs`; 16 in the C3 commit + 1 added in the C3 R0 fold for `--network signet` override). Umbrella `cmd/xpub_search/mod.rs` extended with the `AddressOfXpub` variant + dispatch arm.
 
 - **`mnemonic xpub-search account-of-descriptor`** (C2) — second mode of the `xpub-search` umbrella. Given a seed (BIP-39 phrase OR ms1 card) + a wallet descriptor, identify which cosigner role(s) the seed plays and at which account index. Three descriptor input shapes auto-detected per tie-break order: (1) BIP-388 wallet-policy JSON (starts-with `{`); (2) md1 card(s) (`md1` HRP — single inline OR `--descriptor-from md1=-` stdin one-chunk-per-line); (3) external literal-xpub descriptors (Sparrow/Specter/Core/Electrum/Liana/Caravan/Coldcard). Toolkit `@N`-placeholder descriptors are REFUSED (synthetic xpubs are non-searchable). Explicit shape override via `--descriptor-from <node>=<value>` where `<node>` is `literal` / `md1` / `bip388`.
 
@@ -76,7 +76,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ### Changed
 
-- **`mnemonic convert` — P2PKH gap-fix in `build_address_from_xpub`** (C3, plan §5.3) — extends the address-rendering primitive (and the `--script-type` / `--address-type` clap value-parser surface) to support P2PKH alongside the prior `p2sh-p2wpkh` / `p2wpkh` / `p2tr` set. Five-site edit: `ScriptType` enum gains a `P2pkh` variant; `parse_script_type_arg` accepts the `"p2pkh"` token; `script_type_from_template` maps `CliTemplate::Bip44 → ScriptType::P2pkh`; `build_address_from_xpub` adds the `ScriptType::P2pkh => Address::p2pkh(...)` arm; the prior P2PKH refusal in `mnemonic convert --script-type p2pkh` is relaxed (it was a gap left at v0.13.0+ — BIP-44 was supported by `mnemonic bundle` / `mnemonic export-wallet` but `mnemonic convert` refused the script-type at parse-time). Three cells in `tests/cli_convert_address.rs` updated: refusal-relaxation + new P2PKH happy-path for `xpub6...` parents. Required by `xpub-search address-of-xpub --address-type p2pkh`; the gap-fix is bundled with C3 rather than carried as a separate patch because the two land in the same logical surface and share regression-test scope.
+- **`mnemonic convert` — P2PKH gap-fix in `build_address_from_xpub`** (C3, plan §5.3) — extends the address-rendering primitive (and the `--script-type` / `--address-type` clap value-parser surface) to support P2PKH alongside the prior `p2sh-p2wpkh` / `p2wpkh` / `p2tr` set. Five-site edit: `ScriptType` enum gains a `P2pkh` variant; `parse_script_type_arg` accepts the `"p2pkh"` token; `script_type_from_template` maps `CliTemplate::Bip44 → ScriptType::P2pkh`; `build_address_from_xpub` adds the `ScriptType::P2pkh => Address::p2pkh(...)` arm; the prior P2PKH refusal in `mnemonic convert --script-type p2pkh` is relaxed (it was a gap left at v0.13.0+ — BIP-44 was supported by `mnemonic bundle` / `mnemonic export-wallet` but `mnemonic convert` refused the script-type at parse-time). Four cells in `tests/cli_convert_address.rs` touched: existing `refusal_address_no_script_type` updated to mention `p2pkh` in the value-parser refusal list; new `bip44_template_infers_p2pkh_v0_26_0`, `refusal_invalid_script_type_value`, and `xpub_to_address_p2pkh_explicit_script_type_v0_26_0`. Required by `xpub-search address-of-xpub --address-type p2pkh`; the gap-fix is bundled with C3 rather than carried as a separate patch because the two land in the same logical surface and share regression-test scope.
 
 ## mnemonic-toolkit [0.25.1] — 2026-05-18
 
