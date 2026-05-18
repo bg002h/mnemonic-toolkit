@@ -90,16 +90,16 @@ ToolkitError variant naming: no `Error` suffix (matches `DescriptorParse`/`Conve
 | 2 | `--bip38-passphrase` | convert |
 | 3 | `--ms1` | verify-bundle, **import-wallet (new)** |
 | 4 | `--share` | slip39-combine, seed-xor-combine |
-| 5 | `--slot @N.phrase=` | bundle, synthesize, derive-child (via slot-subkey infra) |
-| 6 | `--slot @N.ms1=` | bundle, synthesize, verify-bundle (via slot-subkey infra) |
+| 5 | `--slot @N.<subkey>=` (secret-bearing subkeys: `phrase`, `entropy`, `wif`, `xprv`) | bundle, verify-bundle (via slot-subkey infra at `slot_input.rs`) |
+| 6 | `--from <node>=` (secret-bearing nodes: `phrase`, `entropy`, `wif`, `xprv`, `minikey`, `electrum-phrase`) | convert, derive-child, slip39-{split,combine}, seed-xor-{split,combine} (via composite-node infra at `from_input.rs`) |
 
-Stdin-form variants (`--passphrase-stdin`, `--bip38-passphrase-stdin`) are unaffected — already non-argv.
+Stdin-form variants (`--passphrase-stdin`, `--bip38-passphrase-stdin`, `--from <node>=-`, `--slot @N.<subkey>=-`) are unaffected — already non-argv. Note: `SlotSubkey` enum (`slot_input.rs:17-32`) does NOT have an `Ms1` variant; prior plan-doc references to `--slot @N.ms1=` were inaccurate (the `--ms1` direct flag is row 3 above; per-cosigner ms1 material is supplied via `--slot @N.entropy=` for raw-hex form or via `import-wallet --ms1` for the import-side overlay).
 
 ### §3.2 Grammar
 
 Sentinel: `@env:<VARNAME>` where `<VARNAME>` matches the POSIX env-var-name regex `[A-Z_][A-Z0-9_]*`.
 
-- **Resolution scope (NORMATIVE):** sentinel resolution applies ONLY at the 6 secret-flag surfaces enumerated in §3.1. Non-secret flags treat `@env:VAR` as literal text (no resolution attempted). This is the locked rule per §7.0.d.
+- **Resolution scope (NORMATIVE):** sentinel resolution applies ONLY at the 6 secret-flag-surface classes enumerated in §3.1. Non-secret flags treat `@env:VAR` as literal text (no resolution attempted). This is the locked rule per §7.0.d. Row 5 (`--slot @N.<subkey>=`) and row 6 (`--from <node>=`) are composite forms covering all secret-bearing subkey/node variants enumerated in the row; resolution applies per-element on the composite form's secret-bearing values.
 - Whole-value sentinel (no concatenation): `--ms1 @env:MNEMONIC_MS1_0` ✓; `--ms1 prefix@env:VAR` ✗ (treated as literal).
 - Resolution: clap-parse-time substitution via `std::env::var(VARNAME)` invoked from the 6 enumerated callsites.
 - Missing/unset env-var → exit 1 with cross-cutting `EnvVarMissing` variant.

@@ -711,8 +711,13 @@ pub fn run<R: Read, W: Write, E: Write>(
     // exit 5 short-circuit.
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
-    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before argv-leakage
-    // advisory + downstream consumption.
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
+    // v0.26.0 §I1 fold: emit BEFORE `@env:` sentinel resolution so
+    // sentinel-bearing flag values are skipped.
+    emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
+    // consumption.
     let env_resolved_owned;
     let args: &ConvertArgs = if needs_env_sentinel_resolution(args) {
         env_resolved_owned = resolve_env_sentinels(args)?;
@@ -720,9 +725,6 @@ pub fn run<R: Read, W: Write, E: Write>(
     } else {
         args
     };
-
-    // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
-    emit_secret_in_argv_advisories(args, stderr);
 
     // 1) Single-from-value constraint (§5).
     let mut primaries: Vec<&FromInput> = args
@@ -1546,16 +1548,25 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
         if f.value == "-" {
             continue;
         }
+        // v0.26.0 §I1 fold: skip sentinel-bearing values; user opted into
+        // the @env: leak-mitigation channel.
+        if f.value.starts_with("@env:") {
+            continue;
+        }
         let node = f.node.as_str();
         let flag = format!("--from {node}=");
         let alt = format!("--from {node}=-");
         secret_in_argv_warning(stderr, &flag, &alt);
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        }
     }
-    if args.bip38_passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+    if let Some(bpp) = args.bip38_passphrase.as_deref() {
+        if !bpp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+        }
     }
 }
 

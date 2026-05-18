@@ -135,9 +135,18 @@ pub fn run<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before argv-leakage
-    // advisories + downstream consumption. Skipped when no sentinel is
-    // present to avoid an unnecessary `args.clone()`.
+    // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE any
+    // dispatch logic so the advisory fires uniformly regardless of
+    // downstream success/error. v0.26.0 §I1 fold: emit BEFORE
+    // `@env:` sentinel resolution so the advisory sees the literal
+    // sentinel string and can skip values that already used the
+    // env-var leak-mitigation channel (sentinel-bearing flags do NOT
+    // get the warning — the user already opted out of argv exposure).
+    emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
+    // consumption. Skipped when no sentinel is present to avoid an
+    // unnecessary `args.clone()`.
     let env_resolved_owned;
     let args: &BundleArgs = if needs_env_sentinel_resolution(args) {
         env_resolved_owned = resolve_env_sentinels(args)?;
@@ -145,12 +154,6 @@ pub fn run<W: Write, E: Write>(
     } else {
         args
     };
-
-    // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE any
-    // dispatch logic so the advisory fires uniformly regardless of
-    // downstream success/error (the xprv-slot rejection at L470+ still
-    // surfaces, but the user has already been warned about the leak).
-    emit_secret_in_argv_advisories(args, stderr);
     let synthetic_args;
     let args: &BundleArgs = if needs_stdin_substitution(args) {
         synthetic_args = apply_stdin_substitutions(args, stdin)?;
@@ -1514,14 +1517,19 @@ pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), Toolk
 fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &BundleArgs, stderr: &mut E) {
     use crate::secret_advisory::secret_in_argv_warning;
     for s in &args.slot {
-        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() {
+        if s.subkey.is_secret_bearing()
+            && !s.is_stdin_sentinel()
+            && !s.value.starts_with("@env:")
+        {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
             let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
             secret_in_argv_warning(stderr, &flag, &alt);
         }
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        }
     }
 }
 

@@ -750,3 +750,89 @@ fn env_var_lifecycle_no_leak_to_argv() {
     drop(child.stdin.take());
     let _ = child.wait();
 }
+
+// ============================================================================
+// Phase 1 R0 architect I1 fold — secret-in-argv advisory MUST NOT fire
+// when the user supplied the secret via the @env: leak-mitigation channel.
+// ============================================================================
+
+#[test]
+fn i1_fold_no_advisory_when_passphrase_uses_env_sentinel() {
+    // bundle --passphrase @env:VAR must NOT emit the secret-in-argv
+    // warning on stderr (user already routed via env-var channel).
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("WALLET_PP_I1", "")
+        .args([
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--passphrase",
+            "@env:WALLET_PP_I1",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("secret material on argv (--passphrase)"),
+        "Phase 1 I1 regression: argv-leak advisory fired despite @env: sentinel; stderr was: {stderr:?}"
+    );
+}
+
+#[test]
+fn i1_fold_advisory_still_fires_on_literal_passphrase() {
+    // Control case: a literal --passphrase value (no sentinel) must STILL
+    // emit the secret-in-argv warning (advisory not silenced wholesale).
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--passphrase",
+            "literal-secret-not-sentinel",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("secret material on argv (--passphrase)"),
+        "literal --passphrase must still fire the argv-leak advisory; stderr was: {stderr:?}"
+    );
+}
+
+#[test]
+fn i1_fold_no_advisory_when_slot_phrase_uses_env_sentinel() {
+    // --slot @N.phrase=@env:VAR must NOT emit the per-slot
+    // secret-in-argv advisory.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("PHRASE_I1", TREZOR_24)
+        .args([
+            "bundle",
+            "--slot",
+            "@0.phrase=@env:PHRASE_I1",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("secret material on argv (--slot @0.phrase=)"),
+        "Phase 1 I1 regression: per-slot argv-leak advisory fired despite @env: sentinel; stderr was: {stderr:?}"
+    );
+}
