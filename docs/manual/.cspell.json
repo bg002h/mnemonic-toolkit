@@ -112,6 +112,7 @@
     "unstored",
     "untracked",
     "unspendable",
+    "usize",
     "UTXOs",
     "walleted",
     "wordlist",

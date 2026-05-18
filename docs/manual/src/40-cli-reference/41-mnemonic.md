@@ -1467,6 +1467,28 @@ better data for the failing chunk.
 | `chunk_index N` data-part length is 94 or 95 | `repair: chunk N data-part length L is in BIP-93's reserved-invalid band [94, 95]; re-type the chunk` |
 | `chunk_index N` data-part length triggers long code for an HRP whose codec doesn't define one (`ms` / `md`) | `repair: chunk N data-part length L would require the long BCH code, which is not defined for HRP 'X' in this codec version` |
 | No chunks supplied | `repair: no chunks supplied` |
+| Post-correction sibling-codec decode failed (`ms1` / `md1` only, v0.23.0+) | `repair: chunk N post-correction decode failed: <upstream codec Display>` (chunk index `N` is omitted when atomic-fail context lost the offending chunk's position). |
+
+#### `PostCorrectionDecodeFailed` (v0.23.0)
+
+At v0.23.0, the `ms1` and `md1` repair branches delegate to the
+sibling codecs' native `decode_with_correction` APIs
+(`ms_codec::decode_with_correction` from ms-codec v0.2.0 +
+`md_codec::decode_with_correction` from md-codec v0.34.0) instead of
+the v0.22.x toolkit-side BCH primitive (which vendored
+`MS_NUMS_TARGET` + `MD_NUMS_TARGET` constants). Because the
+sibling-codec wrappers run BCH correction AND the full §4-rule
+wire-format decoder in one call, decoder errors that occur AFTER
+BCH correction (e.g. ms-codec's `ThresholdNotZero` / `TagInvalidAlphabet`
+/ `PayloadLengthMismatch` orphan §4-rule variants, or md-codec's
+`BitStreamTruncated` / `WireVersionMismatch` wire-format variants)
+surface through a new `RepairError::PostCorrectionDecodeFailed { chunk_index: Option<usize>, detail: String }` variant.
+
+This is the catch-all for sibling-codec error variants that the
+toolkit's per-variant translation table does not enumerate individually.
+The `detail` field is the upstream codec's `Display`-rendered error,
+verbatim. Mk1 repair is unaffected (mk-codec primitives are still
+consumed natively per the unchanged Mk1 branch).
 
 ### Advisories
 

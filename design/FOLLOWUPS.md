@@ -94,7 +94,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `mnemonic-secret/crates/ms-codec/src/decode.rs` (cross-repo).
 - **What:** Add `pub fn decode_with_correction(s: &str) -> Result<(Tag, Payload, Vec<RepairDetail>)>` that internally runs BCH correction within t=4 capacity before the existing decode pipeline. This lets the toolkit's `repair.rs` consume the sibling-codec native API instead of replicating BCH primitives.
 - **Why deferred:** v0.22.0 toolkit-side launch first; consume sibling-codec native APIs once promoted.
-- **Status:** open
+- **Status:** `resolved 2026-05-17` — v0.22.x follow-ups cycle Phase B.3+B.4: ms-codec v0.2.0 shipped at `bg002h/mnemonic-secret` `f3fa531` (Phase B.4) with new `bch` module (B.3 `676097d`) + `bch_decode` module + `decode_with_correction(&str) -> Result<(Tag, Payload, Vec<CorrectionDetail>), Error>` + new `Error::TooManyErrors { bound: 8 }` variant. Toolkit-side consumer migration tracked at the companion `toolkit-repair-consume-native-codec-api` entry below (resolved at toolkit `b8ca6df`).
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-secret`
 
@@ -104,7 +104,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `descriptor-mnemonic/crates/md-codec/src/bch.rs` (currently `pub(crate)`; cross-repo).
 - **What:** Promote `bch::polymod_run` / `bch::hrp_expand` / `bch::MD_REGULAR_CONST` to `pub`, OR add a `pub fn decode_with_correction(strings: &[&str]) -> Result<Descriptor>` wrapper. Either path lets the toolkit's `repair.rs` consume md-codec primitives instead of vendoring `MD_NUMS_TARGET`.
 - **Why deferred:** v0.22.0 vendored the constant + drift-gates it via `#[cfg(test)]` against an md1 stability suite.
-- **Status:** open
+- **Status:** `resolved 2026-05-17` — v0.22.x follow-ups cycle Phase B.1+B.2: md-codec v0.34.0 shipped at `bg002h/descriptor-mnemonic` `56dc300` (Phase B.2) with visibility promotions (B.1 `94069ea`: `pub const GEN_REGULAR` / `MD_REGULAR_CONST` + `pub fn polymod_run` / `hrp_expand` / `bch_create_checksum_regular` / `bch_verify_regular`) + new `bch_decode` module (~450 LOC BM+Chien port) + `decode_with_correction(&[&str]) -> Result<(Descriptor, Vec<CorrectionDetail>), Error>` + new `Error::TooManyErrors { chunk_index, bound: 8 }` variant. Toolkit-side consumer migration tracked at the companion `toolkit-repair-consume-native-codec-api` entry below (resolved at toolkit `b8ca6df`). Follow-up scope tracked at new `md-codec-decode-with-correction-supports-non-chunked-md1` (this file).
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/descriptor-mnemonic`
 
@@ -113,7 +113,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
 - **Where:** `mnemonic-secret/crates/ms-cli/src/cmd/` (NEW subcommand; cross-repo).
 - **What:** Add `ms repair <ms1>` for ms1 BCH error-correction. Mirrors `mnemonic repair --ms1`. Blocked on `ms-codec-decode-with-correction-public-api`.
-- **Status:** open (blocked)
+- **Status:** `resolved 2026-05-17` — v0.22.x follow-ups cycle Phase B.5: ms-cli v0.4.0 shipped at `bg002h/mnemonic-secret` `18f558a`. New `ms-cli/src/cmd/repair.rs` with `--ms1 <MS1>` required option + `--json` + exit-code parity (`0`/`5`/`2`) + cross-CLI `RepairJson` parser-reuse (D27) + D9 secret-on-stdout advisory preserved. Wraps `ms_codec::decode_with_correction` (B.4). D25 handler-signature unification cascade (5 pre-existing handlers `Result<()>` → `Result<u8>` with `Ok(0)` terminators). 5 integration cells.
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-secret`
 
@@ -132,7 +132,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 brainstorm.
 - **Where:** `descriptor-mnemonic/crates/md-cli/src/cmd/` (NEW subcommand; cross-repo).
 - **What:** Add `md repair <md1>...` for md1 BCH error-correction. Blocked on `md-codec-decode-with-correction-public-api`.
-- **Status:** open (blocked)
+- **Status:** `resolved 2026-05-17` — v0.22.x follow-ups cycle Phase B.6: md-cli v0.6.0 shipped at `bg002h/descriptor-mnemonic` `d4fbe48`. New `md-cli/src/cmd/repair.rs` with variadic `<MD1_STRINGS>...` positional + `--json` + atomic per-chunk semantics per plan §1 D28 (any chunk failing BCH capacity aborts the whole call; no partial output) + exit-code parity (`0`/`5`/`2`) + cross-CLI `RepairJson` parser-reuse (D27). Wraps `md_codec::decode_with_correction` (B.2). D25 handler-signature unification cascade (9 pre-existing handlers `Result<(), CliError>` → `Result<u8, CliError>` with `Ok(0)` terminators). 5 integration cells. Surfaced new chunked-form-only constraint tracked at companion `md-codec-decode-with-correction-supports-non-chunked-md1`.
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/descriptor-mnemonic`
 
@@ -142,8 +142,18 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/repair.rs`.
 - **What:** Once `ms-codec` + `md-codec` expose native `decode_with_correction` (siblings to mk-codec's existing internal correction), refactor `repair.rs` to delegate per-HRP to each codec's native correction primitive instead of parameterizing the toolkit's own polymod calls. Cleaner layering; one BCH implementation per codec instead of toolkit-side parameter-juggling.
 - **Why deferred:** cross-repo dep chain; awaits items #2 and #3.
-- **Status:** open (blocked)
+- **Status:** `resolved b8ca6df` — v0.22.x follow-ups cycle Phase B.7 (mnemonic-toolkit v0.23.0). Deleted `MS_NUMS_TARGET` (was `repair.rs:42`) + `MD_NUMS_TARGET` (was `repair.rs:45`) vendored constants. Deleted `(Self::Ms1, BchCode::Regular)` and `(Self::Md1, BchCode::Regular)` arms from `CardKind::target_residue()` (mk1 arms unchanged — mk-codec primitives still consumed natively). New `repair_via_ms_codec` + `repair_via_md_codec` private helpers delegate to `ms_codec::decode_with_correction` (B.4) and `md_codec::decode_with_correction` (B.2) respectively, with sibling-codec error → `RepairError` translation per plan §2.B.4 D29 error-mapping table. New `RepairError::PostCorrectionDecodeFailed { chunk_index: Option<usize>, detail: String }` catch-all variant absorbs orphan §4-rule decoder errors that the per-variant translation table did not enumerate. Public `repair_card` contract unchanged. All 32 pre-existing repair cells stay green via substring-match (not byte-exact equality).
 - **Tier:** `cross-repo`
+
+### `md-codec-decode-with-correction-supports-non-chunked-md1` — toolkit consumer perspective of the chunked-form-only constraint
+
+- **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle Phase B.6 implementation surfaced the gap; filed at Phase B.8 (release-boundary docs). Toolkit-side companion to the descriptor-mnemonic primary entry.
+- **Where:** `crates/mnemonic-toolkit/src/repair.rs::repair_via_md_codec` (Phase B.7 delegation point) → `md_codec::decode_with_correction` (B.2 surface) → `chunk::split` + `chunk::reassemble` (the chunked-form-only integration points). After Phase B.7 migration, the toolkit's `mnemonic repair --md1` inherits the chunked-form-only constraint: users attempting to repair a non-chunked single-string md1 (the form emitted by plain `md encode` for small payloads) see a wire-format-mismatch error from the sibling codec, wrapped through `repair_via_md_codec` as `RepairError::UnparseableInput` or `RepairError::PostCorrectionDecodeFailed`.
+- **What:** Toolkit-side consumer tracker for the md-codec primary. When the primary lands its non-chunked-form coverage, the toolkit migration (no code change required — the delegation already routes through the updated md-codec API) needs a CHANGELOG note + manual chapter update + smoke test confirming non-chunked-form repair works end-to-end through the toolkit's `mnemonic repair --md1`. No toolkit code change in v0.23.0; consumption tracked for the future md-codec patch release.
+- **Why deferred:** Primary work lives in md-codec (B.2's `chunk::split`/`chunk::reassemble` integration); toolkit consumes whatever md-codec exposes. The chunked-form path covers the most common multi-chunk error-recovery use case; the non-chunked-form tail-case is a UX nice-to-have.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/descriptor-mnemonic` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (primary); `bg002h/mnemonic-secret` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (sibling-codec mirror); `bg002h/mnemonic-gui` `FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (GUI-side consumer).
 
 ### `hrp-correction-heuristics` — Levenshtein-1 HRP-typo auto-suggestion
 

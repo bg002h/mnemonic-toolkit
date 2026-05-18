@@ -30,6 +30,7 @@ md bytecode
 md compile
 md vectors
 md verify
+md repair
 
 # ms
 ms encode
@@ -37,6 +38,7 @@ ms decode
 ms inspect
 ms verify
 ms vectors
+ms repair
 
 # mk
 mk encode
