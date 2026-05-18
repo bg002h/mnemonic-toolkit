@@ -70,14 +70,14 @@ pub struct VerifyBundleArgs {
     /// The `mk1` xpub card(s) to verify. Single-sig: one `--mk1`.
     /// Multisig: one `--mk1` per cosigner, in slot order. Mutually
     /// exclusive with `--bundle-json`.
-    #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
+    #[arg(long, num_args = 1.., required_unless_present_any = ["bundle_json", "extra_strings"], conflicts_with = "bundle_json")]
     pub mk1: Vec<String>,
 
     /// The `md1` wallet-policy card(s) to verify. Single-sig
     /// templates emit one md1; multisig templates emit one md1
     /// total (the policy is shared). Mutually exclusive with
     /// `--bundle-json`.
-    #[arg(long, num_args = 1.., required_unless_present = "bundle_json", conflicts_with = "bundle_json")]
+    #[arg(long, num_args = 1.., required_unless_present_any = ["bundle_json", "extra_strings"], conflicts_with = "bundle_json")]
     pub md1: Vec<String>,
 
     /// v0.4.3 Phase Q: read supplied ms1/mk1/md1 cards from a JSON envelope
@@ -109,6 +109,19 @@ pub struct VerifyBundleArgs {
     /// for grammar.
     #[arg(long = "slot", action = clap::ArgAction::Append, value_parser = crate::slot_input::parse_slot_input)]
     pub slot: Vec<SlotInput>,
+
+    /// v0.24.0 §2.C.1 — positional `<STRING>...` intake. Each value
+    /// self-identifies by HRP prefix (`ms1` / `mk1` / `md1`) and is routed
+    /// to the same internal storage as the matching typed flag. Unknown
+    /// HRPs are rejected with `ToolkitError::UnknownHrp`. Mutually
+    /// exclusive with `--bundle-json` (per I3 fold — preserves the
+    /// existing `--bundle-json XOR cards-group` mutex).
+    #[arg(
+        value_name = "STRING",
+        num_args = 0..,
+        conflicts_with = "bundle_json",
+    )]
+    pub extra_strings: Vec<String>,
 }
 
 impl VerifyBundleArgs {
@@ -128,11 +141,30 @@ pub fn run<W: Write, E: Write>(
     use crate::cmd::bundle::mode_text;
     use std::io::IsTerminal;
 
-    // v0.22.1 D18 — TTY-conditional auto-fire. Test harness may set
-    // `MNEMONIC_FORCE_TTY=1` to force the TTY-positive path under cargo
-    // test (where stdout is never a real terminal). `MNEMONIC_FORCE_TTY=0`
-    // forces the opposite. NOT exposed via --help (env vars are not part
-    // of the clap-derive surface) or gui-schema. Documented test-only.
+    // v0.22.1 D18 — TTY-conditional auto-fire. The `MNEMONIC_FORCE_TTY`
+    // environment variable is a **first-class public-API contract**
+    // (semver-stable as of v0.24.0; previously classified test-only at
+    // v0.22.1 D23, promoted per FOLLOWUP
+    // `toolkit-mnemonic-force-tty-promote-from-test-only`).
+    //
+    // Semantics:
+    //   - `MNEMONIC_FORCE_TTY=1` forces the TTY-positive auto-fire path.
+    //   - `MNEMONIC_FORCE_TTY=0` forces the TTY-negative legacy path.
+    //   - unset / any other value → falls back to `is_terminal()` runtime
+    //     detection.
+    //
+    // Known consumers (must continue working through future toolkit
+    // refactors per the public-API contract):
+    //   - `mnemonic-gui` v0.9.0+ subprocess spawn env (the GUI's stdin/stdout
+    //     pipes are not real TTYs, so without the env override the toolkit
+    //     would never auto-fire repair under GUI invocations).
+    //   - the toolkit's own integration test suite, which sets =1 to force
+    //     auto-fire under `cargo test` (cargo's test harness pipes stdout).
+    //
+    // NOT exposed via clap `--help` (environment variables are not part of
+    // the clap-derive surface) or `mnemonic gui-schema` JSON. Documented in
+    // the user manual at `docs/manual/src/40-cli-reference/41-mnemonic.md`
+    // under the verify-bundle / repair auto-fire section.
     let tty = match std::env::var("MNEMONIC_FORCE_TTY").ok().as_deref() {
         Some("1") => true,
         Some("0") => false,
@@ -145,10 +177,41 @@ pub fn run<W: Write, E: Write>(
     // intake so the advisory fires uniformly even on the synthetic-args
     // intake path.
     emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.24.0 §2.C.1 (D34/I5 fold) — strict per-flag HRP validation across
+    // verify-bundle's typed `--ms1` / `--mk1` / `--md1` flag args. Mirrors
+    // the same gate in `cmd::repair::run` + `cmd::inspect::run` so all three
+    // subcommands enforce mismatched-HRP rejection uniformly (architect
+    // review C1 fold — previously verify-bundle dropped through to sibling
+    // codec parse errors with no flag-name attribution).
+    for v in &args.ms1 {
+        crate::repair::validate_flag_hrp("--ms1", "ms", v)?;
+    }
+    for v in &args.mk1 {
+        crate::repair::validate_flag_hrp("--mk1", "mk", v)?;
+    }
+    for v in &args.md1 {
+        crate::repair::validate_flag_hrp("--md1", "md", v)?;
+    }
+
     let stdin_synth;
     let args: &VerifyBundleArgs = if needs_stdin_substitution(args) {
         stdin_synth = apply_stdin_substitutions(args, stdin)?;
         &stdin_synth
+    } else {
+        args
+    };
+
+    // v0.24.0 §2.C.1 — positional `<STRING>...` intake. Route each
+    // positional value to the matching typed-flag bucket (ms1/mk1/md1)
+    // by HRP prefix. Unknown HRPs return `ToolkitError::UnknownHrp`.
+    // Mutually exclusive with `--bundle-json` at clap-parse time
+    // (per I3 fold; `conflicts_with = "bundle_json"` on the
+    // `extra_strings` arg).
+    let positional_synth;
+    let args: &VerifyBundleArgs = if !args.extra_strings.is_empty() {
+        positional_synth = apply_positional_hrp_autodetect(args)?;
+        &positional_synth
     } else {
         args
     };
@@ -330,6 +393,10 @@ fn run_watch_only<W: Write, E: Write>(
     )
     .ok();
 
+    // v0.24.0 D30 — defense-in-depth cross-check between supplied mk1 xpub
+    // fields and md1's claimed OriginPath. Warns (not errors) on mismatch.
+    emit_watch_only_xpub_path_cross_check(&args.mk1, &args.md1, false, stderr);
+
     let template = args.template_unchecked();
     // verify-bundle does not surface SLIP-0132 input-normalization signals.
     // SPEC `design/SPEC_convert_v0_6.md` §11 v0.7 amendment (Option B): checker
@@ -410,6 +477,10 @@ fn run_multisig<W: Write, E: Write>(
             "warning: Use --slot @N.phrase= mode for end-to-end verification of self-multisig backups."
         )
         .ok();
+
+        // v0.24.0 D30 — defense-in-depth cross-check between supplied mk1
+        // xpub fields and md1's claimed OriginPath, per-cosigner.
+        emit_watch_only_xpub_path_cross_check(&args.mk1, &args.md1, true, stderr);
     }
 
     let template = args.template_unchecked();
@@ -852,6 +923,39 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
         mk1,
         md1,
         bundle_json: None,
+        ..args.clone()
+    })
+}
+
+/// v0.24.0 §2.C.1 — route `extra_strings` positional values to the
+/// typed-flag buckets (ms1/mk1/md1) by HRP prefix. Returns a synthetic
+/// `VerifyBundleArgs` with the positional values merged into the
+/// existing flag-form vectors (flag-form first, then positional). The
+/// `extra_strings` field is cleared on the synthetic args.
+///
+/// Unknown HRPs return `ToolkitError::UnknownHrp` per D34/I5 (toolkit-
+/// internal validation; not a clap parser callback).
+///
+/// Mutual exclusion with `--bundle-json` is enforced at clap-parse time
+/// by the `conflicts_with = "bundle_json"` attribute on `extra_strings`.
+fn apply_positional_hrp_autodetect(
+    args: &VerifyBundleArgs,
+) -> Result<VerifyBundleArgs, ToolkitError> {
+    let mut ms1 = args.ms1.clone();
+    let mut mk1 = args.mk1.clone();
+    let mut md1 = args.md1.clone();
+    for s in &args.extra_strings {
+        match crate::repair::classify_hrp_prefix(s)? {
+            crate::repair::CardKind::Ms1 => ms1.push(s.clone()),
+            crate::repair::CardKind::Mk1 => mk1.push(s.clone()),
+            crate::repair::CardKind::Md1 => md1.push(s.clone()),
+        }
+    }
+    Ok(VerifyBundleArgs {
+        ms1,
+        mk1,
+        md1,
+        extra_strings: Vec::new(),
         ..args.clone()
     })
 }
@@ -1743,6 +1847,220 @@ fn emit_md1_checks(
         }
     }
     Ok(())
+}
+
+// ============================================================================
+// v0.24.0 sub-item 1 — D30 watch-only xpub↔path cross-check.
+// ============================================================================
+
+/// Watch-only defense-in-depth cross-check between supplied mk1 cards and the
+/// supplied md1 card. Operates entirely on the decoded structs (no seed
+/// required); emits stderr WARNING lines for each detected inconsistency.
+///
+/// Closes `verify-bundle-watch-only-xpub-path-internal-consistency` (D30
+/// tier upgrade from `v1+` to `v0.24.0`). Distinct from the existing
+/// "compare each card against a synthesized expected Bundle" path: that path
+/// holds when the user-supplied template + slots match the cards' origin;
+/// the cross-check below is independent of the synthesized expectation and
+/// catches mk1↔md1 internal inconsistency even when both cards happen to
+/// agree with the synthesized Bundle (e.g. via tampering on both sides).
+///
+/// Three cross-checks per cosigner (all on already-decoded fields):
+///   1. mk1.xpub.depth == md1 OriginPath length.
+///   2. mk1.xpub.child_number == md1 OriginPath last component
+///      (value + hardened bit).
+///   3. mk1.xpub.parent_fingerprint sanity: at depth 0 it must be all-zeros
+///      (BIP-32 master invariant); at depth 1 it must equal mk1's claimed
+///      origin_fingerprint (the master fingerprint) when the latter is
+///      supplied. Deeper paths skip this check (would require deriving the
+///      parent xpub, which the watch-only path cannot do).
+///
+/// Failure mode: stderr WARNING (not hard error). Matches existing watch-only
+/// stderr disclaimer pattern (see `run_watch_only` and `run_multisig`'s
+/// watch-only branch). The verify-bundle exit code is unchanged.
+fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
+    supplied_mk1: &[String],
+    supplied_md1: &[String],
+    is_multisig: bool,
+    stderr: &mut E,
+) {
+    // Decode md1; bail silently on failure — the regular `md1_decode` check
+    // path will surface decode errors via the VerifyCheck schema.
+    let md1_strs: Vec<&str> = supplied_md1.iter().map(|s| s.as_str()).collect();
+    let desc = match md_codec::chunk::reassemble(&md1_strs) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    // Map of cosigner index → md1's OriginPath. Use TLV
+    // origin_path_overrides if present (per-`@N` override), else path_decl.
+    let n = desc.n as usize;
+    let md_path_for = |idx: usize| -> Option<md_codec::origin_path::OriginPath> {
+        if let Some(overrides) = &desc.tlv.origin_path_overrides {
+            if let Some((_, op)) = overrides.iter().find(|(i, _)| *i as usize == idx) {
+                return Some(op.clone());
+            }
+        }
+        match &desc.path_decl.paths {
+            md_codec::origin_path::PathDeclPaths::Shared(op) => Some(op.clone()),
+            md_codec::origin_path::PathDeclPaths::Divergent(v) => v.get(idx).cloned(),
+        }
+    };
+
+    // Map of cosigner index → claimed master fingerprint (TLV fingerprints,
+    // wallet-policy mode only).
+    let md_fp_for = |idx: usize| -> Option<[u8; 4]> {
+        desc.tlv
+            .fingerprints
+            .as_ref()
+            .and_then(|v| v.iter().find(|(i, _)| *i as usize == idx).map(|(_, fp)| *fp))
+    };
+
+    // Decode supplied mk1 cards. For multisig, group by chunk_set_id (mirrors
+    // emit_multisig_checks's grouping logic at the top of that function).
+    let mk_cards: Vec<(usize, mk_codec::KeyCard)> = if is_multisig {
+        use std::collections::BTreeMap;
+        let mut chunked: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
+        let mut singles: Vec<Vec<&str>> = Vec::new();
+        for s in supplied_mk1 {
+            match chunk_set_id_extract(s) {
+                Some(csi) => chunked.entry(csi).or_default().push(s.as_str()),
+                None => singles.push(vec![s.as_str()]),
+            }
+        }
+        let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
+        let mut out: Vec<(usize, mk_codec::KeyCard)> = Vec::new();
+        // Map each decoded card to its cosigner index via md1.tlv.pubkeys
+        // when in wallet-policy mode, else positional.
+        let pubkeys = desc.tlv.pubkeys.as_ref();
+        let mut assigned = vec![false; n];
+        for (gi, g) in groups.iter().enumerate() {
+            let card = match mk_codec::decode(g) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let want = crate::synthesize::xpub_to_65(&card.xpub);
+            let mut placed_idx: Option<usize> = None;
+            if let Some(pubs) = pubkeys {
+                if let Some((slot, _)) = pubs.iter().find(|(slot, b)| {
+                    b == &want && (*slot as usize) < n && !assigned[*slot as usize]
+                }) {
+                    placed_idx = Some(*slot as usize);
+                }
+            }
+            if placed_idx.is_none() && gi < n && !assigned[gi] {
+                placed_idx = Some(gi);
+            }
+            if let Some(idx) = placed_idx {
+                assigned[idx] = true;
+                out.push((idx, card));
+            }
+        }
+        out
+    } else {
+        match mk_codec::decode(&mk1_strs_to_str_refs(supplied_mk1)) {
+            Ok(card) => vec![(0, card)],
+            Err(_) => Vec::new(),
+        }
+    };
+
+    for (i, card) in &mk_cards {
+        let md_path = match md_path_for(*i) {
+            Some(p) => p,
+            None => continue,
+        };
+
+        // Check 1: depth.
+        let xpub_depth = card.xpub.depth as usize;
+        let md_depth = md_path.components.len();
+        if xpub_depth != md_depth {
+            writeln!(
+                stderr,
+                "warning: cosigner[{}] mk1 xpub depth ({}) does not match md1 origin-path length ({}); cards are internally inconsistent",
+                i, xpub_depth, md_depth
+            )
+            .ok();
+        }
+
+        // Check 2: child_number (last component, including hardened bit).
+        if !md_path.components.is_empty() {
+            let last = md_path.components.last().expect("non-empty");
+            let (xpub_idx, xpub_hardened) = match card.xpub.child_number {
+                bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
+                bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
+            };
+            if xpub_idx != last.value || xpub_hardened != last.hardened {
+                writeln!(
+                    stderr,
+                    "warning: cosigner[{}] mk1 xpub child_number ({}{}) does not match md1 origin-path last component ({}{}); cards are internally inconsistent",
+                    i,
+                    xpub_idx,
+                    if xpub_hardened { "'" } else { "" },
+                    last.value,
+                    if last.hardened { "'" } else { "" },
+                )
+                .ok();
+            }
+        } else {
+            // md1 says depth 0 but xpub claims non-zero child_number → inconsistent.
+            let (xpub_idx, xpub_hardened) = match card.xpub.child_number {
+                bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
+                bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
+            };
+            if xpub_idx != 0 || xpub_hardened {
+                writeln!(
+                    stderr,
+                    "warning: cosigner[{}] mk1 xpub child_number ({}{}) does not match md1 origin-path depth 0 (expected 0); cards are internally inconsistent",
+                    i,
+                    xpub_idx,
+                    if xpub_hardened { "'" } else { "" },
+                )
+                .ok();
+            }
+        }
+
+        // Check 3: parent_fingerprint structural sanity.
+        let pfp = card.xpub.parent_fingerprint.to_bytes();
+        if md_depth == 0 {
+            // Master xpub MUST have all-zero parent_fingerprint per BIP-32.
+            if pfp != [0u8; 4] {
+                writeln!(
+                    stderr,
+                    "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) is non-zero at md1 depth 0 (expected 00000000); cards are internally inconsistent",
+                    i, hex::encode(pfp)
+                )
+                .ok();
+            }
+        } else if md_depth == 1 {
+            // At depth 1, parent IS the master. Cross-check against the
+            // master fingerprint claimed by md1 (TLV fingerprints) or mk1
+            // (origin_fingerprint). Skip if neither is supplied.
+            let claimed_master_fp = md_fp_for(*i)
+                .or_else(|| card.origin_fingerprint.map(|f| f.to_bytes()));
+            if let Some(master_fp) = claimed_master_fp {
+                if pfp != master_fp {
+                    writeln!(
+                        stderr,
+                        "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) does not match claimed master fingerprint ({}) at md1 depth 1; cards are internally inconsistent",
+                        i,
+                        hex::encode(pfp),
+                        hex::encode(master_fp),
+                    )
+                    .ok();
+                }
+            }
+        }
+        // Deeper paths (depth >= 2) skip the parent_fingerprint check because
+        // the parent xpub would need to be derived from the master seed, which
+        // the watch-only path cannot do.
+    }
+}
+
+/// Single-sig mk1 decode helper for `emit_watch_only_xpub_path_cross_check`.
+/// Pulled into a free function to dodge a borrow-checker issue caused by
+/// constructing the `Vec<&str>` inline at the match arm.
+fn mk1_strs_to_str_refs(v: &[String]) -> Vec<&str> {
+    v.iter().map(|s| s.as_str()).collect()
 }
 
 #[cfg(test)]

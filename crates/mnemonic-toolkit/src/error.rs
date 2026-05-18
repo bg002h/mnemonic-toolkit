@@ -131,6 +131,25 @@ pub enum ToolkitError {
     /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
     /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
     DeriveChildLengthNotApplicable,
+    /// v0.24.0 §2.C.1 (D34/I5 fold) — a typed `--ms1` / `--mk1` / `--md1`
+    /// flag was supplied a value whose HRP prefix does not match the flag's
+    /// expected codec. Toolkit-internal validation (not a clap parser
+    /// callback) executed at the top of `repair::run` / `inspect::run`.
+    /// Distinct from `RepairError::HrpMismatch` (which reports a chunk index
+    /// after entering the repair pipeline); this variant reports the
+    /// offending flag name so the user sees `--ms1` vs `--mk1` in the error.
+    /// Exit 2 (user-input class).
+    HrpMismatch {
+        flag: &'static str,
+        expected: &'static str,
+        got: String,
+    },
+    /// v0.24.0 §2.C.1 (D34/I5 fold) — a positional `<STRING>` argument did
+    /// not begin with a recognized HRP prefix (`ms1` / `mk1` / `md1`). Exit 2.
+    UnknownHrp {
+        got: String,
+        expected_one_of: Vec<&'static str>,
+    },
     /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
@@ -293,6 +312,8 @@ impl ToolkitError {
             | ToolkitError::DeriveChildUnsupportedApp
             | ToolkitError::DeriveChildLengthOutOfRange { .. }
             | ToolkitError::DeriveChildLengthNotApplicable
+            | ToolkitError::HrpMismatch { .. }
+            | ToolkitError::UnknownHrp { .. }
             | ToolkitError::Repair(_) => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
@@ -339,6 +360,8 @@ impl ToolkitError {
             ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
             ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
             ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
+            ToolkitError::HrpMismatch { .. } => "HrpMismatch",
+            ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
             ToolkitError::Io(_) => "Io",
@@ -419,6 +442,19 @@ impl ToolkitError {
             ToolkitError::DeriveChildLengthNotApplicable => {
                 "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
                     .to_string()
+            }
+            ToolkitError::HrpMismatch { flag, expected, got } => {
+                format!(
+                    "{flag} expects a value with HRP '{expected}', got '{got}' \
+                     (HRP is not BCH-protected; re-type the prefix)"
+                )
+            }
+            ToolkitError::UnknownHrp { got, expected_one_of } => {
+                format!(
+                    "positional argument '{got}' does not begin with a recognized \
+                     HRP prefix (expected one of: {})",
+                    expected_one_of.join(", ")
+                )
             }
             ToolkitError::Repair(e) => format!("{e}"),
             ToolkitError::RepairShortCircuit { .. } => {

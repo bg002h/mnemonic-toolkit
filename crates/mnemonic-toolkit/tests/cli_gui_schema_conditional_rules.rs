@@ -51,12 +51,17 @@ fn conditional_rules<'a>(v: &'a Value, sub_name: &str) -> &'a Vec<Value> {
 // ── §6.10.6 schema version bump ────────────────────────────────────────
 
 #[test]
-fn schema_version_is_four_after_v0_18_0_bump() {
+fn schema_version_pinned_at_current_cycle() {
+    // v0.24.0 Tranche B.1 bumped 4→5 for the additive Flag fields
+    // (default_value, global, secret). Previous bumps:
+    // v1→v2 v0.16.0 (conditional_rules); v2→v3 v0.17.0
+    // (slot_count_* + pin_value + meta.template_groups);
+    // v3→v4 v0.18.0 (disable_options Visibility variant).
     let v = run_gui_schema();
     assert_eq!(
-        v["version"], 4,
-        "SPEC §6.10.6: gui-schema JSON version bumps 3→4 in v0.18.0 \
-         (v3 cycle — disable_options Visibility for rows 10/11)"
+        v["version"], 5,
+        "SPEC §7: gui-schema JSON version pinned at v5 after v0.24.0 \
+         Tranche B.1 (additive Flag fields)"
     );
 }
 

@@ -29,7 +29,7 @@ set -eu
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.23.0|no|"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.24.0|no|"
             ;;
         md)
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.6.0|yes|cli-compiler"
@@ -38,10 +38,10 @@ component_info() {
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.4.0|yes|"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.4.0|yes|"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.4.1|yes|"
             ;;
         mnemonic-gui)
-            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.9.0|no|"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.10.0|no|"
             ;;
         *)
             return 1

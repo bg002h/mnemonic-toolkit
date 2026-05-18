@@ -6,6 +6,140 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.24.0] — 2026-05-17
+
+v0.24.x cycle: three-tranche follow-up release folding 9 items across
+verify-bundle defense-in-depth (Tranche A), gui-schema v5 envelope
+(Tranche B), and positional-intake UX (Tranche C). Lockstep with
+`mnemonic-gui-v0.10.0` (B + C consumer side), `mk-cli-v0.4.1` (stale
+md-codec pin refresh), and `md-codec-v0.35.0` (non-chunked md1 in
+`decode_with_correction`).
+
+### Added — Tranche A: verify-bundle hardening
+
+- `emit_watch_only_xpub_path_cross_check` in `cmd/verify_bundle.rs` —
+  stderr WARNING-level cross-check between mk1 xpub byte-level fields
+  (`depth` / `child_number` / `parent_fingerprint`) and md1's claimed
+  `OriginPath`. Three checks per cosigner: xpub depth vs path length,
+  final child number (incl. hardened bit), and parent-fingerprint
+  structural sanity (master invariant at md_depth 0; equality with
+  master fingerprint at md_depth 1; deeper paths skipped — would
+  require parent xpub derivation, infeasible without seed). Failure
+  mode: stderr WARNING per cosigner; verify-bundle exit code +
+  `result: ok / mismatch` verdict UNCHANGED (SPEC §5.4 / §5.7
+  VerifyCheck schema intentionally NOT extended). Multi-cosigner
+  index naming preserved. 5 new integration cells in
+  `tests/cli_verify_bundle_watch_only.rs`.
+- `MNEMONIC_FORCE_TTY` env-var promoted from test-only to **first-class
+  public API** (semver-stable contract). Doc-comment in
+  `cmd/verify_bundle.rs::run` rewritten; `cmd/convert.rs` +
+  `cmd/inspect.rs` consumers cite the public contract. New subsection
+  in `docs/manual/src/40-cli-reference/41-mnemonic.md` under the
+  verify-bundle auto-fire section enumerating accepted values
+  (`1`/`0`/unset) + consumer guidance (mnemonic-gui v0.9.0+ is a known
+  caller).
+
+### Added — Tranche B: gui-schema v5 envelope
+
+- Three additive fields on every `flags[]` entry in `cmd/gui_schema.rs`:
+  - `default_value: Option<String>` — surfaces the clap-derive
+    `#[arg(default_value = "...")]` for downstream `is_at_default`
+    suppression logic.
+  - `global: bool` — emitted `true` for `--no-auto-repair` per-
+    subcommand (clap-derive `global = true` previously surfaced only
+    via per-subcommand `--help` TEXT, not JSON). Closes
+    `gui-schema-global-flag-emission`.
+  - `secret: bool` — exposed via new module
+    `crates/mnemonic-toolkit/src/secrets.rs` (NEW) with public
+    `flag_is_secret(subcommand: &str, flag: &str) -> bool` predicate
+    covering 6 flags (`--passphrase`, `--passphrase-stdin`, etc.).
+- Schema integer version bumped `4 → 5`. v4 consumers reading the v5
+  envelope ignore the additive fields; v5 consumers reading a v4
+  envelope hard-fail on the missing fields.
+
+### Added — Tranche C: positional `<STRING>...` intake
+
+- `repair` / `inspect` / `verify-bundle` subcommands accept positional
+  ms1/mk1/md1 strings (no flag required). Toolkit-internal
+  HRP-autodetect routing via shared helper `classify_hrp_prefix` per
+  the SPEC § validation table. `repair`/`inspect`: drops
+  `conflicts_with_all` cross-HRP clauses (D35: mixed-HRP inputs now
+  accepted in one call). `verify-bundle`'s positional carries
+  `conflicts_with = "bundle_json"` (I3: bundle-JSON path is still
+  mutually exclusive with positional/--{ms1,mk1,md1} cards).
+- Two new `ToolkitError` variants: `HrpMismatch` (extracted via shared
+  helper `validate_flag_hrp` called from all 3 subcommands per D34)
+  and `UnknownHrp`. Case-mismatch error text improved.
+- New tests file `tests/cli_positional_hrp_autodetect.rs` (positional
+  + autodetect + mixed-HRP coverage).
+- New tests file `tests/cli_gui_schema_v5_extensions.rs` (v5 envelope
+  surface coverage).
+
+### Changed
+
+- **CLAP ERROR-TEXT BREAK (Tranche C):** scripts parsing the literal
+  error text `error: '--ms1 <MS1>' cannot be used with '--mk1 <MK1>'`
+  from `repair` or `inspect` will now succeed instead. Before:
+
+      $ mnemonic repair --ms1 ... --mk1 ...
+      error: the argument '--ms1 <MS1>' cannot be used with '--mk1 <MK1>'
+      exit 2
+
+  After:
+
+      $ mnemonic repair --ms1 ... --mk1 ...
+      <both cards reported in the JSON envelope / TEXT report>
+      exit 0 / 5
+
+  `verify-bundle --bundle-json … --ms1 …` still rejects (I3 keeps the
+  bundle_json XOR cards mutex). Mismatched-HRP-via-flag still rejects
+  with `ToolkitError::HrpMismatch` (D34).
+- `mnemonic-toolkit` Cargo version `0.23.0` → `0.24.0`.
+- `bech32-correction-api-version-pin` FOLLOWUP body refreshed —
+  upstream `bech32` crate still 0.11.1 (no migration unblock signal).
+
+### Resolved (FOLLOWUPS)
+
+- `verify-bundle-watch-only-xpub-path-internal-consistency` (Tranche A,
+  primary).
+- `gui-schema-global-flag-emission` (Tranche B; GUI consumer side
+  closes lockstep at `mnemonic-gui-v0.10.0`).
+- `toolkit-mnemonic-force-tty-promote-from-test-only` (Tranche A;
+  cross-repo lockstep close).
+- `md-codec-decode-with-correction-supports-non-chunked-md1`
+  (toolkit-side consumer perspective; primary lands at md-codec
+  v0.35.0).
+- `repair-inspect-positional-string-intake` (Tranche C; surfaced
+  mid-cycle in plan §2.C.1).
+
+### New FOLLOWUPS filed
+
+- `verify-bundle-parent-fp-deeper-paths` — extend the
+  parent-fingerprint cross-check to depth ≥ 2 (requires parent xpub
+  derivation; infeasible without seed at v0.24.0).
+- `convert-inspect-tty-asymmetry` — `convert --json` vs `inspect --json`
+  auto-fire envelope wrapping asymmetry surfaced during Tranche C
+  test sweep.
+- `gui-schema-global-vs-local-id-disjointness` — schema v5's `global`
+  field marks per-subcommand entries `true`; some flags appear under
+  both the global and local IDs in clap's reflection. Document the
+  precedence + add a drift gate.
+- `cmd-repair-inspect-helper-duplication` — `cmd/repair.rs` and
+  `cmd/inspect.rs` carry parallel HRP-routing logic that could
+  consolidate into the existing `classify_hrp_prefix` helper module.
+
+### Companion
+
+`mnemonic-gui v0.10.0` consumes the v5 schema (Tranche B), drops the
+v0.9.0 R7 action-bar `--no-auto-repair` checkbox fallback, and
+mirrors Tranche C's at-least-one card mutex (`three_way_card_mutex`
+→ `three_way_card_at_least_one`).
+
+`mk-cli v0.4.1` is a standalone patch (stale md-codec pin refresh +
+`from_md1_derivation` fixture refresh). `md-codec v0.35.0` adds
+non-chunked-form `decode_with_correction` support; toolkit consumes
+it transparently via the unchanged `repair_via_md_codec` delegation.
+
 ## tech-manual [1.1.0] — 2026-05-12
 
 **v0.8.1 wallet-export drift fold.** Adds §V.4.5.9 (eight vendor-format output-shape sub-sub-sections) + §V.4.5.10 (8×8 format×shape compatibility matrix with 7 footnotes). 273pp PDF (up from 258 at v1.0). Tag `tech-manual-v1.1.0`.

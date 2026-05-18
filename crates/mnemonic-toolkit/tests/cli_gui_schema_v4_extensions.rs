@@ -117,20 +117,21 @@ fn pin_value_visibility_round_trips_on_v4_doc() {
     );
 }
 
-// ── §6.10.6 v4 schema-version pin ──────────────────────────────────────────
+// ── §6.10.6 v4 schema-version pin (updated to v5 in v0.24.0 Tranche B.1) ───
 
 #[test]
-fn v4_schema_version_pinned_after_v0_18_1_rollback() {
-    // Schema stays v4 after the row 10/11 rollback. The
-    // disable_options Visibility variant remains defined (just unused
-    // by any rule); v3 consumers would still fail-CLOSED on
-    // disable_options if a future rule reintroduces it. Pinning v4
-    // here documents the deliberate choice not to roll back to v3.
+fn schema_version_pinned_at_five_after_v0_24_0_tranche_b1() {
+    // v0.24.0 Tranche B.1 bumped 4 → 5 for the additive Flag fields
+    // {default_value, global, secret}. The v4 disable_options grammar
+    // variant remains defined (just unused by any rule); v3/v4
+    // consumers would still fail-CLOSED on those features if a future
+    // rule reintroduces them. Pinning v5 here documents the current
+    // schema-version pin; bump in lockstep with future schema cycles.
     let v = run_gui_schema();
     assert_eq!(
-        v["version"], 4,
-        "schema version stays v4 after v0.18.1 row 10/11 rollback \
-         (disable_options grammar variant remains defined)"
+        v["version"], 5,
+        "schema version pinned at v5 after v0.24.0 Tranche B.1 \
+         (additive Flag fields: default_value, global, secret)"
     );
 }
 

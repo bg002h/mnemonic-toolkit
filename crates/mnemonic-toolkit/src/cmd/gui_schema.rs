@@ -5,19 +5,24 @@
 //!
 //! Walks the clap `Command` tree via `clap::CommandFactory` and serializes a
 //! machine-readable schema of every existing subcommand's flag surface to
-//! stdout as JSON. The GUI consumes this schema to render forms; on
-//! `version != 1` the GUI refuses to launch.
+//! stdout as JSON. The GUI consumes this schema to render forms. The
+//! envelope `version` field is an integer; v5 (v0.24.0+) is the current
+//! emission. `schema_check::parse_gui_schema_json` accepts any `version >= 1`
+//! and ignores additive per-flag fields, so older GUI builds still parse
+//! the envelope (the per-flag `default_value`/`global`/`secret` fields
+//! added in v5 simply pass through unread).
 //!
 //! ## SPEC §7 contract
 //!
 //! ```json
 //! {
-//!   "version": 1,
+//!   "version": 5,
 //!   "cli": "mnemonic",
 //!   "subcommands": [
 //!     {
 //!       "name": "bundle",
-//!       "flags":       [ { "name", "required", "kind", "choices": [..] | null } ],
+//!       "flags":       [ { "name", "required", "kind", "choices": [..] | null,
+//!                          "default_value"?: any, "global"?: bool, "secret"?: bool } ],
 //!       "positionals": [ { "name", "required", "repeating" } ]
 //!     }
 //!   ]
@@ -236,6 +241,25 @@ struct Flag {
     required: bool,
     kind: String,
     choices: Option<Vec<String>>,
+    /// v0.24.0 schema v5 — flag's clap-derive `default_value` if any, mapped
+    /// to a JSON value whose shape matches `kind`. Omitted when the clap-derive
+    /// site declares no default (or when the default is uninteresting, e.g.
+    /// a boolean flag's implicit `false`). See `extract_default_value` for
+    /// the per-kind mapping rules.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_value: Option<serde_json::Value>,
+    /// v0.24.0 schema v5 — true iff the flag is a parent-Command global flag
+    /// (clap-derive `global = true`) that propagates into this subcommand.
+    /// Omitted when false (defaulted). Currently emits true for
+    /// `--no-auto-repair` across all subcommands.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    global: bool,
+    /// v0.24.0 schema v5 — true iff the flag carries secret material (per
+    /// the authoritative `secrets::flag_is_secret` predicate). Omitted when
+    /// false (defaulted). GUI consumers use this to drive paste-warn /
+    /// run-confirm modals and exit-time zeroize sweeps.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    secret: bool,
 }
 
 #[derive(Serialize, Debug)]
@@ -910,6 +934,19 @@ fn derive_child_conditional_rules() -> Vec<ConditionalRule> {
 /// generalizes to v0.13.0 slip39 + any future nested-subcommand parent.
 /// Schema `version` stays at 1 — the change is additive at the name set.
 fn build_schema(cmd: &Command) -> Schema {
+    // v0.24.0 Tranche B.1 — collect parent-Command global args (clap-derive
+    // `global = true`) once at the root, then propagate them into every
+    // subcommand's flag set with `global: true`. clap's own
+    // `_propagate_global_args` populates subcommand args at build-time, but
+    // we walk that explicit list here so the emitter does not depend on
+    // clap's lazy-build state and so nested-subcommand parents (seed-xor /
+    // slip39) consistently see the global flag at the flattened
+    // `S-sub_sub` level. Help (`--help`) is excluded as before.
+    let global_args: Vec<&clap::Arg> = cmd
+        .get_arguments()
+        .filter(|a| a.is_global_set() && a.get_id().as_str() != "help")
+        .collect();
+
     let mut subs: Vec<Subcommand> = Vec::new();
     for s in cmd
         .get_subcommands()
@@ -920,10 +957,10 @@ fn build_schema(cmd: &Command) -> Schema {
             .filter(|ss| ss.get_name() != "help")
             .collect();
         if nested.is_empty() {
-            subs.push(build_subcommand(s));
+            subs.push(build_subcommand(s, &global_args));
         } else {
             for ss in nested {
-                let flat = build_subcommand(ss);
+                let flat = build_subcommand(ss, &global_args);
                 let flat_name = format!("{}-{}", s.get_name(), ss.get_name());
                 let conditional_rules = build_subcommand_conditional_rules(&flat_name);
                 let meta = build_subcommand_meta(&flat_name);
@@ -942,15 +979,38 @@ fn build_schema(cmd: &Command) -> Schema {
     subs.sort_by(|a, b| a.name.cmp(&b.name));
 
     Schema {
-        version: 4,
+        // v0.24.0 Tranche B.1 — bump v4 → v5 for the additive Flag fields
+        // {default_value, global, secret}. v4 consumers will still parse v5
+        // documents (additive fields tolerate unknown-field-skipping serde),
+        // but cannot consume the new fields; the version bump signals the
+        // schema change so v4-only consumers can refuse the upgrade
+        // explicitly. Earlier bumps: v1→v2 v0.16.0 (conditional_rules);
+        // v2→v3 v0.17.0 (slot_count_* + pin_value + meta.template_groups);
+        // v3→v4 v0.18.0 (disable_options Visibility variant).
+        version: 5,
         cli: "mnemonic".to_string(),
         subcommands: subs,
     }
 }
 
-fn build_subcommand(sub: &Command) -> Subcommand {
+fn build_subcommand(sub: &Command, global_args: &[&clap::Arg]) -> Subcommand {
     let mut flags: Vec<Flag> = Vec::new();
     let mut positionals: Vec<Positional> = Vec::new();
+    // Track flag long-form names already emitted so we don't double-list a
+    // global flag that clap's own `_propagate_global_args` may have already
+    // copied into `sub.get_arguments()`. The toolkit-side global propagation
+    // below treats the explicit root-args list as authoritative for the
+    // `global: true` annotation regardless of which path put the arg into
+    // the subcommand's flag set.
+    let mut seen_flag_names: std::collections::BTreeSet<String> =
+        std::collections::BTreeSet::new();
+    // IDs of the global args we'll propagate explicitly. Used to recognize
+    // clap-propagated copies in `sub.get_arguments()` and re-route them
+    // through the same emit_flag helper (so they pick up `global: true`).
+    let global_ids: std::collections::BTreeSet<String> = global_args
+        .iter()
+        .map(|a| a.get_id().as_str().to_string())
+        .collect();
 
     for arg in sub.get_arguments() {
         if arg.is_positional() {
@@ -967,17 +1027,27 @@ fn build_subcommand(sub: &Command) -> Subcommand {
             if arg.get_id().as_str() == "help" {
                 continue;
             }
-            let name = arg
-                .get_long()
-                .map(|l| format!("--{l}"))
-                .unwrap_or_else(|| arg.get_id().to_string());
-            let (kind, choices) = classify_kind(arg);
-            flags.push(Flag {
-                name,
-                required: arg.is_required_set(),
-                kind,
-                choices,
-            });
+            // If clap already propagated a global into this subcommand,
+            // skip here and let the global-args pass below emit it once
+            // with `global: true`. Avoids double-listing when both code
+            // paths see the same arg.
+            if global_ids.contains(arg.get_id().as_str()) {
+                continue;
+            }
+            let flag = emit_flag(arg, /*is_global=*/ false);
+            seen_flag_names.insert(flag.name.clone());
+            flags.push(flag);
+        }
+    }
+
+    // v0.24.0 Tranche B.1 — append parent-Command globals into this
+    // subcommand's flag set. Each is marked `global: true` so GUI
+    // consumers can render it under a top-level action-bar or repeat
+    // it per-subcommand as they prefer.
+    for ga in global_args {
+        let flag = emit_flag(ga, /*is_global=*/ true);
+        if seen_flag_names.insert(flag.name.clone()) {
+            flags.push(flag);
         }
     }
 
@@ -993,6 +1063,75 @@ fn build_subcommand(sub: &Command) -> Subcommand {
         positionals,
         conditional_rules,
         meta,
+    }
+}
+
+/// v0.24.0 Tranche B.1 — assemble a `Flag` entry from a clap `Arg`, populating
+/// the schema v5 `default_value` / `global` / `secret` fields.
+///
+/// `is_global` is supplied by the caller because the same arg may be emitted
+/// from two paths (the subcommand's own arg list, or the propagated root-args
+/// list); the caller knows which path applies.
+fn emit_flag(arg: &clap::Arg, is_global: bool) -> Flag {
+    let name = arg
+        .get_long()
+        .map(|l| format!("--{l}"))
+        .unwrap_or_else(|| arg.get_id().to_string());
+    let (kind, choices) = classify_kind(arg);
+    let default_value = extract_default_value(arg, &kind);
+    let secret = mnemonic_toolkit::secrets::flag_is_secret(&name);
+    Flag {
+        name,
+        required: arg.is_required_set(),
+        kind,
+        choices,
+        default_value,
+        global: is_global,
+        secret,
+    }
+}
+
+/// v0.24.0 Tranche B.1 — extract a clap-derive `default_value` into a JSON
+/// value whose shape matches the flag's `kind`.
+///
+/// Per the SPEC §7 v5 contract:
+/// - `boolean` → no default emitted (a bool flag's absence is its default).
+/// - `number`  → `Value::Number(i64)` parsed from the default string. Non-
+///               parseable defaults fall through to string preservation.
+/// - `text` / `path` / `dropdown` → `Value::String(s)`.
+/// - empty / absent defaults → `None` (field omitted from JSON).
+///
+/// Per the kickoff hard constraint: if `get_default_values()` returns a
+/// shape we cannot serialize cleanly (multi-value default for a single-value
+/// flag, non-UTF-8 OsStr), we fall back to the first UTF-8 entry stringified;
+/// the field's purpose is GUI seeding, not roundtrip-faithful re-emission.
+fn extract_default_value(arg: &clap::Arg, kind: &str) -> Option<serde_json::Value> {
+    if kind == "boolean" {
+        // Booleans default to false; no need to emit the trivial default.
+        return None;
+    }
+    let defaults = arg.get_default_values();
+    if defaults.is_empty() {
+        return None;
+    }
+    // Single-value flags: take the first default. Multi-value defaults
+    // (`default_values(["a", "b"])`) are uncommon in this codebase; we
+    // collapse to the first entry to keep the wire shape predictable.
+    let first = defaults.first()?.to_str()?;
+    match kind {
+        "number" => {
+            // Try i64 first (covers all signed/unsigned defaults in current
+            // clap-derive sites — `--account = "0"`, `--iteration-exponent`
+            // = "0"`, `--bitcoin-core-version = "25"`). Fall through to
+            // string preservation if the parse fails (defensive — current
+            // codebase has no float defaults).
+            if let Ok(n) = first.parse::<i64>() {
+                Some(serde_json::Value::Number(n.into()))
+            } else {
+                Some(serde_json::Value::String(first.to_string()))
+            }
+        }
+        _ => Some(serde_json::Value::String(first.to_string())),
     }
 }
 

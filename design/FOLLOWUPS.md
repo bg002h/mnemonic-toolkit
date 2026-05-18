@@ -54,17 +54,23 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
   2. `xpub.child_number == origin_path.last()` (final index matches, with hardened-bit comparison preserved).
   3. For multisig: cross-cosigner `parent_fingerprint` consistency where the same parent is claimed.
   Emit as new checks (e.g., `mk1_md1_path_internal_consistency[i]`) in the SPEC §5.4 / §5.7 schema; SPEC bump per the schema-version policy. Closes the daylight between the existing stderr warning ("watch-only … does not verify --slot @0.xpub= is actually at the claimed BIP path") and the broader claim that watch-only mode can catch *internally* inconsistent bundles even without seed access.
-- **Why deferred:** not a correctness regression — current behavior matches the disclaimed warning at `:317–:331`. No concrete bundle-mismatch report driving urgency. Touching the SPEC §5.4 / §5.7 check schema (additive but version-bumping) is non-trivial scope for an unscheduled enhancement; better folded into a future verify-bundle hardening cycle than bolted on as a patch.
-- **Status:** open
-- **Tier:** `v1+`
+- **Why deferred (historical):** not a correctness regression — current behavior matches the disclaimed warning at `:317–:331`. No concrete bundle-mismatch report driving urgency. Touching the SPEC §5.4 / §5.7 check schema (additive but version-bumping) is non-trivial scope for an unscheduled enhancement; better folded into a future verify-bundle hardening cycle than bolted on as a patch.
+- **Resolution:** RESOLVED in v0.24.0 cycle (Tranche A.1 D30 tier upgrade — rationale: "consolidating verify-bundle defense-in-depth work in v0.24.x cycle; cross-check is cheap and the related code is in active flight"). Shipped a stderr-WARNING (not hard-error / not VerifyCheck-schema-additive) cross-check in `emit_watch_only_xpub_path_cross_check` called from `run_watch_only` and the watch-only branch of `run_multisig`. Three checks per cosigner:
+  1. `xpub.depth == md1 OriginPath length` (mk-codec reconstructs depth from origin_path at decode, so this effectively asserts mk1.origin_path.len() == md1 path-decl length).
+  2. `xpub.child_number == md1 OriginPath last component` (value + hardened bit).
+  3. Parent-fingerprint structural sanity: at md_depth 0 the BIP-32 master invariant requires `parent_fingerprint == [0;4]`; at md_depth 1 the parent IS the master, so `parent_fingerprint` must equal the claimed master fingerprint (via md1 TLV `fingerprints` or mk1's `origin_fingerprint`). Deeper paths skip the check (would require parent xpub derivation, infeasible without seed).
+  Failure mode: stderr WARNING per cosigner. Verify-bundle exit code + `result: ok / mismatch` verdict UNCHANGED — the SPEC §5.4 / §5.7 check schema is intentionally NOT extended (kept the design simple; the existing VerifyCheck rows already cover the load-bearing checks). 5 new integration cells in `crates/mnemonic-toolkit/tests/cli_verify_bundle_watch_only.rs` covering happy-path silence + 3 single-cosigner failure modes + 1 multi-cosigner failure mode. Resolution commit: TODO (this cycle's release tag).
+- **Status:** resolved v0.24.0 cycle
+- **Tier:** `v0.24.0`
 
 ### `gui-schema-global-flag-emission` — `mnemonic gui-schema` JSON omits global flags from per-subcommand schemas
 
 - **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle Phase A.1 execution (mnemonic-gui v0.9.0 catchup). Realized R7 risk from `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §5. mnemonic-gui v0.9.0 attempted to mirror `--no-auto-repair` into its 10 per-subcommand `*_FLAGS` arrays and the schema-mirror drift gate hard-failed: the toolkit's `cmd::gui_schema` v4 JSON emitter does not include global flags in any subcommand's `flags` array; only clap's per-subcommand `--help` TEXT propagates them.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs` (the v4 emitter); downstream consumers across `mnemonic-gui` (currently the only known consumer). GUI workaround at `mnemonic-gui/src/runner.rs::prepend_no_auto_repair` + `MnemonicGuiApp.no_auto_repair` field + action-bar checkbox in `mnemonic-gui/src/main.rs` (load-bearing fallback shipped at `mnemonic-gui-v0.9.0`; ~30 LOC).
 - **What:** Extend `cmd::gui_schema`'s emitter to include global flags (e.g. `--no-auto-repair`, `--debug`) per-subcommand so downstream consumers can mirror them in their per-subcommand schemas without inventing fallbacks. Either (a) duplicate the global-flag entries into every subcommand's `flags` array, or (b) add a sibling top-level `global_flags` array consumed alongside per-subcommand flags. Bump schema version per SPEC §6.10.6 additive-bump policy if needed.
-- **Why deferred:** the GUI's R7 fallback (action-bar checkbox prepending the flag to argv) is functionally complete at v0.9.0; the toolkit-side emitter fix is a future cycle's mechanical extension. UX improvement (per-subcommand native vs top-level affordance) but not a correctness gap.
-- **Status:** open
+- **Why deferred (historical):** the GUI's R7 fallback (action-bar checkbox prepending the flag to argv) was functionally complete at v0.9.0; the toolkit-side emitter fix is a future cycle's mechanical extension. UX improvement (per-subcommand native vs top-level affordance) but not a correctness gap.
+- **Resolution:** RESOLVED in v0.24.0 cycle (Tranche B). `cmd/gui_schema.rs` v5 envelope adds three additive fields to every `flags[]` entry: `default_value: Option<String>`, `global: bool`, `secret: bool`. Schema integer version bumped `4 → 5`. `--no-auto-repair` propagates to every subcommand's flags array with `global: true`. mnemonic-gui v0.10.0 consumes the v5 fields, mirrors `--no-auto-repair` natively per-subcommand, and retires the R7 action-bar fallback. Companion FOLLOWUP closure in `bg002h/mnemonic-gui` `FOLLOWUPS.md` lockstep at v0.24.0 release tag.
+- **Status:** resolved v0.24.0 cycle
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `gui-schema-global-flag-emission`.
 
@@ -73,8 +79,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle D23 lock execution (mnemonic-gui v0.9.0 catchup). Realized R1 risk from `/home/bcg/.claude/plans/nifty-wiggling-gosling.md` §5.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run` doc-comment (currently classifies the env-var as test-only); `crates/mnemonic-toolkit/src/cmd/convert.rs` + `crates/mnemonic-toolkit/src/cmd/inspect.rs` (same env-var consumed via the `is_terminal()` gate); downstream consumer at `mnemonic-gui/src/runner.rs::run` (sets `MNEMONIC_FORCE_TTY=1` on subprocess spawn at `mnemonic-gui-v0.9.0`).
 - **What:** mnemonic-gui v0.9.0 sets `MNEMONIC_FORCE_TTY=1` in the toolkit subprocess env so that the toolkit's `std::io::stdout().is_terminal() && !no_auto_repair` auto-fire gate fires for GUI-spawned invocations (GUI subprocesses are piped, not TTY — without the env override the GUI would never see auto-fire repair reports from `convert` / `inspect` / `verify-bundle`). The env-var is currently documented test-only in `verify_bundle::run` doc-comment. GUI consumption creates a load-bearing dependency on the env-var's behavior; promotion to a first-class public contract (with explicit semver guarantee on its semantics) would harden the GUI side against silent toolkit-internal refactors. Update doc-comment in lockstep to reflect public-contract status; consider adding to the manual's "environment variables" section.
-- **Why deferred:** functional risk is documentary, not behavioral; the env-var works correctly at v0.22.1. Toolkit-side promotion is a future cycle's documentation + semver-contract addition.
-- **Status:** open
+- **Why deferred (historical):** functional risk is documentary, not behavioral; the env-var works correctly at v0.22.1. Toolkit-side promotion is a future cycle's documentation + semver-contract addition.
+- **Resolution:** RESOLVED in v0.24.0 cycle (Tranche A.1 sub-item 2). Doc-comment in `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run` rewritten to reflect first-class public-contract status with semver-stable semantics; cites mnemonic-gui v0.9.0+ as a known consumer. New "Environment variable `MNEMONIC_FORCE_TTY`" subsection added to the user manual at `docs/manual/src/40-cli-reference/41-mnemonic.md` under the verify-bundle auto-fire section. Companion FOLLOWUP closure in `bg002h/mnemonic-gui` `FOLLOWUPS.md` lockstep at v0.24.x release tag.
+- **Status:** resolved v0.24.0 cycle
 - **Tier:** `cross-repo`
 - **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `toolkit-mnemonic-force-tty-promote-from-test-only`.
 
@@ -150,10 +157,11 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.x follow-ups cycle Phase B.6 implementation surfaced the gap; filed at Phase B.8 (release-boundary docs). Toolkit-side companion to the descriptor-mnemonic primary entry.
 - **Where:** `crates/mnemonic-toolkit/src/repair.rs::repair_via_md_codec` (Phase B.7 delegation point) → `md_codec::decode_with_correction` (B.2 surface) → `chunk::split` + `chunk::reassemble` (the chunked-form-only integration points). After Phase B.7 migration, the toolkit's `mnemonic repair --md1` inherits the chunked-form-only constraint: users attempting to repair a non-chunked single-string md1 (the form emitted by plain `md encode` for small payloads) see a wire-format-mismatch error from the sibling codec, wrapped through `repair_via_md_codec` as `RepairError::UnparseableInput` or `RepairError::PostCorrectionDecodeFailed`.
 - **What:** Toolkit-side consumer tracker for the md-codec primary. When the primary lands its non-chunked-form coverage, the toolkit migration (no code change required — the delegation already routes through the updated md-codec API) needs a CHANGELOG note + manual chapter update + smoke test confirming non-chunked-form repair works end-to-end through the toolkit's `mnemonic repair --md1`. No toolkit code change in v0.23.0; consumption tracked for the future md-codec patch release.
-- **Why deferred:** Primary work lives in md-codec (B.2's `chunk::split`/`chunk::reassemble` integration); toolkit consumes whatever md-codec exposes. The chunked-form path covers the most common multi-chunk error-recovery use case; the non-chunked-form tail-case is a UX nice-to-have.
-- **Status:** open
+- **Why deferred (historical):** Primary work lived in md-codec (B.2's `chunk::split`/`chunk::reassemble` integration); toolkit consumed whatever md-codec exposed. The chunked-form path covers the most common multi-chunk error-recovery use case; the non-chunked-form tail-case was a UX nice-to-have until shipped.
+- **Resolution:** RESOLVED in v0.24.0 cycle (downstream consumer of Tranche D). md-codec v0.35.0 (`crates/md-codec/src/chunk.rs::decode_with_correction`) added non-chunked-form detection pre-pass: routes `strings.len() == 1` inputs whose first-symbol bit-0 is `0` (non-chunked header sentinel) directly into `decode_payload`, bypassing `chunk::reassemble`. Toolkit consumes the broadened API transparently through the unchanged `repair_via_md_codec` delegation in `crates/mnemonic-toolkit/src/repair.rs` — no toolkit code change required beyond the md-codec dep version bump. `mnemonic repair --md1` now accepts non-chunked single-string md1 inputs end-to-end. Companion FOLLOWUP closures in `bg002h/descriptor-mnemonic` (primary) + `bg002h/mnemonic-gui` (GUI-side consumer) + `bg002h/mnemonic-secret` (sibling-codec mirror) lockstep.
+- **Status:** resolved v0.24.0 cycle
 - **Tier:** `cross-repo`
-- **Companion:** `bg002h/descriptor-mnemonic` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (primary); `bg002h/mnemonic-secret` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (sibling-codec mirror); `bg002h/mnemonic-gui` `FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (GUI-side consumer).
+- **Companion:** `bg002h/descriptor-mnemonic` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (primary; resolved at md-codec v0.35.0); `bg002h/mnemonic-secret` `design/FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (sibling-codec mirror); `bg002h/mnemonic-gui` `FOLLOWUPS.md` `md-codec-decode-with-correction-supports-non-chunked-md1` (GUI-side consumer).
 
 ### `hrp-correction-heuristics` — Levenshtein-1 HRP-typo auto-suggestion
 
@@ -178,6 +186,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-17, v0.22.0 Phase 0 (rust-bech32 v0.11.1 had no public `Corrector` API; vendored via mk-codec primitives instead).
 - **Where:** monitor `bech32` crate releases.
 - **What:** If/when `bech32 v0.12+` publishes a stable `primitives::correction::Corrector` API, evaluate migrating `repair.rs` off mk-codec primitives onto upstream. Probably blocked indefinitely; mk-codec primitives are stable and serve all 3 HRPs.
+- **Upstream status (last checked 2026-05-17):** **still incomplete — no migration unblock signal.** Latest published version on crates.io is **`bech32 v0.11.1`** (docs.rs confirms: no items mentioning `correction`, `Corrector`, `repair`, BCH, or polymod in the public API). Available modules per docs.rs are `hrp`, `primitives`, `segwit` — none expose a correction primitive. The release-tracking PR #189 for `v0.12.0` ("Release tracking PR: `v0.12.0`") was opened 2026-01-16 and remains open as of last check (last update 2026-01-16); CHANGELOG.md on master shows no entries past `0.11.0 - 2024-02-23`. Issue #95 ("Support identifying potentially errorneous characters", open since 2024) is the only feature-tracking signal for correction work and remains unassigned. Recent commit activity on master is limited to CI / rustc-toolchain maintenance (most recent commits 2026-05-12). No open PR introduces a `Corrector` type or `decode_with_correction` API. **Future-cycle action if a `v0.12+` upstream lands a public correction primitive:** evaluate migrating `repair.rs`'s mk1 branch off vendored mk-codec primitives to upstream `bech32`; this would let the toolkit drop its mk-codec dependency on `string_layer::decode_string`'s correction internals and consolidate on a single upstream BCH implementation. Until then the toolkit stays on mk-codec primitives (which work; see `toolkit-repair-consume-native-codec-api` resolution).
 - **Status:** open
 - **Tier:** `v1+`
 
@@ -1905,4 +1914,55 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** `docs/technical-manual/` is a distinct surface from `docs/manual/` per CLAUDE.md. The v0.21.0 cycle's mirror invariant covers `docs/manual/` only. Technical-manual updates ride a separate cadence and shouldn't block toolkit releases.
 - **Status:** `open`
 - **Tier:** `v0.22+-doc-hygiene`
+- **Companion:** none.
+
+### `verify-bundle-xpub-parent-fingerprint-derivation` — extend xpub-vs-md1 parent_fingerprint check to depth ≥ 2
+
+- **Surfaced:** 2026-05-17, v0.24.0 Tranche A.1 end-of-phase architect review (folded `verify-bundle-watch-only-xpub-path-internal-consistency` as stderr-warning helper, but architect noted the parent_fingerprint check is narrower than plan).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — `emit_watch_only_xpub_path_cross_check` parent_fingerprint branch around `:1796-1799`. Plan §2.A.1 said "compare mk1's xpub parent_fingerprint vs derived-parent-fingerprint of md1's path (requires deriving the parent xpub from supplied mk1 + comparing fingerprints)." Implementation does structural sanity only: depth-0 enforces BIP-32 all-zeros invariant; depth-1 compares against claimed master fingerprint (mk1 origin_fingerprint or md1 TLV fingerprints); depth ≥ 2 SKIPS the parent_fingerprint check entirely. Doc-comment is honest about the narrowing.
+- **What:** Extend the parent_fingerprint check to depth ≥ 2 by deriving the parent xpub from the supplied mk1 (`xpub.derive_pub(parent_path)`-style) and computing its fingerprint, then comparing against `xpub.parent_fingerprint`. Eliminates the depth-≥-2 blind spot. Cheap (no seed required; mk1 carries the xpub).
+- **Why deferred:** Common BIP-84 watch-only bundles are depth-3 (`m/84'/0'/0'`); the current check skips them silently. Not a correctness regression (existing behavior matches the stderr disclaimer at `:317-:331`), but extends the defense-in-depth value of the cross-check. Out-of-scope for v0.24.0 A.1 since the parent-xpub derivation adds complexity (BIP-32 derive_pub call chain) the plan didn't budget. Pair with future verify-bundle hardening.
+- **Status:** `open`
+- **Tier:** `v1+`
+- **Companion:** none.
+
+### `gui-schema-global-flag-id-disjointness-debug-assert` — guard against future global-vs-local flag-id collision in v5+ emitter
+
+- **Surfaced:** 2026-05-17, v0.24.0 Tranche B.1 end-of-phase architect review.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs:1029-1031` skips args by `global_ids` set lookup; `:1042-1047` then re-emits globals via explicit list. `seen_flag_names` HashSet at `:1043` is dead defense — only the `global_ids` skip is load-bearing. Works correctly today because the only global flag is `--no-auto-repair` (boolean, no naming collision risk against subcommand-local flags). If a future cycle adds a global flag whose long-name collides with a subcommand-local flag of a DIFFERENT clap ID, the global would shadow the local.
+- **What:** Add either (a) a debug-assert in `emit_flag` confirming `global_ids` IDs are disjoint from each subcommand's local `arg.get_id()` set, OR (b) a one-shot test cell asserting the same invariant. Optionally remove the `seen_flag_names` dead defense or rewrite it to be load-bearing (e.g., assert no name collisions across global-and-local rather than skip silently).
+- **Why deferred:** Not a current correctness issue (no global flags besides `--no-auto-repair` today). Cheap to fix later; safer to file than to fold mid-cycle without expanding scope.
+- **Status:** `open`
+- **Tier:** `v0.25+`
+- **Companion:** none.
+
+### `cmd-repair-inspect-helper-duplication` — extract `count_dashes` / `expand_dashes` / `resolve_groups` shared between `cmd/repair.rs` and `cmd/inspect.rs`
+
+- **Surfaced:** 2026-05-17, v0.24.0 Tranche C.1 end-of-phase architect review (during the D34/I5 fold).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/repair.rs` — `count_dashes`, `expand_dashes`, `resolve_groups` (~80 LOC).
+  - `crates/mnemonic-toolkit/src/cmd/inspect.rs` — byte-for-byte duplicates of the same three helpers (~80 LOC, modulo a `inspect:` vs `repair:` substring difference in two `BadInput` error messages).
+  - `validate_flag_hrp` already extracted to `crates/mnemonic-toolkit/src/repair.rs` in the C.1 D34/I5 fold (this FOLLOWUP picks up the remaining `cmd/`-local helpers).
+- **What:** Move the three shared helpers to a new `crates/mnemonic-toolkit/src/cmd/_shared_card_args.rs` (or co-locate next to `validate_flag_hrp` in `src/repair.rs`). Signature for `resolve_groups` would need to be parameterized over the per-subcommand error-prefix string (`"repair"` vs `"inspect"`) and the args-struct shape — likely cleanest via a small trait or a free function consuming `(Option<String>, &[String], &[String], &[String])` (ms1/mk1/md1/extra_strings + a `&'static str` subcommand-name for error messages). Update both `cmd::repair::run` + `cmd::inspect::run` to delegate. Subsumes any future verify-bundle equivalent if positional intake grows beyond the three-flag set.
+- **Why deferred:** Tranche C.1 architect review surfaced this as Important #3 alongside D34 (Critical) + I5 (Important — confusing case-mismatch error). The D34/I5 folds were on the critical path for v0.24.0 ship; the helper-extraction refactor is purely DRY (no correctness gap) and was deferred to keep C.1's diff focused. Pattern is well-known: `synthesize_unified` extraction was the analogous earlier cycle (see CLAUDE.md memory `synthesize-unified-is-cli-hotpath`); duplicated helpers between sibling `cmd/` modules carry the same maintenance-drift risk.
+- **Status:** `open`
+- **Tier:** `v0.25+`
+- **Companion:** none.
+
+### `convert-inspect-auto-fire-tty-gate-asymmetry` — convert/inspect auto-fire lacks TTY gate; design-intent says interactive-only
+
+- **Surfaced:** 2026-05-17, v0.24.0 Tranche A.1 end-of-phase architect review (during the `MNEMONIC_FORCE_TTY` doc-promote fold).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/convert.rs:919` calls `crate::repair::try_repair_and_short_circuit(...)` UNCONDITIONALLY when `!no_auto_repair`.
+  - `crates/mnemonic-toolkit/src/cmd/inspect.rs:85` same pattern.
+  - `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:155` consults `MNEMONIC_FORCE_TTY` + `is_terminal()` correctly (D18 design).
+  - `docs/manual/src/40-cli-reference/41-mnemonic.md:505-508` reads "Interactive users see the helpful auto-fire UX; piped consumers see the v0.22.0-and-earlier behavior unchanged" — generic-sounding but only true for verify-bundle.
+  - v0.24.0 cycle Tranche A.1 narrowed the `MNEMONIC_FORCE_TTY` scope claim at `:537-541` to verify-bundle-only, surfacing the asymmetry.
+- **What:** Two resolutions:
+  - (a) **Extend TTY gate to convert/inspect** for design-intent parity. Wraps `try_repair_and_short_circuit` calls in `if MNEMONIC_FORCE_TTY-aware is_terminal()` blocks. This matches the stated design intent + makes the env-var semantically uniform.
+  - (b) **Document the asymmetry intentionally.** Update the manual at `:505-508` to explicitly note convert/inspect auto-fire is unconditional regardless of TTY (existing behavior is preserved; the doc just reads as design-intent).
+  - User+architect choice; (a) is the more principled fix, (b) is the cheaper backfill.
+- **Why deferred:** Latent issue, not a correctness regression. v0.24.0 A.1's scope was force-tty doc-promote, NOT TTY-gate-mechanism extension. Folding (a) would require expanding A.1 scope mid-cycle. Filing for future-cycle resolution; folding (b) is cheap if user prefers that approach.
+- **Status:** `open`
+- **Tier:** `v0.25+`
 - **Companion:** none.

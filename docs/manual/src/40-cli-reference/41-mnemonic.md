@@ -511,6 +511,35 @@ Under `--json` calling context (any of `convert --json`, `inspect
 --json`, `verify-bundle --json`), the auto-fire emits a structured JSON
 envelope per v0.22.1 D20 — see `mnemonic repair` below for the schema.
 
+#### Environment variable `MNEMONIC_FORCE_TTY` (v0.24.0+)
+
+The TTY-detection step above can be overridden by the environment
+variable `MNEMONIC_FORCE_TTY`. This is a **first-class public-API
+contract** with semver-stable semantics (promoted from test-only at
+v0.24.0):
+
+| Value | Effect |
+|---|---|
+| `1` | force the TTY-positive auto-fire path |
+| `0` | force the TTY-negative legacy path |
+| unset / any other | fall back to runtime `is_terminal()` detection |
+
+Known consumers (the public-API contract guarantees these continue to
+work through future toolkit refactors):
+
+- **`mnemonic-gui` v0.9.0+** sets `MNEMONIC_FORCE_TTY=1` in the toolkit
+  subprocess environment. The GUI pipes the toolkit's stdin/stdout
+  (not a real TTY), so without the env override the GUI would never see
+  auto-fire repair under `convert` / `inspect` / `verify-bundle`.
+- The toolkit's own integration test suite sets it to `1` to force
+  auto-fire under `cargo test` (cargo's test harness pipes stdout).
+
+The env-var applies to `verify-bundle`'s TTY-conditional auto-fire
+only. `convert` and `inspect` auto-fire unconditionally when
+`--no-auto-repair=false` (no TTY gate); the env-var has no effect on
+those surfaces. It is not part of the clap `--help` surface (env-vars
+are not part of clap-derive) nor the `mnemonic gui-schema` JSON.
+
 ---
 
 ## `mnemonic convert`

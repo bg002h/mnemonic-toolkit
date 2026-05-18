@@ -28,15 +28,16 @@ fn gui_schema_exits_zero_and_parses_as_json() {
 }
 
 #[test]
-fn gui_schema_top_level_version_is_four() {
+fn gui_schema_top_level_version_is_five() {
     let v = run_gui_schema();
-    // v0.18.0 bump: SPEC §6.10.6 — schema version 3 → 4 (v3 cycle adds
-    // disable_options Visibility for rows 10/11).
+    // v0.24.0 Tranche B.1 bump: SPEC §7 — schema version 4 → 5 for the
+    // additive Flag fields {default_value, global, secret}.
     // Earlier bumps: v1→v2 at v0.16.0 (conditional_rules added); v2→v3 at
-    // v0.17.0 (slot_count_* + pin_value + meta.template_groups).
-    // GUI's relaxed parse_gui_schema_json accepts version >= 1; rules /
-    // disable_options consumers gate on version >= 4.
-    assert_eq!(v["version"], 4, "SPEC §6.10.6: version pin v0.18.0");
+    // v0.17.0 (slot_count_* + pin_value + meta.template_groups);
+    // v3→v4 at v0.18.0 (disable_options Visibility variant).
+    // GUI's relaxed parse_gui_schema_json accepts version >= 1; new
+    // fields consumers gate on version >= 5.
+    assert_eq!(v["version"], 5, "SPEC §7: version pin v0.24.0 Tranche B.1");
 }
 
 #[test]

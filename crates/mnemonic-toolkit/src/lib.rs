@@ -54,5 +54,10 @@ pub mod final_word;
 #[cfg(unix)]
 pub mod mlock;
 pub mod secret_taxonomy;
+/// v0.24.0 Tranche B.1: authoritative `flag_is_secret` predicate consumed by
+/// the gui-schema v5 envelope emitter (`cmd::gui_schema`). Mirror in
+/// `mnemonic-gui/src/secrets.rs` for v0.5..v0.9 hand-coded-schema fallback;
+/// GUI-side drift gate asserts the two lists agree.
+pub mod secrets;
 pub mod seed_xor;
 pub mod slip39;
