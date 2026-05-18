@@ -86,7 +86,7 @@ ToolkitError variant naming: no `Error` suffix (matches `DescriptorParse`/`Conve
 
 | # | Flag | Subcommands |
 |---|---|---|
-| 1 | `--passphrase` | bundle, verify-bundle, convert, derive-child, slip39-{split,combine}, bip85 |
+| 1 | `--passphrase` | bundle, verify-bundle, convert, derive-child (covers BIP-85 path), slip39-{split,combine} |
 | 2 | `--bip38-passphrase` | convert |
 | 3 | `--ms1` | verify-bundle, **import-wallet (new)** |
 | 4 | `--share` | slip39-combine, seed-xor-combine |
@@ -99,8 +99,9 @@ Stdin-form variants (`--passphrase-stdin`, `--bip38-passphrase-stdin`) are unaff
 
 Sentinel: `@env:<VARNAME>` where `<VARNAME>` matches the POSIX env-var-name regex `[A-Z_][A-Z0-9_]*`.
 
+- **Resolution scope (NORMATIVE):** sentinel resolution applies ONLY at the 6 secret-flag surfaces enumerated in §3.1. Non-secret flags treat `@env:VAR` as literal text (no resolution attempted). This is the locked rule per §7.0.d.
 - Whole-value sentinel (no concatenation): `--ms1 @env:MNEMONIC_MS1_0` ✓; `--ms1 prefix@env:VAR` ✗ (treated as literal).
-- Resolution: clap-parse-time substitution via `std::env::var(VARNAME)`.
+- Resolution: clap-parse-time substitution via `std::env::var(VARNAME)` invoked from the 6 enumerated callsites.
 - Missing/unset env-var → exit 1 with cross-cutting `EnvVarMissing` variant.
 - Empty-string env-var (`VAR=""`) → preserves v0.25.1 watch-only sentinel semantics: substituted value is `""` and proceeds through validation (e.g., `validate_flag_hrp("--ms1", "ms", "")` early-returns Ok per v0.25.1).
 - Invalid `<VARNAME>` (e.g., `@env:foo bar`, `@env:1FOO`, `@env:`) → exit 1 with `EnvVarMissing` and stderr template "invalid env-var name `<VARNAME>`".
@@ -122,7 +123,7 @@ Real-anchor verification (grep `^## ` against v0.5 SPEC TOC, 2026-05-18): existi
 
 Similarly:
 - **§6.11 (NEW)** — `import-wallet` CLI grammar, placed after existing §6.10 (Conditional-applicability projection).
-- **§7 (NEW)** — `wallet_import` round-trip discipline, placed as a new top-level section between existing §6.x cluster and §8 (Out of scope).
+- **§6.11.a (NEW)** — `wallet_import` round-trip discipline. Per §7.0.b: this is a sub-section of §6.11 (not a new §7 top-level) to preserve v0.5 SPEC's delta-only ordering convention. Mirrors `§4.12.a-g` precedent established by the v0.19.0 non-canonical descriptor cycle.
 
 ## §4 BSMS Round-2 parser
 
@@ -157,7 +158,7 @@ BSMS 1.0
 5. **Adapter step:** lex concrete `[fp/path]xpub` occurrences from the descriptor body via regex `\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtuvyzYZ]pub[A-HJ-NP-Za-km-z1-9]+)`. For each match: assign sequential `@N` placeholder; collect `(ParsedKey, ParsedFingerprint)` pair preserving declaration order.
 6. Substitute concrete keys with `@N` placeholders in the descriptor body, producing a placeholder-form descriptor.
 7. Call `parse_descriptor::parse_descriptor(placeholder_descriptor, &parsed_keys, &parsed_fingerprints)` (existing pipeline at `parse_descriptor.rs:747-751`). BIP-380 checksum auto-validated via `MsDescriptor::from_str`.
-8. Network detection via `slip0132.rs::detect_network` (supports ypub/zpub/upub/vpub variants in addition to xpub/tpub).
+8. **Network detection from origin paths.** Extract the `coin_type` child number (BIP-48 path component index 1, hardened) from the first parsed cosigner's `[fp/path]` origin annotation. Map: hardened `0'` → `bitcoin::Network::Bitcoin`; hardened `1'` → `bitcoin::Network::Testnet`. Signet and regtest are not distinguishable from testnet via origin-path inspection in either BIP-129 BSMS or Bitcoin Core `listdescriptors` — both use coin-type `1`. Wallets intrinsically running on signet/regtest are imported as testnet; users running signet/regtest workflows must supply `--network signet|regtest` post-import via a downstream subcommand if signet/regtest semantics are required (FOLLOWUP: `wallet-import-signet-regtest-disambiguation`, v0.27+). **Cosigner-to-cosigner coin-type heterogeneity** (e.g., cosigner 0 has `m/48'/0'/...`, cosigner 1 has `m/48'/1'/...`) → exit 2 `ImportWalletParse` per §2.3 with stderr template `error: import-wallet: <format>: cosigner <i> has coin-type <c1>, cosigner 0 has coin-type <c0>; all cosigners must share a coin-type`. The single-`Network` field on `ParsedImport` (per §8.1) permits no heterogeneity. (SLIP-132 prefixes ypub/zpub/upub/vpub remain handled by existing `slip0132.rs::normalize_xpub_prefix` for xpub-string canonicalization — orthogonal to network inference.)
 9. Construct `ParsedImport { descriptor, cosigners, network, threshold, bsms_audit }`. Enforce watch-only invariant: every `cosigners[i].entropy == None`.
 
 ### §4.3 Cosigner ordering
@@ -313,7 +314,7 @@ pub(crate) trait WalletFormatParser {
 
 pub(crate) struct ParsedImport {
     pub(crate) descriptor: md_codec::Descriptor,
-    pub(crate) cosigners: Vec<CosignerKeyInfo>,    // INVARIANT: all entropy == None
+    pub(crate) cosigners: Vec<ResolvedSlot>,    // INVARIANT: all entropy == None
     pub(crate) network: bitcoin::Network,
     pub(crate) threshold: Option<u8>,
     pub(crate) bsms_audit: Option<BsmsAuditFields>,
@@ -330,14 +331,14 @@ pub(crate) struct BsmsAuditFields {
 
 **Dispatch:** The trait has associated-function signatures (no `&self`), matching the existing `WalletFormatEmitter` non-`&self` shape at `wallet_export/mod.rs:322`. The dispatcher uses `match format { ... }` enum-style dispatch (NOT `dyn WalletFormatParser`); trait is not object-safe by design.
 
-**Field-name discipline:** `CosignerKeyInfo` is a type alias for `ResolvedSlot` (`synthesize.rs:585`, re-exported via `parse_descriptor.rs:12`). Field names per the alias: `.xpub` (xpub bytes / typed `Xpub`), `.fingerprint` (`Fingerprint`), `.path` (`DerivationPath` — typed origin path), `.path_raw` (`String` — raw `[fp/path]` text), `.entropy` (`Option<Zeroizing<Vec<u8>>>`), `.master_xpub` (`Option<Xpub>`). Code accessing the origin path uses `.path` for typed comparison or `.path_raw` for byte-exact equality against the blob's input text. NO field named `origin_path` exists.
+**Field-name discipline:** Use the canonical name **`ResolvedSlot`** in new wallet-import code. `CosignerKeyInfo` is a deprecated type alias for `ResolvedSlot` retained for backward-compatibility (`synthesize.rs:182-188`, re-exported via `parse_descriptor.rs:12`); the alias remains importable but should not be used in new code (§7.0.c). Field names per `ResolvedSlot`: `.xpub` (xpub bytes / typed `Xpub`), `.fingerprint` (`Fingerprint`), `.path` (`DerivationPath` — typed origin path), `.path_raw` (`String` — raw `[fp/path]` text), `.entropy` (`Option<Zeroizing<Vec<u8>>>`), `.master_xpub` (`Option<Xpub>`). Code accessing the origin path uses `.path` for typed comparison or `.path_raw` for byte-exact equality against the blob's input text. NO field named `origin_path` exists.
 
 ### §8.2 Watch-only invariant enforcement
 
 New `ToolkitError` variant: `ImportWalletWatchOnlyViolation(usize)` (carrying the offending cosigner index). Tier-2 routing per §2.3 (format-violation/refusal; mirrors `ExportWalletSecretInput` discipline at `error.rs:93,308,354,417`).
 
 ```rust
-fn validate_watch_only_resolved(cosigners: &[CosignerKeyInfo]) -> Result<(), ToolkitError> {
+fn validate_watch_only_resolved(cosigners: &[ResolvedSlot]) -> Result<(), ToolkitError> {
     for (i, c) in cosigners.iter().enumerate() {
         if c.entropy.is_some() {
             return Err(ToolkitError::ImportWalletWatchOnlyViolation(i));

@@ -132,7 +132,7 @@ Per-format zero-sized structs (`BsmsParser`, `BitcoinCoreParser`) stay private t
 
 ### Q-arch2 — Intermediate types (from architect R1)
 
-**D12 — Reuse `md_codec::Descriptor` + `CosignerKeyInfo`; do NOT invent `ImportedDescriptor`.** `ParsedImport` carries `descriptor: md_codec::Descriptor`, `cosigners: Vec<CosignerKeyInfo>` (INVARIANT: all `entropy: None` for watch-only imports), `network: Network`, `threshold: Option<u8>`, `bsms_audit: Option<BsmsAuditFields>`.
+**D12 — Reuse `md_codec::Descriptor` + `ResolvedSlot`; do NOT invent `ImportedDescriptor`.** `ParsedImport` carries `descriptor: md_codec::Descriptor`, `cosigners: Vec<ResolvedSlot>` (INVARIANT: all `entropy: None` for watch-only imports), `network: Network`, `threshold: Option<u8>`, `bsms_audit: Option<BsmsAuditFields>`. Per §7.0.c amendment: `CosignerKeyInfo` is a deprecated alias for `ResolvedSlot` (`synthesize.rs:182-188`); new code uses the canonical `ResolvedSlot` name.
 
 ### Q-arch3 — AST walk (from architect R1)
 
@@ -148,7 +148,7 @@ Per-format zero-sized structs (`BsmsParser`, `BitcoinCoreParser`) stay private t
 
 ### Q-redact — Run-confirm-modal (from architect R2 — GUI section)
 
-**D16 — `@env:VAR` sentinel cross-cutting across all 6 inline-value secret-flag surfaces.** SPEC §5.11 (NEW) — "CLI value-source sentinels." Resolution: clap-parse-time substitution. Missing env-var → exit 1 (`ImportWalletEnvVarMissing` or generic `EnvVarMissing`). Empty-string env-var preserves v0.25.1 watch-only sentinel semantics. Literal `@env:` cannot be escaped this cycle (FOLLOWUP `env-var-sentinel-literal-escape`).
+**D16 — `@env:VAR` sentinel cross-cutting across all 6 inline-value secret-flag surfaces.** SPEC §5.11 (NEW) — "CLI value-source sentinels." Resolution: clap-parse-time substitution. Missing env-var → exit 1 with cross-cutting `ToolkitError::EnvVarMissing` variant (canonical name; NOT import-wallet-specific). Empty-string env-var preserves v0.25.1 watch-only sentinel semantics. Literal `@env:` cannot be escaped this cycle (FOLLOWUP `env-var-sentinel-literal-escape`).
 
 By construction, the sentinel obviates v0.11.0's need for argv-redaction: argv contains `--ms1 @env:MNEMONIC_MS1_0`, not the secret. Run-confirm-modal renders the sentinel. **GUI argv-redaction becomes a v0.12.0 defense-in-depth FOLLOWUP, not a v0.11.0 blocker.**
 
@@ -158,7 +158,7 @@ By construction, the sentinel obviates v0.11.0's need for argv-redaction: argv c
 
 | Tier | Variants |
 |---|---|
-| 1 | `ImportWalletAmbiguousFormat`, `ImportWalletFormatMismatch`, `ImportWalletEnvVarMissing` |
+| 1 | `ImportWalletAmbiguousFormat`, `ImportWalletFormatMismatch`, `EnvVarMissing` (cross-cutting, NOT import-wallet-specific) |
 | 2 | `ImportWalletParse`, `ImportWalletXprvForbidden` |
 | 3 | (via `FutureFormat` From-impl for BSMS 2.0+) |
 | 4 | `ImportWalletSeedMismatch` |
@@ -280,7 +280,7 @@ Per-phase opus architect R0/R1+ until 0 Critical / 0 Important (per `[[feedback-
 - `design/SPEC_mnemonic_toolkit_v0_5.md` — amendments (anchor numbers verified against v0.5 TOC `grep '^## '` on 2026-05-18):
   - **§5.11 (NEW)**: cross-cutting CLI value-source sentinels (`@env:VAR`). Placed textually after the §5-cluster (§5.5, §5.5.a, §5.6, §5.7, §5.8); numerically discontiguous-OK per v0.5 delta-only ordering.
   - **§6.11 (NEW)**: `import-wallet` CLI grammar (mirrors §6.7 verify-bundle structure). Placed after existing §6.10 (Conditional-applicability projection).
-  - **§7 (NEW)**: wallet_import round-trip discipline. New top-level section between §6.x cluster and §8 (which currently lacks any §7 entry).
+  - **§6.11.a (NEW)**: wallet_import round-trip discipline. Per §7.0.b amendment: sub-section of §6.11 (NOT a new §7 top-level) to preserve v0.5 SPEC's delta-only ordering convention. Mirrors `§4.12.a-g` precedent established by the v0.19.0 non-canonical descriptor cycle.
 - `design/FOLLOWUPS.md` — 11 new entries (§6 above).
 - `docs/manual/src/40-cli-reference/41-mnemonic.md` — new `## import-wallet` subsection (Phase 6; load-bearing per CLAUDE.md mirror invariant).
 - `docs/manual/src/<new>-foreign-formats.md` — new chapter on BSMS Round-2 + Bitcoin Core blob shapes.
