@@ -159,15 +159,19 @@ fn bsms_6_line_happy_path() {
 }
 
 // ============================================================================
-// §2.6 — bsms_first_address_mismatch_warning
+// §2.6 — bsms_first_address_field_preserved_unverified
+// (renamed from `bsms_first_address_mismatch_warning` per Phase 2 R0 I1 fold
+//  — first-address verification deferred to v0.27+ FOLLOWUP `bsms-first-address-verify`)
 // ============================================================================
 
 #[test]
-fn bsms_first_address_mismatch_warning() {
-    // First-address verification is informational in v0.26.0 (SPEC §4.1
-    // lock). Mismatch produces stderr WARNING but exit 0. The blob's
-    // first_address is intentionally garbage; the audit fields are still
-    // preserved.
+fn bsms_first_address_field_preserved_unverified() {
+    // v0.26.0 (Phase 2 I1 fold): first-address derivation + mismatch
+    // WARNING are deferred to v0.27+ per FOLLOWUP
+    // `bsms-first-address-verify`. The audit field IS preserved verbatim
+    // for `--json` envelope consumption; the toolkit does not compute
+    // an address at the declared path or compare against it in this
+    // cycle. This cell pins the preservation invariant.
     let desc = format!(
         "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*))"
     );
@@ -179,13 +183,24 @@ fn bsms_first_address_mismatch_warning() {
         "H/sig=",
     );
     let out = run_import_stdin(&blob).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // v0.26.0: the signature-not-verified WARNING is the load-bearing
-    // 6-line marker. First-address mismatch is FOLLOWUP'd
-    // (`bsms-first-address-verify`) and surfaces no extra stderr text in
-    // this cycle. Per SPEC §4.1, mismatch is informational; the audit
-    // fields are preserved verbatim for `--json` envelope use.
-    assert!(stderr.contains("signature present but not verified"));
+    // 6-line shape => signature-not-verified WARNING fires (SPEC §2.4
+    // row 2); audit bundle is populated (preservation invariant).
+    assert!(
+        stderr.contains("signature present but not verified"),
+        "expected 6-line signature-not-verified WARNING; stderr was: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("bsms_audit=some"),
+        "BsmsAuditFields must be populated for 6-line blob; stdout was: {stdout:?}"
+    );
+    // First-address mismatch is intentionally fed but produces no
+    // mismatch WARNING in v0.26.0 (deferral invariant).
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "v0.26.0 must not emit first-address-mismatch WARNING (deferred to v0.27+); stderr was: {stderr:?}"
+    );
 }
 
 // ============================================================================

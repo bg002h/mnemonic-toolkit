@@ -68,7 +68,7 @@ ToolkitError variant naming: no `Error` suffix (matches `DescriptorParse`/`Conve
 |---|---|
 | WARNING (exit 0) | `warning: import-wallet: bsms: 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form` |
 | WARNING (exit 0) | `warning: import-wallet: bsms: signature present but not verified in v0.26.0; see FOLLOWUP \`bsms-verify-signatures\`` |
-| WARNING (exit 0) | `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>` (informational; not hard-error in v0.26.0) |
+| ~~WARNING (exit 0)~~ | ~~`warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>`~~ — **deferred to v0.27+ per Phase 2 I1 fold.** First-address verification requires derivation at `<DERIVATION_PATH>/0/0` which is non-trivial absent a Phase-4-equivalent derivation helper. The audit field is preserved verbatim in `ParsedImport.bsms_audit.first_address` for `--json` envelope; verification + WARNING emission tracked in FOLLOWUP `bsms-first-address-verify`. |
 | NOTICE (exit 0) | `notice: import-wallet: bsms: --select-descriptor <X> has no effect; BSMS Round-2 carries a single descriptor` |
 | NOTICE (exit 0) | `notice: import-wallet: bitcoin-core: dropped wallet-state fields <fields>: not preserved in bundle output (key-state only)` |
 | WARNING (exit 0) | `warning: import-wallet: roundtrip not byte-exact; semantic equivalent; diff below`<br>(+ unified-diff body on stderr OR in `--json` envelope, never both) |
@@ -146,7 +146,7 @@ BSMS 1.0
 <SIGNATURE>
 ```
 - No WARNING about reduced form.
-- First-address verification: derive descriptor at `<DERIVATION_PATH>/0/0` (mainnet receive index 0 by convention); compare against `<FIRST_ADDRESS>`. Mismatch → stderr WARNING (informational, not hard-error this cycle).
+- First-address verification: **deferred to v0.27+ per Phase 2 I1 fold.** `<FIRST_ADDRESS>` is preserved verbatim in `ParsedImport.bsms_audit.first_address` for the `--json` envelope; toolkit-side derivation + mismatch WARNING tracked in FOLLOWUP `bsms-first-address-verify`. Rationale: descriptor-at-derivation-path → address rendering is non-trivial absent a derivation helper that doesn't exist in v0.26.0 toolkit surface; the WARNING was informational-only (not hard-error), so deferral does not weaken the import-path correctness contract — concrete-keys checksum (BIP-380) + xpub parse (`MsDescriptor::from_str`) + watch-only invariant remain load-bearing.
 - `<TOKEN>` + `<SIGNATURE>` preserved in `ParsedImport.bsms_audit` for `--json` envelope; not verified in v0.26.0 (FOLLOWUP `bsms-verify-signatures`).
 
 ### §4.2 Parse pipeline

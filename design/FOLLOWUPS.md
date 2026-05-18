@@ -2079,3 +2079,55 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** resolved v0.25.1 cycle
 - **Tier:** `v0.25.1`
 - **Companion:** none.
+
+### `bsms-first-address-verify` — toolkit-side first-address derivation + mismatch WARNING for 6-line BSMS Round-2
+
+- **Surfaced:** 2026-05-18, Phase 2 R0 architect review of v0.26.0 wallet-import cycle.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:198-205` — `parse_six_line` path deferred verification; comment `let _ = &audit;` is the no-op fence.
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.1 (post-Phase-2-fold) — defers first-address verification to v0.27+.
+  - `design/SPEC_wallet_import_v0_26_0.md` §2.4 row 3 (post-Phase-2-fold) — WARNING template struck through.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_first_address_field_preserved_unverified` (post-fold rename) — pins audit-field preservation; no derivation-side assertions.
+- **What:** v0.27+: derive descriptor at `<DERIVATION_PATH>/0/0` via existing toolkit derivation helpers, compute the address per the network detected in §4.2 step 8, and compare against `audit.first_address`. On mismatch, emit stderr WARNING per (restored) SPEC §2.4 row 3 template: `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>` — informational only (exit 0, not hard-error). The check is BIP-129 §6's intended coordinator-output-self-consistency guard.
+- **Why deferred:** Phase 2 surfaced that descriptor → address rendering at a specific derivation path is non-trivial in the v0.26.0 toolkit surface (no `derive_address_at_path` helper exists). The WARNING was informational-only (not hard-error), so deferring doesn't weaken the import-path correctness contract — concrete-keys checksum (BIP-380), xpub parse (`MsDescriptor::from_str`), and watch-only invariant remain load-bearing.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-signet-regtest-disambiguation` — coin-type-1 collapses signet/regtest to testnet
+
+- **Surfaced:** 2026-05-18, Phase 0 R0 architect review I2 fold (during §7.0.a SPEC amendment) + cited in `wallet_import/bsms.rs:14-15` of Phase 2.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:14-15` — module-level doc comment citing the FOLLOWUP for the canonical testnet collapse rule.
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.2 step 8 — explicit normative text: "Signet and regtest are not distinguishable from testnet via origin-path inspection... imported as testnet."
+  - Future `wallet_import/bitcoin_core.rs` (Phase 3) — same coin-type extraction will share this behavior.
+- **What:** BIP-129 BSMS + Bitcoin Core `listdescriptors` origin annotations use coin-type `1` for testnet, signet, AND regtest — the blob is intrinsically ambiguous. v0.26.0 picks `Network::Testnet` as the canonical interpretation. v0.27+ may add either (a) a `--network signet|regtest` override on `import-wallet` (post-parse network re-binding), or (b) a separate origin-path-side disambiguator (e.g., a sibling `network_hint:` annotation that some wallets emit). User-direction needed before implementation.
+- **Why deferred:** Surface-area trade-off: adding `--network` to `import-wallet` introduces a flag that 99% of users will never set (BIP-129 blobs don't carry signet/regtest as a separate type today), but the ambiguity exists and warrants explicit handling for users who run signet/regtest workflows. Testnet collapse is a safe v0.26.0 default.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-bsms-checksum-delegation-note` — SPEC §4.4 wording inaccuracy (checksum NOT auto-delegated)
+
+- **Surfaced:** 2026-05-18, Phase 2 R0 architect review of v0.26.0 wallet-import cycle (implementer's finding 2).
+- **Where:**
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.4 — text reads "BIP-380 8-character polymod checksum. Auto-validated when `MsDescriptor::from_str` is called by `parse_descriptor`."
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:26-27,140-145` — implementation calls `miniscript::descriptor::checksum::verify_checksum` explicitly up-front because `parse_descriptor::substitute_synthetic` (`parse_descriptor.rs:776`) swaps `@N` placeholders for synthetic xpubs BEFORE `MsDescriptor::from_str`, so the concrete-keys checksum never reaches `from_str`.
+- **What:** Phase 7 SPEC-amend: rewrite §4.4 to describe the actual mechanism — "BIP-380 8-character polymod checksum. Validated UP-FRONT by `wallet_import::bsms::parse` via `miniscript::descriptor::checksum::verify_checksum` on the concrete-keys descriptor body, BEFORE the `concrete_keys_to_placeholders` adapter rewrites the body to `@N` placeholder form for `parse_descriptor`. The downstream `MsDescriptor::from_str` inside `parse_descriptor` operates on the synthetic-xpub-substituted form and cannot reach the original checksum." The implementation is correct; only the SPEC wording is wrong.
+- **Why deferred:** Documentation-only fix; can ride the Phase 7 cycle-close SPEC-amend commit. No correctness change needed in code.
+- **Status:** open
+- **Tier:** `v0.26.0-cycle-close`
+- **Companion:** none.
+
+### `bsms-verify-signatures` — full BIP-129 HMAC token + signature verification on Round-2 ingest
+
+- **Surfaced:** 2026-05-18, planned in `design/BRAINSTORM_wallet_import_v0_26_0.md` §6 item 2 as a cycle-close FOLLOWUP; cited in `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` of Phase 2.
+- **Where:**
+  - `design/BRAINSTORM_wallet_import_v0_26_0.md:264` — planned FOLLOWUP enumeration.
+  - `design/SPEC_wallet_import_v0_26_0.md:150` — defers verification: "not verified in v0.26.0 (FOLLOWUP `bsms-verify-signatures`)".
+  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` (approx; cite is in BsmsAuditFields doc-comment) — `signature_verified: bool` field locked to `false` in v0.26.0.
+- **What:** v0.27+: implement full BIP-129 §5 HMAC token + signature verification flow. Coordinator's HMAC key derivation: PBKDF2(passphrase, salt, iterations) → HMAC-SHA256 over canonical Round-2 body. Toolkit-side flow: prompt for HMAC key (via `--coordinator-hmac-key <FILE>` or `@env:`), recompute HMAC, compare against `<SIGNATURE>` field; on success set `signature_verified: true`. Mismatch → exit 2 `ImportWalletParse` with stderr "bsms: signature mismatch — coordinator HMAC key does not match blob".
+- **Why deferred:** Scope. v0.26.0 cycle target is parse + watch-only invariant + round-trip discipline; BIP-129 HMAC verification is a distinct security primitive that needs its own design pass (key-distribution UX, env-var/file/stdin input forms, refusal-on-missing-key default, etc.).
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
