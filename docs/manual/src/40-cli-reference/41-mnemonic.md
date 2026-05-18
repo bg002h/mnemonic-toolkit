@@ -684,7 +684,7 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
 | `--format <bsms\|bitcoin-core>` | format override; if absent, auto-detected via sniff (SPEC §6) |
 | `--select-descriptor <N\|active-receive\|active-change\|all>` | multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3); accepts integer index, `active-receive`, `active-change`, or `all` (default); BSMS blobs coerce non-default values to `all` with stderr NOTICE |
-| `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel |
+| `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; cosigners not addressed by any `--ms1[N]` flag remain watch-only (no entropy attached); accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel |
 | `--slot <@N.phrase=<phrase>>` | per-slot seed overlay; equivalent to `--ms1` but the phrase is converted to entropy and the derived xpub at the cosigner's origin path is compared against the blob's xpub; mutually exclusive with `--ms1[N]` for the same N; accepts `@env:VAR`; only the `phrase` subkey is accepted on `import-wallet` in v0.26.0 |
 | `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary |
 | `--help` | print help |
@@ -723,9 +723,12 @@ produces xpub <X> at path <P>; blob declares <Y>`.
 The `@env:<VAR>` sentinel (SPEC §3) resolves at clap-parse time via
 `std::env::var(VAR)`. Whole-value only — `--ms1 prefix@env:VAR` is
 treated as literal text. Missing or unset env-var → exit 1 with
-`error: --ms1: env-var VAR referenced by sentinel is not set`. The
-GUI's run-confirm modal exploits this sentinel to keep seeds out of
-the spawned subprocess argv (see [GUI walkthrough](#mnemonic-import-wallet-gui)).
+`error: --ms1: env-var VAR referenced by sentinel is not set`.
+Pipe entropy via `@env:VAR` sentinel to avoid argv-leak; the
+v0.11.0 GUI emits typed values verbatim, so users must type
+`@env:VAR` explicitly themselves (per FOLLOWUP
+`gui-import-wallet-env-var-secret-channel` v0.12.0+ for
+auto-rewriting).
 
 ### Exit codes
 
@@ -849,8 +852,11 @@ on stdout + the round-trip status on stderr.
 ### Advisories
 
 The `--ms1` / `--slot @N.phrase=` overlay flags carry secret material
-on argv; pipe entropy via `@env:VAR` sentinel to avoid argv leakage
-(GUI does this automatically per [§9.3](#mnemonic-import-wallet-gui)).
+on argv; pipe entropy via `@env:VAR` sentinel to avoid argv-leak;
+the v0.11.0 GUI emits typed values verbatim, so users must type
+`@env:VAR` explicitly themselves (per FOLLOWUP
+`gui-import-wallet-env-var-secret-channel` v0.12.0+ for
+auto-rewriting).
 Re-emitted Bitcoin Core blobs DROP `timestamp` / `next` / `next_index`
 fields (wallet-state, not key-state); the dropped-fields NOTICE
 template above fires when input carries any of these. BSMS Round-2
