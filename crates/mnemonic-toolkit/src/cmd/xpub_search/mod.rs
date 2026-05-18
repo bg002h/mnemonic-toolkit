@@ -34,6 +34,7 @@ pub mod address_of_xpub;
 pub mod address_search;
 pub mod candidate_paths;
 pub mod descriptor_intake;
+pub mod passphrase_of_xpub;
 pub mod path_of_xpub;
 pub mod path_search;
 pub mod seed_intake;
@@ -43,6 +44,7 @@ pub mod target_intake;
 // via `mnemonic_toolkit::cmd::xpub_search::PathOfXpubResult`.
 pub use account_of_descriptor::AccountOfDescriptorResult;
 pub use address_of_xpub::AddressOfXpubResult;
+pub use passphrase_of_xpub::PassphraseOfXpubResult;
 pub use path_of_xpub::PathOfXpubResult;
 
 /// Umbrella `xpub-search` args. Defers to `XpubSearchCommand` for the
@@ -64,6 +66,10 @@ pub enum XpubSearchCommand {
     /// Given a single-sig xpub + one or more target addresses, find the
     /// chain/index under the xpub that produces each address.
     AddressOfXpub(address_of_xpub::AddressOfXpubArgs),
+    /// Given a seed + a specific passphrase + target xpub, verify whether
+    /// the passphrase produces the xpub at a standard path. P1 with a
+    /// mandatory passphrase group.
+    PassphraseOfXpub(passphrase_of_xpub::PassphraseOfXpubArgs),
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -88,6 +94,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
         XpubSearchCommand::AddressOfXpub(a) => {
             address_of_xpub::run_address_of_xpub(a, stdin, stdout, stderr, no_auto_repair)
+        }
+        XpubSearchCommand::PassphraseOfXpub(a) => {
+            passphrase_of_xpub::run_passphrase_of_xpub(a, stdin, stdout, stderr, no_auto_repair)
         }
     }
 }
@@ -116,6 +125,7 @@ pub enum XpubSearchJson {
     PathOfXpub(PathOfXpubResult),
     AccountOfDescriptor(AccountOfDescriptorResult),
     AddressOfXpub(AddressOfXpubResult),
+    PassphraseOfXpub(PassphraseOfXpubResult),
 }
 
 #[cfg(test)]

@@ -1706,7 +1706,7 @@ Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — 
 - **`path-of-xpub`** — given seed + target xpub (or mk1 card), find the BIP-32 path under the seed that produces it.
 - **`account-of-descriptor`** — given seed + descriptor, find the cosigner role + account index.
 - **`address-of-xpub`** — given xpub + address, scan child indices to a gap limit.
-- `passphrase-of-xpub` *(planned)* — given seed + passphrase + target xpub, verify match.
+- **`passphrase-of-xpub`** — given seed + passphrase + target xpub, verify the passphrase produces the xpub at a standard path.
 
 ### `mnemonic xpub-search path-of-xpub`
 
@@ -2054,3 +2054,143 @@ P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
 | Both `--xpub` and `--xpub-stdin` supplied | clap mutex error |
 | Neither `--xpub` nor `--xpub-stdin` supplied | `supply --xpub <VALUE> or --xpub-stdin` |
 | No `--target-address` supplied | clap `required` error |
+
+### `mnemonic xpub-search passphrase-of-xpub`
+
+Given a seed (BIP-39 phrase OR ms1 card) **plus a specific passphrase** + a target xpub (or mk1 card carrying an xpub), verify that this passphrase produces the xpub under the seed at one of the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range. Same candidate-set + first-match-wins primitive as `path-of-xpub`; the semantic difference is that this mode answers **"does THIS passphrase produce the xpub?"** rather than **"what path produced this xpub?"**.
+
+The passphrase group is **mandatory**: exactly one of `--passphrase` / `--passphrase-stdin` must be supplied. Omitting both is a clap arg-parse error (exit 64). MVP scope is single-passphrase verification only; file-based / streamed / generated candidate sets are deferred to v0.27+ via FOLLOWUP `xpub-search-passphrase-bruteforce`.
+
+#### Synopsis
+
+```sh
+mnemonic xpub-search passphrase-of-xpub \
+    {--phrase <BIP39> | --phrase-stdin | --ms1 <MS1> | --ms1-stdin | <positional MS1>} \
+    {--passphrase <P> | --passphrase-stdin} \
+    --target-xpub <XPUB-OR-MK1> \
+    [--language <LANG>] [--network <NET>] \
+    [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
+    [--add-path <TEMPLATE>]... \
+    [--json]
+```
+
+#### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--phrase <PHRASE>` | master BIP-39 phrase (inline); emits argv-leakage advisory; prefer `--phrase-stdin` |
+| `--phrase-stdin` | read master BIP-39 phrase from stdin |
+| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
+| `--ms1-stdin` | read ms1 card from stdin (single chunk) |
+| `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
+| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory. **Mandatory** (mutex with `--passphrase-stdin`) |
+| `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). **Mandatory** (mutex with `--passphrase`) |
+| `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
+| `--language <LANGUAGE>` | BIP-39 wordlist (default `english`) |
+| `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
+| `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
+| `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)` |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
+| `--json` | emit JSON envelope on stdout instead of text-form |
+| `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
+| `-h, --help` | print help |
+
+Seed-intake mutex (identical to `path-of-xpub`): exactly one of `{--phrase, --phrase-stdin, --ms1, --ms1-stdin, positional}` is required. Auto-fire BCH repair applies ONLY to the `--ms1` decode-failure path.
+
+#### Stderr advisory (always emitted)
+
+Every invocation emits the following advisory on stderr BEFORE the search starts (it does not gate on match / no-match):
+
+```text
+note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use `xpub-search path-of-xpub` to find the path first.
+```
+
+The advisory is load-bearing UX: a "no match" result does NOT prove the passphrase is wrong — only that no standard path under the (seed, passphrase) pair produces the target. Users with non-standard paths must extend the candidate set via `--add-path`, or solve the path-lookup separately via `path-of-xpub`.
+
+#### Worked example
+
+```sh
+# Test BIP-39 phrase (12-word vector from BIP-39 spec)
+PHRASE="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+# Suppose a wallet's account-0 zpub was derived from this seed + passphrase "satoshi".
+# Verify by supplying the passphrase + the target xpub:
+mnemonic xpub-search passphrase-of-xpub \
+    --phrase "$PHRASE" \
+    --passphrase satoshi \
+    --target-xpub "$ZPUB"
+```
+
+Stdout (text form, match):
+
+```text
+match: m/84'/0'/0'  (template=bip84, account=0)
+target-xpub: xpub6... (normalized from zpub; variant=zpub)
+searched: 140 candidate paths
+```
+
+#### JSON output
+
+`--json` emits a versioned envelope. Schema `v1`. Same shape as `path-of-xpub` with `mode` substituted (separate `PassphraseOfXpubResult` body type keeps future divergence clean). Match shape:
+
+```json
+{
+  "schema_version": "1",
+  "mode": "passphrase-of-xpub",
+  "result": "match",
+  "path": "m/84'/0'/0'",
+  "template": "bip84",
+  "account": 0,
+  "target_xpub_canonical": "xpub6...",
+  "target_xpub_variant": "zpub",
+  "searched_count": 140
+}
+```
+
+No-match shape:
+
+```json
+{
+  "schema_version": "1",
+  "mode": "passphrase-of-xpub",
+  "result": "no_match",
+  "path": null,
+  "template": null,
+  "account": null,
+  "target_xpub_canonical": "xpub6...",
+  "target_xpub_variant": "zpub",
+  "searched_count": 140
+}
+```
+
+`target_xpub_variant` serializes as `null` when the target was supplied in canonical xpub/tpub form (no SLIP-0132 alt-prefix swap occurred). The field is always emitted (not skipped) to keep the JSON envelope structurally stable across runs.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Match found (this passphrase produces the target xpub at one of the searched paths) |
+| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure outside the auto-fire path, ms1 decode failure with `--no-auto-repair` or on no-TTY) |
+| 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch` with `mode: "passphrase-of-xpub"`) |
+| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated; same contract as `convert` / `inspect` / `verify-bundle`) |
+| 64 | Clap arg-parse error (including missing-mandatory-passphrase) |
+
+#### Refusals
+
+| Trigger | Refusal |
+|---|---|
+| Neither `--passphrase` nor `--passphrase-stdin` supplied | clap `the following required arguments were not provided` error (exit 64) |
+| Both `--passphrase` and `--passphrase-stdin` supplied | clap mutex error (exit 64) |
+| Positional argument with no `ms1` HRP (e.g., a BIP-39 phrase typed positionally) | `BIP-39 phrase must be supplied via --phrase or --phrase-stdin (no HRP for positional autodetect)` |
+| Multiple seed-intake flags supplied | clap mutex error |
+| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 1) |
+
+#### Advisories
+
+| Trigger | Stderr advisory |
+|---|---|
+| Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <v>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Every invocation (before search starts) | `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` |
