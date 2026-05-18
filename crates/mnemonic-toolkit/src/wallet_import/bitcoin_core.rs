@@ -58,7 +58,6 @@ pub(crate) struct BitcoinCoreParser;
 /// Vendor-marker keys that ALSO appear at the top level of competing wallet
 /// vendor blobs (Specter, Sparrow, etc.). Their presence overrides any Core
 /// match in `sniff` — keeps `sniff` conservative per SPEC §6.1.2 lock.
-#[allow(dead_code)] // consumed by `sniff`; the trait method is `#[allow(dead_code)]`-gated until Phase 5 wires the dispatcher.
 const VENDOR_MARKER_KEYS: &[&str] = &["chain", "policy", "version", "bipname", "extendedPublicKey"];
 
 impl WalletFormatParser for BitcoinCoreParser {

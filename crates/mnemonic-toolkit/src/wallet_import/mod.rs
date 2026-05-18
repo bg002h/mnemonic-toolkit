@@ -23,8 +23,10 @@ use std::io::Write;
 
 pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
+pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
+pub(crate) mod sniff;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -32,9 +34,8 @@ pub(crate) mod roundtrip;
 /// object-safe by design.
 pub(crate) trait WalletFormatParser {
     /// Heuristic detection: return `true` if `blob` looks like this format.
-    /// Used by Phase 5's `sniff` dispatcher to auto-detect when `--format`
-    /// is not supplied.
-    #[allow(dead_code)] // Phase 5 wires the sniff dispatcher.
+    /// Used by `wallet_import::sniff::sniff_format` to auto-detect when
+    /// `--format` is not supplied.
     fn sniff(blob: &[u8]) -> bool;
 
     /// Parse the blob into one or more `ParsedImport` bundles. WARNINGs go to

@@ -105,7 +105,7 @@ fn main() -> ExitCode {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
         }
         Command::ImportWallet(args) => {
-            cmd::import_wallet::run(args, stdin, stdout, stderr)
+            cmd::import_wallet::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)

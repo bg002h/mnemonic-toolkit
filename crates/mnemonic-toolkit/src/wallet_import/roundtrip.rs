@@ -36,7 +36,6 @@ use std::str::FromStr;
 ///    `ChecksumEngine`.
 /// 4. Drop audit lines (token, signature, first_address, derivation_path).
 /// 5. Re-emit canonical form: `BSMS 1.0\n<re-rendered-descriptor>#<re-checksum>\n`.
-#[allow(dead_code)] // Phase 5 wires this into `cmd/import_wallet.rs::run`.
 pub(crate) fn canonicalize_bsms(blob: &[u8]) -> Result<String, ToolkitError> {
     let text = std::str::from_utf8(blob).map_err(|e| {
         ToolkitError::ImportWalletParse(format!("canonicalize_bsms: blob is not valid UTF-8: {e}"))
@@ -115,7 +114,6 @@ pub(crate) fn canonicalize_bsms(blob: &[u8]) -> Result<String, ToolkitError> {
 /// RPC envelope `{ wallet_name, descriptors: [...] }`. Canonicalize handles
 /// BOTH shapes so import-side fixtures + export-side emit can round-trip
 /// against each other.
-#[allow(dead_code)] // Phase 5 wires this into `cmd/import_wallet.rs::run`.
 pub(crate) fn canonicalize_bitcoin_core(blob: &[u8]) -> Result<String, ToolkitError> {
     let value: Value = serde_json::from_slice(blob).map_err(|e| {
         ToolkitError::ImportWalletParse(format!("canonicalize_bitcoin_core: invalid JSON: {e}"))
@@ -209,7 +207,6 @@ pub(crate) fn canonicalize_bitcoin_core(blob: &[u8]) -> Result<String, ToolkitEr
 ///
 /// Returns the empty string for byte-identical inputs (no diff to render).
 /// Header is fixed to `--- input` / `+++ output`.
-#[allow(dead_code)] // Phase 5 wires this into `cmd/import_wallet.rs::run`.
 pub(crate) fn unified_diff(old: &str, new: &str) -> String {
     similar::TextDiff::from_lines(old, new)
         .unified_diff()
@@ -227,7 +224,6 @@ pub(crate) fn unified_diff(old: &str, new: &str) -> String {
 /// `<body>#<checksum>` form.
 ///
 /// On error (parse / re-checksum), returns `ImportWalletParse`.
-#[allow(dead_code)] // consumed by canonicalize_bsms + canonicalize_bitcoin_core; both Phase-5-wired.
 fn recanonicalize_descriptor(desc_with_csum: &str) -> Result<String, ToolkitError> {
     // Strip any existing checksum suffix BEFORE parsing — miniscript's
     // `from_str` accepts both forms (with or without `#<csum>`), but we
@@ -538,7 +534,11 @@ mod tests {
         assert_eq!(c, c2, "canonicalize must be idempotent");
 
         // 3 cosigner origin annotations present.
-        assert_eq!(c.matches('[').count(), 3, "expected 3 origin annotations; got: {c}");
+        assert_eq!(
+            c.matches('[').count(),
+            3,
+            "expected 3 origin annotations; got: {c}"
+        );
     }
 
     #[test]
