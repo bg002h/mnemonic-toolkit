@@ -2128,9 +2128,27 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` (approx; cite is in BsmsAuditFields doc-comment) — `signature_verified: bool` field locked to `false` in v0.26.0.
 - **What:** v0.27+: implement full BIP-129 §5 HMAC token + signature verification flow. Coordinator's HMAC key derivation: PBKDF2(passphrase, salt, iterations) → HMAC-SHA256 over canonical Round-2 body. Toolkit-side flow: prompt for HMAC key (via `--coordinator-hmac-key <FILE>` or `@env:`), recompute HMAC, compare against `<SIGNATURE>` field; on success set `signature_verified: true`. Mismatch → exit 2 `ImportWalletParse` with stderr "bsms: signature mismatch — coordinator HMAC key does not match blob".
 - **Why deferred:** Scope. v0.26.0 cycle target is parse + watch-only invariant + round-trip discipline; BIP-129 HMAC verification is a distinct security primitive that needs its own design pass (key-distribution UX, env-var/file/stdin input forms, refusal-on-missing-key default, etc.).
-- **Status:** open
+- **Status:** open — **NOTE:** the FOLLOWUP body wording above (and the v0.26.0 SPEC framing it reflects) misreads BIP-129. Per the v0.27.0 Phase 2 BIP-129 recon at `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`: BIP-129's signature surface is NOT HMAC; it is BIP-322 legacy-format ECDSA recoverable signatures on **Round-1** (Signer → Coordinator) records, not Round-2. v0.27.0 closes this FOLLOWUP by implementing BIP-129-faithful Round-1 verify (NEW input path `--bsms-round1 <FILE>`), NOT the HMAC-keyed Round-2 verify the FOLLOWUP body initially called for. The HMAC primitives in BIP-129 are encryption-envelope MAC (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256), separate from signature verify; that surface is filed at v0.27.0 cycle close as `bsms-bip129-full-cutover` for v0.28+.
 - **Tier:** `v0.27`
-- **Companion:** none.
+- **Companion:** new sibling FOLLOWUP `bsms-bip129-full-cutover` (filed at v0.27.0 plan-revision time per Phase 2 recon pivot — see plan §8).
+
+### `bsms-bip129-full-cutover` — complete BIP-129 conformance: 4-line Round-2 input parser + encryption envelope + deprecate v0.26.0 lenient parser
+
+- **Surfaced:** 2026-05-18, v0.27.0 cycle Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). v0.27.0's Path B-lite ships BIP-129 Round-1 verify (`--bsms-round1`) + BIP-129 Round-2 4-line emit (`--bsms-form 4-line`), but does NOT pivot the v0.26.0 6-line lenient input parser nor implement the encryption-envelope MAC surface.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:104-125` — the v0.26.0 6-line lenient parser whose `signature` field has no agreed verify semantics under BIP-129.
+  - `design/SPEC_wallet_import_v0_26_0.md:152` — the documented lenient-input framing that motivated the 6-line shape.
+  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full BIP-129 spec recon (verbatim quotes from §Specification → Round 1, Round 2, Encryption + 5 in-spec test vectors).
+- **What:** v0.28+:
+  - (a) **Deprecate v0.26.0 6-line lenient parser.** Add stderr DEPRECATION notice when 6-line input is detected; planned removal in a future minor version.
+  - (b) **Add BIP-129-faithful 4-line Round-2 input parser.** `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Cross-validates the descriptor against the supplied path-restrictions + first-address (BIP-129 §Round 2 verify gate). Adds 4 + extra fixture coverage from BIP-129 in-spec test vectors.
+  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt of ciphertext + HMAC-SHA256 MAC verify per BIP-129 §Encryption. New CLI flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. Refer to recon doc §2 for byte-level construction. Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup` `test.py`).
+  - (d) Drop the v0.26.0 6-line shape (and possibly the 2-line lenient excerpt) after a stable-version deprecation window.
+  - (e) Document the v0.26.0 → v0.27 → v0.28 BSMS history in `design/SPEC_wallet_import_v0_28+.md` + manual chapter at `docs/manual/src/40-cli-reference/41-mnemonic.md`.
+- **Why deferred from v0.27.0:** Scope. v0.27.0 Path B-lite focuses on BIP-129 Round-1 verify + Round-2 emit (the two clean primitives that close the round-trip cycle). Adding the encryption-envelope primitives in v0.27.0 would ~double the cycle scope; deprecating v0.26.0's lenient parser pre-needs a stable BIP-129-faithful replacement input path (which requires the 4-line parser of (b) here). v0.28+ cycle.
+- **Status:** open
+- **Tier:** `v0.27-cycle-close`
+- **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure).
 
 ### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
 

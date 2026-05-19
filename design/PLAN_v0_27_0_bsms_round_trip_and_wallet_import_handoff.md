@@ -1,6 +1,6 @@
 # PLAN — mnemonic-toolkit v0.27.0 (BSMS round-trip + wallet-import handoff)
 
-**Status:** draft R5 (R4 reviewer YELLOW micro-folded: 1 Critical literal-fix + 3 Important + 1 Minor; no fresh dispatch — all fixes verifiable by inline citation)
+**Status:** draft R6 — Phase 2 recon mid-execution pivot (Path B-lite per user direction). See §8 for diff vs R5; awaits opus architect validation before Phase 2 code starts. (R5 was approved via ExitPlanMode and Phase 0-1 executed at `b47ad2a` + `e908309`; R6 amends §2.2/§3/§4 for BIP-129 framing correction.)
 **Scope:** 7 in-scope items; toolkit-only (no sibling lockstep).
 **Pre-cycle baseline:** master `66c8a56` = tag `mnemonic-toolkit-v0.26.0` + FOLLOWUPS commit `2efe5b0`.
 **Authorship:** single-instance (this Claude session); v0.26.0 multi-instance topology not in effect.
@@ -29,7 +29,7 @@ The v0.26.0 cycle shipped wallet-import (BSMS Round-2 + Bitcoin Core `listdescri
 
 | # | FOLLOWUP slug | Tier | Cells | LOC | Depends on |
 |---|---|---|---|---|---|
-| 1 | `wallet-export-bsms-emitter` | feature | 7-8 | ~180 | #2 (6-line shape) |
+| 1 | `wallet-export-bsms-emitter` | feature | 8 | ~180 | — (R6 pivot: 4-line Round-2 emit is independent of #2 verify path; see §8) |
 | 2 | `bsms-verify-signatures` | feature | ~15 | ~250 | — |
 | 3 | `inspect-json-schema-version-backfill` | trivial | 2-3 | ~30 | — |
 | 4 | `coordinator-runbook-into-design-dir` | doc-only | 1 (presence smoke) | 0 LOC | — |
@@ -41,12 +41,16 @@ The v0.26.0 cycle shipped wallet-import (BSMS Round-2 + Bitcoin Core `listdescri
 
 ### §2.2 Locked design questions
 
-**Q1 (BSMS 6-line keying source).** When `export-wallet --format bsms` emits 6-line, where does the `<TOKEN>` and `<SIGNATURE>` material come from?
-- **Lock:** `--coordinator-hmac-key <FILE|@env:VAR|->` mandatory for 6-line. Absence + no `--bsms-form 6-line` → 2-line fallback (no NOTICE; this is the natural default).  Absence + explicit `--bsms-form 6-line` → `BsmsHmacKeyMissing` exit 2.
-- Rationale: matches BIP-129 §6 "envelope-side keying"; key material is coordinator state, not bundle state. The plan REJECTS silent format-shape downgrade (per project explicit-output philosophy, [[feedback-silent-default-with-stderr-notice]] applies to convention-driven defaults, not user-explicit choices that contradict supplied flags).
+**Q1 (BSMS Round-2 emit form). [REVISED — Phase 2 recon pivot; see §8.]** What output shapes does `export-wallet --format bsms` produce?
+- **Lock:** Two shapes: **2-line** (lenient, descriptor-only excerpt — preserves v0.26.0 SPEC §4 lenient input shape's symmetric output form) and **4-line** (BIP-129-canonical Round-2 plaintext: `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`). Default is **4-line** (BIP-129 spec-canonical). `--bsms-form 2-line|4-line` selects explicitly.
+- **DROPPED:** 6-line emit. The plan-doc R0-R5 6-line shape (`BSMS 1.0` / `<TOKEN>` / `<descriptor>` / `<path>` / `<first-address>` / `<SIGNATURE>`) was authored against a misreading of BIP-129. Per the Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`): BIP-129 §Specification → §Setup Process → Round 2 specifies a 4-line plaintext (no SIG); signatures live only on **Round-1** key records (Signer → Coordinator) and are **BIP-322 legacy-format ECDSA recoverable signatures**, not HMAC. The toolkit's v0.26.0 6-line lenient INPUT shape stays for backward-compat (`SPEC_wallet_import_v0_26_0.md` §4 line 152); emit does NOT mirror it because no real-world wallet consumes 6-line input.
+- Rationale: BIP-129 spec fidelity. Outward-bound blobs in BIP-129-canonical form are consumable by Coldcard / Sparrow / Nunchuk / Coinkite Python ref; 6-line emit is non-interoperable invention.
 
-**Q2 (HMAC verify default on import).** On `import-wallet --format bsms` ingest of a 6-line blob, what happens if `--coordinator-hmac-key` is absent?
-- **Lock:** **Warn-and-proceed** by default (current v0.26.0 behavior: stderr NOTICE about unverified token, `signature_verified: false`). Strict-refuse opt-in via `--bsms-verify-strict` (new flag). Rationale: matches BIP-129 §6's "lenient by default" posture; preserves v0.26.0 backward-compat for users not yet ready to plumb key material.
+**Q2 (BSMS signature verify on import). [REVISED — Phase 2 recon pivot; see §8.]** What signature verification does `import-wallet` do, and where does it fit?
+- **Lock:** Signature verify is a **separate input path** for BIP-129 Round-1 records (Signer → Coordinator), gated by a new flag `--bsms-round1 <FILE|->` (accepts one or more 5-line Round-1 records). The verify scheme is BIP-322 legacy-format ECDSA recoverable signature, verified against the signer's own pubkey/xpub extracted from line 3 of each Round-1 record. NO `--coordinator-hmac-key` (HMAC is BIP-129's encryption-envelope MAC, not its signature surface).
+- **Behavior:** `--bsms-verify-strict` (kept) controls verify-failure semantics: strict → fail with `BsmsSignatureMismatch` exit 2 on mismatch; lenient (default) → stderr NOTICE + `signature_verified: false` per-record + proceed.
+- **Untouched: v0.26.0 6-line `bsms_audit.signature` field.** Continues to be opaque-stored (parser preserves verbatim). Per `SPEC_wallet_import_v0_26_0.md` §4 line 152's lenient-input framing, the 6-line `signature` field has no agreed verify semantics in the toolkit (it was authored as a placeholder for "envelope-side HMAC/signature" that doesn't exist in BIP-129 as framed). v0.27.0 closes the `bsms-verify-signatures` FOLLOWUP via the NEW Round-1 path (which IS BIP-129); it does NOT retroactively define verify semantics for the 6-line `signature` field. The future cycle FOLLOWUP `bsms-bip129-full-cutover` (filed at v0.27.0 cycle close — see §8) deprecates the 6-line lenient shape after a stable-window.
+- **v0.26.0 backward-compat preserved:** existing 2-line + 6-line import paths unchanged. v0.27.0 ADDS Round-1 verify; it does NOT modify v0.26.0 parser semantics.
 
 **Q3 (InspectJson schema_version placement).** Top-level envelope wrapper OR additive field on each tagged variant?
 - **Lock:** Top-level wrapper `InspectEnvelope { schema_version: "1", #[serde(flatten)] body: InspectJson<'a> }`. Mirrors `XpubSearchEnvelope` exactly (line 111-116 of `cmd/xpub_search/mod.rs`).
@@ -79,19 +83,25 @@ The v0.26.0 cycle shipped wallet-import (BSMS Round-2 + Bitcoin Core `listdescri
 **Q7 (consumer flag mutual exclusion).** Existing inputs to bundle are `--template` / `--descriptor` / `--descriptor-file` (mutually exclusive via clap). Where do the new flags slot?
 - **Lock:** Add to the existing exclusion set. Both `--import-json` (bundle) and `--from-import-json` (export-wallet) are mutually exclusive with `--template` / `--descriptor` / `--descriptor-file`. Clap-derive `ArgGroup { required = true, multiple = false }` extended by one variant each.
 
-**Q8 (BIP-129 verifier source-of-truth — formula deferred to spec).** The plan-doc DOES NOT lock the BIP-129 §5 key derivation formula inline. R0 opus correctly flagged that any plan-coded formula risks divergence from the spec.
-- **Lock:** Phase 2 implementer reads BIP-129 §5 directly (https://github.com/bitcoin/bips/blob/master/bip-0129.mediawiki#5-verification) and verifies the per-cosigner key derivation + signature scheme against published test vectors. The Phase 2 implementation passes BIP-129 §5 test vectors as the load-bearing correctness gate.
-- **Phase 2 R0 explicit scope item:** *"Did you verify the verifier output against published BIP-129 §5 test vectors? Cite the test vector source. If no published Rust implementation exists, cite the Python (`bip-utils` or `bsms-rs`) reference output you compared against."*
-- **Note on prior R0 draft:** plan R0 contained an inline formula (`HMAC-SHA256(TOKEN, "<descriptor>")`) that was speculative and likely wrong. R1 removes the formula entirely.
+**Q8 (BIP-129 verifier source-of-truth — Phase 2 recon outcome). [REVISED.]** The Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`) reads BIP-129 directly. Findings replace prior R0-R5 speculation:
+- **What BIP-129 actually specifies for SIG:** BIP-322 legacy-format ECDSA **recoverable** signature (65 bytes = header + r + s) over the 4-line Round-1 body (lines 1-4 joined by `\n`, NO trailing newline), under the standard "Bitcoin Signed Message" double-SHA256 digest, base64-encoded on line 5. The signing key is the privkey behind the line-3 KEY (raw pubkey OR xpub's own embedded pubkey).
+- **Test vectors:** BIP-129 `==Test Vectors==` (lines 211-453 of bip-0129.mediawiki) provides 5 in-spec signers across 4 modes (NO_ENCRYPTION/pubkey, NO_ENCRYPTION/xpub, STANDARD/xpub, EXTENDED/3-signers). All Round-1 SIGs are verifiable via the BIP-322 legacy path. Cross-validate against Coinkite Python ref `https://github.com/coinkite/bsms-bitcoin-secure-multisig-setup` (Peter Gray, BIP-129 co-author).
+- **NOT in scope for v0.27.0:** PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 encryption-envelope MAC (STANDARD/EXTENDED modes). Filed at cycle close FOLLOWUP `bsms-bip129-full-cutover` for v0.28+.
+- **Rust deps (all already in tree):** `secp256k1` (ECDSA recover/verify via `rust-bitcoin`), `bitcoin::sign_message::signed_msg_hash` (exact BIP-129 digest), `base64::engine::general_purpose::STANDARD.decode` (line-5 SIG decode).
+- **Phase 2 R0 explicit scope item:** *"Did the verifier accept all 5 BIP-129 in-spec test-vector Round-1 SIGs (TV-1 Signer 1, TV-2 Signer 1, TV-3 Signer 1, TV-4 Signers 1-3)? Did it correctly reject a TV with a 1-byte-flipped SIG? Did it correctly handle BOTH raw-pubkey KEYs (TV-1) AND xpub KEYs (TV-2 through TV-4)?"*
 
-**Q9 (CLI naming for the BIP-129 flag + symmetry).** Flag names for the new BSMS surfaces — what's the symmetric pair?
-- **Lock:** `--coordinator-hmac-key <FILE|@env:VAR|->` (key material, BIP-129-named — the key is BIP-129, not BSMS-specific). `--bsms-form 2-line|6-line` (export-side output-shape choice; BSMS-prefixed because it's specific to BSMS format). `--bsms-verify-strict` (import-side verification strictness; BSMS-prefixed for symmetry).
-- Why three different naming styles: each flag targets a different concern — `--coordinator-*` names the BIP-129 role; `--bsms-form` and `--bsms-verify-strict` name the format + concern symmetrically. Per opus R0 I3 — symmetric pair `--bsms-form` + `--bsms-verify-strict` adopted.
-- Accepts `<FILE>` (hex-encoded contents), `@env:<VAR>`, or `-` (stdin one-line read). Matches existing `--ms1` / `--blob` precedent.
+**Q9 (CLI naming for the BSMS surfaces). [REVISED — Phase 2 recon pivot; see §8.]** Flag names align with BIP-129 reality:
+- **DROPPED:** `--coordinator-hmac-key` (no HMAC key in BIP-129's signature path; the term reflected a misreading of BIP-129's encryption-envelope MAC).
+- **NEW:** `--bsms-round1 <FILE|->` (repeating flag, accepts one Round-1 5-line record per file or one record per stdin invocation). Verifies BIP-322 ECDSA SIG against the line-3 KEY. Independent input path from `--blob <FILE>` (which still accepts BIP-129 Round-2 / Bitcoin Core listdescriptors).
+- **CHANGED:** `--bsms-form 2-line|6-line` → `--bsms-form 2-line|4-line` (drops 6-line emit; adds 4-line BIP-129-canonical emit). Default `4-line`.
+- **KEPT:** `--bsms-verify-strict` (now controls Round-1 SIG verify behavior; strict = exit 2 on mismatch, lenient = stderr NOTICE + `signature_verified: false`).
+- Accepts `<FILE>` (raw text contents — the 5-line record), or `-` (stdin one record). No `@env:` form needed (Round-1 records are file-shaped, not key-shaped). NO TOKEN file input.
+- Net flag count: was 8 new flags; revised to **7 new flags** (drop `--coordinator-hmac-key`, drop `6-line` value from `--bsms-form`, change to `4-line`, add `--bsms-round1`).
 
-**Q10 (error variant names + ordering convention).** New `ToolkitError` variants for BSMS verification:
-- **Lock:** Three top-level variants: `BsmsHmacKeyMissing { reason: String }`, `BsmsSignatureMismatch { computed: String, declared: String }`, `BsmsTokenMalformed { reason: String }`. Variants are inserted at the end of the existing `ToolkitError` enum (per the existing "newest at bottom" convention — see error.rs:10-235 for current grouping). The `error-rs-canonical-ordering-doc` FOLLOWUP (which proposes alphabetical ordering) **stays open**; v0.27.0 does NOT close it.
-- **Why three top-level variants** (opus R0 D2 lock): matches the `ImportWallet*` precedent (5 sibling variants prefixed `ImportWallet` already at top level); rationale parallels exit-code differentiation per-variant.
+**Q10 (error variant names + ordering convention). [REVISED.]** New `ToolkitError` variants for BIP-129 Round-1 verify:
+- **Lock:** Two top-level variants: `BsmsRound1Malformed { reason: String }` (Round-1 5-line parse error; line count != 5, malformed line-3 KEY, malformed line-5 base64 SIG, line-4 description contains `\n` or `\r`, etc.) and `BsmsSignatureMismatch { record_index: usize, signer_pubkey: String, reason: String }` (BIP-322 verify rejected the SIG). Variants are inserted at the end of the existing `ToolkitError` enum (per the existing "newest at bottom" convention — see error.rs:10-235 for current grouping). The `error-rs-canonical-ordering-doc` FOLLOWUP (which proposes alphabetical ordering) **stays open**; v0.27.0 does NOT close it.
+- **Note on prior R0-R5 names:** `BsmsHmacKeyMissing` and `BsmsTokenMalformed` are DROPPED (no HMAC key, no TOKEN file input under Path B-lite scope).
+- **Why two top-level variants** (not three): matches the granularity of distinct failure modes the user can act on (fix-the-record vs re-sign-the-record); maps to distinct exit code paths (both exit 2, but the message text differentiates).
 
 ### §2.3 Items deferred OUT of v0.27.0 (intentional)
 
@@ -110,9 +120,10 @@ The v0.26.0 cycle shipped wallet-import (BSMS Round-2 + Bitcoin Core `listdescri
 
 #### §3.1.1 `mnemonic export-wallet --format bsms`
 
+**[REVISED — Phase 2 recon pivot; see §8.]**
+
 ```
-mnemonic export-wallet --format bsms [--bsms-form 2-line|6-line]
-    [--coordinator-hmac-key <FILE|@env:VAR|->]
+mnemonic export-wallet --format bsms [--bsms-form 2-line|4-line]
     [--wallet-name <STRING>]
     [--account <N>]
     [--template <NAME> | --descriptor <STRING> | --descriptor-file <PATH>]
@@ -121,43 +132,51 @@ mnemonic export-wallet --format bsms [--bsms-form 2-line|6-line]
 ```
 
 Output forms:
-- **2-line** (default when `--coordinator-hmac-key` absent and no explicit `--bsms-form`):
+- **4-line** (default; BIP-129-canonical Round-2 plaintext):
+  ```
+  BSMS 1.0
+  <descriptor>#<checksum>
+  <PATH_RESTRICTIONS>   # comma-separated, leading-`/`, non-hardened; or `No path restrictions` literal
+  <FIRST_ADDRESS>       # derived from descriptor at first path-restriction's leading index (e.g. `/0/0` for `/0/*,/1/*`)
+  ```
+- **2-line** (lenient excerpt, when `--bsms-form 2-line` explicit):
   ```
   BSMS 1.0
   <descriptor>#<checksum>
   ```
-- **6-line** (when `--coordinator-hmac-key` supplied OR `--bsms-form 6-line` explicit):
-  ```
-  BSMS 1.0
-  <TOKEN>          # hex of supplied key material's TOKEN field
-  <descriptor>#<checksum>
-  <DERIVATION_PATH>  # m/0/0 for receive index 0 (matches BIP-129 reference behavior)
-  <FIRST_ADDRESS>    # derived from descriptor at m/0/0
-  <SIGNATURE>        # HMAC-SHA256(per-cosigner-key, canonical-Round-2-body) — formula per BIP-129 §5
-  ```
+
+Notes:
+- 4-line is BIP-129 §Specification → §Round 2 canonical. Per `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`: line 1 is header, line 2 is descriptor with `#<checksum>`, line 3 is path restrictions (comma-separated `/0/*,/1/*` form OR literal `No path restrictions`), line 4 is wallet first address (derived from descriptor at the first path-restriction's index-0 or `0/0` for `No path restrictions`).
+- 2-line is the v0.26.0 lenient excerpt, preserved as input-form-symmetric output. Phase 3 emits 2-line only on explicit `--bsms-form 2-line`; default is the spec-canonical 4-line.
+- The 6-line shape is **DROPPED** from emit. Per Q1 + Phase 2 recon: that shape was a plan-doc invention that conflated BIP-129's Round-2 plaintext + (incorrectly-framed) "envelope-side HMAC/signature" into a single flat blob. BIP-129 reality: Round-2 carries NO signature; signatures are on **Round-1** (Signer → Coordinator) records, not in the toolkit's emit-from-bundle path.
 
 Errors:
-- `--bsms-form 6-line` without `--coordinator-hmac-key` → `BsmsHmacKeyMissing { reason: "--bsms-form 6-line requires --coordinator-hmac-key" }` exit 2.
-- `--coordinator-hmac-key` supplied with `--bsms-form 2-line` (or default-2-line) → `BadInput { reason: "--coordinator-hmac-key is meaningful only for 6-line output; supplied with 2-line shape" }` exit 2 (surface explicit error not silent ignore).
-- Malformed key material → `BsmsTokenMalformed` exit 2.
-- Taproot descriptor (`tr(...)`) with `--bsms-form 6-line` → `BadInput { reason: "BIP-129 6-line shape with taproot descriptors deferred; see FOLLOWUP bsms-taproot-6-line" }` exit 2 (BIP-129 §6 is ambiguous on tr() handling; v0.27.0 errors loudly).
+- Taproot descriptor (`tr(...)`) with `--format bsms` (either form) → `BadInput { reason: "BIP-129 does not specify taproot key records; see FOLLOWUP bsms-taproot-emit" }` exit 2 (BIP-129 prerequisites omit BIP-386; defer).
+- Per-cosigner divergent-paths (mixed origin paths across cosigners) with `--bsms-form 4-line` → emit `No path restrictions` on line 3 (BIP-129 line-3 is wallet-level not cosigner-level path).
 
-#### §3.1.2 `mnemonic import-wallet --bsms-verify-strict` + `--coordinator-hmac-key`
+#### §3.1.2 `mnemonic import-wallet --bsms-round1` + `--bsms-verify-strict`
 
-New opt-in flags on `import-wallet`:
-- `--coordinator-hmac-key <FILE|@env:VAR|->`: supplies the BIP-129 §5 key material for verification.
-- `--bsms-verify-strict`: when present, BSMS 6-line ingest:
-  - REQUIRES `--coordinator-hmac-key` to be supplied (else `BsmsHmacKeyMissing` exit 2).
-  - Signature mismatch → `BsmsSignatureMismatch` exit 2 (does NOT proceed with stderr NOTICE).
-  - Signature match → `signature_verified: true` in envelope; no NOTICE emitted.
+**[REVISED — Phase 2 recon pivot; see §8.]**
+
+New opt-in flag(s) on `import-wallet`:
+- `--bsms-round1 <FILE|->`: supplies a BIP-129 5-line Round-1 key record (Signer → Coordinator) for BIP-322 ECDSA signature verification. Repeating flag — one per Round-1 record. `<FILE>` reads file contents; `-` reads one record from stdin.
+- `--bsms-verify-strict`: when present, Round-1 verify failures are fatal:
+  - SIG mismatch → `BsmsSignatureMismatch { record_index, signer_pubkey, reason }` exit 2.
+  - Malformed record → `BsmsRound1Malformed { reason }` exit 2.
 
 Default (`--bsms-verify-strict` absent):
-- 6-line blob + no `--coordinator-hmac-key`: current v0.26.0 behavior — stderr NOTICE about unverified token, `signature_verified: false`.
-- 6-line blob + `--coordinator-hmac-key` supplied: verify; on match set `signature_verified: true` + suppress NOTICE; on mismatch emit stderr NOTICE "signature mismatch — coordinator HMAC key does not match blob" and set `signature_verified: false` (proceed; not exit 2).
+- SIG mismatch → stderr NOTICE "import-wallet: bsms-round1: signature verification failed for signer N (pubkey HHH) — record index M" + `signature_verified: false` per-record in `--json` envelope; proceed (exit 0).
+- Malformed record → `BsmsRound1Malformed` exit 2 (parse errors are always fatal; only signature mismatches are lenient).
+
+Behaviors:
+- `--bsms-round1` is **independent** of the existing `--blob` / `--format` inputs. The Round-1 path verifies signatures; the `--blob` path parses Round-2 descriptors. A user wanting full BIP-129 round-trip supplies BOTH: one `--bsms-round1` per signer (for SIG verify) + one `--blob` (for the Round-2 descriptor record to be parsed into a bundle).
+- Round-1 verify alone (without `--blob`) is a meaningful CLI use ("verify these Round-1 records' SIGs, emit JSON of who-signed-what"). When no `--blob` is supplied + `--bsms-round1` is supplied, the command's output is the per-record `signature_verified` envelope; no bundle is emitted.
+- Existing v0.26.0 2-line / 6-line `--blob` paths are unchanged. The 6-line lenient parser continues to store `bsms_audit.signature` verbatim with `signature_verified: false`. v0.27.0 does NOT verify 6-line `signature` (no agreed semantics; see §8 + Q2).
 
 Errors:
-- `--bsms-verify-strict` with `--format bitcoin-core` (or any non-bsms format) → `BadInput` exit 2 (flag only applies to BSMS).
-- `--coordinator-hmac-key` with 2-line BSMS blob → `BadInput` exit 2 (token only meaningful for 6-line shape).
+- `--bsms-round1` with `--format bitcoin-core` blob → `BadInput` exit 2 (Round-1 records are BSMS-only).
+- Malformed Round-1 record (not 5 lines after CRLF→LF normalize; line 1 != `BSMS 1.0`; line-3 KEY not `[fp/path]raw-pubkey-hex|xpub`; line-5 not valid base64 → 65 bytes) → `BsmsRound1Malformed` exit 2.
+- Taproot KEY (xpub indicating tr-only context via descriptor-comment hints) → `BadInput { reason: "BIP-129 does not specify taproot key records; see FOLLOWUP bsms-taproot-emit" }`. BIP-129's prerequisites omit BIP-386; defer.
 
 #### §3.1.3 `mnemonic bundle --import-json <FILE|-> [--import-json-index <N>]`
 
@@ -301,60 +320,128 @@ Constant: `pub const INSPECT_SCHEMA_VERSION: &str = "1";`. At "1" — no migrati
 
 Snapshot tests in `tests/cli_inspect.rs` regenerate (cells 15-17). New cell: assert `schema_version == "1"` for each kind variant (mirrors `cli_xpub_search_path_of_xpub.rs:77-103`).
 
-### §3.4 BIP-129 verification engine
+### §3.4 BIP-129 Round-1 verification engine
 
-Module: `crates/mnemonic-toolkit/src/wallet_import/bsms_verify.rs` (new file).
+**[REVISED — Phase 2 recon pivot; see §8 and `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`.]**
 
-Public surfaces (signatures defer to BIP-129 §5 spec — formula NOT locked in plan-doc, see Q8):
+Modules (new files):
+- `crates/mnemonic-toolkit/src/wallet_import/bsms_round1.rs` — Round-1 5-line record parser. ~80 LOC.
+- `crates/mnemonic-toolkit/src/wallet_import/bsms_verify.rs` — BIP-322 legacy-format ECDSA verify primitive. ~100 LOC.
+
+**Public surfaces (BIP-129-faithful per Q8 recon outcome):**
 
 ```rust
-// Per-cosigner key derivation per BIP-129 §5. Formula to be verified against
-// published test vectors at Phase 2 implementation time.
-pub(crate) fn derive_per_cosigner_key(
-    token: &[u8],          // raw token bytes (decoded from hex by caller)
-    cosigner_xpub: &str,   // bech32m xpub string for this cosigner
-    descriptor: &str,      // canonical descriptor (parameters: per BIP-129 §5 — exact inputs TBD)
-) -> Result<[u8; 32], BsmsVerifyError>;
+// crates/mnemonic-toolkit/src/wallet_import/bsms_round1.rs
 
-pub(crate) fn verify_signature(
-    per_cosigner_key: &[u8; 32],
-    body: &[u8],           // canonical Round-2 body bytes
-    declared_signature_hex: &str,
+/// A parsed BIP-129 Round-1 5-line key record (Signer → Coordinator).
+/// Lines 1-4 are the signed body; line 5 is the base64-encoded SIG.
+pub(crate) struct BsmsRound1Record {
+    pub version: String,        // line 1 — must equal "BSMS 1.0"
+    pub token_hex: String,      // line 2 — hex-encoded TOKEN per §2 Q8 recon
+    pub key_field: KeyField,    // line 3 — parsed [fp/path]raw_pubkey OR [fp/path]xpub
+    pub description: String,    // line 4 — text description, <=80 chars, no '\n'/'\r'
+    pub signature_b64: String,  // line 5 — base64-encoded 65-byte recoverable ECDSA sig
+}
+
+pub(crate) enum KeyField {
+    RawPubkey {
+        fingerprint: bitcoin::bip32::Fingerprint,
+        path: bitcoin::bip32::DerivationPath,
+        pubkey: secp256k1::PublicKey,        // 33-byte compressed
+    },
+    Xpub {
+        fingerprint: bitcoin::bip32::Fingerprint,
+        path: bitcoin::bip32::DerivationPath,
+        xpub: bitcoin::bip32::Xpub,
+    },
+}
+
+/// Parse a Round-1 record from text. CRLF→LF normalize; verify line count == 5;
+/// verify line 1 == "BSMS 1.0"; parse line 3 dispatched on KEY shape (33-byte
+/// hex prefix vs base58 xpub).
+pub(crate) fn parse_round1(text: &str) -> Result<BsmsRound1Record, BsmsVerifyError>;
+
+/// Extract the signer's secp256k1 pubkey from a parsed Round-1 record.
+/// For RawPubkey variant: returns the raw pubkey directly.
+/// For Xpub variant: returns the xpub's OWN embedded pubkey (NOT a child-derived key).
+/// Per BIP-129 line 81 + Coinkite Python ref consensus reading.
+pub(crate) fn signer_pubkey(record: &BsmsRound1Record) -> secp256k1::PublicKey;
+```
+
+```rust
+// crates/mnemonic-toolkit/src/wallet_import/bsms_verify.rs
+
+/// Verify a BIP-129 Round-1 key-record signature.
+///
+/// Per BIP-129 §Round 1 Signer (line 81): the SIG on line 5 is a BIP-322
+/// legacy-format ECDSA recoverable signature over the four-line body
+/// (lines 1-4 joined by '\n', no trailing newline), under the "Bitcoin
+/// Signed Message" double-SHA256 digest, base64-encoded.
+///
+/// Implementation: uses `bitcoin::sign_message::signed_msg_hash` for the
+/// digest, `base64::engine::general_purpose::STANDARD.decode` for line-5
+/// decoding, `secp256k1::Secp256k1::recover_ecdsa` for pubkey recovery,
+/// asserts recovered_pubkey == signer_pubkey + uses standard `verify_ecdsa`
+/// as belt-and-braces.
+pub(crate) fn verify_round1_signature(
+    record: &BsmsRound1Record,
 ) -> Result<(), BsmsVerifyError>;
 ```
 
-Error sub-enum:
+**Error sub-enum:**
 
 ```rust
 pub(crate) enum BsmsVerifyError {
-    SignatureMismatch { computed: String, declared: String },  // field names match ToolkitError::BsmsSignatureMismatch (§2.2 Q10) so the From impl wraps cleanly
-    KeyMalformed { reason: String },
-    BodyCanonicalizationFailed { reason: String },
+    Round1Malformed { reason: String },
+    SignatureMismatch {
+        record_index: usize,        // 0-based index in --bsms-round1 multi-flag
+        signer_pubkey_hex: String,  // 66-char compressed pubkey hex for the user to identify which signer failed
+        reason: String,             // e.g., "ECDSA recover succeeded but pubkey mismatch" vs "ECDSA recover failed"
+    },
+    Base64Decode { reason: String },
 }
 ```
 
-All wrap into `ToolkitError::BsmsSignatureMismatch` / `ToolkitError::BsmsTokenMalformed` / `ToolkitError::BadInput` at the CLI dispatch layer.
+All wrap into `ToolkitError::BsmsRound1Malformed` / `ToolkitError::BsmsSignatureMismatch` / `ToolkitError::BadInput` at the CLI dispatch layer.
 
-**Test vectors:** 2 from BIP-129 §5 (mainnet 2-of-3 wsh-sortedmulti + testnet 2-of-2 wsh-multi) at minimum. Negative tests: 1 corrupted-signature, 1 wrong-key, 1 malformed-token.
+**Test vectors (BIP-129 in-spec; per `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` §Test Vectors):**
+- TV-1 Signer 1 (NO_ENCRYPTION/pubkey): TOKEN=`00`, fingerprint=`59865f44`, raw pubkey, expected SIG matches.
+- TV-2 Signer 1 (NO_ENCRYPTION/xpub): TOKEN=`00`, xpub, expected SIG matches against xpub's own pubkey.
+- TV-3 Signer 1 (STANDARD/xpub): TOKEN=`a54044308ceac9b7`, xpub, expected SIG matches.
+- TV-4 Signers 1, 2, 3 (EXTENDED/3-signers, 128-bit TOKEN, mixed signer set): all 3 SIGs match.
+- Negative: TV-1 with last-byte-flipped SIG → `SignatureMismatch`.
+- Negative: TV-1 with last-byte-flipped TOKEN → `SignatureMismatch` (TOKEN is part of signed body).
+- Negative: malformed line-3 KEY (not `[fp/path]hex|xpub` shape) → `Round1Malformed`.
+- Negative: malformed line-5 SIG (not base64 → 65 bytes) → `Base64Decode` → wrapped to `Round1Malformed`.
+- Negative: line 1 != `BSMS 1.0` (e.g., `BSMS 2.0`) → `Round1Malformed` (NOT `FutureFormat` — parse-side, not blob-side).
+- Negative: line-4 description contains `\n` (over-segments parser) → `Round1Malformed`.
+- 15 total test cells: 6 positive (TVs) + 5 negative + 4 CLI cells (`--bsms-round1 <FILE>`, stdin `-`, multi-record, `--bsms-verify-strict` mode).
 
-**Phase 2 implementer responsibility:** read BIP-129 §5 directly. Verify against published TVs. If no BIP-129 §5 TVs exist (the spec may not include them — needs verification), cross-validate against a Python reference implementation (`bip-utils` or `bsms-rs` or `bitcoinjs-lib`'s BSMS module) and capture the comparison reference in the test fixture's header comment.
+**Phase 2 R0 explicit scope (per Q8):** *"Did the verifier accept all 5 BIP-129 in-spec test-vector Round-1 SIGs (TV-1 Signer 1, TV-2 Signer 1, TV-3 Signer 1, TV-4 Signers 1-3)? Did it correctly reject a TV with a 1-byte-flipped SIG? Did it correctly handle BOTH raw-pubkey KEYs (TV-1) AND xpub KEYs (TV-2 through TV-4)? Did pubkey extraction use the xpub's OWN embedded pubkey (bytes 45-78 of serialized xpub), NOT any child-derived key?"*
 
-**Crate dependency choice (opus R0 D1 lock):** hand-roll using `hmac` + `sha2` crates already in the toolkit dep graph. No `bsms-rs` exists as a mature standalone Rust crate on crates.io as of 2026-05-18.
+**Crate dependency choice (revised):** use `secp256k1` (already in tree via `rust-bitcoin`) for ECDSA recover/verify; `bitcoin::sign_message::signed_msg_hash` for the BIP-129 digest (exact match per Coinkite ref); `base64` (already in tree via `rust-bitcoin`'s feature graph — verify at Phase 2 R0 recon). NO hand-rolled HMAC for the Round-1 path (HMAC is only the encryption-envelope MAC which is out of v0.27.0 scope; see §8 cycle-close FOLLOWUP `bsms-bip129-full-cutover`).
 
 ### §3.5 BSMS Round-2 emitter
 
+**[REVISED — Phase 2 recon pivot; see §8.]**
+
 Module: `crates/mnemonic-toolkit/src/wallet_export/bsms.rs` (new file). Implements `WalletFormatEmitter`.
 
-2-line implementation (~40 LOC):
-- `EmitInputs.canonical_descriptor` (wallet_export/mod.rs:336, `&'a str`) already carries the `#<checksum>` suffix per existing pipeline convention (used live in sparrow/coldcard/etc. emitters). Emit `BSMS 1.0\n<EmitInputs.canonical_descriptor>\n` directly. **NO** `md_codec::descriptor_checksum` call — that symbol does not exist; the codebase's checksum-related helper is `miniscript::descriptor::checksum::verify_checksum` (wallet_import/bsms.rs:141), and it's not needed at emit time because the canonical_descriptor is already canonical.
+**4-line implementation (BIP-129-canonical Round-2, default; ~80 LOC):**
+- Line 1: literal `BSMS 1.0`.
+- Line 2: `EmitInputs.canonical_descriptor` (wallet_export/mod.rs:336, `&'a str`) — already carries the `#<checksum>` suffix per existing pipeline convention (used live in sparrow/coldcard/etc. emitters). Emit verbatim. **NO** `md_codec::descriptor_checksum` call — that symbol does not exist; the codebase's checksum-related helper is `miniscript::descriptor::checksum::verify_checksum` (wallet_import/bsms.rs:141), and it's not needed at emit time because the canonical_descriptor is already canonical.
+- Line 3: path restrictions. Compute from `EmitInputs.resolved_slots[*].path_raw` + descriptor parse — typical multisig descriptors carry `/0/*,/1/*` (receive + change) or `/0/*` only (receive-only); single-sig BIP-48/BIP-84 etc. expand similarly. Conservative default for v0.27.0: emit `/0/*,/1/*` for descriptor-derived wallets when both receive and change branches are addressable; emit `No path restrictions` for divergent-path multisig where the multi-cosigner origin paths differ and no single shared path family applies. SPEC patch §3.5.1 below codifies the path-emit rule.
+- Line 4: first address. Derive at the first index of line 3's restrictions:
+  - `/0/*,/1/*` (typical) → first receive address at `/0/0`.
+  - `/0/*` only → `/0/0`.
+  - `No path restrictions` → `/0/0` (BIP-129 spec convention).
+  - For multisig: compute the witness-script address at the indexed derivation point across all cosigners (matches BIP-129 line 96 "the wallet's first address").
+- **NEW helper required** by exact name (`derive_address_at_path`), BUT existing address-derivation primitives in `cmd/xpub_search/address_search.rs` (v0.26.0 addition: `scan_xpub_for_addresses` + `render_address<C: Verification>` + the `xpub.derive_pub(secp, &dp)` pattern at line 83) should be the implementation pattern source — Phase 3 extracts / reuses, does NOT re-implement parallel logic. The v0.26.0 FOLLOWUP `bsms-first-address-verify` at `design/FOLLOWUPS.md:2092` filed this exact gap for the BSMS path specifically. Phase 3 R0 recon locks the helper signature + the reuse-pattern citation before implementation. Limited to non-taproot; taproot errors out per §3.1.1. The `bsms-first-address-verify` FOLLOWUP resolves at v0.27.0 cycle close as resolved-by-implementation.
 
-6-line implementation (~100 LOC, only when `--coordinator-hmac-key` supplied):
-- 2-line body PLUS:
-- Decode hex-encoded `--coordinator-hmac-key` material to raw bytes.
-- Derive per-cosigner HMAC key via `bsms_verify::derive_per_cosigner_key` (per BIP-129 §5 — exact inputs locked at Phase 2 recon).
-- Derive `m/0/0` address from descriptor. **NEW helper required** by exact name (`derive_address_at_path`), BUT existing address-derivation primitives in `cmd/xpub_search/address_search.rs` (v0.26.0 addition: `scan_xpub_for_addresses` + `render_address<C: Verification>` + the `xpub.derive_pub(secp, &dp)` pattern at line 83) should be the implementation pattern source — Phase 3 extracts / reuses, does NOT re-implement parallel logic. The v0.26.0 FOLLOWUP `bsms-first-address-verify` at design/FOLLOWUPS.md:2092 filed this exact gap for the BSMS path specifically. Phase 3 R0 recon locks the helper signature + the reuse-pattern citation before implementation. Limited to non-taproot; taproot errors out per §3.1.1. The `bsms-first-address-verify` FOLLOWUP resolves at v0.27.0 cycle close as resolved-by-implementation.
-- Compute HMAC-SHA256 signature over canonical Round-2 body (lines 1-5 concatenated with `\n`).
-- Emit all 6 lines.
+**2-line implementation (lenient excerpt; ~30 LOC):**
+- Line 1: `BSMS 1.0`. Line 2: `<canonical_descriptor>#<checksum>`. No path-restrictions, no first-address. Symmetric input form per v0.26.0 SPEC §4 lenient lock.
+
+**6-line emit DROPPED.** Per Q1 + §8: the plan-doc R0-R5 6-line emit shape combined BIP-129 Round-2 plaintext lines + (misframed) "envelope-side HMAC/signature". BIP-129 Round-2 carries no SIG; signatures are on Round-1 (Signer→Coordinator). Replaced by the 4-line BIP-129-canonical Round-2 emit above.
 
 Add `Bsms` to `CliExportFormat` enum + dispatch arms in `cmd/export_wallet.rs`:
 
@@ -363,22 +450,36 @@ Add `Bsms` to `CliExportFormat` enum + dispatch arms in `cmd/export_wallet.rs`:
 Bsms,
 ```
 
-**Test cells (8 total):**
-- `bsms_2line_emit_2of2_mainnet`
-- `bsms_2line_emit_2of3_testnet`
-- `bsms_2line_emit_sortedmulti_3of5`
-- `bsms_6line_emit_with_hmac_key_roundtrips_through_verify`
-- `bsms_form_6line_without_hmac_key_explicit_errors`
-- `bsms_form_2line_with_hmac_key_explicit_errors`
-- `bsms_2line_then_import_byte_exact_idempotent`
-- `bsms_6line_taproot_descriptor_errors_explicit_deferred`
+#### §3.5.1 BSMS 4-line path-restrictions emit rule (load-bearing)
+
+For `EmitInputs.resolved_slots` (length N), each slot's `path_raw: String` has shape `[<fingerprint>/<bip32-origin-path>]`. The descriptor itself carries the per-cosigner receive/change branch suffix (`/0/*,/1/*` typically).
+
+Phase 3 implementer must:
+1. Parse `EmitInputs.canonical_descriptor` via `miniscript::Descriptor::<DescriptorPublicKey>::from_str` to extract the per-key suffix (the `<MULTIPATH>` after the xpub).
+2. Per BIP-129 line 96: "comma-separated list of derivation path restrictions" with non-hardened paths.
+3. Common cases:
+   - Multisig with `<0;1>/*` multipath → emit `/0/*,/1/*` on line 3.
+   - Multisig with `/0/*` receive-only → emit `/0/*`.
+   - Single-sig with explicit BIP-48/84/86/87 family → emit `/0/*,/1/*` (the toolkit's convention is to emit both branches).
+   - Divergent or unrecognized → emit `No path restrictions`.
+4. Reject Taproot descriptors with `BadInput` per BIP-386 not in BIP-129 prerequisites.
+
+**Test cells (8 total — REVISED):**
+- `bsms_4line_emit_2of2_wsh_sortedmulti_mainnet`
+- `bsms_4line_emit_2of3_wsh_multi_testnet`
+- `bsms_4line_emit_sortedmulti_3of5`
+- `bsms_4line_path_restrictions_emits_slash_0_star_slash_1_star_for_multipath`
+- `bsms_4line_first_address_byte_exact_against_descriptor_derivation` (cross-checks `/0/0` address against `cmd/xpub_search/address_search.rs` pattern)
+- `bsms_4line_taproot_descriptor_errors_explicit_deferred`
+- `bsms_2line_lenient_excerpt_emits_descriptor_only`
+- `bsms_4line_then_import_byte_exact_idempotent` (regression: emit → 2-line/6-line lenient parser ingests cleanly; v0.27.0 ingest does NOT add 4-line parser; that's `bsms-bip129-full-cutover` FOLLOWUP)
 
 ### §3.6 `bundle --import-json` consumer
 
 Wire-up in `crates/mnemonic-toolkit/src/cmd/bundle.rs`:
 - Add to `BundleArgs` clap struct: `pub import_json: Option<String>` + `pub import_json_index: Option<usize>`.
 - Extend `ArgGroup` mutual-exclusion with existing template/descriptor inputs.
-- In `run()`: when `--import-json` present, parse the JSON envelope → extract `bundle.descriptor` (or decode `bundle.md1[0]` if descriptor is None) → extract cosigner xpubs by decoding `bundle.mk1` entries → build `SlotOverrides` matching the descriptor's slot count → dispatch to existing `synthesize_unified` path with `descriptor=<extracted>` + `template=None`.
+- In `run()`: when `--import-json` present, parse the JSON envelope → extract `bundle.descriptor` (or decode `bundle.md1[0]` if descriptor is None) → extract cosigner xpubs by decoding `bundle.mk1` entries per §3.6.1 → build the `ResolvedSlot` vector → dispatch to `crate::synthesize::synthesize_descriptor(&descriptor, &resolved_slots, privacy_preserving=false)` (synthesize.rs:200; the same descriptor-mode entry point §3.2 locks for the envelope-emit path; consistent with R3 N-C2 fold).
 - Seed overlay (existing `--ms1` / `--slot @N.phrase=`) continues to work transparently — applies to slots where envelope's `ms1[i] == ""`. Conflict precedence per Q5 / §3.1.3 — supplying `--ms1` for a slot where envelope `ms1[i] != ""` is `BadInput` exit 2.
 
 **Test cells (10-12):**
@@ -488,13 +589,14 @@ Wire-up in `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`:
 Six phases + cycle close. Each phase ends with R0 opus architect review → fold-and-commit. Per-phase reviews persist to `design/agent-reports/phase-N-r0-review.md` (CLAUDE.md line 30 convention; v0.26.0 compare-cost violated this and a FOLLOWUP was filed to back-fill — v0.27.0 follows the discipline from Phase 1).
 
 ```
-Phase 1: trivial folds                  → #3 InspectJson + #4 runbook move
-Phase 2: BIP-129 verify engine          → #2 bsms-verify-signatures (no CLI yet)
-Phase 3: BSMS emitter (depends on #2)   → #1 wallet-export-bsms-emitter (2-line + 6-line)
+Phase 1: trivial folds                  → #3 InspectJson + #4 runbook move          [SHIPPED — e908309]
+Phase 2: BIP-129 Round-1 verify engine  → #2 bsms-verify-signatures (--bsms-round1 CLI)
+Phase 3: BSMS emitter (independent #2)  → #1 wallet-export-bsms-emitter (4-line + 2-line)
 Phase 4: import-wallet --json envelope  → #5 envelope-full-bundle (BundleJson contract)
 Phase 5: consumer wiring                → #6 bundle --import-json + #7 export-wallet --from-import-json
 Phase 6: manual mirror + cycle close    → docs/manual/ + CHANGELOG + FOLLOWUPS Status flips + release-branch + tag
 ```
+*(R6 pivot: Phase 2 + Phase 3 reframed per Phase 2 recon; see §8 for diff vs R5.)*
 
 **Phase 1 placement at start (opus R0 D5 lock):** clean baseline; ensures `schema_version` envelope wrappers are in place before Phase 4 introduces another envelope.
 
@@ -513,49 +615,43 @@ Phase 6: manual mirror + cycle close    → docs/manual/ + CHANGELOG + FOLLOWUPS
 - `feat(inspect): add schema_version: "1" to InspectJson + RepairJson envelopes (closes inspect-json-schema-version-backfill)` + flip Status in FOLLOWUPS.md.
 - `docs(coordinator): promote merge-plan to design/PLAN_v0_26_0_three_way_merge.md (closes coordinator-runbook-into-design-dir)` + flip Status.
 
-### §4.2 Phase 2 — BIP-129 verify engine (#2)
+### §4.2 Phase 2 — BIP-129 Round-1 verify engine (#2)
 
-**Phase 2 begins with recon (pre-code).** Read BIP-129 §5 directly + locate published test vectors (or external reference implementation). Pin the engine signature (specifically the exact inputs to `derive_per_cosigner_key`) before any code is written. Document the pinned signature in the Phase 2 R0 brief (which persists to `design/agent-reports/phase-2-r0-review.md`). This recon step prevents Phase 3 (BSMS emitter) from inheriting a signature drift if BIP-129 §5 turns out to require a 4th argument the plan-doc didn't anticipate (opus R1 N-I2 fold).
+**[REVISED — Phase 2 recon pivot; see §8.]**
+
+**Phase 2 recon is COMPLETE** (persisted at `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). BIP-129 §Specification → Round 1 mechanics are fully pinned. Implementer goes straight to code.
 
 **Scope:**
-- New module `src/wallet_import/bsms_verify.rs` (~150 LOC engine + ~100 LOC test vectors).
-- New CLI flags on `import-wallet`: `--coordinator-hmac-key <FILE|@env:VAR|->`, `--bsms-verify-strict` (bool).
-- New `ToolkitError` variants: `BsmsHmacKeyMissing`, `BsmsSignatureMismatch`, `BsmsTokenMalformed`. Inserted at end of enum per existing convention; `match self { ... }` blocks update in lockstep.
-- `wallet_import/bsms.rs` Phase 2 integration: when `--coordinator-hmac-key` supplied, dispatch to `bsms_verify` post-parse; on success set `BsmsAuditFields.signature_verified = true`; on mismatch, branch on `--bsms-verify-strict` (error vs NOTICE).
-- **Phase 2 R0 explicit scope (per Q8):** *"Did the verifier match BIP-129 §5 published test vectors? Cite TV source. If no TVs, cite external Rust/Python reference comparison."*
+- New modules:
+  - `src/wallet_import/bsms_round1.rs` — 5-line Round-1 record parser (~80 LOC).
+  - `src/wallet_import/bsms_verify.rs` — BIP-322 ECDSA recoverable verify primitive (~100 LOC).
+- New CLI flags on `import-wallet`: `--bsms-round1 <FILE|->` (repeating), `--bsms-verify-strict` (bool).
+- New `ToolkitError` variants: `BsmsRound1Malformed { reason: String }`, `BsmsSignatureMismatch { record_index: usize, signer_pubkey: String, reason: String }`. Inserted at end of enum per existing convention; `match self { ... }` blocks update in lockstep.
+- `cmd/import_wallet.rs` integration: when `--bsms-round1` supplied (one or more), each record is parsed + verified BEFORE existing `--blob` parsing (or independently if no `--blob`). Per-record verify state flows into the `--json` envelope's NEW `bsms_round1_verifications: Vec<{ index, signer_pubkey, signature_verified }>` field.
+- **Phase 2 R0 explicit scope (per Q8):** *"Did the verifier accept all 5 BIP-129 in-spec test-vector Round-1 SIGs (TV-1 Signer 1, TV-2 Signer 1, TV-3 Signer 1, TV-4 Signers 1-3)? Did it correctly reject a TV with a 1-byte-flipped SIG? Did it correctly handle BOTH raw-pubkey KEYs (TV-1) AND xpub KEYs (TV-2 through TV-4)? Did pubkey extraction use the xpub's OWN embedded pubkey (bytes 45-78 of serialized xpub), NOT any child-derived key?"*
 
-**Test cells (15):** per §3.4 enumeration above; key path:
-- BIP-129 §5 TV #1 (2-of-3 mainnet wsh-sortedmulti) — happy path.
-- BIP-129 §5 TV #2 (2-of-2 testnet wsh-multi) — happy path.
-- Corrupted signature → `BsmsSignatureMismatch` exit 2 with `--bsms-verify-strict`.
-- Corrupted signature → stderr NOTICE without `--bsms-verify-strict` (v0.26.0 lenient default).
-- Wrong key material → `BsmsSignatureMismatch`.
-- Malformed token (odd-length hex) → `BsmsTokenMalformed`.
-- Missing key with `--bsms-verify-strict` → `BsmsHmacKeyMissing`.
-- Stdin key via `--coordinator-hmac-key -` — happy path.
-- `@env:BSMS_TOKEN` sentinel via `--coordinator-hmac-key @env:BSMS_TOKEN`.
-- File key via `--coordinator-hmac-key /tmp/key.hex`.
-- key + 2-line blob → `BadInput` (token only meaningful for 6-line; explicit error not silent ignore).
-- `signature_verified: true` propagates to `--json` envelope `bsms_audit.signature_verified`.
-- `signature_verified: true` propagates to stderr NOTICE suppression (no NOTICE emitted on verified imports).
-- Negative: `--bsms-verify-strict` with `--format bitcoin-core` blob → `BadInput`.
-- Negative: derive-key uses canonical descriptor not raw blob descriptor (regression guard).
+**Test cells (15):** per §3.4 enumeration above.
 
-**R0 dispatch:** opus on the bsms_verify module + integration + new error variants. Expected findings: medium — opus may flag missing edge cases (empty body HMAC, max-length descriptor) and MUST confirm TV alignment.
+**Crate deps:** verify at Phase 2 R0 — `secp256k1` (via `rust-bitcoin`) for ECDSA recover/verify; `bitcoin::sign_message::signed_msg_hash` for the BIP-129 digest; `base64` for line-5 decode. The toolkit's `Cargo.toml` already lists `bitcoin = "0.32"` (line 32) and `sha2 = "0.10"` (line 29). `base64` access via `bitcoin`'s public re-exports or direct `base64` dep — Phase 2 R0 verifies (if direct dep needed, add as workspace dependency).
 
-### §4.3 Phase 3 — BSMS emitter (#1)
+**R0 dispatch:** opus on the bsms_round1 + bsms_verify modules + integration + new error variants. Expected findings: medium — opus must confirm TV alignment (all 5 in-spec SIGs verify) + cross-impl smoke against Coinkite Python ref.
+
+### §4.3 Phase 3 — BSMS Round-2 emitter (#1)
+
+**[REVISED — Phase 2 recon pivot; see §8.]**
 
 **Scope:**
 - New module `src/wallet_export/bsms.rs` implementing `WalletFormatEmitter` (trait at wallet_export/mod.rs:322-326: `collect_missing`, `emit`, `extension`).
 - **NEW helper `derive_address_at_path` (Phase 3 in-cycle work; closes design/FOLLOWUPS.md:2092 `bsms-first-address-verify`).** Signature pinned at Phase 3 R0 recon.
-- CLI: `--bsms-form 2-line|6-line` (default = inferred from `--coordinator-hmac-key` presence; absence ⇒ 2-line; presence ⇒ 6-line; explicit override always honored).
-- 2-line: pure serialize.
-- 6-line: depends on Phase 2's `bsms_verify::derive_per_cosigner_key` and a new `bsms_emit::sign_round2_body` (HMAC sign — direct inverse of `bsms_verify::verify_signature`).
+- CLI: `--bsms-form 2-line|4-line` (default `4-line`; explicit override always honored).
+- 4-line (default): BIP-129-canonical Round-2 plaintext. Lines: `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Pulls `EmitInputs.canonical_descriptor` for line 2, computes path-restrictions per §3.5.1, derives first address via `derive_address_at_path`.
+- 2-line: lenient excerpt; only `BSMS 1.0\n<descriptor>#<checksum>\n`.
+- **6-line emit DROPPED** (no plan-doc invention; see §8). Independent of Phase 2's verify engine.
 - Add `Bsms` to `CliExportFormat` enum + dispatch arms in `cmd/export_wallet.rs`.
 
 **Test cells (8):** per §3.5 enumeration above.
 
-**R0 dispatch:** opus on the emitter + dispatch wiring. Expected findings: low-medium. Key risk: `m/0/0` address-derivation correctness for non-standard descriptors — confirm v0.27.0 errors loudly for tr() rather than emitting garbage.
+**R0 dispatch:** opus on the emitter + dispatch wiring + `derive_address_at_path` helper. Expected findings: low-medium. Key risk: path-restrictions rule (§3.5.1) correctness for multipath vs single-branch descriptors — confirm v0.27.0 errors loudly for tr() rather than emitting garbage.
 
 ### §4.4 Phase 4 — import-wallet --json envelope (#5)
 
@@ -609,30 +705,33 @@ This is the headline end-user feature for v0.27.0.
 
 ### §4.6 Phase 6 — manual mirror + cycle close
 
+**[REVISED — Phase 2 recon pivot; see §8.]**
+
 **Scope:**
-- Update `docs/manual/src/40-cli-reference/41-mnemonic.md`. Explicit flag enumeration to verify against `lint.sh` (opus R0 I2 fold):
-  1. `mnemonic export-wallet --bsms-form` (new flag)
-  2. `mnemonic export-wallet --coordinator-hmac-key` (new flag — shared with import-wallet)
-  3. `mnemonic export-wallet --from-import-json` (new flag)
-  4. `mnemonic export-wallet --from-import-json-index` (new flag)
-  5. `mnemonic import-wallet --coordinator-hmac-key` (new flag)
-  6. `mnemonic import-wallet --bsms-verify-strict` (new flag)
-  7. `mnemonic bundle --import-json` (new flag)
-  8. `mnemonic bundle --import-json-index` (new flag)
-  9. `mnemonic inspect` — document `schema_version` field on envelope
-  10. `mnemonic repair` — document `schema_version` field on envelope
-- Eight new flags + two envelope schema_version documentations. The lint check at `docs/manual/tests/lint.sh` will fail if any flag is missing.
-- New format addition: `mnemonic export-wallet --format bsms` (new `--format` value).
+- Update `docs/manual/src/40-cli-reference/41-mnemonic.md`. Explicit flag enumeration to verify against `lint.sh`:
+  1. `mnemonic export-wallet --bsms-form` (new flag; values `2-line|4-line`)
+  2. `mnemonic export-wallet --from-import-json` (new flag)
+  3. `mnemonic export-wallet --from-import-json-index` (new flag)
+  4. `mnemonic import-wallet --bsms-round1` (new flag — repeating)
+  5. `mnemonic import-wallet --bsms-verify-strict` (new flag)
+  6. `mnemonic bundle --import-json` (new flag)
+  7. `mnemonic bundle --import-json-index` (new flag)
+  8. `mnemonic inspect` — document `schema_version` field on envelope
+  9. `mnemonic repair` — document `schema_version` field on envelope (note: already existed at v0.26.0; document the existing behavior)
+- **Seven** new flags (revised from 8: dropped `--coordinator-hmac-key`; added `--bsms-round1`; `--bsms-form` value-set changed) + 2 envelope schema_version documentations. The lint check at `docs/manual/tests/lint.sh` will fail if any flag is missing.
+- New format addition: `mnemonic export-wallet --format bsms` (new `--format` value; 4-line BIP-129-canonical default, 2-line lenient via `--bsms-form 2-line`).
 - New recipe chapter `docs/manual/src/30-workflows/3X-cross-format-conversion.md` walking BSMS → Sparrow end-to-end.
-- CHANGELOG.md: appropriate `### Added` (BSMS emitter, --bsms-form, --coordinator-hmac-key, --bsms-verify-strict, --import-json, --from-import-json, --import-json-index, --from-import-json-index) + `### Changed` (import-wallet --json envelope shape: bundle field replaced from summary to BundleJson; mention SemVer minor-bump justification) + `### Closed FOLLOWUPS` entries (5 closed: `wallet-export-bsms-emitter`, `bsms-verify-signatures`, `inspect-json-schema-version-backfill`, `coordinator-runbook-into-design-dir`, `wallet-import-json-envelope-full-bundle` — items #6 and #7 are NEW features, not FOLLOWUP closures).
+- New recipe chapter `docs/manual/src/30-workflows/3Y-bsms-round1-verify.md` walking BIP-129 Round-1 SIG verification (`--bsms-round1` use cases).
+- CHANGELOG.md: `### Added` (BSMS Round-2 emitter [4-line BIP-129-canonical default + 2-line lenient], --bsms-form, --bsms-round1, --bsms-verify-strict, --import-json, --from-import-json, --import-json-index, --from-import-json-index) + `### Changed` (import-wallet --json envelope shape: bundle field replaced from summary to BundleJson; mention SemVer minor-bump justification) + `### Closed FOLLOWUPS` entries (5 closed: `wallet-export-bsms-emitter`, `bsms-verify-signatures`, `inspect-json-schema-version-backfill`, `coordinator-runbook-into-design-dir`, `wallet-import-json-envelope-full-bundle` — items #6 and #7 are NEW features, not FOLLOWUP closures).
 - Sweep `design/FOLLOWUPS.md` for any `Status: open` entries that the per-phase commits cited as Resolved (per memory [[feedback-per-phase-agents-forget-followup-status-flip]] — backstop check).
 - Bump `Cargo.toml` workspace version to `0.27.0`.
 - `pinned-upstream.toml` (mnemonic-gui sibling repo) — NOT touched by this cycle; GUI consumer cycle picks it up.
 - Create release branch `release/v0.27.0`. Single squash PR. Tag `mnemonic-toolkit-v0.27.0`. GitHub release with full notes.
 
-**File new FOLLOWUPS (at least 2):**
+**File new FOLLOWUPS (at least 3):**
 - `cross-format-conversion-matrix-expansion` — N×M coverage for the 7+ format combinations beyond the BSMS→Sparrow integration cell.
-- `bsms-taproot-6-line` — BIP-129 6-line shape for tr() descriptors deferred.
+- `bsms-taproot-emit` (revised from `bsms-taproot-6-line`) — BIP-129 emit for tr() descriptors. Blocked on BIP-129 adding BIP-386 to prerequisites (not yet specified).
+- `bsms-bip129-full-cutover` — v0.28+: deprecate v0.26.0 6-line lenient parser; add proper 4-line Round-2 parser; add encryption-envelope (STANDARD/EXTENDED with PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 MAC) support; possibly drop 6-line and 2-line lenient shapes after deprecation window. Filed pre-emptively at v0.27.0 cycle close — see §8 pivot record.
 
 **R0 dispatch (end-of-cycle holistic):** opus full-cycle review of release branch. Catches manual-mirror gaps, missing FOLLOWUPS flips, CHANGELOG completeness.
 
@@ -643,7 +742,7 @@ This is the headline end-user feature for v0.27.0.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | BIP-129 §5 test vectors don't exist or are ambiguous | medium | high (verifier correctness) | Phase 2 R0 explicit scope: cite TV source or external reference. Plan-doc does NOT lock formula inline (per opus R0 C2 fold). |
-| BSMS 6-line `m/0/0` derivation differs for taproot tr() | medium | low (rare format) | Explicitly error on tr() 6-line emit in v0.27.0; FOLLOWUP `bsms-taproot-6-line` for v0.28+. |
+| BSMS Round-2 emit for taproot tr() unspecified in BIP-129 (BIP-386 not in BIP-129 prerequisites) | medium | low (rare format) | Explicitly error on tr() with `--format bsms` in v0.27.0; FOLLOWUP `bsms-taproot-emit` for v0.28+. |
 | envelope replacement breaks downstream mnemonic-gui parser | high | medium | v0.27.0 is wire-shape replacement, NOT additive. CHANGELOG `### Changed`. GUI's `pinned-upstream.toml` not bumped until GUI cycle explicitly adopts v0.27.0 envelope (next GUI cycle picks it up; gui-schema auto-emit handles flag additions). |
 | clap-derive mutex extension breaks existing flag combinations | medium | medium | Phase 5 R0 explicitly enumerates pre-existing flag-combo cells that should continue passing. |
 | `wallet-import-fixture-corpus-expansion` recurs as opus finding | high | low | Folded into §2.3 explicit deferral; opus R0 told this is intentional. |
@@ -788,4 +887,59 @@ R4 reviewer (`feature-dev:code-reviewer` opus) returned YELLOW with 4 source-ver
 
 ---
 
-**End of plan-doc draft R5.**
+## §8. Phase 2 recon pivot (mid-execution plan revision)
+
+**Status:** R6 — Phase 2 recon outcome; mid-execution plan revision; awaits opus architect validation. Date: 2026-05-18.
+
+**Context.** The R5-GREEN plan-doc was approved via ExitPlanMode and execution began on `release/v0.27.0` branch (Phase 0 at `b47ad2a`, Phase 1 at `e908309`). Phase 2 was scoped per §4.2 R5 to "begin with recon (pre-code): read BIP-129 §5 directly + locate published test vectors + pin engine signature before any code." The recon ran via opus general-purpose agent with WebFetch and surfaced a **major framing error** in the R5 plan: BIP-129 Round-2 carries no SIG; signatures live on Round-1 (Signer → Coordinator) records and are BIP-322 legacy-format ECDSA recoverable signatures, not HMAC-SHA256. The plan-doc's `--coordinator-hmac-key` / per-cosigner HMAC key / 6-line emit framing matched no part of BIP-129 as actually specified.
+
+**Recon artifact:** `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full verbatim quotes from BIP-129 §Specification → Round 1 + §Specification → Round 2 + §Encryption + 5 published test vectors + reference-impl survey (Coinkite Python ref is authoritative; no Rust impl exists on crates.io as of 2026-05-18).
+
+**Pivot path chosen (user-directed):** **Path B-lite + new FOLLOWUP for full v0.28+ cutover.** Pivots Phase 2 to BIP-129-faithful Round-1 verify (NEW input path; does not modify v0.26.0 6-line lenient parser). Pivots Phase 3 to BIP-129-faithful 4-line Round-2 emit (drops the plan-doc's 6-line invention). Files a new FOLLOWUP `bsms-bip129-full-cutover` for v0.28+ to deprecate the v0.26.0 6-line lenient input shape, add proper 4-line Round-2 input parsing, and add encryption-envelope support.
+
+### §8.1 Section-by-section diff (old vs revised)
+
+| Section | Old (R5) | Revised (R6) |
+|---|---|---|
+| §2.2 Q1 | 2-line + 6-line emit; `--coordinator-hmac-key` mandatory for 6-line | 2-line + 4-line emit (default 4-line BIP-129-canonical); 6-line DROPPED |
+| §2.2 Q2 | 6-line verify with `--coordinator-hmac-key` + `--bsms-verify-strict` mode | Round-1 5-line verify via NEW `--bsms-round1` input path + `--bsms-verify-strict` mode; v0.26.0 6-line `signature` field stays opaque-stored |
+| §2.2 Q8 | "Phase 2 implementer reads BIP-129 §5 directly" (formula not locked) | Phase 2 recon complete; BIP-322 ECDSA recoverable verify; 5 in-spec test vectors enumerated |
+| §2.2 Q9 | `--coordinator-hmac-key`, `--bsms-form 2-line\|6-line`, `--bsms-verify-strict` (8 new flags total) | `--bsms-round1`, `--bsms-form 2-line\|4-line`, `--bsms-verify-strict` (7 new flags total) |
+| §2.2 Q10 | 3 new ToolkitError variants (BsmsHmacKeyMissing, BsmsSignatureMismatch, BsmsTokenMalformed) | 2 new ToolkitError variants (BsmsRound1Malformed, BsmsSignatureMismatch) |
+| §3.1.1 | `--bsms-form 2-line\|6-line` with HMAC-keyed signature on line 6 | `--bsms-form 2-line\|4-line` with BIP-129-canonical Round-2 plaintext (4 lines) |
+| §3.1.2 | `--coordinator-hmac-key` keys both emit and verify | `--bsms-round1 <FILE>` separate input path; verify per-record via BIP-322 ECDSA recoverable |
+| §3.4 | `derive_per_cosigner_key` + HMAC-keyed `verify_signature` | `bsms_round1` parser + BIP-322 `verify_round1_signature` |
+| §3.5 | 2-line + 6-line emit | 4-line BIP-129-canonical + 2-line lenient; +new §3.5.1 path-restrictions rule |
+| §4.2 | "Phase 2 begins with recon (pre-code); pin engine signature" | Phase 2 recon COMPLETE (`v0_27_0-phase-2-bip129-recon.md`); implementer goes straight to code |
+| §4.3 | 6-line depends on Phase 2 `derive_per_cosigner_key` | 4-line independent of Phase 2 verify path |
+| §4.6 | 8 new flags + 2 new FOLLOWUPS at cycle close | 7 new flags + 3 new FOLLOWUPS (added `bsms-bip129-full-cutover`); recipe chapter list expands by 1 (`3Y-bsms-round1-verify.md`) |
+| Test-cell totals | Phase 2: 15, Phase 3: 8 | Phase 2: 15 (revised TV set; all BIP-129 in-spec), Phase 3: 8 (revised cell list) |
+| §2.1 row 1 (Phase 3 `Depends on`) | `#2 (6-line shape)` | `—` (4-line independent of Phase 2 verify path) |
+| §4.0 phase-ordering box | "Phase 3: BSMS emitter (depends on #2) → #1 ... (2-line + 6-line)" | "Phase 3: BSMS emitter (independent #2) → #1 ... (4-line + 2-line)" + Phase 1 marked SHIPPED |
+| §5 Risks (tr() row) | "BSMS 6-line m/0/0 derivation differs for taproot tr()" + dead FOLLOWUP slug `bsms-taproot-6-line` | "BSMS Round-2 emit for taproot tr() unspecified in BIP-129" + FOLLOWUP slug `bsms-taproot-emit` |
+| §3.6 (`bundle --import-json` synthesis call) | `synthesize_unified` | `synthesize_descriptor` (per R3 N-C2 fold; consistent with §3.2 lock) |
+
+### §8.2 Phase 0-1 commits remain valid
+
+Phase 0 (`b47ad2a` — plan-doc mirror) and Phase 1 (`e908309` — InspectEnvelope + runbook move) are NOT affected by the pivot. They closed the FOLLOWUPS they were scoped to close (`inspect-json-schema-version-backfill` + `coordinator-runbook-into-design-dir`). The plan-doc mirror at `design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` is amended in-place; Phase 0 mirrored the R5 plan, and §8 is a R6 revision appended to that file (the revision diff is committed as a separate commit with rationale).
+
+### §8.3 New FOLLOWUP `bsms-bip129-full-cutover`
+
+Filed pre-emptively at the plan-revision commit (NOT deferred to cycle close). v0.28+ work:
+- Deprecate the v0.26.0 6-line lenient parser. Add explicit deprecation NOTICE in v0.27.0 (informational only, no behavior change).
+- Add proper 4-line Round-2 input parser (BIP-129-canonical Round-2 plaintext ingest).
+- Add encryption-envelope (STANDARD/EXTENDED) support: PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt + HMAC-SHA256 MAC verify.
+- Possibly drop 6-line lenient input after a stable-version deprecation window.
+- Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup test.py`).
+
+### §8.4 Architect validation required
+
+This revision (§8 + all in-place §2.2/§3.1.1/§3.1.2/§3.4/§3.5/§4.2/§4.3/§4.6 edits) requires a fresh opus architect dispatch BEFORE Phase 2 code starts. Dispatch must:
+- Confirm the recon's BIP-129 claims are spec-faithful (re-read the recon doc + spot-check BIP-129 quotes).
+- Validate Path B-lite scope vs Path A (toolkit-local) vs Path B-full (complete cutover) — confirm B-lite is the right cycle-size choice.
+- Identify any residual drift between Q1/Q2/Q8/Q9/Q10 locks and §3/§4 details.
+- Verify the new FOLLOWUP body adequately scopes the v0.28+ work.
+
+---
+
+**End of plan-doc draft R6 (Phase 2 recon pivot).**
