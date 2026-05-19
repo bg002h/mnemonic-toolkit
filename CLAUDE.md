@@ -29,5 +29,7 @@ Mirror invariant: any flag/API addition or removal in this repo's CLI surface �
 - Design artifacts in `design/`: `BRAINSTORM_*`, `SPEC_*`, `IMPLEMENTATION_PLAN_*`, `FOLLOWUPS.md`.
 - Per-phase opus reviews persist to `design/agent-reports/`.
 - Per-phase TDD: tests written before impl. Per-phase reviewer-loop until 0 critical / 0 important.
+- **Plan-doc + spec citations are grep-verified at write time.** `FOLLOWUPS.md` entries cite source line numbers but those are snapshots from when the entry was filed — they decay every merge. When lifting a citation from `FOLLOWUPS.md` into a plan-doc, brainstorm spec, or SPEC body, re-grep against current `origin/master` source (`git show origin/master:<path> | grep -n <pattern>`) and use the live line numbers. Document the source SHA in the spec for future readers.
+- **Reviewer-loop continues after every fold.** "Per-phase reviewer-loop until 0 critical / 0 important" applies to plan-docs and brainstorm specs too, not just per-phase execution. After folding architect findings, re-dispatch the architect. Stopping after R0 → fold → done is insufficient because folds themselves can introduce drift.
 - Stage paths explicitly (no `git add -A`).
 - Multi-instance coordination playbook: see `design/PLAN_v0_26_0_three_way_merge.md` (integration-branch model + per-instance branch ownership).
