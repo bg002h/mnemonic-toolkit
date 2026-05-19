@@ -23,6 +23,18 @@ The end-user manual lives at `docs/manual/` in this repo and is the single sourc
 
 Mirror invariant: any flag/API addition or removal in this repo's CLI surface — or in the sibling-codec CLIs (`descriptor-mnemonic/md-cli`, `mnemonic-secret/ms-cli`, `mnemonic-key/mk-cli`) — must update the manual under `docs/manual/src/40-cli-reference/` in lockstep with the implementing PR. The bidirectional flag-coverage check lives at `docs/manual/tests/lint.sh` and is invoked via `make -C docs/manual lint MNEMONIC_BIN=... MD_BIN=... MS_BIN=... MK_BIN=...`; CI calls this from `.github/workflows/manual.yml`. The manual chapters mirror clap-derive's `--help` output for all four CLIs. See `design/FOLLOWUPS.md` entry `manual-cli-surface-mirror` for the canonical record; sibling repos carry companion entries.
 
+## GUI schema-mirror coverage
+
+The downstream consumer `mnemonic-gui` maintains a clap-flag schema mirror at `mnemonic-gui/src/schema/mnemonic.rs` (subcommand-by-subcommand flag listings + dropdown value enums), enforced by the `schema_mirror` integration test which runs `mnemonic gui-schema` against the pinned toolkit binary and compares against the hand-maintained schema.
+
+Mirror invariant: **any flag/option/subcommand/dropdown-value addition, removal, or rename in `mnemonic-toolkit`'s clap-derived CLI surface MUST update `mnemonic-gui/src/schema/mnemonic.rs` in lockstep with the implementing PR** (same PR if cross-repo authoring is feasible; otherwise a paired sibling PR on mnemonic-gui).
+
+The `schema_mirror` test fires on `mnemonic-gui` pin bumps via the toolkit binary it consumes — so missing the lockstep update does not surface immediately; it accumulates silently until the next GUI pin bump catches the cumulative delta. The drift gate is therefore a **lagging indicator**, not a leading one. The leading discipline is the paired-PR rule.
+
+Historical case study (v0.27.0 + v0.27.1): neither cycle paired its toolkit CLI additions with a GUI schema-mirror update. v0.11.1's pin bump v0.26.0 → v0.27.2 fired the drift gate against 8 accumulated missing flags (`bundle --import-json`, `--import-json-index`; `export-wallet --bsms-form`, `--from-import-json`, `--from-import-json-index`, `bsms` format, `BSMS_FORMS` enum; `import-wallet --bsms-round1`, `--bsms-verify-strict`). The Phase 3 of v0.27.2 had to backfill all 8 in one go.
+
+See `design/FOLLOWUPS.md` entry `gui-schema-mirror-lockstep-discipline` for the canonical record. Companion convention lives in `mnemonic-gui/CLAUDE.md`.
+
 ## Conventions
 
 - Reference implementation in `crates/mnemonic-toolkit/`.
