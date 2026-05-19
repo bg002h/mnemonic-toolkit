@@ -190,7 +190,51 @@ pub(crate) struct BsmsAuditFields {
     pub(crate) signature: String,
     pub(crate) first_address: String,
     pub(crate) derivation_path: String,
-    pub(crate) signature_verified: bool,
+    /// v0.27.1 Phase 5c API-discipline scaffolding: replaces the prior
+    /// `signature_verified: bool` field. Closed enum makes the `(bool,
+    /// Option<reason>)` representable-invalid state unrepresentable internally
+    /// even though wire-shape preserves the legacy `"signature_verified": bool`
+    /// JSON field via `BsmsVerification::signature_verified()` derived getter.
+    /// Pattern mirrors `Round1VerificationStatus` at cmd/import_wallet.rs:844-850
+    /// (v0.27.0 Phase 6.5 I7 precedent).
+    pub(crate) verification: BsmsVerification,
+}
+
+/// SPEC §8.1 — closed-enum verification status for the BSMS Round-2 audit
+/// metadata. v0.26.0/v0.27.0 inline 2/6-line parsers do NOT cryptographically
+/// verify the 6-line signature blob (the toolkit's actual BIP-322 verification
+/// surface is the v0.27.0 `--bsms-round1 <FILE>` path); inline audit therefore
+/// always constructs as `NotAttempted`. The `Verified` / `Failed` variants are
+/// reserved for a future cycle that wires the 6-line signature blob through
+/// `wallet_import::bsms_verify::verify_round1_signature` — until then they are
+/// unreachable from user input but unrepresentable at the type level rather
+/// than silently representable-as-`true`.
+#[derive(Debug, Clone)]
+pub(crate) enum BsmsVerification {
+    /// Inline 2/6-line parser did not attempt cryptographic verification of
+    /// the 6-line signature blob. v0.26.0/v0.27.0 default.
+    NotAttempted,
+    /// Reserved: signature was cryptographically verified against the
+    /// signer's pubkey. Currently unreachable; constructible only when a
+    /// future cycle wires inline-signature verification.
+    #[allow(dead_code)]
+    Verified,
+    /// Reserved: signature was cryptographically verified and FAILED.
+    /// Currently unreachable; the `reason` carries the verifier's typed error.
+    #[allow(dead_code)]
+    Failed {
+        #[allow(dead_code)]
+        reason: String,
+    },
+}
+
+impl BsmsVerification {
+    /// Wire-shape getter: derives the legacy `"signature_verified": bool` JSON
+    /// field for `--json` envelope emission. `Verified` → true; everything
+    /// else → false (matches the prior `signature_verified: bool` semantics).
+    pub(crate) fn signature_verified(&self) -> bool {
+        matches!(self, BsmsVerification::Verified)
+    }
 }
 
 /// SPEC §8.2 — post-construction watch-only invariant. Every parser's

@@ -177,6 +177,44 @@ pub struct MatchedCosignerJson {
     pub account: Option<u32>,
 }
 
+/// v0.27.1 Phase 5a API-discipline scaffolding for `AccountOfDescriptorResult`.
+/// Mirrors `path_of_xpub::build_path_match` discipline; the `matched_cosigners`
+/// vec is required non-empty for match and is pinned to `vec![]` on no-match.
+/// Tracked by FOLLOWUP
+/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+pub(super) fn build_account_match(
+    matched_cosigners: Vec<MatchedCosignerJson>,
+    cosigners_total: usize,
+    searched_count_per_cosigner: usize,
+    descriptor_shape: DescriptorShape,
+    unspendable_internal_keys: Vec<usize>,
+) -> AccountOfDescriptorResult {
+    AccountOfDescriptorResult {
+        result: "match",
+        matched_cosigners,
+        cosigners_total,
+        searched_count_per_cosigner,
+        descriptor_shape,
+        unspendable_internal_keys,
+    }
+}
+
+pub(super) fn build_account_no_match(
+    cosigners_total: usize,
+    searched_count_per_cosigner: usize,
+    descriptor_shape: DescriptorShape,
+    unspendable_internal_keys: Vec<usize>,
+) -> AccountOfDescriptorResult {
+    AccountOfDescriptorResult {
+        result: "no_match",
+        matched_cosigners: Vec::new(),
+        cosigners_total,
+        searched_count_per_cosigner,
+        descriptor_shape,
+        unspendable_internal_keys,
+    }
+}
+
 pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
     args: &AccountOfDescriptorArgs,
     stdin: &mut R,
@@ -280,24 +318,24 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
     // 6) Emit result.
     if !matches.is_empty() {
         if args.json {
+            let matched_cosigners = matches
+                .iter()
+                .map(|m| MatchedCosignerJson {
+                    cosigner_index: m.cosigner_index,
+                    path: format!("m/{}", m.path),
+                    template: m.template.clone(),
+                    account: m.account,
+                })
+                .collect();
             let envelope = XpubSearchEnvelope {
                 schema_version: "1",
-                body: XpubSearchJson::AccountOfDescriptor(AccountOfDescriptorResult {
-                    result: "match",
-                    matched_cosigners: matches
-                        .iter()
-                        .map(|m| MatchedCosignerJson {
-                            cosigner_index: m.cosigner_index,
-                            path: format!("m/{}", m.path),
-                            template: m.template.clone(),
-                            account: m.account,
-                        })
-                        .collect(),
+                body: XpubSearchJson::AccountOfDescriptor(build_account_match(
+                    matched_cosigners,
                     cosigners_total,
-                    searched_count_per_cosigner: searched_count,
-                    descriptor_shape: descriptor_intake.shape,
-                    unspendable_internal_keys: unspendable,
-                }),
+                    searched_count,
+                    descriptor_intake.shape,
+                    unspendable.clone(),
+                )),
             };
             let body = serde_json::to_string(&envelope).map_err(|e| {
                 ToolkitError::BadInput(format!("account-of-descriptor JSON serialize: {e}"))
@@ -334,14 +372,12 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
         if args.json {
             let envelope = XpubSearchEnvelope {
                 schema_version: "1",
-                body: XpubSearchJson::AccountOfDescriptor(AccountOfDescriptorResult {
-                    result: "no_match",
-                    matched_cosigners: Vec::new(),
+                body: XpubSearchJson::AccountOfDescriptor(build_account_no_match(
                     cosigners_total,
-                    searched_count_per_cosigner: searched_count,
-                    descriptor_shape: descriptor_intake.shape,
-                    unspendable_internal_keys: unspendable,
-                }),
+                    searched_count,
+                    descriptor_intake.shape,
+                    unspendable,
+                )),
             };
             let body = serde_json::to_string(&envelope).map_err(|e| {
                 ToolkitError::BadInput(format!("account-of-descriptor JSON serialize: {e}"))

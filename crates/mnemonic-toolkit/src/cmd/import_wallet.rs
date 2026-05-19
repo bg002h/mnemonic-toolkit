@@ -592,7 +592,7 @@ fn emit_json_envelope<W: Write, E: Write>(
                     "signature": audit.signature,
                     "first_address": audit.first_address,
                     "derivation_path": audit.derivation_path,
-                    "signature_verified": audit.signature_verified,
+                    "signature_verified": audit.verification.signature_verified(),
                 }),
             );
         }

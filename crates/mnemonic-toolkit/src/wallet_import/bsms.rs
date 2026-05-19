@@ -121,7 +121,7 @@ impl WalletFormatParser for BsmsParser {
                         signature,
                         first_address,
                         derivation_path,
-                        signature_verified: false,
+                        verification: crate::wallet_import::BsmsVerification::NotAttempted,
                     }),
                 )
             }
