@@ -29,7 +29,7 @@ regex = "1"
 sha2 = "0.10"
 bip38 = "1.1"
 bip39 = { version = "2", features = ["all-languages"] }
-bitcoin = "0.32"
+bitcoin = { version = "0.32", features = ["base64"] }
 clap = { version = "4", features = ["derive"] }
 hex = "0.4"
 libc = "0.2"

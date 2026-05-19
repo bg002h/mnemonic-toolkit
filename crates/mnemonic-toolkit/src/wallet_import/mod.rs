@@ -23,6 +23,8 @@ use std::io::Write;
 
 pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
+pub(crate) mod bsms_round1;
+pub(crate) mod bsms_verify;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;

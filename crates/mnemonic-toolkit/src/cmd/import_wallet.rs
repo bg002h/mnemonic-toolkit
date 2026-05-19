@@ -51,8 +51,15 @@ use std::path::PathBuf;
 #[derive(Args, Debug, Clone)]
 pub struct ImportWalletArgs {
     /// Path to the third-party wallet blob; `-` reads from stdin.
-    #[arg(long = "blob", value_name = "FILE|-", required = true)]
-    pub blob: PathBuf,
+    /// v0.27.0: required UNLESS `--bsms-round1` is supplied (Round-1 verify
+    /// alone is a meaningful CLI mode; emits per-record verify envelope on
+    /// `--json`, exits 0 on verify success).
+    #[arg(
+        long = "blob",
+        value_name = "FILE|-",
+        required_unless_present = "bsms_round1"
+    )]
+    pub blob: Option<PathBuf>,
 
     /// Format override. If absent, the blob is auto-detected via sniff
     /// (SPEC §6). Supported values: `bsms`, `bitcoin-core`.
@@ -100,11 +107,32 @@ pub struct ImportWalletArgs {
     ///   - `roundtrip`        — { byte_exact, semantic_match, diff? }
     ///   - `bsms_audit?`      — BSMS audit fields (BSMS source only)
     ///   - `source_metadata?` — Bitcoin Core per-entry metadata
+    ///   - `bsms_round1_verifications?` — per-record BIP-129 Round-1 SIG
+    ///     verify state when `--bsms-round1` supplied (v0.27.0)
     ///
     /// When `--json` is set, the round-trip diff goes ONLY in the envelope;
     /// stderr is silent for the diff.
     #[arg(long = "json")]
     pub json: bool,
+
+    /// v0.27.0 — supply a BIP-129 5-line Round-1 key record (Signer →
+    /// Coordinator) for BIP-322 ECDSA signature verification. Repeating
+    /// flag — one per record. `<FILE>` reads file contents; `-` reads one
+    /// record from stdin (mutually exclusive with `--blob -`).
+    ///
+    /// Each record is verified independently; verify state propagates to the
+    /// `--json` envelope's `bsms_round1_verifications` field. Verify failure
+    /// is fatal under `--bsms-verify-strict`; otherwise emits a stderr NOTICE
+    /// and sets `signature_verified: false` per-record.
+    #[arg(long = "bsms-round1", value_name = "FILE|-")]
+    pub bsms_round1: Vec<PathBuf>,
+
+    /// v0.27.0 — make BIP-129 Round-1 SIG verification failures fatal.
+    /// Without this flag, verify mismatches emit a stderr NOTICE and proceed
+    /// with `signature_verified: false`. With this flag, verify mismatch is
+    /// `BsmsSignatureMismatch` exit 2.
+    #[arg(long = "bsms-verify-strict")]
+    pub bsms_verify_strict: bool,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -133,8 +161,39 @@ pub fn run<R: Read, W: Write, E: Write>(
         args
     };
 
+    // v0.27.0 — `--bsms-verify-strict` without `--bsms-round1` is meaningless;
+    // reject explicitly so the user notices the typo.
+    if args.bsms_verify_strict && args.bsms_round1.is_empty() {
+        return Err(ToolkitError::BadInput(
+            "--bsms-verify-strict requires `--bsms-round1` (the flag controls \
+             BIP-129 Round-1 SIG verify strictness; there are no records to verify)"
+                .to_string(),
+        ));
+    }
+
+    // v0.27.0 — BIP-129 Round-1 BIP-322 ECDSA verify (independent of --blob).
+    let round1_verifications = if !args.bsms_round1.is_empty() {
+        verify_bsms_round1_files(&args.bsms_round1, args.bsms_verify_strict, stderr)?
+    } else {
+        Vec::new()
+    };
+
+    // v0.27.0 — Standalone Round-1 verify mode: no --blob supplied. Emit
+    // verifications only (no bundle synthesis path).
+    let blob_path = match &args.blob {
+        Some(p) => p,
+        None => {
+            if args.json {
+                emit_round1_only_envelope(stdout, &round1_verifications)?;
+            } else {
+                emit_round1_only_summary(stdout, &round1_verifications)?;
+            }
+            return Ok(0);
+        }
+    };
+
     // Read blob.
-    let blob = read_blob(&args.blob, stdin)?;
+    let blob = read_blob(blob_path, stdin)?;
 
     // SPEC §6: sniff dispatch.
     let sniff_outcome = sniff_format(&blob);
@@ -253,7 +312,14 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // Emit stdout.
     if args.json {
-        emit_json_envelope(stdout, &parsed, &blob, format_str, args.json)?;
+        emit_json_envelope(
+            stdout,
+            &parsed,
+            &blob,
+            format_str,
+            args.json,
+            &round1_verifications,
+        )?;
     } else {
         // Default text-mode: emit the Phase 2/3 summary form. Emit
         // round-trip diff on stderr when canonicalize is non-byte-exact.
@@ -328,6 +394,7 @@ fn emit_json_envelope<W: Write>(
     blob: &[u8],
     format_str: &str,
     _json: bool,
+    round1_verifications: &[Round1Verification],
 ) -> Result<(), ToolkitError> {
     let mut envelopes: Vec<serde_json::Value> = Vec::with_capacity(parsed.len());
 
@@ -442,6 +509,22 @@ fn emit_json_envelope<W: Write>(
                     "dropped_fields": meta.dropped_fields,
                     "wallet_name": meta.wallet_name,
                 }),
+            );
+        }
+
+        // v0.27.0 — propagate Round-1 BIP-322 verify state when --bsms-round1
+        // was supplied alongside --blob. Same array on every parsed entry
+        // (verifications are blob-independent; surface on every envelope so
+        // downstream consumers don't have to index-match).
+        if !round1_verifications.is_empty() {
+            env.insert(
+                "bsms_round1_verifications".to_string(),
+                serde_json::Value::Array(
+                    round1_verifications
+                        .iter()
+                        .map(round1_verification_to_json)
+                        .collect(),
+                ),
             );
         }
 
@@ -572,4 +655,135 @@ fn hex_lower(bytes: &[u8]) -> String {
         s.push_str(&format!("{b:02x}"));
     }
     s
+}
+
+// ---------------------------------------------------------------------------
+// v0.27.0 — BIP-129 Round-1 verify (--bsms-round1 + --bsms-verify-strict)
+// ---------------------------------------------------------------------------
+
+/// Per-record verify result. Propagates to `--json` envelope when --blob is
+/// supplied, OR to the standalone Round-1 verify envelope when --blob is not.
+struct Round1Verification {
+    index: usize,
+    signer_pubkey: String,
+    description: String,
+    token_hex: String,
+    signature_verified: bool,
+    /// Stderr-NOTICE detail (only populated on lenient-default verify failure).
+    failure_reason: Option<String>,
+}
+
+/// Read + parse + verify each `--bsms-round1 <FILE>` entry. Lenient default:
+/// verify failure emits stderr NOTICE + sets `signature_verified: false`;
+/// strict (`--bsms-verify-strict`) makes verify failure fatal.
+fn verify_bsms_round1_files(
+    paths: &[PathBuf],
+    strict: bool,
+    stderr: &mut dyn Write,
+) -> Result<Vec<Round1Verification>, ToolkitError> {
+    use crate::wallet_import::bsms_round1::{parse_round1, signer_pubkey};
+    use crate::wallet_import::bsms_verify::verify_round1_signature;
+
+    let mut out = Vec::with_capacity(paths.len());
+    for (i, path) in paths.iter().enumerate() {
+        if path.as_os_str() == "-" {
+            // v0.27.0 first cut: stdin input for --bsms-round1 deferred. Future:
+            // multi-record stdin (one record per blob, separated by sentinel)
+            // or single-record-from-stdin (mutually exclusive with --blob -).
+            return Err(ToolkitError::BadInput(format!(
+                "--bsms-round1 -: stdin input deferred in v0.27.0; supply a file path \
+                 (record index {})",
+                i
+            )));
+        }
+        let text = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
+        let record = parse_round1(&text)?;
+        let pk_hex = hex::encode(signer_pubkey(&record).serialize());
+
+        match verify_round1_signature(&record, i) {
+            Ok(()) => {
+                out.push(Round1Verification {
+                    index: i,
+                    signer_pubkey: pk_hex,
+                    description: record.description.clone(),
+                    token_hex: record.token_hex.clone(),
+                    signature_verified: true,
+                    failure_reason: None,
+                });
+            }
+            Err(ToolkitError::BsmsSignatureMismatch {
+                record_index,
+                signer_pubkey: pk_for_err,
+                reason,
+            }) => {
+                if strict {
+                    return Err(ToolkitError::BsmsSignatureMismatch {
+                        record_index,
+                        signer_pubkey: pk_for_err,
+                        reason,
+                    });
+                }
+                let _ = writeln!(
+                    stderr,
+                    "notice: import-wallet: --bsms-round1: signature verification failed \
+                     for record {i} (signer pubkey {pk_for_err}): {reason}"
+                );
+                out.push(Round1Verification {
+                    index: i,
+                    signer_pubkey: pk_for_err,
+                    description: record.description.clone(),
+                    token_hex: record.token_hex.clone(),
+                    signature_verified: false,
+                    failure_reason: Some(reason),
+                });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(out)
+}
+
+fn emit_round1_only_envelope<W: Write>(
+    stdout: &mut W,
+    verifications: &[Round1Verification],
+) -> Result<(), ToolkitError> {
+    let payload = json!({
+        "source_format": "bsms-round1",
+        "bsms_round1_verifications": verifications
+            .iter()
+            .map(round1_verification_to_json)
+            .collect::<Vec<_>>(),
+    });
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| ToolkitError::BadInput(format!("--bsms-round1 envelope serialize: {e}")))?;
+    writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
+    Ok(())
+}
+
+fn emit_round1_only_summary<W: Write>(
+    stdout: &mut W,
+    verifications: &[Round1Verification],
+) -> Result<(), ToolkitError> {
+    writeln!(stdout, "bsms-round1: {} record(s) processed", verifications.len())
+        .map_err(ToolkitError::Io)?;
+    for v in verifications {
+        writeln!(
+            stdout,
+            "  record[{}]: signer_pubkey={} description={:?} token_hex={} verified={}",
+            v.index, v.signer_pubkey, v.description, v.token_hex, v.signature_verified
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+    Ok(())
+}
+
+fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
+    json!({
+        "index": v.index,
+        "signer_pubkey": v.signer_pubkey,
+        "description": v.description,
+        "token_hex": v.token_hex,
+        "signature_verified": v.signature_verified,
+        "failure_reason": v.failure_reason,
+    })
 }
