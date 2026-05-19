@@ -43,7 +43,7 @@ Any inline-value secret flag accepts `@env:<VAR>` sentinel resolved at clap-pars
 - **Stdout (default mode):** human-readable engraving card(s) — exactly the byte-shape produced by `mnemonic synthesize`. When N > 1 descriptors emit N bundles, cards are separated by a single line `;` (newline + literal semicolon + newline; i.e., `\n;\n`).
 - **Stdout (`--json` mode):** JSON array of bundle envelopes, one per emitted bundle. Each envelope includes:
   - `bundle: {...}` — **v0.26.0 ships a parse-side summary** (per Phase 5 R0 I2 fold) of the shape `{ cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold }`. The full toolkit-native `BundleJson` shape (the one `verify-bundle --bundle-json` consumes, with synthesized ms1/mk1/md1 cards) requires running the synthesizer post-parse and is tracked at FOLLOWUP `wallet-import-json-envelope-full-bundle` (v0.27+). Consumers writing against v0.26.0 should encode against the summary shape; the envelope key remains `bundle`, the shape itself extends in v0.27.
-  - `roundtrip: { byte_exact: bool, semantic_match: bool, diff: Option<String>, status: "ok" | "blocked_no_emitter" | "canonicalize_failed" }` — `status` is the v0.26.0 envelope-extension key (per Phase 5 R0): `"ok"` for the standard case, `"blocked_no_emitter"` for BSMS until FOLLOWUP `wallet-export-bsms-emitter` lands, `"canonicalize_failed"` when canonicalize errors post-parse-success.
+  - `roundtrip: { byte_exact: bool, semantic_match: bool, diff: Option<String>, status: "ok" | "blocked_no_emitter" | "canonicalize_failed", error?: String }` — `status` is the v0.26.0 envelope-extension key (per Phase 5 R0): `"ok"` for the standard case, `"blocked_no_emitter"` for BSMS until FOLLOWUP `wallet-export-bsms-emitter` lands, `"canonicalize_failed"` when canonicalize errors post-parse-success. **v0.27.1 amendment (per FOLLOWUP `pr-26-roundtrip-warning-suppression`):** `error: String` field added in the `canonicalize_failed` branch only (omitted in other status values); carries the typed `ToolkitError` Display form. See §7.4.
   - `bsms_audit: { token, signature, first_address, derivation_path, signature_verified: false }` (BSMS only; absent for Core).
   - `source_format: "bsms" | "bitcoin-core"`.
 - **Stderr:** progress / NOTICEs / WARNINGs / round-trip diff (when bytes differ and `--json` is NOT set).
@@ -297,7 +297,17 @@ canonicalize(core_blob):
 
 - `"ok"`: standard case; `byte_exact` + `semantic_match` reflect the canonicalize comparison faithfully.
 - `"blocked_no_emitter"`: applies to BSMS until FOLLOWUP `wallet-export-bsms-emitter` lands. The re-emit side of the round-trip cannot run because `export-wallet --format bsms` is unimplemented in v0.26.0. Envelope reports `byte_exact: false`, `semantic_match: false`, `diff: null`; the discriminator informs downstream consumers (mnemonic-gui, automation) that the round-trip discipline is not yet evaluable for this blob — NOT that the blob is malformed.
-- `"canonicalize_failed"`: applies when `canonicalize_bsms` or `canonicalize_bitcoin_core` errors after parse-success (e.g., exotic descriptor accepted by parse but rejected by `MsDescriptor::from_str` in the canonicalize path). Envelope reports `byte_exact: false`, `semantic_match: false`, `diff: null`. This is a v0.26.0-rare error path; the canonicalize-failure-with-parse-success class is a candidate for FOLLOWUP `wallet-import-roundtrip-canonicalize-edge-cases` if it surfaces in real fixtures.
+- `"canonicalize_failed"`: applies when `canonicalize_bsms` or `canonicalize_bitcoin_core` errors after parse-success (e.g., exotic descriptor accepted by parse but rejected by `MsDescriptor::from_str` in the canonicalize path). Envelope reports `byte_exact: false`, `semantic_match: false`, `diff: null`. **v0.27.1 amendment (per FOLLOWUP `pr-26-roundtrip-warning-suppression`):** the envelope carries an additional `error: String` field with the typed `ToolkitError` Display form, scoped to the `canonicalize_failed` branch only (omitted in other status values). Example:
+  ```json
+  "roundtrip": {
+    "byte_exact": false,
+    "semantic_match": false,
+    "diff": null,
+    "status": "canonicalize_failed",
+    "error": "canonicalize_bitcoin_core: miniscript: unexpected token"
+  }
+  ```
+  The canonicalize-failure-with-parse-success class is a candidate for FOLLOWUP `wallet-import-roundtrip-canonicalize-edge-cases` if it surfaces in real fixtures. **Backward compatibility:** consumers parsing the prior `{byte_exact, semantic_match, diff, status}` fields are unaffected; the `error` key is additive in a closed-enum branch.
 
 ## §8 Module layout
 
