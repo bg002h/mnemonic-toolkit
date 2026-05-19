@@ -56,15 +56,18 @@
 
 **Files:** none (git operations)
 
-- [ ] **Step 1: Verify PR #29 status**
+- [ ] **Step 1: Verify PR #29 status (programmatic halt on not-merged)**
 
 ```bash
-gh pr view 29 --json state,mergedAt,mergeCommit -q '{state, mergedAt, mergeCommit: .mergeCommit.oid}'
+state=$(gh pr view 29 --json state -q '.state')
+if [ "$state" != "MERGED" ]; then
+  echo "PR #29 not merged (state=$state); halting Phase 0 — wait for merge."
+  exit 1
+fi
+echo "PR #29 merged; proceeding."
 ```
 
-Expected: `state: MERGED`, non-null `mergedAt`, non-null `mergeCommit.oid`.
-
-If `state: OPEN`, halt this plan — wait for merge before proceeding.
+Expected: `PR #29 merged; proceeding.` on stdout, exit 0. If the script exits 1, the agent must stop — do not proceed to Step 2.
 
 - [ ] **Step 2: Fetch + verify origin/master tip advanced past 2f8b311**
 
@@ -98,7 +101,7 @@ No commit at this step; just branch creation.
 grep -nE '\.(bsms_audit|source_metadata)([^_a-zA-Z]|$)' crates/mnemonic-toolkit/src/cmd/import_wallet.rs
 ```
 
-Expected: 5 lines. Spec at brainstorm commit `24978e4` cites `{587, 599, 806, 818, 825}`. If different on `release/v0.27.2` (because PR #29's lockfile-only changes may have shifted nothing, but verify), update the spec inline and the Task 2.7 step code below.
+Expected: **7 lines total** — 5 actionable field-access sites at `{587, 599, 806, 818, 825}` + 2 string-literal false-positives at `{811, 823}` (the `writeln!(... "bundles[{i}].bsms_audit={audit_str}")` format strings — the regex matches `=` as the non-letter trailing context). The 5 actionable sites are what Phase 2 Task 2.6 mechanically edits. If the totals differ, update the recon-dossier values + Phase 2 Task 2.6 step code inline before agent dispatch.
 
 - [ ] **Step 2: Re-grep wallet_import/mod.rs apply_select_descriptor sites**
 
@@ -170,14 +173,14 @@ Expected: `6` (spec ground truth). If different, the dispatcher has grown or shr
 
 **Files:** `design/agent-reports/v0_27_2-phase-0-recon.md` (append)
 
-- [ ] **Step 1: Grep drift cells for `searched`**
+- [ ] **Step 1: Grep drift cells for the bare `searched` token**
 
 ```bash
-grep -n 'searched' crates/mnemonic-toolkit/tests/cli_xpub_search_drift_v0_27_0.rs
-grep -n 'searched' crates/mnemonic-toolkit/tests/cli_import_wallet_envelope_v0_27_0.rs
+grep -nE '\bsearched\b[^_]' crates/mnemonic-toolkit/tests/cli_xpub_search_drift_v0_27_0.rs
+grep -nE '\bsearched\b[^_]' crates/mnemonic-toolkit/tests/cli_import_wallet_envelope_v0_27_0.rs
 ```
 
-Expected: ZERO matches in both. Item 6 is doc-only; if any test asserts a specific `searched` value, that test will need updating in Task 1.5 (escalating item 6 from doc-only to doc + 1-2 test updates).
+Expected: ZERO matches for the bare `searched` token used by `ToolkitError::XpubSearchNoMatch`. Note: the test files DO contain `searched_count` and `searched_count_per_cosigner` references — those are unrelated per-target / per-cosigner aggregations and are correctly NOT touched by item 6 (which is about the aggregate `XpubSearchNoMatch.searched` field). The regex `\bsearched\b[^_]` excludes `_count` suffixes via word-boundary + non-underscore lookahead. If any match surfaces, item 6 escalates from doc-only to doc + 1-2 test updates.
 
 ### Task 0.5: Verify mnemonic-gui repo state for Phase 3 sizing
 
@@ -222,6 +225,8 @@ git commit --amend --no-edit  # if combined with Task 0.2.5; else new commit
 ## Phase 1 — Toolkit doc + test batch (items 2, 3, 4, 5, 6)
 
 **Goal:** Land items 2-6 as a single coherent batch. Each item lands as its own commit for FOLLOWUP-status-flip auditability. Zero behavior change; drift-shape regression guarded by existing fixtures.
+
+> 📋 **Recon-dossier discipline:** All line-number citations in Phase 1 + Phase 2 tasks are reference values from spec-write time (`24978e4` → `03c1dae` lineage). Phase 0 produces `design/agent-reports/v0_27_2-phase-0-recon.md` with grep-verified live line numbers. **The dossier is authoritative — if dossier values differ from Phase 1/2 task text, the dossier wins.** Before dispatching a Phase 1 or Phase 2 agent, the operator updates the task text inline to match the dossier. This is the discipline codified in memory `feedback-grep-verify-during-fold-not-just-during-write`.
 
 ### Task 1.1: error-rs alphabetical-ordering Convention (item 2)
 
@@ -291,22 +296,18 @@ Closes design/FOLLOWUPS.md::compare-cost-agent-reports-back-fill"
 - [ ] **Step 1: Read the current test**
 
 ```bash
-sed -n '20,40p' crates/mnemonic-toolkit/tests/mlock_unit.rs
+sed -n '20,35p' crates/mnemonic-toolkit/tests/mlock_unit.rs
 ```
 
-Expected: test `g1_1_single_page_pin_has_page_count_one` allocating `Box<[u8; 64]>` and asserting page count `== 1`. The `Box::new([0u8; 64])` allocator placement is the flake source.
+Expected: test `g1_1_single_page_pin_has_page_count_one` allocating `vec![0xAAu8; 64]` and asserting `pin.page_count == 1` via `mlock::pin_pages_for(&buf)`. The `Vec`'s heap-allocator bump pointer may straddle a page boundary depending on thread-local arena state — this is the flake source.
 
 - [ ] **Step 2: Run the test under parallel execution to reproduce flake (informational)**
 
 ```bash
-cargo test --test mlock_unit g1_1_single_page_pin_has_page_count_one
-```
-
-If passes 5× in a row, the heap state happens to be aligned today. Run with explicit thread count to verify flake potential:
-
-```bash
 for i in 1 2 3 4 5; do cargo test --test mlock_unit g1_1_single_page_pin_has_page_count_one 2>&1 | tail -2; done
 ```
+
+If 5/5 PASS, the heap state happens to be aligned today. The fix is invariant regardless.
 
 - [ ] **Step 3: Rewrite the test using `std::alloc::alloc` with explicit page alignment**
 
@@ -317,28 +318,24 @@ Edit `crates/mnemonic-toolkit/tests/mlock_unit.rs` — replace the `g1_1_single_
 fn g1_1_single_page_pin_has_page_count_one() {
     use std::alloc::{alloc, dealloc, Layout};
 
-    let page_size = mnemonic_toolkit::mlock::PAGE_SIZE.get();
+    let page_size = mlock::page_size_for_test();
     // SAFETY: Layout is valid (size > 0, align is power of 2). We deallocate
     // before returning. Buffer is page-aligned so pin_pages_for returns exactly 1.
     let layout = Layout::from_size_align(64, page_size).expect("valid layout");
     unsafe {
         let ptr = alloc(layout);
         assert!(!ptr.is_null(), "alloc failed");
-        let slice = std::slice::from_raw_parts_mut(ptr, 64);
-        let pages = mnemonic_toolkit::mlock::pin_pages_for(slice);
-        assert_eq!(pages, 1, "page-aligned 64-byte buffer spans exactly 1 page");
+        let slice = std::slice::from_raw_parts(ptr, 64);
+        let pin = mlock::pin_pages_for(slice);
+        assert_eq!(pin.page_count, 1, "page-aligned 64-byte buffer spans exactly 1 page");
+        assert!(!pin.start.is_null(), "non-empty buf produces non-null start");
+        drop(pin);
         dealloc(ptr, layout);
     }
 }
 ```
 
-Verify the symbol `mnemonic_toolkit::mlock::PAGE_SIZE` exists; if it's `*PAGE_SIZE` (an `OnceCell`) the access is `.get()`. If it's `PAGE_SIZE` (const), drop `.get()`. Grep first:
-
-```bash
-grep -n 'PAGE_SIZE' crates/mnemonic-toolkit/src/mlock.rs | head -5
-```
-
-Adjust the test code based on actual API shape.
+Public API used (grep-verified at `src/mlock.rs`): `mlock::page_size_for_test()` (line 221) returns `usize`; `mlock::pin_pages_for(&[u8])` (line 90) returns `PinnedPageRange` with `.page_count: usize` and `.start: *const u8`. The `mlock::*` import is at the top of `mlock_unit.rs` already.
 
 - [ ] **Step 4: Run the test 10× in parallel to verify invariance**
 
@@ -401,13 +398,13 @@ fn dispatcher_arm_count_matches_pinned_constant() {
 
 Note: `regex` may need adding to `dev-dependencies` if not already present.
 
-- [ ] **Step 3: Verify regex is a workspace dev-dep**
+- [ ] **Step 3: Verify regex is already a workspace dep (no add needed)**
 
 ```bash
-grep -A 5 '\[dev-dependencies\]' crates/mnemonic-toolkit/Cargo.toml | grep regex || echo "MISSING"
+grep -nE '^regex' crates/mnemonic-toolkit/Cargo.toml
 ```
 
-If MISSING, add `regex = "1"` to `[dev-dependencies]`. If present, proceed.
+Expected: hit at `[dependencies]` section (currently line 28: `regex = "1"`). Integration tests have access to runtime `[dependencies]`, so no `[dev-dependencies]` add is required. If grep returns nothing (e.g., regex was removed in a later cycle), add `regex = "1"` to `[dev-dependencies]`.
 
 - [ ] **Step 4: Run the test (expect PASS — regex matches the 6 arms)**
 
@@ -577,16 +574,27 @@ mod provenance_tests {
     use super::*;
 
     fn sample_bsms_audit() -> BsmsAuditFields {
+        // Field shape grep-verified at src/wallet_import/mod.rs:188-202.
+        // No Default impl on BsmsAuditFields or BsmsVerification; construct
+        // with minimal valid values directly.
         BsmsAuditFields {
-            // populate with minimal valid values; cross-check field shape against
-            // wallet_import::bsms module definitions
-            ..Default::default()
+            token: String::new(),
+            signature: String::new(),
+            first_address: String::new(),
+            derivation_path: String::new(),
+            verification: BsmsVerification::NotAttempted,
         }
     }
 
     fn sample_core_metadata() -> CoreSourceMetadata {
+        // Field shape grep-verified at src/wallet_import/mod.rs:88-100.
+        // No Default impl; minimal valid construction.
         CoreSourceMetadata {
-            ..Default::default()
+            active: false,
+            internal: false,
+            range: None,
+            dropped_fields: Vec::new(),
+            wallet_name: None,
         }
     }
 
@@ -640,8 +648,14 @@ Edit `crates/mnemonic-toolkit/src/wallet_import/mod.rs` — add above the `Parse
 ///
 /// See `design/FOLLOWUPS.md::pr-26-import-provenance-enum-internal-refactor`
 /// for rationale (v0.27.1 Phase 5b deferral).
+///
+/// Visibility is `pub(crate)` to match the existing `ParsedImport` /
+/// `BsmsAuditFields` / `CoreSourceMetadata` types (all `pub(crate)` per
+/// grep-verified `src/wallet_import/mod.rs:60,88,188`). Bumping to `pub`
+/// would require E0446-fixing all transitively-referenced types — out of
+/// scope for this internal refactor.
 #[derive(Debug, Clone)]
-pub enum ImportProvenance {
+pub(crate) enum ImportProvenance {
     /// BSMS Round-2 parse (`wallet_import/bsms.rs`).
     Bsms(BsmsAuditFields),
     /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
@@ -650,7 +664,7 @@ pub enum ImportProvenance {
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` only for the `Bsms` variant.
-    pub fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
+    pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::Bsms(audit) => Some(audit),
             Self::BitcoinCore(_) => None,
@@ -658,7 +672,7 @@ impl ImportProvenance {
     }
 
     /// Back-compat accessor: returns `Some(&metadata)` only for the `BitcoinCore` variant.
-    pub fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
+    pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
         match self {
             Self::Bsms(_) => None,
             Self::BitcoinCore(meta) => Some(meta),
@@ -682,7 +696,7 @@ with:
 /// Source-provenance of this parsed import. Use `provenance.bsms_audit()` /
 /// `provenance.source_metadata()` accessors to extract the (still-flat) wire
 /// shape on the JSON envelope. See `ImportProvenance` for invariant.
-pub provenance: ImportProvenance,
+pub(crate) provenance: ImportProvenance,
 ```
 
 - [ ] **Step 3: Add ParsedImport accessor convenience methods (forward access through `provenance`)**
@@ -692,12 +706,12 @@ In the same file, add an `impl ParsedImport { ... }` block (or extend existing):
 ```rust
 impl ParsedImport {
     /// Convenience: equivalent to `self.provenance.bsms_audit()`.
-    pub fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
+    pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         self.provenance.bsms_audit()
     }
 
     /// Convenience: equivalent to `self.provenance.source_metadata()`.
-    pub fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
+    pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
         self.provenance.source_metadata()
     }
 }
@@ -1075,9 +1089,11 @@ git commit -m "docs(agent-reports): v0.27.2 Phase 2 architect review (GREEN)"
 
 ## Phase 3 — Sibling lockstep (item 7) — mnemonic-gui v0.11.1
 
+> ⚠️ **EXECUTION ORDER NOTE — read before dispatching this phase:** Phase 3 is sequenced **AFTER Phase 4**. Document order here does NOT match execution order. Execute Phase 4 (Toolkit cycle close → tag → GH release → install-pin-check CI) FIRST, THEN return here. The phase numbering reflects the spec's conceptual grouping ("Phase 3 = sibling work"); the actual ship rule is toolkit-first, GUI-second (per `design/PLAN_v0_26_0_three_way_merge.md`). Any agent doing linear-order traversal must skip Phase 3 on first pass and return after Phase 4 completes.
+
 **Goal:** Land mnemonic-gui v0.11.1: workflow YAML extension + toolkit pin bump v0.26.0 → v0.27.2 + envelope smoke cells.
 
-**Sequencing:** EXECUTE AFTER Phase 4 toolkit tag (toolkit-first, GUI-second per `design/PLAN_v0_26_0_three_way_merge.md` convention). The GUI cycle pulls the toolkit v0.27.2 tag via `pinned-upstream.toml`.
+**Sequencing pre-condition:** `mnemonic-toolkit-v0.27.2` tag exists on `origin/master`; GH release published. The GUI cycle pulls the toolkit v0.27.2 tag via `pinned-upstream.toml`.
 
 **Working directory:** `/scratch/code/shibboleth/mnemonic-gui/` (sibling repo).
 
@@ -1230,14 +1246,18 @@ const TOOLKIT_BIN: &str = env!("MNEMONIC_BIN");
 
 #[test]
 fn import_wallet_json_envelope_parses_v0_27_x_shape() {
+    // Grep-verified at envelope_v0_27_0.json: top-level shape is a JSON ARRAY
+    // (each element = one bundle). Per-bundle keys: schema_version, source_format,
+    // bundle, roundtrip.
     let fixture = include_str!("../../mnemonic-toolkit/crates/mnemonic-toolkit/tests/fixtures/wallet_import/envelope_v0_27_0.json");
-    // Run GUI's envelope parser (via the consumer module the v0.11.1 bump exercises);
-    // assert no panic / shape error.
     let parsed: serde_json::Value = serde_json::from_str(fixture).expect("v0.27.0 envelope parses");
-    assert_eq!(parsed.get("schema_version").and_then(|v| v.as_str()), Some("1"));
-    assert!(parsed.get("bundle").is_some(), "envelope has bundle field");
-    let bundle = parsed.get("bundle").unwrap();
+    let entries = parsed.as_array().expect("top-level is a JSON array");
+    assert!(!entries.is_empty(), "envelope has at least one bundle entry");
+    let entry = &entries[0];
+    assert_eq!(entry.get("schema_version").and_then(|v| v.as_str()), Some("1"));
+    assert!(entry.get("bundle").is_some(), "entry has bundle field");
     // v0.27.0 replaced compact-summary with full BundleJson; verify the new shape
+    let bundle = entry.get("bundle").unwrap();
     assert!(bundle.get("descriptor").is_some(), "bundle has descriptor field (full BundleJson, not compact)");
 }
 
@@ -1259,9 +1279,14 @@ fn xpub_search_path_of_xpub_no_match_envelope_parses() {
 
 #[test]
 fn xpub_search_account_of_descriptor_envelope_parses() {
+    // Grep-verified at account_of_descriptor.match.json: per-mode shape has
+    // `matched_cosigners[i].{cosigner_index, path, template, account}` — there
+    // is NO top-level `account` field.
     let fixture = include_str!("../../mnemonic-toolkit/crates/mnemonic-toolkit/tests/fixtures/v0_27_0_envelopes/account_of_descriptor.match.json");
     let parsed: serde_json::Value = serde_json::from_str(fixture).expect("account_of_descriptor match envelope parses");
-    assert!(parsed.get("account").is_some());
+    let matched = parsed.get("matched_cosigners").expect("matched_cosigners present");
+    let first = matched.get(0).expect("at least one matched cosigner");
+    assert!(first.get("account").is_some(), "matched_cosigners[0].account present");
 }
 
 #[test]
@@ -1423,6 +1448,8 @@ gh release create mnemonic-gui-v0.11.1 \
 
 ## Phase 4 — Toolkit cycle close
 
+> ✅ **EXECUTION ORDER NOTE:** Phase 4 executes **immediately after Phase 2 closes** (Phase 1 already merged by then). Do not advance to Phase 3 until this phase ships the toolkit tag + GH release. The sibling Phase 3 (mnemonic-gui v0.11.1) consumes the toolkit tag emitted here.
+
 **Goal:** Land CHANGELOG + FOLLOWUPS Status flips + Cargo bumps + install.sh pin + tag + release.
 
 **Working directory:** `/scratch/code/shibboleth/mnemonic-toolkit/` on `release/v0.27.2`.
@@ -1546,13 +1573,13 @@ Expected: `version = "0.27.1"`.
 
 Edit the line to `version = "0.27.2"`.
 
-- [ ] **Step 3: Check for workspace-root version field**
+- [ ] **Step 3: Verify root Cargo.toml has no workspace-version field (sanity)**
 
 ```bash
-grep -n '^version' Cargo.toml | head -3
+grep -nE '^version|^\[workspace\.package\]' Cargo.toml
 ```
 
-If the root `Cargo.toml` has a `[workspace.package]` version field, also bump.
+Expected (grep-verified at plan-write time): root `Cargo.toml` has `[workspace.package]` with `edition`, `license`, `repository`, `homepage`, `rust-version` — but NO `version` field (per-crate versions only). No action needed. If a future cycle adds a workspace-level `version`, also bump here.
 
 - [ ] **Step 4: Stage**
 
@@ -1636,19 +1663,19 @@ git diff origin/master...HEAD -- crates/mnemonic-toolkit/src/cmd/ | grep -E '^\+
 
 Expected: zero matches.
 
-- [ ] **Step 2: Run manual lint (smoke)**
+- [ ] **Step 2: Run manual lint (smoke) — use installer-managed sibling-CLI paths**
 
 ```bash
 cargo build --release
 make -C docs/manual lint \
   MNEMONIC_BIN=$PWD/target/release/mnemonic \
-  MD_BIN=/scratch/code/shibboleth/descriptor-mnemonic/target/release/md \
-  MS_BIN=/scratch/code/shibboleth/mnemonic-secret/target/release/ms \
-  MK_BIN=/scratch/code/shibboleth/mnemonic-key/target/release/mk \
+  MD_BIN=$HOME/.cargo/bin/md \
+  MS_BIN=$HOME/.cargo/bin/ms \
+  MK_BIN=$HOME/.cargo/bin/mk \
   2>&1 | tail -10
 ```
 
-Expected: PASS — bidirectional flag-coverage check confirms no manual chapter drift.
+Expected: PASS — bidirectional flag-coverage check confirms no manual chapter drift. Uses installer-managed sibling-CLI paths so this doesn't require local sibling-repo checkouts to be built. If `~/.cargo/bin/{md,ms,mk}` are missing (fresh install), fall back to building them locally OR check that they're installed via `scripts/install.sh`.
 
 ### Task 4.7: Commit Phase 4 cycle close
 
