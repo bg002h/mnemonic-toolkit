@@ -2172,7 +2172,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/SPEC_wallet_import_v0_26_0.md` §2.2 — post-Phase-5-fold lock: v0.26.0 ships the summary shape; full BundleJson tracked here.
 - **What:** v0.27+: wire the `--json` envelope's `bundle:` field to emit the full toolkit-native `BundleJson` shape (the same `verify-bundle --bundle-json` consumes — with synthesized ms1/mk1/md1 cards). This requires invoking the synthesizer post-parse against the supplied / overlayed seeds; for watch-only cosigners, emit the ms1/mk1 sentinel forms per SPEC §5.8. The `descriptor: md_codec::Descriptor` field on `ParsedImport` becomes load-bearing in this wire-up (currently unused).
 - **Why deferred:** v0.26.0's scope was parse + watch-only invariant + round-trip discipline; envelope-side synthesis is a distinct integration with `crate::synthesize` that exceeds the cycle budget. The summary shape is forward-compatible with v0.27: the envelope key remains `bundle`, the shape itself extends. Downstream consumers encoding against v0.26.0 should target the summary; v0.27 will treat the legacy summary as a strict subset of the full shape.
-- **Status:** open
+- **Status:** resolved (v0.27.0 Phase 4 — `emit_json_envelope` rewritten to synthesize full `BundleJson` via `synthesize_descriptor`; new `ParsedImport.original_descriptor: String` field carries the pre-strip raw descriptor for envelope wire emission; outer envelope gains `schema_version: "1"`; wire-shape replacement (NOT additive) per CHANGELOG `### Changed`; closes via per-phase R0 GREEN 0C/0I + 8 new test cells incl verify-bundle round-trip Cell 7 + envelope_v0_27_0.json byte-exact fixture pin).
 - **Tier:** `v0.27`
 - **Companion:** none.
 

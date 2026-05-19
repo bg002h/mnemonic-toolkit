@@ -57,8 +57,16 @@ pub(crate) trait WalletFormatParser {
 /// distinct downstream step.
 #[derive(Debug)]
 pub(crate) struct ParsedImport {
-    #[allow(dead_code)] // ParsedImport.descriptor: pending FOLLOWUP wallet-import-json-envelope-full-bundle (v0.27+)
+    /// Typed descriptor shape (post-`@N`-substitution; canonical-form bytes).
+    /// Input to `crate::synthesize::synthesize_descriptor` on the v0.27.0
+    /// `import-wallet --json` envelope emit path.
     pub(crate) descriptor: md_codec::Descriptor,
+    /// Pre-strip raw descriptor verbatim, including the BIP-380
+    /// `#<checksum>` suffix. Disjoint use vs `descriptor` above: this
+    /// carries the wire-shape string used in `BundleJson.descriptor`
+    /// envelope emission (SPEC §3.2.1). For BSMS the raw is line 2 of
+    /// Round-2; for Bitcoin Core it is the `desc` JSON field verbatim.
+    pub(crate) original_descriptor: String,
     pub(crate) cosigners: Vec<ResolvedSlot>,
     pub(crate) network: bitcoin::Network,
     pub(crate) threshold: Option<u8>,

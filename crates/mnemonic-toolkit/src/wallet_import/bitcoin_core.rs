@@ -297,6 +297,7 @@ fn parse_entry(
 
     Ok(ParsedImport {
         descriptor,
+        original_descriptor: desc_with_csum.to_string(),
         cosigners,
         network,
         threshold,

@@ -31,8 +31,10 @@
 //!     stderr is silent for the diff (SPEC §7.4).
 
 use crate::error::ToolkitError;
+use crate::format::{BundleJson, CosignerEntry, MultisigInfo};
 use crate::language::CliLanguage;
 use crate::slot_input::{SlotInput, SlotSubkey};
+use crate::synthesize::synthesize_descriptor;
 use crate::wallet_import::{
     apply_select_descriptor,
     bitcoin_core::BitcoinCoreParser,
@@ -47,6 +49,11 @@ use serde_json::json;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+
+/// v0.27.0 SPEC §3.2 — `import-wallet --json` envelope schema version.
+/// Pinned at "1" (first version; no migration). Phase 6 documents this in
+/// the manual; future bumps update both sites + the SPEC.
+pub(crate) const IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION: &str = "1";
 
 #[derive(Args, Debug, Clone)]
 pub struct ImportWalletArgs {
@@ -377,17 +384,19 @@ fn resolve_env_sentinels(args: &ImportWalletArgs) -> Result<ImportWalletArgs, To
     Ok(owned)
 }
 
-/// SPEC §7.4 — emit the JSON envelope array on stdout. Each element
-/// corresponds to one `ParsedImport`. Round-trip is computed against the
-/// ORIGINAL blob (after filtering) via canonicalize_<format>.
+/// v0.27.0 SPEC §3.2 + §3.2.1 — emit the `import-wallet --json` envelope
+/// array on stdout. Each element corresponds to one `ParsedImport`.
 ///
-/// **BSMS round-trip caveat (SPEC §7.3.1 policy):** there is no
-/// `mnemonic export-wallet --format bsms` emitter in v0.26.x (FOLLOWUP
-/// `wallet-export-bsms-emitter`). Without an emitter we cannot produce
-/// a fresh blob to compare against the original; instead we emit
-/// `roundtrip: { byte_exact: false, semantic_match: false, diff: null,
-/// status: "blocked_no_emitter" }`. The same applies to BSMS at default-
-/// mode stderr WARNING emission (see `emit_roundtrip_stderr_warning`).
+/// The envelope's `bundle` field is the full `BundleJson` shape (SPEC §5.3),
+/// synthesized post-parse via `synthesize_descriptor`. v0.26.0's compact
+/// `bundle: { cosigners, network, threshold }` summary is replaced wholesale
+/// — this is the wire-shape change that v0.27.0's `### Changed` CHANGELOG
+/// entry documents. Closes FOLLOWUP `wallet-import-json-envelope-full-bundle`.
+///
+/// **BSMS round-trip caveat:** v0.27.0 ships a BSMS Round-2 emitter (Phase 3),
+/// but wiring import-wallet's round-trip block to consume it is out of scope
+/// for Phase 4. Status stays `blocked_no_emitter` until a follow-up cycle
+/// rewires the round-trip block to call the new BSMS emitter.
 fn emit_json_envelope<W: Write>(
     stdout: &mut W,
     parsed: &[ParsedImport],
@@ -405,86 +414,145 @@ fn emit_json_envelope<W: Write>(
     };
 
     for p in parsed {
-        // Build a compact bundle-view summary. The full BundleJson shape
-        // (with synthesized ms1/mk1/md1 cards) is NOT produced by import-
-        // wallet in v0.26.0 — synthesis happens in a separate `bundle`
-        // pipeline. The summary here is sufficient for downstream
-        // consumers to identify the parsed cosigners + carry the entropy
-        // attached via seed overlay.
-        let cosigners_json: Vec<serde_json::Value> = p
+        // v0.27.0 SPEC §3.2.1 — synthesize the full BundleJson via
+        // descriptor-mode synthesis (`synthesize_descriptor`). Both v0.26.0
+        // wallet-import formats (BSMS Round-2 + Bitcoin Core listdescriptors)
+        // carry a literal descriptor, so descriptor-mode synthesis applies
+        // uniformly.
+        let bundle = synthesize_descriptor(&p.descriptor, &p.cosigners, false)?;
+
+        // Per §3.2.1 row `template`: descriptor-mode → `None`.
+        // Per §3.2.1 row `descriptor`: source from `original_descriptor`
+        // (pre-strip raw including `#<checksum>`). Disjoint use vs the
+        // typed `p.descriptor` (input to synthesize above).
+        let descriptor_field = Some(p.original_descriptor.clone());
+
+        let n = p.cosigners.len();
+
+        // Per §3.2.1 row `master_fingerprint`: Some only for N=1; None for
+        // multisig. Mirrors live cmd/bundle.rs:677-678 emission rule.
+        let master_fingerprint = if n == 1 {
+            Some(p.cosigners[0].fingerprint.to_string().to_lowercase())
+        } else {
+            None
+        };
+
+        // Per §3.2.1 row `origin_path` / `origin_paths`: mutually exclusive
+        // per SPEC §5.3. Extract per-cosigner path string from the bracket-
+        // form `path_raw` produced by the wallet-import parsers
+        // (`[fp_hex/48'/0'/0'/2']`); strip the fingerprint prefix so the
+        // wire-shape matches `cmd/bundle.rs` (`m/48'/0'/0'/2'`).
+        let paths: Vec<String> = p
             .cosigners
             .iter()
-            .map(|c| {
-                json!({
-                    "fingerprint": format!("{:08x}", u32::from_be_bytes(c.fingerprint.to_bytes())),
-                    "path_raw": c.path_raw,
-                    "xpub": c.xpub.to_string(),
-                    "has_entropy": c.entropy.is_some(),
-                })
-            })
+            .map(|c| origin_path_from_bracket(&c.path_raw))
             .collect();
-        let network_name = network_human_name(p.network);
-        let bundle_view = json!({
-            "cosigners": cosigners_json,
-            "network": network_name,
-            "threshold": p.threshold,
-        });
-
-        // Round-trip per SPEC §7.4 + §7.3.
-        let roundtrip = match format_str {
-            "bitcoin-core" => {
-                // For Bitcoin Core, we re-canonicalize the same blob (no
-                // separate emit step in v0.26.0 — emit-from-bundle is the
-                // sibling `mnemonic export-wallet --format bitcoin-core`
-                // pipeline). The byte-exact check is original-bytes-vs-
-                // canonical; semantic_match is true ONLY when canonicalize
-                // succeeded. If canonicalize failed (e.g., exotic descriptor
-                // that `BitcoinCoreParser::parse` accepted but the
-                // canonicalize path rejected), surface that explicitly via
-                // `status: "canonicalize_failed"` rather than silently
-                // claiming success.
-                match canon_orig.clone() {
-                    Some(canon) => {
-                        let original_text =
-                            std::str::from_utf8(blob).unwrap_or("").to_string();
-                        let byte_exact = original_text == canon;
-                        let diff_val = if byte_exact {
-                            serde_json::Value::Null
-                        } else {
-                            serde_json::Value::String(unified_diff(&original_text, &canon))
-                        };
-                        json!({
-                            "byte_exact": byte_exact,
-                            "semantic_match": true,
-                            "diff": diff_val,
-                            "status": "ok",
-                        })
-                    }
-                    None => json!({
-                        "byte_exact": false,
-                        "semantic_match": false,
-                        "diff": serde_json::Value::Null,
-                        "status": "canonicalize_failed",
-                    }),
-                }
+        let (origin_path, origin_paths) = if n == 1 {
+            (paths.first().cloned(), None)
+        } else {
+            let all_same = paths.windows(2).all(|w| w[0] == w[1]);
+            if all_same {
+                (paths.first().cloned(), None)
+            } else {
+                (None, Some(paths.clone()))
             }
-            "bsms" => {
-                // SPEC §7.3.1 policy: BSMS export emitter does not exist
-                // in v0.26.0 (FOLLOWUP `wallet-export-bsms-emitter`).
-                // Emit a non-misleading envelope per SPEC §7.4.
-                json!({
+        };
+
+        // Per §3.2.1 row `multisig`: Some when N>1, None for N=1.
+        let multisig = if n > 1 {
+            let cosigners: Vec<CosignerEntry> = p
+                .cosigners
+                .iter()
+                .enumerate()
+                .map(|(i, s)| CosignerEntry {
+                    index: i,
+                    master_fingerprint: Some(s.fingerprint.to_string().to_lowercase()),
+                    origin_path: origin_path_from_bracket(&s.path_raw),
+                    xpub: s.xpub.to_string(),
+                })
+                .collect();
+            let threshold = p.threshold.unwrap_or(n as u8);
+            Some(MultisigInfo {
+                template: "descriptor",
+                threshold,
+                cosigner_count: n,
+                path_family: path_family_from_paths(&paths),
+                cosigners,
+            })
+        } else {
+            None
+        };
+
+        // Per §3.2.1 row `mode`: "watch-only" when all cosigners are
+        // watch-only; "full" if any cosigner has entropy attached (seed
+        // overlay path). Mirrors `bundle.any_secret_bearing()` rule at
+        // `cmd/bundle.rs:611`.
+        let mode_str: &'static str = if p.cosigners.iter().any(|c| c.entropy.is_some()) {
+            "full"
+        } else {
+            "watch-only"
+        };
+
+        let bundle_json = BundleJson {
+            schema_version: "4",
+            mode: mode_str,
+            network: network_human_name(p.network),
+            template: None,
+            descriptor: descriptor_field,
+            account: 0,
+            origin_path,
+            origin_paths,
+            master_fingerprint,
+            ms1: bundle.ms1,
+            mk1: bundle.mk1,
+            md1: bundle.md1,
+            multisig,
+            privacy_preserving: false,
+        };
+        let bundle_value = serde_json::to_value(&bundle_json)
+            .map_err(|e| ToolkitError::BadInput(format!("import-wallet --json bundle serialize: {e}")))?;
+
+        // Round-trip per SPEC §7.4 + §7.3 — preserved from v0.26.0 wire shape.
+        let roundtrip = match format_str {
+            "bitcoin-core" => match canon_orig.clone() {
+                Some(canon) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                None => json!({
                     "byte_exact": false,
                     "semantic_match": false,
                     "diff": serde_json::Value::Null,
-                    "status": "blocked_no_emitter",
-                })
-            }
+                    "status": "canonicalize_failed",
+                }),
+            },
+            "bsms" => json!({
+                "byte_exact": false,
+                "semantic_match": false,
+                "diff": serde_json::Value::Null,
+                "status": "blocked_no_emitter",
+            }),
             _ => json!({}),
         };
 
         let mut env = serde_json::Map::new();
-        env.insert("bundle".to_string(), bundle_view);
+        env.insert(
+            "schema_version".to_string(),
+            json!(IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION),
+        );
         env.insert("source_format".to_string(), json!(format_str));
+        env.insert("bundle".to_string(), bundle_value);
         env.insert("roundtrip".to_string(), roundtrip);
 
         if let Some(audit) = &p.bsms_audit {
@@ -537,6 +605,42 @@ fn emit_json_envelope<W: Write>(
     Ok(())
 }
 
+/// Extract the m/-prefixed origin path from a wallet-import-parsed
+/// `path_raw` (bracket form: `[fp_hex/48'/0'/0'/2']`). The bracket form is
+/// produced by `wallet_import::bsms::extract_origin_components` and the
+/// Bitcoin Core sibling; it carries the fingerprint inline because the
+/// bracketed-origin annotation is BIP-380 syntax. The v0.27.0 envelope's
+/// `origin_path` (and `multisig.cosigners[].origin_path`) wire-shape mirrors
+/// `cmd/bundle.rs:617-625` (`m/48'/0'/0'/2'`); strip `[fp_hex` and `]` here.
+fn origin_path_from_bracket(path_raw: &str) -> String {
+    let inner = path_raw.trim_start_matches('[').trim_end_matches(']');
+    match inner.find('/') {
+        Some(slash) => format!("m{}", &inner[slash..]),
+        None => "m".to_string(),
+    }
+}
+
+/// SPEC §3.2.1 row `multisig.path_family` — heuristic detection from the
+/// BIP-43-purpose component of the first cosigner's path. `48'` → bip48
+/// (BIP-48 multisig); `87'` → bip87 (BIP-87). Default `bip87` when the
+/// purpose-component is unrecognized (matches `MultisigPathFamily::default()`
+/// at `parse.rs:67`). Heterogeneity is rare in real-world wallet imports —
+/// the BSMS parser's network-detection step already enforces coin-type
+/// uniformity, and the BIP-43 purpose tracks that.
+fn path_family_from_paths(paths: &[String]) -> &'static str {
+    let first = match paths.first() {
+        Some(p) => p,
+        None => return "bip87",
+    };
+    let trimmed = first.trim_start_matches("m/");
+    let purpose = trimmed.split('/').next().unwrap_or("");
+    match purpose {
+        "48'" | "48h" => "bip48",
+        "87'" | "87h" => "bip87",
+        _ => "bip87",
+    }
+}
+
 /// SPEC §7.4: when `--json` is NOT set, the round-trip diff goes ONLY on
 /// stderr (the cards stdout is unaffected). For BSMS we have no emitter
 /// in v0.26.0 (FOLLOWUP `wallet-export-bsms-emitter`); we skip the
@@ -571,7 +675,7 @@ fn emit_roundtrip_stderr_warning<E: Write>(
     Ok(())
 }
 
-fn network_human_name(n: bitcoin::Network) -> &'static str {
+pub(crate) fn network_human_name(n: bitcoin::Network) -> &'static str {
     match n {
         bitcoin::Network::Bitcoin => "mainnet",
         bitcoin::Network::Testnet => "testnet",

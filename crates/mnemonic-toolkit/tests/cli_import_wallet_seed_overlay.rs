@@ -78,16 +78,27 @@ fn seed_overlay_ms1_match_success() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let env = &val.as_array().unwrap()[0];
-    let cosigner0 = &env["bundle"]["cosigners"].as_array().unwrap()[0];
+    // v0.27.0 envelope: `bundle` is full BundleJson. For 1-of-1 the
+    // master_fingerprint surfaces at bundle.master_fingerprint; per-slot
+    // entropy presence is encoded by `bundle.ms1[i]` being non-empty per
+    // SPEC §5.8.
+    let bundle = &env["bundle"];
     assert_eq!(
-        cosigner0["has_entropy"].as_bool(),
-        Some(true),
-        "cosigner[0].has_entropy must be true after successful overlay; env: {env}"
+        bundle["master_fingerprint"].as_str(),
+        Some(TREZOR_24_FP),
+        "bundle.master_fingerprint must be the TREZOR_24 fp; env: {env}"
+    );
+    let ms1_0 = bundle["ms1"].as_array().expect("bundle.ms1 must be array")[0]
+        .as_str()
+        .expect("ms1[0] must be string");
+    assert!(
+        !ms1_0.is_empty(),
+        "bundle.ms1[0] must be non-empty (entropy attached) after successful overlay; got {ms1_0:?}"
     );
     assert_eq!(
-        cosigner0["fingerprint"].as_str(),
-        Some(TREZOR_24_FP),
-        "cosigner fingerprint must be the TREZOR_24 fp"
+        bundle["mode"].as_str(),
+        Some("full"),
+        "bundle.mode must be \"full\" when any cosigner has entropy"
     );
 }
 
@@ -160,8 +171,13 @@ fn seed_overlay_empty_string_sentinel_preserves_watch_only() {
     );
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let cosigner0 = &val.as_array().unwrap()[0]["bundle"]["cosigners"][0];
-    assert_eq!(cosigner0["has_entropy"].as_bool(), Some(false));
+    let bundle = &val.as_array().unwrap()[0]["bundle"];
+    let ms1_0 = bundle["ms1"].as_array().unwrap()[0].as_str().unwrap();
+    assert!(
+        ms1_0.is_empty(),
+        "bundle.ms1[0] must be empty (watch-only sentinel) under --ms1 \"\"; got {ms1_0:?}"
+    );
+    assert_eq!(bundle["mode"].as_str(), Some("watch-only"));
 }
 
 // ============================================================================
@@ -189,11 +205,11 @@ fn seed_overlay_via_slot_subkey_phrase() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let cosigner0 = &val.as_array().unwrap()[0]["bundle"]["cosigners"][0];
-    assert_eq!(
-        cosigner0["has_entropy"].as_bool(),
-        Some(true),
-        "cosigner[0].has_entropy must be true after --slot @0.phrase= overlay"
+    let bundle = &val.as_array().unwrap()[0]["bundle"];
+    let ms1_0 = bundle["ms1"].as_array().unwrap()[0].as_str().unwrap();
+    assert!(
+        !ms1_0.is_empty(),
+        "bundle.ms1[0] must be non-empty after --slot @0.phrase= overlay; got {ms1_0:?}"
     );
 }
 
@@ -222,11 +238,11 @@ fn seed_overlay_env_var_sentinel() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let cosigner0 = &val.as_array().unwrap()[0]["bundle"]["cosigners"][0];
-    assert_eq!(
-        cosigner0["has_entropy"].as_bool(),
-        Some(true),
-        "env-var sentinel resolution must drive a successful overlay"
+    let bundle = &val.as_array().unwrap()[0]["bundle"];
+    let ms1_0 = bundle["ms1"].as_array().unwrap()[0].as_str().unwrap();
+    assert!(
+        !ms1_0.is_empty(),
+        "env-var sentinel resolution must drive a successful overlay; ms1[0] should carry entropy"
     );
 }
 
@@ -347,19 +363,25 @@ fn seed_overlay_multi_cosigner_skip_middle() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let cosigners = val.as_array().unwrap()[0]["bundle"]["cosigners"]
+    // v0.27.0 envelope: `bundle.ms1` is the length-N SPEC §5.8 array;
+    // entry [i] non-empty ↔ cosigner i has entropy. `bundle.multisig.cosigners`
+    // carries the per-cosigner CosignerEntry vec for N>1.
+    let bundle = &val.as_array().unwrap()[0]["bundle"];
+    let cosigners = bundle["multisig"]["cosigners"]
         .as_array()
-        .expect("bundle.cosigners array")
+        .expect("bundle.multisig.cosigners array")
         .clone();
     assert_eq!(cosigners.len(), 3, "expected 3 cosigners");
-    let has_entropy: Vec<bool> = cosigners
+    let ms1 = bundle["ms1"].as_array().expect("bundle.ms1 array");
+    assert_eq!(ms1.len(), 3, "expected bundle.ms1 length 3");
+    let has_entropy: Vec<bool> = ms1
         .iter()
-        .map(|c| c["has_entropy"].as_bool().unwrap())
+        .map(|s| !s.as_str().unwrap().is_empty())
         .collect();
     assert_eq!(
         has_entropy,
         vec![true, false, true],
-        "expected [true, false, true]; got {has_entropy:?}; cosigners={cosigners:?}"
+        "expected [true, false, true]; got {has_entropy:?}; ms1={ms1:?}"
     );
     // Sanity: middle cosigner stays watch-only via the empty-string sentinel.
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();

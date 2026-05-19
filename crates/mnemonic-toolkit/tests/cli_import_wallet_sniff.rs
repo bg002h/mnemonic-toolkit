@@ -197,11 +197,18 @@ fn sniff_json_envelope_includes_roundtrip_field() {
         Some("bitcoin-core")
     );
     let bundle = env.get("bundle").expect("envelope must contain `bundle`");
-    let cosigners = bundle
-        .get("cosigners")
-        .and_then(|c| c.as_array())
-        .expect("bundle.cosigners must be array");
-    assert_eq!(cosigners.len(), 1);
+    // v0.27.0 envelope: `bundle` is full BundleJson; per-cosigner shape is
+    // either `bundle.multisig.cosigners` (N>1) or absent (N=1, surfaces
+    // master_fingerprint + origin_path at the top level). Fixture
+    // `core-bip84-mainnet.json` is single-sig (wpkh, n=1).
+    assert!(
+        bundle.get("master_fingerprint").is_some(),
+        "n=1 singlesig must surface master_fingerprint at the top level"
+    );
+    assert!(
+        bundle.get("ms1").is_some() && bundle["ms1"].as_array().unwrap().len() == 1,
+        "n=1 bundle.ms1 must be length-1 array"
+    );
 }
 
 #[test]

@@ -251,6 +251,7 @@ impl WalletFormatParser for BsmsParser {
 
         Ok(vec![ParsedImport {
             descriptor,
+            original_descriptor: descriptor_body.to_string(),
             cosigners,
             network,
             threshold,
