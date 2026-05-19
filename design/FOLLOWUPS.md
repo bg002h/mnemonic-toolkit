@@ -45,6 +45,60 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (see `design/agent-reports/pr-26-post-merge-comprehensive-review.md` — C1 + I7). The SPEC §7.4 stderr warning is the only non-JSON-mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly; if `canonicalize_bitcoin_core` errors (parser / canonicalizer disagreement, non-UTF-8 input, internal serde mismatch) the function returns `Ok(())` with no diagnostic. JSON mode drops the error reason via `.ok()` → envelope shows surface `"canonicalize_failed"` only.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:471-478` (two `Err(_) => return Ok(())` arms); `cmd/import_wallet.rs:334-338, 396-402` (`canonicalize_*.ok()` in JSON-mode roundtrip emit).
+- **What:** (a) Replace `Err(_) => return Ok(())` with `Err(e) => { writeln!(stderr, "warning: import-wallet: roundtrip check skipped: canonicalize_bitcoin_core failed: {e}")?; Ok(()) }`. For the UTF-8 case, fold to `String::from_utf8_lossy` + explicit "blob is not UTF-8" notice. (b) In JSON mode, capture the `Err` and emit `{ "status": "canonicalize_failed", "error": "<message>" }` instead of `null` diff.
+- **Why deferred:** PR #26 already merged at squash `66c8a56`; v0.26.x patch line is the natural fold target.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-shape-mismatch-silent-defaults` — distinguish "absent" from "shape-wrong" for `active`/`internal`, threshold, and origin_fingerprint
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I4 + I5 + I6). Three sites silently substitute defaults on malformed input where they should error: (1) `active`/`internal` use `.and_then(.as_bool).unwrap_or(false)` — string `"true"`, integer `1`, etc. silently flip to `false` and downstream `--select-descriptor active-*` emits a misleading "no active-* descriptor found" error. (2) `mk1_card_to_resolved_slot` substitutes `xpub.fingerprint()` for missing `origin_fingerprint` — master-fp vs current-xpub-fp are semantically distinct; descriptor reconstruction silently produces mismatched origin annotations. (3) `extract_threshold` maps `thresh(256, …)` u8-overflow to `None` → `"threshold": null` in envelope, user sees "no-threshold" descriptor.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:273-280` (active/internal); `wallet_import/json_envelope.rs:258-260` (fingerprint substitution); `wallet_import/bsms.rs:354-362` + `bitcoin_core.rs:455-462` (threshold).
+- **What:** (1) Active/internal: distinguish absent (`None → default false`) from shape-wrong (`Some(non-bool) → ImportWalletParse`); mirror `parse_range_field`'s pattern. (2) Fingerprint substitution: emit a stderr NOTICE on fallback that names the slot index (close the `let _ = slot_idx; // reserved for future error-context attribution` self-confessed gap). (3) Threshold: return `Result<Option<u8>, ToolkitError>` distinguishing "no `thresh()` found" from "thresh argument failed u8 parse".
+- **Why deferred:** PR #26 already merged; the three sites are independent of each other but share the "silent default substituting for shape-mismatch" pattern.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-comment-rot-fold` — citation accuracy + cycle-phase vocabulary sweep on v0.26.0 surface
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (C2 + I8 + I9 + I10 + I11). Five categories of comment-rot identified by the comment-analyzer agent: (1) module doc lists non-existent `--slot @N.ms1=` surface (SPEC §3.1 row 6 is actually `--from <node>=`); (2) unfiled FOLLOWUP slug `compare-cost-single-leaf-tr-input` cited in user-visible error + 2 comments — grep returns zero; (3) SPEC citation `§7.0.a..d` doesn't resolve (no `§7.0` header in `SPEC_wallet_import_v0_26_0.md` — leaked brainstorm shorthand); (4) `error.rs` doc comments tag variants "Phase 2/3/5 emits" — internal cycle vocabulary meaningless post-cycle; (5) user-visible error string contains `"supported in Phase 2"`.
+- **Where:** `crates/mnemonic-toolkit/src/env_sentinel.rs:1-13`; `cost/strip.rs:5,51`; `cost/mod.rs:75`; `wallet_import/bsms.rs:10`; `wallet_import/bitcoin_core.rs:34`; `error.rs:181-222`.
+- **What:** (1) Rewrite `env_sentinel.rs` module doc to mirror SPEC §3.1 table verbatim. (2) Either file the `compare-cost-single-leaf-tr-input` slug as a separate FOLLOWUP (preferred — preserves user-visible text) or drop the slug from both code sites. (3) Either define `## §7.0 Locks` (or similar) as a real SPEC §-anchored section, or rewrite to reference the in-prose locks directly. (4) Replace "Phase N emits" with function-anchored citations (e.g., `Emitted by import_wallet::dispatch_auto_detect_format`). (5) Drop "in Phase 2" from the user-visible `cost/mod.rs:75` error string.
+- **Why deferred:** PR #26 already merged; comment hygiene is a sweep best done in one pass, not piecemeal.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-test-coverage-gap-fold` — overlay-conflict + select-descriptor matrix + sniff/BSMS-line-count rejection cells + multisig round-trip byte-exact assertion
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I12-I19). 8 Important test-coverage gaps identified by pr-test-analyzer: (I12) `--ms1` + `--slot @i.phrase=` conflict path untested → silent precedence-change regression risk; (I13) phrase-overlay-mismatch (`Source::Phrase` + wrong phrase) untested — only ms1 path covered; (I14) `apply_seed_overlay` non-entropy ms1 branch (e.g. `Payload::Pphr` instead of `Entr`) untested; (I15) `--select-descriptor` invalid-index / no-active-match / malformed-selector cells missing; (I16) sniff `Ambiguous` arm has no live integration test; (I17) BSMS unrecognized line-count (3/4/5/7+) only weakly covered; (I18) BSMS sniff false-positive (lowercase / leading whitespace) not pinned; (I19) multisig round-trip never asserts `roundtrip.byte_exact == true` / `semantic_match == true` — only fingerprint+count substrings.
+- **Where:** `crates/mnemonic-toolkit/tests/cli_import_wallet_seed_overlay.rs` (I12-I14); `tests/cli_import_wallet_bitcoin_core.rs:107-131` (I15); `tests/cli_import_wallet_sniff.rs` (I16); `tests/cli_import_wallet_bsms.rs` (I17-I18); `tests/cli_import_wallet_roundtrip.rs:371-452` (I19).
+- **What:** Add the 8 missing cells (~30-50 LOC each). pr-test-analyzer flags **I12 (overlay conflict) + I19 (multisig roundtrip byte_exact)** as the highest-ROI subset (~30 LOC total) — fold first; the remaining 6 can stage across patch releases.
+- **Why deferred:** PR #26 already merged; coverage gaps are not regressions (existing behavior is correct), just absent regression guards.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-type-design-anti-pattern-sweep` — unify SearchOutcome / ImportProvenance / BsmsVerification enums
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I20 + I21 + 6 recurring anti-patterns identified by type-design-analyzer). The top-3 highest-ROI refactors: (1) **Unify 4 xpub-search result structs** (`PathOfXpubResult`, `PassphraseOfXpubResult`, `AccountOfDescriptorResult`, `AddressResultJson`) into `enum SearchOutcome<T> { Match(T), NoMatch }` — eliminates 8 representable-invalid states across 4 types in one edit. (2) **`ParsedImport` provenance**: replace `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)` with `provenance: ImportProvenance` enum — eliminates the both-set / both-none impossible states. (3) **`BsmsAuditFields.signature_verified: bool` → `BsmsVerification` enum** (`NotAttempted | Failed(reason) | Verified`) — parallels v0.27.0 Phase 6.5 I7's `Round1VerificationStatus` refactor; closes the future-trap before the BIP-322 inline-verifier lands.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/{path,passphrase,account,address}_of_*.rs` (refactor 1); `wallet_import/mod.rs:60` (refactor 2); `wallet_import/mod.rs:188` (refactor 3).
+- **What:** Three independent refactor sub-tasks; can stage independently. The wire-shape preservation discipline: serde-flatten the new enums to preserve the existing JSON envelope shape — this becomes a Serialize-only refactor (no consumer break) if done with `#[serde(untagged)]` or `flatten`. Mirror the Phase 6.5 I7 pattern from `cmd/import_wallet.rs:835-850` for the `BsmsVerification` enum shape.
+- **Why deferred:** PR #26 already merged; representable-invalid states are latent bugs not active ones (no current code path exercises the impossible combinations), so this is a type-design-cleanup pass rather than a regression fix.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I8). The slug is already cited in 2 source-code comments + 1 user-visible error message at `cost/strip.rs:5,51` and `cost/mod.rs:75`, but no FOLLOWUP was filed in the v0.26.0 cycle — this filing closes the citation-without-target loop.
+- **Where:** `crates/mnemonic-toolkit/src/cost/strip.rs` (the `strip_wrapper` `UnsupportedWrapper` arm); `cost/mod.rs:75` (user-visible Display impl); `cost/translate.rs` (Translator dispatch).
+- **What:** Extend `strip_wrapper` to accept `tr(<internal-key>, <single-leaf-script>)` (single-leaf only — multi-leaf TapTree is a separate scope). Map to a cost-domain that compares fairly against `wsh(...)` outputs. Specify the SPEC §-anchor before implementing — `tr()` cost comparison vs `wsh()` is non-trivial (different witness-stack shapes, different fee surfaces).
+- **Why deferred:** v0.26.0 ship scope didn't include taproot input parsing for compare-cost; user-visible error directs users at this slug.
+- **Status:** open
+- **Tier:** `v0.27`
+
 ### `inspect-json-schema-version-backfill` — backfill `schema_version: "1"` field on `InspectJson` envelope to match `XpubSearchJson`
 
 - **Surfaced:** 2026-05-18, v0.26.0 C1 (path-of-xpub) — `XpubSearchEnvelope` introduces a top-level `schema_version: "1"` field for forward-compat versioning of the per-mode tagged-union body. `InspectJson` (and `RepairJson`) carry no equivalent field; consumers that learn to read `schema_version` from `xpub-search` JSON have no parallel signal on inspect/repair envelopes.
