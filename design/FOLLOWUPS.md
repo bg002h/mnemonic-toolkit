@@ -2420,7 +2420,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - each `match self { ... }` block that exhaustively matches it (Display, exit_code, kind).
   Drift across concurrent feature PRs (9+ new variants in v0.26.0 cycle) is otherwise a guaranteed merge-conflict generator; the rule makes the resolution mechanical. Codify this in CONVENTIONS so future cycles converge on the same order without per-PR negotiation.
 - **Why deferred:** v0.26.0 cycle resolved this in-flight via the plan-doc cheat-sheet (P-I2 fold); codification is for future cycles.
-- **Status:** open
+- **Status:** resolved (79734f8; v0.27.2 Phase 1.1)
 - **Tier:** `v0.27`
 - **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
 
@@ -2432,7 +2432,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/agent-reports/compare-cost-cycle-meta.md` — meta-record back-filling the audit trail with commit pointers, but verbatim review text was lost.
 - **What:** Establish per-cycle discipline: when an architect-review agent dispatch completes, **write its verbatim output** to `design/agent-reports/phase-N-r0-review.md` (or similar) BEFORE the per-phase fold-and-commit step. The compare-cost cycle's reviews were inlined in the session transcript only; a back-fill meta-record exists but verbatim text is unrecoverable from outside the transcript. Future cycles MUST persist verbatim — recommend wiring into a per-phase task with an explicit "write report file" step. Optionally extend the plan-doc template at `.v0_26_0-merge-plan.md` to enumerate this discipline.
 - **Why deferred:** Convention codification; no per-PR regression. Future cycles will benefit from real-time persistence.
-- **Status:** open
+- **Status:** resolved (08cf0a9; v0.27.2 Phase 1.2)
 - **Tier:** `v0.27`
 - **Companion:** none.
 
