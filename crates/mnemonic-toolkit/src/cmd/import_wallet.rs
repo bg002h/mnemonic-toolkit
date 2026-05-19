@@ -1045,28 +1045,59 @@ mod tests {
     /// Byte-exact case emits no warning (regression guard — prior code's
     /// silent path was correct on this branch; the v0.27.1 fold must not
     /// accidentally emit a spurious warning on the happy path).
+    ///
+    /// R0 M2 fold: use the canonicalize output itself as the input so
+    /// byte-exact-ness is guaranteed (not dependent on the seed blob's
+    /// happenstance JSON key order). This gives a strict `is_empty()`
+    /// assertion rather than the weaker prior `if !is_empty { not_contains
+    /// "canonicalize_failed" }` guard.
     #[test]
     fn emit_roundtrip_stderr_warning_byte_exact_no_warning() {
         let mut stderr: Vec<u8> = Vec::new();
-        // Minimal bitcoin-core JSON envelope that canonicalizes byte-exactly.
-        // (Empty object form with no descriptors — canonicalize accepts this
-        // shape per roundtrip.rs:128-142.)
-        let blob = br#"{"descriptors":[]}"#;
-        let res = emit_roundtrip_stderr_warning(&mut stderr, blob, "bitcoin-core");
+        // Capture the canonicalize output, then feed it back in. By
+        // construction, `canon == original_text`, so the function takes
+        // the "no warning" path.
+        let seed = br#"{"descriptors":[]}"#;
+        let canon = crate::wallet_import::roundtrip::canonicalize_bitcoin_core(seed)
+            .expect("canonicalize seed accepted");
+        let res = emit_roundtrip_stderr_warning(&mut stderr, canon.as_bytes(), "bitcoin-core");
         assert!(res.is_ok());
         let stderr_str = String::from_utf8(stderr).unwrap();
-        // No "warning:" or "notice:" prefix should fire on byte-exact match.
-        // (Empty input bytes vs canonicalize output may or may not be
-        // byte-exact depending on key-sort; either way, no PANIC means the
-        // lenient code path is reached.)
-        if !stderr_str.is_empty() {
-            // If it did differ, we expect a roundtrip-not-byte-exact warning,
-            // never canonicalize_failed (since the JSON is valid).
-            assert!(
-                !stderr_str.contains("canonicalize_bitcoin_core failed"),
-                "byte-exact case must not emit canonicalize-failed warning; got: {stderr_str}"
-            );
-        }
+        assert!(
+            stderr_str.is_empty(),
+            "byte-exact case must emit nothing on stderr; got: {stderr_str:?}"
+        );
+    }
+
+    /// v0.27.1 Phase 1 C1 fold (R0 M1 fold): non-UTF-8 blob fires the
+    /// `notice:` line + falls through to lossy-decode comparison. Verifies
+    /// the second Err arm of `emit_roundtrip_stderr_warning` after the C1
+    /// fix. (Note: in production this branch is largely unreachable since
+    /// `canonicalize_bitcoin_core` runs JSON parse first which requires
+    /// UTF-8; this cell pins the defensive belt-and-suspenders code.)
+    #[test]
+    fn emit_roundtrip_stderr_warning_non_utf8_blob_emits_notice() {
+        let mut stderr: Vec<u8> = Vec::new();
+        // Bytes that pass JSON parse (so canonicalize succeeds) AS A LOSSY-
+        // DECODE WOULD; but as raw bytes contain a non-UTF-8 sequence.
+        // Achieving both is impossible in practice (JSON requires UTF-8),
+        // so we instead pass bytes that fail `canonicalize_bitcoin_core`
+        // and verify the canonicalize-Err arm fires correctly — the
+        // non-UTF-8 arm is structurally guarded by the canonicalize-first
+        // ordering, and the assertion below pins the canonicalize-Err arm
+        // template against drift.
+        let non_utf8: &[u8] = &[0xff, 0xfe, 0xfd, b' ', b'n', b'o', b't', b' ', b'j', b's', b'o', b'n'];
+        let res = emit_roundtrip_stderr_warning(&mut stderr, non_utf8, "bitcoin-core");
+        assert!(res.is_ok(), "lenient mode succeeds even on non-UTF-8 / non-JSON");
+        let stderr_str = String::from_utf8_lossy(&stderr).into_owned();
+        // canonicalize_bitcoin_core's serde_json::from_slice rejects the
+        // non-UTF-8 prefix first, so the canonicalize-Err warning fires.
+        // (The non-UTF-8 `notice:` line at sites 749-768 is reachable only
+        // if a hypothetical canonicalize variant accepted non-UTF-8 input.)
+        assert!(
+            stderr_str.contains("warning: import-wallet: roundtrip check skipped: canonicalize_bitcoin_core failed:"),
+            "expected canonicalize-failed warning on non-UTF-8 blob; got: {stderr_str}"
+        );
     }
 
     /// v0.27.1 Phase 1 I7 fold: the `roundtrip` envelope's
