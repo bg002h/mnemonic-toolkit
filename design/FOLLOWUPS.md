@@ -111,8 +111,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 ### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`
 
 - **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I8). The slug is already cited in 2 source-code comments + 1 user-visible error message at `cost/strip.rs:5,51` and `cost/mod.rs:75`, but no FOLLOWUP was filed in the v0.26.0 cycle — this filing closes the citation-without-target loop.
-- **Where:** `crates/mnemonic-toolkit/src/cost/strip.rs` (the `strip_wrapper` `UnsupportedWrapper` arm); `cost/mod.rs:75` (user-visible Display impl); `cost/translate.rs` (Translator dispatch).
-- **What:** Extend `strip_wrapper` to accept `tr(<internal-key>, <single-leaf-script>)` (single-leaf only — multi-leaf TapTree is a separate scope). Map to a cost-domain that compares fairly against `wsh(...)` outputs. Specify the SPEC §-anchor before implementing — `tr()` cost comparison vs `wsh()` is non-trivial (different witness-stack shapes, different fee surfaces).
+- **Where:** `crates/mnemonic-toolkit/src/cost/strip.rs:51-54` (the `translate_descriptor` function's `Descriptor::Tr(_) => Err(UnsupportedWrapper)` arm); `cost/mod.rs:75` (user-visible Display impl for `UnsupportedWrapper`); `cost/mod.rs:131-138` (`run_compare_cost`'s `InputForm::{Miniscript, Descriptor}` dispatch — the `InputForm::Descriptor` arm calls `strip::translate_descriptor`). Citations verified against origin/master SHA `1abd9d1` 2026-05-19.
+- **What:** Extend `translate_descriptor` (at `cost/strip.rs`) to accept `tr(<internal-key>, <single-leaf-script>)` (single-leaf only — multi-leaf TapTree is a separate scope). Map to a cost-domain that compares fairly against `wsh(...)` outputs. Specify the SPEC §-anchor before implementing — `tr()` cost comparison vs `wsh()` is non-trivial (different witness-stack shapes, different fee surfaces).
 - **Why deferred:** v0.26.0 ship scope didn't include taproot input parsing for compare-cost; user-visible error directs users at this slug.
 - **Status:** open
 - **Tier:** `v0.27`
@@ -2294,7 +2294,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:**
   - `crates/mnemonic-toolkit/src/wallet_import/` — no Sparrow parser; sniff would need to extend `SniffOutcome` + new module.
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
-- **What:** v0.27+: add `wallet_import/sparrow.rs` (or merged dispatcher) parsing Sparrow's wallet-export JSON shape. Inverse of `wallet_export::sparrow_wallet_emit` if a wallet_export-side Sparrow emitter exists; otherwise build forward.
+- **What:** v0.27+: add `wallet_import/sparrow.rs` (or merged dispatcher) parsing Sparrow's wallet-export JSON shape. Inverse of `wallet_export::sparrow::emit_sparrow_wallet_json` (at `wallet_export/sparrow.rs:103`); the wallet_export-side Sparrow emitter ships today, so this is the matching ingest side. Citation verified against origin/master SHA `1abd9d1` 2026-05-19.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
 - **Status:** open
 - **Tier:** `v0.27`
@@ -2464,7 +2464,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-19, v0.27.0 Phase 3 deferral (revised from `bsms-taproot-6-line`).
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs::BsmsEmitter::collect_missing` — currently refuses taproot scripts with `IncompatibleFormatForTemplate`.
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:69-76` — `BsmsEmitter::emit()` refuses taproot scripts (P2tr / P2trMulti) with `ToolkitError::BadInput`. Note: `BsmsEmitter::collect_missing` at `bsms.rs:58-62` returns an empty vec; the `IncompatibleFormatForTemplate` variant defined in `wallet_export/mod.rs` is not on the BSMS refusal path. Citation verified against origin/master SHA `1abd9d1` 2026-05-19.
   - BIP-129 §1 Prerequisites — enumerates BIPs 32/43/44/45/48/67/86/87/174/350 + the SegWit BIPs; conspicuously does NOT include BIP-386 (`tr(...)`).
 - **What:** v0.28+: implement BSMS Round-2 emit for taproot descriptors (`tr(K)` and `tr(internal, multi_a(K,...))` / `tr(internal, sortedmulti_a(K,...))`). Blocked on a BIP-129 update adding BIP-386 to §1 prerequisites — without that prerequisite update, the BIP-129-canonical descriptor-line shape is undefined for tr() (specifically: how taproot internal-key + multi_a leaf set serialize into the line-2 descriptor body within the BIP-129 spec). Soft-blocker: track upstream BIP-129 PRs; revisit when a published canonicalization is available.
 - **Why deferred:** Standards prerequisite not yet met; emitting against an unpublished canonicalization would commit the toolkit to a wire shape we'd need to break.
@@ -2472,21 +2472,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.28+`.
 - **Companion:** none.
 
-### `bsms-bip129-full-cutover` — v0.28+: 4-line parser + encryption envelope + cleanup
+### `bsms-bip129-full-cutover` — DUPLICATE STUB → see canonical entry above (line ~2207)
 
-- **Surfaced:** 2026-05-19, v0.27.0 Phase 3 cycle close (planned at plan-doc §4.6).
-- **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — v0.26.0 lenient parser accepts only 2-line + 6-line shapes; Phase 3's BSMS emitter defaults to 4-line (BIP-129-canonical). The asymmetry is documented at `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:28-30` and in this cycle's CHANGELOG `### Changed` block.
-  - BIP-129 §Specification → Round 2: encryption envelope STANDARD / EXTENDED with PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 MAC (the HMAC primitives the v0.26.0 `bsms-verify-signatures` FOLLOWUP body originally misframed as "signature verify").
-- **What:** v0.28+ cutover:
-  1. Add a proper 4-line BIP-129-canonical Round-2 parser (currently the import-side only accepts 2-line + 6-line).
-  2. Add encryption-envelope support (STANDARD plaintext is what v0.27.0 ships; EXTENDED + ENCRYPTED variants are deferred).
-  3. Deprecate the v0.26.0 6-line "lenient" parser (the misframed extra-signature-line shape that motivated the original `bsms-verify-signatures` FOLLOWUP body; superseded by the v0.27.0-canonical 4-line + separate Round-1 verify).
-  4. Consider dropping 2-line and 6-line shapes after the deprecation window — leaving only the BIP-129-canonical 4-line.
-- **Why deferred:** v0.27.0's scope was Round-1 verify + canonical 4-line emit; the parser-side cutover + encryption envelope is a clean v0.28+ scope boundary. Asymmetry (4-line emit, 2/6-line parse) is acknowledged and tracked; round-trip via 2-line emit shape is symmetric today.
-- **Status:** open
+- **Status:** consolidated 2026-05-19 during cycle-prep recon (source SHA `1abd9d1`). This was a v0.27.0 Phase 3 cycle-close re-filing of the same scope (4-line parser + encryption envelope + lenient-parser deprecation) as the canonical `bsms-bip129-full-cutover` entry filed at v0.27.0 Phase 2 (line ~2207). Per `feedback-per-phase-agents-forget-followup-status-flip` discipline (split-state hazard), all work tracking now happens at the canonical entry above. When the canonical entry resolves at v0.28 ship, mark this stub resolved in lockstep.
 - **Tier:** `v0.28+`.
-- **Companion:** none.
 
 ### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
 
