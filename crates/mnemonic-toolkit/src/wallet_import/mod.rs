@@ -46,6 +46,50 @@ pub(crate) trait WalletFormatParser {
     fn parse(blob: &[u8], stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError>;
 }
 
+/// Source-provenance of a parsed wallet import. Replaces the v0.26.0 / v0.27.x
+/// representable-invalid `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)`
+/// pair on `ParsedImport`. Exactly one variant per parse — enforced at the type
+/// level.
+///
+/// See `design/FOLLOWUPS.md::pr-26-import-provenance-enum-internal-refactor`
+/// for rationale (v0.27.1 Phase 5b deferral).
+///
+/// Visibility is `pub(crate)` to match the existing `ParsedImport` /
+/// `BsmsAuditFields` / `CoreSourceMetadata` types (all `pub(crate)` per
+/// grep-verified `src/wallet_import/mod.rs:60,88,188`). Bumping to `pub`
+/// would require E0446-fixing all transitively-referenced types — out of
+/// scope for this internal refactor.
+#[derive(Debug, Clone)]
+pub(crate) enum ImportProvenance {
+    /// BSMS Round-2 parse (`wallet_import/bsms.rs`). Holds `Option` because
+    /// the lenient 2-line excerpt shape carries no audit fields (token /
+    /// signature / first_address / derivation_path absent); the 6-line full
+    /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
+    Bsms(Option<BsmsAuditFields>),
+    /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
+    BitcoinCore(CoreSourceMetadata),
+}
+
+impl ImportProvenance {
+    /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
+    /// when audit fields are present (6-line shape); `None` for the 2-line
+    /// excerpt shape or for the `BitcoinCore` variant.
+    pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
+        match self {
+            Self::Bsms(audit) => audit.as_ref(),
+            Self::BitcoinCore(_) => None,
+        }
+    }
+
+    /// Back-compat accessor: returns `Some(&metadata)` only for the `BitcoinCore` variant.
+    pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
+        match self {
+            Self::Bsms(_) => None,
+            Self::BitcoinCore(meta) => Some(meta),
+        }
+    }
+}
+
 /// SPEC §8.1 — output of one parser invocation. BSMS Round-2 always emits
 /// `vec![ParsedImport]` of length 1 (single descriptor). Bitcoin Core
 /// `listdescriptors` (Phase 3) emits length-N for N descriptor entries
@@ -71,12 +115,22 @@ pub(crate) struct ParsedImport {
     pub(crate) cosigners: Vec<ResolvedSlot>,
     pub(crate) network: bitcoin::Network,
     pub(crate) threshold: Option<u8>,
-    pub(crate) bsms_audit: Option<BsmsAuditFields>,
-    /// SPEC §5 — Bitcoin Core source-specific metadata (`active`, `internal`,
-    /// `range`, dropped wallet-state field names). `None` for BSMS parses.
-    /// Drives `--select-descriptor active-receive` / `active-change` filtering
-    /// at the CLI dispatch layer (`apply_select_descriptor` below).
-    pub(crate) source_metadata: Option<CoreSourceMetadata>,
+    /// Source-provenance of this parsed import. Use `provenance.bsms_audit()` /
+    /// `provenance.source_metadata()` accessors to extract the (still-flat) wire
+    /// shape on the JSON envelope. See `ImportProvenance` for invariant.
+    pub(crate) provenance: ImportProvenance,
+}
+
+impl ParsedImport {
+    /// Convenience: equivalent to `self.provenance.bsms_audit()`.
+    pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
+        self.provenance.bsms_audit()
+    }
+
+    /// Convenience: equivalent to `self.provenance.source_metadata()`.
+    pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
+        self.provenance.source_metadata()
+    }
 }
 
 /// SPEC §5 — per-entry Bitcoin Core metadata. Carries `active`, `internal`,
@@ -147,8 +201,7 @@ pub(crate) fn apply_select_descriptor(
             let kept: Vec<ParsedImport> = parsed
                 .into_iter()
                 .filter(|p| {
-                    p.source_metadata
-                        .as_ref()
+                    p.source_metadata()
                         .map(|m| m.active && !m.internal)
                         .unwrap_or(false)
                 })
@@ -164,8 +217,7 @@ pub(crate) fn apply_select_descriptor(
             let kept: Vec<ParsedImport> = parsed
                 .into_iter()
                 .filter(|p| {
-                    p.source_metadata
-                        .as_ref()
+                    p.source_metadata()
                         .map(|m| m.active && m.internal)
                         .unwrap_or(false)
                 })
@@ -249,4 +301,62 @@ pub(crate) fn validate_watch_only_resolved(cosigners: &[ResolvedSlot]) -> Result
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod provenance_tests {
+    use super::*;
+
+    fn sample_bsms_audit() -> BsmsAuditFields {
+        // Field shape grep-verified at src/wallet_import/mod.rs:188-202.
+        // No Default impl on BsmsAuditFields or BsmsVerification; construct
+        // with minimal valid values directly.
+        BsmsAuditFields {
+            token: String::new(),
+            signature: String::new(),
+            first_address: String::new(),
+            derivation_path: String::new(),
+            verification: BsmsVerification::NotAttempted,
+        }
+    }
+
+    fn sample_core_metadata() -> CoreSourceMetadata {
+        // Field shape grep-verified at src/wallet_import/mod.rs:88-100.
+        // No Default impl; minimal valid construction.
+        CoreSourceMetadata {
+            active: false,
+            internal: false,
+            range: None,
+            dropped_fields: Vec::new(),
+            wallet_name: None,
+        }
+    }
+
+    #[test]
+    fn provenance_bsms_variant_yields_some_bsms_audit_and_none_source_metadata() {
+        let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
+        assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
+        assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
+    }
+
+    #[test]
+    fn provenance_bsms_no_audit_variant_yields_none_bsms_audit() {
+        let p = ImportProvenance::Bsms(None);
+        assert!(p.bsms_audit().is_none(), "Bsms(None) variant yields no bsms_audit (2-line shape)");
+        assert!(p.source_metadata().is_none(), "Bsms(None) variant does not expose source_metadata");
+    }
+
+    #[test]
+    fn provenance_bitcoin_core_variant_yields_none_bsms_audit_and_some_source_metadata() {
+        let p = ImportProvenance::BitcoinCore(sample_core_metadata());
+        assert!(p.bsms_audit().is_none(), "BitcoinCore variant does not expose bsms_audit");
+        assert!(p.source_metadata().is_some(), "BitcoinCore variant exposes source_metadata");
+    }
+
+    #[test]
+    fn provenance_accessors_return_references_not_owned() {
+        let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
+        let _: Option<&BsmsAuditFields> = p.bsms_audit();
+        let _: Option<&CoreSourceMetadata> = p.source_metadata();
+    }
 }

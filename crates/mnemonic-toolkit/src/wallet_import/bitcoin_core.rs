@@ -40,8 +40,8 @@
 //! SPEC §8.1, and the CLI dispatch may emit per-bundle network metadata.
 
 use super::{
-    pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, BsmsAuditFields,
-    CoreSourceMetadata, ParsedImport, WalletFormatParser,
+    pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, CoreSourceMetadata,
+    ImportProvenance, ParsedImport, WalletFormatParser,
 };
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
@@ -288,13 +288,13 @@ fn parse_entry(
         }
     }
 
-    let source_metadata = Some(CoreSourceMetadata {
+    let source_metadata = CoreSourceMetadata {
         active,
         internal,
         range,
         dropped_fields,
         wallet_name,
-    });
+    };
 
     Ok(ParsedImport {
         descriptor,
@@ -302,8 +302,7 @@ fn parse_entry(
         cosigners,
         network,
         threshold,
-        bsms_audit: None::<BsmsAuditFields>,
-        source_metadata,
+        provenance: ImportProvenance::BitcoinCore(source_metadata),
     })
 }
 

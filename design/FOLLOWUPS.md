@@ -105,7 +105,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_import/mod.rs:60-80` (ParsedImport struct + apply_select_descriptor uses `source_metadata` directly at 5+ sites); `wallet_import/bsms.rs:272-273` + `wallet_import/bitcoin_core.rs:291-306` (parser construct sites); `cmd/import_wallet.rs:587,599,806,818,825,846` (envelope emit consumer sites — both text and JSON paths).
 - **What:** Introduce `ImportProvenance { Bsms(BsmsAuditFields), BitcoinCore(CoreSourceMetadata) }` enum. Replace ParsedImport's pair with a single `provenance: ImportProvenance` field. Internal-only refactor — wire shape unchanged (envelope-side `bsms_audit` / `source_metadata` fields stay flat siblings; emit code matches on the new enum to populate them). Two practical options: (a) thread the enum through all 14 sites in one commit; (b) add back-compat `bsms_audit() -> Option<&BsmsAuditFields>` / `source_metadata() -> Option<&CoreSourceMetadata>` accessor methods, leave existing field-access sites unchanged. Option (b) is the lower-risk path.
 - **Why deferred:** Phase 5b's 14-site footprint exceeded the v0.27.1 cycle's scope window after Phase 5a + 5c absorbed the type-design budget. The representable-invalid pair (both-set, both-none) is purely internal — no wire-shape or user-visible surface — so deferral has zero impact on shipped behavior.
-- **Status:** open
+- **Status:** resolved (pending commit; v0.27.2 Phase 2)
 - **Tier:** `v0.28+`
 
 ### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`

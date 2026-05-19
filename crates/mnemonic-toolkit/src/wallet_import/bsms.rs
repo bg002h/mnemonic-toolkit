@@ -28,7 +28,7 @@
 
 use super::{
     pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, BsmsAuditFields,
-    ParsedImport, WalletFormatParser,
+    ImportProvenance, ParsedImport, WalletFormatParser,
 };
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
@@ -269,8 +269,7 @@ impl WalletFormatParser for BsmsParser {
             cosigners,
             network,
             threshold,
-            bsms_audit: audit,
-            source_metadata: None,
+            provenance: ImportProvenance::Bsms(audit),
         }])
     }
 }
