@@ -5,7 +5,7 @@
 **Target tags:**
 - `mnemonic-toolkit-v0.27.2` (toolkit)
 - `mnemonic-gui-v0.11.1` (sibling lockstep)
-**Source branch:** `release/v0.27.2` off `origin/master` (post-PR-#29 merge)
+**Source branch (target — not yet branched):** `release/v0.27.2` off `origin/master`. Pre-condition: PR #29 (Cargo.lock + scratch-gitignore) must merge to master first; current local state is on `release/v0.27.1` with PR #29 open.
 
 ## Cycle thesis
 
@@ -32,14 +32,18 @@ Source citations below were verified by opus architect review against `origin/ma
 ### Item 1 — `pr-26-import-provenance-enum-internal-refactor`
 
 - **What:** Introduce `ImportProvenance { Bsms(BsmsAuditFields), BitcoinCore(CoreSourceMetadata) }` enum. Replace `ParsedImport`'s `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)` representable-invalid pair with a single `provenance: ImportProvenance` field. Internal-only refactor; wire shape unchanged (envelope-side `bsms_audit` / `source_metadata` JSON fields stay flat siblings).
-- **Approach:** Option (b) from the FOLLOWUP — add back-compat accessors `bsms_audit() -> Option<&BsmsAuditFields>` and `source_metadata() -> Option<&CoreSourceMetadata>`. Call-sites mechanically updated: drop `&` prefix on `&p.bsms_audit` → `p.bsms_audit()`; replace `p.source_metadata.as_ref()` → `p.source_metadata()`. Call-site logic structurally identical (~10 line edits across access sites).
-- **Where (origin/master ground truth):**
+- **Approach:** Option (b) from the FOLLOWUP — add back-compat accessors `bsms_audit() -> Option<&BsmsAuditFields>` and `source_metadata() -> Option<&CoreSourceMetadata>`. Call-sites mechanically updated under three patterns:
+  - `&p.bsms_audit` → `p.bsms_audit()` (drop `&` prefix; 2 sites at `import_wallet.rs:587,599`)
+  - `&b.source_metadata` → `b.source_metadata()` (drop `&` prefix; 1 site at `import_wallet.rs:825`)
+  - `b.bsms_audit.is_some()` → `b.bsms_audit().is_some()` (owned-field `.is_some()` pattern; 2 sites at `import_wallet.rs:806, 818`)
+  Plus `apply_select_descriptor` raw-field access at `wallet_import/mod.rs:150,167` → `p.source_metadata()` (`.as_ref()` chain replacement).
+- **Where (origin/master ground truth, grep-verified against tip `2f8b311`):**
   - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:60-80` — `ParsedImport` struct definition
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:310` — `Bsms` variant construction site
-  - `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:291-306` — `BitcoinCore` variant construction site
-  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:{519,525,529,534,631,638,645,651}` — envelope-emit access sites (8 sites)
-  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:{169,181}` — `apply_select_descriptor` access sites (2 sites, not "5+" as the FOLLOWUP claims)
-- **Sized:** ~150 LOC + 4-6 new test cells
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:266` — `Bsms` variant construction site (`Ok(vec![ParsedImport { ... bsms_audit: audit, source_metadata: None }])`)
+  - `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:291-306` — `BitcoinCore` variant construction site (let-binding at 291; struct expr at 297-307)
+  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:{587, 599, 806, 818, 825}` — envelope-emit access sites (5 sites total; 2 are `.is_some()` calls per recipe above)
+  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:{150, 167}` — `apply_select_descriptor` access sites (2 sites)
+- **Sized:** ~80-110 LOC (enum + 2 accessors + ~7 mechanical access-site edits + 4-6 cells)
 - **Test coverage:** new unit cells in `wallet_import_unit` asserting (a) construction yields the variant matching the source (BSMS or Bitcoin Core); (b) accessors return `Some(&_)` for the matching variant and `None` for the other; (c) round-trip integration cell preserving envelope wire shape against `tests/cli_import_wallet_envelope_v0_27_0.rs` drift fixtures.
 
 ### Item 2 — `error-rs-canonical-ordering-doc`
@@ -74,10 +78,10 @@ Source citations below were verified by opus architect review against `origin/ma
 
 ### Item 6 — `xpub-search-address-of-xpub-searched-count-semantic`
 
-- **What:** **Doc clarification only** per user direction. Keep the current code (`searched = num_targets × gap_limit × chains`); add an inline code comment + JSON-envelope docstring explaining the semantic: `searched` reports the count of **candidate-comparisons performed** (work done), not unique child-addresses derived. The per-target `scanned_external` / `scanned_internal` JSON fields already report unique candidates per-target.
-- **Where:**
-  - `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293` — add inline comment
-  - JSON envelope schema docstring on the `XpubSearchNoMatch.searched` field (locate via serde-derived struct; add `///` doc comment if none exists). Phase 0 confirms the struct name + file path.
+- **What:** **Doc clarification only** per user direction. Keep the current code (`searched = num_targets × gap_limit × chains`); clarify the semantic in two places. The per-target `scanned_external` / `scanned_internal` JSON fields already report unique candidates per-target; `searched` (an aggregate on `ToolkitError::XpubSearchNoMatch`) reports total candidate-comparisons performed.
+- **Where (grep-verified):**
+  - `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:288-293` — add inline comment at the `total_scanned` computation explaining the `n_targets × gap_limit × chains` formula
+  - `crates/mnemonic-toolkit/src/error.rs:230-237` — extend the existing `XpubSearchNoMatch` enum-variant docstring (NOT a serde-derived struct; the variant has no JSON envelope of its own). Current docstring at lines 236-237 says "addresses × chains × gap-limit for address mode" but elides the `× n_targets` factor in the actual formula — restore the missing term + add the "candidate-comparisons performed" framing
 - **Sized:** ~10 LOC doc only
 - **Test coverage:** zero new cells; zero drift-cell updates (no behavior change, no value change). Existing cells continue to pass.
 
@@ -98,13 +102,23 @@ Source citations below were verified by opus architect review against `origin/ma
 
 ### Phase 0 — Recon
 
-- Re-grep `cmd/import_wallet.rs` for `\.bsms_audit\|\.source_metadata` and lock the access-site line numbers in §2 item 1 (origin file is 991 lines; line numbers may shift again after PR #29 advances master)
-- Run `grep -c '=> .*_conditional_rules()' crates/mnemonic-toolkit/src/cmd/gui_schema.rs` to lock item 5's arm-count constant (currently **6**)
+**Toolkit-side citation refresh:**
+- Re-grep `cmd/import_wallet.rs` for `\.(bsms_audit|source_metadata)([^_a-zA-Z]|$)` against current `release/v0.27.2` tip. Lock the 5 access sites + 3 mechanical-edit patterns in §2 item 1 (current Round-2-verified values: lines 587/599/806/818/825 at master tip `2f8b311`; will drift after PR #29 advances master)
+- Re-grep `wallet_import/mod.rs` for the same pattern; lock `apply_select_descriptor` sites (currently lines 150/167)
+- Re-grep `wallet_import/bsms.rs` for `Ok(vec!\[ParsedImport \{` (currently line 266) and `wallet_import/bitcoin_core.rs` for `Ok(ParsedImport \{` (currently line 299)
+- Run `grep -cE '^[[:space:]]+"[a-z-]+" => [a-z_]+_conditional_rules\(\),$' crates/mnemonic-toolkit/src/cmd/gui_schema.rs` to lock item 5's arm-count constant (currently **6**; tightened from the looser `'=> .*_conditional_rules()'` per architect R2 I3 to be reformatter-robust)
+
+**Cross-phase dependency check:**
 - Verify whether Phase 5b (item 1) adds any new `ToolkitError` variant; if yes, item 2's ordering rule applies and item 2 should land before Phase 2
-- Enumerate drift cells that would be touched by item 6 (anticipated: **zero**, since item 6 is doc-only now)
-- Verify GUI `Cargo.toml` toolkit-pin site + `pinned-upstream.toml` for Phase 3 bump
+- Enumerate drift cells that would be touched by item 6 (anticipated: **zero**, since item 6 is doc-only)
+
+**Sibling-repo (mnemonic-gui) recon for Phase 3 sizing:**
+- Read `mnemonic-gui/Cargo.toml` + `mnemonic-gui/pinned-upstream.toml` to confirm current toolkit pin (assumed v0.26.0; verify)
+- `grep -r "schema_version" mnemonic-gui/src/` — locate GUI envelope consumers
+- `grep -r "import-wallet\|xpub-search\|bsms_round1\|bsms-round1" mnemonic-gui/src/` — locate GUI surfaces exposed for v0.27.x toolkit features
+- Verify mnemonic-gui's `pinned-upstream.toml` workflow auto-track mechanism for the v0.26.0 → v0.27.2 toolkit-pin bump (per memory `[[project-v0-5-1-schema-mirror-v2-closed]]`: workflow auto-tracks via Python `tomllib` parse-pre); identify whether `schema_mirror.yml` or any drift gate needs hand-update
 - Confirm GUI v0.11.0 tip baseline + check for any in-flight GUI changes that conflict with v0.11.1 scope
-- Enumerate the GUI consumer surfaces affected by toolkit v0.26.0 → v0.27.2 pin bump (envelope wire shape, xpub-search result types, BSMS surfaces) to size Phase 3's smoke cell budget
+- Size Phase 3's smoke cell budget from the surfaces enumerated above (estimated 3-6 cells; finalize at Phase 0 close)
 
 ### Phase 1 — Toolkit doc + test batch (items 2, 3, 4, 5, 6)
 
@@ -121,8 +135,8 @@ Stage explicitly: `git add` each file. No `git add -A` per CLAUDE.md convention.
 
 - Introduce `ImportProvenance` enum at `wallet_import/mod.rs`
 - Add accessors `bsms_audit() -> Option<&BsmsAuditFields>` + `source_metadata() -> Option<&CoreSourceMetadata>`
-- Update construction sites: `wallet_import/bsms.rs:310` + `wallet_import/bitcoin_core.rs:291-306`
-- Mechanical syntax shift at access sites: 8 in `cmd/import_wallet.rs` + 2 in `apply_select_descriptor`
+- Update construction sites: `wallet_import/bsms.rs:266` + `wallet_import/bitcoin_core.rs:291-306` (grep-verified against `origin/master` tip `2f8b311`)
+- Mechanical syntax shift at access sites: **5** in `cmd/import_wallet.rs:{587, 599, 806, 818, 825}` + **2** in `apply_select_descriptor` at `wallet_import/mod.rs:{150, 167}` — 7 access sites total. Three mechanical-edit patterns per §2 item 1 (drop `&`, replace `.as_ref()` chain, owned-field `.is_some()`)
 - Add 4-6 unit cells + 1-2 integration cells (drift-shape regression against `tests/cli_import_wallet_envelope_v0_27_0.rs`)
 
 **Sequencing relative to Phase 1:** independent IF Phase 5b adds no new `ToolkitError` variant (Phase 0 confirms). If it does, Phase 2 follows Phase 1 (item 2's ordering rule applies to the new variant).
@@ -150,9 +164,11 @@ Per the memories `feedback-phase-6-cargo-lock-stage-with-version-bump`, `feedbac
 4. **`cargo build`** (not `cargo check`) to regenerate `Cargo.lock` with the new version
 5. `git add Cargo.lock` explicitly; verify pre-commit `git diff --cached -- Cargo.lock` shows the version bump
 6. `scripts/install.sh` self-pin bump `mnemonic-toolkit-v0.27.1` → `mnemonic-toolkit-v0.27.2`
-7. `git tag mnemonic-toolkit-v0.27.2` + `git push origin mnemonic-toolkit-v0.27.2` + `gh release create` with CHANGELOG body
-8. Verify `install-pin-check` CI gate fires green on tag-merge
-9. THEN sequence GUI v0.11.1 (Phase 3 cycle close) — toolkit-first, GUI-second rule
+7. Confirm "no CLI flag delta" → no `docs/manual/src/40-cli-reference/` chapter update needed (none of items 1-6 add or remove a CLI flag; sanity-check `make -C docs/manual lint` still green)
+8. **PR-merge sequencing:** Open PR `release/v0.27.2 → master`; await CI green; squash-merge to master; **then** `git tag mnemonic-toolkit-v0.27.2` on the squash commit (matches v0.27.1 + v0.26.0 + v0.27.0 cycle precedents — tag points at master squash, not at the unsquashed cycle tip)
+9. `git push origin mnemonic-toolkit-v0.27.2` + `gh release create` with CHANGELOG body
+10. Verify `install-pin-check` CI gate fires green on tag-merge
+11. THEN sequence GUI v0.11.1 (Phase 3 cycle close) — toolkit-first, GUI-second rule
 
 ## §4 — Test strategy + budget
 
@@ -169,8 +185,8 @@ Per the memories `feedback-phase-6-cargo-lock-stage-with-version-bump`, `feedbac
 
 ## §5 — Risk surface
 
-- **Low (items 2, 3, 4, 5, 6):** doc + test + zero-behavior items. Drift cells at `tests/cli_import_wallet_envelope_v0_27_0.rs` + `tests/cli_xpub_search_drift_v0_27_0.rs` (which exist as integration test files on origin/master, NOT as a `tests/fixtures/v0_27_0_envelopes/` directory) gate the v0.27.0 wire-shape ground truth.
-- **Medium (item 1, Phase 5b):** ~10 access-site mechanical edits + 2 construction sites + accessor introduction. Wire-shape unchanged → the v0.27.0 envelope drift cells (`cli_import_wallet_envelope_v0_27_0.rs`) gate option-(b) accessor refactor against shape regressions.
+- **Low (items 2, 3, 4, 5, 6):** doc + test + zero-behavior items. Drift-shape regression guarded by both surfaces: integration test files `tests/cli_import_wallet_envelope_v0_27_0.rs` + `tests/cli_xpub_search_drift_v0_27_0.rs`, AND captured envelope fixtures at `tests/fixtures/v0_27_0_envelopes/` (6 JSON files: `path_of_xpub.{match,no_match}.json`, `account_of_descriptor.{match,no_match}.json`, `passphrase_of_xpub.{match,no_match}.json`) and `tests/fixtures/wallet_import/envelope_v0_27_0.json`.
+- **Medium (item 1, Phase 5b):** ~7 access-site mechanical edits + 2 construction sites + accessor introduction. Wire-shape unchanged → the v0.27.0 envelope drift cells (`cli_import_wallet_envelope_v0_27_0.rs`) gate option-(b) accessor refactor against shape regressions.
 - **Cross-repo low (item 7):** YAML edit + Cargo.toml pin bump + smoke cells. mnemonic-gui CI gates regressions on the integration PR (which targets master, so its workflow trigger fires correctly even before the trigger-filter fix lands).
 
 ## §6 — Ship sequence + dependencies
@@ -179,7 +195,7 @@ Per the memories `feedback-phase-6-cargo-lock-stage-with-version-bump`, `feedbac
 2. Pull master locally; create `release/v0.27.2` off the new tip.
 3. **Phase 0** recon → fold any line-number / arm-count corrections into the plan-doc inline.
 4. **Phase 1** (toolkit doc + test batch) AND **Phase 2** (Phase 5b refactor) — parallel agent dispatches if Phase 0 confirms no Phase 5b new-variant dependency; sequenced (1 → 2) otherwise.
-5. **Toolkit cycle close** — Phase 4 steps 1-8 → tag `mnemonic-toolkit-v0.27.2` → GH release.
+5. **Toolkit cycle close** — Phase 4 steps 1-10 (CHANGELOG → FOLLOWUPS → Cargo.toml → Cargo.lock → install.sh → manual-no-flag-delta check → PR-merge → tag at squash commit → push tag + GH release → install-pin-check CI verify).
 6. **Phase 3** begins: branch mnemonic-gui off its master; fold workflow YAML + toolkit pin bump + smoke cells.
 7. **GUI cycle close** — `mnemonic-gui-v0.11.1` tag + release.
 8. Verify install-pin-check CI gate green on both tags.
