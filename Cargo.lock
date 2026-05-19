@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "assert_cmd",
  "bip38",

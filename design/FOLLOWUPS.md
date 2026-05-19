@@ -2375,3 +2375,67 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.27` (cross-repo companion in mnemonic-gui).
 - **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-workflow-trigger-include-release-branches` (this cycle close).
+
+### `cross-format-conversion-matrix-expansion` — N×M coverage beyond the BSMS → Bitcoin Core integration cell
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 6 cycle close.
+- **Where:**
+  - `crates/mnemonic-toolkit/tests/cli_export_wallet_from_import_json.rs::cross_format_bsms_to_bitcoin_core_to_import_round_trip` — the v0.27.0 headline integration cell. Single source→destination pair (BSMS → Bitcoin Core).
+  - `docs/manual/src/30-workflows/39-cross-format-conversion.md` — narrative recipe covering 3 paths (BSMS→Bitcoin Core, Bitcoin Core→bundle synth, BSMS→BIP-388); no automated cross-format coverage for the remaining N×M combinations.
+- **What:** v0.28+: expand the integration cell into a parameterized N×M matrix covering every supported source × destination pair: BSMS / Bitcoin Core as sources × {bitcoin-core, bip388, bsms, sparrow*, jade*, coldcard*, electrum*, specter*, green} as destinations (* requires template-mode handling — wallet-export-from-import-json refuses descriptor-mode by current per-emitter contract). Acceptance: every cell loads a fixture envelope, emits the target format, parses the output (or asserts the expected refusal for template-only formats), and asserts cosigner xpub + descriptor preservation.
+- **Why deferred:** v0.27.0 cycle scope was wiring + headline integration; matrix expansion is hardening work, not load-bearing for v0.27.0 correctness.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `bsms-taproot-emit` — BIP-129 emit for tr() descriptors (BIP-386 prerequisite)
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 3 deferral (revised from `bsms-taproot-6-line`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs::BsmsEmitter::collect_missing` — currently refuses taproot scripts with `IncompatibleFormatForTemplate`.
+  - BIP-129 §1 Prerequisites — enumerates BIPs 32/43/44/45/48/67/86/87/174/350 + the SegWit BIPs; conspicuously does NOT include BIP-386 (`tr(...)`).
+- **What:** v0.28+: implement BSMS Round-2 emit for taproot descriptors (`tr(K)` and `tr(internal, multi_a(K,...))` / `tr(internal, sortedmulti_a(K,...))`). Blocked on a BIP-129 update adding BIP-386 to §1 prerequisites — without that prerequisite update, the BIP-129-canonical descriptor-line shape is undefined for tr() (specifically: how taproot internal-key + multi_a leaf set serialize into the line-2 descriptor body within the BIP-129 spec). Soft-blocker: track upstream BIP-129 PRs; revisit when a published canonicalization is available.
+- **Why deferred:** Standards prerequisite not yet met; emitting against an unpublished canonicalization would commit the toolkit to a wire shape we'd need to break.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `bsms-bip129-full-cutover` — v0.28+: 4-line parser + encryption envelope + cleanup
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 3 cycle close (planned at plan-doc §4.6).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — v0.26.0 lenient parser accepts only 2-line + 6-line shapes; Phase 3's BSMS emitter defaults to 4-line (BIP-129-canonical). The asymmetry is documented at `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:28-30` and in this cycle's CHANGELOG `### Changed` block.
+  - BIP-129 §Specification → Round 2: encryption envelope STANDARD / EXTENDED with PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 MAC (the HMAC primitives the v0.26.0 `bsms-verify-signatures` FOLLOWUP body originally misframed as "signature verify").
+- **What:** v0.28+ cutover:
+  1. Add a proper 4-line BIP-129-canonical Round-2 parser (currently the import-side only accepts 2-line + 6-line).
+  2. Add encryption-envelope support (STANDARD plaintext is what v0.27.0 ships; EXTENDED + ENCRYPTED variants are deferred).
+  3. Deprecate the v0.26.0 6-line "lenient" parser (the misframed extra-signature-line shape that motivated the original `bsms-verify-signatures` FOLLOWUP body; superseded by the v0.27.0-canonical 4-line + separate Round-1 verify).
+  4. Consider dropping 2-line and 6-line shapes after the deprecation window — leaving only the BIP-129-canonical 4-line.
+- **Why deferred:** v0.27.0's scope was Round-1 verify + canonical 4-line emit; the parser-side cutover + encryption envelope is a clean v0.28+ scope boundary. Asymmetry (4-line emit, 2/6-line parse) is acknowledged and tracked; round-trip via 2-line emit shape is symmetric today.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 5 R0 deferral.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/export_wallet.rs::run_from_import_json` — constructs `EmitInputs` with `taproot_internal_key: None` (envelope doesn't carry the designation; v0.27.0 doesn't surface it).
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs` — refuses taproot at emit time (per `bsms-taproot-emit` deferral).
+  - `crates/mnemonic-toolkit/src/wallet_export/{coldcard,jade,sparrow,electrum,specter}.rs` — accept descriptor-mode but lose the multi_a-vs-key-path internal-key designation when emitting from `--from-import-json` (each consumer uses `taproot_internal_key: None`).
+- **What:** v0.28+: when an envelope's `bundle.descriptor` matches `tr(...)`, EITHER (a) refuse loudly at the `--from-import-json` typed-deser layer with `BadInput "taproot envelopes not yet supported by --from-import-json; supply --template + --slot args directly"`, OR (b) thread the internal-key designation through the envelope's `bundle` surface (which currently has no such field). Option (a) is simpler and matches v0.27.0's "envelopes are descriptor-mode only" framing.
+- **Why deferred:** v0.27.0 cycle deferred per Phase 5 R0 (no v0.27.0 wire-format path produces a taproot envelope from `import-wallet`: BSMS rejects taproot at import; Bitcoin Core `listdescriptors` with `tr()` is a corner case). Refuse-loudly is hardening for the v0.28+ corner case.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** `wallet-import-bitcoin-core-taproot-emission` (if a sibling-codec-side FOLLOWUP surfaces).
+
+### `plan-smoke-step4-ms1-on-bundle-not-supported` — plan-doc §6.3 smoke recipe references nonexistent `--ms1` on bundle subcommand
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 5 R0 review M2.
+- **Where:**
+  - `design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` §6.3 step 4 (end-user smoke recipe).
+- **What:** v0.28+ doc-only fix: the smoke recipe step 4 says `mnemonic bundle --import-json /tmp/env.json --ms1 "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"`. `BundleArgs` doesn't expose `--ms1` (that's import-wallet's surface); seed overlay on bundle is `--slot @N.phrase=` only. Rewrite step 4 as `--slot @0.phrase="..."`.
+- **Why deferred:** Plan-doc bug; smoke recipe is informational and the load-bearing acceptance is the integration cell `cross_format_bsms_to_bitcoin_core_to_import_round_trip` (which uses the correct flags).
+- **Status:** open
+- **Tier:** `v0.28+` (doc-only).
+- **Companion:** none.

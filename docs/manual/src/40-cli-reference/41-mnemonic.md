@@ -42,6 +42,8 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
 | `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `entropy`, `xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput` |
+| `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
 
 ### Worked example
@@ -630,13 +632,16 @@ mnemonic export-wallet [OPTIONS]
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys refused by `export-wallet`'s watch-only validator) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `now` (default) or unix seconds |
 | `--bitcoin-core-version <BITCOIN_CORE_VERSION>` | 24 or 25 (default 25) |
 | `--wallet-name <WALLET_NAME>` | wallet name/label for formats that publish one (Coldcard generic JSON, Sparrow, Specter, Electrum); default `<template-human-name>-<account>` |
 | `--taproot-internal-key <TAPROOT_INTERNAL_KEY>` | `nums` or `@N` for `tr-multi-a` / `tr-sortedmulti-a` |
+| `--bsms-form <FORM>` | (v0.27.0) BSMS Round-2 emit shape — `4-line` (default; BIP-129-canonical) or `2-line` (lenient excerpt symmetric with the v0.26.0 import-side parser); ignored by every non-BSMS format per the per-format ignored-input contract |
+| `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative) |
+| `--from-import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array; required when the envelope has > 1 entry |
 | `--help` | print help |
 
 ### Notes
@@ -680,13 +685,15 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--blob <FILE\|->` | path to the third-party wallet blob; `-` reads from stdin (required) |
+| `--blob <FILE\|->` | path to the third-party wallet blob; `-` reads from stdin (required UNLESS `--bsms-round1` is supplied as a standalone Round-1 verify mode) |
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
 | `--format <bsms\|bitcoin-core>` | format override; if absent, auto-detected via sniff (SPEC §6) |
 | `--select-descriptor <N\|active-receive\|active-change\|all>` | multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3); accepts integer index, `active-receive`, `active-change`, or `all` (default); BSMS blobs coerce non-default values to `all` with stderr NOTICE |
 | `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; cosigners not addressed by any `--ms1[N]` flag remain watch-only (no entropy attached); accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel |
 | `--slot <@N.phrase=<phrase>>` | per-slot seed overlay; equivalent to `--ms1` but the phrase is converted to entropy and the derived xpub at the cosigner's origin path is compared against the blob's xpub; mutually exclusive with `--ms1[N]` for the same N; accepts `@env:VAR`; only the `phrase` subkey is accepted on `import-wallet` in v0.26.0 |
-| `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary |
+| `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary; the v0.27.0 envelope `bundle` field is the full toolkit-native `BundleJson` shape (was a parse-side summary in v0.26.0; the v0.27.0 wire-shape replacement is documented in CHANGELOG `### Changed`) plus a new top-level `schema_version: "1"` field |
+| `--bsms-round1 <FILE>` | (v0.27.0) BIP-129 5-line Round-1 key record (Signer → Coordinator) for BIP-322 ECDSA signature verification; repeating flag — one per record; each record verified independently; verify state propagates to `--json` envelope's `bsms_round1_verifications` field; standalone mode (no `--blob` supplied) emits per-record verify envelope and exits 0 on verify success; v0.27.0 accepts a file path only — stdin form `-` is rejected, supply a file path per record (FOLLOWUP: multi-record stdin intake) |
+| `--bsms-verify-strict` | (v0.27.0) make BIP-129 Round-1 SIG verification failures fatal; without this flag, verify mismatches emit a stderr NOTICE and proceed with `signature_verified: false`; requires `--bsms-round1` to be meaningful |
 | `--help` | print help |
 
 ### Description
@@ -1895,6 +1902,30 @@ Stderr:
 ```text
 warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
 ```
+
+### JSON output (v0.27.0)
+
+When `--json` is supplied, `inspect` emits a single JSON envelope on
+stdout instead of the text-form report. The envelope carries a
+top-level `schema_version: "1"` field (v0.27.0 backfill via the new
+`InspectEnvelope` wrapper) followed by the kind-specific fields:
+
+```json
+{
+  "schema_version": "1",
+  "kind": "ms1",
+  "tag": "entr",
+  "payload_kind": "Entr",
+  "byte_length": 16,
+  "bit_strength": 128,
+  "entropy_hex": null
+}
+```
+
+`schema_version` is currently pinned at `"1"`; future format changes
+will bump the version with explicit migration notes in the SPEC. The
+same convention applies to `mnemonic repair`'s JSON output (which has
+shipped `schema_version: "1"` since v0.22.0).
 
 ### Auto-fire short-circuit
 
