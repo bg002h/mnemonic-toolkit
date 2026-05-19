@@ -91,7 +91,7 @@ The dispatch semantic in v0.28.0 is **identical to v0.26.0 §6**, just extended 
 
 ## §6.1.1 — Vendor-marker exclusion list (NEW)
 
-**Lock (R0 Q4):** the Bitcoin Core sniff's vendor-marker exclusion list at `wallet_import/bitcoin_core.rs:62` (`VENDOR_MARKER_KEYS`) expands from 5 to 15 entries to absorb the new format markers introduced by Phases P1-P6:
+**Lock (R0 Q4 + R1 I3/I4 folds):** the Bitcoin Core sniff's vendor-marker exclusion list — the `VENDOR_MARKER_KEYS` `const` at `wallet_import/bitcoin_core.rs:74` (R0 I2 citation fix: the const declaration sits at `:74`; lines `:59-72` are the doc-comment) — expands from 5 to 13 entries to absorb the new format markers introduced by Phases P1-P6:
 
 ```rust
 const VENDOR_MARKER_KEYS: &[&str] = &[
@@ -103,13 +103,15 @@ const VENDOR_MARKER_KEYS: &[&str] = &[
     "policyType",         // Sparrow Wallet (§11.1)
     "defaultPolicy",      // Sparrow Wallet (§11.1)
     "keystores",          // Sparrow Wallet (§11.1)
-    "label",              // Specter (§11.2) — also weakly used by Sparrow; sufficient combined-with other markers
     "devices",            // Specter (§11.2)
-    "blockheight",        // Specter (§11.2)
-    "register_multisig",  // Jade (§11.5)
-    "multisig_file",      // Jade (§11.5)
+    "blockheight",        // Specter (§11.2; integer marker — strong disambiguator)
+    "multisig_file",      // Jade (§11.5; top-level reply field from `get_registered_multisig` RPC)
 ];
 ```
+
+**R1 I3 fold — `label` deliberately omitted.** The original P0A scope included `"label"` as a Specter marker. Removed in R1 because (a) `label` is generic enough that a legitimate Core blob carrying a top-level `label` key should not be excluded; (b) Specter is still strongly disambiguated by `blockheight` (integer) + `devices` (array) + `descriptor` (string) per §11.2 positive sniff. The Specter positive sniff still requires `label`, but its absence from the EXCLUSION list does not weaken Specter discrimination because `blockheight` is the load-bearing exclusion marker.
+
+**R1 I4 fold — `register_multisig` deliberately omitted.** The original P0A scope included `"register_multisig"` as a Jade marker. Removed in R1 because: per Blockstream/Jade docs (`https://github.com/Blockstream/Jade/blob/master/docs/index.rst`), `register_multisig` is an RPC **command name**, not a JSON field present in any on-disk export. The actual top-level Jade export marker is `multisig_file` (the reply field of the `get_registered_multisig` RPC). The plan-doc's `register_multisig.multisig_file` notation referred to **command.reply-field**, not JSON nesting. Only `multisig_file` is retained as the load-bearing Jade vendor-marker.
 
 When any of these keys appears at the JSON top level, the Bitcoin Core sniff returns `false` (the blob is excluded from Bitcoin Core's positive-sniff territory and falls through to the other parsers). Each non-Core parser's sniff in §11.x conducts its own positive-marker check.
 
@@ -449,7 +451,17 @@ pub(crate) enum ColdcardMsFormat { P2wsh, P2shP2wsh, P2sh }
 
 **Sniff signature:** top-level JSON object with a top-level `multisig_file` field (string containing the inner Coldcard-multisig text shape). The `multisig_file` field is the distinctive marker — no other format uses it.
 
-**Q1 lock:** SeedQR variant (`register_multisig.seedqr`) is DEFERRED. v0.28.0 jade.rs handles only `register_multisig.multisig_file` JSON shape. New FOLLOWUP `wallet-import-jade-seedqr` filed at Phase P14A.
+**On-disk shape clarification (R1 I4 fold):** Jade's `register_multisig` is the RPC command name in the Jade firmware API. The `get_registered_multisig` RPC reply carries a top-level `multisig_file` field whose value is the same flat-file text format Coldcard's multisig export produces. Per Blockstream/Jade docs (`https://github.com/Blockstream/Jade/blob/master/docs/index.rst`), the export shape is:
+```json
+{
+  "id": "<request-id>",
+  "multisig_name": "<wallet-name>",
+  "multisig_file": "Name: …\nPolicy: …\nFormat: …\nDerivation: …\n\n<xfp>: <xpub>\n…"
+}
+```
+The `multisig_file` field at the JSON top level is the load-bearing v0.28.0 sniff marker (per §6.1.1).
+
+**Q1 lock:** SeedQR variant (`register_multisig` RPC + `seedqr` reply field, exact shape pending field-research at Phase P14A) is DEFERRED. v0.28.0 jade.rs handles only the `get_registered_multisig`-reply JSON shape (top-level `multisig_file` field). New FOLLOWUP `wallet-import-jade-seedqr` filed at Phase P14A.
 
 **Parse contract:** Extract `multisig_file` field. Delegate to `coldcard_multisig::parse_text(&inner_text)` (per §11.4). Annotate provenance as Jade rather than Coldcard.
 
@@ -472,7 +484,9 @@ pub(crate) struct JadeSourceMetadata {
 - `seed_version` (integer ∈ {11..71}; current Electrum FINAL_SEED_VERSION is 71)
 - `wallet_type` (string ∈ {`"standard"`, `"multisig"`, `"2fa"`, `"imported"`})
 
-Electrum's wallet file is Python-dict-serialized JSON; specific quirks (e.g., string-keyed nested dicts) require careful parsing. SnIFF only validates top-level structure; parsing depth follows in §11.6 parse contract.
+**Electrum-version scoping note (R1 I1 fold):** the 4-value `wallet_type` set above is the **current Electrum 4.x post-upgrade enumeration**. Legacy values `"old"`, `"xpub"`, `"bip44"` appear in pre-4.x wallet files but Electrum 4.x's auto-upgrade machinery rewrites them to `"standard"` on load (verified at `electrum/wallet_db.py::_convert_wallet_type` — see also: WebFetch confirmation that legacy values are upgrade-only). Users with pre-Electrum-4.x wallets must open them in Electrum 4.x first (auto-upgrade behavior) before exporting for ingest into mnemonic-toolkit. If a v0.28.0 user's blob carries a legacy `wallet_type` value, sniff returns `NoMatch` and P6 surfaces no Electrum-specific error; the user must upgrade via Electrum 4.x as a prerequisite. Tracking: pre-4.x direct ingest is out of v0.28.0 scope; if user demand surfaces, file new FOLLOWUP `wallet-import-electrum-pre-4x-legacy-types`.
+
+Electrum's wallet file is Python-dict-serialized JSON; specific quirks (e.g., string-keyed nested dicts) require careful parsing. Sniff only validates top-level structure; parsing depth follows in §11.6 parse contract.
 
 **Parse contract per `wallet_type`:**
 
@@ -525,7 +539,7 @@ v0.26.0 §8 module layout governs. v0.28.0 amendments:
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/mod.rs` — `ImportProvenance` enum extended with 6 new alphabetically-sorted variants (per §6.2 discipline).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/sniff.rs` — `SniffOutcome` enum extended (§6.2); `sniff_format` body rewritten (§6.3).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/roundtrip.rs` — 6 new `canonicalize_<format>` helpers (one per new parser, per §11.x).
-- AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:62` — `VENDOR_MARKER_KEYS` expanded per §6.1.1.
+- AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:74` (`const VENDOR_MARKER_KEYS:` declaration; doc-comment at `:59-72`) — `VENDOR_MARKER_KEYS` expanded per §6.1.1 (R1 I2 citation fix).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — 4-line parser arm (§10) + DEPRECATION notice (§10.4) + error template update (§10.5).
 - AMENDED: `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — 8 dispatch sites extended for 6 new formats (per plan-doc P0C pre-stub + per-parser P{N}C arm-flips).
 

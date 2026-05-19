@@ -65,8 +65,15 @@ pub(crate) struct BitcoinCoreParser;
 /// v0.28.0 P0A additions absorb markers for Phases P1-P6 parsers:
 /// - `seed_version`, `wallet_type` — Electrum wallet (SPEC §11.6)
 /// - `policyType`, `defaultPolicy`, `keystores` — Sparrow Wallet (SPEC §11.1)
-/// - `label`, `devices`, `blockheight` — Specter (SPEC §11.2)
-/// - `register_multisig`, `multisig_file` — Blockstream Jade (SPEC §11.5)
+/// - `devices`, `blockheight` — Specter (SPEC §11.2; `label` deliberately
+///   omitted per R0 I3 fold — Specter positive sniff uses `blockheight` +
+///   `devices` + `descriptor` + `label`, but `label` is generic enough that
+///   a legitimate Core blob carrying a top-level `label` key should not be
+///   excluded; Specter is still strongly disambiguated by `blockheight`)
+/// - `multisig_file` — Blockstream Jade (SPEC §11.5; the top-level reply
+///   field of Jade's `get_registered_multisig` RPC. R0 I4 fold removed
+///   `register_multisig` from this list — that's the RPC command name,
+///   not an on-disk JSON field, verified via Blockstream/Jade docs)
 ///
 /// Note: Coldcard generic-JSON (`chain`, `xfp`, `bipN`) is already covered
 /// by the `chain` exclusion (v0.26.0 original); ColdcardMultisig is a text
@@ -78,16 +85,14 @@ const VENDOR_MARKER_KEYS: &[&str] = &[
     "version",
     "bipname",
     "extendedPublicKey",
-    // v0.28.0 P0A additions (per-format vendor markers):
+    // v0.28.0 P0A additions (per-format vendor markers; R1 fold):
     "seed_version",
     "wallet_type",
     "policyType",
     "defaultPolicy",
     "keystores",
-    "label",
     "devices",
     "blockheight",
-    "register_multisig",
     "multisig_file",
 ];
 
