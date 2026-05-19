@@ -6,6 +6,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.27.2] — 2026-05-19
+
+Cleanup cycle closing 7 v0.27-tier FOLLOWUPs. Anchored on Phase 5b's deferred `ImportProvenance` enum refactor (tier promoted from `v0.28+` per Shape A approval). Sibling lockstep: mnemonic-gui v0.11.1 ships separately (workflow trigger filter + toolkit pin bump). Zero wire-shape change; patch bump valid.
+
+### Fixed
+
+- **xpub-search address-of-xpub `searched` count semantic clarified** (item 6, doc-only). The aggregate `searched` field on `ToolkitError::XpubSearchNoMatch` reports **candidate-comparisons performed** (`n_targets × gap_limit × chains`), not unique child-addresses derived. The existing docstring at `error.rs:230-237` previously elided the `n_targets` factor for address mode; restored. Per-target `scanned_external` / `scanned_internal` JSON fields (on `AddressResultJson::NoMatch` entries inside `AddressOfXpubResult.results`) report unique candidates per-target — unchanged. Closes `xpub-search-address-of-xpub-searched-count-semantic`.
+- **`mlock_unit::g1_1_single_page_pin_has_page_count_one` no longer flakes under parallel test execution** (item 4). Switched from `vec![0xAAu8; 64]` heap-allocator-luck buffer to `std::alloc::alloc_zeroed` with explicit page-aligned `Layout`. Closes `mlock-g1-1-test-page-alignment-luck`.
+
+### Changed
+
+- **`ParsedImport` internal representation** (item 1, internal refactor). Replaces the representable-invalid `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)` pair with a single `provenance: ImportProvenance` enum. Variants: `Bsms(Option<BsmsAuditFields>)` (the `Option` accommodates the 2-line BSMS path's no-audit case) and `BitcoinCore(CoreSourceMetadata)` (non-optional). Wire shape unchanged — back-compat accessors (`ParsedImport::bsms_audit()` / `source_metadata()` returning `Option<&_>`) keep envelope JSON emit code structurally identical. Closes `pr-26-import-provenance-enum-internal-refactor` (tier promoted from v0.28+).
+
+### Tests
+
+- **+1 cell** `dispatcher_arm_count_matches_pinned_constant` in `tests/cli_gui_schema_conditional_rules.rs` — regression guard for `build_subcommand_conditional_rules` arm count drift (pinned at 6). Closes `gui-schema-arm-drop-detector`.
+- **+4 unit cells** in `wallet_import/mod.rs::provenance_tests` for the new `ImportProvenance` enum + accessors (Bsms-with-audit, Bsms-without-audit, BitcoinCore-with-metadata, accessor-return-shape).
+- **Test count:** 1576 → ~1581 toolkit cells.
+
+### Conventions (CLAUDE.md)
+
+- **`enum ToolkitError` alphabetical-by-variant-name ordering** for new variants + new exhaustive match blocks. Pre-v0.27.2 variants not yet sorted — retroactive sort tracked as `error-rs-retroactive-alphabetical-sort` (v0.28+). Closes `error-rs-canonical-ordering-doc`.
+- **Per-phase architect-review agent outputs persist verbatim** to `design/agent-reports/<cycle>-phase-N-<round>-review.md` BEFORE the fold-and-commit step. Closes `compare-cost-agent-reports-back-fill`.
+- **Plan-doc + spec citations grep-verified at write time** (FOLLOWUPS.md line numbers presumed stale).
+- **Reviewer-loop continues after every fold** until 0 Critical / 0 Important.
+
+### Closed FOLLOWUPs (6 toolkit-side)
+
+- `pr-26-import-provenance-enum-internal-refactor` (Phase 2; tier promoted from v0.28+)
+- `error-rs-canonical-ordering-doc` (Phase 1.1)
+- `compare-cost-agent-reports-back-fill` (Phase 1.2)
+- `mlock-g1-1-test-page-alignment-luck` (Phase 1.3)
+- `gui-schema-arm-drop-detector` (Phase 1.4)
+- `xpub-search-address-of-xpub-searched-count-semantic` (Phase 1.5)
+
+### Filed FOLLOWUPs (2 new)
+
+- `error-rs-retroactive-alphabetical-sort` (v0.28+) — retroactively apply alphabetical ordering to existing ToolkitError variants + match blocks
+- `pr-26-import-provenance-three-variant-cleanup` (v0.28+) — promote `Bsms(Option<_>)` to three-variant `BsmsTwoLine` / `BsmsSixLine(BsmsAuditFields)` / `BitcoinCore(_)`
+
+### Sibling repo
+
+- mnemonic-gui v0.11.1 (separate ship) — workflow trigger filter extension (`gui-workflow-trigger-include-release-branches`) + toolkit pin bump v0.26.0 → v0.27.2 + envelope shape smoke cells.
+
 ## mnemonic-toolkit [0.27.1] — 2026-05-19
 
 PR-#26 post-merge fold cycle. A 5-agent retrospective audit on v0.26.0 (silent-failure-hunter + comment-analyzer + type-design-analyzer + pr-test-analyzer + code-reviewer) surfaced 19 Important findings across silent-failures, shape-mismatch defaults, comment-rot, test-coverage gaps, and type-design anti-patterns. v0.27.1 folds 5 of the 6 filed FOLLOWUPs in a single patch cycle (the sixth, `compare-cost-single-leaf-tr-input`, ships as filed-only with implementation deferred to a separate SPEC-anchor cycle).

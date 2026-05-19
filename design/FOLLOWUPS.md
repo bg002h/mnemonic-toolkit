@@ -106,7 +106,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **What:** Introduce `ImportProvenance { Bsms(BsmsAuditFields), BitcoinCore(CoreSourceMetadata) }` enum. Replace ParsedImport's pair with a single `provenance: ImportProvenance` field. Internal-only refactor — wire shape unchanged (envelope-side `bsms_audit` / `source_metadata` fields stay flat siblings; emit code matches on the new enum to populate them). Two practical options: (a) thread the enum through all 14 sites in one commit; (b) add back-compat `bsms_audit() -> Option<&BsmsAuditFields>` / `source_metadata() -> Option<&CoreSourceMetadata>` accessor methods, leave existing field-access sites unchanged. Option (b) is the lower-risk path.
 - **Why deferred:** Phase 5b's 14-site footprint exceeded the v0.27.1 cycle's scope window after Phase 5a + 5c absorbed the type-design budget. The representable-invalid pair (both-set, both-none) is purely internal — no wire-shape or user-visible surface — so deferral has zero impact on shipped behavior.
 - **Status:** resolved (cc15cf0; v0.27.2 Phase 2)
-- **Tier:** `v0.28+`
+- **Tier:** `v0.28+` → `v0.27.2` (resolved at v0.27.2 per Shape A approval)
 
 ### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`
 
