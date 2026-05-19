@@ -122,19 +122,20 @@ impl WalletFormatEmitter for BsmsEmitter {
 /// based on the unique set:
 /// - All keys carry `<0;1>/*` → emit `/0/*,/1/*` (canonical multipath).
 /// - All keys carry `/0/*` (single receive branch) → emit `/0/*`.
-/// - All keys carry `/0/*,/1/*` (heterogeneous single-branch unioned) →
-///   emit `/0/*,/1/*` (toolkit accepts this user-supplied shape as
-///   equivalent to the canonical multipath).
 /// - Any other shape OR mixed per-key suffixes → `No path restrictions`
 ///   per BIP-129 §Round 2 (the path-restrictions field is the wallet's
 ///   coordinator-declared addressable scope; emitting one that does not
-///   apply to all cosigners would misrepresent the bundle).
+///   apply to all cosigners would misrepresent the bundle). A hand-rolled
+///   `[fp/path]xpub/0/*,/1/*` per-key suffix falls into this arm — the
+///   toolkit does NOT special-case the unioned single-branch shape
+///   because miniscript's Display canonicalizes the multipath form to
+///   `<0;1>/*`; if a future input shape needs it, file a FOLLOWUP.
 ///
 /// The structural walk uses miniscript's canonical key `Display` form;
 /// closes the architect-flagged divergent-multipath false-positive that
 /// the prior string-contains heuristic carried.
 fn path_restrictions_line(parsed: &MsDescriptor<DescriptorPublicKey>) -> &'static str {
-    let mut suffixes: Vec<String> = Vec::new();
+    let mut suffixes: Vec<Option<String>> = Vec::new();
     parsed.for_each_key(|k| {
         suffixes.push(extract_key_suffix(&k.to_string()));
         true
@@ -142,11 +143,11 @@ fn path_restrictions_line(parsed: &MsDescriptor<DescriptorPublicKey>) -> &'stati
     if suffixes.is_empty() {
         return "No path restrictions";
     }
-    let canonical_multipath = suffixes.iter().all(|s| s == "/<0;1>/*");
+    let canonical_multipath = suffixes.iter().all(|s| s.as_deref() == Some("/<0;1>/*"));
     if canonical_multipath {
         return "/0/*,/1/*";
     }
-    let receive_only = suffixes.iter().all(|s| s == "/0/*");
+    let receive_only = suffixes.iter().all(|s| s.as_deref() == Some("/0/*"));
     if receive_only {
         return "/0/*";
     }
@@ -156,15 +157,18 @@ fn path_restrictions_line(parsed: &MsDescriptor<DescriptorPublicKey>) -> &'stati
 /// Extract the path-suffix from a `DescriptorPublicKey`'s canonical `Display`
 /// form. The Display shape is `[<fp>/<origin>]<xpub>[<suffix>]`; suffix
 /// begins at the first non-base58 char (`/` or `<`) after the xpub body.
-fn extract_key_suffix(key_str: &str) -> String {
+///
+/// Returns `None` when the key has no suffix at all (xpub with no trailing
+/// path) — distinguishing "no suffix" from "empty suffix" lets the caller's
+/// `==` predicates short-circuit cleanly instead of comparing against
+/// sentinel empty strings.
+fn extract_key_suffix(key_str: &str) -> Option<String> {
     let after_origin = match key_str.rfind(']') {
         Some(i) => &key_str[i + 1..],
         None => key_str,
     };
-    let suffix_start = after_origin
-        .find(['/', '<'])
-        .unwrap_or(after_origin.len());
-    after_origin[suffix_start..].to_string()
+    let suffix_start = after_origin.find(['/', '<'])?;
+    Some(after_origin[suffix_start..].to_string())
 }
 
 /// Map the toolkit's `CliNetwork` to `bitcoin::Network` for the

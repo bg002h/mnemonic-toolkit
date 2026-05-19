@@ -167,10 +167,12 @@ fn bsms_6_line_happy_path() {
     let out = run_import_stdin(&blob).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §2.4: 6-line WARNING about signature-not-verified fires.
+    // SPEC §2.4 (+ v0.27.0 update): 6-line NOTICE that inline signature is
+    // not verified by the 2/6-line parser fires; the v0.27.0 reword points
+    // the user at the new --bsms-round1 path for BIP-322 verification.
     assert!(
-        stderr.contains("signature present but not verified"),
-        "expected signature-not-verified WARNING; stderr was: {stderr}"
+        stderr.contains("not verified inline") && stderr.contains("--bsms-round1"),
+        "expected v0.27.0 6-line not-verified-inline NOTICE; stderr was: {stderr}"
     );
     // 6-line does NOT emit the 2-line reduced-form WARNING.
     assert!(!stderr.contains("2-line excerpt"));

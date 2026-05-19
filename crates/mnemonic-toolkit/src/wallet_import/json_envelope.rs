@@ -5,7 +5,7 @@
 //! typed Rust structs (`ImportJsonEnvelope` + the deserialization-friendly
 //! `BundleJsonView` mirror struct), decodes per-cosigner mk1 chunks back
 //! into `ResolvedSlot` values per SPEC §3.6.1, and constructs the
-//! 17-field `EmitInputs` contract per SPEC §3.7.1.
+//! 16-field `EmitInputs` contract per SPEC §3.7.1.
 //!
 //! Why a mirror struct (Phase 4 holistic review I1 fold). `crate::format::
 //! BundleJson` is `#[derive(Serialize)]` only at `format.rs:119` and
@@ -484,6 +484,93 @@ mod tests {
         ]"#;
         let err = parse_import_json_envelopes(raw, None, "--import-json").unwrap_err();
         assert!(format!("{err:?}").contains("envelope array has 2 entries"));
+    }
+
+    /// v0.27.0 Phase 6.5 PR-review I8: drift regression — serialize a fully
+    /// populated `BundleJson` and re-parse it via `BundleJsonView`. The
+    /// assertion that the parse succeeds + each typed field round-trips is
+    /// what catches drift if `BundleJson` gains, renames, or retypes a field
+    /// without a matching `BundleJsonView` update. (Compile alone is not
+    /// enough — `BundleJson` is Serialize-only and Serde tolerates unknown
+    /// fields by default on `BundleJsonView`'s side.)
+    #[test]
+    fn bundle_json_view_round_trips_every_field_of_bundle_json() {
+        use crate::format::{BundleJson, CosignerEntry, MkField, MultisigInfo};
+
+        let src = BundleJson {
+            schema_version: "4",
+            mode: "watch-only",
+            network: "mainnet",
+            template: Some("multisig"),
+            descriptor: Some("wsh(sortedmulti(2,@0,@1))#csum".to_string()),
+            account: 7,
+            origin_path: Some("m/48'/0'/7'/2'".to_string()),
+            origin_paths: Some(vec!["m/48'/0'/0'/2'".to_string(), "m/48'/0'/1'/2'".to_string()]),
+            master_fingerprint: Some("deadbeef".to_string()),
+            ms1: vec!["ms1abc".to_string(), "".to_string()],
+            mk1: MkField::Multi(vec![
+                vec!["a0".to_string(), "a1".to_string()],
+                vec!["b0".to_string(), "b1".to_string()],
+            ]),
+            md1: vec!["md1xyz".to_string()],
+            multisig: Some(MultisigInfo {
+                template: "sortedmulti",
+                threshold: 2,
+                cosigner_count: 2,
+                path_family: "bip48",
+                cosigners: vec![
+                    CosignerEntry {
+                        index: 0,
+                        master_fingerprint: Some("11111111".to_string()),
+                        origin_path: "m/48'/0'/0'/2'".to_string(),
+                        xpub: "xpub6A".to_string(),
+                    },
+                    CosignerEntry {
+                        index: 1,
+                        master_fingerprint: Some("22222222".to_string()),
+                        origin_path: "m/48'/0'/1'/2'".to_string(),
+                        xpub: "xpub6B".to_string(),
+                    },
+                ],
+            }),
+            privacy_preserving: false,
+        };
+
+        let wire = serde_json::to_string(&src).expect("BundleJson serialize");
+        let v: BundleJsonView = serde_json::from_str(&wire).expect("BundleJsonView re-parse");
+
+        assert_eq!(v.schema_version, "4");
+        assert_eq!(v.mode, "watch-only");
+        assert_eq!(v.network, "mainnet");
+        assert_eq!(v.template.as_deref(), Some("multisig"));
+        assert_eq!(
+            v.descriptor.as_deref(),
+            Some("wsh(sortedmulti(2,@0,@1))#csum")
+        );
+        assert_eq!(v.account, 7);
+        assert_eq!(v.origin_path.as_deref(), Some("m/48'/0'/7'/2'"));
+        assert_eq!(
+            v.origin_paths.as_deref(),
+            Some(["m/48'/0'/0'/2'".to_string(), "m/48'/0'/1'/2'".to_string()].as_slice())
+        );
+        assert_eq!(v.master_fingerprint.as_deref(), Some("deadbeef"));
+        assert_eq!(v.ms1, vec!["ms1abc".to_string(), "".to_string()]);
+        assert_eq!(v.mk1.len(), 2, "Multi-form outer length");
+        assert_eq!(v.mk1[0], vec!["a0".to_string(), "a1".to_string()]);
+        assert_eq!(v.mk1[1], vec!["b0".to_string(), "b1".to_string()]);
+        assert_eq!(v.md1, vec!["md1xyz".to_string()]);
+        let m = v.multisig.expect("multisig view present");
+        assert_eq!(m.template, "sortedmulti");
+        assert_eq!(m.threshold, 2);
+        assert_eq!(m.cosigner_count, 2);
+        assert_eq!(m.path_family, "bip48");
+        assert_eq!(m.cosigners.len(), 2);
+        assert_eq!(m.cosigners[0].index, 0);
+        assert_eq!(m.cosigners[0].master_fingerprint.as_deref(), Some("11111111"));
+        assert_eq!(m.cosigners[0].origin_path, "m/48'/0'/0'/2'");
+        assert_eq!(m.cosigners[0].xpub, "xpub6A");
+        assert_eq!(m.cosigners[1].index, 1);
+        assert!(!v.privacy_preserving);
     }
 
     /// `parse_import_json_envelopes` errors on out-of-range index.

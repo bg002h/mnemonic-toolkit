@@ -398,6 +398,25 @@ mod tests {
         ));
     }
 
+    /// v0.27.0 Phase 6.5 PR-review S3 fold — boundary test: exactly
+    /// `MAX_DESCRIPTION_LEN` (80) chars MUST parse; one more (81) MUST
+    /// reject. Pinning both sides locks the off-by-one risk.
+    #[test]
+    fn parse_description_at_boundary_80_accepts_81_rejects() {
+        let at_limit = "x".repeat(MAX_DESCRIPTION_LEN);
+        let one_over = "x".repeat(MAX_DESCRIPTION_LEN + 1);
+
+        let ok = TV1_RECORD.replacen("Signer 1 key", &at_limit, 1);
+        let r = parse_round1(&ok).expect("80-char description must parse");
+        assert_eq!(r.description.chars().count(), MAX_DESCRIPTION_LEN);
+
+        let bad = TV1_RECORD.replacen("Signer 1 key", &one_over, 1);
+        assert!(matches!(
+            parse_round1(&bad),
+            Err(ToolkitError::BsmsRound1Malformed { .. })
+        ));
+    }
+
     #[test]
     fn signer_pubkey_for_raw_pubkey_returns_embedded_pubkey() {
         let r = parse_round1(TV1_RECORD).expect("TV-1");

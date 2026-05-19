@@ -315,13 +315,104 @@ fn cross_format_bsms_to_bitcoin_core_to_import_round_trip() {
 
     // Step 3: assert each Bitcoin Core descriptor body contains all 3
     // cosigner xpubs from the BSMS source + the 48'/0'/0'/2' origin paths.
+    // Phase 6.5 PR-review S4 fold: assert each full xpub (not just a prefix
+    // substring) so a truncation/canonicalization regression cannot pass.
+    let xpub_a = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    let xpub_b = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
+    let xpub_c = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
     for entry in arr {
         let desc = entry["desc"].as_str().unwrap();
-        assert!(desc.contains("xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJA"));
-        assert!(desc.contains("xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62"));
-        assert!(desc.contains("xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxi"));
+        assert!(desc.contains(xpub_a), "missing full xpub_a in: {desc}");
+        assert!(desc.contains(xpub_b), "missing full xpub_b in: {desc}");
+        assert!(desc.contains(xpub_c), "missing full xpub_c in: {desc}");
         assert!(desc.contains("b8688df1/48'/0'/0'/2'"));
         assert!(desc.contains("5436d724/48'/0'/0'/2'"));
         assert!(desc.contains("28645006/48'/0'/0'/2'"));
     }
+}
+
+// ============================================================================
+// Cell 12 — Phase 6.5 PR-review I4: --from-import-json-index out-of-bounds
+// on EXPORT side (bundle side already covered in cli_bundle_import_json.rs).
+// ============================================================================
+
+#[test]
+fn export_wallet_from_import_json_index_out_of_bounds_errors() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("multi.json");
+    std::fs::write(&p, multi_entry_envelope_json()).unwrap();
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            p.to_str().unwrap(),
+            "--from-import-json-index",
+            "9",
+            "--format",
+            "bitcoin-core",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("index 9") && stderr.contains("2 entries"),
+        "expected OOB diagnostic naming both index and length; got: {stderr}"
+    );
+}
+
+// ============================================================================
+// Cell 13 — Phase 6.5 PR-review I5: empty-array envelope must reject with a
+// pointer-text error rather than panic or "no entries" silent-skip.
+// ============================================================================
+
+#[test]
+fn export_wallet_from_import_json_empty_array_errors() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("empty.json");
+    std::fs::write(&p, "[]").unwrap();
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            p.to_str().unwrap(),
+            "--format",
+            "bitcoin-core",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("empty") || stderr.contains("0 entries") || stderr.contains("no entries"),
+        "expected empty-envelope diagnostic; got: {stderr}"
+    );
+}
+
+// ============================================================================
+// Cell 14 — Phase 6.5 PR-review I6: malformed-JSON envelope must surface a
+// parse error rather than producing garbage output.
+// ============================================================================
+
+#[test]
+fn export_wallet_from_import_json_malformed_json_errors() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("malformed.json");
+    std::fs::write(&p, "not json at all {{{").unwrap();
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            p.to_str().unwrap(),
+            "--format",
+            "bitcoin-core",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("json") || stderr.contains("parse"),
+        "expected JSON-parse diagnostic; got: {stderr}"
+    );
 }

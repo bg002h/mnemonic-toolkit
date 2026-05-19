@@ -109,7 +109,9 @@ impl WalletFormatParser for BsmsParser {
                 let signature = lines[5].to_string();
                 writeln!(
                     stderr,
-                    "warning: import-wallet: bsms: signature present but not verified in v0.26.0; see FOLLOWUP `bsms-verify-signatures`"
+                    "notice: import-wallet: bsms: 6-line Round-1 signature in the blob \
+                     is not verified inline by this 2/6-line parser; supply the same record \
+                     via --bsms-round1 <FILE> to engage v0.27.0 BIP-322 verification"
                 )
                 .map_err(ToolkitError::Io)?;
                 (
@@ -220,7 +222,11 @@ impl WalletFormatParser for BsmsParser {
                 let is_taproot = matches!(parsed, MsDescriptor::Tr(_));
                 if !is_taproot {
                     match crate::derive_address::derive_first_address(&parsed, network) {
-                        Ok(computed) if computed != a.first_address => {
+                        Ok(computed) if computed == a.first_address => {
+                            // Match: silent. The audit field is consistent
+                            // with the toolkit-derived address.
+                        }
+                        Ok(computed) => {
                             // SPEC §2.4 row 3 template (restored at v0.27.0
                             // Phase 3; FOLLOWUP `bsms-first-address-verify`
                             // body line 2091). `at path <P>` segment sources
@@ -234,15 +240,23 @@ impl WalletFormatParser for BsmsParser {
                             )
                             .map_err(ToolkitError::Io)?;
                         }
-                        _ => {
-                            // Match (no WARNING) or derivation failure
-                            // (skip; downstream parse already validated the
-                            // descriptor — a render-side error here is not
-                            // a fatal-import concern in v0.27.0). Taproot
-                            // descriptors short-circuit above this match
-                            // because BIP-129 §1 prerequisites pre-date
-                            // BIP-386; their first-address derivation is
-                            // out-of-scope for v0.27.0.
+                        Err(e) => {
+                            // v0.27.0 Phase 6.5 PR-review I3 fold:
+                            // surface derivation failure as a stderr
+                            // NOTICE rather than silently conflating it
+                            // with a match. The user opted into BSMS
+                            // first-address verify by including the
+                            // 6-line audit fields; they deserve to know
+                            // it was skipped. Downstream parse already
+                            // validated the descriptor structurally, so
+                            // this remains non-fatal.
+                            writeln!(
+                                stderr,
+                                "notice: import-wallet: bsms: first-address verify could not run: {e}; \
+                                 audit.first_address={declared} preserved verbatim in envelope",
+                                declared = a.first_address,
+                            )
+                            .map_err(ToolkitError::Io)?;
                         }
                     }
                 }

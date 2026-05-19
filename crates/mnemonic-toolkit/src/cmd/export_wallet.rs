@@ -486,7 +486,10 @@ pub fn run<W: Write, E: Write>(
     }?;
 
     if args.output == "-" {
-        let _ = writeln!(stdout, "{emitted}");
+        // v0.27.0 Phase 6.5 PR-review C1 fold: propagate stdout write
+        // failure (broken pipe / disk full / closed handle) as a typed
+        // I/O error rather than silently exiting 0 with empty stdout.
+        writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
@@ -497,7 +500,7 @@ pub fn run<W: Write, E: Write>(
 /// v0.27.0 Phase 5 entry — `export-wallet --from-import-json <FILE|->`.
 /// Consumes an `import-wallet --json` envelope (SPEC §3.2 wire shape;
 /// Phase 4 ship) and emits a per-format wallet config. Per plan §3.7 +
-/// §3.7.1 (17-field EmitInputs contract).
+/// §3.7.1 (16-field EmitInputs contract).
 fn run_from_import_json<W: Write>(
     args: &ExportWalletArgs,
     stdout: &mut W,
@@ -646,7 +649,10 @@ fn run_from_import_json<W: Write>(
     }?;
 
     if args.output == "-" {
-        let _ = writeln!(stdout, "{emitted}");
+        // v0.27.0 Phase 6.5 PR-review C1 fold: propagate stdout write
+        // failure (broken pipe / disk full / closed handle) as a typed
+        // I/O error rather than silently exiting 0 with empty stdout.
+        writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;

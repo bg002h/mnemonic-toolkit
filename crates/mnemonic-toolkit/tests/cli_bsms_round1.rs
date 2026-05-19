@@ -38,6 +38,13 @@ const TV3_FIXTURE: &str = "tests/fixtures/bsms_round1/tv3-standard-xpub-signer1.
 const TV1_SIGNER_PUBKEY: &str =
     "026d15412460ba0d881c21837bb999233896085a9ed4e5445bd637c10e579768ba";
 
+/// TV-2's xpub-embedded compressed public key (the xpub's OWN
+/// `public_key.serialize()` — not a child derivation). Pinning the exact
+/// hex distinguishes "xpub path uses embedded pubkey" from "xpub path
+/// derives a child" — the v0.27.0 PR-review S5 ask.
+const TV2_SIGNER_PUBKEY: &str =
+    "025fa5a6544e85c02a2c33f5090f573d9ba83ec54a852211d39f844f04b8e8b0a3";
+
 /// Cell 1 — TV-1 NO_ENCRYPTION/pubkey Signer 1 verifies under lenient default.
 #[test]
 fn cell_1_tv1_no_encryption_pubkey_signer1_verifies() {
@@ -60,8 +67,10 @@ fn cell_2_tv2_no_encryption_xpub_signer1_verifies() {
         .code(0)
         .stdout(predicate::str::contains("\"signature_verified\":true"))
         // xpub TV-2 embedded pubkey (xpub.public_key.serialize()) — load-bearing
-        // assertion that xpub path uses the OWN embedded pubkey, NOT a derived child.
-        .stdout(predicate::str::contains("\"signer_pubkey\""));
+        // assertion that xpub path uses the OWN embedded pubkey, NOT a derived
+        // child. Phase 6.5 PR-review S5 fold: pin the exact hex (not just the
+        // field's presence) so a "derive child instead" regression cannot pass.
+        .stdout(predicate::str::contains(TV2_SIGNER_PUBKEY));
 }
 
 /// Cell 3 — TV-3 STANDARD encryption Signer 1 verifies (TOKEN is signed-body member).

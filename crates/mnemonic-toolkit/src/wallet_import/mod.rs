@@ -181,8 +181,9 @@ pub(crate) fn apply_select_descriptor(
 }
 
 /// SPEC §8.1 — BSMS Round-2 audit metadata. Preserved for `--json` envelope
-/// emission; `signature_verified` is always `false` in v0.26.0 (FOLLOWUP
-/// `bsms-verify-signatures`).
+/// emission; this field captures inline 2/6-line parser audit context only and
+/// is unrelated to v0.27.0's `--bsms-round1 <FILE>` BIP-322 verification path
+/// (which emits `bsms_round1_verifications[*].signature_verified` instead).
 #[derive(Debug, Clone)]
 pub(crate) struct BsmsAuditFields {
     pub(crate) token: String,
