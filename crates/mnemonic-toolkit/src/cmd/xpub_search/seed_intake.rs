@@ -83,8 +83,17 @@ where
     }
 
     let source: Source = if let Some(p) = args.phrase() {
-        secret_in_argv_warning(stderr, "--phrase", "--phrase-stdin");
-        Source::Phrase(Zeroizing::new(normalize_phrase(p)))
+        // v0.26.0 §3 — resolve `@env:<VAR>` sentinel BEFORE the secret-in-argv
+        // advisory and downstream normalize_phrase. Skip the advisory entirely
+        // when the user routed through the env-var channel (the literal seed
+        // is not in argv — only the sentinel string is).
+        if p.starts_with("@env:") {
+            let resolved = crate::env_sentinel::resolve_env_var_sentinel(p, "--phrase")?;
+            Source::Phrase(Zeroizing::new(normalize_phrase(&resolved)))
+        } else {
+            secret_in_argv_warning(stderr, "--phrase", "--phrase-stdin");
+            Source::Phrase(Zeroizing::new(normalize_phrase(p)))
+        }
     } else if args.phrase_stdin() {
         let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
