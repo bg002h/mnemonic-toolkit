@@ -1,6 +1,6 @@
 # PLAN — mnemonic-toolkit v0.27.1 (PR-#26 post-merge fold cycle)
 
-**Status:** R2 — opus R2 verdict GREEN (1 trivial Minor on Phase 6 CHANGELOG-stub wording folded inline). Plan-doc ready for execution post-PR-#27-merge.
+**Status:** R3 — Phase 0 recon (`design/agent-reports/v0_27_1-phase-0-recon.md`) folded inline (line-range corrections for C1 + I7; I9-wontfix-clarification on Phase 3 file list). PR #27 merged at `77ebfca` (post-recon); v0.27.1 cycle execution unblocked.
 **Scope:** 6 FOLLOWUPs filed against PR #26 post-merge comprehensive review.
 **Pre-cycle baseline:** master at the post-merge commit of PR #27 (currently OPEN; cycle blocks on that merge per architect advisory).
 **Authorship:** single-instance.
@@ -229,9 +229,9 @@ Item #6 (`compare-cost-single-leaf-tr-input`) is **filed as a v0.27.1 FOLLOWUP**
 1. **Commit 1 (docs-only):** SPEC amendment per Q1a — add `error: String` field to `roundtrip` `canonicalize_failed` branch in `SPEC_wallet_import_v0_26_0.md` §2.2 + `SPEC_mnemonic_toolkit_v0_5.md` §X.
 2. **Commit 2 (impl + cells):** stderr warning arm + JSON-mode `error` field wiring + 3 new cells.
 
-**Files (impl):**
-- `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:471-478` (stderr warning arm)
-- `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:334-338, 396-402` (JSON-mode roundtrip emit)
+**Files (impl) — R3 line-range corrections per Phase 0 recon S1:**
+- `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:710-736` (function `emit_roundtrip_stderr_warning`); two `Err(_) => return Ok(())` arms at **lines 720 + 724**. (Drifted from agent-report's `:471-478` due to v0.27.0 Phase 2-5 additions.)
+- `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:425-428` (`canonicalize_*.ok()` pattern that silently discards the canonicalize error) + `cmd/import_wallet.rs:552-557` (the `None =>` branch emitting `"status":"canonicalize_failed"` with no `error` field — the additive-field site). Drifted from agent-report's `:334-338, 396-402`.
 
 **New cells (`tests/cli_import_wallet_roundtrip.rs` + `tests/cli_import_wallet_bitcoin_core.rs`):**
 1. `roundtrip_canonicalize_failure_emits_stderr_warning_lenient` — feed a Bitcoin Core blob the parser accepts + canonicalizer rejects; assert exit 0 + stderr contains "roundtrip check skipped: canonicalize_bitcoin_core failed".
@@ -265,11 +265,12 @@ Item #6 (`compare-cost-single-leaf-tr-input`) is **filed as a v0.27.1 FOLLOWUP**
 
 **Scope:** Per Q3.
 
-**Files:**
+**Files (R3 — I9 entry removed per Phase 0 recon S3; Q3 wontfix confirmed via Q3a §7.0 anchor verification):**
 - `crates/mnemonic-toolkit/src/env_sentinel.rs:1-13` (C2 — `--slot @N.ms1=` → `--from <node>=` per SPEC §3.1)
-- `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:10` + `bitcoin_core.rs:34` (I9 — §7.0.a..d citations rewritten to in-prose locks)
+- ~~`crates/mnemonic-toolkit/src/wallet_import/bsms.rs:10` + `bitcoin_core.rs:34`~~ (I9 — **WONTFIX** per Q3 + Q3a verification; the §7.0.a citations correctly reference `IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md §7.0.a` cross-doc anchor. Leave both source comments untouched.)
 - `crates/mnemonic-toolkit/src/error.rs:181-222` (I10 — "Phase N emits" replaced with function-anchored citations)
 - `crates/mnemonic-toolkit/src/cost/mod.rs:75` (I11 — drop "in Phase 2" from user-visible string)
+- `crates/mnemonic-toolkit/src/cost/strip.rs:5,51` + `cost/mod.rs:75` (I8 — verify the `compare-cost-single-leaf-tr-input` slug resolves via `grep -F` per Q3 lock; **leave cite text intact** since FOLLOWUP was filed in v0.27.0 cycle `53a1bf6`)
 
 **New cells:** none. Comment-rot sweep verified by `cargo doc --no-deps` clean build + `grep -F` checks for the removed phrases (run as a Phase 3 R0 manual check).
 
@@ -331,7 +332,7 @@ Item #6 (`compare-cost-single-leaf-tr-input`) is **filed as a v0.27.1 FOLLOWUP**
 - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:122-124` (construct site)
 - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (envelope emit if it touches signature_verified directly)
 
-**Pattern:** mirror `Round1VerificationStatus` enum from `cmd/import_wallet.rs:843-850` (Phase 6.5 I7 precedent).
+**Pattern:** mirror `Round1VerificationStatus` enum from `cmd/import_wallet.rs:844-850` (Phase 6.5 I7 precedent; struct `Round1Verification` at line 835). (R3 — off-by-one correction per Phase 0 recon S5.)
 
 **New cells:** 1 drift regression — envelope shape byte-equality.
 
@@ -408,4 +409,5 @@ Item #6 (`compare-cost-single-leaf-tr-input`) is **filed as a v0.27.1 FOLLOWUP**
 | R0 | 2026-05-19 | Initial draft | opus R0: YELLOW (4 Important + 3 Minor + 3 new Q-items) |
 | R1 | 2026-05-19 | R0 folds: I1 → Q5a pivot (private-constructor refactor — flat-enum & flatten-via-struct-variant approaches both proven wire-shape-incompatible via cargo-build smoke test); I2 → Q1 corrected (status is SPEC-locked) + Q1a (SPEC amendment-first); I3 → Q3 reversed to wontfix + Q3a (§7.0 anchor verify); I4 → extract_threshold line ranges corrected; M1 → Phase 5-after-Phase-4 rationale documented; M2 → I16 helper-extract fallback pre-locked; M3 → Phase 6 task 4 verifies #6 slug stays open; §2 budget + §5 acceptance gates + §7 risks updated | opus R1: YELLOW (1 Important + 3 Minor + 2 new Q-items) |
 | R2 | 2026-05-19 | R1 folds: I1 (R1) → Q5b lock to option (a) — ship API-discipline-scaffolding builders in v0.27.1 + file new FOLLOWUP `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution` targeting v0.28+; M1 → Phase 5 LOC tightened to ~180; M2 → §2 + §5 cell-count reconciled to 22; M3 → Phase 5a cell-count fixed at 3 (no 4th `address_of_xpub` cell since no edit); Q5c → drift-fixture pinning discipline locked; §4 Phase 6 task 3 amended to include the new FOLLOWUP filing | opus R2: GREEN (1 trivial Minor on CHANGELOG-stub wording folded inline) |
+| R3 | 2026-05-19 | Phase 0 recon folds (`design/agent-reports/v0_27_1-phase-0-recon.md`): S1 → Phase 1 file-list line ranges corrected (C1 `:471-478` → `:710-736` Err arms @ 720+724; I7 `:334-338, 396-402` → `:425-428` `.ok()` pattern + `:552-557` missing-error branch); S3 → Phase 3 file-list removes I9 entries (wontfix per Q3+Q3a) + adds I8 cite-resolution check; S5 → Phase 5c `Round1VerificationStatus` precedent cite corrected to `:844-850` (struct `Round1Verification` at 835). Phase 0 verdict was YELLOW pending these; post-fold preconditions are GREEN | recon-folds-only, no further re-review needed |
 
