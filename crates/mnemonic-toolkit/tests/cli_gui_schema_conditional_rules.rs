@@ -333,6 +333,54 @@ fn convert_has_two_passphrase_mutexes() {
     assert_eq!(rules.len(), 4);
 }
 
+#[test]
+fn compare_cost_has_one_input_mutex() {
+    // v0.26.0 — compare-cost's `--miniscript` ↔ `--descriptor` mutual
+    // exclusion is the drift-gate keeping mnemonic-gui's hand-maintained
+    // `form::conditional::compare_cost` helper in sync with the toolkit's
+    // clap `conflicts_with`. Pins the count + the two symmetric
+    // FlagPresent→Disabled tuples so a future deletion of either rule
+    // fails CI loudly (mirrors the bundle/convert rule-count discipline).
+    let v = run_gui_schema();
+    let rules = conditional_rules(&v, "compare-cost");
+    assert_eq!(
+        rules.len(),
+        2,
+        "compare-cost must emit exactly 2 conditional_rules \
+         (--miniscript→disable --descriptor, --descriptor→disable --miniscript). \
+         Got: {} rules",
+        rules.len()
+    );
+    let tuples: Vec<(String, String, String)> = rules
+        .iter()
+        .map(|r| {
+            (
+                r["when"]["kind"].as_str().unwrap().to_string(),
+                r["when"]["flag"].as_str().unwrap().to_string(),
+                r["effect"]["flag"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    let mut sorted = tuples.clone();
+    sorted.sort();
+    assert_eq!(
+        sorted,
+        vec![
+            ("flag_present".to_string(), "--descriptor".to_string(), "--miniscript".to_string()),
+            ("flag_present".to_string(), "--miniscript".to_string(), "--descriptor".to_string()),
+        ],
+        "compare-cost rules must be the two symmetric FlagPresent→Disabled \
+         tuples; got: {tuples:?}"
+    );
+    for rule in rules {
+        assert_eq!(
+            rule["effect"]["visibility"].as_str().unwrap(),
+            "disabled",
+            "compare-cost mutex effects must all be Disabled; got rule: {rule}"
+        );
+    }
+}
+
 // ── §6.10.2 Predicate AST shape ────────────────────────────────────────
 
 #[test]

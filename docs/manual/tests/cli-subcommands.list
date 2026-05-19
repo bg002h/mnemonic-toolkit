@@ -21,6 +21,7 @@ mnemonic slip39 combine
 mnemonic gui-schema
 mnemonic repair
 mnemonic inspect
+mnemonic compare-cost
 mnemonic xpub-search path-of-xpub
 mnemonic xpub-search account-of-descriptor
 mnemonic xpub-search address-of-xpub

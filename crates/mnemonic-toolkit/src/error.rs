@@ -154,6 +154,8 @@ pub enum ToolkitError {
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
     Repair(crate::repair::RepairError),
+    /// v0.26.0 compare-cost subcommand error. SPEC §9.
+    CompareCost(crate::cost::CompareCostError),
     /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
     /// Synthesized by `repair::try_repair_and_short_circuit` on
     /// repair-success; `?`-propagated through the helper hierarchy up to
@@ -392,6 +394,7 @@ impl ToolkitError {
             | ToolkitError::HrpMismatch { .. }
             | ToolkitError::UnknownHrp { .. }
             | ToolkitError::Repair(_) => 2,
+            ToolkitError::CompareCost(e) => e.exit_code(),
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
@@ -450,6 +453,7 @@ impl ToolkitError {
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::CompareCost(_) => "CompareCost",
             ToolkitError::Io(_) => "Io",
             ToolkitError::EnvVarMissing { .. } => "EnvVarMissing",
             ToolkitError::ImportWalletAmbiguousFormat(_) => "ImportWalletAmbiguousFormat",
@@ -558,6 +562,9 @@ impl ToolkitError {
                 String::new()
             }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            // v0.26.0 variants in alphabetical order (canonical ordering for
+            // I2 multi-PR convergence).
+            ToolkitError::CompareCost(e) => format!("{e}"),
             ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
                 EnvVarMissingReason::Unset => format!(
                     "{flag}: env-var {var} referenced by sentinel is not set"
@@ -566,7 +573,6 @@ impl ToolkitError {
                     format!("{flag}: invalid env-var name `{var}`")
                 }
             },
-            // v0.26.0 wallet-import message templates per SPEC §2.4.
             ToolkitError::ImportWalletAmbiguousFormat(detail) => detail.clone(),
             ToolkitError::ImportWalletFormatMismatch { supplied, sniffed } => format!(
                 "import-wallet: --format {supplied} supplied but blob looks like {sniffed}"

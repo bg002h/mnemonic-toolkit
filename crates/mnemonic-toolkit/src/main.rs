@@ -3,6 +3,7 @@
 mod bip85;
 mod bundle_unified;
 mod cmd;
+mod cost;
 mod derive;
 mod derive_slot;
 mod electrum;
@@ -79,6 +80,8 @@ enum Command {
     Repair(cmd::repair::RepairArgs),
     /// describe the contents of an m-format card (ms1 / mk1 / md1)
     Inspect(cmd::inspect::InspectArgs),
+    /// compare wsh-vs-tr per-spending-condition cost for a miniscript or descriptor
+    CompareCost(cmd::compare_cost::CompareCostArgs),
     /// search for a target (xpub, descriptor, address, or passphrase) under a seed or xpub
     XpubSearch(cmd::xpub_search::XpubSearchArgs),
 }
@@ -122,6 +125,7 @@ fn main() -> ExitCode {
         }
         Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
         Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout).map(|_| 0),
         Command::XpubSearch(args) => {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }

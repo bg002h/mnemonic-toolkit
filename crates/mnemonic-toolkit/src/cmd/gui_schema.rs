@@ -340,8 +340,46 @@ fn build_subcommand_conditional_rules(name: &str) -> Vec<ConditionalRule> {
         "export-wallet" => export_wallet_conditional_rules(),
         "convert" => convert_conditional_rules(),
         "derive-child" => derive_child_conditional_rules(),
+        "compare-cost" => compare_cost_conditional_rules(),
         _ => Vec::new(),
     }
+}
+
+fn compare_cost_conditional_rules() -> Vec<ConditionalRule> {
+    // v0.26.0 — `--miniscript` and `--descriptor` are mutually exclusive
+    // (clap-derive `conflicts_with`). The GUI mirrors this UX-side via
+    // `form::conditional::compare_cost` in mnemonic-gui; this emission is
+    // the drift-gate that keeps the GUI's hand-maintained mutex helper
+    // in sync with the toolkit's clap surface.
+    vec![
+        ConditionalRule {
+            rationale: "--miniscript and --descriptor are mutually exclusive \
+                        (compare-cost's exactly-one-of input flag rule)."
+                .to_string(),
+            spec_ref: "SPEC §6 compare-cost; cmd/compare_cost.rs clap-derive conflicts_with"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--miniscript".to_string(),
+            },
+            effect: Effect {
+                flag: "--descriptor".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+        ConditionalRule {
+            rationale: "--miniscript and --descriptor are mutually exclusive (symmetric direction)."
+                .to_string(),
+            spec_ref: "SPEC §6 compare-cost; cmd/compare_cost.rs clap-derive conflicts_with"
+                .to_string(),
+            when: Predicate::FlagPresent {
+                flag: "--descriptor".to_string(),
+            },
+            effect: Effect {
+                flag: "--miniscript".to_string(),
+                visibility: VisibilityProjection::Disabled,
+            },
+        },
+    ]
 }
 
 fn bundle_conditional_rules() -> Vec<ConditionalRule> {
