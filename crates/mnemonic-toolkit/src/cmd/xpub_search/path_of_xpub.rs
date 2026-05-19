@@ -162,6 +162,54 @@ pub struct PathOfXpubResult {
     pub searched_count: usize,
 }
 
+/// v0.27.1 Phase 5a API-discipline scaffolding for `PathOfXpubResult`.
+///
+/// Construct a match-arm result that enforces the `result:"match"` ↔
+/// `Some(path/template)` correlation at the call site. Fields remain `pub` for
+/// back-compat (wire-shape is byte-preserved); the type-level invariant fix
+/// (tagged enum + `#[serde(skip_serializing_if)]`) requires the wire-shape
+/// change deferred to v0.28+ — tracked by FOLLOWUP
+/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+///
+/// `account` remains `Option<u32>` per existing semantics (None for
+/// `--add-path` templates without an account token).
+pub(super) fn build_path_match(
+    path: String,
+    template: String,
+    account: Option<u32>,
+    target_xpub_canonical: String,
+    target_xpub_variant: Option<&'static str>,
+    searched_count: usize,
+) -> PathOfXpubResult {
+    PathOfXpubResult {
+        result: "match",
+        path: Some(path),
+        template: Some(template),
+        account,
+        target_xpub_canonical,
+        target_xpub_variant,
+        searched_count,
+    }
+}
+
+/// Construct a no-match-arm result. Fields representing the matched payload
+/// are pinned to `None` at the boundary; envelope-scope fields are preserved.
+pub(super) fn build_path_no_match(
+    target_xpub_canonical: String,
+    target_xpub_variant: Option<&'static str>,
+    searched_count: usize,
+) -> PathOfXpubResult {
+    PathOfXpubResult {
+        result: "no_match",
+        path: None,
+        template: None,
+        account: None,
+        target_xpub_canonical,
+        target_xpub_variant,
+        searched_count,
+    }
+}
+
 pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
     args: &PathOfXpubArgs,
     stdin: &mut R,
@@ -240,15 +288,14 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
             if args.json {
                 let envelope = XpubSearchEnvelope {
                     schema_version: "1",
-                    body: XpubSearchJson::PathOfXpub(PathOfXpubResult {
-                        result: "match",
-                        path: Some(format!("m/{}", m.path)),
-                        template: Some(m.template_name.clone()),
-                        account: m.account,
-                        target_xpub_canonical: target_xpub_canonical.clone(),
-                        target_xpub_variant: target_variant,
+                    body: XpubSearchJson::PathOfXpub(build_path_match(
+                        format!("m/{}", m.path),
+                        m.template_name.clone(),
+                        m.account,
+                        target_xpub_canonical.clone(),
+                        target_variant,
                         searched_count,
-                    }),
+                    )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
                     ToolkitError::BadInput(format!("path-of-xpub JSON serialize: {e}"))
@@ -286,15 +333,11 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
                 // return the typed no-match error so the exit code routes to 4.
                 let envelope = XpubSearchEnvelope {
                     schema_version: "1",
-                    body: XpubSearchJson::PathOfXpub(PathOfXpubResult {
-                        result: "no_match",
-                        path: None,
-                        template: None,
-                        account: None,
-                        target_xpub_canonical: target_xpub_canonical.clone(),
-                        target_xpub_variant: target_variant,
+                    body: XpubSearchJson::PathOfXpub(build_path_no_match(
+                        target_xpub_canonical.clone(),
+                        target_variant,
                         searched_count,
-                    }),
+                    )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
                     ToolkitError::BadInput(format!("path-of-xpub JSON serialize: {e}"))

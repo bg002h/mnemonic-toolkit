@@ -1,10 +1,11 @@
 //! Descriptor wrapper-stripping. SPEC §2.
 //!
-//! Phase 2 supports `wsh(M)`, `sh(wsh(M))`, and refuses `tr(...)` /
-//! other wrapper kinds. Single-leaf-tr support is deferred to a v0.27
-//! FOLLOWUP (`compare-cost-single-leaf-tr-input`) because the inner
-//! miniscript M is Tap-context with x-only keys, requiring a tap→
-//! segv0 key+context conversion path not yet built.
+//! Supports `wsh(M)` and `sh(wsh(M))`; refuses `tr(...)` and other
+//! wrapper kinds. Single-leaf-tr support is tracked by FOLLOWUP
+//! `compare-cost-single-leaf-tr-input` (filed in v0.27.0 cycle close;
+//! deferred because the inner miniscript M is Tap-context with x-only
+//! keys, requiring a tap→segv0 key+context conversion path not yet
+//! built).
 
 use std::str::FromStr;
 
@@ -48,7 +49,7 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
             ),
         },
         Descriptor::Tr(_) => Err(CompareCostError::UnsupportedWrapper(
-            "tr-input deferred to v0.27 FOLLOWUP (compare-cost-single-leaf-tr-input); supply --miniscript for now".to_string(),
+            "tr-input deferred — see FOLLOWUP `compare-cost-single-leaf-tr-input`; supply --miniscript for now".to_string(),
         )),
         Descriptor::Bare(_) | Descriptor::Pkh(_) | Descriptor::Wpkh(_) => Err(
             CompareCostError::UnsupportedWrapper("pkh / wpkh / bare not a miniscript-wrapping question".to_string()),

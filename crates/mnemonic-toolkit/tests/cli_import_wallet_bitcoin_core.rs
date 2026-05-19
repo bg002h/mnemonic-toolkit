@@ -562,3 +562,154 @@ fn core_fixture_file_multi_bip84_all() {
     // The fixture has 4 entries (receive + change, two script types).
     assert!(stdout.contains("bundles=4"), "stdout: {stdout}");
 }
+
+// ============================================================================
+// v0.27.1 Phase 2 PR-#26 fold — shape-mismatch silent defaults
+// ============================================================================
+
+/// Phase 2 I4 fold cell — `"active": "true"` (string instead of bool) must
+/// surface as a typed parse error, not silently flip to `active: false` and
+/// produce a misleading downstream "no active-* descriptor found" error.
+#[test]
+fn bitcoin_core_active_non_boolean_errors_with_pointer_text() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let cs = checksum(&desc);
+    let blob = format!(
+        "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{desc}#{cs}\",\n      \"active\": \"true\",\n      \"internal\": false\n    }}\n  ]\n}}\n"
+    );
+    let assertion = run_core_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("`active` must be boolean"),
+        "expected shape-strict diagnostic naming `active`; got: {stderr}"
+    );
+}
+
+/// Phase 2 I4 fold cell — `"internal": 1` (number instead of bool) must
+/// reject symmetric with `active`.
+#[test]
+fn bitcoin_core_internal_non_boolean_errors_with_pointer_text() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let cs = checksum(&desc);
+    let blob = format!(
+        "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{desc}#{cs}\",\n      \"active\": true,\n      \"internal\": 1\n    }}\n  ]\n}}\n"
+    );
+    let assertion = run_core_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("`internal` must be boolean"),
+        "expected shape-strict diagnostic naming `internal`; got: {stderr}"
+    );
+}
+
+/// Phase 2 I4 fold cell — regression guard that ABSENT (vs shape-wrong)
+/// `active` keeps the prior default-false behavior. Mirrors `parse_range_field`'s
+/// absent-vs-shape-wrong split. R0 M3 fold: verify the resulting envelope
+/// materializes `active: false` / `internal: false`, not just that parse
+/// succeeded. Use --json to access source_metadata in the envelope.
+#[test]
+fn bitcoin_core_active_absent_defaults_false() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let cs = checksum(&desc);
+    // No `active` or `internal` keys — both default to false.
+    let blob = format!(
+        "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{desc}#{cs}\"\n    }}\n  ]\n}}\n"
+    );
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope is array");
+    assert_eq!(arr.len(), 1, "expected one entry; got: {stdout}");
+    let meta = &arr[0]["source_metadata"];
+    assert_eq!(
+        meta["active"], serde_json::Value::Bool(false),
+        "absent `active` must default to false; envelope: {stdout}"
+    );
+    assert_eq!(
+        meta["internal"], serde_json::Value::Bool(false),
+        "absent `internal` must default to false; envelope: {stdout}"
+    );
+}
+
+/// Phase 2 I6 fold cell — `thresh()` argument exceeding u8 range (>255
+/// cosigners) must surface as a typed parse error, not silently render as
+/// `"threshold": null` per FOLLOWUP `pr-26-shape-mismatch-silent-defaults`.
+#[test]
+fn bitcoin_core_thresh_overflow_errors_clearly() {
+    // sortedmulti is the practical multisig surface; thresh(256, …) would
+    // require 256 keys which is implausible at the test-fixture level. We
+    // construct a synthetic descriptor body that hits the u8 overflow path
+    // via the regex match — the descriptor parse may also fail downstream,
+    // but the overflow rejection fires first.
+    let desc = format!("wsh(sortedmulti(256,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*))");
+    let cs = checksum(&desc);
+    let blob = format!(
+        "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{desc}#{cs}\",\n      \"active\": true,\n      \"internal\": false\n    }}\n  ]\n}}\n"
+    );
+    let assertion = run_core_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    // Either the overflow rejection fires (preferred path), or the descriptor
+    // parser rejects 256 cosigners first. Both are correct refusals; we
+    // accept either diagnostic as proof that the silent `threshold: null`
+    // path is closed.
+    assert!(
+        stderr.contains("exceeds u8 range") || stderr.contains("256") || stderr.to_lowercase().contains("threshold"),
+        "expected u8-overflow or 256-cosigner diagnostic; got: {stderr}"
+    );
+}
+
+// ============================================================================
+// v0.27.1 Phase 4 PR-#26 I15 — --select-descriptor matrix
+// ============================================================================
+
+/// I15(a) — out-of-range numeric index on a multi-entry blob → exit 1
+/// (`SelectDescriptor::ByIndex(N)` arm of `apply_select_descriptor` at
+/// wallet_import/mod.rs). Single happy-path index cell already covered in
+/// existing suite (`core_select_index_1`); this cell pins the failure path.
+#[test]
+fn core_select_index_out_of_range_errors() {
+    // 4-entry blob from existing fixture.
+    let p = fixture_path("core-multi-bip84.json");
+    let assertion = run_core_file_select(&p, "99").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("99") && stderr.to_lowercase().contains("range"),
+        "expected OOB diagnostic naming index 99; got: {stderr}"
+    );
+}
+
+/// I15(b) — `--select-descriptor active-receive` against a blob where NO
+/// entry satisfies `active && !internal` → exit 1.
+#[test]
+fn core_select_active_receive_no_match_errors() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    // Only inactive entry — no active-receive candidate.
+    let blob = build_core_single(&desc, false, false, None, false);
+    let assertion = run_core_stdin_select(&blob, "active-receive").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("active-receive") || stderr.contains("no active"),
+        "expected no-active-receive diagnostic; got: {stderr}"
+    );
+}
+
+/// I15(c) — malformed `--select-descriptor` value → exit (clap-parse or
+/// `parse_select` rejection). Locks the rejection template.
+#[test]
+fn core_select_malformed_value_errors() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let blob = build_core_single(&desc, true, false, None, false);
+    let assertion = run_core_stdin_select(&blob, "garbage_value").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("garbage_value")
+            || stderr.to_lowercase().contains("invalid value")
+            || stderr.to_lowercase().contains("--select-descriptor"),
+        "expected malformed-value diagnostic; got: {stderr}"
+    );
+}

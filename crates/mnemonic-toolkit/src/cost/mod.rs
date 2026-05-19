@@ -72,7 +72,7 @@ impl std::fmt::Display for CompareCostError {
             ),
             CompareCostError::UnsupportedWrapper(w) => write!(
                 f,
-                "compare-cost: unsupported wrapper '{w}'; supported in Phase 2: wsh(..), sh(wsh(..)). tr() input is deferred to v0.27 FOLLOWUP."
+                "compare-cost: unsupported wrapper '{w}'; supported wrappers: wsh(..), sh(wsh(..)). tr() input is deferred — see FOLLOWUP `compare-cost-single-leaf-tr-input`."
             ),
             CompareCostError::MultiLeafTr => write!(
                 f,

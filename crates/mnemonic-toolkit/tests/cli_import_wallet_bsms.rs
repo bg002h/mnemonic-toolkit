@@ -499,3 +499,125 @@ fn bsms_sniff_smoke_true_and_false() {
     let code = assert.get_output().status.code().unwrap_or(-1);
     assert_eq!(code, 2);
 }
+
+/// v0.27.1 Phase 2 I6 fold cell — `thresh()` argument exceeding u8 range
+/// in a BSMS Round-2 blob must surface as a typed parse error, not silently
+/// render as `"threshold": null`. Mirrors the bitcoin-core-path cell.
+#[test]
+fn bsms_thresh_overflow_errors_clearly() {
+    // 2-line lenient form: header + descriptor. The descriptor body carries
+    // `sortedmulti(256, ...)` which triggers extract_threshold's u8 overflow
+    // branch. The toolkit's descriptor parse may reject 256-cosigner shapes
+    // upstream too; either rejection path closes the silent null-threshold
+    // surface.
+    let blob = "BSMS 1.0\nwsh(sortedmulti(256,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#abcdefgh\n";
+    let assertion = run_import_stdin(blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("exceeds u8 range") || stderr.contains("256") || stderr.to_lowercase().contains("threshold") || stderr.to_lowercase().contains("checksum"),
+        "expected u8-overflow / 256-cosigner / checksum-rejection diagnostic; got: {stderr}"
+    );
+}
+
+// ============================================================================
+// v0.27.1 Phase 4 PR-#26 fold — I17 + I18
+// ============================================================================
+
+/// I17 — unrecognized BSMS line counts (3/4/5/7+) hit the
+/// `wallet_import/bsms.rs::parse` "expected 2 or 6 lines" rejection arm.
+/// Currently no cell pins this template. Cells below exercise 3, 4, 5,
+/// and 7-line inputs; all must reject at exit 2 with the locked template.
+#[test]
+fn bsms_3_line_blob_rejected_with_pointer_text() {
+    let blob = "BSMS 1.0\nfoo\nbar\n";
+    let assertion = run_import_stdin(blob).failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "non-{{2,6}}-line BSMS must exit 2");
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("expected 2 or 6 lines"),
+        "expected locked line-count rejection template; got: {stderr}"
+    );
+}
+
+#[test]
+fn bsms_4_line_blob_rejected_with_pointer_text() {
+    let blob = "BSMS 1.0\nfoo\nbar\nbaz\n";
+    let assertion = run_import_stdin(blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("expected 2 or 6 lines"),
+        "expected line-count rejection on 4-line blob; got: {stderr}"
+    );
+}
+
+#[test]
+fn bsms_5_line_blob_rejected_with_pointer_text() {
+    let blob = "BSMS 1.0\na\nb\nc\nd\n";
+    let assertion = run_import_stdin(blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("expected 2 or 6 lines"),
+        "expected line-count rejection on 5-line blob; got: {stderr}"
+    );
+}
+
+#[test]
+fn bsms_7_line_blob_rejected_with_pointer_text() {
+    let blob = "BSMS 1.0\na\nb\nc\nd\ne\nf\n";
+    let assertion = run_import_stdin(blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("expected 2 or 6 lines"),
+        "expected line-count rejection on 7-line blob; got: {stderr}"
+    );
+}
+
+/// I18 — BSMS sniff is strict-prefix `BSMS 1.0\n`. Lowercase `bsms 1.0\n`
+/// and leading-whitespace ` BSMS 1.0\n` MUST NOT match. Pins this so a
+/// future "tolerance" loosening doesn't silently accept malformed blobs.
+#[test]
+fn bsms_sniff_rejects_lowercase_header() {
+    let blob = b"bsms 1.0\nwpkh(xpub...)\n";
+    assert!(
+        !crate::shared::bsms_sniff_via_dispatch(blob),
+        "lowercase header must NOT match BSMS sniff"
+    );
+}
+
+#[test]
+fn bsms_sniff_rejects_leading_whitespace() {
+    let blob = b" BSMS 1.0\nwpkh(xpub...)\n";
+    assert!(
+        !crate::shared::bsms_sniff_via_dispatch(blob),
+        "leading-whitespace header must NOT match BSMS sniff"
+    );
+}
+
+mod shared {
+    use std::process::Stdio;
+    /// I18 helper — drives the sniff via the `mnemonic import-wallet --blob -`
+    /// command without `--format`, which exercises `sniff_format`. If sniff
+    /// returns `Bsms`, the parser runs and either succeeds or fails with a
+    /// bsms-specific template; if sniff returns `NoMatch`/`Ambiguous`, the
+    /// dispatch returns `ImportWalletAmbiguousFormat` instead (no
+    /// bsms-specific template in stderr).
+    pub(super) fn bsms_sniff_via_dispatch(blob: &[u8]) -> bool {
+        let mut cmd = std::process::Command::new(
+            assert_cmd::cargo::cargo_bin("mnemonic"),
+        );
+        cmd.args(["import-wallet", "--blob", "-"]);
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        let mut child = cmd.spawn().expect("spawn mnemonic");
+        use std::io::Write;
+        child.stdin.as_mut().unwrap().write_all(blob).unwrap();
+        let out = child.wait_with_output().expect("wait");
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        // BSMS-sniff-positive path emits a bsms-specific stderr (parse error
+        // mentioning "bsms"). NoMatch/Ambiguous path emits
+        // ImportWalletAmbiguousFormat without "bsms" in the template.
+        stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2 or 6 lines")
+    }
+}

@@ -715,6 +715,8 @@ Sub-section of §6.11 per delta-only ordering convention (mirrors `§4.12.a-g` p
 
 **`status` extension key (v0.26.0 lock).** `"ok"` for the standard case; `"blocked_no_emitter"` for BSMS (no export emitter); `"canonicalize_failed"` when canonicalize errors post-parse-success (rare; surfaces e.g. for an exotic descriptor that `parse` accepts but `MsDescriptor::from_str` rejects in the canonicalize path).
 
+**v0.27.1 amendment (per FOLLOWUP `pr-26-roundtrip-warning-suppression`).** The envelope carries an additional `error: String` field in the `canonicalize_failed` branch, populated with the typed `ToolkitError` Display form (e.g. `"canonicalize_bitcoin_core: miniscript: unexpected token"`). The field is omitted in `"ok"` and `"blocked_no_emitter"` branches. The corresponding non-JSON stderr surface emits a warning of the form `"warning: import-wallet: roundtrip check skipped: canonicalize_<bsms|bitcoin_core> failed: <ToolkitError>"`. See `SPEC_wallet_import_v0_26_0.md §7.4`.
+
 **Idempotency.** `canonicalize(canonicalize(x)) == canonicalize(x)` for all `x` where `canonicalize(x)` succeeds. Pinned by unit cells in `wallet_import::roundtrip::tests`.
 
 **Declaration-order preservation.** `multi(...)` and `sortedmulti(...)` BOTH preserve cosigner declaration order in the canonicalized output. `sortedmulti` performs key-sort at signature-materialization time, NOT at descriptor-construction time (Phase 0 §0.1 empirical verification, 2026-05-18). Cell `fixture_bsms_2line_multi_2of3_canonicalize_preserves_declaration_order` pins this contract (Phase 4 R0 M3 fold).

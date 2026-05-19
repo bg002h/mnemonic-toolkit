@@ -6,6 +6,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.27.1] — 2026-05-19
+
+PR-#26 post-merge fold cycle. A 5-agent retrospective audit on v0.26.0 (silent-failure-hunter + comment-analyzer + type-design-analyzer + pr-test-analyzer + code-reviewer) surfaced 19 Important findings across silent-failures, shape-mismatch defaults, comment-rot, test-coverage gaps, and type-design anti-patterns. v0.27.1 folds 5 of the 6 filed FOLLOWUPs in a single patch cycle (the sixth, `compare-cost-single-leaf-tr-input`, ships as filed-only with implementation deferred to a separate SPEC-anchor cycle).
+
+### Fixed
+
+- **`emit_roundtrip_stderr_warning` no longer swallows canonicalize / UTF-8 errors silently** (Phase 1, C1+I7). The function previously returned `Ok(())` on both error arms, suppressing the SPEC §7.4 stderr warning — the only non-`--json` mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly. The fold emits explicit diagnostics: `warning: import-wallet: roundtrip check skipped: canonicalize_bitcoin_core failed: <ToolkitError>` and `notice: import-wallet: blob is not UTF-8; roundtrip check uses lossy decode`. In `--json` mode, the `roundtrip.canonicalize_failed` envelope branch now carries an additive `error: String` field with the typed `ToolkitError` Display form (SPEC §7.4 v0.27.1 amendment). Closes FOLLOWUP `pr-26-roundtrip-warning-suppression`.
+- **Bitcoin Core `active`/`internal` shape-strictness** (Phase 2, I4). The previous `.and_then(.as_bool).unwrap_or(false)` pattern silently flipped non-bool inputs (`"active": "true"`, `1`, etc.) to `false`, producing a misleading downstream `--select-descriptor active-receive` "no active-receive descriptor found" error. The fold distinguishes "absent" (default false) from "shape-wrong" (typed `ImportWalletParse` error with pointer text) via a new `parse_bool_field` helper that mirrors `parse_range_field`'s strictness. Part of FOLLOWUP `pr-26-shape-mismatch-silent-defaults`.
+- **`mk1_card_to_resolved_slot` fingerprint substitution NOTICE** (Phase 2, I5). The `card.origin_fingerprint.unwrap_or_else(|| card.xpub.fingerprint())` substitution is now accompanied by a stderr NOTICE naming the slot index, the substituted hex, and a "downstream wallets may show mismatched origins" warning. Closes the self-confessed `let _ = slot_idx; // reserved for future error-context attribution` gap. Part of FOLLOWUP `pr-26-shape-mismatch-silent-defaults`.
+- **`extract_threshold` u8 overflow surface** (Phase 2, I6). Return type changes from `Option<u8>` to `Result<Option<u8>, ToolkitError>`. `None` case = no `thresh()` token found; `Err` case = u8 overflow (`thresh(256, …)`) with pointer text. Previously, u8 overflow silently rendered as `"threshold": null` in the envelope, presenting a malformed input as a "no-threshold" descriptor. Applied symmetrically in `wallet_import/bsms.rs` and `wallet_import/bitcoin_core.rs`. Part of FOLLOWUP `pr-26-shape-mismatch-silent-defaults`.
+
+### Changed
+
+- **`mnemonic import-wallet --format bitcoin-core` rejects malformed `active`/`internal` JSON shape with exit 1** instead of silently defaulting to `false`. v0.26.0 / v0.27.0 consumers feeding `"active": "true"` (string) or `"active": 1` (number) saw a "no active-* descriptor found" error downstream; v0.27.1 now surfaces an upfront `ImportWalletParse` error citing the field name. Behavior change in a previously-undefined edge surface (the SPEC always required boolean per Bitcoin Core's own JSON schema); consumer impact is limited to malformed inputs.
+- **`mnemonic import-wallet --json` envelope `roundtrip.canonicalize_failed` branch carries `error: String`** as an additive field. v0.26.0 / v0.27.0 consumers parsing `byte_exact` / `semantic_match` / `status` are unaffected; consumers learning to read `error` see a richer payload only on `canonicalize_failed`. SPEC §7.4 amended in lockstep.
+- **Comment-rot sweep** (Phase 3) — citation accuracy across `env_sentinel.rs`, `cost/mod.rs`, `cost/strip.rs`, `error.rs`, `wallet_import/json_envelope.rs`. The user-visible error string at `cost/mod.rs:75` no longer contains internal "Phase 2" cycle vocabulary. The `compare-cost-single-leaf-tr-input` FOLLOWUP slug (already cited in source comments since v0.26.0) was filed in v0.27.0 cycle close at `53a1bf6`. Closes FOLLOWUP `pr-26-comment-rot-fold`.
+- **Internal API-discipline scaffolding for xpub-search result types** (Phase 5a). New private builder functions in `cmd/xpub_search/{path_of_xpub,passphrase_of_xpub,account_of_descriptor}.rs` enforce the `result:"match"` ↔ `Some(payload)` correlation at the call site. Fields remain `pub` for wire-shape preservation; the type-level invariant fix (tagged enum + `#[serde(skip_serializing_if)]`) requires a wire-shape change deferred to v0.28+. Tracked by new FOLLOWUP `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+- **`BsmsAuditFields.signature_verified: bool` → `BsmsVerification` enum** (Phase 5c). Replaces the prior `(bool, Option<reason>)`-class pair with a closed enum (`NotAttempted | Verified | Failed { reason }`). Wire shape preserved via the `BsmsVerification::signature_verified()` derived getter that emits the legacy `"signature_verified": bool` JSON field. v0.26.0 / v0.27.0 inline 2/6-line parsers always construct as `NotAttempted` (no inline cryptographic verification exists). Mirrors v0.27.0 Phase 6.5 I7's `Round1VerificationStatus` precedent. Part of FOLLOWUP `pr-26-type-design-anti-pattern-sweep`.
+
+### Tests
+
+- **+34 new cells** across Phases 1/2/4/5 (Phase 1: 4, Phase 2: 9, Phase 4: 14, Phase 5: 7 drift cells) + Phase 0 fixture captures. Test count 1542 → 1576.
+- 6 captured v0.27.0 envelope fixtures at `tests/fixtures/v0_27_0_envelopes/` pinned forever per plan-doc Q5c discipline (drift guards for future minor cycles).
+- New test file `tests/cli_xpub_search_drift_v0_27_0.rs` with 7 drift-regression cells pinning xpub-search result wire shapes against the captured fixtures.
+
+### Closed FOLLOWUPS
+
+- `pr-26-roundtrip-warning-suppression` (Phase 1)
+- `pr-26-shape-mismatch-silent-defaults` (Phase 2)
+- `pr-26-comment-rot-fold` (Phase 3)
+- `pr-26-test-coverage-gap-fold` (Phase 4)
+- `pr-26-type-design-anti-pattern-sweep` (Phase 5, partial: 5a + 5c shipped; 5b deferred — see new FOLLOWUP `pr-26-import-provenance-enum-internal-refactor`)
+
+### Filed FOLLOWUPS
+
+- `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution` (Phase 5a; v0.28+)
+- `pr-26-import-provenance-enum-internal-refactor` (Phase 5b deferral; v0.28+)
+
 ## mnemonic-toolkit [0.27.0] — 2026-05-19
 
 The **cross-format wallet conversion** cycle. The toolkit now ingests a BSMS Round-2 blob, mediates it through a canonical envelope, and emits any of the eight supported per-format wallet configs (Bitcoin Core, BIP-388, Coldcard, Jade, Sparrow, Specter, Electrum, Green) — or synthesizes the canonical `ms1`/`mk1`/`md1` engraving cards from the same envelope. v0.27.0 also ships BIP-129 Round-1 BIP-322 ECDSA signature verification (`--bsms-round1`), the first toolkit-side cryptographic Round-1 audit, and a `--format bsms` emitter (4-line BIP-129-canonical default + 2-line lenient).

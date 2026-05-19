@@ -268,16 +268,17 @@ fn parse_entry(
 
     validate_watch_only_resolved(&cosigners)?;
 
-    let threshold = extract_threshold(descriptor_body_no_csum);
+    let threshold = extract_threshold(descriptor_body_no_csum)?;
 
-    let active = eobj
-        .get("active")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let internal = eobj
-        .get("internal")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    // v0.27.1 Phase 2 I4 fold: distinguish "absent" (default false) from
+    // "shape-wrong" (typed parse error). The prior pattern
+    // `.and_then(.as_bool).unwrap_or(false)` silently flipped non-bool inputs
+    // ("active": "true", `1`, etc.) to false, which downstream
+    // `--select-descriptor active-*` reported as "no active-* descriptor
+    // found" — a misleading user-facing error. Mirrors `parse_range_field`'s
+    // shape-strictness precedent.
+    let active = parse_bool_field(eobj, "active")?;
+    let internal = parse_bool_field(eobj, "internal")?;
     let range = parse_range_field(eobj.get("range"))?;
 
     let mut dropped_fields: Vec<String> = Vec::new();
@@ -309,6 +310,33 @@ fn parse_entry(
 /// Decode the optional `range` field — Bitcoin Core emits a 2-element integer
 /// array `[lo, hi]`. Returns `Ok(None)` if absent (Core may omit `range` for
 /// non-ranged descriptors); errors if the shape is unexpected.
+/// v0.27.1 Phase 2 I4 helper. Mirrors `parse_range_field`'s shape-strictness:
+/// absent or `null` → `Ok(false)` (default); present + non-bool → `Err` with
+/// pointer text naming the field.
+fn parse_bool_field(eobj: &serde_json::Map<String, Value>, field: &str) -> Result<bool, ToolkitError> {
+    match eobj.get(field) {
+        None => Ok(false),
+        Some(Value::Null) => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(other) => Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: bitcoin-core: parse error: `{field}` must be boolean, got {}",
+            kind_of(other)
+        ))),
+    }
+}
+
+/// Compact JSON type label used by `parse_bool_field` error templates.
+fn kind_of(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
 fn parse_range_field(v: Option<&Value>) -> Result<Option<(u64, u64)>, ToolkitError> {
     let v = match v {
         Some(v) => v,
@@ -451,16 +479,31 @@ fn coin_type_from_path(path: &DerivationPath, entry_idx: usize) -> Result<u32, T
 }
 
 /// Extract K from `thresh(K, ...)` / `multi(K, ...)` / `sortedmulti(K, ...)`
-/// at the top-level miniscript context. Returns `None` for single-key shapes.
+/// at the top-level miniscript context. Returns `Ok(None)` for single-key
+/// shapes (no thresh/multi token found); `Err` for u8 overflow.
+///
+/// v0.27.1 Phase 2 I6 fold: previously returned `Option<u8>`, silently
+/// mapping u8 overflow (e.g. `thresh(256, …)`) to `None` — which downstream
+/// rendered as `"threshold": null`, presenting a "no-threshold" descriptor
+/// when the input was actually malformed. Now distinguishes "no thresh token"
+/// from "thresh argument failed u8 parse" via the typed Result.
+///
 /// Mirrors `bsms::extract_threshold`.
-fn extract_threshold(descriptor_body: &str) -> Option<u8> {
+pub(super) fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
         Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")
     });
-    re.captures(descriptor_body)
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse::<u8>().ok())
+    let cap = match re.captures(descriptor_body) {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+    let arg = cap.get(1).expect("regex has capture group 1").as_str();
+    arg.parse::<u8>().map(Some).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: bitcoin-core: parse error: thresh/multi argument `{arg}` exceeds u8 range (>255 cosigners not supported): {e}"
+        ))
+    })
 }
 
 /// Match any extended-private-key prefix per BIP-32 + SLIP-132 (Phase 3 R0
@@ -498,6 +541,27 @@ fn trim_leading_ws(blob: &[u8]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// v0.27.1 Phase 2 R0 M1 fold: guarantee coverage of the
+    /// `extract_threshold` u8-overflow branch. Mirrors `bsms::tests` cell.
+    #[test]
+    fn extract_threshold_u8_overflow_is_typed_error() {
+        // Body without thresh/multi → Ok(None).
+        let r = extract_threshold("wpkh(@0)").unwrap();
+        assert_eq!(r, None);
+
+        // Body with multi(2,…) → Ok(Some(2)).
+        let r = extract_threshold("sh(multi(2,@0,@1,@2))").unwrap();
+        assert_eq!(r, Some(2));
+
+        // Body with sortedmulti(256,…) → Err (u8 overflow).
+        let err = extract_threshold("wsh(sortedmulti(256,@0,@1))").unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("exceeds u8 range") && msg.contains("256"),
+            "expected u8-overflow diagnostic naming 256; got: {msg}"
+        );
+    }
 
     /// SPEC §6.1 item 2: sniff predicate smoke. Pins behavior for the cases
     /// where sniff must return true vs. false. Used by Phase 5's sniff

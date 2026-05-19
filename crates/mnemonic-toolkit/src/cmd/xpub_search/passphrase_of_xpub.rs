@@ -187,6 +187,44 @@ pub struct PassphraseOfXpubResult {
     pub searched_count: usize,
 }
 
+/// v0.27.1 Phase 5a API-discipline scaffolding for `PassphraseOfXpubResult`.
+/// Mirrors `path_of_xpub::build_path_match` discipline. Tracked by FOLLOWUP
+/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+pub(super) fn build_passphrase_match(
+    path: String,
+    template: String,
+    account: Option<u32>,
+    target_xpub_canonical: String,
+    target_xpub_variant: Option<&'static str>,
+    searched_count: usize,
+) -> PassphraseOfXpubResult {
+    PassphraseOfXpubResult {
+        result: "match",
+        path: Some(path),
+        template: Some(template),
+        account,
+        target_xpub_canonical,
+        target_xpub_variant,
+        searched_count,
+    }
+}
+
+pub(super) fn build_passphrase_no_match(
+    target_xpub_canonical: String,
+    target_xpub_variant: Option<&'static str>,
+    searched_count: usize,
+) -> PassphraseOfXpubResult {
+    PassphraseOfXpubResult {
+        result: "no_match",
+        path: None,
+        template: None,
+        account: None,
+        target_xpub_canonical,
+        target_xpub_variant,
+        searched_count,
+    }
+}
+
 /// Stderr advisory emitted on every passphrase-of-xpub invocation (plan §6.4).
 /// Points users at `--add-path` / `path-of-xpub` for non-standard paths.
 const STDERR_ADVISORY: &str = "note: passphrase verification searches the standard \
@@ -281,15 +319,14 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
             if args.json {
                 let envelope = XpubSearchEnvelope {
                     schema_version: "1",
-                    body: XpubSearchJson::PassphraseOfXpub(PassphraseOfXpubResult {
-                        result: "match",
-                        path: Some(format!("m/{}", m.path)),
-                        template: Some(m.template_name.clone()),
-                        account: m.account,
-                        target_xpub_canonical: target_xpub_canonical.clone(),
-                        target_xpub_variant: target_variant,
+                    body: XpubSearchJson::PassphraseOfXpub(build_passphrase_match(
+                        format!("m/{}", m.path),
+                        m.template_name.clone(),
+                        m.account,
+                        target_xpub_canonical.clone(),
+                        target_variant,
                         searched_count,
-                    }),
+                    )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
                     ToolkitError::BadInput(format!("passphrase-of-xpub JSON serialize: {e}"))
@@ -325,15 +362,11 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
             if args.json {
                 let envelope = XpubSearchEnvelope {
                     schema_version: "1",
-                    body: XpubSearchJson::PassphraseOfXpub(PassphraseOfXpubResult {
-                        result: "no_match",
-                        path: None,
-                        template: None,
-                        account: None,
-                        target_xpub_canonical: target_xpub_canonical.clone(),
-                        target_xpub_variant: target_variant,
+                    body: XpubSearchJson::PassphraseOfXpub(build_passphrase_no_match(
+                        target_xpub_canonical.clone(),
+                        target_variant,
                         searched_count,
-                    }),
+                    )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
                     ToolkitError::BadInput(format!("passphrase-of-xpub JSON serialize: {e}"))

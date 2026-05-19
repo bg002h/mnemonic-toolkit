@@ -6,8 +6,11 @@
 //!   2. `--bip38-passphrase`
 //!   3. `--ms1`
 //!   4. `--share`
-//!   5. `--slot @N.phrase=`
-//!   6. `--slot @N.ms1=`
+//!   5. `--slot @N.<subkey>=` — secret-bearing subkeys `phrase` / `entropy`
+//!      / `wif` / `xprv` (`SlotSubkey` enum at `slot_input.rs:17-32`)
+//!   6. `--from <node>=` — secret-bearing composite nodes `phrase` /
+//!      `entropy` / `wif` / `xprv` / `minikey` / `electrum-phrase`
+//!      (composite-node infra at `from_input.rs`)
 //!
 //! Whole-value sentinel only: `--ms1 @env:VAR` resolves; `--ms1 prefix@env:VAR`
 //! is treated as a literal (§3.2 grammar lock).

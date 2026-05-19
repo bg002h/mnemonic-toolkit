@@ -29,11 +29,14 @@
 //! - `parse_import_json_envelopes(raw, index) -> ImportJsonEnvelope` —
 //!   load a JSON array; pick the entry at `index` (with multi-entry
 //!   semantics + `BadInput` exit 2 on ambiguity / out-of-range).
-//! - `envelope_to_resolved_slots(envelope) -> Vec<ResolvedSlot>` —
+//! - `envelope_to_resolved_slots(envelope, stderr) -> Vec<ResolvedSlot>` —
 //!   decode mk1 chunks (single or multi) into `ResolvedSlot` values
-//!   per §3.6.1.
-//! - `mk1_card_to_resolved_slot(card, index) -> ResolvedSlot` —
-//!   per-cosigner decode helper.
+//!   per §3.6.1. `stderr` carries the per-cosigner origin_fingerprint
+//!   substitution NOTICE when any mk1 card omits the master fingerprint
+//!   (v0.27.1 Phase 2 I5 fold).
+//! - `mk1_card_to_resolved_slot(card, index, stderr) -> ResolvedSlot` —
+//!   per-cosigner decode helper. Emits a NOTICE on the substitution
+//!   fallback (see `envelope_to_resolved_slots` above).
 //! - `cli_network_from_bitcoin_network(n) -> CliNetwork` — inverse of
 //!   `network_human_name`; covers all 4 variants per §4.5 R0 scope.
 //! - `cli_network_from_str(s) -> CliNetwork` — inverse of
@@ -228,8 +231,9 @@ pub(crate) fn parse_import_json_envelopes(
 /// `ms1[i] != ""`, the caller is responsible for decoding it and overlaying
 /// entropy at the corresponding slot — see `bundle --import-json` consumer
 /// at `cmd::bundle::run_from_import_json`).
-pub(crate) fn envelope_to_resolved_slots(
+pub(crate) fn envelope_to_resolved_slots<E: std::io::Write>(
     envelope: &ImportJsonEnvelope,
+    stderr: &mut E,
 ) -> Result<Vec<ResolvedSlot>, ToolkitError> {
     let mk1_outer = &envelope.bundle.mk1;
     let mut out = Vec::with_capacity(mk1_outer.len());
@@ -238,7 +242,7 @@ pub(crate) fn envelope_to_resolved_slots(
         let card = mk_codec::decode(&chunk_refs).map_err(|e| {
             ToolkitError::BadInput(format!("--import-json: mk1[{i}] decode failed: {e}"))
         })?;
-        out.push(mk1_card_to_resolved_slot(&card, i)?);
+        out.push(mk1_card_to_resolved_slot(&card, i, stderr)?);
     }
     Ok(out)
 }
@@ -251,13 +255,30 @@ pub(crate) fn envelope_to_resolved_slots(
 /// with `privacy_preserving: false`), but hand-crafted / intermediate
 /// envelopes might omit it; mirror sortedmulti's xpub-fingerprint
 /// fallback so the consumer is robust.
-pub(crate) fn mk1_card_to_resolved_slot(
+///
+/// v0.27.1 Phase 2 I5 fold: emit a stderr NOTICE when the fallback fires.
+/// Master-fp and current-xpub-fp are semantically distinct — substituting
+/// silently produces wallets with mismatched origin annotations downstream.
+/// Closes the self-confessed `let _ = slot_idx; // reserved` gap by wiring
+/// `slot_idx` through to the NOTICE template.
+pub(crate) fn mk1_card_to_resolved_slot<E: std::io::Write>(
     card: &mk_codec::KeyCard,
     slot_idx: usize,
+    stderr: &mut E,
 ) -> Result<ResolvedSlot, ToolkitError> {
-    let fingerprint = card
-        .origin_fingerprint
-        .unwrap_or_else(|| card.xpub.fingerprint());
+    let fingerprint = match card.origin_fingerprint {
+        Some(fp) => fp,
+        None => {
+            let substituted = card.xpub.fingerprint();
+            writeln!(
+                stderr,
+                "notice: import-wallet: mk1[{slot_idx}]: origin_fingerprint absent; substituting xpub-derived fingerprint {} (master-fp and current-xpub-fp may differ; downstream wallets may show mismatched origins)",
+                substituted.to_string().to_lowercase()
+            )
+            .map_err(ToolkitError::Io)?;
+            substituted
+        }
+    };
     let path_raw = format!(
         "[{}/{}]",
         fingerprint.to_string().to_lowercase(),
@@ -266,7 +287,6 @@ pub(crate) fn mk1_card_to_resolved_slot(
             .trim_start_matches("m/")
             .trim_start_matches('m'),
     );
-    let _ = slot_idx; // reserved for future error-context attribution
     Ok(ResolvedSlot {
         xpub: card.xpub,
         fingerprint,
@@ -586,5 +606,63 @@ mod tests {
         ]"#;
         let err = parse_import_json_envelopes(raw, Some(5), "--import-json").unwrap_err();
         assert!(format!("{err:?}").contains("out of range"));
+    }
+
+    /// v0.27.1 Phase 2 I5 fold — when `KeyCard.origin_fingerprint == None`,
+    /// `mk1_card_to_resolved_slot` substitutes `card.xpub.fingerprint()` BUT
+    /// emits a stderr NOTICE naming the slot index + the substituted hex.
+    /// Closes the prior `let _ = slot_idx; // reserved` silent-substitution
+    /// gap. Master-fp and current-xpub-fp are semantically distinct.
+    #[test]
+    fn mk1_card_to_resolved_slot_missing_origin_fingerprint_emits_notice() {
+        use std::str::FromStr;
+        // Synthetic KeyCard with origin_fingerprint = None — exercises the
+        // fallback arm.
+        let xpub = bitcoin::bip32::Xpub::from_str("xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX").unwrap();
+        let card = mk_codec::KeyCard::new(
+            vec![[0u8; 4]],
+            None, // <-- origin_fingerprint absent
+            bitcoin::bip32::DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+            xpub,
+        );
+        let mut stderr: Vec<u8> = Vec::new();
+        let slot = mk1_card_to_resolved_slot(&card, 7, &mut stderr).unwrap();
+        let stderr_str = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_str.contains("mk1[7]:"),
+            "NOTICE must name the slot index; got: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("origin_fingerprint absent"),
+            "NOTICE must explain the substitution; got: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("mismatched origins"),
+            "NOTICE must warn about downstream wallets; got: {stderr_str}"
+        );
+        // Resolved fingerprint equals xpub-derived.
+        assert_eq!(slot.fingerprint, xpub.fingerprint());
+    }
+
+    /// Regression guard: present `origin_fingerprint` does NOT emit a NOTICE.
+    #[test]
+    fn mk1_card_to_resolved_slot_present_origin_fingerprint_silent() {
+        use std::str::FromStr;
+        let xpub = bitcoin::bip32::Xpub::from_str("xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX").unwrap();
+        let fp = bitcoin::bip32::Fingerprint::from([0xde, 0xad, 0xbe, 0xef]);
+        let card = mk_codec::KeyCard::new(
+            vec![[0u8; 4]],
+            Some(fp),
+            bitcoin::bip32::DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+            xpub,
+        );
+        let mut stderr: Vec<u8> = Vec::new();
+        let slot = mk1_card_to_resolved_slot(&card, 0, &mut stderr).unwrap();
+        let stderr_str = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_str.is_empty(),
+            "present fingerprint must emit no NOTICE; got: {stderr_str}"
+        );
+        assert_eq!(slot.fingerprint, fp);
     }
 }
