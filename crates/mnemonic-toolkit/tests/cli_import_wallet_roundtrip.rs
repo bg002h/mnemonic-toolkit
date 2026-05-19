@@ -450,3 +450,46 @@ fn core_bundle_roundtrip_export_blob_keys_present() {
     assert!(stdout.contains(TREZOR_BIP84_FP), "stdout: {stdout}");
     assert!(stdout.contains("network=mainnet"));
 }
+
+/// v0.27.1 Phase 4 I19 — multisig round-trip asserts on
+/// `roundtrip.semantic_match == true` (and `byte_exact` if the wrapped
+/// export happens to canonicalize byte-identically). Prior multisig
+/// round-trip cells only verified fingerprint + count substrings; the
+/// `roundtrip` envelope block was unchecked, so a regression in
+/// `canonicalize_bitcoin_core` or `unified_diff` for multisig shapes
+/// would only surface as count-still-matches-but-bytes-don't.
+#[test]
+fn core_bundle_roundtrip_wsh_sortedmulti_2of2_envelope_semantic_match() {
+    let exported = export_core_wsh_sortedmulti_2of2();
+    let wrapped = wrap_export_in_object_envelope(&exported, "test_2of2_semantic");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .write_stdin(wrapped)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let val: serde_json::Value =
+        serde_json::from_str(&stdout).expect("--json output must parse");
+    let arr = val.as_array().expect("envelope array");
+    assert!(!arr.is_empty(), "expected at least one envelope; got {stdout}");
+    // wsh-sortedmulti emits as 2 multipath entries (receive + change). Both
+    // must report semantic_match: true (canonicalize-equal modulo
+    // diff-bytes); status: ok.
+    for env in arr {
+        let rt = &env["roundtrip"];
+        assert_eq!(
+            rt["status"], serde_json::Value::String("ok".to_string()),
+            "multisig roundtrip status must be ok; envelope: {env}"
+        );
+        assert_eq!(
+            rt["semantic_match"], serde_json::Value::Bool(true),
+            "multisig roundtrip must report semantic_match:true; envelope: {env}"
+        );
+        // byte_exact may be true or false depending on canonical key-sort
+        // happening in the export emitter; we don't pin it here. The
+        // existence of the field is the regression guard.
+        assert!(rt.get("byte_exact").is_some(),
+            "byte_exact field must be present; envelope: {env}");
+    }
+}

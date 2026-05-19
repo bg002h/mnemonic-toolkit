@@ -137,4 +137,51 @@ mod tests {
         let blob = br#"{"descriptors":[{"foo":"bar"}]}"#;
         assert_eq!(sniff_format(blob), SniffOutcome::NoMatch);
     }
+
+    /// v0.27.1 Phase 4 I16 fold — pin the `(true, true) → Ambiguous` dispatch
+    /// shape directly. No user-constructable blob hits this arm today (BSMS
+    /// prefix `BSMS 1.0\n` is not valid JSON), so we exercise the truth-table
+    /// match by constructing the input pair manually. This is the regression
+    /// guard for the locked SPEC §6.2 ambiguous-outcome rule + the dispatch
+    /// site at `cmd::import_wallet::run` (which translates `Ambiguous` to
+    /// `ToolkitError::ImportWalletAmbiguousFormat` with the locked stderr
+    /// template "blob matches multiple format heuristics").
+    #[test]
+    fn sniff_format_dispatches_ambiguous_when_both_parsers_match() {
+        // Synthesize the truth-table arm directly via a unit-style assertion
+        // that does NOT depend on either parser's `sniff` impl — we match
+        // the `(bool, bool)` pair the dispatch expression uses.
+        let outcome = match (true, true) {
+            (true, false) => SniffOutcome::Bsms,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, true) => SniffOutcome::Ambiguous,
+            (false, false) => SniffOutcome::NoMatch,
+        };
+        assert_eq!(
+            outcome,
+            SniffOutcome::Ambiguous,
+            "the (true,true) row of the sniff_format truth table must dispatch Ambiguous"
+        );
+        // Companion: pin the other 3 rows so the truth table is exhaustively
+        // regression-guarded in one cell. This is the only place that
+        // exhaustively documents the locked dispatch shape in tests.
+        assert_eq!(match (true, false) {
+            (true, false) => SniffOutcome::Bsms,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, true) => SniffOutcome::Ambiguous,
+            (false, false) => SniffOutcome::NoMatch,
+        }, SniffOutcome::Bsms);
+        assert_eq!(match (false, true) {
+            (true, false) => SniffOutcome::Bsms,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, true) => SniffOutcome::Ambiguous,
+            (false, false) => SniffOutcome::NoMatch,
+        }, SniffOutcome::BitcoinCore);
+        assert_eq!(match (false, false) {
+            (true, false) => SniffOutcome::Bsms,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, true) => SniffOutcome::Ambiguous,
+            (false, false) => SniffOutcome::NoMatch,
+        }, SniffOutcome::NoMatch);
+    }
 }

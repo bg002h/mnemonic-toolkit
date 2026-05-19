@@ -399,3 +399,111 @@ fn seed_overlay_multi_cosigner_skip_middle() {
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from("tests/fixtures/wallet_import").join(name)
 }
+
+// ============================================================================
+// v0.27.1 Phase 4 PR-#26 coverage gap fold (I12 + I13 + I14)
+// ============================================================================
+
+/// I12 — `--ms1` AND `--slot @i.phrase=` for the SAME cosigner index conflict
+/// per `wallet_import/overlay.rs::apply_seed_overlay` BadInput template
+/// ("cosigner {i} has both --ms1 and --slot @{i}.phrase= supplied"). Regression
+/// guard against silent precedence-change.
+#[test]
+fn seed_overlay_ms1_and_slot_phrase_for_same_cosigner_conflict() {
+    let blob = flagship_1of1_blob();
+    let slot_arg = format!("@0.phrase={TREZOR_24}");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            TREZOR_24_MS1,
+            "--slot",
+            &slot_arg,
+        ])
+        .write_stdin(blob)
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("cosigner 0") && (stderr.contains("--ms1") || stderr.contains("--slot")),
+        "expected per-cosigner conflict diagnostic naming cosigner 0; got: {stderr}"
+    );
+}
+
+/// I13 — phrase-overlay mismatch via `--slot @0.phrase=<wrong-phrase>` (not
+/// `--ms1`). The symmetric Source::Phrase code path through
+/// `apply_seed_overlay` mismatch arm; the existing
+/// `seed_overlay_ms1_mismatch_exit_4` only exercises the Source::Ms1 path.
+#[test]
+fn seed_overlay_slot_phrase_mismatch_exit_4() {
+    let blob = flagship_1of1_blob();
+    // BIP-39 valid 24-word phrase whose derived xpub at m/48'/0'/0'/2'
+    // differs from TREZOR_24's. (Standard BIP-39 alternative.)
+    const WRONG_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth title";
+    let slot_arg = format!("@0.phrase={WRONG_24}");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--slot",
+            &slot_arg,
+        ])
+        .write_stdin(blob)
+        .assert()
+        .failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 4, "phrase mismatch must exit 4 (sibling to BundleMismatch)");
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("mismatch") || stderr.to_lowercase().contains("xpub"),
+        "expected mismatch diagnostic; got: {stderr}"
+    );
+}
+
+/// I14 — `--ms1` with malformed bech32 hits the `Err(_)` arm at
+/// `overlay.rs:133-137` ("ms_codec decode failed"). The strictly-non-entropy
+/// branch at overlay.rs:128-132 ("decoded payload is not entropy") is
+/// structurally unreachable from user input because `ms_codec::Payload` v0.2.0
+/// has only the `Entr` variant (the enum is `#[non_exhaustive]` for future
+/// expansion); this cell pins the adjacent decode-Err coverage gap that
+/// `apply_seed_overlay` shares with the non-entropy arm. If a future ms-codec
+/// version adds Payload variants, a Phase-N cycle can extend this cell to
+/// also feed a non-Entr payload card.
+#[test]
+fn seed_overlay_ms1_decode_error_rejected_with_pointer_text() {
+    let blob = flagship_1of1_blob();
+    // Valid ms1 HRP prefix to pass upstream `validate_flag_hrp("--ms1", "ms", ...)`,
+    // but garbage bech32 body so `ms_codec::decode` rejects.
+    const MALFORMED_MS1: &str = "ms1qpzqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqy";
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            MALFORMED_MS1,
+        ])
+        .write_stdin(blob)
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("decode")
+            || stderr.to_lowercase().contains("ms_codec")
+            || stderr.to_lowercase().contains("checksum")
+            || stderr.to_lowercase().contains("invalid"),
+        "expected ms_codec decode-failure diagnostic; got: {stderr}"
+    );
+}

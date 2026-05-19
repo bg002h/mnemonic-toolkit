@@ -662,3 +662,54 @@ fn bitcoin_core_thresh_overflow_errors_clearly() {
         "expected u8-overflow or 256-cosigner diagnostic; got: {stderr}"
     );
 }
+
+// ============================================================================
+// v0.27.1 Phase 4 PR-#26 I15 — --select-descriptor matrix
+// ============================================================================
+
+/// I15(a) — out-of-range numeric index on a multi-entry blob → exit 1
+/// (`SelectDescriptor::ByIndex(N)` arm of `apply_select_descriptor` at
+/// wallet_import/mod.rs). Single happy-path index cell already covered in
+/// existing suite (`core_select_index_1`); this cell pins the failure path.
+#[test]
+fn core_select_index_out_of_range_errors() {
+    // 4-entry blob from existing fixture.
+    let p = fixture_path("core-multi-bip84.json");
+    let assertion = run_core_file_select(&p, "99").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("99") && stderr.to_lowercase().contains("range"),
+        "expected OOB diagnostic naming index 99; got: {stderr}"
+    );
+}
+
+/// I15(b) — `--select-descriptor active-receive` against a blob where NO
+/// entry satisfies `active && !internal` → exit 1.
+#[test]
+fn core_select_active_receive_no_match_errors() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    // Only inactive entry — no active-receive candidate.
+    let blob = build_core_single(&desc, false, false, None, false);
+    let assertion = run_core_stdin_select(&blob, "active-receive").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("active-receive") || stderr.contains("no active"),
+        "expected no-active-receive diagnostic; got: {stderr}"
+    );
+}
+
+/// I15(c) — malformed `--select-descriptor` value → exit (clap-parse or
+/// `parse_select` rejection). Locks the rejection template.
+#[test]
+fn core_select_malformed_value_errors() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let blob = build_core_single(&desc, true, false, None, false);
+    let assertion = run_core_stdin_select(&blob, "garbage_value").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("garbage_value")
+            || stderr.to_lowercase().contains("invalid value")
+            || stderr.to_lowercase().contains("--select-descriptor"),
+        "expected malformed-value diagnostic; got: {stderr}"
+    );
+}
