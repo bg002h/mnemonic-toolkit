@@ -891,23 +891,40 @@ Expected: bitcoin_core.rs error gone; only `import_wallet.rs` errors remain.
 **Files:**
 - Modify: `crates/mnemonic-toolkit/src/wallet_import/mod.rs:150, 167`
 
-- [ ] **Step 1: Read the sites**
+- [ ] **Step 1: Read both sites + their distinct predicates**
 
 ```bash
-sed -n '145,175p' crates/mnemonic-toolkit/src/wallet_import/mod.rs
+sed -n '145,180p' crates/mnemonic-toolkit/src/wallet_import/mod.rs
 ```
 
-Confirm both sites access `p.source_metadata` directly. Likely shape:
+Confirm two sites with **DIFFERENT closure bodies** (grep-verified at origin/master):
+- `ActiveReceive` filter (around line 150-153): `.map(|m| m.active && !m.internal)` — note the `!` NEGATION on `internal`
+- `ActiveChange` filter (around line 167-170): `.map(|m| m.active && m.internal)` — no negation
 
+A single Before/After substitution would either miss one site OR silently corrupt the negation. Apply each site's edit separately, preserving each closure's predicate verbatim.
+
+- [ ] **Step 2a: Replace ActiveReceive site — preserve `!m.internal` negation**
+
+Before (around line 150-153 in `crates/mnemonic-toolkit/src/wallet_import/mod.rs`):
 ```rust
-.as_ref().map(|m| m.active && m.internal).unwrap_or(false)
+p.source_metadata
+    .as_ref()
+    .map(|m| m.active && !m.internal)
+    .unwrap_or(false)
 ```
 
-- [ ] **Step 2: Replace direct-field access with accessor call**
+After:
+```rust
+p.source_metadata()
+    .map(|m| m.active && !m.internal)
+    .unwrap_or(false)
+```
 
-Edit the two sites:
+(Drops `p.source_metadata.as_ref()` → `p.source_metadata()`; accessor returns `Option<&_>` directly. **The closure body `m.active && !m.internal` is UNCHANGED.**)
 
-Before:
+- [ ] **Step 2b: Replace ActiveChange site — predicate has NO negation**
+
+Before (around line 167-170):
 ```rust
 p.source_metadata
     .as_ref()
@@ -922,9 +939,15 @@ p.source_metadata()
     .unwrap_or(false)
 ```
 
-(Drops the `.as_ref()` call — accessor already returns `Option<&_>`.)
+(Same mechanical edit; closure body `m.active && m.internal` is UNCHANGED.)
 
-Apply at both lines 150 and 167 (filter machinery for `ActiveReceive` and `ActiveChange`).
+- [ ] **Step 2c: Verify no closure-body drift**
+
+```bash
+grep -A 2 'p.source_metadata()' crates/mnemonic-toolkit/src/wallet_import/mod.rs | grep '\.map(|m|'
+```
+
+Expected: 2 lines — one with `!m.internal`, one without. If both lines have the same predicate, one site was silently corrupted; revert and re-apply Step 2a/2b separately.
 
 - [ ] **Step 3: cargo build incremental**
 
