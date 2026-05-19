@@ -2511,3 +2511,12 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.28+` (doc-only).
 - **Companion:** none.
+
+### `error-rs-retroactive-alphabetical-sort` — apply alphabetical-by-variant-name ordering to existing ToolkitError variants + match blocks
+
+- **Surfaced:** 2026-05-19, v0.27.2 Task 1.1 code-quality reviewer (R0). The CLAUDE.md alphabetical-ordering Convention was added forward-looking; existing pre-v0.27.2 variants in `error.rs::ToolkitError` (~50+ variants) + 4 exhaustive match blocks (`Display`, `exit_code`, `kind`, + any debug/extra) are not yet sorted.
+- **Where:** `crates/mnemonic-toolkit/src/error.rs` — enum declaration + each `match self { ... }` block that exhaustively matches `ToolkitError`.
+- **What:** Sort `ToolkitError` variant declarations alphabetically by name. Reorder the corresponding arms in each exhaustive `match self` block to match. No semantic change; pure refactor.
+- **Why deferred:** Out of scope for v0.27.2 (item 2 scoped as "codify the Convention", not "apply retroactively"). Retroactive sort touches `error.rs` substantially (50+ variants moved + 4 match blocks × 50 arms reordered = ~250 line moves) — better as a dedicated cleanup commit in v0.27.3 or v0.28 cycle, where the diff is clearly scoped to "no semantic change, alphabetical sort only".
+- **Status:** open
+- **Tier:** `v0.28+`
