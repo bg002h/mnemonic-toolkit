@@ -23,11 +23,22 @@ use mnemonic_toolkit::mlock;
 
 #[test]
 fn g1_1_single_page_pin_has_page_count_one() {
-    let buf = vec![0xAAu8; 64];
-    let pin = mlock::pin_pages_for(&buf);
-    assert_eq!(pin.page_count, 1, "64-byte buffer must round up to 1 page");
-    assert!(!pin.start.is_null(), "non-empty buf must produce a non-null start");
-    drop(pin);
+    use std::alloc::{alloc, dealloc, Layout};
+
+    let page_size = mlock::page_size_for_test();
+    // SAFETY: Layout is valid (size > 0, align is power of 2). We deallocate
+    // before returning. Buffer is page-aligned so pin_pages_for returns exactly 1.
+    let layout = Layout::from_size_align(64, page_size).expect("valid layout");
+    unsafe {
+        let ptr = alloc(layout);
+        assert!(!ptr.is_null(), "alloc failed");
+        let slice = std::slice::from_raw_parts(ptr, 64);
+        let pin = mlock::pin_pages_for(slice);
+        assert_eq!(pin.page_count, 1, "page-aligned 64-byte buffer spans exactly 1 page");
+        assert!(!pin.start.is_null(), "non-empty buf produces non-null start");
+        drop(pin);
+        dealloc(ptr, layout);
+    }
 }
 
 #[test]

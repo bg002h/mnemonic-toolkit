@@ -150,7 +150,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/tests/mlock_unit.rs:28` (assertion site); `crates/mnemonic-toolkit/src/mlock.rs::pin_pages_for` (page-count derivation).
 - **What:** Pin the test buffer at a known page-aligned address (e.g., `std::alloc::alloc` with a Layout that forces alignment to `*PAGE_SIZE*`) so the assertion is invariant across parallel-execution heap states. Alternative: relax the assertion to `>= 1 && <= 2` and add a paired test that uses an aligned allocator to pin the exact-page-count guarantee.
 - **Why deferred:** non-regression (single-threaded passes; the v0.10.0 mlock cycle landed under this pre-existing flake too — see `feedback-default-cargo-test-runs-sibling-dependent-tests` memory). v0.27+ touch.
-- **Status:** open
+- **Status:** resolved (pending commit; v0.27.2 Phase 1.3)
 - **Tier:** `v0.27`
 
 ### `xpub-search-gui-bespoke-hub-pane` — discoverable umbrella hub UI for `xpub-search` modes
