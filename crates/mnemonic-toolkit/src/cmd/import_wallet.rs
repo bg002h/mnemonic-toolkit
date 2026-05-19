@@ -1,17 +1,24 @@
-//! `mnemonic import-wallet` — Phase 5 surface (full v0.26.0).
+//! `mnemonic import-wallet` — v0.27.0 surface.
 //!
-//! v0.26.0 Phase 5 extends the Phase 2/3 scaffold to the full clap surface
-//! per SPEC_wallet_import_v0_26_0.md §2.1:
+//! Per SPEC_wallet_import_v0_26_0.md §2.1 (v0.26.0 baseline) + v0.27.0
+//! plan-doc additions (BIP-129 Round-1 verify + envelope wire-shape
+//! replacement):
 //!
-//!   --blob <FILE|->                                             required
+//!   --blob <FILE|->                                             required UNLESS --bsms-round1 supplied
 //!   --format <bsms|bitcoin-core>                                optional (sniff default)
 //!   --select-descriptor <N|active-receive|active-change|all>    default `all`
 //!   --ms1 <STRING>                                              repeatable (positional cosigner-index)
 //!   --slot @<N>.phrase=<STRING>                                 (existing slot infra)
-//!   --json                                                      bool; emit JSON envelope array
-//!   --no-auto-repair                                            global; no-op in v0.26.0 (reserved)
+//!   --json                                                      bool; emit JSON envelope array (v0.27.0 carries full BundleJson + schema_version)
+//!   --no-auto-repair                                            global; no-op for import-wallet path (reserved)
+//!   --bsms-round1 <FILE>                                        v0.27.0 — repeatable; BIP-129 Round-1 BIP-322 verify per record
+//!   --bsms-verify-strict                                        v0.27.0 — make Round-1 verify failure fatal (default lenient: stderr NOTICE + signature_verified:false)
 //!
-//! Sniff dispatch flow (SPEC §6):
+//! Dispatch flow:
+//!   0. v0.27.0 standalone Round-1 verify mode — when `--bsms-round1` is
+//!      supplied without `--blob`, parse + verify each record, emit a
+//!      Round-1-only envelope (`--json`) or summary, exit 0 on verify
+//!      success.
 //!   1. Resolve env-var sentinels (`@env:VAR` → `std::env::var(VAR)`).
 //!   2. Read blob.
 //!   3. If `--format` is absent → invoke `sniff_format`:
@@ -23,7 +30,12 @@
 //!      format matches sniff outcome OR sniff is `NoMatch`/`Ambiguous`,
 //!      the explicit `--format` is honored.)
 //!   5. Parse via selected parser. Apply seed overlay (SPEC §8.3). Apply
-//!      `--select-descriptor` filter. Emit stdout (cards-or-JSON).
+//!      `--select-descriptor` filter. Emit stdout (cards-or-JSON);
+//!      v0.27.0 `--json` emits the full `BundleJson` shape in `bundle:`,
+//!      with an outer `schema_version: "1"` (wire-shape REPLACEMENT vs
+//!      v0.26.0 summary). When `--bsms-round1` also supplied, per-record
+//!      verify state propagates into every envelope's
+//!      `bsms_round1_verifications` field.
 //!
 //! Stderr discipline:
 //!   - WARNINGs / NOTICEs from per-format parsers.
@@ -31,8 +43,10 @@
 //!     stderr is silent for the diff (SPEC §7.4).
 
 use crate::error::ToolkitError;
+use crate::format::{BundleJson, CosignerEntry, MultisigInfo};
 use crate::language::CliLanguage;
 use crate::slot_input::{SlotInput, SlotSubkey};
+use crate::synthesize::synthesize_descriptor;
 use crate::wallet_import::{
     apply_select_descriptor,
     bitcoin_core::BitcoinCoreParser,
@@ -48,11 +62,23 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
+/// v0.27.0 SPEC §3.2 — `import-wallet --json` envelope schema version.
+/// Pinned at "1" (first version; no migration). Phase 6 documents this in
+/// the manual; future bumps update both sites + the SPEC.
+pub(crate) const IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION: &str = "1";
+
 #[derive(Args, Debug, Clone)]
 pub struct ImportWalletArgs {
     /// Path to the third-party wallet blob; `-` reads from stdin.
-    #[arg(long = "blob", value_name = "FILE|-", required = true)]
-    pub blob: PathBuf,
+    /// v0.27.0: required UNLESS `--bsms-round1` is supplied (Round-1 verify
+    /// alone is a meaningful CLI mode; emits per-record verify envelope on
+    /// `--json`, exits 0 on verify success).
+    #[arg(
+        long = "blob",
+        value_name = "FILE|-",
+        required_unless_present = "bsms_round1"
+    )]
+    pub blob: Option<PathBuf>,
 
     /// Format override. If absent, the blob is auto-detected via sniff
     /// (SPEC §6). Supported values: `bsms`, `bitcoin-core`.
@@ -100,11 +126,33 @@ pub struct ImportWalletArgs {
     ///   - `roundtrip`        — { byte_exact, semantic_match, diff? }
     ///   - `bsms_audit?`      — BSMS audit fields (BSMS source only)
     ///   - `source_metadata?` — Bitcoin Core per-entry metadata
+    ///   - `bsms_round1_verifications?` — per-record BIP-129 Round-1 SIG
+    ///     verify state when `--bsms-round1` supplied (v0.27.0)
     ///
     /// When `--json` is set, the round-trip diff goes ONLY in the envelope;
     /// stderr is silent for the diff.
     #[arg(long = "json")]
     pub json: bool,
+
+    /// v0.27.0 — supply a BIP-129 5-line Round-1 key record (Signer →
+    /// Coordinator) for BIP-322 ECDSA signature verification. Repeating
+    /// flag — one per record. `<FILE>` reads file contents; stdin (`-`)
+    /// is NOT supported in v0.27.0 (multi-record stdin intake is filed
+    /// as a future FOLLOWUP — supply file paths per record).
+    ///
+    /// Each record is verified independently; verify state propagates to the
+    /// `--json` envelope's `bsms_round1_verifications` field. Verify failure
+    /// is fatal under `--bsms-verify-strict`; otherwise emits a stderr NOTICE
+    /// and sets `signature_verified: false` per-record.
+    #[arg(long = "bsms-round1", value_name = "FILE")]
+    pub bsms_round1: Vec<PathBuf>,
+
+    /// v0.27.0 — make BIP-129 Round-1 SIG verification failures fatal.
+    /// Without this flag, verify mismatches emit a stderr NOTICE and proceed
+    /// with `signature_verified: false`. With this flag, verify mismatch is
+    /// `BsmsSignatureMismatch` exit 2.
+    #[arg(long = "bsms-verify-strict")]
+    pub bsms_verify_strict: bool,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -133,8 +181,39 @@ pub fn run<R: Read, W: Write, E: Write>(
         args
     };
 
+    // v0.27.0 — `--bsms-verify-strict` without `--bsms-round1` is meaningless;
+    // reject explicitly so the user notices the typo.
+    if args.bsms_verify_strict && args.bsms_round1.is_empty() {
+        return Err(ToolkitError::BadInput(
+            "--bsms-verify-strict requires `--bsms-round1` (the flag controls \
+             BIP-129 Round-1 SIG verify strictness; there are no records to verify)"
+                .to_string(),
+        ));
+    }
+
+    // v0.27.0 — BIP-129 Round-1 BIP-322 ECDSA verify (independent of --blob).
+    let round1_verifications = if !args.bsms_round1.is_empty() {
+        verify_bsms_round1_files(&args.bsms_round1, args.bsms_verify_strict, stderr)?
+    } else {
+        Vec::new()
+    };
+
+    // v0.27.0 — Standalone Round-1 verify mode: no --blob supplied. Emit
+    // verifications only (no bundle synthesis path).
+    let blob_path = match &args.blob {
+        Some(p) => p,
+        None => {
+            if args.json {
+                emit_round1_only_envelope(stdout, &round1_verifications)?;
+            } else {
+                emit_round1_only_summary(stdout, &round1_verifications)?;
+            }
+            return Ok(0);
+        }
+    };
+
     // Read blob.
-    let blob = read_blob(&args.blob, stdin)?;
+    let blob = read_blob(blob_path, stdin)?;
 
     // SPEC §6: sniff dispatch.
     let sniff_outcome = sniff_format(&blob);
@@ -159,7 +238,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
         Some(other) => {
             return Err(ToolkitError::BadInput(format!(
-                "--format {other} is not supported in v0.26.0 (bsms + bitcoin-core only)"
+                "--format {other} is not supported (bsms + bitcoin-core only)"
             )));
         }
         None => match sniff_outcome {
@@ -190,7 +269,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         if s.subkey != SlotSubkey::Phrase {
             return Err(ToolkitError::BadInput(format!(
                 "import-wallet: --slot @{}.{}=: only the `phrase` subkey is supported \
-                 by import-wallet in v0.26.0",
+                 by import-wallet",
                 s.index,
                 s.subkey.as_str()
             )));
@@ -203,7 +282,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
         other => {
             return Err(ToolkitError::BadInput(format!(
-                "import-wallet --format {other} is not supported in v0.26.0 (bsms + bitcoin-core only)"
+                "import-wallet --format {other} is not supported (bsms + bitcoin-core only)"
             )));
         }
     };
@@ -253,7 +332,15 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // Emit stdout.
     if args.json {
-        emit_json_envelope(stdout, &parsed, &blob, format_str, args.json)?;
+        emit_json_envelope(
+            stdout,
+            stderr,
+            &parsed,
+            &blob,
+            format_str,
+            args.json,
+            &round1_verifications,
+        )?;
     } else {
         // Default text-mode: emit the Phase 2/3 summary form. Emit
         // round-trip diff on stderr when canonicalize is non-byte-exact.
@@ -311,23 +398,27 @@ fn resolve_env_sentinels(args: &ImportWalletArgs) -> Result<ImportWalletArgs, To
     Ok(owned)
 }
 
-/// SPEC §7.4 — emit the JSON envelope array on stdout. Each element
-/// corresponds to one `ParsedImport`. Round-trip is computed against the
-/// ORIGINAL blob (after filtering) via canonicalize_<format>.
+/// v0.27.0 SPEC §3.2 + §3.2.1 — emit the `import-wallet --json` envelope
+/// array on stdout. Each element corresponds to one `ParsedImport`.
 ///
-/// **BSMS round-trip caveat (SPEC §7.3.1 policy):** there is no
-/// `mnemonic export-wallet --format bsms` emitter in v0.26.x (FOLLOWUP
-/// `wallet-export-bsms-emitter`). Without an emitter we cannot produce
-/// a fresh blob to compare against the original; instead we emit
-/// `roundtrip: { byte_exact: false, semantic_match: false, diff: null,
-/// status: "blocked_no_emitter" }`. The same applies to BSMS at default-
-/// mode stderr WARNING emission (see `emit_roundtrip_stderr_warning`).
-fn emit_json_envelope<W: Write>(
+/// The envelope's `bundle` field is the full `BundleJson` shape (SPEC §5.3),
+/// synthesized post-parse via `synthesize_descriptor`. v0.26.0's compact
+/// `bundle: { cosigners, network, threshold }` summary is replaced wholesale
+/// — this is the wire-shape change that v0.27.0's `### Changed` CHANGELOG
+/// entry documents. Closes FOLLOWUP `wallet-import-json-envelope-full-bundle`.
+///
+/// **BSMS round-trip caveat:** v0.27.0 ships a BSMS Round-2 emitter (Phase 3),
+/// but wiring import-wallet's round-trip block to consume it is out of scope
+/// for Phase 4. Status stays `blocked_no_emitter` until a follow-up cycle
+/// rewires the round-trip block to call the new BSMS emitter.
+fn emit_json_envelope<W: Write, E: Write>(
     stdout: &mut W,
+    stderr: &mut E,
     parsed: &[ParsedImport],
     blob: &[u8],
     format_str: &str,
     _json: bool,
+    round1_verifications: &[Round1Verification],
 ) -> Result<(), ToolkitError> {
     let mut envelopes: Vec<serde_json::Value> = Vec::with_capacity(parsed.len());
 
@@ -338,86 +429,149 @@ fn emit_json_envelope<W: Write>(
     };
 
     for p in parsed {
-        // Build a compact bundle-view summary. The full BundleJson shape
-        // (with synthesized ms1/mk1/md1 cards) is NOT produced by import-
-        // wallet in v0.26.0 — synthesis happens in a separate `bundle`
-        // pipeline. The summary here is sufficient for downstream
-        // consumers to identify the parsed cosigners + carry the entropy
-        // attached via seed overlay.
-        let cosigners_json: Vec<serde_json::Value> = p
+        // v0.27.0 SPEC §3.2.1 — synthesize the full BundleJson via
+        // descriptor-mode synthesis (`synthesize_descriptor`). Both v0.26.0
+        // wallet-import formats (BSMS Round-2 + Bitcoin Core listdescriptors)
+        // carry a literal descriptor, so descriptor-mode synthesis applies
+        // uniformly.
+        let bundle = synthesize_descriptor(&p.descriptor, &p.cosigners, false)?;
+
+        // Per §3.2.1 row `template`: descriptor-mode → `None`.
+        // Per §3.2.1 row `descriptor`: source from `original_descriptor`
+        // (pre-strip raw including `#<checksum>`). Disjoint use vs the
+        // typed `p.descriptor` (input to synthesize above).
+        let descriptor_field = Some(p.original_descriptor.clone());
+
+        let n = p.cosigners.len();
+
+        // Per §3.2.1 row `master_fingerprint`: Some only for N=1; None for
+        // multisig. Mirrors live cmd/bundle.rs:677-678 emission rule.
+        let master_fingerprint = if n == 1 {
+            Some(p.cosigners[0].fingerprint.to_string().to_lowercase())
+        } else {
+            None
+        };
+
+        // Per §3.2.1 row `origin_path` / `origin_paths`: mutually exclusive
+        // per SPEC §5.3. Extract per-cosigner path string from the bracket-
+        // form `path_raw` produced by the wallet-import parsers
+        // (`[fp_hex/48'/0'/0'/2']`); strip the fingerprint prefix so the
+        // wire-shape matches `cmd/bundle.rs` (`m/48'/0'/0'/2'`).
+        let paths: Vec<String> = p
             .cosigners
             .iter()
-            .map(|c| {
-                json!({
-                    "fingerprint": format!("{:08x}", u32::from_be_bytes(c.fingerprint.to_bytes())),
-                    "path_raw": c.path_raw,
-                    "xpub": c.xpub.to_string(),
-                    "has_entropy": c.entropy.is_some(),
-                })
-            })
+            .map(|c| origin_path_from_bracket(&c.path_raw))
             .collect();
-        let network_name = network_human_name(p.network);
-        let bundle_view = json!({
-            "cosigners": cosigners_json,
-            "network": network_name,
-            "threshold": p.threshold,
-        });
-
-        // Round-trip per SPEC §7.4 + §7.3.
-        let roundtrip = match format_str {
-            "bitcoin-core" => {
-                // For Bitcoin Core, we re-canonicalize the same blob (no
-                // separate emit step in v0.26.0 — emit-from-bundle is the
-                // sibling `mnemonic export-wallet --format bitcoin-core`
-                // pipeline). The byte-exact check is original-bytes-vs-
-                // canonical; semantic_match is true ONLY when canonicalize
-                // succeeded. If canonicalize failed (e.g., exotic descriptor
-                // that `BitcoinCoreParser::parse` accepted but the
-                // canonicalize path rejected), surface that explicitly via
-                // `status: "canonicalize_failed"` rather than silently
-                // claiming success.
-                match canon_orig.clone() {
-                    Some(canon) => {
-                        let original_text =
-                            std::str::from_utf8(blob).unwrap_or("").to_string();
-                        let byte_exact = original_text == canon;
-                        let diff_val = if byte_exact {
-                            serde_json::Value::Null
-                        } else {
-                            serde_json::Value::String(unified_diff(&original_text, &canon))
-                        };
-                        json!({
-                            "byte_exact": byte_exact,
-                            "semantic_match": true,
-                            "diff": diff_val,
-                            "status": "ok",
-                        })
-                    }
-                    None => json!({
-                        "byte_exact": false,
-                        "semantic_match": false,
-                        "diff": serde_json::Value::Null,
-                        "status": "canonicalize_failed",
-                    }),
-                }
+        let (origin_path, origin_paths) = if n == 1 {
+            (paths.first().cloned(), None)
+        } else {
+            let all_same = paths.windows(2).all(|w| w[0] == w[1]);
+            if all_same {
+                (paths.first().cloned(), None)
+            } else {
+                (None, Some(paths.clone()))
             }
-            "bsms" => {
-                // SPEC §7.3.1 policy: BSMS export emitter does not exist
-                // in v0.26.0 (FOLLOWUP `wallet-export-bsms-emitter`).
-                // Emit a non-misleading envelope per SPEC §7.4.
-                json!({
+        };
+
+        // Per §3.2.1 row `multisig`: Some when N>1, None for N=1.
+        let multisig = if n > 1 {
+            let cosigners: Vec<CosignerEntry> = p
+                .cosigners
+                .iter()
+                .enumerate()
+                .map(|(i, s)| CosignerEntry {
+                    index: i,
+                    master_fingerprint: Some(s.fingerprint.to_string().to_lowercase()),
+                    origin_path: origin_path_from_bracket(&s.path_raw),
+                    xpub: s.xpub.to_string(),
+                })
+                .collect();
+            let threshold = p.threshold.unwrap_or(n as u8);
+            let (path_family, notice) = path_family_from_paths(&paths);
+            if let Some(msg) = notice {
+                writeln!(stderr, "{msg}").map_err(ToolkitError::Io)?;
+            }
+            Some(MultisigInfo {
+                template: "descriptor",
+                threshold,
+                cosigner_count: n,
+                path_family,
+                cosigners,
+            })
+        } else {
+            None
+        };
+
+        // Per §3.2.1 row `mode`: "watch-only" when all cosigners are
+        // watch-only; "full" if any cosigner has entropy attached (seed
+        // overlay path). Mirrors `bundle.any_secret_bearing()` rule at
+        // `cmd/bundle.rs:611`.
+        let mode_str: &'static str = if p.cosigners.iter().any(|c| c.entropy.is_some()) {
+            "full"
+        } else {
+            "watch-only"
+        };
+
+        let bundle_json = BundleJson {
+            schema_version: "4",
+            mode: mode_str,
+            network: network_human_name(p.network),
+            template: None,
+            descriptor: descriptor_field,
+            account: 0,
+            origin_path,
+            origin_paths,
+            master_fingerprint,
+            ms1: bundle.ms1,
+            mk1: bundle.mk1,
+            md1: bundle.md1,
+            multisig,
+            privacy_preserving: false,
+        };
+        let bundle_value = serde_json::to_value(&bundle_json)
+            .map_err(|e| ToolkitError::BadInput(format!("import-wallet --json bundle serialize: {e}")))?;
+
+        // Round-trip per SPEC §7.4 + §7.3 — preserved from v0.26.0 wire shape.
+        let roundtrip = match format_str {
+            "bitcoin-core" => match canon_orig.clone() {
+                Some(canon) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                None => json!({
                     "byte_exact": false,
                     "semantic_match": false,
                     "diff": serde_json::Value::Null,
-                    "status": "blocked_no_emitter",
-                })
-            }
+                    "status": "canonicalize_failed",
+                }),
+            },
+            "bsms" => json!({
+                "byte_exact": false,
+                "semantic_match": false,
+                "diff": serde_json::Value::Null,
+                "status": "blocked_no_emitter",
+            }),
             _ => json!({}),
         };
 
         let mut env = serde_json::Map::new();
-        env.insert("bundle".to_string(), bundle_view);
+        env.insert(
+            "schema_version".to_string(),
+            json!(IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION),
+        );
         env.insert("source_format".to_string(), json!(format_str));
+        env.insert("bundle".to_string(), bundle_value);
         env.insert("roundtrip".to_string(), roundtrip);
 
         if let Some(audit) = &p.bsms_audit {
@@ -445,6 +599,22 @@ fn emit_json_envelope<W: Write>(
             );
         }
 
+        // v0.27.0 — propagate Round-1 BIP-322 verify state when --bsms-round1
+        // was supplied alongside --blob. Same array on every parsed entry
+        // (verifications are blob-independent; surface on every envelope so
+        // downstream consumers don't have to index-match).
+        if !round1_verifications.is_empty() {
+            env.insert(
+                "bsms_round1_verifications".to_string(),
+                serde_json::Value::Array(
+                    round1_verifications
+                        .iter()
+                        .map(round1_verification_to_json)
+                        .collect(),
+                ),
+            );
+        }
+
         envelopes.push(serde_json::Value::Object(env));
     }
 
@@ -454,11 +624,88 @@ fn emit_json_envelope<W: Write>(
     Ok(())
 }
 
+/// Extract the m/-prefixed origin path from a wallet-import-parsed
+/// `path_raw` (bracket form: `[fp_hex/48'/0'/0'/2']`). The bracket form is
+/// produced by `wallet_import::bsms::extract_origin_components` and the
+/// Bitcoin Core sibling; it carries the fingerprint inline because the
+/// bracketed-origin annotation is BIP-380 syntax. The v0.27.0 envelope's
+/// `origin_path` (and `multisig.cosigners[].origin_path`) wire-shape mirrors
+/// `cmd/bundle.rs:617-625` (`m/48'/0'/0'/2'`); strip `[fp_hex` and `]` here.
+fn origin_path_from_bracket(path_raw: &str) -> String {
+    let inner = path_raw.trim_start_matches('[').trim_end_matches(']');
+    match inner.find('/') {
+        Some(slash) => format!("m{}", &inner[slash..]),
+        None => "m".to_string(),
+    }
+}
+
+/// SPEC §3.2.1 row `multisig.path_family` — detection from the BIP-43
+/// purpose component of cosigner paths. v0.27.0 Phase 6.5 PR-review I1 fold:
+/// requires all cosigners to agree on the purpose component (heterogeneity
+/// produces a stderr NOTICE + falls back to bip87); explicitly enumerates
+/// recognized BIP-43 purposes (`44'/45'/48'/49'/84'/86'/87'`) rather than
+/// silently collapsing unknowns to bip87.
+///
+/// Returns `(path_family, optional_stderr_notice)`:
+/// - `48'` → `"bip48"` — BIP-48 multisig.
+/// - `87'` → `"bip87"` — BIP-87 cosigner-level multisig (and toolkit default).
+/// - `44'`/`45'`/`49'`/`84'`/`86'` → `"bip87"` + stderr NOTICE about the
+///   purpose mismatch (single-sig purposes appearing in multisig context
+///   are non-canonical; surface this rather than silently collapsing).
+/// - Heterogeneous purposes → `"bip87"` + stderr NOTICE listing the
+///   per-cosigner purposes.
+/// - Empty paths → `"bip87"` silently (the calling site only invokes this
+///   helper when N ≥ 1).
+fn path_family_from_paths(paths: &[String]) -> (&'static str, Option<String>) {
+    fn extract_purpose(p: &str) -> &str {
+        let trimmed = p.trim_start_matches("m/").trim_start_matches('m');
+        trimmed.trim_start_matches('/').split('/').next().unwrap_or("")
+    }
+    let purposes: Vec<&str> = paths.iter().map(|p| extract_purpose(p)).collect();
+    if purposes.is_empty() {
+        return ("bip87", None);
+    }
+    let all_same = purposes.windows(2).all(|w| w[0] == w[1]);
+    if !all_same {
+        let notice = format!(
+            "notice: import-wallet: cosigner paths disagree on BIP-43 purpose: {:?}; \
+             envelope `multisig.path_family` defaults to \"bip87\" — consumers may misinterpret",
+            purposes
+        );
+        return ("bip87", Some(notice));
+    }
+    match purposes[0] {
+        "48'" | "48h" => ("bip48", None),
+        "87'" | "87h" => ("bip87", None),
+        // Recognized but non-canonical-for-multisig BIP-43 purposes.
+        "44'" | "44h" | "45'" | "45h" | "49'" | "49h" | "84'" | "84h" | "86'" | "86h" => {
+            let notice = format!(
+                "notice: import-wallet: cosigner BIP-43 purpose {:?} is non-canonical for \
+                 multisig; envelope `multisig.path_family` defaults to \"bip87\"",
+                purposes[0]
+            );
+            ("bip87", Some(notice))
+        }
+        "" => ("bip87", None), // empty paths (single-sig N=1) — no notice
+        other => {
+            let notice = format!(
+                "notice: import-wallet: unrecognized BIP-43 purpose component {:?}; \
+                 envelope `multisig.path_family` defaults to \"bip87\"",
+                other
+            );
+            ("bip87", Some(notice))
+        }
+    }
+}
+
 /// SPEC §7.4: when `--json` is NOT set, the round-trip diff goes ONLY on
-/// stderr (the cards stdout is unaffected). For BSMS we have no emitter
-/// in v0.26.0 (FOLLOWUP `wallet-export-bsms-emitter`); we skip the
-/// WARNING. For Bitcoin Core we compare original bytes vs canonicalize
-/// and emit a WARNING per SPEC §2.4 ("roundtrip not byte-exact; semantic
+/// stderr (the cards stdout is unaffected). For BSMS the stderr-WARNING
+/// path is not yet rewired to consume the v0.27.0-shipped emitter
+/// (`crate::wallet_export::bsms`); we skip the WARNING here. See the
+/// caveat at `emit_json_envelope`'s doc comment (`import_wallet.rs:396-399`)
+/// for the corresponding `--json` envelope `roundtrip.status` behavior.
+/// For Bitcoin Core we compare original bytes vs canonicalize and emit
+/// a WARNING per SPEC §2.4 ("roundtrip not byte-exact; semantic
 /// equivalent; diff below").
 fn emit_roundtrip_stderr_warning<E: Write>(
     stderr: &mut E,
@@ -488,7 +735,7 @@ fn emit_roundtrip_stderr_warning<E: Write>(
     Ok(())
 }
 
-fn network_human_name(n: bitcoin::Network) -> &'static str {
+pub(crate) fn network_human_name(n: bitcoin::Network) -> &'static str {
     match n {
         bitcoin::Network::Bitcoin => "mainnet",
         bitcoin::Network::Testnet => "testnet",
@@ -572,4 +819,157 @@ fn hex_lower(bytes: &[u8]) -> String {
         s.push_str(&format!("{b:02x}"));
     }
     s
+}
+
+// ---------------------------------------------------------------------------
+// v0.27.0 — BIP-129 Round-1 verify (--bsms-round1 + --bsms-verify-strict)
+// ---------------------------------------------------------------------------
+
+/// Per-record verify result. Propagates to `--json` envelope when --blob is
+/// supplied, OR to the standalone Round-1 verify envelope when --blob is not.
+///
+/// v0.27.0 Phase 6.5 PR-review I7 fold: status flipped from a
+/// `(signature_verified: bool, failure_reason: Option<String>)` pair to a
+/// closed enum so the representable-invalid state `(true, Some(reason))`
+/// is no longer expressible.
+struct Round1Verification {
+    index: usize,
+    signer_pubkey: String,
+    description: String,
+    token_hex: String,
+    status: Round1VerificationStatus,
+}
+
+#[derive(Debug)]
+enum Round1VerificationStatus {
+    Verified,
+    /// Lenient-default failure: `reason` is the BIP-322 verifier's
+    /// rationale string. Strict mode surfaces this as a fatal
+    /// `BsmsSignatureMismatch` before this enum is constructed.
+    Failed { reason: String },
+}
+
+/// Read + parse + verify each `--bsms-round1 <FILE>` entry. Lenient default:
+/// verify failure emits stderr NOTICE + sets `status: Failed { reason }`;
+/// strict (`--bsms-verify-strict`) makes verify failure fatal.
+fn verify_bsms_round1_files(
+    paths: &[PathBuf],
+    strict: bool,
+    stderr: &mut dyn Write,
+) -> Result<Vec<Round1Verification>, ToolkitError> {
+    use crate::wallet_import::bsms_round1::{parse_round1, signer_pubkey};
+    use crate::wallet_import::bsms_verify::verify_round1_signature;
+
+    let mut out = Vec::with_capacity(paths.len());
+    for (i, path) in paths.iter().enumerate() {
+        if path.as_os_str() == "-" {
+            // v0.27.0 first cut: stdin input for --bsms-round1 deferred. Future:
+            // multi-record stdin (one record per blob, separated by sentinel)
+            // or single-record-from-stdin (mutually exclusive with --blob -).
+            return Err(ToolkitError::BadInput(format!(
+                "--bsms-round1 -: stdin input deferred in v0.27.0; supply a file path \
+                 (record index {})",
+                i
+            )));
+        }
+        let text = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
+        let record = parse_round1(&text)?;
+        let pk_hex = hex::encode(signer_pubkey(&record).serialize());
+
+        match verify_round1_signature(&record, i) {
+            Ok(()) => {
+                out.push(Round1Verification {
+                    index: i,
+                    signer_pubkey: pk_hex,
+                    description: record.description.clone(),
+                    token_hex: record.token_hex.clone(),
+                    status: Round1VerificationStatus::Verified,
+                });
+            }
+            Err(ToolkitError::BsmsSignatureMismatch {
+                record_index,
+                signer_pubkey: pk_for_err,
+                reason,
+            }) => {
+                if strict {
+                    return Err(ToolkitError::BsmsSignatureMismatch {
+                        record_index,
+                        signer_pubkey: pk_for_err,
+                        reason,
+                    });
+                }
+                // v0.27.0 Phase 6.5 PR-review I2 fold: propagate stderr
+                // write failure as a typed I/O error rather than silently
+                // dropping the NOTICE. This NOTICE is the ONLY interactive
+                // signal of Round-1 verify failure in lenient mode (text-
+                // mode users see no other indication), so a failed write
+                // here would be a silent security-relevant signal loss.
+                writeln!(
+                    stderr,
+                    "notice: import-wallet: --bsms-round1: signature verification failed \
+                     for record {i} (signer pubkey {pk_for_err}): {reason}"
+                )
+                .map_err(ToolkitError::Io)?;
+                out.push(Round1Verification {
+                    index: i,
+                    signer_pubkey: pk_for_err,
+                    description: record.description.clone(),
+                    token_hex: record.token_hex.clone(),
+                    status: Round1VerificationStatus::Failed { reason },
+                });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(out)
+}
+
+fn emit_round1_only_envelope<W: Write>(
+    stdout: &mut W,
+    verifications: &[Round1Verification],
+) -> Result<(), ToolkitError> {
+    let payload = json!({
+        "source_format": "bsms-round1",
+        "bsms_round1_verifications": verifications
+            .iter()
+            .map(round1_verification_to_json)
+            .collect::<Vec<_>>(),
+    });
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| ToolkitError::BadInput(format!("--bsms-round1 envelope serialize: {e}")))?;
+    writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
+    Ok(())
+}
+
+fn emit_round1_only_summary<W: Write>(
+    stdout: &mut W,
+    verifications: &[Round1Verification],
+) -> Result<(), ToolkitError> {
+    writeln!(stdout, "bsms-round1: {} record(s) processed", verifications.len())
+        .map_err(ToolkitError::Io)?;
+    for v in verifications {
+        let verified = matches!(v.status, Round1VerificationStatus::Verified);
+        writeln!(
+            stdout,
+            "  record[{}]: signer_pubkey={} description={:?} token_hex={} verified={}",
+            v.index, v.signer_pubkey, v.description, v.token_hex, verified
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+    Ok(())
+}
+
+fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
+    let (signature_verified, failure_reason): (bool, Option<&str>) = match &v.status {
+        Round1VerificationStatus::Verified => (true, None),
+        Round1VerificationStatus::Failed { reason } => (false, Some(reason.as_str())),
+    };
+    json!({
+        "index": v.index,
+        "signer_pubkey": v.signer_pubkey,
+        "description": v.description,
+        "token_hex": v.token_hex,
+        "signature_verified": signature_verified,
+        "failure_reason": failure_reason,
+    })
 }

@@ -920,3 +920,51 @@ fn descriptor_to_bip388_non_multipath_refused() {
         "stderr missing multipath requirement: {stderr:?}",
     );
 }
+
+/// v0.27.0 Phase 6.5 PR-review S2 fold — `--bsms-form` is documented as
+/// "ignored by every other format" (export_wallet.rs:144). Lock that
+/// contract: setting `--bsms-form 2-line` against `--format bitcoin-core`
+/// must produce byte-identical output to the same invocation without the
+/// flag. (Catches accidental flag-leak regressions where a future per-format
+/// emitter starts branching on `inputs.bsms_form`.)
+#[test]
+fn bsms_form_does_not_leak_into_non_bsms_format_output() {
+    let mk_args = |with_form: bool| {
+        let mut v = vec![
+            "export-wallet".to_string(),
+            "--template".into(),
+            "bip84".into(),
+            "--network".into(),
+            "mainnet".into(),
+            "--format".into(),
+            "bitcoin-core".into(),
+            "--slot".into(),
+            format!("@0.xpub={TREZOR_BIP84_XPUB}"),
+            "--slot".into(),
+            format!("@0.fingerprint={TREZOR_BIP84_FP}"),
+        ];
+        if with_form {
+            v.push("--bsms-form".into());
+            v.push("2-line".into());
+        }
+        v
+    };
+    let out_baseline = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(mk_args(false))
+        .assert()
+        .success();
+    let stdout_baseline = String::from_utf8(out_baseline.get_output().stdout.clone()).unwrap();
+
+    let out_with_form = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(mk_args(true))
+        .assert()
+        .success();
+    let stdout_with_form = String::from_utf8(out_with_form.get_output().stdout.clone()).unwrap();
+
+    assert_eq!(
+        stdout_baseline, stdout_with_form,
+        "--bsms-form must not influence --format bitcoin-core output"
+    );
+}

@@ -5,6 +5,7 @@ mod bundle_unified;
 mod cmd;
 mod cost;
 mod derive;
+mod derive_address;
 mod derive_slot;
 mod electrum;
 mod env_sentinel;

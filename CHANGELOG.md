@@ -6,6 +6,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.27.0] — 2026-05-19
+
+The **cross-format wallet conversion** cycle. The toolkit now ingests a BSMS Round-2 blob, mediates it through a canonical envelope, and emits any of the eight supported per-format wallet configs (Bitcoin Core, BIP-388, Coldcard, Jade, Sparrow, Specter, Electrum, Green) — or synthesizes the canonical `ms1`/`mk1`/`md1` engraving cards from the same envelope. v0.27.0 also ships BIP-129 Round-1 BIP-322 ECDSA signature verification (`--bsms-round1`), the first toolkit-side cryptographic Round-1 audit, and a `--format bsms` emitter (4-line BIP-129-canonical default + 2-line lenient).
+
+### Added
+
+- **`mnemonic export-wallet --format bsms`** (Phase 3 `4a2b6e7`) — BSMS Round-2 emitter. The default `--bsms-form 4-line` produces the BIP-129-canonical Round-2 plaintext (4 lines: `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`). The lenient `--bsms-form 2-line` emits the v0.26.0 import-side parser's symmetric form (no audit fields). Closes FOLLOWUP `wallet-export-bsms-emitter`. The Phase 3 commit additionally wires first-address verification into `import-wallet --format bsms` (closes FOLLOWUP `bsms-first-address-verify`): a stderr WARNING fires when the blob's declared first-address disagrees with the toolkit-derived address at `m/0/0` (informational; not hard-error per BIP-129 §6 self-consistency intent). Taproot descriptors are explicitly out of scope (FOLLOWUP `bsms-taproot-emit`; v0.28+).
+- **`mnemonic import-wallet --bsms-round1 <FILE>`** + **`--bsms-verify-strict`** (Phase 2 `149b341`) — BIP-129 5-line Round-1 key-record parser + BIP-322 ECDSA recoverable-signature verification. Each `--bsms-round1` is a separate file; repeating. Default lenient mode emits a stderr NOTICE on verify failure + sets `signature_verified: false` per-record; `--bsms-verify-strict` makes verify failure fatal (`BsmsSignatureMismatch` exit 2). When supplied alongside `--blob`, the per-record verify state propagates into the `--json` envelope's new `bsms_round1_verifications` field. Standalone mode (no `--blob`) emits a verify envelope on stdout and exits 0 on verify success. Verifies against the xpub's OWN embedded pubkey (bytes 45-78 of serialized xpub) per BIP-129 §Specification → Round 1; supports both raw-pubkey KEYs and xpub KEYs. Closes FOLLOWUP `bsms-verify-signatures`. New recipe chapter `docs/manual/src/30-workflows/3A-bsms-round1-verify.md`.
+- **`mnemonic bundle --import-json <FILE|->`** + **`--import-json-index <N>`** (Phase 5 `5bf64a1`) — synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`. The envelope's `bundle.descriptor` is the source-of-truth descriptor; `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths per SPEC §3.6.1. Seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""`; supplying overlay for an already-seeded slot is `BadInput`. Multi-entry envelopes (e.g., Bitcoin Core `listdescriptors` with multiple descriptors) require `--import-json-index N`; ambiguous-multi-entry without index is `BadInput` exit 2 (intentional footgun guard).
+- **`mnemonic export-wallet --from-import-json <FILE|->`** + **`--from-import-json-index <N>`** (Phase 5 `5bf64a1`) — emit a per-format wallet config from an `import-wallet --json` envelope. The envelope's `bundle.descriptor` becomes the emitter's canonical descriptor; cosigner xpubs decode from `bundle.mk1`; network derives from `bundle.network`. `--account` is rejected (envelope's `bundle.account` is authoritative). Template-only destination formats (Sparrow / Jade / Coldcard / Electrum) surface the existing per-emitter "--template required" refusal because the v0.27.0 envelope is always descriptor-mode. New recipe chapter `docs/manual/src/30-workflows/39-cross-format-conversion.md` walks the BSMS → Bitcoin Core end-to-end pipeline.
+- **`mnemonic inspect --json`** schema_version backfill (Phase 1 `e908309`) — the new `InspectEnvelope<'a>` wrapper adds a top-level `schema_version: "1"` field to the `--json` output, mirroring the `XpubSearchEnvelope` precedent. Closes FOLLOWUP `inspect-json-schema-version-backfill`. `mnemonic repair --json` was already shipping `schema_version: "1"` since v0.22.0; no Repair-side change.
+
+### Changed
+
+- **`mnemonic import-wallet --json` envelope wire-shape replacement** (Phase 4 `8ac6847`). The `bundle:` field was a parse-side summary `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` in v0.26.0; v0.27.0 emits the full toolkit-native `BundleJson` shape (the same `verify-bundle --bundle-json` consumes), synthesized post-parse via `crate::synthesize::synthesize_descriptor`. A new top-level `schema_version: "1"` field is added. **This is a wire-shape REPLACEMENT (not additive).** Downstream consumers encoding against the v0.26.0 summary shape must be updated. The v0.27.0 envelope is byte-exact-pinned via `crates/mnemonic-toolkit/tests/fixtures/wallet_import/envelope_v0_27_0.json`. Closes FOLLOWUP `wallet-import-json-envelope-full-bundle`. The mnemonic-gui consumer cycle picks up this envelope change separately (sibling repo `pinned-upstream.toml` not bumped by this cycle).
+- **`docs/m-format-coordinator-runbook.md`** moved to `design/PLAN_v0_26_0_three_way_merge.md` (Phase 1 `e908309`) per the canonical-record convention. The CLAUDE.md Conventions section is updated to point at the new location. Closes FOLLOWUP `coordinator-runbook-into-design-dir`.
+
+### Closed FOLLOWUPS
+
+- `wallet-export-bsms-emitter` (Phase 3)
+- `bsms-first-address-verify` (Phase 3)
+- `bsms-verify-signatures` (Phase 2)
+- `inspect-json-schema-version-backfill` (Phase 1)
+- `coordinator-runbook-into-design-dir` (Phase 1)
+- `wallet-import-json-envelope-full-bundle` (Phase 4)
+
 ## mnemonic-toolkit [0.26.0] — 2026-05-18
 
 ### Added

@@ -131,27 +131,56 @@ fn bsms_2_line_happy_path() {
 #[test]
 fn bsms_6_line_happy_path() {
     // Mainnet 2-of-2 sortedmulti at `48'/0'/0'/2'`. Synthesize a 6-line
-    // BSMS Round-2 with realistic-looking audit fields.
+    // BSMS Round-2 with realistic audit fields. v0.27.0 Phase 3 derives
+    // line-4 first-address locally and compares against `audit.first_address`;
+    // we compute the real /0/0 address here so the mismatch WARNING does
+    // NOT fire on the happy path.
     let desc = format!(
         "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*))"
     );
+    // Independent derivation of the /0/0 first address (mainnet) via
+    // miniscript, mirroring the toolkit's `derive_address::derive_first_address`
+    // primitive. Equality with the toolkit's local derivation is exactly
+    // the v0.27.0 happy-path invariant.
+    use miniscript::{Descriptor, DescriptorPublicKey};
+    use std::str::FromStr;
+    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc)
+        .expect("descriptor parses");
+    let receive = parsed
+        .into_single_descriptors()
+        .expect("multipath split")
+        .remove(0);
+    let real_first_address = receive
+        .derive_at_index(0)
+        .expect("derive_at_index")
+        .address(bitcoin::Network::Bitcoin)
+        .expect("address render")
+        .to_string();
+
     let blob = build_bsms_6line(
         &desc,
         "00112233445566778899aabbccddeeff",
         "m/48'/0'/0'/2'",
-        "bc1qexample0000000000000000000000000000000",
+        &real_first_address,
         "H/example/sig/base64=",
     );
     let out = run_import_stdin(&blob).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §2.4: 6-line WARNING about signature-not-verified fires.
+    // SPEC §2.4 (+ v0.27.0 update): 6-line NOTICE that inline signature is
+    // not verified by the 2/6-line parser fires; the v0.27.0 reword points
+    // the user at the new --bsms-round1 path for BIP-322 verification.
     assert!(
-        stderr.contains("signature present but not verified"),
-        "expected signature-not-verified WARNING; stderr was: {stderr}"
+        stderr.contains("not verified inline") && stderr.contains("--bsms-round1"),
+        "expected v0.27.0 6-line not-verified-inline NOTICE; stderr was: {stderr}"
     );
     // 6-line does NOT emit the 2-line reduced-form WARNING.
     assert!(!stderr.contains("2-line excerpt"));
+    // v0.27.0 Phase 3 regression guard: real /0/0 address ⇒ NO mismatch WARNING.
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "happy-path 6-line ingest must NOT emit first-address-mismatch WARNING when the declared address byte-equals the toolkit-derived address; stderr was: {stderr}"
+    );
     assert!(stdout.contains("cosigners=2"));
     assert!(stdout.contains("network=mainnet"));
     assert!(stdout.contains("threshold=2"));
@@ -159,19 +188,21 @@ fn bsms_6_line_happy_path() {
 }
 
 // ============================================================================
-// §2.6 — bsms_first_address_field_preserved_unverified
-// (renamed from `bsms_first_address_mismatch_warning` per Phase 2 R0 I1 fold
-//  — first-address verification deferred to v0.27+ FOLLOWUP `bsms-first-address-verify`)
+// §2.6 — bsms_first_address_mismatch_warning
+// (v0.27.0 Phase 3: restored — closes FOLLOWUP `bsms-first-address-verify`.
+//  Pre-v0.27.0 this cell was `bsms_first_address_field_preserved_unverified`
+//  per the v0.26.0 deferral; v0.27.0 wires the toolkit-side derivation +
+//  mismatch WARNING per the FOLLOWUP body's spec.)
 // ============================================================================
 
 #[test]
-fn bsms_first_address_field_preserved_unverified() {
-    // v0.26.0 (Phase 2 I1 fold): first-address derivation + mismatch
-    // WARNING are deferred to v0.27+ per FOLLOWUP
-    // `bsms-first-address-verify`. The audit field IS preserved verbatim
-    // for `--json` envelope consumption; the toolkit does not compute
-    // an address at the declared path or compare against it in this
-    // cycle. This cell pins the preservation invariant.
+fn bsms_first_address_mismatch_warning() {
+    // v0.27.0 Phase 3: 6-line BSMS Round-2 ingest now derives the wallet's
+    // first address at canonical /0/0 via
+    // `crate::derive_address::derive_first_address` and compares against
+    // the declared `<FIRST_ADDRESS>` audit field. Mismatch is informational
+    // (stderr WARNING; exit 0) per BIP-129 §6 coordinator-output
+    // self-consistency intent.
     let desc = format!(
         "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*))"
     );
@@ -185,21 +216,25 @@ fn bsms_first_address_field_preserved_unverified() {
     let out = run_import_stdin(&blob).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // 6-line shape => signature-not-verified WARNING fires (SPEC §2.4
-    // row 2); audit bundle is populated (preservation invariant).
-    assert!(
-        stderr.contains("signature present but not verified"),
-        "expected 6-line signature-not-verified WARNING; stderr was: {stderr:?}"
-    );
+    // 6-line shape => audit bundle is populated (preservation invariant).
     assert!(
         stdout.contains("bsms_audit=some"),
         "BsmsAuditFields must be populated for 6-line blob; stdout was: {stdout:?}"
     );
-    // First-address mismatch is intentionally fed but produces no
-    // mismatch WARNING in v0.26.0 (deferral invariant).
+    // v0.27.0 Phase 3: first-address mismatch WARNING fires.
+    // SPEC §2.4 row 3 template:
+    //   "warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>"
     assert!(
-        !stderr.contains("first-address mismatch"),
-        "v0.26.0 must not emit first-address-mismatch WARNING (deferred to v0.27+); stderr was: {stderr:?}"
+        stderr.contains("first-address mismatch at path m/48'/0'/0'/2'"),
+        "WARNING must include 'at path <P>' segment (FOLLOWUP body line 2091); stderr was: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("computed bc1q"),
+        "WARNING must report toolkit-computed mainnet bech32 first-address; stderr was: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("blob declares bc1qINTENTIONALLY_GARBAGE_ADDRESS"),
+        "WARNING must echo the blob's declared first-address verbatim; stderr was: {stderr:?}"
     );
 }
 

@@ -241,6 +241,20 @@ fn path_decl_shape(d: &md_codec::Descriptor) -> &'static str {
     }
 }
 
+/// v0.27.0 inspect-envelope schema. Bumped with each wire-shape change.
+pub const INSPECT_SCHEMA_VERSION: &str = "1";
+
+/// v0.27.0 top-level wrapper. Always emits `schema_version: "1"` at the top
+/// level; the per-kind body is `#[serde(flatten)]`'d so the resulting JSON
+/// has shape `{"schema_version":"1","kind":"<kind>",...}`. Mirrors
+/// `XpubSearchEnvelope` precedent (`crate::cmd::xpub_search::mod`).
+#[derive(serde::Serialize)]
+struct InspectEnvelope<'a> {
+    schema_version: &'static str,
+    #[serde(flatten)]
+    body: InspectJson<'a>,
+}
+
 #[derive(serde::Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 enum InspectJson<'a> {
@@ -270,7 +284,7 @@ fn emit_inspect_json<W: Write>(
     reveal_secret: bool,
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
-    let envelope = match payload {
+    let body = match payload {
         InspectPayload::Ms1 { tag, payload } => {
             let tag_str = std::str::from_utf8(tag.as_bytes()).unwrap_or("<non-utf8>");
             let bytes = payload.as_bytes();
@@ -299,8 +313,85 @@ fn emit_inspect_json<W: Write>(
             path_decl_shape: path_decl_shape(d),
         },
     };
-    let body = serde_json::to_string(&envelope)
+    let envelope = InspectEnvelope {
+        schema_version: INSPECT_SCHEMA_VERSION,
+        body,
+    };
+    let body_str = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("inspect JSON serialize: {e}")))?;
-    writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
+    writeln!(stdout, "{body_str}").map_err(ToolkitError::Io)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod inspect_envelope_tests {
+    //! Unit cell: `InspectEnvelope` serde round-trip. Pins the
+    //! `#[serde(flatten)]` + inner `tag = "kind"` shape against accidental
+    //! breakage. Mirrors `XpubSearchEnvelope` precedent.
+
+    use super::*;
+
+    #[test]
+    fn inspect_envelope_ms1_serializes_schema_version_and_flattens_body() {
+        let body = InspectJson::Ms1 {
+            tag: "entr",
+            payload_kind: "Entr16".to_string(),
+            byte_length: 16,
+            bit_strength: 128,
+            entropy_hex: None,
+        };
+        let envelope = InspectEnvelope {
+            schema_version: INSPECT_SCHEMA_VERSION,
+            body,
+        };
+        let v = serde_json::to_value(&envelope).expect("serialize");
+        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["kind"], "ms1");
+        assert_eq!(v["tag"], "entr");
+        assert_eq!(v["byte_length"], 16);
+        assert_eq!(v["bit_strength"], 128);
+        assert!(v["entropy_hex"].is_null());
+    }
+
+    #[test]
+    fn inspect_envelope_mk1_serializes_schema_version_and_flattens_body() {
+        let body = InspectJson::Mk1 {
+            policy_id_stub_count: 2,
+            origin_fingerprint: Some("aabbccdd".to_string()),
+            origin_path: "m/84'/0'/0'".to_string(),
+            xpub: "xpub6...".to_string(),
+        };
+        let envelope = InspectEnvelope {
+            schema_version: INSPECT_SCHEMA_VERSION,
+            body,
+        };
+        let v = serde_json::to_value(&envelope).expect("serialize");
+        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["kind"], "mk1");
+        assert_eq!(v["policy_id_stub_count"], 2);
+        assert_eq!(v["origin_fingerprint"], "aabbccdd");
+        assert_eq!(v["origin_path"], "m/84'/0'/0'");
+        assert_eq!(v["xpub"], "xpub6...");
+    }
+
+    #[test]
+    fn inspect_envelope_md1_serializes_schema_version_and_flattens_body() {
+        let body = InspectJson::Md1 {
+            placeholder_count: 1,
+            tree_tag: "Wpkh".to_string(),
+            wallet_policy_mode: true,
+            path_decl_shape: "Shared",
+        };
+        let envelope = InspectEnvelope {
+            schema_version: INSPECT_SCHEMA_VERSION,
+            body,
+        };
+        let v = serde_json::to_value(&envelope).expect("serialize");
+        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["kind"], "md1");
+        assert_eq!(v["placeholder_count"], 1);
+        assert_eq!(v["tree_tag"], "Wpkh");
+        assert_eq!(v["wallet_policy_mode"], true);
+        assert_eq!(v["path_decl_shape"], "Shared");
+    }
 }

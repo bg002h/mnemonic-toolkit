@@ -232,6 +232,22 @@ pub enum ToolkitError {
         mode: &'static str,
         searched: usize,
     },
+    /// v0.27.0 — `mnemonic import-wallet --bsms-round1 <FILE>` parsed a
+    /// blob that does not meet BIP-129 §Round 1 record syntax (line count
+    /// != 5 after CRLF normalize, line 1 != `BSMS 1.0`, malformed line-3
+    /// KEY field, malformed line-5 base64 SIG, line-4 description carries
+    /// `\n` or `\r`, etc.). Exit 2 — parse-class error.
+    BsmsRound1Malformed { reason: String },
+    /// v0.27.0 — BIP-129 §Round 1 BIP-322 ECDSA recoverable signature
+    /// verification failed: signature recovered to a different pubkey than
+    /// the one declared on the record's line 3, OR recovery itself failed.
+    /// Exit 2 — explicit failure (NOT a stderr NOTICE; the user opted into
+    /// verify by supplying `--bsms-round1` + `--bsms-verify-strict`).
+    BsmsSignatureMismatch {
+        record_index: usize,
+        signer_pubkey: String,
+        reason: String,
+    },
 }
 
 /// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
@@ -413,6 +429,13 @@ impl ToolkitError {
             | ToolkitError::ImportWalletXprvForbidden
             | ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
             ToolkitError::ImportWalletSeedMismatch { .. } => 4,
+            // v0.27.0 — BSMS Round-1 parse/verify failures. Both exit 2
+            // (parse-class for Malformed; explicit-fail for SignatureMismatch
+            // when --bsms-verify-strict is set; lenient-default path emits
+            // stderr NOTICE + signature_verified: false instead of returning
+            // SignatureMismatch — caller controls the strictness gate).
+            ToolkitError::BsmsRound1Malformed { .. }
+            | ToolkitError::BsmsSignatureMismatch { .. } => 2,
         }
     }
 
@@ -463,6 +486,8 @@ impl ToolkitError {
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
             ToolkitError::ImportWalletXprvForbidden => "ImportWalletXprvForbidden",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
+            ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
+            ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
         }
     }
 
@@ -601,6 +626,17 @@ impl ToolkitError {
                 "no match in searched set: mode={mode}, paths searched={searched}; \
                  widen the range with --max-account / --number-of-accounts, or supply \
                  additional templates via --add-path"
+            ),
+            ToolkitError::BsmsRound1Malformed { reason } => format!(
+                "import-wallet: --bsms-round1: BIP-129 Round-1 record malformed: {reason}"
+            ),
+            ToolkitError::BsmsSignatureMismatch {
+                record_index,
+                signer_pubkey,
+                reason,
+            } => format!(
+                "import-wallet: --bsms-round1: BIP-129 signature verification failed for \
+                 record {record_index} (signer pubkey {signer_pubkey}): {reason}"
             ),
         }
     }

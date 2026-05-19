@@ -23,6 +23,9 @@ use std::io::Write;
 
 pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
+pub(crate) mod bsms_round1;
+pub(crate) mod bsms_verify;
+pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
@@ -55,8 +58,16 @@ pub(crate) trait WalletFormatParser {
 /// distinct downstream step.
 #[derive(Debug)]
 pub(crate) struct ParsedImport {
-    #[allow(dead_code)] // ParsedImport.descriptor: pending FOLLOWUP wallet-import-json-envelope-full-bundle (v0.27+)
+    /// Typed descriptor shape (post-`@N`-substitution; canonical-form bytes).
+    /// Input to `crate::synthesize::synthesize_descriptor` on the v0.27.0
+    /// `import-wallet --json` envelope emit path.
     pub(crate) descriptor: md_codec::Descriptor,
+    /// Pre-strip raw descriptor verbatim, including the BIP-380
+    /// `#<checksum>` suffix. Disjoint use vs `descriptor` above: this
+    /// carries the wire-shape string used in `BundleJson.descriptor`
+    /// envelope emission (SPEC §3.2.1). For BSMS the raw is line 2 of
+    /// Round-2; for Bitcoin Core it is the `desc` JSON field verbatim.
+    pub(crate) original_descriptor: String,
     pub(crate) cosigners: Vec<ResolvedSlot>,
     pub(crate) network: bitcoin::Network,
     pub(crate) threshold: Option<u8>,
@@ -170,8 +181,9 @@ pub(crate) fn apply_select_descriptor(
 }
 
 /// SPEC §8.1 — BSMS Round-2 audit metadata. Preserved for `--json` envelope
-/// emission; `signature_verified` is always `false` in v0.26.0 (FOLLOWUP
-/// `bsms-verify-signatures`).
+/// emission; this field captures inline 2/6-line parser audit context only and
+/// is unrelated to v0.27.0's `--bsms-round1 <FILE>` BIP-322 verification path
+/// (which emits `bsms_round1_verifications[*].signature_verified` instead).
 #[derive(Debug, Clone)]
 pub(crate) struct BsmsAuditFields {
     pub(crate) token: String,

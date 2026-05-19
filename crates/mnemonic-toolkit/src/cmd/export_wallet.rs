@@ -11,8 +11,9 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter, JadeEmitter, SparrowEmitter,
-    SpecterEmitter, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
+    BsmsEmitter, BsmsForm, ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter,
+    JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
+    WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -35,6 +36,8 @@ pub enum CliExportFormat {
     Electrum,
     #[value(name = "green")]
     Green,
+    #[value(name = "bsms")]
+    Bsms,
 }
 
 #[derive(Args, Debug)]
@@ -135,6 +138,39 @@ pub struct ExportWalletArgs {
         verbatim_doc_comment,
     )]
     pub taproot_internal_key: Option<TaprootInternalKey>,
+
+    /// SPEC v0.27.0 §3.5 — BSMS Round-2 emit shape. `4-line`
+    /// (BIP-129-canonical) is the default; `2-line` is the lenient
+    /// excerpt symmetric with the v0.26.0 import-side parser. Ignored
+    /// by every other format.
+    #[arg(long = "bsms-form", value_enum, default_value = "4-line")]
+    pub bsms_form: BsmsForm,
+
+    /// v0.27.0 — emit a per-format wallet config from an
+    /// `import-wallet --json` envelope rather than from `--template` /
+    /// `--descriptor`. Accepts a file path or `-` to read the envelope
+    /// from stdin. The envelope's `bundle.descriptor` becomes the
+    /// canonical descriptor for the emitter; cosigner xpubs decode
+    /// from `bundle.mk1` per SPEC §3.6.1; network derives from
+    /// `bundle.network`. Mutually exclusive with `--template` and
+    /// `--descriptor`. `--account` is rejected (the envelope's
+    /// `bundle.account` value applies; the account is encoded in the
+    /// descriptor's origin paths).
+    #[arg(
+        long = "from-import-json",
+        value_name = "FILE|-",
+        conflicts_with_all = ["template", "descriptor"],
+    )]
+    pub from_import_json: Option<String>,
+
+    /// v0.27.0 — pick a specific entry from a multi-entry envelope
+    /// array. Required when the envelope has > 1 entry.
+    #[arg(
+        long = "from-import-json-index",
+        value_name = "N",
+        requires = "from_import_json",
+    )]
+    pub from_import_json_index: Option<usize>,
 }
 
 /// SPEC v0.8 §7 parser: `nums` or `@N` (decimal index).
@@ -191,6 +227,15 @@ pub fn run<W: Write, E: Write>(
     _stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // All six formats are now real (Phase 3 promoted Specter); no stubs.
+
+    // v0.27.0 — `--from-import-json` dispatch short-circuits before slot /
+    // template / descriptor pre-checks. The envelope carries everything the
+    // emitter needs (descriptor + per-cosigner xpubs/fingerprints/paths).
+    // Mutex with --template / --descriptor is enforced by clap via
+    // `conflicts_with_all` on the `--from-import-json` arg.
+    if args.from_import_json.is_some() {
+        return run_from_import_json(args, stdout);
+    }
 
     // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
     // inputs. The SPEC-mandated invariant ("runs on the resolved-slot set") is
@@ -402,6 +447,7 @@ pub fn run<W: Write, E: Write>(
         timestamp: args.timestamp.0,
         bitcoin_core_version: args.bitcoin_core_version,
         master_xpub_at_0,
+        bsms_form: args.bsms_form,
     };
 
     // SPEC §4 missing-info channel — every emitter exposes a per-format
@@ -418,6 +464,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
             CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -435,10 +482,177 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
         CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
         CliExportFormat::Green => GreenEmitter::emit(&inputs),
+        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {
-        let _ = writeln!(stdout, "{emitted}");
+        // v0.27.0 Phase 6.5 PR-review C1 fold: propagate stdout write
+        // failure (broken pipe / disk full / closed handle) as a typed
+        // I/O error rather than silently exiting 0 with empty stdout.
+        writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, format!("{emitted}\n"))
+            .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
+    }
+    Ok(())
+}
+
+/// v0.27.0 Phase 5 entry — `export-wallet --from-import-json <FILE|->`.
+/// Consumes an `import-wallet --json` envelope (SPEC §3.2 wire shape;
+/// Phase 4 ship) and emits a per-format wallet config. Per plan §3.7 +
+/// §3.7.1 (16-field EmitInputs contract).
+fn run_from_import_json<W: Write>(
+    args: &ExportWalletArgs,
+    stdout: &mut W,
+) -> Result<(), ToolkitError> {
+    use crate::wallet_export::script_type_from_descriptor;
+    use crate::wallet_import::json_envelope::{
+        cli_network_from_str, descriptor_body_no_csum, envelope_to_resolved_slots,
+        parse_import_json_envelopes,
+    };
+
+    // §3.7 Q6 — `--account` on the --from-import-json path is BadInput
+    // (the envelope's bundle.account is authoritative; the user supplying
+    // a separate account index is ambiguous / contradictory).
+    if args.account != 0 {
+        return Err(ToolkitError::BadInput(
+            "--account is meaningful only with --template / --descriptor; \
+             --from-import-json reads the account from the envelope (bundle.account)"
+                .to_string(),
+        ));
+    }
+
+    let value = args
+        .from_import_json
+        .as_ref()
+        .expect("caller checked --from-import-json.is_some()");
+    let raw = if value == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(ToolkitError::Io)?;
+        buf
+    } else {
+        std::fs::read_to_string(value).map_err(|e| {
+            ToolkitError::BadInput(format!("--from-import-json: read {value}: {e}"))
+        })?
+    };
+    let envelope = parse_import_json_envelopes(
+        &raw,
+        args.from_import_json_index,
+        "--from-import-json",
+    )?;
+
+    let descriptor_with_csum = envelope
+        .bundle
+        .descriptor
+        .as_deref()
+        .ok_or_else(|| {
+            ToolkitError::BadInput(
+                "--from-import-json: envelope.bundle.descriptor is null; v0.27.0 \
+                 wallet-import path always emits the descriptor string verbatim"
+                    .to_string(),
+            )
+        })?;
+    // canonicalize: store the descriptor body without `#<csum>` so the
+    // miniscript parse below succeeds. BIP-380 checksum validated up-
+    // front; failure is `BadInput` (Phase 5 R0 I1 fold) rather than
+    // silently passing through to a downstream miniscript parse error.
+    let canonical_descriptor =
+        descriptor_body_no_csum(descriptor_with_csum, "--from-import-json")?.to_string();
+
+    // Decode mk1 → ResolvedSlots per §3.6.1.
+    let resolved_slots = envelope_to_resolved_slots(&envelope)?;
+
+    // Derive network from envelope.
+    let network = cli_network_from_str(&envelope.bundle.network)?;
+
+    // Script-type from the parsed descriptor (canonical form sans checksum).
+    use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+    use std::str::FromStr;
+    let parsed_ms = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical_descriptor)
+        .map_err(|e| {
+            ToolkitError::DescriptorParse(format!(
+                "--from-import-json: descriptor parse for script-type derivation: {e}"
+            ))
+        })?;
+    let script_type = script_type_from_descriptor(&parsed_ms)?;
+
+    // Wallet name: --wallet-name explicit OR default `imported-descriptor`
+    // (same as the descriptor-mode path at run() line ~385-391).
+    let wallet_name_resolved: String = args
+        .wallet_name
+        .clone()
+        .unwrap_or_else(|| "imported-descriptor".to_string());
+
+    // Threshold from envelope's bundle.multisig.threshold (None for N=1).
+    let threshold = envelope.bundle.multisig.as_ref().map(|m| m.threshold);
+
+    let inputs = EmitInputs {
+        canonical_descriptor: &canonical_descriptor,
+        resolved_slots: &resolved_slots,
+        // template is always None for descriptor-mode (envelope is
+        // always descriptor-mode per §3.2.1).
+        template: None,
+        script_type,
+        network,
+        account: envelope.bundle.account,
+        threshold,
+        threshold_user_supplied: false, // envelope-derived, not user-supplied
+        wallet_name: &wallet_name_resolved,
+        wallet_name_was_user_supplied: args.wallet_name.is_some(),
+        // taproot internal key: v0.27.0 wallet-import path doesn't surface
+        // taproot internal-key designation; reject taproot envelopes here
+        // (file FOLLOWUP `wallet-import-taproot-internal-key` for v0.28+).
+        taproot_internal_key: None,
+        range: args.range,
+        timestamp: args.timestamp.0,
+        bitcoin_core_version: args.bitcoin_core_version,
+        master_xpub_at_0: None,
+        bsms_form: args.bsms_form,
+    };
+
+    // §3.7 — per-format missing-info channel + dispatch. Mirror the
+    // template-path dispatch at run() line ~422-449.
+    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
+        match args.format {
+            CliExportFormat::BitcoinCore => {
+                (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core")
+            }
+            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
+            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
+            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
+            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
+            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
+            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
+        };
+    if !missing.is_empty() {
+        return Err(ToolkitError::ExportWalletMissingFields {
+            format: format_name,
+            missing,
+        });
+    }
+
+    let emitted: String = match args.format {
+        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
+        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
+        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
+        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
+        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
+        CliExportFormat::Green => GreenEmitter::emit(&inputs),
+        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
+    }?;
+
+    if args.output == "-" {
+        // v0.27.0 Phase 6.5 PR-review C1 fold: propagate stdout write
+        // failure (broken pipe / disk full / closed handle) as a typed
+        // I/O error rather than silently exiting 0 with empty stdout.
+        writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;

@@ -45,13 +45,67 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (see `design/agent-reports/pr-26-post-merge-comprehensive-review.md` — C1 + I7). The SPEC §7.4 stderr warning is the only non-JSON-mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly; if `canonicalize_bitcoin_core` errors (parser / canonicalizer disagreement, non-UTF-8 input, internal serde mismatch) the function returns `Ok(())` with no diagnostic. JSON mode drops the error reason via `.ok()` → envelope shows surface `"canonicalize_failed"` only.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:471-478` (two `Err(_) => return Ok(())` arms); `cmd/import_wallet.rs:334-338, 396-402` (`canonicalize_*.ok()` in JSON-mode roundtrip emit).
+- **What:** (a) Replace `Err(_) => return Ok(())` with `Err(e) => { writeln!(stderr, "warning: import-wallet: roundtrip check skipped: canonicalize_bitcoin_core failed: {e}")?; Ok(()) }`. For the UTF-8 case, fold to `String::from_utf8_lossy` + explicit "blob is not UTF-8" notice. (b) In JSON mode, capture the `Err` and emit `{ "status": "canonicalize_failed", "error": "<message>" }` instead of `null` diff.
+- **Why deferred:** PR #26 already merged at squash `66c8a56`; v0.26.x patch line is the natural fold target.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-shape-mismatch-silent-defaults` — distinguish "absent" from "shape-wrong" for `active`/`internal`, threshold, and origin_fingerprint
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I4 + I5 + I6). Three sites silently substitute defaults on malformed input where they should error: (1) `active`/`internal` use `.and_then(.as_bool).unwrap_or(false)` — string `"true"`, integer `1`, etc. silently flip to `false` and downstream `--select-descriptor active-*` emits a misleading "no active-* descriptor found" error. (2) `mk1_card_to_resolved_slot` substitutes `xpub.fingerprint()` for missing `origin_fingerprint` — master-fp vs current-xpub-fp are semantically distinct; descriptor reconstruction silently produces mismatched origin annotations. (3) `extract_threshold` maps `thresh(256, …)` u8-overflow to `None` → `"threshold": null` in envelope, user sees "no-threshold" descriptor.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:273-280` (active/internal); `wallet_import/json_envelope.rs:258-260` (fingerprint substitution); `wallet_import/bsms.rs:354-362` + `bitcoin_core.rs:455-462` (threshold).
+- **What:** (1) Active/internal: distinguish absent (`None → default false`) from shape-wrong (`Some(non-bool) → ImportWalletParse`); mirror `parse_range_field`'s pattern. (2) Fingerprint substitution: emit a stderr NOTICE on fallback that names the slot index (close the `let _ = slot_idx; // reserved for future error-context attribution` self-confessed gap). (3) Threshold: return `Result<Option<u8>, ToolkitError>` distinguishing "no `thresh()` found" from "thresh argument failed u8 parse".
+- **Why deferred:** PR #26 already merged; the three sites are independent of each other but share the "silent default substituting for shape-mismatch" pattern.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-comment-rot-fold` — citation accuracy + cycle-phase vocabulary sweep on v0.26.0 surface
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (C2 + I8 + I9 + I10 + I11). Five categories of comment-rot identified by the comment-analyzer agent: (1) module doc lists non-existent `--slot @N.ms1=` surface (SPEC §3.1 row 6 is actually `--from <node>=`); (2) unfiled FOLLOWUP slug `compare-cost-single-leaf-tr-input` cited in user-visible error + 2 comments — grep returns zero; (3) SPEC citation `§7.0.a..d` doesn't resolve (no `§7.0` header in `SPEC_wallet_import_v0_26_0.md` — leaked brainstorm shorthand); (4) `error.rs` doc comments tag variants "Phase 2/3/5 emits" — internal cycle vocabulary meaningless post-cycle; (5) user-visible error string contains `"supported in Phase 2"`.
+- **Where:** `crates/mnemonic-toolkit/src/env_sentinel.rs:1-13`; `cost/strip.rs:5,51`; `cost/mod.rs:75`; `wallet_import/bsms.rs:10`; `wallet_import/bitcoin_core.rs:34`; `error.rs:181-222`.
+- **What:** (1) Rewrite `env_sentinel.rs` module doc to mirror SPEC §3.1 table verbatim. (2) Either file the `compare-cost-single-leaf-tr-input` slug as a separate FOLLOWUP (preferred — preserves user-visible text) or drop the slug from both code sites. (3) Either define `## §7.0 Locks` (or similar) as a real SPEC §-anchored section, or rewrite to reference the in-prose locks directly. (4) Replace "Phase N emits" with function-anchored citations (e.g., `Emitted by import_wallet::dispatch_auto_detect_format`). (5) Drop "in Phase 2" from the user-visible `cost/mod.rs:75` error string.
+- **Why deferred:** PR #26 already merged; comment hygiene is a sweep best done in one pass, not piecemeal.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-test-coverage-gap-fold` — overlay-conflict + select-descriptor matrix + sniff/BSMS-line-count rejection cells + multisig round-trip byte-exact assertion
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I12-I19). 8 Important test-coverage gaps identified by pr-test-analyzer: (I12) `--ms1` + `--slot @i.phrase=` conflict path untested → silent precedence-change regression risk; (I13) phrase-overlay-mismatch (`Source::Phrase` + wrong phrase) untested — only ms1 path covered; (I14) `apply_seed_overlay` non-entropy ms1 branch (e.g. `Payload::Pphr` instead of `Entr`) untested; (I15) `--select-descriptor` invalid-index / no-active-match / malformed-selector cells missing; (I16) sniff `Ambiguous` arm has no live integration test; (I17) BSMS unrecognized line-count (3/4/5/7+) only weakly covered; (I18) BSMS sniff false-positive (lowercase / leading whitespace) not pinned; (I19) multisig round-trip never asserts `roundtrip.byte_exact == true` / `semantic_match == true` — only fingerprint+count substrings.
+- **Where:** `crates/mnemonic-toolkit/tests/cli_import_wallet_seed_overlay.rs` (I12-I14); `tests/cli_import_wallet_bitcoin_core.rs:107-131` (I15); `tests/cli_import_wallet_sniff.rs` (I16); `tests/cli_import_wallet_bsms.rs` (I17-I18); `tests/cli_import_wallet_roundtrip.rs:371-452` (I19).
+- **What:** Add the 8 missing cells (~30-50 LOC each). pr-test-analyzer flags **I12 (overlay conflict) + I19 (multisig roundtrip byte_exact)** as the highest-ROI subset (~30 LOC total) — fold first; the remaining 6 can stage across patch releases.
+- **Why deferred:** PR #26 already merged; coverage gaps are not regressions (existing behavior is correct), just absent regression guards.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `pr-26-type-design-anti-pattern-sweep` — unify SearchOutcome / ImportProvenance / BsmsVerification enums
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I20 + I21 + 6 recurring anti-patterns identified by type-design-analyzer). The top-3 highest-ROI refactors: (1) **Unify 4 xpub-search result structs** (`PathOfXpubResult`, `PassphraseOfXpubResult`, `AccountOfDescriptorResult`, `AddressResultJson`) into `enum SearchOutcome<T> { Match(T), NoMatch }` — eliminates 8 representable-invalid states across 4 types in one edit. (2) **`ParsedImport` provenance**: replace `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)` with `provenance: ImportProvenance` enum — eliminates the both-set / both-none impossible states. (3) **`BsmsAuditFields.signature_verified: bool` → `BsmsVerification` enum** (`NotAttempted | Failed(reason) | Verified`) — parallels v0.27.0 Phase 6.5 I7's `Round1VerificationStatus` refactor; closes the future-trap before the BIP-322 inline-verifier lands.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/{path,passphrase,account,address}_of_*.rs` (refactor 1); `wallet_import/mod.rs:60` (refactor 2); `wallet_import/mod.rs:188` (refactor 3).
+- **What:** Three independent refactor sub-tasks; can stage independently. The wire-shape preservation discipline: serde-flatten the new enums to preserve the existing JSON envelope shape — this becomes a Serialize-only refactor (no consumer break) if done with `#[serde(untagged)]` or `flatten`. Mirror the Phase 6.5 I7 pattern from `cmd/import_wallet.rs:835-850` for the `BsmsVerification` enum shape.
+- **Why deferred:** PR #26 already merged; representable-invalid states are latent bugs not active ones (no current code path exercises the impossible combinations), so this is a type-design-cleanup pass rather than a regression fix.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`
+
+- **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (I8). The slug is already cited in 2 source-code comments + 1 user-visible error message at `cost/strip.rs:5,51` and `cost/mod.rs:75`, but no FOLLOWUP was filed in the v0.26.0 cycle — this filing closes the citation-without-target loop.
+- **Where:** `crates/mnemonic-toolkit/src/cost/strip.rs` (the `strip_wrapper` `UnsupportedWrapper` arm); `cost/mod.rs:75` (user-visible Display impl); `cost/translate.rs` (Translator dispatch).
+- **What:** Extend `strip_wrapper` to accept `tr(<internal-key>, <single-leaf-script>)` (single-leaf only — multi-leaf TapTree is a separate scope). Map to a cost-domain that compares fairly against `wsh(...)` outputs. Specify the SPEC §-anchor before implementing — `tr()` cost comparison vs `wsh()` is non-trivial (different witness-stack shapes, different fee surfaces).
+- **Why deferred:** v0.26.0 ship scope didn't include taproot input parsing for compare-cost; user-visible error directs users at this slug.
+- **Status:** open
+- **Tier:** `v0.27`
+
 ### `inspect-json-schema-version-backfill` — backfill `schema_version: "1"` field on `InspectJson` envelope to match `XpubSearchJson`
 
 - **Surfaced:** 2026-05-18, v0.26.0 C1 (path-of-xpub) — `XpubSearchEnvelope` introduces a top-level `schema_version: "1"` field for forward-compat versioning of the per-mode tagged-union body. `InspectJson` (and `RepairJson`) carry no equivalent field; consumers that learn to read `schema_version` from `xpub-search` JSON have no parallel signal on inspect/repair envelopes.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/inspect.rs` `InspectJson` struct; `crates/mnemonic-toolkit/src/repair.rs` `RepairJson` struct.
 - **What:** Add a top-level `schema_version: "1"` (or fresh integer initializer) to both `InspectJson` and `RepairJson` envelopes; document the SemVer compatibility policy (`Major.Minor.Patch` shape; additive fields require a Minor bump). Coordinate with mnemonic-gui consumer paths.
 - **Why deferred:** scope discipline at C1; the existing consumers parse the existing envelope shape and would break on the additive field unless their parsers tolerate unknown top-level keys. v0.27+ touch.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 1 (`InspectEnvelope { schema_version, body: InspectJson }` wrapper mirroring `XpubSearchEnvelope` precedent at `cmd/xpub_search/mod.rs:111-116`). FOLLOWUP-body wording cited "both `InspectJson` and `RepairJson`"; source-verification (R3) found `RepairJson` ALREADY carries `schema_version: "1"` inline at `cmd/repair.rs:155` + construct site `cmd/repair.rs:178` (latent FOLLOWUP-body inaccuracy). Closes as no-op for Repair side; ships InspectEnvelope only.
 - **Tier:** `v0.27`
 
 ### `xpub-search-passphrase-bruteforce` — brute-force passphrase scanning over a candidates file / wordlist for `xpub-search passphrase-of-xpub`
@@ -2090,7 +2144,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_first_address_field_preserved_unverified` (post-fold rename) — pins audit-field preservation; no derivation-side assertions.
 - **What:** v0.27+: derive descriptor at `<DERIVATION_PATH>/0/0` via existing toolkit derivation helpers, compute the address per the network detected in §4.2 step 8, and compare against `audit.first_address`. On mismatch, emit stderr WARNING per (restored) SPEC §2.4 row 3 template: `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>` — informational only (exit 0, not hard-error). The check is BIP-129 §6's intended coordinator-output-self-consistency guard.
 - **Why deferred:** Phase 2 surfaced that descriptor → address rendering at a specific derivation path is non-trivial in the v0.26.0 toolkit surface (no `derive_address_at_path` helper exists). The WARNING was informational-only (not hard-error), so deferring doesn't weaken the import-path correctness contract — concrete-keys checksum (BIP-380), xpub parse (`MsDescriptor::from_str`), and watch-only invariant remain load-bearing.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 3. **Closure narrative:** v0.27.0 lands `crate::derive_address::derive_first_address` (`crates/mnemonic-toolkit/src/derive_address.rs`) as a shared helper consumed by BOTH the new BSMS Round-2 emitter (line-4 first-address emission) AND the import-side parser's 6-line WARNING wire-up. The import-side wire-up at `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:198-244` parses the descriptor body via `miniscript::Descriptor::<DescriptorPublicKey>::from_str`, derives the receive-branch /0/0 address via `into_single_descriptors() → derive_at_index(0) → address(network)`, and compares against `audit.first_address`. Mismatch emits the SPEC §2.4 row 3 byte-exact template `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>` (exit 0, informational). Taproot descriptors are explicitly skipped (BIP-386 not in BIP-129 §1 prerequisites). SPEC §2.4 row 3 un-struck. Integration cell renamed to `bsms_first_address_mismatch_warning` (was `bsms_first_address_field_preserved_unverified` during v0.26.0 deferral); `bsms_6_line_happy_path` updated to compute the real /0/0 address at test build time so it does NOT emit the WARNING and pins the byte-exact-match invariant.
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2128,9 +2182,27 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` (approx; cite is in BsmsAuditFields doc-comment) — `signature_verified: bool` field locked to `false` in v0.26.0.
 - **What:** v0.27+: implement full BIP-129 §5 HMAC token + signature verification flow. Coordinator's HMAC key derivation: PBKDF2(passphrase, salt, iterations) → HMAC-SHA256 over canonical Round-2 body. Toolkit-side flow: prompt for HMAC key (via `--coordinator-hmac-key <FILE>` or `@env:`), recompute HMAC, compare against `<SIGNATURE>` field; on success set `signature_verified: true`. Mismatch → exit 2 `ImportWalletParse` with stderr "bsms: signature mismatch — coordinator HMAC key does not match blob".
 - **Why deferred:** Scope. v0.26.0 cycle target is parse + watch-only invariant + round-trip discipline; BIP-129 HMAC verification is a distinct security primitive that needs its own design pass (key-distribution UX, env-var/file/stdin input forms, refusal-on-missing-key default, etc.).
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 2. **Closure narrative:** the FOLLOWUP body wording above (and the v0.26.0 SPEC framing it reflects) misreads BIP-129. Per the v0.27.0 Phase 2 BIP-129 recon at `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`: BIP-129's signature surface is NOT HMAC; it is BIP-322 legacy-format ECDSA recoverable signatures on **Round-1** (Signer → Coordinator) records, not Round-2. v0.27.0 closes this FOLLOWUP by implementing BIP-129-faithful Round-1 verify (NEW input path `--bsms-round1 <FILE>`), NOT the HMAC-keyed Round-2 verify the FOLLOWUP body initially called for. Implementation: `crates/mnemonic-toolkit/src/wallet_import/bsms_round1.rs` (5-line parser, raw-pubkey + xpub KeyField dispatch) + `crates/mnemonic-toolkit/src/wallet_import/bsms_verify.rs` (BIP-322 ECDSA recoverable verify via `bitcoin::sign_message::signed_msg_hash` + `MessageSignature::recover_pubkey`). 6 unit cells in `bsms_verify::tests` against BIP-129 TVs 1/2/3 + 9 parser cells in `bsms_round1::tests` + 15 integration cells in `tests/cli_bsms_round1.rs`. Lenient default (stderr NOTICE) + `--bsms-verify-strict` mode (exit 2 BsmsSignatureMismatch). The HMAC primitives in BIP-129 are encryption-envelope MAC (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256), separate from signature verify; that surface is filed at v0.27.0 cycle close as `bsms-bip129-full-cutover` for v0.28+.
 - **Tier:** `v0.27`
-- **Companion:** none.
+- **Companion:** new sibling FOLLOWUP `bsms-bip129-full-cutover` (filed at v0.27.0 plan-revision time per Phase 2 recon pivot — see plan §8).
+
+### `bsms-bip129-full-cutover` — complete BIP-129 conformance: 4-line Round-2 input parser + encryption envelope + deprecate v0.26.0 lenient parser
+
+- **Surfaced:** 2026-05-18, v0.27.0 cycle Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). v0.27.0's Path B-lite ships BIP-129 Round-1 verify (`--bsms-round1`) + BIP-129 Round-2 4-line emit (`--bsms-form 4-line`), but does NOT pivot the v0.26.0 6-line lenient input parser nor implement the encryption-envelope MAC surface.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:104-125` — the v0.26.0 6-line lenient parser whose `signature` field has no agreed verify semantics under BIP-129.
+  - `design/SPEC_wallet_import_v0_26_0.md:152` — the documented lenient-input framing that motivated the 6-line shape.
+  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full BIP-129 spec recon (verbatim quotes from §Specification → Round 1, Round 2, Encryption + 5 in-spec test vectors).
+- **What:** v0.28+:
+  - (a) **Deprecate v0.26.0 6-line lenient parser.** Add stderr DEPRECATION notice when 6-line input is detected; planned removal in a future minor version.
+  - (b) **Add BIP-129-faithful 4-line Round-2 input parser.** `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Cross-validates the descriptor against the supplied path-restrictions + first-address (BIP-129 §Round 2 verify gate). Adds 4 + extra fixture coverage from BIP-129 in-spec test vectors.
+  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt of ciphertext + HMAC-SHA256 MAC verify per BIP-129 §Encryption. New CLI flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. Refer to recon doc §2 for byte-level construction. Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup` `test.py`).
+  - (d) Drop the v0.26.0 6-line shape (and possibly the 2-line lenient excerpt) after a stable-version deprecation window.
+  - (e) Document the v0.26.0 → v0.27 → v0.28 BSMS history in `design/SPEC_wallet_import_v0_28+.md` + manual chapter at `docs/manual/src/40-cli-reference/41-mnemonic.md`.
+- **Why deferred from v0.27.0:** Scope. v0.27.0 Path B-lite focuses on BIP-129 Round-1 verify + Round-2 emit (the two clean primitives that close the round-trip cycle). Adding the encryption-envelope primitives in v0.27.0 would ~double the cycle scope; deprecating v0.26.0's lenient parser pre-needs a stable BIP-129-faithful replacement input path (which requires the 4-line parser of (b) here). v0.28+ cycle.
+- **Status:** open
+- **Tier:** `v0.27-cycle-close`
+- **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure).
 
 ### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
 
@@ -2141,7 +2213,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/SPEC_wallet_import_v0_26_0.md` §7.1 — round-trip discipline assumes both formats can emit; BSMS direction was acknowledged blocked at Phase 4 R0.
 - **What:** Implement the BSMS Round-2 export-side emitter so that `mnemonic export-wallet --format bsms` produces a BIP-129 lenient 2-line (or 6-line, with `--coordinator-hmac-key` for the optional MAC) output. Pairs with v0.26.0's import-side surface to close the bundle round-trip discipline cells deferred in §4.5. The 6-line shape additionally depends on `bsms-verify-signatures` (HMAC key material plumbing).
 - **Why deferred:** Outside v0.26.0 scope; the cycle goal was import-side correctness + round-trip discipline. The 2-line emitter is feasible standalone (no HMAC required); 6-line emitter pairs with `bsms-verify-signatures`. Splitting into two FOLLOWUPs (2-line in v0.27.x, 6-line bundled with `bsms-verify-signatures`) is a viable plan.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 3. **Closure narrative:** the v0.27.0 plan-doc R6 pivot (post-Phase 2 BIP-129 recon) reframed the emitter scope to: BIP-129-canonical 4-line Round-2 plaintext (default) + 2-line lenient excerpt (symmetric with the v0.26.0 import-side parser). The 6-line emit shape was dropped — that shape commingled BIP-129 Round-2 plaintext lines with a (misframed) "envelope-side HMAC/signature" that BIP-129 §Specification → Round 2 does NOT carry (BIP-322 signatures are on Round-1 Signer→Coordinator records, not Round-2; see `design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). Implementation: `crates/mnemonic-toolkit/src/wallet_export/bsms.rs` (`BsmsEmitter` + `BsmsForm` enum, ~180 LOC) + `crates/mnemonic-toolkit/src/derive_address.rs` (shared first-address helper). CLI surface: `--format bsms` + `--bsms-form 2-line|4-line` (default `4-line`). Taproot descriptors refuse with `BadInput` (BIP-386 not in BIP-129 §1 prerequisites). Path-restrictions emit rule per SPEC §3.5.1: structural per-key walk via `Descriptor::for_each_key` → `/0/*,/1/*` for all-canonical-multipath, `/0/*` for all-single-receive, `No path restrictions` for any divergent shape. 8 integration cells in `tests/cli_export_wallet_bsms.rs` covering 2-of-2 / 2-of-3 / 3-of-4 / path-restrictions / first-address byte-exact / tr-refuse / 2-line / 2-line→import round-trip. 6-line `--coordinator-hmac-key` continuation rolls into `bsms-bip129-full-cutover` (v0.28+) which subsumes the HMAC-envelope work that the FOLLOWUP body originally hinted at.
 - **Tier:** `v0.27`
 - **Companion:** none. (Pairs in spirit with `bsms-verify-signatures` for the 6-line shape.)
 
@@ -2154,7 +2226,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/SPEC_wallet_import_v0_26_0.md` §2.2 — post-Phase-5-fold lock: v0.26.0 ships the summary shape; full BundleJson tracked here.
 - **What:** v0.27+: wire the `--json` envelope's `bundle:` field to emit the full toolkit-native `BundleJson` shape (the same `verify-bundle --bundle-json` consumes — with synthesized ms1/mk1/md1 cards). This requires invoking the synthesizer post-parse against the supplied / overlayed seeds; for watch-only cosigners, emit the ms1/mk1 sentinel forms per SPEC §5.8. The `descriptor: md_codec::Descriptor` field on `ParsedImport` becomes load-bearing in this wire-up (currently unused).
 - **Why deferred:** v0.26.0's scope was parse + watch-only invariant + round-trip discipline; envelope-side synthesis is a distinct integration with `crate::synthesize` that exceeds the cycle budget. The summary shape is forward-compatible with v0.27: the envelope key remains `bundle`, the shape itself extends. Downstream consumers encoding against v0.26.0 should target the summary; v0.27 will treat the legacy summary as a strict subset of the full shape.
-- **Status:** open
+- **Status:** resolved (v0.27.0 Phase 4 — `emit_json_envelope` rewritten to synthesize full `BundleJson` via `synthesize_descriptor`; new `ParsedImport.original_descriptor: String` field carries the pre-strip raw descriptor for envelope wire emission; outer envelope gains `schema_version: "1"`; wire-shape replacement (NOT additive) per CHANGELOG `### Changed`; closes via per-phase R0 GREEN 0C/0I + 8 new test cells incl verify-bundle round-trip Cell 7 + envelope_v0_27_0.json byte-exact fixture pin).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2303,7 +2375,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `CLAUDE.md` should cross-cite as the multi-instance coordination playbook.
 - **What:** Copy `.v0_26_0-merge-plan.md` into `design/PLAN_v0_26_0_three_way_merge.md` (verbatim or with a "canonical record" header). Delete the scratch file at project root. Add a one-line bullet in `CLAUDE.md` Conventions section pointing at the design-dir copy as the recipe for future multi-instance cycles.
 - **Why deferred:** Cycle-close polish; no correctness regression. The scratch artifact at root continues to function as the audit trail for the cycle itself; promotion is a future-reference cleanup.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 1 (file relocated with canonical-record header; `CLAUDE.md` Conventions cross-cite added; presence-smoke `tests/design_artifacts_presence.rs::three_way_merge_runbook_lives_in_design_dir` guards future churn).
 - **Tier:** `v0.27`
 - **Companion:** memory entry `[[project-v0-26-0-cycle-shipped]]`.
 
@@ -2357,3 +2429,67 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.27` (cross-repo companion in mnemonic-gui).
 - **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-workflow-trigger-include-release-branches` (this cycle close).
+
+### `cross-format-conversion-matrix-expansion` — N×M coverage beyond the BSMS → Bitcoin Core integration cell
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 6 cycle close.
+- **Where:**
+  - `crates/mnemonic-toolkit/tests/cli_export_wallet_from_import_json.rs::cross_format_bsms_to_bitcoin_core_to_import_round_trip` — the v0.27.0 headline integration cell. Single source→destination pair (BSMS → Bitcoin Core).
+  - `docs/manual/src/30-workflows/39-cross-format-conversion.md` — narrative recipe covering 3 paths (BSMS→Bitcoin Core, Bitcoin Core→bundle synth, BSMS→BIP-388); no automated cross-format coverage for the remaining N×M combinations.
+- **What:** v0.28+: expand the integration cell into a parameterized N×M matrix covering every supported source × destination pair: BSMS / Bitcoin Core as sources × {bitcoin-core, bip388, bsms, sparrow*, jade*, coldcard*, electrum*, specter*, green} as destinations (* requires template-mode handling — wallet-export-from-import-json refuses descriptor-mode by current per-emitter contract). Acceptance: every cell loads a fixture envelope, emits the target format, parses the output (or asserts the expected refusal for template-only formats), and asserts cosigner xpub + descriptor preservation.
+- **Why deferred:** v0.27.0 cycle scope was wiring + headline integration; matrix expansion is hardening work, not load-bearing for v0.27.0 correctness.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `bsms-taproot-emit` — BIP-129 emit for tr() descriptors (BIP-386 prerequisite)
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 3 deferral (revised from `bsms-taproot-6-line`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs::BsmsEmitter::collect_missing` — currently refuses taproot scripts with `IncompatibleFormatForTemplate`.
+  - BIP-129 §1 Prerequisites — enumerates BIPs 32/43/44/45/48/67/86/87/174/350 + the SegWit BIPs; conspicuously does NOT include BIP-386 (`tr(...)`).
+- **What:** v0.28+: implement BSMS Round-2 emit for taproot descriptors (`tr(K)` and `tr(internal, multi_a(K,...))` / `tr(internal, sortedmulti_a(K,...))`). Blocked on a BIP-129 update adding BIP-386 to §1 prerequisites — without that prerequisite update, the BIP-129-canonical descriptor-line shape is undefined for tr() (specifically: how taproot internal-key + multi_a leaf set serialize into the line-2 descriptor body within the BIP-129 spec). Soft-blocker: track upstream BIP-129 PRs; revisit when a published canonicalization is available.
+- **Why deferred:** Standards prerequisite not yet met; emitting against an unpublished canonicalization would commit the toolkit to a wire shape we'd need to break.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `bsms-bip129-full-cutover` — v0.28+: 4-line parser + encryption envelope + cleanup
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 3 cycle close (planned at plan-doc §4.6).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — v0.26.0 lenient parser accepts only 2-line + 6-line shapes; Phase 3's BSMS emitter defaults to 4-line (BIP-129-canonical). The asymmetry is documented at `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:28-30` and in this cycle's CHANGELOG `### Changed` block.
+  - BIP-129 §Specification → Round 2: encryption envelope STANDARD / EXTENDED with PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 MAC (the HMAC primitives the v0.26.0 `bsms-verify-signatures` FOLLOWUP body originally misframed as "signature verify").
+- **What:** v0.28+ cutover:
+  1. Add a proper 4-line BIP-129-canonical Round-2 parser (currently the import-side only accepts 2-line + 6-line).
+  2. Add encryption-envelope support (STANDARD plaintext is what v0.27.0 ships; EXTENDED + ENCRYPTED variants are deferred).
+  3. Deprecate the v0.26.0 6-line "lenient" parser (the misframed extra-signature-line shape that motivated the original `bsms-verify-signatures` FOLLOWUP body; superseded by the v0.27.0-canonical 4-line + separate Round-1 verify).
+  4. Consider dropping 2-line and 6-line shapes after the deprecation window — leaving only the BIP-129-canonical 4-line.
+- **Why deferred:** v0.27.0's scope was Round-1 verify + canonical 4-line emit; the parser-side cutover + encryption envelope is a clean v0.28+ scope boundary. Asymmetry (4-line emit, 2/6-line parse) is acknowledged and tracked; round-trip via 2-line emit shape is symmetric today.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** none.
+
+### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 5 R0 deferral.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/export_wallet.rs::run_from_import_json` — constructs `EmitInputs` with `taproot_internal_key: None` (envelope doesn't carry the designation; v0.27.0 doesn't surface it).
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs` — refuses taproot at emit time (per `bsms-taproot-emit` deferral).
+  - `crates/mnemonic-toolkit/src/wallet_export/{coldcard,jade,sparrow,electrum,specter}.rs` — accept descriptor-mode but lose the multi_a-vs-key-path internal-key designation when emitting from `--from-import-json` (each consumer uses `taproot_internal_key: None`).
+- **What:** v0.28+: when an envelope's `bundle.descriptor` matches `tr(...)`, EITHER (a) refuse loudly at the `--from-import-json` typed-deser layer with `BadInput "taproot envelopes not yet supported by --from-import-json; supply --template + --slot args directly"`, OR (b) thread the internal-key designation through the envelope's `bundle` surface (which currently has no such field). Option (a) is simpler and matches v0.27.0's "envelopes are descriptor-mode only" framing.
+- **Why deferred:** v0.27.0 cycle deferred per Phase 5 R0 (no v0.27.0 wire-format path produces a taproot envelope from `import-wallet`: BSMS rejects taproot at import; Bitcoin Core `listdescriptors` with `tr()` is a corner case). Refuse-loudly is hardening for the v0.28+ corner case.
+- **Status:** open
+- **Tier:** `v0.28+`.
+- **Companion:** `wallet-import-bitcoin-core-taproot-emission` (if a sibling-codec-side FOLLOWUP surfaces).
+
+### `plan-smoke-step4-ms1-on-bundle-not-supported` — plan-doc §6.3 smoke recipe references nonexistent `--ms1` on bundle subcommand
+
+- **Surfaced:** 2026-05-19, v0.27.0 Phase 5 R0 review M2.
+- **Where:**
+  - `design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` §6.3 step 4 (end-user smoke recipe).
+- **What:** v0.28+ doc-only fix: the smoke recipe step 4 says `mnemonic bundle --import-json /tmp/env.json --ms1 "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"`. `BundleArgs` doesn't expose `--ms1` (that's import-wallet's surface); seed overlay on bundle is `--slot @N.phrase=` only. Rewrite step 4 as `--slot @0.phrase="..."`.
+- **Why deferred:** Plan-doc bug; smoke recipe is informational and the load-bearing acceptance is the integration cell `cross_format_bsms_to_bitcoin_core_to_import_round_trip` (which uses the correct flags).
+- **Status:** open
+- **Tier:** `v0.28+` (doc-only).
+- **Companion:** none.
