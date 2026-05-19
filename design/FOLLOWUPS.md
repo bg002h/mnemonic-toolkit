@@ -2293,3 +2293,67 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.27`
 - **Companion:** none.
+
+### `coordinator-runbook-into-design-dir` — promote merge-plan-doc into `design/`
+
+- **Surfaced:** 2026-05-18, v0.26.0/v0.11.0 cycle close — per architect R2 fold.
+- **Where:**
+  - Source: `.v0_26_0-merge-plan.md` (project-root scratch file, R3 — folds R0+R1+R2 architect reviews).
+  - Destination: `design/PLAN_v0_26_0_three_way_merge.md` (canonical-record location per project convention; cf. `design/PLAN_v0_26_0_xpub_search.md`).
+  - `CLAUDE.md` should cross-cite as the multi-instance coordination playbook.
+- **What:** Copy `.v0_26_0-merge-plan.md` into `design/PLAN_v0_26_0_three_way_merge.md` (verbatim or with a "canonical record" header). Delete the scratch file at project root. Add a one-line bullet in `CLAUDE.md` Conventions section pointing at the design-dir copy as the recipe for future multi-instance cycles.
+- **Why deferred:** Cycle-close polish; no correctness regression. The scratch artifact at root continues to function as the audit trail for the cycle itself; promotion is a future-reference cleanup.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** memory entry `[[project-v0-26-0-cycle-shipped]]`.
+
+### `gui-schema-arm-drop-detector` — formalize `build_subcommand_conditional_rules` grep-c assertion as regression test
+
+- **Surfaced:** 2026-05-18, v0.26.0 cycle close — per architect R0 finding I1.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/gui_schema.rs::build_subcommand_conditional_rules` — the match-block dispatcher whose arm count grew from a few to 11+ across v0.26.0 (4 xpub-search + 1 import-wallet + 1 compare-cost).
+  - Proposed test location: `crates/mnemonic-toolkit/tests/cli_gui_schema_arm_count.rs` (or as a new cell in `cli_gui_schema_conditional_rules.rs`).
+- **What:** Three-way merge of the dispatcher arm-set across concurrent feature PRs is silently-dropping-risky when two PRs insert at adjacent positions. Mitigation that worked this cycle: manual `grep -c '=> .*_conditional_rules()' crates/mnemonic-toolkit/src/cmd/gui_schema.rs` per rebase, with a documented expected count. Formalize as a `#[test]` that asserts the live count against a pinned constant; bumping the constant becomes the explicit signal whenever a new arm is added (and forces conscious decision-making in multi-PR rebases).
+- **Why deferred:** Per-PR rebase verification worked this cycle; codification is hardening rather than gap-fix.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
+
+### `error-rs-canonical-ordering-doc` — record alphabetical variant-ordering rule in CONVENTIONS
+
+- **Surfaced:** 2026-05-18, v0.26.0 cycle close — per architect R0 finding I2.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/error.rs` — `ToolkitError` enum and its `match self` blocks (Display impl, `exit_code`, `kind`).
+  - Proposed doc location: `CLAUDE.md` Conventions section, OR a new `design/CONVENTIONS.md`.
+- **What:** Adopt alphabetical-by-variant-name as the canonical ordering rule for:
+  - the `enum ToolkitError` variant declarations, and
+  - each `match self { ... }` block that exhaustively matches it (Display, exit_code, kind).
+  Drift across concurrent feature PRs (9+ new variants in v0.26.0 cycle) is otherwise a guaranteed merge-conflict generator; the rule makes the resolution mechanical. Codify this in CONVENTIONS so future cycles converge on the same order without per-PR negotiation.
+- **Why deferred:** v0.26.0 cycle resolved this in-flight via the plan-doc cheat-sheet (P-I2 fold); codification is for future cycles.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
+
+### `compare-cost-agent-reports-back-fill` — persist architect reviews verbatim, in real time
+
+- **Surfaced:** 2026-05-18, v0.26.0 compare-cost cycle close — per multi-aspect code review finding (CLAUDE.md line 30 compliance gap).
+- **Where:**
+  - `crates/mnemonic-toolkit/CLAUDE.md` line 30 ("Per-phase opus reviews persist to `design/agent-reports/`") — load-bearing convention; the compare-cost cycle violated it.
+  - `design/agent-reports/compare-cost-cycle-meta.md` — meta-record back-filling the audit trail with commit pointers, but verbatim review text was lost.
+- **What:** Establish per-cycle discipline: when an architect-review agent dispatch completes, **write its verbatim output** to `design/agent-reports/phase-N-r0-review.md` (or similar) BEFORE the per-phase fold-and-commit step. The compare-cost cycle's reviews were inlined in the session transcript only; a back-fill meta-record exists but verbatim text is unrecoverable from outside the transcript. Future cycles MUST persist verbatim — recommend wiring into a per-phase task with an explicit "write report file" step. Optionally extend the plan-doc template at `.v0_26_0-merge-plan.md` to enumerate this discipline.
+- **Why deferred:** Convention codification; no per-PR regression. Future cycles will benefit from real-time persistence.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `gui-workflow-trigger-include-release-branches` — CI gates silently skip PRs targeting release branches
+
+- **Surfaced:** 2026-05-19, v0.11.0 GUI cycle — discovered mid-G2/G3 when no CI workflows queued for 14+ min after force-pushes on `compare-cost/p4-gui` and `worktree-xpub-search-v0-11-0`.
+- **Where:**
+  - Cross-repo: `mnemonic-gui/.github/workflows/build.yml` and `mnemonic-gui/.github/workflows/schema-mirror.yml`
+  - Trigger blocks: `pull_request: branches: [master]`
+- **What:** Both workflow files currently filter `pull_request: branches: [master]` — meaning **no CI fires for PRs targeting `release/v0.11.0`** (or any future integration branch). v0.11.0 cycle worked around this via local pre-merge vetting (`cargo build` + `cargo clippy --all-targets -- -D warnings` + `cargo test` with `MNEMONIC_BIN` pointing at the v0.26.0 toolkit binary) plus `--admin` merges against the integration branch. The integration PR (`release/v0.11.0 → master`) DID trigger workflows normally (base=master), so the load-bearing gate worked. Fix: extend trigger filter to `branches: [master, release/*]` so per-PR CI runs on integration branches too. Reduces reliance on out-of-band local vetting.
+- **Why deferred:** Cycle workaround was sound and architecturally consistent (per plan-doc §G3.5.2, the integration PR is the load-bearing gate). Trigger-filter fix is a future-cycle ergonomics improvement.
+- **Status:** open
+- **Tier:** `v0.27` (cross-repo companion in mnemonic-gui).
+- **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-workflow-trigger-include-release-branches` (this cycle close).
