@@ -2,3 +2,15 @@
 /.spike-v0.3/
 /.spike-v0.4/
 __pycache__/
+
+# Per-cycle scratch / session-handoff files (kickoff, handoff, phase0 artifact,
+# resume, plan stash). Each scratchpad's substantive content is captured by
+# the cycle's commits / agent-reports / design/FOLLOWUPS.md / memory entries;
+# the dotfile copies are session-continuity scratch only and need not be
+# tracked.
+.*-kickoff.md
+.*-handoff.md
+.*-phase0-artifact.md
+.*-resume.md
+.*-plan-stash.md
+TEMP_*
