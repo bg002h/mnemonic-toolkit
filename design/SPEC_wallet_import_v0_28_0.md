@@ -24,7 +24,7 @@ This SPEC carries forward all of `SPEC_wallet_import_v0_26_0.md` UNCHANGED excep
 | NEW §2.1 — `--format` flag value-set expanded from `{bsms, bitcoin-core}` to 8 values | §2.1 (amended) | Plan-doc P1C-P6C |
 | NEW §2.2 — envelope `schema_version` stays at `"1"`; `source_format` is open-set | §2.2 (amended) | Plan-doc R0 I3 lock |
 | AMENDED §6.1 — sniff semantic LOCKED: all-parsers-consulted; ≥2-match→Ambiguous | §6.1 (clarified-not-changed) | Plan-doc R0 I4 lock |
-| NEW §6.1.1 — `VENDOR_MARKER_KEYS` exclusion list expanded with 10 new format markers | §6.1.1 (new) | Plan-doc P0A scope + Q4 lock |
+| NEW §6.1.1 — `VENDOR_MARKER_KEYS` exclusion list expanded with 8 new format markers (5 originals + 8 additions = 13 entries; R1 I3/I4 folds removed 2 prior candidates) | §6.1.1 (new) | Plan-doc P0A scope + Q4 lock + R1 I3+I4 folds |
 | NEW §6.2 — `SniffOutcome` enum alphabetical-variant-order | §6.2 (amended) | Plan-doc P0B.1 + R1-C1/R2 locks |
 | NEW §6.3 — `sniff_format` dispatch-shape: consult-all-then-count for 8 parsers (replaces v0.26.0's 2-bool 2×2 match) | §6.3 (new) | Plan-doc P0D + R3-C2/R4-I1/R4-I3 locks |
 | NEW §10 — BIP-129 4-line Round-2 parser; line-3 canonical name `path-restrictions` (per BIP-129 line 96) | §10 (new) | Plan-doc §S.7 + R0 I6 lock |
@@ -91,7 +91,7 @@ The dispatch semantic in v0.28.0 is **identical to v0.26.0 §6**, just extended 
 
 ## §6.1.1 — Vendor-marker exclusion list (NEW)
 
-**Lock (R0 Q4 + R1 I3/I4 folds):** the Bitcoin Core sniff's vendor-marker exclusion list — the `VENDOR_MARKER_KEYS` `const` at `wallet_import/bitcoin_core.rs:74` (R0 I2 citation fix: the const declaration sits at `:74`; lines `:59-72` are the doc-comment) — expands from 5 to 13 entries to absorb the new format markers introduced by Phases P1-P6:
+**Lock (R0 Q4 + R1 I3/I4 + R2 N1 folds):** the Bitcoin Core sniff's vendor-marker exclusion list — the `VENDOR_MARKER_KEYS` `const` at `wallet_import/bitcoin_core.rs:81` (R2 N1 citation fix: const declaration sits at `:81` post-R1-doc-comment-expansion; lines `:59-80` are the doc-comment) — expands from 5 to 13 entries to absorb the new format markers introduced by Phases P1-P6:
 
 ```rust
 const VENDOR_MARKER_KEYS: &[&str] = &[
@@ -539,7 +539,7 @@ v0.26.0 §8 module layout governs. v0.28.0 amendments:
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/mod.rs` — `ImportProvenance` enum extended with 6 new alphabetically-sorted variants (per §6.2 discipline).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/sniff.rs` — `SniffOutcome` enum extended (§6.2); `sniff_format` body rewritten (§6.3).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/roundtrip.rs` — 6 new `canonicalize_<format>` helpers (one per new parser, per §11.x).
-- AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:74` (`const VENDOR_MARKER_KEYS:` declaration; doc-comment at `:59-72`) — `VENDOR_MARKER_KEYS` expanded per §6.1.1 (R1 I2 citation fix).
+- AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:81` (`const VENDOR_MARKER_KEYS:` declaration; doc-comment at `:59-80`) — `VENDOR_MARKER_KEYS` expanded per §6.1.1 (R1 I2 citation fix → R2 N1 re-fix; const drifted from `:74` to `:81` after R1 I3+I4 doc-comment expansion).
 - AMENDED: `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — 4-line parser arm (§10) + DEPRECATION notice (§10.4) + error template update (§10.5).
 - AMENDED: `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — 8 dispatch sites extended for 6 new formats (per plan-doc P0C pre-stub + per-parser P{N}C arm-flips).
 
