@@ -2208,7 +2208,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-18, v0.27.0 cycle Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). v0.27.0's Path B-lite ships BIP-129 Round-1 verify (`--bsms-round1`) + BIP-129 Round-2 4-line emit (`--bsms-form 4-line`), but does NOT pivot the v0.26.0 6-line lenient input parser nor implement the encryption-envelope MAC surface.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:104-125` — the v0.26.0 6-line lenient parser whose `signature` field has no agreed verify semantics under BIP-129.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:105-127` — the v0.26.0 6-line lenient parser (`6 =>` arm of the line-count match) whose `signature` field has no agreed verify semantics under BIP-129. Citation verified against origin/master SHA `176443e` 2026-05-19.
   - `design/SPEC_wallet_import_v0_26_0.md:152` — the documented lenient-input framing that motivated the 6-line shape.
   - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full BIP-129 spec recon (verbatim quotes from §Specification → Round 1, Round 2, Encryption + 5 in-spec test vectors).
 - **What:** v0.28+:
