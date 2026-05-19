@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 1.85 (workspace), cargo, clap-derive, serde, jq + ripgrep for verification, gh CLI, GitHub Actions YAML.
 
-**Spec reference:** `design/BRAINSTORM_v0_27_2_followup_cleanup.md` at branch `brainstorm/v0_27_2-cleanup-spec` commit `24978e4`. Architect reviewer-loop converged at R4 GREEN.
+**Spec reference:** `design/BRAINSTORM_v0_27_2_followup_cleanup.md` at branch `brainstorm/v0_27_2-cleanup-spec` commit `03c1dae`. Architect reviewer-loop converged at R4 GREEN.
 
 ---
 
@@ -239,7 +239,7 @@ git commit --amend --no-edit  # if combined with Task 0.2.5; else new commit
 sed -n '/^## Conventions/,/^## /p' CLAUDE.md | head -20
 ```
 
-Expected: confirm Conventions section bullet style matches the additions in v0.27.2 commit `24978e4` (citation grep-verify rule + reviewer-loop rule). Item 2's new bullet sits alongside these.
+Expected: confirm Conventions section bullet style matches the additions at brainstorm commit `24978e4` (initial spec) → `03c1dae` (R4 GREEN spec) lineage — citation grep-verify rule + reviewer-loop rule. Item 2's new bullet sits alongside these.
 
 - [ ] **Step 2: Add the alphabetical-ordering Convention bullet**
 
@@ -522,7 +522,7 @@ Review the 5 Phase 1 commits on release/v0.27.2:
 - Task 1.4: gui-schema arm-count regression test (pinned at 6)
 - Task 1.5: error.rs + address_of_xpub.rs docstring clarification
 
-Verify each commit's diff against the spec at brainstorm commit 24978e4.
+Verify each commit's diff against the spec at brainstorm commit 03c1dae (R4 GREEN).
 Surface Critical / Important / Minor findings.
 ```
 
