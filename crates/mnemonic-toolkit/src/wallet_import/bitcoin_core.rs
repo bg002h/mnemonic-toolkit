@@ -22,7 +22,8 @@
 //! Each `descriptors[i]` is parsed via the same adapter + `parse_descriptor`
 //! pipeline as BSMS (`pipeline::concrete_keys_to_placeholders` →
 //! `parse_descriptor::parse_descriptor`). Per-entry metadata (`active`,
-//! `internal`, `range`) is preserved in `ParsedImport.source_metadata`;
+//! `internal`, `range`) is preserved via `ParsedImport::source_metadata()`
+//! accessor; backed by `ImportProvenance::BitcoinCore(...)`;
 //! wallet-state fields (`timestamp`, `next`, `next_index`) are dropped from
 //! the bundle output with a single stderr NOTICE per SPEC §2.4.
 //!

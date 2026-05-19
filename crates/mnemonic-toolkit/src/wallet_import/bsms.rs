@@ -5,7 +5,8 @@
 //!   stderr WARNING about reduced form).
 //! - 6-line: `BSMS 1.0\n<TOKEN>\n<descriptor>#<checksum>\n<DERIVATION_PATH>\n
 //!   <FIRST_ADDRESS>\n<SIGNATURE>` (full BIP-129 Round-2; audit fields
-//!   preserved in `ParsedImport.bsms_audit`).
+//!   preserved via `ParsedImport::bsms_audit()` accessor; backed by
+//!   `ImportProvenance::Bsms(Some(...))`).
 //!
 //! Network detection (SPEC §4.2 step 8, §7.0.a locked): inspect the BIP-48
 //! coin-type child number on the FIRST cosigner's origin path; hardened `0'`

@@ -333,17 +333,10 @@ mod provenance_tests {
     }
 
     #[test]
-    fn provenance_bsms_variant_yields_some_bsms_audit_and_none_source_metadata() {
+    fn provenance_accessors_return_references_not_owned() {
         let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
-        assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
-        assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
-    }
-
-    #[test]
-    fn provenance_bsms_no_audit_variant_yields_none_bsms_audit() {
-        let p = ImportProvenance::Bsms(None);
-        assert!(p.bsms_audit().is_none(), "Bsms(None) variant yields no bsms_audit (2-line shape)");
-        assert!(p.source_metadata().is_none(), "Bsms(None) variant does not expose source_metadata");
+        let _: Option<&BsmsAuditFields> = p.bsms_audit();
+        let _: Option<&CoreSourceMetadata> = p.source_metadata();
     }
 
     #[test]
@@ -354,9 +347,16 @@ mod provenance_tests {
     }
 
     #[test]
-    fn provenance_accessors_return_references_not_owned() {
+    fn provenance_bsms_no_audit_variant_yields_none_bsms_audit() {
+        let p = ImportProvenance::Bsms(None);
+        assert!(p.bsms_audit().is_none(), "Bsms(None) variant yields no bsms_audit (2-line shape)");
+        assert!(p.source_metadata().is_none(), "Bsms(None) variant does not expose source_metadata");
+    }
+
+    #[test]
+    fn provenance_bsms_variant_yields_some_bsms_audit_and_none_source_metadata() {
         let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
-        let _: Option<&BsmsAuditFields> = p.bsms_audit();
-        let _: Option<&CoreSourceMetadata> = p.source_metadata();
+        assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
+        assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
     }
 }

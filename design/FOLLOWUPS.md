@@ -2520,3 +2520,20 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Out of scope for v0.27.2 (item 2 scoped as "codify the Convention", not "apply retroactively"). Retroactive sort touches `error.rs` substantially (50+ variants moved + 4 match blocks × 50 arms reordered = ~250 line moves) — better as a dedicated cleanup commit in v0.27.3 or v0.28 cycle, where the diff is clearly scoped to "no semantic change, alphabetical sort only".
 - **Status:** open
 - **Tier:** `v0.28+`
+
+### `pr-26-import-provenance-three-variant-cleanup` — three-variant cleanup for ImportProvenance::Bsms(Option<_>)
+
+- **Surfaced:** 2026-05-19, v0.27.2 Phase 2 architect R0 (Minor M1; confidence 30). The shipped `ImportProvenance::Bsms(Option<BsmsAuditFields>)` is sound (representable-invalid pair eliminated) but hides the 2-line-vs-6-line BSMS shape distinction inside an Option.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/mod.rs::ImportProvenance` enum + `bsms_audit()` accessor.
+- **What:** Promote to three variants:
+  ```rust
+  pub(crate) enum ImportProvenance {
+      BsmsTwoLine,
+      BsmsSixLine(BsmsAuditFields),
+      BitcoinCore(CoreSourceMetadata),
+  }
+  ```
+  The `bsms_audit()` accessor naturally returns `Some(&audit)` only for `BsmsSixLine` and `None` for `BsmsTwoLine` and `BitcoinCore`. Eliminates the residual Option inside the variant. Update the construction site at `bsms.rs:266` to match: `audit.map(ImportProvenance::BsmsSixLine).unwrap_or(ImportProvenance::BsmsTwoLine)` or pattern-match.
+- **Why deferred:** Design-aesthetic improvement, not a correctness fix. The shipped shape already eliminates the representable-invalid pair the v0.27.1 audit flagged. Patch-tier cycle (v0.27.2) doesn't need this; v0.28+ wire-shape cycle is a natural home.
+- **Status:** open
+- **Tier:** `v0.28+`
