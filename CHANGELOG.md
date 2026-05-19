@@ -27,7 +27,7 @@ PR-#26 post-merge fold cycle. A 5-agent retrospective audit on v0.26.0 (silent-f
 
 ### Tests
 
-- **+22 new cells** across Phases 1/2/4/5 + Phase 0 fixture captures. Test count 1542 → 1576.
+- **+34 new cells** across Phases 1/2/4/5 (Phase 1: 4, Phase 2: 9, Phase 4: 14, Phase 5: 7 drift cells) + Phase 0 fixture captures. Test count 1542 → 1576.
 - 6 captured v0.27.0 envelope fixtures at `tests/fixtures/v0_27_0_envelopes/` pinned forever per plan-doc Q5c discipline (drift guards for future minor cycles).
 - New test file `tests/cli_xpub_search_drift_v0_27_0.rs` with 7 drift-regression cells pinning xpub-search result wire shapes against the captured fixtures.
 
