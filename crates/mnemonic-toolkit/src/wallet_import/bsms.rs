@@ -414,7 +414,7 @@ fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
 /// v0.27.1 Phase 2 I6 fold: returns `Ok(None)` when no thresh/multi token is
 /// found; `Err` on u8 overflow (was: silently mapped overflow to `None`).
 /// Mirrors `bitcoin_core::extract_threshold`.
-fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
+pub(super) fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
         Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")
@@ -439,4 +439,35 @@ fn origin_capture_regex() -> &'static Regex {
         Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
             .expect("origin_capture_regex is a fixed string literal")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// v0.27.1 Phase 2 R0 M1 fold: guarantee coverage of the
+    /// `extract_threshold` u8-overflow branch via a direct unit test. (The
+    /// integration cell at `tests/cli_import_wallet_bsms.rs::bsms_thresh_
+    /// overflow_errors_clearly` accepts multiple correct rejection paths
+    /// — checksum, descriptor parse, or u8-overflow — which means the
+    /// overflow code path itself may not be exercised in the integration
+    /// suite. This unit test is the regression guard.)
+    #[test]
+    fn extract_threshold_u8_overflow_is_typed_error() {
+        // Body without thresh/multi → Ok(None).
+        let r = extract_threshold("wpkh(@0)").unwrap();
+        assert_eq!(r, None);
+
+        // Body with thresh(2,…) → Ok(Some(2)).
+        let r = extract_threshold("wsh(thresh(2,pk(@0),s:pk(@1)))").unwrap();
+        assert_eq!(r, Some(2));
+
+        // Body with sortedmulti(256,…) → Err (u8 overflow). 256 > u8::MAX.
+        let err = extract_threshold("wsh(sortedmulti(256,@0,@1))").unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("exceeds u8 range") && msg.contains("256"),
+            "expected u8-overflow diagnostic naming 256; got: {msg}"
+        );
+    }
 }

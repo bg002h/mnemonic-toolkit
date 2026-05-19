@@ -604,7 +604,9 @@ fn bitcoin_core_internal_non_boolean_errors_with_pointer_text() {
 
 /// Phase 2 I4 fold cell — regression guard that ABSENT (vs shape-wrong)
 /// `active` keeps the prior default-false behavior. Mirrors `parse_range_field`'s
-/// absent-vs-shape-wrong split.
+/// absent-vs-shape-wrong split. R0 M3 fold: verify the resulting envelope
+/// materializes `active: false` / `internal: false`, not just that parse
+/// succeeded. Use --json to access source_metadata in the envelope.
 #[test]
 fn bitcoin_core_active_absent_defaults_false() {
     let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
@@ -613,9 +615,25 @@ fn bitcoin_core_active_absent_defaults_false() {
     let blob = format!(
         "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{desc}#{cs}\"\n    }}\n  ]\n}}\n"
     );
-    let out = run_core_stdin(&blob).success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .write_stdin(blob)
+        .assert()
+        .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope is array");
+    assert_eq!(arr.len(), 1, "expected one entry; got: {stdout}");
+    let meta = &arr[0]["source_metadata"];
+    assert_eq!(
+        meta["active"], serde_json::Value::Bool(false),
+        "absent `active` must default to false; envelope: {stdout}"
+    );
+    assert_eq!(
+        meta["internal"], serde_json::Value::Bool(false),
+        "absent `internal` must default to false; envelope: {stdout}"
+    );
 }
 
 /// Phase 2 I6 fold cell — `thresh()` argument exceeding u8 range (>255
