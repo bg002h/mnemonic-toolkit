@@ -40,7 +40,7 @@ Source citations below were verified by opus architect review against `origin/ma
 - **Where (origin/master ground truth, grep-verified against tip `2f8b311`):**
   - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:60-80` — `ParsedImport` struct definition
   - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:266` — `Bsms` variant construction site (`Ok(vec![ParsedImport { ... bsms_audit: audit, source_metadata: None }])`)
-  - `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:291-306` — `BitcoinCore` variant construction site (let-binding at 291; struct expr at 297-307)
+  - `crates/mnemonic-toolkit/src/wallet_import/bitcoin_core.rs:291-307` — `BitcoinCore` variant construction site (let-binding at 291-297; struct expr at 299-307)
   - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:{587, 599, 806, 818, 825}` — envelope-emit access sites (5 sites total; 2 are `.is_some()` calls per recipe above)
   - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:{150, 167}` — `apply_select_descriptor` access sites (2 sites)
 - **Sized:** ~80-110 LOC (enum + 2 accessors + ~7 mechanical access-site edits + 4-6 cells)
@@ -135,7 +135,7 @@ Stage explicitly: `git add` each file. No `git add -A` per CLAUDE.md convention.
 
 - Introduce `ImportProvenance` enum at `wallet_import/mod.rs`
 - Add accessors `bsms_audit() -> Option<&BsmsAuditFields>` + `source_metadata() -> Option<&CoreSourceMetadata>`
-- Update construction sites: `wallet_import/bsms.rs:266` + `wallet_import/bitcoin_core.rs:291-306` (grep-verified against `origin/master` tip `2f8b311`)
+- Update construction sites: `wallet_import/bsms.rs:266` + `wallet_import/bitcoin_core.rs:291-307` (grep-verified against `origin/master` tip `2f8b311`)
 - Mechanical syntax shift at access sites: **5** in `cmd/import_wallet.rs:{587, 599, 806, 818, 825}` + **2** in `apply_select_descriptor` at `wallet_import/mod.rs:{150, 167}` — 7 access sites total. Three mechanical-edit patterns per §2 item 1 (drop `&`, replace `.as_ref()` chain, owned-field `.is_some()`)
 - Add 4-6 unit cells + 1-2 integration cells (drift-shape regression against `tests/cli_import_wallet_envelope_v0_27_0.rs`)
 
