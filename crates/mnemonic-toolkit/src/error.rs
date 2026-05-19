@@ -232,9 +232,18 @@ pub enum ToolkitError {
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
     /// `mode` distinguishes which xpub-search mode emitted (one of
     /// `"path-of-xpub"`, `"account-of-descriptor"`, `"address-of-xpub"`,
-    /// `"passphrase-of-xpub"`); `searched` is the candidate count exhausted
-    /// (paths × accounts × cosigners for descriptor mode; addresses ×
-    /// chains × gap-limit for address mode).
+    /// `"passphrase-of-xpub"`); `searched` reports the count of
+    /// **candidate-comparisons performed** (work done), not unique
+    /// child-addresses derived. Formula:
+    ///   - descriptor modes: `paths × accounts × cosigners`
+    ///   - address mode: `n_targets × gap_limit × chains` (per-target
+    ///     scan over the shared rendered-address Vec; one comparison per
+    ///     (target, address) pair)
+    ///
+    /// The per-target JSON envelope fields `scanned_external` /
+    /// `scanned_internal` (on `AddressResultJson::NoMatch` entries inside
+    /// `AddressOfXpubResult.results`) report unique child-addresses derived
+    /// per-target (i.e., `gap_limit × chains`).
     XpubSearchNoMatch {
         mode: &'static str,
         searched: usize,

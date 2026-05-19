@@ -22,7 +22,8 @@
 //! Each `descriptors[i]` is parsed via the same adapter + `parse_descriptor`
 //! pipeline as BSMS (`pipeline::concrete_keys_to_placeholders` →
 //! `parse_descriptor::parse_descriptor`). Per-entry metadata (`active`,
-//! `internal`, `range`) is preserved in `ParsedImport.source_metadata`;
+//! `internal`, `range`) is preserved via `ParsedImport::source_metadata()`
+//! accessor; backed by `ImportProvenance::BitcoinCore(...)`;
 //! wallet-state fields (`timestamp`, `next`, `next_index`) are dropped from
 //! the bundle output with a single stderr NOTICE per SPEC §2.4.
 //!
@@ -40,8 +41,8 @@
 //! SPEC §8.1, and the CLI dispatch may emit per-bundle network metadata.
 
 use super::{
-    pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, BsmsAuditFields,
-    CoreSourceMetadata, ParsedImport, WalletFormatParser,
+    pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, CoreSourceMetadata,
+    ImportProvenance, ParsedImport, WalletFormatParser,
 };
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
@@ -288,13 +289,13 @@ fn parse_entry(
         }
     }
 
-    let source_metadata = Some(CoreSourceMetadata {
+    let source_metadata = CoreSourceMetadata {
         active,
         internal,
         range,
         dropped_fields,
         wallet_name,
-    });
+    };
 
     Ok(ParsedImport {
         descriptor,
@@ -302,8 +303,7 @@ fn parse_entry(
         cosigners,
         network,
         threshold,
-        bsms_audit: None::<BsmsAuditFields>,
-        source_metadata,
+        provenance: ImportProvenance::BitcoinCore(source_metadata),
     })
 }
 

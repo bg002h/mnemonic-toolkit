@@ -584,7 +584,7 @@ fn emit_json_envelope<W: Write, E: Write>(
         env.insert("bundle".to_string(), bundle_value);
         env.insert("roundtrip".to_string(), roundtrip);
 
-        if let Some(audit) = &p.bsms_audit {
+        if let Some(audit) = p.bsms_audit() {
             env.insert(
                 "bsms_audit".to_string(),
                 json!({
@@ -596,7 +596,7 @@ fn emit_json_envelope<W: Write, E: Write>(
                 }),
             );
         }
-        if let Some(meta) = &p.source_metadata {
+        if let Some(meta) = p.source_metadata() {
             env.insert(
                 "source_metadata".to_string(),
                 json!({
@@ -803,7 +803,7 @@ fn emit_summary<W: Write>(stdout: &mut W, parsed: &[ParsedImport]) -> Result<(),
             .map(|t| t.to_string())
             .unwrap_or_else(|| "none".to_string());
         writeln!(stdout, "bundles[{i}].threshold={threshold_str}").map_err(ToolkitError::Io)?;
-        let audit_str = if b.bsms_audit.is_some() {
+        let audit_str = if b.bsms_audit().is_some() {
             "some"
         } else {
             "none"
@@ -815,14 +815,14 @@ fn emit_summary<W: Write>(stdout: &mut W, parsed: &[ParsedImport]) -> Result<(),
             "none"
         };
         writeln!(stdout, "bundles[{i}].entropy={entropy_str}").map_err(ToolkitError::Io)?;
-        let src_meta_str = if b.source_metadata.is_some() {
+        let src_meta_str = if b.source_metadata().is_some() {
             "some"
         } else {
             "none"
         };
         writeln!(stdout, "bundles[{i}].source_metadata={src_meta_str}")
             .map_err(ToolkitError::Io)?;
-        if let Some(m) = &b.source_metadata {
+        if let Some(m) = b.source_metadata() {
             writeln!(stdout, "bundles[{i}].active={}", m.active).map_err(ToolkitError::Io)?;
             writeln!(stdout, "bundles[{i}].internal={}", m.internal).map_err(ToolkitError::Io)?;
         }

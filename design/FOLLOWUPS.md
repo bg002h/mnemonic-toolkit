@@ -105,8 +105,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/wallet_import/mod.rs:60-80` (ParsedImport struct + apply_select_descriptor uses `source_metadata` directly at 5+ sites); `wallet_import/bsms.rs:272-273` + `wallet_import/bitcoin_core.rs:291-306` (parser construct sites); `cmd/import_wallet.rs:587,599,806,818,825,846` (envelope emit consumer sites — both text and JSON paths).
 - **What:** Introduce `ImportProvenance { Bsms(BsmsAuditFields), BitcoinCore(CoreSourceMetadata) }` enum. Replace ParsedImport's pair with a single `provenance: ImportProvenance` field. Internal-only refactor — wire shape unchanged (envelope-side `bsms_audit` / `source_metadata` fields stay flat siblings; emit code matches on the new enum to populate them). Two practical options: (a) thread the enum through all 14 sites in one commit; (b) add back-compat `bsms_audit() -> Option<&BsmsAuditFields>` / `source_metadata() -> Option<&CoreSourceMetadata>` accessor methods, leave existing field-access sites unchanged. Option (b) is the lower-risk path.
 - **Why deferred:** Phase 5b's 14-site footprint exceeded the v0.27.1 cycle's scope window after Phase 5a + 5c absorbed the type-design budget. The representable-invalid pair (both-set, both-none) is purely internal — no wire-shape or user-visible surface — so deferral has zero impact on shipped behavior.
-- **Status:** open
-- **Tier:** `v0.28+`
+- **Status:** resolved (cc15cf0; v0.27.2 Phase 2)
+- **Tier:** `v0.28+` → `v0.27.2` (resolved at v0.27.2 per Shape A approval)
 
 ### `compare-cost-single-leaf-tr-input` — single-leaf `tr()` input support for `compare-cost`
 
@@ -150,7 +150,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/tests/mlock_unit.rs:28` (assertion site); `crates/mnemonic-toolkit/src/mlock.rs::pin_pages_for` (page-count derivation).
 - **What:** Pin the test buffer at a known page-aligned address (e.g., `std::alloc::alloc` with a Layout that forces alignment to `*PAGE_SIZE*`) so the assertion is invariant across parallel-execution heap states. Alternative: relax the assertion to `>= 1 && <= 2` and add a paired test that uses an aligned allocator to pin the exact-page-count guarantee.
 - **Why deferred:** non-regression (single-threaded passes; the v0.10.0 mlock cycle landed under this pre-existing flake too — see `feedback-default-cargo-test-runs-sibling-dependent-tests` memory). v0.27+ touch.
-- **Status:** open
+- **Status:** resolved (c9ead62; v0.27.2 Phase 1.3)
 - **Tier:** `v0.27`
 
 ### `xpub-search-gui-bespoke-hub-pane` — discoverable umbrella hub UI for `xpub-search` modes
@@ -198,7 +198,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293`.
 - **What:** Decide on the canonical semantic — "total candidate-comparisons performed" (current; correct under that read) vs "unique child-addresses derived" (truth: `gap_limit * chains`). Either fix the count or document the chosen semantic inline. The per-target JSON envelope's `scanned_external` + `scanned_internal` fields are already correct for the per-target perspective.
 - **Why deferred:** semantic-debate, not a correctness regression; the per-target JSON envelope fields are correct. v0.26.0 ships the slightly-over-reported aggregate.
-- **Status:** open
+- **Status:** resolved (`8304f5b`; v0.27.2 Phase 1.5) — chose "candidate-comparisons performed" semantic; docstring + inline comment clarified.
 - **Tier:** `v0.27-nice-to-have`
 
 ### `xpub-search-gui-flag-mutex-visibility` — cross-flag conditional visibility for `xpub-search` mutex groups
@@ -2405,7 +2405,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - Proposed test location: `crates/mnemonic-toolkit/tests/cli_gui_schema_arm_count.rs` (or as a new cell in `cli_gui_schema_conditional_rules.rs`).
 - **What:** Three-way merge of the dispatcher arm-set across concurrent feature PRs is silently-dropping-risky when two PRs insert at adjacent positions. Mitigation that worked this cycle: manual `grep -c '=> .*_conditional_rules()' crates/mnemonic-toolkit/src/cmd/gui_schema.rs` per rebase, with a documented expected count. Formalize as a `#[test]` that asserts the live count against a pinned constant; bumping the constant becomes the explicit signal whenever a new arm is added (and forces conscious decision-making in multi-PR rebases).
 - **Why deferred:** Per-PR rebase verification worked this cycle; codification is hardening rather than gap-fix.
-- **Status:** open
+- **Status:** resolved (93bf3ff; v0.27.2 Phase 1.4)
 - **Tier:** `v0.27`
 - **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
 
@@ -2420,7 +2420,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - each `match self { ... }` block that exhaustively matches it (Display, exit_code, kind).
   Drift across concurrent feature PRs (9+ new variants in v0.26.0 cycle) is otherwise a guaranteed merge-conflict generator; the rule makes the resolution mechanical. Codify this in CONVENTIONS so future cycles converge on the same order without per-PR negotiation.
 - **Why deferred:** v0.26.0 cycle resolved this in-flight via the plan-doc cheat-sheet (P-I2 fold); codification is for future cycles.
-- **Status:** open
+- **Status:** resolved (79734f8; v0.27.2 Phase 1.1)
 - **Tier:** `v0.27`
 - **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
 
@@ -2432,7 +2432,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/agent-reports/compare-cost-cycle-meta.md` — meta-record back-filling the audit trail with commit pointers, but verbatim review text was lost.
 - **What:** Establish per-cycle discipline: when an architect-review agent dispatch completes, **write its verbatim output** to `design/agent-reports/phase-N-r0-review.md` (or similar) BEFORE the per-phase fold-and-commit step. The compare-cost cycle's reviews were inlined in the session transcript only; a back-fill meta-record exists but verbatim text is unrecoverable from outside the transcript. Future cycles MUST persist verbatim — recommend wiring into a per-phase task with an explicit "write report file" step. Optionally extend the plan-doc template at `.v0_26_0-merge-plan.md` to enumerate this discipline.
 - **Why deferred:** Convention codification; no per-PR regression. Future cycles will benefit from real-time persistence.
-- **Status:** open
+- **Status:** resolved (08cf0a9; v0.27.2 Phase 1.2)
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2511,3 +2511,29 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.28+` (doc-only).
 - **Companion:** none.
+
+### `error-rs-retroactive-alphabetical-sort` — apply alphabetical-by-variant-name ordering to existing ToolkitError variants + match blocks
+
+- **Surfaced:** 2026-05-19, v0.27.2 Task 1.1 code-quality reviewer (R0). The CLAUDE.md alphabetical-ordering Convention was added forward-looking; existing pre-v0.27.2 variants in `error.rs::ToolkitError` (~50+ variants) + 4 exhaustive match blocks (`Display`, `exit_code`, `kind`, + any debug/extra) are not yet sorted.
+- **Where:** `crates/mnemonic-toolkit/src/error.rs` — enum declaration + each `match self { ... }` block that exhaustively matches `ToolkitError`.
+- **What:** Sort `ToolkitError` variant declarations alphabetically by name. Reorder the corresponding arms in each exhaustive `match self` block to match. No semantic change; pure refactor.
+- **Why deferred:** Out of scope for v0.27.2 (item 2 scoped as "codify the Convention", not "apply retroactively"). Retroactive sort touches `error.rs` substantially (50+ variants moved + 4 match blocks × 50 arms reordered = ~250 line moves) — better as a dedicated cleanup commit in v0.27.3 or v0.28 cycle, where the diff is clearly scoped to "no semantic change, alphabetical sort only".
+- **Status:** open
+- **Tier:** `v0.28+`
+
+### `pr-26-import-provenance-three-variant-cleanup` — three-variant cleanup for ImportProvenance::Bsms(Option<_>)
+
+- **Surfaced:** 2026-05-19, v0.27.2 Phase 2 architect R0 (Minor M1; confidence 30). The shipped `ImportProvenance::Bsms(Option<BsmsAuditFields>)` is sound (representable-invalid pair eliminated) but hides the 2-line-vs-6-line BSMS shape distinction inside an Option.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/mod.rs::ImportProvenance` enum + `bsms_audit()` accessor.
+- **What:** Promote to three variants:
+  ```rust
+  pub(crate) enum ImportProvenance {
+      BsmsTwoLine,
+      BsmsSixLine(BsmsAuditFields),
+      BitcoinCore(CoreSourceMetadata),
+  }
+  ```
+  The `bsms_audit()` accessor naturally returns `Some(&audit)` only for `BsmsSixLine` and `None` for `BsmsTwoLine` and `BitcoinCore`. Eliminates the residual Option inside the variant. Update the construction site at `bsms.rs:266` to match: `audit.map(ImportProvenance::BsmsSixLine).unwrap_or(ImportProvenance::BsmsTwoLine)` or pattern-match.
+- **Why deferred:** Design-aesthetic improvement, not a correctness fix. The shipped shape already eliminates the representable-invalid pair the v0.27.1 audit flagged. Patch-tier cycle (v0.27.2) doesn't need this; v0.28+ wire-shape cycle is a natural home.
+- **Status:** open
+- **Tier:** `v0.28+`

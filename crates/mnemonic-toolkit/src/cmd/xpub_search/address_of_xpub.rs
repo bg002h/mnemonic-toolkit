@@ -285,8 +285,11 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
     if all_matched {
         Ok(0)
     } else {
-        // Report total scanned across targets (per plan §5.6 — XpubSearchNoMatch
-        // routes to exit 4).
+        // Aggregate count of candidate-comparisons performed for the no-match
+        // diagnostic. Formula: matches.len() (= n_targets) × gap_limit × chains.
+        // Per-target unique candidates are reported in AddressResultJson's
+        // scanned_external / scanned_internal fields. See SPEC `searched` semantic
+        // notes on ToolkitError::XpubSearchNoMatch.
         let total_scanned = matches
             .iter()
             .map(|_| (args.gap_limit * if scan_internal { 2 } else { 1 }) as usize)

@@ -521,3 +521,25 @@ fn every_rule_has_rationale_and_spec_ref() {
         }
     }
 }
+
+/// Regression guard: ensures the `build_subcommand_conditional_rules` dispatcher
+/// arm count remains pinned. Concurrent feature PRs that add a new subcommand
+/// must consciously bump this constant — otherwise three-way merge can silently
+/// drop an arm (no `cargo` error since the match is `_ => default`).
+///
+/// See `design/FOLLOWUPS.md::gui-schema-arm-drop-detector` for rationale.
+#[test]
+fn dispatcher_arm_count_matches_pinned_constant() {
+    const EXPECTED_ARM_COUNT: usize = 6;
+    let path = "src/cmd/gui_schema.rs";
+    let body = std::fs::read_to_string(path).expect("read gui_schema.rs");
+    let re = regex::Regex::new(r#"(?m)^\s+"[a-z-]+" => [a-z_]+_conditional_rules\(\),$"#).unwrap();
+    let actual = re.find_iter(&body).count();
+    assert_eq!(
+        actual, EXPECTED_ARM_COUNT,
+        "build_subcommand_conditional_rules arm count drift: \
+         expected {EXPECTED_ARM_COUNT}, found {actual} arms in {path}. \
+         If you added a new subcommand to the dispatcher, bump EXPECTED_ARM_COUNT \
+         and verify no concurrent-PR rebase dropped an arm."
+    );
+}

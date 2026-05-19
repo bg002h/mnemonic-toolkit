@@ -5,7 +5,8 @@
 //!   stderr WARNING about reduced form).
 //! - 6-line: `BSMS 1.0\n<TOKEN>\n<descriptor>#<checksum>\n<DERIVATION_PATH>\n
 //!   <FIRST_ADDRESS>\n<SIGNATURE>` (full BIP-129 Round-2; audit fields
-//!   preserved in `ParsedImport.bsms_audit`).
+//!   preserved via `ParsedImport::bsms_audit()` accessor; backed by
+//!   `ImportProvenance::Bsms(Some(...))`).
 //!
 //! Network detection (SPEC §4.2 step 8, §7.0.a locked): inspect the BIP-48
 //! coin-type child number on the FIRST cosigner's origin path; hardened `0'`
@@ -28,7 +29,7 @@
 
 use super::{
     pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, BsmsAuditFields,
-    ParsedImport, WalletFormatParser,
+    ImportProvenance, ParsedImport, WalletFormatParser,
 };
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
@@ -269,8 +270,7 @@ impl WalletFormatParser for BsmsParser {
             cosigners,
             network,
             threshold,
-            bsms_audit: audit,
-            source_metadata: None,
+            provenance: ImportProvenance::Bsms(audit),
         }])
     }
 }
