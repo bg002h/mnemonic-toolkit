@@ -543,11 +543,11 @@ Wire-up in `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`:
 - In `run()`: parse JSON envelope → extract `bundle.descriptor` + decode `bundle.mk1` per §3.6.1 → construct `EmitInputs` (16 fields — see §3.7.1 below) → dispatch to existing per-format emitter.
 - `--account` supplied → `BadInput` (per Q6).
 
-#### §3.7.1 EmitInputs construction (17-field contract)
+#### §3.7.1 EmitInputs construction (16-field contract)
 
-**[REVISED post-Phase-3 — field count 16 → 17 (Phase 3 added `bsms_form`); see Phase 4 holistic review I/M1 fold.]**
+**[REVISED twice. (1) Post-Phase-3 — Phase 3 added `bsms_form` to `EmitInputs` (post-original-plan); the field-table here gains a `bsms_form` row. (2) Post-Phase-5-R0 — the field COUNT did NOT change with Phase 3 (the original §3.7.1 table omitted the `bsms_form` row but had the same total of 16 fields per the live struct including bsms_form). Phase 4 holistic review M1 erroneously bumped 16→17; Phase 5 R0 caught it. The corrected count is 16, matching the live struct AND the corrected table below.]**
 
-`EmitInputs<'a>` at `wallet_export/mod.rs:333-389` has **17 fields**. Phase 5 implementer constructs all 17 from the envelope + Phase 5 helpers. Mirror the existing construction site in `cmd::export_wallet::run` for defaults.
+`EmitInputs<'a>` at `wallet_export/mod.rs:336-382` has **16 fields**. Phase 5 implementer constructs all 16 from the envelope + Phase 5 helpers. Mirror the existing construction site in `cmd::export_wallet::run` for defaults.
 
 | EmitInputs field | Source / value | Notes |
 |---|---|---|
@@ -568,7 +568,7 @@ Wire-up in `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`:
 | `bitcoin_core_version: u8` | `25` (existing default per `cmd/export_wallet.rs:108-110`) | Source-verified literal: clap `default_value = "25"`; doc-comment "24 or 25 (default 25)" |
 | `bsms_form: BsmsForm` | **Phase 3 addition (post-original-plan).** `BsmsForm::default()` is acceptable when emitting non-BSMS formats; for BSMS emitter, defaults to `BsmsForm::FourLine` (BIP-129 canonical). When `--bsms-form` is supplied on the command line, it overrides. The wallet-import-emit path: pass through from clap (default `BsmsForm::FourLine` for `export-wallet --format bsms`; ignored for non-BSMS emitters). | Source: `wallet_export/mod.rs` near top of `EmitInputs` (Phase 3 ship `4a2b6e7`) |
 
-**Phase 5 R0 explicit scope** (architect EDIT 6 fold + Phase 4 holistic M1 fold): enumerate all **17** fields against the live `cmd::export_wallet::run` construction site; assert no field is omitted or defaulted incorrectly. Architect's structural review confirmed the live struct has 17 fields after Phase 3 added `bsms_form`; any plan-doc that enumerates fewer compile-errors.
+**Phase 5 R0 explicit scope** (architect EDIT 6 fold; Phase 5 R0 count corrected): enumerate all **16** fields against the live `cmd::export_wallet::run` construction site; assert no field is omitted or defaulted incorrectly. Architect's structural review confirms the live struct has 16 fields including `bsms_form`; any plan-doc that enumerates fewer compile-errors.
 
 **Test cells (10-12):**
 - `export_wallet_from_import_json_bsms_to_sparrow_emits_valid_sparrow` (headline integration cell)
@@ -686,7 +686,7 @@ Phase 6: manual mirror + cycle close    → docs/manual/ + CHANGELOG + FOLLOWUPS
 
 **Scope:**
 - `bundle --import-json` + `--import-json-index` (per §3.6).
-- `export-wallet --from-import-json` + `--from-import-json-index` (per §3.7 + §3.7.1's **17-field** EmitInputs contract — post-Phase-3-fold; the original plan-doc said 16-field, which became stale when Phase 3 added `bsms_form`).
+- `export-wallet --from-import-json` + `--from-import-json-index` (per §3.7 + §3.7.1's **16-field** EmitInputs contract; live struct at `wallet_export/mod.rs:336-382`).
 - Shared helper: `crates/mnemonic-toolkit/src/wallet_import/json_envelope.rs` (new) — parses an `import-wallet --json` envelope element into a typed struct `ImportJsonEnvelope` + provides `envelope_to_resolved_slots(envelope) -> Vec<ResolvedSlot>` (decodes mk1 entries per §3.6.1) + `infer_emit_inputs_from_envelope(envelope, args) -> EmitInputs` (constructs all **17** fields per §3.7.1).
 - **Phase 5 deserialization strategy (Phase 4 holistic review I1 fold).** `crate::format::BundleJson` is `Serialize`-only at `format.rs:119-145` (no `Deserialize` impl) and carries `&'static str` fields (`schema_version`, `mode`, `network`, `template: Option<&'static str>`, `multisig.template`) plus a `#[serde(untagged)]` Serialize-only `MkField`. **Phase 5 CANNOT deserialize directly into `BundleJson`.** The original §4.5 mention of `#[serde(deserialize_with = ...)]` is incomplete. Two acceptable patterns:
   - **(a) Parallel `BundleJsonView` mirror struct (RECOMMENDED for Phase 5).** Define in `wallet_import/json_envelope.rs` a mirror with `String` (or `Cow<'static, str>`) fields matching the wire shape one-for-one; derive `Deserialize`. `ImportJsonEnvelope` uses `BundleJsonView` for its `bundle:` field. Scales cleanly to all 13 BundleJson fields + the multisig sub-shape; mirrors the SemVer-decoupling convention (Phase 5's parser doesn't need to track future BundleJson field additions field-by-field).

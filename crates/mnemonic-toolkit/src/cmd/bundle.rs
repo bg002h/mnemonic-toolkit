@@ -23,8 +23,9 @@ pub struct BundleArgs {
     pub network: CliNetwork,
 
     /// Pre-built template name (single-sig or multisig). Mutually-required-one-of
-    /// with --descriptor / --descriptor-file (clap-level + runtime pre-check).
-    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file"])]
+    /// with --descriptor / --descriptor-file / --import-json (clap-level + runtime
+    /// pre-check; v0.27.0 added the --import-json branch).
+    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file", "import_json"])]
     pub template: Option<CliTemplate>,
 
     /// User-supplied BIP-388 descriptor (v0.3 §2.1.10). Mutually-required-one-of
@@ -113,6 +114,39 @@ pub struct BundleArgs {
         verbatim_doc_comment,
     )]
     pub slot: Vec<crate::slot_input::SlotInput>,
+
+    /// v0.27.0 — synthesize a bundle from an `import-wallet --json`
+    /// envelope rather than from `--template` / `--descriptor`. Accepts a
+    /// file path or `-` to read the envelope from stdin. The envelope's
+    /// `bundle.descriptor` carries the source-of-truth descriptor; the
+    /// envelope's `bundle.mk1` chunks decode to per-cosigner xpubs +
+    /// fingerprints + paths. Mutually exclusive with `--template`,
+    /// `--descriptor`, `--descriptor-file`.
+    ///
+    /// Seed overlay (`--ms1` / `--slot @N.phrase=`) continues to apply
+    /// to cosigners where the envelope's `ms1[N] == ""` sentinel (watch-
+    /// only). Supplying `--ms1` for a cosigner with non-empty envelope
+    /// `ms1[N]` is `BadInput` (conflict).
+    #[arg(
+        long = "import-json",
+        value_name = "FILE|-",
+        conflicts_with_all = ["template", "descriptor", "descriptor_file"],
+    )]
+    pub import_json: Option<String>,
+
+    /// v0.27.0 — pick a specific entry from a multi-entry envelope
+    /// array (e.g., Bitcoin Core `listdescriptors` blob with multiple
+    /// descriptors). Required when the envelope has > 1 entry; optional
+    /// (and rejected if supplied) for single-entry envelopes? — actually
+    /// SPEC §3.6 leaves single-entry usage unrestricted; passing an
+    /// index for a single-entry envelope just requires `0`. Out-of-
+    /// range → exit 2.
+    #[arg(
+        long = "import-json-index",
+        value_name = "N",
+        requires = "import_json",
+    )]
+    pub import_json_index: Option<usize>,
 }
 
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
@@ -174,6 +208,17 @@ pub fn run<W: Write, E: Write>(
         .iter()
         .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.value.as_bytes()))
         .collect();
+
+    // v0.27.0 — `--import-json` dispatch short-circuits before template /
+    // descriptor mode pre-checks. The envelope carries everything needed
+    // for a fresh `synthesize_descriptor` pass; the only relevant user
+    // flags downstream are `--ms1` / `--slot @N.phrase=` (seed overlay),
+    // `--privacy-preserving`, `--json`, `--self-check`, `--no-engraving-card`.
+    // Mutex with --template / --descriptor / --descriptor-file is enforced
+    // by clap (`conflicts_with_all` on the `--import-json` arg).
+    if args.import_json.is_some() {
+        return bundle_run_from_import_json(args, stdin, stdout, stderr);
+    }
 
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
     let multisig_template = args
@@ -1308,6 +1353,228 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         stdout,
         stderr,
     )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+
+    Ok(())
+}
+
+/// v0.27.0 Phase 5 entry point — `bundle --import-json <FILE|->`. Consumes
+/// an `import-wallet --json` envelope (SPEC §3.2 wire shape; Phase 4 ship)
+/// and synthesizes a fresh bundle. Per plan §3.6.
+///
+/// Pipeline:
+/// 1. Read envelope (file or stdin) → parse via `parse_import_json_envelopes`.
+/// 2. Extract descriptor (`bundle.descriptor`) + decode `bundle.mk1` chunks
+///    into `Vec<ResolvedSlot>` per §3.6.1.
+/// 3. Decode envelope's `bundle.ms1[i] != ""` entries → attach entropy to
+///    `resolved_slots[i]` (envelope-derived seed-bearing state).
+/// 4. Apply user seed overlay (`--ms1` / `--slot @N.phrase=`) on slots
+///    where envelope `ms1[i] == ""`; conflict-on-non-empty-envelope-ms1
+///    is `BadInput` exit 2 (per plan Q5 / §3.1.3).
+/// 5. Parse descriptor via `concrete_keys_to_placeholders` →
+///    `parse_descriptor::parse_descriptor` (same path bundle_run_unified_descriptor
+///    follows post-substitute).
+/// 6. `synthesize_descriptor(descriptor, resolved_slots, privacy_preserving)`
+///    → `Bundle`.
+/// 7. Determine `BundleMode` from `resolved_slots` entropy state +
+///    cosigner count; route through `emit_unified` (existing
+///    text/JSON/engraving renderer).
+fn bundle_run_from_import_json<W: Write, E: Write>(
+    args: &BundleArgs,
+    stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    use crate::wallet_import::json_envelope::{
+        cli_network_from_str, descriptor_body_no_csum, envelope_to_resolved_slots,
+        parse_import_json_envelopes, read_import_json_arg,
+    };
+    use crate::wallet_import::pipeline::concrete_keys_to_placeholders;
+    use bitcoin::secp256k1::Secp256k1;
+    use zeroize::Zeroizing;
+
+    let value = args
+        .import_json
+        .as_ref()
+        .expect("caller checked --import-json.is_some()");
+    let raw = read_import_json_arg(value, stdin, "--import-json")?;
+    let envelope =
+        parse_import_json_envelopes(&raw, args.import_json_index, "--import-json")?;
+
+    // §3.6 — envelope.bundle.descriptor is the source-of-truth for the
+    // descriptor; descriptor-mode synthesis applies. v0.27.0 wallet-
+    // import path always emits Some.
+    let descriptor_with_csum = envelope
+        .bundle
+        .descriptor
+        .as_deref()
+        .ok_or_else(|| {
+            ToolkitError::BadInput(
+                "--import-json: envelope.bundle.descriptor is null; v0.27.0 wallet-import \
+                 path always emits the descriptor string verbatim"
+                    .to_string(),
+            )
+        })?;
+    let descriptor_body = descriptor_body_no_csum(descriptor_with_csum, "--import-json")?;
+
+    // Decode mk1 chunks per §3.6.1 → ResolvedSlots (entropy=None).
+    let mut resolved_slots = envelope_to_resolved_slots(&envelope)?;
+
+    // Network: env-derived. Used for entropy → xpub derivation in the
+    // seed-overlay step + as the cross-check against args.network when
+    // the user supplied one explicitly (--network defaults silently to
+    // mainnet on the bundle subcommand; we use envelope.network as the
+    // source-of-truth for the consumer path).
+    let envelope_network = cli_network_from_str(&envelope.bundle.network)?;
+    let secp = Secp256k1::new();
+
+    // §3.6 — decode envelope's ms1[i] != "" entries first (envelope-
+    // declared seed-bearing slots). These are equivalent to v0.26.0
+    // "full" import-wallet's seed-overlay-on-emit state.
+    let n = resolved_slots.len();
+    if envelope.bundle.ms1.len() != n {
+        return Err(ToolkitError::BadInput(format!(
+            "--import-json: envelope.bundle.ms1 length {} disagrees with mk1 cosigner count {n}",
+            envelope.bundle.ms1.len()
+        )));
+    }
+    for (i, ms1_str) in envelope.bundle.ms1.iter().enumerate() {
+        if ms1_str.is_empty() {
+            continue;
+        }
+        let (_tag, payload) = ms_codec::decode(ms1_str).map_err(|e| {
+            ToolkitError::BadInput(format!(
+                "--import-json: envelope.bundle.ms1[{i}] decode failed: {e:?}"
+            ))
+        })?;
+        let entropy_bytes = match payload {
+            ms_codec::Payload::Entr(bytes) => Zeroizing::new(bytes),
+            _ => {
+                return Err(ToolkitError::BadInput(format!(
+                    "--import-json: envelope.bundle.ms1[{i}] payload is not entropy"
+                )));
+            }
+        };
+        resolved_slots[i].entropy = Some(entropy_bytes);
+    }
+
+    // §3.6 + Q5 — apply user seed overlay (--ms1 positional + --slot
+    // @N.phrase=). Conflict on non-empty envelope ms1[i] is BadInput.
+    // Build positional ms1 vec (Option<&str>) for indexing.
+    for (i, user_ms1) in args.slot.iter().filter_map(|s| {
+        if s.subkey == crate::slot_input::SlotSubkey::Phrase {
+            Some((s.index as usize, &s.value))
+        } else {
+            None
+        }
+    }) {
+        if i >= n {
+            return Err(ToolkitError::BadInput(format!(
+                "--slot @{i}.phrase=: cosigner index out of range (envelope has {n} cosigners)"
+            )));
+        }
+        if !envelope.bundle.ms1[i].is_empty() {
+            return Err(ToolkitError::BadInput(format!(
+                "--slot @{i}.phrase=: envelope already carries entropy for cosigner {i} \
+                 (bundle.ms1[{i}] != \"\"); supply overlay only for watch-only slots"
+            )));
+        }
+        // Resolve phrase → entropy → derive xpub at resolved_slots[i].path → verify match.
+        let language = args.language.unwrap_or_default();
+        // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize.
+        // FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
+        let mnemonic = bip39::Mnemonic::parse_in(language.into(), user_ms1).map_err(|e| {
+            ToolkitError::BadInput(format!(
+                "--slot @{i}.phrase=: BIP-39 parse error: {e}"
+            ))
+        })?;
+        let entropy = Zeroizing::new(mnemonic.to_entropy());
+        let passphrase: Zeroizing<String> =
+            Zeroizing::new(args.passphrase.clone().unwrap_or_default());
+        let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
+        // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+        // Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
+        let master = BipXpriv::new_master(envelope_network.network_kind(), &seed[..])
+            .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
+        // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
+        // Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
+        let child = master
+            .derive_priv(&secp, &resolved_slots[i].path)
+            .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
+        let derived_xpub = BipXpub::from_priv(&secp, &child);
+        // Path-only-mk1-encoded xpub may differ from the user's derivation
+        // by reconstructed depth+child_number — compare via (parent_fp,
+        // chain_code, public_key) tuple per the Phase 4 holistic-review
+        // mk-codec depth/child reconstruction note.
+        if derived_xpub.parent_fingerprint != resolved_slots[i].xpub.parent_fingerprint
+            || derived_xpub.chain_code != resolved_slots[i].xpub.chain_code
+            || derived_xpub.public_key != resolved_slots[i].xpub.public_key
+        {
+            return Err(ToolkitError::ImportWalletSeedMismatch {
+                cosigner_index: i,
+                derived_xpub: derived_xpub.to_string(),
+                blob_xpub: resolved_slots[i].xpub.to_string(),
+                path: resolved_slots[i].path_raw.clone(),
+            });
+        }
+        resolved_slots[i].entropy = Some(entropy);
+    }
+
+    // --ms1 positional overlay (vs --slot @N.phrase=). Repeat with the
+    // ms_codec entropy decode + same xpub-equivalence check.
+    // BundleArgs doesn't currently expose --ms1 (that's import-wallet's
+    // surface); the seed-overlay channel on `bundle --import-json` is
+    // --slot @N.phrase= per the existing bundle subcommand convention.
+    // Document the asymmetry in the import-wallet --json envelope's
+    // overlay model — `--ms1` is the import-wallet-side surface and
+    // already attaches entropy via Phase 4 emit → bundle.ms1[i] != "".
+    // No `--ms1` arg on BundleArgs to handle here.
+
+    // §3.6 — parse descriptor: concrete-keys → @N placeholders → md_codec.
+    let (placeholder_form, parsed_keys, parsed_fps) =
+        concrete_keys_to_placeholders(descriptor_body)?;
+    let descriptor = crate::parse_descriptor::parse_descriptor(
+        &placeholder_form,
+        &parsed_keys,
+        &parsed_fps,
+    )
+    .map_err(|e| {
+        ToolkitError::DescriptorParse(format!(
+            "--import-json: descriptor re-parse failed: {}",
+            e.message()
+        ))
+    })?;
+
+    // Synthesize.
+    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving)?;
+
+    // Determine BundleMode from resolved_slots state.
+    let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());
+    let any_watch = resolved_slots.iter().any(|s| s.entropy.is_none());
+    let mode = match (n, any_secret, any_watch) {
+        (1, true, _) => BundleMode::SingleSigFull,
+        (1, false, _) => BundleMode::SingleSigWatchOnly,
+        (_, true, true) => BundleMode::MultisigHybrid,
+        (_, true, false) => BundleMode::MultisigMultiSource,
+        (_, false, _) => BundleMode::MultisigWatchOnly,
+    };
+
+    // Emit. emit_unified derives its `descriptor` field from
+    // `args.descriptor` / `args.descriptor_file`; the --import-json path
+    // doesn't populate either, so we clone the args struct and inject
+    // the envelope's descriptor (including #<csum>) so the emit-side
+    // `descriptor` field round-trips faithfully through the new envelope.
+    // This mirrors `cmd::bundle::run`'s descriptor-mode dispatch
+    // pre-conditions; clap-mutex `conflicts_with_all` is bypassed at
+    // this layer (the synthetic args is internal, not user-facing).
+    let mut emit_args = args.clone();
+    emit_args.descriptor = Some(descriptor_with_csum.to_string());
+    // slip0132 signals are not applicable to envelope-sourced bundles
+    // (the envelope's xpub field is canonical per SPEC §5.3).
+    emit_unified(&emit_args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
         self_check_bundle(&bundle, args)?;
