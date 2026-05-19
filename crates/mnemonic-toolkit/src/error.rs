@@ -239,6 +239,7 @@ pub enum ToolkitError {
     ///   - address mode: `n_targets × gap_limit × chains` (per-target
     ///     scan over the shared rendered-address Vec; one comparison per
     ///     (target, address) pair)
+    ///
     /// The per-target JSON envelope fields `scanned_external` /
     /// `scanned_internal` (on `AddressResultJson::NoMatch` entries inside
     /// `AddressOfXpubResult.results`) report unique child-addresses derived
