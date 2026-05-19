@@ -2544,6 +2544,6 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `CLAUDE.md` Conventions section + `mnemonic-gui/CLAUDE.md` (companion convention).
 - **What:** Add a Convention line codifying that any toolkit CLI surface change (clap flag add/remove/rename) MUST also update the GUI's `src/schema/mnemonic.rs` schema-mirror in the same PR or as a paired sibling PR. The drift gate (`schema_mirror` test in mnemonic-gui) fires on pin-bump, which is a lagging indicator; the lockstep PR is the leading discipline. Companion-cite the existing "Mirror invariant" clause that covers the manual.
 - **Why deferred:** v0.27.2 cycle is closed; the inline fix landed the catchup. Codifying the Convention is for future cycles. Patch-tier doesn't fit; v0.28+ tier (paired with the next CLI surface change).
-- **Status:** open
-- **Tier:** `v0.28+`
-- **Companion:** Cross-repo — mnemonic-gui should carry the matching Convention in its CLAUDE.md.
+- **Status:** resolved (toolkit a215f31 + mnemonic-gui f5c597e; codified in both CLAUDE.mds)
+- **Tier:** `v0.28+` (resolved early as docs-only close-out on master)
+- **Companion:** Cross-repo — mnemonic-gui CLAUDE.md companion added at f5c597e.
