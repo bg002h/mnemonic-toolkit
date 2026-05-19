@@ -29,11 +29,14 @@
 //! - `parse_import_json_envelopes(raw, index) -> ImportJsonEnvelope` —
 //!   load a JSON array; pick the entry at `index` (with multi-entry
 //!   semantics + `BadInput` exit 2 on ambiguity / out-of-range).
-//! - `envelope_to_resolved_slots(envelope) -> Vec<ResolvedSlot>` —
+//! - `envelope_to_resolved_slots(envelope, stderr) -> Vec<ResolvedSlot>` —
 //!   decode mk1 chunks (single or multi) into `ResolvedSlot` values
-//!   per §3.6.1.
-//! - `mk1_card_to_resolved_slot(card, index) -> ResolvedSlot` —
-//!   per-cosigner decode helper.
+//!   per §3.6.1. `stderr` carries the per-cosigner origin_fingerprint
+//!   substitution NOTICE when any mk1 card omits the master fingerprint
+//!   (v0.27.1 Phase 2 I5 fold).
+//! - `mk1_card_to_resolved_slot(card, index, stderr) -> ResolvedSlot` —
+//!   per-cosigner decode helper. Emits a NOTICE on the substitution
+//!   fallback (see `envelope_to_resolved_slots` above).
 //! - `cli_network_from_bitcoin_network(n) -> CliNetwork` — inverse of
 //!   `network_human_name`; covers all 4 variants per §4.5 R0 scope.
 //! - `cli_network_from_str(s) -> CliNetwork` — inverse of

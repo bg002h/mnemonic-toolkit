@@ -179,12 +179,15 @@ pub enum ToolkitError {
         reason: EnvVarMissingReason,
     },
     /// v0.26.0 — sniff returned 0 or ≥2 format matches; user must supply
-    /// `--format`. Tier-1 (exit 1). Phase 5 emits via auto-detect dispatcher.
+    /// `--format`. Tier-1 (exit 1). Emitted by `cmd::import_wallet::run` via
+    /// `wallet_import::sniff::sniff_format` dispatch (`SniffOutcome::Ambiguous`
+    /// / `NoMatch` arms).
     #[allow(dead_code)]
     ImportWalletAmbiguousFormat(String),
     /// v0.26.0 — `--format <X>` supplied but `<X>::sniff` returned false (and
-    /// some other parser's sniff matched the blob). Tier-1 (exit 1). Phase 5
-    /// emits.
+    /// some other parser's sniff matched the blob). Tier-1 (exit 1). Emitted
+    /// by `cmd::import_wallet::run` when the user-supplied `--format` conflicts
+    /// with the sniff outcome.
     #[allow(dead_code)]
     ImportWalletFormatMismatch {
         supplied: String,
@@ -195,12 +198,14 @@ pub enum ToolkitError {
     /// SPEC_wallet_import_v0_26_0.md §2.3. Carries an opaque detail message
     /// constructed at the parser site; the rendered template prepends
     /// `error: import-wallet: <format>: parse error:` via `message()`.
-    #[allow(dead_code)] // Phase 2 emits via BSMS parser; Phase 3 emits from bitcoin-core parser.
+    /// Emitted by `wallet_import::bsms::BsmsParser::parse` and
+    /// `wallet_import::bitcoin_core::BitcoinCoreParser::parse`.
+    #[allow(dead_code)]
     ImportWalletParse(String),
     /// v0.26.0 — `--ms1` / `--slot @N.phrase=` seed overlay supplied entropy
     /// whose derived xpub at the blob-declared origin path does not match the
     /// blob's xpub for the same cosigner. Tier-4 (exit 4); mirrors
-    /// `BundleMismatch` semantics. Phase 5 emits.
+    /// `BundleMismatch` semantics. Emitted by `wallet_import::overlay::apply_seed_overlay`.
     #[allow(dead_code)]
     ImportWalletSeedMismatch {
         cosigner_index: usize,
@@ -212,12 +217,14 @@ pub enum ToolkitError {
     /// a `ParsedImport` whose cosigner at index `usize` carries `Some(entropy)`.
     /// This is an internal-bug guard (every `WalletFormatParser::parse` impl
     /// constructs watch-only cosigners). Tier-2 (exit 2). Mirrors
-    /// `ExportWalletSecretInput` discipline.
+    /// `ExportWalletSecretInput` discipline. Emitted by
+    /// `wallet_import::mod::validate_watch_only_resolved`.
     #[allow(dead_code)]
     ImportWalletWatchOnlyViolation(usize),
     /// v0.26.0 — Bitcoin Core `listdescriptors` returned an xprv-bearing
     /// descriptor (called with the `true` argument). Refuse: re-run with the
-    /// xpub-only variant. Tier-2 (exit 2). Phase 3 emits.
+    /// xpub-only variant. Tier-2 (exit 2). Emitted by
+    /// `wallet_import::bitcoin_core::BitcoinCoreParser::parse`.
     #[allow(dead_code)]
     ImportWalletXprvForbidden,
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
