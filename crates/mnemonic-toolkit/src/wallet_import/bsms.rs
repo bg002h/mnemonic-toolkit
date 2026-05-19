@@ -195,14 +195,59 @@ impl WalletFormatParser for BsmsParser {
 
         let threshold = extract_threshold(descriptor_body_no_csum);
 
-        // First-address mismatch is informational (SPEC §4.1 lock); not
-        // hard-error. v0.26.0 emits stderr WARNING; verification deferred to
-        // a future cycle that wires in pin-derive on /0/0. For now, the
-        // audit fields are preserved verbatim and the WARNING is suppressed
-        // (first_address may or may not be verifiable depending on whether
-        // the descriptor type supports a stable address-derivation path; the
-        // §4.1 hook is left for the FOLLOWUP `bsms-first-address-verify`).
-        let _ = &audit; // audit moved into ParsedImport below
+        // SPEC §4.1 — first-address verification. v0.27.0 wires in the
+        // toolkit-side derivation at canonical /0/0 via
+        // `crate::derive_address::derive_first_address` and compares against
+        // `audit.first_address` (6-line shape only; the 2-line shape carries
+        // no audit fields). Mismatch is informational (stderr WARNING; not
+        // hard-error) per BIP-129 §6's coordinator-output self-consistency
+        // intent. Closes FOLLOWUP `bsms-first-address-verify`.
+        if let Some(ref a) = audit {
+            // Re-parse the descriptor string so we can derive against a
+            // miniscript `Descriptor` value. The earlier `parse_descriptor`
+            // returns the toolkit's `md_codec::Descriptor`, which carries
+            // the canonical-form bytes; for first-address derivation we
+            // need a `miniscript::Descriptor` over `DescriptorPublicKey`.
+            // We use the user-supplied checksum-stripped body — taproot
+            // descriptors are accepted at parse time (network detection +
+            // checksum + xpub parse are all script-type-agnostic), but
+            // address derivation via `derive_first_address` is non-taproot
+            // by contract; we therefore skip the WARNING for taproot.
+            use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+            if let Ok(parsed) =
+                MsDescriptor::<DescriptorPublicKey>::from_str(descriptor_body_no_csum)
+            {
+                let is_taproot = matches!(parsed, MsDescriptor::Tr(_));
+                if !is_taproot {
+                    match crate::derive_address::derive_first_address(&parsed, network) {
+                        Ok(computed) if computed != a.first_address => {
+                            // SPEC §2.4 row 3 template (restored at v0.27.0
+                            // Phase 3; FOLLOWUP `bsms-first-address-verify`
+                            // body line 2091). `at path <P>` segment sources
+                            // from the audit's declared derivation_path.
+                            writeln!(
+                                stderr,
+                                "warning: import-wallet: bsms: first-address mismatch at path {path}: computed {computed}, blob declares {declared}",
+                                path = a.derivation_path,
+                                computed = computed,
+                                declared = a.first_address,
+                            )
+                            .map_err(ToolkitError::Io)?;
+                        }
+                        _ => {
+                            // Match (no WARNING) or derivation failure
+                            // (skip; downstream parse already validated the
+                            // descriptor — a render-side error here is not
+                            // a fatal-import concern in v0.27.0). Taproot
+                            // descriptors short-circuit above this match
+                            // because BIP-129 §1 prerequisites pre-date
+                            // BIP-386; their first-address derivation is
+                            // out-of-scope for v0.27.0.
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(vec![ParsedImport {
             descriptor,

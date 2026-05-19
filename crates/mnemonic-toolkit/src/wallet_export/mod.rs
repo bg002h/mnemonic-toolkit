@@ -19,6 +19,7 @@
 
 mod bip388;
 mod bitcoin_core;
+mod bsms;
 mod coldcard;
 mod electrum;
 mod green;
@@ -29,6 +30,8 @@ mod specter;
 
 pub(crate) use bip388::Bip388Emitter;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
+pub use bsms::BsmsForm;
+pub(crate) use bsms::BsmsEmitter;
 pub(crate) use coldcard::ColdcardEmitter;
 pub(crate) use electrum::ElectrumEmitter;
 pub(crate) use green::GreenEmitter;
@@ -372,4 +375,8 @@ pub(crate) struct EmitInputs<'a> {
     pub range: (u32, u32),
     pub timestamp: TimestampArg,
     pub bitcoin_core_version: u8,
+    /// SPEC v0.27.0 §3.5 — `--bsms-form` selection for `--format bsms`.
+    /// Silently ignored by every other emitter (per the per-format
+    /// ignored-input contract).
+    pub bsms_form: BsmsForm,
 }

@@ -11,8 +11,9 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter, JadeEmitter, SparrowEmitter,
-    SpecterEmitter, TaprootInternalKey, TimestampArg, WalletFormatEmitter,
+    BsmsEmitter, BsmsForm, ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter,
+    JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
+    WalletFormatEmitter,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -35,6 +36,8 @@ pub enum CliExportFormat {
     Electrum,
     #[value(name = "green")]
     Green,
+    #[value(name = "bsms")]
+    Bsms,
 }
 
 #[derive(Args, Debug)]
@@ -135,6 +138,13 @@ pub struct ExportWalletArgs {
         verbatim_doc_comment,
     )]
     pub taproot_internal_key: Option<TaprootInternalKey>,
+
+    /// SPEC v0.27.0 §3.5 — BSMS Round-2 emit shape. `4-line`
+    /// (BIP-129-canonical) is the default; `2-line` is the lenient
+    /// excerpt symmetric with the v0.26.0 import-side parser. Ignored
+    /// by every other format.
+    #[arg(long = "bsms-form", value_enum, default_value = "4-line")]
+    pub bsms_form: BsmsForm,
 }
 
 /// SPEC v0.8 §7 parser: `nums` or `@N` (decimal index).
@@ -402,6 +412,7 @@ pub fn run<W: Write, E: Write>(
         timestamp: args.timestamp.0,
         bitcoin_core_version: args.bitcoin_core_version,
         master_xpub_at_0,
+        bsms_form: args.bsms_form,
     };
 
     // SPEC §4 missing-info channel — every emitter exposes a per-format
@@ -418,6 +429,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
             CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -435,6 +447,7 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
         CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
         CliExportFormat::Green => GreenEmitter::emit(&inputs),
+        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {

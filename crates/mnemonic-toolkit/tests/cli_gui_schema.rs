@@ -249,7 +249,8 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
         .iter()
         .map(|c| c.as_str().unwrap())
         .collect();
-    // SPEC v0.8: 8 vendor formats.
+    // SPEC v0.8: 8 vendor formats; v0.27.0 adds `bsms` (BIP-129 Round-2
+    // emitter) for a total of 9.
     for vendor in [
         "bitcoin-core",
         "bip388",
@@ -259,10 +260,11 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
         "specter",
         "electrum",
         "green",
+        "bsms",
     ] {
         assert!(choices.contains(&vendor), "format must include {vendor}");
     }
-    assert_eq!(choices.len(), 8);
+    assert_eq!(choices.len(), 9);
 }
 
 #[test]
