@@ -154,6 +154,8 @@ pub enum ToolkitError {
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
     Repair(crate::repair::RepairError),
+    /// v0.26.0 compare-cost subcommand error. SPEC §9.
+    CompareCost(crate::cost::CompareCostError),
     /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
     /// Synthesized by `repair::try_repair_and_short_circuit` on
     /// repair-success; `?`-propagated through the helper hierarchy up to
@@ -165,6 +167,83 @@ pub enum ToolkitError {
     /// v0.22.0 repair feature — std::io::Error from emit_repair_report
     /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
     Io(std::io::Error),
+    /// v0.26.0 wallet-import cycle — cross-cutting `@env:<VAR>` sentinel
+    /// resolution failed. Either the env-var was unset (`Unset`) or the
+    /// `<VAR>` token failed POSIX env-var-name validation (`InvalidName`).
+    /// Exit 1 (Tier-1, user-input class) per SPEC_wallet_import_v0_26_0.md §2.3.
+    /// Carries the offending `--flag` name for stderr disambiguation across
+    /// the 6 secret-flag surfaces enumerated in SPEC §3.1.
+    EnvVarMissing {
+        flag: String,
+        var: String,
+        reason: EnvVarMissingReason,
+    },
+    /// v0.26.0 — sniff returned 0 or ≥2 format matches; user must supply
+    /// `--format`. Tier-1 (exit 1). Phase 5 emits via auto-detect dispatcher.
+    #[allow(dead_code)]
+    ImportWalletAmbiguousFormat(String),
+    /// v0.26.0 — `--format <X>` supplied but `<X>::sniff` returned false (and
+    /// some other parser's sniff matched the blob). Tier-1 (exit 1). Phase 5
+    /// emits.
+    #[allow(dead_code)]
+    ImportWalletFormatMismatch {
+        supplied: String,
+        sniffed: String,
+    },
+    /// v0.26.0 wallet-import cycle — blob parse failed (BIP-380 checksum,
+    /// header line, descriptor body, JSON shape, etc.). Tier-2 (exit 2) per
+    /// SPEC_wallet_import_v0_26_0.md §2.3. Carries an opaque detail message
+    /// constructed at the parser site; the rendered template prepends
+    /// `error: import-wallet: <format>: parse error:` via `message()`.
+    #[allow(dead_code)] // Phase 2 emits via BSMS parser; Phase 3 emits from bitcoin-core parser.
+    ImportWalletParse(String),
+    /// v0.26.0 — `--ms1` / `--slot @N.phrase=` seed overlay supplied entropy
+    /// whose derived xpub at the blob-declared origin path does not match the
+    /// blob's xpub for the same cosigner. Tier-4 (exit 4); mirrors
+    /// `BundleMismatch` semantics. Phase 5 emits.
+    #[allow(dead_code)]
+    ImportWalletSeedMismatch {
+        cosigner_index: usize,
+        derived_xpub: String,
+        blob_xpub: String,
+        path: String,
+    },
+    /// v0.26.0 — post-parse watch-only invariant violation: a parser produced
+    /// a `ParsedImport` whose cosigner at index `usize` carries `Some(entropy)`.
+    /// This is an internal-bug guard (every `WalletFormatParser::parse` impl
+    /// constructs watch-only cosigners). Tier-2 (exit 2). Mirrors
+    /// `ExportWalletSecretInput` discipline.
+    #[allow(dead_code)]
+    ImportWalletWatchOnlyViolation(usize),
+    /// v0.26.0 — Bitcoin Core `listdescriptors` returned an xprv-bearing
+    /// descriptor (called with the `true` argument). Refuse: re-run with the
+    /// xpub-only variant. Tier-2 (exit 2). Phase 3 emits.
+    #[allow(dead_code)]
+    ImportWalletXprvForbidden,
+    /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
+    /// candidate set. Exit 4 (sibling to `BundleMismatch` /
+    /// `Bip388VerifyDistinctness` — search-target mismatch class).
+    /// `mode` distinguishes which xpub-search mode emitted (one of
+    /// `"path-of-xpub"`, `"account-of-descriptor"`, `"address-of-xpub"`,
+    /// `"passphrase-of-xpub"`); `searched` is the candidate count exhausted
+    /// (paths × accounts × cosigners for descriptor mode; addresses ×
+    /// chains × gap-limit for address mode).
+    XpubSearchNoMatch {
+        mode: &'static str,
+        searched: usize,
+    },
+}
+
+/// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
+/// two distinct stderr message templates per SPEC_wallet_import_v0_26_0.md §2.4.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnvVarMissingReason {
+    /// The `@env:VAR` syntax was well-formed but `std::env::var(VAR)` failed
+    /// (variable is unset or not valid UTF-8).
+    Unset,
+    /// The `<VAR>` token failed the POSIX env-var-name regex
+    /// `[A-Z_][A-Z0-9_]*` (e.g., `@env:foo bar`, `@env:1FOO`, `@env:lowercase`).
+    InvalidName,
 }
 
 impl From<crate::repair::RepairError> for ToolkitError {
@@ -315,15 +394,25 @@ impl ToolkitError {
             | ToolkitError::HrpMismatch { .. }
             | ToolkitError::UnknownHrp { .. }
             | ToolkitError::Repair(_) => 2,
+            ToolkitError::CompareCost(e) => e.exit_code(),
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::BundleMismatch { .. }
             | ToolkitError::DescriptorReparseFailed { .. }
-            | ToolkitError::Bip388VerifyDistinctness => 4,
+            | ToolkitError::Bip388VerifyDistinctness
+            | ToolkitError::XpubSearchNoMatch { .. } => 4,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::Io(_) => 1,
             ToolkitError::MultisigConfig { .. }
             | ToolkitError::CosignerSpec { .. }
             | ToolkitError::CosignersFile { .. } => 1,
+            ToolkitError::EnvVarMissing { .. } => 1,
+            // v0.26.0 wallet-import tier table per SPEC §2.3.
+            ToolkitError::ImportWalletAmbiguousFormat(_)
+            | ToolkitError::ImportWalletFormatMismatch { .. } => 1,
+            ToolkitError::ImportWalletParse(_)
+            | ToolkitError::ImportWalletXprvForbidden
+            | ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
+            ToolkitError::ImportWalletSeedMismatch { .. } => 4,
         }
     }
 
@@ -364,7 +453,16 @@ impl ToolkitError {
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::CompareCost(_) => "CompareCost",
             ToolkitError::Io(_) => "Io",
+            ToolkitError::EnvVarMissing { .. } => "EnvVarMissing",
+            ToolkitError::ImportWalletAmbiguousFormat(_) => "ImportWalletAmbiguousFormat",
+            ToolkitError::ImportWalletFormatMismatch { .. } => "ImportWalletFormatMismatch",
+            ToolkitError::ImportWalletParse(_) => "ImportWalletParse",
+            ToolkitError::ImportWalletSeedMismatch { .. } => "ImportWalletSeedMismatch",
+            ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
+            ToolkitError::ImportWalletXprvForbidden => "ImportWalletXprvForbidden",
+            ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
         }
     }
 
@@ -464,6 +562,46 @@ impl ToolkitError {
                 String::new()
             }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            // v0.26.0 variants in alphabetical order (canonical ordering for
+            // I2 multi-PR convergence).
+            ToolkitError::CompareCost(e) => format!("{e}"),
+            ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
+                EnvVarMissingReason::Unset => format!(
+                    "{flag}: env-var {var} referenced by sentinel is not set"
+                ),
+                EnvVarMissingReason::InvalidName => {
+                    format!("{flag}: invalid env-var name `{var}`")
+                }
+            },
+            ToolkitError::ImportWalletAmbiguousFormat(detail) => detail.clone(),
+            ToolkitError::ImportWalletFormatMismatch { supplied, sniffed } => format!(
+                "import-wallet: --format {supplied} supplied but blob looks like {sniffed}"
+            ),
+            ToolkitError::ImportWalletParse(detail) => detail.clone(),
+            ToolkitError::ImportWalletSeedMismatch {
+                cosigner_index,
+                derived_xpub,
+                blob_xpub,
+                path,
+            } => format!(
+                "import-wallet: cosigner {cosigner_index}: supplied seed produces \
+                 xpub {derived_xpub} at path {path}; blob declares {blob_xpub}"
+            ),
+            ToolkitError::ImportWalletWatchOnlyViolation(i) => format!(
+                "import-wallet: cosigner {i} has entropy populated post-parse; \
+                 watch-only invariant violated (internal bug)"
+            ),
+            ToolkitError::ImportWalletXprvForbidden => {
+                "import-wallet: bitcoin-core: xprv-bearing descriptor refused; \
+                 re-run `bitcoin-cli listdescriptors` without `true` to get \
+                 xpub-only output"
+                    .to_string()
+            }
+            ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
+                "no match in searched set: mode={mode}, paths searched={searched}; \
+                 widen the range with --max-account / --number-of-accounts, or supply \
+                 additional templates via --add-path"
+            ),
         }
     }
 

@@ -45,6 +45,100 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `inspect-json-schema-version-backfill` — backfill `schema_version: "1"` field on `InspectJson` envelope to match `XpubSearchJson`
+
+- **Surfaced:** 2026-05-18, v0.26.0 C1 (path-of-xpub) — `XpubSearchEnvelope` introduces a top-level `schema_version: "1"` field for forward-compat versioning of the per-mode tagged-union body. `InspectJson` (and `RepairJson`) carry no equivalent field; consumers that learn to read `schema_version` from `xpub-search` JSON have no parallel signal on inspect/repair envelopes.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/inspect.rs` `InspectJson` struct; `crates/mnemonic-toolkit/src/repair.rs` `RepairJson` struct.
+- **What:** Add a top-level `schema_version: "1"` (or fresh integer initializer) to both `InspectJson` and `RepairJson` envelopes; document the SemVer compatibility policy (`Major.Minor.Patch` shape; additive fields require a Minor bump). Coordinate with mnemonic-gui consumer paths.
+- **Why deferred:** scope discipline at C1; the existing consumers parse the existing envelope shape and would break on the additive field unless their parsers tolerate unknown top-level keys. v0.27+ touch.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-passphrase-bruteforce` — brute-force passphrase scanning over a candidates file / wordlist for `xpub-search passphrase-of-xpub`
+
+- **Surfaced:** 2026-05-18, v0.26.0 C4 (passphrase-of-xpub MVP scope). The C4 mode verifies a SINGLE passphrase; brute-force scanning is a deliberate MVP exclusion.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/passphrase_of_xpub.rs` + new `passphrase_search.rs` for the iterator/streaming.
+- **What:** Three modes to consider: (a) `--passphrases-file <path>` newline-delimited candidates; (b) `--passphrases-stdin` streamed candidates; (c) generated wordlists (e.g. EFF Long, common passphrases). Per-candidate stderr-advisory budget; rate-limit / progress reporting; deterministic iteration order; abort-on-first-match. Engineering surface includes resource-bounding (memory + time) and a clear "give-up" exit code.
+- **Why deferred:** scope discipline at C4; the single-passphrase verification covers the common-case forensic question ("does X passphrase produce this xpub?"). Brute-force needs a careful UX + rate-limit story to avoid foot-guns.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-manual-gui-chapters` — `mnemonic-gui` user manual chapters for the 4 new `xpub-search` modes
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 cycle-close — manual-gui chapters were deferred per user direction during the C5→C6 boundary check.
+- **Where:** `docs/manual-gui/src/40-mnemonic/4c-xpub-search-path-of-xpub.md` (and 4d/4e/4f for the other 3 modes); `docs/manual-gui/tests/expected_gui_schema_inventory.json` (regenerate from extract_gui_schema.py); `docs/manual-gui/pinned-upstream.toml` (bump mnemonic-gui pin to v0.11.0 once tagged).
+- **What:** Four new chapters mirroring the existing `4b-slip39-combine.md` pattern (~200-500 LOC each): synopsis, per-flag anchor sections with `id="mnemonic-<sub>-<flag>"`, NodeValueComposite node enumerations (where applicable), dropdown variant anchors, exit-codes table, warnings + secret-class material disclaimers. Drives the `gui-schema-coverage` lint gate (bidirectional anchor parity vs the GUI's `SubcommandSchema` source at the pinned tag).
+- **Why deferred:** user direction during C5→C6 boundary — 4 chapters × ~200-500 LOC each (~800-2000 LOC total prose). Out-of-band cycle.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `mlock-g1-1-test-page-alignment-luck` — `mlock_unit::g1_1_single_page_pin_has_page_count_one` flakes under parallel test execution
+
+- **Surfaced:** 2026-05-18, v0.26.0 C1 cycle observation. After C1's binary-layout shift the test fails under `cargo test`'s default parallel test runner because the heap allocator's bump pointer for a fresh `Box<[u8; 64]>` happens to straddle a page boundary; passes single-threaded (`cargo test -- --test-threads=1`). Pre-existing brittleness pattern (heap-allocator-luck), not a regression introduced by xpub-search.
+- **Where:** `crates/mnemonic-toolkit/tests/mlock_unit.rs:28` (assertion site); `crates/mnemonic-toolkit/src/mlock.rs::pin_pages_for` (page-count derivation).
+- **What:** Pin the test buffer at a known page-aligned address (e.g., `std::alloc::alloc` with a Layout that forces alignment to `*PAGE_SIZE*`) so the assertion is invariant across parallel-execution heap states. Alternative: relax the assertion to `>= 1 && <= 2` and add a paired test that uses an aligned allocator to pin the exact-page-count guarantee.
+- **Why deferred:** non-regression (single-threaded passes; the v0.10.0 mlock cycle landed under this pre-existing flake too — see `feedback-default-cargo-test-runs-sibling-dependent-tests` memory). v0.27+ touch.
+- **Status:** open
+- **Tier:** `v0.27`
+
+### `xpub-search-gui-bespoke-hub-pane` — discoverable umbrella hub UI for `xpub-search` modes
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 plan-vs-codebase recon. Plan §7.2 enumerated a "hub" navigation pane with nav cards linking to the 4 mode panes. The GUI has no pane abstraction — every subcommand is a flat row in the subcommand-name ComboBox.
+- **Where:** `mnemonic-gui/src/main.rs:346-602` (central panel renderer; net-new per-pane dispatch branch); `mnemonic-gui/src/schema/mnemonic.rs` (a new `SubcommandSchema` entry for the hub itself, or a sibling navigation manifest).
+- **What:** Introduce a "hub" pseudo-pane visible when the user picks the umbrella `xpub-search` from a dropdown above the subcommand selector. Hub renders 4 cards (one per mode) with mode-name + 1-line description + click-through. v0.12.0 UI polish; not a v0.11.0 blocker.
+- **Why deferred:** C5 plan-vs-codebase recon revealed plan §7.2's "pane" architecture was overspecified; v0.11.0 ships the 4 modes via the generic flag-renderer + the existing subcommand-name ComboBox.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-bespoke-hub-pane`.
+
+### `xpub-search-gui-bespoke-widgets` — per-mode composite widgets (TargetXpubField / DescriptorIntakeField / TargetAddressField / etc.)
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5 plan-vs-codebase recon. Plan §7.3 enumerated `SeedIntakeWidget`, `TargetXpubField`, `DescriptorIntakeField`, `TargetAddressField`, `AddPathRepeater`, `XpubSearchResultRenderer` as net-new widgets. GUI codebase has NO `PhraseField` / `PassphraseField` / `Ms1Field` named types; the plan's "widget reuse" framing was wrong.
+- **Where:** `mnemonic-gui/src/form/` (new modules).
+- **What:** Per-mode composite widgets with affordances beyond the generic `widget::render` dispatch: TargetXpubField with prefix-detect badge; AddressTypeField that auto-suggests from xpub prefix; DescriptorIntakeField with multi-line textarea + shape-detect badge; AddPathRepeater with +/− buttons. v0.12.0 polish.
+- **Why deferred:** v0.11.0 ships via the generic FlagKind dispatcher; the bespoke widgets are UX polish, not functional blockers.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-bespoke-widgets`.
+
+### `xpub-search-gui-positional-intake` — positional ms1 (HRP-autodetect) routing in mnemonic-gui
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5. The toolkit accepts a positional ms1 (HRP-autodetect) on P1/P2/P4; the GUI's argv assembler does not surface this affordance — the GUI forces users into `--ms1` explicitly.
+- **Where:** `mnemonic-gui/src/form/invocation.rs::assemble_argv`; `mnemonic-gui/src/schema/mnemonic.rs` `positional_args: NO_POSITIONALS` on the 4 xpub-search entries.
+- **What:** Add a "drop any card" textarea/file-drop affordance that auto-routes via HRP detection (`ms1` → positional, `mk1`/`md1` → would be future modes' surfaces). v0.12.0 polish.
+- **Why deferred:** v0.11.0 keeps GUI argv assembly simple; positional intake is a polish item.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-positional-intake`.
+
+### `xpub-search-descriptor-md1-detection-bech32-validate` — md1 tie-break uses `starts_with("md1")` not full bech32 validation
+
+- **Surfaced:** 2026-05-18, v0.26.0 holistic architect review (C2 R0 m2 carry-forward). `crates/mnemonic-toolkit/src/cmd/xpub_search/descriptor_intake.rs:167` routes any tokens-list whose entries all start with the literal `"md1"` prefix into the md1 chunk-assembly funnel. A garbage token like `md1xxx` routes there and fails at `md_codec::chunk::reassemble` with a clear typed error rather than falling through to literal-xpub.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/descriptor_intake.rs:167`.
+- **What:** Tighten the tie-break to a real bech32 syntactic validation (e.g. `bech32::decode(t).is_ok() && t.starts_with("md1")` — even a shape-only check would be tighter). Defensible to leave as-is (the md1 HRP is unambiguous and false-positives surface as typed errors); fold or defer based on appetite for tightening.
+- **Why deferred:** v0.26.0 behavior is correct (false-positives produce clean error messages, not silent misroutes); not a v0.26.0 blocker.
+- **Status:** open
+- **Tier:** `v0.27-nice-to-have`
+
+### `xpub-search-address-of-xpub-searched-count-semantic` — P3 `XpubSearchNoMatch.searched` over-reports candidates
+
+- **Surfaced:** 2026-05-18, v0.26.0 holistic architect review (C3 R0 m2 carry-forward). `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293` computes the `searched` count for `ToolkitError::XpubSearchNoMatch` as `num_targets × gap_limit × chains`. The actual candidate-set is `gap_limit × chains` (one shared rendered-address Vec; see `address_search.rs:75-90` for the shared-build). For 3 targets / gap_limit=20 / 2 chains: reports 120 truth-is-40.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/address_of_xpub.rs:290-293`.
+- **What:** Decide on the canonical semantic — "total candidate-comparisons performed" (current; correct under that read) vs "unique child-addresses derived" (truth: `gap_limit * chains`). Either fix the count or document the chosen semantic inline. The per-target JSON envelope's `scanned_external` + `scanned_internal` fields are already correct for the per-target perspective.
+- **Why deferred:** semantic-debate, not a correctness regression; the per-target JSON envelope fields are correct. v0.26.0 ships the slightly-over-reported aggregate.
+- **Status:** open
+- **Tier:** `v0.27-nice-to-have`
+
+### `xpub-search-gui-flag-mutex-visibility` — cross-flag conditional visibility for `xpub-search` mutex groups
+
+- **Surfaced:** 2026-05-18, v0.26.0 C5. The 4 xpub-search SubcommandSchema entries set `conditional: None` for v0.11.0; cross-flag mutex visibility (e.g., greying `--ms1` when `--phrase` is filled in) is open.
+- **Where:** `mnemonic-gui/src/form/conditional.rs` (new per-subcommand functions following the existing pattern at `slip39_split` / `slip39_combine` / `repair` / `inspect` / `derive_child` / etc.).
+- **What:** Per-subcommand `fn(&FormState) -> FlagVisibility` functions that grey/hide flags based on cross-flag state. For xpub-search modes: enforce the seed-intake mutex visually (only one of `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` interactive at a time); surface the P4 mandatory-passphrase requirement before run-confirm; flag the multi-`--target-address` repeating affordance in P3. v0.12.0 polish.
+- **Why deferred:** v0.11.0 ships with `conditional: None`; the user sees all flags simultaneously and clap-side handles the mutex at exec. The GUI's run-confirm modal will surface clap errors verbatim — functional but not ideal UX.
+- **Status:** open
+- **Tier:** `cross-repo`
+- **Companion:** `bg002h/mnemonic-gui` `FOLLOWUPS.md` entry `xpub-search-gui-flag-mutex-visibility`.
+
 ### `verify-bundle-watch-only-xpub-path-internal-consistency` — watch-only verify-bundle does not cross-check mk1 xpub byte-level fields against md1's claimed OriginPath
 
 - **Surfaced:** 2026-05-17, Q&A session in `descriptor-mnemonic` repo while explaining xpub↔keypath semantics. User asked whether `verify-bundle` cross-checks md1 and mk1 internal claims; code-read confirmed it does not.
@@ -1984,4 +2078,218 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Resolution:** RESOLVED in v0.25.1 (chose option (c) per user direction — relax `validate_flag_hrp` to accept empty strings, with explicit NOTICE-on-stderr to guard the accidental-empty-shell-variable footgun, plus option (a) SPEC §5.8 wording clarification documenting both equivalent CLI input forms). Restores the pre-v0.24.0 positional empty-string sentinel convention so middle-cosigner watch-only (e.g., `--ms1 <s0> --ms1 "" --ms1 <s2>`) is expressible — flag-omission alone can't represent this case. Mechanism: `crate::repair::validate_flag_hrp` early-returns `Ok(())` on `value.is_empty()` (alongside the existing `"-"` stdin exemption); `cmd::verify_bundle::run` iterates `args.ms1` and emits the NOTICE per skipped cosigner; SPEC §5.8 gains a new "CLI input forms" subsection. 1 new cell `watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice` exercises middle-cosigner skip (un-expressible via flag omission alone). Released 2026-05-18 as v0.25.1 (single-FOLLOWUP patch).
 - **Status:** resolved v0.25.1 cycle
 - **Tier:** `v0.25.1`
+- **Companion:** none.
+
+### `bsms-first-address-verify` — toolkit-side first-address derivation + mismatch WARNING for 6-line BSMS Round-2
+
+- **Surfaced:** 2026-05-18, Phase 2 R0 architect review of v0.26.0 wallet-import cycle.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:198-205` — `parse_six_line` path deferred verification; comment `let _ = &audit;` is the no-op fence.
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.1 (post-Phase-2-fold) — defers first-address verification to v0.27+.
+  - `design/SPEC_wallet_import_v0_26_0.md` §2.4 row 3 (post-Phase-2-fold) — WARNING template struck through.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_first_address_field_preserved_unverified` (post-fold rename) — pins audit-field preservation; no derivation-side assertions.
+- **What:** v0.27+: derive descriptor at `<DERIVATION_PATH>/0/0` via existing toolkit derivation helpers, compute the address per the network detected in §4.2 step 8, and compare against `audit.first_address`. On mismatch, emit stderr WARNING per (restored) SPEC §2.4 row 3 template: `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <C>, blob declares <D>` — informational only (exit 0, not hard-error). The check is BIP-129 §6's intended coordinator-output-self-consistency guard.
+- **Why deferred:** Phase 2 surfaced that descriptor → address rendering at a specific derivation path is non-trivial in the v0.26.0 toolkit surface (no `derive_address_at_path` helper exists). The WARNING was informational-only (not hard-error), so deferring doesn't weaken the import-path correctness contract — concrete-keys checksum (BIP-380), xpub parse (`MsDescriptor::from_str`), and watch-only invariant remain load-bearing.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-signet-regtest-disambiguation` — coin-type-1 collapses signet/regtest to testnet
+
+- **Surfaced:** 2026-05-18, Phase 0 R0 architect review I2 fold (during §7.0.a SPEC amendment) + cited in `wallet_import/bsms.rs:14-15` of Phase 2.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:14-15` — module-level doc comment citing the FOLLOWUP for the canonical testnet collapse rule.
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.2 step 8 — explicit normative text: "Signet and regtest are not distinguishable from testnet via origin-path inspection... imported as testnet."
+  - Future `wallet_import/bitcoin_core.rs` (Phase 3) — same coin-type extraction will share this behavior.
+- **What:** BIP-129 BSMS + Bitcoin Core `listdescriptors` origin annotations use coin-type `1` for testnet, signet, AND regtest — the blob is intrinsically ambiguous. v0.26.0 picks `Network::Testnet` as the canonical interpretation. v0.27+ may add either (a) a `--network signet|regtest` override on `import-wallet` (post-parse network re-binding), or (b) a separate origin-path-side disambiguator (e.g., a sibling `network_hint:` annotation that some wallets emit). User-direction needed before implementation.
+- **Why deferred:** Surface-area trade-off: adding `--network` to `import-wallet` introduces a flag that 99% of users will never set (BIP-129 blobs don't carry signet/regtest as a separate type today), but the ambiguity exists and warrants explicit handling for users who run signet/regtest workflows. Testnet collapse is a safe v0.26.0 default.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-bsms-checksum-delegation-note` — SPEC §4.4 wording inaccuracy (checksum NOT auto-delegated)
+
+- **Surfaced:** 2026-05-18, Phase 2 R0 architect review of v0.26.0 wallet-import cycle (implementer's finding 2).
+- **Where:**
+  - `design/SPEC_wallet_import_v0_26_0.md` §4.4 — text reads "BIP-380 8-character polymod checksum. Auto-validated when `MsDescriptor::from_str` is called by `parse_descriptor`."
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:26-27,140-145` — implementation calls `miniscript::descriptor::checksum::verify_checksum` explicitly up-front because `parse_descriptor::substitute_synthetic` (`parse_descriptor.rs:776`) swaps `@N` placeholders for synthetic xpubs BEFORE `MsDescriptor::from_str`, so the concrete-keys checksum never reaches `from_str`.
+- **What:** Phase 7 SPEC-amend: rewrite §4.4 to describe the actual mechanism — "BIP-380 8-character polymod checksum. Validated UP-FRONT by `wallet_import::bsms::parse` via `miniscript::descriptor::checksum::verify_checksum` on the concrete-keys descriptor body, BEFORE the `concrete_keys_to_placeholders` adapter rewrites the body to `@N` placeholder form for `parse_descriptor`. The downstream `MsDescriptor::from_str` inside `parse_descriptor` operates on the synthetic-xpub-substituted form and cannot reach the original checksum." The implementation is correct; only the SPEC wording is wrong.
+- **Why deferred:** Documentation-only fix; can ride the Phase 7 cycle-close SPEC-amend commit. No correctness change needed in code.
+- **Status:** resolved (Phase 7 cycle-close commit; SPEC §4.4 amended with the up-front-validation prose; implementation unchanged at `wallet_import/bsms.rs:26-27,140-145`).
+- **Tier:** `v0.26.0-cycle-close`
+- **Companion:** none.
+
+### `bsms-verify-signatures` — full BIP-129 HMAC token + signature verification on Round-2 ingest
+
+- **Surfaced:** 2026-05-18, planned in `design/BRAINSTORM_wallet_import_v0_26_0.md` §6 item 2 as a cycle-close FOLLOWUP; cited in `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` of Phase 2.
+- **Where:**
+  - `design/BRAINSTORM_wallet_import_v0_26_0.md:264` — planned FOLLOWUP enumeration.
+  - `design/SPEC_wallet_import_v0_26_0.md:150` — defers verification: "not verified in v0.26.0 (FOLLOWUP `bsms-verify-signatures`)".
+  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:65` (approx; cite is in BsmsAuditFields doc-comment) — `signature_verified: bool` field locked to `false` in v0.26.0.
+- **What:** v0.27+: implement full BIP-129 §5 HMAC token + signature verification flow. Coordinator's HMAC key derivation: PBKDF2(passphrase, salt, iterations) → HMAC-SHA256 over canonical Round-2 body. Toolkit-side flow: prompt for HMAC key (via `--coordinator-hmac-key <FILE>` or `@env:`), recompute HMAC, compare against `<SIGNATURE>` field; on success set `signature_verified: true`. Mismatch → exit 2 `ImportWalletParse` with stderr "bsms: signature mismatch — coordinator HMAC key does not match blob".
+- **Why deferred:** Scope. v0.26.0 cycle target is parse + watch-only invariant + round-trip discipline; BIP-129 HMAC verification is a distinct security primitive that needs its own design pass (key-distribution UX, env-var/file/stdin input forms, refusal-on-missing-key default, etc.).
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
+
+- **Surfaced:** 2026-05-18, Phase 4 implementer (commit `120e6b4`) noted at the "Phase 5 deferrals" section of the commit body; corroborated at Phase 4 R0 architect review.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/export_wallet.rs` — current emitter enumeration lacks `bsms`; the toolkit has only Bitcoin Core JSON + descriptor-passthrough surfaces at v0.25.x.
+  - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §4.5 (lines 308-318) — bundle round-trip BSMS direction is **structurally blocked** without the emitter.
+  - `design/SPEC_wallet_import_v0_26_0.md` §7.1 — round-trip discipline assumes both formats can emit; BSMS direction was acknowledged blocked at Phase 4 R0.
+- **What:** Implement the BSMS Round-2 export-side emitter so that `mnemonic export-wallet --format bsms` produces a BIP-129 lenient 2-line (or 6-line, with `--coordinator-hmac-key` for the optional MAC) output. Pairs with v0.26.0's import-side surface to close the bundle round-trip discipline cells deferred in §4.5. The 6-line shape additionally depends on `bsms-verify-signatures` (HMAC key material plumbing).
+- **Why deferred:** Outside v0.26.0 scope; the cycle goal was import-side correctness + round-trip discipline. The 2-line emitter is feasible standalone (no HMAC required); 6-line emitter pairs with `bsms-verify-signatures`. Splitting into two FOLLOWUPs (2-line in v0.27.x, 6-line bundled with `bsms-verify-signatures`) is a viable plan.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none. (Pairs in spirit with `bsms-verify-signatures` for the 6-line shape.)
+
+### `wallet-import-json-envelope-full-bundle` — `--json` envelope `bundle:` field is a parse-side summary, not the full toolkit-native `BundleJson`
+
+- **Surfaced:** 2026-05-18, Phase 5 R0 architect review I2 (commit `ff1c85c` under review).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:336-359` — `emit_json_envelope` hand-builds a summary `bundle_view: { cosigners: [...], network, threshold }`.
+  - `crates/mnemonic-toolkit/src/wallet_import/mod.rs:59` — `ParsedImport.descriptor: md_codec::Descriptor` is parsed but never read by `cmd::import_wallet::run` (carries a narrow `#[allow(dead_code)]` per Phase 5 fold pointing at this FOLLOWUP).
+  - `design/SPEC_wallet_import_v0_26_0.md` §2.2 — post-Phase-5-fold lock: v0.26.0 ships the summary shape; full BundleJson tracked here.
+- **What:** v0.27+: wire the `--json` envelope's `bundle:` field to emit the full toolkit-native `BundleJson` shape (the same `verify-bundle --bundle-json` consumes — with synthesized ms1/mk1/md1 cards). This requires invoking the synthesizer post-parse against the supplied / overlayed seeds; for watch-only cosigners, emit the ms1/mk1 sentinel forms per SPEC §5.8. The `descriptor: md_codec::Descriptor` field on `ParsedImport` becomes load-bearing in this wire-up (currently unused).
+- **Why deferred:** v0.26.0's scope was parse + watch-only invariant + round-trip discipline; envelope-side synthesis is a distinct integration with `crate::synthesize` that exceeds the cycle budget. The summary shape is forward-compatible with v0.27: the envelope key remains `bundle`, the shape itself extends. Downstream consumers encoding against v0.26.0 should target the summary; v0.27 will treat the legacy summary as a strict subset of the full shape.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-fixture-corpus-expansion` — broaden BSMS + Bitcoin Core fixture coverage to SPEC §10.1/§10.2 full set
+
+- **Surfaced:** 2026-05-18, Phase 4 R0 architect review I1 (commit `120e6b4` under review).
+- **Where:**
+  - `crates/mnemonic-toolkit/tests/fixtures/wallet_import/` — v0.26.0 ships 8 BSMS + 5 Bitcoin Core fixtures (post-Phase-4-fold close M3 adds `bsms-2line-multi-2of3.txt` for declaration-order discipline).
+  - `design/SPEC_wallet_import_v0_26_0.md` §10.1 / §10.2 — full corpus enumerated (12-15 per format); §10.1 amended post-Phase-4-fold to lock the v0.26.0 shipped subset + cite this FOLLOWUP.
+  - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §4.3 / §4.4 — full fixture list.
+- **What:** v0.27+: ship remaining fixtures per SPEC §10.1/§10.2 — BSMS decay-4032, 6-line sortedmulti-2of3, sortedmulti-3of5, mainnet+ypub, mainnet+zpub, tr(NUMS,...) taproot; Core BIP-44 P2PKH, BIP-86 P2TR, wsh-sortedmulti 3-of-5, native `<0;1>/*` multipath, explicit `active: false` cell name. Each new fixture pairs with a per-fixture canonicalize-idempotency cell + a sniff cell.
+- **Why deferred:** v0.26.0's shipped subset exercises the load-bearing canonicalize + idempotency + Core envelope-shape branches + declaration-order preservation invariant. Missing fixtures are coverage-expansion targets, not load-bearing for v0.26.0's correctness contract. Phase 4 implementer's commit body explicitly flagged the corpus reduction; the architect review confirmed the load-bearing paths are covered and the missing fixtures are expansion-class rather than correctness-class.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `gui-import-wallet-env-var-secret-channel` — v0.12.0+ GUI: auto-rewrite literal seeds in repeating `--ms1` widgets to `@env:MNEMONIC_MS1_<i>` sentinels + spawn-time env-var injection
+
+- **Surfaced:** 2026-05-18, Phase 6 R0 architect review C1 (toolkit-manual cycle).
+- **Where:**
+  - `mnemonic-gui/src/runner.rs:74-114` — current spawn flow injects only `MNEMONIC_FORCE_TTY`; no per-cosigner secret env-var bag.
+  - `mnemonic-gui/src/form/invocation.rs:236-251` — repeating-secret branch routes values verbatim.
+  - `mnemonic-gui/src/main.rs:683-688` — run-confirm modal renders argv verbatim (per `[[feedback-run-confirm-modal-renders-argv-verbatim]]`).
+  - `mnemonic-gui/tests/kittest_import_wallet_form.rs:154-213` — pins literal-pass-through contract.
+  - `design/SPEC_wallet_import_v0_26_0.md` §9.3 — describes the aspirational behavior (toolkit-side accepts `@env:VAR` sentinels at parse time, but GUI does NOT pre-rewrite).
+- **What:** v0.12.0+ `mnemonic-gui`: on subprocess spawn, collect per-cosigner-index secret values from `--ms1` repeating-widget state into a per-spawn env-var bag (`MNEMONIC_MS1_<i>=<value>`), rewrite `args[--ms1+1]` to `@env:MNEMONIC_MS1_<i>` sentinels, render the sentinel-bearing argv in the run-confirm modal, drop the env-vars on subprocess exit. Same pattern for `--passphrase`, `--share` (slip39-combine, seed-xor-combine), and other secret-bearing flags. Toolkit-side already accepts the sentinel at parse-time per Phase 1 cross-cutting helper.
+- **Why deferred:** v0.26.0 scope is wallet-import-side parse + watch-only invariant + round-trip; the env-var-channel rewrite is GUI-side runner work that affects ALL repeating-secret surfaces, not just `--ms1`. Pre-existing `gui-run-confirm-modal-secret-redaction` (mnemonic-gui/FOLLOWUPS.md:454-462) covers the modal-redaction direction; this FOLLOWUP covers the argv-rewrite direction. Both need to land together in v0.12.0.
+- **Status:** open
+- **Tier:** `v0.12.0`
+- **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-import-wallet-env-var-secret-channel` (primary). v0.26.0 manual prose calls out the user-must-type-explicitly fallback.
+
+### `gui-import-wallet-cell-coverage-gap` — Phase 6 plan §6.4.a + §6.4.b + §6.8 + §6.9 cells deferred to v0.12.0+
+
+- **Surfaced:** 2026-05-18, Phase 6 R0 architect review I2.
+- **Where:**
+  - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §6.4.a-§6.9 — plan items not shipped at `b2e281a`.
+  - `mnemonic-gui/tests/kittest_import_wallet_form.rs` — 8 cells shipped; 4 plan items not exercised (file-picker extension filter; blob-paste-textarea → stdin; env-var unset → subprocess exit 1; env-var no parent leak).
+- **What:** v0.12.0+: ship the 4 deferred kittest cells. §6.8 + §6.9 ride `gui-import-wallet-env-var-secret-channel` close (no point asserting env-var lifecycle until the GUI does env-var injection). §6.4.a + §6.4.b are independent and can ship earlier.
+- **Why deferred:** §6.4.a + §6.4.b ride file-picker / textarea widget plumbing not yet enumerated in the v0.11.0 GUI's file-selection surface (currently a one-shot file path string; no extension filter; no textarea paste). §6.8 + §6.9 ride the env-var-channel FOLLOWUP.
+- **Status:** open
+- **Tier:** `v0.12.0`
+- **Companion:** none.
+
+### `wallet-import-sparrow` — Sparrow Wallet JSON export-format ingest
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Sparrow parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: add `wallet_import/sparrow.rs` (or merged dispatcher) parsing Sparrow's wallet-export JSON shape. Inverse of `wallet_export::sparrow_wallet_emit` if a wallet_export-side Sparrow emitter exists; otherwise build forward.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-specter` — Specter-DIY JSON descriptor export
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Specter parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: add Specter-DIY JSON descriptor parser (non-BSMS path). Specter's wallet-export schema diverges from BSMS Round-2's line-oriented shape and from Bitcoin Core's `listdescriptors` envelope; needs its own sniff signature + parser.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-electrum` — Electrum 4.x wallet file ingest
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Electrum parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: ingest Electrum 4.x wallet file (Python-dict-serialized JSON with `xpub` / `wallet_type` keys; multisig shapes via `x1`/`x2`/... per-cosigner subkeys). Encrypted variants (Electrum's stretched-key envelope) are out of scope; sibling FOLLOWUP for encrypted ingest if user-direction warrants.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-coldcard` — Coldcard wallet.json export (single-sig)
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Coldcard parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: ingest Coldcard's single-sig `wallet.json` export shape (BIP-44 / BIP-49 / BIP-84 / BIP-86 per-path xpub blocks under a fixed envelope; Coldcard-specific provenance metadata). Multisig descriptor-text shape is tracked separately under `wallet-import-coldcard-multisig`.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-coldcard-multisig` — Coldcard multisig.txt (descriptor + cosigner list)
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Coldcard-multisig parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: ingest Coldcard's multisig descriptor-text export (`Name`, `Policy`, `Format`, per-cosigner `Derivation` + xpub blocks; output script type as a separate header). Distinct shape from Coldcard's single-sig `wallet.json`; line-oriented `Key: Value` grammar more similar to BSMS than to Sparrow's JSON.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-jade` — Jade SeedQR or descriptor JSON export
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/` — no Jade parser; sniff would need to extend `SniffOutcome` + new module.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: ingest Blockstream Jade's `register_multisig` JSON-like export shape (multisig descriptor + per-cosigner xpub + name + threshold; signer-fingerprint annotations). SeedQR formats — distinct surface — may be folded later as an inline mode rather than a wallet-import format if user-direction warrants.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-bsms-round-1` — BSMS Round-1 share ingest (multi-cosigner setup phase)
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — current parser handles Round-2 only (concrete descriptor + audit envelope).
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: ingest BSMS Round-1 share files (per-cosigner contribution prior to coordinator assembly; carries token + signer-fingerprint + xpub but NOT the assembled descriptor). Multi-share collation requires N-of-N Round-1 inputs to produce a single Round-2-equivalent bundle; semantically distinct from single-blob ingest.
+- **Why deferred:** v0.26.0 scope was BSMS Round-2 only. Round-1 multi-share orchestration is a multi-input pipeline (vs Round-2's single-blob ingest); needs its own CLI surface (e.g., `--shares share1 share2 share3` repeating-flag) and threshold-consistency invariants.
+- **Status:** open
+- **Tier:** `v0.27`
+- **Companion:** none.
+
+### `wallet-import-bsms-encrypted` — BSMS encrypted-envelope decryption + Round-2 ingest
+
+- **Surfaced:** 2026-05-18, Phase 6 cycle close (forward-reference from manual chapter `docs/manual/src/45-foreign-formats.md`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — current parser handles unencrypted Round-2 only.
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
+- **What:** v0.27+: decrypt BSMS encrypted-envelope shape per BIP-129 §5 (AES-CTR over the Round-2 payload keyed by a coordinator-shared token-derived key), then route the decrypted plaintext through the existing Round-2 parser. Requires CLI flag for the decryption key material (e.g., `--bsms-key <hex>` or `@env:BSMS_KEY` sentinel) and clear stderr templates for decryption failure vs format failure.
+- **Why deferred:** v0.26.0 scope was unencrypted BSMS Round-2 only. Encrypted-envelope decryption is a distinct cryptographic surface that warrants its own design discussion (key material handling, argv leak vectors, key-derivation choice). The user can decrypt out-of-band today and pipe plaintext into `import-wallet`.
+- **Status:** open
+- **Tier:** `v0.27`
 - **Companion:** none.

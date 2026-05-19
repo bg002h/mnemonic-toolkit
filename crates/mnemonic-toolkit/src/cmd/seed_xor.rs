@@ -37,7 +37,7 @@ pub enum SeedXorCommand {
     Combine(SeedXorCombineArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct SeedXorSplitArgs {
     /// Master phrase as `phrase=<value>` (inline) or `phrase=-` (stdin).
     ///
@@ -69,7 +69,7 @@ pub struct SeedXorSplitArgs {
     pub json_out: Option<std::path::PathBuf>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct SeedXorCombineArgs {
     /// Share phrase as `phrase=<value>` (inline) or `phrase=-` (stdin).
     /// Repeating; at most ONE may be `phrase=-` (single stdin per invocation).
@@ -101,9 +101,57 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     match &args.command {
-        SeedXorCommand::Split(a) => run_split(a, stdin, stdout, stderr),
-        SeedXorCommand::Combine(a) => run_combine(a, stdin, stdout, stderr),
+        SeedXorCommand::Split(a) => {
+            // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--from`
+            // before downstream consumption. `--from phrase=` is the only
+            // accepted shape (row 8 enforced post-resolution).
+            let owned_a;
+            let a = if a.from.value.starts_with("@env:") {
+                owned_a = resolve_split_env_sentinels(a)?;
+                &owned_a
+            } else {
+                a
+            };
+            run_split(a, stdin, stdout, stderr)
+        }
+        SeedXorCommand::Combine(a) => {
+            // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share`
+            // values (all are `phrase=` secret-bearing per row 8).
+            let owned_a;
+            let a = if a.share.iter().any(|s| s.value.starts_with("@env:")) {
+                owned_a = resolve_combine_env_sentinels(a)?;
+                &owned_a
+            } else {
+                a
+            };
+            run_combine(a, stdin, stdout, stderr)
+        }
     }
+}
+
+fn resolve_split_env_sentinels(
+    args: &SeedXorSplitArgs,
+) -> Result<SeedXorSplitArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    // `--from phrase=` is the only accepted shape (refusal below at row 8);
+    // we resolve the sentinel here so the refusal still fires with the
+    // post-resolution value, which preserves user-facing behavior.
+    let flag = format!("--from {}=", owned.from.node.as_str());
+    owned.from.value = resolve_env_var_sentinel(&owned.from.value, &flag)?;
+    Ok(owned)
+}
+
+fn resolve_combine_env_sentinels(
+    args: &SeedXorCombineArgs,
+) -> Result<SeedXorCombineArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    for sh in owned.share.iter_mut() {
+        let flag = format!("--share {}=", sh.node.as_str());
+        sh.value = resolve_env_var_sentinel(&sh.value, &flag)?;
+    }
+    Ok(owned)
 }
 
 fn run_split<R: Read, W: Write, E: Write>(

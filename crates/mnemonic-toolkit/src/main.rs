@@ -3,9 +3,11 @@
 mod bip85;
 mod bundle_unified;
 mod cmd;
+mod cost;
 mod derive;
 mod derive_slot;
 mod electrum;
+mod env_sentinel;
 mod error;
 mod format;
 mod friendly;
@@ -20,6 +22,7 @@ mod slot_input;
 mod synthesize;
 mod template;
 mod wallet_export;
+mod wallet_import;
 mod wordlists;
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -61,6 +64,8 @@ enum Command {
     Convert(cmd::convert::ConvertArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
+    /// import a third-party wallet blob into an m-format bundle (v0.26.0 Phase 2: BSMS Round-2 only)
+    ImportWallet(cmd::import_wallet::ImportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
     /// emit the set of BIP-39 last words that yield a valid checksum for an N-1 partial phrase
@@ -75,6 +80,10 @@ enum Command {
     Repair(cmd::repair::RepairArgs),
     /// describe the contents of an m-format card (ms1 / mk1 / md1)
     Inspect(cmd::inspect::InspectArgs),
+    /// compare wsh-vs-tr per-spending-condition cost for a miniscript or descriptor
+    CompareCost(cmd::compare_cost::CompareCostArgs),
+    /// search for a target (xpub, descriptor, address, or passphrase) under a seed or xpub
+    XpubSearch(cmd::xpub_search::XpubSearchArgs),
 }
 
 fn main() -> ExitCode {
@@ -98,6 +107,9 @@ fn main() -> ExitCode {
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
         }
+        Command::ImportWallet(args) => {
+            cmd::import_wallet::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
         }
@@ -113,6 +125,10 @@ fn main() -> ExitCode {
         }
         Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
         Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout).map(|_| 0),
+        Command::XpubSearch(args) => {
+            cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
     };
 
     let exit = match result {

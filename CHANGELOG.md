@@ -6,6 +6,129 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.26.0] — 2026-05-18
+
+### Added
+
+- **`mnemonic xpub-search passphrase-of-xpub`** (C4) — fourth and final v0.26.0 mode of the `xpub-search` umbrella. Given a seed (BIP-39 phrase OR ms1 card) **plus a specific passphrase** + a target xpub (any SLIP-0132 prefix, or an `mk1...` bech32 card), verify that this passphrase produces the target xpub under the seed at one of the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range. Same `match_xpub_against_paths` primitive + candidate-set as `path-of-xpub`; semantic difference is that P4 answers **"does THIS passphrase produce the xpub?"** rather than P1's **"what path produced this xpub?"**.
+
+  Clap-derive enforces the **mandatory passphrase group**: exactly one of `--passphrase` / `--passphrase-stdin` must be supplied (`required_unless_present` pair forms the mandatory mutex). Omitting both is a clap arg-parse error (exit 64); supplying both is a clap mutex error (exit 64). MVP scope is single-passphrase verification only — no `--passphrases-file <path>`, no streamed candidates, no generated wordlists; deferred to v0.27+ via FOLLOWUP `xpub-search-passphrase-bruteforce`.
+
+  Every invocation emits a load-bearing stderr advisory BEFORE the search starts: `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` The advisory is intentionally unconditional: a "no match" result does NOT prove the passphrase is wrong — only that no standard path under the (seed, passphrase) pair produces the target. Users with non-standard paths must extend the candidate set via `--add-path`, or solve the path-lookup separately via `path-of-xpub`.
+
+  `--json` envelope shape: `{"schema_version":"1","mode":"passphrase-of-xpub","result":"match|no_match","path":"m/…|null","template":"bip…|null","account":N|null,"target_xpub_canonical":"xpub…","target_xpub_variant":"zpub|…|null","searched_count":N}` — same shape as `path-of-xpub` with `mode` substituted. Separate `PassphraseOfXpubResult` struct (not a re-export of `PathOfXpubResult`) keeps future per-mode divergence clean. Exit codes: 0 match / 1 bad input / 4 no match (`ToolkitError::XpubSearchNoMatch` with `mode: "passphrase-of-xpub"`) / 5 auto-fire short-circuit on `--ms1` decode failure / 64 clap. Seed-intake polymorphism + argv-leak advisories + secret-hygiene (Zeroizing + mlock pinning) match `path-of-xpub`.
+
+  New files: `cmd/xpub_search/passphrase_of_xpub.rs`. The shared verify-helper from plan §2.2 was inlined per orchestrator decision (the verification path is a thin wrapper over `match_xpub_against_paths` already exposed by C1; a separate `passphrase_verify.rs` would have been 5 LOC of pure indirection). Umbrella `cmd/xpub_search/mod.rs` extended with the `PassphraseOfXpub` variant + dispatch arm + `XpubSearchJson::PassphraseOfXpub` enum arm + `pub use` re-export. 10 new integration cells (`tests/cli_xpub_search_passphrase_of_xpub.rs`). gui-schema renamed `gui_schema_lists_all_fifteen_subcommands` → `gui_schema_lists_all_sixteen_subcommands` with `xpub-search-passphrase-of-xpub` in the alphabetically-sorted list (note: `passphrase-of-xpub` sorts BEFORE `path-of-xpub` lexically — `passphrase` < `path`).
+
+- **`mnemonic xpub-search address-of-xpub`** (C3) — third mode of the `xpub-search` umbrella. Given a parent xpub (any SLIP-0132 single-sig prefix: `xpub`/`tpub`/`ypub`/`upub`/`zpub`/`vpub`) OR an mk1 bech32 card carrying an xpub, plus one or more target addresses, scans child receive (`chain=0`) and (default) change (`chain=1`) addresses across the gap-limit window and reports which targets matched at which `(chain, index)`. Per-target first-match-wins; envelope reports per-target match-or-no-match payloads with stable shape. Takes **no seed material** — auto-fire BCH repair does NOT apply, and there is no argv-leakage surface beyond the (non-secret) xpub itself.
+
+  Script-type inference (priority): explicit `--address-type` wins; else SLIP-0132 prefix mapping (`ypub`/`upub` → P2SH-P2WPKH; `zpub`/`vpub` → P2WPKH); else (neutral `xpub`/`tpub` or mk1 input) require `--address-type` explicit. Multisig SLIP-0132 prefixes (`Ypub`/`Zpub`/`Upub`/`Vpub`) are detected via base58check version-byte inspection BEFORE `resolve_target_xpub` and refused with a pointer to `account-of-descriptor` (the single-sig-address derivation from a multisig cosigner xpub is semantically wrong; the full descriptor is required for multisig address materialization).
+
+  Network resolution: explicit `--network` wins; else inferred from the xpub version byte (mainnet ↔ `xpub`/`ypub`/`Ypub`/`zpub`/`Zpub`; testnet ↔ `tpub`/`upub`/`Upub`/`vpub`/`Vpub`). `--network signet` / `--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte.
+
+  Scan covers `chain ∈ {0, 1} × index ∈ [0, gap_limit)`; `--external-only` restricts to `chain ∈ {0}`; `--gap-limit` (default 20) tunes the window. Address rendering reuses the v0.26.0-extended `build_address_from_xpub` (P2PKH branch added in this commit — see `### Changed`); byte-equal comparison against each target address.
+
+  `--json` envelope shape: `{"schema_version":"1","mode":"address-of-xpub","results":[{"target":"…","result":"match","chain":"external|internal","index":N,"script_type":"p2pkh|p2sh-p2wpkh|p2wpkh|p2tr"} | {"target":"…","result":"no_match","scanned_external":N,"scanned_internal":N}, ...],"xpub_canonical":"xpub…","xpub_variant":"zpub|ypub|…|null","gap_limit":N}`. Mixed match / no-match payloads supported; envelope shape stays stable. Exit codes: 0 all matched / 1 bad input (xpub parse error, multisig prefix, missing `--address-type` for neutral xpub) / 4 any unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) / 64 clap.
+
+  New files: `cmd/xpub_search/address_of_xpub.rs`, `cmd/xpub_search/address_search.rs`. 17 new integration cells (`tests/cli_xpub_search_address_of_xpub.rs`; 16 in the C3 commit + 1 added in the C3 R0 fold for `--network signet` override). Umbrella `cmd/xpub_search/mod.rs` extended with the `AddressOfXpub` variant + dispatch arm.
+
+- **`mnemonic xpub-search account-of-descriptor`** (C2) — second mode of the `xpub-search` umbrella. Given a seed (BIP-39 phrase OR ms1 card) + a wallet descriptor, identify which cosigner role(s) the seed plays and at which account index. Three descriptor input shapes auto-detected per tie-break order: (1) BIP-388 wallet-policy JSON (starts-with `{`); (2) md1 card(s) (`md1` HRP — single inline OR `--descriptor-from md1=-` stdin one-chunk-per-line); (3) external literal-xpub descriptors (Sparrow/Specter/Core/Electrum/Liana/Caravan/Coldcard). Toolkit `@N`-placeholder descriptors are REFUSED (synthetic xpubs are non-searchable). Explicit shape override via `--descriptor-from <node>=<value>` where `<node>` is `literal` / `md1` / `bip388`.
+
+  Two-funnel implementation: BIP-388 JSON + literal-xpub paths feed `rust_miniscript::Descriptor::<DescriptorPublicKey>::from_str` + `iter_pk()` walk (precedent `wallet_export/pipeline.rs:177`); md1 path feeds `md_codec::chunk::reassemble` → direct tree-walk on `desc.tlv.pubkeys` / `desc.tlv.fingerprints` / `desc.tlv.origin_path_overrides` / `desc.path_decl.paths` (no `md_codec::Descriptor → String` serializer required). BIP-388 reconstruction: `@N/**` token in `description_template` → `keys_info[N] + "/<0;1>/*"` (exact inverse of `wallet_export/pipeline.rs:192-198` emitter).
+
+  v0.19.0 silent-default-path inference applies when literal-xpub descriptors omit `[fp/path]` annotations — BIP-48 default path (`m/48'/<coin>'/<account>'/2'`) assigned + stderr `info:` notice emitted (~6 LOC inline mirror of `cmd/bundle.rs:1367-1388`).
+
+  NUMS sentinel cosigners (BIP-341 unspendable internal-key H point) are skipped and reported in JSON `unspendable_internal_keys` array. Zero-xpub guard: descriptors yielding no `DescriptorPublicKey::XPub` / `MultiXPub` entries (string funnel) OR `desc.tlv.pubkeys.is_none()` (tree-walk funnel) refused with `descriptor contains no extended keys`.
+
+  Per-cosigner search reuses C1's `match_xpub_against_paths` primitive over the same candidate set (BIP-44/49/84/86 single-sig + BIP-48 multisig × account range + `--add-path` templates). Multi-cosigner match (one seed matches >1 cosigner via reused mnemonic across roles) → reports all matches.
+
+  `--json` envelope shape: `{"schema_version":"1","mode":"account-of-descriptor","result":"match|no_match","matched_cosigners":[...],"cosigners_total":N,"searched_count_per_cosigner":N,"descriptor_shape":"literal_xpub|md1|bip388","unspendable_internal_keys":[...]}`. Exit codes: 0 match / 1 bad input / 4 no match / 5 auto-fire short-circuit / 64 clap. New files: `cmd/xpub_search/account_of_descriptor.rs`, `cmd/xpub_search/descriptor_intake.rs`, `cmd/xpub_search/account_search.rs`. 14 new integration cells (`tests/cli_xpub_search_account_of_descriptor.rs`) + 5 new unit cells in `descriptor_intake::tests`.
+
+- **`mnemonic xpub-search path-of-xpub`** — new umbrella subcommand `xpub-search` with the first of four planned modes shipped. Given a seed (BIP-39 phrase OR ms1 card) + a target xpub (any SLIP-0132 prefix, or an mk1 bech32 card), searches the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set (literal token `account'` or `account` substituted per iterated account; templates without an `account` token are searched once at the literal path).
+
+  Seed intake: `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` / positional ms1 (HRP-autodetect; BIP-39 phrase text rejected positionally — no HRP). BCH auto-fire repair applies ONLY to the `--ms1` decode-failure path (TTY-gated via `MNEMONIC_FORCE_TTY`); `--phrase` BIP-39 parse failure routes direct exit 1.
+
+  `--passphrase` / `--passphrase-stdin` plumbed through to `derive_master_seed`. Target intake accepts both SLIP-0132 xpubs (normalized to canonical xpub/tpub form internally; original variant preserved in output) AND `mk1` bech32 cards carrying an xpub.
+
+  Exit codes: 0 match / 1 bad input / 4 no match / 5 auto-fire short-circuit / 64 clap. New `ToolkitError::XpubSearchNoMatch { mode, searched }` variant routes to exit 4.
+
+  `--json` envelope shape (`tag = "mode"` — deviates from project's `tag = "kind"` convention because "mode" is the natural domain term for `xpub-search`'s four sub-modes; "kind" would conflict with `RepairJson`'s `kind: "ms1"|"mk1"|"md1"` per-card-type semantic):
+
+  ```json
+  {
+    "schema_version": "1",
+    "mode": "path-of-xpub",
+    "result": "match",
+    "path": "m/84'/0'/0'",
+    "template": "bip84",
+    "account": 0,
+    "target_xpub_canonical": "xpub6...",
+    "target_xpub_variant": "zpub",
+    "searched_count": 140
+  }
+  ```
+
+  `target_xpub_variant` always emitted (`null` when the target was supplied in canonical xpub/tpub form); structural stability across runs. The top-level `schema_version: "1"` field is new on `XpubSearchJson`; parallel addition to `InspectJson` is filed as FOLLOWUP `inspect-json-schema-version-backfill` for v0.27+.
+
+  Implementation: 6 new files under `cmd/xpub_search/` (umbrella `mod.rs` + per-mode `path_of_xpub.rs` + shared helpers `candidate_paths.rs` / `path_search.rs` / `seed_intake.rs` / `target_intake.rs`); per-mode-file split enables parallel-disjoint follow-on commits for the remaining 3 modes. 19 new integration cells (`tests/cli_xpub_search_path_of_xpub.rs`) + 8 unit cells.
+
+  Plan: `design/PLAN_v0_26_0_xpub_search.md` (C6 release commit will copy from the plan-mode source-of-truth).
+
+- **`mnemonic import-wallet` subcommand** — parse-side ingest for third-party wallet blobs. Two formats supported in v0.26.0:
+  - **BIP-129 BSMS Round-2** (`--format bsms`): 2-line and 6-line lenient shapes. Parses the descriptor body via `MsDescriptor::from_str` after a concrete-keys → `@N`-placeholder adapter rewrite (`wallet_import::pipeline::concrete_keys_to_placeholders`). BIP-380 checksum validated up-front via `miniscript::descriptor::checksum::verify_checksum` (before placeholder substitution). Audit fields (token, signature, first_address, derivation_path) preserved verbatim in the `--json` envelope's `bsms_audit` object; signature verification deferred to v0.27+ FOLLOWUP `bsms-verify-signatures`. Driving seed-case: `wsh(thresh(2, pk, s:pk, sln:older(N)))` decaying-multisig with N=144 / N=4032 / N=32768.
+  - **Bitcoin Core `listdescriptors`** (`--format bitcoin-core`): top-level JSON object (`{wallet_name, descriptors: [...]}`) OR bare-array shape. `--select-descriptor <N|active-receive|active-change|all>` filters the multi-descriptor case. Refuses `xprv`-bearing blobs with exit 2 + stderr template directing the user to re-run `bitcoin-cli listdescriptors` without `true`. Tested against testnet (`tprv`), `tpub`, BIP-49 / BIP-84 / wsh-sortedmulti / multipath shapes.
+  - **Auto-detect (sniff)** when `--format` is omitted: heuristics in `wallet_import::sniff::sniff_format`. BSMS prefix-match `BSMS 1.0\n` (CRLF tolerant); Bitcoin Core JSON-parse + `descriptors[].desc: String` shape with conservative Specter/Sparrow vendor-marker exclusion (`chain`, `policy`, `version`, `bipname`, `extendedPublicKey`). Ambiguous + no-match cases route to exit 1.
+  - **Seed overlay** (`--ms1` repeating; `--slot @<i>.phrase=`): post-parse cosigner-by-cosigner entropy attach. Derives xpub at the cosigner's declared origin path; cross-checks against the blob's declared xpub; exit 4 `ImportWalletSeedMismatch` on mismatch. Watch-only-cosigner empty-string sentinel honored per v0.25.1 contract (cosigner skipped + stderr NOTICE).
+  - **`--json` envelope** (SPEC §2.2 / §7.4): emits an array of bundle envelopes per blob. Each envelope carries `bundle` (parse-side summary in v0.26.0; full `BundleJson` deferred to v0.27+ FOLLOWUP `wallet-import-json-envelope-full-bundle`), `roundtrip { byte_exact, semantic_match, diff?, status }`, optional `bsms_audit`, optional `source_metadata`, `source_format`. The `status` extension key takes values `"ok"` / `"blocked_no_emitter"` / `"canonicalize_failed"`.
+  - **Round-trip discipline** (SPEC §7): `canonicalize_bsms` + `canonicalize_bitcoin_core` + `unified_diff` helpers. Semantic round-trip via canonicalize equality with unified-diff on byte-mismatch; idempotency cells pin `canonicalize(canonicalize(x)) == canonicalize(x)`. `similar = "2"` dep added (Apache-2.0/MIT). BSMS bundle round-trip blocked on missing export emitter (FOLLOWUP `wallet-export-bsms-emitter` v0.27+).
+
+- **Cross-cutting `@env:<VAR>` value-source sentinel** (`crate::env_sentinel::resolve_env_var_sentinel`). Resolves at clap-parse-side for all secret-bearing flags: `--ms1`, `--mk1`/`--md1`, `--passphrase`, `--bip38-passphrase`, `--share`, `--slot @<i>.phrase=`, `--slot @<i>.ms1=`. VAR must match `[A-Z_][A-Z0-9_]*`. Missing → exit 1 `EnvVarMissing` with `reason: { Unset, InvalidName }` discriminator. Non-secret flags treat `@env:VAR` as literal text (no auto-resolution; per SPEC §3.2 + §5.11 explicit-opt-in rule).
+
+- **`PossibleValuesParser` on `--format`** for clap-side enumeration (post Phase 5 R0 M4 fold).
+
+- **Test count delta:** +161 cells cycle-wide (1153 → 1314 in `cargo test -p mnemonic-toolkit`).
+
+### Changed
+
+- **`mnemonic convert` — P2PKH gap-fix in `build_address_from_xpub`** (C3, plan §5.3) — extends the address-rendering primitive (and the `--script-type` / `--address-type` clap value-parser surface) to support P2PKH alongside the prior `p2sh-p2wpkh` / `p2wpkh` / `p2tr` set. Five-site edit: `ScriptType` enum gains a `P2pkh` variant; `parse_script_type_arg` accepts the `"p2pkh"` token; `script_type_from_template` maps `CliTemplate::Bip44 → ScriptType::P2pkh`; `build_address_from_xpub` adds the `ScriptType::P2pkh => Address::p2pkh(...)` arm; the prior P2PKH refusal in `mnemonic convert --script-type p2pkh` is relaxed (it was a gap left at v0.13.0+ — BIP-44 was supported by `mnemonic bundle` / `mnemonic export-wallet` but `mnemonic convert` refused the script-type at parse-time). Four cells in `tests/cli_convert_address.rs` touched: existing `refusal_address_no_script_type` updated to mention `p2pkh` in the value-parser refusal list; new `bip44_template_infers_p2pkh_v0_26_0`, `refusal_invalid_script_type_value`, and `xpub_to_address_p2pkh_explicit_script_type_v0_26_0`. Required by `xpub-search address-of-xpub --address-type p2pkh`; the gap-fix is bundled with C3 rather than carried as a separate patch because the two land in the same logical surface and share regression-test scope.
+
+- **SPEC `SPEC_mnemonic_toolkit_v0_5.md` amendments** (carry-forward toolkit SPEC):
+  - `§5.11 CLI value-source sentinels (NEW)` — generalizes the three sentinel forms (empty-string + stdin + env-var) across all secret-bearing CLI surfaces.
+  - `§6.11 import-wallet CLI grammar (NEW)` — clap surface + sniff dispatch + override semantics + exit codes + `--json` envelope shape.
+  - `§6.11.a wallet_import round-trip discipline (NEW)` — bundle + semantic blob round-trip; canonicalize per-format algorithms; `status` extension key lock; idempotency + declaration-order-preservation guarantees.
+
+- **Manual mirror surfaces:**
+  - `docs/manual/src/40-cli-reference/41-mnemonic.md` — new `## mnemonic import-wallet` section mirrors `--help` byte-shape.
+  - `docs/manual/src/45-foreign-formats.md` — new chapter on BSMS Round-2 + Bitcoin Core `listdescriptors` formats; normative BIP-129 / BIP-380 / BIP-389 references.
+  - `docs/manual-gui/src/40-mnemonic/4c-import-wallet.md` — new GUI walkthrough.
+
+### Security
+
+- **Env-var sentinel `@env:<VAR>` keeps secrets off the argv vector** (visible to `/proc/<pid>/cmdline` + shell history). v0.11.0 `mnemonic-gui` companion ships SubcommandSchema for import-wallet but does NOT auto-rewrite literal repeating-secret values; GUI users must type `@env:<VAR>` explicitly with `<VAR>` exported in the calling shell to benefit. Auto-rewrite tracked at FOLLOWUP `gui-import-wallet-env-var-secret-channel` (v0.12.0+).
+
+- **BIP-129 token + signature on Round-2 blobs are NOT verified** in v0.26.0 (FOLLOWUP `bsms-verify-signatures` v0.27+). Audit fields preserved verbatim in the envelope for the user to verify manually.
+
+- **`xprv`-bearing Bitcoin Core blobs are hard-refused** (exit 2). Extends to testnet `tprv` and SLIP-132 private-key prefixes (`yprv`/`zprv`/`uprv`/`vprv` etc.) via regex per Phase 3 R0 C1 fold.
+
+### Resolved (FOLLOWUPS)
+
+- `wallet-import-bsms-checksum-delegation-note` — SPEC §4.4 amended in this cycle-close commit to describe the actual mechanism (up-front validation via `miniscript::descriptor::checksum::verify_checksum` BEFORE placeholder substitution). Implementation at `wallet_import/bsms.rs:26-27,140-145` was correct since Phase 2 close; only the SPEC wording is now corrected.
+
+### Cross-repo lockstep
+
+`mnemonic-gui v0.11.0` (companion release) at `feat/import-wallet-v0_11_0` branch:
+- `SubcommandSchema` entry for `import-wallet` (schema v5 — no version bump).
+- 8 kittest cells pinning argv-emission contracts.
+- 1 new FOLLOWUP `gui-import-wallet-env-var-secret-channel` (cross-cited companion).
+
+### FOLLOWUPs filed (13 new this cycle)
+
+- `bsms-first-address-verify`, `wallet-import-signet-regtest-disambiguation`, `wallet-import-bsms-checksum-delegation-note`, `bsms-verify-signatures` (Phase 2 close)
+- `wallet-export-bsms-emitter`, `wallet-import-fixture-corpus-expansion` (Phase 4 close)
+- `wallet-import-json-envelope-full-bundle` (Phase 5 close)
+- `gui-import-wallet-env-var-secret-channel`, `gui-import-wallet-cell-coverage-gap` (Phase 6 close)
+- `wallet-import-{sparrow, specter, electrum, coldcard, coldcard-multisig, jade, bsms-round-1, bsms-encrypted}` (Phase 6 cycle-close placeholders)
+
 ## mnemonic-toolkit [0.25.1] — 2026-05-18
 
 ### Fixed

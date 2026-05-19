@@ -154,7 +154,7 @@ pub fn parse_from_input(s: &str) -> Result<FromInput, String> {
 // CLI args
 // ============================================================================
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct ConvertArgs {
     /// Input node descriptor — shape `<node>=<value>`. Repeating.
     ///
@@ -321,13 +321,14 @@ pub struct ConvertArgs {
     /// Script-type selector for `(xpub, address)` derivation.
     ///
     /// Accepted values:
+    ///   p2pkh        legacy single-sig (BIP-44; mainnet `1...`, testnet `m/n...`)
     ///   p2wpkh       native-segwit single-sig
     ///   p2sh-p2wpkh  nested-segwit single-sig
     ///   p2tr         taproot single-sig
     ///
     /// If absent and `--template` is supplied, inferred from the
-    /// template (`bip84` → p2wpkh, `bip49` → p2sh-p2wpkh, `bip86` →
-    /// p2tr); else refused. (SPEC v0.7 §10.a)
+    /// template (`bip44` → p2pkh, `bip84` → p2wpkh, `bip49` → p2sh-p2wpkh,
+    /// `bip86` → p2tr); else refused. (SPEC v0.7 §10.a; P2PKH added v0.26.0)
     #[arg(long = "script-type", value_parser = parse_script_type_arg, verbatim_doc_comment)]
     pub script_type: Option<ScriptType>,
 
@@ -337,10 +338,12 @@ pub struct ConvertArgs {
 }
 
 /// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
-/// Single-sig variants only in v0.7; multisig templates do not infer to a
-/// single-sig script-type.
+/// Single-sig variants only; multisig templates do not infer to a single-sig
+/// script-type. P2PKH (BIP-44) added v0.26.0 to round out the four standard
+/// single-sig address types (closes the v0.26.0 xpub-search P3 5-site gap).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptType {
+    P2pkh,
     P2wpkh,
     P2shP2wpkh,
     P2tr,
@@ -348,26 +351,27 @@ pub enum ScriptType {
 
 pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
     match s {
+        "p2pkh" => Ok(ScriptType::P2pkh),
         "p2wpkh" => Ok(ScriptType::P2wpkh),
         "p2sh-p2wpkh" => Ok(ScriptType::P2shP2wpkh),
         "p2tr" => Ok(ScriptType::P2tr),
         _ => Err(format!(
-            "--script-type must be one of: p2wpkh, p2sh-p2wpkh, p2tr; got {:?}",
+            "--script-type must be one of: p2pkh, p2wpkh, p2sh-p2wpkh, p2tr; got {:?}",
             s,
         )),
     }
 }
 
 /// SPEC v0.7 §10.a — infer script-type from `--template` when `--script-type`
-/// is absent. Single-sig templates (`bip49` / `bip84` / `bip86`) map cleanly;
-/// `bip44` and any multisig template return None (refused upstream as
+/// is absent. Single-sig templates (`bip44` / `bip49` / `bip84` / `bip86`)
+/// map cleanly; multisig templates return None (refused upstream as
 /// `refusal_address_script_type_unknown_template`).
 fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
     match template {
+        CliTemplate::Bip44 => Some(ScriptType::P2pkh),
         CliTemplate::Bip84 => Some(ScriptType::P2wpkh),
         CliTemplate::Bip49 => Some(ScriptType::P2shP2wpkh),
         CliTemplate::Bip86 => Some(ScriptType::P2tr),
-        // Bip44 (P2PKH) is not in the v0.7 single-sig script-type set.
         // Multisig templates don't reduce to a single-sig script-type.
         _ => None,
     }
@@ -543,13 +547,13 @@ fn refusal_address_no_path() -> ToolkitError {
 
 fn refusal_address_no_script_type() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--to address requires --script-type <p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
+        "--to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
     )
 }
 
 fn refusal_address_script_type_unknown_template() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--template does not infer a single-sig --script-type for --to address (bip49/bip84/bip86 supported; multisig templates and bip44 require explicit --script-type).".into(),
+        "--template does not infer a single-sig --script-type for --to address (bip44/bip49/bip84/bip86 supported; multisig templates require explicit --script-type).".into(),
     )
 }
 
@@ -708,7 +712,19 @@ pub fn run<R: Read, W: Write, E: Write>(
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
+    // v0.26.0 §I1 fold: emit BEFORE `@env:` sentinel resolution so
+    // sentinel-bearing flag values are skipped.
     emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
+    // consumption.
+    let env_resolved_owned;
+    let args: &ConvertArgs = if needs_env_sentinel_resolution(args) {
+        env_resolved_owned = resolve_env_sentinels(args)?;
+        &env_resolved_owned
+    } else {
+        args
+    };
 
     // 1) Single-from-value constraint (§5).
     let mut primaries: Vec<&FromInput> = args
@@ -1489,6 +1505,7 @@ fn build_address_from_xpub<C: bitcoin::secp256k1::Verification>(
     network: CliNetwork,
 ) -> String {
     match script_type {
+        ScriptType::P2pkh => Address::p2pkh(child.to_pub(), network.network_kind()).to_string(),
         ScriptType::P2wpkh => Address::p2wpkh(&child.to_pub(), network.known_hrp()).to_string(),
         ScriptType::P2shP2wpkh => {
             Address::p2shwpkh(&child.to_pub(), network.network_kind()).to_string()
@@ -1531,17 +1548,68 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
         if f.value == "-" {
             continue;
         }
+        // v0.26.0 §I1 fold: skip sentinel-bearing values; user opted into
+        // the @env: leak-mitigation channel.
+        if f.value.starts_with("@env:") {
+            continue;
+        }
         let node = f.node.as_str();
         let flag = format!("--from {node}=");
         let alt = format!("--from {node}=-");
         secret_in_argv_warning(stderr, &flag, &alt);
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        }
     }
-    if args.bip38_passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+    if let Some(bpp) = args.bip38_passphrase.as_deref() {
+        if !bpp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+        }
     }
+}
+
+/// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `convert`'s
+/// secret-bearing flag surfaces (`--passphrase`, `--bip38-passphrase`, and
+/// secret-bearing `--from <node>=` values).
+fn needs_env_sentinel_resolution(args: &ConvertArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let bip38_pp = args
+        .bip38_passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let from = args
+        .from
+        .iter()
+        .any(|f| f.node.is_secret_bearing() && f.value.starts_with("@env:"));
+    pp || bip38_pp || from
+}
+
+/// v0.26.0 §3 — resolve `@env:<VAR>` sentinels across `convert`'s
+/// secret-bearing flag surfaces. Per SPEC §3.2, resolution is opt-in
+/// per-callsite: only secret-bearing flags are scanned.
+fn resolve_env_sentinels(args: &ConvertArgs) -> Result<ConvertArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    if let Some(bp) = owned.bip38_passphrase.as_ref() {
+        owned.bip38_passphrase = Some(resolve_env_var_sentinel(bp, "--bip38-passphrase")?);
+    }
+    for f in owned.from.iter_mut() {
+        if f.node.is_secret_bearing() {
+            let flag = format!("--from {}=", f.node.as_str());
+            f.value = resolve_env_var_sentinel(&f.value, &flag)?;
+        }
+    }
+    Ok(owned)
 }
 
 #[cfg(test)]

@@ -77,7 +77,7 @@ pub enum Slip39Command {
     Combine(Slip39CombineArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct Slip39SplitArgs {
     /// Master secret as `phrase=<value-or->` OR `entropy=<hex-or->`.
     ///
@@ -138,7 +138,7 @@ pub struct Slip39SplitArgs {
     pub json_out: Option<std::path::PathBuf>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct Slip39CombineArgs {
     /// SLIP-39 share mnemonic. Repeating; at most ONE may be `-` (stdin).
     ///
@@ -213,9 +213,79 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     match &args.command {
-        Slip39Command::Split(a) => run_split(a, stdin, stdout, stderr),
-        Slip39Command::Combine(a) => run_combine(a, stdin, stdout, stderr),
+        Slip39Command::Split(a) => {
+            // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--from` +
+            // `--passphrase` before downstream consumption.
+            let owned_a;
+            let a = if needs_split_env_sentinel_resolution(a) {
+                owned_a = resolve_split_env_sentinels(a)?;
+                &owned_a
+            } else {
+                a
+            };
+            run_split(a, stdin, stdout, stderr)
+        }
+        Slip39Command::Combine(a) => {
+            // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share` +
+            // `--passphrase` before downstream consumption.
+            let owned_a;
+            let a = if needs_combine_env_sentinel_resolution(a) {
+                owned_a = resolve_combine_env_sentinels(a)?;
+                &owned_a
+            } else {
+                a
+            };
+            run_combine(a, stdin, stdout, stderr)
+        }
     }
+}
+
+fn needs_split_env_sentinel_resolution(args: &Slip39SplitArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    // `--from` carries `phrase=` or `entropy=` (both secret-bearing per
+    // row 17). Resolve sentinel in the value side.
+    let from = args.from.value.starts_with("@env:");
+    pp || from
+}
+
+fn resolve_split_env_sentinels(args: &Slip39SplitArgs) -> Result<Slip39SplitArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    // Both `phrase=` and `entropy=` are secret-bearing per SPEC §2.5 row 17.
+    let flag = format!("--from {}=", owned.from.node.as_str());
+    owned.from.value = resolve_env_var_sentinel(&owned.from.value, &flag)?;
+    Ok(owned)
+}
+
+fn needs_combine_env_sentinel_resolution(args: &Slip39CombineArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let share = args.share.iter().any(|v| v.starts_with("@env:"));
+    pp || share
+}
+
+fn resolve_combine_env_sentinels(
+    args: &Slip39CombineArgs,
+) -> Result<Slip39CombineArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    for v in owned.share.iter_mut() {
+        *v = resolve_env_var_sentinel(v, "--share")?;
+    }
+    Ok(owned)
 }
 
 fn emit_env_var_advisory<E: Write>(stderr: &mut E) {
