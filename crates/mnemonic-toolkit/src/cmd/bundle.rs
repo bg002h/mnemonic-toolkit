@@ -1420,8 +1420,10 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         })?;
     let descriptor_body = descriptor_body_no_csum(descriptor_with_csum, "--import-json")?;
 
-    // Decode mk1 chunks per §3.6.1 → ResolvedSlots (entropy=None).
-    let mut resolved_slots = envelope_to_resolved_slots(&envelope)?;
+    // Decode mk1 chunks per §3.6.1 → ResolvedSlots (entropy=None). v0.27.1
+    // Phase 2 I5 fold: stderr carries the origin_fingerprint substitution
+    // NOTICE if any mk1 card omits the master fingerprint.
+    let mut resolved_slots = envelope_to_resolved_slots(&envelope, stderr)?;
 
     // Network: env-derived. Used for entropy → xpub derivation in the
     // seed-overlay step + as the cross-check against args.network when

@@ -218,13 +218,16 @@ fn parse_timestamp(s: &str) -> Result<TimestampArgValue, String> {
     }
 }
 
-/// `_stderr` is unused: export-wallet is watch-only by SPEC §3, so the
-/// secret-on-stdout warning never fires; the parameter exists for callsite
-/// symmetry with the other subcommands.
+/// `stderr` is reachable only from the `--from-import-json` path in v0.27.1+
+/// (Phase 2 I5 fold: mk1 origin_fingerprint substitution NOTICE). The
+/// secret-on-stdout warning never fires for export-wallet (watch-only by
+/// SPEC §3). The parameter remains for callsite symmetry with the other
+/// subcommands; the Phase 2 fold turns the prior `_stderr` into a live
+/// channel for the `--from-import-json` consumer path only.
 pub fn run<W: Write, E: Write>(
     args: &ExportWalletArgs,
     stdout: &mut W,
-    _stderr: &mut E,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // All six formats are now real (Phase 3 promoted Specter); no stubs.
 
@@ -234,7 +237,7 @@ pub fn run<W: Write, E: Write>(
     // Mutex with --template / --descriptor is enforced by clap via
     // `conflicts_with_all` on the `--from-import-json` arg.
     if args.from_import_json.is_some() {
-        return run_from_import_json(args, stdout);
+        return run_from_import_json(args, stdout, stderr);
     }
 
     // SPEC §3 fast-path watch-only validator on the user-supplied raw slot
@@ -501,9 +504,10 @@ pub fn run<W: Write, E: Write>(
 /// Consumes an `import-wallet --json` envelope (SPEC §3.2 wire shape;
 /// Phase 4 ship) and emits a per-format wallet config. Per plan §3.7 +
 /// §3.7.1 (16-field EmitInputs contract).
-fn run_from_import_json<W: Write>(
+fn run_from_import_json<W: Write, E: Write>(
     args: &ExportWalletArgs,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     use crate::wallet_export::script_type_from_descriptor;
     use crate::wallet_import::json_envelope::{
@@ -562,8 +566,10 @@ fn run_from_import_json<W: Write>(
     let canonical_descriptor =
         descriptor_body_no_csum(descriptor_with_csum, "--from-import-json")?.to_string();
 
-    // Decode mk1 → ResolvedSlots per §3.6.1.
-    let resolved_slots = envelope_to_resolved_slots(&envelope)?;
+    // Decode mk1 → ResolvedSlots per §3.6.1. v0.27.1 Phase 2 I5 fold:
+    // stderr carries the origin_fingerprint substitution NOTICE if any
+    // mk1 card omits the master fingerprint.
+    let resolved_slots = envelope_to_resolved_slots(&envelope, stderr)?;
 
     // Derive network from envelope.
     let network = cli_network_from_str(&envelope.bundle.network)?;

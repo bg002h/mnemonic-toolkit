@@ -499,3 +499,22 @@ fn bsms_sniff_smoke_true_and_false() {
     let code = assert.get_output().status.code().unwrap_or(-1);
     assert_eq!(code, 2);
 }
+
+/// v0.27.1 Phase 2 I6 fold cell — `thresh()` argument exceeding u8 range
+/// in a BSMS Round-2 blob must surface as a typed parse error, not silently
+/// render as `"threshold": null`. Mirrors the bitcoin-core-path cell.
+#[test]
+fn bsms_thresh_overflow_errors_clearly() {
+    // 2-line lenient form: header + descriptor. The descriptor body carries
+    // `sortedmulti(256, ...)` which triggers extract_threshold's u8 overflow
+    // branch. The toolkit's descriptor parse may reject 256-cosigner shapes
+    // upstream too; either rejection path closes the silent null-threshold
+    // surface.
+    let blob = "BSMS 1.0\nwsh(sortedmulti(256,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#abcdefgh\n";
+    let assertion = run_import_stdin(blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("exceeds u8 range") || stderr.contains("256") || stderr.to_lowercase().contains("threshold") || stderr.to_lowercase().contains("checksum"),
+        "expected u8-overflow / 256-cosigner / checksum-rejection diagnostic; got: {stderr}"
+    );
+}

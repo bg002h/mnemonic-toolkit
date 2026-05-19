@@ -195,7 +195,7 @@ impl WalletFormatParser for BsmsParser {
 
         validate_watch_only_resolved(&cosigners)?;
 
-        let threshold = extract_threshold(descriptor_body_no_csum);
+        let threshold = extract_threshold(descriptor_body_no_csum)?;
 
         // SPEC §4.1 — first-address verification. v0.27.0 wires in the
         // toolkit-side derivation at canonical /0/0 via
@@ -411,14 +411,24 @@ fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
 /// sln:older(N))`) this returns K (the thresh threshold), not N (the
 /// timelock). Per SPEC §4.1: BSMS Round-2 carries the multisig threshold
 /// via the `thresh()` outer-K in the wsh body.
-fn extract_threshold(descriptor_body: &str) -> Option<u8> {
+/// v0.27.1 Phase 2 I6 fold: returns `Ok(None)` when no thresh/multi token is
+/// found; `Err` on u8 overflow (was: silently mapped overflow to `None`).
+/// Mirrors `bitcoin_core::extract_threshold`.
+fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
         Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")
     });
-    re.captures(descriptor_body)
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse::<u8>().ok())
+    let cap = match re.captures(descriptor_body) {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+    let arg = cap.get(1).expect("regex has capture group 1").as_str();
+    arg.parse::<u8>().map(Some).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: bsms: parse error: thresh/multi argument `{arg}` exceeds u8 range (>255 cosigners not supported): {e}"
+        ))
+    })
 }
 
 /// Shared origin-capture regex. Mirrors `pipeline::key_regex` but with
