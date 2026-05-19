@@ -2420,3 +2420,188 @@ No-match shape:
 | Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
 | Inline `--passphrase <v>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
 | Every invocation (before search starts) | `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` |
+
+## `mnemonic compare-cost`
+
+Compare per-spending-condition cost of wrapping the same miniscript as
+`wsh(M)` (Segwit v0 native) versus `tr(NUMS, {M})` (Taproot,
+script-path-only, with the BIP-341 H-point as the unspendable internal
+key). For every minimal satisfying assignment of `M` — every distinct
+"spending condition" — emit one row showing the witness-bytes cost
+under each wrapper in virtual bytes, in sats at the user-supplied
+feerate, and the `Δ` between the two.
+
+Cost is computed via rust-miniscript v13's `Descriptor::plan(...)`
+API; `Plan::witness_size()` returns the full witness-data byte count
+(witness items + length prefixes + stack-count varint + the
+serialized witnessScript or tapscript + control block). Per-input
+costs include the constant 41 vB SegWit-input overhead (36-byte
+outpoint + 1-byte scriptSig-length-zero + 4-byte sequence) so the
+absolute `wsh vB` and `tr vB` numbers match what Sparrow / Bitcoin
+Core / mempool fee-estimators report.
+
+### Synopsis
+
+```sh
+mnemonic compare-cost {--miniscript <STR> | --descriptor <STR> | stdin (when non-TTY)} [--feerate <SATS_PER_VB>] [--max-conditions <N>] [--json]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--miniscript <STR>` | bare miniscript fragment with abstract labels (`pk(A)`, `pk(B)`, …) or concrete hex pubkeys; cost is key-agnostic so abstract labels auto-substitute to deterministic dummy keys. Mutually exclusive with `--descriptor`. |
+| `--descriptor <STR>` | full descriptor — `wsh(M)` or `sh(wsh(M))`. The wrapper is stripped to recover the inner miniscript `M` before the comparison. `tr(...)` input is refused with exit `3` and a FOLLOWUP message. Mutually exclusive with `--miniscript`. |
+| `--feerate <SATS_PER_VB>` | decimal sats per virtual byte for the sats columns; default `1.0`, max `10000.0`. Out-of-range values exit `64`. |
+| `--max-conditions <N>` | hard cap on raw enumeration size `n_abs × n_rel × 2^(\|signers\|+\|preimages\|)`; exceeding the cap exits `3` before any enumeration. Default `4096` (permits up to 10 signers+preimages). When `>256`, a soft warn-trail entry appears in `notes[]` once 256 rows are produced. Min `1`. |
+| `--json` | emit a JSON envelope on stdout instead of the plaintext aligned-column table. |
+| `--help` | print help. |
+
+When neither `--miniscript` nor `--descriptor` is supplied and stdin
+is not a terminal, the first non-blank line of stdin is read and
+classified: if its top-level identifier is in `{wsh, sh, tr, wpkh,
+pkh, combo, addr, rawtr, raw}` it routes as a descriptor, otherwise
+as a miniscript. If both flags are supplied, the command exits `64`
+(clap `conflicts_with`).
+
+### Row labels
+
+Each row is labeled by the minimal satisfying assignment that
+produces it. Components are joined by ` + `:
+
+- **Signers** — the user's input label (`A`, `Alice`, …) for the
+  abstract-label case; `key[i]` (AST-order index) for concrete-key
+  input where no user label is available.
+- **Preimages** — `preimage(h<i>)` in AST-order, one per `sha256` /
+  `hash256` / `ripemd160` / `hash160` leaf supplied.
+- **Absolute timelocks** — `after(height)` for block-height locks
+  (`after(N)` with `N<500_000_000`), `after(time)` for MTP-time locks
+  (`N≥500_000_000`).
+- **Relative timelocks** — `older(blocks)` for sequence-based locks
+  (`older(N)` with the TIME_LOCK_FLAG / bit 22 clear),
+  `older(512s)` for 512-second-interval locks (bit 22 set).
+
+### Worked examples
+
+**1. Bare miniscript with `--feerate` set:**
+
+```sh
+mnemonic compare-cost --miniscript 'or_b(pk(A),s:pk(B))' --feerate 25.0
+```
+
+Stdout:
+
+```text
+Input: or_b(pk(A),s:pk(B))
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 25.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+```
+
+Either A or B can sign alone; both pay the same cost. tr costs `+24`
+vB more per spend than wsh because the tr witness carries an extra
+33-byte control block.
+
+**2. Timelocked recovery path (SPEC §5 hero example):**
+
+```sh
+mnemonic compare-cost --miniscript 'or_d(pk(A),and_v(v:pk(B),older(144)))'
+```
+
+Stdout:
+
+```text
+Input: or_d(pk(A),and_v(v:pk(B),older(144)))
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 1.0 sat/vB
+
+Condition         | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+------------------+--------+-------+-------+----------+---------+-------
+A                 |     60 |    85 |   +25 |       60 |      85 |    +25
+B + older(blocks) |     60 |    86 |   +26 |       60 |      86 |    +26
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+```
+
+Two rows: A can sign at any time (no timelock needed); B can sign
+after 144 blocks (the recovery path costs `+1` vB more than A's
+direct path on both wrappers).
+
+**3. Descriptor input via stdin, JSON output:**
+
+```sh
+echo 'wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9))' | \
+  mnemonic compare-cost --json
+```
+
+Stdout:
+
+```json
+{
+  "schema_version": 1,
+  "subcommand": "compare-cost",
+  "input": {
+    "form": "descriptor",
+    "value": "wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9))"
+  },
+  "extracted_miniscript": "pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)",
+  "feerate_sat_per_vb": 1.0,
+  "conditions": [
+    {
+      "label": "key[0]",
+      "wsh_vbytes": 60,
+      "tr_vbytes": 75,
+      "delta_vbytes": 15,
+      "wsh_sats": 60,
+      "tr_sats": 75,
+      "delta_sats": 15
+    }
+  ],
+  "notes": [
+    "per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct",
+    "input had concrete keys; cost is identical to the abstract case"
+  ]
+}
+```
+
+The stdin path auto-classifies the input as a descriptor (top-level
+identifier `wsh`); the JSON envelope's `input.form` field records the
+chosen path. For `--descriptor` input the `extracted_miniscript` field
+holds the wrapper-stripped inner miniscript M (SPEC §5) — note the
+example above shows `pk(02998512…)` in that field, not the full
+`wsh(pk(02998512…))` the user supplied.
+
+### Notes catalog
+
+The `notes[]` array in JSON output (and the trailing `note:` lines
+in plaintext output) carry advisory text. Known entries:
+
+| Note | Trigger |
+|---|---|
+| `per-condition vbytes are rounded individually; …` | always present (vbyte rounding caveat per §4). |
+| `feerate is 0; sats columns will be 0` | `--feerate 0.0`. |
+| `enumeration reached soft threshold; <N> conditions shown` | row count ≥ 256 (or `--max-conditions` if smaller). |
+| `input had concrete keys; cost is identical to the abstract case` | input contained no abstract labels. |
+| `input contains hash-preimage fragments; …` | input has at least one `sha256` / `hash256` / `ripemd160` / `hash160` leaf. |
+| `input had a non-NUMS internal key IK; …` | (v0.27+ FOLLOWUP) `--descriptor tr(IK, {M})` with `IK ≠ NUMS`. Not emitted in v0.26.0 since tr-input is refused. |
+
+### Exit codes
+
+| Condition | Exit |
+|---|---|
+| success (rows emitted; advisories in `notes[]`) | `0` |
+| input parse error (malformed miniscript / descriptor) | `2` |
+| no input supplied (TTY stdin + no flag) | `1` |
+| miniscript valid in only one of {Segwitv0, Tap} after `multi↔multi_a` rewrite | `3` |
+| unsupported wrapper (pkh, wpkh, bare, tr(...) deferred) | `3` |
+| eager precheck exceeded `--max-conditions` cap | `3` |
+| miniscript has zero satisfying conditions | `3` |
+| `--miniscript` AND `--descriptor` both supplied | `64` (clap mutex) |
+| `--feerate` out of `[0.0, 10000.0]` or non-numeric | `64` |
+| `--max-conditions 0` | `64` |
