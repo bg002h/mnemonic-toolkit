@@ -2537,3 +2537,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Design-aesthetic improvement, not a correctness fix. The shipped shape already eliminates the representable-invalid pair the v0.27.1 audit flagged. Patch-tier cycle (v0.27.2) doesn't need this; v0.28+ wire-shape cycle is a natural home.
 - **Status:** open
 - **Tier:** `v0.28+`
+
+### `gui-schema-mirror-lockstep-discipline` — codify GUI schema-mirror lockstep invariant in CLAUDE.md
+
+- **Surfaced:** 2026-05-19, v0.27.2 + v0.11.1 lockstep cycle end-of-cycle architect review (M3). The Phase 3 inline CI fix added 8 flags to `mnemonic-gui/src/schema/mnemonic.rs` that v0.27.0 + v0.27.1 toolkit cycles never paired with a GUI schema-mirror update. The gap is cumulative — not a v0.27.2 regression — but was only revealed when v0.11.1's pin bump fired the `schema_mirror` drift gate on the accumulated delta.
+- **Where:** `CLAUDE.md` Conventions section + `mnemonic-gui/CLAUDE.md` (companion convention).
+- **What:** Add a Convention line codifying that any toolkit CLI surface change (clap flag add/remove/rename) MUST also update the GUI's `src/schema/mnemonic.rs` schema-mirror in the same PR or as a paired sibling PR. The drift gate (`schema_mirror` test in mnemonic-gui) fires on pin-bump, which is a lagging indicator; the lockstep PR is the leading discipline. Companion-cite the existing "Mirror invariant" clause that covers the manual.
+- **Why deferred:** v0.27.2 cycle is closed; the inline fix landed the catchup. Codifying the Convention is for future cycles. Patch-tier doesn't fit; v0.28+ tier (paired with the next CLI surface change).
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** Cross-repo — mnemonic-gui should carry the matching Convention in its CLAUDE.md.
