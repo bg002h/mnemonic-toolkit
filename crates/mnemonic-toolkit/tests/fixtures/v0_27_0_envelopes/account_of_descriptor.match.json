@@ -1,0 +1,1 @@
+{"schema_version":"1","mode":"account-of-descriptor","result":"match","matched_cosigners":[{"cosigner_index":0,"path":"m/84'/0'/0'","template":"bip84","account":0}],"cosigners_total":1,"searched_count_per_cosigner":140,"descriptor_shape":"literal_xpub","unspendable_internal_keys":[]}
