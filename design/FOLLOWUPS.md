@@ -51,7 +51,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/inspect.rs` `InspectJson` struct; `crates/mnemonic-toolkit/src/repair.rs` `RepairJson` struct.
 - **What:** Add a top-level `schema_version: "1"` (or fresh integer initializer) to both `InspectJson` and `RepairJson` envelopes; document the SemVer compatibility policy (`Major.Minor.Patch` shape; additive fields require a Minor bump). Coordinate with mnemonic-gui consumer paths.
 - **Why deferred:** scope discipline at C1; the existing consumers parse the existing envelope shape and would break on the additive field unless their parsers tolerate unknown top-level keys. v0.27+ touch.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 1 (`InspectEnvelope { schema_version, body: InspectJson }` wrapper mirroring `XpubSearchEnvelope` precedent at `cmd/xpub_search/mod.rs:111-116`). FOLLOWUP-body wording cited "both `InspectJson` and `RepairJson`"; source-verification (R3) found `RepairJson` ALREADY carries `schema_version: "1"` inline at `cmd/repair.rs:155` + construct site `cmd/repair.rs:178` (latent FOLLOWUP-body inaccuracy). Closes as no-op for Repair side; ships InspectEnvelope only.
 - **Tier:** `v0.27`
 
 ### `xpub-search-passphrase-bruteforce` — brute-force passphrase scanning over a candidates file / wordlist for `xpub-search passphrase-of-xpub`
@@ -2303,7 +2303,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `CLAUDE.md` should cross-cite as the multi-instance coordination playbook.
 - **What:** Copy `.v0_26_0-merge-plan.md` into `design/PLAN_v0_26_0_three_way_merge.md` (verbatim or with a "canonical record" header). Delete the scratch file at project root. Add a one-line bullet in `CLAUDE.md` Conventions section pointing at the design-dir copy as the recipe for future multi-instance cycles.
 - **Why deferred:** Cycle-close polish; no correctness regression. The scratch artifact at root continues to function as the audit trail for the cycle itself; promotion is a future-reference cleanup.
-- **Status:** open
+- **Status:** resolved — v0.27.0 Phase 1 (file relocated with canonical-record header; `CLAUDE.md` Conventions cross-cite added; presence-smoke `tests/design_artifacts_presence.rs::three_way_merge_runbook_lives_in_design_dir` guards future churn).
 - **Tier:** `v0.27`
 - **Companion:** memory entry `[[project-v0-26-0-cycle-shipped]]`.
 

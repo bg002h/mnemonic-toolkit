@@ -30,3 +30,4 @@ Mirror invariant: any flag/API addition or removal in this repo's CLI surface â€
 - Per-phase opus reviews persist to `design/agent-reports/`.
 - Per-phase TDD: tests written before impl. Per-phase reviewer-loop until 0 critical / 0 important.
 - Stage paths explicitly (no `git add -A`).
+- Multi-instance coordination playbook: see `design/PLAN_v0_26_0_three_way_merge.md` (integration-branch model + per-instance branch ownership).

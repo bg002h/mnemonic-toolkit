@@ -123,3 +123,69 @@ fn cell_17_reveal_secret_gate_on_ms1_entropy_hex() {
 // lives in `tests/cli_auto_repair.rs::cell_18b_inspect_auto_fire_on_corrupted_ms1`.
 // The `--no-auto-repair`-suppressed shape (typed sibling-codec error, NOT
 // exit 5) is covered by `cli_auto_repair.rs::cell_22`.
+
+/// v0.27.0 cell: assert `--json` envelope carries `schema_version: "1"` at
+/// top level for each kind variant. Closes `inspect-json-schema-version-backfill`
+/// FOLLOWUP. Mirrors `cli_xpub_search_path_of_xpub::path_of_xpub_phrase_zpub_match_bip84`
+/// pattern (assert `v["schema_version"] == "1"`).
+#[test]
+fn inspect_json_envelope_schema_version_v_0_27_0() {
+    // ms1 kind
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["inspect", "--json", "--ms1", VALID_MS1])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let body = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    assert_eq!(v["schema_version"], "1", "ms1 envelope schema_version");
+    assert_eq!(v["kind"], "ms1");
+    assert_eq!(v["byte_length"], 16);
+
+    // mk1 kind
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "inspect",
+            "--json",
+            "--mk1",
+            VALID_MK1_CHUNK0,
+            "--mk1",
+            VALID_MK1_CHUNK1,
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let body = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    assert_eq!(v["schema_version"], "1", "mk1 envelope schema_version");
+    assert_eq!(v["kind"], "mk1");
+
+    // md1 kind
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "inspect",
+            "--json",
+            "--md1",
+            VALID_MD1_CHUNK0,
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let body = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    assert_eq!(v["schema_version"], "1", "md1 envelope schema_version");
+    assert_eq!(v["kind"], "md1");
+}
