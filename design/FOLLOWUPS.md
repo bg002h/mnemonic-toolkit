@@ -2444,7 +2444,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - Trigger blocks: `pull_request: branches: [master]`
 - **What:** Both workflow files currently filter `pull_request: branches: [master]` — meaning **no CI fires for PRs targeting `release/v0.11.0`** (or any future integration branch). v0.11.0 cycle worked around this via local pre-merge vetting (`cargo build` + `cargo clippy --all-targets -- -D warnings` + `cargo test` with `MNEMONIC_BIN` pointing at the v0.26.0 toolkit binary) plus `--admin` merges against the integration branch. The integration PR (`release/v0.11.0 → master`) DID trigger workflows normally (base=master), so the load-bearing gate worked. Fix: extend trigger filter to `branches: [master, release/*]` so per-PR CI runs on integration branches too. Reduces reliance on out-of-band local vetting.
 - **Why deferred:** Cycle workaround was sound and architecturally consistent (per plan-doc §G3.5.2, the integration PR is the load-bearing gate). Trigger-filter fix is a future-cycle ergonomics improvement.
-- **Status:** open
+- **Status:** resolved (sibling tag mnemonic-gui-v0.11.1; v0.27.2 Phase 3)
 - **Tier:** `v0.27` (cross-repo companion in mnemonic-gui).
 - **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-workflow-trigger-include-release-branches` (this cycle close).
 
