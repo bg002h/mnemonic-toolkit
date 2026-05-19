@@ -158,8 +158,22 @@ pub fn run<W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE bundle-json
     // intake so the advisory fires uniformly even on the synthetic-args
-    // intake path.
+    // intake path. v0.26.0 §I1 fold: emit BEFORE `@env:` sentinel
+    // resolution; sentinel-bearing flag values are skipped (user opted
+    // into the env-var leak-mitigation channel).
     emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before HRP validation
+    // + downstream consumption. Owned-args shadowing keeps the diff
+    // localized; clones the original `args` only if any sentinel
+    // actually needed substitution.
+    let env_resolved_owned;
+    let args: &VerifyBundleArgs = if needs_env_sentinel_resolution(args) {
+        env_resolved_owned = resolve_env_sentinels(args)?;
+        &env_resolved_owned
+    } else {
+        args
+    };
 
     // v0.24.0 §2.C.1 (D34/I5 fold) — strict per-flag HRP validation across
     // verify-bundle's typed `--ms1` / `--mk1` / `--md1` flag args. Mirrors
@@ -850,19 +864,67 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
 fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &VerifyBundleArgs, stderr: &mut E) {
     use crate::secret_advisory::secret_in_argv_warning;
     for s in &args.slot {
-        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() {
+        if s.subkey.is_secret_bearing()
+            && !s.is_stdin_sentinel()
+            && !s.value.starts_with("@env:")
+        {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
             let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
             secret_in_argv_warning(stderr, &flag, &alt);
         }
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    // v0.26.0 §I1 fold: `--passphrase @env:VAR` is the leak-mitigation
+    // channel; do not emit the argv-leak warning for sentinel values.
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        }
     }
 }
 
 fn needs_stdin_substitution(args: &VerifyBundleArgs) -> bool {
     args.passphrase_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+}
+
+/// v0.26.0 §3 — cheap pre-check for `@env:` sentinels across `verify-bundle`'s
+/// secret-bearing flag surfaces (`--ms1`, `--passphrase`, secret `--slot` values).
+/// Returning false avoids the `args.clone()` in the common case where no
+/// sentinel is in play.
+fn needs_env_sentinel_resolution(args: &VerifyBundleArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let ms1 = args.ms1.iter().any(|v| v.starts_with("@env:"));
+    let slot = args
+        .slot
+        .iter()
+        .any(|s| s.subkey.is_secret_bearing() && s.value.starts_with("@env:"));
+    pp || ms1 || slot
+}
+
+/// v0.26.0 §3 — resolve `@env:<VAR>` sentinels across `verify-bundle`'s
+/// secret-bearing flag surfaces. Non-secret flag values (`--mk1`, `--md1`,
+/// non-secret slot subkeys, `--network`, etc.) are NOT resolved per SPEC
+/// §3.2 (opt-in per-callsite). On any resolution failure, returns the
+/// `EnvVarMissing` error with the offending flag name for stderr attribution.
+fn resolve_env_sentinels(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    for v in owned.ms1.iter_mut() {
+        *v = resolve_env_var_sentinel(v, "--ms1")?;
+    }
+    for s in owned.slot.iter_mut() {
+        if s.subkey.is_secret_bearing() {
+            let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
+            s.value = resolve_env_var_sentinel(&s.value, &flag)?;
+        }
+    }
+    Ok(owned)
 }
 
 fn apply_stdin_substitutions(

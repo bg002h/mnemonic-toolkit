@@ -47,7 +47,7 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_sixteen_subcommands() {
+fn gui_schema_lists_all_seventeen_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
@@ -57,11 +57,11 @@ fn gui_schema_lists_all_sixteen_subcommands() {
     // empty-flags rendering); new `slip39` enters as `slip39-split` +
     // `slip39-combine`. v0.22.0 adds `repair` (BCH error-correction) and
     // `inspect` (describe-card-contents). v0.26.0 adds the `xpub-search`
-    // umbrella; each mode is flattened. After C4 the list carries 16
-    // subcommands: 12 base + `xpub-search-path-of-xpub` (C1) +
-    // `xpub-search-account-of-descriptor` (C2) + `xpub-search-address-of-xpub`
-    // (C3) + `xpub-search-passphrase-of-xpub` (C4).
-    // gui-schema + help filtered out.
+    // umbrella (4 flattened modes) AND `import-wallet` (third-party wallet
+    // blob → bundle). After both, the list carries 17 subcommands: 12 base
+    // + `xpub-search-path-of-xpub` (C1) + `xpub-search-account-of-descriptor`
+    // (C2) + `xpub-search-address-of-xpub` (C3) + `xpub-search-passphrase-of-xpub`
+    // (C4) + `import-wallet`. gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
@@ -70,6 +70,7 @@ fn gui_schema_lists_all_sixteen_subcommands() {
             "derive-child",
             "export-wallet",
             "final-word",
+            "import-wallet",
             "inspect",
             "repair",
             "seed-xor-combine",
@@ -82,7 +83,7 @@ fn gui_schema_lists_all_sixteen_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all user-facing subcommands must appear (nested split/combine \
+        "all 17 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

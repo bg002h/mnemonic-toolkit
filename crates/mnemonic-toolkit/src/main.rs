@@ -6,6 +6,7 @@ mod cmd;
 mod derive;
 mod derive_slot;
 mod electrum;
+mod env_sentinel;
 mod error;
 mod format;
 mod friendly;
@@ -20,6 +21,7 @@ mod slot_input;
 mod synthesize;
 mod template;
 mod wallet_export;
+mod wallet_import;
 mod wordlists;
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -61,6 +63,8 @@ enum Command {
     Convert(cmd::convert::ConvertArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
+    /// import a third-party wallet blob into an m-format bundle (v0.26.0 Phase 2: BSMS Round-2 only)
+    ImportWallet(cmd::import_wallet::ImportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
     /// emit the set of BIP-39 last words that yield a valid checksum for an N-1 partial phrase
@@ -99,6 +103,9 @@ fn main() -> ExitCode {
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
+        }
+        Command::ImportWallet(args) => {
+            cmd::import_wallet::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)

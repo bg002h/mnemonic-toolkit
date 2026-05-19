@@ -74,9 +74,60 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
   Plan: `design/PLAN_v0_26_0_xpub_search.md` (C6 release commit will copy from the plan-mode source-of-truth).
 
+- **`mnemonic import-wallet` subcommand** — parse-side ingest for third-party wallet blobs. Two formats supported in v0.26.0:
+  - **BIP-129 BSMS Round-2** (`--format bsms`): 2-line and 6-line lenient shapes. Parses the descriptor body via `MsDescriptor::from_str` after a concrete-keys → `@N`-placeholder adapter rewrite (`wallet_import::pipeline::concrete_keys_to_placeholders`). BIP-380 checksum validated up-front via `miniscript::descriptor::checksum::verify_checksum` (before placeholder substitution). Audit fields (token, signature, first_address, derivation_path) preserved verbatim in the `--json` envelope's `bsms_audit` object; signature verification deferred to v0.27+ FOLLOWUP `bsms-verify-signatures`. Driving seed-case: `wsh(thresh(2, pk, s:pk, sln:older(N)))` decaying-multisig with N=144 / N=4032 / N=32768.
+  - **Bitcoin Core `listdescriptors`** (`--format bitcoin-core`): top-level JSON object (`{wallet_name, descriptors: [...]}`) OR bare-array shape. `--select-descriptor <N|active-receive|active-change|all>` filters the multi-descriptor case. Refuses `xprv`-bearing blobs with exit 2 + stderr template directing the user to re-run `bitcoin-cli listdescriptors` without `true`. Tested against testnet (`tprv`), `tpub`, BIP-49 / BIP-84 / wsh-sortedmulti / multipath shapes.
+  - **Auto-detect (sniff)** when `--format` is omitted: heuristics in `wallet_import::sniff::sniff_format`. BSMS prefix-match `BSMS 1.0\n` (CRLF tolerant); Bitcoin Core JSON-parse + `descriptors[].desc: String` shape with conservative Specter/Sparrow vendor-marker exclusion (`chain`, `policy`, `version`, `bipname`, `extendedPublicKey`). Ambiguous + no-match cases route to exit 1.
+  - **Seed overlay** (`--ms1` repeating; `--slot @<i>.phrase=`): post-parse cosigner-by-cosigner entropy attach. Derives xpub at the cosigner's declared origin path; cross-checks against the blob's declared xpub; exit 4 `ImportWalletSeedMismatch` on mismatch. Watch-only-cosigner empty-string sentinel honored per v0.25.1 contract (cosigner skipped + stderr NOTICE).
+  - **`--json` envelope** (SPEC §2.2 / §7.4): emits an array of bundle envelopes per blob. Each envelope carries `bundle` (parse-side summary in v0.26.0; full `BundleJson` deferred to v0.27+ FOLLOWUP `wallet-import-json-envelope-full-bundle`), `roundtrip { byte_exact, semantic_match, diff?, status }`, optional `bsms_audit`, optional `source_metadata`, `source_format`. The `status` extension key takes values `"ok"` / `"blocked_no_emitter"` / `"canonicalize_failed"`.
+  - **Round-trip discipline** (SPEC §7): `canonicalize_bsms` + `canonicalize_bitcoin_core` + `unified_diff` helpers. Semantic round-trip via canonicalize equality with unified-diff on byte-mismatch; idempotency cells pin `canonicalize(canonicalize(x)) == canonicalize(x)`. `similar = "2"` dep added (Apache-2.0/MIT). BSMS bundle round-trip blocked on missing export emitter (FOLLOWUP `wallet-export-bsms-emitter` v0.27+).
+
+- **Cross-cutting `@env:<VAR>` value-source sentinel** (`crate::env_sentinel::resolve_env_var_sentinel`). Resolves at clap-parse-side for all secret-bearing flags: `--ms1`, `--mk1`/`--md1`, `--passphrase`, `--bip38-passphrase`, `--share`, `--slot @<i>.phrase=`, `--slot @<i>.ms1=`. VAR must match `[A-Z_][A-Z0-9_]*`. Missing → exit 1 `EnvVarMissing` with `reason: { Unset, InvalidName }` discriminator. Non-secret flags treat `@env:VAR` as literal text (no auto-resolution; per SPEC §3.2 + §5.11 explicit-opt-in rule).
+
+- **`PossibleValuesParser` on `--format`** for clap-side enumeration (post Phase 5 R0 M4 fold).
+
+- **Test count delta:** +161 cells cycle-wide (1153 → 1314 in `cargo test -p mnemonic-toolkit`).
+
 ### Changed
 
 - **`mnemonic convert` — P2PKH gap-fix in `build_address_from_xpub`** (C3, plan §5.3) — extends the address-rendering primitive (and the `--script-type` / `--address-type` clap value-parser surface) to support P2PKH alongside the prior `p2sh-p2wpkh` / `p2wpkh` / `p2tr` set. Five-site edit: `ScriptType` enum gains a `P2pkh` variant; `parse_script_type_arg` accepts the `"p2pkh"` token; `script_type_from_template` maps `CliTemplate::Bip44 → ScriptType::P2pkh`; `build_address_from_xpub` adds the `ScriptType::P2pkh => Address::p2pkh(...)` arm; the prior P2PKH refusal in `mnemonic convert --script-type p2pkh` is relaxed (it was a gap left at v0.13.0+ — BIP-44 was supported by `mnemonic bundle` / `mnemonic export-wallet` but `mnemonic convert` refused the script-type at parse-time). Four cells in `tests/cli_convert_address.rs` touched: existing `refusal_address_no_script_type` updated to mention `p2pkh` in the value-parser refusal list; new `bip44_template_infers_p2pkh_v0_26_0`, `refusal_invalid_script_type_value`, and `xpub_to_address_p2pkh_explicit_script_type_v0_26_0`. Required by `xpub-search address-of-xpub --address-type p2pkh`; the gap-fix is bundled with C3 rather than carried as a separate patch because the two land in the same logical surface and share regression-test scope.
+
+- **SPEC `SPEC_mnemonic_toolkit_v0_5.md` amendments** (carry-forward toolkit SPEC):
+  - `§5.11 CLI value-source sentinels (NEW)` — generalizes the three sentinel forms (empty-string + stdin + env-var) across all secret-bearing CLI surfaces.
+  - `§6.11 import-wallet CLI grammar (NEW)` — clap surface + sniff dispatch + override semantics + exit codes + `--json` envelope shape.
+  - `§6.11.a wallet_import round-trip discipline (NEW)` — bundle + semantic blob round-trip; canonicalize per-format algorithms; `status` extension key lock; idempotency + declaration-order-preservation guarantees.
+
+- **Manual mirror surfaces:**
+  - `docs/manual/src/40-cli-reference/41-mnemonic.md` — new `## mnemonic import-wallet` section mirrors `--help` byte-shape.
+  - `docs/manual/src/45-foreign-formats.md` — new chapter on BSMS Round-2 + Bitcoin Core `listdescriptors` formats; normative BIP-129 / BIP-380 / BIP-389 references.
+  - `docs/manual-gui/src/40-mnemonic/4c-import-wallet.md` — new GUI walkthrough.
+
+### Security
+
+- **Env-var sentinel `@env:<VAR>` keeps secrets off the argv vector** (visible to `/proc/<pid>/cmdline` + shell history). v0.11.0 `mnemonic-gui` companion ships SubcommandSchema for import-wallet but does NOT auto-rewrite literal repeating-secret values; GUI users must type `@env:<VAR>` explicitly with `<VAR>` exported in the calling shell to benefit. Auto-rewrite tracked at FOLLOWUP `gui-import-wallet-env-var-secret-channel` (v0.12.0+).
+
+- **BIP-129 token + signature on Round-2 blobs are NOT verified** in v0.26.0 (FOLLOWUP `bsms-verify-signatures` v0.27+). Audit fields preserved verbatim in the envelope for the user to verify manually.
+
+- **`xprv`-bearing Bitcoin Core blobs are hard-refused** (exit 2). Extends to testnet `tprv` and SLIP-132 private-key prefixes (`yprv`/`zprv`/`uprv`/`vprv` etc.) via regex per Phase 3 R0 C1 fold.
+
+### Resolved (FOLLOWUPS)
+
+- `wallet-import-bsms-checksum-delegation-note` — SPEC §4.4 amended in this cycle-close commit to describe the actual mechanism (up-front validation via `miniscript::descriptor::checksum::verify_checksum` BEFORE placeholder substitution). Implementation at `wallet_import/bsms.rs:26-27,140-145` was correct since Phase 2 close; only the SPEC wording is now corrected.
+
+### Cross-repo lockstep
+
+`mnemonic-gui v0.11.0` (companion release) at `feat/import-wallet-v0_11_0` branch:
+- `SubcommandSchema` entry for `import-wallet` (schema v5 — no version bump).
+- 8 kittest cells pinning argv-emission contracts.
+- 1 new FOLLOWUP `gui-import-wallet-env-var-secret-channel` (cross-cited companion).
+
+### FOLLOWUPs filed (13 new this cycle)
+
+- `bsms-first-address-verify`, `wallet-import-signet-regtest-disambiguation`, `wallet-import-bsms-checksum-delegation-note`, `bsms-verify-signatures` (Phase 2 close)
+- `wallet-export-bsms-emitter`, `wallet-import-fixture-corpus-expansion` (Phase 4 close)
+- `wallet-import-json-envelope-full-bundle` (Phase 5 close)
+- `gui-import-wallet-env-var-secret-channel`, `gui-import-wallet-cell-coverage-gap` (Phase 6 close)
+- `wallet-import-{sparrow, specter, electrum, coldcard, coldcard-multisig, jade, bsms-round-1, bsms-encrypted}` (Phase 6 cycle-close placeholders)
 
 ## mnemonic-toolkit [0.25.1] — 2026-05-18
 

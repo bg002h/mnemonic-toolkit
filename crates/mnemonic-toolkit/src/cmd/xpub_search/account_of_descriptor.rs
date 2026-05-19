@@ -245,8 +245,15 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
         }
         buf
     } else if let Some(p) = &args.passphrase {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-        zeroize::Zeroizing::new(p.clone())
+        // v0.26.0 §3 — resolve `@env:<VAR>` sentinel; skip argv-leak advisory
+        // when the user routed through the env-var channel.
+        if p.starts_with("@env:") {
+            let resolved = crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?;
+            zeroize::Zeroizing::new(resolved)
+        } else {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+            zeroize::Zeroizing::new(p.clone())
+        }
     } else {
         zeroize::Zeroizing::new(String::new())
     };

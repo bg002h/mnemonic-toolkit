@@ -264,6 +264,33 @@ Mismatch identifies the failing field within a card, not just the failing card. 
   `expected: null`, `actual: null`, `diff_byte_offset: null`. Optional `decode_error: <error message>` field carries the underlying decode error string (best-effort; from md-codec / mk-codec / ms-codec error types).
 - **Length-mismatch** (e.g., `mk1_path_match[1]` where the supplied and expected path strings have different lengths): `diff_byte_offset` set to `min(len(expected), len(actual))`; full strings in `expected`/`actual`.
 
+## §5.11 CLI value-source sentinels (NEW)
+
+Generalizes the value-source sentinel discipline previously scattered across `§5.8` (empty-string watch-only sentinel) and the long-standing stdin sentinel (`-`). v0.26.0 promotes a third value-source — environment-variable indirection via `@env:<VAR>` — for all secret-bearing flag surfaces.
+
+**Three sentinel kinds:**
+
+1. **Empty-string sentinel — `--<flag> ""`.** Marks the positionally-aligned slot or cosigner as watch-only / skipped per §5.8 (current scope: `--ms1` / `--mk1` / `--md1`). Locked at v0.25.1.
+
+2. **Stdin sentinel — `--<flag> -`.** Read the flag value from stdin. Applies to all `<FILE|->`-typed flags (`--blob`, `--bundle-json`, `--phrase-file`, etc.). Multiple stdin sentinels in one invocation are rejected (exit 1) — only one flag may consume stdin per call.
+
+3. **Env-var indirection sentinel — `--<flag> @env:<VAR>`** (NEW v0.26.0). Resolves to the value of environment variable `<VAR>` at clap-parse-side. `<VAR>` must match `[A-Z_][A-Z0-9_]*` (POSIX-conforming uppercase). Missing variable surfaces `ToolkitError::EnvVarMissing` (exit 1) with stderr template `error: --<flag> @env:<VAR>: environment variable <VAR> is not set`. Invalid name surfaces the same exit + a `reason: InvalidName` discriminator.
+
+**Surfaces covered (v0.26.0 secret-bearing flag set):**
+
+- `--ms1` (verify-bundle, inspect, repair, import-wallet)
+- `--mk1` / `--md1` (verify-bundle: present at SPEC level but env-var resolution is wired only for `--ms1` in v0.26.0; remaining wires are forward-compatible)
+- `--passphrase` (bundle, convert, derive-child, slip39-{combine,split}, verify-bundle)
+- `--bip38-passphrase` (convert)
+- `--share` (seed-xor-combine, slip39-combine)
+- `--slot @<i>.<subkey>=<value>` (when `<subkey>` is `phrase` or `ms1`; the secret-subkey enumeration is `slot_input.rs`'s `SECRET_SUBKEYS` set)
+
+**Non-secret flags do NOT resolve sentinels.** A user passing `--network @env:NETWORK_NAME` gets the literal string `@env:NETWORK_NAME` substituted in argv, which then fails downstream parse with the standard network-parse error. This is intentional — avoids the surprise of a non-secret flag silently expanding an environment variable that happens to share the sentinel grammar. Resolution is opt-in per call-site (`crate::env_sentinel::resolve_env_var_sentinel` is called at the per-subcommand `resolve_env_sentinels` wrapper).
+
+**Composition with stdin sentinel.** `--<flag> -` is mutually exclusive with `--<flag> @env:<VAR>` only in the sense that only one of them is processed per call-site. They're distinguishable lexically (`-` is exactly one byte; `@env:` is a 5-byte prefix). Mixed-form invocations like `--ms1 - --ms1 @env:MS1_1 --ms1 ms1xxx...` are valid (different cosigners use different value-sources).
+
+**Argv-leak avoidance.** The sentinel forms keep secrets off the argv vector visible to other processes via `/proc/<pid>/cmdline` and shell history. The GUI's repeating-secret widgets in v0.11.0 emit user-typed values verbatim (per FOLLOWUP `gui-import-wallet-env-var-secret-channel`, v0.12.0+); GUI users today must type `@env:<VAR>` explicitly with `<VAR>` exported in the calling shell to benefit from this protection.
+
 ## §6.6 Mode-violation pre-check ladder (v0.5 — legacy flags fully deleted)
 
 v0.5 deletes the legacy CLI flags entirely. The unified `--slot @N.<subkey>=<value>` syntax is the sole input shape for slot-bearing data. The mode-violation ladder is correspondingly trimmed.
@@ -639,6 +666,58 @@ Carry-forward from v0.3 §8 plus v0.4 additions:
 
 - Any descriptor-mode cells where the descriptor causes two slots to resolve to identical (xpub, path) tuples. Phase A audits the v0.3 fixture corpus.
 - Most v0.3 fixtures expected to carry forward unchanged.
+
+## §6.11 import-wallet CLI grammar (NEW)
+
+v0.26.0 adds `mnemonic import-wallet`, a parse-side subcommand that consumes third-party wallet blobs (BIP-129 BSMS Round-2; Bitcoin Core `listdescriptors`) and emits a toolkit-native `Bundle`-shape envelope (summary form in v0.26.0; full `BundleJson` per FOLLOWUP `wallet-import-json-envelope-full-bundle` v0.27+).
+
+**Clap surface:**
+
+```
+mnemonic import-wallet --blob <FILE|-> [--format <bsms|bitcoin-core>]
+                       [--select-descriptor <N|active-receive|active-change|all>]
+                       [--ms1 <STR>]... [--slot @<i>.<subkey>=<VAL>]...
+                       [--json] [--no-auto-repair]
+```
+
+- `--blob` (required): path to blob file; `-` reads stdin.
+- `--format` (optional): explicit format override. Omitting triggers sniff. Uses `PossibleValuesParser` for clap-side enumeration.
+- `--select-descriptor` (default `all`): filter for multi-descriptor Bitcoin Core blobs. Accepts an integer N (mapped to `ByIndex(N)`) or one of three named tags. BSMS coerces any non-default value to `all`.
+- `--ms1` (repeating, secret-bearing): positional seed-overlay per cosigner. Supports `@env:VAR` sentinel per §5.11. Cosigners not addressed remain watch-only.
+- `--slot @<i>.<subkey>=<VAL>` (repeating, secret-bearing for `phrase`/`ms1`): alternative seed-overlay channel. v0.26.0 accepts only `phrase` and `ms1` subkeys.
+- `--json`: emit a JSON envelope (array of bundle envelopes) rather than human-readable card output.
+- `--no-auto-repair`: reserved for v0.27+; no-op in v0.26.0 (wallet blobs are not BCH-coded).
+
+**Sniff dispatch (SPEC `SPEC_wallet_import_v0_26_0.md` §6).** Without `--format`, the toolkit invokes `wallet_import::sniff::sniff_format` on the blob bytes. Heuristics: BSMS prefix-matches `BSMS 1.0\n`; Bitcoin Core JSON-parses + checks `descriptors: [{desc: String, ...}]` (object form) OR bare array. Specter/Sparrow vendor-marker keys (`chain`, `policy`, `version`, `bipname`, `extendedPublicKey`) shift the verdict to `NoMatch` (conservative — false-positive Specter blobs route to ambiguous-format-exit-1; user can override with `--format bitcoin-core`).
+
+**`--format` override semantics (Phase 5 R0 I3 fold).** When `--format <X>` is supplied:
+- If sniff returns positive evidence for a DIFFERENT format `<Y>`: exit 1 `ImportWalletFormatMismatch`.
+- If sniff returns `NoMatch` or `Ambiguous`: the explicit override is honored unconditionally; parse proceeds with `<X>`. Downstream parse failures surface as `ImportWalletParse` (exit 2).
+
+**Exit codes:** `0` ok; `1` ambiguous-format / format-mismatch / env-var-missing; `2` parse error / unknown subkey; `3` future format version (e.g., `BSMS 2.0`); `4` seed mismatch (`--ms1` derives an xpub that doesn't match the blob's declared xpub at the cosigner's path); `5` reserved for repair auto-fire short-circuit (not applicable to import-wallet today).
+
+**Output (`--json` mode):** array of envelopes per emitted bundle; each envelope carries `bundle` (parse-side summary in v0.26.0), `roundtrip { byte_exact, semantic_match, diff?, status }`, optional `bsms_audit`, optional `source_metadata`, `source_format`. The `status` extension key takes values `"ok"` / `"blocked_no_emitter"` (BSMS until export emitter ships per FOLLOWUP `wallet-export-bsms-emitter`) / `"canonicalize_failed"`.
+
+**Watch-only invariant.** Every parsed cosigner starts with `entropy: None`. Seed overlay (via `--ms1` or `--slot @<i>.phrase=`) populates entropy AFTER parse + cross-check; mismatch is fatal (exit 4). The toolkit-side parse never trusts seed material embedded in the blob (BSMS Round-2 blobs do not carry seeds; Bitcoin Core `listdescriptors true` blobs that carry `xprv` are hard-refused at exit 2 with stderr template `error: import-wallet: bitcoin-core: blob contains xprv (extended private key); re-run 'bitcoin-cli listdescriptors' without 'true' for the public-key form`).
+
+### §6.11.a wallet_import round-trip discipline (NEW)
+
+Sub-section of §6.11 per delta-only ordering convention (mirrors `§4.12.a-g` precedent from v0.19.0). Specifies the canonicalize + semantic-round-trip guarantee for the parse → emit cycle.
+
+**Bundle round-trip (§7.1 of `SPEC_wallet_import_v0_26_0.md`).** `import-wallet (export-wallet bundle) == bundle` for any format `F` and any bundle that round-trips through both surfaces. BSMS direction blocked in v0.26.0 (no export emitter; FOLLOWUP `wallet-export-bsms-emitter`).
+
+**Semantic blob round-trip (§7.2).** `canonicalize(input_blob) == canonicalize(export_wallet(import_wallet(input_blob)))`. When non-byte-exact, `--json` envelope's `roundtrip` field carries the unified-diff in `diff`; stderr emits a WARNING when `--json` is NOT set; stderr is silent under `--json`.
+
+**Canonicalize semantics (§7.3).**
+
+- **BSMS:** CRLF→LF; strip per-line trailing whitespace; parse + re-render + re-checksum the descriptor via `MsDescriptor::from_str` → `to_string()` → miniscript `ChecksumEngine`; drop audit lines (token, signature, first_address, derivation_path); re-emit `BSMS 1.0\n<re-rendered-descriptor>#<re-checksum>\n`.
+- **Bitcoin Core:** parse JSON via `serde_json`; re-checksum each descriptor's `desc` field; preserve `active`/`internal`/`range`/`wallet_name`; drop `timestamp`/`next`/`next_index` from comparison; re-serialize with alphabetic key-sort + 2-space indent + trailing newline. Accepts both `{wallet_name, descriptors: [...]}` envelope shape AND bare-array `[{desc, ...}, ...]` form.
+
+**`status` extension key (v0.26.0 lock).** `"ok"` for the standard case; `"blocked_no_emitter"` for BSMS (no export emitter); `"canonicalize_failed"` when canonicalize errors post-parse-success (rare; surfaces e.g. for an exotic descriptor that `parse` accepts but `MsDescriptor::from_str` rejects in the canonicalize path).
+
+**Idempotency.** `canonicalize(canonicalize(x)) == canonicalize(x)` for all `x` where `canonicalize(x)` succeeds. Pinned by unit cells in `wallet_import::roundtrip::tests`.
+
+**Declaration-order preservation.** `multi(...)` and `sortedmulti(...)` BOTH preserve cosigner declaration order in the canonicalized output. `sortedmulti` performs key-sort at signature-materialization time, NOT at descriptor-construction time (Phase 0 §0.1 empirical verification, 2026-05-18). Cell `fixture_bsms_2line_multi_2of3_canonicalize_preserves_declaration_order` pins this contract (Phase 4 R0 M3 fold).
 
 ## §11 Release process (carry-forward)
 

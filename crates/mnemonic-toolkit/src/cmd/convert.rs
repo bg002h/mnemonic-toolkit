@@ -154,7 +154,7 @@ pub fn parse_from_input(s: &str) -> Result<FromInput, String> {
 // CLI args
 // ============================================================================
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct ConvertArgs {
     /// Input node descriptor — shape `<node>=<value>`. Repeating.
     ///
@@ -712,7 +712,19 @@ pub fn run<R: Read, W: Write, E: Write>(
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
+    // v0.26.0 §I1 fold: emit BEFORE `@env:` sentinel resolution so
+    // sentinel-bearing flag values are skipped.
     emit_secret_in_argv_advisories(args, stderr);
+
+    // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
+    // consumption.
+    let env_resolved_owned;
+    let args: &ConvertArgs = if needs_env_sentinel_resolution(args) {
+        env_resolved_owned = resolve_env_sentinels(args)?;
+        &env_resolved_owned
+    } else {
+        args
+    };
 
     // 1) Single-from-value constraint (§5).
     let mut primaries: Vec<&FromInput> = args
@@ -1536,17 +1548,68 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
         if f.value == "-" {
             continue;
         }
+        // v0.26.0 §I1 fold: skip sentinel-bearing values; user opted into
+        // the @env: leak-mitigation channel.
+        if f.value.starts_with("@env:") {
+            continue;
+        }
         let node = f.node.as_str();
         let flag = format!("--from {node}=");
         let alt = format!("--from {node}=-");
         secret_in_argv_warning(stderr, &flag, &alt);
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        }
     }
-    if args.bip38_passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+    if let Some(bpp) = args.bip38_passphrase.as_deref() {
+        if !bpp.starts_with("@env:") {
+            secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
+        }
     }
+}
+
+/// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `convert`'s
+/// secret-bearing flag surfaces (`--passphrase`, `--bip38-passphrase`, and
+/// secret-bearing `--from <node>=` values).
+fn needs_env_sentinel_resolution(args: &ConvertArgs) -> bool {
+    let pp = args
+        .passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let bip38_pp = args
+        .bip38_passphrase
+        .as_deref()
+        .map(|v| v.starts_with("@env:"))
+        .unwrap_or(false);
+    let from = args
+        .from
+        .iter()
+        .any(|f| f.node.is_secret_bearing() && f.value.starts_with("@env:"));
+    pp || bip38_pp || from
+}
+
+/// v0.26.0 §3 — resolve `@env:<VAR>` sentinels across `convert`'s
+/// secret-bearing flag surfaces. Per SPEC §3.2, resolution is opt-in
+/// per-callsite: only secret-bearing flags are scanned.
+fn resolve_env_sentinels(args: &ConvertArgs) -> Result<ConvertArgs, ToolkitError> {
+    use crate::env_sentinel::resolve_env_var_sentinel;
+    let mut owned = args.clone();
+    if let Some(pp) = owned.passphrase.as_ref() {
+        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+    }
+    if let Some(bp) = owned.bip38_passphrase.as_ref() {
+        owned.bip38_passphrase = Some(resolve_env_var_sentinel(bp, "--bip38-passphrase")?);
+    }
+    for f in owned.from.iter_mut() {
+        if f.node.is_secret_bearing() {
+            let flag = format!("--from {}=", f.node.as_str());
+            f.value = resolve_env_var_sentinel(&f.value, &flag)?;
+        }
+    }
+    Ok(owned)
 }
 
 #[cfg(test)]
