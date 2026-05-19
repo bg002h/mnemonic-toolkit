@@ -240,8 +240,9 @@ pub enum ToolkitError {
     ///     scan over the shared rendered-address Vec; one comparison per
     ///     (target, address) pair)
     /// The per-target JSON envelope fields `scanned_external` /
-    /// `scanned_internal` (in `AddressOfXpubResult`) report unique
-    /// child-addresses derived per-target (i.e., `gap_limit × chains`).
+    /// `scanned_internal` (on `AddressResultJson::NoMatch` entries inside
+    /// `AddressOfXpubResult.results`) report unique child-addresses derived
+    /// per-target (i.e., `gap_limit × chains`).
     XpubSearchNoMatch {
         mode: &'static str,
         searched: usize,

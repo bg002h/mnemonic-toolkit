@@ -1535,6 +1535,8 @@ git add CHANGELOG.md
 
 - [ ] **Step 1: For each of 7 entries, flip `Status: open` → `Status: resolved <SHA>`**
 
+> **Note:** Phase 1 + 2 eagerly flipped 6 of these 7 entries per-task during execution (per the `feedback-per-phase-agents-forget-followup-status-flip` anti-flake guard). Only 1 entry — `gui-workflow-trigger-include-release-branches` — should still show `Status: open` at Phase 4 entry. Verify each entry's current Status BEFORE editing; do NOT re-flip already-resolved entries (the existing SHA citations are correct).
+
 Slugs to update (use the Phase 2/3 commit SHAs from `git log`):
 
 ```

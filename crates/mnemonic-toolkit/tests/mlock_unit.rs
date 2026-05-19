@@ -23,14 +23,16 @@ use mnemonic_toolkit::mlock;
 
 #[test]
 fn g1_1_single_page_pin_has_page_count_one() {
-    use std::alloc::{alloc, dealloc, Layout};
+    use std::alloc::{alloc_zeroed, dealloc, Layout};
 
     let page_size = mlock::page_size_for_test();
-    // SAFETY: Layout is valid (size > 0, align is power of 2). We deallocate
-    // before returning. Buffer is page-aligned so pin_pages_for returns exactly 1.
+    // SAFETY: Layout is valid (size > 0, align is power of 2). alloc_zeroed
+    // returns initialized memory (zero-filled), so the &[u8] slice is well-formed.
+    // We deallocate before returning. Buffer is page-aligned so pin_pages_for
+    // returns exactly 1.
     let layout = Layout::from_size_align(64, page_size).expect("valid layout");
     unsafe {
-        let ptr = alloc(layout);
+        let ptr = alloc_zeroed(layout);
         assert!(!ptr.is_null(), "alloc failed");
         let slice = std::slice::from_raw_parts(ptr, 64);
         let pin = mlock::pin_pages_for(slice);
