@@ -2405,7 +2405,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - Proposed test location: `crates/mnemonic-toolkit/tests/cli_gui_schema_arm_count.rs` (or as a new cell in `cli_gui_schema_conditional_rules.rs`).
 - **What:** Three-way merge of the dispatcher arm-set across concurrent feature PRs is silently-dropping-risky when two PRs insert at adjacent positions. Mitigation that worked this cycle: manual `grep -c '=> .*_conditional_rules()' crates/mnemonic-toolkit/src/cmd/gui_schema.rs` per rebase, with a documented expected count. Formalize as a `#[test]` that asserts the live count against a pinned constant; bumping the constant becomes the explicit signal whenever a new arm is added (and forces conscious decision-making in multi-PR rebases).
 - **Why deferred:** Per-PR rebase verification worked this cycle; codification is hardening rather than gap-fix.
-- **Status:** resolved (pending commit; v0.27.2 Phase 1.4)
+- **Status:** resolved (93bf3ff; v0.27.2 Phase 1.4)
 - **Tier:** `v0.27`
 - **Companion:** `[[project-v0-26-0-cycle-shipped]]`.
 
