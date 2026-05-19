@@ -543,9 +543,11 @@ Wire-up in `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`:
 - In `run()`: parse JSON envelope → extract `bundle.descriptor` + decode `bundle.mk1` per §3.6.1 → construct `EmitInputs` (16 fields — see §3.7.1 below) → dispatch to existing per-format emitter.
 - `--account` supplied → `BadInput` (per Q6).
 
-#### §3.7.1 EmitInputs construction (16-field contract)
+#### §3.7.1 EmitInputs construction (17-field contract)
 
-`EmitInputs<'a>` at `wallet_export/mod.rs:333-375` has 16 fields. Phase 5 implementer constructs all 16 from the envelope + Phase 5 helpers. Mirror the existing construction site in `cmd::export_wallet::run` for defaults.
+**[REVISED post-Phase-3 — field count 16 → 17 (Phase 3 added `bsms_form`); see Phase 4 holistic review I/M1 fold.]**
+
+`EmitInputs<'a>` at `wallet_export/mod.rs:333-389` has **17 fields**. Phase 5 implementer constructs all 17 from the envelope + Phase 5 helpers. Mirror the existing construction site in `cmd::export_wallet::run` for defaults.
 
 | EmitInputs field | Source / value | Notes |
 |---|---|---|
@@ -564,8 +566,9 @@ Wire-up in `crates/mnemonic-toolkit/src/cmd/export_wallet.rs`:
 | `range: (u32, u32)` | `(0, 999)` (existing default per `cmd/export_wallet.rs:100-102`) | Source-verified literal: clap `default_value = "0,999"` |
 | `timestamp: TimestampArg` | `TimestampArg::Now` (unwrap from `TimestampArgValue::Now`; args struct field at `cmd/export_wallet.rs:106` is `TimestampArgValue`; EmitInputs field expects `TimestampArg` — one newtype unwrap needed at Phase 5 wiring) | Source-verified default `now` |
 | `bitcoin_core_version: u8` | `25` (existing default per `cmd/export_wallet.rs:108-110`) | Source-verified literal: clap `default_value = "25"`; doc-comment "24 or 25 (default 25)" |
+| `bsms_form: BsmsForm` | **Phase 3 addition (post-original-plan).** `BsmsForm::default()` is acceptable when emitting non-BSMS formats; for BSMS emitter, defaults to `BsmsForm::FourLine` (BIP-129 canonical). When `--bsms-form` is supplied on the command line, it overrides. The wallet-import-emit path: pass through from clap (default `BsmsForm::FourLine` for `export-wallet --format bsms`; ignored for non-BSMS emitters). | Source: `wallet_export/mod.rs` near top of `EmitInputs` (Phase 3 ship `4a2b6e7`) |
 
-**Phase 5 R0 explicit scope** (architect EDIT 6 fold): enumerate all 16 fields against the live `cmd::export_wallet::run` construction site; assert no field is omitted or defaulted incorrectly. Architect's structural review confirmed the live struct has 16 fields; any plan-doc that enumerates fewer compile-errors.
+**Phase 5 R0 explicit scope** (architect EDIT 6 fold + Phase 4 holistic M1 fold): enumerate all **17** fields against the live `cmd::export_wallet::run` construction site; assert no field is omitted or defaulted incorrectly. Architect's structural review confirmed the live struct has 17 fields after Phase 3 added `bsms_form`; any plan-doc that enumerates fewer compile-errors.
 
 **Test cells (10-12):**
 - `export_wallet_from_import_json_bsms_to_sparrow_emits_valid_sparrow` (headline integration cell)
@@ -683,8 +686,12 @@ Phase 6: manual mirror + cycle close    → docs/manual/ + CHANGELOG + FOLLOWUPS
 
 **Scope:**
 - `bundle --import-json` + `--import-json-index` (per §3.6).
-- `export-wallet --from-import-json` + `--from-import-json-index` (per §3.7 + §3.7.1's 16-field EmitInputs contract).
-- Shared helper: `crates/mnemonic-toolkit/src/wallet_import/json_envelope.rs` (new) — parses an `import-wallet --json` envelope element into a typed struct `ImportJsonEnvelope` (with `#[serde(deserialize_with = ...)]` for `bundle: BundleJson`) + provides `envelope_to_resolved_slots(envelope) -> Vec<ResolvedSlot>` (decodes mk1 entries per §3.6.1) + `infer_emit_inputs_from_envelope(envelope, args) -> EmitInputs` (constructs all 16 fields per §3.7.1).
+- `export-wallet --from-import-json` + `--from-import-json-index` (per §3.7 + §3.7.1's **17-field** EmitInputs contract — post-Phase-3-fold; the original plan-doc said 16-field, which became stale when Phase 3 added `bsms_form`).
+- Shared helper: `crates/mnemonic-toolkit/src/wallet_import/json_envelope.rs` (new) — parses an `import-wallet --json` envelope element into a typed struct `ImportJsonEnvelope` + provides `envelope_to_resolved_slots(envelope) -> Vec<ResolvedSlot>` (decodes mk1 entries per §3.6.1) + `infer_emit_inputs_from_envelope(envelope, args) -> EmitInputs` (constructs all **17** fields per §3.7.1).
+- **Phase 5 deserialization strategy (Phase 4 holistic review I1 fold).** `crate::format::BundleJson` is `Serialize`-only at `format.rs:119-145` (no `Deserialize` impl) and carries `&'static str` fields (`schema_version`, `mode`, `network`, `template: Option<&'static str>`, `multisig.template`) plus a `#[serde(untagged)]` Serialize-only `MkField`. **Phase 5 CANNOT deserialize directly into `BundleJson`.** The original §4.5 mention of `#[serde(deserialize_with = ...)]` is incomplete. Two acceptable patterns:
+  - **(a) Parallel `BundleJsonView` mirror struct (RECOMMENDED for Phase 5).** Define in `wallet_import/json_envelope.rs` a mirror with `String` (or `Cow<'static, str>`) fields matching the wire shape one-for-one; derive `Deserialize`. `ImportJsonEnvelope` uses `BundleJsonView` for its `bundle:` field. Scales cleanly to all 13 BundleJson fields + the multisig sub-shape; mirrors the SemVer-decoupling convention (Phase 5's parser doesn't need to track future BundleJson field additions field-by-field).
+  - **(b) `serde_json::Value` traversal (existing precedent).** `verify_bundle.rs:980-1010` walks `serde_json::Value` to extract `ms1/mk1/md1` fields manually. Works fine for the narrow card-list extraction; would be verbose for the full 13-field envelope.
+  - **Phase 5 R0 explicit scope (Phase 4 holistic I1 fold):** confirm the chosen pattern matches the implementation, AND that taproot rejection happens at the typed-deser layer rather than panic'ing on a downstream miniscript parse.
 - **NEW helper (Phase 5 in-cycle):** `fn cli_network_from_bitcoin_network(n: bitcoin::Network) -> CliNetwork` (no existing `impl From` exists). Phase 5 R0 scope: confirm helper covers all 4 variants (Mainnet/Testnet/Signet/Regtest); reject unknown variant with `BadInput`.
 
 **Test cells (~22):** per §3.6 + §3.7 enumerations.
