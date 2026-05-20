@@ -844,6 +844,22 @@ fn emit_unified<W: Write, E: Write>(
     Ok(())
 }
 
+/// Extract the multisig threshold K from a descriptor's tree, if a
+/// multi-family operator (`multi` / `sortedmulti` / `multi_a` /
+/// `sortedmulti_a`) or `thresh` is present. Returns `None` for pure
+/// single-sig descriptors. Walks `wsh(...)`, `sh(...)`, and `tr(IK, ...)`
+/// wrappings to reach the inner threshold-bearing node.
+fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<u8> {
+    use md_codec::tree::Body;
+    match &node.body {
+        Body::MultiKeys { k, .. } => Some(*k),
+        Body::Variable { k, .. } => Some(*k),
+        Body::Children(children) => children.iter().find_map(extract_multisig_threshold),
+        Body::Tr { tree: Some(inner), .. } => extract_multisig_threshold(inner),
+        _ => None,
+    }
+}
+
 /// v0.4.1 Phase I helper: assemble `BundleInputForCard` from the unified
 /// dispatch's `ResolvedSlot` vec + `Bundle` + args, then render via
 /// `engraving_card_unified`.
@@ -862,18 +878,23 @@ fn build_unified_card(
 
     // Compute md1 chunk_set_id from the descriptor's policy_id (re-extracted
     // from the encoded md1 strings to avoid threading the policy_id through
-    // the synthesis output).
+    // the synthesis output). The reassembled Descriptor is reused below to
+    // extract the multisig threshold K — args.threshold is None on the
+    // --import-json descriptor-mode path, so we must read K from the
+    // descriptor body itself rather than fall back to N.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
-    let md1_chunk_set_id = match md_codec::chunk::reassemble(&md1_strs)
-        .ok()
-        .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok())
-    {
-        Some(pid) => {
+    let reassembled_descriptor = md_codec::chunk::reassemble(&md1_strs).ok();
+    let md1_chunk_set_id = reassembled_descriptor
+        .as_ref()
+        .and_then(|d| md_codec::compute_wallet_policy_id(d).ok())
+        .map(|pid| {
             let bytes = pid.as_bytes();
             format!("{:02x}{:02x}", bytes[0], bytes[1])
-        }
-        None => "????".to_string(),
-    };
+        })
+        .unwrap_or_else(|| "????".to_string());
+    let descriptor_threshold: Option<u8> = reassembled_descriptor
+        .as_ref()
+        .and_then(|d| extract_multisig_threshold(&d.tree));
 
     let per_slot: Vec<SlotCardBlock> = resolved
         .iter()
@@ -919,7 +940,10 @@ fn build_unified_card(
     let input = BundleInputForCard {
         network: args.network.human_name(),
         template_or_descriptor: TemplateOrDescriptor::Template(template_str),
-        threshold: args.threshold.or(if n > 1 { Some(n) } else { None }),
+        threshold: args
+            .threshold
+            .or(descriptor_threshold)
+            .or(if n > 1 { Some(n) } else { None }),
         n,
         language: args.language.map(|l| l.human_name()),
         passphrase_used: args.passphrase.as_ref().map(|p| !p.is_empty()).unwrap_or(false),

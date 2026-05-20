@@ -529,3 +529,147 @@ fn bundle_import_json_to_verify_bundle_round_trip_yields_ok() {
         "round-trip verify-bundle must yield result=ok; got: {verify_val}"
     );
 }
+
+// ============================================================================
+// Regression — human-readable cosigner-summary stderr emits K (not N) on the
+// descriptor-mode --import-json path.
+//
+// Pre-fix bug: `build_unified_card` set `threshold` to `args.threshold.or(N)`,
+// where args.threshold is None on --import-json — so a 2-of-3 wallet rendered
+// `# Threshold: 3 of 3`. The descriptor's true K=2 is encoded in the md1 body
+// (verifiable via the existing JSON-output cells) but was masked at the
+// stderr-display layer. Fix: extract K from the reassembled descriptor's
+// multi-family node and prefer it over the N fallback.
+// ============================================================================
+
+#[test]
+fn bundle_import_json_stderr_threshold_uses_descriptor_k_not_cosigner_count() {
+    let p = fixture_path("envelope_v0_27_0.json");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            p.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("# Threshold: 2 of 3"),
+        "stderr cosigner-summary must show descriptor K=2 (not cosigner N=3) for a 2-of-3 wallet on --import-json; got stderr:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("# Threshold: 3 of 3"),
+        "stderr must NOT report K=N for a 2-of-3 wallet (pre-fix bug); got stderr:\n{stderr}"
+    );
+}
+
+// ============================================================================
+// Per-format regression coverage for `# Threshold: K of N` stderr display.
+//
+// The pre-fix bug at build_unified_card masked K with N on any descriptor-mode
+// --import-json path; the fix extracts K from the reassembled descriptor's
+// multi-family node so every foreign format that flows through this code path
+// is covered uniformly. One cell per parser × the canonical 2-of-3 fixture +
+// one K≠N robustness cell (3-of-5) so future regressions in any single parser
+// or in the descriptor-K extractor itself surface immediately.
+// ============================================================================
+
+/// Run `import-wallet --format <fmt> --blob <blob> --json` and capture the
+/// envelope to a tempdir file. Then run `bundle --import-json --network
+/// mainnet` against the captured envelope and return its stderr.
+fn import_then_bundle_stderr(format: &str, blob_path: &Path) -> String {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let envelope_path = tmpdir.path().join("envelope.json");
+    let envelope_bytes = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            format,
+            "--blob",
+            blob_path.to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    std::fs::write(&envelope_path, &envelope_bytes).unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            envelope_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    String::from_utf8(out.get_output().stderr.clone()).unwrap()
+}
+
+fn assert_threshold_stderr(stderr: &str, k: u8, n: u8) {
+    let expected = format!("# Threshold: {k} of {n}");
+    assert!(
+        stderr.contains(&expected),
+        "expected stderr to contain '{expected}'; got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_bitcoin_core_2of3() {
+    let p = fixture_path("core-multisig-2of3.json");
+    let stderr = import_then_bundle_stderr("bitcoin-core", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_coldcard_multisig_2of3() {
+    let p = fixture_path("coldcard-ms-2of3-p2wsh-with-xfp.txt");
+    let stderr = import_then_bundle_stderr("coldcard-multisig", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_electrum_2of3() {
+    let p = fixture_path("electrum-multisig-2of3-wsh.json");
+    let stderr = import_then_bundle_stderr("electrum", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_jade_2of3() {
+    let p = fixture_path("jade-multisig-2of3-p2wsh.json");
+    let stderr = import_then_bundle_stderr("jade", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_sparrow_2of3() {
+    let p = fixture_path("sparrow-multisig-2of3-p2wsh-sortedmulti.json");
+    let stderr = import_then_bundle_stderr("sparrow", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+#[test]
+fn bundle_import_json_stderr_threshold_specter_2of3() {
+    let p = fixture_path("specter-multisig-2of3-p2wsh-sortedmulti.json");
+    let stderr = import_then_bundle_stderr("specter", &p);
+    assert_threshold_stderr(&stderr, 2, 3);
+}
+
+/// K-not-equal-to-N robustness: 3-of-5 stresses the descriptor-K extractor
+/// against a case where neither K nor N could be confused with cosigner-count
+/// or with each other.
+#[test]
+fn bundle_import_json_stderr_threshold_coldcard_multisig_3of5() {
+    let p = fixture_path("coldcard-ms-3of5-p2wsh.txt");
+    let stderr = import_then_bundle_stderr("coldcard-multisig", &p);
+    assert_threshold_stderr(&stderr, 3, 5);
+}
