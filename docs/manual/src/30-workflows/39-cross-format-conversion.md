@@ -147,7 +147,8 @@ mnemonic import-wallet --format sparrow \
 ```
 
 The resulting `coordinator.bsms.txt` is a 4-line BSMS Round-2 blob
-(`BSMS 1.0`, token, descriptor with `#<checksum>`, derivation path).
+(`BSMS 1.0` header, descriptor with `#<checksum>`, path-restrictions,
+first address). See chapter 45 § BSMS Round-2 for the full shape spec.
 Copy it to the Coldcard's microSD via the "Multisig Wallets > Make
 Multisig Wallet > BSMS" path.
 
@@ -196,7 +197,7 @@ mnemonic import-wallet --format coldcard \
 
 The resulting `policy.json` carries the canonical `description_template`
 (`wpkh(@0/**)`) plus a single-element `keys_info` array
-(`[B8688DF1/84'/0'/0']xpub6FQya7zGhR9...`). Companion apps that
+(`[b8688df1/84'/0'/0']xpub6FQya7zGhR9...`). Companion apps that
 understand BIP-388 (BitBox02 firmware, hardware-wallet vendors'
 companion software, etc.) load this format directly.
 
@@ -238,8 +239,9 @@ mnemonic import-wallet --format electrum \
 ```
 
 The resulting `coordinator.bsms.txt` is a BIP-129-canonical 4-line
-BSMS Round-2 blob (`BSMS 1.0` header, token, descriptor, derivation
-path). The Electrum-side BSMS Round-2 emit drops Electrum's
+BSMS Round-2 blob (`BSMS 1.0` header, descriptor with `#<checksum>`,
+path-restrictions, first address). The Electrum-side BSMS Round-2
+emit drops Electrum's
 `seed_version` integer + wallet `label` (BSMS Round-2 has no slot for
 either); those fields remain in the envelope's
 `bundle.import_provenance.electrum` field for audit.

@@ -86,17 +86,23 @@ accepts this excerpt and emits stderr `warning: import-wallet: bsms:
 
 ```text
 BSMS 1.0
-<TOKEN>
 <descriptor>#<checksum>
-<DERIVATION_PATH>
+<path-restrictions>
+<first-address>
 ```
 
-This is the BIP-129 §Specification *Round 2* on-disk shape: version,
-token, descriptor, derivation path. No first-address verification line
-and no signature line; the BIP-129 audit envelope's HMAC + signature
-travel *out-of-band* with the coordinator. v0.28.0 parses this shape
-natively (no fallback). When the parser falls through the 4-line arm
-to the legacy 6-line arm, a stderr DEPRECATION notice fires.
+This is the BIP-129 §Specification *Round 2* on-disk plaintext shape:
+version header, descriptor (with BIP-380 `#checksum`), path-
+restrictions, and the wallet's first address at `/0/0` (derived via
+`crate::derive_address::derive_first_address`). The BIP-129 audit
+envelope's token + HMAC + signature travel *out-of-band* with the
+coordinator and are NOT in the plaintext blob. Line 3's path-
+restrictions string emits `/0/*,/1/*` for canonical multipath
+descriptors (`<0;1>/*` cosigner keys), `/0/*` for single-receive-
+branch descriptors, or `No path restrictions` otherwise (per SPEC
+§3.5.1). v0.28.0 parses this shape natively (no fallback). When the
+parser falls through the 4-line arm to the legacy 6-line arm, a
+stderr DEPRECATION notice fires.
 
 **6-line shape** (legacy toolkit consolidation; deprecated):
 
@@ -305,7 +311,7 @@ mnemonic import-wallet --format sparrow \
 
 # Re-emit via export-wallet
 mnemonic export-wallet --from-import-json envelope.json \
-  --format sparrow > sparrow_re.json
+  --format sparrow --template bip84 > sparrow_re.json
 
 # Compare under per-format canonicalize (semantic round-trip)
 diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
@@ -320,8 +326,11 @@ Sparrow's emit side ships taproot wallets as *descriptor-passthrough*
 v0.28.0's Sparrow *parse* path refuses any blob whose script contains
 `tr(` with the byte-exact error `error: import-wallet: sparrow:
 taproot scripts are not yet supported …` (exit 2). The export-wallet
-side handles taproot via descriptor-passthrough; full taproot import
-support is queued as FOLLOWUP `sparrow-taproot-descriptor-passthrough-import-support`.
+side requires a recognized `--template` (no descriptor-passthrough);
+taproot-multisig emit is supported via `--template tr-multi-a` /
+`tr-sortedmulti-a`. Full taproot **import** support (parsing
+Sparrow's descriptor-passthrough-on-emit shape) is queued as FOLLOWUP
+`sparrow-taproot-descriptor-passthrough-import-support`.
 
 ## Specter-DIY (`--format specter`) {#specter-diy}
 
@@ -370,7 +379,7 @@ preserves Specter-specific metadata:
 mnemonic import-wallet --format specter \
   --blob specter-singlesig-p2wpkh.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format specter > specter_re.json
+  --format specter --wallet-name "Specter re-export" > specter_re.json
 ```
 
 `blockheight` is preserved in the provenance metadata but DROPPED on
@@ -446,7 +455,7 @@ preserves Coldcard-specific metadata:
 mnemonic import-wallet --format coldcard \
   --blob coldcard-singlesig-bip84-mainnet.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format coldcard > coldcard_re.json
+  --format coldcard --template bip84 > coldcard_re.json
 ```
 
 ### Deferral — legacy Mk1/Mk2 xpub-prefix inference
@@ -529,9 +538,20 @@ field preserves the multisig metadata:
 mnemonic import-wallet --format coldcard-multisig \
   --blob coldcard-ms-2of3-p2wsh-with-xfp.txt --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format coldcard-multisig > coldcard_ms_re.txt
+  --format coldcard --template wsh-sortedmulti --threshold 2 \
+  > coldcard_ms_re.txt
 diff coldcard-ms-2of3-p2wsh-with-xfp.txt coldcard_ms_re.txt
 ```
+
+> **Format-name asymmetry note.** `--format coldcard-multisig` is
+> accepted only on the **import** side (sniffs Coldcard's text
+> multisig setup file). On the **export** side, `--format coldcard`
+> emits Coldcard-multisig text when paired with a multisig
+> `--template` (e.g., `wsh-sortedmulti`) — see SPEC v0.8 §5.2. The
+> single `coldcard` export value covers both single-sig JSON
+> (singlesig templates) and multisig text (multisig templates);
+> tracked for export-side flag-name alignment as FOLLOWUP
+> `export-wallet-coldcard-multisig-alias`.
 
 ## Blockstream Jade (`--format jade`) {#jade-multisig}
 
@@ -593,7 +613,8 @@ metadata once the SeedQR variant ships (see deferral below).
 mnemonic import-wallet --format jade \
   --blob jade-multisig-2of3-p2wsh.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format jade > jade_re.json
+  --format jade --template wsh-sortedmulti --threshold 2 \
+  > jade_re.json
 ```
 
 ### Deferral — SeedQR
@@ -687,7 +708,7 @@ Refused variants (`2fa` / `imported` / encrypted) do not produce a
 mnemonic import-wallet --format electrum \
   --blob electrum-standard-bip84-mainnet.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format electrum > electrum_re.json
+  --format electrum --template bip84 > electrum_re.json
 ```
 
 ### Deferrals

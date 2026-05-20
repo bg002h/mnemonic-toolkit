@@ -372,6 +372,24 @@ mnemonic verify-bundle --network mainnet --account 0 \
   --bundle-json /tmp/inheritance-bundle.json
 ```
 
+The preceding `bundle` and `verify-bundle` commands emit stderr
+disclosures alongside the JSON / stdout. From `bundle`:
+
+```text
+warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
+info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+```
+
+The `info:` line is the v0.19.0 silent-default-with-stderr-notice
+feature firing on this recipe's non-canonical `wsh(andor(...))`
+descriptor — the BIP-48 origin path is inferred silently and the
+bundle proceeds. `verify-bundle` emits the same three secret-on-argv
+warnings (no info-notice — the default-path inference fired once at
+bundle-time and is now baked into the envelope).
+
 Expected output (one block per cosigner; final `result: ok`):
 
 ```text

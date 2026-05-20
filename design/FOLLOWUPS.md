@@ -2652,3 +2652,28 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
 - **Companion:** none.
+
+
+### `export-wallet-coldcard-multisig-alias` — `--format coldcard-multisig` on export side (alias for `coldcard` + multisig template)
+
+- **Surfaced:** 2026-05-20, manual-v0.2.0 content-audit cycle finding F4. P1b R0 architect classification at `design/agent-reports/manual-v0_2_0-p1b-r0-classification.md` §F4.
+- **Where:**
+  - Import side accepts `--format coldcard-multisig` (sniffs Coldcard's text multisig setup file): `crates/mnemonic-toolkit/src/wallet_import/coldcard_multisig.rs` (parser); CLI flag accepted by `cmd/import_wallet.rs` enum.
+  - Export side does NOT accept `--format coldcard-multisig`: `crates/mnemonic-toolkit/src/wallet_export/mod.rs` `enum CliExportFormat` — only `Coldcard` variant exists. Multisig text emit is reached via `--format coldcard --template wsh-sortedmulti` (and equivalent multisig templates), which template-dispatches to `emit_coldcard_multisig_text` (`wallet_export/coldcard.rs:42-55`).
+- **What:** v0.28+ ergonomic-surface fix: add `coldcard-multisig` as a `CliExportFormat` variant that aliases to `Coldcard` with a multisig-template precheck (refusal pointer for singlesig templates). Surfaces flag-name parity between the import and export value sets so a reader who sees `--format coldcard-multisig` accepted on import doesn't trip on the asymmetric export rejection. Requires paired `mnemonic-gui/src/schema/mnemonic.rs` update per CLAUDE.md schema-mirror invariant.
+- **Why deferred:** manual-v0.2.0 cycle is content-audit-only at scope; F4's user-facing prose fix (use `--format coldcard --template wsh-sortedmulti --threshold 2` + add asymmetry note paragraph) is sufficient for the documentation deliverable. Toolkit surface-enlargement triggers GUI schema-mirror lockstep and warrants its own cycle.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Tags:** `wallet`
+- **Companion:** none (mnemonic-gui needs a paired CliExportFormat dropdown-value addition when this fold lands).
+
+### `emitinputs-canonical-descriptor-checksum-invariant-enforcement` — defensive type/assertion for the `#checksum` invariant on `EmitInputs.canonical_descriptor`
+
+- **Surfaced:** 2026-05-20, manual-v0.2.0 cycle. Forward-looking observation from F9 c2-B fold review (P1b R1 architect §F9 Axis B → synthesis "Forward-looking toolkit observation").
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/mod.rs` (`EmitInputs.canonical_descriptor: &str`); `wallet_export/bsms.rs:86-90` (the documented invariant comment); construction sites: `cmd/export_wallet.rs` (`--template` path via `build_descriptor_string`; `--from-import-json` path via the F9 v0.28.2 `parsed_ms.to_string()` re-emit; `--descriptor` passthrough via the SPEC §6 pre-canonicalization).
+- **What:** v0.29-cleanup: enforce the "`canonical_descriptor` ends with `#<8-char-csum>`" invariant beyond convention. Options: (a) make `EmitInputs::new(...)` a constructor that asserts the checksum suffix; (b) change `canonical_descriptor` type from `&str` to a newtype `CheckedDescriptor<'_>(&'_ str)` whose constructor validates `#<csum>`. Either approach guarantees the F9 class cannot regress silently when a future code path constructs `EmitInputs` from a stripped-body descriptor.
+- **Why deferred:** F9 v0.28.2 fix (commit `615b10e`) restored the invariant at the active construction site (`--from-import-json` path); regression-tested by the 2 new test cells in `tests/cli_export_wallet_from_import_json.rs` (`f9_*`). This FOLLOWUP is defensive engineering — preventing recurrence — not a behavioral bug-blocker. The newtype option is the structurally cleaner of (a)/(b) but is a wider refactor.
+- **Status:** open
+- **Tier:** `v0.29-cleanup`
+- **Tags:** `wallet`
+- **Companion:** parent F9 fix (commit `615b10e`).
