@@ -559,11 +559,11 @@ fn run_from_import_json<W: Write, E: Write>(
                     .to_string(),
             )
         })?;
-    // canonicalize: store the descriptor body without `#<csum>` so the
-    // miniscript parse below succeeds. BIP-380 checksum validated up-
-    // front; failure is `BadInput` (Phase 5 R0 I1 fold) rather than
-    // silently passing through to a downstream miniscript parse error.
-    let canonical_descriptor =
+    // Validate the user-supplied BIP-380 checksum up-front; failure is
+    // `BadInput` (Phase 5 R0 I1 fold) rather than silently passing through
+    // to a downstream miniscript parse error. The body-only string drives
+    // the miniscript parse for script-type derivation just below.
+    let canonical_descriptor_body =
         descriptor_body_no_csum(descriptor_with_csum, "--from-import-json")?.to_string();
 
     // Decode mk1 → ResolvedSlots per §3.6.1. v0.27.1 Phase 2 I5 fold:
@@ -577,13 +577,23 @@ fn run_from_import_json<W: Write, E: Write>(
     // Script-type from the parsed descriptor (canonical form sans checksum).
     use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
     use std::str::FromStr;
-    let parsed_ms = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical_descriptor)
+    let parsed_ms = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical_descriptor_body)
         .map_err(|e| {
             ToolkitError::DescriptorParse(format!(
                 "--from-import-json: descriptor parse for script-type derivation: {e}"
             ))
         })?;
     let script_type = script_type_from_descriptor(&parsed_ms)?;
+
+    // F9 fix (v0.28.2): re-emit via miniscript's canonical Display so
+    // `canonical_descriptor` carries the BIP-380 `#<8-char>` checksum
+    // suffix required by `EmitInputs.canonical_descriptor`'s invariant
+    // (`wallet_export/bsms.rs:86-90`). Pre-fix, the body-only form above
+    // flowed verbatim into BSMS L2 + Specter `descriptor` JSON + Green
+    // plaintext, where downstream BSMS coordinators (Coldcard Mk4) reject
+    // descriptor lines without the checksum. miniscript Display always
+    // appends `#<csum>` per BIP-380 §Checksum-on-emit.
+    let canonical_descriptor = parsed_ms.to_string();
 
     // Wallet name: --wallet-name explicit OR default `imported-descriptor`
     // (same as the descriptor-mode path at run() line ~385-391).

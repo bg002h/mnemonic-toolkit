@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.2] — 2026-05-20
+
+Patch release: `export-wallet --from-import-json` BSMS / Specter / Green emitters now carry the BIP-380 `#<8-char>` checksum on the descriptor surface, restoring the `EmitInputs.canonical_descriptor` invariant documented at `wallet_export/bsms.rs:86-90`. Pre-fix, the `--from-import-json` path stripped the checksum via `descriptor_body_no_csum` and passed the body verbatim into emitters that expect the canonical form; downstream BSMS coordinators (Coldcard Mk4) reject Round-2 blobs whose descriptor line lacks `#checksum`. Surfaced by the `manual-v0.2.0` content-audit cycle finding F9 (P1b R1 classification at `design/agent-reports/manual-v0_2_0-p1b-r1-classification.md`). No CLI surface change; no GUI lockstep required.
+
+### Fixed
+
+- `export-wallet --from-import-json --format bsms` 4-line Round-2 output's L2 descriptor now carries the BIP-380 `#<8-char>` checksum (was missing pre-v0.28.2). Same fix simultaneously cures the latent class in `--format specter` (`descriptor` JSON field) and `--format green` (plaintext output line). The fix is at `cmd/export_wallet.rs:566-598` — the strip-validate-then-reparse step now re-emits via miniscript's canonical `Descriptor::Display` (which always appends `#<csum>` per BIP-380 §Checksum-on-emit) before constructing `EmitInputs`.
+
+### Tests
+
+- 2 new regression cells in `tests/cli_export_wallet_from_import_json.rs` — `f9_from_import_json_bsms_l2_carries_bip380_checksum` (BSMS 4-line shape; asserts L2's `#<8-char>` suffix) and `f9_from_import_json_specter_descriptor_carries_bip380_checksum` (Specter JSON field; latent class regression guard). Total toolkit cells: 1994 → 1996.
+
+---
+
 ## mnemonic-toolkit [0.28.1] — 2026-05-20
 
 Patch release: cosmetic-only bugfix in the `bundle --import-json` stderr cosigner-summary block. Underlying md1 + mk1 + ms1 strings were always correct (verifiable via `verify-bundle` round-trip); only the human-readable display was wrong. No CLI surface change; no sibling-codec or mnemonic-gui lockstep required.

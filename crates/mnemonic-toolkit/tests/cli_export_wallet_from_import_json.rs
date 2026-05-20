@@ -988,3 +988,112 @@ fn p11d_semantic_match_false_for_bsms_blocked_no_emitter() {
         "bsms source carries status=blocked_no_emitter; got {rt}"
     );
 }
+
+// ============================================================================
+// F9 v0.28.2 regression — `--from-import-json` MUST emit canonical_descriptor
+// with BIP-380 `#<8-char>` checksum suffix on user-facing surfaces.
+// Pre-v0.28.2: `cmd/export_wallet.rs:566-567` stripped the checksum via
+// `descriptor_body_no_csum` and passed the body verbatim into EmitInputs,
+// violating `wallet_export/bsms.rs:86-90`'s stated invariant. Downstream
+// Coldcard Mk4 BSMS Round-2 import + Specter Desktop BIP-380 descriptor
+// parse both expect the checksum. Audit-cycle finding F9, P1b R1
+// classification at
+// `design/agent-reports/manual-v0_2_0-p1b-r1-classification.md` §F9.
+// ============================================================================
+
+fn assert_descriptor_has_checksum(desc: &str, context: &str) {
+    let pos = desc
+        .rfind('#')
+        .unwrap_or_else(|| panic!("{context}: descriptor missing '#' delimiter: {desc:?}"));
+    let csum = &desc[pos + 1..];
+    assert_eq!(
+        csum.len(),
+        8,
+        "{context}: checksum suffix must be exactly 8 chars per BIP-380, got {csum:?} in: {desc:?}"
+    );
+    assert!(
+        csum.chars().all(|c| c.is_ascii_alphanumeric()),
+        "{context}: checksum must be ASCII-alphanumeric, got {csum:?}"
+    );
+}
+
+#[test]
+fn f9_from_import_json_bsms_l2_carries_bip380_checksum() {
+    // Source: same BSMS Round-2 blob as the headline cross-format cell at
+    // line 295. Sniff confirms a `#<csum>` on input; the test asserts the
+    // output L2 also carries `#<csum>` (the F9 fix at
+    // cmd/export_wallet.rs:566-598 re-emits via parsed_ms.to_string()).
+    let bsms = "BSMS 1.0\nsh(multi(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[5436d724/48'/0'/0'/2']xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#ek6d38cp\n";
+
+    let import_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "bsms", "--json"])
+        .write_stdin(bsms)
+        .assert()
+        .success();
+    let envelope_json = String::from_utf8(import_out.get_output().stdout.clone()).unwrap();
+
+    let export_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            "bsms",
+        ])
+        .write_stdin(envelope_json)
+        .assert()
+        .success();
+    let bsms_out = String::from_utf8(export_out.get_output().stdout.clone()).unwrap();
+
+    let lines: Vec<&str> = bsms_out.lines().collect();
+    assert_eq!(lines.len(), 4, "4-line BSMS Round-2 default shape; got {bsms_out:?}");
+    assert_eq!(lines[0], "BSMS 1.0");
+    assert_descriptor_has_checksum(lines[1], "BSMS L2 descriptor");
+}
+
+#[test]
+fn f9_from_import_json_specter_descriptor_carries_bip380_checksum() {
+    // Latent class: Specter's `descriptor` JSON field passes
+    // EmitInputs.canonical_descriptor verbatim (specter.rs:68). Same
+    // checksum-attached invariant applies. v0.28.2 fix at
+    // cmd/export_wallet.rs:566-598 covers Specter via the shared
+    // canonical_descriptor path.
+    let fixture = fixture_path("specter-multisig-2of3-p2wsh-sortedmulti.json");
+    let import_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            fixture.to_str().unwrap(),
+            "--format",
+            "specter",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let envelope_json = String::from_utf8(import_out.get_output().stdout.clone()).unwrap();
+
+    let export_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            "specter",
+            "--wallet-name",
+            "f9-regression",
+        ])
+        .write_stdin(envelope_json)
+        .assert()
+        .success();
+    let specter_out = String::from_utf8(export_out.get_output().stdout.clone()).unwrap();
+    let val: serde_json::Value =
+        serde_json::from_str(&specter_out).expect("specter emit must be valid JSON");
+    let desc = val["descriptor"]
+        .as_str()
+        .expect("specter wallet must carry `descriptor` field");
+    assert_descriptor_has_checksum(desc, "Specter `descriptor` JSON field");
+}
