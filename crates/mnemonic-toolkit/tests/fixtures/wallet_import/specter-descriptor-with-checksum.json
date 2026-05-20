@@ -1,0 +1,8 @@
+{
+  "label": "checksum-cell",
+  "blockheight": 500000,
+  "descriptor": "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere",
+  "devices": [
+    {"type": "coldcard", "label": ""}
+  ]
+}
