@@ -92,10 +92,10 @@ impl WalletFormatParser for JadeParser {
             Some(o) => o,
             None => return false,
         };
-        match obj.get("multisig_file").and_then(|v| v.as_str()) {
-            Some(s) if !s.is_empty() => true,
-            _ => false,
-        }
+        matches!(
+            obj.get("multisig_file").and_then(|v| v.as_str()),
+            Some(s) if !s.is_empty()
+        )
     }
 
     fn parse(blob: &[u8], stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError> {

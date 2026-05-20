@@ -114,11 +114,8 @@ pub(crate) enum ImportProvenance {
     /// `ColdcardMultisig` provenance into the Jade-specific
     /// `JadeSourceMetadata` wrapper. The `cmd/import_wallet.rs` dispatch
     /// arm wired at P5C plumbs this variant to the `--json` envelope
-    /// `jade_source_metadata` field. `#[allow(dead_code)]` covers the
-    /// P5B → P5C interim: P5B constructs the variant inside
-    /// `JadeParser::parse` but the dedicated `jade_source_metadata()`
-    /// accessor lands at P5C (same pattern as ColdcardMultisig above).
-    #[allow(dead_code)]
+    /// `jade_source_metadata` field. The `jade_source_metadata()`
+    /// accessor at P5C is the load-bearing consumer.
     Jade(jade::JadeSourceMetadata),
     /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
@@ -184,6 +181,24 @@ impl ImportProvenance {
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Jade-specific accessor: returns `Some(&metadata)` only for the
+    /// `Jade` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P5C wiring). Mirrors
+    /// `coldcard_source_metadata` / `electrum_source_metadata` /
+    /// `sparrow_source_metadata` / `specter_source_metadata`.
+    pub(crate) fn jade_source_metadata(&self) -> Option<&jade::JadeSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(meta) => Some(meta),
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }

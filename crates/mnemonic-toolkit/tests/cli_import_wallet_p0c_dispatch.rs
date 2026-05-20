@@ -136,14 +136,23 @@ fn p0c_format_coldcard_multisig_dispatches_format_mismatch_post_p4c() {
     );
 }
 
+/// v0.28.0 Phase P5C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format jade panics unimplemented"); post-P5C
+/// the dispatch is wired, so the same BSMS-blob input now surfaces an
+/// `ImportWalletFormatMismatch` (supplied=jade, sniffed=bsms) instead
+/// of a panic. The cell is preserved at the same location as a
+/// dispatch-surface regression guard for the post-P5C-wiring semantic.
+/// Mirrors the P3C / P6C `*_dispatches_format_mismatch_post_p?c`
+/// precedents.
 #[test]
-fn p0c_format_jade_panics_unimplemented() {
+fn p0c_format_jade_dispatches_format_mismatch_post_p5c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "jade"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P5C") || stderr.contains("jade"),
-        "stderr should mention P5C or jade on unimplemented dispatch; got: {stderr}"
+        stderr.contains("jade") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=jade vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 

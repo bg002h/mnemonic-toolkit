@@ -59,6 +59,7 @@ use crate::wallet_import::{
     coldcard::ColdcardParser,
     coldcard_multisig::ColdcardMultisigParser,
     electrum::ElectrumParser,
+    jade::JadeParser,
     overlay::apply_seed_overlay,
     // v0.28.0 Phase P0C — 6 new canonicalize skeletons imported alphabetically;
     // bodies are `Err(BadInput("not yet implemented"))` stubs in
@@ -398,7 +399,64 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "electrum"
         }
-        Some("jade") => unimplemented!("P5C: format jade not yet wired"),
+        Some("jade") => {
+            // v0.28.0 Phase P5C: format-mismatch check mirrors the
+            // bsms/bitcoin-core/coldcard/coldcard-multisig/electrum/sparrow/specter
+            // upper arms (SPEC §6.1). Only reject when sniff strongly
+            // pinned a different format; Ambiguous/NoMatch are tolerated.
+            //
+            // The mismatch matrix is now complete at P5C (Jade is the
+            // LAST parser landed in v0.28.0 Wave 1 — the matrix lists
+            // all 7 sibling formats). Full N×N symmetry across the 8
+            // formats lands incrementally per cycle-followup
+            // `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "jade"
+        }
         Some("sparrow") => {
             // SPEC §6.1 format-mismatch check: explicit `--format sparrow`
             // against a blob that sniff identified as a different format → reject
@@ -607,7 +665,7 @@ electrum|jade|sparrow|specter>"
         "coldcard" => ColdcardParser::parse(&blob, stderr)?,
         "coldcard-multisig" => ColdcardMultisigParser::parse(&blob, stderr)?,
         "electrum" => ElectrumParser::parse(&blob, stderr)?,
-        "jade" => unimplemented!("P5C: parse not yet wired"),
+        "jade" => JadeParser::parse(&blob, stderr)?,
         "sparrow" => SparrowParser::parse(&blob, stderr)?,
         "specter" => SpecterParser::parse(&blob, stderr)?,
         other => {
@@ -1062,7 +1120,38 @@ fn emit_json_envelope<W: Write, E: Write>(
                 }),
                 None => json!({}),
             },
-            "jade" => json!({}),
+            // v0.28.0 Phase P5C — jade round-trip envelope mirrors the
+            // bitcoin-core / coldcard / coldcard-multisig / electrum /
+            // sparrow / specter shape: canonicalize is real (SPEC §11.5
+            // semantic round-trip via BTreeMap-backed JSON wrapper with
+            // `id` dropped + inner Coldcard-multisig text canonicalized).
+            // `byte_exact` compares input bytes to canonical output;
+            // `semantic_match=true` always on Ok.
+            "jade" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
             // v0.28.0 Phase P1C — sparrow round-trip envelope mirrors the
             // bitcoin-core + coldcard-multisig shape: canonicalize is real
             // (SPEC §11.1 semantic round-trip via BTreeMap-backed
@@ -1216,6 +1305,38 @@ fn emit_json_envelope<W: Write, E: Write>(
                     "wallet_type": wallet_type_str,
                     "wallet_name": meta.wallet_name,
                     "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P5C — Jade provenance envelope field. Mirrors
+        // the per-format-distinct field-name discipline
+        // (`jade_source_metadata`): surfaces ONLY when the parse was
+        // Jade-shaped. Carries the delegated Coldcard-multisig metadata
+        // verbatim under `coldcard_compat` (name, policy K-of-N,
+        // script_format, xfp telemetry, dropped_fields) plus a
+        // future-proof `jade_specific_fields` array (empty at v0.28.0
+        // per Q1 SeedQR-deferred lock).
+        if let Some(meta) = p.provenance.jade_source_metadata() {
+            let script_format_str = match meta.coldcard_compat.script_format {
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2wsh => "P2WSH",
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2shP2wsh => {
+                    "P2SH-P2WSH"
+                }
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2sh => "P2SH",
+            };
+            env.insert(
+                "jade_source_metadata".to_string(),
+                json!({
+                    "coldcard_compat": {
+                        "name": meta.coldcard_compat.name,
+                        "policy_k": meta.coldcard_compat.policy.k,
+                        "policy_n": meta.coldcard_compat.policy.n,
+                        "script_format": script_format_str,
+                        "xfp_was_blob_supplied": meta.coldcard_compat.xfp_was_blob_supplied,
+                        "xfp_header_disagreed": meta.coldcard_compat.xfp_header_disagreed,
+                        "dropped_fields": meta.coldcard_compat.dropped_fields,
+                    },
+                    "jade_specific_fields": meta.jade_specific_fields,
                 }),
             );
         }
