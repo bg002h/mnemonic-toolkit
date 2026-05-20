@@ -93,14 +93,21 @@ fn p0c_format_specter_dispatches_format_mismatch_post_p2c() {
     );
 }
 
+/// v0.28.0 Phase P3C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format coldcard panics unimplemented"); post-P3C
+/// the dispatch is wired, so the same BSMS-blob input now surfaces an
+/// `ImportWalletFormatMismatch` (supplied=coldcard, sniffed=bsms) instead
+/// of a panic. The cell is preserved at the same location as a
+/// dispatch-surface regression guard for the post-P3C-wiring semantic.
 #[test]
-fn p0c_format_coldcard_panics_unimplemented() {
+fn p0c_format_coldcard_dispatches_format_mismatch_post_p3c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "coldcard"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P3C") || stderr.contains("coldcard"),
-        "stderr should mention P3C or coldcard on unimplemented dispatch; got: {stderr}"
+        stderr.contains("coldcard") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=coldcard vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 

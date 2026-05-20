@@ -108,12 +108,7 @@ impl ColdcardBip {
 /// SPEC §11.3 — per-blob provenance metadata for a Coldcard single-sig parse.
 /// Carried on `ImportProvenance::Coldcard(...)`; preserved for `--json`
 /// envelope `coldcard_source_metadata` emit (P3C wiring).
-///
-/// `dead_code` allow on the field set covers the P3B → P3C interim
-/// (fields are read from tests + P3C's envelope emit site lands the
-/// production-side read).
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ColdcardSourceMetadata {
     /// Top-level `chain` (BTC | XTN).
     pub(crate) chain: ColdcardChain,

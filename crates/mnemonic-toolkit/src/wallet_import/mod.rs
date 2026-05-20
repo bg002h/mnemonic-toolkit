@@ -78,10 +78,8 @@ pub(crate) enum ImportProvenance {
     /// `Bsms` and `ColdcardMultisig`).
     ///
     /// Constructed by `ColdcardParser::parse` (Phase P3B). The
-    /// `cmd/import_wallet.rs` dispatch arm wired at P3C plumbs this variant
-    /// to the `--json` envelope `coldcard_source_metadata` field; the
-    /// `dead_code` allow covers the P3B → P3C interim.
-    #[allow(dead_code)]
+    /// `cmd/import_wallet.rs` dispatch arm at P3C plumbs this variant to
+    /// the `--json` envelope `coldcard_source_metadata` field.
     Coldcard(coldcard::ColdcardSourceMetadata),
     /// Coldcard multisig text-file parse (`wallet_import/coldcard_multisig.rs`).
     /// SPEC §11.4. Inserted in alphabetical-by-variant-name slot per CLAUDE.md
@@ -148,10 +146,6 @@ impl ImportProvenance {
     /// `Coldcard` variant. Consumed by the `--json` envelope emitter in
     /// `cmd::import_wallet::emit_json_envelope` (P3C wiring). Mirrors
     /// `sparrow_source_metadata` / `specter_source_metadata`.
-    ///
-    /// `dead_code` allow covers the P3B → P3C interim (called from P3C's
-    /// envelope-emit site only).
-    #[allow(dead_code)]
     pub(crate) fn coldcard_source_metadata(&self) -> Option<&coldcard::ColdcardSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
