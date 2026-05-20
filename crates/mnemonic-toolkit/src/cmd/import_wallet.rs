@@ -365,6 +365,18 @@ pub fn run<R: Read, W: Write, E: Write>(
             // the unreachable contract intact for the still-placeholder
             // variants (Coldcard / Electrum / Jade / Specter).
             SniffOutcome::Sparrow => "sparrow",
+            // v0.28.0 Phase P2A: auto-sniff arm for Specter-DIY JSON. The
+            // sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Specter`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P2C: parse not yet wired")` until P2C
+            // flips it to `SpecterParser::parse(...)`. Pattern matches
+            // the P1A precedent above (Sparrow): wiring the auto-sniff
+            // arm at P2A makes a `SniffOutcome::Specter` verdict
+            // dispatch through this `None =>` branch instead of falling
+            // into the `other => unreachable!()` catch-all (which
+            // would crash on a positive Specter sniff before P2C lands).
+            SniffOutcome::Specter => "specter",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \
