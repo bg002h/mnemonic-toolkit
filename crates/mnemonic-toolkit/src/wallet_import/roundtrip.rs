@@ -258,6 +258,81 @@ fn recanonicalize_descriptor(desc_with_csum: &str) -> Result<String, ToolkitErro
     Ok(format!("{body_after_display}#{csum}"))
 }
 
+// =============================================================================
+// v0.28.0 Phase P0C — canonicalize skeletons for the 6 new wallet-import formats.
+//
+// Per plan-doc P0C row (R0 I2 + R1-M5 fold): each new parser's B-sub-phase
+// scope includes its `canonicalize_<format>` helper. The bodies here are
+// `Err(ToolkitError::BadInput("not yet implemented; <format> ingest lands
+// in Phase P{N}B".into()))` stubs that satisfy the import dispatch surface
+// at `cmd/import_wallet.rs:432-435` (Site 6 in plan-doc §B.2 #6). Per-parser
+// P{N}B sub-phases replace the body with a real semantic-canonicalize per
+// SPEC §11.x; this signature does not change.
+//
+// At P0C the skeletons are unreachable in practice (Site 2 + Site 4 panic
+// earlier on `--format <new>`, and auto-sniff can't yield a new-format
+// verdict until per-parser P{N}A wires the SniffOutcome variant). Returning
+// `Err(BadInput)` is the defensive shape — should anything reach a skeleton
+// in violation of that contract, it surfaces as a typed BadInput rather
+// than a silent empty-string roundtrip.
+//
+// Per-parser P{N}B → P{N}C ordering: P{N}B installs the real body here;
+// P{N}C flips the corresponding Site 2 + Site 4 dispatch arms to invoke
+// the format's parser. The Site 6 dispatch already routes via these symbols
+// (alphabetical import block at `cmd/import_wallet.rs:50-65`), so P{N}B's
+// body-swap is structurally complete the moment the new body lands.
+// =============================================================================
+
+/// SPEC §11.3 — canonicalize a Coldcard single-sig generic-JSON blob.
+/// Body lands in Phase P3B.
+pub(crate) fn canonicalize_coldcard(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_coldcard: not yet implemented; coldcard ingest lands in Phase P3B".into(),
+    ))
+}
+
+/// SPEC §11.4 — canonicalize a Coldcard multisig text blob.
+/// Body lands in Phase P4B.
+pub(crate) fn canonicalize_coldcard_multisig(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_coldcard_multisig: not yet implemented; \
+         coldcard-multisig ingest lands in Phase P4B"
+            .into(),
+    ))
+}
+
+/// SPEC §11.6 — canonicalize an Electrum wallet JSON blob.
+/// Body lands in Phase P6B.
+pub(crate) fn canonicalize_electrum(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_electrum: not yet implemented; electrum ingest lands in Phase P6B".into(),
+    ))
+}
+
+/// SPEC §11.5 — canonicalize a Jade multisig-file JSON wrapper.
+/// Body lands in Phase P5B.
+pub(crate) fn canonicalize_jade(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_jade: not yet implemented; jade ingest lands in Phase P5B".into(),
+    ))
+}
+
+/// SPEC §11.1 — canonicalize a Sparrow wallet JSON blob.
+/// Body lands in Phase P1B.
+pub(crate) fn canonicalize_sparrow(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_sparrow: not yet implemented; sparrow ingest lands in Phase P1B".into(),
+    ))
+}
+
+/// SPEC §11.2 — canonicalize a Specter wallet JSON blob.
+/// Body lands in Phase P2B.
+pub(crate) fn canonicalize_specter(_blob: &[u8]) -> Result<String, ToolkitError> {
+    Err(ToolkitError::BadInput(
+        "canonicalize_specter: not yet implemented; specter ingest lands in Phase P2B".into(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -709,6 +784,126 @@ mod tests {
         let blob = read_fixture("bsms-2line-sortedmulti-2of2.txt");
         let s = std::str::from_utf8(&blob).unwrap();
         assert_eq!(unified_diff(s, s), "");
+    }
+
+    // =========================================================================
+    // v0.28.0 Phase P0C — skeleton-canonicalize cells.
+    //
+    // Each new format's `canonicalize_<format>` helper returns
+    // `Err(ToolkitError::BadInput("not yet implemented; <format> ingest lands
+    // in Phase P{N}B"))` per plan-doc P0C row. Per-parser P{N}B replaces the
+    // body with the real semantic-canonicalize implementation; these cells
+    // become regression guards for the skeleton-shape contract and will be
+    // REPLACED (not augmented) at P{N}B with format-specific happy-path
+    // canonicalize cells.
+    //
+    // Pinning the error template here defends against accidental
+    // "early-flip" of a skeleton body without the matching SPEC §11.x parse
+    // contract landing first.
+    // =========================================================================
+
+    #[test]
+    fn canonicalize_coldcard_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_coldcard(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(
+                    msg.contains("not yet implemented"),
+                    "skeleton must surface not-yet-implemented BadInput; got: {msg}"
+                );
+                assert!(msg.contains("P3B"), "msg must cite Phase P3B; got: {msg}");
+                assert!(msg.contains("coldcard"), "msg must cite format; got: {msg}");
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_coldcard_multisig_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_coldcard_multisig(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(msg.contains("not yet implemented"));
+                assert!(msg.contains("P4B"), "msg must cite Phase P4B; got: {msg}");
+                assert!(
+                    msg.contains("coldcard-multisig"),
+                    "msg must cite format; got: {msg}"
+                );
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_electrum_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_electrum(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(msg.contains("not yet implemented"));
+                assert!(msg.contains("P6B"), "msg must cite Phase P6B; got: {msg}");
+                assert!(msg.contains("electrum"), "msg must cite format; got: {msg}");
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_jade_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_jade(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(msg.contains("not yet implemented"));
+                assert!(msg.contains("P5B"), "msg must cite Phase P5B; got: {msg}");
+                assert!(msg.contains("jade"), "msg must cite format; got: {msg}");
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_sparrow_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_sparrow(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(msg.contains("not yet implemented"));
+                assert!(msg.contains("P1B"), "msg must cite Phase P1B; got: {msg}");
+                assert!(msg.contains("sparrow"), "msg must cite format; got: {msg}");
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_specter_skeleton_returns_not_yet_implemented() {
+        let err = canonicalize_specter(b"any blob").unwrap_err();
+        match err {
+            ToolkitError::BadInput(msg) => {
+                assert!(msg.contains("not yet implemented"));
+                assert!(msg.contains("P2B"), "msg must cite Phase P2B; got: {msg}");
+                assert!(msg.contains("specter"), "msg must cite format; got: {msg}");
+            }
+            other => panic!("expected BadInput, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn skeleton_canonicalize_helpers_accept_empty_blob() {
+        // Empty blob is a degenerate input; skeletons must still return the
+        // BadInput("not yet implemented") shape (not panic, not Ok, not a
+        // different error class). This pins the "shape-only" contract.
+        for (name, result) in [
+            ("coldcard", canonicalize_coldcard(b"")),
+            ("coldcard-multisig", canonicalize_coldcard_multisig(b"")),
+            ("electrum", canonicalize_electrum(b"")),
+            ("jade", canonicalize_jade(b"")),
+            ("sparrow", canonicalize_sparrow(b"")),
+            ("specter", canonicalize_specter(b"")),
+        ] {
+            assert!(
+                matches!(result, Err(ToolkitError::BadInput(ref m)) if m.contains("not yet implemented")),
+                "{name} skeleton must return BadInput(not yet implemented) on empty blob; got: {result:?}"
+            );
+        }
     }
 
     #[test]
