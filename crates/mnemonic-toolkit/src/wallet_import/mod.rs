@@ -72,8 +72,12 @@ pub(crate) enum ImportProvenance {
     /// Specter-DIY wallet-JSON parse (`wallet_import/specter.rs`). v0.28.0
     /// Phase P2 — `SpecterSourceMetadata` holds the top-level `label`,
     /// `blockheight`, per-cosigner device hints, and the list of dropped
-    /// top-level field names per SPEC §11.2.
-    #[allow(dead_code)] // P2A: variant + struct land here; P2B parse impl + P2C dispatch wire-up.
+    /// top-level field names per SPEC §11.2. P2C wires the envelope-emit
+    /// dispatch site to read the inner metadata; until then, the variant's
+    /// payload field is constructed (by P2B's parse impl) but not yet read,
+    /// so `#[allow(dead_code)]` on the variant suppresses the field-never-
+    /// read warning. The allow lifts at P2C alongside the envelope-emit wiring.
+    #[allow(dead_code)]
     Specter(crate::wallet_import::specter::SpecterSourceMetadata),
 }
 

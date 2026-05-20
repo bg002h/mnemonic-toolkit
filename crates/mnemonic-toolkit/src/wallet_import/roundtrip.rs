@@ -325,12 +325,137 @@ pub(crate) fn canonicalize_sparrow(_blob: &[u8]) -> Result<String, ToolkitError>
     ))
 }
 
-/// SPEC §11.2 — canonicalize a Specter wallet JSON blob.
-/// Body lands in Phase P2B.
-pub(crate) fn canonicalize_specter(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_specter: not yet implemented; specter ingest lands in Phase P2B".into(),
-    ))
+/// SPEC §11.2 + §7.3 — canonicalize a Specter wallet JSON blob for
+/// semantic round-trip comparison.
+///
+/// 1. Parse JSON via `serde_json`.
+/// 2. Extract the 4 load-bearing fields: `label`, `blockheight`,
+///    `descriptor`, `devices`. Any unrecognized top-level field is DROPPED.
+/// 3. `descriptor`: re-canonicalize via `recanonicalize_descriptor`
+///    (parse + render + re-checksum) — mirrors BSMS / Core treatment.
+/// 4. `devices`: normalize each entry to canonical object-form
+///    `{type: <string>, label: <string>}`. Legacy string-form `"<vendor>"`
+///    projects to `{type: <vendor>, label: ""}`. Unknown / non-{string,object}
+///    entries propagate as `ImportWalletParse` errors (sniff already
+///    accepted any array shape, but a malformed entry inside a sniffed
+///    blob is still a parse failure).
+/// 5. Re-serialize as `serde_json::to_string_pretty` with alphabetically
+///    sorted keys (BTreeMap) + trailing newline. Field order in the canonical
+///    output: `blockheight`, `descriptor`, `devices`, `label` (alphabetical).
+///
+/// This is `Specter`'s analog of `canonicalize_bitcoin_core`. The same
+/// invariants hold:
+/// - Semantic, not byte-exact (whitespace, key-order, recanonicalize-able
+///   descriptor checksum all normalize away).
+/// - Dropped wallet-state fields (any non-{label,blockheight,descriptor,
+///   devices}) are excluded from the canonical form so a round-trip ignores
+///   them.
+pub(crate) fn canonicalize_specter(blob: &[u8]) -> Result<String, ToolkitError> {
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_specter: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: top-level JSON must be an object".to_string(),
+        )
+    })?;
+
+    let label = obj
+        .get("label")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_specter: missing or non-string `label`".to_string(),
+            )
+        })?
+        .to_string();
+
+    let blockheight: u64 = match obj.get("blockheight") {
+        Some(v) if v.is_u64() => v.as_u64().expect("u64 check above"),
+        Some(v) if v.is_i64() => {
+            let i = v.as_i64().expect("i64 check above");
+            if i < 0 {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "canonicalize_specter: negative `blockheight` {i}"
+                )));
+            }
+            i as u64
+        }
+        Some(_) | None => {
+            return Err(ToolkitError::ImportWalletParse(
+                "canonicalize_specter: missing or non-integer `blockheight`".to_string(),
+            ));
+        }
+    };
+
+    let desc_with_csum = obj
+        .get("descriptor")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_specter: missing or non-string `descriptor`".to_string(),
+            )
+        })?;
+    let canonical_desc = recanonicalize_descriptor(desc_with_csum)?;
+
+    let devices_json = obj
+        .get("devices")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_specter: missing or non-array `devices`".to_string(),
+            )
+        })?;
+    let mut canonical_devices: Vec<Value> = Vec::with_capacity(devices_json.len());
+    for (i, entry) in devices_json.iter().enumerate() {
+        let (device_type, device_label) = match entry {
+            Value::String(s) => (s.clone(), String::new()),
+            Value::Object(map) => {
+                let t = map
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        ToolkitError::ImportWalletParse(format!(
+                            "canonicalize_specter: devices[{i}]: missing or non-string `type`"
+                        ))
+                    })?
+                    .to_string();
+                let l = map
+                    .get("label")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_default();
+                (t, l)
+            }
+            _ => {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "canonicalize_specter: devices[{i}] is neither a string nor an object"
+                )));
+            }
+        };
+        // Emit each device entry as canonical-object form with alphabetic
+        // keys (label, type).
+        let mut entry_map: BTreeMap<String, Value> = BTreeMap::new();
+        entry_map.insert("label".to_string(), Value::String(device_label));
+        entry_map.insert("type".to_string(), Value::String(device_type));
+        canonical_devices.push(serde_json::to_value(&entry_map).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_specter: re-serialize devices[{i}]: {e}"
+            ))
+        })?);
+    }
+
+    let mut envelope: BTreeMap<String, Value> = BTreeMap::new();
+    envelope.insert("blockheight".to_string(), serde_json::Value::Number(blockheight.into()));
+    envelope.insert("descriptor".to_string(), Value::String(canonical_desc));
+    envelope.insert("devices".to_string(), Value::Array(canonical_devices));
+    envelope.insert("label".to_string(), Value::String(label));
+
+    let mut text = serde_json::to_string_pretty(&envelope).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_specter: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 #[cfg(test)]
@@ -873,37 +998,196 @@ mod tests {
         }
     }
 
-    #[test]
-    fn canonicalize_specter_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_specter(b"any blob").unwrap_err();
-        match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P2B"), "msg must cite Phase P2B; got: {msg}");
-                assert!(msg.contains("specter"), "msg must cite format; got: {msg}");
-            }
-            other => panic!("expected BadInput, got: {other:?}"),
-        }
-    }
+    // P2B: canonicalize_specter skeleton REPLACED by real semantic-canonicalize
+    // body. New cells below exercise the round-trip discipline; pin-test
+    // for the not-yet-implemented BadInput shape removed (per P0C
+    // skeleton-doc: "Per-parser P{N}B replaces the body with a real
+    // semantic-canonicalize ... these cells become regression guards for the
+    // skeleton-shape contract and will be REPLACED").
 
     #[test]
     fn skeleton_canonicalize_helpers_accept_empty_blob() {
         // Empty blob is a degenerate input; skeletons must still return the
         // BadInput("not yet implemented") shape (not panic, not Ok, not a
         // different error class). This pins the "shape-only" contract.
+        // P2B removed `specter` from the skeleton roster — `canonicalize_specter`
+        // is now a real impl; its empty-blob behavior is exercised by the
+        // `canonicalize_specter_rejects_empty_blob` cell below.
         for (name, result) in [
             ("coldcard", canonicalize_coldcard(b"")),
             ("coldcard-multisig", canonicalize_coldcard_multisig(b"")),
             ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
             ("sparrow", canonicalize_sparrow(b"")),
-            ("specter", canonicalize_specter(b"")),
         ] {
             assert!(
                 matches!(result, Err(ToolkitError::BadInput(ref m)) if m.contains("not yet implemented")),
                 "{name} skeleton must return BadInput(not yet implemented) on empty blob; got: {result:?}"
             );
         }
+    }
+
+    // =========================================================================
+    // v0.28.0 Phase P2B — canonicalize_specter semantic round-trip cells.
+    // =========================================================================
+
+    fn build_specter_blob(label: &str, blockheight: u64, desc: &str, devices: &str) -> String {
+        format!(
+            "{{\n  \"label\": \"{label}\",\n  \"blockheight\": {blockheight},\n  \"descriptor\": \"{desc}\",\n  \"devices\": {devices}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn canonicalize_specter_rejects_empty_blob() {
+        let err = canonicalize_specter(b"").unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("invalid JSON"), "got: {msg}");
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_specter_round_trips_singlesig() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let desc = format!("{body}#{cs}");
+        let blob = build_specter_blob("daily", 800000, &desc, r#"[{"type":"coldcard","label":"primary"}]"#);
+        let c1 = canonicalize_specter(blob.as_bytes()).unwrap();
+        // Idempotency: canonicalize is a fixed point.
+        let c2 = canonicalize_specter(c1.as_bytes()).unwrap();
+        assert_eq!(c1, c2, "canonicalize_specter must be idempotent");
+    }
+
+    #[test]
+    fn canonicalize_specter_drops_unknown_top_level_fields() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let desc = format!("{body}#{cs}");
+        let with_extras = format!(
+            "{{\n  \"label\": \"daily\",\n  \"blockheight\": 800000,\n  \"descriptor\": \"{desc}\",\n  \"devices\": [{{\"type\":\"coldcard\",\"label\":\"\"}}],\n  \"extra_field\": \"x\",\n  \"another\": 42\n}}\n"
+        );
+        let without_extras = build_specter_blob("daily", 800000, &desc, r#"[{"type":"coldcard","label":""}]"#);
+        let a = canonicalize_specter(with_extras.as_bytes()).unwrap();
+        let b = canonicalize_specter(without_extras.as_bytes()).unwrap();
+        assert_eq!(a, b, "unknown top-level fields must be dropped during canonicalize");
+    }
+
+    #[test]
+    fn canonicalize_specter_normalizes_legacy_string_devices_to_object_form() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let desc = format!("{body}#{cs}");
+        let with_string_devices = build_specter_blob("daily", 0, &desc, r#"["coldcard"]"#);
+        let with_object_devices = build_specter_blob("daily", 0, &desc, r#"[{"type":"coldcard","label":""}]"#);
+        let a = canonicalize_specter(with_string_devices.as_bytes()).unwrap();
+        let b = canonicalize_specter(with_object_devices.as_bytes()).unwrap();
+        assert_eq!(
+            a, b,
+            "legacy string-form devices must canonicalize to the same object-form as the modern shape"
+        );
+    }
+
+    #[test]
+    fn canonicalize_specter_recomputes_checksum() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let good = build_specter_blob("daily", 0, &format!("{body}#{cs}"), r#"[{"type":"coldcard","label":""}]"#);
+        let bad = build_specter_blob("daily", 0, &format!("{body}#deadbeef"), r#"[{"type":"coldcard","label":""}]"#);
+        let a = canonicalize_specter(good.as_bytes()).unwrap();
+        let b = canonicalize_specter(bad.as_bytes()).unwrap();
+        assert_eq!(a, b, "canonicalize must re-checksum the descriptor body");
+    }
+
+    #[test]
+    fn canonicalize_specter_keys_sorted_alphabetically() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let desc = format!("{body}#{cs}");
+        // Scrambled-key input ordering (label first, descriptor last, etc.).
+        let scrambled = format!(
+            "{{\n  \"label\": \"daily\",\n  \"devices\": [{{\"type\":\"coldcard\",\"label\":\"primary\"}}],\n  \"blockheight\": 800000,\n  \"descriptor\": \"{desc}\"\n}}\n"
+        );
+        let canonical = canonicalize_specter(scrambled.as_bytes()).unwrap();
+        // Output must list keys in alphabetic order: blockheight, descriptor,
+        // devices, label.
+        let bh_idx = canonical.find("\"blockheight\"").unwrap();
+        let desc_idx = canonical.find("\"descriptor\"").unwrap();
+        let devices_idx = canonical.find("\"devices\"").unwrap();
+        let label_idx = canonical.find("\"label\"").unwrap();
+        assert!(bh_idx < desc_idx);
+        assert!(desc_idx < devices_idx);
+        assert!(devices_idx < label_idx);
+    }
+
+    #[test]
+    fn canonicalize_specter_rejects_missing_descriptor() {
+        let blob = r#"{"label":"x","blockheight":0,"devices":[]}"#;
+        let err = canonicalize_specter(blob.as_bytes()).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("missing or non-string `descriptor`"), "got: {msg}");
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_specter_rejects_negative_blockheight() {
+        let body = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>/*)");
+        let cs = dummy_csum(&body);
+        let desc = format!("{body}#{cs}");
+        let blob = format!(
+            "{{\"label\":\"x\",\"blockheight\":-1,\"descriptor\":\"{desc}\",\"devices\":[{{\"type\":\"coldcard\",\"label\":\"\"}}]}}"
+        );
+        let err = canonicalize_specter(blob.as_bytes()).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("negative `blockheight`"), "got: {msg}");
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fixture_specter_singlesig_canonicalize_stable() {
+        let blob = read_fixture("specter-singlesig-p2wpkh-coldcard.json");
+        let c1 = canonicalize_specter(&blob).unwrap();
+        let c2 = canonicalize_specter(c1.as_bytes()).unwrap();
+        assert_eq!(c1, c2, "fixture canonicalize must be idempotent");
+        assert!(c1.contains("\"blockheight\": 850000"), "preserved blockheight: {c1}");
+        assert!(c1.contains("wpkh("), "preserved descriptor: {c1}");
+    }
+
+    #[test]
+    fn fixture_specter_multisig_canonicalize_stable() {
+        let blob = read_fixture("specter-multisig-2of3-wsh-sortedmulti.json");
+        let c = canonicalize_specter(&blob).unwrap();
+        assert!(c.contains("wsh(sortedmulti(2,"), "preserved multisig wrapper: {c}");
+        // 3 device entries preserved.
+        assert_eq!(c.matches("\"type\":").count(), 3, "expected 3 devices: {c}");
+    }
+
+    #[test]
+    fn fixture_specter_blockheight_zero_canonicalize_stable() {
+        let blob = read_fixture("specter-blockheight-zero.json");
+        let c = canonicalize_specter(&blob).unwrap();
+        assert!(c.contains("\"blockheight\": 0"), "preserved zero blockheight: {c}");
+        // Legacy string-form `["unknown"]` normalized to object form.
+        assert!(
+            c.contains("\"type\": \"unknown\""),
+            "legacy string-form normalized to object form: {c}"
+        );
+    }
+
+    #[test]
+    fn fixture_specter_with_checksum_canonicalize_stable() {
+        let blob = read_fixture("specter-with-checksum.json");
+        let c = canonicalize_specter(&blob).unwrap();
+        // Descriptor re-rendered + re-checksummed; final form carries a
+        // BIP-380 `#<csum>` suffix.
+        assert!(c.contains('#'), "must include re-computed checksum: {c}");
     }
 
     #[test]

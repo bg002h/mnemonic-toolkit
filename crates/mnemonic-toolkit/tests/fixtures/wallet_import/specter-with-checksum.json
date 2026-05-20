@@ -1,0 +1,6 @@
+{
+  "label": "Hardware Setup Round 3",
+  "blockheight": 820000,
+  "descriptor": "wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#5ql5mvwg",
+  "devices": [{"type": "coldcard", "label": "ColdCard Q"}]
+}
