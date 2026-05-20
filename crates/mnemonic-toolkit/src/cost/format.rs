@@ -1,10 +1,11 @@
-//! Plaintext-table renderer + JSON envelope serializer. SPEC §5.
+//! Plaintext-table renderer + JSON envelope serializer. SPEC §5 + §11.
 
 use std::io::{self, Write};
 
 use serde::Serialize;
 
 use super::enumerate::{Row, SEGWIT_INPUT_BASE_WU};
+use super::KeypathSpend;
 
 /// Per-row JSON shape — keys mirror SPEC §5 example.
 #[derive(Serialize)]
@@ -24,6 +25,15 @@ pub struct InputJson<'a> {
     pub value: &'a str,
 }
 
+/// SPEC §11 (v0.28.0) — keypath-spend cost surfaced when input is
+/// `tr(IK, {M})` with a non-NUMS internal key.
+#[derive(Serialize)]
+pub struct KeypathSpendJson<'a> {
+    pub internal_key_xonly_hex: &'a str,
+    pub vbytes: i64,
+    pub sats: i64,
+}
+
 #[derive(Serialize)]
 pub struct Envelope<'a> {
     pub schema_version: u32,
@@ -32,6 +42,11 @@ pub struct Envelope<'a> {
     pub extracted_miniscript: &'a str,
     pub feerate_sat_per_vb: f64,
     pub conditions: Vec<RowJson>,
+    /// SPEC §11 — present only when input is `tr(IK, {M})` with
+    /// non-NUMS IK. `None` is serialized as JSON `null` (preserved field
+    /// for shape stability so downstream consumers can branch on presence
+    /// via type-check rather than key-existence-check).
+    pub keypath_spend: Option<KeypathSpendJson<'a>>,
     pub notes: &'a [String],
 }
 
@@ -48,6 +63,7 @@ pub fn render_table<W: Write>(
     feerate: f64,
     rows: &[Row],
     notes: &[String],
+    keypath_spend: Option<&KeypathSpend>,
     out: &mut W,
 ) -> io::Result<()> {
     // For --miniscript input the original equals the extracted M; for
@@ -119,6 +135,21 @@ pub fn render_table<W: Write>(
         )?;
     }
 
+    // SPEC §11 — keypath-spend cost annotation. Lives below the table
+    // (not as a vertical column) because the table is row-aligned by
+    // script-path condition; the keyspend has no per-condition variance.
+    if let Some(ks) = keypath_spend {
+        writeln!(out)?;
+        let sats = (ks.vbytes as f64 * feerate).round() as i64;
+        writeln!(
+            out,
+            "Keypath-spend (via IK {ik}): {vb} vB | {sats} sats",
+            ik = ks.internal_key_xonly_hex,
+            vb = ks.vbytes,
+            sats = sats,
+        )?;
+    }
+
     if !notes.is_empty() {
         writeln!(out)?;
         for n in notes {
@@ -129,6 +160,9 @@ pub fn render_table<W: Write>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // §11 added keypath_spend; lifting to a
+                                     // builder struct is gold-plating for a
+                                     // thin two-call renderer.
 pub fn render_json<W: Write>(
     original_input: &str,
     input_form_label: &str,
@@ -136,9 +170,15 @@ pub fn render_json<W: Write>(
     feerate: f64,
     rows: &[Row],
     notes: &[String],
+    keypath_spend: Option<&KeypathSpend>,
     out: &mut W,
 ) -> io::Result<()> {
     let conditions: Vec<RowJson> = rows.iter().map(|r| build_row_json(r, feerate)).collect();
+    let keypath_spend_json = keypath_spend.map(|ks| KeypathSpendJson {
+        internal_key_xonly_hex: ks.internal_key_xonly_hex.as_str(),
+        vbytes: ks.vbytes,
+        sats: (ks.vbytes as f64 * feerate).round() as i64,
+    });
     let envelope = Envelope {
         schema_version: 1,
         subcommand: "compare-cost",
@@ -149,6 +189,7 @@ pub fn render_json<W: Write>(
         extracted_miniscript: extracted,
         feerate_sat_per_vb: feerate,
         conditions,
+        keypath_spend: keypath_spend_json,
         notes,
     };
     serde_json::to_writer_pretty(&mut *out, &envelope)

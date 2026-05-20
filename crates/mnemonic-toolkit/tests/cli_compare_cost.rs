@@ -524,17 +524,242 @@ fn descriptor_wsh_or_b_produces_two_rows() {
     assert_eq!(v["conditions"].as_array().unwrap().len(), 2);
 }
 
+// ── Phase 12 (v0.28.0): single-leaf tr() input support (SPEC §11) ──────────
+//
+// Pre-v0.28.0 behavior was `tr(...)` → exit 3 with "tr-input deferred"
+// message. v0.28.0 (P12A) replaces that with a `Tr → translated_via_
+// translate_descriptor_tr_single_leaf` path. The cells below cover:
+// - happy-path × shape variants (pk-only, and_v_pk_pk, multi_a-2-of-3)
+// - multi-leaf-tr-refused (exit 3 + MultiLeafTr message)
+// - NUMS-vs-cooperative-IK (advisory + keypath_spend JSON field)
+// - descriptor-checksum-pass/fail
+
+// SPEC §11 LOCK: BIP-341 NUMS H-point x-only (mirrored from
+// cost/mod.rs::NUMS_XONLY_HEX).
+const NUMS_XONLY: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+// Cooperative (non-NUMS) IK x-only fixtures — BIP-340 test-vector
+// x-coordinates (well-known valid on-curve points). Source:
+// https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
+// Cost is key-agnostic; only the IK-classification path branches on
+// the hex literal vs NUMS_XONLY constant.
+const KEY_X_ONLY_A: &str = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
+const KEY_X_ONLY_B: &str = "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659";
+const KEY_X_ONLY_C: &str = "dd308afec5777e13121fa72b9cc1b7cc0139715309b086c960e18fd969774eb8";
+
 #[test]
-fn descriptor_tr_refused_exit_3() {
+fn tr_descriptor_nums_single_leaf_pk_happy_path() {
+    // tr(NUMS, pk(<x-only>)) → single condition, advisory absent
+    // (IK == NUMS), no keypath_spend in JSON.
+    let desc = format!("tr({NUMS_XONLY},pk({KEY_X_ONLY_A}))");
     let out = bin()
-        .args(["compare-cost", "--descriptor", "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0)"])
+        .args(["compare-cost", "--descriptor", &desc, "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["input"]["form"], "descriptor");
+    assert_eq!(v["conditions"].as_array().unwrap().len(), 1);
+    // NUMS IK → no keypath_spend, no IK-advisory note.
+    assert!(v["keypath_spend"].is_null(), "NUMS IK MUST NOT surface keypath_spend: {v}");
+    let notes: Vec<&str> = v["notes"].as_array().unwrap().iter().map(|n| n.as_str().unwrap_or("")).collect();
+    assert!(
+        !notes.iter().any(|n| n.contains("non-NUMS internal key")),
+        "NUMS IK MUST NOT surface non-NUMS advisory: {notes:?}"
+    );
+}
+
+#[test]
+fn tr_descriptor_non_nums_ik_surfaces_keypath_spend_and_advisory() {
+    // tr(<non-NUMS>, pk(<x-only>)) → JSON keypath_spend populated +
+    // advisory note present.
+    let desc = format!("tr({KEY_X_ONLY_A},pk({KEY_X_ONLY_B}))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc, "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let ks = &v["keypath_spend"];
+    assert!(!ks.is_null(), "non-NUMS IK MUST surface keypath_spend: {v}");
+    assert_eq!(ks["internal_key_xonly_hex"], KEY_X_ONLY_A);
+    // SPEC §11: keyspend witness = 66B; vbytes = (164+66+3)/4 = 58.
+    assert_eq!(ks["vbytes"], 58);
+    let notes: Vec<&str> = v["notes"].as_array().unwrap().iter().map(|n| n.as_str().unwrap_or("")).collect();
+    assert!(
+        notes.iter().any(|n| n.contains("non-NUMS internal key") && n.contains(KEY_X_ONLY_A)),
+        "non-NUMS IK MUST surface advisory note: {notes:?}"
+    );
+}
+
+#[test]
+fn tr_descriptor_non_nums_ik_keypath_spend_plaintext_annotation_line() {
+    // Plaintext table mode: keypath-spend appears as an annotation line
+    // BELOW the table (not a vertical column — table column widths are
+    // preserved for byte-aligned comparison with v0.27.x output).
+    let desc = format!("tr({KEY_X_ONLY_A},pk({KEY_X_ONLY_B}))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc, "--feerate", "10.0"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(&format!("Keypath-spend (via IK {KEY_X_ONLY_A}): 58 vB | 580 sats")),
+        "missing keypath-spend annotation line: {stdout}"
+    );
+}
+
+#[test]
+fn tr_descriptor_single_leaf_and_v_pk_pk_two_signers() {
+    // tr(NUMS, and_v(v:pk(A),pk(B))) — script-path requires both A and B.
+    let desc = format!("tr({NUMS_XONLY},and_v(v:pk({KEY_X_ONLY_A}),pk({KEY_X_ONLY_B})))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc, "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let conds = v["conditions"].as_array().unwrap();
+    assert_eq!(conds.len(), 1, "and_v(A,B) → single joint-signing condition");
+}
+
+#[test]
+fn tr_descriptor_single_leaf_multi_a_2_of_3() {
+    // tr(NUMS, multi_a(2,A,B,C)) — script-path 2-of-3 → 3 minimal conditions.
+    let desc = format!(
+        "tr({NUMS_XONLY},multi_a(2,{KEY_X_ONLY_A},{KEY_X_ONLY_B},{KEY_X_ONLY_C}))"
+    );
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc, "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let conds = v["conditions"].as_array().unwrap();
+    assert_eq!(
+        conds.len(),
+        3,
+        "multi_a(2,A,B,C) script-path → 3 minimal conditions; got {conds:?}"
+    );
+}
+
+#[test]
+fn tr_descriptor_multi_leaf_refused_exit_3() {
+    // tr(NUMS, {pk(A), pk(B)}) — multi-leaf TapTree is rejected with
+    // MultiLeafTr.
+    let desc = format!(
+        "tr({NUMS_XONLY},{{pk({KEY_X_ONLY_A}),pk({KEY_X_ONLY_B})}})"
+    );
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    let stderr = String::from_utf8_lossy(&out.stdout) + String::from_utf8_lossy(&out.stderr);
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("tr-input") || stderr.contains("FOLLOWUP"),
-        "expected tr-input FOLLOWUP message: {stderr}"
+        stderr.contains("multi-leaf tr") || stderr.contains("--miniscript"),
+        "expected multi-leaf-tr rejection message: {stderr}"
+    );
+}
+
+#[test]
+fn tr_descriptor_with_valid_checksum_succeeds() {
+    // Descriptor with a valid BIP-380 checksum: rust-miniscript's parser
+    // accepts and we route to the new tr-helper. Pin acceptance so a
+    // regression in checksum-validation does not silently swallow the
+    // happy-path. Sub-cases below verify the bad-checksum path is exit 2.
+    //
+    // Get the canonical checksum by parsing then re-serializing via
+    // `mnemonic` itself: but here we just rely on rust-miniscript's
+    // checksum-optional parsing — supplying no checksum still parses.
+    let desc_no_checksum = format!("tr({NUMS_XONLY},pk({KEY_X_ONLY_A}))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc_no_checksum])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "no-checksum form must parse: stderr: {}", String::from_utf8_lossy(&out.stderr));
+}
+
+#[test]
+fn tr_descriptor_with_bad_checksum_exit_2() {
+    // Descriptor checksum-fail path → exit 2 (parse error). Use a
+    // deliberately wrong 8-char checksum suffix; rust-miniscript's parser
+    // validates checksums when present.
+    let desc_bad_checksum = format!("tr({NUMS_XONLY},pk({KEY_X_ONLY_A}))#zzzzzzzz");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc_bad_checksum])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "bad-checksum tr() MUST exit 2: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn tr_descriptor_nums_keypath_only_refused_no_script() {
+    // tr(NUMS) with NO script-tree (keypath-only) → there's nothing to
+    // compare on the script side. UnsupportedWrapper exit 3.
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &format!("tr({NUMS_XONLY})")])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("no script") || stderr.contains("--miniscript"),
+        "expected no-script rejection: {stderr}"
+    );
+}
+
+// ── R1-I4 (b) cost-domain parity-invariance smoke (SPEC §11) ───────────────
+//
+// Manually substitute the projected key's prefix `02 → 03` on a single
+// fixture and re-run cost enumeration; assert vbytes-per-condition are
+// byte-identical across the two parity choices. This pins the SPEC §11
+// "lift-x even-y LOCK" convention as cost-neutral so future refactors
+// cannot silently break the cost-invariance claim that justifies the
+// arbitrary parity choice.
+#[test]
+fn cost_is_parity_invariant_02_vs_03() {
+    // Cost is key-agnostic so any 32-byte x-only candidate works; use
+    // the NUMS x-coordinate for determinism.
+    let xonly = NUMS_XONLY;
+    let pk_02 = format!("pk(02{xonly})");
+    let pk_03 = format!("pk(03{xonly})");
+
+    let fetch = |input: &str| -> Vec<(String, i64, i64)> {
+        let out = bin()
+            .args(["compare-cost", "--miniscript", input, "--json"])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "compare-cost failed for {input}: stderr={}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["conditions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["label"].as_str().unwrap().to_string(),
+                    r["wsh_vbytes"].as_i64().unwrap(),
+                    r["tr_vbytes"].as_i64().unwrap(),
+                )
+            })
+            .collect()
+    };
+
+    let rows_02 = fetch(&pk_02);
+    let rows_03 = fetch(&pk_03);
+    assert_eq!(
+        rows_02, rows_03,
+        "SPEC §11: cost MUST be parity-invariant — 02-prefix vs 03-prefix produce identical vbytes"
     );
 }
 

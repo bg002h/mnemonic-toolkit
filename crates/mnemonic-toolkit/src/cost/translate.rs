@@ -32,6 +32,14 @@ pub struct Translated {
     /// index as `labels`. Used to map post-substitution pubkey strings back
     /// to user labels.
     pub label_pubkeys: Vec<(String, String)>,
+    /// SPEC §11 (v0.28.0) — single-leaf `tr(IK, {M})` input only: x-only hex
+    /// of the user-supplied internal key (`None` for `--miniscript`,
+    /// `--descriptor wsh(...)`, `--descriptor sh(wsh(...))`, or when the IK
+    /// equals BIP-341 NUMS). When `Some`, [`run_compare_cost`] surfaces a
+    /// keypath-spend-cost column / advisory.
+    ///
+    /// [`run_compare_cost`]: super::run_compare_cost
+    pub tr_non_nums_internal_key_xonly_hex: Option<String>,
 }
 
 /// Substitute abstract labels and parse in both contexts.
@@ -86,6 +94,7 @@ pub fn translate_miniscript(input: &str) -> Result<Translated, CompareCostError>
         concrete_keys,
         labels,
         label_pubkeys,
+        tr_non_nums_internal_key_xonly_hex: None,
     })
 }
 
