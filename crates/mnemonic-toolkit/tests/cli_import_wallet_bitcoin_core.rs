@@ -713,3 +713,115 @@ fn core_select_malformed_value_errors() {
         "expected malformed-value diagnostic; got: {stderr}"
     );
 }
+
+// ============================================================================
+// v0.28.0 Phase 10 — Bitcoin Core fixture-corpus expansion
+//
+// Adds 8 parse-only fixture cells against new vendored Core blobs per the
+// plan-doc §S.9 owner-phase tags + plan-doc Phase 10 sub-phase table:
+//
+// - P10A: 4 new Core fixtures (`core-bip44-mainnet.json`,
+//   `core-bip86-mainnet.json`, `core-wsh-sortedmulti-3of5.json`,
+//   `core-multipath-0-1.json`). Parse-only cells.
+// - P10B: 4 more Core fixtures (`core-explicit-active-false.json`,
+//   `core-mainnet-receive-change-pair.json`,
+//   `core-multipath-receive-change-pair.json`, `core-empty-descriptors-array.json`).
+//   Parse-only + sniff-negative cells.
+//
+// Each cell loads the fixture from disk via `fixture_path` and asserts the
+// stdout shape; no new test infrastructure required (existing helpers
+// `run_core_file_select` + `Command::cargo_bin` + `fixture_path` suffice).
+//
+// Scope discipline: fixture-corpus only. No SPEC §6/§10 contract changes; no
+// new parser flags. Per plan-doc §S.9, the BSMS-side corpus expansion is
+// owned by Instance G3 (P9A/P9B); the per-vendor-format corpora are owned by
+// their respective per-parser instances (A/B/C/D/E/F).
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// P10A — 4 new Core fixtures, parse-only cells
+// ----------------------------------------------------------------------------
+
+/// P10A.1 — `core-bip44-mainnet.json`: P2PKH BIP-44 single-sig mainnet
+/// (legacy script-type, `pkh(...)` descriptor wrapper, `m/44'/0'/0'` origin).
+/// Pins the parser's acceptance of `pkh()` (legacy P2PKH) — Core ships this
+/// for "legacy wallet" descriptors. Mirrors `core-bip49-mainnet.json`'s
+/// existing happy-path shape but with the legacy `pkh()` wrapper instead of
+/// the SegWit-v0-nested `sh(wpkh())`.
+#[test]
+fn core_fixture_file_bip44_mainnet_parses() {
+    let p = fixture_path("core-bip44-mainnet.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    // ParsedImport.threshold is `None` for single-sig (no thresh/multi).
+    assert!(stdout.contains("threshold=none"), "stdout: {stdout}");
+    // Core entries set bsms_audit=None.
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    // The fixture's [fp/...] origin uses MAINNET_FP_A (b8688df1).
+    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+}
+
+/// P10A.2 — `core-bip86-mainnet.json`: P2TR BIP-86 single-sig mainnet
+/// (taproot key-path-only, `tr(xpub)` descriptor wrapper, `m/86'/0'/0'`
+/// origin). Pins the parser's acceptance of `tr()` key-path-only — Core
+/// ships this for taproot single-sig wallets. The miniscript adapter
+/// permits `tr(xpub/...)` without a TapTree; threshold is None (single-sig).
+#[test]
+fn core_fixture_file_bip86_mainnet_parses() {
+    let p = fixture_path("core-bip86-mainnet.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=none"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+}
+
+/// P10A.3 — `core-wsh-sortedmulti-3of5.json`: 3-of-5 wsh-sortedmulti
+/// mainnet. Larger threshold + larger cosigner count than the existing
+/// 2-of-3 fixture (`core-multisig-2of3.json`); pins the parser scales
+/// beyond BIP-48 §"Multisig Public Key Derivation Path" common cases.
+///
+/// Three cosigners use the existing mainnet xpubs (A/B/C from
+/// `cli_export_wallet_jade.rs`); two additional cosigners use BIP-32
+/// Test Vector 1 and Test Vector 2 root xpubs (publicly-known, distinct
+/// from the toolkit's test corpus to give 5 unique keys with stable
+/// fingerprints `deadbeef` and `cafebabe`).
+#[test]
+fn core_fixture_file_wsh_sortedmulti_3of5_parses() {
+    let p = fixture_path("core-wsh-sortedmulti-3of5.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=5"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=3"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    // All 5 fingerprints surface in stdout.
+    for fp in [MAINNET_FP_A, MAINNET_FP_B, MAINNET_FP_C, "deadbeef", "cafebabe"] {
+        assert!(stdout.contains(fp), "fp {fp} missing from stdout: {stdout}");
+    }
+}
+
+/// P10A.4 — `core-multipath-0-1.json`: explicit BIP-389 `<0;1>/*` multipath
+/// in a single-entry blob. Pins the parser's acceptance of the canonical
+/// Core `listdescriptors`-default emit shape. (The existing
+/// `core_multipath_split_to_receive_change` cell exercises the same shape
+/// via `build_core_single`; this cell adds a fixture-FILE round-trip to
+/// validate disk-on-disk consumption.)
+#[test]
+fn core_fixture_file_multipath_0_1_parses() {
+    let p = fixture_path("core-multipath-0-1.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+}
+
+// P10B cells appended in a follow-on commit on the same branch.
