@@ -294,6 +294,16 @@ pub fn run<R: Read, W: Write, E: Write>(
             // post-cycle 8-format list per plan-doc Site 3 directive.
             SniffOutcome::Bsms => "bsms",
             SniffOutcome::BitcoinCore => "bitcoin-core",
+            // v0.28.0 Phase P3A wires `ColdcardParser::sniff` into the
+            // `sniff_format` dispatcher, which means `SniffOutcome::Coldcard`
+            // becomes a reachable auto-sniff verdict. Route it to the
+            // `"coldcard"` format string; Phase P3C's parse-impl replaces
+            // the existing `unimplemented!("P3C: parse not yet wired")`
+            // dispatch arm at site 4 with a real `ColdcardParser::parse`
+            // call. Until P3C lands, an auto-sniff-detected Coldcard blob
+            // will panic at site 4 with the existing P3C-pointer message
+            // (cleaner failure mode than the catch-all `unreachable!` arm).
+            SniffOutcome::Coldcard => "coldcard",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \

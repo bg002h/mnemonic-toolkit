@@ -25,6 +25,7 @@ pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
+pub(crate) mod coldcard;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
@@ -68,6 +69,11 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
+    // Phase P3C insertion point: add `Coldcard(coldcard::ColdcardSourceMetadata)`
+    // variant here (alphabetically after `Bsms`) when wiring the parse-impl
+    // dispatch arms in `cmd/import_wallet.rs`. The variant type
+    // (`coldcard::ColdcardSourceMetadata`) is defined at P3A and ready for
+    // use; deferring the enum addition keeps P3A's diff sniff-only.
 }
 
 impl ImportProvenance {
