@@ -15,6 +15,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Why deferred:** the reason it didn't ship in the original commit
 - **Status:** `open` | `resolved <COMMIT>` | `wont-fix — <one-line reason>`
 - **Tier:** `v0.1-blocker` | `v0.1-nice-to-have` | `v0.2` | `cross-repo` | `v1+` | `external`
+- **Tags:** *(optional)* space-separated free-form tags for grouping FOLLOWUPS into themes that cut across Tiers. Used to reference a thematic batch as a group in user-driven planning. Convention: lowercase kebab-case; multiple tags allowed. Established tags: `wallet` (v0.28.0 cycle's 11-entry surface — 6 new wallet-import parsers + BSMS BIP-129 work + cross-format matrix + parser-side gaps surfaced during execution).
 ```
 
 Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.md <short-id>`.
@@ -2221,6 +2222,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred from v0.27.0:** Scope. v0.27.0 Path B-lite focuses on BIP-129 Round-1 verify + Round-2 emit (the two clean primitives that close the round-trip cycle). Adding the encryption-envelope primitives in v0.27.0 would ~double the cycle scope; deprecating v0.26.0's lenient parser pre-needs a stable BIP-129-faithful replacement input path (which requires the 4-line parser of (b) here). v0.28+ cycle.
 - **Status:** open (sub-items (c) + (d) remain; (a)/(b)/(e) shipped at v0.28.0).
 - **Tier:** `v0.27-cycle-close`
+- **Tags:** `wallet`
 - **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure). Sibling carve-out: `bsms-bip129-encryption-envelope` (v0.28+; sub-item (c) tracked separately).
 
 ### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
@@ -2472,12 +2474,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Standards prerequisite not yet met; emitting against an unpublished canonicalization would commit the toolkit to a wire shape we'd need to break.
 - **Status:** open (real emit remains upstream-blocked; v0.28.0 shipped refusal-scaffold UX improvements only).
 - **Tier:** `v0.28+`.
+- **Tags:** `wallet`
 - **Companion:** `bsms-import-taproot-refusal-parity` (v0.28+; symmetric import-side refusal hardening + `extract_threshold` side-channel finding).
 
 ### `bsms-bip129-full-cutover` — DUPLICATE STUB → see canonical entry above (line ~2207)
 
 - **Status:** open — consolidated 2026-05-19 during cycle-prep recon (source SHA `1abd9d1`). This was a v0.27.0 Phase 3 cycle-close re-filing of the same scope (4-line parser + encryption envelope + lenient-parser deprecation) as the canonical `bsms-bip129-full-cutover` entry filed at v0.27.0 Phase 2 (line ~2207). Per `feedback-per-phase-agents-forget-followup-status-flip` discipline (split-state hazard), all work tracking now happens at the canonical entry above. The canonical entry remains OPEN after v0.28.0 (sub-items (c) encryption envelope + (d) drop legacy shapes are deferred); v0.28.0 shipped sub-items (a) 6-line deprecation + (b) 4-line parser + (e) SPEC/manual coverage at commit `1444c51` + `d18787f`. This stub stays OPEN in lockstep with the canonical entry. Will mark resolved once the canonical entry resolves.
 - **Tier:** `v0.28+`.
+- **Tags:** `wallet`
 
 ### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
 
@@ -2549,6 +2553,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** v0.28.0 cycle shipped the BIP-129-canonical 4-line plaintext parser; encryption envelope is a distinct cryptographic surface with its own attack-surface review requirements (PBKDF2 work-factor choice, AES-CTR nonce handling, MAC-then-decrypt vs decrypt-then-MAC ordering, key-material argv leak vectors). Worth its own cycle.
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** parent canonical entry `bsms-bip129-full-cutover` (sub-item (c)).
 
 ### `wallet-import-jade-seedqr` — Blockstream Jade SeedQR ingest surface
@@ -2561,6 +2566,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Phase P5 cycle scope was the JSON `get_registered_multisig` reply shape only (per Q1 lock). SeedQR is a distinct surface (numeric encoding vs JSON; entropy-only vs wallet-policy) and warrants its own cycle.
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** parent `wallet-import-jade` (resolved v0.28.0; this is the deferred SeedQR carve-out).
 
 ### `wallet-import-electrum-encrypted` — encrypted Electrum 4.x wallet ingest
@@ -2573,6 +2579,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Phase P6 cycle scope was plaintext Electrum 4.x wallet-file ingest only (per Q2 lock). Electrum's encryption is a distinct cryptographic surface; user-direction was to defer rather than vendor Electrum's crypto stack inline. The out-of-band decrypt-via-Electrum-CLI workflow covers the common case.
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** parent `wallet-import-electrum` (resolved v0.28.0).
 
 ### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
@@ -2583,6 +2590,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is a hardening pass, not a correctness gap.
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** none (symmetric emit-side gap tracked at `green-emitter-multisig-refusal-template-only`).
 
 ### `bsms-import-taproot-refusal-parity` — BSMS parser should refuse tr() blobs at parse time (+ `extract_threshold` regex side-channel)
@@ -2596,6 +2604,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** P9B's plan-doc scope was `~0 src + ~250 tests + 4 fixture files`. Modifying the parser to refuse tr() is a source-code change with normative-SPEC implications — out of P9B's authored scope. Low-priority because the emit-side refusal already prevents users from generating tr() blobs via the toolkit; import-side hole is only triggered by externally-coordinated tr() BSMS blobs (currently rare in the wild).
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** `bsms-taproot-emit` (symmetric emit-side scaffold; cross-cite SPEC §10 amendment).
 
 ### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import via descriptor-passthrough
@@ -2608,6 +2617,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
 - **Status:** open
 - **Tier:** `v0.29+`
+- **Tags:** `wallet`
 - **Companion:** parent `wallet-import-sparrow` (resolved v0.28.0).
 
 ### `coldcard-legacy-mk1-mk2-top-level-xpub-inference` — legacy Coldcard wallet.json top-level xpub support
@@ -2618,6 +2628,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** v0.28.0 P3 scope was the modern multi-path shape only; legacy mk1/mk2 firmware is rare in active use, and users on legacy firmware have an upgrade path. Hardening rather than correctness.
 - **Status:** open
 - **Tier:** `v0.29+`
+- **Tags:** `wallet`
 - **Companion:** parent `wallet-import-coldcard` (resolved v0.28.0).
 
 ### `green-emitter-multisig-refusal-template-only` — Green's multisig refusal misses descriptor-mode
@@ -2628,6 +2639,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** The matrix-test fix (filter green out of the multisig-refusal matrix and pin the current behavior with a regression cell) was scoped to P11C. Patching green's emitter is OOS for P11C (Phase 11 is matrix-coverage, not refusal-contract reshuffle); changing `GreenEmitter::emit` would affect `cli_export_wallet_green.rs` multisig-refusal cells that currently use templated input.
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** `wallet-import-format-mismatch-matrix-completion` (symmetric import-side matrix-gap).
 
 ### `import-wallet-envelope-schema-version-narrative-drift` — outer envelope `schema_version` vs inner `BundleJson.schema_version` collision
@@ -2638,4 +2650,5 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** Rename is wire-shape-breaking; affects GUI schema mirror + every downstream JSON consumer. Documentation fix is low-risk but OOS for P11 (matrix coverage, not envelope redesign).
 - **Status:** open
 - **Tier:** `v0.28+`
+- **Tags:** `wallet`
 - **Companion:** none.
