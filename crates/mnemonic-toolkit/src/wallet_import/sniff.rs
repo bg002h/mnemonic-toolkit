@@ -21,9 +21,8 @@
 //! - `Sparrow`          — only `SparrowParser::sniff` matches (P1A).
 //! - `Specter`          — only `SpecterParser::sniff` matches (P2A).
 //!
-//! Per SPEC §6.1 (sniff heuristics at v0.28.0 cutover; the wired bools are
-//! enumerated below — the remaining placeholder `false` slots flip on as
-//! their per-parser P{N}A sub-phase lands):
+//! Per SPEC §6.1 (sniff heuristics at v0.28.0 cycle close — all 8 parser
+//! bools wired):
 //! - BSMS: blob (post CRLF→LF normalize) starts with `BSMS 1.0\n`.
 //! - Bitcoin Core: valid JSON whose top-level object has a non-empty
 //!   `descriptors: [{desc: String}]` array AND NO vendor-marker keys

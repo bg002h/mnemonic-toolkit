@@ -19,10 +19,11 @@ pub struct CompareCostArgs {
     #[arg(long, conflicts_with = "descriptor")]
     pub miniscript: Option<String>,
 
-    /// Full descriptor (wsh, sh(wsh(...))); the wrapper is stripped to recover
-    /// the inner miniscript M, then `wsh(M)` is compared against `tr(NUMS,{M})`.
-    /// Multi-leaf tr and single-leaf tr inputs are refused (the latter via a
-    /// future FOLLOWUP). Mutually exclusive with `--miniscript`.
+    /// Full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})`
+    /// (v0.28.0). The wrapper is stripped to recover the inner miniscript M
+    /// before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-
+    /// only `tr(IK)` inputs are refused with exit 3. Mutually exclusive with
+    /// `--miniscript`.
     #[arg(long)]
     pub descriptor: Option<String>,
 
