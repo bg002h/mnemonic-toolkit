@@ -65,16 +65,11 @@ fn p0c_format_sparrow_panics_unimplemented() {
     );
 }
 
-#[test]
-fn p0c_format_specter_panics_unimplemented() {
-    let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "specter"]).failure();
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("P2C") || stderr.contains("specter"),
-        "stderr should mention P2C or specter on unimplemented dispatch; got: {stderr}"
-    );
-}
+// v0.28.0 Phase P2C — `p0c_format_specter_panics_unimplemented` REMOVED
+// (Specter dispatch is now real). Coverage moves to
+// `tests/cli_import_wallet_specter.rs`. Per the P0C self-doc, per-parser
+// P{N}C sub-phases REPLACE these regression-guard cells with real happy-path
+// cells. This deletion is the matching half of the regression-cell promotion.
 
 #[test]
 fn p0c_format_coldcard_panics_unimplemented() {

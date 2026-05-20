@@ -75,10 +75,9 @@ pub(crate) struct SpecterParser;
 
 /// SPEC §11.2 — per-blob provenance metadata for a Specter-DIY parse.
 /// Carried on `ImportProvenance::Specter(...)`; preserved for `--json`
-/// envelope `source_metadata` emit (Phase P2C integration adds the envelope
-/// read; the `#[allow(dead_code)]` lifts at P2C).
+/// envelope `source_metadata` emit at `cmd/import_wallet.rs` Site 7
+/// (P2C wired).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // P2B: fields populated by parse impl; P2C wires envelope-emit reads.
 pub(crate) struct SpecterSourceMetadata {
     /// Top-level `label` (wallet display name).
     pub(crate) label: String,
@@ -101,7 +100,6 @@ pub(crate) struct SpecterSourceMetadata {
 /// - **String form** (older / toolkit-side emit): `"<vendor>"` — normalized to
 ///   `{device_type: <vendor>, label: ""}` during parse.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // P2B: fields populated by parse impl; P2C wires envelope-emit reads.
 pub(crate) struct SpecterDeviceMarker {
     /// Hardware-wallet type identifier (e.g., `"coldcard"`, `"trezor"`,
     /// `"ledger"`, `"unknown"`). Specter does not normalize the vendor

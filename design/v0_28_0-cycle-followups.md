@@ -27,7 +27,14 @@ Each entry:
 
 ## Open items (cycle-internal)
 
-(none yet)
+### `wallet-import-cross-format-symmetric-mismatch` — extend `--format <X>` mismatch checks to all N+1 cross-format pairs
+
+- **Surfaced:** 2026-05-19 during Phase P2C (specter dispatch wiring).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:246-263` — only the `Some("bsms")` ↔ `Some("bitcoin-core")` arms cross-check the SniffOutcome for mismatch. P2C added `Some("specter")` with arms that reject `SniffOutcome::{Bsms,BitcoinCore}` but the inverse — `Some("bsms")` rejecting `SniffOutcome::Specter`, `Some("bitcoin-core")` rejecting `SniffOutcome::Specter`, etc. — is NOT covered. Today the existing `tests/cli_import_wallet_bitcoin_core.rs:548` `specter_like` test runs `--format bitcoin-core` against a Specter-shaped blob and the Core parser fails with `ImportWalletParse` (exit 2). The user gets a less-precise error than the `ImportWalletFormatMismatch` they'd get if the symmetric mismatch fired earlier.
+- **What:** decide between (a) extend each `Some("<format>")` arm with an exhaustive sniff-outcome match rejecting all non-matching outcomes, or (b) introduce a generalized `check_format_mismatch(supplied, sniffed) -> Result<...>` helper consulted before the per-format arms. With 8 formats post-cycle, the matrix is 8×7=56 mismatch pairs (each direction); a generalized helper is preferable.
+- **Why deferred:** the plan-doc P{N}C row literally enumerates "Flip 8 dispatch sites" — not "extend symmetric N+1 mismatch coverage." Cross-format mismatch matrix work fits the Phase P11 (cross-format-conversion-matrix-expansion) scope rather than the per-parser P{N}C scope. The existing test still passes because Core parser produces a typed `ImportWalletParse` instead of the more-precise `ImportWalletFormatMismatch`; behavior is correct (just less specific).
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md.
+- **Tier:** v0.28+ (could land in Phase P11 of v0.28.0 if the matrix expansion adopts the generalized helper).
 
 ---
 
