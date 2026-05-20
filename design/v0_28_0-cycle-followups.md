@@ -36,6 +36,15 @@ Each entry:
 - **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as `sparrow-taproot-descriptor-passthrough-import-support`.
 - **Tier:** v0.29+.
 
+### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
+
+- **Surfaced:** 2026-05-19 during Phase P1C execution; Site 2 wiring discovery.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:246-254` (BSMS arm) + `:255-263` (BitcoinCore arm) + P1C's new `:279-293` (sparrow arm) — each format arm only mismatches against a SUBSET of competing sniffs.
+- **What:** v0.26.0 wired the BSMS ↔ BitcoinCore mutual-mismatch pair: `--format bsms` errors `ImportWalletFormatMismatch` when sniff says BitcoinCore (and vice versa). P1C's `--format sparrow` arm extends to mismatch against BSMS + BitcoinCore sniffs. But the REVERSE wires — `--format bsms` mismatching a Sparrow sniff, `--format bitcoin-core` mismatching a Sparrow sniff — are NOT wired (the BSMS/Core arms still only check against the v0.26.0 axis). Same N×N matrix gap will repeat for each per-parser flip (P2C-P6C). Recommend: each per-parser P{N}C extends the mismatch matrix symmetrically so EVERY `--format X` arm refuses EVERY other parser's positive sniff.
+- **Why deferred:** the inverse mismatch lands in a benign fallthrough (BSMS parser fails the Sparrow JSON blob with `ImportWalletParse` exit 2 rather than `ImportWalletFormatMismatch` exit 1) — same user-visible "this doesn't work" message, different exit code + stderr template. Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is end-of-cycle FOLLOWUP triage.
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md.
+- **Tier:** v0.28+ (fold incrementally as per-parser P{N}C lands).
+
 ### `sparrow-descriptor-with-checksum-verify-fixture` — dedicated checksum-verify fixture
 
 - **Surfaced:** 2026-05-19 during Phase P1B execution; plan-doc §S.1 fixture enumeration mentions "descriptor-with-checksum verify" as one of ~5 fixtures.

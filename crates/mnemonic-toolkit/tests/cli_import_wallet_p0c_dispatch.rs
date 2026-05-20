@@ -53,17 +53,11 @@ fn run_import(args: &[&str]) -> assert_cmd::assert::Assert {
 // `--format <new>` arms panic via unimplemented!()  (Site 2 in plan-doc §B.2 #6)
 // ============================================================================
 
-#[test]
-fn p0c_format_sparrow_panics_unimplemented() {
-    // Any blob — the panic is BEFORE blob inspection.
-    let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "sparrow"]).failure();
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("P1C") || stderr.contains("sparrow"),
-        "stderr should mention P1C or sparrow on unimplemented dispatch; got: {stderr}"
-    );
-}
+// v0.28.0 Phase P1C: `p0c_format_sparrow_panics_unimplemented` REMOVED —
+// the dispatch arm no longer panics; sparrow parse is live. Happy-path
+// integration coverage lives in `tests/cli_import_wallet_sparrow.rs` per
+// the P0C-cell-replacement-on-P{N}C-flip contract documented in this
+// file's header.
 
 #[test]
 fn p0c_format_specter_panics_unimplemented() {

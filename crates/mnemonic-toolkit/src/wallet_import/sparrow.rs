@@ -90,13 +90,10 @@ pub(crate) struct SparrowParser;
 ///   but not preserved in `ParsedImport`. Drives the per-blob NOTICE per
 ///   SPEC §2.4 (analogous to `CoreSourceMetadata.dropped_fields`).
 ///
-/// Fields are populated by `SparrowParser::parse` and the
-/// `sparrow_source_metadata()` accessor; the `--json` envelope emitter and
-/// human-readable summary consumer wires land in Phase P1C, at which point
-/// the `dead_code` allow can be removed. P1B unit tests cross-check field
-/// population.
+/// Fields populated by `SparrowParser::parse` and consumed by the
+/// `cmd::import_wallet::emit_json_envelope` `sparrow_source_metadata` field
+/// (Phase P1C wiring).
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct SparrowSourceMetadata {
     pub(crate) label: Option<String>,
     pub(crate) policy_type: SparrowPolicyType,
