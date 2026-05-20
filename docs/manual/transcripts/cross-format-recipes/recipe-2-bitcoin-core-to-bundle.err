@@ -1,0 +1,9 @@
+# === Wallet bundle: descriptor, mainnet ===
+# ms1: (omitted; watch-only)
+# mk1: 10df1
+# fingerprint: b8688df1
+# origin path: [b8688df1/84'/0'/0']
+# Template: descriptor
+# md1: 10df
+warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
+error: import-wallet: cosigner 0: supplied seed produces xpub xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V at path [b8688df1/84'/0'/0']; blob declares xpub6DXqiLUFV7U2oiL8mTooXSueF4FJBJjevVtc9Ate4WzmbGUxJMzKgg4MKjHgXaRXq7udH1oeD7kaae1PJsWaPYXQxobF5se8pNg5U9x1UKu

@@ -1,0 +1,7 @@
+{
+  "description_template": "wpkh(@0/**)",
+  "keys_info": [
+    "[b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
+  ],
+  "name": "imported-descriptor"
+}

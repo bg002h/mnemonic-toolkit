@@ -1,0 +1,22 @@
+[
+  {
+    "active": true,
+    "desc": "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/0/*)#tk4vnxy8",
+    "internal": false,
+    "range": [
+      0,
+      999
+    ],
+    "timestamp": "now"
+  },
+  {
+    "active": true,
+    "desc": "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/1/*)#6zsdwn5l",
+    "internal": true,
+    "range": [
+      0,
+      999
+    ],
+    "timestamp": "now"
+  }
+]
