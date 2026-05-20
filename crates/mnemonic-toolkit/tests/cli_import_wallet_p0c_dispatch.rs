@@ -116,13 +116,23 @@ fn p0c_format_jade_panics_unimplemented() {
 }
 
 #[test]
-fn p0c_format_electrum_panics_unimplemented() {
+fn p6c_format_electrum_no_longer_panics_unimplemented() {
+    // v0.28.0 P6C: --format electrum is fully wired. This cell is the
+    // P0C-→-P6C regression guard: BSMS blob against --format electrum now
+    // surfaces ImportWalletFormatMismatch (exit 1) rather than the prior
+    // unimplemented!() panic. Dedicated electrum coverage lives in
+    // `cli_import_wallet_electrum.rs`; this cell pins the pre-stub-removal
+    // contract so a future regression that restores the panic surfaces here.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P6C") || stderr.contains("electrum"),
-        "stderr should mention P6C or electrum on unimplemented dispatch; got: {stderr}"
+        !stderr.contains("not implemented") && !stderr.contains("unimplemented"),
+        "electrum dispatch must no longer panic via unimplemented!(); got: {stderr}"
+    );
+    assert!(
+        stderr.contains("electrum") && stderr.contains("bsms"),
+        "expected format-mismatch citing both supplied + sniffed; got: {stderr}"
     );
 }
 

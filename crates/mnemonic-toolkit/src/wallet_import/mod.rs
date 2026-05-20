@@ -69,16 +69,23 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
+    /// Electrum 4.x wallet-file parse (`wallet_import/electrum.rs`,
+    /// v0.28.0 Phase P6). Carries `seed_version`, `wallet_type` discriminator
+    /// (Standard / Multisig{k,n}), and dropped runtime-state field list.
+    /// Per SPEC §11.6 — alphabetically positioned between Bsms and (future)
+    /// other format variants.
+    Electrum(crate::wallet_import::electrum::ElectrumSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for the `BitcoinCore` variant.
+    /// excerpt shape or for the `BitcoinCore` / `Electrum` variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
+            Self::Electrum(_) => None,
         }
     }
 
@@ -87,6 +94,23 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
+            Self::Electrum(_) => None,
+        }
+    }
+
+    /// Accessor for the Electrum-specific provenance metadata. Returns
+    /// `Some(&metadata)` only for `Electrum(_)`, `None` otherwise. Used
+    /// by `cmd::import_wallet::emit_json_envelope` to populate the
+    /// `source_metadata` field with Electrum-specific fields
+    /// (seed_version, wallet_type, dropped_fields) for v0.28.0 envelope
+    /// downstream consumers.
+    pub(crate) fn electrum_metadata(
+        &self,
+    ) -> Option<&crate::wallet_import::electrum::ElectrumSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Electrum(meta) => Some(meta),
         }
     }
 }
@@ -333,6 +357,15 @@ mod provenance_tests {
         }
     }
 
+    fn sample_electrum_metadata() -> crate::wallet_import::electrum::ElectrumSourceMetadata {
+        crate::wallet_import::electrum::ElectrumSourceMetadata {
+            seed_version: 17,
+            wallet_type: crate::wallet_import::electrum::ElectrumWalletType::Standard,
+            wallet_name: None,
+            dropped_fields: Vec::new(),
+        }
+    }
+
     #[test]
     fn provenance_accessors_return_references_not_owned() {
         let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
@@ -388,6 +421,36 @@ mod provenance_tests {
         assert!(
             bsms_none.source_metadata().is_none(),
             "Bsms(None) → source_metadata None"
+        );
+
+        // v0.28.0 P6C addition: Electrum variant covered for matrix
+        // completeness. The new `electrum_metadata()` accessor returns
+        // `Some(&meta)` only for `Electrum(_)`, `None` for the other
+        // variants — exhaustively pinned below.
+        let electrum = ImportProvenance::Electrum(sample_electrum_metadata());
+        assert!(electrum.bsms_audit().is_none(), "Electrum → bsms_audit None");
+        assert!(
+            electrum.source_metadata().is_none(),
+            "Electrum → source_metadata None"
+        );
+        assert!(
+            electrum.electrum_metadata().is_some(),
+            "Electrum → electrum_metadata Some"
+        );
+
+        // Cross-variant: the new `electrum_metadata()` accessor returns None
+        // for non-Electrum variants.
+        assert!(
+            core.electrum_metadata().is_none(),
+            "BitcoinCore → electrum_metadata None"
+        );
+        assert!(
+            bsms_some.electrum_metadata().is_none(),
+            "Bsms(Some) → electrum_metadata None"
+        );
+        assert!(
+            bsms_none.electrum_metadata().is_none(),
+            "Bsms(None) → electrum_metadata None"
         );
     }
 }

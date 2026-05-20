@@ -59,12 +59,9 @@ pub(crate) struct ElectrumParser;
 /// dropped_fields) preserved for the `--json` envelope's `source_metadata`
 /// surface (parallel to v0.26.0's `CoreSourceMetadata`).
 ///
-/// `#[allow(dead_code)]` is the P6A→P6B handoff window: the struct is
-/// declared here so Phase P6B's parse body can populate it, and Phase P6C
-/// can wire it into `ImportProvenance::Electrum(...)`. Until then no caller
-/// constructs it. Tests at the bottom of this module exercise the
-/// constructor + field-access surfaces so the contract is pinned.
-#[allow(dead_code)]
+/// Wired into `ImportProvenance::Electrum(_)` at v0.28.0 Phase P6C;
+/// consumed by `cmd::import_wallet::emit_json_envelope`'s
+/// `source_metadata` block for envelope downstream consumers.
 #[derive(Debug, Clone)]
 pub(crate) struct ElectrumSourceMetadata {
     /// `seed_version` integer from the top-level Electrum wallet object.
@@ -101,10 +98,6 @@ pub(crate) struct ElectrumSourceMetadata {
 /// Refused wallet-type variants (`"2fa"` / `"imported"`) do not reach this
 /// enum — they error out at parse-time via SPEC §11.6.1 refusal templates
 /// before a provenance is constructed.
-///
-/// `#[allow(dead_code)]` is the P6A→P6B handoff window — see
-/// `ElectrumSourceMetadata`'s doc-comment for the same rationale.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ElectrumWalletType {
     /// `wallet_type: "standard"` — singlesig wallet (single `keystore` field
@@ -346,17 +339,18 @@ impl WalletFormatParser for ElectrumParser {
 
         validate_watch_only_resolved(&cosigners)?;
 
-        // v0.28.0 P6B → P6C handoff: ImportProvenance currently has no
-        // `Electrum(ElectrumSourceMetadata)` variant — P6C adds it
-        // alphabetically (Bsms < Electrum). P6B emits a `Bsms(None)`
-        // placeholder so the parse pipeline compiles + integration cells
-        // can exercise the descriptor / cosigner / network / threshold
-        // surface end-to-end. P6C swaps the placeholder for the real
-        // variant + populates `ElectrumSourceMetadata` from
-        // `(seed_version, wt_enum, dropped_fields, wallet_name=None)`.
-        // The fields are captured via let-bindings above so the diff at
-        // P6C is a single-arm replacement (no plumbing additions).
-        let _placeholder_provenance_inputs = (seed_version, &wt_enum, &dropped_fields);
+        // v0.28.0 P6C: ImportProvenance::Electrum(ElectrumSourceMetadata) is
+        // now wired (was Bsms(None) placeholder under P6B). Per SPEC §11.6
+        // Provenance section; populated from the per-blob fields captured
+        // above (seed_version, wt_enum, dropped_fields, wallet_name=None
+        // since Electrum's wallet file does not carry a top-level
+        // wallet_name field).
+        let provenance = ImportProvenance::Electrum(ElectrumSourceMetadata {
+            seed_version,
+            wallet_type: wt_enum,
+            wallet_name: None,
+            dropped_fields,
+        });
 
         Ok(vec![ParsedImport {
             descriptor,
@@ -364,7 +358,7 @@ impl WalletFormatParser for ElectrumParser {
             cosigners,
             network,
             threshold,
-            provenance: ImportProvenance::Bsms(None),
+            provenance,
         }])
     }
 }
