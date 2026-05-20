@@ -56,6 +56,7 @@ use crate::wallet_import::{
     apply_select_descriptor,
     bitcoin_core::BitcoinCoreParser,
     bsms::BsmsParser,
+    coldcard_multisig::ColdcardMultisigParser,
     overlay::apply_seed_overlay,
     // v0.28.0 Phase P0C — 6 new canonicalize skeletons imported alphabetically;
     // bodies are `Err(BadInput("not yet implemented"))` stubs in
@@ -272,7 +273,28 @@ pub fn run<R: Read, W: Write, E: Write>(
         // belt-and-suspenders guard).
         Some("coldcard") => unimplemented!("P3C: format coldcard not yet wired"),
         Some("coldcard-multisig") => {
-            unimplemented!("P4C: format coldcard-multisig not yet wired")
+            // SPEC §6.1 format-mismatch check: explicit `--format coldcard-multisig`
+            // against a blob that sniff identified as a different format → reject
+            // with `ImportWalletFormatMismatch` (exit 1). Same shape as
+            // BSMS/Bitcoin Core upper arms. Only reject when sniff strongly
+            // pinned a DIFFERENT format; `Ambiguous` and `NoMatch` are tolerated
+            // (the user opted in to coldcard-multisig explicitly).
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "coldcard-multisig"
         }
         Some("electrum") => unimplemented!("P6C: format electrum not yet wired"),
         Some("jade") => unimplemented!("P5C: format jade not yet wired"),
@@ -294,6 +316,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             // post-cycle 8-format list per plan-doc Site 3 directive.
             SniffOutcome::Bsms => "bsms",
             SniffOutcome::BitcoinCore => "bitcoin-core",
+            // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
+            SniffOutcome::ColdcardMultisig => "coldcard-multisig",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \
@@ -359,7 +383,7 @@ electrum|jade|sparrow|specter>"
         "bsms" => BsmsParser::parse(&blob, stderr)?,
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
         "coldcard" => unimplemented!("P3C: parse not yet wired"),
-        "coldcard-multisig" => unimplemented!("P4C: parse not yet wired"),
+        "coldcard-multisig" => ColdcardMultisigParser::parse(&blob, stderr)?,
         "electrum" => unimplemented!("P6C: parse not yet wired"),
         "jade" => unimplemented!("P5C: parse not yet wired"),
         "sparrow" => unimplemented!("P1C: parse not yet wired"),
@@ -693,7 +717,38 @@ fn emit_json_envelope<W: Write, E: Write>(
             // earlier on `--format <new>`, and auto-sniff can't yield a new
             // format until per-parser P{N}A wires the SniffOutcome variant).
             "coldcard" => json!({}),
-            "coldcard-multisig" => json!({}),
+            // v0.28.0 Phase P4C — coldcard-multisig round-trip envelope mirrors
+            // the bitcoin-core shape: canonicalize is real (SPEC §11.4
+            // semantic round-trip via `parse_text` + re-emit in canonical
+            // shared-derivation shape). `byte_exact` compares input bytes to
+            // canonical output; `semantic_match=true` always since a
+            // successful canonicalize implies the parse + re-emit cycle
+            // succeeded.
+            "coldcard-multisig" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
             "electrum" => json!({}),
             "jade" => json!({}),
             "sparrow" => json!({}),
