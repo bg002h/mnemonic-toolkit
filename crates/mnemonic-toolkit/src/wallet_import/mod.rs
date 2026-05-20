@@ -121,10 +121,7 @@ impl ImportProvenance {
 
     /// Sparrow-specific accessor: returns `Some(&metadata)` only for the
     /// `Sparrow` variant. Consumed by the `--json` envelope emitter in
-    /// `cmd::import_wallet::emit_json_envelope` (P1C wiring); exposed at
-    /// P1B so the variant payload is reachable (Rust dead-code analysis
-    /// otherwise flags the tuple field).
-    #[allow(dead_code)]
+    /// `cmd::import_wallet::emit_json_envelope` (P1C wiring).
     pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,

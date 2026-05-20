@@ -27,6 +27,15 @@ Each entry:
 
 ## Open items (cycle-internal)
 
+### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
+
+- **Surfaced:** 2026-05-19 during Phase P1C-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); Site 2 wiring discovery.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (each `Some("X")` arm at Site 2: BSMS arm checks only BitcoinCore sniff; BitcoinCore arm checks only BSMS sniff; ColdcardMultisig arm checks BSMS + BitcoinCore; Sparrow arm now checks BSMS + BitcoinCore + ColdcardMultisig).
+- **What:** v0.26.0 wired the BSMS ↔ BitcoinCore mutual-mismatch pair. v0.28.0 P1C extends Sparrow's mismatch coverage to BSMS + BitcoinCore + ColdcardMultisig, BUT the inverse wires — `--format bsms` mismatching a Sparrow sniff, `--format bitcoin-core` mismatching a Sparrow sniff, `--format coldcard-multisig` mismatching a Sparrow sniff — are NOT wired (the existing arms still only check against their pre-Sparrow sniff axes). Same N×N matrix gap will repeat for each per-parser flip (P2C-P6C, P7C). Recommend: each per-parser P{N}C extends the mismatch matrix symmetrically so EVERY `--format X` arm refuses EVERY other parser's positive sniff.
+- **Why deferred:** the inverse mismatch lands in a benign fallthrough (the parser fails the alien blob shape with `ImportWalletParse` exit 2 rather than `ImportWalletFormatMismatch` exit 1) — same user-visible "this doesn't work" message, different exit code + stderr template. Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is end-of-cycle FOLLOWUP triage.
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md.
+- **Tier:** v0.28+ (fold incrementally as per-parser P{N}C lands).
+
 ### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import support
 
 - **Surfaced:** 2026-05-19 during Phase P1B-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); SPEC §11.1 implementation discovery.

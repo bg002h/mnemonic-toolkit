@@ -92,13 +92,8 @@ pub(crate) struct SparrowParser;
 ///
 /// Fields populated by `SparrowParser::parse` (P1B) and consumed by the
 /// `cmd::import_wallet::emit_json_envelope` `sparrow_source_metadata` field
-/// (P1C wiring). `#[allow(dead_code)]` covers the P1B → P1C interim:
-/// P1B constructs the struct via `SparrowParser::parse`, but no production
-/// code reads the fields yet — P1C wires the JSON envelope. Tests at
-/// `wallet_import::sparrow::tests` cover the per-field reads via
-/// `let ImportProvenance::Sparrow(meta) = ...` pattern.
+/// (P1C wiring).
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct SparrowSourceMetadata {
     pub(crate) label: Option<String>,
     pub(crate) policy_type: SparrowPolicyType,
