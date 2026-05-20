@@ -66,13 +66,21 @@ impl WalletFormatEmitter for BsmsEmitter {
         // purpose values. BIP-386 (taproot) is not in the list. Refuse
         // before any descriptor parse so the failure points at the format
         // mismatch (more helpful than a downstream miniscript parse error).
+        //
+        // v0.28.0 P8A/P8B (plan-doc §S.8): the refusal carries a
+        // `ToolkitError::BsmsTaprootRefused { script_type }` payload so the
+        // per-script-type discriminator (P2tr vs P2trMulti) surfaces in stderr,
+        // along with a BIP-386 status note + FOLLOWUP slug pointer for
+        // upstream-watch + alternative-format hints. Real taproot emit
+        // remains upstream-blocked on BIP-129 §1 adding BIP-386; tracked at
+        // FOLLOWUP `bsms-taproot-emit`.
         if matches!(
             inputs.script_type,
             WalletScriptType::P2tr | WalletScriptType::P2trMulti
         ) {
-            return Err(ToolkitError::BadInput(
-                "--format bsms does not support taproot descriptors; BIP-129 §1 prerequisites pre-date BIP-386. Use --format bitcoin-core or --format sparrow for taproot watch-only setup.".into(),
-            ));
+            return Err(ToolkitError::BsmsTaprootRefused {
+                script_type: inputs.script_type,
+            });
         }
 
         // Lines 1 + 2 are shared between the 2-line and 4-line shapes. Line 2
@@ -171,6 +179,29 @@ fn extract_key_suffix(key_str: &str) -> Option<String> {
     Some(after_origin[suffix_start..].to_string())
 }
 
+/// v0.28.0 P8A (plan-doc §S.8) — short-name discriminator for
+/// `WalletScriptType::P2tr` / `P2trMulti` used by the BSMS taproot refusal
+/// message. Returns:
+/// - `"P2tr"` for `WalletScriptType::P2tr` (taproot singlesig — bip86 / `tr(K)`).
+/// - `"P2trMulti"` for `WalletScriptType::P2trMulti` (taproot multisig —
+///   `tr(IK, multi_a(...))` / `tr(IK, sortedmulti_a(...))`).
+///
+/// Panics on any other variant — callers must gate the call on a
+/// `matches!(inputs.script_type, P2tr | P2trMulti)` predicate (`emit()` does
+/// this above). The panic is the load-bearing invariant the caller gate
+/// preserves; renaming/removing either taproot variant would be a downstream
+/// compiler error that surfaces this contract loudly.
+pub(crate) fn script_type_short_name(st: &WalletScriptType) -> &'static str {
+    match st {
+        WalletScriptType::P2tr => "P2tr",
+        WalletScriptType::P2trMulti => "P2trMulti",
+        other => panic!(
+            "script_type_short_name called with non-taproot variant {other:?}; \
+             callers must gate on matches!(_, P2tr | P2trMulti)"
+        ),
+    }
+}
+
 /// Map the toolkit's `CliNetwork` to `bitcoin::Network` for the
 /// `derive_address` helper. Mirrors the conversion `network.network_kind()`
 /// pattern used by per-format emitters (e.g., coldcard.rs:173) but resolves
@@ -182,5 +213,39 @@ fn network_to_bitcoin(network: CliNetwork) -> bitcoin::Network {
         CliNetwork::Testnet => bitcoin::Network::Testnet,
         CliNetwork::Signet => bitcoin::Network::Signet,
         CliNetwork::Regtest => bitcoin::Network::Regtest,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// v0.28.0 P8A (plan-doc §S.8) — pin the two valid `script_type_short_name`
+    /// returns. Discriminator strings appear verbatim in the v0.28.0
+    /// `BsmsTaprootRefused` user-facing message; renaming either silently
+    /// would break the corresponding stderr-assertion cells in
+    /// `tests/cli_export_wallet_bsms.rs`. Pinning here gives a closer-to-the-
+    /// source regression guard.
+    #[test]
+    fn script_type_short_name_p2tr() {
+        assert_eq!(script_type_short_name(&WalletScriptType::P2tr), "P2tr");
+    }
+
+    #[test]
+    fn script_type_short_name_p2tr_multi() {
+        assert_eq!(
+            script_type_short_name(&WalletScriptType::P2trMulti),
+            "P2trMulti"
+        );
+    }
+
+    /// Non-taproot variant must panic — preserves the caller-gate contract
+    /// documented on the helper. If a future refactor accidentally widens
+    /// the caller surface beyond the `matches!(_, P2tr | P2trMulti)` predicate
+    /// in `emit()`, this cell fires loudly.
+    #[test]
+    #[should_panic(expected = "non-taproot variant")]
+    fn script_type_short_name_panics_on_non_taproot() {
+        let _ = script_type_short_name(&WalletScriptType::P2wshMulti);
     }
 }

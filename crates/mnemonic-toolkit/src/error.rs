@@ -264,6 +264,21 @@ pub enum ToolkitError {
         signer_pubkey: String,
         reason: String,
     },
+    /// v0.28.0 P8B (plan-doc §S.8) — `mnemonic export-wallet --format bsms`
+    /// refused because the requested template / descriptor resolves to a
+    /// taproot script-type (`P2tr` / `P2trMulti`). BIP-129 §1 prerequisites
+    /// pre-date BIP-386 — there is no published canonicalization for taproot
+    /// descriptors in the BSMS Round-2 wire shape. The carried `script_type`
+    /// drives the per-script-type discriminator in the rendered message
+    /// (P2tr → singlesig hint; P2trMulti → multisig hint). Real emit is
+    /// tracked at FOLLOWUP `bsms-taproot-emit` (upstream-blocked).
+    ///
+    /// Exit 2 (parse / refusal class) — same routing as the prior
+    /// `ToolkitError::BadInput` text this variant replaces at
+    /// `wallet_export/bsms.rs:emit`.
+    BsmsTaprootRefused {
+        script_type: crate::wallet_export::WalletScriptType,
+    },
 }
 
 /// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
@@ -452,6 +467,10 @@ impl ToolkitError {
             // SignatureMismatch — caller controls the strictness gate).
             ToolkitError::BsmsRound1Malformed { .. }
             | ToolkitError::BsmsSignatureMismatch { .. } => 2,
+            // v0.28.0 P8B — BSMS taproot refusal at export-wallet. Exit 2
+            // (parse / refusal class) matches the prior `ToolkitError::BadInput`
+            // text this variant replaces at `wallet_export/bsms.rs:emit`.
+            ToolkitError::BsmsTaprootRefused { .. } => 2,
         }
     }
 
@@ -504,6 +523,7 @@ impl ToolkitError {
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
             ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
             ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
+            ToolkitError::BsmsTaprootRefused { .. } => "BsmsTaprootRefused",
         }
     }
 
@@ -653,6 +673,22 @@ impl ToolkitError {
             } => format!(
                 "import-wallet: --bsms-round1: BIP-129 signature verification failed for \
                  record {record_index} (signer pubkey {signer_pubkey}): {reason}"
+            ),
+            // v0.28.0 P8B (plan-doc §S.8) — tightened BSMS taproot refusal.
+            // Replaces the v0.27.0 `ToolkitError::BadInput("--format bsms does
+            // not support taproot descriptors; ...")` text. The per-script-type
+            // discriminator (P2tr / P2trMulti) lets users see which template
+            // class their input resolved to; the FOLLOWUP slug pointer
+            // (`bsms-taproot-emit`) lets users tracking upstream BIP-129 work
+            // grep the toolkit's tracker quickly; the alternative-format
+            // pointers ({bitcoin-core, sparrow}) match the prior text's hints.
+            ToolkitError::BsmsTaprootRefused { script_type } => format!(
+                "--format bsms does not support taproot ({}); BIP-129 §1 prerequisites \
+                 do not yet include BIP-386. Real emit support is tracked at FOLLOWUP \
+                 `bsms-taproot-emit` and depends on a BIP-129 spec update. Use \
+                 --format bitcoin-core (Core-importable) or --format sparrow \
+                 (Sparrow JSON, taproot-capable) for taproot watch-only setup.",
+                crate::wallet_export::script_type_short_name(script_type)
             ),
         }
     }
@@ -980,6 +1016,67 @@ mod tests {
             "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys"
         );
         assert!(v.details().is_none());
+    }
+
+    /// v0.28.0 P8B (plan-doc §S.8) — pin `BsmsTaprootRefused`'s tri-arm
+    /// behavior: exit_code = 2 (parse/refusal class — same as the
+    /// `BadInput` text it replaces); kind = `"BsmsTaprootRefused"`; message
+    /// carries the per-script-type discriminator + BIP-386 status note +
+    /// FOLLOWUP slug pointer + alternative-format pointers.
+    ///
+    /// Two cells (P2tr + P2trMulti) verify the message format-arg
+    /// substitution distinguishes singlesig (`bip86`/`tr(K)`) from multisig
+    /// (`tr-multi-a` / `tr-sortedmulti-a`).
+    #[test]
+    fn bsms_taproot_refused_variant_p2tr_singlesig() {
+        let e = ToolkitError::BsmsTaprootRefused {
+            script_type: crate::wallet_export::WalletScriptType::P2tr,
+        };
+        assert_eq!(e.exit_code(), 2);
+        assert_eq!(e.kind(), "BsmsTaprootRefused");
+        assert!(e.details().is_none());
+        let msg = e.message();
+        assert!(
+            msg.contains("--format bsms does not support taproot (P2tr)"),
+            "P2tr message must include the P2tr discriminator; got:\n{msg}"
+        );
+        assert!(
+            !msg.contains("P2trMulti"),
+            "P2tr message must NOT include the multisig discriminator; got:\n{msg}"
+        );
+        assert!(
+            msg.contains("BIP-129 §1 prerequisites do not yet include BIP-386"),
+            "message must cite BIP-386 prerequisite gap; got:\n{msg}"
+        );
+        assert!(
+            msg.contains("`bsms-taproot-emit`"),
+            "message must point at FOLLOWUP slug; got:\n{msg}"
+        );
+        assert!(
+            msg.contains("--format bitcoin-core") && msg.contains("--format sparrow"),
+            "message must list both alternative formats; got:\n{msg}"
+        );
+    }
+
+    #[test]
+    fn bsms_taproot_refused_variant_p2tr_multisig() {
+        let e = ToolkitError::BsmsTaprootRefused {
+            script_type: crate::wallet_export::WalletScriptType::P2trMulti,
+        };
+        assert_eq!(e.exit_code(), 2);
+        assert_eq!(e.kind(), "BsmsTaprootRefused");
+        let msg = e.message();
+        assert!(
+            msg.contains("--format bsms does not support taproot (P2trMulti)"),
+            "P2trMulti message must include the P2trMulti discriminator; got:\n{msg}"
+        );
+        // Substring discipline: `(P2tr)` alone would falsely match
+        // `(P2trMulti)` — assert the non-multisig token does NOT appear by
+        // bracketing the suffix character to disambiguate from the prefix.
+        assert!(
+            !msg.contains("(P2tr)"),
+            "P2trMulti message must NOT include the bare-P2tr token; got:\n{msg}"
+        );
     }
 
     #[test]
