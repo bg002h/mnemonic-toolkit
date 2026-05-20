@@ -524,12 +524,63 @@ fn is_canonical_cosigner_key(k: &str, n: usize) -> bool {
     parsed >= 1 && parsed <= n
 }
 
-/// SPEC §11.5 — canonicalize a Jade multisig-file JSON wrapper.
-/// Body lands in Phase P5B.
-pub(crate) fn canonicalize_jade(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_jade: not yet implemented; jade ingest lands in Phase P5B".into(),
-    ))
+/// SPEC §11.5 — canonicalize a Blockstream Jade `get_registered_multisig`
+/// reply JSON for semantic round-trip comparison.
+///
+/// Strategy:
+/// 1. JSON-parse + top-level object check.
+/// 2. Extract `multisig_file` (required) + `multisig_name` (optional,
+///    canonical-shape field).
+/// 3. Run the inner `multisig_file` text through
+///    `canonicalize_coldcard_multisig` (SPEC §11.4 canonical form).
+/// 4. Re-emit as BTreeMap (alphabetical key ordering) with:
+///    - `multisig_file` → the canonicalized Coldcard-multisig text.
+///    - `multisig_name` → preserved verbatim if present.
+///    - `id` field is DROPPED (Jade-side request-id, ephemeral; not
+///      load-bearing for the wallet identity per SPEC §11.5).
+///
+/// The canonicalization is **semantic, not byte-exact**: two Jade blobs
+/// that wrap the same multisig wallet (regardless of `id` differences,
+/// JSON key ordering, or inner Coldcard-multisig firmware-variance) shall
+/// canonicalize to the same string.
+pub(crate) fn canonicalize_jade(blob: &[u8]) -> Result<String, ToolkitError> {
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_jade: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_jade: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    let multisig_file = obj
+        .get("multisig_file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_jade: missing or non-string top-level `multisig_file`".to_string(),
+            )
+        })?;
+
+    // Inner Coldcard-multisig text → canonical Coldcard-multisig form.
+    let inner_canonical = canonicalize_coldcard_multisig(multisig_file.as_bytes())?;
+
+    let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
+    canonical.insert(
+        "multisig_file".to_string(),
+        Value::String(inner_canonical),
+    );
+    // Preserve `multisig_name` verbatim if present (canonical-shape field
+    // per SPEC §11.5). Drop `id` (request-id, ephemeral).
+    if let Some(name) = obj.get("multisig_name") {
+        canonical.insert("multisig_name".to_string(), name.clone());
+    }
+
+    let mut text = serde_json::to_string_pretty(&canonical).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_jade: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 /// SPEC §11.1 — canonicalize a Sparrow wallet JSON blob for semantic
@@ -1667,17 +1718,95 @@ B7F7DFEA: {xpub_c}\n"
         assert!(canon.ends_with('\n'), "canonical form must end with trailing newline");
     }
 
+    // ========================================================================
+    // canonicalize_jade (P5B): real body cells. The pre-P5B skeleton-shape
+    // test (`canonicalize_jade_skeleton_returns_not_yet_implemented`) is
+    // replaced by the cells below — the body now (a) extracts `multisig_file`,
+    // (b) runs the inner Coldcard-multisig text through
+    // `canonicalize_coldcard_multisig`, (c) re-emits as alphabetical-key
+    // BTreeMap-backed JSON with `id` dropped (ephemeral request-id per SPEC
+    // §11.5) + `multisig_name` preserved.
+    // ========================================================================
+
     #[test]
-    fn canonicalize_jade_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_jade(b"any blob").unwrap_err();
+    fn canonicalize_jade_invalid_json_returns_parse_error() {
+        let err = canonicalize_jade(b"{not json").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P5B"), "msg must cite Phase P5B; got: {msg}");
+            ToolkitError::ImportWalletParse(msg) => {
                 assert!(msg.contains("jade"), "msg must cite format; got: {msg}");
+                assert!(msg.contains("invalid JSON"), "msg must cite JSON shape; got: {msg}");
             }
-            other => panic!("expected BadInput, got: {other:?}"),
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn canonicalize_jade_missing_multisig_file_returns_parse_error() {
+        let src = br#"{"id":"x","multisig_name":"y"}"#;
+        let err = canonicalize_jade(src).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(
+                    msg.contains("multisig_file"),
+                    "msg must cite missing field; got: {msg}"
+                );
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_jade_drops_id_preserves_multisig_name() {
+        let inner = "\
+Name: TestMs2of3
+Policy: 2 of 3
+Derivation: m/48'/0'/0'/2'
+Format: P2WSH
+XFP: 34A3A4F1
+
+34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx
+";
+        let src = serde_json::to_string(&serde_json::json!({
+            "id": "ephemeral-request-id",
+            "multisig_name": "TestMs2of3",
+            "multisig_file": inner,
+        }))
+        .unwrap();
+        let canon = canonicalize_jade(src.as_bytes()).unwrap();
+        // `id` MUST be dropped (ephemeral per SPEC §11.5).
+        assert!(
+            !canon.contains("ephemeral-request-id"),
+            "canonical form must drop id; got: {canon}"
+        );
+        // `multisig_name` MUST be preserved (canonical-shape field).
+        assert!(
+            canon.contains("TestMs2of3"),
+            "canonical form must preserve multisig_name; got: {canon}"
+        );
+        // Trailing newline.
+        assert!(canon.ends_with('\n'));
+    }
+
+    #[test]
+    fn canonicalize_jade_ends_with_trailing_newline() {
+        // Minimal valid blob.
+        let inner = "\
+Name: Min
+Policy: 2 of 2
+Derivation: m/48'/0'/0'/2'
+Format: P2WSH
+
+34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+";
+        let src = serde_json::to_string(&serde_json::json!({
+            "multisig_file": inner,
+        }))
+        .unwrap();
+        let canon = canonicalize_jade(src.as_bytes()).unwrap();
+        assert!(canon.ends_with('\n'));
     }
 
     // ========================================================================
@@ -1760,29 +1889,28 @@ B7F7DFEA: {xpub_c}\n"
     }
 
     #[test]
-    fn skeleton_canonicalize_helpers_accept_empty_blob() {
-        // Empty blob is a degenerate input; remaining skeletons must still
-        // return the BadInput("not yet implemented") shape (not panic, not
-        // Ok, not a different error class). This pins the "shape-only"
-        // contract.
-        //
-        // Note: `coldcard`, `coldcard-multisig`, `electrum`, `sparrow`,
-        // `specter` are OMITTED from this list — their canonicalize bodies
-        // are no longer skeletons (P3B, P4B, P6B, P1B, P2B respectively).
-        // Other format skeletons stay on this list until their per-parser
-        // P{N}B phase.
-        //
-        // With only Jade remaining as a skeleton at v0.28.0 Phase P6C, this
-        // loop iterates a single element — preserved as a `for` shape (not
-        // collapsed to a direct call) so the per-format roll-call discipline
-        // is mechanical when P5B lands.
-        #[allow(clippy::single_element_loop)]
+    fn empty_blob_canonicalize_helpers_return_parse_error() {
+        // v0.28.0 Phase P5B: with `canonicalize_jade` now real (the LAST
+        // skeleton in the family), ALL 8 canonicalize helpers carry real
+        // bodies. The empty-blob contract is now uniform: every helper
+        // returns `Err(ToolkitError::ImportWalletParse(...))` (NOT
+        // `BadInput("not yet implemented")`), since empty input is
+        // semantically a parse error in every format. This cell pins the
+        // post-P5B contract — the pre-P5B `skeleton_canonicalize_helpers_
+        // accept_empty_blob` skeleton-shape test is replaced.
         for (name, result) in [
+            ("bsms", canonicalize_bsms(b"")),
+            ("bitcoin-core", canonicalize_bitcoin_core(b"")),
+            ("coldcard", canonicalize_coldcard(b"")),
+            ("coldcard-multisig", canonicalize_coldcard_multisig(b"")),
+            ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
+            ("sparrow", canonicalize_sparrow(b"")),
+            ("specter", canonicalize_specter(b"")),
         ] {
             assert!(
-                matches!(result, Err(ToolkitError::BadInput(ref m)) if m.contains("not yet implemented")),
-                "{name} skeleton must return BadInput(not yet implemented) on empty blob; got: {result:?}"
+                result.is_err(),
+                "{name} canonicalize must error on empty blob; got: {result:?}"
             );
         }
     }

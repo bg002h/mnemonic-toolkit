@@ -41,7 +41,10 @@
 //! `jade_specific_fields: Vec<String>` (currently empty; reserved for
 //! SeedQR variant when the FOLLOWUP lands).
 
-use super::{coldcard_multisig::ColdcardMultisigSourceMetadata, ParsedImport, WalletFormatParser};
+use super::{
+    coldcard_multisig::{parse_text as parse_coldcard_multisig_text, ColdcardMultisigSourceMetadata},
+    ImportProvenance, ParsedImport, WalletFormatParser,
+};
 use crate::error::ToolkitError;
 use serde_json::Value;
 use std::io::Write;
@@ -95,12 +98,58 @@ impl WalletFormatParser for JadeParser {
         }
     }
 
-    fn parse(_blob: &[u8], _stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError> {
-        // P5A skeleton: parse-side body lands at P5B (delegate to
-        // `coldcard_multisig::parse_text` + re-annotate provenance).
-        Err(ToolkitError::BadInput(
-            "P5B: jade parse not yet wired".into(),
-        ))
+    fn parse(blob: &[u8], stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError> {
+        // SPEC §11.5 parse: extract `multisig_file` string; delegate to
+        // `coldcard_multisig::parse_text` (SPEC §11.4 parser); re-annotate
+        // the returned `ParsedImport.provenance` from `ColdcardMultisig`
+        // to `Jade`. The delegation preserves SPEC §11.4.1 5-row XFP
+        // truth-table semantics byte-identical — the Jade wrapper carries
+        // no extra parse semantics beyond the multisig text.
+        let value: Value = serde_json::from_slice(blob).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: jade: parse error: top-level blob is not valid JSON: {e}"
+            ))
+        })?;
+        let obj = value.as_object().ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: jade: parse error: top-level JSON value is not an object"
+                    .to_string(),
+            )
+        })?;
+        let multisig_file = obj
+            .get("multisig_file")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(
+                    "import-wallet: jade: parse error: missing or non-string top-level \
+                     `multisig_file` field"
+                        .to_string(),
+                )
+            })?;
+
+        // Delegate to Coldcard multisig text parser (SPEC §11.4).
+        let mut parsed = parse_coldcard_multisig_text(multisig_file.as_bytes(), stderr)?;
+
+        // Re-annotate provenance: ColdcardMultisig → Jade wrapper.
+        let coldcard_compat = match parsed.provenance {
+            ImportProvenance::ColdcardMultisig(meta) => meta,
+            _ => {
+                // Defensive: parse_coldcard_multisig_text only ever returns
+                // ColdcardMultisig provenance. If this ever changes the
+                // explicit error here is preferable to a silent mismatch.
+                return Err(ToolkitError::ImportWalletParse(
+                    "import-wallet: jade: internal: delegated parser returned \
+                     non-ColdcardMultisig provenance"
+                        .to_string(),
+                ));
+            }
+        };
+        parsed.provenance = ImportProvenance::Jade(JadeSourceMetadata {
+            coldcard_compat,
+            jade_specific_fields: Vec::new(),
+        });
+
+        Ok(vec![parsed])
     }
 }
 
@@ -203,5 +252,140 @@ B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ
         // BSMS 2-line shape (text, not JSON) → sniff-negative.
         let blob = b"BSMS 1.0\nwpkh([deadbeef/84'/0'/0']xpub6...)\n";
         assert!(!JadeParser::sniff(blob));
+    }
+
+    // ========================================================================
+    // P5B parse cells
+    // ========================================================================
+
+    #[test]
+    fn parse_jade_wrapper_2of3_happy_path() {
+        let blob = jade_wrapper_2of3();
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = JadeParser::parse(blob.as_bytes(), &mut stderr).expect("parse must succeed");
+        assert_eq!(parsed.len(), 1, "Jade emits exactly one ParsedImport");
+        let p = &parsed[0];
+        assert_eq!(p.cosigners.len(), 3);
+        assert_eq!(p.threshold, Some(2));
+        // Provenance: Jade (NOT ColdcardMultisig — the re-annotation
+        // is the load-bearing distinction per SPEC §11.5).
+        assert!(
+            matches!(p.provenance, ImportProvenance::Jade(_)),
+            "provenance must be Jade after delegation"
+        );
+        // The delegated ColdcardMultisig metadata is preserved inside.
+        if let ImportProvenance::Jade(meta) = &p.provenance {
+            assert_eq!(meta.coldcard_compat.name, "TestMs2of3");
+            assert_eq!(meta.coldcard_compat.policy.k, 2);
+            assert_eq!(meta.coldcard_compat.policy.n, 3);
+            // jade_specific_fields is empty at v0.28.0 (SeedQR deferred per
+            // Q1 lock).
+            assert!(meta.jade_specific_fields.is_empty());
+        }
+    }
+
+    #[test]
+    fn parse_rejects_missing_multisig_file_field() {
+        let blob = br#"{"id":"x","multisig_name":"y"}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = JadeParser::parse(blob, &mut stderr).expect_err("parse must fail");
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("jade") && err_str.contains("multisig_file"),
+            "error must cite jade format + missing field; got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_malformed_json() {
+        let blob = b"{not-valid-json";
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = JadeParser::parse(blob, &mut stderr).expect_err("parse must fail");
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("jade") && err_str.contains("not valid JSON"),
+            "error must cite jade format + JSON validity; got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_inner_text_missing_format_header() {
+        // Inner text lacks the `Format:` header → delegated parser surfaces
+        // a ColdcardMultisig error (we do not re-wrap or relabel; the user
+        // sees the underlying SPEC §11.4 diagnostic).
+        let inner = "Name: x\nPolicy: 2 of 3\nDerivation: m/48'/0'/0'/2'\n\nABCDEF01: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX\n";
+        let blob = serde_json::to_string(&serde_json::json!({
+            "multisig_file": inner,
+        }))
+        .unwrap();
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = JadeParser::parse(blob.as_bytes(), &mut stderr).expect_err("parse must fail");
+        // Delegated error surfaces — the format string is `coldcard-multisig`
+        // since we delegate to that parser; this is by design (the user
+        // sees the underlying §11.4 diagnostic verbatim).
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("coldcard-multisig") || err_str.contains("Format"),
+            "delegated coldcard-multisig error must surface; got: {err_str}"
+        );
+    }
+
+    // ========================================================================
+    // P5B fixture-backed parse cells
+    // ========================================================================
+
+    fn read_fixture(name: &str) -> Vec<u8> {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("wallet_import")
+            .join(name);
+        std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {path:?}: {e}"))
+    }
+
+    #[test]
+    fn fixture_jade_multisig_2of3_p2wsh_parse_ok() {
+        let blob = read_fixture("jade-multisig-2of3-p2wsh.json");
+        // Sniff must positive on the wire-shape blob.
+        assert!(JadeParser::sniff(&blob), "fixture must sniff-positive");
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = JadeParser::parse(&blob, &mut stderr).expect("fixture parse must succeed");
+        assert_eq!(parsed.len(), 1);
+        let p = &parsed[0];
+        assert_eq!(p.cosigners.len(), 3);
+        assert_eq!(p.threshold, Some(2));
+        assert!(matches!(p.provenance, ImportProvenance::Jade(_)));
+    }
+
+    #[test]
+    fn fixture_jade_singlesig_refused() {
+        let blob = read_fixture("jade-singlesig-refused.json");
+        // Sniff is still positive (top-level `multisig_file` field exists);
+        // the refusal surfaces at parse time via the delegated
+        // coldcard-multisig parser (missing `Policy:` header).
+        assert!(JadeParser::sniff(&blob), "fixture must sniff-positive");
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = JadeParser::parse(&blob, &mut stderr)
+            .expect_err("singlesig-shaped fixture must refuse");
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("coldcard-multisig") || err_str.contains("Policy") || err_str.contains("Format"),
+            "delegated parser error must surface; got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn fixture_jade_malformed_json_refused() {
+        let blob = read_fixture("jade-malformed-json.json");
+        // Sniff returns false (not valid JSON).
+        assert!(!JadeParser::sniff(&blob), "malformed JSON must sniff-negative");
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = JadeParser::parse(&blob, &mut stderr)
+            .expect_err("malformed-JSON fixture must refuse");
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("jade") && err_str.contains("not valid JSON"),
+            "jade error must cite format + JSON validity; got: {err_str}"
+        );
     }
 }

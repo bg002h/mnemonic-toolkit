@@ -104,6 +104,22 @@ pub(crate) enum ImportProvenance {
     /// `cmd/import_wallet.rs` dispatch arm wired at P6C plumbs this variant
     /// to the `--json` envelope `electrum_source_metadata` field.
     Electrum(electrum::ElectrumSourceMetadata),
+    /// Blockstream Jade `get_registered_multisig` reply parse
+    /// (`wallet_import/jade.rs`). SPEC §11.5. Inserted in alphabetical-by-
+    /// variant-name slot per CLAUDE.md discipline (between `Electrum` and
+    /// `Sparrow`).
+    ///
+    /// Constructed by `JadeParser::parse` (Phase P5B) — delegates to
+    /// `coldcard_multisig::parse_text` and re-annotates the inner
+    /// `ColdcardMultisig` provenance into the Jade-specific
+    /// `JadeSourceMetadata` wrapper. The `cmd/import_wallet.rs` dispatch
+    /// arm wired at P5C plumbs this variant to the `--json` envelope
+    /// `jade_source_metadata` field. `#[allow(dead_code)]` covers the
+    /// P5B → P5C interim: P5B constructs the variant inside
+    /// `JadeParser::parse` but the dedicated `jade_source_metadata()`
+    /// accessor lands at P5C (same pattern as ColdcardMultisig above).
+    #[allow(dead_code)]
+    Jade(jade::JadeSourceMetadata),
     /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
     /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
@@ -136,6 +152,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -149,6 +166,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -165,6 +183,7 @@ impl ImportProvenance {
             Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -184,6 +203,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(meta) => Some(meta),
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -199,6 +219,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(meta) => Some(meta),
             Self::Specter(_) => None,
         }
@@ -215,6 +236,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(meta) => Some(meta),
         }
