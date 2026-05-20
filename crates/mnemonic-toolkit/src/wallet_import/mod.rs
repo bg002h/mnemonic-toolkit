@@ -28,6 +28,7 @@ pub(crate) mod bsms_verify;
 pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
 pub(crate) mod electrum;
+pub(crate) mod jade;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
@@ -103,6 +104,19 @@ pub(crate) enum ImportProvenance {
     /// `cmd/import_wallet.rs` dispatch arm wired at P6C plumbs this variant
     /// to the `--json` envelope `electrum_source_metadata` field.
     Electrum(electrum::ElectrumSourceMetadata),
+    /// Blockstream Jade `get_registered_multisig` reply parse
+    /// (`wallet_import/jade.rs`). SPEC §11.5. Inserted in alphabetical-by-
+    /// variant-name slot per CLAUDE.md discipline (between `Electrum` and
+    /// `Sparrow`).
+    ///
+    /// Constructed by `JadeParser::parse` (Phase P5B) — delegates to
+    /// `coldcard_multisig::parse_text` and re-annotates the inner
+    /// `ColdcardMultisig` provenance into the Jade-specific
+    /// `JadeSourceMetadata` wrapper. The `cmd/import_wallet.rs` dispatch
+    /// arm wired at P5C plumbs this variant to the `--json` envelope
+    /// `jade_source_metadata` field. The `jade_source_metadata()`
+    /// accessor at P5C is the load-bearing consumer.
+    Jade(jade::JadeSourceMetadata),
     /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
     /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
@@ -135,6 +149,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -148,6 +163,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -164,6 +180,25 @@ impl ImportProvenance {
             Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Jade-specific accessor: returns `Some(&metadata)` only for the
+    /// `Jade` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P5C wiring). Mirrors
+    /// `coldcard_source_metadata` / `electrum_source_metadata` /
+    /// `sparrow_source_metadata` / `specter_source_metadata`.
+    pub(crate) fn jade_source_metadata(&self) -> Option<&jade::JadeSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(meta) => Some(meta),
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -183,6 +218,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(meta) => Some(meta),
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -198,6 +234,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(meta) => Some(meta),
             Self::Specter(_) => None,
         }
@@ -214,6 +251,7 @@ impl ImportProvenance {
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
+            Self::Jade(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(meta) => Some(meta),
         }
