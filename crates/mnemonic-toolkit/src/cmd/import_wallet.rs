@@ -58,6 +58,7 @@ use crate::wallet_import::{
     bsms::BsmsParser,
     coldcard::ColdcardParser,
     coldcard_multisig::ColdcardMultisigParser,
+    electrum::ElectrumParser,
     overlay::apply_seed_overlay,
     // v0.28.0 Phase P0C — 6 new canonicalize skeletons imported alphabetically;
     // bodies are `Err(BadInput("not yet implemented"))` stubs in
@@ -346,7 +347,57 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "coldcard-multisig"
         }
-        Some("electrum") => unimplemented!("P6C: format electrum not yet wired"),
+        Some("electrum") => {
+            // v0.28.0 Phase P6C: format-mismatch check mirrors the
+            // bsms/bitcoin-core/coldcard/coldcard-multisig/sparrow/specter
+            // upper arms (SPEC §6.1). Only reject when sniff strongly pinned
+            // a different format; Ambiguous/NoMatch are tolerated.
+            //
+            // The mismatch matrix is intentionally narrow at P6C (BSMS +
+            // BitcoinCore + Coldcard + ColdcardMultisig + Sparrow + Specter);
+            // full N×N symmetry across the 8 formats lands incrementally per
+            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "electrum"
+        }
         Some("jade") => unimplemented!("P5C: format jade not yet wired"),
         Some("sparrow") => {
             // SPEC §6.1 format-mismatch check: explicit `--format sparrow`
@@ -453,16 +504,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             SniffOutcome::Coldcard => "coldcard",
             // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
             SniffOutcome::ColdcardMultisig => "coldcard-multisig",
-            // v0.28.0 Phase P6A: auto-sniff arm for Electrum 4.x wallet
+            // v0.28.0 Phase P6A→P6C: auto-sniff arm for Electrum 4.x wallet
             // JSON. The sniff slot is wired at `sniff.rs:88`
             // (`ElectrumParser::sniff`); the parse-side dispatch at the
-            // `match format_str` block below remains
-            // `unimplemented!("P6C: parse not yet wired")` until P6C flips it
-            // to `ElectrumParser::parse(...)`. Adding this arm BEFORE the
-            // `other => unreachable!()` catch-all keeps the unreachable
-            // contract intact for the still-placeholder Jade variant
-            // (only `SniffOutcome::Jade` lacks a real auto-sniff arm at
-            // P6A close — P5A wires the remaining one).
+            // `match format_str` block below routes to
+            // `ElectrumParser::parse(&blob, stderr)` (wired at P6C). Adding
+            // this arm BEFORE the `other => unreachable!()` catch-all keeps
+            // the unreachable contract intact for the still-placeholder Jade
+            // variant (only `SniffOutcome::Jade` lacks a real auto-sniff arm
+            // at P6C close — P5A wires the remaining one).
             SniffOutcome::Electrum => "electrum",
             // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The
             // sniff slot is wired here so `sniff_format` can now return
@@ -554,7 +604,7 @@ electrum|jade|sparrow|specter>"
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
         "coldcard" => ColdcardParser::parse(&blob, stderr)?,
         "coldcard-multisig" => ColdcardMultisigParser::parse(&blob, stderr)?,
-        "electrum" => unimplemented!("P6C: parse not yet wired"),
+        "electrum" => ElectrumParser::parse(&blob, stderr)?,
         "jade" => unimplemented!("P5C: parse not yet wired"),
         "sparrow" => SparrowParser::parse(&blob, stderr)?,
         "specter" => SpecterParser::parse(&blob, stderr)?,
@@ -979,7 +1029,37 @@ fn emit_json_envelope<W: Write, E: Write>(
                 }),
                 None => json!({}),
             },
-            "electrum" => json!({}),
+            // v0.28.0 Phase P6C — electrum round-trip envelope mirrors the
+            // bitcoin-core / coldcard / coldcard-multisig / sparrow / specter
+            // shape: canonicalize is real (SPEC §11.6 semantic round-trip via
+            // BTreeMap-backed alphabetical key reorder + dynamic xN/ cosigner
+            // key preservation). `byte_exact` compares input bytes to canonical
+            // output; `semantic_match=true` always on Ok.
+            "electrum" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
             "jade" => json!({}),
             // v0.28.0 Phase P1C — sparrow round-trip envelope mirrors the
             // bitcoin-core + coldcard-multisig shape: canonicalize is real
@@ -1108,6 +1188,31 @@ fn emit_json_envelope<W: Write, E: Write>(
                     "xfp": xfp_hex,
                     "bip_derivation": bip_str,
                     "raw_account": meta.raw_account,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P6C — Electrum provenance envelope field. Mirrors
+        // the per-format-distinct field-name discipline
+        // (`electrum_source_metadata`): surfaces ONLY when the parse was
+        // Electrum-shaped. Carries `seed_version`, `wallet_type` (rendered
+        // as the canonical Electrum value-set string: "standard" or
+        // "<k>of<n>"), `wallet_name`, `dropped_fields` per SPEC §11.6.
+        if let Some(meta) = p.provenance.electrum_source_metadata() {
+            let wallet_type_str = match meta.wallet_type {
+                crate::wallet_import::electrum::ElectrumWalletType::Standard => {
+                    "standard".to_string()
+                }
+                crate::wallet_import::electrum::ElectrumWalletType::Multisig { k, n } => {
+                    format!("{k}of{n}")
+                }
+            };
+            env.insert(
+                "electrum_source_metadata".to_string(),
+                json!({
+                    "seed_version": meta.seed_version,
+                    "wallet_type": wallet_type_str,
+                    "wallet_name": meta.wallet_name,
                     "dropped_fields": meta.dropped_fields,
                 }),
             );

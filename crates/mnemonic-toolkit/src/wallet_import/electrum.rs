@@ -91,7 +91,6 @@ pub(crate) enum ElectrumWalletType {
 /// Carried on `ImportProvenance::Electrum(...)`; preserved for `--json`
 /// envelope `electrum_source_metadata` emit (P6C wiring).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // fields read by P6C envelope emitter + unit tests
 pub(crate) struct ElectrumSourceMetadata {
     /// Top-level `seed_version` (Electrum's wallet-db version pin; integer
     /// in {11..71} at v0.28.0 cutover, FINAL_SEED_VERSION drifts upward per
@@ -374,9 +373,9 @@ impl WalletFormatParser for ElectrumParser {
 
         // Step 6: build ResolvedSlot vec.
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(cosigners_count);
-        for i in 0..cosigners_count {
+        for (i, key) in parsed_keys.iter().enumerate().take(cosigners_count) {
             let (xpub, fp, path, path_raw) = build_slot_fields(&descriptor_body, i)?;
-            debug_assert_eq!(xpub_to_65(&xpub), parsed_keys[i].payload);
+            debug_assert_eq!(xpub_to_65(&xpub), key.payload);
             cosigners.push(ResolvedSlot {
                 xpub,
                 fingerprint: fp,
@@ -463,15 +462,26 @@ fn is_multisig_cosigner_key(k: &str, n: usize) -> bool {
     parsed >= 1 && parsed <= n
 }
 
-/// SPEC §11.6 — singlesig parse path. Returns
-/// `(descriptor_body, network, threshold, wallet_name, cosigners_count)`.
+/// SPEC §11.6 dispatch result tuple: `(descriptor_body, network, threshold,
+/// wallet_name, cosigners_count)`. Threshold is `Some(K)` for multisig,
+/// `None` for singlesig. Returned by both `build_standard_descriptor` +
+/// `build_multisig_descriptor`.
+type ElectrumDispatchResult = (
+    String,
+    bitcoin::Network,
+    Option<u8>,
+    Option<String>,
+    usize,
+);
+
+/// SPEC §11.6 — singlesig parse path.
 ///
 /// Extracts `keystore.xpub` + `keystore.derivation` + `keystore.root_fingerprint`,
 /// then builds a synthetic `<wrapper>([fp/path]xpub/<0;1>/*)` descriptor with
 /// wrapper inferred from the xpub SLIP-132 prefix and derivation purpose.
 fn build_standard_descriptor(
     obj: &serde_json::Map<String, Value>,
-) -> Result<(String, bitcoin::Network, Option<u8>, Option<String>, usize), ToolkitError> {
+) -> Result<ElectrumDispatchResult, ToolkitError> {
     let keystore = obj
         .get("keystore")
         .and_then(|v| v.as_object())
@@ -634,8 +644,7 @@ fn derivation_purpose(s: &str) -> Option<String> {
     }
 }
 
-/// SPEC §11.6 — multisig parse path. Returns
-/// `(descriptor_body, network, Some(K), wallet_name, n)`.
+/// SPEC §11.6 — multisig parse path.
 ///
 /// Iterates `x1/`, `x2/`, ..., `xn/` per-key sub-objects; each carries
 /// `xpub`, `derivation`, `root_fingerprint`, `label` (and `type: "bip32"`).
@@ -647,7 +656,7 @@ fn build_multisig_descriptor(
     obj: &serde_json::Map<String, Value>,
     k: u8,
     n: u8,
-) -> Result<(String, bitcoin::Network, Option<u8>, Option<String>, usize), ToolkitError> {
+) -> Result<ElectrumDispatchResult, ToolkitError> {
     if k == 0 || n == 0 || k > n {
         return Err(ToolkitError::ImportWalletParse(format!(
             "import-wallet: electrum: parse error: wallet_type \"{k}of{n}\" is malformed (require 1 ≤ k ≤ n, n ≥ 1)"

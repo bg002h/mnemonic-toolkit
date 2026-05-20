@@ -1771,6 +1771,12 @@ B7F7DFEA: {xpub_c}\n"
         // are no longer skeletons (P3B, P4B, P6B, P1B, P2B respectively).
         // Other format skeletons stay on this list until their per-parser
         // P{N}B phase.
+        //
+        // With only Jade remaining as a skeleton at v0.28.0 Phase P6C, this
+        // loop iterates a single element — preserved as a `for` shape (not
+        // collapsed to a direct call) so the per-format roll-call discipline
+        // is mechanical when P5B lands.
+        #[allow(clippy::single_element_loop)]
         for (name, result) in [
             ("jade", canonicalize_jade(b"")),
         ] {

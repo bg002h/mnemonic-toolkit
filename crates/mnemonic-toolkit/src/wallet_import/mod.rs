@@ -99,12 +99,9 @@ pub(crate) enum ImportProvenance {
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
     /// (between `ColdcardMultisig` and `Sparrow`).
     ///
-    /// The variant is constructed by `ElectrumParser::parse` at P6B and the
-    /// `cmd/import_wallet.rs` dispatch arm wired at P6C; the `dead_code`
-    /// allow on the variant covers the P6A → P6C interim (the type exists
-    /// for downstream-consumer reference + dispatch stitching but is not
-    /// yet constructed by any wired call site).
-    #[allow(dead_code)]
+    /// Constructed by `ElectrumParser::parse` (Phase P6B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P6C plumbs this variant
+    /// to the `--json` envelope `electrum_source_metadata` field.
     Electrum(electrum::ElectrumSourceMetadata),
     /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
@@ -177,7 +174,6 @@ impl ImportProvenance {
     /// `cmd::import_wallet::emit_json_envelope` (P6C wiring). Mirrors
     /// `coldcard_source_metadata` / `sparrow_source_metadata` /
     /// `specter_source_metadata`.
-    #[allow(dead_code)] // wired by P6C
     pub(crate) fn electrum_source_metadata(
         &self,
     ) -> Option<&electrum::ElectrumSourceMetadata> {
