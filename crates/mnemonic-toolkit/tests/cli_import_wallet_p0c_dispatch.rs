@@ -77,13 +77,18 @@ fn p0c_format_specter_panics_unimplemented() {
 }
 
 #[test]
-fn p0c_format_coldcard_panics_unimplemented() {
+fn p0c_format_coldcard_dispatch_post_p3c_returns_format_mismatch() {
+    // v0.28.0 Phase P3C — `--format coldcard` against a BSMS blob now
+    // returns a FormatMismatch error (sniff yields Bsms, explicit
+    // override is coldcard). Prior to P3C this arm panicked via
+    // `unimplemented!("P3C: ...")`; post-P3C the dispatch is real and
+    // mirrors the BSMS/Bitcoin Core FormatMismatch precedent.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "coldcard"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P3C") || stderr.contains("coldcard"),
-        "stderr should mention P3C or coldcard on unimplemented dispatch; got: {stderr}"
+        stderr.contains("coldcard") && stderr.contains("bsms"),
+        "stderr should mention both the supplied (coldcard) and sniffed (bsms) formats; got: {stderr}"
     );
 }
 

@@ -69,21 +69,22 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
-    // Phase P3C insertion point: add `Coldcard(coldcard::ColdcardSourceMetadata)`
-    // variant here (alphabetically after `Bsms`) when wiring the parse-impl
-    // dispatch arms in `cmd/import_wallet.rs`. The variant type
-    // (`coldcard::ColdcardSourceMetadata`) is defined at P3A and ready for
-    // use; deferring the enum addition keeps P3A's diff sniff-only.
+    /// Coldcard single-sig `wallet.json` parse
+    /// (`wallet_import/coldcard.rs`, Phase P3). Alphabetically after `Bsms`
+    /// per the v0.28.0 enum-ordering invariant. Holds the Coldcard-specific
+    /// source metadata (chain / xfp / dominant-BIP / dropped fields).
+    Coldcard(coldcard::ColdcardSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for the `BitcoinCore` variant.
+    /// excerpt shape, the `BitcoinCore` variant, or the `Coldcard` variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
+            Self::Coldcard(_) => None,
         }
     }
 
@@ -92,6 +93,20 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+        }
+    }
+
+    /// Accessor for the Coldcard-specific source metadata. Returns
+    /// `Some(&metadata)` only for the `Coldcard` variant. Used by
+    /// `cmd::import_wallet::emit_json_envelope` to wire the Coldcard
+    /// source-metadata block into the `--json` envelope output (Phase P3C
+    /// row 7 in plan-doc §B.2 #6).
+    pub(crate) fn coldcard_metadata(&self) -> Option<&coldcard::ColdcardSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(meta) => Some(meta),
         }
     }
 }

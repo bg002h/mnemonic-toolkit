@@ -136,9 +136,6 @@ impl ColdcardBip {
 /// Carried inside `ImportProvenance::Coldcard(...)` and surfaced via the
 /// `--json` envelope's `source_metadata` field (Phase P3C wire-up).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // P3B: fields populated by parse-impl; P3C surfaces them
-                    // via the --json envelope's `source_metadata` field +
-                    // `ImportProvenance::Coldcard` variant.
 pub(crate) struct ColdcardSourceMetadata {
     /// SPEC §11.3 — `chain` field value (BTC / XTN).
     pub chain: ColdcardChain,
@@ -444,19 +441,17 @@ impl WalletFormatParser for ColdcardParser {
             .map_err(ToolkitError::Io)?;
         }
 
-        // SPEC §11.3 P3C wire-up: the `ImportProvenance::Coldcard` variant
-        // does not yet exist on the enum (lands at P3C). At P3B, we
-        // construct the metadata struct for use post-P3C; for now, route
-        // through the BSMS(None) provenance placeholder so the type
-        // compiles. P3C replaces this with `ImportProvenance::Coldcard(meta)`.
-        let _provenance_pending_p3c = ColdcardSourceMetadata {
+        // SPEC §11.3 — Coldcard provenance constructed + wired into
+        // `ImportProvenance::Coldcard`. P3C wire-up (`mod.rs:65` enum +
+        // `mod.rs:90` accessor + `cmd/import_wallet.rs` envelope arm).
+        let meta = ColdcardSourceMetadata {
             chain,
             xfp,
             bip_derivation,
             raw_account,
             dropped_fields,
         };
-        let provenance = ImportProvenance::Bsms(None); // P3C-replace
+        let provenance = ImportProvenance::Coldcard(meta);
 
         Ok(vec![ParsedImport {
             descriptor,
