@@ -57,9 +57,44 @@ use std::sync::OnceLock;
 pub(crate) struct BitcoinCoreParser;
 
 /// Vendor-marker keys that ALSO appear at the top level of competing wallet
-/// vendor blobs (Specter, Sparrow, etc.). Their presence overrides any Core
-/// match in `sniff` — keeps `sniff` conservative per SPEC §6.1.2 lock.
-const VENDOR_MARKER_KEYS: &[&str] = &["chain", "policy", "version", "bipname", "extendedPublicKey"];
+/// vendor blobs (Specter, Sparrow, Coldcard, Jade, Electrum, etc.). Their
+/// presence at top level overrides any Core match in `sniff` — keeps `sniff`
+/// conservative per `SPEC_wallet_import_v0_26_0.md` §6.1.2 lock and the
+/// v0.28.0 amendment at `SPEC_wallet_import_v0_28_0.md` §6.1.1 (Q4 lock).
+///
+/// v0.28.0 P0A additions absorb markers for Phases P1-P6 parsers:
+/// - `seed_version`, `wallet_type` — Electrum wallet (SPEC §11.6)
+/// - `policyType`, `defaultPolicy`, `keystores` — Sparrow Wallet (SPEC §11.1)
+/// - `devices`, `blockheight` — Specter (SPEC §11.2; `label` deliberately
+///   omitted per R0 I3 fold — Specter positive sniff uses `blockheight` +
+///   `devices` + `descriptor` + `label`, but `label` is generic enough that
+///   a legitimate Core blob carrying a top-level `label` key should not be
+///   excluded; Specter is still strongly disambiguated by `blockheight`)
+/// - `multisig_file` — Blockstream Jade (SPEC §11.5; the top-level reply
+///   field of Jade's `get_registered_multisig` RPC. R0 I4 fold removed
+///   `register_multisig` from this list — that's the RPC command name,
+///   not an on-disk JSON field, verified via Blockstream/Jade docs)
+///
+/// Note: Coldcard generic-JSON (`chain`, `xfp`, `bipN`) is already covered
+/// by the `chain` exclusion (v0.26.0 original); ColdcardMultisig is a text
+/// format (NOT JSON) and never reaches this JSON-sniff path.
+const VENDOR_MARKER_KEYS: &[&str] = &[
+    // v0.26.0 originals (Bitcoin Core / generic-vendor exclusion):
+    "chain",
+    "policy",
+    "version",
+    "bipname",
+    "extendedPublicKey",
+    // v0.28.0 P0A additions (per-format vendor markers; R1 fold):
+    "seed_version",
+    "wallet_type",
+    "policyType",
+    "defaultPolicy",
+    "keystores",
+    "devices",
+    "blockheight",
+    "multisig_file",
+];
 
 impl WalletFormatParser for BitcoinCoreParser {
     fn sniff(blob: &[u8]) -> bool {

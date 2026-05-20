@@ -1,12 +1,22 @@
 //! BIP-129 BSMS Round-2 parser.
 //!
-//! Per `design/SPEC_wallet_import_v0_26_0.md` §4. Accepts two lenient shapes:
+//! Per `design/SPEC_wallet_import_v0_26_0.md` §4 + `SPEC_wallet_import_v0_28_0.md`
+//! §10. Accepts three shapes:
 //! - 2-line: `BSMS 1.0\n<descriptor>#<checksum>` (kickoff seed-case form;
 //!   stderr WARNING about reduced form).
+//! - 4-line (v0.28.0; BIP-129-canonical Round-2 per BIP-129 line 96):
+//!   `BSMS 1.0\n<descriptor>#<checksum>\n<path-restrictions>\n<FIRST_ADDRESS>`.
+//!   The 4-line shape is symmetric with `wallet_export/bsms.rs`'s
+//!   `BsmsForm::FourLine` emit (the canonical round-trip pair). Cross-validates
+//!   line 4 against `derive_first_address` per SPEC §10.2. Audit provenance
+//!   uses the empty-string-sentinel pattern (token / signature empty;
+//!   first_address + derivation_path populated; verification = NotAttempted)
+//!   per SPEC §10.3. Closes FOLLOWUP `bsms-bip129-full-cutover`.
 //! - 6-line: `BSMS 1.0\n<TOKEN>\n<descriptor>#<checksum>\n<DERIVATION_PATH>\n
-//!   <FIRST_ADDRESS>\n<SIGNATURE>` (full BIP-129 Round-2; audit fields
+//!   <FIRST_ADDRESS>\n<SIGNATURE>` (legacy lenient 6-line shape; audit fields
 //!   preserved via `ParsedImport::bsms_audit()` accessor; backed by
-//!   `ImportProvenance::Bsms(Some(...))`).
+//!   `ImportProvenance::Bsms(Some(...))`). DEPRECATED in v0.28.0; will be
+//!   removed in a future minor version. See SPEC §10.4.
 //!
 //! Network detection (SPEC §4.2 step 8, §7.0.a locked): inspect the BIP-48
 //! coin-type child number on the FIRST cosigner's origin path; hardened `0'`
@@ -90,8 +100,9 @@ impl WalletFormatParser for BsmsParser {
             )));
         }
 
-        // SPEC §4.2 step 3: count non-empty lines (trailing newline may
-        // produce a single empty final element). Detect 2-line vs 6-line.
+        // SPEC §4.2 step 3 + SPEC §10.1: count non-empty lines (trailing
+        // newline may produce a single empty final element). Detect 2-line,
+        // 4-line (BIP-129-canonical Round-2), or 6-line (DEPRECATED) shape.
         let trimmed_count = strip_trailing_empty(&lines).len();
         let (descriptor_body, audit) = match trimmed_count {
             2 => {
@@ -102,17 +113,65 @@ impl WalletFormatParser for BsmsParser {
                 .map_err(ToolkitError::Io)?;
                 (lines[1], None)
             }
+            4 => {
+                // SPEC §10.1 — BIP-129-canonical 4-line Round-2 shape per
+                // BIP-129 line 96: header / descriptor#checksum /
+                // path-restrictions / FIRST_ADDRESS. Audit provenance uses
+                // the empty-string-sentinel pattern per SPEC §10.3:
+                //   token = ""
+                //   signature = ""
+                //   first_address = lines[3]
+                //   derivation_path = lines[2]   (the path-restrictions field)
+                //   verification = NotAttempted
+                // Cross-validation against `derive_first_address` runs in
+                // the shared post-parse block below (SPEC §10.2); BIP-129
+                // path-restrictions string is preserved verbatim in the
+                // audit envelope's `derivation_path` slot for round-trip
+                // (the field name is a legacy mismatch but the wire shape
+                // is stable; see SPEC §10.3).
+                let body = lines[1];
+                let derivation_path = lines[2].to_string();
+                let first_address = lines[3].to_string();
+                (
+                    body,
+                    Some(BsmsAuditFields {
+                        token: String::new(),
+                        signature: String::new(),
+                        first_address,
+                        derivation_path,
+                        verification: crate::wallet_import::BsmsVerification::NotAttempted,
+                    }),
+                )
+            }
             6 => {
                 let token = lines[1].to_string();
                 let body = lines[2];
                 let derivation_path = lines[3].to_string();
                 let first_address = lines[4].to_string();
                 let signature = lines[5].to_string();
+                // SPEC §10.4 — DEPRECATION notice for the 6-line lenient
+                // shape. v0.28.0 makes the 4-line BIP-129-canonical shape
+                // the preferred ingest form; the 6-line lenient shape is
+                // retained for one cycle to avoid breaking active flows but
+                // will be removed in a future minor version.
                 writeln!(
                     stderr,
-                    "notice: import-wallet: bsms: 6-line Round-1 signature in the blob \
-                     is not verified inline by this 2/6-line parser; supply the same record \
-                     via --bsms-round1 <FILE> to engage v0.27.0 BIP-322 verification"
+                    "notice: import-wallet: bsms: 6-line lenient shape is DEPRECATED in v0.28+ and"
+                )
+                .map_err(ToolkitError::Io)?;
+                writeln!(
+                    stderr,
+                    "will be removed in a future minor version; convert your blob to the BIP-129-"
+                )
+                .map_err(ToolkitError::Io)?;
+                writeln!(
+                    stderr,
+                    "canonical 4-line shape (BSMS_VERSION + DESCRIPTOR + path-restrictions +"
+                )
+                .map_err(ToolkitError::Io)?;
+                writeln!(
+                    stderr,
+                    "FIRST_ADDRESS) for forward compatibility. See SPEC §10 for the canonical shape."
                 )
                 .map_err(ToolkitError::Io)?;
                 (
@@ -128,7 +187,7 @@ impl WalletFormatParser for BsmsParser {
             }
             other => {
                 return Err(ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: bsms: parse error: expected 2 or 6 lines, got {other}"
+                    "import-wallet: bsms: parse error: expected 2, 4, or 6 lines, got {other}"
                 )));
             }
         };
@@ -468,6 +527,155 @@ mod tests {
         assert!(
             msg.contains("exceeds u8 range") && msg.contains("256"),
             "expected u8-overflow diagnostic naming 256; got: {msg}"
+        );
+    }
+
+    // ============================================================================
+    // v0.28.0 Phase 7 (G1) — SPEC §10 4-line BIP-129-canonical parser units
+    // ============================================================================
+
+    /// Build a synthetic 4-line BIP-129-canonical Round-2 blob from
+    /// (descriptor body without `#csum`, path-restrictions, first-address).
+    /// Computes the BIP-380 checksum dynamically (mirrors the integration
+    /// test helper `build_bsms_2line`).
+    fn build_4line(desc: &str, path_restrictions: &str, first_address: &str) -> String {
+        use miniscript::descriptor::checksum::Engine;
+        let mut eng = Engine::new();
+        eng.input(desc).expect("ascii-only descriptor body");
+        let cs = eng.checksum();
+        format!("BSMS 1.0\n{desc}#{cs}\n{path_restrictions}\n{first_address}\n")
+    }
+
+    /// SPEC §10.1 happy-path: 4-line parse succeeds; audit envelope uses
+    /// the empty-string-sentinel pattern per SPEC §10.3 (token + signature
+    /// empty; first_address + derivation_path populated; verification =
+    /// NotAttempted). Replaces the deleted `bsms_4_line_blob_rejected_with_
+    /// pointer_text` integration cell.
+    #[test]
+    fn parse_4line_happy_path_populates_audit_with_empty_sentinels() {
+        // Real /0/0 first-address for the canonical mainnet sortedmulti-2of2
+        // (re-using the fixture xpubs that vendor at tests/fixtures/
+        // wallet_import/bsms-4line-no-path-restrictions.txt). Pre-derived
+        // via `wallet_export::bsms::BsmsForm::FourLine` semantics so the
+        // first-address cross-validation does NOT fire.
+        let desc = "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))";
+        let blob = build_4line(
+            desc,
+            "/0/*,/1/*",
+            "bc1q2a4vm7ww7v0c02qerrgg0znr4ck4kez2la82kzpm9gturx68q4nsfdl000",
+        );
+        let mut stderr = Vec::new();
+        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr).expect("4-line parses");
+        assert_eq!(parsed.len(), 1, "BSMS parse returns single ParsedImport");
+        let p = &parsed[0];
+        let audit = p.bsms_audit().expect("4-line populates audit (SPEC §10.3)");
+        // SPEC §10.3 empty-string sentinels for token + signature.
+        assert_eq!(audit.token, "", "4-line token must be empty-string sentinel");
+        assert_eq!(audit.signature, "", "4-line signature must be empty-string sentinel");
+        // SPEC §10.3 populated fields: first_address + derivation_path
+        // (the path-restrictions string in 4-line semantics).
+        assert_eq!(
+            audit.first_address,
+            "bc1q2a4vm7ww7v0c02qerrgg0znr4ck4kez2la82kzpm9gturx68q4nsfdl000"
+        );
+        assert_eq!(audit.derivation_path, "/0/*,/1/*");
+        // verification = NotAttempted per SPEC §10.3.
+        assert!(
+            matches!(
+                audit.verification,
+                crate::wallet_import::BsmsVerification::NotAttempted
+            ),
+            "4-line verification field must be NotAttempted"
+        );
+        // SPEC §10.2 happy-path: no first-address mismatch WARNING on stderr.
+        let stderr_str = String::from_utf8_lossy(&stderr);
+        assert!(
+            !stderr_str.contains("first-address mismatch"),
+            "happy-path 4-line must NOT emit mismatch WARNING; stderr was: {stderr_str}"
+        );
+        // 4-line shape does NOT emit the 2-line WARNING or 6-line NOTICE.
+        assert!(!stderr_str.contains("2-line excerpt"));
+        assert!(!stderr_str.contains("DEPRECATED"));
+    }
+
+    /// SPEC §10.2 — 4-line first-address cross-validation. Wrong line-4
+    /// address must trigger the existing `first-address mismatch` WARNING
+    /// (informational; parse still succeeds — matches 6-line behavior).
+    #[test]
+    fn parse_4line_first_address_mismatch_emits_warning() {
+        let desc = "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))";
+        let blob = build_4line(
+            desc,
+            "/0/*,/1/*",
+            // Deliberately-wrong first-address.
+            "bc1qwrongwrongwrongwrongwrongwrongwrongwrongwrongwronguakw50",
+        );
+        let mut stderr = Vec::new();
+        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr)
+            .expect("4-line parse succeeds even with first-address mismatch (SPEC §10.2 informational)");
+        assert_eq!(parsed.len(), 1);
+        let stderr_str = String::from_utf8_lossy(&stderr);
+        assert!(
+            stderr_str.contains("first-address mismatch"),
+            "expected first-address mismatch WARNING; stderr was: {stderr_str}"
+        );
+    }
+
+    /// SPEC §10.1 — line-3 (path-restrictions) is preserved verbatim into
+    /// the audit envelope's `derivation_path` slot. Non-canonical line-3
+    /// strings such as `"No path restrictions"` survive into the audit
+    /// envelope without rewriting.
+    #[test]
+    fn parse_4line_line3_preserved_verbatim_in_audit() {
+        let desc = "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))";
+        let blob = build_4line(
+            desc,
+            "No path restrictions",
+            "bc1q2a4vm7ww7v0c02qerrgg0znr4ck4kez2la82kzpm9gturx68q4nsfdl000",
+        );
+        let mut stderr = Vec::new();
+        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr).expect("4-line parses");
+        let audit = parsed[0].bsms_audit().expect("audit populated");
+        assert_eq!(
+            audit.derivation_path, "No path restrictions",
+            "line-3 must be preserved verbatim in audit envelope"
+        );
+    }
+
+    /// SPEC §10.4 — 6-line shape continues to parse; emits the new
+    /// DEPRECATION NOTICE shape (4 lines of stderr text per the P7B
+    /// `writeln!` block). Regression guard against accidental removal
+    /// of any of the 4 stderr lines.
+    #[test]
+    fn parse_6line_emits_deprecation_notice_shape() {
+        let desc = "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))";
+        use miniscript::descriptor::checksum::Engine;
+        let mut eng = Engine::new();
+        eng.input(desc).expect("ascii-only");
+        let cs = eng.checksum();
+        let blob = format!(
+            "BSMS 1.0\n00112233445566778899aabbccddeeff\n{desc}#{cs}\nm/48'/0'/0'/2'\nbc1q2a4vm7ww7v0c02qerrgg0znr4ck4kez2la82kzpm9gturx68q4nsfdl000\nH/example/sig/base64=\n"
+        );
+        let mut stderr = Vec::new();
+        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr).expect("6-line parses");
+        assert_eq!(parsed.len(), 1);
+        let stderr_str = String::from_utf8_lossy(&stderr);
+        // Each of the 4 substrings must appear in the rendered stderr.
+        assert!(
+            stderr_str.contains("6-line lenient shape is DEPRECATED in v0.28+ and"),
+            "missing DEPRECATION line 1; stderr was: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("will be removed in a future minor version"),
+            "missing DEPRECATION line 2; stderr was: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("canonical 4-line shape"),
+            "missing DEPRECATION line 3; stderr was: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("SPEC §10 for the canonical shape"),
+            "missing DEPRECATION line 4; stderr was: {stderr_str}"
         );
     }
 }

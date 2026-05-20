@@ -5,7 +5,12 @@
 //! replacement):
 //!
 //!   --blob <FILE|->                                             required UNLESS --bsms-round1 supplied
-//!   --format <bsms|bitcoin-core>                                optional (sniff default)
+//!   --format <bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter>
+//!                                                               optional (sniff default).
+//!                                                               v0.28.0 Phase P0C pre-stubs the 6
+//!                                                               new formats (panic via
+//!                                                               `unimplemented!()` until per-parser
+//!                                                               P{N}C sub-phases wire real dispatch).
 //!   --select-descriptor <N|active-receive|active-change|all>    default `all`
 //!   --ms1 <STRING>                                              repeatable (positional cosigner-index)
 //!   --slot @<N>.phrase=<STRING>                                 (existing slot infra)
@@ -51,9 +56,23 @@ use crate::wallet_import::{
     apply_select_descriptor,
     bitcoin_core::BitcoinCoreParser,
     bsms::BsmsParser,
+    coldcard::ColdcardParser,
+    coldcard_multisig::ColdcardMultisigParser,
+    electrum::ElectrumParser,
+    jade::JadeParser,
     overlay::apply_seed_overlay,
-    roundtrip::{canonicalize_bitcoin_core, canonicalize_bsms, unified_diff},
+    // v0.28.0 Phase P0C — 6 new canonicalize skeletons imported alphabetically;
+    // bodies are `Err(BadInput("not yet implemented"))` stubs in
+    // wallet_import/roundtrip.rs. Per-parser P{N}B replaces each body with
+    // a real implementation; this import list does not change.
+    roundtrip::{
+        canonicalize_bitcoin_core, canonicalize_bsms, canonicalize_coldcard,
+        canonicalize_coldcard_multisig, canonicalize_electrum, canonicalize_jade,
+        canonicalize_sparrow, canonicalize_specter, unified_diff,
+    },
     sniff::{sniff_format, SniffOutcome},
+    sparrow::SparrowParser,
+    specter::SpecterParser,
     ParsedImport, SelectDescriptor, WalletFormatParser,
 };
 use clap::Args;
@@ -81,11 +100,23 @@ pub struct ImportWalletArgs {
     pub blob: Option<PathBuf>,
 
     /// Format override. If absent, the blob is auto-detected via sniff
-    /// (SPEC §6). Supported values: `bsms`, `bitcoin-core`.
+    /// (SPEC §6). Supported values (alphabetical): `bitcoin-core`, `bsms`,
+    /// `coldcard`, `coldcard-multisig`, `electrum`, `jade`, `sparrow`,
+    /// `specter`. The 6 non-{bsms,bitcoin-core} formats are pre-stubbed at
+    /// v0.28.0 Phase P0C; per-parser dispatch ships in Phases P1C-P6C.
     #[arg(
         long = "format",
-        value_name = "bsms|bitcoin-core",
-        value_parser = clap::builder::PossibleValuesParser::new(["bsms", "bitcoin-core"]),
+        value_name = "bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter",
+        value_parser = clap::builder::PossibleValuesParser::new([
+            "bitcoin-core",
+            "bsms",
+            "coldcard",
+            "coldcard-multisig",
+            "electrum",
+            "jade",
+            "sparrow",
+            "specter",
+        ]),
     )]
     pub format: Option<String>,
 
@@ -236,28 +267,370 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "bitcoin-core"
         }
+        // v0.28.0 Phase P0C pre-stub arms (R0 C1 + R1-I2 fold). Each new
+        // format is enumerated alphabetically here; the body is
+        // `unimplemented!()` until the per-parser P{N}C sub-phase flips
+        // the arm to a real `SniffOutcome::<Format>` mismatch check +
+        // parser dispatch. Insertion point: BEFORE the `Some(other) =>`
+        // fallback so PossibleValuesParser-rejected values still surface
+        // via the BadInput template (defense-in-depth — clap already
+        // rejects out-of-set values, but the fallback is preserved as a
+        // belt-and-suspenders guard).
+        Some("coldcard") => {
+            // SPEC §6.1 format-mismatch check: explicit `--format coldcard`
+            // against a blob that sniff identified as a DIFFERENT format →
+            // reject with `ImportWalletFormatMismatch` (exit 1). Same shape
+            // as BSMS / Bitcoin Core / Sparrow / Specter upper arms. Only
+            // reject when sniff strongly pinned a different format;
+            // `Ambiguous` and `NoMatch` are tolerated (user opted in
+            // explicitly).
+            //
+            // The mismatch matrix is intentionally narrow at P3C (BSMS +
+            // BitcoinCore + ColdcardMultisig + Sparrow + Specter); full N×N
+            // symmetry across the 8 formats lands incrementally per
+            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "coldcard"
+        }
+        Some("coldcard-multisig") => {
+            // SPEC §6.1 format-mismatch check: explicit `--format coldcard-multisig`
+            // against a blob that sniff identified as a different format → reject
+            // with `ImportWalletFormatMismatch` (exit 1). Same shape as
+            // BSMS/Bitcoin Core upper arms. Only reject when sniff strongly
+            // pinned a DIFFERENT format; `Ambiguous` and `NoMatch` are tolerated
+            // (the user opted in to coldcard-multisig explicitly).
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "coldcard-multisig"
+        }
+        Some("electrum") => {
+            // v0.28.0 Phase P6C: format-mismatch check mirrors the
+            // bsms/bitcoin-core/coldcard/coldcard-multisig/sparrow/specter
+            // upper arms (SPEC §6.1). Only reject when sniff strongly pinned
+            // a different format; Ambiguous/NoMatch are tolerated.
+            //
+            // The mismatch matrix is intentionally narrow at P6C (BSMS +
+            // BitcoinCore + Coldcard + ColdcardMultisig + Sparrow + Specter);
+            // full N×N symmetry across the 8 formats lands incrementally per
+            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "electrum"
+        }
+        Some("jade") => {
+            // v0.28.0 Phase P5C: format-mismatch check mirrors the
+            // bsms/bitcoin-core/coldcard/coldcard-multisig/electrum/sparrow/specter
+            // upper arms (SPEC §6.1). Only reject when sniff strongly
+            // pinned a different format; Ambiguous/NoMatch are tolerated.
+            //
+            // The mismatch matrix is now complete at P5C (Jade is the
+            // LAST parser landed in v0.28.0 Wave 1 — the matrix lists
+            // all 7 sibling formats). Full N×N symmetry across the 8
+            // formats lands incrementally per cycle-followup
+            // `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "jade".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "jade"
+        }
+        Some("sparrow") => {
+            // SPEC §6.1 format-mismatch check: explicit `--format sparrow`
+            // against a blob that sniff identified as a different format → reject
+            // with `ImportWalletFormatMismatch` (exit 1). Same shape as BSMS /
+            // Bitcoin Core / ColdcardMultisig upper arms. Only reject when sniff
+            // strongly pinned a DIFFERENT format; `Ambiguous` and `NoMatch`
+            // are tolerated (the user opted in to sparrow explicitly).
+            //
+            // The mismatch matrix is intentionally narrow at P1C (BSMS +
+            // BitcoinCore + ColdcardMultisig); full N×N symmetry across the
+            // 8 formats lands incrementally per cycle-followup
+            // `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "sparrow"
+        }
+        Some("specter") => {
+            // SPEC §6.1 format-mismatch check: explicit `--format specter`
+            // against a blob that sniff identified as a different format → reject
+            // with `ImportWalletFormatMismatch` (exit 1). Same shape as
+            // BSMS / Bitcoin Core / ColdcardMultisig / Sparrow upper arms.
+            // Only reject when sniff strongly pinned a DIFFERENT format;
+            // `Ambiguous` and `NoMatch` are tolerated (the user opted in to
+            // specter explicitly).
+            //
+            // The mismatch matrix expands to include `Sparrow` (vs P1C's
+            // matrix, which only listed Bsms/BitcoinCore/ColdcardMultisig);
+            // full N×N symmetry across the 8 formats lands incrementally per
+            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "specter"
+        }
         Some(other) => {
             return Err(ToolkitError::BadInput(format!(
-                "--format {other} is not supported (bsms + bitcoin-core only)"
+                "--format {other} is not supported \
+                 (bitcoin-core, bsms, coldcard, coldcard-multisig, \
+                  electrum, jade, sparrow, specter)"
             )));
         }
         None => match sniff_outcome {
+            // v0.28.0 Phase P0C: per plan-doc P0C row, the auto-sniff `None =>`
+            // arm is UNTOUCHED at P0C — the new SniffOutcome::<Format>
+            // variants land at per-parser P{N}A sub-phases (P1A through P6A
+            // and the BSMS BIP-129 cutover at P7A). Only the Ambiguous /
+            // NoMatch stderr templates below are updated to enumerate the
+            // post-cycle 8-format list per plan-doc Site 3 directive.
             SniffOutcome::Bsms => "bsms",
             SniffOutcome::BitcoinCore => "bitcoin-core",
+            // v0.28.0 Phase P3A: auto-sniff arm for Coldcard single-sig JSON.
+            // The sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Coldcard`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P3C: parse not yet wired")` until P3C flips it
+            // to `ColdcardParser::parse(...)`. Adding this arm BEFORE the
+            // `other => unreachable!()` catch-all keeps the unreachable
+            // contract intact for the still-placeholder variants
+            // (Electrum / Jade).
+            SniffOutcome::Coldcard => "coldcard",
+            // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
+            SniffOutcome::ColdcardMultisig => "coldcard-multisig",
+            // v0.28.0 Phase P6A→P6C: auto-sniff arm for Electrum 4.x wallet
+            // JSON. The sniff slot is wired at `sniff.rs:88`
+            // (`ElectrumParser::sniff`); the parse-side dispatch at the
+            // `match format_str` block below routes to
+            // `ElectrumParser::parse(&blob, stderr)` (wired at P6C). Adding
+            // this arm BEFORE the `other => unreachable!()` catch-all keeps
+            // the unreachable contract intact for the still-placeholder Jade
+            // variant (only `SniffOutcome::Jade` lacks a real auto-sniff arm
+            // at P6C close — P5A wires the remaining one).
+            SniffOutcome::Electrum => "electrum",
+            // v0.28.0 Phase P5A: auto-sniff arm for Blockstream Jade
+            // multisig wrapper JSON. The sniff slot is wired at
+            // `sniff.rs:90` (`JadeParser::sniff`); the parse-side dispatch
+            // at the `match format_str` block below remains
+            // `unimplemented!("P5C: parse not yet wired")` until P5C flips
+            // it to `JadeParser::parse(...)`. Adding this arm BEFORE the
+            // `other => unreachable!()` catch-all keeps the unreachable
+            // contract intact post-P5A (no remaining P5C-only
+            // placeholders — P5A wires the final auto-sniff arm).
+            SniffOutcome::Jade => "jade",
+            // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The
+            // sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Sparrow`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P1C: parse not yet wired")` until P1C
+            // flips it to `SparrowParser::parse(...)`. v0.28.0 P0D's
+            // `other => unreachable!()` catch-all would otherwise fire
+            // on the Sparrow verdict — adding this arm BEFORE the
+            // catch-all (per C/F dispatch learned-best-practice) keeps
+            // the unreachable contract intact for the still-placeholder
+            // variants (Coldcard / Electrum / Jade / Specter).
+            SniffOutcome::Sparrow => "sparrow",
+            // v0.28.0 Phase P2A: auto-sniff arm for Specter-DIY JSON. The
+            // sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Specter`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P2C: parse not yet wired")` until P2C
+            // flips it to `SpecterParser::parse(...)`. Pattern matches
+            // the P1A precedent above (Sparrow): wiring the auto-sniff
+            // arm at P2A makes a `SniffOutcome::Specter` verdict
+            // dispatch through this `None =>` branch instead of falling
+            // into the `other => unreachable!()` catch-all (which
+            // would crash on a positive Specter sniff before P2C lands).
+            SniffOutcome::Specter => "specter",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \
-                     supply --format <bsms|bitcoin-core>"
+                     supply --format <bitcoin-core|bsms|coldcard|coldcard-multisig|\
+electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
             }
             SniffOutcome::NoMatch => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: could not detect format; \
-                     supply --format <bsms|bitcoin-core>"
+                     supply --format <bitcoin-core|bsms|coldcard|coldcard-multisig|\
+electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
             }
+            // v0.28.0 Phase P5A close: all 8 `SniffOutcome` parser variants
+            // (BitcoinCore / Bsms / Coldcard / ColdcardMultisig / Electrum /
+            // Jade / Sparrow / Specter) plus the 2 aggregate verdicts
+            // (Ambiguous / NoMatch) now have explicit arms. The P0D
+            // `other => unreachable!()` pre-stub catch-all was removed at
+            // P5A because the match is now exhaustive — Rust's
+            // `unreachable_patterns` lint flags any remaining catch-all
+            // as dead code. The match exhaustiveness invariant is
+            // statically enforced by the compiler.
         },
     };
 
@@ -277,12 +650,29 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // Parse via selected format.
+    //
+    // v0.28.0 Phase P0C pre-stub (R0 C1 fold): 6 new format arms each
+    // panic via `unimplemented!()` at execution time. The arms above
+    // (Site 2 in plan-doc) panic FIRST when `--format <new>` is supplied
+    // explicitly; this site is reachable only via the auto-sniff path
+    // which can't yield a new-format verdict at P0C (the SniffOutcome
+    // variants don't exist yet). The arms are preserved here for
+    // alphabetical-source-grep parity + so per-parser P{N}C diffs touch
+    // a SINGLE arm per site (matrix-discipline lock per plan-doc §B.2 #6).
     let mut parsed: Vec<ParsedImport> = match format_str {
         "bsms" => BsmsParser::parse(&blob, stderr)?,
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
+        "coldcard" => ColdcardParser::parse(&blob, stderr)?,
+        "coldcard-multisig" => ColdcardMultisigParser::parse(&blob, stderr)?,
+        "electrum" => ElectrumParser::parse(&blob, stderr)?,
+        "jade" => JadeParser::parse(&blob, stderr)?,
+        "sparrow" => SparrowParser::parse(&blob, stderr)?,
+        "specter" => SpecterParser::parse(&blob, stderr)?,
         other => {
             return Err(ToolkitError::BadInput(format!(
-                "import-wallet --format {other} is not supported (bsms + bitcoin-core only)"
+                "import-wallet --format {other} is not supported \
+                 (bitcoin-core, bsms, coldcard, coldcard-multisig, \
+                  electrum, jade, sparrow, specter)"
             )));
         }
     };
@@ -313,6 +703,21 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC §5.3 — `--select-descriptor` filter. BSMS coerces non-default
     // to `all` per the SPEC NOTICE rule; emit the NOTICE here.
+    //
+    // v0.28.0 Phase P0C (Site 5 in plan-doc §B.2 #6) — per-format coerce
+    // decision: BSMS + Specter coerce non-`all` to `all` (both formats are
+    // single-descriptor by construction so `--select-descriptor` is
+    // meaningless for them). Other formats (sparrow, coldcard,
+    // coldcard-multisig, jade, electrum) fall through to the `_ =>`
+    // default which invokes `apply_select_descriptor`. Per-parser P{N}B /
+    // P{N}C sub-phases may revisit this if a format turns out to need an
+    // analogous coerce.
+    //
+    // v0.28.0 Phase P2C added the `specter` coerce arm: Specter-DIY's
+    // wire shape carries a single `descriptor` field at top level (no
+    // multi-descriptor envelope), so coercing to `all` matches SPEC §5.3's
+    // intent (active-receive / active-change semantics require per-entry
+    // metadata that Specter doesn't carry).
     let select = parse_select(&args.select_descriptor)?;
     let parsed = match format_str {
         "bsms" => match select {
@@ -322,6 +727,36 @@ pub fn run<R: Read, W: Write, E: Write>(
                     stderr,
                     "notice: import-wallet: bsms: --select-descriptor {} has no effect; \
                      BSMS Round-2 carries a single descriptor",
+                    args.select_descriptor
+                );
+                parsed
+            }
+        },
+        "specter" => match select {
+            SelectDescriptor::All => parsed,
+            _ => {
+                let _ = writeln!(
+                    stderr,
+                    "notice: import-wallet: specter: --select-descriptor {} has no effect; \
+                     Specter-DIY carries a single descriptor",
+                    args.select_descriptor
+                );
+                parsed
+            }
+        },
+        // v0.28.0 Phase P3C: Coldcard single-sig coerce arm. Coldcard's
+        // generic-wallet-export carries exactly one dominant-BIP descriptor
+        // per blob (single-sig by construction; bipNN sub-objects are
+        // exposed but the parser picks ONE dominant per SPEC §11.3.1), so
+        // `--select-descriptor` is meaningless — coerce non-`all` to `all`
+        // + emit NOTICE per the bsms/specter precedent.
+        "coldcard" => match select {
+            SelectDescriptor::All => parsed,
+            _ => {
+                let _ = writeln!(
+                    stderr,
+                    "notice: import-wallet: coldcard: --select-descriptor {} has no effect; \
+                     Coldcard single-sig carries a single descriptor",
                     args.select_descriptor
                 );
                 parsed
@@ -428,9 +863,27 @@ fn emit_json_envelope<W: Write, E: Write>(
     // envelope's `canonicalize_failed` branch per SPEC §7.4 v0.27.1
     // amendment. `None` for non-{bsms,bitcoin-core} formats (no canonicalize
     // path defined; not an error).
+    // v0.28.0 Phase P0C (Site 6 in plan-doc §B.2 #6) — 6 new canonicalize
+    // dispatch arms. Each calls a skeleton helper in
+    // `wallet_import/roundtrip.rs` that returns `Err(BadInput("not yet
+    // implemented; <format> ingest lands in Phase P{N}B"))`. At P0C the
+    // arms are unreachable in practice (Site 2 + Site 4 panic earlier on
+    // `--format <new>`, and the auto-sniff `None =>` arm can only yield
+    // bsms/bitcoin-core verdicts until per-parser P{N}A wires the new
+    // SniffOutcome variants). Per-parser P{N}B replaces the skeleton body
+    // with a real canonicalize implementation; this dispatch site flips
+    // from skeleton to real automatically.
     let canon_orig: Option<Result<String, String>> = match format_str {
         "bsms" => Some(canonicalize_bsms(blob).map_err(|e| e.to_string())),
         "bitcoin-core" => Some(canonicalize_bitcoin_core(blob).map_err(|e| e.to_string())),
+        "coldcard" => Some(canonicalize_coldcard(blob).map_err(|e| e.to_string())),
+        "coldcard-multisig" => {
+            Some(canonicalize_coldcard_multisig(blob).map_err(|e| e.to_string()))
+        }
+        "electrum" => Some(canonicalize_electrum(blob).map_err(|e| e.to_string())),
+        "jade" => Some(canonicalize_jade(blob).map_err(|e| e.to_string())),
+        "sparrow" => Some(canonicalize_sparrow(blob).map_err(|e| e.to_string())),
+        "specter" => Some(canonicalize_specter(blob).map_err(|e| e.to_string())),
         _ => None,
     };
 
@@ -572,6 +1025,197 @@ fn emit_json_envelope<W: Write, E: Write>(
                 "diff": serde_json::Value::Null,
                 "status": "blocked_no_emitter",
             }),
+            // v0.28.0 Phase P3C — coldcard round-trip envelope mirrors the
+            // bitcoin-core / coldcard-multisig shape: canonicalize is real
+            // (SPEC §11.3 semantic round-trip via preserved-key projection +
+            // BTreeMap alphabetical ordering). `byte_exact` compares input
+            // bytes to canonical output; `semantic_match=true` always since
+            // a successful canonicalize implies the parse + re-emit cycle
+            // succeeded.
+            "coldcard" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
+            // v0.28.0 Phase P4C — coldcard-multisig round-trip envelope mirrors
+            // the bitcoin-core shape: canonicalize is real (SPEC §11.4
+            // semantic round-trip via `parse_text` + re-emit in canonical
+            // shared-derivation shape). `byte_exact` compares input bytes to
+            // canonical output; `semantic_match=true` always since a
+            // successful canonicalize implies the parse + re-emit cycle
+            // succeeded.
+            "coldcard-multisig" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
+            // v0.28.0 Phase P6C — electrum round-trip envelope mirrors the
+            // bitcoin-core / coldcard / coldcard-multisig / sparrow / specter
+            // shape: canonicalize is real (SPEC §11.6 semantic round-trip via
+            // BTreeMap-backed alphabetical key reorder + dynamic xN/ cosigner
+            // key preservation). `byte_exact` compares input bytes to canonical
+            // output; `semantic_match=true` always on Ok.
+            "electrum" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
+            // v0.28.0 Phase P5C — jade round-trip envelope mirrors the
+            // bitcoin-core / coldcard / coldcard-multisig / electrum /
+            // sparrow / specter shape: canonicalize is real (SPEC §11.5
+            // semantic round-trip via BTreeMap-backed JSON wrapper with
+            // `id` dropped + inner Coldcard-multisig text canonicalized).
+            // `byte_exact` compares input bytes to canonical output;
+            // `semantic_match=true` always on Ok.
+            "jade" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
+            // v0.28.0 Phase P1C — sparrow round-trip envelope mirrors the
+            // bitcoin-core + coldcard-multisig shape: canonicalize is real
+            // (SPEC §11.1 semantic round-trip via BTreeMap-backed
+            // alphabetical-key form). `byte_exact` compares input bytes to
+            // canonical output; `semantic_match=true` always on Ok (a
+            // successful canonicalize implies the parse + re-emit cycle
+            // succeeded). Failures surface via `canonicalize_failed`.
+            "sparrow" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
+            // v0.28.0 Phase P2C — specter round-trip envelope mirrors the
+            // bitcoin-core + coldcard-multisig + sparrow shape: canonicalize
+            // is real (SPEC §11.2 semantic round-trip via BTreeMap-backed
+            // alphabetical-key form). `byte_exact` compares input bytes to
+            // canonical output; `semantic_match=true` always on Ok (a
+            // successful canonicalize implies the parse + re-emit cycle
+            // succeeded). Failures surface via `canonicalize_failed`.
+            "specter" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
             _ => json!({}),
         };
 
@@ -605,6 +1249,141 @@ fn emit_json_envelope<W: Write, E: Write>(
                     "range": meta.range,
                     "dropped_fields": meta.dropped_fields,
                     "wallet_name": meta.wallet_name,
+                }),
+            );
+        }
+        // v0.28.0 Phase P3C — Coldcard single-sig provenance envelope field.
+        // Mirrors the per-format-distinct field-name discipline
+        // (`coldcard_source_metadata`): surfaces ONLY when the parse was
+        // Coldcard-shaped. Carries `chain`, `xfp`, `bip_derivation`,
+        // `raw_account`, `dropped_fields` per SPEC §11.3.
+        if let Some(meta) = p.provenance.coldcard_source_metadata() {
+            let chain_str = match meta.chain {
+                crate::wallet_import::coldcard::ColdcardChain::Btc => "BTC",
+                crate::wallet_import::coldcard::ColdcardChain::Xtn => "XTN",
+            };
+            let bip_str = match meta.bip_derivation {
+                crate::wallet_import::coldcard::ColdcardBip::Bip44 => "bip44",
+                crate::wallet_import::coldcard::ColdcardBip::Bip49 => "bip49",
+                crate::wallet_import::coldcard::ColdcardBip::Bip84 => "bip84",
+                crate::wallet_import::coldcard::ColdcardBip::Bip86 => "bip86",
+            };
+            let xfp_hex = format!(
+                "{:02X}{:02X}{:02X}{:02X}",
+                meta.xfp[0], meta.xfp[1], meta.xfp[2], meta.xfp[3]
+            );
+            env.insert(
+                "coldcard_source_metadata".to_string(),
+                json!({
+                    "chain": chain_str,
+                    "xfp": xfp_hex,
+                    "bip_derivation": bip_str,
+                    "raw_account": meta.raw_account,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P6C — Electrum provenance envelope field. Mirrors
+        // the per-format-distinct field-name discipline
+        // (`electrum_source_metadata`): surfaces ONLY when the parse was
+        // Electrum-shaped. Carries `seed_version`, `wallet_type` (rendered
+        // as the canonical Electrum value-set string: "standard" or
+        // "<k>of<n>"), `wallet_name`, `dropped_fields` per SPEC §11.6.
+        if let Some(meta) = p.provenance.electrum_source_metadata() {
+            let wallet_type_str = match meta.wallet_type {
+                crate::wallet_import::electrum::ElectrumWalletType::Standard => {
+                    "standard".to_string()
+                }
+                crate::wallet_import::electrum::ElectrumWalletType::Multisig { k, n } => {
+                    format!("{k}of{n}")
+                }
+            };
+            env.insert(
+                "electrum_source_metadata".to_string(),
+                json!({
+                    "seed_version": meta.seed_version,
+                    "wallet_type": wallet_type_str,
+                    "wallet_name": meta.wallet_name,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P5C — Jade provenance envelope field. Mirrors
+        // the per-format-distinct field-name discipline
+        // (`jade_source_metadata`): surfaces ONLY when the parse was
+        // Jade-shaped. Carries the delegated Coldcard-multisig metadata
+        // verbatim under `coldcard_compat` (name, policy K-of-N,
+        // script_format, xfp telemetry, dropped_fields) plus a
+        // future-proof `jade_specific_fields` array (empty at v0.28.0
+        // per Q1 SeedQR-deferred lock).
+        if let Some(meta) = p.provenance.jade_source_metadata() {
+            let script_format_str = match meta.coldcard_compat.script_format {
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2wsh => "P2WSH",
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2shP2wsh => {
+                    "P2SH-P2WSH"
+                }
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2sh => "P2SH",
+            };
+            env.insert(
+                "jade_source_metadata".to_string(),
+                json!({
+                    "coldcard_compat": {
+                        "name": meta.coldcard_compat.name,
+                        "policy_k": meta.coldcard_compat.policy.k,
+                        "policy_n": meta.coldcard_compat.policy.n,
+                        "script_format": script_format_str,
+                        "xfp_was_blob_supplied": meta.coldcard_compat.xfp_was_blob_supplied,
+                        "xfp_header_disagreed": meta.coldcard_compat.xfp_header_disagreed,
+                        "dropped_fields": meta.coldcard_compat.dropped_fields,
+                    },
+                    "jade_specific_fields": meta.jade_specific_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P1C — Sparrow provenance envelope field. Mirrors
+        // `source_metadata` (BitcoinCore) + `bsms_audit` (BSMS): the field
+        // surfaces ONLY when the parse was Sparrow-shaped. Field name is
+        // `sparrow_source_metadata` for cross-format symmetry with
+        // `source_metadata` (Core); using a per-format-distinct field name
+        // avoids wire-shape conflict with the existing `source_metadata`.
+        if let Some(meta) = p.provenance.sparrow_source_metadata() {
+            let policy_type_str = match meta.policy_type {
+                crate::wallet_import::sparrow::SparrowPolicyType::Single => "SINGLE",
+                crate::wallet_import::sparrow::SparrowPolicyType::Multi => "MULTI",
+            };
+            env.insert(
+                "sparrow_source_metadata".to_string(),
+                json!({
+                    "label": meta.label,
+                    "policy_type": policy_type_str,
+                    "script_type": meta.script_type,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P2C — Specter provenance envelope field. Mirrors
+        // `sparrow_source_metadata` discipline: per-format-distinct field
+        // name (`specter_source_metadata`) surfaces ONLY when the parse was
+        // Specter-shaped. Carries `label` + `blockheight` + `devices` array
+        // (vendor-type + label per cosigner) + `dropped_fields`.
+        if let Some(meta) = p.provenance.specter_source_metadata() {
+            let devices_json: Vec<serde_json::Value> = meta
+                .devices
+                .iter()
+                .map(|d| {
+                    json!({
+                        "type": d.device_type,
+                        "label": d.label,
+                    })
+                })
+                .collect();
+            env.insert(
+                "specter_source_metadata".to_string(),
+                json!({
+                    "label": meta.label,
+                    "blockheight": meta.blockheight,
+                    "devices": devices_json,
+                    "dropped_fields": meta.dropped_fields,
                 }),
             );
         }
@@ -722,6 +1501,13 @@ fn emit_roundtrip_stderr_warning<E: Write>(
     blob: &[u8],
     format_str: &str,
 ) -> Result<(), ToolkitError> {
+    // v0.28.0 Phase P0C (Site 8 in plan-doc §B.2 #6) — per-format
+    // stderr-WARNING decision: ALL 6 new formats fall under the no-warning
+    // early-return (the `!= "bitcoin-core"` predicate covers them). BSMS
+    // takes the same path today via the `blocked_no_emitter` caveat. If a
+    // per-parser P{N}B sub-phase decides to surface a roundtrip WARNING on
+    // stderr, this site flips to an explicit `if !matches!(format_str,
+    // "bitcoin-core" | "<new>") { return Ok(()) }` shape.
     if format_str != "bitcoin-core" {
         return Ok(());
     }

@@ -1,0 +1,12 @@
+{
+  "chain": "BTC",
+  "xfp": "B8688DF1",
+  "account": 0,
+  "bip86": {
+    "name": "p2tr",
+    "deriv": "m/86'/0'/0'",
+    "xfp": "B8688DF1",
+    "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX",
+    "first": "bc1p..."
+  }
+}

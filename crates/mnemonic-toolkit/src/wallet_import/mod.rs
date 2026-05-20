@@ -25,11 +25,17 @@ pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
+pub(crate) mod coldcard;
+pub(crate) mod coldcard_multisig;
+pub(crate) mod electrum;
+pub(crate) mod jade;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
+pub(crate) mod sparrow;
+pub(crate) mod specter;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -61,31 +67,193 @@ pub(crate) trait WalletFormatParser {
 /// scope for this internal refactor.
 #[derive(Debug, Clone)]
 pub(crate) enum ImportProvenance {
+    /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
+    BitcoinCore(CoreSourceMetadata),
     /// BSMS Round-2 parse (`wallet_import/bsms.rs`). Holds `Option` because
     /// the lenient 2-line excerpt shape carries no audit fields (token /
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
-    /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
-    BitcoinCore(CoreSourceMetadata),
+    /// Coldcard single-sig generic-wallet-export JSON parse
+    /// (`wallet_import/coldcard.rs`). SPEC §11.3. Inserted in
+    /// alphabetical-by-variant-name slot per CLAUDE.md discipline (between
+    /// `Bsms` and `ColdcardMultisig`).
+    ///
+    /// Constructed by `ColdcardParser::parse` (Phase P3B). The
+    /// `cmd/import_wallet.rs` dispatch arm at P3C plumbs this variant to
+    /// the `--json` envelope `coldcard_source_metadata` field.
+    Coldcard(coldcard::ColdcardSourceMetadata),
+    /// Coldcard multisig text-file parse (`wallet_import/coldcard_multisig.rs`).
+    /// SPEC §11.4. Inserted in alphabetical-by-variant-name slot per CLAUDE.md
+    /// discipline; the prior `Coldcard(...)` slot (single-sig, SPEC §11.3) is
+    /// added in Phase P3B and lands at the alphabetically-preceding position
+    /// without affecting this insertion.
+    ///
+    /// The variant is constructed by `ColdcardMultisigParser::parse` at P4B
+    /// and the `cmd/import_wallet.rs` dispatch arm wired at P4C; the
+    /// `dead_code` allow on the variant covers the P4A → P4C interim
+    /// (the type exists for downstream-consumer reference + dispatch
+    /// stitching but is not yet constructed by any wired call site).
+    #[allow(dead_code)]
+    ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// Electrum 4.x wallet-file parse (`wallet_import/electrum.rs`). SPEC §11.6.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
+    /// (between `ColdcardMultisig` and `Sparrow`).
+    ///
+    /// Constructed by `ElectrumParser::parse` (Phase P6B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P6C plumbs this variant
+    /// to the `--json` envelope `electrum_source_metadata` field.
+    Electrum(electrum::ElectrumSourceMetadata),
+    /// Blockstream Jade `get_registered_multisig` reply parse
+    /// (`wallet_import/jade.rs`). SPEC §11.5. Inserted in alphabetical-by-
+    /// variant-name slot per CLAUDE.md discipline (between `Electrum` and
+    /// `Sparrow`).
+    ///
+    /// Constructed by `JadeParser::parse` (Phase P5B) — delegates to
+    /// `coldcard_multisig::parse_text` and re-annotates the inner
+    /// `ColdcardMultisig` provenance into the Jade-specific
+    /// `JadeSourceMetadata` wrapper. The `cmd/import_wallet.rs` dispatch
+    /// arm wired at P5C plumbs this variant to the `--json` envelope
+    /// `jade_source_metadata` field. The `jade_source_metadata()`
+    /// accessor at P5C is the load-bearing consumer.
+    Jade(jade::JadeSourceMetadata),
+    /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
+    /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
+    /// later phase and lands at the alphabetically-following position
+    /// without affecting this insertion.
+    ///
+    /// Constructed by `SparrowParser::parse` (Phase P1B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P1C plumbs this variant
+    /// to the `--json` envelope; until then the variant is reachable only
+    /// from `wallet_import::sparrow::tests`.
+    Sparrow(sparrow::SparrowSourceMetadata),
+    /// Specter-DIY wallet JSON parse (`wallet_import/specter.rs`). SPEC §11.2.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
+    /// (after `Sparrow`).
+    ///
+    /// Constructed by `SpecterParser::parse` (Phase P2B) and consumed by
+    /// the `cmd/import_wallet.rs` dispatch arm at P2C which plumbs this
+    /// variant to the `--json` envelope `specter_source_metadata` field.
+    Specter(specter::SpecterSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for the `BitcoinCore` variant.
+    /// excerpt shape or for any non-BSMS variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
-            Self::Bsms(audit) => audit.as_ref(),
             Self::BitcoinCore(_) => None,
+            Self::Bsms(audit) => audit.as_ref(),
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
         }
     }
 
     /// Back-compat accessor: returns `Some(&metadata)` only for the `BitcoinCore` variant.
     pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
         match self {
-            Self::Bsms(_) => None,
             Self::BitcoinCore(meta) => Some(meta),
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Coldcard-specific accessor: returns `Some(&metadata)` only for the
+    /// `Coldcard` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P3C wiring). Mirrors
+    /// `sparrow_source_metadata` / `specter_source_metadata`.
+    pub(crate) fn coldcard_source_metadata(&self) -> Option<&coldcard::ColdcardSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(meta) => Some(meta),
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Jade-specific accessor: returns `Some(&metadata)` only for the
+    /// `Jade` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P5C wiring). Mirrors
+    /// `coldcard_source_metadata` / `electrum_source_metadata` /
+    /// `sparrow_source_metadata` / `specter_source_metadata`.
+    pub(crate) fn jade_source_metadata(&self) -> Option<&jade::JadeSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(meta) => Some(meta),
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Electrum-specific accessor: returns `Some(&metadata)` only for the
+    /// `Electrum` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P6C wiring). Mirrors
+    /// `coldcard_source_metadata` / `sparrow_source_metadata` /
+    /// `specter_source_metadata`.
+    pub(crate) fn electrum_source_metadata(
+        &self,
+    ) -> Option<&electrum::ElectrumSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(meta) => Some(meta),
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Sparrow-specific accessor: returns `Some(&metadata)` only for the
+    /// `Sparrow` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P1C wiring).
+    pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(meta) => Some(meta),
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Specter-specific accessor: returns `Some(&metadata)` only for the
+    /// `Specter` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P2C wiring). Mirrors
+    /// `sparrow_source_metadata` above.
+    pub(crate) fn specter_source_metadata(&self) -> Option<&specter::SpecterSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(meta) => Some(meta),
         }
     }
 }
@@ -358,5 +526,35 @@ mod provenance_tests {
         let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
         assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
         assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
+    }
+
+    /// P0B.2 regression guard: behavior on the existing 2 variants is
+    /// unchanged by the alphabetical reorder of `BitcoinCore` before `Bsms`.
+    /// Exhaustively exercises every (variant × accessor) pair and asserts the
+    /// same `Some`/`None` outputs as pre-reorder semantics. Variants
+    /// constructed in alphabetical source order to mirror the new enum
+    /// declaration ordering (R0 invariant: enum + matches stay alphabetical).
+    #[test]
+    fn provenance_accessor_matrix_invariant_under_alphabetical_reorder() {
+        let core = ImportProvenance::BitcoinCore(sample_core_metadata());
+        assert!(core.bsms_audit().is_none(), "BitcoinCore → bsms_audit None");
+        assert!(
+            core.source_metadata().is_some(),
+            "BitcoinCore → source_metadata Some"
+        );
+
+        let bsms_some = ImportProvenance::Bsms(Some(sample_bsms_audit()));
+        assert!(bsms_some.bsms_audit().is_some(), "Bsms(Some) → bsms_audit Some");
+        assert!(
+            bsms_some.source_metadata().is_none(),
+            "Bsms(Some) → source_metadata None"
+        );
+
+        let bsms_none = ImportProvenance::Bsms(None);
+        assert!(bsms_none.bsms_audit().is_none(), "Bsms(None) → bsms_audit None");
+        assert!(
+            bsms_none.source_metadata().is_none(),
+            "Bsms(None) → source_metadata None"
+        );
     }
 }

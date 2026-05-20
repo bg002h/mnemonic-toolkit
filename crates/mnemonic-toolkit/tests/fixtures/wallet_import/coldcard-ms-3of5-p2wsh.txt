@@ -1,0 +1,15 @@
+# Coldcard Multisig setup file — 3-of-5 mainnet P2WSH.
+# No XFP header (per-cosigner XFPs in <XFP>: <xpub> form on each cosigner line).
+# Shared-derivation shape. Uses 5 distinct mainnet xpubs from the toolkit's
+# existing test corpus; each per-cosigner XFP matches xpub.fingerprint() so
+# the parse path is the silent-match row of the 5-row truth table.
+Name: TestMs3of5
+Policy: 3 of 5
+Derivation: m/48'/0'/0'/2'
+Format: P2WSH
+
+34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx
+5C1BD648: xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw
+A7BEA80D: xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ

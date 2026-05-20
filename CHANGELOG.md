@@ -6,6 +6,64 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.0] — 2026-05-20
+
+Headline cycle: 6 new wallet-import format parsers (Sparrow / Specter / Electrum / Coldcard / Coldcard-multisig / Jade) + BSMS BIP-129-canonical 4-line Round-2 input parser + `compare-cost` single-leaf taproot input support. Cross-format conversion matrix grows from a single source→destination cell to a parameterized N×M matrix (74 cells: 24 happy-path + 42 refusal + adjuncts) covering 8 sources × N destinations.
+
+### Added
+
+- 6 new `mnemonic import-wallet --format` parsers:
+  - `coldcard` — Coldcard single-sig `wallet.json` (BIP-44 / BIP-49 / BIP-84 / BIP-86 per-path xpub blocks)
+  - `coldcard-multisig` — Coldcard multisig text export (descriptor + cosigner list with per-cosigner `Derivation`/xpub blocks)
+  - `electrum` — Electrum 4.x plaintext wallet file (singlesig + multisig `x1`/`x2`/... per-cosigner subkeys)
+  - `jade` — Blockstream Jade `get_registered_multisig` reply (multisig descriptor + per-cosigner xpub + threshold + signer-fingerprint annotations)
+  - `sparrow` — Sparrow Wallet JSON export (singlesig + `sortedmulti` wsh() / sh(wsh()) shapes)
+  - `specter` — Specter-DIY JSON descriptor export
+- BSMS BIP-129-canonical 4-line Round-2 input parser (SPEC §10) — `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>` with descriptor cross-validation against path-restrictions + first-address per BIP-129 §Round 2 verify gate. Partial implementation of `bsms-bip129-full-cutover` (sub-items (a)/(b)/(e)); encryption envelope sub-item (c) deferred to v0.28+ as `bsms-bip129-encryption-envelope`.
+- `mnemonic compare-cost --descriptor 'tr(IK, M)'` single-leaf taproot input support (SPEC compare-cost v0.28.0 §11). `translate_descriptor` extended to accept `Descriptor::Tr(_)` where the TapTree contains a single leaf-script; multi-leaf TapTree continues to refuse with `UnsupportedWrapper`.
+- Cross-format conversion matrix: 24 happy-path + 42 refusal cells in `tests/cli_export_wallet_from_import_json.rs` covering 8 sources × N destinations (closes `cross-format-conversion-matrix-expansion`).
+- 8 new Bitcoin Core fixtures + 7 new BSMS fixtures in `tests/fixtures/wallet_import/` (closes `wallet-import-fixture-corpus-expansion`).
+
+### Changed
+
+- BSMS `--format bsms` taproot refusal text now per-script-type discriminated (P2tr / P2trMulti); cites FOLLOWUP `bsms-taproot-emit`; refusal text points users at `--format bitcoin-core` / `--format sparrow` alternatives. Real BSMS taproot emit remains upstream-blocked on BIP-129 §1 prerequisites adding BIP-386.
+- CLI `--format` value-set expanded from 2 to 8 values (alphabetical: `bitcoin-core`, `bsms`, `coldcard`, `coldcard-multisig`, `electrum`, `jade`, `sparrow`, `specter`).
+- `wallet_import/sniff.rs::sniff_format` dispatch rewrote from 2-bool 2x2 truth-table to N-parser consult-all-then-count pattern (`SniffOutcome` extended with 6 new variants).
+- `VENDOR_MARKER_KEYS` exclusion list grew from 5 to 13 entries to cover the new vendor envelope shapes.
+
+### Deprecated
+
+- BSMS 6-line lenient input shape — stderr DEPRECATION NOTICE fires when parsed; planned for removal in a future minor version. Convert to BIP-129-canonical 4-line shape (the new default ingest path).
+
+### Closed FOLLOWUPs (9 resolved + 2 partial-impl sub-deliverables)
+
+Resolved:
+- `wallet-import-sparrow` (P1; commit `b20a357`)
+- `wallet-import-specter` (P2; commit `8548258`)
+- `wallet-import-electrum` (P6; commit `2031609`)
+- `wallet-import-coldcard` (P3; commit `1304932`)
+- `wallet-import-coldcard-multisig` (P4 instance D; commit `387a709`)
+- `wallet-import-jade` (P5 instance E; commit `091a313`)
+- `wallet-import-fixture-corpus-expansion` (G3 + H; commits `d7a2859` + `2a803e8`)
+- `cross-format-conversion-matrix-expansion` (P11; commit `8bf78ff`)
+- `compare-cost-single-leaf-tr-input` (P12; commit `78936ab`)
+
+Partial-implementation sub-deliverables (canonical entries stay open; sub-deliverable notes added):
+- `bsms-bip129-full-cutover` — sub-items (a) 6-line deprecation + (b) 4-line parser + (e) SPEC/manual coverage shipped at commits `1444c51` + `d18787f`; (c) encryption envelope + (d) drop legacy shapes remain open
+- `bsms-taproot-emit` — refusal-scaffold UX improvements shipped at commit `158897f` (P8A+P8B); real emit remains upstream-blocked
+
+### Filed FOLLOWUPs (9 new)
+
+- `bsms-bip129-encryption-envelope` (v0.28+) — STANDARD/EXTENDED encryption envelope carved out of `bsms-bip129-full-cutover` sub-item (c)
+- `wallet-import-jade-seedqr` (v0.28+) — SeedQR ingest deferred from P5 per Q1 lock
+- `wallet-import-electrum-encrypted` (v0.28+) — encrypted Electrum 4.x ingest deferred from P6 per Q2 lock
+- `wallet-import-format-mismatch-matrix-completion` (v0.28+) — symmetric N×N mismatch matrix completion (promoted from cycle-followups tracker)
+- `bsms-import-taproot-refusal-parity` (v0.28+) — BSMS import-side tr() refusal + `extract_threshold` regex side-channel finding (promoted from cycle-followups tracker)
+- `sparrow-taproot-descriptor-passthrough-import-support` (v0.29+) — Sparrow taproot import via descriptor-passthrough heuristic
+- `coldcard-legacy-mk1-mk2-top-level-xpub-inference` (v0.29+) — legacy Coldcard wallet.json top-level xpub support
+- `green-emitter-multisig-refusal-template-only` (v0.28+) — Green's multisig refusal misses descriptor-mode invocations
+- `import-wallet-envelope-schema-version-narrative-drift` (v0.28+) — outer envelope vs inner BundleJson `schema_version` name collision
+
 ## mnemonic-toolkit [0.27.2] — 2026-05-19
 
 Cleanup cycle closing 7 v0.27-tier FOLLOWUPs. Anchored on Phase 5b's deferred `ImportProvenance` enum refactor (tier promoted from `v0.28+` per Shape A approval). Sibling lockstep: mnemonic-gui v0.11.1 ships separately (workflow trigger filter + toolkit pin bump). Zero wire-shape change; patch bump valid.

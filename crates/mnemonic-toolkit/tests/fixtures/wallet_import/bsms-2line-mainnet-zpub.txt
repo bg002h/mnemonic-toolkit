@@ -1,0 +1,2 @@
+BSMS 1.0
+wpkh([5436d724/84'/0'/0']zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S/<0;1>/*)#yxzx3ag7

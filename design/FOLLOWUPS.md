@@ -114,7 +114,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cost/strip.rs:51-54` (the `translate_descriptor` function's `Descriptor::Tr(_) => Err(UnsupportedWrapper)` arm); `cost/mod.rs:75` (user-visible Display impl for `UnsupportedWrapper`); `cost/mod.rs:131-138` (`run_compare_cost`'s `InputForm::{Miniscript, Descriptor}` dispatch — the `InputForm::Descriptor` arm calls `strip::translate_descriptor`). Citations verified against origin/master SHA `1abd9d1` 2026-05-19.
 - **What:** Extend `translate_descriptor` (at `cost/strip.rs`) to accept `tr(<internal-key>, <single-leaf-script>)` (single-leaf only — multi-leaf TapTree is a separate scope). Map to a cost-domain that compares fairly against `wsh(...)` outputs. Specify the SPEC §-anchor before implementing — `tr()` cost comparison vs `wsh()` is non-trivial (different witness-stack shapes, different fee surfaces).
 - **Why deferred:** v0.26.0 ship scope didn't include taproot input parsing for compare-cost; user-visible error directs users at this slug.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 78936ab). Phase P12 shipped single-leaf `tr(IK, M)` input support per SPEC compare-cost v0.28.0 §11. `translate_descriptor` extended to accept `Descriptor::Tr(_)` where the TapTree contains a single leaf-script; multi-leaf TapTree continues to refuse with `UnsupportedWrapper`. Internal key surface re-used the existing cost-domain mapping against `wsh(...)`.
 - **Tier:** `v0.27`
 
 ### `inspect-json-schema-version-backfill` — backfill `schema_version: "1"` field on `InspectJson` envelope to match `XpubSearchJson`
@@ -2211,16 +2211,17 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:105-127` — the v0.26.0 6-line lenient parser (`6 =>` arm of the line-count match) whose `signature` field has no agreed verify semantics under BIP-129. Citation verified against origin/master SHA `176443e` 2026-05-19.
   - `design/SPEC_wallet_import_v0_26_0.md:152` — the documented lenient-input framing that motivated the 6-line shape.
   - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full BIP-129 spec recon (verbatim quotes from §Specification → Round 1, Round 2, Encryption + 5 in-spec test vectors).
-- **What:** v0.28+:
-  - (a) **Deprecate v0.26.0 6-line lenient parser.** Add stderr DEPRECATION notice when 6-line input is detected; planned removal in a future minor version.
-  - (b) **Add BIP-129-faithful 4-line Round-2 input parser.** `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Cross-validates the descriptor against the supplied path-restrictions + first-address (BIP-129 §Round 2 verify gate). Adds 4 + extra fixture coverage from BIP-129 in-spec test vectors.
-  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt of ciphertext + HMAC-SHA256 MAC verify per BIP-129 §Encryption. New CLI flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. Refer to recon doc §2 for byte-level construction. Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup` `test.py`).
-  - (d) Drop the v0.26.0 6-line shape (and possibly the 2-line lenient excerpt) after a stable-version deprecation window.
-  - (e) Document the v0.26.0 → v0.27 → v0.28 BSMS history in `design/SPEC_wallet_import_v0_28+.md` + manual chapter at `docs/manual/src/40-cli-reference/41-mnemonic.md`.
+- **What:** v0.28+ remaining sub-items (a) and (c) and (d):
+  - (a) **Deprecate v0.26.0 6-line lenient parser.** Stderr DEPRECATION notice when 6-line input is detected; planned removal in a future minor version. *Shipped v0.28.0 (commit `1444c51`)*: the BIP-129-canonical 4-line Round-2 parser is now the default ingest path; 6-line lenient input still parses but fires a stderr DEPRECATION NOTICE. Final removal (d) deferred to a future minor.
+  - (b) **Add BIP-129-faithful 4-line Round-2 input parser.** `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Cross-validates the descriptor against the supplied path-restrictions + first-address (BIP-129 §Round 2 verify gate). *Shipped v0.28.0 (commit `1444c51`)*: 4-line parser + path-restrictions cross-validation + first-address byte-exact verify per SPEC §10.
+  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt of ciphertext + HMAC-SHA256 MAC verify per BIP-129 §Encryption. New CLI flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. *Remains open* — carved out into the dedicated sibling FOLLOWUP `bsms-bip129-encryption-envelope` (v0.28+) for tracking.
+  - (d) Drop the v0.26.0 6-line shape (and possibly the 2-line lenient excerpt) after a stable-version deprecation window. *Remains open* — the v0.28.0 deprecation NOTICE in sub-item (a) starts the window; removal deferred to a future minor.
+  - (e) Document the v0.26.0 → v0.27 → v0.28 BSMS history in `design/SPEC_wallet_import_v0_28+.md` + manual chapter at `docs/manual/src/40-cli-reference/41-mnemonic.md`. *Shipped v0.28.0 (commit `d18787f` via P13)*: SPEC_wallet_import_v0_28_0.md §10 + manual chapter updates land in lockstep with the v0.28.0 ship.
+- **v0.28.0 sub-deliverable note:** sub-item (b) BIP-129-canonical 4-line Round-2 parser shipped in commit `1444c51`; sub-item (a) deprecation NOTICE for 6-line shape ships alongside; sub-item (e) SPEC + manual coverage lands at P13. Sub-items (c) encryption envelope and (d) drop legacy shapes remain open and are tracked under the canonical entry (this one) plus the dedicated sibling FOLLOWUP `bsms-bip129-encryption-envelope` for the encryption-envelope work specifically.
 - **Why deferred from v0.27.0:** Scope. v0.27.0 Path B-lite focuses on BIP-129 Round-1 verify + Round-2 emit (the two clean primitives that close the round-trip cycle). Adding the encryption-envelope primitives in v0.27.0 would ~double the cycle scope; deprecating v0.26.0's lenient parser pre-needs a stable BIP-129-faithful replacement input path (which requires the 4-line parser of (b) here). v0.28+ cycle.
-- **Status:** open
+- **Status:** open (sub-items (c) + (d) remain; (a)/(b)/(e) shipped at v0.28.0).
 - **Tier:** `v0.27-cycle-close`
-- **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure).
+- **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure). Sibling carve-out: `bsms-bip129-encryption-envelope` (v0.28+; sub-item (c) tracked separately).
 
 ### `wallet-export-bsms-emitter` — `mnemonic export-wallet --format bsms` is unimplemented; blocks BSMS bundle round-trip cells
 
@@ -2257,7 +2258,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/IMPLEMENTATION_PLAN_wallet_import_v0_26_0.md` §4.3 / §4.4 — full fixture list.
 - **What:** v0.27+: ship remaining fixtures per SPEC §10.1/§10.2 — BSMS decay-4032, 6-line sortedmulti-2of3, sortedmulti-3of5, mainnet+ypub, mainnet+zpub, tr(NUMS,...) taproot; Core BIP-44 P2PKH, BIP-86 P2TR, wsh-sortedmulti 3-of-5, native `<0;1>/*` multipath, explicit `active: false` cell name. Each new fixture pairs with a per-fixture canonicalize-idempotency cell + a sniff cell.
 - **Why deferred:** v0.26.0's shipped subset exercises the load-bearing canonicalize + idempotency + Core envelope-shape branches + declaration-order preservation invariant. Missing fixtures are coverage-expansion targets, not load-bearing for v0.26.0's correctness contract. Phase 4 implementer's commit body explicitly flagged the corpus reduction; the architect review confirmed the load-bearing paths are covered and the missing fixtures are expansion-class rather than correctness-class.
-- **Status:** open
+- **Status:** resolved (v0.28.0; d7a2859 (G3 BSMS fixtures) + 2a803e8 (H Core fixtures)). Phase G3 shipped 7 new BSMS fixtures (2-line/6-line sortedmulti variants, mainnet+ypub, mainnet+zpub, tr(NUMS,...) parity cell) + 9 cells. Phase H (Wave 2) shipped 8 new Bitcoin Core fixtures (BIP-44 P2PKH, BIP-86 P2TR, wsh-sortedmulti 3-of-5, native `<0;1>/*` multipath, explicit `active: false`, etc.).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2296,7 +2297,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: add `wallet_import/sparrow.rs` (or merged dispatcher) parsing Sparrow's wallet-export JSON shape. Inverse of `wallet_export::sparrow::emit_sparrow_wallet_json` (at `wallet_export/sparrow.rs:103`); the wallet_export-side Sparrow emitter ships today, so this is the matching ingest side. Citation verified against origin/master SHA `1abd9d1` 2026-05-19.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; b20a357). Phase P1 shipped `wallet_import/sparrow.rs` covering singlesig + `sortedmulti` wsh() / sh(wsh()) shapes. Taproot descriptor-passthrough support filed forward as `sparrow-taproot-descriptor-passthrough-import-support` (v0.29+).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2308,7 +2309,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: add Specter-DIY JSON descriptor parser (non-BSMS path). Specter's wallet-export schema diverges from BSMS Round-2's line-oriented shape and from Bitcoin Core's `listdescriptors` envelope; needs its own sniff signature + parser.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 8548258). Phase P2 shipped `wallet_import/specter.rs` covering Specter-DIY JSON descriptor exports.
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2320,9 +2321,9 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: ingest Electrum 4.x wallet file (Python-dict-serialized JSON with `xpub` / `wallet_type` keys; multisig shapes via `x1`/`x2`/... per-cosigner subkeys). Encrypted variants (Electrum's stretched-key envelope) are out of scope; sibling FOLLOWUP for encrypted ingest if user-direction warrants.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 2031609). Phase P6 shipped `wallet_import/electrum.rs` covering Electrum 4.x wallet-file ingest (singlesig + multisig `x1`/`x2`/... per-cosigner subkeys). Encrypted-envelope variant filed forward as `wallet-import-electrum-encrypted` (v0.28+) per Q2 lock.
 - **Tier:** `v0.27`
-- **Companion:** none.
+- **Companion:** `wallet-import-electrum-encrypted` (encrypted Electrum wallets require decrypting via Electrum CLI first).
 
 ### `wallet-import-coldcard` — Coldcard wallet.json export (single-sig)
 
@@ -2332,7 +2333,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: ingest Coldcard's single-sig `wallet.json` export shape (BIP-44 / BIP-49 / BIP-84 / BIP-86 per-path xpub blocks under a fixed envelope; Coldcard-specific provenance metadata). Multisig descriptor-text shape is tracked separately under `wallet-import-coldcard-multisig`.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 1304932). Phase P3 shipped `wallet_import/coldcard.rs` covering Coldcard single-sig wallet.json (BIP-44 / BIP-49 / BIP-84 / BIP-86 per-path xpub blocks). Legacy mk1/mk2 top-level xpub inference filed forward as `coldcard-legacy-mk1-mk2-top-level-xpub-inference` (v0.29+).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2344,7 +2345,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: ingest Coldcard's multisig descriptor-text export (`Name`, `Policy`, `Format`, per-cosigner `Derivation` + xpub blocks; output script type as a separate header). Distinct shape from Coldcard's single-sig `wallet.json`; line-oriented `Key: Value` grammar more similar to BSMS than to Sparrow's JSON.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 387a709). Phase P4 (instance D) shipped `wallet_import/coldcard_multisig.rs` covering Coldcard multisig text-file ingest (`Name`/`Policy`/`Format`/per-cosigner `Derivation`+xpub blocks).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2356,9 +2357,9 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: ingest Blockstream Jade's `register_multisig` JSON-like export shape (multisig descriptor + per-cosigner xpub + name + threshold; signer-fingerprint annotations). SeedQR formats — distinct surface — may be folded later as an inline mode rather than a wallet-import format if user-direction warrants.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 + Bitcoin Core listdescriptors only. Sparrow/Specter/Coldcard/Jade are tracked individually for granular v0.27+ scope planning.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 091a313). Phase P5 (instance E) shipped `wallet_import/jade.rs` covering Blockstream Jade `get_registered_multisig` reply (multisig descriptor + per-cosigner xpub + threshold + signer-fingerprint annotations). SeedQR-format intake deferred per Q1 lock; filed forward as `wallet-import-jade-seedqr` (v0.28+).
 - **Tier:** `v0.27`
-- **Companion:** none.
+- **Companion:** `wallet-import-jade-seedqr` (SeedQR intake surface).
 
 ### `wallet-import-bsms-round-1` — BSMS Round-1 share ingest (multi-cosigner setup phase)
 
@@ -2456,9 +2457,9 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/30-workflows/39-cross-format-conversion.md` — narrative recipe covering 3 paths (BSMS→Bitcoin Core, Bitcoin Core→bundle synth, BSMS→BIP-388); no automated cross-format coverage for the remaining N×M combinations.
 - **What:** v0.28+: expand the integration cell into a parameterized N×M matrix covering every supported source × destination pair: BSMS / Bitcoin Core as sources × {bitcoin-core, bip388, bsms, sparrow*, jade*, coldcard*, electrum*, specter*, green} as destinations (* requires template-mode handling — wallet-export-from-import-json refuses descriptor-mode by current per-emitter contract). Acceptance: every cell loads a fixture envelope, emits the target format, parses the output (or asserts the expected refusal for template-only formats), and asserts cosigner xpub + descriptor preservation.
 - **Why deferred:** v0.27.0 cycle scope was wiring + headline integration; matrix expansion is hardening work, not load-bearing for v0.27.0 correctness.
-- **Status:** open
+- **Status:** resolved (v0.28.0; 8bf78ff). Phase P11 shipped a parameterized N×M cross-format matrix in `tests/cli_export_wallet_from_import_json.rs`: 24 happy-path + 42 refusal cells (74 total) covering 8 sources (bsms, bitcoin-core, coldcard, coldcard-multisig, electrum, jade, sparrow, specter) × N destinations including refusal classes per per-emitter contract. Symmetry/inverse-mismatch matrix completion filed forward as `wallet-import-format-mismatch-matrix-completion` (v0.28+).
 - **Tier:** `v0.28+`.
-- **Companion:** none.
+- **Companion:** `wallet-import-format-mismatch-matrix-completion` (per-arm symmetric mismatch wiring).
 
 ### `bsms-taproot-emit` — BIP-129 emit for tr() descriptors (BIP-386 prerequisite)
 
@@ -2467,14 +2468,15 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:69-76` — `BsmsEmitter::emit()` refuses taproot scripts (P2tr / P2trMulti) with `ToolkitError::BadInput`. Note: `BsmsEmitter::collect_missing` at `bsms.rs:58-62` returns an empty vec; the `IncompatibleFormatForTemplate` variant defined in `wallet_export/mod.rs` is not on the BSMS refusal path. Citation verified against origin/master SHA `1abd9d1` 2026-05-19.
   - BIP-129 §1 Prerequisites — enumerates BIPs 32/43/44/45/48/67/86/87/174/350 + the SegWit BIPs; conspicuously does NOT include BIP-386 (`tr(...)`).
 - **What:** v0.28+: implement BSMS Round-2 emit for taproot descriptors (`tr(K)` and `tr(internal, multi_a(K,...))` / `tr(internal, sortedmulti_a(K,...))`). Blocked on a BIP-129 update adding BIP-386 to §1 prerequisites — without that prerequisite update, the BIP-129-canonical descriptor-line shape is undefined for tr() (specifically: how taproot internal-key + multi_a leaf set serialize into the line-2 descriptor body within the BIP-129 spec). Soft-blocker: track upstream BIP-129 PRs; revisit when a published canonicalization is available.
+- **v0.28.0 sub-deliverable note:** P8A+P8B (commit `158897f`) shipped a refusal-scaffold UX improvement: `--format bsms` taproot refusal text is now per-script-type discriminated (P2tr / P2trMulti); refusal text cites this FOLLOWUP slug and points users at `--format bitcoin-core` / `--format sparrow` alternatives. Real emit remains upstream-blocked on BIP-129 §1 prerequisites adding BIP-386; the v0.28.0 work is refusal-side hardening only.
 - **Why deferred:** Standards prerequisite not yet met; emitting against an unpublished canonicalization would commit the toolkit to a wire shape we'd need to break.
-- **Status:** open
+- **Status:** open (real emit remains upstream-blocked; v0.28.0 shipped refusal-scaffold UX improvements only).
 - **Tier:** `v0.28+`.
-- **Companion:** none.
+- **Companion:** `bsms-import-taproot-refusal-parity` (v0.28+; symmetric import-side refusal hardening + `extract_threshold` side-channel finding).
 
 ### `bsms-bip129-full-cutover` — DUPLICATE STUB → see canonical entry above (line ~2207)
 
-- **Status:** consolidated 2026-05-19 during cycle-prep recon (source SHA `1abd9d1`). This was a v0.27.0 Phase 3 cycle-close re-filing of the same scope (4-line parser + encryption envelope + lenient-parser deprecation) as the canonical `bsms-bip129-full-cutover` entry filed at v0.27.0 Phase 2 (line ~2207). Per `feedback-per-phase-agents-forget-followup-status-flip` discipline (split-state hazard), all work tracking now happens at the canonical entry above. When the canonical entry resolves at v0.28 ship, mark this stub resolved in lockstep.
+- **Status:** open — consolidated 2026-05-19 during cycle-prep recon (source SHA `1abd9d1`). This was a v0.27.0 Phase 3 cycle-close re-filing of the same scope (4-line parser + encryption envelope + lenient-parser deprecation) as the canonical `bsms-bip129-full-cutover` entry filed at v0.27.0 Phase 2 (line ~2207). Per `feedback-per-phase-agents-forget-followup-status-flip` discipline (split-state hazard), all work tracking now happens at the canonical entry above. The canonical entry remains OPEN after v0.28.0 (sub-items (c) encryption envelope + (d) drop legacy shapes are deferred); v0.28.0 shipped sub-items (a) 6-line deprecation + (b) 4-line parser + (e) SPEC/manual coverage at commit `1444c51` + `d18787f`. This stub stays OPEN in lockstep with the canonical entry. Will mark resolved once the canonical entry resolves.
 - **Tier:** `v0.28+`.
 
 ### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
@@ -2536,3 +2538,104 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** resolved (toolkit a215f31 + mnemonic-gui f5c597e; codified in both CLAUDE.mds)
 - **Tier:** `v0.28+` (resolved early as docs-only close-out on master)
 - **Companion:** Cross-repo — mnemonic-gui CLAUDE.md companion added at f5c597e.
+
+### `bsms-bip129-encryption-envelope` — STANDARD/EXTENDED encryption envelope (carved out of `bsms-bip129-full-cutover`)
+
+- **Surfaced:** 2026-05-20, v0.28.0 cycle close (Phase P14A). Carved out from the canonical `bsms-bip129-full-cutover` entry sub-item (c) so the encryption-envelope work has a dedicated tracking slug independent of the parent entry's lenient-parser deprecation cadence.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — current 4-line parser (post-v0.28.0) consumes plaintext shapes only.
+  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` §2 — byte-level construction of the STANDARD/EXTENDED encryption envelopes.
+- **What:** v0.28+: ship BIP-129 §Encryption STANDARD/EXTENDED envelope support. Key derivation: PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY). Decrypt: AES-256-CTR over ciphertext; verify HMAC-SHA256 MAC. CLI surface: new flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup` `test.py`). Refusal text on bad token / MAC mismatch should be discriminated from format errors with its own typed error variant.
+- **Why deferred:** v0.28.0 cycle shipped the BIP-129-canonical 4-line plaintext parser; encryption envelope is a distinct cryptographic surface with its own attack-surface review requirements (PBKDF2 work-factor choice, AES-CTR nonce handling, MAC-then-decrypt vs decrypt-then-MAC ordering, key-material argv leak vectors). Worth its own cycle.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** parent canonical entry `bsms-bip129-full-cutover` (sub-item (c)).
+
+### `wallet-import-jade-seedqr` — Blockstream Jade SeedQR ingest surface
+
+- **Surfaced:** 2026-05-20, v0.28.0 cycle close (Phase P14A). Deferred from Phase P5 per the Q1 lock; filed forward for v0.28+.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/jade.rs` (v0.28.0 P5 ships the `get_registered_multisig` JSON reply shape; SeedQR shape diverges).
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — references this slug as the SeedQR-side carve-out.
+- **What:** v0.28+: ingest Blockstream Jade SeedQR shape — BIP-39 entropy encoded as a numeric-string QR payload per Jade firmware's SeedQR convention. May be folded into the `--format jade` parser via a sniff branch, OR shipped as a distinct `--format jade-seedqr` value depending on user-direction (single-blob vs multi-format ambiguity). Either path needs sniff signature, ms1 entropy extraction, and the same envelope shape as P5.
+- **Why deferred:** Phase P5 cycle scope was the JSON `get_registered_multisig` reply shape only (per Q1 lock). SeedQR is a distinct surface (numeric encoding vs JSON; entropy-only vs wallet-policy) and warrants its own cycle.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** parent `wallet-import-jade` (resolved v0.28.0; this is the deferred SeedQR carve-out).
+
+### `wallet-import-electrum-encrypted` — encrypted Electrum 4.x wallet ingest
+
+- **Surfaced:** 2026-05-20, v0.28.0 cycle close (Phase P14A). Deferred from Phase P6 per the Q2 lock; filed forward for v0.28+.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/electrum.rs` (v0.28.0 P6 ships plaintext Electrum 4.x wallet-file ingest; encrypted variants short-circuit refuse at parse time).
+  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — references this slug.
+- **What:** v0.28+: decrypt Electrum's stretched-key envelope (Electrum's bespoke AES-based wallet encryption per `electrum.crypto.pw_decode` / `pw_encode`), then route plaintext through the existing Electrum parser. Alternatives: (a) implement the Electrum decryption primitive in-process (PBKDF2 + AES-CBC over the wallet file body); (b) refuse with a stderr pointer telling users to decrypt out-of-band via Electrum CLI (`electrum decrypt <path>`) and re-import the plaintext. Option (b) is the v0.28.0 default per Q2 lock — refusal text at parse time directs users at this slug.
+- **Why deferred:** Phase P6 cycle scope was plaintext Electrum 4.x wallet-file ingest only (per Q2 lock). Electrum's encryption is a distinct cryptographic surface; user-direction was to defer rather than vendor Electrum's crypto stack inline. The out-of-band decrypt-via-Electrum-CLI workflow covers the common case.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** parent `wallet-import-electrum` (resolved v0.28.0).
+
+### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P1C-v2 + P2C-v2 execution (Site 2 wiring discovery); extended each per-parser P{N}C.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (each `Some("X")` arm at Site 2: BSMS arm checks only BitcoinCore sniff; BitcoinCore arm checks only BSMS sniff; ColdcardMultisig arm checks BSMS + BitcoinCore; Sparrow arm checks BSMS + BitcoinCore + ColdcardMultisig; Specter arm checks BSMS + BitcoinCore + ColdcardMultisig + Sparrow). Citations from cycle-followups tracker entry filed at v0.28.0 P1C-v2.
+- **What:** v0.28+: complete the N×N format-mismatch matrix symmetrically so EVERY `--format X` arm refuses EVERY other parser's positive sniff. v0.26.0 wired the BSMS ↔ BitcoinCore pair; v0.28.0 P1C/P2C extended Sparrow's + Specter's coverage to the pre-existing axes but the inverse wires (`--format bsms` mismatching a Sparrow / Specter / Jade / Electrum / Coldcard sniff, etc.) are NOT wired. The inverse mismatch lands in a benign fallthrough (`ImportWalletParse` exit 2 from the parser failing the alien blob shape rather than `ImportWalletFormatMismatch` exit 1) — same user-visible "this doesn't work" message, different exit code + stderr template.
+- **Why deferred:** Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is a hardening pass, not a correctness gap.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** none (symmetric emit-side gap tracked at `green-emitter-multisig-refusal-template-only`).
+
+### `bsms-import-taproot-refusal-parity` — BSMS parser should refuse tr() blobs at parse time (+ `extract_threshold` regex side-channel)
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P9B execution (instance G3, `v0.28.0/g3-bsms-fixtures`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` `BsmsParser::parse` — current parser ACCEPTS taproot at parse time, only skipping the first-address-verify WARNING. Asymmetric with emit side (`wallet_export/bsms.rs:69-76`) which refuses taproot with `BadInput("--format bsms does not support taproot descriptors; BIP-129 §1 prerequisites pre-date BIP-386. ...")`.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs::extract_threshold` regex — does NOT match `sortedmulti_a(` (the `_a` taproot variant). For `tr(NUMS, sortedmulti_a(2, ...))`, the regex returns `Ok(None)` and the CLI summary emits `threshold=none`. **Side-channel finding** — a parser that refuses tr() at the top eliminates this stay-behind hazard entirely.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_2line_tr_nums_current_behavior_no_refusal` — pins the current (pre-refusal) behavior; cell-name preserves plan-doc's forward-looking intent via the suffix `_current_behavior_no_refusal`.
+- **What:** v0.28+: add a `Tr(_)` short-circuit at the top of `BsmsParser::parse` mirroring `wallet_export/bsms.rs:69-76`'s emit-side refusal. Refusal text re-uses the same substring ("does not support taproot descriptors; BIP-129 §1 prerequisites pre-date BIP-386") for parity. Cell renamed to `bsms_tr_nums_refused` per plan-doc R1-M2 wording and asserts exit-2 with `ImportWalletParse` containing the substring. Requires SPEC §10 amendment declaring tr() refusal alongside the 4-line shape lock.
+- **Why deferred:** P9B's plan-doc scope was `~0 src + ~250 tests + 4 fixture files`. Modifying the parser to refuse tr() is a source-code change with normative-SPEC implications — out of P9B's authored scope. Low-priority because the emit-side refusal already prevents users from generating tr() blobs via the toolkit; import-side hole is only triggered by externally-coordinated tr() BSMS blobs (currently rare in the wild).
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** `bsms-taproot-emit` (symmetric emit-side scaffold; cross-cite SPEC §10 amendment).
+
+### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import via descriptor-passthrough
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P1B-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); SPEC §11.1 implementation discovery.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` (parse-step-6 taproot refusal — `script_template.contains("tr(")` short-circuit returning `ImportWalletParse("taproot scripts are not yet supported ...")`).
+  - `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:215-219` (emit-side taproot descriptor-passthrough).
+- **What:** v0.29+: Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refuses taproot scripts; full taproot import requires a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
+- **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
+- **Status:** open
+- **Tier:** `v0.29+`
+- **Companion:** parent `wallet-import-sparrow` (resolved v0.28.0).
+
+### `coldcard-legacy-mk1-mk2-top-level-xpub-inference` — legacy Coldcard wallet.json top-level xpub support
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P3 execution (instance C, `v0.28.0/p3-coldcard-v2`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/coldcard.rs` — v0.28.0 parser consumes the modern multi-path `bip44/bip49/bip84/bip86` xpub-block envelope shape; legacy Coldcard firmware (mk1/mk2 era) emits a flatter top-level `xpub` field without per-path blocks.
+- **What:** v0.29+: extend the Coldcard single-sig parser to detect and consume the legacy top-level xpub shape (no `bip44`/`bip49`/`bip84`/`bip86` envelope; xpub at root level + a separate `xfp` field). Path inference falls back to BIP-44 default per Coldcard firmware history. Parse-side heuristic: if no recognized per-path block keys present but `xpub` + `xfp` at root, assume legacy. Add fixture covering mk1/mk2 wallet.json shape.
+- **Why deferred:** v0.28.0 P3 scope was the modern multi-path shape only; legacy mk1/mk2 firmware is rare in active use, and users on legacy firmware have an upgrade path. Hardening rather than correctness.
+- **Status:** open
+- **Tier:** `v0.29+`
+- **Companion:** parent `wallet-import-coldcard` (resolved v0.28.0).
+
+### `green-emitter-multisig-refusal-template-only` — Green's multisig refusal misses descriptor-mode
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P11C execution (instance Wave-2, `v0.28.0/p11-cross-format-matrix`); cross-format refusal matrix probe.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs:30-44` (the `if let Some(t) = inputs.template` guard skips refusal entirely when `template == None`, which is the case on every `--from-import-json` invocation per `cmd/export_wallet.rs:603`).
+- **What:** v0.28+: `GreenEmitter::emit` refuses multisig templates (P{2sh,2wsh,..}Multi), but the refusal is gated on `inputs.template.is_some()`. In descriptor-mode invocations (`--descriptor` or `--from-import-json`), `template` is `None`, so the multisig guard never fires — Green emits a multisig wsh()-descriptor text comment-block even though Green's actual file-import surface refuses multisig wallets at runtime. Refusal should be derived from the canonical descriptor's script-type (`script_type_from_descriptor`) when `template` is absent — `inputs.script_type: WalletScriptType` already encodes the multisig variants and is populated on both paths. Refactor: refuse when `inputs.script_type.is_multisig()` regardless of template presence.
+- **Why deferred:** The matrix-test fix (filter green out of the multisig-refusal matrix and pin the current behavior with a regression cell) was scoped to P11C. Patching green's emitter is OOS for P11C (Phase 11 is matrix-coverage, not refusal-contract reshuffle); changing `GreenEmitter::emit` would affect `cli_export_wallet_green.rs` multisig-refusal cells that currently use templated input.
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** `wallet-import-format-mismatch-matrix-completion` (symmetric import-side matrix-gap).
+
+### `import-wallet-envelope-schema-version-narrative-drift` — outer envelope `schema_version` vs inner `BundleJson.schema_version` collision
+
+- **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P11A execution; helper test `p11a_helper_envelope_carries_schema_version_and_source_format` asserted schema_version="4" per a misread.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:87` (outer envelope const `IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION = "1"`) vs `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:975` (inner BundleJson literal `"4"`).
+- **What:** v0.28+: the dual `schema_version` fields share a name but have independent rev numbers (envelope wire-shape vs BundleJson wire-shape). Per CLAUDE.md plan-doc verification discipline, this duality is a silent footgun for future readers / parser authors. Recommend renaming one to disambiguate (`envelope_schema_version` vs `bundle_schema_version`) OR adding a doc-comment at both sites cross-referencing the other.
+- **Why deferred:** Rename is wire-shape-breaking; affects GUI schema mirror + every downstream JSON consumer. Documentation fix is low-risk but OOS for P11 (matrix coverage, not envelope redesign).
+- **Status:** open
+- **Tier:** `v0.28+`
+- **Companion:** none.
