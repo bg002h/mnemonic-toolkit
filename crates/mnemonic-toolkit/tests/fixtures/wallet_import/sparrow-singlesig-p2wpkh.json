@@ -1,0 +1,24 @@
+{
+  "name": "bip84-0",
+  "network": "mainnet",
+  "policyType": "SINGLE",
+  "scriptType": "P2WPKH",
+  "defaultPolicy": {
+    "name": "Default",
+    "miniscript": {
+      "script": "wpkh(@0/**)"
+    }
+  },
+  "keystores": [
+    {
+      "label": "bip84-0",
+      "source": "SW_WATCH",
+      "walletModel": "SPARROW",
+      "keyDerivation": {
+        "masterFingerprint": "5436d724",
+        "derivation": "m/84'/0'/0'"
+      },
+      "extendedPublicKey": "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9"
+    }
+  ]
+}

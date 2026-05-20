@@ -31,6 +31,7 @@ pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
+pub(crate) mod sparrow;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -82,6 +83,17 @@ pub(crate) enum ImportProvenance {
     /// stitching but is not yet constructed by any wired call site).
     #[allow(dead_code)]
     ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
+    /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
+    /// later phase and lands at the alphabetically-following position
+    /// without affecting this insertion.
+    ///
+    /// Constructed by `SparrowParser::parse` (Phase P1B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P1C plumbs this variant
+    /// to the `--json` envelope; until then the variant is reachable only
+    /// from `wallet_import::sparrow::tests`.
+    Sparrow(sparrow::SparrowSourceMetadata),
 }
 
 impl ImportProvenance {
@@ -93,6 +105,7 @@ impl ImportProvenance {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
         }
     }
 
@@ -102,6 +115,19 @@ impl ImportProvenance {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
+        }
+    }
+
+    /// Sparrow-specific accessor: returns `Some(&metadata)` only for the
+    /// `Sparrow` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P1C wiring).
+    pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(meta) => Some(meta),
         }
     }
 }

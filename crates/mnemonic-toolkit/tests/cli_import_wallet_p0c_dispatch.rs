@@ -53,15 +53,23 @@ fn run_import(args: &[&str]) -> assert_cmd::assert::Assert {
 // `--format <new>` arms panic via unimplemented!()  (Site 2 in plan-doc §B.2 #6)
 // ============================================================================
 
+/// v0.28.0 Phase P1C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format sparrow panics unimplemented"); post-P1C
+/// the dispatch is wired, so the same BSMS-blob input now surfaces an
+/// `ImportWalletFormatMismatch` (supplied=sparrow, sniffed=bsms) instead
+/// of a panic. The cell is preserved at the same location as a
+/// dispatch-surface regression guard for the post-P1C-wiring semantic.
+/// Mirrors the P4C `p0c_format_coldcard_multisig_dispatches_format_mismatch_post_p4c`
+/// precedent.
 #[test]
-fn p0c_format_sparrow_panics_unimplemented() {
-    // Any blob — the panic is BEFORE blob inspection.
+fn p0c_format_sparrow_dispatches_format_mismatch_post_p1c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "sparrow"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P1C") || stderr.contains("sparrow"),
-        "stderr should mention P1C or sparrow on unimplemented dispatch; got: {stderr}"
+        stderr.contains("sparrow") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=sparrow vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 

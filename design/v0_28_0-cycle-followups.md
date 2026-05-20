@@ -4,7 +4,7 @@
 
 **Authoritative scope:** `/home/bcg/.claude/plans/unified-meandering-sundae.md` (R6 GREEN). Any work item NOT in the plan-doc's sub-phase rows is OOS by default.
 
-**Cycle status:** Wave 1 in progress (P9B file added entry 2026-05-19; Wave 0 closed at `71592bc`).
+**Cycle status:** Wave 1 in progress (P1B-v2 file added entry 2026-05-19; P9B prior entry; Wave 0 closed at `71592bc`).
 
 ---
 
@@ -26,6 +26,24 @@ Each entry:
 ---
 
 ## Open items (cycle-internal)
+
+### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
+
+- **Surfaced:** 2026-05-19 during Phase P1C-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); Site 2 wiring discovery.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (each `Some("X")` arm at Site 2: BSMS arm checks only BitcoinCore sniff; BitcoinCore arm checks only BSMS sniff; ColdcardMultisig arm checks BSMS + BitcoinCore; Sparrow arm now checks BSMS + BitcoinCore + ColdcardMultisig).
+- **What:** v0.26.0 wired the BSMS ↔ BitcoinCore mutual-mismatch pair. v0.28.0 P1C extends Sparrow's mismatch coverage to BSMS + BitcoinCore + ColdcardMultisig, BUT the inverse wires — `--format bsms` mismatching a Sparrow sniff, `--format bitcoin-core` mismatching a Sparrow sniff, `--format coldcard-multisig` mismatching a Sparrow sniff — are NOT wired (the existing arms still only check against their pre-Sparrow sniff axes). Same N×N matrix gap will repeat for each per-parser flip (P2C-P6C, P7C). Recommend: each per-parser P{N}C extends the mismatch matrix symmetrically so EVERY `--format X` arm refuses EVERY other parser's positive sniff.
+- **Why deferred:** the inverse mismatch lands in a benign fallthrough (the parser fails the alien blob shape with `ImportWalletParse` exit 2 rather than `ImportWalletFormatMismatch` exit 1) — same user-visible "this doesn't work" message, different exit code + stderr template. Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is end-of-cycle FOLLOWUP triage.
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md.
+- **Tier:** v0.28+ (fold incrementally as per-parser P{N}C lands).
+
+### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import support
+
+- **Surfaced:** 2026-05-19 during Phase P1B-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); SPEC §11.1 implementation discovery.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` (parse-step-6 taproot refusal — `script_template.contains("tr(")` short-circuit returning `ImportWalletParse("taproot scripts are not yet supported ...")`); `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:215-219` (emit-side taproot descriptor-passthrough).
+- **What:** Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refuses taproot scripts; full taproot import requires a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
+- **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as `sparrow-taproot-descriptor-passthrough-import-support`.
+- **Tier:** v0.29+.
 
 ### `bsms-import-taproot-refusal-parity` — BSMS parser should refuse tr() blobs at parse time
 
