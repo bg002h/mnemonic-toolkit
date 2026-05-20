@@ -238,7 +238,7 @@ The 4-line parse arm performs a **first-address cross-validation** before return
 1. Parse Line 2 as a descriptor via `MsDescriptor::from_str` (with BIP-380 checksum if present).
 2. Derive the first receive address at path `/0/0` of the descriptor's first path-restriction branch, using existing helper `crate::derive_address::derive_first_address` at `derive_address.rs:26` (`pub(crate)`; already consumed by `wallet_export/bsms.rs:36, 104` and `wallet_import/bsms.rs:225`).
 3. Compare byte-exact against Line 4's supplied FIRST_ADDRESS.
-4. Mismatch → `ToolkitError::ImportWalletParse("BSMS 4-line first-address mismatch: derived=<X>, supplied=<Y>")` (exit 2).
+4. Mismatch → stderr WARNING `warning: import-wallet: bsms: first-address mismatch at path <P>: computed <X>, blob declares <Y>` (exit 0); **parse continues**. **R-W1-end I1 fold:** the 4-line path reuses the existing v0.26.0 §2.4 `bsms: first-address mismatch` WARNING semantic (informational, not refusal). Rationale: matches the 6-line precedent + BIP-129 §6 coordinator-output self-consistency intent (coordinator emits both DESCRIPTOR + FIRST_ADDRESS for cross-check transparency; mismatch should be visible without being a hard failure). Earlier drafts of this SPEC framed it as `ImportWalletParse` exit 2; the implementation followed the established v0.26.0 WARNING-only behavior. Strict-mismatch-error remains a candidate for a future cycle if user demand surfaces; see §10.6.
 5. Match → continue normal parse.
 
 Taproot descriptors are SKIPPED for cross-validation (BIP-129 §1 prerequisites pre-date BIP-386; first-address derivation surface for tr() requires additional taproot-context infrastructure). This is consistent with v0.27.0's existing taproot-skip discipline at `wallet_import/bsms.rs:217-225`.
@@ -279,6 +279,7 @@ This SPEC §10 implements ONLY sub-item (b) of the canonical `bsms-bip129-full-c
 - **(c) STANDARD/EXTENDED encryption envelope** (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256). Tracked at NEW FOLLOWUP `bsms-bip129-encryption-envelope` filed at Phase P14A.
 - **(d) Drop 2-line / 6-line shapes after deprecation window.** Deferred indefinitely; deprecation window opens with v0.28.0 (notice firing) and closes in a future cycle when full BIP-129 conformance ships.
 - **Real BSMS Round-2 taproot emit** — tracked at canonical `bsms-taproot-emit` FOLLOWUP (upstream-blocked on BIP-129 §1 prerequisites adding BIP-386). Phase P8 ships only refusal-scaffold UX improvements.
+- **Strict first-address-mismatch refusal (exit 2)** — v0.28.0 ships the WARNING-only semantic per §10.2 step 4 (matching v0.26.0 §2.4 6-line precedent + BIP-129 §6 coordinator-output self-consistency intent). A future cycle MAY introduce a `--strict-first-address` flag or equivalent opt-in to escalate mismatch to `ImportWalletParse` exit 2 if user demand surfaces. Tracking deferred until demand signal; no v0.28+ FOLLOWUP filed pre-emptively per the "avoid speculative-feature backlog" discipline.
 
 ---
 
