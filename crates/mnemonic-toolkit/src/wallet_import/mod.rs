@@ -27,6 +27,7 @@ pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
 pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
+pub(crate) mod electrum;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
@@ -94,6 +95,14 @@ pub(crate) enum ImportProvenance {
     /// stitching but is not yet constructed by any wired call site).
     #[allow(dead_code)]
     ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// Electrum 4.x wallet-file parse (`wallet_import/electrum.rs`). SPEC §11.6.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
+    /// (between `ColdcardMultisig` and `Sparrow`).
+    ///
+    /// Constructed by `ElectrumParser::parse` (Phase P6B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P6C plumbs this variant
+    /// to the `--json` envelope `electrum_source_metadata` field.
+    Electrum(electrum::ElectrumSourceMetadata),
     /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
     /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
@@ -125,6 +134,7 @@ impl ImportProvenance {
             Self::Bsms(audit) => audit.as_ref(),
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -137,6 +147,7 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -152,6 +163,26 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Electrum-specific accessor: returns `Some(&metadata)` only for the
+    /// `Electrum` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P6C wiring). Mirrors
+    /// `coldcard_source_metadata` / `sparrow_source_metadata` /
+    /// `specter_source_metadata`.
+    pub(crate) fn electrum_source_metadata(
+        &self,
+    ) -> Option<&electrum::ElectrumSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Electrum(meta) => Some(meta),
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
         }
@@ -166,6 +197,7 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
             Self::Sparrow(meta) => Some(meta),
             Self::Specter(_) => None,
         }
@@ -181,6 +213,7 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Electrum(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(meta) => Some(meta),
         }

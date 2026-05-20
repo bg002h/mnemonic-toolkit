@@ -147,14 +147,23 @@ fn p0c_format_jade_panics_unimplemented() {
     );
 }
 
+/// v0.28.0 Phase P6C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format electrum panics unimplemented"); post-P6C
+/// the dispatch is wired, so the same BSMS-blob input now surfaces an
+/// `ImportWalletFormatMismatch` (supplied=electrum, sniffed=bsms) instead
+/// of a panic. The cell is preserved at the same location as a
+/// dispatch-surface regression guard for the post-P6C-wiring semantic.
+/// Mirrors the P3C `p0c_format_coldcard_dispatches_format_mismatch_post_p3c`
+/// precedent.
 #[test]
-fn p0c_format_electrum_panics_unimplemented() {
+fn p0c_format_electrum_dispatches_format_mismatch_post_p6c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P6C") || stderr.contains("electrum"),
-        "stderr should mention P6C or electrum on unimplemented dispatch; got: {stderr}"
+        stderr.contains("electrum") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=electrum vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 
