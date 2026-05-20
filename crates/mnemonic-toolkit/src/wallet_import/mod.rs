@@ -25,6 +25,7 @@ pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
+pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
@@ -71,6 +72,15 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
+    /// Coldcard single-sig generic-wallet-export JSON parse
+    /// (`wallet_import/coldcard.rs`). SPEC §11.3. Inserted in
+    /// alphabetical-by-variant-name slot per CLAUDE.md discipline (between
+    /// `Bsms` and `ColdcardMultisig`).
+    ///
+    /// Constructed by `ColdcardParser::parse` (Phase P3B). The
+    /// `cmd/import_wallet.rs` dispatch arm at P3C plumbs this variant to
+    /// the `--json` envelope `coldcard_source_metadata` field.
+    Coldcard(coldcard::ColdcardSourceMetadata),
     /// Coldcard multisig text-file parse (`wallet_import/coldcard_multisig.rs`).
     /// SPEC §11.4. Inserted in alphabetical-by-variant-name slot per CLAUDE.md
     /// discipline; the prior `Coldcard(...)` slot (single-sig, SPEC §11.3) is
@@ -113,6 +123,7 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
+            Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
@@ -124,6 +135,22 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Coldcard-specific accessor: returns `Some(&metadata)` only for the
+    /// `Coldcard` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P3C wiring). Mirrors
+    /// `sparrow_source_metadata` / `specter_source_metadata`.
+    pub(crate) fn coldcard_source_metadata(&self) -> Option<&coldcard::ColdcardSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(_) => None,
@@ -137,6 +164,7 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(meta) => Some(meta),
             Self::Specter(_) => None,
@@ -151,6 +179,7 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(_) => None,
+            Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
             Self::Specter(meta) => Some(meta),

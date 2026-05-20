@@ -1,0 +1,13 @@
+{
+  "chain": "BTC",
+  "xfp": "28645006",
+  "account": 0,
+  "bip49": {
+    "name": "p2wpkh-p2sh",
+    "deriv": "m/49'/0'/0'",
+    "xfp": "28645006",
+    "xpub": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6",
+    "_pub": "ypub6sExampleYpubBip49Mainnet",
+    "first": "3FZ..."
+  }
+}
