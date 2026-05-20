@@ -279,10 +279,19 @@ fn bsms_4line_first_address_byte_exact_against_descriptor_derivation() {
     );
 }
 
-/// SPEC v0.27.0 §3.5 cell 6 — `tr(...)` taproot descriptors REFUSE under
-/// `--format bsms` (BIP-129 §1 prerequisites pre-date BIP-386).
+/// SPEC v0.27.0 §3.5 cell 6 / v0.28.0 plan-doc §S.8 (P8A/P8B) — `tr(...)`
+/// taproot descriptors REFUSE under `--format bsms`. BIP-129 §1 prerequisites
+/// pre-date BIP-386 — no published canonicalization yet.
+///
+/// v0.28.0 tightened the refusal: the message now carries the per-script-type
+/// discriminator (P2tr / P2trMulti), a BIP-386 status note, a FOLLOWUP slug
+/// pointer (`bsms-taproot-emit`), and pointers to alternative formats
+/// (`--format bitcoin-core` / `--format sparrow`). Exit code is 2 (unchanged
+/// — same parse/refusal class as the prior `BadInput` text it replaces).
+///
+/// This cell exercises **P2trMulti** (template `tr-sortedmulti-a`).
 #[test]
-fn bsms_4line_taproot_descriptor_errors_explicit_deferred() {
+fn bsms_4line_taproot_multisig_refused_carries_full_v0_28_diagnostic() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -309,15 +318,84 @@ fn bsms_4line_taproot_descriptor_errors_explicit_deferred() {
             &format!("@1.fingerprint={COSIGNER_B_FP}"),
         ])
         .assert()
-        .failure();
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // Headline + script-type discriminator (P2trMulti for tr-sortedmulti-a).
+    assert!(
+        stderr.contains("--format bsms does not support taproot"),
+        "stderr must lead with the BIP-129 §1 refusal headline; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("(P2trMulti)"),
+        "stderr must carry the P2trMulti script-type discriminator for tr-sortedmulti-a; got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("(P2tr)"),
+        "stderr must NOT carry the singlesig discriminator for the multisig template; got:\n{stderr}"
+    );
+    // BIP-386 status note.
+    assert!(
+        stderr.contains("BIP-129 §1 prerequisites do not yet include BIP-386"),
+        "stderr must cite the BIP-386 prerequisite gap; got:\n{stderr}"
+    );
+    // FOLLOWUP slug pointer (lets watchers grep the toolkit's tracker).
+    assert!(
+        stderr.contains("`bsms-taproot-emit`"),
+        "stderr must point at the FOLLOWUP slug for upstream-watch; got:\n{stderr}"
+    );
+    // Alternative-format pointers.
+    assert!(
+        stderr.contains("--format bitcoin-core"),
+        "stderr must point at bitcoin-core alternative; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("--format sparrow"),
+        "stderr must point at sparrow alternative; got:\n{stderr}"
+    );
+}
+
+/// SPEC v0.27.0 §3.5 cell 6 / v0.28.0 plan-doc §S.8 (P8A) — companion to
+/// the multisig refusal cell above. Exercises **P2tr** (taproot singlesig via
+/// `--template bip86`) to verify the per-script-type discriminator
+/// distinguishes `P2tr` from `P2trMulti`. Same exit-code (2) + same overall
+/// message body except for the parenthetical script-type token.
+#[test]
+fn bsms_taproot_singlesig_refused_carries_p2tr_discriminator() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "bsms",
+            "--template",
+            "bip86",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+        ])
+        .assert()
+        .failure()
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--format bsms does not support taproot"),
-        "stderr must point at the BIP-129 § 1 prerequisites refusal; got:\n{stderr}"
+        "stderr must lead with the BIP-129 §1 refusal headline; got:\n{stderr}"
     );
     assert!(
-        stderr.contains("BIP-129"),
-        "stderr must cite BIP-129; got:\n{stderr}"
+        stderr.contains("(P2tr)"),
+        "stderr must carry the P2tr (singlesig) script-type discriminator for bip86; got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("P2trMulti"),
+        "stderr must NOT carry the multisig discriminator for the singlesig template; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`bsms-taproot-emit`"),
+        "stderr must point at the FOLLOWUP slug; got:\n{stderr}"
     );
 }
 
