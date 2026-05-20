@@ -1,0 +1,2 @@
+BSMS 1.0
+sh(wpkh([00112233/49'/0'/0']ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP/<0;1>/*))#nkwrvhy4

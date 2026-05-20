@@ -4,7 +4,7 @@
 
 **Authoritative scope:** `/home/bcg/.claude/plans/unified-meandering-sundae.md` (R6 GREEN). Any work item NOT in the plan-doc's sub-phase rows is OOS by default.
 
-**Cycle status:** Wave 0 in progress (P0A active 2026-05-19).
+**Cycle status:** Wave 1 in progress (P9B file added entry 2026-05-19; Wave 0 closed at `71592bc`).
 
 ---
 
@@ -27,7 +27,39 @@ Each entry:
 
 ## Open items (cycle-internal)
 
-(none yet)
+### `bsms-import-taproot-refusal-parity` — BSMS parser should refuse tr() blobs at parse time
+
+- **Surfaced:** 2026-05-19 during Phase P9B execution (instance G3, `v0.28.0/g3-bsms-fixtures`).
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:217-224` — current parser ACCEPTS
+    taproot at parse time, only skipping the first-address-verify WARNING.
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:69-76` — EMIT side refuses taproot
+    with `BadInput("--format bsms does not support taproot descriptors; BIP-129 §1
+    prerequisites pre-date BIP-386. ...")`. Asymmetric: emit refuses, import accepts.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_2line_tr_nums_current_behavior_no_refusal`
+    pins the CURRENT behavior; the cell-name preserves the plan-doc's
+    forward-looking intent via the suffix `_current_behavior_no_refusal`.
+- **What:** add a `Tr(_)` short-circuit at the top of `BsmsParser::parse` mirroring
+  `wallet_export/bsms.rs:69-76`'s emit-side refusal. Refusal text would re-use the same
+  substring ("does not support taproot descriptors; BIP-129 §1 prerequisites pre-date BIP-386")
+  for parity. Cell would then be renamed `bsms_tr_nums_refused` per plan-doc R1-M2 wording
+  and assert exit-2 with `ImportWalletParse` containing the substring.
+- **Side-channel finding:** `extract_threshold`'s regex at `bsms.rs:419-421` does NOT match
+  `sortedmulti_a(` (the `_a` taproot variant). For `tr(NUMS, sortedmulti_a(2, ...))`, the
+  regex returns `Ok(None)` and the CLI summary emits `threshold=none`. A parser that
+  refuses tr() at the top eliminates this stay-behind hazard entirely.
+- **Why deferred:** P9B's plan-doc scope (`/home/bcg/.claude/plans/unified-meandering-sundae.md:555`)
+  is `~0 src + ~250 tests + 4 fixture files`. Modifying the parser to refuse tr() is a
+  source-code change with normative-SPEC implications (would require a §10 amendment
+  declaring tr() refusal alongside the 4-line shape lock). Out of P9B's authored scope.
+  G2 (Phase P8 — `bsms-taproot-emit` refusal scaffold) is the natural cycle-resident
+  fold target if user lifts mid-cycle; otherwise file as v0.28+ FOLLOWUP at P14A.
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as `bsms-import-taproot-refusal-parity`;
+  cross-cite the SPEC §10 amendment + the related v0.27.0 first-address-skip discipline at
+  `bsms.rs:217-224`.
+- **Tier:** `v0.28+` (low-priority; the emit-side refusal already prevents users from
+  generating tr() blobs via the toolkit, so the import-side hole is only triggered by
+  externally-coordinated tr() BSMS blobs — currently rare in the wild).
 
 ---
 
