@@ -5,7 +5,12 @@
 //! replacement):
 //!
 //!   --blob <FILE|->                                             required UNLESS --bsms-round1 supplied
-//!   --format <bsms|bitcoin-core>                                optional (sniff default)
+//!   --format <bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter>
+//!                                                               optional (sniff default).
+//!                                                               v0.28.0 Phase P0C pre-stubs the 6
+//!                                                               new formats (panic via
+//!                                                               `unimplemented!()` until per-parser
+//!                                                               P{N}C sub-phases wire real dispatch).
 //!   --select-descriptor <N|active-receive|active-change|all>    default `all`
 //!   --ms1 <STRING>                                              repeatable (positional cosigner-index)
 //!   --slot @<N>.phrase=<STRING>                                 (existing slot infra)
@@ -52,7 +57,15 @@ use crate::wallet_import::{
     bitcoin_core::BitcoinCoreParser,
     bsms::BsmsParser,
     overlay::apply_seed_overlay,
-    roundtrip::{canonicalize_bitcoin_core, canonicalize_bsms, unified_diff},
+    // v0.28.0 Phase P0C — 6 new canonicalize skeletons imported alphabetically;
+    // bodies are `Err(BadInput("not yet implemented"))` stubs in
+    // wallet_import/roundtrip.rs. Per-parser P{N}B replaces each body with
+    // a real implementation; this import list does not change.
+    roundtrip::{
+        canonicalize_bitcoin_core, canonicalize_bsms, canonicalize_coldcard,
+        canonicalize_coldcard_multisig, canonicalize_electrum, canonicalize_jade,
+        canonicalize_sparrow, canonicalize_specter, unified_diff,
+    },
     sniff::{sniff_format, SniffOutcome},
     ParsedImport, SelectDescriptor, WalletFormatParser,
 };
@@ -81,11 +94,23 @@ pub struct ImportWalletArgs {
     pub blob: Option<PathBuf>,
 
     /// Format override. If absent, the blob is auto-detected via sniff
-    /// (SPEC §6). Supported values: `bsms`, `bitcoin-core`.
+    /// (SPEC §6). Supported values (alphabetical): `bitcoin-core`, `bsms`,
+    /// `coldcard`, `coldcard-multisig`, `electrum`, `jade`, `sparrow`,
+    /// `specter`. The 6 non-{bsms,bitcoin-core} formats are pre-stubbed at
+    /// v0.28.0 Phase P0C; per-parser dispatch ships in Phases P1C-P6C.
     #[arg(
         long = "format",
-        value_name = "bsms|bitcoin-core",
-        value_parser = clap::builder::PossibleValuesParser::new(["bsms", "bitcoin-core"]),
+        value_name = "bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter",
+        value_parser = clap::builder::PossibleValuesParser::new([
+            "bitcoin-core",
+            "bsms",
+            "coldcard",
+            "coldcard-multisig",
+            "electrum",
+            "jade",
+            "sparrow",
+            "specter",
+        ]),
     )]
     pub format: Option<String>,
 
@@ -236,25 +261,52 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "bitcoin-core"
         }
+        // v0.28.0 Phase P0C pre-stub arms (R0 C1 + R1-I2 fold). Each new
+        // format is enumerated alphabetically here; the body is
+        // `unimplemented!()` until the per-parser P{N}C sub-phase flips
+        // the arm to a real `SniffOutcome::<Format>` mismatch check +
+        // parser dispatch. Insertion point: BEFORE the `Some(other) =>`
+        // fallback so PossibleValuesParser-rejected values still surface
+        // via the BadInput template (defense-in-depth — clap already
+        // rejects out-of-set values, but the fallback is preserved as a
+        // belt-and-suspenders guard).
+        Some("coldcard") => unimplemented!("P3C: format coldcard not yet wired"),
+        Some("coldcard-multisig") => {
+            unimplemented!("P4C: format coldcard-multisig not yet wired")
+        }
+        Some("electrum") => unimplemented!("P6C: format electrum not yet wired"),
+        Some("jade") => unimplemented!("P5C: format jade not yet wired"),
+        Some("sparrow") => unimplemented!("P1C: format sparrow not yet wired"),
+        Some("specter") => unimplemented!("P2C: format specter not yet wired"),
         Some(other) => {
             return Err(ToolkitError::BadInput(format!(
-                "--format {other} is not supported (bsms + bitcoin-core only)"
+                "--format {other} is not supported \
+                 (bitcoin-core, bsms, coldcard, coldcard-multisig, \
+                  electrum, jade, sparrow, specter)"
             )));
         }
         None => match sniff_outcome {
+            // v0.28.0 Phase P0C: per plan-doc P0C row, the auto-sniff `None =>`
+            // arm is UNTOUCHED at P0C — the new SniffOutcome::<Format>
+            // variants land at per-parser P{N}A sub-phases (P1A through P6A
+            // and the BSMS BIP-129 cutover at P7A). Only the Ambiguous /
+            // NoMatch stderr templates below are updated to enumerate the
+            // post-cycle 8-format list per plan-doc Site 3 directive.
             SniffOutcome::Bsms => "bsms",
             SniffOutcome::BitcoinCore => "bitcoin-core",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \
-                     supply --format <bsms|bitcoin-core>"
+                     supply --format <bitcoin-core|bsms|coldcard|coldcard-multisig|\
+electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
             }
             SniffOutcome::NoMatch => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: could not detect format; \
-                     supply --format <bsms|bitcoin-core>"
+                     supply --format <bitcoin-core|bsms|coldcard|coldcard-multisig|\
+electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
             }
@@ -294,12 +346,29 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // Parse via selected format.
+    //
+    // v0.28.0 Phase P0C pre-stub (R0 C1 fold): 6 new format arms each
+    // panic via `unimplemented!()` at execution time. The arms above
+    // (Site 2 in plan-doc) panic FIRST when `--format <new>` is supplied
+    // explicitly; this site is reachable only via the auto-sniff path
+    // which can't yield a new-format verdict at P0C (the SniffOutcome
+    // variants don't exist yet). The arms are preserved here for
+    // alphabetical-source-grep parity + so per-parser P{N}C diffs touch
+    // a SINGLE arm per site (matrix-discipline lock per plan-doc §B.2 #6).
     let mut parsed: Vec<ParsedImport> = match format_str {
         "bsms" => BsmsParser::parse(&blob, stderr)?,
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
+        "coldcard" => unimplemented!("P3C: parse not yet wired"),
+        "coldcard-multisig" => unimplemented!("P4C: parse not yet wired"),
+        "electrum" => unimplemented!("P6C: parse not yet wired"),
+        "jade" => unimplemented!("P5C: parse not yet wired"),
+        "sparrow" => unimplemented!("P1C: parse not yet wired"),
+        "specter" => unimplemented!("P2C: parse not yet wired"),
         other => {
             return Err(ToolkitError::BadInput(format!(
-                "import-wallet --format {other} is not supported (bsms + bitcoin-core only)"
+                "import-wallet --format {other} is not supported \
+                 (bitcoin-core, bsms, coldcard, coldcard-multisig, \
+                  electrum, jade, sparrow, specter)"
             )));
         }
     };
@@ -330,6 +399,15 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC §5.3 — `--select-descriptor` filter. BSMS coerces non-default
     // to `all` per the SPEC NOTICE rule; emit the NOTICE here.
+    //
+    // v0.28.0 Phase P0C (Site 5 in plan-doc §B.2 #6) — per-format coerce
+    // decision: ONLY BSMS coerces (BSMS Round-2 is single-descriptor by
+    // construction so `--select-descriptor` is meaningless for it). Each of
+    // the 6 new formats (sparrow, specter, coldcard, coldcard-multisig,
+    // jade, electrum) falls through to the `_ =>` default which invokes
+    // `apply_select_descriptor`. Per-parser P{N}B / P{N}C sub-phases may
+    // revisit this if a format turns out to need an analogous coerce
+    // (none identified at plan-time).
     let select = parse_select(&args.select_descriptor)?;
     let parsed = match format_str {
         "bsms" => match select {
@@ -445,9 +523,27 @@ fn emit_json_envelope<W: Write, E: Write>(
     // envelope's `canonicalize_failed` branch per SPEC §7.4 v0.27.1
     // amendment. `None` for non-{bsms,bitcoin-core} formats (no canonicalize
     // path defined; not an error).
+    // v0.28.0 Phase P0C (Site 6 in plan-doc §B.2 #6) — 6 new canonicalize
+    // dispatch arms. Each calls a skeleton helper in
+    // `wallet_import/roundtrip.rs` that returns `Err(BadInput("not yet
+    // implemented; <format> ingest lands in Phase P{N}B"))`. At P0C the
+    // arms are unreachable in practice (Site 2 + Site 4 panic earlier on
+    // `--format <new>`, and the auto-sniff `None =>` arm can only yield
+    // bsms/bitcoin-core verdicts until per-parser P{N}A wires the new
+    // SniffOutcome variants). Per-parser P{N}B replaces the skeleton body
+    // with a real canonicalize implementation; this dispatch site flips
+    // from skeleton to real automatically.
     let canon_orig: Option<Result<String, String>> = match format_str {
         "bsms" => Some(canonicalize_bsms(blob).map_err(|e| e.to_string())),
         "bitcoin-core" => Some(canonicalize_bitcoin_core(blob).map_err(|e| e.to_string())),
+        "coldcard" => Some(canonicalize_coldcard(blob).map_err(|e| e.to_string())),
+        "coldcard-multisig" => {
+            Some(canonicalize_coldcard_multisig(blob).map_err(|e| e.to_string()))
+        }
+        "electrum" => Some(canonicalize_electrum(blob).map_err(|e| e.to_string())),
+        "jade" => Some(canonicalize_jade(blob).map_err(|e| e.to_string())),
+        "sparrow" => Some(canonicalize_sparrow(blob).map_err(|e| e.to_string())),
+        "specter" => Some(canonicalize_specter(blob).map_err(|e| e.to_string())),
         _ => None,
     };
 
@@ -589,6 +685,19 @@ fn emit_json_envelope<W: Write, E: Write>(
                 "diff": serde_json::Value::Null,
                 "status": "blocked_no_emitter",
             }),
+            // v0.28.0 Phase P0C (Site 7 in plan-doc §B.2 #6) — 6 placeholder
+            // arms. Each emits an empty `{}` mirroring the existing `_ =>`
+            // default; the arms are pre-stubbed alphabetically so per-parser
+            // P{N}B / P{N}C can replace ONE arm body (matrix-discipline
+            // lock). These arms are unreachable at P0C (Site 4 panics
+            // earlier on `--format <new>`, and auto-sniff can't yield a new
+            // format until per-parser P{N}A wires the SniffOutcome variant).
+            "coldcard" => json!({}),
+            "coldcard-multisig" => json!({}),
+            "electrum" => json!({}),
+            "jade" => json!({}),
+            "sparrow" => json!({}),
+            "specter" => json!({}),
             _ => json!({}),
         };
 
@@ -739,6 +848,13 @@ fn emit_roundtrip_stderr_warning<E: Write>(
     blob: &[u8],
     format_str: &str,
 ) -> Result<(), ToolkitError> {
+    // v0.28.0 Phase P0C (Site 8 in plan-doc §B.2 #6) — per-format
+    // stderr-WARNING decision: ALL 6 new formats fall under the no-warning
+    // early-return (the `!= "bitcoin-core"` predicate covers them). BSMS
+    // takes the same path today via the `blocked_no_emitter` caveat. If a
+    // per-parser P{N}B sub-phase decides to surface a roundtrip WARNING on
+    // stderr, this site flips to an explicit `if !matches!(format_str,
+    // "bitcoin-core" | "<new>") { return Ok(()) }` shape.
     if format_str != "bitcoin-core" {
         return Ok(());
     }
