@@ -1,0 +1,13 @@
+{
+  "chain": "XTN",
+  "xfp": "5436D724",
+  "account": 0,
+  "bip84": {
+    "name": "p2wpkh",
+    "deriv": "m/84'/1'/0'",
+    "xfp": "127EA0E6",
+    "xpub": "tpubDDYhB7EGtNkJdeaPTacttc9jZ6aq7NWHiYy21ACcFx8g2zs9HNpQDondF7HQfemghZSEimBPHPRfs93UehvbFHZyHgWDBrY4KSCC183DAFw",
+    "_pub": "vpub5YjYKEC5XfTBaTm1g5RAUGfQ9jSCXfWGUuyqcqUUFxk2k4WYR43YyQ5ZgWmt71J7kFHvMxa4DXPGwG52ZD52ZJ5DLb6KbZTrkSJ3rkLayM5",
+    "first": "tb1qzmtrqsfuaf6l6kkcsseumq26ukaphfj9twh3z6"
+  }
+}

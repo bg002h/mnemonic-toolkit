@@ -1,0 +1,13 @@
+{
+  "chain": "BTC",
+  "xfp": "5436D724",
+  "account": 0,
+  "bip49": {
+    "name": "p2wpkh-p2sh",
+    "deriv": "m/49'/0'/0'",
+    "xfp": "127EA0E6",
+    "xpub": "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9",
+    "_pub": "ypub6X6Ws2tDcb7AGcG5RUDMghqRJUd5oFn3WBhxd6m3aDXswJsSqLpaubBaUixaaJWMyExBgPe5wPmPwQiQTzMD7vYqLfFE2WjkkqXLBM1qg1u",
+    "first": "33Tb7xz3KSoxQwjm5cUvCWPiHTYZYJB2cw"
+  }
+}
