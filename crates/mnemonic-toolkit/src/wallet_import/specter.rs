@@ -56,7 +56,6 @@ pub(crate) struct SpecterParser;
 /// Carried on `ImportProvenance::Specter(...)`; preserved for `--json`
 /// envelope `source_metadata` emit (Phase P2B integration).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // P2B constructs all fields; some are read only at P2C envelope-emit dispatch.
 pub(crate) struct SpecterSourceMetadata {
     /// Top-level `label` (wallet display name).
     pub(crate) label: String,
@@ -79,7 +78,6 @@ pub(crate) struct SpecterSourceMetadata {
 /// - **String form** (older / toolkit-side emit): `"<vendor>"` — normalized to
 ///   `{type: <vendor>, label: ""}` during parse.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // P2B constructs all fields; fields read only at P2C envelope-emit dispatch.
 pub(crate) struct SpecterDeviceMarker {
     /// Hardware-wallet type identifier (e.g., `"coldcard"`, `"trezor"`,
     /// `"ledger"`, `"unknown"`). Specter does not normalize the vendor

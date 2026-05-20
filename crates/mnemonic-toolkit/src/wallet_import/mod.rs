@@ -99,12 +99,9 @@ pub(crate) enum ImportProvenance {
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
     /// (after `Sparrow`).
     ///
-    /// Constructed by `SpecterParser::parse` (Phase P2B). The
-    /// `cmd/import_wallet.rs` dispatch arm wired at P2C plumbs this variant
-    /// to the `--json` envelope; until then the variant is reachable only
-    /// from `wallet_import::specter::tests`. P2A scaffolds the variant +
-    /// holds it behind `#[allow(dead_code)]` until P2C lifts it.
-    #[allow(dead_code)]
+    /// Constructed by `SpecterParser::parse` (Phase P2B) and consumed by
+    /// the `cmd/import_wallet.rs` dispatch arm at P2C which plumbs this
+    /// variant to the `--json` envelope `specter_source_metadata` field.
     Specter(specter::SpecterSourceMetadata),
 }
 
@@ -150,7 +147,6 @@ impl ImportProvenance {
     /// `Specter` variant. Consumed by the `--json` envelope emitter in
     /// `cmd::import_wallet::emit_json_envelope` (P2C wiring). Mirrors
     /// `sparrow_source_metadata` above.
-    #[allow(dead_code)] // Wired at P2C envelope-emit dispatch site.
     pub(crate) fn specter_source_metadata(&self) -> Option<&specter::SpecterSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
