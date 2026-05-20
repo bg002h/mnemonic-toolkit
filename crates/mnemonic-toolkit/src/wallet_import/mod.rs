@@ -28,6 +28,7 @@ pub(crate) mod bsms_verify;
 pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
 pub(crate) mod electrum;
+pub(crate) mod jade;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;

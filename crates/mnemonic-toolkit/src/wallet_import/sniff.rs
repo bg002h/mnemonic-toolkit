@@ -48,6 +48,7 @@ use super::bsms::BsmsParser;
 use super::coldcard::ColdcardParser;
 use super::coldcard_multisig::ColdcardMultisigParser;
 use super::electrum::ElectrumParser;
+use super::jade::JadeParser;
 use super::sparrow::SparrowParser;
 use super::specter::SpecterParser;
 use super::WalletFormatParser;
@@ -87,7 +88,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let coldcard = ColdcardParser::sniff(blob);
     let coldcard_multisig = ColdcardMultisigParser::sniff(blob);
     let electrum = ElectrumParser::sniff(blob);
-    let jade = false; // P5A: replace with JadeParser::sniff(blob)
+    let jade = JadeParser::sniff(blob);
     let sparrow = SparrowParser::sniff(blob);
     let specter = SpecterParser::sniff(blob);
 

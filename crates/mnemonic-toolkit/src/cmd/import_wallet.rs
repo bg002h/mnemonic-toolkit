@@ -514,6 +514,16 @@ pub fn run<R: Read, W: Write, E: Write>(
             // variant (only `SniffOutcome::Jade` lacks a real auto-sniff arm
             // at P6C close — P5A wires the remaining one).
             SniffOutcome::Electrum => "electrum",
+            // v0.28.0 Phase P5A: auto-sniff arm for Blockstream Jade
+            // multisig wrapper JSON. The sniff slot is wired at
+            // `sniff.rs:90` (`JadeParser::sniff`); the parse-side dispatch
+            // at the `match format_str` block below remains
+            // `unimplemented!("P5C: parse not yet wired")` until P5C flips
+            // it to `JadeParser::parse(...)`. Adding this arm BEFORE the
+            // `other => unreachable!()` catch-all keeps the unreachable
+            // contract intact post-P5A (no remaining P5C-only
+            // placeholders — P5A wires the final auto-sniff arm).
+            SniffOutcome::Jade => "jade",
             // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The
             // sniff slot is wired here so `sniff_format` can now return
             // `SniffOutcome::Sparrow`; the parse-side dispatch at the
@@ -554,23 +564,15 @@ electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
             }
-            // v0.28.0 P0D pre-stub catch-all: P0D added 6 new `SniffOutcome`
-            // variants (`Coldcard`, `ColdcardMultisig`, `Electrum`, `Jade`,
-            // `Sparrow`, `Specter`) to the enum, but `sniff_format` hardcodes
-            // their underlying parser bools to `false` until each per-parser
-            // P{N}A sub-phase wires `XParser::sniff(blob)` in. Until P0C wires
-            // real dispatch arms for these formats, this arm is statically
-            // unreachable — `sniff_format` cannot return any of the 6 new
-            // variants. P0C will replace this catch-all with explicit arms
-            // (one per format, dispatching via the cmd-side per-format
-            // pre-stub mechanism). Until then, an explicit `unreachable!`
-            // preserves Rust exhaustiveness while making the contract
-            // unmistakable on the (unreachable) runtime path.
-            other => unreachable!(
-                "SPEC §6.2 P0D pre-stub: sniff_format cannot yield {other:?} until P{{N}}A wires \
-                 the matching parser (placeholder bool is hardcoded `false`); P0C will replace \
-                 this catch-all with explicit per-format dispatch arms"
-            ),
+            // v0.28.0 Phase P5A close: all 8 `SniffOutcome` parser variants
+            // (BitcoinCore / Bsms / Coldcard / ColdcardMultisig / Electrum /
+            // Jade / Sparrow / Specter) plus the 2 aggregate verdicts
+            // (Ambiguous / NoMatch) now have explicit arms. The P0D
+            // `other => unreachable!()` pre-stub catch-all was removed at
+            // P5A because the match is now exhaustive — Rust's
+            // `unreachable_patterns` lint flags any remaining catch-all
+            // as dead code. The match exhaustiveness invariant is
+            // statically enforced by the compiler.
         },
     };
 
