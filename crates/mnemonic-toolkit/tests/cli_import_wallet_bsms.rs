@@ -167,12 +167,15 @@ fn bsms_6_line_happy_path() {
     let out = run_import_stdin(&blob).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §2.4 (+ v0.27.0 update): 6-line NOTICE that inline signature is
-    // not verified by the 2/6-line parser fires; the v0.27.0 reword points
-    // the user at the new --bsms-round1 path for BIP-322 verification.
+    // SPEC §10.4 (v0.28.0): the 6-line shape now emits a DEPRECATION NOTICE
+    // pointing the user at the BIP-129-canonical 4-line shape. The legacy
+    // v0.27.0 "not verified inline" reword has been folded into the
+    // deprecation message (the 6-line surface is on its way out).
     assert!(
-        stderr.contains("not verified inline") && stderr.contains("--bsms-round1"),
-        "expected v0.27.0 6-line not-verified-inline NOTICE; stderr was: {stderr}"
+        stderr.contains("6-line lenient shape is DEPRECATED")
+            && stderr.contains("4-line shape")
+            && stderr.contains("SPEC §10"),
+        "expected v0.28.0 6-line DEPRECATION NOTICE; stderr was: {stderr}"
     );
     // 6-line does NOT emit the 2-line reduced-form WARNING.
     assert!(!stderr.contains("2-line excerpt"));
@@ -523,31 +526,23 @@ fn bsms_thresh_overflow_errors_clearly() {
 // v0.27.1 Phase 4 PR-#26 fold — I17 + I18
 // ============================================================================
 
-/// I17 — unrecognized BSMS line counts (3/4/5/7+) hit the
-/// `wallet_import/bsms.rs::parse` "expected 2 or 6 lines" rejection arm.
-/// Currently no cell pins this template. Cells below exercise 3, 4, 5,
-/// and 7-line inputs; all must reject at exit 2 with the locked template.
+/// I17 — unrecognized BSMS line counts (3/5/7+) hit the
+/// `wallet_import/bsms.rs::parse` "expected 2, 4, or 6 lines" rejection arm.
+/// v0.28.0 admits a 4-line BIP-129-canonical Round-2 shape (SPEC §10), so
+/// the prior 4-line rejection cell has been removed; the 4-line happy-path
+/// plus first-address-mismatch cells below replace it. Cells below exercise
+/// 3, 5, and 7-line inputs; all must reject at exit 2 with the locked
+/// v0.28.0 template.
 #[test]
 fn bsms_3_line_blob_rejected_with_pointer_text() {
     let blob = "BSMS 1.0\nfoo\nbar\n";
     let assertion = run_import_stdin(blob).failure();
     let code = assertion.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 2, "non-{{2,6}}-line BSMS must exit 2");
+    assert_eq!(code, 2, "non-{{2,4,6}}-line BSMS must exit 2");
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("expected 2 or 6 lines"),
+        stderr.contains("expected 2, 4, or 6 lines"),
         "expected locked line-count rejection template; got: {stderr}"
-    );
-}
-
-#[test]
-fn bsms_4_line_blob_rejected_with_pointer_text() {
-    let blob = "BSMS 1.0\nfoo\nbar\nbaz\n";
-    let assertion = run_import_stdin(blob).failure();
-    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("expected 2 or 6 lines"),
-        "expected line-count rejection on 4-line blob; got: {stderr}"
     );
 }
 
@@ -557,7 +552,7 @@ fn bsms_5_line_blob_rejected_with_pointer_text() {
     let assertion = run_import_stdin(blob).failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("expected 2 or 6 lines"),
+        stderr.contains("expected 2, 4, or 6 lines"),
         "expected line-count rejection on 5-line blob; got: {stderr}"
     );
 }
@@ -568,7 +563,7 @@ fn bsms_7_line_blob_rejected_with_pointer_text() {
     let assertion = run_import_stdin(blob).failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("expected 2 or 6 lines"),
+        stderr.contains("expected 2, 4, or 6 lines"),
         "expected line-count rejection on 7-line blob; got: {stderr}"
     );
 }
@@ -591,6 +586,196 @@ fn bsms_sniff_rejects_leading_whitespace() {
     assert!(
         !crate::shared::bsms_sniff_via_dispatch(blob),
         "leading-whitespace header must NOT match BSMS sniff"
+    );
+}
+
+// ============================================================================
+// v0.28.0 Phase 7 (G1) — SPEC §10 BIP-129-canonical 4-line Round-2 parser
+// ============================================================================
+
+/// SPEC §10.1 — 4-line BIP-129-canonical Round-2 shape (sortedmulti 2-of-3
+/// mainnet P2WSH). Asserts: parser accepts the 4-line shape; first-address
+/// cross-validation per SPEC §10.2 emits NO mismatch WARNING (the blob's
+/// line-4 byte-equals `derive_first_address` at canonical /0/0); audit
+/// provenance uses the empty-string-sentinel pattern per SPEC §10.3 (the
+/// `bsms_audit=some` summary line confirms `Bsms(Some(...))` is constructed).
+#[test]
+fn bsms_4line_sortedmulti_2of3_happy_path() {
+    let p = fixture_path("bsms-4line-sortedmulti-2of3.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // 4-line shape does NOT emit the 2-line reduced-form WARNING.
+    assert!(
+        !stderr.contains("2-line excerpt"),
+        "4-line shape must NOT trigger 2-line WARNING; stderr was: {stderr}"
+    );
+    // 4-line shape does NOT emit the 6-line DEPRECATION NOTICE.
+    assert!(
+        !stderr.contains("6-line lenient shape is DEPRECATED"),
+        "4-line shape must NOT trigger 6-line DEPRECATION NOTICE; stderr was: {stderr}"
+    );
+    // SPEC §10.2 happy-path: line-4 byte-equals derive_first_address ⇒ no WARNING.
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "4-line happy-path must NOT emit first-address-mismatch WARNING; stderr was: {stderr}"
+    );
+    assert!(stdout.contains("cosigners=3"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=2"), "stdout: {stdout}");
+    // SPEC §10.3 empty-string-sentinel: audit is Some(...) for 4-line.
+    assert!(stdout.contains("bsms_audit=some"), "stdout: {stdout}");
+    // Cosigner fingerprints byte-exact.
+    assert!(stdout.contains(MAINNET_FP_A));
+    assert!(stdout.contains(MAINNET_FP_B));
+    assert!(stdout.contains(MAINNET_FP_C));
+}
+
+/// SPEC §10.1 — 4-line BIP-129-canonical Round-2 shape, singlesig P2WPKH
+/// (BIP-84). Asserts singlesig descriptors with non-multisig path-restrictions
+/// parse through the same 4-line arm. Threshold is None for singlesig (no
+/// thresh/multi/sortedmulti token in the descriptor).
+#[test]
+fn bsms_4line_singlesig_wpkh_happy_path() {
+    let p = fixture_path("bsms-4line-singlesig-wpkh.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(!stderr.contains("2-line excerpt"));
+    assert!(!stderr.contains("6-line lenient shape is DEPRECATED"));
+    assert!(!stderr.contains("first-address mismatch"));
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    // Singlesig has no threshold token; summary should reflect None.
+    assert!(stdout.contains("threshold=none"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=some"));
+}
+
+/// SPEC §10.1 — 4-line shape accepts the `"No path restrictions"` sentinel
+/// on line 3 (per BIP-129 line 96 the field is required but may be the
+/// literal string `"No path restrictions"` when there are none). Asserts
+/// the parser does NOT special-case that line content — it's preserved
+/// verbatim in the audit envelope and the descriptor parse + first-address
+/// cross-validation succeed normally.
+#[test]
+fn bsms_4line_no_path_restrictions_accepted() {
+    let p = fixture_path("bsms-4line-no-path-restrictions.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(!stderr.contains("first-address mismatch"));
+    assert!(stdout.contains("cosigners=2"));
+    assert!(stdout.contains("threshold=2"));
+    assert!(stdout.contains("bsms_audit=some"));
+}
+
+/// SPEC §10.2 — 4-line first-address cross-validation. The fixture carries
+/// a deliberately-wrong line-4 address; the parser MUST emit the existing
+/// `first-address mismatch at path <P>` WARNING (informational, exit 0,
+/// matching the 6-line behavior) and STILL succeed. The `<P>` segment for
+/// the 4-line shape sources from the BIP-129 path-restrictions string
+/// (e.g., `/0/*,/1/*`) per the empty-string-sentinel audit layout.
+#[test]
+fn bsms_4line_first_address_mismatch_emits_warning() {
+    let p = fixture_path("bsms-4line-first-address-mismatch.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("first-address mismatch"),
+        "4-line first-address mismatch must emit the locked WARNING; stderr was: {stderr}"
+    );
+    // The WARNING is informational, not a hard error — exit 0, parse proceeds.
+    assert!(stdout.contains("cosigners=3"));
+    assert!(stdout.contains("network=mainnet"));
+    assert!(stdout.contains("threshold=2"));
+    assert!(stdout.contains("bsms_audit=some"));
+}
+
+/// SPEC §10.4 — 6-line lenient shape continues to be accepted in v0.28.0
+/// but emits the new DEPRECATION NOTICE. This is the regression guard
+/// against accidentally removing the 6-line arm (per SPEC §10.4 the 6-line
+/// shape stays for one cycle before removal in a future minor).
+#[test]
+fn bsms_6line_still_accepted_with_deprecation_notice() {
+    let desc = format!(
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*))"
+    );
+    // Use the real /0/0 first-address so the cross-validation does not fire.
+    use miniscript::{Descriptor, DescriptorPublicKey};
+    use std::str::FromStr;
+    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc)
+        .expect("descriptor parses");
+    let receive = parsed
+        .into_single_descriptors()
+        .expect("multipath split")
+        .remove(0);
+    let real_first_address = receive
+        .derive_at_index(0)
+        .expect("derive_at_index")
+        .address(bitcoin::Network::Bitcoin)
+        .expect("address render")
+        .to_string();
+    let blob = build_bsms_6line(
+        &desc,
+        "00112233445566778899aabbccddeeff",
+        "m/48'/0'/0'/2'",
+        &real_first_address,
+        "H/example/sig/base64=",
+    );
+    let out = run_import_stdin(&blob).success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // SPEC §10.4 DEPRECATION NOTICE shape verbatim.
+    assert!(
+        stderr.contains("6-line lenient shape is DEPRECATED in v0.28+ and"),
+        "expected v0.28.0 DEPRECATION NOTICE; stderr was: {stderr}"
+    );
+    assert!(
+        stderr.contains("4-line shape"),
+        "expected DEPRECATION NOTICE to point at the 4-line shape; stderr was: {stderr}"
+    );
+    assert!(
+        stderr.contains("SPEC §10"),
+        "expected DEPRECATION NOTICE to cite SPEC §10; stderr was: {stderr}"
+    );
+}
+
+/// SPEC §10 + roundtrip — 4-line input through the `--json` envelope.
+/// `canonicalize_bsms` accepts the 4-line shape (per the P7A R5-C2 mirror
+/// fix at `roundtrip.rs::canonicalize_bsms`); the canonical form is the
+/// 2-line shape (audit lines dropped per §7.3.1 step 4), so 4-line →
+/// canonicalize is semantically equivalent to the same descriptor in 2-line
+/// shape. Round-trip status should report `byte_exact: false` but
+/// `semantic_match: true` (and `status: "blocked_no_emitter"` until the
+/// BSMS emitter is wired for the input side; until then status is the
+/// envelope's canonical "blocked" value).
+#[test]
+fn bsms_4line_via_bundle_roundtrip_json() {
+    let p = fixture_path("bsms-4line-sortedmulti-2of3.txt");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+        ])
+        .arg(&p)
+        .args(["--format", "bsms", "--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let val: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("envelope JSON invalid: {e}\nstdout: {stdout}"));
+    let entry = &val.as_array().expect("array envelope")[0];
+    // Sanity: source_format identifies BSMS.
+    assert_eq!(entry["source_format"].as_str(), Some("bsms"));
+    // The roundtrip envelope must be present and parseable. Status enumerates
+    // {ok, blocked_no_emitter, canonicalize_failed} per SPEC §2.2; either
+    // "ok" or "blocked_no_emitter" is acceptable here — the load-bearing
+    // assertion is that canonicalize_bsms did NOT fail on the 4-line shape.
+    let status = entry["roundtrip"]["status"].as_str();
+    assert!(
+        matches!(status, Some("ok") | Some("blocked_no_emitter")),
+        "expected ok or blocked_no_emitter roundtrip status (canonicalize accepted 4-line); got: {status:?}\nentry: {entry}"
     );
 }
 
@@ -618,6 +803,6 @@ mod shared {
         // BSMS-sniff-positive path emits a bsms-specific stderr (parse error
         // mentioning "bsms"). NoMatch/Ambiguous path emits
         // ImportWalletAmbiguousFormat without "bsms" in the template.
-        stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2 or 6 lines")
+        stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2, 4, or 6 lines")
     }
 }
