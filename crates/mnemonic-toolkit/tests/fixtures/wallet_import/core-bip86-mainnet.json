@@ -1,0 +1,12 @@
+{
+  "wallet_name": "bip86_mainnet",
+  "descriptors": [
+    {
+      "desc": "tr([b8688df1/86'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#039zy36w",
+      "active": true,
+      "internal": false,
+      "range": [0, 1000],
+      "timestamp": "now"
+    }
+  ]
+}
