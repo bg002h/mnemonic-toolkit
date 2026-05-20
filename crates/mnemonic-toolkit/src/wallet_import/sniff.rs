@@ -40,6 +40,7 @@
 
 use super::bitcoin_core::BitcoinCoreParser;
 use super::bsms::BsmsParser;
+use super::specter::SpecterParser;
 use super::WalletFormatParser;
 
 /// SPEC §6 — sniff verdict. Names mirror SPEC §2.1 `--format` values where
@@ -79,7 +80,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let electrum = false; // P6A: replace with ElectrumParser::sniff(blob)
     let jade = false; // P5A: replace with JadeParser::sniff(blob)
     let sparrow = false; // P1A: replace with SparrowParser::sniff(blob)
-    let specter = false; // P2A: replace with SpecterParser::sniff(blob)
+    let specter = SpecterParser::sniff(blob);
 
     let votes: [(bool, SniffOutcome); 8] = [
         (bitcoin_core, SniffOutcome::BitcoinCore),
@@ -188,6 +189,84 @@ mod tests {
     #[test]
     fn sniff_core_desc_missing_not_matched() {
         let blob = br#"{"descriptors":[{"foo":"bar"}]}"#;
+        assert_eq!(sniff_format(blob), SniffOutcome::NoMatch);
+    }
+
+    // =========================================================================
+    // v0.28.0 Phase P2A — Specter sniff integration through `sniff_format`.
+    //
+    // The `SpecterParser::sniff` unit tests live at
+    // `wallet_import/specter.rs::tests`. Cells here verify the wiring at the
+    // dispatcher: a canonical Specter blob routes to `SniffOutcome::Specter`
+    // (no ambiguity); a Specter blob does NOT co-fire with Bitcoin Core sniff
+    // (VENDOR_MARKER_KEYS at `bitcoin_core.rs:81` excludes `blockheight` +
+    // `devices`); and BSMS / Core fixtures do NOT co-fire with Specter sniff.
+    // =========================================================================
+
+    #[test]
+    fn sniff_specter_canonical_singlesig_blob() {
+        let blob = br#"{
+  "label": "daily",
+  "blockheight": 800000,
+  "descriptor": "wpkh([deadbeef/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#abcdefgh",
+  "devices": [{"type": "coldcard", "label": "primary"}]
+}"#;
+        assert_eq!(sniff_format(blob), SniffOutcome::Specter);
+    }
+
+    #[test]
+    fn sniff_specter_legacy_string_devices_blob() {
+        // Older Specter exports use string-form devices array.
+        let blob = br#"{"label":"daily","blockheight":0,"descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh","devices":["unknown"]}"#;
+        assert_eq!(sniff_format(blob), SniffOutcome::Specter);
+    }
+
+    #[test]
+    fn sniff_specter_blob_does_not_co_fire_with_bitcoin_core() {
+        // Per SPEC §6.1.1 + VENDOR_MARKER_KEYS at `bitcoin_core.rs:81`, the
+        // top-level `blockheight` + `devices` markers exclude any Specter
+        // blob from Bitcoin Core's positive sniff. The dispatcher must NOT
+        // report Ambiguous on a canonical Specter blob.
+        let blob = br#"{
+  "label": "daily",
+  "blockheight": 800000,
+  "descriptor": "wpkh(xpub.../<0;1>/*)#abcdefgh",
+  "devices": [{"type":"coldcard","label":"primary"}]
+}"#;
+        // Sanity at the per-parser layer: Core sniff false (vendor markers).
+        assert!(!super::super::bitcoin_core::BitcoinCoreParser::sniff(blob));
+        assert!(super::super::specter::SpecterParser::sniff(blob));
+        // Dispatcher routes to Specter (no Ambiguous).
+        assert_eq!(sniff_format(blob), SniffOutcome::Specter);
+    }
+
+    #[test]
+    fn sniff_bsms_blob_does_not_co_fire_with_specter() {
+        // BSMS blob is not JSON — Specter sniff must reject.
+        let blob = b"BSMS 1.0\nwpkh([deadbeef/84'/0'/0']xpub.../<0;1>/*)#abcdefgh\n";
+        assert!(!super::super::specter::SpecterParser::sniff(blob));
+        assert_eq!(sniff_format(blob), SniffOutcome::Bsms);
+    }
+
+    #[test]
+    fn sniff_bitcoin_core_blob_does_not_co_fire_with_specter() {
+        // Core listdescriptors envelope lacks blockheight + descriptor +
+        // devices — fails Specter's all-four positive marker check.
+        let blob = br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub...)#abcdefgh"}]}"#;
+        assert!(!super::super::specter::SpecterParser::sniff(blob));
+        assert_eq!(sniff_format(blob), SniffOutcome::BitcoinCore);
+    }
+
+    #[test]
+    fn sniff_specter_without_blockheight_is_no_match() {
+        // No vendor sniffs positive on a blob missing `blockheight` (Specter
+        // requires it; Core's vendor-marker exclusion doesn't fire without
+        // `blockheight`; BSMS prefix absent). Dispatcher routes to NoMatch.
+        //
+        // NB: this blob also has `descriptor` + `devices` at top level which
+        // are vendor markers for Core; so even without `blockheight` Core
+        // sniff returns false. Dispatcher should land on NoMatch.
+        let blob = br#"{"label":"x","descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh","devices":[]}"#;
         assert_eq!(sniff_format(blob), SniffOutcome::NoMatch);
     }
 

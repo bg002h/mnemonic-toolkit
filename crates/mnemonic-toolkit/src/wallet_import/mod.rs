@@ -30,6 +30,7 @@ pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
+pub(crate) mod specter;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -68,16 +69,23 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
+    /// Specter-DIY wallet-JSON parse (`wallet_import/specter.rs`). v0.28.0
+    /// Phase P2 — `SpecterSourceMetadata` holds the top-level `label`,
+    /// `blockheight`, per-cosigner device hints, and the list of dropped
+    /// top-level field names per SPEC §11.2.
+    #[allow(dead_code)] // P2A: variant + struct land here; P2B parse impl + P2C dispatch wire-up.
+    Specter(crate::wallet_import::specter::SpecterSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for the `BitcoinCore` variant.
+    /// excerpt shape or for the non-BSMS variants.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
+            Self::Specter(_) => None,
         }
     }
 
@@ -86,6 +94,7 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
+            Self::Specter(_) => None,
         }
     }
 }
