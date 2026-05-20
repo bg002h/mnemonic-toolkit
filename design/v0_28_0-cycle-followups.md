@@ -79,6 +79,61 @@ Each entry:
   generating tr() blobs via the toolkit, so the import-side hole is only triggered by
   externally-coordinated tr() BSMS blobs — currently rare in the wild).
 
+### `green-emitter-multisig-refusal-template-only` — Green's multisig refusal misses descriptor-mode
+
+- **Surfaced:** 2026-05-19 during Phase P11C execution (instance Wave-2,
+  `v0.28.0/p11-cross-format-matrix`); cross-format refusal matrix probe.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs:30-44` (the
+  `if let Some(t) = inputs.template` guard skips refusal entirely when
+  `template == None`, which is the case on every `--from-import-json`
+  invocation per `cmd/export_wallet.rs:603`).
+- **What:** `GreenEmitter::emit` refuses multisig templates (P{2sh,2wsh,..}Multi),
+  but the refusal is gated on `inputs.template.is_some()`. In descriptor-mode
+  invocations (`--descriptor` or `--from-import-json`), `template` is `None`,
+  so the multisig guard never fires — Green emits a multisig wsh()-descriptor
+  text comment-block even though Green's actual file-import surface refuses
+  multisig wallets at runtime. Refusal should be derived from the canonical
+  descriptor's script-type (`script_type_from_descriptor`) when `template` is
+  absent — `inputs.script_type: WalletScriptType` already encodes the
+  multisig variants and is populated on both paths. Refactor: refuse when
+  `inputs.script_type.is_multisig()` regardless of template presence.
+- **Why deferred:** the matrix-test fix (filter green out of the
+  multisig-refusal matrix and pin the current behavior with a regression
+  cell) is scoped to P11C. Patching green's emitter is OOS for P11C
+  (Phase 11 is matrix-coverage, not refusal-contract reshuffle); changing
+  `GreenEmitter::emit` would affect `cli_export_wallet_green.rs`
+  multisig-refusal cells that currently use templated input.
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as
+  `green-emitter-multisig-refusal-template-only`.
+- **Tier:** v0.28+ (refusal-contract correctness; not blocking matrix).
+- **Companion:** body update — `wallet-import-format-mismatch-matrix-completion`
+  notes the matrix-symmetry gap on the import side; this is the symmetric
+  emit-side gap.
+
+### `import-wallet-envelope-schema-version-narrative-drift` — schema_version SPEC vs source drift
+
+- **Surfaced:** 2026-05-19 during Phase P11A execution; helper test
+  `p11a_helper_envelope_carries_schema_version_and_source_format` asserted
+  schema_version="4" per a misread of `cmd/import_wallet.rs:975` (inner
+  BundleJson's own `schema_version: "4"`). The OUTER envelope's
+  schema_version is `"1"` per `IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION` at
+  `cmd/import_wallet.rs:87`.
+- **Where:** `cmd/import_wallet.rs:87` (outer envelope const `"1"`) vs
+  `cmd/import_wallet.rs:975` (inner BundleJson literal `"4"`).
+- **What:** the dual `schema_version` fields share a name but have
+  independent rev numbers (envelope wire-shape vs BundleJson wire-shape).
+  Per CLAUDE.md plan-doc verification discipline, this duality is a
+  silent footgun for future readers / parser authors. Recommend renaming
+  one to disambiguate (`envelope_schema_version` vs
+  `bundle_schema_version`) OR adding a doc-comment at both sites
+  cross-referencing the other.
+- **Why deferred:** rename is wire-shape-breaking; affects
+  GUI schema mirror + every downstream JSON consumer. Documentation
+  fix is low-risk but OOS for P11 (matrix coverage, not envelope
+  redesign).
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md.
+- **Tier:** v0.28+.
+
 ---
 
 ## Triage queue for Phase P14A
