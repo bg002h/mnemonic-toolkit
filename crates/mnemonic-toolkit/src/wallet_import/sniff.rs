@@ -1,13 +1,14 @@
 //! v0.26.0 format auto-detect (SPEC §6).
 //!
 //! Dispatcher consulted by `cmd::import_wallet::run` when the user does NOT
-//! supply `--format`. Returns one of four outcomes:
+//! supply `--format`. Returns one of four outcomes (listed in alphabetical
+//! variant-name order, per the Phase P0B.1 anchor):
 //!
-//! - `Bsms`        — only `BsmsParser::sniff` matches.
-//! - `BitcoinCore` — only `BitcoinCoreParser::sniff` matches.
 //! - `Ambiguous`   — both parsers' sniff claim the blob (e.g., contrived
 //!                   JSON containing `BSMS 1.0` as a string value AND a
 //!                   valid `descriptors` array).
+//! - `BitcoinCore` — only `BitcoinCoreParser::sniff` matches.
+//! - `Bsms`        — only `BsmsParser::sniff` matches.
 //! - `NoMatch`     — neither parser's sniff claims the blob.
 //!
 //! Per SPEC §6.1:
@@ -29,11 +30,18 @@ use super::WalletFormatParser;
 
 /// SPEC §6 — sniff verdict. Names mirror SPEC §2.1 `--format` values where
 /// possible (`Bsms` / `BitcoinCore`).
+///
+/// Variant order: alphabetical, per the v0.28.0 cycle's
+/// alphabetical-by-variant-name discipline (Phase P0B.1 anchor). Per-parser
+/// phases insert new variants in their alphabetically-correct slots; this
+/// keeps the union of concurrent feature-branch diffs mechanically
+/// resolvable. See `CLAUDE.md` "Conventions" + `design/SPEC_wallet_import_v0_28_0.md`
+/// §6.2.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SniffOutcome {
-    Bsms,
-    BitcoinCore,
     Ambiguous,
+    BitcoinCore,
+    Bsms,
     NoMatch,
 }
 
@@ -43,10 +51,15 @@ pub(crate) enum SniffOutcome {
 pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let bsms = BsmsParser::sniff(blob);
     let core = BitcoinCoreParser::sniff(blob);
+    // Match arms ordered alphabetically by SniffOutcome variant (Phase P0B.1
+    // anchor). Order is cosmetic — the truth table is exhaustive over the
+    // `(bool, bool)` domain and the dispatch is value-matched, not
+    // position-matched. Kept aligned with the enum definition above for
+    // readability.
     match (bsms, core) {
-        (true, false) => SniffOutcome::Bsms,
-        (false, true) => SniffOutcome::BitcoinCore,
         (true, true) => SniffOutcome::Ambiguous,
+        (false, true) => SniffOutcome::BitcoinCore,
+        (true, false) => SniffOutcome::Bsms,
         (false, false) => SniffOutcome::NoMatch,
     }
 }
@@ -151,10 +164,14 @@ mod tests {
         // Synthesize the truth-table arm directly via a unit-style assertion
         // that does NOT depend on either parser's `sniff` impl — we match
         // the `(bool, bool)` pair the dispatch expression uses.
+        //
+        // Match arms ordered alphabetically by SniffOutcome variant
+        // (Phase P0B.1 anchor); arm-order is cosmetic, the assertion is on
+        // the `(bool, bool) → SniffOutcome` mapping.
         let outcome = match (true, true) {
-            (true, false) => SniffOutcome::Bsms,
-            (false, true) => SniffOutcome::BitcoinCore,
             (true, true) => SniffOutcome::Ambiguous,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, false) => SniffOutcome::Bsms,
             (false, false) => SniffOutcome::NoMatch,
         };
         assert_eq!(
@@ -166,22 +183,44 @@ mod tests {
         // regression-guarded in one cell. This is the only place that
         // exhaustively documents the locked dispatch shape in tests.
         assert_eq!(match (true, false) {
-            (true, false) => SniffOutcome::Bsms,
-            (false, true) => SniffOutcome::BitcoinCore,
             (true, true) => SniffOutcome::Ambiguous,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, false) => SniffOutcome::Bsms,
             (false, false) => SniffOutcome::NoMatch,
         }, SniffOutcome::Bsms);
         assert_eq!(match (false, true) {
-            (true, false) => SniffOutcome::Bsms,
-            (false, true) => SniffOutcome::BitcoinCore,
             (true, true) => SniffOutcome::Ambiguous,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, false) => SniffOutcome::Bsms,
             (false, false) => SniffOutcome::NoMatch,
         }, SniffOutcome::BitcoinCore);
         assert_eq!(match (false, false) {
-            (true, false) => SniffOutcome::Bsms,
-            (false, true) => SniffOutcome::BitcoinCore,
             (true, true) => SniffOutcome::Ambiguous,
+            (false, true) => SniffOutcome::BitcoinCore,
+            (true, false) => SniffOutcome::Bsms,
             (false, false) => SniffOutcome::NoMatch,
         }, SniffOutcome::NoMatch);
+    }
+
+    /// Phase P0B.1 — pin the alphabetical-by-variant-name ordering discipline
+    /// of `SniffOutcome`. Per CLAUDE.md "Conventions": new variants are
+    /// inserted in alphabetical position; per-parser phases (P1A..P6A) add
+    /// `Coldcard / ColdcardMultisig / Electrum / Jade / Sparrow / Specter`
+    /// at their alphabetically-correct slots.
+    ///
+    /// Detection strategy: a fieldless enum's discriminants are assigned in
+    /// source declaration order, so `as u8` exposes that order. Pair each
+    /// variant with its expected discriminant under the alphabetical lock
+    /// and assert byte-equality. A revert (e.g., back to v0.27.x source
+    /// order `Bsms / BitcoinCore / Ambiguous / NoMatch`) would flip the
+    /// discriminants and trip this cell.
+    #[test]
+    fn sniff_outcome_variants_alphabetical_discipline() {
+        // Expected: Ambiguous=0, BitcoinCore=1, Bsms=2, NoMatch=3
+        // (alphabetical declaration order in source).
+        assert_eq!(SniffOutcome::Ambiguous as u8, 0);
+        assert_eq!(SniffOutcome::BitcoinCore as u8, 1);
+        assert_eq!(SniffOutcome::Bsms as u8, 2);
+        assert_eq!(SniffOutcome::NoMatch as u8, 3);
     }
 }
