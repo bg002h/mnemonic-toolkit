@@ -318,6 +318,12 @@ pub fn run<R: Read, W: Write, E: Write>(
             SniffOutcome::BitcoinCore => "bitcoin-core",
             // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
             SniffOutcome::ColdcardMultisig => "coldcard-multisig",
+            // v0.28.0 Phase P1A — Sparrow sniff is wired; auto-sniff path
+            // routes the verdict to `format_str = "sparrow"`, which falls
+            // through to the parse dispatch at `match format_str`.
+            // The parse-arm body is still `unimplemented!("P1C: ...")` at P1A;
+            // P1C flips it to `SparrowParser::parse(...)`.
+            SniffOutcome::Sparrow => "sparrow",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \

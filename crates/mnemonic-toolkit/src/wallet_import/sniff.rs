@@ -41,6 +41,7 @@
 use super::bitcoin_core::BitcoinCoreParser;
 use super::bsms::BsmsParser;
 use super::coldcard_multisig::ColdcardMultisigParser;
+use super::sparrow::SparrowParser;
 use super::WalletFormatParser;
 
 /// SPEC §6 — sniff verdict. Names mirror SPEC §2.1 `--format` values where
@@ -79,7 +80,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let coldcard_multisig = ColdcardMultisigParser::sniff(blob);
     let electrum = false; // P6A: replace with ElectrumParser::sniff(blob)
     let jade = false; // P5A: replace with JadeParser::sniff(blob)
-    let sparrow = false; // P1A: replace with SparrowParser::sniff(blob)
+    let sparrow = SparrowParser::sniff(blob); // P1A wired (Phase P1A).
     let specter = false; // P2A: replace with SpecterParser::sniff(blob)
 
     let votes: [(bool, SniffOutcome); 8] = [

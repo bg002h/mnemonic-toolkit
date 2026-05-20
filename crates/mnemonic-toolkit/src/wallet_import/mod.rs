@@ -31,6 +31,9 @@ pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
+// v0.28.0 Phase P1A — Sparrow Wallet parser skeleton (sniff + parse-stub).
+// Parse body lands in P1B.
+pub(crate) mod sparrow;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
