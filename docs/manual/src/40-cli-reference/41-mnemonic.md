@@ -2482,7 +2482,7 @@ mnemonic compare-cost {--miniscript <STR> | --descriptor <STR> | stdin (when non
 | Flag | Purpose |
 |---|---|
 | `--miniscript <STR>` | bare miniscript fragment with abstract labels (`pk(A)`, `pk(B)`, …) or concrete hex pubkeys; cost is key-agnostic so abstract labels auto-substitute to deterministic dummy keys. Mutually exclusive with `--descriptor`. |
-| `--descriptor <STR>` | full descriptor — `wsh(M)` or `sh(wsh(M))`. The wrapper is stripped to recover the inner miniscript `M` before the comparison. `tr(...)` input is refused with exit `3` and a FOLLOWUP message. Mutually exclusive with `--miniscript`. |
+| `--descriptor <STR>` | full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner miniscript `M` before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with exit `3`. Mutually exclusive with `--miniscript`. |
 | `--feerate <SATS_PER_VB>` | decimal sats per virtual byte for the sats columns; default `1.0`, max `10000.0`. Out-of-range values exit `64`. |
 | `--max-conditions <N>` | hard cap on raw enumeration size `n_abs × n_rel × 2^(\|signers\|+\|preimages\|)`; exceeding the cap exits `3` before any enumeration. Default `4096` (permits up to 10 signers+preimages). When `>256`, a soft warn-trail entry appears in `notes[]` once 256 rows are produced. Min `1`. |
 | `--json` | emit a JSON envelope on stdout instead of the plaintext aligned-column table. |
@@ -2608,6 +2608,58 @@ holds the wrapper-stripped inner miniscript M (SPEC §5) — note the
 example above shows `pk(02998512…)` in that field, not the full
 `wsh(pk(02998512…))` the user supplied.
 
+**4. Single-leaf `tr(IK, {M})` with a non-NUMS internal key (v0.28.0):**
+
+```sh
+mnemonic compare-cost --descriptor \
+  'tr(f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9,pk(dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659))' \
+  --feerate 25.0
+```
+
+Stdout:
+
+```text
+Input:     tr(f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9,pk(dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659))
+Extracted: pk(02dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659)
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 25.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
+
+Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+note: input had concrete keys; cost is identical to the abstract case
+note: input had a non-NUMS internal key IK (f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9); this report compares script-path-only cost (tr modeled as tr(NUMS, {M})). Keyspend-via-IK costs ~58 vB total (under SIGHASH_DEFAULT) and is the cheapest spend if signing with IK is acceptable.
+```
+
+The per-condition table compares `wsh(M)` against the script-path of
+`tr(NUMS, {M})` (the script-path is canonicalized to a NUMS internal
+key for the comparison so the wsh and tr sides are like-for-like
+script-spend cost). Because the user supplied a non-NUMS internal key,
+the **keypath-spend** path is also available: signing with the IK
+directly costs `58 vB` (Schnorr 64B + length prefix + stack-count = 66
+witness bytes; `(164+66+3)/4 = 58`). That annotation line is the
+cheapest spend if signing with IK is acceptable for the wallet's
+spending policy.
+
+When `IK == NUMS`, the keypath-spend cost is **not** surfaced — the
+NUMS H-point has no known discrete-log so signing under it is
+impossible by construction; only the script-path is meaningful.
+
+The internal key is reverse-projected from x-only (32B) to compressed
+(33B) by prepending the byte `0x02` (BIP-340 lift-x even-y LOCK; SPEC
+§11.2). Cost is parity-invariant — the choice of `0x02` over `0x03`
+does not affect any vbyte count — so the LOCK is a convention for
+deterministic round-trips, not a cost-load-bearing decision. (Pinned
+by `tests/cli_compare_cost.rs::cost_is_parity_invariant_02_vs_03`.)
+
+Multi-leaf `tr(IK, {M1, M2, ...})` is rejected; supply one leaf at a
+time via `--miniscript`. Keypath-only `tr(IK)` with no script-tree is
+also rejected — there's no inner miniscript to compare.
+
 ### Notes catalog
 
 The `notes[]` array in JSON output (and the trailing `note:` lines
@@ -2620,7 +2672,7 @@ in plaintext output) carry advisory text. Known entries:
 | `enumeration reached soft threshold; <N> conditions shown` | row count ≥ 256 (or `--max-conditions` if smaller). |
 | `input had concrete keys; cost is identical to the abstract case` | input contained no abstract labels. |
 | `input contains hash-preimage fragments; …` | input has at least one `sha256` / `hash256` / `ripemd160` / `hash160` leaf. |
-| `input had a non-NUMS internal key IK; …` | (v0.27+ FOLLOWUP) `--descriptor tr(IK, {M})` with `IK ≠ NUMS`. Not emitted in v0.26.0 since tr-input is refused. |
+| `input had a non-NUMS internal key IK; …` | (v0.28.0) `--descriptor tr(IK, {M})` with `IK ≠ NUMS`. The advisory carries the IK hex; the JSON envelope's `keypath_spend` field carries the keypath-spend cost (`{ internal_key_xonly_hex, vbytes: 58, sats }`); plaintext output adds a `Keypath-spend (via IK …): 58 vB | <sats> sats` annotation line below the per-condition table. |
 
 ### Exit codes
 
@@ -2630,7 +2682,8 @@ in plaintext output) carry advisory text. Known entries:
 | input parse error (malformed miniscript / descriptor) | `2` |
 | no input supplied (TTY stdin + no flag) | `1` |
 | miniscript valid in only one of {Segwitv0, Tap} after `multi↔multi_a` rewrite | `3` |
-| unsupported wrapper (pkh, wpkh, bare, tr(...) deferred) | `3` |
+| unsupported wrapper (pkh, wpkh, bare, keypath-only `tr(IK)` with no script-tree) | `3` |
+| multi-leaf `tr(IK, {M1, M2, ...})` (one-leaf-at-a-time via `--miniscript`) | `3` |
 | eager precheck exceeded `--max-conditions` cap | `3` |
 | miniscript has zero satisfying conditions | `3` |
 | `--miniscript` AND `--descriptor` both supplied | `64` (clap mutex) |

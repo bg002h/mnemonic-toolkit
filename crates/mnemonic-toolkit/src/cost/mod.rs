@@ -46,10 +46,8 @@ pub enum CompareCostError {
         detail: String,
     },
     /// Descriptor wrapper not in {`wsh`, `sh(wsh)`, single-leaf `tr`}. Exit 3.
-    #[allow(dead_code)] // Phase 2 — surfaces with `--descriptor`.
     UnsupportedWrapper(String),
     /// Multi-leaf `tr(IK, {M1, M2, …})` descriptor input. Exit 3.
-    #[allow(dead_code)] // Phase 2 — surfaces with `--descriptor`.
     MultiLeafTr,
     /// Spending-condition power-set pre-check would exceed `--max-conditions`
     /// hard cap. Exit 3.
@@ -72,7 +70,7 @@ impl std::fmt::Display for CompareCostError {
             ),
             CompareCostError::UnsupportedWrapper(w) => write!(
                 f,
-                "compare-cost: unsupported wrapper '{w}'; supported wrappers: wsh(..), sh(wsh(..)). tr() input is deferred — see FOLLOWUP `compare-cost-single-leaf-tr-input`."
+                "compare-cost: unsupported wrapper '{w}'; supported wrappers: wsh(..), sh(wsh(..)), single-leaf tr(IK,{{M}})."
             ),
             CompareCostError::MultiLeafTr => write!(
                 f,
@@ -182,18 +180,70 @@ pub fn run_compare_cost<W: std::io::Write>(
             "input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)".to_string(),
         );
     }
+    // SPEC §11 (v0.28.0) + §2.3 — advisory when `tr(IK, {M})` is supplied
+    // with a non-NUMS internal key. The per-condition rows still compare
+    // wsh(M) vs tr(NUMS,{M}) on the script-path; the keypath-spend cost
+    // appears separately (annotation line in plaintext; `keypath_spend`
+    // field in JSON).
+    if let Some(ik_hex) = translated.tr_non_nums_internal_key_xonly_hex.as_deref() {
+        notes.push(format!(
+            "input had a non-NUMS internal key IK ({ik_hex}); this report compares script-path-only cost (tr modeled as tr(NUMS, {{M}})). Keyspend-via-IK costs ~58 vB total (under SIGHASH_DEFAULT) and is the cheapest spend if signing with IK is acceptable."
+        ));
+    }
+
+    // SPEC §11 (v0.28.0) — when input is `tr(IK, {M})` with non-NUMS IK,
+    // surface the keypath-spend cost. P2TR keyspend witness under
+    // SIGHASH_DEFAULT = 1B stack-count + 1B sig-len + 64B Schnorr = 66B;
+    // total vbytes = `(164 + 66 + 3) / 4 = 58`. Cost is fixed; the IK
+    // hex is the user-supplied non-NUMS internal key.
+    let keypath_spend = translated
+        .tr_non_nums_internal_key_xonly_hex
+        .as_deref()
+        .map(|ik_hex| KeypathSpend {
+            internal_key_xonly_hex: ik_hex.to_string(),
+            vbytes: format::witness_bytes_to_vbytes(KEYPATH_SPEND_WITNESS_BYTES),
+        });
 
     let input_form_label = match &args.input {
         InputForm::Miniscript(_) => "miniscript",
         InputForm::Descriptor(_) => "descriptor",
     };
     if args.json {
-        format::render_json(original_input, input_form_label, &translated.extracted, args.feerate_sat_per_vb, &report.rows, &notes, stdout)
-            .map_err(ToolkitError::Io)?;
+        format::render_json(
+            original_input,
+            input_form_label,
+            &translated.extracted,
+            args.feerate_sat_per_vb,
+            &report.rows,
+            &notes,
+            keypath_spend.as_ref(),
+            stdout,
+        )
+        .map_err(ToolkitError::Io)?;
     } else {
-        format::render_table(original_input, &translated.extracted, args.feerate_sat_per_vb, &report.rows, &notes, stdout)
-            .map_err(ToolkitError::Io)?;
+        format::render_table(
+            original_input,
+            &translated.extracted,
+            args.feerate_sat_per_vb,
+            &report.rows,
+            &notes,
+            keypath_spend.as_ref(),
+            stdout,
+        )
+        .map_err(ToolkitError::Io)?;
     }
 
     Ok(())
 }
+
+/// SPEC §11 (v0.28.0) — keypath-spend cost surfaced when input is
+/// `tr(IK, {M})` with a non-NUMS internal key. The wire-shape carries
+/// the IK hex (for user-visible attribution) and the computed vbytes.
+pub struct KeypathSpend {
+    pub internal_key_xonly_hex: String,
+    pub vbytes: i64,
+}
+
+/// SPEC §11 — P2TR keyspend witness bytes under SIGHASH_DEFAULT.
+/// `1 (stack-count varint) + 1 (sig-length-prefix) + 64 (Schnorr sig) = 66`.
+const KEYPATH_SPEND_WITNESS_BYTES: usize = 66;
