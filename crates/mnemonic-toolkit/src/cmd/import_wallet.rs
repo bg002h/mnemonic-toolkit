@@ -318,6 +318,18 @@ pub fn run<R: Read, W: Write, E: Write>(
             SniffOutcome::BitcoinCore => "bitcoin-core",
             // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
             SniffOutcome::ColdcardMultisig => "coldcard-multisig",
+            // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The
+            // sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Sparrow`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P1C: parse not yet wired")` until P1C
+            // flips it to `SparrowParser::parse(...)`. v0.28.0 P0D's
+            // `other => unreachable!()` catch-all would otherwise fire
+            // on the Sparrow verdict — adding this arm BEFORE the
+            // catch-all (per C/F dispatch learned-best-practice) keeps
+            // the unreachable contract intact for the still-placeholder
+            // variants (Coldcard / Electrum / Jade / Specter).
+            SniffOutcome::Sparrow => "sparrow",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \

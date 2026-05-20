@@ -31,6 +31,7 @@ pub(crate) mod overlay;
 pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
+pub(crate) mod sparrow;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -82,6 +83,19 @@ pub(crate) enum ImportProvenance {
     /// stitching but is not yet constructed by any wired call site).
     #[allow(dead_code)]
     ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// Sparrow Wallet JSON parse (`wallet_import/sparrow.rs`). SPEC §11.1.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline;
+    /// the future `Specter(...)` slot (SPEC §11.2, Phase P2) is added in a
+    /// later phase and lands at the alphabetically-following position
+    /// without affecting this insertion.
+    ///
+    /// The variant is constructed by `SparrowParser::parse` at P1B and the
+    /// `cmd/import_wallet.rs` dispatch arm wired at P1C; the `dead_code`
+    /// allow on the variant covers the P1A → P1C interim (the type exists
+    /// for downstream-consumer reference + dispatch stitching but is not
+    /// yet constructed by any wired call site at P1A).
+    #[allow(dead_code)]
+    Sparrow(sparrow::SparrowSourceMetadata),
 }
 
 impl ImportProvenance {
@@ -93,6 +107,7 @@ impl ImportProvenance {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
         }
     }
 
@@ -102,6 +117,7 @@ impl ImportProvenance {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
         }
     }
 }

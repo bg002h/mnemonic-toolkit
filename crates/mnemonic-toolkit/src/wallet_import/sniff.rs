@@ -21,14 +21,17 @@
 //! - `Sparrow`          — only `SparrowParser::sniff` matches (P1A).
 //! - `Specter`          — only `SpecterParser::sniff` matches (P2A).
 //!
-//! Per SPEC §6.1 (sniff heuristics at v0.28.0 cutover; only the first two are
-//! wired in P0D — the other 6 are placeholder `false` until their per-parser
-//! P{N}A sub-phase lands):
+//! Per SPEC §6.1 (sniff heuristics at v0.28.0 cutover; the wired bools are
+//! enumerated below — the remaining placeholder `false` slots flip on as
+//! their per-parser P{N}A sub-phase lands):
 //! - BSMS: blob (post CRLF→LF normalize) starts with `BSMS 1.0\n`.
 //! - Bitcoin Core: valid JSON whose top-level object has a non-empty
 //!   `descriptors: [{desc: String}]` array AND NO vendor-marker keys
 //!   (`chain`, `policy`, `version`, etc.) that would indicate Specter /
 //!   Sparrow / similar. Conservative-only per SPEC §6.1.2 lock.
+//! - Coldcard multisig: SPEC §11.4 4-line text-shape header (P4A wired).
+//! - Sparrow: SPEC §11.1 positive-marker on `policyType` + `scriptType` +
+//!   `defaultPolicy.miniscript.script` + non-empty `keystores` (P1A wired).
 //!
 //! Per SPEC §6.2 (consult-all-then-count dispatch, N-parser generalization
 //! of v0.26.0's 2-parser 2×2 truth table):
@@ -41,6 +44,7 @@
 use super::bitcoin_core::BitcoinCoreParser;
 use super::bsms::BsmsParser;
 use super::coldcard_multisig::ColdcardMultisigParser;
+use super::sparrow::SparrowParser;
 use super::WalletFormatParser;
 
 /// SPEC §6 — sniff verdict. Names mirror SPEC §2.1 `--format` values where
@@ -79,7 +83,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let coldcard_multisig = ColdcardMultisigParser::sniff(blob);
     let electrum = false; // P6A: replace with ElectrumParser::sniff(blob)
     let jade = false; // P5A: replace with JadeParser::sniff(blob)
-    let sparrow = false; // P1A: replace with SparrowParser::sniff(blob)
+    let sparrow = SparrowParser::sniff(blob);
     let specter = false; // P2A: replace with SpecterParser::sniff(blob)
 
     let votes: [(bool, SniffOutcome); 8] = [
