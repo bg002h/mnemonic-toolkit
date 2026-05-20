@@ -824,4 +824,112 @@ fn core_fixture_file_multipath_0_1_parses() {
     assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
 }
 
-// P10B cells appended in a follow-on commit on the same branch.
+// ----------------------------------------------------------------------------
+// P10B — 4 more Core fixtures: parse-only + sniff-negative cells
+// ----------------------------------------------------------------------------
+
+/// P10B.1 — `core-explicit-active-false.json`: a single-entry blob with
+/// `active: false` explicit. Pins the parser's `active` field passthrough
+/// without coercion. The bundle parses cleanly (active flag is a passthrough
+/// piece of provenance metadata, not a filter); the entry surfaces as
+/// `active=false` in the stdout breakdown.
+#[test]
+fn core_fixture_file_explicit_active_false_parses() {
+    let p = fixture_path("core-explicit-active-false.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    // active=false surfaces in the per-bundle breakdown.
+    assert!(stdout.contains("active=false"), "stdout: {stdout}");
+}
+
+/// P10B.2 — `core-mainnet-receive-change-pair.json`: two-entry blob with
+/// `/0/*` (receive, active+!internal) + `/1/*` (change, active+internal)
+/// — the legacy Core shape pre-BIP-389-multipath. Pins parser acceptance
+/// of the non-multipath receive/change pair and the implicit promotion to
+/// `bundles=2` under `--select-descriptor all`.
+#[test]
+fn core_fixture_file_mainnet_receive_change_pair_parses() {
+    let p = fixture_path("core-mainnet-receive-change-pair.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // 2 entries → 2 bundles under `all`.
+    assert!(stdout.contains("bundles=2"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+}
+
+/// P10B.3 — `core-multipath-receive-change-pair.json`: two-entry blob where
+/// each entry already carries a BIP-389 `<0;1>/*` multipath (one wpkh
+/// active+!internal, one sh(wpkh) active+internal). Distinct from P10B.2
+/// in that each entry is itself multipath-shaped — a hybrid Core layout
+/// some wallets emit when they combine legacy + segwit accounts. Parser
+/// must accept this without conflating the two entries.
+#[test]
+fn core_fixture_file_multipath_receive_change_pair_parses() {
+    let p = fixture_path("core-multipath-receive-change-pair.json");
+    let out = run_core_file_select(&p, "all").success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=2"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    // Both fingerprints (BIP-84 entry uses MAINNET_FP_A; BIP-49 entry uses
+    // MAINNET_FP_B) surface in stdout.
+    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+    assert!(stdout.contains(MAINNET_FP_B), "stdout: {stdout}");
+}
+
+/// P10B.4 — `core-empty-descriptors-array.json`: NEGATIVE case. Top-level
+/// `descriptors: []` (empty array). Must refuse with exit 2 under
+/// `--format bitcoin-core`. Pairs with `core_empty_descriptors_array_exit_2`
+/// (the existing stdin-based assertion) to extend coverage to fixture-FILE
+/// consumption.
+#[test]
+fn core_fixture_file_empty_descriptors_array_refused_exit_2() {
+    let p = fixture_path("core-empty-descriptors-array.json");
+    // Use a builder that does NOT pass `--select-descriptor` (we want the
+    // bare `--format bitcoin-core` dispatch to surface the empty-array
+    // refusal early in parse, not in the select-filter).
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(&p)
+        .args(["--format", "bitcoin-core"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "expected exit 2; stderr: {stderr}");
+    assert!(
+        stderr.contains("parse error") && stderr.contains("empty"),
+        "expected empty-array error template; stderr: {stderr}"
+    );
+}
+
+/// P10B.4-sniff — companion sniff-negative cell for the empty-descriptors
+/// fixture. When `--format` is omitted, the `sniff_format` orchestrator
+/// (post-P0D consult-all-then-count, sniff.rs:74-105) consults
+/// `BitcoinCoreParser::sniff` (`bitcoin_core.rs:91-97`), which returns
+/// `false` on an empty `descriptors: []` array. With all other parser
+/// sniffs at v0.28.0 cutover still pre-stubbed to `false`, the verdict is
+/// `SniffOutcome::NoMatch` → caller emits `ImportWalletAmbiguousFormat`
+/// exit 1 with the "could not detect format" template (per SPEC §6.2).
+#[test]
+fn core_fixture_file_empty_descriptors_array_sniff_no_match() {
+    let p = fixture_path("core-empty-descriptors-array.json");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(&p)
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    // SniffOutcome::NoMatch → exit 1 with the auto-detect failure template
+    // (distinct from the parse-time exit-2 path the previous cell pins).
+    assert_eq!(code, 1, "expected exit 1 (sniff NoMatch); stderr: {stderr}");
+    assert!(
+        stderr.contains("could not detect format"),
+        "expected sniff-NoMatch template; stderr: {stderr}"
+    );
+}
