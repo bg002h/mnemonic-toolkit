@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.1] — 2026-05-20
+
+Patch release: cosmetic-only bugfix in the `bundle --import-json` stderr cosigner-summary block. Underlying md1 + mk1 + ms1 strings were always correct (verifiable via `verify-bundle` round-trip); only the human-readable display was wrong. No CLI surface change; no sibling-codec or mnemonic-gui lockstep required.
+
+### Fixed
+
+- `bundle --import-json` stderr `# Threshold:` line + `# Recovery:` line now report the descriptor's true K instead of the cosigner count N. Pre-fix bug: a 2-of-3 multisig wallet imported via `--import-json` rendered `# Threshold: 3 of 3` because `build_unified_card` fell back to N when the `--threshold` CLI arg was None (which it always is on the `--import-json` descriptor-mode path). Fix extracts K from the reassembled descriptor's multi-family node (`Body::MultiKeys` / `Body::Variable`) so every foreign format flowing through this code path renders correctly.
+
+### Tests
+
+- 8 new regression cells in `tests/cli_bundle_import_json.rs` — one per foreign-wallet format on the canonical 2-of-3 multisig fixture (bitcoin-core / bsms / coldcard-multisig / electrum / jade / sparrow / specter) plus a K-not-equal-to-N robustness cell (coldcard-multisig 3-of-5). Total toolkit cells: 1986 → 1994.
+
+---
+
 ## mnemonic-toolkit [0.28.0] — 2026-05-20
 
 Headline cycle: 6 new wallet-import format parsers (Sparrow / Specter / Electrum / Coldcard / Coldcard-multisig / Jade) + BSMS BIP-129-canonical 4-line Round-2 input parser + `compare-cost` single-leaf taproot input support. Cross-format conversion matrix grows from a single source→destination cell to a parameterized N×M matrix (74 cells: 24 happy-path + 42 refusal + adjuncts) covering 8 sources × N destinations.
