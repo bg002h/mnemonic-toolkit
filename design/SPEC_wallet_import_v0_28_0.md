@@ -482,7 +482,14 @@ pub(crate) struct JadeSourceMetadata {
 
 **Sniff signature:** top-level JSON object with all of:
 - `seed_version` (integer ∈ {11..71}; current Electrum FINAL_SEED_VERSION is 71)
-- `wallet_type` (string ∈ {`"standard"`, `"multisig"`, `"2fa"`, `"imported"`})
+- `wallet_type` (string ∈ {`"standard"`, `"<k>of<n>"` regex per `electrum/util.py::multisig_type` `(\d+)of(\d+)`, `"2fa"`, `"imported"`})
+
+**P6A in-phase SPEC correction (R1-I1 v2 fold):** the original P0A draft listed `wallet_type` value-set as `{"standard", "multisig", "2fa", "imported"}`. This was empirically wrong: Electrum stores multisig wallets under a `<k>of<n>` regex pattern (e.g., `"2of3"`, `"3of5"`), NOT the literal string `"multisig"`. Verified via:
+1. WebFetch of `electrum/util.py::multisig_type` (regex `r'(\d+)of(\d+)'`).
+2. The toolkit's own `wallet_export/electrum.rs:141` emits `format!("{k}of{n}")` for multisig.
+3. The toolkit's own fixture `tests/export_wallet/electrum_multi_2of4.json` carries `"wallet_type": "2of4"`.
+
+The corrected enumeration is therefore `{"standard", "<k>of<n>", "2fa", "imported"}`, with `<k>of<n>` recognized at sniff/parse time via the same `(\d+)of(\d+)` regex Electrum uses.
 
 **Electrum-version scoping note (R1 I1 fold):** the 4-value `wallet_type` set above is the **current Electrum 4.x post-upgrade enumeration**. Legacy values `"old"`, `"xpub"`, `"bip44"` appear in pre-4.x wallet files but Electrum 4.x's auto-upgrade machinery rewrites them to `"standard"` on load (verified at `electrum/wallet_db.py::_convert_wallet_type` — see also: WebFetch confirmation that legacy values are upgrade-only). Users with pre-Electrum-4.x wallets must open them in Electrum 4.x first (auto-upgrade behavior) before exporting for ingest into mnemonic-toolkit. If a v0.28.0 user's blob carries a legacy `wallet_type` value, sniff returns `NoMatch` and P6 surfaces no Electrum-specific error; the user must upgrade via Electrum 4.x as a prerequisite. Tracking: pre-4.x direct ingest is out of v0.28.0 scope; if user demand surfaces, file new FOLLOWUP `wallet-import-electrum-pre-4x-legacy-types`.
 
@@ -493,7 +500,7 @@ Electrum's wallet file is Python-dict-serialized JSON; specific quirks (e.g., st
 | wallet_type | parse-action |
 |---|---|
 | `"standard"` | Singlesig parse: extract `keystore.xpub` + `keystore.derivation`. Compute descriptor via standard BIP-84/49/44 wrapping based on xpub SLIP-132 prefix. |
-| `"multisig"` | Multisig parse: iterate `x1/`, `x2/`, ... per-key sub-objects; extract per-cosigner xpub + derivation. Synthesize `wsh(sortedmulti(K, ...))` descriptor. |
+| `<k>of<n>` (regex `(\d+)of(\d+)`) | Multisig parse: iterate `x1/`, `x2/`, ... per-key sub-objects; extract per-cosigner xpub + derivation. Synthesize `wsh(sortedmulti(K, ...))` descriptor. |
 | `"2fa"` | **REFUSE** — TrustedCoin two-factor wallet; not natively reconstructible from xpubs alone. Specific stderr error per §11.6.1 below. |
 | `"imported"` | **REFUSE** — Electrum "imported addresses" wallet has no derivation chain to reconstruct. Specific stderr error per §11.6.1. |
 
@@ -509,13 +516,18 @@ Electrum's wallet file is Python-dict-serialized JSON; specific quirks (e.g., st
 
 ```rust
 pub(crate) struct ElectrumSourceMetadata {
-    pub seed_version: u8,
-    pub wallet_type: ElectrumWalletType,     // Standard | Multisig
+    pub seed_version: u64,
+    pub wallet_type: ElectrumWalletType,     // Standard | Multisig { k, n }
     pub wallet_name: Option<String>,
     pub dropped_fields: Vec<String>,
 }
 
-pub(crate) enum ElectrumWalletType { Standard, Multisig }
+pub(crate) enum ElectrumWalletType {
+    Standard,
+    /// `k`-of-`n` multisig per `electrum/util.py::multisig_type` regex
+    /// `(\d+)of(\d+)`. P6A in-phase SPEC correction (see §11.6 intro).
+    Multisig { k: u8, n: u8 },
+}
 ```
 
 (Refused variants — 2fa / imported / encrypted — do not produce a `ParsedImport` and therefore have no provenance.)

@@ -453,6 +453,17 @@ pub fn run<R: Read, W: Write, E: Write>(
             SniffOutcome::Coldcard => "coldcard",
             // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
             SniffOutcome::ColdcardMultisig => "coldcard-multisig",
+            // v0.28.0 Phase P6A: auto-sniff arm for Electrum 4.x wallet
+            // JSON. The sniff slot is wired at `sniff.rs:88`
+            // (`ElectrumParser::sniff`); the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P6C: parse not yet wired")` until P6C flips it
+            // to `ElectrumParser::parse(...)`. Adding this arm BEFORE the
+            // `other => unreachable!()` catch-all keeps the unreachable
+            // contract intact for the still-placeholder Jade variant
+            // (only `SniffOutcome::Jade` lacks a real auto-sniff arm at
+            // P6A close — P5A wires the remaining one).
+            SniffOutcome::Electrum => "electrum",
             // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The
             // sniff slot is wired here so `sniff_format` can now return
             // `SniffOutcome::Sparrow`; the parse-side dispatch at the
