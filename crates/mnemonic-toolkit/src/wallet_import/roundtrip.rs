@@ -291,14 +291,100 @@ pub(crate) fn canonicalize_coldcard(_blob: &[u8]) -> Result<String, ToolkitError
     ))
 }
 
-/// SPEC §11.4 — canonicalize a Coldcard multisig text blob.
-/// Body lands in Phase P4B.
-pub(crate) fn canonicalize_coldcard_multisig(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_coldcard_multisig: not yet implemented; \
-         coldcard-multisig ingest lands in Phase P4B"
-            .into(),
-    ))
+/// SPEC §11.4 — canonicalize a Coldcard multisig text blob for semantic
+/// round-trip comparison.
+///
+/// Strategy:
+/// 1. CRLF → LF normalize + strip trailing whitespace per line + drop
+///    comment lines (`# …`) + drop blank lines for diffing purposes.
+/// 2. Parse via `coldcard_multisig::parse_text` to recover the typed
+///    header fields + cosigner list (with effective per-cosigner XFPs
+///    via the SPEC §11.4.1 truth table).
+/// 3. Re-emit in a deterministic canonical form: shared-derivation shape,
+///    cosigners sorted lex by xpub (mirrors the toolkit's emit at
+///    `wallet_export/coldcard.rs:339` sortedmulti rule), top-level XFP
+///    header DROPPED (redundant with per-cosigner `<XFP>: <xpub>` lines).
+///
+/// The canonicalization is **semantic, not byte-exact**: two blobs that
+/// parse to the same wallet (regardless of cosigner ordering, comment
+/// lines, CRLF vs LF, XFP-header presence, dash vs space in `Policy:`)
+/// canonicalize to the same string.
+pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, ToolkitError> {
+    use crate::wallet_import::coldcard_multisig::{
+        parse_text, ColdcardMsFormat,
+    };
+
+    // Re-parse via the dedicated parser; stderr WARNING (xfp divergence)
+    // is swallowed for canonicalization — it does not affect the canonical
+    // form (effective XFP per truth-table is what's emitted).
+    let mut sink: Vec<u8> = Vec::new();
+    let parsed = parse_text(blob, &mut sink)?;
+
+    let meta = match &parsed.provenance {
+        crate::wallet_import::ImportProvenance::ColdcardMultisig(m) => m,
+        _ => {
+            return Err(ToolkitError::ImportWalletParse(
+                "canonicalize_coldcard_multisig: parser returned non-ColdcardMultisig provenance"
+                    .to_string(),
+            ));
+        }
+    };
+
+    // Effective per-cosigner XFP from parsed.cosigners (already applied
+    // the truth table). Sort by xpub lex (sortedmulti convention).
+    let mut cosigner_lines: Vec<String> = parsed
+        .cosigners
+        .iter()
+        .map(|c| {
+            format!(
+                "{xfp}: {xpub}",
+                xfp = c.fingerprint.to_string().to_uppercase(),
+                xpub = c.xpub
+            )
+        })
+        .collect();
+    cosigner_lines.sort();
+
+    // Shared derivation path: rebuild from the first cosigner's path
+    // (canonicalization ASSUMES homogeneous derivation; the parser already
+    // accepted heterogeneous paths but they would canonicalize awkwardly.
+    // For SPEC §11.4 the shared `Derivation:` field is the canonical form).
+    let derivation_str = format!("m{}", path_components_for_canonical(&parsed.cosigners[0].path));
+
+    let format_str = match meta.script_format {
+        ColdcardMsFormat::P2wsh => "P2WSH",
+        ColdcardMsFormat::P2shP2wsh => "P2SH-P2WSH",
+        ColdcardMsFormat::P2sh => "P2SH",
+    };
+
+    let mut out = String::new();
+    out.push_str(&format!("Name: {}\n", meta.name));
+    out.push_str(&format!("Policy: {} of {}\n", meta.policy.k, meta.policy.n));
+    out.push_str(&format!("Derivation: {}\n", derivation_str));
+    out.push_str(&format!("Format: {}\n", format_str));
+    out.push('\n');
+    for line in cosigner_lines {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// Render a DerivationPath as `/N'/N'/...` components (the form used in
+/// the `Derivation:` header value, minus the leading `m`). Mirrors the
+/// path-string conversion at `wallet_import/coldcard_multisig.rs`'s
+/// `derivation_path_components` but operates on the typed
+/// `bitcoin::bip32::DerivationPath`.
+fn path_components_for_canonical(path: &bitcoin::bip32::DerivationPath) -> String {
+    use bitcoin::bip32::ChildNumber;
+    let mut s = String::new();
+    for comp in path.into_iter() {
+        match comp {
+            ChildNumber::Hardened { index } => s.push_str(&format!("/{}'", index)),
+            ChildNumber::Normal { index } => s.push_str(&format!("/{}", index)),
+        }
+    }
+    s
 }
 
 /// SPEC §11.6 — canonicalize an Electrum wallet JSON blob.
@@ -818,19 +904,107 @@ mod tests {
         }
     }
 
+    /// P4B canonicalize: round-trip a fixture and verify the canonical form
+    /// is stable (canonicalize-of-canonicalize == canonicalize). The skeleton
+    /// regression cell that previously sat here is replaced — the body is
+    /// no longer a stub.
     #[test]
-    fn canonicalize_coldcard_multisig_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_coldcard_multisig(b"any blob").unwrap_err();
+    fn canonicalize_coldcard_multisig_idempotent() {
+        let blob = std::fs::read(
+            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
+        )
+        .expect("fixture file readable");
+        let c1 = canonicalize_coldcard_multisig(&blob).unwrap();
+        let c2 = canonicalize_coldcard_multisig(c1.as_bytes()).unwrap();
+        assert_eq!(c1, c2, "canonicalize_coldcard_multisig must be idempotent");
+    }
+
+    /// P4B canonicalize: with-XFP-header fixture and without-XFP-header
+    /// fixture canonicalize to the same string (header dropped; same
+    /// per-cosigner XFPs + same cosigners + same headers otherwise).
+    #[test]
+    fn canonicalize_coldcard_multisig_with_and_without_xfp_header_match() {
+        let with_blob = std::fs::read(
+            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
+        )
+        .expect("with-xfp fixture readable");
+        let without_blob = std::fs::read(
+            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-no-xfp.txt",
+        )
+        .expect("no-xfp fixture readable");
+        let c_with = canonicalize_coldcard_multisig(&with_blob).unwrap();
+        let c_without = canonicalize_coldcard_multisig(&without_blob).unwrap();
+        assert_eq!(
+            c_with, c_without,
+            "with-XFP-header and without-XFP-header fixtures must canonicalize identically"
+        );
+    }
+
+    /// P4B canonicalize: 3-of-5 fixture canonicalizes to a stable form
+    /// containing all 5 cosigners (sorted lex by xpub).
+    #[test]
+    fn canonicalize_coldcard_multisig_3of5_stable() {
+        let blob = std::fs::read("tests/fixtures/wallet_import/coldcard-ms-3of5-p2wsh.txt")
+            .expect("3of5 fixture readable");
+        let c = canonicalize_coldcard_multisig(&blob).unwrap();
+        assert!(c.starts_with("Name: TestMs3of5\n"));
+        assert!(c.contains("Policy: 3 of 5\n"));
+        assert!(c.contains("Format: P2WSH\n"));
+        assert!(c.contains("Derivation: m/48'/0'/0'/2'\n"));
+        // Counts of XFP-prefixed cosigner lines == 5.
+        let cosigner_line_count = c.lines().filter(|l| l.contains(": xpub")).count();
+        assert_eq!(cosigner_line_count, 5, "got:\n{c}");
+    }
+
+    /// P4B canonicalize: comment lines + CRLF + dash-form Policy are all
+    /// stripped/normalized — three variants of the same underlying wallet
+    /// canonicalize identically.
+    #[test]
+    fn canonicalize_coldcard_multisig_cosmetic_variants_match() {
+        let xpub_a = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+        let xpub_b = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
+        let xpub_c = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
+
+        let plain = format!(
+            "Name: T\n\
+Policy: 2 of 3\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+\n\
+34A3A4F1: {xpub_a}\n\
+FF9DFBCF: {xpub_b}\n\
+B7F7DFEA: {xpub_c}\n"
+        );
+        let with_comments = format!(
+            "# exported from Coldcard\n\
+# wallet xfp = 34A3A4F1\n\
+Name: T\n\
+Policy: 2-of-3\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+\n\
+34A3A4F1: {xpub_a}\n\
+FF9DFBCF: {xpub_b}\n\
+B7F7DFEA: {xpub_c}\n"
+        );
+        let crlf = plain.replace('\n', "\r\n");
+
+        let c_plain = canonicalize_coldcard_multisig(plain.as_bytes()).unwrap();
+        let c_comments = canonicalize_coldcard_multisig(with_comments.as_bytes()).unwrap();
+        let c_crlf = canonicalize_coldcard_multisig(crlf.as_bytes()).unwrap();
+        assert_eq!(c_plain, c_comments);
+        assert_eq!(c_plain, c_crlf);
+    }
+
+    /// P4B canonicalize: invalid blob surfaces as `ImportWalletParse` (NOT
+    /// the prior P0C-stub `BadInput`); the helper signature contract per
+    /// SPEC §7-style helpers (canonicalize errors are parse-class).
+    #[test]
+    fn canonicalize_coldcard_multisig_invalid_blob_returns_parse_error() {
+        let err = canonicalize_coldcard_multisig(b"not a coldcard ms file").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P4B"), "msg must cite Phase P4B; got: {msg}");
-                assert!(
-                    msg.contains("coldcard-multisig"),
-                    "msg must cite format; got: {msg}"
-                );
-            }
-            other => panic!("expected BadInput, got: {other:?}"),
+            ToolkitError::ImportWalletParse(_) => {}
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
     }
 
@@ -891,9 +1065,15 @@ mod tests {
         // Empty blob is a degenerate input; skeletons must still return the
         // BadInput("not yet implemented") shape (not panic, not Ok, not a
         // different error class). This pins the "shape-only" contract.
+        //
+        // Note: `coldcard-multisig` is OMITTED from this list since v0.28.0
+        // Phase P4B — its canonicalize body is no longer a skeleton; the
+        // empty-blob path now correctly returns `ImportWalletParse`. The
+        // P4B canonicalize cells above (`canonicalize_coldcard_multisig_*`)
+        // are the regression guards for the real body. Other format
+        // skeletons stay on this list until their per-parser P{N}B phase.
         for (name, result) in [
             ("coldcard", canonicalize_coldcard(b"")),
-            ("coldcard-multisig", canonicalize_coldcard_multisig(b"")),
             ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
             ("sparrow", canonicalize_sparrow(b"")),

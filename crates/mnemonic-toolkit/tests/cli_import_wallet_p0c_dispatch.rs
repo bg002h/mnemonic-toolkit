@@ -87,8 +87,15 @@ fn p0c_format_coldcard_panics_unimplemented() {
     );
 }
 
+/// v0.28.0 Phase P4C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format coldcard-multisig panics unimplemented");
+/// post-P4C the dispatch is wired, so the same BSMS-blob input now
+/// surfaces an `ImportWalletFormatMismatch` (supplied=coldcard-multisig,
+/// sniffed=bsms) instead of a panic. The cell is preserved at the same
+/// location as a dispatch-surface regression guard for the
+/// post-P4C-wiring semantic.
 #[test]
-fn p0c_format_coldcard_multisig_panics_unimplemented() {
+fn p0c_format_coldcard_multisig_dispatches_format_mismatch_post_p4c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&[
         "--blob",
@@ -99,8 +106,9 @@ fn p0c_format_coldcard_multisig_panics_unimplemented() {
     .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P4C") || stderr.contains("coldcard-multisig"),
-        "stderr should mention P4C or coldcard-multisig on unimplemented dispatch; got: {stderr}"
+        stderr.contains("coldcard-multisig") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=coldcard-multisig vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 

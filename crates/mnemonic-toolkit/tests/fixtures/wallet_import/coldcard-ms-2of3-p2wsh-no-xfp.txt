@@ -1,0 +1,13 @@
+# Coldcard Multisig setup file — firmware variant without leading XFP: header.
+# Per-cosigner XFPs (the <XFP>: prefix on each cosigner line) are still required
+# per the Coldcard format and use `xpub.fingerprint()` (SPEC §11.4.1
+# computed-formula) so per-cosigner XFP matching is silent.
+# 2-of-3 mainnet P2WSH. xpubs reused from bsms-2line-sortedmulti-2of3.txt.
+Name: TestMs2of3
+Policy: 2 of 3
+Derivation: m/48'/0'/0'/2'
+Format: P2WSH
+
+34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx

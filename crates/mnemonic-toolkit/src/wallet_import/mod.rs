@@ -25,6 +25,7 @@ pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
+pub(crate) mod coldcard_multisig;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;
 pub(crate) mod pipeline;
@@ -68,16 +69,30 @@ pub(crate) enum ImportProvenance {
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
+    /// Coldcard multisig text-file parse (`wallet_import/coldcard_multisig.rs`).
+    /// SPEC §11.4. Inserted in alphabetical-by-variant-name slot per CLAUDE.md
+    /// discipline; the prior `Coldcard(...)` slot (single-sig, SPEC §11.3) is
+    /// added in Phase P3B and lands at the alphabetically-preceding position
+    /// without affecting this insertion.
+    ///
+    /// The variant is constructed by `ColdcardMultisigParser::parse` at P4B
+    /// and the `cmd/import_wallet.rs` dispatch arm wired at P4C; the
+    /// `dead_code` allow on the variant covers the P4A → P4C interim
+    /// (the type exists for downstream-consumer reference + dispatch
+    /// stitching but is not yet constructed by any wired call site).
+    #[allow(dead_code)]
+    ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for the `BitcoinCore` variant.
+    /// excerpt shape or for any non-BSMS variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
+            Self::ColdcardMultisig(_) => None,
         }
     }
 
@@ -86,6 +101,7 @@ impl ImportProvenance {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
+            Self::ColdcardMultisig(_) => None,
         }
     }
 }
