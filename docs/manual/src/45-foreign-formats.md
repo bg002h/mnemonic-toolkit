@@ -433,7 +433,7 @@ mnemonic import-wallet --format coldcard \
 ```
 
 For the BIP-84 mainnet fixture, the result is a watch-only bundle
-whose descriptor is `wpkh([B8688DF1/84'/0'/0']xpub6FQya7zGhR9.../<0;1>/*)`
+whose descriptor is `wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR9.../<0;1>/*)`
 with `mk1` carrying the lone cosigner xpub.
 
 ### Provenance metadata
@@ -501,7 +501,7 @@ mnemonic import-wallet --format coldcard-multisig \
 ```
 
 For the 2-of-3 P2WSH fixture, the parser synthesizes
-`wsh(sortedmulti(2, [34A3A4F1/48'/0'/0'/2']xpub6FQya..., ...))` and
+`wsh(sortedmulti(2, [34a3a4f1/48'/0'/0'/2']xpub6FQya..., ...))` and
 populates `mk1` with all three cosigner xpubs.
 
 ### XFP-header policy (5-row truth table)
