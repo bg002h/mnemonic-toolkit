@@ -218,6 +218,12 @@ mod tests {
     fn sniff_outcome_variants_alphabetical_discipline() {
         // Expected: Ambiguous=0, BitcoinCore=1, Bsms=2, NoMatch=3
         // (alphabetical declaration order in source).
+        //
+        // Stability note: depends on the default sequential-discriminant
+        // assignment for fieldless enums without `#[repr(...)]`. If a future
+        // change attaches `#[repr(C)]` or an explicit `= N` discriminant to
+        // any variant, update the expected values below — the discipline
+        // (alphabetical order) is unchanged, only the numeric anchors shift.
         assert_eq!(SniffOutcome::Ambiguous as u8, 0);
         assert_eq!(SniffOutcome::BitcoinCore as u8, 1);
         assert_eq!(SniffOutcome::Bsms as u8, 2);
