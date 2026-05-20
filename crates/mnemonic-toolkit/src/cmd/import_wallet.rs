@@ -258,6 +258,23 @@ pub fn run<R: Read, W: Write, E: Write>(
                         .to_string(),
                 ));
             }
+            // v0.28.0 P0D pre-stub catch-all: P0D added 6 new `SniffOutcome`
+            // variants (`Coldcard`, `ColdcardMultisig`, `Electrum`, `Jade`,
+            // `Sparrow`, `Specter`) to the enum, but `sniff_format` hardcodes
+            // their underlying parser bools to `false` until each per-parser
+            // P{N}A sub-phase wires `XParser::sniff(blob)` in. Until P0C wires
+            // real dispatch arms for these formats, this arm is statically
+            // unreachable — `sniff_format` cannot return any of the 6 new
+            // variants. P0C will replace this catch-all with explicit arms
+            // (one per format, dispatching via the cmd-side per-format
+            // pre-stub mechanism). Until then, an explicit `unreachable!`
+            // preserves Rust exhaustiveness while making the contract
+            // unmistakable on the (unreachable) runtime path.
+            other => unreachable!(
+                "SPEC §6.2 P0D pre-stub: sniff_format cannot yield {other:?} until P{{N}}A wires \
+                 the matching parser (placeholder bool is hardcoded `false`); P0C will replace \
+                 this catch-all with explicit per-format dispatch arms"
+            ),
         },
     };
 
