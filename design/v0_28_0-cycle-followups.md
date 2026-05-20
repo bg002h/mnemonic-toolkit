@@ -27,7 +27,23 @@ Each entry:
 
 ## Open items (cycle-internal)
 
-(none yet)
+### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import support
+
+- **Surfaced:** 2026-05-19 during Phase P1B execution; SPEC §11.1 implementation discovery.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs:280-285` (parse-step-6 taproot refusal) + `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:215-219` (emit-side taproot descriptor-passthrough).
+- **What:** Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refuses taproot scripts; full taproot import requires a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
+- **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as `sparrow-taproot-descriptor-passthrough-import-support`.
+- **Tier:** v0.29+.
+
+### `sparrow-descriptor-with-checksum-verify-fixture` — dedicated checksum-verify fixture
+
+- **Surfaced:** 2026-05-19 during Phase P1B execution; plan-doc §S.1 fixture enumeration mentions "descriptor-with-checksum verify" as one of ~5 fixtures.
+- **Where:** `crates/mnemonic-toolkit/tests/fixtures/wallet_import/sparrow-*.json` (5 fixtures created; no `*-checksum-verify` fixture).
+- **What:** Add a dedicated `sparrow-checksum-verify-mainnet.json` fixture that round-trips through `canonicalize_sparrow` + the `recompute_descriptor_checksum` helper. Currently `parse_single_wpkh_mainnet_happy_path` indirectly exercises this; a fixture-level cell makes the contract explicit + survives `--ignored` filter usage.
+- **Why deferred:** Sparrow's WIRE SHAPE has no BIP-380 checksum on `miniscript.script` (the script is a bare policy expression, not a BIP-380 descriptor). The "checksum verify" semantic only applies to the toolkit-side `original_descriptor` field on `ParsedImport`, which is implicit in P1B's parse cells. A dedicated fixture is scope-creep at P1B; could fold into a future hardening cycle if Sparrow ever adds a wire-level checksum.
+- **Triage decision (post-P14A):** wontfix-with-rationale (Sparrow's wire shape does not carry a wire-level checksum); resurface only if Sparrow changes their JSON shape.
+- **Tier:** v0.29+ (likely wontfix).
 
 ---
 

@@ -85,17 +85,22 @@ pub(crate) enum ImportProvenance {
     /// stitching but is not yet constructed by any wired call site).
     #[allow(dead_code)]
     ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// Sparrow Wallet parse (`wallet_import/sparrow.rs`). v0.28.0 Phase P1B.
+    /// Alphabetical position: BitcoinCore < Bsms < ColdcardMultisig < Sparrow.
+    Sparrow(sparrow::SparrowSourceMetadata),
 }
 
 impl ImportProvenance {
     /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
     /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for any non-BSMS variant.
+    /// excerpt shape or for any non-BSMS variant (`BitcoinCore`,
+    /// `ColdcardMultisig`, `Sparrow`, ...).
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::Bsms(audit) => audit.as_ref(),
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
         }
     }
 
@@ -105,6 +110,21 @@ impl ImportProvenance {
             Self::BitcoinCore(meta) => Some(meta),
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
+        }
+    }
+
+    /// v0.28.0 Phase P1B accessor: returns `Some(&metadata)` only for the
+    /// `Sparrow` variant. Symmetric with `source_metadata` (BitcoinCore) +
+    /// `bsms_audit` (BSMS); each parser owns its accessor. Consumed by the
+    /// `--json` envelope emitter in `cmd::import_wallet::emit_json_envelope`
+    /// (P1C wiring).
+    pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(meta) => Some(meta),
         }
     }
 }

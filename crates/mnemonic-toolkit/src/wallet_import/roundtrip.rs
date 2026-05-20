@@ -408,11 +408,184 @@ pub(crate) fn canonicalize_jade(_blob: &[u8]) -> Result<String, ToolkitError> {
 }
 
 /// SPEC §11.1 — canonicalize a Sparrow wallet JSON blob.
-/// Body lands in Phase P1B.
-pub(crate) fn canonicalize_sparrow(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_sparrow: not yet implemented; sparrow ingest lands in Phase P1B".into(),
-    ))
+///
+/// v0.28.0 Phase P1B implementation. Mirrors `canonicalize_bitcoin_core`'s
+/// approach: re-serialize via BTreeMap so key ordering is deterministic
+/// (alphabetical-by-key on every nested object) + re-checksum the embedded
+/// miniscript script body so per-version Display-impl drift doesn't poison
+/// the round-trip equality check.
+///
+/// Preserved fields (per SPEC §11.1):
+/// - top-level: `name`, `network`, `policyType`, `scriptType`,
+///   `defaultPolicy`, `keystores`.
+/// - `defaultPolicy.miniscript.script`: kept verbatim (Sparrow's miniscript
+///   policy expression is not BIP-380; no checksum to recompute).
+/// - per-keystore: `label`, `source`, `walletModel`, `keyDerivation`,
+///   `extendedPublicKey`. `xpub` strings are passed through the SLIP-132
+///   normalizer for canonical neutral-prefix form.
+///
+/// Dropped fields (analogous to Core's `timestamp`/`next`/`next_index`):
+/// any top-level key NOT in the preserved set is dropped (e.g.,
+/// Sparrow's `birthDate`, `gapLimit`, `mixConfig`).
+pub(crate) fn canonicalize_sparrow(blob: &[u8]) -> Result<String, ToolkitError> {
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_sparrow: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_sparrow: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    // BTreeMap → deterministic alphabetical key ordering at serialize time.
+    let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
+
+    if let Some(name) = obj.get("name") {
+        canonical.insert("name".to_string(), name.clone());
+    }
+    if let Some(network) = obj.get("network") {
+        canonical.insert("network".to_string(), network.clone());
+    }
+    let policy_type = obj.get("policyType").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_sparrow: missing top-level `policyType`".to_string(),
+        )
+    })?;
+    canonical.insert("policyType".to_string(), policy_type.clone());
+
+    let script_type = obj.get("scriptType").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_sparrow: missing top-level `scriptType`".to_string(),
+        )
+    })?;
+    canonical.insert("scriptType".to_string(), script_type.clone());
+
+    // defaultPolicy: rebuild as canonical (alphabetical) BTreeMap nesting.
+    let default_policy_obj = obj
+        .get("defaultPolicy")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_sparrow: missing or non-object `defaultPolicy`".to_string(),
+            )
+        })?;
+    let miniscript_obj = default_policy_obj
+        .get("miniscript")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_sparrow: missing or non-object `defaultPolicy.miniscript`"
+                    .to_string(),
+            )
+        })?;
+    let script_str = miniscript_obj
+        .get("script")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_sparrow: missing or non-string `defaultPolicy.miniscript.script`"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+    let mut canonical_miniscript: BTreeMap<String, Value> = BTreeMap::new();
+    canonical_miniscript.insert("script".to_string(), Value::String(script_str));
+    let mut canonical_default_policy: BTreeMap<String, Value> = BTreeMap::new();
+    let policy_name = default_policy_obj
+        .get("name")
+        .cloned()
+        .unwrap_or_else(|| Value::String("Default".to_string()));
+    canonical_default_policy.insert("name".to_string(), policy_name);
+    canonical_default_policy.insert(
+        "miniscript".to_string(),
+        serde_json::to_value(&canonical_miniscript).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_sparrow: serialize miniscript: {e}"
+            ))
+        })?,
+    );
+    canonical.insert(
+        "defaultPolicy".to_string(),
+        serde_json::to_value(&canonical_default_policy).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_sparrow: serialize defaultPolicy: {e}"
+            ))
+        })?,
+    );
+
+    // keystores: rebuild each entry as canonical BTreeMap. Drop any
+    // non-preserved keystore field (e.g., `passphrase`).
+    let keystores = obj
+        .get("keystores")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_sparrow: missing or non-array `keystores`".to_string(),
+            )
+        })?;
+    let mut canonical_keystores: Vec<Value> = Vec::with_capacity(keystores.len());
+    for (i, ks) in keystores.iter().enumerate() {
+        let kobj = ks.as_object().ok_or_else(|| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_sparrow: keystores[{i}] is not an object"
+            ))
+        })?;
+        let mut ck: BTreeMap<String, Value> = BTreeMap::new();
+        if let Some(v) = kobj.get("label") {
+            ck.insert("label".to_string(), v.clone());
+        }
+        if let Some(v) = kobj.get("source") {
+            ck.insert("source".to_string(), v.clone());
+        }
+        if let Some(v) = kobj.get("walletModel") {
+            ck.insert("walletModel".to_string(), v.clone());
+        }
+        let key_derivation = kobj
+            .get("keyDerivation")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "canonicalize_sparrow: keystores[{i}].keyDerivation missing or not object"
+                ))
+            })?;
+        let mut ckd: BTreeMap<String, Value> = BTreeMap::new();
+        if let Some(fp) = key_derivation.get("masterFingerprint") {
+            ckd.insert("masterFingerprint".to_string(), fp.clone());
+        }
+        if let Some(d) = key_derivation.get("derivation") {
+            ckd.insert("derivation".to_string(), d.clone());
+        }
+        ck.insert(
+            "keyDerivation".to_string(),
+            serde_json::to_value(&ckd).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "canonicalize_sparrow: serialize keystores[{i}].keyDerivation: {e}"
+                ))
+            })?,
+        );
+        // Pass xpub through SLIP-132 normalizer for canonical neutral form.
+        // Failure to normalize → preserve verbatim (canonicalize is best-
+        // effort; the parse layer surfaces invalid xpubs separately).
+        if let Some(xpub_str) = kobj.get("extendedPublicKey").and_then(|v| v.as_str()) {
+            let neutral = match crate::slip0132::normalize_xpub_prefix(xpub_str) {
+                Ok((n, _)) => n,
+                Err(_) => xpub_str.to_string(),
+            };
+            ck.insert("extendedPublicKey".to_string(), Value::String(neutral));
+        }
+        canonical_keystores.push(serde_json::to_value(&ck).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_sparrow: serialize keystores[{i}]: {e}"
+            ))
+        })?);
+    }
+    canonical.insert("keystores".to_string(), Value::Array(canonical_keystores));
+
+    let mut text = serde_json::to_string_pretty(&canonical).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_sparrow: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 /// SPEC §11.2 — canonicalize a Specter wallet JSON blob.
@@ -1038,18 +1211,9 @@ B7F7DFEA: {xpub_c}\n"
         }
     }
 
-    #[test]
-    fn canonicalize_sparrow_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_sparrow(b"any blob").unwrap_err();
-        match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P1B"), "msg must cite Phase P1B; got: {msg}");
-                assert!(msg.contains("sparrow"), "msg must cite format; got: {msg}");
-            }
-            other => panic!("expected BadInput, got: {other:?}"),
-        }
-    }
+    // v0.28.0 Phase P1B: canonicalize_sparrow is no longer a skeleton; real
+    // canonicalize tests live below. The pre-P1B skeleton regression cell is
+    // removed (cannot survive the body swap).
 
     #[test]
     fn canonicalize_specter_skeleton_returns_not_yet_implemented() {
@@ -1066,21 +1230,27 @@ B7F7DFEA: {xpub_c}\n"
 
     #[test]
     fn skeleton_canonicalize_helpers_accept_empty_blob() {
-        // Empty blob is a degenerate input; skeletons must still return the
-        // BadInput("not yet implemented") shape (not panic, not Ok, not a
-        // different error class). This pins the "shape-only" contract.
+        // Empty blob is a degenerate input; remaining skeletons must still
+        // return the BadInput("not yet implemented") shape (not panic, not
+        // Ok, not a different error class). This pins the "shape-only"
+        // contract.
         //
-        // Note: `coldcard-multisig` is OMITTED from this list since v0.28.0
-        // Phase P4B — its canonicalize body is no longer a skeleton; the
-        // empty-blob path now correctly returns `ImportWalletParse`. The
-        // P4B canonicalize cells above (`canonicalize_coldcard_multisig_*`)
-        // are the regression guards for the real body. Other format
-        // skeletons stay on this list until their per-parser P{N}B phase.
+        // Removed from this list:
+        // - `coldcard-multisig` (v0.28.0 Phase P4B): canonicalize body is no
+        //   longer a skeleton; empty-blob path returns ImportWalletParse.
+        //   The P4B canonicalize cells (`canonicalize_coldcard_multisig_*`)
+        //   are the regression guards for the real body.
+        // - `sparrow` (v0.28.0 Phase P1B): canonicalize_sparrow is real now
+        //   and returns ImportWalletParse on empty blob (invalid JSON),
+        //   which has different shape semantics. The P1B canonicalize cells
+        //   (`canonicalize_sparrow_*`) are the regression guards.
+        //
+        // Other format skeletons stay on this list until their per-parser
+        // P{N}B phase.
         for (name, result) in [
             ("coldcard", canonicalize_coldcard(b"")),
             ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
-            ("sparrow", canonicalize_sparrow(b"")),
             ("specter", canonicalize_specter(b"")),
         ] {
             assert!(
@@ -1088,6 +1258,125 @@ B7F7DFEA: {xpub_c}\n"
                 "{name} skeleton must return BadInput(not yet implemented) on empty blob; got: {result:?}"
             );
         }
+    }
+
+    // ===========================================================================
+    // P1B: canonicalize_sparrow real-impl cells
+    // ===========================================================================
+
+    /// SPEC §11.1 — canonicalize_sparrow on a minimal SINGLE wallet produces
+    /// a JSON object with alphabetically-sorted top-level keys. Verifies the
+    /// preserved-field set: name, network, policyType, scriptType,
+    /// defaultPolicy, keystores.
+    #[test]
+    fn canonicalize_sparrow_single_preserves_required_fields() {
+        let blob = br#"{
+            "name":"bip84-0","network":"mainnet","policyType":"SINGLE","scriptType":"P2WPKH",
+            "defaultPolicy":{"name":"Default","miniscript":{"script":"wpkh(@0/**)"}},
+            "keystores":[{
+                "label":"bip84-0","source":"SW_WATCH","walletModel":"SPARROW",
+                "keyDerivation":{"masterFingerprint":"5436d724","derivation":"m/84'/0'/0'"},
+                "extendedPublicKey":"xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9"
+            }]
+        }"#;
+        let canonical = canonicalize_sparrow(blob).unwrap();
+        // All required top-level keys present.
+        for key in ["name", "network", "policyType", "scriptType", "defaultPolicy", "keystores"] {
+            assert!(canonical.contains(&format!("\"{key}\"")), "missing key {key}: {canonical}");
+        }
+        // Round-trip via serde_json to verify the canonical form is itself
+        // valid JSON with the required top-level keys in a serde_json::Map
+        // (which preserves insertion order from BTreeMap → alphabetical).
+        let parsed: serde_json::Value =
+            serde_json::from_str(&canonical).expect("canonical output must be valid JSON");
+        let obj = parsed.as_object().expect("top-level must be object");
+        let top_level_keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+        assert_eq!(
+            top_level_keys,
+            vec!["defaultPolicy", "keystores", "name", "network", "policyType", "scriptType"],
+            "top-level keys must be alphabetically ordered in canonical form"
+        );
+    }
+
+    /// SPEC §11.1 — canonicalize_sparrow is idempotent (re-canonicalize
+    /// produces byte-identical output).
+    #[test]
+    fn canonicalize_sparrow_idempotent() {
+        let blob = br#"{
+            "name":"bip84-0","network":"mainnet","policyType":"SINGLE","scriptType":"P2WPKH",
+            "defaultPolicy":{"name":"Default","miniscript":{"script":"wpkh(@0/**)"}},
+            "keystores":[{
+                "label":"bip84-0","source":"SW_WATCH","walletModel":"SPARROW",
+                "keyDerivation":{"masterFingerprint":"5436d724","derivation":"m/84'/0'/0'"},
+                "extendedPublicKey":"xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9"
+            }]
+        }"#;
+        let once = canonicalize_sparrow(blob).unwrap();
+        let twice = canonicalize_sparrow(once.as_bytes()).unwrap();
+        assert_eq!(once, twice, "canonicalize_sparrow must be idempotent");
+    }
+
+    /// SPEC §11.1 — extra top-level fields (Sparrow's `birthDate`,
+    /// `gapLimit`) are DROPPED from the canonical form.
+    #[test]
+    fn canonicalize_sparrow_drops_non_preserved_top_level_fields() {
+        let blob = br#"{
+            "name":"x","network":"mainnet","policyType":"SINGLE","scriptType":"P2WPKH",
+            "defaultPolicy":{"name":"Default","miniscript":{"script":"wpkh(@0/**)"}},
+            "keystores":[{
+                "label":"x","source":"SW_WATCH","walletModel":"SPARROW",
+                "keyDerivation":{"masterFingerprint":"5436d724","derivation":"m/84'/0'/0'"},
+                "extendedPublicKey":"xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9"
+            }],
+            "birthDate":1717000000,
+            "gapLimit":20,
+            "mixConfig":{"mixers":[]}
+        }"#;
+        let canonical = canonicalize_sparrow(blob).unwrap();
+        assert!(!canonical.contains("birthDate"), "birthDate must be dropped: {canonical}");
+        assert!(!canonical.contains("gapLimit"), "gapLimit must be dropped: {canonical}");
+        assert!(!canonical.contains("mixConfig"), "mixConfig must be dropped: {canonical}");
+    }
+
+    /// SPEC §11.1 — multisig canonicalize preserves all keystores entries in
+    /// declaration order with alphabetical sub-key ordering.
+    #[test]
+    fn canonicalize_sparrow_multi_preserves_keystore_ordering() {
+        let blob = br#"{
+            "name":"wsh-sortedmulti-0","network":"mainnet","policyType":"MULTI","scriptType":"P2WSH",
+            "defaultPolicy":{"name":"Default","miniscript":{"script":"wsh(sortedmulti(2,@0/**,@1/**,@2/**))"}},
+            "keystores":[
+                {"label":"k1","source":"SW_WATCH","walletModel":"SPARROW",
+                 "keyDerivation":{"masterFingerprint":"b8688df1","derivation":"m/48'/0'/0'/2'"},
+                 "extendedPublicKey":"xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"},
+                {"label":"k2","source":"SW_WATCH","walletModel":"SPARROW",
+                 "keyDerivation":{"masterFingerprint":"28645006","derivation":"m/48'/0'/0'/2'"},
+                 "extendedPublicKey":"xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"},
+                {"label":"k3","source":"SW_WATCH","walletModel":"SPARROW",
+                 "keyDerivation":{"masterFingerprint":"5436d724","derivation":"m/48'/0'/0'/2'"},
+                 "extendedPublicKey":"xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx"}
+            ]
+        }"#;
+        let canonical = canonicalize_sparrow(blob).unwrap();
+        // All 3 fingerprints present in declaration order.
+        let p1 = canonical.find("b8688df1").expect("k1 fp");
+        let p2 = canonical.find("28645006").expect("k2 fp");
+        let p3 = canonical.find("5436d724").expect("k3 fp");
+        assert!(p1 < p2 && p2 < p3, "keystore ordering must be preserved: {canonical}");
+    }
+
+    /// SPEC §11.1 — malformed JSON returns ImportWalletParse.
+    #[test]
+    fn canonicalize_sparrow_malformed_json_typed_error() {
+        let err = canonicalize_sparrow(b"not json").unwrap_err();
+        assert!(matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("invalid JSON")));
+    }
+
+    /// SPEC §11.1 — bare-array top-level returns ImportWalletParse.
+    #[test]
+    fn canonicalize_sparrow_bare_array_typed_error() {
+        let err = canonicalize_sparrow(b"[]").unwrap_err();
+        assert!(matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("top-level JSON value is not an object")));
     }
 
     #[test]
