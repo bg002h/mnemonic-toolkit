@@ -436,12 +436,92 @@ fn path_components_for_canonical(path: &bitcoin::bip32::DerivationPath) -> Strin
     s
 }
 
-/// SPEC §11.6 — canonicalize an Electrum wallet JSON blob.
-/// Body lands in Phase P6B.
-pub(crate) fn canonicalize_electrum(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_electrum: not yet implemented; electrum ingest lands in Phase P6B".into(),
-    ))
+/// SPEC §11.6 — canonicalize an Electrum 4.x wallet JSON blob for semantic
+/// round-trip comparison.
+///
+/// Strategy:
+/// 1. JSON-parse + top-level object check.
+/// 2. Preserve `ELECTRUM_PRESERVED_TOP_LEVEL_KEYS` (seed_version, wallet_type,
+///    use_encryption, keystore) + dynamic `xN/` per-cosigner keys (matched
+///    via the same predicate the parser uses).
+/// 3. Re-emit via BTreeMap (alphabetical key ordering) + JSON pretty-print.
+///
+/// The canonicalization is **semantic, not byte-exact**: two blobs that
+/// differ only in top-level key order / dropped extra fields canonicalize
+/// to the same string. The `keystore` / `xN/` sub-objects are preserved
+/// verbatim (their internal key order is wire-determined by Electrum's
+/// Python dict serialization; we do NOT reorder them at this layer because
+/// nested sub-object key order is not load-bearing for Electrum's loader).
+pub(crate) fn canonicalize_electrum(blob: &[u8]) -> Result<String, ToolkitError> {
+    use crate::wallet_import::electrum::{
+        classify_wallet_type, ElectrumWalletType, ELECTRUM_PRESERVED_TOP_LEVEL_KEYS,
+    };
+
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_electrum: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_electrum: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    // Required fields: seed_version + wallet_type.
+    if obj.get("seed_version").and_then(|v| v.as_u64()).is_none() {
+        return Err(ToolkitError::ImportWalletParse(
+            "canonicalize_electrum: missing or non-integer top-level `seed_version`".to_string(),
+        ));
+    }
+    let wt_str = obj.get("wallet_type").and_then(|v| v.as_str()).ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_electrum: missing or non-string top-level `wallet_type`".to_string(),
+        )
+    })?;
+
+    // For multisig blobs, derive cosigner count `n` from wallet_type so we
+    // know which `xN/` keys to preserve. For non-multisig (standard / 2fa /
+    // imported / unknown), n=0 → no `xN/` keys preserved.
+    let n: usize = match classify_wallet_type(wt_str) {
+        Some(ElectrumWalletType::Multisig { n, .. }) => n as usize,
+        _ => 0,
+    };
+
+    let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
+    for (k, v) in obj.iter() {
+        if ELECTRUM_PRESERVED_TOP_LEVEL_KEYS.contains(&k.as_str()) {
+            canonical.insert(k.clone(), v.clone());
+            continue;
+        }
+        // Preserve `xN/` cosigner sub-objects for the matched n.
+        if is_canonical_cosigner_key(k, n) {
+            canonical.insert(k.clone(), v.clone());
+        }
+    }
+
+    let mut text = serde_json::to_string_pretty(&canonical).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_electrum: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
+}
+
+/// Local predicate: `k` matches `xN/` for `1 <= N <= n`. Mirrors
+/// `wallet_import::electrum::is_multisig_cosigner_key` (private to that
+/// module; re-implemented here to keep roundtrip.rs from depending on
+/// internal helpers).
+fn is_canonical_cosigner_key(k: &str, n: usize) -> bool {
+    if n == 0 {
+        return false;
+    }
+    let stripped = match k.strip_prefix('x').and_then(|s| s.strip_suffix('/')) {
+        Some(s) => s,
+        None => return false,
+    };
+    let parsed: usize = match stripped.parse() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    parsed >= 1 && parsed <= n
 }
 
 /// SPEC §11.5 — canonicalize a Jade multisig-file JSON wrapper.
@@ -1479,17 +1559,112 @@ B7F7DFEA: {xpub_c}\n"
         assert!(matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("top-level JSON value is not an object")));
     }
 
+    // ========================================================================
+    // canonicalize_electrum (P6B): real body cells. The pre-P6B skeleton-shape
+    // test (`canonicalize_electrum_skeleton_returns_not_yet_implemented`) is
+    // replaced by the cells below — the body now mirrors `canonicalize_coldcard`
+    // (BTreeMap-backed alphabetical key reorder + 4 preserved top-level fields
+    // + dynamic `xN/` cosigner keys for multisig).
+    // ========================================================================
+
     #[test]
-    fn canonicalize_electrum_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_electrum(b"any blob").unwrap_err();
+    fn canonicalize_electrum_standard_reorders_alphabetically() {
+        let src = br#"{
+            "wallet_type": "standard",
+            "seed_version": 17,
+            "use_encryption": false,
+            "keystore": {"type": "bip32", "xpub": "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S", "derivation": "m/84'/0'/0'", "root_fingerprint": "5436d724", "label": "Daily"}
+        }"#;
+        let canon = canonicalize_electrum(src).unwrap();
+        // Alphabetical: keystore, seed_version, use_encryption, wallet_type.
+        let keystore_idx = canon.find("\"keystore\"").unwrap();
+        let seedv_idx = canon.find("\"seed_version\"").unwrap();
+        let useenc_idx = canon.find("\"use_encryption\"").unwrap();
+        let wtype_idx = canon.find("\"wallet_type\"").unwrap();
+        assert!(keystore_idx < seedv_idx);
+        assert!(seedv_idx < useenc_idx);
+        assert!(useenc_idx < wtype_idx);
+    }
+
+    #[test]
+    fn canonicalize_electrum_drops_extra_top_level_fields() {
+        let src = br#"{
+            "seed_version": 17,
+            "wallet_type": "standard",
+            "use_encryption": false,
+            "keystore": {"type": "bip32", "xpub": "zpub...", "derivation": "m/84'/0'/0'", "root_fingerprint": "5436d724"},
+            "addresses": {"receiving": ["bc1q..."]},
+            "labels": {"tx1": "label"}
+        }"#;
+        let canon = canonicalize_electrum(src).unwrap();
+        assert!(
+            !canon.contains("addresses") && !canon.contains("labels"),
+            "extra top-level fields must be dropped; got: {canon}"
+        );
+    }
+
+    #[test]
+    fn canonicalize_electrum_multisig_preserves_xn_keys() {
+        let src = br#"{
+            "seed_version": 17,
+            "wallet_type": "2of3",
+            "use_encryption": false,
+            "x1/": {"xpub": "Zpub1", "derivation": "m/48'/0'/0'/2'"},
+            "x2/": {"xpub": "Zpub2", "derivation": "m/48'/0'/0'/2'"},
+            "x3/": {"xpub": "Zpub3", "derivation": "m/48'/0'/0'/2'"}
+        }"#;
+        let canon = canonicalize_electrum(src).unwrap();
+        assert!(canon.contains("\"x1/\""), "x1/ must be preserved; got: {canon}");
+        assert!(canon.contains("\"x2/\""), "x2/ must be preserved; got: {canon}");
+        assert!(canon.contains("\"x3/\""), "x3/ must be preserved; got: {canon}");
+    }
+
+    #[test]
+    fn canonicalize_electrum_multisig_drops_xn_keys_above_n() {
+        // wallet_type "2of3" → preserve x1/, x2/, x3/ only. An out-of-band x4/
+        // (e.g., user added a phantom cosigner manually) is dropped.
+        let src = br#"{
+            "seed_version": 17,
+            "wallet_type": "2of3",
+            "use_encryption": false,
+            "x1/": {"xpub": "Zpub1"},
+            "x2/": {"xpub": "Zpub2"},
+            "x3/": {"xpub": "Zpub3"},
+            "x4/": {"xpub": "Zpub4-phantom"}
+        }"#;
+        let canon = canonicalize_electrum(src).unwrap();
+        assert!(canon.contains("\"x3/\""));
+        assert!(!canon.contains("\"x4/\""), "phantom x4/ must be dropped; got: {canon}");
+    }
+
+    #[test]
+    fn canonicalize_electrum_invalid_json_returns_parse_error() {
+        let err = canonicalize_electrum(b"{not json").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P6B"), "msg must cite Phase P6B; got: {msg}");
-                assert!(msg.contains("electrum"), "msg must cite format; got: {msg}");
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("invalid JSON"), "msg must cite invalid JSON; got: {msg}");
             }
-            other => panic!("expected BadInput, got: {other:?}"),
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn canonicalize_electrum_missing_seed_version_returns_parse_error() {
+        let src = br#"{"wallet_type": "standard"}"#;
+        let err = canonicalize_electrum(src).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("seed_version"), "msg must cite seed_version; got: {msg}");
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_electrum_ends_with_trailing_newline() {
+        let src = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":false,"keystore":{}}"#;
+        let canon = canonicalize_electrum(src).unwrap();
+        assert!(canon.ends_with('\n'), "canonical form must end with trailing newline");
     }
 
     #[test]
@@ -1591,12 +1766,12 @@ B7F7DFEA: {xpub_c}\n"
         // Ok, not a different error class). This pins the "shape-only"
         // contract.
         //
-        // Note: `coldcard`, `coldcard-multisig`, `sparrow`, `specter` are
-        // OMITTED from this list — their canonicalize bodies are no longer
-        // skeletons (P3B, P4B, P1B, P2B respectively). Other format
-        // skeletons stay on this list until their per-parser P{N}B phase.
+        // Note: `coldcard`, `coldcard-multisig`, `electrum`, `sparrow`,
+        // `specter` are OMITTED from this list — their canonicalize bodies
+        // are no longer skeletons (P3B, P4B, P6B, P1B, P2B respectively).
+        // Other format skeletons stay on this list until their per-parser
+        // P{N}B phase.
         for (name, result) in [
-            ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
         ] {
             assert!(

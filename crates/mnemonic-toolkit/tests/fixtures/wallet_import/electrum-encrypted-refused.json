@@ -1,0 +1,11 @@
+{
+  "seed_version": 17,
+  "wallet_type": "standard",
+  "use_encryption": true,
+  "keystore": {
+    "type": "bip32",
+    "xpub": "encrypted-blob-not-readable",
+    "derivation": "encrypted",
+    "root_fingerprint": "encrypted"
+  }
+}
