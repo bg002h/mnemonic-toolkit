@@ -75,3 +75,9 @@ rm -rf <worktree-path>
 git worktree prune
 ```
 This is more forceful but works when `git worktree remove` cannot unlock.
+
+## Wave-1 deferred-then-dispatched (E — Jade P5)
+
+Dispatched 2026-05-19 post-D-merge at `release/v0.28.0` @ `387a709`.
+
+- `/scratch/code/shibboleth/mnemonic-toolkit/.claude/worktrees/agent-a76b092f01263f9bb` — P5 Jade (agentId `a76b092f01263f9bb`) — branch `v0.28.0/p5-jade`
