@@ -75,16 +75,20 @@ pub(crate) fn canonicalize_bsms(blob: &[u8]) -> Result<String, ToolkitError> {
         )));
     }
 
-    // Step 3: locate the descriptor body. 2-line shape: line 1.
-    // 6-line shape: line 2 (line 1 is the token, line 2 is the
-    // descriptor). Audit lines 1/3/4/5 (i.e., token + path + first-
-    // address + signature) are dropped per step 4.
+    // Step 3: locate the descriptor body.
+    // - 2-line shape: line 1 carries the descriptor.
+    // - 4-line shape (v0.28.0; BIP-129-canonical Round-2): line 1 is the
+    //   descriptor; lines 2-3 are path-restrictions + first-address (dropped
+    //   per step 4 — the canonical form is always re-emitted as 2-line).
+    // - 6-line shape (DEPRECATED in v0.28.0): line 2 is the descriptor;
+    //   lines 1/3/4/5 (token + path + first-address + signature) are dropped.
     let descriptor_with_csum = match lines.len() {
         2 => lines[1],
+        4 => lines[1],
         6 => lines[2],
         other => {
             return Err(ToolkitError::ImportWalletParse(format!(
-                "canonicalize_bsms: expected 2 or 6 lines, got {other}"
+                "canonicalize_bsms: expected 2, 4, or 6 lines, got {other}"
             )));
         }
     };
