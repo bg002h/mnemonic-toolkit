@@ -2009,7 +2009,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `.github/workflows/manual.yml:81` invokes `make -C docs/manual lint` with `MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk`. The flag-coverage gate at `docs/manual/tests/lint.sh:84` then runs `true gui-schema --help` (exits 0 with empty stdout); the per-subcommand flag-extraction loop at `:85-87` short-circuits via `warn "no flags parsed... skipping"`.
 - **What:** The bidirectional `cli-surface-mirror` invariant relies on the flag-coverage lint asserting that every clap-derive `--flag` is mirrored in the manual chapter. With placeholder binaries, that assertion never runs in CI — drift can ship and the manual lint will pass green. Local pre-commit lint catches the gap because developers run with real binaries on PATH, but the CI gate is a fig leaf.
 - **Why deferred:** v0.20.0 cycle F2 inherited the gap; F2's `--classify-descriptor` is correctly documented at `41-mnemonic.md:962-996` and verified locally, but the CI gate didn't enforce it. Closing this FOLLOWUP requires either (a) building the four real binaries in `manual.yml` via cargo-install pinned-tag pre-step (slow but authoritative); or (b) bumping a probe binary that exits 1 on unknown subcommand so the placeholder approach fails-loud instead of silently skipping.
-- **Status:** `open`
+- **Status:** `resolved-partial 52f33f7` — manual-v0.2.0 cycle landed option (a) for the mnemonic-side: `cargo build --bin mnemonic` pre-step in `manual.yml` + `make audit MNEMONIC_BIN=<built-path>` invocation. mnemonic-side flag-coverage gate is now real-binary-bound. MD/MS sibling-bin promotion deferred to successor entries `manual-md-bin-real-binary-promote` + `manual-ms-bin-real-binary-promote` (filed below).
 - **Tier:** `v0.20+-ci-hygiene`
 - **Companion:** none.
 
@@ -2049,7 +2049,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `docs/manual/src/40-cli-reference/41-mnemonic.md:209-216` (bundle command) + `:351-357` (verify-bundle command) — the inheritance worked example. Today's `make verify-examples` lint pass at `docs/manual/Makefile` doesn't cover chapter 41's `wsh(andor(...))` recipe.
 - **What:** Add a transcript pair `docs/manual/tests/transcripts/41-inheritance.cmd` + `41-inheritance.out` that drives the chapter-41 bundle + verify-bundle commands end-to-end against the installed `mnemonic` binary, diffs the captured stdout against expected, and fails CI if the manual's documented output drifts from the binary's actual output. This would catch a future regression to the SPEC §5.8 per-slot emission (or any other example-block drift) at lint time instead of at user-complaint time.
 - **Why deferred:** Phase 4 architect-must-run-prose discipline caught the post-v0.21.0 ms1 strings byte-exact in this cycle; the CI gap is real but the manual content is currently correct. Adding transcript coverage is test-hygiene work that can be done in a dedicated docs cycle.
-- **Status:** `open`
+- **Status:** `resolved f46ac70` (P1a capture) + `52f33f7` (P3 verify-examples.sh extension + CI wiring). The actual transcript-pair path is `docs/manual/transcripts/41-inheritance.{cmd,out}` (NOT `docs/manual/tests/transcripts/` as the body cited — this FOLLOWUP body had the wrong path infix; the actual `docs/manual/transcripts/` dir was the existing convention from v0.22's first 5 pairs). The recipe runs end-to-end in CI via `make audit` with the real v0.28.2 mnemonic binary.
 - **Tier:** `v0.22+-test-hygiene`
 - **Companion:** none.
 
@@ -2677,3 +2677,34 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.29-cleanup`
 - **Tags:** `wallet`
 - **Companion:** parent F9 fix (commit `615b10e`).
+
+
+### `manual-md-bin-real-binary-promote` — promote `MD_BIN` from placeholder to real `md` binary in CI manual.yml
+
+- **Surfaced:** 2026-05-20, manual-v0.2.0 cycle P4 partition. Successor to the partial closure of `manual-yml-bind-real-mnemonic-bin` (resolved-partial at commit `52f33f7`).
+- **Where:** `.github/workflows/manual.yml` "Audit manual" step (post-`52f33f7`) passes `MD_BIN=true` to `make audit`. The flag-coverage gate at `docs/manual/tests/lint.sh` per-subcommand `--help` extraction short-circuits via "no flags parsed... skipping" warnings for every `md` subcommand. Same gap class as the pre-cycle mnemonic-side situation, restricted to the `md` sibling-codec CLI.
+- **What:** v0.28+ ci-hygiene: add a `cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v<latest> md-cli` step to `manual.yml` analogous to the existing mk-cli install at lines 72-77. Then pass `MD_BIN=md` to `make audit`. The flag-coverage gate at `docs/manual/tests/lint.sh` will then exercise `md <subcommand> --help` against the real binary. Pin the tag to the install.sh-locked sibling-CLI tag (currently `descriptor-mnemonic-md-cli-v0.6.0` per `scripts/install.sh:35`).
+- **Why deferred:** manual-v0.2.0 cycle scope was the v0.28.0 P13A/P13B audit (chapter-45 + chapter-39 + the chapter-41 inheritance composite). MD-sibling-CLI promotion is independent — it gates `md`-chapter (chapter-42) coverage, which wasn't audited in this cycle.
+- **Status:** `open`
+- **Tier:** `v0.28+-ci-hygiene`
+- **Companion:** `manual-ms-bin-real-binary-promote` (sibling successor; same partition).
+
+### `manual-ms-bin-real-binary-promote` — promote `MS_BIN` from placeholder to real `ms` binary in CI manual.yml
+
+- **Surfaced:** 2026-05-20, manual-v0.2.0 cycle P4 partition. Successor to the partial closure of `manual-yml-bind-real-mnemonic-bin` (resolved-partial at commit `52f33f7`).
+- **Where:** `.github/workflows/manual.yml` "Audit manual" step (post-`52f33f7`) passes `MS_BIN=true` to `make audit`. Same gap class as the mnemonic-side situation, restricted to the `ms` sibling-codec CLI.
+- **What:** v0.28+ ci-hygiene: add a `cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v<latest> ms-cli` step to `manual.yml`. Then pass `MS_BIN=ms` to `make audit`. The flag-coverage gate will then exercise `ms <subcommand> --help` against the real binary. Pin the tag to the install.sh-locked sibling-CLI tag (currently `ms-cli-v0.4.0` per `scripts/install.sh:38`).
+- **Why deferred:** Same scope-rationale as `manual-md-bin-real-binary-promote` — MS-sibling-CLI promotion gates `ms`-chapter (chapter-43) coverage, which wasn't audited in this cycle.
+- **Status:** `open`
+- **Tier:** `v0.28+-ci-hygiene`
+- **Companion:** `manual-md-bin-real-binary-promote` (sibling successor; same partition).
+
+### `manual-chapters-22-23-24-post-v0.15.0-wire-format-refresh` — chapters 22/23/24 transcripts + prose are pre-v0.15.0 wire-format-broken
+
+- **Surfaced:** 2026-05-20, manual-v0.2.0 cycle P3 verify-examples.sh wiring. The new `make audit` CI gate surfaced the drift; pre-cycle the placeholder `MNEMONIC_BIN=true` masked it (the gate silently passed against a no-op binary).
+- **Where:** `docs/manual/transcripts/{22-first-bundle,23-verify,24-recover,24-recover-md1}.{cmd,out}` + the corresponding chapter prose at `docs/manual/src/20-quickstart/{22-first-bundle,23-verify,24-recover}.md`. The captured `.out` files carry pre-v0.15.0 wire-format card strings (ms1/mk1/md1 prefixes that the v0.28.x decoder no longer accepts — `md1zsxdspq...` vs current `md1fgdxlpq...`). 23-verify's captured output is `result: mismatch` because the embedded md1 strings fail v0.28.x decode with `WireVersionMismatch { got: 1 }`. The drift dates from v0.15.0 (per memory `project_v0_15_0_md_codec_catchup_closed` "Wire-format clean break: v0.14.x bundles forward-incompatible").
+- **What:** Refresh both the transcript captures AND the chapter prose. The captures need rerunning against v0.28.x; the prose needs re-audit (claim verification) against the new captured output. Chapter scope: 22-first-bundle.md + 23-verify.md + 24-recover.md (3 chapters). Plus parallel grep + audit of the 9 OTHER manual chapters that mention the stale card strings (per `grep -l 'ms10entrsq\|mk1qprsqhp\|md1zsxdsp' docs/manual/src/**/*.md` — chapters 31/35/41/42/43/44 in addition to the 3 quickstart chapters). Per Q2 (manual-v0.2.0 cycle scope lock), this work is OUT-OF-SCOPE for v0.2.0 (the cycle is audit of v0.28.0 P13A/P13B files only).
+- **Why deferred:** Scope partition: manual-v0.2.0 was scoped to the v0.28.0 P13A/P13B chapter set (45 + 39 + 41-inheritance). Refreshing chapters 22/23/24/31/35/42/43/44 is a multi-chapter audit that warrants its own cycle.
+- **Status:** `open`
+- **Tier:** `manual-v0.3+-audit`
+- **Companion:** SKIP_STEMS in `docs/manual/tests/verify-examples.sh` carries the 4 transcript-stem exclusion list; remove those entries once this FOLLOWUP closes.
