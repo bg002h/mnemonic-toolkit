@@ -8,6 +8,7 @@
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
+#   make audit         — `lint` + `verify-examples` umbrella (CI runs this)
 #   make lint          — markdownlint + cspell + lychee + flag-coverage + glossary-coverage + index bidirectional
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
@@ -42,6 +43,9 @@ MNEMONIC_BIN ?= cargo run --quiet --manifest-path $(TOOLKIT_ROOT)/Cargo.toml -p 
 MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-mnemonic/Cargo.toml -p md-cli --bin md --
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
 MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
+
+# Cross-format-recipes fixture corpus (consumed by verify-examples.sh).
+FIXTURES_DIR ?= $(TOOLKIT_ROOT)/crates/mnemonic-toolkit/tests/fixtures/wallet_import
 
 # ---------------------------------------------------------------------------
 # Tools (override with PANDOC=/path/to/pandoc etc.)
@@ -211,7 +215,15 @@ verify-examples:
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
+		MK_BIN="$(MK_BIN)" \
+		FIXTURES_DIR="$(FIXTURES_DIR)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
+
+# `make audit` umbrella target: lint (static gates) + verify-examples
+# (transcript replay against real binaries). CI runs `make audit`; local
+# fast iteration uses `make lint` alone.
+.PHONY: audit
+audit: lint verify-examples
 
 # ---------------------------------------------------------------------------
 # Lint

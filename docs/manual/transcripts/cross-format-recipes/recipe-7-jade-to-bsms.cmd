@@ -1,4 +1,6 @@
-mnemonic import-wallet --format jade \
+cp $FIXTURES_DIR/jade-multisig-2of3-p2wsh.json .
+$MNEMONIC_BIN import-wallet --format jade \
   --blob jade-multisig-2of3-p2wsh.json --json \
-  | mnemonic export-wallet --from-import-json - --format bsms \
+  | $MNEMONIC_BIN export-wallet --from-import-json - --format bsms \
   > coordinator.bsms.txt
+cat coordinator.bsms.txt

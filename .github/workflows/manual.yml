@@ -76,9 +76,24 @@ jobs:
         # against a multi-binary workspace.
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.2.0 mk-cli
 
-      - name: Lint manual
+      - name: Build mnemonic binary (debug)
+        # Debug binary is sufficient for transcript-replay byte-comparison.
+        # Behavior under test is identical between debug/release modulo
+        # panic-handler verbosity; mnemonic never panics in normal flow.
+        run: cargo build --bin mnemonic
+
+      - name: Audit manual (lint + verify-examples with real mnemonic binary)
         working-directory: docs/manual
-        run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk
+        # All flag values below are constants or controlled built-ins
+        # ($GITHUB_WORKSPACE); no untrusted github.event.* fields per
+        # https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/.
+        run: |
+          make audit \
+            MNEMONIC_BIN="$GITHUB_WORKSPACE/target/debug/mnemonic" \
+            MD_BIN=true \
+            MS_BIN=true \
+            MK_BIN=mk \
+            FIXTURES_DIR="$GITHUB_WORKSPACE/crates/mnemonic-toolkit/tests/fixtures/wallet_import"
 
       - name: Build PDF
         # MERMAID_FILTER=skip is the Makefile default; explicit here for
