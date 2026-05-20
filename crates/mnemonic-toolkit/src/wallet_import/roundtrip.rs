@@ -590,12 +590,63 @@ pub(crate) fn canonicalize_sparrow(blob: &[u8]) -> Result<String, ToolkitError> 
     Ok(text)
 }
 
-/// SPEC §11.2 — canonicalize a Specter wallet JSON blob.
-/// Body lands in Phase P2B.
-pub(crate) fn canonicalize_specter(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_specter: not yet implemented; specter ingest lands in Phase P2B".into(),
-    ))
+/// SPEC §11.2 — canonicalize a Specter-DIY wallet JSON blob.
+///
+/// Re-emit in alphabetical top-level key order via `BTreeMap`. Preserves the
+/// four load-bearing fields (`label`, `blockheight`, `descriptor`, `devices`);
+/// drops any other top-level key (parser-side `SPECTER_PRESERVED_TOP_LEVEL_KEYS`
+/// surfaces dropped fields in `SpecterSourceMetadata.dropped_fields` for
+/// the `--json` envelope). Mirrors `canonicalize_sparrow` shape +
+/// `canonicalize_bitcoin_core` shape (top-level alphabetical, nested
+/// preserved-key projection).
+pub(crate) fn canonicalize_specter(blob: &[u8]) -> Result<String, ToolkitError> {
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_specter: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
+
+    let label = obj.get("label").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: missing top-level `label`".to_string(),
+        )
+    })?;
+    canonical.insert("label".to_string(), label.clone());
+
+    let blockheight = obj.get("blockheight").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: missing top-level `blockheight`".to_string(),
+        )
+    })?;
+    canonical.insert("blockheight".to_string(), blockheight.clone());
+
+    let descriptor = obj.get("descriptor").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: missing top-level `descriptor`".to_string(),
+        )
+    })?;
+    canonical.insert("descriptor".to_string(), descriptor.clone());
+
+    let devices = obj.get("devices").ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_specter: missing top-level `devices`".to_string(),
+        )
+    })?;
+    // Preserve devices verbatim (both legacy string-form + modern object-form
+    // are intrinsic to the blob shape; the parser normalizes them, but
+    // canonicalize re-emits the on-disk shape).
+    canonical.insert("devices".to_string(), devices.clone());
+
+    let mut text = serde_json::to_string_pretty(&canonical).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_specter: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 #[cfg(test)]
@@ -1332,39 +1383,100 @@ B7F7DFEA: {xpub_c}\n"
         }
     }
 
+    // ========================================================================
+    // canonicalize_specter (P2B): real body cells. The pre-P2B skeleton-shape
+    // test (`canonicalize_specter_skeleton_returns_not_yet_implemented`) is
+    // replaced by the cells below — the body now mirrors `canonicalize_sparrow`
+    // (BTreeMap-backed alphabetical key reorder + 4 preserved top-level fields).
+    // ========================================================================
+
     #[test]
-    fn canonicalize_specter_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_specter(b"any blob").unwrap_err();
+    fn canonicalize_specter_reorders_top_level_keys_alphabetically() {
+        // Source order: label, blockheight, descriptor, devices (already
+        // alphabetical — but Specter Desktop's wire shape often differs).
+        // BTreeMap pretty-print emits keys in alphabetical order regardless
+        // of source-blob order.
+        let src = br#"{
+  "descriptor": "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere",
+  "label": "Daily",
+  "blockheight": 800000,
+  "devices": ["unknown"]
+}"#;
+        let canon = canonicalize_specter(src).unwrap();
+        // First key in canonical form is alphabetical-first: "blockheight".
+        let bh_idx = canon.find("\"blockheight\"").unwrap();
+        let descriptor_idx = canon.find("\"descriptor\"").unwrap();
+        let devices_idx = canon.find("\"devices\"").unwrap();
+        let label_idx = canon.find("\"label\"").unwrap();
+        assert!(bh_idx < descriptor_idx);
+        assert!(descriptor_idx < devices_idx);
+        assert!(devices_idx < label_idx);
+    }
+
+    #[test]
+    fn canonicalize_specter_drops_extra_top_level_fields() {
+        let src = br#"{
+            "label":"x","blockheight":0,
+            "descriptor":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere",
+            "devices":["unknown"],
+            "extra_metadata":"this should be dropped"
+        }"#;
+        let canon = canonicalize_specter(src).unwrap();
+        assert!(
+            !canon.contains("extra_metadata"),
+            "extra_metadata must be dropped from canonical form; got: {canon}"
+        );
+    }
+
+    #[test]
+    fn canonicalize_specter_invalid_json_returns_parse_error() {
+        let err = canonicalize_specter(b"{not json").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P2B"), "msg must cite Phase P2B; got: {msg}");
+            ToolkitError::ImportWalletParse(msg) => {
                 assert!(msg.contains("specter"), "msg must cite format; got: {msg}");
+                assert!(msg.contains("invalid JSON"), "msg must cite JSON shape; got: {msg}");
             }
-            other => panic!("expected BadInput, got: {other:?}"),
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
     }
 
     #[test]
+    fn canonicalize_specter_missing_descriptor_returns_parse_error() {
+        let src = br#"{"label":"x","blockheight":0,"devices":[]}"#;
+        let err = canonicalize_specter(src).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(
+                    msg.contains("descriptor"),
+                    "msg must cite missing descriptor; got: {msg}"
+                );
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_specter_ends_with_trailing_newline() {
+        let src = br#"{"label":"x","blockheight":0,"descriptor":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere","devices":[]}"#;
+        let canon = canonicalize_specter(src).unwrap();
+        assert!(canon.ends_with('\n'), "canonical form must end with trailing newline; got tail: {:?}", &canon[canon.len().saturating_sub(5)..]);
+    }
+
+    #[test]
     fn skeleton_canonicalize_helpers_accept_empty_blob() {
-        // Empty blob is a degenerate input; skeletons must still return the
-        // BadInput("not yet implemented") shape (not panic, not Ok, not a
-        // different error class). This pins the "shape-only" contract.
+        // Empty blob is a degenerate input; remaining skeletons must still
+        // return the BadInput("not yet implemented") shape (not panic, not
+        // Ok, not a different error class). This pins the "shape-only"
+        // contract.
         //
-        // Note: `coldcard-multisig` is OMITTED from this list since v0.28.0
-        // Phase P4B — its canonicalize body is no longer a skeleton; the
-        // empty-blob path now correctly returns `ImportWalletParse`. The
-        // P4B canonicalize cells above (`canonicalize_coldcard_multisig_*`)
-        // are the regression guards for the real body. Likewise `sparrow`
-        // is OMITTED since v0.28.0 Phase P1B — its body is real and
-        // `canonicalize_sparrow_*` cells below are the regression guards.
-        // Other format skeletons stay on this list until their per-parser
-        // P{N}B phase.
+        // Note: `coldcard-multisig`, `sparrow`, `specter` are OMITTED from
+        // this list — their canonicalize bodies are no longer skeletons
+        // (P4B, P1B, P2B respectively). Other format skeletons stay on
+        // this list until their per-parser P{N}B phase.
         for (name, result) in [
             ("coldcard", canonicalize_coldcard(b"")),
             ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
-            ("specter", canonicalize_specter(b"")),
         ] {
             assert!(
                 matches!(result, Err(ToolkitError::BadInput(ref m)) if m.contains("not yet implemented")),

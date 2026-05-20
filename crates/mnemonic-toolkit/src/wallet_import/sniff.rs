@@ -32,6 +32,8 @@
 //! - Coldcard multisig: SPEC §11.4 4-line text-shape header (P4A wired).
 //! - Sparrow: SPEC §11.1 positive-marker on `policyType` + `scriptType` +
 //!   `defaultPolicy.miniscript.script` + non-empty `keystores` (P1A wired).
+//! - Specter: SPEC §11.2 positive-marker on `label` + `blockheight` (integer)
+//!   + `descriptor` + `devices` (P2A wired).
 //!
 //! Per SPEC §6.2 (consult-all-then-count dispatch, N-parser generalization
 //! of v0.26.0's 2-parser 2×2 truth table):
@@ -45,6 +47,7 @@ use super::bitcoin_core::BitcoinCoreParser;
 use super::bsms::BsmsParser;
 use super::coldcard_multisig::ColdcardMultisigParser;
 use super::sparrow::SparrowParser;
+use super::specter::SpecterParser;
 use super::WalletFormatParser;
 
 /// SPEC §6 — sniff verdict. Names mirror SPEC §2.1 `--format` values where
@@ -84,7 +87,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let electrum = false; // P6A: replace with ElectrumParser::sniff(blob)
     let jade = false; // P5A: replace with JadeParser::sniff(blob)
     let sparrow = SparrowParser::sniff(blob);
-    let specter = false; // P2A: replace with SpecterParser::sniff(blob)
+    let specter = SpecterParser::sniff(blob);
 
     let votes: [(bool, SniffOutcome); 8] = [
         (bitcoin_core, SniffOutcome::BitcoinCore),

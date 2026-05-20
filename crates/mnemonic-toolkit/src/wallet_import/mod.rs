@@ -32,6 +32,7 @@ pub(crate) mod pipeline;
 pub(crate) mod roundtrip;
 pub(crate) mod sniff;
 pub(crate) mod sparrow;
+pub(crate) mod specter;
 
 /// SPEC §8.1 — every per-format parser implements this trait. Associated-
 /// function shape (no `&self`); dispatch is `match format { ... }`-style at
@@ -94,6 +95,14 @@ pub(crate) enum ImportProvenance {
     /// to the `--json` envelope; until then the variant is reachable only
     /// from `wallet_import::sparrow::tests`.
     Sparrow(sparrow::SparrowSourceMetadata),
+    /// Specter-DIY wallet JSON parse (`wallet_import/specter.rs`). SPEC §11.2.
+    /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
+    /// (after `Sparrow`).
+    ///
+    /// Constructed by `SpecterParser::parse` (Phase P2B) and consumed by
+    /// the `cmd/import_wallet.rs` dispatch arm at P2C which plumbs this
+    /// variant to the `--json` envelope `specter_source_metadata` field.
+    Specter(specter::SpecterSourceMetadata),
 }
 
 impl ImportProvenance {
@@ -106,6 +115,7 @@ impl ImportProvenance {
             Self::Bsms(audit) => audit.as_ref(),
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
         }
     }
 
@@ -116,6 +126,7 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
         }
     }
 
@@ -128,6 +139,21 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(meta) => Some(meta),
+            Self::Specter(_) => None,
+        }
+    }
+
+    /// Specter-specific accessor: returns `Some(&metadata)` only for the
+    /// `Specter` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P2C wiring). Mirrors
+    /// `sparrow_source_metadata` above.
+    pub(crate) fn specter_source_metadata(&self) -> Option<&specter::SpecterSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(meta) => Some(meta),
         }
     }
 }

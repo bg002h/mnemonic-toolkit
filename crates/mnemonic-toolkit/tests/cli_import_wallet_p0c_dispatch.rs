@@ -73,14 +73,23 @@ fn p0c_format_sparrow_dispatches_format_mismatch_post_p1c() {
     );
 }
 
+/// v0.28.0 Phase P2C UPDATE: this cell was originally the P0C-stub
+/// regression guard ("--format specter panics unimplemented"); post-P2C
+/// the dispatch is wired, so the same BSMS-blob input now surfaces an
+/// `ImportWalletFormatMismatch` (supplied=specter, sniffed=bsms) instead
+/// of a panic. The cell is preserved at the same location as a
+/// dispatch-surface regression guard for the post-P2C-wiring semantic.
+/// Mirrors the P1C `p0c_format_sparrow_dispatches_format_mismatch_post_p1c`
+/// precedent.
 #[test]
-fn p0c_format_specter_panics_unimplemented() {
+fn p0c_format_specter_dispatches_format_mismatch_post_p2c() {
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
     let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "specter"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("P2C") || stderr.contains("specter"),
-        "stderr should mention P2C or specter on unimplemented dispatch; got: {stderr}"
+        stderr.contains("specter") && stderr.contains("bsms"),
+        "stderr should cite format mismatch (supplied=specter vs sniffed=bsms); \
+         got: {stderr}"
     );
 }
 

@@ -69,6 +69,7 @@ use crate::wallet_import::{
     },
     sniff::{sniff_format, SniffOutcome},
     sparrow::SparrowParser,
+    specter::SpecterParser,
     ParsedImport, SelectDescriptor, WalletFormatParser,
 };
 use clap::Args;
@@ -334,7 +335,48 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "sparrow"
         }
-        Some("specter") => unimplemented!("P2C: format specter not yet wired"),
+        Some("specter") => {
+            // SPEC §6.1 format-mismatch check: explicit `--format specter`
+            // against a blob that sniff identified as a different format → reject
+            // with `ImportWalletFormatMismatch` (exit 1). Same shape as
+            // BSMS / Bitcoin Core / ColdcardMultisig / Sparrow upper arms.
+            // Only reject when sniff strongly pinned a DIFFERENT format;
+            // `Ambiguous` and `NoMatch` are tolerated (the user opted in to
+            // specter explicitly).
+            //
+            // The mismatch matrix expands to include `Sparrow` (vs P1C's
+            // matrix, which only listed Bsms/BitcoinCore/ColdcardMultisig);
+            // full N×N symmetry across the 8 formats lands incrementally per
+            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            "specter"
+        }
         Some(other) => {
             return Err(ToolkitError::BadInput(format!(
                 "--format {other} is not supported \
@@ -365,6 +407,18 @@ pub fn run<R: Read, W: Write, E: Write>(
             // the unreachable contract intact for the still-placeholder
             // variants (Coldcard / Electrum / Jade / Specter).
             SniffOutcome::Sparrow => "sparrow",
+            // v0.28.0 Phase P2A: auto-sniff arm for Specter-DIY JSON. The
+            // sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Specter`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P2C: parse not yet wired")` until P2C
+            // flips it to `SpecterParser::parse(...)`. Pattern matches
+            // the P1A precedent above (Sparrow): wiring the auto-sniff
+            // arm at P2A makes a `SniffOutcome::Specter` verdict
+            // dispatch through this `None =>` branch instead of falling
+            // into the `other => unreachable!()` catch-all (which
+            // would crash on a positive Specter sniff before P2C lands).
+            SniffOutcome::Specter => "specter",
             SniffOutcome::Ambiguous => {
                 return Err(ToolkitError::ImportWalletAmbiguousFormat(
                     "import-wallet: blob matches multiple format heuristics; \
@@ -434,7 +488,7 @@ electrum|jade|sparrow|specter>"
         "electrum" => unimplemented!("P6C: parse not yet wired"),
         "jade" => unimplemented!("P5C: parse not yet wired"),
         "sparrow" => SparrowParser::parse(&blob, stderr)?,
-        "specter" => unimplemented!("P2C: parse not yet wired"),
+        "specter" => SpecterParser::parse(&blob, stderr)?,
         other => {
             return Err(ToolkitError::BadInput(format!(
                 "import-wallet --format {other} is not supported \
@@ -472,13 +526,19 @@ electrum|jade|sparrow|specter>"
     // to `all` per the SPEC NOTICE rule; emit the NOTICE here.
     //
     // v0.28.0 Phase P0C (Site 5 in plan-doc §B.2 #6) — per-format coerce
-    // decision: ONLY BSMS coerces (BSMS Round-2 is single-descriptor by
-    // construction so `--select-descriptor` is meaningless for it). Each of
-    // the 6 new formats (sparrow, specter, coldcard, coldcard-multisig,
-    // jade, electrum) falls through to the `_ =>` default which invokes
-    // `apply_select_descriptor`. Per-parser P{N}B / P{N}C sub-phases may
-    // revisit this if a format turns out to need an analogous coerce
-    // (none identified at plan-time).
+    // decision: BSMS + Specter coerce non-`all` to `all` (both formats are
+    // single-descriptor by construction so `--select-descriptor` is
+    // meaningless for them). Other formats (sparrow, coldcard,
+    // coldcard-multisig, jade, electrum) fall through to the `_ =>`
+    // default which invokes `apply_select_descriptor`. Per-parser P{N}B /
+    // P{N}C sub-phases may revisit this if a format turns out to need an
+    // analogous coerce.
+    //
+    // v0.28.0 Phase P2C added the `specter` coerce arm: Specter-DIY's
+    // wire shape carries a single `descriptor` field at top level (no
+    // multi-descriptor envelope), so coercing to `all` matches SPEC §5.3's
+    // intent (active-receive / active-change semantics require per-entry
+    // metadata that Specter doesn't carry).
     let select = parse_select(&args.select_descriptor)?;
     let parsed = match format_str {
         "bsms" => match select {
@@ -488,6 +548,18 @@ electrum|jade|sparrow|specter>"
                     stderr,
                     "notice: import-wallet: bsms: --select-descriptor {} has no effect; \
                      BSMS Round-2 carries a single descriptor",
+                    args.select_descriptor
+                );
+                parsed
+            }
+        },
+        "specter" => match select {
+            SelectDescriptor::All => parsed,
+            _ => {
+                let _ = writeln!(
+                    stderr,
+                    "notice: import-wallet: specter: --select-descriptor {} has no effect; \
+                     Specter-DIY carries a single descriptor",
                     args.select_descriptor
                 );
                 parsed
@@ -830,7 +902,38 @@ fn emit_json_envelope<W: Write, E: Write>(
                 }),
                 None => json!({}),
             },
-            "specter" => json!({}),
+            // v0.28.0 Phase P2C — specter round-trip envelope mirrors the
+            // bitcoin-core + coldcard-multisig + sparrow shape: canonicalize
+            // is real (SPEC §11.2 semantic round-trip via BTreeMap-backed
+            // alphabetical-key form). `byte_exact` compares input bytes to
+            // canonical output; `semantic_match=true` always on Ok (a
+            // successful canonicalize implies the parse + re-emit cycle
+            // succeeded). Failures surface via `canonicalize_failed`.
+            "specter" => match canon_orig.clone() {
+                Some(Ok(canon)) => {
+                    let original_text = std::str::from_utf8(blob).unwrap_or("").to_string();
+                    let byte_exact = original_text == canon;
+                    let diff_val = if byte_exact {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::Value::String(unified_diff(&original_text, &canon))
+                    };
+                    json!({
+                        "byte_exact": byte_exact,
+                        "semantic_match": true,
+                        "diff": diff_val,
+                        "status": "ok",
+                    })
+                }
+                Some(Err(err_msg)) => json!({
+                    "byte_exact": false,
+                    "semantic_match": false,
+                    "diff": serde_json::Value::Null,
+                    "status": "canonicalize_failed",
+                    "error": err_msg,
+                }),
+                None => json!({}),
+            },
             _ => json!({}),
         };
 
@@ -884,6 +987,32 @@ fn emit_json_envelope<W: Write, E: Write>(
                     "label": meta.label,
                     "policy_type": policy_type_str,
                     "script_type": meta.script_type,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
+        // v0.28.0 Phase P2C — Specter provenance envelope field. Mirrors
+        // `sparrow_source_metadata` discipline: per-format-distinct field
+        // name (`specter_source_metadata`) surfaces ONLY when the parse was
+        // Specter-shaped. Carries `label` + `blockheight` + `devices` array
+        // (vendor-type + label per cosigner) + `dropped_fields`.
+        if let Some(meta) = p.provenance.specter_source_metadata() {
+            let devices_json: Vec<serde_json::Value> = meta
+                .devices
+                .iter()
+                .map(|d| {
+                    json!({
+                        "type": d.device_type,
+                        "label": d.label,
+                    })
+                })
+                .collect();
+            env.insert(
+                "specter_source_metadata".to_string(),
+                json!({
+                    "label": meta.label,
+                    "blockheight": meta.blockheight,
+                    "devices": devices_json,
                     "dropped_fields": meta.dropped_fields,
                 }),
             );
