@@ -89,12 +89,10 @@ pub(crate) enum ImportProvenance {
     /// later phase and lands at the alphabetically-following position
     /// without affecting this insertion.
     ///
-    /// The variant is constructed by `SparrowParser::parse` at P1B and the
-    /// `cmd/import_wallet.rs` dispatch arm wired at P1C; the `dead_code`
-    /// allow on the variant covers the P1A → P1C interim (the type exists
-    /// for downstream-consumer reference + dispatch stitching but is not
-    /// yet constructed by any wired call site at P1A).
-    #[allow(dead_code)]
+    /// Constructed by `SparrowParser::parse` (Phase P1B). The
+    /// `cmd/import_wallet.rs` dispatch arm wired at P1C plumbs this variant
+    /// to the `--json` envelope; until then the variant is reachable only
+    /// from `wallet_import::sparrow::tests`.
     Sparrow(sparrow::SparrowSourceMetadata),
 }
 
@@ -118,6 +116,21 @@ impl ImportProvenance {
             Self::Bsms(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Sparrow(_) => None,
+        }
+    }
+
+    /// Sparrow-specific accessor: returns `Some(&metadata)` only for the
+    /// `Sparrow` variant. Consumed by the `--json` envelope emitter in
+    /// `cmd::import_wallet::emit_json_envelope` (P1C wiring); exposed at
+    /// P1B so the variant payload is reachable (Rust dead-code analysis
+    /// otherwise flags the tuple field).
+    #[allow(dead_code)]
+    pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::Bsms(_) => None,
+            Self::ColdcardMultisig(_) => None,
+            Self::Sparrow(meta) => Some(meta),
         }
     }
 }

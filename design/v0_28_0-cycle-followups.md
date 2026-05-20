@@ -4,7 +4,7 @@
 
 **Authoritative scope:** `/home/bcg/.claude/plans/unified-meandering-sundae.md` (R6 GREEN). Any work item NOT in the plan-doc's sub-phase rows is OOS by default.
 
-**Cycle status:** Wave 1 in progress (P9B file added entry 2026-05-19; Wave 0 closed at `71592bc`).
+**Cycle status:** Wave 1 in progress (P1B-v2 file added entry 2026-05-19; P9B prior entry; Wave 0 closed at `71592bc`).
 
 ---
 
@@ -26,6 +26,15 @@ Each entry:
 ---
 
 ## Open items (cycle-internal)
+
+### `sparrow-taproot-descriptor-passthrough-import-support` — Sparrow taproot import support
+
+- **Surfaced:** 2026-05-19 during Phase P1B-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); SPEC §11.1 implementation discovery.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` (parse-step-6 taproot refusal — `script_template.contains("tr(")` short-circuit returning `ImportWalletParse("taproot scripts are not yet supported ...")`); `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:215-219` (emit-side taproot descriptor-passthrough).
+- **What:** Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refuses taproot scripts; full taproot import requires a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
+- **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
+- **Triage decision (post-P14A):** open in design/FOLLOWUPS.md as `sparrow-taproot-descriptor-passthrough-import-support`.
+- **Tier:** v0.29+.
 
 ### `bsms-import-taproot-refusal-parity` — BSMS parser should refuse tr() blobs at parse time
 
