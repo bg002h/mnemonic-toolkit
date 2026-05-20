@@ -25,6 +25,7 @@ pub(crate) mod bitcoin_core;
 pub(crate) mod bsms;
 pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
+pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
 pub(crate) mod json_envelope;
 pub(crate) mod overlay;

@@ -393,6 +393,16 @@ pub fn run<R: Read, W: Write, E: Write>(
             // post-cycle 8-format list per plan-doc Site 3 directive.
             SniffOutcome::Bsms => "bsms",
             SniffOutcome::BitcoinCore => "bitcoin-core",
+            // v0.28.0 Phase P3A: auto-sniff arm for Coldcard single-sig JSON.
+            // The sniff slot is wired here so `sniff_format` can now return
+            // `SniffOutcome::Coldcard`; the parse-side dispatch at the
+            // `match format_str` block below remains
+            // `unimplemented!("P3C: parse not yet wired")` until P3C flips it
+            // to `ColdcardParser::parse(...)`. Adding this arm BEFORE the
+            // `other => unreachable!()` catch-all keeps the unreachable
+            // contract intact for the still-placeholder variants
+            // (Electrum / Jade).
+            SniffOutcome::Coldcard => "coldcard",
             // v0.28.0 Phase P4C: auto-sniff arm for coldcard-multisig text format.
             SniffOutcome::ColdcardMultisig => "coldcard-multisig",
             // v0.28.0 Phase P1A: auto-sniff arm for Sparrow JSON. The

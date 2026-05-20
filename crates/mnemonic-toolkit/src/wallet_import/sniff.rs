@@ -45,6 +45,7 @@
 
 use super::bitcoin_core::BitcoinCoreParser;
 use super::bsms::BsmsParser;
+use super::coldcard::ColdcardParser;
 use super::coldcard_multisig::ColdcardMultisigParser;
 use super::sparrow::SparrowParser;
 use super::specter::SpecterParser;
@@ -82,7 +83,7 @@ pub(crate) enum SniffOutcome {
 pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
     let bitcoin_core = BitcoinCoreParser::sniff(blob);
     let bsms = BsmsParser::sniff(blob);
-    let coldcard = false; // P3A: replace with ColdcardParser::sniff(blob)
+    let coldcard = ColdcardParser::sniff(blob);
     let coldcard_multisig = ColdcardMultisigParser::sniff(blob);
     let electrum = false; // P6A: replace with ElectrumParser::sniff(blob)
     let jade = false; // P5A: replace with JadeParser::sniff(blob)
