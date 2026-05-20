@@ -16,23 +16,42 @@ format set).
 ## Overview
 
 A *foreign format* is any wire shape that originates outside this
-toolkit's `bundle`/`verify-bundle`/`convert` triad. v0.26.0 supports
-two on the import side:
+toolkit's `bundle`/`verify-bundle`/`convert` triad. v0.28.0 supports
+eight on the import side:
 
 - **BSMS Round-2 (BIP-129).** Plaintext multi-line shape emitted
   by Bitcoin coordinators (Coldcard, Specter, Bitcoin Core's
   miniscript-aware wallets, etc.) as the second round of the
-  BIP-129 multisig setup protocol. The toolkit accepts both the
-  full 6-line shape and a lenient 2-line excerpt.
+  BIP-129 multisig setup protocol. The toolkit accepts the
+  BIP-129-canonical 4-line shape, the toolkit's lenient 6-line
+  consolidation, and a 2-line excerpt.
 - **Bitcoin Core `listdescriptors` JSON.** The RPC output of
   `bitcoin-cli listdescriptors`, carrying one or more descriptor
   entries plus wallet-state metadata (`active`, `internal`,
   `range`, `timestamp`).
+- **Sparrow Wallet JSON.** Sparrow Desktop's wallet-export JSON
+  (`policyType` + `defaultPolicy.miniscript.script` + `keystores[]`).
+- **Specter-DIY JSON.** Specter Desktop's bare wallet-export JSON
+  (`blockheight` + `descriptor` + `devices[]`).
+- **Coldcard single-sig `wallet.json`.** Coq's "Export Wallet"
+  single-sig artifact (per-BIP derivation blocks: `bip44` / `bip49`
+  / `bip84` / `bip86`).
+- **Coldcard multisig text file.** Coldcard's "Multisig Setup file"
+  text format (`Name:` / `Policy:` / `Format:` / `Derivation:` +
+  per-cosigner `<XFP>: <xpub>` lines).
+- **Blockstream Jade JSON.** Jade's `get_registered_multisig` RPC
+  reply (top-level `multisig_file` field whose value is a Coldcard-
+  multisig-text body).
+- **Electrum 4.x wallet file.** Electrum's on-disk JSON
+  (`seed_version` + `wallet_type` + `keystore` or `x1/`...`xN/`
+  per-cosigner blocks).
 
-Both formats are *watch-only by construction*: they carry xpubs
+All eight formats are *watch-only by construction*: they carry xpubs
 and origin paths but not secret material. (Bitcoin Core's
 `listdescriptors true` variant CAN carry `xprv`; the toolkit
-**refuses** that input — see [§3 below](#bitcoin-core-listdescriptors).)
+**refuses** that input — see [§3 below](#bitcoin-core-listdescriptors).
+Electrum's encrypted wallet files and 2fa/imported wallet variants
+are also refused — see [§9 below](#electrum-wallet-file).)
 
 Importing a foreign blob yields an m-format `bundle` whose
 cosigners are populated from the blob's xpubs. The `ms1` slot is
@@ -63,7 +82,23 @@ decaying-multisig descriptor `wsh(thresh(...))`. The toolkit
 accepts this excerpt and emits stderr `warning: import-wallet: bsms:
 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form`.
 
-**6-line shape** (full BIP-129 Round-2):
+**4-line shape** (BIP-129-canonical Round-2; v0.28.0):
+
+```text
+BSMS 1.0
+<TOKEN>
+<descriptor>#<checksum>
+<DERIVATION_PATH>
+```
+
+This is the BIP-129 §Specification *Round 2* on-disk shape: version,
+token, descriptor, derivation path. No first-address verification line
+and no signature line; the BIP-129 audit envelope's HMAC + signature
+travel *out-of-band* with the coordinator. v0.28.0 parses this shape
+natively (no fallback). When the parser falls through the 4-line arm
+to the legacy 6-line arm, a stderr DEPRECATION notice fires.
+
+**6-line shape** (legacy toolkit consolidation; deprecated):
 
 ```text
 BSMS 1.0
@@ -74,13 +109,14 @@ BSMS 1.0
 <SIGNATURE>
 ```
 
-The toolkit's 6-line shape is a *lenient toolkit-specific
-consolidation* of BIP-129's plaintext (4 lines: version, descriptor,
-derivation_path, first_address) plus the BIP-129 *envelope*-side
-HMAC token + signature flattened into the same blob. An importer
-that doesn't decrypt the BIP-129 encryption envelope can still
-preserve and audit those fields. The 4-line strict shape is also
-accepted as a degenerate case.
+A *lenient toolkit-specific consolidation* of BIP-129's plaintext
+(4 lines: version, token, descriptor, derivation_path) plus the
+BIP-129 *envelope*-side first-address verification value + signature
+flattened into the same blob. An importer that doesn't decrypt the
+BIP-129 encryption envelope can still preserve and audit those
+fields. This shape was added before v0.28.0 promoted the 4-line
+canonical parser to first-class status; it remains supported but
+emits a stderr DEPRECATION notice.
 
 ### Where it comes from
 
@@ -213,6 +249,459 @@ the full enumeration. Under `--format bsms`, any non-default value
 emits stderr NOTICE (BSMS Round-2 carries a single descriptor) and
 is treated as `all`.
 
+## Sparrow Wallet (`--format sparrow`) {#sparrow-wallet}
+
+Sparrow Desktop emits a wallet-export JSON whose distinctive shape
+carries `policyType` (`"SINGLE"` or `"MULTI"`), `scriptType`
+(`"P2WPKH"` / `"P2WSH"` / `"P2SH-P2WPKH"` / …),
+`defaultPolicy.miniscript.script`, and a `keystores[]` array (per
+SPEC §11.1). Sparrow stores the wallet script as a miniscript
+fragment with `@N/**` placeholders inside `defaultPolicy.miniscript.script`;
+the parser re-wraps it as `wsh(...)` / `sh(wsh(...))` per the script
+type and ties cosigner xpubs from `keystores[i]`.
+
+### Sniff signature
+
+A blob is recognized as Sparrow iff its top-level JSON object carries
+ALL of: `policyType` ∈ {`"SINGLE"`, `"MULTI"`}, `scriptType` (string),
+`defaultPolicy.miniscript.script` (nested string), and a non-empty
+`keystores` array. The vendor-marker quartet disambiguates Sparrow
+from Bitcoin Core / Specter / other JSON formats; sniff is positive-
+marker-based with no false-positive co-fire risk against the other
+v0.28.0 parsers.
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format sparrow \
+  --blob tests/fixtures/wallet_import/sparrow-singlesig-p2wpkh.json
+```
+
+The toolkit synthesizes a watch-only bundle whose `mk1` slot carries
+the single cosigner xpub and whose `md1` slot carries the descriptor
+`wpkh([5436d724/84'/0'/0']xpub6Bner3L3.../<0;1>/*)`. For the multisig
+fixture `sparrow-multisig-2of3-p2wsh-sortedmulti.json`, three
+cosigners populate `mk1` and the descriptor wraps `sortedmulti(2,...)`.
+
+### Provenance metadata
+
+The `--json` envelope's `bundle.import_provenance.sparrow` field
+preserves Sparrow-specific metadata that doesn't ride the bundle
+itself (per SPEC §11.1):
+
+| Field | Source | Note |
+|---|---|---|
+| `label` | top-level `name` (or `label`) | preserved verbatim |
+| `policy_type` | `policyType` | `"Single"` / `"Multi"` |
+| `script_type` | `scriptType` | verbatim — `"P2WPKH"` / `"P2WSH"` / … |
+| `dropped_fields` | runtime | Sparrow fields not lifted into the bundle (analogous to Bitcoin Core's drop list) |
+
+### Round-trip example
+
+```sh
+# Import → JSON envelope
+mnemonic import-wallet --format sparrow \
+  --blob sparrow-singlesig-p2wpkh.json --json > envelope.json
+
+# Re-emit via export-wallet
+mnemonic export-wallet --from-import-json envelope.json \
+  --format sparrow > sparrow_re.json
+
+# Compare under per-format canonicalize (semantic round-trip)
+diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
+     <(jq -S . sparrow_re.json)
+```
+
+### Deferral — taproot import
+
+Sparrow's emit side ships taproot wallets as *descriptor-passthrough*
+(concrete `[fp/path]xpub` keys embedded in
+`defaultPolicy.miniscript.script` instead of `@N/**` placeholders).
+v0.28.0's Sparrow *parse* path refuses any blob whose script contains
+`tr(` with the byte-exact error `error: import-wallet: sparrow:
+taproot scripts are not yet supported …` (exit 2). The export-wallet
+side handles taproot via descriptor-passthrough; full taproot import
+support is queued as FOLLOWUP `sparrow-taproot-descriptor-passthrough-import-support`.
+
+## Specter-DIY (`--format specter`) {#specter-diy}
+
+Specter Desktop emits a bare wallet-export JSON whose distinctive
+shape carries a top-level `blockheight` integer alongside `label`,
+`descriptor`, and `devices[]` (per SPEC §11.2). The `blockheight`
+field is the load-bearing sniff marker — no other v0.28.0 format
+carries it at JSON top level.
+
+### Sniff signature
+
+A blob is recognized as Specter iff its top-level JSON object carries
+ALL of: `label` (string), `blockheight` (integer), `descriptor`
+(string), and `devices` (array). The `blockheight` integer is the
+strongest discriminator (Sparrow doesn't carry it; Bitcoin Core
+doesn't carry it).
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format specter \
+  --blob tests/fixtures/wallet_import/specter-singlesig-p2wpkh.json
+```
+
+The parser extracts `descriptor` verbatim (preserving its `#<checksum>`
+trailer) and lifts `label` into the bundle as the wallet name.
+`devices[]` becomes per-cosigner provenance hints (vendor strings
+like `"coldcard"`, `"trezor"`, `"unknown"`) — informational only,
+not load-bearing for descriptor parse.
+
+### Provenance metadata
+
+The `--json` envelope's `bundle.import_provenance.specter` field
+preserves Specter-specific metadata:
+
+| Field | Source | Note |
+|---|---|---|
+| `label` | top-level `label` | preserved verbatim |
+| `blockheight` | top-level `blockheight` | u64 — wallet's import block height |
+| `devices` | top-level `devices[]` | `Vec<{device_type, label}>` |
+| `dropped_fields` | runtime | any Specter fields not lifted into the bundle |
+
+### Round-trip example
+
+```sh
+mnemonic import-wallet --format specter \
+  --blob specter-singlesig-p2wpkh.json --json > envelope.json
+mnemonic export-wallet --from-import-json envelope.json \
+  --format specter > specter_re.json
+```
+
+`blockheight` is preserved in the provenance metadata but DROPPED on
+the canonicalize-side comparison (it's wallet-state, not key-state —
+analogous to Bitcoin Core's `timestamp` field).
+
+## Coldcard single-sig wallet.json (`--format coldcard`) {#coldcard-singlesig}
+
+Coldcard hardware-wallet firmware (Mk1 through Q) exports a single-sig
+wallet manifest as a JSON file carrying per-BIP derivation blocks
+(`bip44` / `bip49` / `bip84` / `bip86`) alongside a top-level `chain`
+field (`"BTC"` mainnet or `"XTN"` testnet) and master fingerprint
+`xfp` (per SPEC §11.3).
+
+### Sniff signature
+
+A blob is recognized as Coldcard single-sig iff its top-level JSON
+object carries ALL of:
+
+- `chain` ∈ {`"BTC"`, `"XTN"`}
+- `xfp` (8-char uppercase hex string)
+- At-least-one-of: `xpub`, `bip44`, `bip49`, `bip84`, `bip86`,
+  `bip48_1`, `bip48_2`
+
+The disjunction in the third clause absorbs firmware variance —
+different Coldcard firmware eras emit different combinations of
+per-BIP derivation blocks:
+
+| Firmware era | Emits | Discriminator |
+|---|---|---|
+| Mk1/Mk2 (pre-2022) | top-level `xpub` only | legacy `xpub` field |
+| Mk3 (2022+) | `bip44` / `bip49` / `bip84` blocks | per-bipN sub-objects |
+| Mk4 (2023+) | + `bip86` block (taproot) | adds `bip86` |
+| Q (2024+) | + `bip48_1` / `bip48_2` (multisig hints) | adds `bip48_*` |
+
+### Dominant-BIP selection
+
+Coldcard typically exports several per-BIP blocks side-by-side. The
+parser picks ONE dominant block per the heuristic at SPEC §11.3.1:
+`bip86` (taproot) > `bip84` (P2WPKH) > `bip49` (P2SH-P2WPKH) > `bip44`
+(P2PKH); fall back to legacy top-level `xpub` with SLIP-132-prefix
+inference (`zpub` → BIP-84, `ypub` → BIP-49, `xpub` → BIP-44). The
+`bip48_*` multisig-hint blocks are IGNORED by the single-sig parser
+(use [Coldcard multisig text](#coldcard-multisig) instead).
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format coldcard \
+  --blob tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json
+```
+
+For the BIP-84 mainnet fixture, the result is a watch-only bundle
+whose descriptor is `wpkh([B8688DF1/84'/0'/0']xpub6FQya7zGhR9.../<0;1>/*)`
+with `mk1` carrying the lone cosigner xpub.
+
+### Provenance metadata
+
+The `--json` envelope's `bundle.import_provenance.coldcard` field
+preserves Coldcard-specific metadata:
+
+| Field | Source | Note |
+|---|---|---|
+| `chain` | top-level `chain` | `Btc` (mainnet) / `Xtn` (testnet) |
+| `xfp` | top-level `xfp` | 4-byte master fingerprint |
+| `bip_derivation` | dominant block | `Bip44` / `Bip49` / `Bip84` / `Bip86` |
+| `raw_account` | dominant block | `account` integer (typically 0) |
+| `dropped_fields` | runtime | per-BIP blocks not selected as dominant |
+
+### Round-trip example
+
+```sh
+mnemonic import-wallet --format coldcard \
+  --blob coldcard-singlesig-bip84-mainnet.json --json > envelope.json
+mnemonic export-wallet --from-import-json envelope.json \
+  --format coldcard > coldcard_re.json
+```
+
+### Deferral — legacy Mk1/Mk2 xpub-prefix inference
+
+Coldcard Mk1/Mk2 firmware emits only the legacy top-level `xpub`
+field (no per-BIP blocks). v0.28.0's parser handles this case by
+inferring the dominant BIP from the xpub's SLIP-132 prefix (zpub →
+BIP-84, ypub → BIP-49, xpub → BIP-44), but the inference is heuristic
+and not all legacy variants are covered. Cycle-FOLLOWUP
+`wallet-import-coldcard-legacy-mk1-mk2-xpub-prefix-inference-edge-cases`
+tracks edge cases as users surface them.
+
+## Coldcard multisig text (`--format coldcard-multisig`) {#coldcard-multisig}
+
+Coldcard's "Multisig Setup File" emit is a **text** format (not JSON,
+distinct from the single-sig wallet.json above). The file shape is
+line-oriented (per SPEC §11.4):
+
+```text
+Name: <wallet-name>
+Policy: <K>-of-<N>
+Format: <script-type>          # P2WSH, P2SH-P2WSH, or P2SH
+Derivation: m/...
+[XFP: <hex>]                   # optional header (firmware-variant)
+
+<xfp1>: <xpub1>
+<xfp2>: <xpub2>
+...
+```
+
+### Sniff signature
+
+A blob is recognized as Coldcard-multisig iff its first three non-
+blank lines (in order) match `Name: <...>`, `Policy: <K>-of-<N>`,
+`Format: <...>`. The `XFP: <hex>` header line is optional —
+firmware variants disagree on its presence.
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format coldcard-multisig \
+  --blob tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt
+```
+
+For the 2-of-3 P2WSH fixture, the parser synthesizes
+`wsh(sortedmulti(2, [34A3A4F1/48'/0'/0'/2']xpub6FQya..., ...))` and
+populates `mk1` with all three cosigner xpubs.
+
+### XFP-header policy (5-row truth table)
+
+The `XFP:` header line interacts with the computed fingerprint (from
+the master xpub or per-cosigner xpubs) per the table at SPEC §11.4.1.
+The header-matches-computed case is the silent-pass row; the
+header-disagrees case emits a stderr WARNING but proceeds with the
+header value as authoritative:
+
+```text
+warning: import-wallet: coldcard-multisig: xfp header `XFP: <hex>`
+  disagrees with computed fingerprint `<hex>` from cosigner xpub;
+  using blob-supplied header value as authoritative
+```
+
+### Provenance metadata
+
+The `--json` envelope's `bundle.import_provenance.coldcard_multisig`
+field preserves the multisig metadata:
+
+| Field | Source | Note |
+|---|---|---|
+| `name` | `Name:` line | wallet name |
+| `policy` | `Policy:` line | `(k, n)` u8 pair |
+| `script_format` | `Format:` line | `P2wsh` / `P2shP2wsh` / `P2sh` |
+| `xfp_was_blob_supplied` | header present | `true` if `XFP:` line in blob |
+| `xfp_header_disagreed` | computed compare | `true` if WARNING fired |
+| `dropped_fields` | runtime | non-load-bearing lines |
+
+### Round-trip example
+
+```sh
+mnemonic import-wallet --format coldcard-multisig \
+  --blob coldcard-ms-2of3-p2wsh-with-xfp.txt --json > envelope.json
+mnemonic export-wallet --from-import-json envelope.json \
+  --format coldcard-multisig > coldcard_ms_re.txt
+diff coldcard-ms-2of3-p2wsh-with-xfp.txt coldcard_ms_re.txt
+```
+
+## Blockstream Jade (`--format jade`) {#jade-multisig}
+
+Blockstream's Jade hardware wallet exposes multisig wallet registration
+via the `register_multisig` RPC; the inverse `get_registered_multisig`
+RPC reply carries a top-level `multisig_file` field whose value is the
+**Coldcard-multisig text body** verbatim (per SPEC §11.5).
+
+### Sniff signature
+
+A blob is recognized as Jade iff its top-level JSON object carries a
+`multisig_file` field whose value is a non-empty string. The field
+name `multisig_file` is the distinctive marker — no other format
+uses it.
+
+### Parse contract
+
+The parser extracts the `multisig_file` string and delegates to the
+Coldcard-multisig text parser ([§7 above](#coldcard-multisig)). The
+provenance is annotated as Jade rather than Coldcard so the round-trip
+emit re-wraps the body in Jade's JSON envelope.
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format jade \
+  --blob tests/fixtures/wallet_import/jade-multisig-2of3-p2wsh.json
+```
+
+The Jade JSON wrapper is:
+
+```json
+{
+  "id": "jade-test-request-001",
+  "multisig_name": "TestMs2of3",
+  "multisig_file": "Name: TestMs2of3\nPolicy: 2 of 3\nDerivation: ...\n..."
+}
+```
+
+The parser extracts `multisig_file`, delegates parse to
+`coldcard_multisig::parse_text()`, and tags the resulting bundle's
+provenance as Jade with the inner Coldcard-multisig metadata embedded.
+
+### Provenance metadata
+
+```rust
+pub(crate) struct JadeSourceMetadata {
+    pub coldcard_compat: ColdcardMultisigSourceMetadata,
+    pub jade_specific_fields: Vec<String>,  // empty in v0.28.0
+}
+```
+
+The `jade_specific_fields` field is reserved for future Jade-only
+metadata once the SeedQR variant ships (see deferral below).
+
+### Round-trip example
+
+```sh
+mnemonic import-wallet --format jade \
+  --blob jade-multisig-2of3-p2wsh.json --json > envelope.json
+mnemonic export-wallet --from-import-json envelope.json \
+  --format jade > jade_re.json
+```
+
+### Deferral — SeedQR
+
+Jade's `register_multisig` RPC also accepts a SeedQR-encoded variant
+(`seedqr` reply field, shape pending field-research). v0.28.0 handles
+ONLY the `get_registered_multisig`-reply JSON shape (top-level
+`multisig_file` field). SeedQR support is queued as FOLLOWUP
+`wallet-import-jade-seedqr`.
+
+## Electrum 4.x wallet file (`--format electrum`) {#electrum-wallet-file}
+
+Electrum 4.x stores wallets as Python-dict-serialized JSON on disk.
+The toolkit imports singlesig and `<k>of<n>` multisig variants; 2fa,
+imported, and encrypted variants are refused with format-specific
+stderr errors (per SPEC §11.6).
+
+> **Disambiguation:** `--format electrum` (this section) is the
+> *Electrum wallet file* parser. It is **distinct** from
+> [`mnemonic electrum {encode,decode}`](#mnemonic-electrum) which is
+> Electrum's native *seed format* codec (BIP-39-alternative entropy
+> serialization). See SPEC §1.4.
+
+### Sniff signature
+
+A blob is recognized as Electrum iff its top-level JSON object carries
+ALL of:
+
+- `seed_version` (integer ∈ {11..71}; current FINAL_SEED_VERSION is 71)
+- `wallet_type` (string ∈ {`"standard"`, `"<k>of<n>"`, `"2fa"`,
+  `"imported"`})
+
+The `wallet_type` value-set follows Electrum's `electrum/util.py::multisig_type`
+regex `(\d+)of(\d+)` for multisig — values like `"2of3"`, `"3of5"` are
+matched, NOT the literal string `"multisig"`.
+
+### Parse contract
+
+| `wallet_type` | Action |
+|---|---|
+| `"standard"` | Singlesig parse: extract `keystore.xpub` + `keystore.derivation`. Compute descriptor via standard BIP-84/49/44 wrapping based on the xpub's SLIP-132 prefix. |
+| `<k>of<n>` (regex `(\d+)of(\d+)`) | Multisig parse: iterate `x1/`, `x2/`, … sub-objects; extract per-cosigner xpub + derivation. Synthesize `wsh(sortedmulti(K, ...))`. |
+| `"2fa"` | **REFUSE** — TrustedCoin two-factor wallet; not reconstructible from xpubs alone. |
+| `"imported"` | **REFUSE** — "imported addresses" wallet has no derivation chain. |
+
+Encrypted wallets (`use_encryption: true` + base64-encrypted sensitive
+fields) are also **REFUSED**.
+
+### Refusal stderr templates
+
+```text
+error: import-wallet: electrum: 2fa wallets require TrustedCoin
+  two-factor restoration; ingest not supported
+
+error: import-wallet: electrum: imported-addresses wallets have no
+  derivation chain to reconstruct; ingest not supported
+
+error: import-wallet: electrum: encrypted wallet files require
+  decrypting via 'electrum --decrypt-wallet' first; encrypted ingest
+  not yet supported (FOLLOWUP wallet-import-electrum-encrypted)
+```
+
+### CLI invocation
+
+```sh
+mnemonic import-wallet --format electrum \
+  --blob tests/fixtures/wallet_import/electrum-standard-bip84-mainnet.json
+```
+
+Singlesig BIP-84 yields `wpkh([5436d724/84'/0'/0']zpub6qTB.../<0;1>/*)`.
+The multisig fixture `electrum-multisig-2of3-wsh.json` (with
+`wallet_type: "2of3"`) yields `wsh(sortedmulti(2, [b8688df1/48'/0'/0'/2']Zpub.../<0;1>/*, …))`.
+
+### Provenance metadata
+
+```rust
+pub(crate) struct ElectrumSourceMetadata {
+    pub seed_version: u64,
+    pub wallet_type: ElectrumWalletType,    // Standard | Multisig { k, n }
+    pub wallet_name: Option<String>,
+    pub dropped_fields: Vec<String>,
+}
+```
+
+Refused variants (`2fa` / `imported` / encrypted) do not produce a
+`ParsedImport` and therefore have no provenance.
+
+### Round-trip example
+
+```sh
+mnemonic import-wallet --format electrum \
+  --blob electrum-standard-bip84-mainnet.json --json > envelope.json
+mnemonic export-wallet --from-import-json envelope.json \
+  --format electrum > electrum_re.json
+```
+
+### Deferrals
+
+- **Encrypted wallet files** — refused at sniff/parse time; see FOLLOWUP
+  `wallet-import-electrum-encrypted`. Workaround: decrypt out-of-band
+  via `electrum --decrypt-wallet`, then re-feed the plaintext blob.
+- **Pre-4.x legacy `wallet_type` values** (`"old"`, `"xpub"`, `"bip44"`)
+  — rejected at sniff time. Open the wallet in Electrum 4.x first
+  (auto-upgrade rewrites `wallet_type` to `"standard"`), then export
+  for import.
+- **2fa and imported-addresses wallets** — refused by design (not
+  reconstructible from xpubs alone).
+
 ## Round-trip discipline {#foreign-formats-roundtrip}
 
 For every imported blob `B`, the toolkit runs:
@@ -259,24 +748,28 @@ the user can re-attach them externally if desired.
 
 ## What's NOT supported {#foreign-formats-not-supported}
 
-v0.26.0 ships exactly two source formats. Recognized in the broader
-ecosystem but NOT yet importable (each tracked by a queued FOLLOWUP
-for v0.27+): Sparrow JSON (`wallet-import-sparrow`), Specter JSON
-non-BSMS path (`wallet-import-specter`), Electrum wallet file
-(`wallet-import-electrum`), Coldcard generic JSON
-(`wallet-import-coldcard`) + multisig text
-(`wallet-import-coldcard-multisig`), Blockstream Jade
-`register_multisig` (`wallet-import-jade`), BSMS Round-1
-token-only (`wallet-import-bsms-round-1`), and BSMS encrypted
-envelopes per BIP-129 §5 (`wallet-import-bsms-encrypted`).
+v0.28.0 ships eight source formats. Recognized in the broader
+ecosystem but NOT yet importable (each tracked by a queued
+FOLLOWUP):
 
-Workaround in v0.26.0: for Sparrow / Specter / Electrum / Coldcard
-/ Jade, re-emit the watch-only descriptor via the source wallet's
-Bitcoin-Core-compatible export path, then ingest the resulting
-`listdescriptors` JSON. For encrypted BSMS envelopes, decrypt
-out-of-band with the coordinator's key, then feed the plaintext
-into `import-wallet`. BSMS Round-1 has no workaround until Round-1
-parsing ships — the descriptor is not yet assembled at Round-1.
+- **BSMS Round-1 token-only** (`wallet-import-bsms-round-1`) — the
+  pre-descriptor handshake. No workaround until Round-1 parsing
+  ships; the descriptor is not yet assembled at Round-1.
+- **BSMS encrypted envelopes** per BIP-129 §5
+  (`bsms-bip129-encryption-envelope`). Workaround: decrypt
+  out-of-band with the coordinator's key, then feed the plaintext
+  into `import-wallet`.
+- **Sparrow taproot descriptor-passthrough**
+  (`sparrow-taproot-descriptor-passthrough-import-support`) — see
+  [§4 above](#sparrow-wallet) deferral note.
+- **Jade SeedQR variant** (`wallet-import-jade-seedqr`) — see
+  [§8 above](#jade-multisig) deferral note.
+- **Electrum encrypted wallet files**
+  (`wallet-import-electrum-encrypted`) — see [§9 above](#electrum-wallet-file)
+  deferral note.
+- **Electrum pre-4.x legacy `wallet_type` values**
+  (`wallet-import-electrum-pre-4x-legacy-types`) — see [§9 above](#electrum-wallet-file)
+  deferral note.
 
 ## Normative references {#foreign-formats-references}
 
