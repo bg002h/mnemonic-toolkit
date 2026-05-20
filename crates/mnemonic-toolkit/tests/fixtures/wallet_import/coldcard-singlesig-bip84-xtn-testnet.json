@@ -1,0 +1,13 @@
+{
+  "chain": "XTN",
+  "xfp": "704C7836",
+  "account": 0,
+  "bip84": {
+    "name": "p2wpkh",
+    "deriv": "m/84'/1'/0'",
+    "xfp": "704C7836",
+    "xpub": "tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC",
+    "_pub": "vpubExampleVpubBip84Testnet",
+    "first": "tb1q..."
+  }
+}

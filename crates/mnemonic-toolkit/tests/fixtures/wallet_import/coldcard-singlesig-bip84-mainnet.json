@@ -1,0 +1,13 @@
+{
+  "chain": "BTC",
+  "xfp": "B8688DF1",
+  "account": 0,
+  "bip84": {
+    "name": "p2wpkh",
+    "deriv": "m/84'/0'/0'",
+    "xfp": "B8688DF1",
+    "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX",
+    "_pub": "zpub6sExampleZpubBip84Mainnet",
+    "first": "bc1qjyf0xzn0eyl9d0glujytdq2t5kdq0u4lcj6xtg"
+  }
+}

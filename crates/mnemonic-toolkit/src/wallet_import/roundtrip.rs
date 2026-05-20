@@ -287,12 +287,57 @@ fn recanonicalize_descriptor(desc_with_csum: &str) -> Result<String, ToolkitErro
 // body-swap is structurally complete the moment the new body lands.
 // =============================================================================
 
-/// SPEC §11.3 — canonicalize a Coldcard single-sig generic-JSON blob.
-/// Body lands in Phase P3B.
-pub(crate) fn canonicalize_coldcard(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_coldcard: not yet implemented; coldcard ingest lands in Phase P3B".into(),
-    ))
+/// SPEC §11.3 — canonicalize a Coldcard single-sig generic-JSON blob for
+/// semantic round-trip comparison.
+///
+/// Strategy:
+/// 1. JSON-parse.
+/// 2. Drop fields the toolkit doesn't preserve on the bundle (any top-level
+///    key not in `COLDCARD_PRESERVED_TOP_LEVEL_KEYS`).
+/// 3. Re-emit in alphabetical top-level key order via `BTreeMap`. Mirrors
+///    `canonicalize_specter` / `canonicalize_sparrow` shape.
+///
+/// The canonicalization is **semantic, not byte-exact**: two blobs that
+/// differ only in top-level key order / dropped extra fields canonicalize
+/// to the same string. Per-bipN sub-objects are preserved verbatim (their
+/// internal key order is wire-determined by Coldcard firmware emit; we do
+/// not reorder them).
+pub(crate) fn canonicalize_coldcard(blob: &[u8]) -> Result<String, ToolkitError> {
+    use crate::wallet_import::coldcard::COLDCARD_PRESERVED_TOP_LEVEL_KEYS;
+
+    let value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_coldcard: invalid JSON: {e}"))
+    })?;
+    let obj = value.as_object().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_coldcard: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    // Required fields: chain + xfp.
+    if obj.get("chain").and_then(|v| v.as_str()).is_none() {
+        return Err(ToolkitError::ImportWalletParse(
+            "canonicalize_coldcard: missing top-level `chain`".to_string(),
+        ));
+    }
+    if obj.get("xfp").and_then(|v| v.as_str()).is_none() {
+        return Err(ToolkitError::ImportWalletParse(
+            "canonicalize_coldcard: missing top-level `xfp`".to_string(),
+        ));
+    }
+
+    let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
+    for (k, v) in obj.iter() {
+        if COLDCARD_PRESERVED_TOP_LEVEL_KEYS.contains(&k.as_str()) {
+            canonical.insert(k.clone(), v.clone());
+        }
+    }
+
+    let mut text = serde_json::to_string_pretty(&canonical).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("canonicalize_coldcard: pretty-print: {e}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 /// SPEC §11.4 — canonicalize a Coldcard multisig text blob for semantic
@@ -1118,19 +1163,96 @@ mod tests {
     // contract landing first.
     // =========================================================================
 
+    // =========================================================================
+    // canonicalize_coldcard cells (Phase P3B)
+    // =========================================================================
+
+    /// SPEC §11.3 — canonicalize_coldcard on a bip84 fixture produces a JSON
+    /// object with alphabetically-sorted top-level keys + trailing newline.
+    /// Preserved-field set: chain, xfp, xpub, account, bip44, bip49, bip84,
+    /// bip86, bip48_1, bip48_2.
     #[test]
-    fn canonicalize_coldcard_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_coldcard(b"any blob").unwrap_err();
+    fn canonicalize_coldcard_preserves_required_fields() {
+        let blob = std::fs::read(
+            "tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json",
+        )
+        .expect("bip84 fixture readable");
+        let canonical = canonicalize_coldcard(&blob).unwrap();
+        assert!(canonical.contains("\"chain\":"));
+        assert!(canonical.contains("\"xfp\":"));
+        assert!(canonical.contains("\"bip84\":"));
+        assert!(canonical.contains("\"account\":"));
+        assert!(canonical.ends_with('\n'), "trailing newline required");
+    }
+
+    /// canonicalize_coldcard is idempotent — re-canonicalize equals canonicalize.
+    #[test]
+    fn canonicalize_coldcard_idempotent() {
+        let blob = std::fs::read(
+            "tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json",
+        )
+        .expect("fixture readable");
+        let once = canonicalize_coldcard(&blob).unwrap();
+        let twice = canonicalize_coldcard(once.as_bytes()).unwrap();
+        assert_eq!(once, twice, "canonicalize_coldcard must be idempotent");
+    }
+
+    /// canonicalize_coldcard drops non-preserved top-level fields.
+    #[test]
+    fn canonicalize_coldcard_drops_non_preserved_top_level_fields() {
+        let blob = br#"{
+            "chain":"BTC","xfp":"B8688DF1","account":0,
+            "bip84":{"name":"p2wpkh","deriv":"m/84'/0'/0'","xfp":"B8688DF1","xpub":"xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"},
+            "this_field_dropped":"x",
+            "and_this_too":42
+        }"#;
+        let canonical = canonicalize_coldcard(blob).unwrap();
+        assert!(!canonical.contains("this_field_dropped"));
+        assert!(!canonical.contains("and_this_too"));
+        assert!(canonical.contains("\"chain\":"));
+    }
+
+    /// canonicalize_coldcard reorders top-level keys alphabetically. The
+    /// preserved key set is {account, bip44, bip49, bip48_1, bip48_2, bip84,
+    /// bip86, chain, xfp, xpub} → alphabetical order moves `chain` after
+    /// `bip86` etc. Two blobs with the same content but different on-disk
+    /// key ordering canonicalize identically.
+    #[test]
+    fn canonicalize_coldcard_alphabetizes_keys_across_orderings() {
+        let blob_order_a = br#"{
+            "chain":"BTC","xfp":"B8688DF1","account":0,
+            "bip84":{"name":"p2wpkh","deriv":"m/84'/0'/0'","xfp":"B8688DF1","xpub":"xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"}
+        }"#;
+        // Same fields, different on-disk top-level order.
+        let blob_order_b = br#"{
+            "bip84":{"name":"p2wpkh","deriv":"m/84'/0'/0'","xfp":"B8688DF1","xpub":"xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"},
+            "account":0,"xfp":"B8688DF1","chain":"BTC"
+        }"#;
+        let canon_a = canonicalize_coldcard(blob_order_a).unwrap();
+        let canon_b = canonicalize_coldcard(blob_order_b).unwrap();
+        assert_eq!(canon_a, canon_b, "ordering-only differences must canonicalize identically");
+    }
+
+    /// canonicalize_coldcard refuses invalid JSON with parse-class error.
+    #[test]
+    fn canonicalize_coldcard_invalid_json_returns_parse_error() {
+        let err = canonicalize_coldcard(b"{not json").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(
-                    msg.contains("not yet implemented"),
-                    "skeleton must surface not-yet-implemented BadInput; got: {msg}"
-                );
-                assert!(msg.contains("P3B"), "msg must cite Phase P3B; got: {msg}");
-                assert!(msg.contains("coldcard"), "msg must cite format; got: {msg}");
+            ToolkitError::ImportWalletParse(_) => {}
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    /// canonicalize_coldcard refuses missing-chain with parse-class error.
+    #[test]
+    fn canonicalize_coldcard_missing_chain_refused() {
+        let blob = br#"{"xfp":"B8688DF1","bip84":{"name":"p2wpkh","xpub":"xpub..."}}"#;
+        let err = canonicalize_coldcard(blob).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("chain"), "msg must cite chain; got: {msg}");
             }
-            other => panic!("expected BadInput, got: {other:?}"),
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
     }
 
@@ -1469,12 +1591,11 @@ B7F7DFEA: {xpub_c}\n"
         // Ok, not a different error class). This pins the "shape-only"
         // contract.
         //
-        // Note: `coldcard-multisig`, `sparrow`, `specter` are OMITTED from
-        // this list — their canonicalize bodies are no longer skeletons
-        // (P4B, P1B, P2B respectively). Other format skeletons stay on
-        // this list until their per-parser P{N}B phase.
+        // Note: `coldcard`, `coldcard-multisig`, `sparrow`, `specter` are
+        // OMITTED from this list — their canonicalize bodies are no longer
+        // skeletons (P3B, P4B, P1B, P2B respectively). Other format
+        // skeletons stay on this list until their per-parser P{N}B phase.
         for (name, result) in [
-            ("coldcard", canonicalize_coldcard(b"")),
             ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
         ] {
