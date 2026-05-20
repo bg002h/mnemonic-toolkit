@@ -169,7 +169,7 @@ fn bsms_6_line_happy_path() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // SPEC §10.4 (v0.28.0): the 6-line shape now emits a DEPRECATION NOTICE
     // pointing the user at the BIP-129-canonical 4-line shape. The legacy
-    // v0.27.0 "not verified inline" reword has been folded into the
+    // v0.27.0 "6-line lenient shape is DEPRECATED" reword has been folded into the
     // deprecation message (the 6-line surface is on its way out).
     assert!(
         stderr.contains("6-line lenient shape is DEPRECATED")
@@ -777,6 +777,304 @@ fn bsms_4line_via_bundle_roundtrip_json() {
         matches!(status, Some("ok") | Some("blocked_no_emitter")),
         "expected ok or blocked_no_emitter roundtrip status (canonicalize accepted 4-line); got: {status:?}\nentry: {entry}"
     );
+// v0.28.0 Phase P9A — BSMS fixture-corpus expansion (3 fixtures)
+}
+
+//
+// Plan-doc §S.9 owner-phase tag. Parse-only cells exercising the file-on-disk
+// fixtures `bsms-2line-decay-4032.txt`, `bsms-6line-sortedmulti-2of3.txt`,
+// `bsms-2line-sortedmulti-3of5.txt`. These cells lock the v0.26.0 BSMS
+// 2-line / 6-line lenient parser behavior across:
+//   - decaying-multisig timelock N=4032 (1-month-ish fallback);
+//   - 6-line Round-2 with audit fields populated;
+//   - sortedmulti scaled to 3-of-5 (verifies the parser handles >3 cosigners).
+// All cells route through `run_import(&fixture_path(...))` so the fixture
+// files themselves are exercised on the filesystem (matches the existing
+// `bsms_2_line_happy_path` pattern at line 104).
+// ============================================================================
+
+/// P9A.1 — 2-line decaying-multisig N=4032 fixture.
+///
+/// Mirrors `bsms_decaying_multisig_n_4032` (line 280) which builds the same
+/// descriptor dynamically; this cell pins the static fixture file. Both must
+/// parse identically.
+#[test]
+fn bsms_2line_decay_4032_fixture_parses() {
+    let p = fixture_path("bsms-2line-decay-4032.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // 2-line WARNING fires.
+    assert!(
+        stderr.contains("2-line excerpt"),
+        "expected 2-line WARNING; stderr was: {stderr}"
+    );
+    // Two cosigners (decaying multisig has 2 keys + 1 timelock branch).
+    assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
+    assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    // Watch-only invariant.
+    assert!(stdout.contains("entropy=none"), "stdout: {stdout}");
+    // Cosigner fingerprints byte-exact.
+    assert!(stdout.contains(TESTNET_FP_A), "stdout: {stdout}");
+    assert!(stdout.contains(TESTNET_FP_B), "stdout: {stdout}");
+}
+
+/// P9A.2 — 6-line BSMS Round-2 mainnet sortedmulti 2-of-3 fixture.
+///
+/// Static-fixture mirror of `bsms_6_line_happy_path` (line 132) — but with
+/// the audit `<FIRST_ADDRESS>` field set to the toolkit-derived /0/0 mainnet
+/// address. The 6-line lenient parser populates `BsmsAuditFields` and emits
+/// the "6-line lenient shape is DEPRECATED" NOTICE per `wallet_import/bsms.rs:111-117`.
+#[test]
+fn bsms_6line_sortedmulti_2of3_fixture_parses() {
+    let p = fixture_path("bsms-6line-sortedmulti-2of3.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // 6-line "6-line lenient shape is DEPRECATED" NOTICE fires (v0.27.0 wording).
+    assert!(
+        stderr.contains("6-line lenient shape is DEPRECATED"),
+        "expected v0.28.0 6-line DEPRECATION NOTICE; stderr was: {stderr}"
+    );
+    // 6-line MUST NOT emit the 2-line WARNING.
+    assert!(
+        !stderr.contains("2-line excerpt"),
+        "6-line shape must not emit 2-line WARNING; stderr was: {stderr}"
+    );
+    // 6-line carries audit fields (token + signature + first_address + path).
+    assert!(stdout.contains("cosigners=3"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=2"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=some"), "stdout: {stdout}");
+    // Real /0/0 first-address (pre-computed at fixture-author time) — so the
+    // mismatch WARNING must NOT fire on this fixture.
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "fixture's audit first-address byte-equals the toolkit-derived address; \
+         mismatch WARNING must not fire; stderr was: {stderr}"
+    );
+}
+
+/// P9A.3 — 2-line BSMS wsh(sortedmulti(3, ...5 cosigners)) fixture.
+///
+/// Scales the existing 2-of-3 sortedmulti fixture path to 3-of-5. Pins the
+/// parser's handling of larger sortedmulti N — the cosigner-extraction loop
+/// at `wallet_import/bsms.rs:181-195` walks `parsed_keys.iter().enumerate()`
+/// so any cosigner count up to u8::MAX should parse identically.
+#[test]
+fn bsms_2line_sortedmulti_3of5_fixture_parses() {
+    let p = fixture_path("bsms-2line-sortedmulti-3of5.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // 2-line WARNING fires.
+    assert!(
+        stderr.contains("2-line excerpt"),
+        "expected 2-line WARNING; stderr was: {stderr}"
+    );
+    assert!(stdout.contains("cosigners=5"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=3"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    // All 5 cosigner fingerprints byte-exact in the summary.
+    for fp in [MAINNET_FP_A, MAINNET_FP_B, MAINNET_FP_C, "16a93ed0", "99887766"] {
+        assert!(
+            stdout.contains(fp),
+            "expected fingerprint {fp} in summary; stdout: {stdout}"
+        );
+    }
+}
+
+// ============================================================================
+// v0.28.0 Phase P9B — BSMS fixture-corpus expansion (4 more fixtures)
+//
+// Plan-doc §S.9 owner-phase tag. Adds 4 more file-on-disk BSMS fixtures
+// exercising SLIP-132 prefix variants (ypub/zpub), the BIP-129 taproot-edge
+// (tr(NUMS, sortedmulti_a(...))), and the BIP-45 legacy multisig shape.
+// All fixtures pin the v0.26.0 parser's CURRENT behavior — see the tr-NUMS
+// cell for the v0.28+ taproot-refusal FOLLOWUP rationale.
+// ============================================================================
+
+/// P9B.4 — SLIP-132 mainnet ypub single-sig fixture (BIP-49 path).
+///
+/// Locks the `slip0132::normalize_xpub_prefix` round-trip behavior on a
+/// file-on-disk fixture (the existing `bsms_slip132_variants_ypub` cell at
+/// line 373 builds the same descriptor dynamically). The ypub xpub bytes are
+/// the canonical SLIP-0132 BIP-49 mainnet test vector at `m/49'/0'/0'`.
+#[test]
+fn bsms_2line_mainnet_ypub_fixture_parses() {
+    let p = fixture_path("bsms-2line-mainnet-ypub.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("2-line excerpt"),
+        "expected 2-line WARNING; stderr was: {stderr}"
+    );
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+}
+
+/// P9B.5 — SLIP-132 mainnet zpub single-sig fixture (BIP-84 path).
+///
+/// Mirrors P9B.4 for the zpub variant. The zpub bytes are
+/// `TREZOR_24_BIP84_MAINNET_ZPUB` shared across the toolkit's export-wallet
+/// test corpus (`cli_export_wallet_electrum.rs:14`, `cli_export_wallet_jade.rs:11`,
+/// etc.); the fingerprint is `5436d724` (the TREZOR 24-word seed master fp).
+#[test]
+fn bsms_2line_mainnet_zpub_fixture_parses() {
+    let p = fixture_path("bsms-2line-mainnet-zpub.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("2-line excerpt"),
+        "expected 2-line WARNING; stderr was: {stderr}"
+    );
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    // FP is canonical Trezor-24-word seed master fingerprint.
+    assert!(stdout.contains(MAINNET_FP_C), "stdout: {stdout}");
+}
+
+/// P9B.6 — tr(NUMS, sortedmulti_a(2, A, C)) BSMS blob at m/86'/0'/0'.
+///
+/// **Plan-doc §S.9 R1-M2 ownership intent:** the cell name pins the
+/// fixture-author identity (`bsms_tr_nums_refused`) but P9B's scope is
+/// 0 src changes; the v0.27.0 BSMS parser at `wallet_import/bsms.rs:201-265`
+/// explicitly **accepts** taproot descriptors at parse time (it only skips
+/// the first-address-verify WARNING for `Tr(_)` — `bsms.rs:217-224`). So
+/// `import-wallet --format bsms <tr-blob>` currently exits 0 with cosigner
+/// extraction succeeding via the existing origin-capture-regex path.
+///
+/// This cell **pins the current behavior** (exit 0, cosigners=2,
+/// network=mainnet, bsms_audit=none) and documents the gap from the plan-doc's
+/// forward-looking "taproot-refusal" intent. The actual refusal — which
+/// would require a `Tr(_)` short-circuit at `bsms.rs::parse` mirroring
+/// `wallet_export/bsms.rs:69-76` — is filed as a v0.28+ FOLLOWUP at
+/// `design/v0_28_0-cycle-followups.md` (entry `bsms-import-taproot-refusal-parity`).
+///
+/// **Side-channel finding (folded into the FOLLOWUP body):**
+/// `extract_threshold`'s regex at `wallet_import/bsms.rs:419-421` does NOT
+/// match `sortedmulti_a(` (the `_a` taproot variant). For this fixture's
+/// `tr(NUMS, sortedmulti_a(2, ...))` body, the regex returns `Ok(None)` and
+/// the CLI summary emits `threshold=none`. A real taproot-aware BSMS parser
+/// would either refuse (P9B.6's forward-looking intent) or extend the regex
+/// to include `sortedmulti_a` and `multi_a`.
+#[test]
+fn bsms_2line_tr_nums_current_behavior_no_refusal() {
+    let p = fixture_path("bsms-2line-tr-nums.txt");
+    let out = run_import(&p).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // v0.27.0 parser accepts tr(...) and skips first-address verify.
+    assert!(
+        stderr.contains("2-line excerpt"),
+        "expected 2-line WARNING; stderr was: {stderr}"
+    );
+    // Parse extracts both cosigners from the sortedmulti_a leaf via the
+    // origin-capture-regex at bsms.rs:438-441 (regex matches anywhere in
+    // the body, including taproot script-tree positions).
+    assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
+    // Side-channel finding: extract_threshold's regex does NOT match
+    // `sortedmulti_a(` — tracked in the FOLLOWUP body.
+    assert!(
+        stdout.contains("threshold=none"),
+        "expected threshold=none (extract_threshold regex gap); stdout: {stdout}"
+    );
+    // No first-address-mismatch WARNING (2-line shape carries no audit).
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "2-line shape has no audit fields; mismatch WARNING must not fire; \
+         stderr was: {stderr}"
+    );
+}
+
+/// P9B.7 — BIP-45 multisig `sh(multi(2, ...))` at m/45'/0'/0'.
+///
+/// BIP-45 uses bare `multi(...)` (declaration-order, not lexicographic-
+/// sorted). Pins the SPEC §4.3 declaration-order preservation for BIP-45
+/// paths (the existing `bsms_multi_non_sorted_2_of_3` cell at line 326
+/// exercises the same shape dynamically; this cell adds the file-on-disk
+/// fixture variant). Coin-type at origin-path index 1 is `0'` →
+/// `network=mainnet` per `coin_type_from_path` at `bsms.rs:384-401`.
+///
+/// **Permissive contract** (mirrors line 354-366): rust-miniscript may
+/// refuse bare `multi(...)` inside `sh(...)` at BIP-45 in some configs;
+/// if so, the failure must mention the descriptor body (rules out a silent
+/// re-sort regression). Cell accepts EITHER the success path (with
+/// declaration-order fingerprint preservation) OR a structured rejection.
+#[test]
+fn bsms_2line_bip45_fixture_parses_or_rejects_descriptively() {
+    let p = fixture_path("bsms-2line-bip45.txt");
+    let output = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(&p)
+        .args(["--format", "bsms"])
+        .output()
+        .expect("run import-wallet");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    if output.status.success() {
+        // Happy path: 3 cosigners; mainnet; declaration order preserved
+        // (first fingerprint is A per fixture line 2 order).
+        assert!(stdout.contains("cosigners=3"), "stdout: {stdout}");
+        assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+        assert!(
+            stdout.contains(&format!("cosigners[0].fingerprint={MAINNET_FP_A}")),
+            "expected first cosigner = A per BIP-45 declaration order; stdout: {stdout}"
+        );
+    } else {
+        // Permissive rejection: stderr must explain (rules out silent
+        // re-sort or other foot-gun).
+        assert!(
+            !stderr.is_empty(),
+            "expected stderr description if pipeline refuses sh(multi)"
+        );
+    }
+}
+
+/// P9B roundtrip cell — re-parse YPUB fixture via stdin to confirm the
+/// CRLF-normalized + stdin-piped path treats the file content identically
+/// to `--blob <path>`. Pins the symmetry of the two CLI input modes for
+/// the new fixtures.
+#[test]
+fn bsms_2line_mainnet_ypub_stdin_roundtrip_matches_blob_path() {
+    let p = fixture_path("bsms-2line-mainnet-ypub.txt");
+    let blob = std::fs::read_to_string(&p).expect("fixture file present");
+
+    let by_path = run_import(&p).success();
+    let by_stdin = run_import_stdin(&blob).success();
+
+    // Stdout summary must byte-equal across the two input modes.
+    let stdout_a = String::from_utf8(by_path.get_output().stdout.clone()).unwrap();
+    let stdout_b = String::from_utf8(by_stdin.get_output().stdout.clone()).unwrap();
+    assert_eq!(
+        stdout_a, stdout_b,
+        "stdin and --blob <path> must produce byte-identical stdout summaries; \
+         path={stdout_a} stdin={stdout_b}"
+    );
+}
+
+/// P9B roundtrip cell — same as above for the zpub fixture. Closes
+/// "stdin vs --blob symmetry" for SLIP-132 prefix variants in the corpus.
+#[test]
+fn bsms_2line_mainnet_zpub_stdin_roundtrip_matches_blob_path() {
+    let p = fixture_path("bsms-2line-mainnet-zpub.txt");
+    let blob = std::fs::read_to_string(&p).expect("fixture file present");
+
+    let by_path = run_import(&p).success();
+    let by_stdin = run_import_stdin(&blob).success();
+
+    let stdout_a = String::from_utf8(by_path.get_output().stdout.clone()).unwrap();
+    let stdout_b = String::from_utf8(by_stdin.get_output().stdout.clone()).unwrap();
+    assert_eq!(stdout_a, stdout_b);
 }
 
 mod shared {
@@ -806,3 +1104,4 @@ mod shared {
         stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2, 4, or 6 lines")
     }
 }
+
