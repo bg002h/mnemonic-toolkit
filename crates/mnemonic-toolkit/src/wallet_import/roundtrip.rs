@@ -302,11 +302,89 @@ pub(crate) fn canonicalize_coldcard_multisig(_blob: &[u8]) -> Result<String, Too
 }
 
 /// SPEC §11.6 — canonicalize an Electrum wallet JSON blob.
-/// Body lands in Phase P6B.
-pub(crate) fn canonicalize_electrum(_blob: &[u8]) -> Result<String, ToolkitError> {
-    Err(ToolkitError::BadInput(
-        "canonicalize_electrum: not yet implemented; electrum ingest lands in Phase P6B".into(),
-    ))
+///
+/// Semantic round-trip: parse the blob's JSON, drop wallet-state fields
+/// (`addr_history`, `addresses`, `channels`, `labels`, `transactions`, etc.
+/// — runtime state not reconstructable from key material; mirrors
+/// `wallet_import::electrum::collect_dropped_fields`), then re-emit via
+/// `serde_json::to_string_pretty` with `BTreeMap` ordering for byte-stable
+/// output (mirrors `canonicalize_bitcoin_core`).
+///
+/// Refused wallet shapes (`use_encryption: true`, `wallet_type: 2fa`,
+/// `wallet_type: imported`) are NOT canonicalized — they would fail the
+/// downstream `--json` envelope roundtrip anyway. Canonicalize returns the
+/// same `ToolkitError::ImportWalletParse` that `ElectrumParser::parse`
+/// would, so the envelope's `canonicalize_failed` arm fires with the
+/// user-facing refusal text.
+pub(crate) fn canonicalize_electrum(blob: &[u8]) -> Result<String, ToolkitError> {
+    let mut value: Value = serde_json::from_slice(blob).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "canonicalize_electrum: invalid JSON: {e}"
+        ))
+    })?;
+
+    let obj = value.as_object_mut().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "canonicalize_electrum: top-level JSON value is not an object".to_string(),
+        )
+    })?;
+
+    // Refuse same shapes the parser refuses (encrypted / 2fa / imported).
+    if obj.get("use_encryption").and_then(Value::as_bool) == Some(true) {
+        return Err(ToolkitError::ImportWalletParse(
+            "canonicalize_electrum: encrypted wallet files require decrypting first \
+             (FOLLOWUP wallet-import-electrum-encrypted)"
+                .to_string(),
+        ));
+    }
+    if let Some(wt) = obj.get("wallet_type").and_then(Value::as_str) {
+        if wt == "2fa" || wt == "imported" {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "canonicalize_electrum: wallet_type `{wt}` is refused at parse time; \
+                 see §11.6.1 for the corresponding refusal template"
+            )));
+        }
+    }
+
+    // Drop runtime-state fields (mirrors
+    // wallet_import::electrum::collect_dropped_fields).
+    for f in [
+        "addr_history",
+        "addresses",
+        "channels",
+        "channel_backups",
+        "fiat_value",
+        "labels",
+        "spent_outpoints",
+        "stored_height",
+        "transactions",
+        "tx_fees",
+        "txi",
+        "txo",
+        "verified_tx3",
+    ] {
+        obj.remove(f);
+    }
+
+    // Re-emit with BTreeMap ordering for byte-stable output. We rebuild
+    // the top-level object via BTreeMap; nested objects are emitted
+    // via serde_json's default ordering (which is also alphabetical when
+    // the `preserve_order` feature is OFF, the default).
+    let mut sorted: BTreeMap<String, Value> = BTreeMap::new();
+    for (k, v) in obj.iter() {
+        sorted.insert(k.clone(), v.clone());
+    }
+    serde_json::to_string_pretty(&sorted)
+        .map(|s| {
+            let mut s = s;
+            s.push('\n');
+            s
+        })
+        .map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "canonicalize_electrum: serialize: {e}"
+            ))
+        })
 }
 
 /// SPEC §11.5 — canonicalize a Jade multisig-file JSON wrapper.
@@ -835,15 +913,72 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_electrum_skeleton_returns_not_yet_implemented() {
-        let err = canonicalize_electrum(b"any blob").unwrap_err();
+    fn canonicalize_electrum_real_body_returns_parse_error_on_garbage_blob() {
+        // v0.28.0 P6B: skeleton replaced with real body. Non-JSON garbage
+        // now produces ImportWalletParse with the canonicalize_electrum
+        // prefix. (Pre-P6B test pinned the BadInput("not yet implemented")
+        // skeleton; updated by P6B in lockstep with the body landing.)
+        let err = canonicalize_electrum(b"not json at all").unwrap_err();
         match err {
-            ToolkitError::BadInput(msg) => {
-                assert!(msg.contains("not yet implemented"));
-                assert!(msg.contains("P6B"), "msg must cite Phase P6B; got: {msg}");
-                assert!(msg.contains("electrum"), "msg must cite format; got: {msg}");
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(
+                    msg.contains("canonicalize_electrum") && msg.contains("invalid JSON"),
+                    "msg must cite electrum + invalid JSON; got: {msg}"
+                );
             }
-            other => panic!("expected BadInput, got: {other:?}"),
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_electrum_drops_runtime_state_fields() {
+        // v0.28.0 P6B: real body removes wallet-state fields (addr_history,
+        // addresses, labels, transactions, ...). Re-emit is byte-stable
+        // (alphabetical via BTreeMap) and ends with a trailing newline.
+        let blob = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":false,"keystore":{"type":"bip32","xpub":"x"},"addr_history":{},"transactions":{},"labels":{}}"#;
+        let out = canonicalize_electrum(blob).expect("canonicalize must succeed");
+        // Dropped fields absent in output.
+        assert!(!out.contains("addr_history"));
+        assert!(!out.contains("transactions"));
+        assert!(!out.contains("labels"));
+        // Key fields preserved.
+        assert!(out.contains("seed_version"));
+        assert!(out.contains("wallet_type"));
+        assert!(out.contains("keystore"));
+        // Trailing newline.
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn canonicalize_electrum_refuses_encrypted() {
+        let blob = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":true,"keystore":"blob"}"#;
+        let err = canonicalize_electrum(blob).unwrap_err();
+        match err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(msg.contains("encrypted wallet files require decrypting"));
+                assert!(msg.contains("wallet-import-electrum-encrypted"));
+            }
+            other => panic!("expected ImportWalletParse, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canonicalize_electrum_refuses_2fa_and_imported() {
+        for wt in &["2fa", "imported"] {
+            let blob = format!(
+                r#"{{"seed_version":17,"wallet_type":"{wt}","use_encryption":false}}"#
+            );
+            let err = canonicalize_electrum(blob.as_bytes()).unwrap_err();
+            match err {
+                ToolkitError::ImportWalletParse(msg) => {
+                    assert!(
+                        msg.contains(&format!("wallet_type `{wt}`"))
+                            && msg.contains("refused at parse time"),
+                        "expected refusal text for {wt}; got: {msg}"
+                    );
+                }
+                other => panic!("expected ImportWalletParse for {wt}, got: {other:?}"),
+            }
         }
     }
 
@@ -891,10 +1026,15 @@ mod tests {
         // Empty blob is a degenerate input; skeletons must still return the
         // BadInput("not yet implemented") shape (not panic, not Ok, not a
         // different error class). This pins the "shape-only" contract.
+        //
+        // v0.28.0 P6B: `electrum` removed from this list — its skeleton was
+        // replaced with the real body at P6B. The corresponding empty-blob
+        // assertion for the real-body shape lives at
+        // `canonicalize_electrum_real_body_returns_parse_error_on_garbage_blob`
+        // + the dedicated electrum cells above.
         for (name, result) in [
             ("coldcard", canonicalize_coldcard(b"")),
             ("coldcard-multisig", canonicalize_coldcard_multisig(b"")),
-            ("electrum", canonicalize_electrum(b"")),
             ("jade", canonicalize_jade(b"")),
             ("sparrow", canonicalize_sparrow(b"")),
             ("specter", canonicalize_specter(b"")),
@@ -904,6 +1044,14 @@ mod tests {
                 "{name} skeleton must return BadInput(not yet implemented) on empty blob; got: {result:?}"
             );
         }
+    }
+
+    #[test]
+    fn canonicalize_electrum_returns_parse_error_on_empty_blob() {
+        // Post-P6B: empty blob is now an ImportWalletParse (invalid JSON),
+        // not a BadInput("not yet implemented") sentinel.
+        let err = canonicalize_electrum(b"").unwrap_err();
+        assert!(matches!(err, ToolkitError::ImportWalletParse(_)));
     }
 
     #[test]

@@ -1,0 +1,26 @@
+{
+  "seed_version": 17,
+  "use_encryption": false,
+  "wallet_type": "2of3",
+  "x1/": {
+    "derivation": "m/48'/0'/0'/2'",
+    "label": "VaultColdMS-1",
+    "root_fingerprint": "b8688df1",
+    "type": "bip32",
+    "xpub": "Zpub75ybJh4YZjnMskAAUkpy6uLizWcTTRC91yDtz9RcRwtavi4wHpBPZDEYUu9LoAPb6NQZNqKd6eKqF4FhqgWSaWQdqSt4FmdQkQH9uMmHhSh"
+  },
+  "x2/": {
+    "derivation": "m/48'/0'/0'/2'",
+    "label": "VaultColdMS-2",
+    "root_fingerprint": "28645006",
+    "type": "bip32",
+    "xpub": "Zpub74LquwpiAdpsXwRDJp46dQ9BhcoEhk3vPktqwMqGrQYmjRhYQi5mbemCRiHUXVh1Ypu5XRYzbbznqxodCwK5NPeVXAPVAuLGKrr1LUMFmPh"
+  },
+  "x3/": {
+    "derivation": "m/48'/0'/0'/2'",
+    "label": "VaultColdMS-3",
+    "root_fingerprint": "5436d724",
+    "type": "bip32",
+    "xpub": "Zpub72UafiS3U4xBBsiYjpCRcsEqm8i4Uo2Y2e5DmoNQALzLEXfyaJ7RvrGNGKznahzYT9T2BdMXiGPZ55NiuVukpcueupHwtfXeRKF3wyH3XDv"
+  }
+}

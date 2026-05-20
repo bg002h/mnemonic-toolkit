@@ -1,0 +1,12 @@
+{
+  "seed_version": 17,
+  "wallet_type": "standard",
+  "use_encryption": false,
+  "keystore": {
+    "type": "bip32",
+    "xpub": "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP",
+    "derivation": "m/49'/0'/0'",
+    "root_fingerprint": "deadbeef",
+    "label": "TestBip49"
+  }
+}

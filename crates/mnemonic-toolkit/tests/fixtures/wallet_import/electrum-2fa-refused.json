@@ -1,0 +1,12 @@
+{
+  "seed_version": 17,
+  "wallet_type": "2fa",
+  "use_encryption": false,
+  "x1/": {
+    "type": "bip32",
+    "xpub": "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S",
+    "derivation": "m/44'/0'/0'",
+    "root_fingerprint": "5436d724",
+    "label": "trustedcoin-cosigner"
+  }
+}

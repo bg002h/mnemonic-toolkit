@@ -1,0 +1,9 @@
+{
+  "seed_version": 17,
+  "wallet_type": "imported",
+  "use_encryption": false,
+  "addresses": {
+    "bc1qaddr1": {"index": 0, "type": "p2wpkh"},
+    "bc1qaddr2": {"index": 1, "type": "p2wpkh"}
+  }
+}

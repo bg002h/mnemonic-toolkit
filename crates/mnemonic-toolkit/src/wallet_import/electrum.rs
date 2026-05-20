@@ -36,10 +36,19 @@
 //!
 //! See `parse()` doc-comment for the per-`wallet_type` dispatch table.
 
-use super::{WalletFormatParser, ParsedImport};
+use super::{
+    pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, ImportProvenance,
+    ParsedImport, WalletFormatParser,
+};
 use crate::error::ToolkitError;
+use crate::parse_descriptor;
+use crate::slip0132::normalize_xpub_prefix;
+use crate::synthesize::{xpub_to_65, ResolvedSlot};
+use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use miniscript::descriptor::checksum::Engine as ChecksumEngine;
 use serde_json::Value;
 use std::io::Write;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 /// SPEC §11.6 — Electrum wallet-file parser.
@@ -149,15 +158,672 @@ impl WalletFormatParser for ElectrumParser {
         }
     }
 
-    /// SPEC §11.6 parse contract — body lands in Phase P6B. The P6A skeleton
-    /// emits a typed `BadInput` carrying the P6B sentinel so an explicit
-    /// `--format electrum` invocation surfaces a clear "not yet wired" error
-    /// rather than a panic.
-    fn parse(_blob: &[u8], _stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError> {
-        Err(ToolkitError::BadInput(
-            "wallet_import::electrum::parse: skeleton only; body lands in Phase P6B".into(),
-        ))
+    /// SPEC §11.6 parse contract — per-`wallet_type` dispatch:
+    ///
+    /// - `"standard"` → singlesig parse: extract `keystore.{xpub, derivation,
+    ///   root_fingerprint}`, normalize SLIP-132 xpub, infer wrapper from
+    ///   `(slip132_variant, derivation_purpose)`, synthesize concrete-keys
+    ///   descriptor, run through the toolkit's `concrete_keys_to_placeholders`
+    ///   + `parse_descriptor` pipeline.
+    /// - `"<k>of<n>"` → multisig parse: iterate `x1/`..`xN/` per-cosigner
+    ///   sub-objects; wrapper is `wsh(sortedmulti)` (Zpub) or
+    ///   `sh(wsh(sortedmulti))` (Ypub) or `sh(sortedmulti)` (xpub legacy);
+    ///   K and N parsed from the regex.
+    /// - `"2fa"` / `"imported"` → REFUSE with SPEC §11.6.1 template.
+    /// - `use_encryption: true` → REFUSE with SPEC §11.6.1 encrypted template.
+    fn parse(blob: &[u8], stderr: &mut dyn Write) -> Result<Vec<ParsedImport>, ToolkitError> {
+        let value: Value = serde_json::from_slice(blob).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: invalid JSON: {e}"
+            ))
+        })?;
+        let obj = value.as_object().ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: electrum: parse error: top-level JSON value is not an object"
+                    .to_string(),
+            )
+        })?;
+
+        // §11.6.1 — encrypted refusal precedes type-discrimination because
+        // sensitive keystore fields are unreadable; we cannot extract xpub
+        // from a base64-encrypted keystore blob.
+        if obj.get("use_encryption").and_then(Value::as_bool) == Some(true) {
+            return Err(ToolkitError::ImportWalletParse(
+                "import-wallet: electrum: encrypted wallet files require decrypting via \
+                 'electrum --decrypt-wallet' first; encrypted ingest not yet supported \
+                 (FOLLOWUP wallet-import-electrum-encrypted)"
+                    .to_string(),
+            ));
+        }
+
+        let seed_version = obj
+            .get("seed_version")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(
+                    "import-wallet: electrum: parse error: missing or non-integer \
+                     `seed_version` field"
+                        .to_string(),
+                )
+            })?;
+        if !(11..=71).contains(&seed_version) {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: seed_version {seed_version} outside \
+                 supported range {{11..=71}} (Electrum 4.x post-upgrade canonical range)"
+            )));
+        }
+        // Cast: range-checked above, fits in u32.
+        let seed_version: u32 = seed_version as u32;
+
+        let wallet_type = obj
+            .get("wallet_type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(
+                    "import-wallet: electrum: parse error: missing or non-string \
+                     `wallet_type` field"
+                        .to_string(),
+                )
+            })?;
+
+        // §11.6.1 — 2fa / imported refusal templates.
+        match wallet_type {
+            "2fa" => {
+                return Err(ToolkitError::ImportWalletParse(
+                    "import-wallet: electrum: 2fa wallets require TrustedCoin two-factor \
+                     restoration; ingest not supported"
+                        .to_string(),
+                ))
+            }
+            "imported" => {
+                return Err(ToolkitError::ImportWalletParse(
+                    "import-wallet: electrum: imported-addresses wallets have no derivation \
+                     chain to reconstruct; ingest not supported"
+                        .to_string(),
+                ))
+            }
+            _ => {}
+        }
+
+        let wt_enum: ElectrumWalletType = if wallet_type == "standard" {
+            ElectrumWalletType::Standard
+        } else if let Some((k, n)) = parse_multisig_wallet_type(wallet_type) {
+            // SPEC §11.6: bounds-validate per Electrum's `multisig_type` upstream
+            // (k >= 1, n <= 15, k <= n).
+            if k < 1 || n < 2 || n > 15 || k > n {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: wallet_type `{wallet_type}` has \
+                     out-of-bounds (k, n) = ({k}, {n}); require 1 <= k <= n and 2 <= n <= 15"
+                )));
+            }
+            ElectrumWalletType::Multisig { k, n }
+        } else {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: unrecognized wallet_type `{wallet_type}`; \
+                 accepted: \"standard\", \"<k>of<n>\" pattern, \"2fa\", \"imported\""
+            )));
+        };
+
+        // SPEC §11.6 step 3 — dropped wallet-state fields. Electrum's wallet
+        // file carries runtime state (address history, transactions, channel
+        // state) that is not reconstructable from key material alone. Surface
+        // a single stderr NOTICE listing what was present (per SPEC §2.4,
+        // analogous to bitcoin-core's `aggregate_dropped` block).
+        let dropped_fields = collect_dropped_fields(obj);
+        if !dropped_fields.is_empty() {
+            writeln!(
+                stderr,
+                "notice: import-wallet: electrum: dropped wallet-state fields {}: not preserved \
+                 in bundle output (key-state only)",
+                dropped_fields.join(", ")
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+
+        // Per-wallet_type parse-arm. Both arms produce a descriptor body
+        // bearing concrete `[fp/path]xpub` keys; the rest of the pipeline
+        // (placeholder substitution + parse_descriptor) is shared.
+        let (descriptor_body, network, threshold, original_descriptor) = match wt_enum {
+            ElectrumWalletType::Standard => parse_standard(obj)?,
+            ElectrumWalletType::Multisig { k, n } => parse_multisig(obj, k, n)?,
+        };
+
+        let descriptor_body_no_csum =
+            miniscript::descriptor::checksum::verify_checksum(&descriptor_body).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: synthesized BIP-380 checksum \
+                     validation failed (internal bug; descriptor: {descriptor_body}): {e}"
+                ))
+            })?;
+
+        let (placeholder_form, parsed_keys, parsed_fingerprints) =
+            concrete_keys_to_placeholders(descriptor_body_no_csum).map_err(|e| {
+                ToolkitError::ImportWalletParse(e.message().replacen(
+                    "import-wallet: bsms:",
+                    "import-wallet: electrum:",
+                    1,
+                ))
+            })?;
+
+        let descriptor =
+            parse_descriptor::parse_descriptor(&placeholder_form, &parsed_keys, &parsed_fingerprints)
+                .map_err(|e| {
+                    ToolkitError::ImportWalletParse(format!(
+                        "import-wallet: electrum: parse error: {}",
+                        e.message()
+                    ))
+                })?;
+
+        // Per-cosigner ResolvedSlot vector. Walk the synthesized descriptor's
+        // origin annotations (which we just emitted from the parsed Electrum
+        // fields) and pair each with the parsed xpub.
+        let origins = extract_origin_components(descriptor_body_no_csum)?;
+        let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
+        for (slot_idx, _) in parsed_keys.iter().enumerate() {
+            let (fp, path, path_raw, xpub_str) = origins.get(slot_idx).cloned().ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: slot {slot_idx} out of range in \
+                     synthesized descriptor origins (internal bug)"
+                ))
+            })?;
+            let (neutral, _variant) = normalize_xpub_prefix(&xpub_str)?;
+            let xpub = Xpub::from_str(&neutral).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: xpub decode for slot {slot_idx}: {e}"
+                ))
+            })?;
+            debug_assert_eq!(xpub_to_65(&xpub), parsed_keys[slot_idx].payload);
+            cosigners.push(ResolvedSlot {
+                xpub,
+                fingerprint: fp,
+                path,
+                path_raw,
+                entropy: None,
+                master_xpub: None,
+                _entropy_pin: None,
+            });
+        }
+
+        validate_watch_only_resolved(&cosigners)?;
+
+        // v0.28.0 P6B → P6C handoff: ImportProvenance currently has no
+        // `Electrum(ElectrumSourceMetadata)` variant — P6C adds it
+        // alphabetically (Bsms < Electrum). P6B emits a `Bsms(None)`
+        // placeholder so the parse pipeline compiles + integration cells
+        // can exercise the descriptor / cosigner / network / threshold
+        // surface end-to-end. P6C swaps the placeholder for the real
+        // variant + populates `ElectrumSourceMetadata` from
+        // `(seed_version, wt_enum, dropped_fields, wallet_name=None)`.
+        // The fields are captured via let-bindings above so the diff at
+        // P6C is a single-arm replacement (no plumbing additions).
+        let _placeholder_provenance_inputs = (seed_version, &wt_enum, &dropped_fields);
+
+        Ok(vec![ParsedImport {
+            descriptor,
+            original_descriptor,
+            cosigners,
+            network,
+            threshold,
+            provenance: ImportProvenance::Bsms(None),
+        }])
     }
+}
+
+// ============================================================================
+// Per-wallet_type parse arms
+// ============================================================================
+
+/// SPEC §11.6 — singlesig parse. Returns `(descriptor_body_with_checksum,
+/// network, threshold=None, original_descriptor)`.
+fn parse_standard(
+    obj: &serde_json::Map<String, Value>,
+) -> Result<(String, bitcoin::Network, Option<u8>, String), ToolkitError> {
+    let keystore = obj.get("keystore").and_then(Value::as_object).ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "import-wallet: electrum: parse error: missing or non-object `keystore` field for \
+             wallet_type=standard"
+                .to_string(),
+        )
+    })?;
+
+    let xpub_str = keystore
+        .get("xpub")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: electrum: parse error: missing or non-string `keystore.xpub`"
+                    .to_string(),
+            )
+        })?;
+
+    let derivation = keystore
+        .get("derivation")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: electrum: parse error: missing or non-string \
+                 `keystore.derivation`"
+                    .to_string(),
+            )
+        })?;
+
+    let root_fingerprint = keystore
+        .get("root_fingerprint")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: electrum: parse error: missing or non-string \
+                 `keystore.root_fingerprint`"
+                    .to_string(),
+            )
+        })?;
+
+    // SLIP-132 variant + derivation purpose drive the wrapper choice.
+    let (neutral_xpub, variant) = normalize_xpub_prefix(xpub_str)?;
+    let xpub = Xpub::from_str(&neutral_xpub).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: keystore.xpub decode failed: {e}"
+        ))
+    })?;
+
+    let path = parse_derivation_path(derivation)?;
+    let purpose = derivation_purpose(&path)?;
+    let network = network_from_derivation(&path)?;
+    let wrapper = singlesig_wrapper_from_variant_and_purpose(variant, purpose)?;
+
+    let fp_hex = normalize_fp_hex(root_fingerprint)?;
+    let path_no_m = derivation.trim_start_matches('m').trim_start_matches('/');
+    // Inner is `[fp/path]xpub/<0;1>/*` (the multipath/ranged tail mirrors
+    // Electrum's auto-derivation of `/0/*` receive + `/1/*` change).
+    let inner = format!(
+        "[{fp_hex}/{path_no_m}]{xpub}/<0;1>/*",
+        fp_hex = fp_hex,
+        path_no_m = path_no_m,
+        xpub = xpub, // re-rendered neutral form via Display
+    );
+    let body = wrap_singlesig(wrapper, &inner);
+    let checksum = render_checksum(&body)?;
+    let original = format!("{body}#{checksum}");
+    Ok((original.clone(), network, None, original))
+}
+
+/// SPEC §11.6 — multisig parse. Iterates `x1/`..`xN/` cosigner sub-objects;
+/// returns `(descriptor_body_with_checksum, network, threshold=Some(K),
+/// original_descriptor)`.
+fn parse_multisig(
+    obj: &serde_json::Map<String, Value>,
+    k: u8,
+    n: u8,
+) -> Result<(String, bitcoin::Network, Option<u8>, String), ToolkitError> {
+    let mut cosigners: Vec<(Fingerprint, DerivationPath, String, &'static str)> =
+        Vec::with_capacity(n as usize);
+
+    // Per-cosigner key is "x1/", "x2/", ... per Electrum's wallet_db.py
+    // (note the trailing slash; per the upstream code "version 55 removes
+    // trailing /" — pre-v55 wallets carry the slash, current Electrum
+    // 4.x writes still emit it as of FINAL_SEED_VERSION=71 per the toolkit's
+    // own electrum_multi_2of4.json fixture). We support both shapes
+    // (with and without slash) defensively.
+    for i in 0..n {
+        let key_with_slash = format!("x{}/", i + 1);
+        let key_no_slash = format!("x{}", i + 1);
+        let ks = obj
+            .get(&key_with_slash)
+            .or_else(|| obj.get(&key_no_slash))
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: missing or non-object cosigner key \
+                     `{key_with_slash}` (also tried `{key_no_slash}`)"
+                ))
+            })?;
+
+        let xpub_str = ks
+            .get("xpub")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: missing or non-string \
+                     `{key_with_slash}.xpub`"
+                ))
+            })?;
+        let derivation = ks
+            .get("derivation")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: missing or non-string \
+                     `{key_with_slash}.derivation`"
+                ))
+            })?;
+        let root_fingerprint = ks
+            .get("root_fingerprint")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: missing or non-string \
+                     `{key_with_slash}.root_fingerprint`"
+                ))
+            })?;
+
+        let (neutral_xpub, variant) = normalize_xpub_prefix(xpub_str)?;
+        let _xpub = Xpub::from_str(&neutral_xpub).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: `{key_with_slash}.xpub` decode failed: {e}"
+            ))
+        })?;
+
+        // Per-cosigner variant must agree across all cosigners (Electrum
+        // emits a uniform SLIP-132 variant per multisig wallet — all Zpub
+        // or all Ypub). Heterogeneous variants → parse error.
+        let path = parse_derivation_path(derivation)?;
+        let fp_hex = normalize_fp_hex(root_fingerprint)?;
+        let fp = Fingerprint::from_str(&fp_hex).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: `{key_with_slash}.root_fingerprint` \
+                 decode failed: {e}"
+            ))
+        })?;
+        cosigners.push((
+            fp,
+            path,
+            neutral_xpub,
+            variant.unwrap_or("xpub"),
+        ));
+    }
+
+    // Cosigner-variant agreement.
+    let first_variant = cosigners[0].3;
+    for (i, c) in cosigners.iter().enumerate().skip(1) {
+        if c.3 != first_variant {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: cosigner x{slot}/ uses SLIP-132 variant \
+                 `{ovariant}`, x1/ uses `{first_variant}`; all cosigners must share a variant",
+                slot = i + 1,
+                ovariant = c.3,
+            )));
+        }
+    }
+
+    // Cosigner-network agreement.
+    let networks: Vec<bitcoin::Network> = cosigners
+        .iter()
+        .map(|(_, p, _, _)| network_from_derivation(p))
+        .collect::<Result<Vec<_>, _>>()?;
+    let first_network = networks[0];
+    for (i, nw) in networks.iter().enumerate().skip(1) {
+        if *nw != first_network {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: cosigner x{slot}/ has network {nw:?}, \
+                 x1/ has {first_network:?}; all cosigners must share a network",
+                slot = i + 1,
+            )));
+        }
+    }
+
+    let wrapper = multisig_wrapper_from_variant(first_variant)?;
+    let inner: Vec<String> = cosigners
+        .iter()
+        .map(|(fp, path, xpub_str, _)| {
+            format!(
+                "[{fp}/{path}]{xpub_str}/<0;1>/*",
+                fp = format_fp(fp),
+                path = render_path_no_m(path),
+                xpub_str = xpub_str,
+            )
+        })
+        .collect();
+    let body = match wrapper {
+        MultisigWrapper::Wsh => format!("wsh(sortedmulti({k},{}))", inner.join(",")),
+        MultisigWrapper::ShWsh => format!("sh(wsh(sortedmulti({k},{})))", inner.join(",")),
+        MultisigWrapper::Sh => format!("sh(sortedmulti({k},{}))", inner.join(",")),
+    };
+    let checksum = render_checksum(&body)?;
+    let original = format!("{body}#{checksum}");
+    Ok((original.clone(), first_network, Some(k), original))
+}
+
+// ============================================================================
+// Inference helpers (variant + derivation → wrapper)
+// ============================================================================
+
+/// Parse Electrum's `m/<purpose>'/...` derivation string into a typed
+/// `DerivationPath`.
+fn parse_derivation_path(s: &str) -> Result<DerivationPath, ToolkitError> {
+    DerivationPath::from_str(s).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: derivation `{s}` parse failed: {e}"
+        ))
+    })
+}
+
+/// BIP-43 purpose (first hardened component) from a derivation path. Must
+/// be hardened.
+fn derivation_purpose(p: &DerivationPath) -> Result<u32, ToolkitError> {
+    let mut iter = p.into_iter();
+    let comp = iter.next().ok_or_else(|| {
+        ToolkitError::ImportWalletParse(
+            "import-wallet: electrum: parse error: derivation path is empty".to_string(),
+        )
+    })?;
+    match comp {
+        ChildNumber::Hardened { index } => Ok(*index),
+        ChildNumber::Normal { .. } => Err(ToolkitError::ImportWalletParse(
+            "import-wallet: electrum: parse error: derivation purpose component must be \
+             hardened (e.g., 84')"
+                .to_string(),
+        )),
+    }
+}
+
+/// BIP-48 coin-type (second hardened component). 0' → mainnet, 1' → testnet.
+fn network_from_derivation(p: &DerivationPath) -> Result<bitcoin::Network, ToolkitError> {
+    let comps: Vec<&ChildNumber> = p.into_iter().collect();
+    if comps.len() < 2 {
+        return Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: derivation path has only {} components; \
+             need >=2 for coin-type inference",
+            comps.len()
+        )));
+    }
+    match comps[1] {
+        ChildNumber::Hardened { index: 0 } => Ok(bitcoin::Network::Bitcoin),
+        ChildNumber::Hardened { index: 1 } => Ok(bitcoin::Network::Testnet),
+        ChildNumber::Hardened { index } => Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: unsupported coin-type {index}; only 0 \
+             (mainnet) and 1 (testnet) supported"
+        ))),
+        ChildNumber::Normal { .. } => Err(ToolkitError::ImportWalletParse(
+            "import-wallet: electrum: parse error: coin-type component must be hardened"
+                .to_string(),
+        )),
+    }
+}
+
+/// SPEC §11.6 — singlesig wrapper choice from `(SLIP-132 variant, purpose)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SinglesigWrapper {
+    /// `pkh(<inner>)` — BIP-44.
+    Pkh,
+    /// `wpkh(<inner>)` — BIP-84 (or BIP-84 neutral-form hand-edit).
+    Wpkh,
+    /// `sh(wpkh(<inner>))` — BIP-49.
+    ShWpkh,
+    /// `tr(<inner>)` — BIP-86.
+    Tr,
+}
+
+/// SPEC §11.6 — singlesig wrapper from `(SLIP-132 variant, purpose)`.
+///
+/// Variant table (per `wallet_export/electrum.rs::render_slip132_xpub`):
+/// - xpub + purpose=44 → pkh
+/// - xpub + purpose=86 → tr
+/// - xpub + purpose=84 → wpkh (rare; Electrum emits zpub here, but tolerate
+///   neutral form for hand-edited wallets)
+/// - xpub + purpose=49 → sh(wpkh) (rare; Electrum emits ypub)
+/// - ypub / upub → sh(wpkh)
+/// - zpub / vpub → wpkh
+fn singlesig_wrapper_from_variant_and_purpose(
+    variant: Option<&'static str>,
+    purpose: u32,
+) -> Result<SinglesigWrapper, ToolkitError> {
+    match (variant, purpose) {
+        (Some("zpub"), _) | (Some("vpub"), _) => Ok(SinglesigWrapper::Wpkh),
+        (Some("ypub"), _) | (Some("upub"), _) => Ok(SinglesigWrapper::ShWpkh),
+        (None, 44) => Ok(SinglesigWrapper::Pkh),
+        (None, 86) => Ok(SinglesigWrapper::Tr),
+        (None, 84) => Ok(SinglesigWrapper::Wpkh),
+        (None, 49) => Ok(SinglesigWrapper::ShWpkh),
+        (None, other) => Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: cannot infer wrapper for neutral xpub at \
+             purpose {other}'; supported singlesig purposes for neutral xpub are \
+             44 (pkh), 49 (sh(wpkh)), 84 (wpkh), 86 (tr)"
+        ))),
+        (Some(other), _) => Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: unexpected SLIP-132 variant `{other}` on \
+             singlesig keystore.xpub; expected xpub / ypub / zpub for mainnet or \
+             tpub / upub / vpub for testnet"
+        ))),
+    }
+}
+
+fn wrap_singlesig(w: SinglesigWrapper, inner: &str) -> String {
+    match w {
+        SinglesigWrapper::Pkh => format!("pkh({inner})"),
+        SinglesigWrapper::Wpkh => format!("wpkh({inner})"),
+        SinglesigWrapper::ShWpkh => format!("sh(wpkh({inner}))"),
+        SinglesigWrapper::Tr => format!("tr({inner})"),
+    }
+}
+
+/// SPEC §11.6 — multisig wrapper choice from cosigner SLIP-132 variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MultisigWrapper {
+    /// `wsh(sortedmulti(K, ...))` — Zpub cosigners (or Vpub testnet).
+    Wsh,
+    /// `sh(wsh(sortedmulti(K, ...)))` — Ypub cosigners (or Upub testnet).
+    ShWsh,
+    /// `sh(sortedmulti(K, ...))` — neutral xpub cosigners (legacy BIP-45 /
+    /// hand-edited wallets). Not common but tolerated.
+    Sh,
+}
+
+fn multisig_wrapper_from_variant(variant: &str) -> Result<MultisigWrapper, ToolkitError> {
+    match variant {
+        "Zpub" | "Vpub" => Ok(MultisigWrapper::Wsh),
+        "Ypub" | "Upub" => Ok(MultisigWrapper::ShWsh),
+        "xpub" | "tpub" => Ok(MultisigWrapper::Sh),
+        other => Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: unsupported multisig SLIP-132 variant \
+             `{other}`; expected Zpub / Ypub / Vpub / Upub or neutral xpub / tpub"
+        ))),
+    }
+}
+
+/// Normalize a `root_fingerprint` string (Electrum stores it lowercase,
+/// 8 hex chars). Accepts upper/lower case, rejects non-hex / wrong length.
+fn normalize_fp_hex(s: &str) -> Result<String, ToolkitError> {
+    if s.len() != 8 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: root_fingerprint `{s}` must be 8 lowercase \
+             hex characters"
+        )));
+    }
+    Ok(s.to_ascii_lowercase())
+}
+
+fn format_fp(fp: &Fingerprint) -> String {
+    fp.to_string().to_ascii_lowercase()
+}
+
+/// Render a `DerivationPath` as `84'/0'/0'` (no leading `m/`). Hardened
+/// components use `'`.
+fn render_path_no_m(p: &DerivationPath) -> String {
+    let s = p.to_string();
+    // bitcoin::bip32::DerivationPath::Display emits `m/84'/0'/0'`.
+    s.trim_start_matches('m').trim_start_matches('/').to_string()
+}
+
+/// Re-emit a BIP-380 checksum for a descriptor body via miniscript's
+/// `ChecksumEngine`. Used internally to synthesize a valid `#checksum`
+/// trailer on the parsed-from-Electrum descriptor body.
+fn render_checksum(body: &str) -> Result<String, ToolkitError> {
+    let mut e = ChecksumEngine::new();
+    e.input(body).map_err(|err| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: electrum: parse error: checksum input rejected: {err}"
+        ))
+    })?;
+    Ok(e.checksum())
+}
+
+/// Per-cosigner origin tuple lifted out of the descriptor body via the
+/// shared `[fp/path]xpub` regex pattern. Returned in declaration order.
+/// Mirrors `bsms::extract_origin_components` semantics with electrum error
+/// prefix.
+fn extract_origin_components(
+    descriptor_body: &str,
+) -> Result<Vec<(Fingerprint, DerivationPath, String, String)>, ToolkitError> {
+    let re = origin_capture_regex();
+    let mut out = Vec::new();
+    for cap in re.captures_iter(descriptor_body) {
+        let fp_hex = cap.get(1).expect("group 1").as_str();
+        let path_raw_inner = cap.get(2).expect("group 2").as_str();
+        let xpub_str = cap.get(3).expect("group 3").as_str();
+
+        let fp = Fingerprint::from_str(fp_hex).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: fingerprint hex: {e}"
+            ))
+        })?;
+        let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: electrum: parse error: derivation-path parse: {e}"
+            ))
+        })?;
+        let path_raw = format!("[{fp_hex}{path_raw_inner}]");
+        out.push((fp, path, path_raw, xpub_str.to_string()));
+    }
+    Ok(out)
+}
+
+fn origin_capture_regex() -> &'static regex::Regex {
+    static R: OnceLock<regex::Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        regex::Regex::new(
+            r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)",
+        )
+        .expect("origin_capture_regex is a fixed string literal")
+    })
+}
+
+/// Collect Electrum wallet-state field names present at top level that are
+/// not preserved in the bundle output. Drives the §2.4 stderr NOTICE.
+/// The discriminator set covers the runtime-state fields Electrum 4.x
+/// commonly writes (per `electrum/wallet_db.py`'s default keys).
+fn collect_dropped_fields(obj: &serde_json::Map<String, Value>) -> Vec<String> {
+    const STATE_FIELDS: &[&str] = &[
+        "addr_history",
+        "addresses",
+        "channels",
+        "channel_backups",
+        "fiat_value",
+        "labels",
+        "spent_outpoints",
+        "stored_height",
+        "transactions",
+        "tx_fees",
+        "txi",
+        "txo",
+        "verified_tx3",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for f in STATE_FIELDS {
+        if obj.contains_key(*f) {
+            out.push((*f).to_string());
+        }
+    }
+    out
 }
 
 /// SPEC §11.6 — `wallet_type` multisig pattern regex. Mirrors Electrum's
@@ -351,17 +1017,271 @@ mod tests {
         assert!(!ElectrumParser::sniff(blob));
     }
 
-    // ====== parse: skeleton stub ======
+    // ====== parse: P6B happy paths ======
 
     #[test]
-    fn parse_skeleton_returns_p6b_sentinel_error() {
+    fn parse_standard_bip84_produces_singlesig_bundle() {
         let mut stderr: Vec<u8> = Vec::new();
-        let err = ElectrumParser::parse(STANDARD_BIP84.as_bytes(), &mut stderr)
-            .expect_err("P6A skeleton must Err with P6B sentinel");
+        let parsed = ElectrumParser::parse(STANDARD_BIP84.as_bytes(), &mut stderr)
+            .expect("P6B standard parse must succeed");
+        assert_eq!(parsed.len(), 1, "standard wallet emits 1 bundle");
+        let p = &parsed[0];
+        assert_eq!(p.cosigners.len(), 1, "singlesig has 1 cosigner");
+        assert_eq!(p.threshold, None, "singlesig has no threshold");
+        assert_eq!(p.network, bitcoin::Network::Bitcoin);
+        // Cosigner xpub is the neutral form (SLIP-132 zpub → xpub).
+        let xpub_str = p.cosigners[0].xpub.to_string();
+        assert!(xpub_str.starts_with("xpub"), "neutral xpub form expected; got {xpub_str}");
+        // Descriptor should be `wpkh([fp/84'/0'/0']xpub.../<0;1>/*)#csum`.
+        assert!(
+            p.original_descriptor.starts_with("wpkh(["),
+            "wpkh wrapper expected; got {}",
+            p.original_descriptor
+        );
+        assert!(
+            p.original_descriptor.contains("/<0;1>/*"),
+            "multipath suffix expected; got {}",
+            p.original_descriptor
+        );
+        // Fingerprint matches the keystore.
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string(),
+            "5436d724"
+        );
+    }
+
+    #[test]
+    fn parse_multisig_2of3_produces_wsh_sortedmulti_bundle() {
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = ElectrumParser::parse(MULTISIG_2OF3.as_bytes(), &mut stderr)
+            .expect("P6B multisig parse must succeed");
+        assert_eq!(parsed.len(), 1, "multisig wallet emits 1 bundle");
+        let p = &parsed[0];
+        assert_eq!(p.cosigners.len(), 3, "2of3 has 3 cosigners");
+        assert_eq!(p.threshold, Some(2), "2of3 has threshold 2");
+        assert_eq!(p.network, bitcoin::Network::Bitcoin);
+        assert!(
+            p.original_descriptor.starts_with("wsh(sortedmulti(2,"),
+            "wsh(sortedmulti(2,..)) expected; got {}",
+            p.original_descriptor
+        );
+        // Three cosigner fingerprints in declaration order.
+        assert_eq!(p.cosigners[0].fingerprint.to_string(), "b8688df1");
+        assert_eq!(p.cosigners[1].fingerprint.to_string(), "28645006");
+        assert_eq!(p.cosigners[2].fingerprint.to_string(), "5436d724");
+    }
+
+    #[test]
+    fn parse_2fa_refuses_with_specific_template() {
+        let blob = br#"{"seed_version":17,"wallet_type":"2fa","use_encryption":false,"x1/":{}}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob, &mut stderr).expect_err("2fa must refuse");
         let msg = err.to_string();
         assert!(
-            msg.contains("P6B"),
-            "P6A skeleton error must reference Phase P6B; got: {msg}"
+            msg.contains("2fa wallets require TrustedCoin two-factor restoration"),
+            "expected 2fa-specific refusal template; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_imported_refuses_with_specific_template() {
+        let blob =
+            br#"{"seed_version":17,"wallet_type":"imported","use_encryption":false,"addresses":{}}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob, &mut stderr).expect_err("imported must refuse");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("imported-addresses wallets have no derivation chain"),
+            "expected imported-specific refusal template; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_encrypted_refuses_with_specific_template_and_followup() {
+        let blob = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":true,"keystore":"blob"}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob, &mut stderr).expect_err("encrypted must refuse");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("encrypted wallet files require decrypting via")
+                && msg.contains("wallet-import-electrum-encrypted"),
+            "expected encrypted-specific refusal template + FOLLOWUP slug; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_drops_runtime_state_fields_with_stderr_notice() {
+        // Inject several runtime-state fields. Parser should drop them
+        // and emit ONE stderr NOTICE enumerating the dropped fields.
+        let blob = r#"{
+  "seed_version": 17,
+  "wallet_type": "standard",
+  "use_encryption": false,
+  "keystore": {
+    "type": "bip32",
+    "xpub": "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S",
+    "derivation": "m/84'/0'/0'",
+    "root_fingerprint": "5436d724",
+    "label": ""
+  },
+  "addresses": {"receiving": [], "change": []},
+  "labels": {},
+  "transactions": {}
+}
+"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let _ = ElectrumParser::parse(blob.as_bytes(), &mut stderr).expect("parse with state");
+        let stderr_str = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_str.contains("notice:") && stderr_str.contains("dropped wallet-state fields"),
+            "expected dropped-fields NOTICE; got: {stderr_str}"
+        );
+        assert!(
+            stderr_str.contains("addresses")
+                && stderr_str.contains("labels")
+                && stderr_str.contains("transactions"),
+            "NOTICE should enumerate present runtime-state fields; got: {stderr_str}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_multisig_with_out_of_bounds_n() {
+        let blob =
+            br#"{"seed_version":17,"wallet_type":"2of20","use_encryption":false,"x1/":{}}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob, &mut stderr).expect_err("n>15 must reject");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("out-of-bounds") && msg.contains("(2, 20)"),
+            "expected out-of-bounds template; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_multisig_with_k_greater_than_n() {
+        let blob = br#"{"seed_version":17,"wallet_type":"4of3","use_encryption":false,"x1/":{}}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob, &mut stderr).expect_err("k>n must reject");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("out-of-bounds") && msg.contains("(4, 3)"),
+            "expected k>n out-of-bounds; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_missing_keystore_for_standard() {
+        let blob = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":false}"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err =
+            ElectrumParser::parse(blob, &mut stderr).expect_err("missing keystore must reject");
+        assert!(err.to_string().contains("missing or non-object `keystore`"));
+    }
+
+    #[test]
+    fn parse_rejects_missing_x_n_for_multisig() {
+        let blob = r#"{
+  "seed_version": 17,
+  "wallet_type": "2of3",
+  "use_encryption": false,
+  "x1/": {"type":"bip32","xpub":"Zpub75ybJh4YZjnMskAAUkpy6uLizWcTTRC91yDtz9RcRwtavi4wHpBPZDEYUu9LoAPb6NQZNqKd6eKqF4FhqgWSaWQdqSt4FmdQkQH9uMmHhSh","derivation":"m/48'/0'/0'/2'","root_fingerprint":"b8688df1","label":""},
+  "x2/": {"type":"bip32","xpub":"Zpub74LquwpiAdpsXwRDJp46dQ9BhcoEhk3vPktqwMqGrQYmjRhYQi5mbemCRiHUXVh1Ypu5XRYzbbznqxodCwK5NPeVXAPVAuLGKrr1LUMFmPh","derivation":"m/48'/0'/0'/2'","root_fingerprint":"28645006","label":""}
+}
+"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob.as_bytes(), &mut stderr)
+            .expect_err("missing x3/ must reject");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("missing or non-object cosigner key `x3/`"),
+            "expected x3/ missing template; got: {msg}"
+        );
+    }
+
+    // ====== fixture parse: round-trip against canonical fixtures ======
+
+    fn read_fixture(name: &str) -> Vec<u8> {
+        let path = format!("tests/fixtures/wallet_import/{name}");
+        std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {path}: {e}"))
+    }
+
+    #[test]
+    fn fixture_standard_bip84_mainnet_parses() {
+        let blob = read_fixture("electrum-standard-bip84-mainnet.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = ElectrumParser::parse(&blob, &mut stderr).expect("fixture parse");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].cosigners.len(), 1);
+        assert_eq!(parsed[0].cosigners[0].fingerprint.to_string(), "5436d724");
+        assert!(parsed[0].original_descriptor.starts_with("wpkh(["));
+    }
+
+    #[test]
+    fn fixture_standard_bip49_mainnet_parses_as_sh_wpkh() {
+        let blob = read_fixture("electrum-standard-bip49-mainnet.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = ElectrumParser::parse(&blob, &mut stderr).expect("fixture parse");
+        assert_eq!(parsed[0].cosigners.len(), 1);
+        assert!(
+            parsed[0].original_descriptor.starts_with("sh(wpkh(["),
+            "BIP-49 ypub must wrap as sh(wpkh(...)); got: {}",
+            parsed[0].original_descriptor
+        );
+    }
+
+    #[test]
+    fn fixture_multisig_2of3_wsh_parses() {
+        let blob = read_fixture("electrum-multisig-2of3-wsh.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let parsed = ElectrumParser::parse(&blob, &mut stderr).expect("fixture parse");
+        assert_eq!(parsed[0].cosigners.len(), 3);
+        assert_eq!(parsed[0].threshold, Some(2));
+        assert!(parsed[0].original_descriptor.starts_with("wsh(sortedmulti(2,"));
+    }
+
+    #[test]
+    fn fixture_2fa_refuses() {
+        let blob = read_fixture("electrum-2fa-refused.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(&blob, &mut stderr).expect_err("2fa fixture refuses");
+        assert!(err.to_string().contains("TrustedCoin"));
+    }
+
+    #[test]
+    fn fixture_imported_refuses() {
+        let blob = read_fixture("electrum-imported-refused.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(&blob, &mut stderr).expect_err("imported refuses");
+        assert!(err.to_string().contains("imported-addresses"));
+    }
+
+    #[test]
+    fn fixture_encrypted_refuses() {
+        let blob = read_fixture("electrum-encrypted-refused.json");
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(&blob, &mut stderr).expect_err("encrypted refuses");
+        assert!(err.to_string().contains("encrypted wallet files require decrypting"));
+    }
+
+    #[test]
+    fn parse_rejects_heterogeneous_cosigner_variants() {
+        // x1/ is Zpub (mainnet wsh multisig), x2/ is xpub (neutral) —
+        // heterogeneous SLIP-132 variants must reject.
+        let blob = r#"{
+  "seed_version": 17,
+  "wallet_type": "2of2",
+  "use_encryption": false,
+  "x1/": {"type":"bip32","xpub":"Zpub75ybJh4YZjnMskAAUkpy6uLizWcTTRC91yDtz9RcRwtavi4wHpBPZDEYUu9LoAPb6NQZNqKd6eKqF4FhqgWSaWQdqSt4FmdQkQH9uMmHhSh","derivation":"m/48'/0'/0'/2'","root_fingerprint":"b8688df1","label":""},
+  "x2/": {"type":"bip32","xpub":"xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6","derivation":"m/48'/0'/0'/2'","root_fingerprint":"28645006","label":""}
+}
+"#;
+        let mut stderr: Vec<u8> = Vec::new();
+        let err = ElectrumParser::parse(blob.as_bytes(), &mut stderr)
+            .expect_err("heterogeneous variants must reject");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must share a variant"),
+            "expected heterogeneous-variant rejection; got: {msg}"
         );
     }
 
