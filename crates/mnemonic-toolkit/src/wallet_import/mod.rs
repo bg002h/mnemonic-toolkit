@@ -61,13 +61,13 @@ pub(crate) trait WalletFormatParser {
 /// scope for this internal refactor.
 #[derive(Debug, Clone)]
 pub(crate) enum ImportProvenance {
+    /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
+    BitcoinCore(CoreSourceMetadata),
     /// BSMS Round-2 parse (`wallet_import/bsms.rs`). Holds `Option` because
     /// the lenient 2-line excerpt shape carries no audit fields (token /
     /// signature / first_address / derivation_path absent); the 6-line full
     /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
     Bsms(Option<BsmsAuditFields>),
-    /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
-    BitcoinCore(CoreSourceMetadata),
 }
 
 impl ImportProvenance {
@@ -76,16 +76,16 @@ impl ImportProvenance {
     /// excerpt shape or for the `BitcoinCore` variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
-            Self::Bsms(audit) => audit.as_ref(),
             Self::BitcoinCore(_) => None,
+            Self::Bsms(audit) => audit.as_ref(),
         }
     }
 
     /// Back-compat accessor: returns `Some(&metadata)` only for the `BitcoinCore` variant.
     pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
         match self {
-            Self::Bsms(_) => None,
             Self::BitcoinCore(meta) => Some(meta),
+            Self::Bsms(_) => None,
         }
     }
 }
@@ -358,5 +358,35 @@ mod provenance_tests {
         let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
         assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
         assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
+    }
+
+    /// P0B.2 regression guard: behavior on the existing 2 variants is
+    /// unchanged by the alphabetical reorder of `BitcoinCore` before `Bsms`.
+    /// Exhaustively exercises every (variant × accessor) pair and asserts the
+    /// same `Some`/`None` outputs as pre-reorder semantics. Variants
+    /// constructed in alphabetical source order to mirror the new enum
+    /// declaration ordering (R0 invariant: enum + matches stay alphabetical).
+    #[test]
+    fn provenance_accessor_matrix_invariant_under_alphabetical_reorder() {
+        let core = ImportProvenance::BitcoinCore(sample_core_metadata());
+        assert!(core.bsms_audit().is_none(), "BitcoinCore → bsms_audit None");
+        assert!(
+            core.source_metadata().is_some(),
+            "BitcoinCore → source_metadata Some"
+        );
+
+        let bsms_some = ImportProvenance::Bsms(Some(sample_bsms_audit()));
+        assert!(bsms_some.bsms_audit().is_some(), "Bsms(Some) → bsms_audit Some");
+        assert!(
+            bsms_some.source_metadata().is_none(),
+            "Bsms(Some) → source_metadata None"
+        );
+
+        let bsms_none = ImportProvenance::Bsms(None);
+        assert!(bsms_none.bsms_audit().is_none(), "Bsms(None) → bsms_audit None");
+        assert!(
+            bsms_none.source_metadata().is_none(),
+            "Bsms(None) → source_metadata None"
+        );
     }
 }
