@@ -53,13 +53,13 @@ fn verify_bundle_seedqr_slot_byte_equal_to_phrase() {
 
     let via_phrase = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(&common_args(format!("@0.phrase={TREZOR_24}")))
+        .args(common_args(format!("@0.phrase={TREZOR_24}")))
         .assert()
         .success();
 
     let via_seedqr = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(&common_args(format!("@0.seedqr={TREZOR_24_DIGITS}")))
+        .args(common_args(format!("@0.seedqr={TREZOR_24_DIGITS}")))
         .assert()
         .success();
 

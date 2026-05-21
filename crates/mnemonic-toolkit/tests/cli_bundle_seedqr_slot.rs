@@ -2,7 +2,7 @@
 //!
 //! Validates the path-split at `wallet_input::slot_input::SlotSubkey::Seedqr`
 //! + the bundle.rs slot-consumer branch that decodes via `seedqr::decode`
-//! and dispatches identically to the existing Phrase branch.
+//!     and dispatches identically to the existing Phrase branch.
 //!
 //! Byte-equal regression cells assert the bundle envelope is identical
 //! between `--slot @N.seedqr=<digits>` and `--slot @N.phrase=<phrase>`
