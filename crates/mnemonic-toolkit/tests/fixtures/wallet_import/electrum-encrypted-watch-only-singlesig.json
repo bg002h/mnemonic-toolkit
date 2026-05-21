@@ -1,0 +1,14 @@
+{
+  "seed_version": 17,
+  "wallet_type": "standard",
+  "use_encryption": true,
+  "keystore": {
+    "type": "bip32",
+    "xpub": "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S",
+    "derivation": "m/84'/0'/0'",
+    "root_fingerprint": "5436d724",
+    "label": "Daily (encrypted; watch-only passthrough)",
+    "seed": "ZW5jcnlwdGVkLWJsb2ItcGxhY2Vob2xkZXI=",
+    "xprv": "ZW5jcnlwdGVkLWJsb2ItcGxhY2Vob2xkZXI="
+  }
+}

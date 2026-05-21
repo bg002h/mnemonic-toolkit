@@ -775,6 +775,7 @@ auto-rewriting).
 | WARNING (exit 0) | `warning: import-wallet: roundtrip not byte-exact; semantic equivalent; diff below` (+ unified-diff body on stderr OR in `--json` envelope, never both) |
 | NOTICE (exit 0) | `notice: import-wallet: bsms: --select-descriptor <X> has no effect; BSMS Round-2 carries a single descriptor` |
 | NOTICE (exit 0) | `notice: import-wallet: bitcoin-core: dropped wallet-state fields <fields>: not preserved in bundle output (key-state only)` |
+| NOTICE (exit 0) | `notice: import-wallet: electrum: wallet is encrypted (use_encryption=true); importing watch-only material only (encrypted seed/xprv/passphrase/keypairs fields ignored). To extract the encrypted seed, use 'electrum --decrypt-wallet' out-of-band then re-import the plaintext wallet.` |
 | Error (exit 1) | `error: import-wallet: could not detect format; supply --format <bsms\|bitcoin-core>` |
 | Error (exit 1) | `error: import-wallet: --format <X> supplied but blob looks like <Y>` |
 | Error (exit 1) | `error: <flag>: env-var <VAR> referenced by sentinel is not set` |

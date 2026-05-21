@@ -151,13 +151,60 @@ fn electrum_imported_fixture_refuses_with_derivation_chain_message() {
 }
 
 #[test]
-fn electrum_encrypted_fixture_refuses_with_decrypt_wallet_message() {
-    let p = fixture_path("electrum-encrypted-refused.json");
-    let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).failure();
+fn electrum_encrypted_singlesig_imports_watch_only_with_advisory() {
+    // v0.30.1 Cycle 6b: encrypted wallets import watch-only with a stderr
+    // NOTICE advisory (formerly refused at parse time). Per Cycle 6b R0:
+    // the parser reads only plaintext keystore.{xpub,derivation,...}; the
+    // encrypted seed/xprv/passphrase/keypairs fields are ignored.
+    let p = fixture_path("electrum-encrypted-watch-only-singlesig.json");
+    let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).success();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("encrypted") && stderr.contains("decrypt-wallet"),
-        "expected encrypted refusal; got: {stderr}"
+        stderr.contains("notice: import-wallet: electrum: wallet is encrypted")
+            && stderr.contains("watch-only material only")
+            && stderr.contains("electrum --decrypt-wallet"),
+        "expected v0.30.1 watch-only-passthrough NOTICE advisory; got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn electrum_encrypted_multisig_imports_watch_only_with_advisory() {
+    // v0.30.1 Cycle 6b: multisig encrypted wallet variant of the watch-only-
+    // passthrough. The per-cosigner xpub/derivation/fingerprint fields are
+    // plaintext under both encrypted and unencrypted wallets; the optional
+    // per-cosigner seed/xprv (where present) are ignored.
+    let p = fixture_path("electrum-encrypted-watch-only-multisig-2of3.json");
+    let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).success();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("notice: import-wallet: electrum: wallet is encrypted")
+            && stderr.contains("watch-only material only"),
+        "expected v0.30.1 watch-only-passthrough NOTICE advisory on multisig encrypted wallet; got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn electrum_encrypted_sniff_still_positive_without_format_flag() {
+    // Auto-sniff must still detect encrypted wallets as electrum-shape;
+    // the dispatch reaches the parser which emits the advisory + continues.
+    let p = fixture_path("electrum-encrypted-watch-only-singlesig.json");
+    let assertion = run_import(&["--blob", p.to_str().unwrap()]).success();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("notice: import-wallet: electrum: wallet is encrypted"),
+        "expected advisory on auto-sniffed encrypted electrum wallet; got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn electrum_plaintext_no_regression_no_advisory() {
+    // Sanity: plaintext wallet imports as before, with NO advisory.
+    let p = fixture_path("electrum-standard-bip84-mainnet.json");
+    let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "electrum"]).success();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("wallet is encrypted"),
+        "plaintext electrum wallet must NOT emit the encrypted-advisory; got stderr: {stderr}"
     );
 }
 

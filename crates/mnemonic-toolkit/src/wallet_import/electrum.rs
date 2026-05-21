@@ -44,7 +44,10 @@
 //! }
 //! ```
 //!
-//! Refusals (`2fa` / `imported` / `use_encryption: true`) per SPEC §11.6.1.
+//! Refusals (`2fa` / `imported`) per SPEC §11.6.1. Encrypted wallets
+//! (`use_encryption: true`) are imported as watch-only at v0.30.1+
+//! (stderr NOTICE advisory; encrypted seed/xprv/passphrase/keypairs fields
+//! ignored) — see `design/BRAINSTORM_v0_30_1_electrum_encrypted_watch_only.md`.
 //!
 //! ## Phase P6A scope
 //!
@@ -255,7 +258,11 @@ impl WalletFormatParser for ElectrumParser {
     /// Steps:
     /// 1. JSON-parse + top-level object check.
     /// 2. Validate `seed_version` + sniff-positive `wallet_type`.
-    /// 3. If `use_encryption: true` → REFUSE per §11.6.1.
+    /// 3. If `use_encryption: true` → emit stderr NOTICE advisory
+    ///    (watch-only-passthrough per v0.30.1 / Cycle 6b R0 fold). Parse
+    ///    continues with the plaintext xpub/derivation/fingerprint/label
+    ///    fields the parser actually reads; encrypted seed/xprv/passphrase/
+    ///    keypairs are ignored.
     /// 4. Classify `wallet_type`:
     ///    - `"standard"` → singlesig: build `<wrapper>([fp/path]xpub/<0;1>/*)`
     ///      where wrapper is derived from xpub SLIP-132 prefix + derivation purpose.
@@ -302,16 +309,27 @@ impl WalletFormatParser for ElectrumParser {
         // No NOTICE here (sniff-time + parse-time validation both lenient
         // per SPEC §11.6).
 
-        // Step 3: use_encryption refusal per §11.6.1.
+        // Step 3: use_encryption advisory (v0.30.1 / Cycle 6b watch-only-passthrough).
+        //
+        // Per electrum/keystore.py (verified at Cycle 6 P0 recon §A1 + Cycle 6b
+        // brainstorm R0 §C1), Electrum's field-level encryption protects
+        // `keystore.{seed,xprv,passphrase,keypairs}`. The fields THIS parser
+        // reads (`keystore.{xpub,derivation,root_fingerprint,label}` +
+        // multisig analogues at xN/.*) are plaintext under BOTH encrypted and
+        // unencrypted wallets. The encrypted-wallet refusal v0.28.0 shipped
+        // was therefore over-restrictive in principle: watch-only import has
+        // all the material it needs without touching the encrypted fields.
+        // v0.30.1 downgrades the refusal to a stderr advisory and continues
+        // with the plaintext xpub/derivation/etc.
         let use_encryption = obj
             .get("use_encryption")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if use_encryption {
-            return Err(ToolkitError::ImportWalletParse(
-                "import-wallet: electrum: encrypted wallet files require decrypting via 'electrum --decrypt-wallet' first; encrypted ingest not yet supported (FOLLOWUP wallet-import-electrum-encrypted)"
-                    .to_string(),
-            ));
+            let _ = writeln!(
+                stderr,
+                "notice: import-wallet: electrum: wallet is encrypted (use_encryption=true); importing watch-only material only (encrypted seed/xprv/passphrase/keypairs fields ignored). To extract the encrypted seed, use 'electrum --decrypt-wallet' out-of-band then re-import the plaintext wallet."
+            );
         }
 
         // Step 4: classify wallet_type.
@@ -1332,14 +1350,26 @@ mod tests {
     }
 
     #[test]
-    fn parse_use_encryption_refuses_with_specific_message() {
+    fn parse_use_encryption_emits_advisory_then_continues() {
+        // v0.30.1 Cycle 6b: use_encryption=true is no longer a refusal — the
+        // parser emits a stderr NOTICE advisory and continues. The parse here
+        // still fails because the blob lacks `keystore` (Step 4 needs it),
+        // but the advisory MUST fire first on stderr.
         let blob = br#"{"seed_version": 17, "wallet_type": "standard", "use_encryption": true}"#;
         let mut sink = Vec::new();
         let err = ElectrumParser::parse(blob, &mut sink).unwrap_err();
+        let stderr = String::from_utf8(sink).unwrap();
+        assert!(
+            stderr.contains("notice: import-wallet: electrum: wallet is encrypted")
+                && stderr.contains("watch-only material only")
+                && stderr.contains("electrum --decrypt-wallet"),
+            "expected use_encryption NOTICE advisory; got stderr: {stderr}"
+        );
+        // Parse continues to Step 4 keystore-required check.
         let msg = format!("{err}");
         assert!(
-            msg.contains("encrypted") && msg.contains("decrypt-wallet"),
-            "expected encrypted refusal; got: {msg}"
+            msg.contains("keystore"),
+            "expected keystore-missing refusal post-advisory; got: {msg}"
         );
     }
 

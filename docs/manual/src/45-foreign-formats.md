@@ -665,7 +665,16 @@ matched, NOT the literal string `"multisig"`.
 | `"imported"` | **REFUSE** — "imported addresses" wallet has no derivation chain. |
 
 Encrypted wallets (`use_encryption: true` + base64-encrypted sensitive
-fields) are also **REFUSED**.
+fields) are imported as **watch-only** at v0.30.1+. Per Electrum's
+`electrum/keystore.py`, the field-level encryption protects only the
+seed-material fields (`keystore.seed` / `keystore.xprv` / `keystore.passphrase`
+/ `keystore.keypairs`). The watch-only fields (`keystore.xpub`,
+`keystore.derivation`, `keystore.root_fingerprint`, `keystore.label`) are
+plaintext under both encrypted and unencrypted wallets. The toolkit reads
+only the watch-only fields and emits a stderr NOTICE advisory describing
+the passthrough semantic; the encrypted seed/xprv/passphrase/keypairs
+fields are ignored. To extract the encrypted seed, use `electrum
+--decrypt-wallet` out-of-band then re-import the plaintext wallet.
 
 ### Refusal stderr templates
 
@@ -675,10 +684,15 @@ error: import-wallet: electrum: 2fa wallets require TrustedCoin
 
 error: import-wallet: electrum: imported-addresses wallets have no
   derivation chain to reconstruct; ingest not supported
+```
 
-error: import-wallet: electrum: encrypted wallet files require
-  decrypting via 'electrum --decrypt-wallet' first; encrypted ingest
-  not yet supported (FOLLOWUP wallet-import-electrum-encrypted)
+### Encrypted-wallet NOTICE advisory (v0.30.1+)
+
+```text
+notice: import-wallet: electrum: wallet is encrypted (use_encryption=true);
+  importing watch-only material only (encrypted seed/xprv/passphrase/keypairs
+  fields ignored). To extract the encrypted seed, use 'electrum
+  --decrypt-wallet' out-of-band then re-import the plaintext wallet.
 ```
 
 ### CLI invocation
@@ -717,9 +731,15 @@ mnemonic export-wallet --from-import-json envelope.json \
 
 ### Deferrals
 
-- **Encrypted wallet files** — refused at sniff/parse time; see FOLLOWUP
-  `wallet-import-electrum-encrypted`. Workaround: decrypt out-of-band
-  via `electrum --decrypt-wallet`, then re-feed the plaintext blob.
+- ~~**Encrypted wallet files** — refused at sniff/parse time~~ — imported
+  as watch-only at v0.30.1+ with a stderr NOTICE advisory (the parser
+  reads only plaintext xpub/derivation/fingerprint/label; encrypted
+  seed/xprv/passphrase/keypairs fields are ignored). To extract the
+  encrypted seed, decrypt out-of-band via `electrum --decrypt-wallet`,
+  then re-feed the plaintext blob. See the §"Wallet-type classification"
+  block above for the advisory text.
+- **Whole-file storage encryption** (Format B; version-byte + AES-CBC + MAC)
+  — out of scope (FOLLOWUP `wallet-import-electrum-encrypted-storage-format-b`).
 - **Pre-4.x legacy `wallet_type` values** (`"old"`, `"xpub"`, `"bip44"`)
   — rejected at sniff time. Open the wallet in Electrum 4.x first
   (auto-upgrade rewrites `wallet_type` to `"standard"`), then export
@@ -788,9 +808,11 @@ FOLLOWUP):
   (`sparrow-taproot-descriptor-passthrough-import-support`) — see
   [§4 above](#sparrow-wallet) deferral note.
 - ~~**Jade SeedQR variant**~~ — shipped in v0.30.0 as a vendor-neutral subsurface. See [`mnemonic seedqr`](40-cli-reference/41-mnemonic.md#mnemonic-seedqr).
-- **Electrum encrypted wallet files**
-  (`wallet-import-electrum-encrypted`) — see [§9 above](#electrum-wallet-file)
-  deferral note.
+- ~~**Electrum encrypted wallet files**~~ — shipped in v0.30.1 as
+  watch-only passthrough (parses plaintext xpub/derivation/etc., ignores
+  encrypted seed/xprv/passphrase/keypairs, emits stderr NOTICE advisory).
+  Whole-file Format-B encryption (`wallet-import-electrum-encrypted-storage-format-b`)
+  remains deferred — see [§9 above](#electrum-wallet-file).
 - **Electrum pre-4.x legacy `wallet_type` values**
   (`wallet-import-electrum-pre-4x-legacy-types`) — see [§9 above](#electrum-wallet-file)
   deferral note.
