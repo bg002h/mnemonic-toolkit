@@ -57,11 +57,40 @@
 
 **Single-sentence answer:** `seedqr.rs` imports `use bip39::{Mnemonic, Language};` — uses `Mnemonic::parse_in(Language::English, phrase)` for decode-side checksum-validating parse, `Mnemonic::from_entropy_in(Language::English, entropy_bytes)` for synthesized round-trip, and `Language::English.word_list()` for raw wordlist access (linear-search for word→index in encode; array-indexing for index→word in decode). **Zero new Cargo.toml deps required.**
 
-## A4 — SeedSigner Python reference symbol path
+## A4 — SeedSigner Python reference symbol path (verified)
 
-**Deferred:** Phase 0 A4 (added per R0 I7) will WebFetch the SeedSigner repo + locate the exact Python symbol path before Phase 5 manual writing. Brainstorm cites the placeholder `seedsigner.helpers.qr.SeedSigner.encode_standard_seedqr` with caveat "verify exact symbol at write time"; A4's job is to lock the symbol or change it.
+**Repo:** `github.com/SeedSigner/seedsigner`
+**File:** `src/seedsigner/models/encode_qr.py`
+**Class:** `SeedQrEncoder` (also `CompactSeedQrEncoder` for the deferred compact variant).
+**Encoding logic** (per `SeedQrEncoder.__post_init__`):
+```python
+self.data = ""
+for word in self.mnemonic:
+    index = self.wordlist.index(word)
+    self.data += str("%04d" % index)
+```
 
-**Expected scope:** under 1h. Output added to this dossier as `## A4` section after the WebFetch completes.
+This is byte-identical to the toolkit's `format!("{idx:04}")` in `seedqr.rs::encode`.
+
+**Cross-impl smoke recipe** (cite verbatim in manual chapter):
+```
+$ git clone https://github.com/SeedSigner/seedsigner /tmp/ss
+$ cd /tmp/ss
+$ python3 -c "
+import sys; sys.path.insert(0, 'src')
+from seedsigner.models.encode_qr import SeedQrEncoder
+phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+enc = SeedQrEncoder(mnemonic=phrase.split())
+print(enc.data)
+"
+# Expected: 000000000000000000000000000000000000000000000003
+
+# Compare against:
+$ mnemonic seedqr encode --from phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+# MUST match byte-for-byte.
+```
+
+**Verdict:** symbol-path locked; manual chapter cross-impl smoke recipe cites `src/seedsigner/models/encode_qr.py::SeedQrEncoder` verbatim. `CompactSeedQrEncoder` exists as the binary variant — deferred per brainstorm (`seedqr-compact-variant` FOLLOWUP).
 
 ## Recon verdict
 
