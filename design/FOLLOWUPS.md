@@ -2642,10 +2642,21 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/tests/cli_import_wallet_sparrow_taproot.rs::taproot_singlesig_template_still_refused` — Cycle 8 boundary cell.
 - **What:** v0.31+: ship taproot SINGLESIG (Bip86) import via template-mode substitution. Implementation: under the path-split's `has_tr && has_at_placeholder` branch, substitute `@0/**` → `[fp/path]xpub/<0;1>/*` (mirrors the non-taproot template-mode substitution at the existing Step 5 loop), then feed through `concrete_keys_to_placeholders` → `parse_descriptor`. The pipeline likely accepts `tr([fp/path]xpub/<0;1>/*)` but this is UNVERIFIED — first Phase of the follow-on cycle is a TV-style cross-validation against rust-miniscript's taproot singlesig handling.
 - **Why deferred:** Cycle 8 was scoped to descriptor-passthrough specifically. Expanding to template-mode taproot singlesig is a separate path-split branch + its own integration test surface + a verification step against rust-miniscript's taproot acceptance. Better to ship the descriptor-passthrough case alone and dedicate a follow-on cycle.
-- **Status:** `open`
+- **Status:** `resolved b42b1505` — mnemonic-toolkit-v0.31.2 Cycle 9. Removed the `has_tr && has_at_placeholder` narrow-refusal branch at `wallet_import/sparrow.rs::parse` Step 6; `tr(@0/**)` now flows through the standard Step 5 `@N/**` → `[fp/path]xpub/<0;1>/*` substitution loop, producing `tr([fp/86'/0'/0']xpub.../<0;1>/*)` which `concrete_keys_to_placeholders` + `parse_descriptor` accept cleanly (Phase 0 P0 recon empirically verified at master HEAD `7fa721d`). 3 refusal-asserting cells converted to happy-path counterparts (1 in-file lib + 2 integration); new boundary cell `taproot_singlesig_envelope_blocked_by_wallet_import_taproot_internal_key` documents the orthogonal `wallet-import-taproot-internal-key` FOLLOWUP that still blocks `--from-import-json` re-emission for ALL taproot envelopes; new fixture `sparrow-singlesig-p2tr.json` closes the p2wpkh/p2sh-p2wpkh/p2tr fixture-parity gap.
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
-- **Companion:** parent `sparrow-taproot-descriptor-passthrough-import-support` (resolved v0.31.1).
+- **Companion:** parent `sparrow-taproot-descriptor-passthrough-import-support` (resolved v0.31.1). Follow-on M1 (defensive substring-vs-regex widening): `sparrow-import-detection-regex-defensive-widening`.
+
+### `sparrow-import-detection-regex-defensive-widening` — widen `has_at_placeholder` from literal `@0/**` to regex `@\d+/\*\*`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.2 Cycle 9 close. End-of-cycle opus architect review M1 finding.
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs:338` (`let has_at_placeholder = script_template.contains("@0/**");`).
+- **What:** The descriptor-passthrough discriminator's `has_at_placeholder` check matches only the literal `@0/**` substring. For a hypothetical Sparrow MULTISIG blob that emits `@N/**` with `N ≥ 1` and no `@0/**` (e.g. a 2-of-2 starting key at index 1), `is_descriptor_passthrough` would mis-classify as passthrough and skip Step 5 substitution. **Currently inert in production**: Sparrow's emit-side at `wallet_export/sparrow.rs` builds placeholders from `(0..n)` (always starts at index 0), and the leftover-placeholder regex at `sparrow.rs:383-389` would catch any stray `@N/**` and surface as a parse error rather than feeding garbage downstream. Hardening: widen to `Regex(r"@\d+/\*\*")` for robustness against future Sparrow emit-side drift.
+- **Why deferred:** Defensive hardening only; not load-bearing under current Sparrow emit invariants. Cycle 9 scope was the singlesig refusal collapse.
+- **Status:** `open`
+- **Tier:** `v0.32+`
+- **Tags:** `wallet`
+- **Companion:** parent `sparrow-taproot-singlesig-template-mode-import` (resolved v0.31.2).
 
 ### `coldcard-legacy-mk1-mk2-top-level-xpub-inference` — legacy Coldcard wallet.json top-level xpub support (PARSER IMPLEMENTED; fixture + tests remain)
 
