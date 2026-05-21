@@ -1,6 +1,7 @@
 //! CLI integration tests for `mnemonic seedqr` (v0.30.0). Target ≥30 cells.
 
 use assert_cmd::Command;
+use predicates::prelude::*;
 use serde_json::Value;
 
 const PHRASE_12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
