@@ -617,13 +617,17 @@ mnemonic export-wallet --from-import-json envelope.json \
   > jade_re.json
 ```
 
-### Deferral — SeedQR
+### SeedQR (Jade + SeedSigner + others)
 
-Jade's `register_multisig` RPC also accepts a SeedQR-encoded variant
-(`seedqr` reply field, shape pending field-research). v0.28.0 handles
-ONLY the `get_registered_multisig`-reply JSON shape (top-level
-`multisig_file` field). SeedQR support is queued as FOLLOWUP
-`wallet-import-jade-seedqr`.
+SeedQR is an open spec originated by SeedSigner; Blockstream Jade and
+several other wallets (Coldcard, Cobo, Krux) adopted it. Because SeedQR
+encodes a BIP-39 seed (not a wallet policy), it does NOT round-trip
+through `mnemonic import-wallet` — instead, decode the SeedQR payload
+to a phrase via `mnemonic seedqr decode`, then feed the phrase into
+`mnemonic bundle` or any other downstream subcommand.
+
+See [`mnemonic seedqr`](40-cli-reference/41-mnemonic.md#mnemonic-seedqr)
+for the encode/decode subsurface (v0.30.0+).
 
 ## Electrum 4.x wallet file (`--format electrum`) {#electrum-wallet-file}
 
@@ -783,8 +787,7 @@ FOLLOWUP):
 - **Sparrow taproot descriptor-passthrough**
   (`sparrow-taproot-descriptor-passthrough-import-support`) — see
   [§4 above](#sparrow-wallet) deferral note.
-- **Jade SeedQR variant** (`wallet-import-jade-seedqr`) — see
-  [§8 above](#jade-multisig) deferral note.
+- ~~**Jade SeedQR variant**~~ — shipped in v0.30.0 as a vendor-neutral subsurface. See [`mnemonic seedqr`](40-cli-reference/41-mnemonic.md#mnemonic-seedqr).
 - **Electrum encrypted wallet files**
   (`wallet-import-electrum-encrypted`) — see [§9 above](#electrum-wallet-file)
   deferral note.

@@ -1584,6 +1584,120 @@ varied by firmware version.
 
 ---
 
+## `mnemonic seedqr`
+
+SeedQR is an open spec originated by [SeedSigner](https://seedsigner.com/seedqr-instructions/):
+a BIP-39 mnemonic encoded as a numeric-string QR payload where each
+English-wordlist index is rendered as a 4-digit zero-padded decimal.
+12-word phrases produce 48 digits; 24-word phrases produce 96.
+
+`mnemonic seedqr` has two subsubcommands:
+
+- `decode` — read a SeedQR numeric string, emit the BIP-39 phrase.
+- `encode` — read a BIP-39 phrase, emit the SeedQR numeric string.
+
+### Synopsis
+
+```text
+mnemonic seedqr decode --digits <VALUE|-> [--json-out <PATH>]
+mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
+```
+
+### Flags
+
+`decode`:
+
+- `--digits <VALUE|->`: SeedQR numeric digit string (48 or 96 ASCII digits). `-` reads from stdin.
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+
+`encode`:
+
+- `--from phrase=<VALUE|->`: BIP-39 phrase (12 or 24 English words). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+
+Both subsubcommands emit an argv-leakage advisory on stderr when the
+secret is supplied inline (e.g., `--digits <value>` or `--from phrase=<value>`).
+Use the stdin form (`-`) to avoid the advisory.
+
+### Scope (v0.30.0)
+
+- **Variants:** Standard SeedQR only. CompactSeedQR (raw entropy bytes encoded in QR binary mode) is deferred.
+- **Word counts:** 12 + 24 only. 15 / 18 / 21 deferred.
+- **Language:** English only. SeedQR's open spec defines the encoding against the BIP-39 English wordlist.
+
+### Worked example — decode
+
+```sh
+mnemonic seedqr decode --digits 000000000000000000000000000000000000000000000003
+```
+
+Stdout:
+
+```text
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
+
+JSON envelope form:
+
+```sh
+mnemonic seedqr decode --digits 000000000000000000000000000000000000000000000003 --json-out /tmp/decode.json
+cat /tmp/decode.json
+```
+
+`/tmp/decode.json` contents:
+
+```json
+{
+  "schema_version": "1",
+  "operation": "decode",
+  "variant": "standard",
+  "word_count": 12,
+  "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "digits": "000000000000000000000000000000000000000000000003"
+}
+```
+
+### Worked example — encode
+
+```sh
+mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+```
+
+Stdout:
+
+```text
+000000000000000000000000000000000000000000000003
+```
+
+Pipe to a QR generator:
+
+```sh
+mnemonic seedqr encode --from phrase="abandon ... about" | qrencode -o out.png -
+```
+
+### Cross-impl smoke recipe
+
+Verify byte-identical output against the SeedSigner Python reference at
+`src/seedsigner/models/encode_qr.py::SeedQrEncoder` (recipe finalized at commit time using the symbol
+path recorded in `design/cycle-5-p0-recon.md` §A4).
+
+### Exit codes
+
+- `0` — success.
+- `1` — `BadInput` (any `SeedqrError` variant: invalid digit count/character, word index out of range, wrong word count, BIP-39 checksum failure; OR non-phrase node passed to `encode --from`).
+
+### Stderr templates
+
+- `seedqr: decode: invalid digit count (expected 48 or 96; got N)`
+- `seedqr: decode: invalid character at position N: <char>`
+- `seedqr: decode: invalid word index N at position M (must be 0..=2047)`
+- `seedqr: decode: BIP-39 checksum failure: <bip39-crate-diagnostic>`
+- `seedqr: encode: invalid word count: N (only 12 or 24 supported)`
+- `seedqr: encode: BIP-39 checksum failure: <bip39-crate-diagnostic>`
+- `seedqr encode only accepts phrase=<value> or phrase=-`
+
+---
+
 ## `mnemonic gui-schema`
 
 Emit the SPEC §7 machine-readable schema of every existing
