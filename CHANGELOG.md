@@ -6,6 +6,58 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.3] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: new `SlotSubkey::Seedqr` variant. `--slot @N.seedqr=<digit-string>` is now accepted on `mnemonic bundle` + `mnemonic verify-bundle` (refused on `mnemonic export-wallet` per the SPEC §3 watch-only-by-definition invariant). The value is a 48- or 96-digit SeedQR string per the SeedSigner SeedQR spec; it's decoded inline via the existing `seedqr::decode` library primitive at slot-emit time, and the resulting BIP-39 phrase is materialized into the slot identically to a `--slot @N.phrase=` invocation. Closes Cycle 10 (`seedqr-bundle-slot-integration` FOLLOWUP — the first v0.32+ tier follow-on from Cycle 5's introductory `mnemonic seedqr` subcommand).
+
+### Added
+
+- New `SlotSubkey::Seedqr` variant in `crates/mnemonic-toolkit/src/slot_input.rs`. Declared at position 1 in the enum (after `Phrase`, before `Entropy`) so derived `Ord` slots Seedqr at index 1 — yielding ascending-sorted legal-set patterns `[Seedqr]`, `[Seedqr, Path]`, and `[Seedqr, Fingerprint, Path]` that mirror the existing v0.19.0 SPEC §6.6.b exception for Phrase.
+- Phrase + Seedqr unified branch in `cmd/bundle.rs` slot-consumer (after the Phrase block, before Xpub). The Seedqr branch decodes via `mnemonic_toolkit::seedqr::decode`, maps errors via the canonical `crate::cmd::seedqr::map_seedqr_error` helper (promoted to `pub(crate)` to avoid error-text drift across consumer sites), and dispatches the resulting phrase through the same `derive_full` + `ResolvedSlot` materialization as Phrase.
+- Mirrored consumer branch in `cmd/verify_bundle.rs`; path-override pipelines in both files extended to route Seedqr-bearing slots through the per-`@N` override path (parallel to the v0.19.0 `[Phrase, Path]` handling).
+- `wallet_export/mod.rs::validate_watch_only` extended to refuse Seedqr alongside Phrase / Entropy / Xprv / Wif (SPEC §3 watch-only invariant correctly fires on the new subkey).
+- `--slot` clap help text + manual chapter 41 enumerations updated on all three consumers (`bundle`, `verify-bundle`, `export-wallet`) to document the `seedqr` token + decode-at-slot-emit semantics. Backfilled `master_xpub` token (pre-existing v0.x drift; touch-and-fix at the same edit sites).
+- 9 new integration cells: 6 in `tests/cli_bundle_seedqr_slot.rs` (24-word + 12-word byte-equal-vs-phrase happy paths, invalid-digit-count + checksum-failure refusals, stdin-sentinel happy path, double-stdin refusal); 2 in `tests/cli_verify_bundle_seedqr_slot.rs` (round-trip byte-equal vs phrase-slot using bip84-mainnet vector; decode-error path); 1 in `tests/cli_export_wallet_seedqr_slot.rs` (SPEC §3 watch-only refusal cell).
+- 6 new in-file lib unit cells in `slot_input.rs` (parse_happy_seedqr, parse_seedqr_stdin_sentinel, validate_single_seedqr_passes, validate_seedqr_plus_path_passes_v0_19_0, validate_seedqr_plus_fingerprint_plus_path_passes_v0_19_0, validate_seedqr_plus_xpub_still_conflict).
+- `SECRET_SLOT_SUBKEYS` taxonomy + `declare_slot_subkey_variants!` macro updated to include `seedqr`; the existing secret-taxonomy parity test continues to pass without modification.
+
+### Changed
+
+- `cmd/seedqr.rs::map_seedqr_error` promoted from private fn to `pub(crate)` so the bundle / verify-bundle / export-wallet consumer sites can reuse the canonical `"seedqr: {action}: {e}"` mapping. R0 C3 fold.
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md` — `--slot` rows on chapter §`mnemonic bundle`, §`mnemonic verify-bundle`, §`mnemonic export-wallet` all updated to enumerate the new `seedqr` token + its inline-decode semantics.
+
+### Test totals
+
+- 2150 cells passing; 12 ignored. +15 net (vs v0.31.2 baseline 2135).
+
+### Cycle topology
+
+Cycle 10 is the FIRST cycle of the v0.32+ tier (the post-v0.28+-residual queue). Wave structure for v0.32+ remains to be planned:
+- Wave D (this cycle): one big new surface — picked: `seedqr-bundle-slot-integration`.
+- Remaining: 9 other v0.32+ FOLLOWUPs filed during cycles 5-9 — `sparrow-import-detection-regex-defensive-widening` (hardening), `seedqr-compact-variant` (CompactSeedQR), `seedqr-15-18-21-word-counts`, `seedqr-digits-from-input-unification`, `electrum-crypto-seed-extraction-subcommand`, `wallet-import-electrum-encrypted-storage-format-b`, `bsms-encryption-per-signer-tokens`, `bsms-encryption-round1-decrypt-then-verify`, `bsms-encryption-cross-impl-coinkite-python-smoke`.
+
+### R0/R1 review history
+
+Plan-doc opus R0 RED 3C/2I/2M:
+- C1: SlotSubkey ordering inverted (would have produced `[Path, Seedqr]` instead of `[Seedqr, Path]`); folded by placing Seedqr at enum position 1.
+- C2: Branch placement (placed AFTER Phrase, BEFORE Xpub per fold).
+- C3: `map_seedqr_error` is private; promoted to `pub(crate)`.
+- I1: SemVer-MINOR rationale was wrong (GUI schema_mirror gate compares flag-NAME parity NOT value-content per memory `v0.28+ Wave 3 SHIPPED R0 I1`); user picked PATCH v0.31.3.
+- I2: Refusal-matrix cell `bundle_seedqr_slot_double_stdin_refused` added.
+- M1: Byte-equal assertion on both 12-word AND 24-word happy paths.
+- M2: master_xpub clap-help drift fixed inline via touch-and-fix.
+
+R1 GREEN after fold (no new Critical / Important issues). End-of-cycle opus review GREEN pre-tag. Reports persisted to `design/agent-reports/v0_32_0-plan-doc-r0-review.md` (filed under intended SemVer-MINOR name before the I1 PATCH pivot), `design/agent-reports/v0_31_3-plan-doc-r1-review.md`, and `design/agent-reports/v0_31_3-end-of-cycle-review.md`.
+
+### Toolkit-only
+
+No clap surface (i.e. flag-name) change; only a new `--slot` value-enumeration token. The GUI schema_mirror gate (which compares clap flag-NAME parity, not value-content) does NOT fire. Optional GUI help-text mirror tracked as a separate follow-on FOLLOWUP `gui-seedqr-slot-subkey-help-mirror`.
+
+---
+
 ## mnemonic-toolkit [0.31.2] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: Sparrow taproot SINGLESIG (Bip86 `tr(@0/**)` template-mode) wallets now import successfully via the standard substitution path. Closes Cycle 9 (`sparrow-taproot-singlesig-template-mode-import` FOLLOWUP — the same-session follow-on filed at Cycle 8 close).
