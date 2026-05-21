@@ -75,6 +75,8 @@ pub struct ExportWalletArgs {
     ///
     /// `<subkey>` is one of:
     ///   phrase       BIP-39 mnemonic (secret)
+    ///   seedqr       48 or 96 ASCII digits encoding a BIP-39 phrase
+    ///                (secret; decoded inline via seedqr::decode)
     ///   entropy      raw entropy hex (secret)
     ///   xpub         BIP-32 extended public key
     ///   fingerprint  4-byte master fingerprint (hex)
@@ -83,9 +85,12 @@ pub struct ExportWalletArgs {
     ///   xprv         BIP-32 extended private key (secret)
     ///
     /// `<value>` is the subkey's text form, or `-` to read from
-    /// stdin. The 7 subkeys mirror `mnemonic bundle --slot`. For a
+    /// stdin. The subkeys mirror `mnemonic bundle --slot`. For a
     /// watch-only export only `xpub` and `fingerprint` are required;
-    /// secret subkeys are accepted but unnecessary.
+    /// secret subkeys (incl. seedqr) are REFUSED at the export-wallet
+    /// boundary per SPEC §3 (`mnemonic export-wallet is watch-only by
+    /// definition`); use `mnemonic bundle` to materialize secret
+    /// material.
     #[arg(
         long = "slot",
         action = clap::ArgAction::Append,

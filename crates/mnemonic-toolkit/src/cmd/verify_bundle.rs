@@ -666,7 +666,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         }
         for (idx, slot_path) in &by_index_path {
             let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
-            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
+            // v0.31.3: Seedqr materializes to a phrase at slot-emit time;
+            // route the path override through the same branch.
+            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
+                && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+            {
                 continue;
             }
             let user_path = bitcoin::bip32::DerivationPath::from_str(&slot_path.value)
@@ -717,12 +721,33 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             bitcoin::bip32::DerivationPath,
             String,
             Option<Vec<u8>>,
-        ) = if subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
-            let phrase = slot_inputs
-                .iter()
-                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
-                .map(|s| s.value.as_str())
-                .expect("contains() asserts presence");
+        ) = if subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
+            || subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+        {
+            // v0.31.3 — Seedqr materialization. Decode at slot-emit
+            // time; dispatch to the same materialization path as Phrase.
+            let decoded_phrase: String;
+            let phrase: &str = if subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr) {
+                let digits = slot_inputs
+                    .iter()
+                    .find(|s| s.subkey == crate::slot_input::SlotSubkey::Seedqr)
+                    .map(|s| s.value.as_str())
+                    .expect("contains() asserts presence");
+                decoded_phrase =
+                    mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
+                        crate::cmd::seedqr::map_seedqr_error(
+                            e,
+                            &format!("slot @{idx} decode"),
+                        )
+                    })?;
+                &decoded_phrase
+            } else {
+                slot_inputs
+                    .iter()
+                    .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
+                    .map(|s| s.value.as_str())
+                    .expect("contains() asserts presence")
+            };
             let language = args.language.unwrap_or_default();
             let passphrase: zeroize::Zeroizing<String> =
                 zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());

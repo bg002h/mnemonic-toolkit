@@ -108,7 +108,11 @@ pub(crate) fn validate_watch_only(slots: &[SlotInput]) -> Result<(), ToolkitErro
     for s in slots {
         if matches!(
             s.subkey,
-            SlotSubkey::Phrase | SlotSubkey::Entropy | SlotSubkey::Xprv | SlotSubkey::Wif
+            SlotSubkey::Phrase
+                | SlotSubkey::Seedqr
+                | SlotSubkey::Entropy
+                | SlotSubkey::Xprv
+                | SlotSubkey::Wif
         ) {
             return Err(ToolkitError::ExportWalletSecretInput);
         }
