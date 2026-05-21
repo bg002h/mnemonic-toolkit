@@ -23,6 +23,7 @@ md-codec = "0.34.0"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"
+ctr = "0.9"
 hmac = "0.12"
 miniscript = { version = "13", default-features = false, features = ["std"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }

@@ -42,6 +42,14 @@
 //!   at orchestrator pre-decrypt time. Format B (whole-file storage
 //!   encryption) is out of scope; tracked as FOLLOWUP
 //!   `wallet-import-electrum-encrypted-storage-format-b`.
+//! - `bsms_crypto` — BIP-129 encryption-envelope crypto primitives
+//!   (v0.31.0 / Cycle 7a). Implements PBKDF2-SHA512 + AES-256-CTR +
+//!   HMAC-SHA256 per BIP-129 §Encryption. Defines a library-local
+//!   `BsmsCryptoError` per the same pattern. The CLI handler in
+//!   `src/cmd/import_wallet.rs` (Cycle 7b Phase 3) will convert via
+//!   a boundary mapper to `ToolkitError::BadInput` at orchestrator
+//!   pre-decrypt time. Used standalone (no CLI consumer) until
+//!   Cycle 7b ships the `--bsms-encryption-token` flag.
 //! - `secret_taxonomy` (v0.14.0): public `pub const &[&str]` arrays of
 //!   secret-class node / slot-subkey token strings. Mirrors the
 //!   private `NodeType::is_secret_bearing` /
@@ -56,6 +64,7 @@
 //!   bump); adding entries is additive and minor-safe. Consumed by
 //!   `mnemonic-gui` v0.4.0+.
 
+pub mod bsms_crypto;
 pub mod electrum_crypto;
 pub mod final_word;
 // `mlock` uses POSIX `libc::mlock` / `libc::munlock` / `libc::sysconf` /
