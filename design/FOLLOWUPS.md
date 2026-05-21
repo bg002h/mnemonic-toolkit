@@ -2492,7 +2492,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/src/wallet_export/{coldcard,jade,sparrow,electrum,specter}.rs` — accept descriptor-mode but lose the multi_a-vs-key-path internal-key designation when emitting from `--from-import-json` (each consumer uses `taproot_internal_key: None`).
 - **What:** v0.28+: when an envelope's `bundle.descriptor` matches `tr(...)`, EITHER (a) refuse loudly at the `--from-import-json` typed-deser layer with `BadInput "taproot envelopes not yet supported by --from-import-json; supply --template + --slot args directly"`, OR (b) thread the internal-key designation through the envelope's `bundle` surface (which currently has no such field). Option (a) is simpler and matches v0.27.0's "envelopes are descriptor-mode only" framing.
 - **Why deferred:** v0.27.0 cycle deferred per Phase 5 R0 (no v0.27.0 wire-format path produces a taproot envelope from `import-wallet`: BSMS rejects taproot at import; Bitcoin Core `listdescriptors` with `tr()` is a corner case). Refuse-loudly is hardening for the v0.28+ corner case.
-- **Status:** open
+- **Status:** `resolved ffcd336e76ee1e2b74a5a0b918b6bc78bef275ea` — mnemonic-toolkit-v0.28.7 cycle Fix-α (Framing B envelope-gate-only per P0 recon). Refusal added at `cmd/export_wallet.rs:622` immediately after `script_type_from_descriptor` via `matches!(script_type, WalletScriptType::P2tr | WalletScriptType::P2trMulti)`. Per-exporter framing dropped (P0 recon Framing B confirmed: all 8 `wallet_import/*.rs` parsers are uniformly taproot-agnostic; the gap was a single envelope-emit gate). New test cell `p_slug4_taproot_envelope_refused_on_from_import_json` covers 4 formats × 2 descriptors (P2tr + P2trMulti) = 8 sub-assertions. Fix-β (envelope wire-shape evolution to carry `taproot_internal_key`) remains open for v0.29+.
 - **Tier:** `v0.28+`.
 - **Companion:** `wallet-import-bitcoin-core-taproot-emission` (if a sibling-codec-side FOLLOWUP surfaces).
 
@@ -2588,7 +2588,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (each `Some("X")` arm at Site 2). **As-filed (v0.28.0 P1C-v2 era):** BSMS arm checks only BitcoinCore sniff; BitcoinCore arm checks only BSMS sniff; ColdcardMultisig arm checks BSMS + BitcoinCore; Sparrow arm checks BSMS + BitcoinCore + ColdcardMultisig; Specter arm checks BSMS + BitcoinCore + ColdcardMultisig + Sparrow. **Post-v0.28.0 expansion** (verified by recon dossier `cycle-prep-recon-followups-v0_28_plus.md` 2026-05-20): Coldcard arm has grown to 5-format coverage (P3C); Electrum arm to 6-format (P6C); Jade arm to 7-format complete matrix (P5C). The body's narrow-matrix framing pre-dates these expansions.
 - **What:** v0.28+: complete the N×N format-mismatch matrix symmetrically so EVERY `--format X` arm refuses EVERY other parser's positive sniff. v0.26.0 wired the BSMS ↔ BitcoinCore pair; v0.28.0 P1C/P2C extended Sparrow's + Specter's coverage; v0.28.0 P3C/P5C/P6C extended Coldcard/Jade/Electrum further; v0.28.4 added ColdcardMultisig as an export variant but did NOT extend the import-side mismatch matrix to refuse its sniff symmetrically. **The narrow-arm residuals are now: BSMS (1 format only), BitcoinCore (1), ColdcardMultisig (2).** The inverse wires (e.g., `--format bsms` mismatching a Sparrow / Specter / Jade / Electrum / Coldcard sniff) are NOT wired; the mismatch lands in a benign fallthrough (`ImportWalletParse` exit 2 vs the symmetric `ImportWalletFormatMismatch` exit 1) — same user-visible "this doesn't work" message, different exit code + stderr template. **Re-validate the exact narrow-arm set at brainstorm-write** by grepping `ImportWalletFormatMismatch` blocks per arm in `cmd/import_wallet.rs`; the body's claim that Sparrow checks only 3 / Specter only 4 may have grown silently.
 - **Why deferred:** Cosmetic + not load-bearing for v0.28.0 cycle correctness; full matrix completion is a hardening pass, not a correctness gap.
-- **Status:** open
+- **Status:** `resolved ffcd336e76ee1e2b74a5a0b918b6bc78bef275ea` — mnemonic-toolkit-v0.28.7 cycle Option B narrow set (per P0 user lock 2026-05-20). Extended the 3 narrow arms (BSMS / BitcoinCore / ColdcardMultisig) to full off-diagonal coverage: 17 new `ImportWalletFormatMismatch` return sites in `cmd/import_wallet.rs` + new test file `tests/cli_import_wallet_format_mismatch_matrix.rs` with 17 cells. P0 recon discovered 4 additional arms with residual gaps (Coldcard 2 + Sparrow 4 + Specter 3 + Electrum 1 = 10 more arms) — filed as NEW FOLLOWUP `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
 - **Companion:** none (symmetric emit-side gap tracked at `green-emitter-multisig-refusal-template-only`).
@@ -2602,7 +2602,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms.rs::bsms_2line_tr_nums_current_behavior_no_refusal` — pins the current (pre-refusal) behavior; cell-name preserves plan-doc's forward-looking intent via the suffix `_current_behavior_no_refusal`.
 - **What:** v0.28+: add a `Tr(_)` short-circuit at the top of `BsmsParser::parse` mirroring `wallet_export/bsms.rs:69-76`'s emit-side refusal. Refusal text re-uses the same substring ("does not support taproot descriptors; BIP-129 §1 prerequisites pre-date BIP-386") for parity. Cell renamed to `bsms_tr_nums_refused` per plan-doc R1-M2 wording and asserts exit-2 with `ImportWalletParse` containing the substring. Requires SPEC §10 amendment declaring tr() refusal alongside the 4-line shape lock.
 - **Why deferred:** P9B's plan-doc scope was `~0 src + ~250 tests + 4 fixture files`. Modifying the parser to refuse tr() is a source-code change with normative-SPEC implications — out of P9B's authored scope. Low-priority because the emit-side refusal already prevents users from generating tr() blobs via the toolkit; import-side hole is only triggered by externally-coordinated tr() BSMS blobs (currently rare in the wild).
-- **Status:** open
+- **Status:** `resolved ffcd336e76ee1e2b74a5a0b918b6bc78bef275ea` — mnemonic-toolkit-v0.28.7 cycle. New `enum ToolkitError` variant `BsmsTaprootImportRefused` (alphabetically inserted BEFORE `BsmsTaprootRefused` per CLAUDE.md). Parse-entry `tr(` short-circuit in `wallet_import/bsms.rs::BsmsParser::parse` fires before expensive `parse_descriptor` work. Defense-in-depth `contains("sortedmulti_a(") || contains("multi_a(")` check at top of `extract_threshold` for any code path that bypasses parse-entry refusal. Renamed existing pin cell `bsms_2line_tr_nums_current_behavior_no_refusal` → `bsms_2line_tr_nums_refused` with assertion flipped exit-0 → exit-2. New cell `bsms_tr_sortedmulti_a_refused_via_extract_threshold_guard`. Defense-in-depth direct unit-test gap filed as NEW FOLLOWUP `bsms-extract-threshold-defense-in-depth-direct-unit-test`.
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
 - **Companion:** `bsms-taproot-emit` (symmetric emit-side scaffold; cross-cite SPEC §10 amendment).
@@ -2637,7 +2637,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/wallet_export/green.rs:30-44` (the `if let Some(t) = inputs.template` guard skips refusal entirely when `template == None`, which is the case on every `--from-import-json` invocation per `cmd/export_wallet.rs:603`).
 - **What:** v0.28+: `GreenEmitter::emit` refuses multisig templates (P{2sh,2wsh,..}Multi), but the refusal is gated on `inputs.template.is_some()`. In descriptor-mode invocations (`--descriptor` or `--from-import-json`), `template` is `None`, so the multisig guard never fires — Green emits a multisig wsh()-descriptor text comment-block even though Green's actual file-import surface refuses multisig wallets at runtime. Refusal should be derived from the canonical descriptor's script-type (`script_type_from_descriptor`) when `template` is absent — `inputs.script_type: WalletScriptType` already encodes the multisig variants and is populated on both paths. Refactor: refuse when `inputs.script_type.is_multisig()` regardless of template presence.
 - **Why deferred:** The matrix-test fix (filter green out of the multisig-refusal matrix and pin the current behavior with a regression cell) was scoped to P11C. Patching green's emitter is OOS for P11C (Phase 11 is matrix-coverage, not refusal-contract reshuffle); changing `GreenEmitter::emit` would affect `cli_export_wallet_green.rs` multisig-refusal cells that currently use templated input.
-- **Status:** open
+- **Status:** `resolved ffcd336e76ee1e2b74a5a0b918b6bc78bef275ea` — mnemonic-toolkit-v0.28.7 cycle. New `WalletScriptType::is_multisig()` method in `wallet_export/mod.rs` covers `P2shMulti | P2shP2wshMulti | P2wshMulti | P2trMulti`. Refactored `wallet_export/green.rs:30-44` refusal guard from `if let Some(t) = inputs.template { if t.is_multisig() { ... } }` → `if inputs.script_type.is_multisig() { ... }`. Closes the bug where descriptor-mode (`--from-import-json`) multisig green exports silently passed despite Green's import surface being singlesig-only. New test cell `cell_4_green_descriptor_mode_multisig_refuses` + pre-existing canary `p11c_green_descriptor_passthrough_current_behavior_no_refusal` flipped to `p11c_green_descriptor_passthrough_singlesig_passes_multisig_refused` (3 singlesig sources pass, 5 multisig sources refuse).
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
 - **Companion:** `wallet-import-format-mismatch-matrix-completion` (symmetric import-side matrix-gap).
@@ -2720,3 +2720,27 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.28+-test-hygiene`
 - **Tags:** `wallet`
 - **Companion:** parent v0.28.4 cycle commit (toolkit side).
+
+
+### `wallet-import-format-mismatch-matrix-completion-discovered-gaps` — Coldcard / Sparrow / Specter / Electrum arm residuals (post-Cycle-3 discovery)
+
+- **Surfaced:** 2026-05-20, during Cycle 3 P0 STRICT-GATE recon (`design/cycle-3-p0-recon.md` Slug 3). The original `wallet-import-format-mismatch-matrix-completion` FOLLOWUP body listed only BSMS / BitcoinCore / ColdcardMultisig as narrow-arm residuals. P0 recon found 4 additional arms with residual gaps: Coldcard (2 missing: electrum, jade), Sparrow (4 missing: coldcard, electrum, jade, specter), Specter (3 missing: coldcard, electrum, jade), Electrum (1 missing: jade). Total: **10 additional missing `ImportWalletFormatMismatch` arms / ~10 additional test cells**.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — Coldcard, Sparrow, Specter, Electrum dispatch arms.
+- **What:** Extend each arm to refuse all wrong-format sniff outcomes symmetrically. Closes the 8×7 = 56-cell full off-diagonal matrix.
+- **Why deferred:** Cycle 3 scope was locked at Option B (original 3-arm narrow set) per user decision 2026-05-20.
+- **Status:** `open`
+- **Tier:** `v0.28+-test-hygiene`
+- **Tags:** `wallet`
+- **Companion:** parent `wallet-import-format-mismatch-matrix-completion` (resolved v0.28.7).
+
+
+### `bsms-extract-threshold-defense-in-depth-direct-unit-test` — defense-in-depth guard at `extract_threshold` is unit-test-unreachable
+
+- **Surfaced:** 2026-05-20, mnemonic-toolkit-v0.28.7 Phase 6 end-of-cycle opus review (`design/agent-reports/v0_28_7-phase-6-end-of-cycle-review.md`).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:~493` (`extract_threshold` defense-in-depth guard added v0.28.7 Slug 1 returning `Err(BsmsTaprootImportRefused)` for `sortedmulti_a(` / `multi_a(` substrings).
+- **What:** Add a `#[cfg(test)] mod tests` unit test in `wallet_import/bsms.rs` that directly invokes `extract_threshold("tr(NUMS,sortedmulti_a(2,@0,@1))")` and asserts `Err(BsmsTaprootImportRefused)`. The integration test cell `bsms_tr_sortedmulti_a_refused_via_extract_threshold_guard` at `tests/cli_import_wallet_bsms.rs` cannot reach the guard because the parse-entry refusal at `bsms.rs:215` fires FIRST on `tr(` substring. The guard at L493 is therefore shipped untested at v0.28.7.
+- **Why deferred:** Low priority — purely defense-in-depth regression-guard gap. Functional behavior is already pinned by the parse-entry guard; the guard at L493 is fallback protection if a future code path bypasses parse-entry refusal.
+- **Status:** `open`
+- **Tier:** `v0.28+-test-hygiene`
+- **Tags:** `wallet`
+- **Companion:** parent `bsms-import-taproot-refusal-parity` (resolved v0.28.7).

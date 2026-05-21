@@ -6,6 +6,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.7] — 2026-05-20
+
+Patch release: 4 hardening FOLLOWUPs from the post-A/B/C residual backlog (Wave 2).
+
+### Imports / Exports — defect refusal hardening
+
+- **`bsms-import-taproot-refusal-parity`** — Add import-side parity of `BsmsTaprootRefused`. New variant `BsmsTaprootImportRefused` (no `script_type` field — import parser has no `WalletScriptType` in scope at parse time; alphabetically inserted BEFORE `BsmsTaprootRefused` per CLAUDE.md). BSMS parser now short-circuits on `tr(` substring at parse-entry, mirroring emit-side refusal. Defense-in-depth: `extract_threshold` now refuses `sortedmulti_a(` / `multi_a(` substrings. User-visible: `mnemonic import-wallet --format bsms ... <taproot blob>` now exits 2 with explanatory message + FOLLOWUP slug reference.
+
+- **`green-emitter-multisig-refusal-template-only`** — Refactor green emitter's multisig refusal from `inputs.template.is_some() && t.is_multisig()` → `inputs.script_type.is_multisig()`. Closes the bug where descriptor-mode (`--from-import-json`) multisig green exports silently passed despite Green's import surface being singlesig-only. New `WalletScriptType::is_multisig()` method covers `P2shMulti | P2shP2wshMulti | P2wshMulti | P2trMulti`. Anti-pattern survey at P0 recon: isolated to green.rs; no other emitters share the same bug.
+
+- **`wallet-import-format-mismatch-matrix-completion`** (Option B narrow set) — Extend BSMS / BitcoinCore / ColdcardMultisig dispatch arms in `cmd/import_wallet.rs` to refuse all 17 missing sniff outcomes via `ImportWalletFormatMismatch`. New matrix test file `tests/cli_import_wallet_format_mismatch_matrix.rs`. NOTE: P0 recon discovered the original FOLLOWUPS scope was structurally narrower than actual residuals — Coldcard / Sparrow / Specter / Electrum arms also have residual gaps. Those 10 discovered gaps are filed as NEW FOLLOWUP `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
+
+- **`wallet-import-taproot-internal-key`** (Fix-α envelope-gate refusal) — Refuse taproot envelopes at the single `EmitInputs` construction gate in `cmd/export_wallet.rs:run_from_import_json` via `matches!(script_type, WalletScriptType::P2tr | WalletScriptType::P2trMulti)` (parse-side detection, not string-sniff). P0 recon confirmed Framing B (envelope-gate-only) over Framing A (per-exporter fan-out); all 8 `wallet_import/*.rs` parsers are uniformly taproot-agnostic. Fix-β (envelope wire-shape evolution to carry the field) remains open for v0.29+.
+
+### Tests
+
+- 4 slug closures contribute +20 net cells: +1 Slug 1 (sortedmulti_a regex side-channel; 1 cell renamed), +1 Slug 2 (descriptor-mode multisig refusal), +17 Slug 3 matrix, +1 Slug 4 envelope-refusal multi-format. Total: 2008 → 2028.
+- 2 canary tests flipped to match new (correct) behavior: `p11c_green_descriptor_passthrough_singlesig_passes_multisig_refused` + `core_sniff_smoke` (exit code 1 vs 2 post-Slug-3).
+
+### Note
+
+Cycle 3 of v0.28+ residual FOLLOWUP release plan (Wave 2 hardening). See `design/BRAINSTORM_v0_28_plus_residual_followups.md` + `design/PLAN_mnemonic_toolkit_v0_28_7.md` + `design/cycle-3-p0-recon.md`. Opus end-of-cycle review GREEN (0 critical / 0 important; 1 minor + 1 new FOLLOWUP filed).
+
+No CLI surface change; no wire-shape change; no GUI lockstep.
+
+---
+
 ## mnemonic-toolkit [0.28.6] — 2026-05-20
 
 Patch release: 2 test-hygiene FOLLOWUPs from the post-A/B/C residual backlog.

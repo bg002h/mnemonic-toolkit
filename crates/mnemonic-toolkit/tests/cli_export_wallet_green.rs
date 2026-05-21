@@ -93,6 +93,54 @@ fn cell_2_green_multisig_refuses_byte_exact() {
     );
 }
 
+/// v0.28.7 Slug 2 cell 4 — Green descriptor-mode (--from-import-json) REFUSES
+/// multisig. Previously the refusal was gated on `inputs.template.is_some()`,
+/// so descriptor-mode multisig (where template==None) silently produced output.
+/// v0.28.7 changes the guard to `inputs.script_type.is_multisig()` which fires
+/// for both template-mode and descriptor-mode.
+///
+/// FOLLOWUP `green-emitter-multisig-refusal-template-only` (resolved v0.28.7).
+#[test]
+fn cell_4_green_descriptor_mode_multisig_refuses() {
+    // Step 1: import a multisig coldcard-multisig fixture to get the JSON envelope.
+    let import_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard-multisig",
+            "--blob",
+            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
+            "--json",
+        ])
+        .output()
+        .expect("mnemonic import-wallet spawn");
+    assert!(
+        import_out.status.success(),
+        "coldcard-multisig import must succeed; stderr: {}",
+        String::from_utf8_lossy(&import_out.stderr)
+    );
+
+    // Step 2: export-wallet --format green --from-import-json - (stdin = envelope JSON).
+    let export_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["export-wallet", "--format", "green", "--from-import-json", "-"])
+        .write_stdin(import_out.stdout)
+        .output()
+        .expect("mnemonic export-wallet spawn");
+    assert_ne!(
+        export_out.status.code(),
+        Some(0),
+        "descriptor-mode multisig must refuse, got success; stderr: {}",
+        String::from_utf8_lossy(&export_out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&export_out.stderr);
+    assert!(
+        stderr.contains("does not support multisig"),
+        "expected multisig-refusal stderr, got: {stderr}"
+    );
+}
+
 /// SPEC §10 cell 3 — Green emits the canonical descriptor verbatim (includes
 /// `#checksum`). Cross-verifies that the singlesig file body matches the
 /// descriptor that bitcoin-core / specter would emit for the same inputs.

@@ -940,58 +940,69 @@ fn bsms_2line_mainnet_zpub_fixture_parses() {
     assert!(stdout.contains(MAINNET_FP_C), "stdout: {stdout}");
 }
 
-/// P9B.6 — tr(NUMS, sortedmulti_a(2, A, C)) BSMS blob at m/86'/0'/0'.
+/// v0.28.7 Slug 1 — tr(NUMS, sortedmulti_a(2, A, C)) BSMS blob at m/86'/0'/0'.
 ///
-/// **Plan-doc §S.9 R1-M2 ownership intent:** the cell name pins the
-/// fixture-author identity (`bsms_tr_nums_refused`) but P9B's scope is
-/// 0 src changes; the v0.27.0 BSMS parser at `wallet_import/bsms.rs:201-265`
-/// explicitly **accepts** taproot descriptors at parse time (it only skips
-/// the first-address-verify WARNING for `Tr(_)` — `bsms.rs:217-224`). So
-/// `import-wallet --format bsms <tr-blob>` currently exits 0 with cosigner
-/// extraction succeeding via the existing origin-capture-regex path.
-///
-/// This cell **pins the current behavior** (exit 0, cosigners=2,
-/// network=mainnet, bsms_audit=none) and documents the gap from the plan-doc's
-/// forward-looking "taproot-refusal" intent. The actual refusal — which
-/// would require a `Tr(_)` short-circuit at `bsms.rs::parse` mirroring
-/// `wallet_export/bsms.rs:69-76` — is filed as a v0.28+ FOLLOWUP at
-/// `design/v0_28_0-cycle-followups.md` (entry `bsms-import-taproot-refusal-parity`).
-///
-/// **Side-channel finding (folded into the FOLLOWUP body):**
-/// `extract_threshold`'s regex at `wallet_import/bsms.rs:419-421` does NOT
-/// match `sortedmulti_a(` (the `_a` taproot variant). For this fixture's
-/// `tr(NUMS, sortedmulti_a(2, ...))` body, the regex returns `Ok(None)` and
-/// the CLI summary emits `threshold=none`. A real taproot-aware BSMS parser
-/// would either refuse (P9B.6's forward-looking intent) or extend the regex
-/// to include `sortedmulti_a` and `multi_a`.
+/// Previously pinned as `bsms_2line_tr_nums_current_behavior_no_refusal`
+/// (exit-0, accepting taproot). v0.28.7 adds the `tr(` short-circuit at
+/// `BsmsParser::parse` entry, causing this blob to be refused with exit 2
+/// and `BsmsTaprootImportRefused` (FOLLOWUP `bsms-import-taproot-refusal-parity`
+/// resolved v0.28.7).
 #[test]
-fn bsms_2line_tr_nums_current_behavior_no_refusal() {
+fn bsms_2line_tr_nums_refused() {
     let p = fixture_path("bsms-2line-tr-nums.txt");
-    let out = run_import(&p).success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let out = run_import(&p).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // v0.27.0 parser accepts tr(...) and skips first-address verify.
-    assert!(
-        stderr.contains("2-line excerpt"),
-        "expected 2-line WARNING; stderr was: {stderr}"
+    assert_eq!(
+        out.get_output().status.code(),
+        Some(2),
+        "BsmsTaprootImportRefused must exit 2; stderr was: {stderr}"
     );
-    // Parse extracts both cosigners from the sortedmulti_a leaf via the
-    // origin-capture-regex at bsms.rs:438-441 (regex matches anywhere in
-    // the body, including taproot script-tree positions).
-    assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
-    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
-    assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
-    // Side-channel finding: extract_threshold's regex does NOT match
-    // `sortedmulti_a(` — tracked in the FOLLOWUP body.
     assert!(
-        stdout.contains("threshold=none"),
-        "expected threshold=none (extract_threshold regex gap); stdout: {stdout}"
+        stderr.contains("--format bsms does not support taproot import"),
+        "expected taproot-refusal stderr, got: {stderr}"
     );
-    // No first-address-mismatch WARNING (2-line shape carries no audit).
     assert!(
-        !stderr.contains("first-address mismatch"),
-        "2-line shape has no audit fields; mismatch WARNING must not fire; \
-         stderr was: {stderr}"
+        stderr.contains("bsms-import-taproot-refusal-parity"),
+        "expected FOLLOWUP slug reference in stderr, got: {stderr}"
+    );
+}
+
+/// v0.28.7 Slug 1 defense-in-depth — `sortedmulti_a(` substring in descriptor
+/// body triggers `extract_threshold` explicit refusal even if parse-entry guard
+/// is bypassed. This test exercises the taproot refusal via the same fixture
+/// as `bsms_2line_tr_nums_refused` (which exercises the parse-entry `tr(` check).
+/// Since the parse-entry guard fires first, this cell verifies the end-to-end
+/// refusal contract (exit 2 + taproot-refusal message) rather than the
+/// `extract_threshold` internal guard directly (the internal guard is tested
+/// by the unit test in `wallet_import/bsms.rs`).
+#[test]
+fn bsms_tr_sortedmulti_a_refused_via_extract_threshold_guard() {
+    // The bsms-2line-tr-nums.txt fixture contains tr(NUMS, sortedmulti_a(2,...))
+    // which triggers BsmsTaprootImportRefused at parse entry via `tr(` check
+    // (and would also trigger the extract_threshold defense-in-depth guard for
+    // sortedmulti_a if that path were reached).
+    let p = fixture_path("bsms-2line-tr-nums.txt");
+    let output = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(&p)
+        .args(["--format", "bsms"])
+        .output()
+        .expect("mnemonic spawn");
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "taproot sortedmulti_a blob must refuse, got success"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "BsmsTaprootImportRefused must exit 2"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not support taproot"),
+        "expected taproot-refusal stderr, got: {stderr}"
     );
 }
 

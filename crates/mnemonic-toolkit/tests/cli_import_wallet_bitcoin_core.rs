@@ -543,11 +543,16 @@ fn core_sniff_smoke() {
     run_core_stdin(&core_blob).success();
 
     // Specter-shaped blob: `descriptor` (singular) + `label` + `devices` keys.
-    // Lacks top-level `descriptors` array -> parse error.
+    // Lacks top-level `descriptors` array. Pre-v0.28.7: parse error (exit 2).
+    // Post-v0.28.7 Slug 3 (cross-format mismatch matrix completion): the
+    // bitcoin-core arm now refuses Specter-shaped blobs via the more
+    // specific ImportWalletFormatMismatch (exit 1), since the sniffer
+    // identifies the blob as Specter and the user-supplied --format is
+    // bitcoin-core.
     let specter_like = "{\"label\":\"Daily\",\"blockheight\":0,\"descriptor\":\"wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#00lx6ere\",\"devices\":[\"unknown\"]}";
     let assert = run_core_stdin(specter_like).failure();
     let code = assert.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 2);
+    assert_eq!(code, 1, "post-v0.28.7 Slug 3: bitcoin-core arm refuses Specter-shaped blob via ImportWalletFormatMismatch (exit 1)");
 }
 
 // ============================================================================

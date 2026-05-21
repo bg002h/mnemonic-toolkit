@@ -206,6 +206,16 @@ impl WalletFormatParser for BsmsParser {
                 ))
             })?;
 
+        // v0.28.7 — Slug 1: refuse taproot at parse entry, mirroring emit-side
+        // BsmsTaprootRefused. BIP-129 §1 prerequisites do not yet include BIP-386.
+        // Detection mode: cheap textual sniff on `tr(` substring in the descriptor
+        // block content. Authoritative parse-side detection happens later in this
+        // fn via `MsDescriptor::Tr(_)`, but we want to refuse before doing the
+        // (expensive) full descriptor-parse + first-address verify.
+        if descriptor_body_no_csum.contains("tr(") {
+            return Err(ToolkitError::BsmsTaprootImportRefused);
+        }
+
         // SPEC §4.2 step 5: run concrete-keys → @N adapter against the
         // checksum-stripped body.
         let (placeholder_form, parsed_keys, parsed_fingerprints) =
@@ -474,6 +484,15 @@ fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
 /// found; `Err` on u8 overflow (was: silently mapped overflow to `None`).
 /// Mirrors `bitcoin_core::extract_threshold`.
 pub(super) fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
+    // v0.28.7 defense-in-depth: after Slug 1's BsmsTaprootImportRefused at
+    // parse-entry, taproot blobs cannot reach this fn legitimately. But if
+    // a future code path bypasses the parse-entry refusal, the existing
+    // regex would return Ok(None) on `sortedmulti_a(...)` — silently emitting
+    // `threshold=none` rather than refusing. Convert that silent miss into
+    // an explicit refusal.
+    if descriptor_body.contains("sortedmulti_a(") || descriptor_body.contains("multi_a(") {
+        return Err(ToolkitError::BsmsTaprootImportRefused);
+    }
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
         Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")

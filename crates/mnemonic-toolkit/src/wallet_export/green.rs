@@ -28,14 +28,15 @@ impl WalletFormatEmitter for GreenEmitter {
     }
 
     fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
-        // Multisig refusal: Green's multisig surface is server-mediated
-        // (Green Multisig Shield, Liquid), not a direct file import.
-        if let Some(t) = inputs.template {
-            if t.is_multisig() {
-                return Err(ToolkitError::BadInput(
-                    "--format green does not support multisig — Blockstream Green's multisig setup is server-mediated (Green Multisig Shield) and not a file-import surface (tracked by FOLLOWUPS green-native-multisig-pending-server-support). Use --format bitcoin-core (descriptor) or --format sparrow for multisig watch-only.".into(),
-                ));
-            }
+        // v0.28.7 — Slug 2: refuse multisig in BOTH template-mode and
+        // descriptor-mode (--from-import-json). Previously the refusal was
+        // gated on `inputs.template.is_some()`, which silently passed multisig
+        // descriptor-mode invocations. See FOLLOWUP
+        // `green-emitter-multisig-refusal-template-only` (resolved v0.28.7).
+        if inputs.script_type.is_multisig() {
+            return Err(ToolkitError::BadInput(
+                "--format green does not support multisig — Blockstream Green's multisig setup is server-mediated (Green Multisig Shield) and not a file-import surface (tracked by FOLLOWUPS green-native-multisig-pending-server-support). Use --format bitcoin-core (descriptor) or --format sparrow for multisig watch-only.".into(),
+            ));
         }
         Ok(format!(
             "# Blockstream Green — Watch-only import (singlesig)\n# Help: https://help.blockstream.com/hc/en-us/articles/19340800530713-Set-up-watch-only-wallet\n{}",

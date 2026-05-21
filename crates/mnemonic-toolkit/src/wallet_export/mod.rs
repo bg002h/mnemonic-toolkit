@@ -166,6 +166,21 @@ pub(crate) enum WalletScriptType {
     P2trMulti,      // tr-multi-a / tr-sortedmulti-a
 }
 
+impl WalletScriptType {
+    /// `true` iff this script type is a multisig variant.
+    ///
+    /// Used by emitters to refuse multisig in descriptor-mode invocations
+    /// (where `inputs.template == None`, but `inputs.script_type` is still
+    /// available from `script_type_from_descriptor`). See FOLLOWUP
+    /// `green-emitter-multisig-refusal-template-only` (resolved v0.28.7).
+    pub fn is_multisig(&self) -> bool {
+        matches!(
+            self,
+            Self::P2shMulti | Self::P2shP2wshMulti | Self::P2wshMulti | Self::P2trMulti
+        )
+    }
+}
+
 /// SPEC v0.8 §12 — map a `CliTemplate` to the corresponding `WalletScriptType`.
 /// Used by emitters that operate on the template path (`--template`).
 pub(crate) fn script_type_from_template(t: &CliTemplate) -> WalletScriptType {

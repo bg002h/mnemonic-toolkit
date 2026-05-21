@@ -263,20 +263,106 @@ pub fn run<R: Read, W: Write, E: Write>(
     let sniff_outcome = sniff_format(&blob);
     let format_str: &str = match args.format.as_deref() {
         Some("bsms") => {
-            if let SniffOutcome::BitcoinCore = sniff_outcome {
-                return Err(ToolkitError::ImportWalletFormatMismatch {
-                    supplied: "bsms".to_string(),
-                    sniffed: "bitcoin-core".to_string(),
-                });
+            // v0.28.7 — Slug 3 Option B: extend BSMS arm to refuse all
+            // 6 remaining sniff-detected formats (was: only bitcoin-core).
+            // Closes `wallet-import-format-mismatch-matrix-completion` for
+            // this arm.
+            match sniff_outcome {
+                SniffOutcome::BitcoinCore => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "jade".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bsms".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
             }
             "bsms"
         }
         Some("bitcoin-core") => {
-            if let SniffOutcome::Bsms = sniff_outcome {
-                return Err(ToolkitError::ImportWalletFormatMismatch {
-                    supplied: "bitcoin-core".to_string(),
-                    sniffed: "bsms".to_string(),
-                });
+            // v0.28.7 — Slug 3 Option B: extend BitcoinCore arm to refuse all
+            // 6 remaining sniff-detected formats (was: only bsms).
+            // Closes `wallet-import-format-mismatch-matrix-completion` for
+            // this arm.
+            match sniff_outcome {
+                SniffOutcome::Bsms => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "bsms".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::ColdcardMultisig => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "jade".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "bitcoin-core".to_string(),
+                        sniffed: "specter".to_string(),
+                    });
+                }
+                _ => {}
             }
             "bitcoin-core"
         }
@@ -344,6 +430,10 @@ pub fn run<R: Read, W: Write, E: Write>(
             // BSMS/Bitcoin Core upper arms. Only reject when sniff strongly
             // pinned a DIFFERENT format; `Ambiguous` and `NoMatch` are tolerated
             // (the user opted in to coldcard-multisig explicitly).
+            // v0.28.7 — Slug 3 Option B: extend ColdcardMultisig arm to
+            // refuse 5 additional sniff-detected formats (was: bsms +
+            // bitcoin-core only). Closes
+            // `wallet-import-format-mismatch-matrix-completion` for this arm.
             match sniff_outcome {
                 SniffOutcome::Bsms => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
@@ -355,6 +445,36 @@ pub fn run<R: Read, W: Write, E: Write>(
                     return Err(ToolkitError::ImportWalletFormatMismatch {
                         supplied: "coldcard-multisig".to_string(),
                         sniffed: "bitcoin-core".to_string(),
+                    });
+                }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "jade".to_string(),
+                    });
+                }
+                SniffOutcome::Sparrow => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "sparrow".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard-multisig".to_string(),
+                        sniffed: "specter".to_string(),
                     });
                 }
                 _ => {}

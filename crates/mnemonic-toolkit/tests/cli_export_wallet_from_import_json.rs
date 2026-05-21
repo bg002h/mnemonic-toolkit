@@ -882,31 +882,52 @@ fn p11c_refusal_matrix_specter_no_wallet_name() {
     }
 }
 
-/// Pin Green's current `--from-import-json` behavior: accepts ANY
-/// descriptor (singlesig + multisig) because the multisig refusal in
-/// `wallet_export/green.rs:33-39` is template-gated and the envelope
-/// path always supplies `template: None`. This is a real product gap
-/// (logged at `green-emitter-multisig-refusal-template-only`); the
-/// matrix test pins the current behavior so any future fix will surface
-/// as a P11C regression that flags the cycle-followup as ready for
-/// closure.
+/// Pin Green's `--from-import-json` behavior post-v0.28.7 Slug 2 fix:
+/// refuses multisig descriptors regardless of `template` (was previously
+/// template-gated and silently passed multisig envelope-mode inputs).
+/// Singlesig sources (3 of 8) continue to succeed; multisig sources
+/// (5 of 8) now refuse with the "does not support multisig" stderr.
+/// Closes `green-emitter-multisig-refusal-template-only`.
 #[test]
-fn p11c_green_descriptor_passthrough_current_behavior_no_refusal() {
+fn p11c_green_descriptor_passthrough_singlesig_passes_multisig_refused() {
+    // Per `happy_path_fixture`: bitcoin-core / coldcard / electrum are
+    // singlesig (bip84); bsms / coldcard-multisig / jade / sparrow /
+    // specter are multisig (sortedmulti 2of3 or analogous).
+    const SINGLESIG_SOURCES: &[&str] = &["bitcoin-core", "coldcard", "electrum"];
+    const MULTISIG_SOURCES: &[&str] = &[
+        "bsms", "coldcard-multisig", "jade", "sparrow", "specter",
+    ];
     let mut failures: Vec<String> = Vec::new();
-    for src in ALL_SOURCES {
+    for src in SINGLESIG_SOURCES {
         let fixture = fixture_path(happy_path_fixture(src));
         let res = run_export_from_import_envelope(&fixture, src, "green");
         if res.exit_code != 0 {
             failures.push(format!(
-                "[{src} → green] expected current passthrough success but exit={}; stderr={}",
+                "[{src} → green] expected singlesig success but exit={}; stderr={}",
+                res.exit_code, res.stderr
+            ));
+        }
+    }
+    for src in MULTISIG_SOURCES {
+        let fixture = fixture_path(happy_path_fixture(src));
+        let res = run_export_from_import_envelope(&fixture, src, "green");
+        if res.exit_code == 0 {
+            failures.push(format!(
+                "[{src} → green] expected multisig refusal but succeeded; \
+                 v0.28.7 Slug 2 should have closed this; stderr={}",
+                res.stderr
+            ));
+        } else if !res.stderr.contains("does not support multisig") {
+            failures.push(format!(
+                "[{src} → green] refused (exit={}) but stderr missing \
+                 'does not support multisig'; stderr={}",
                 res.exit_code, res.stderr
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "P11C green passthrough pin failed (a fix to \
-         green-emitter-multisig-refusal-template-only would surface here): {failures:#?}"
+        "P11C green singlesig-pass / multisig-refuse contract failed: {failures:#?}"
     );
 }
 
@@ -1098,4 +1119,91 @@ fn f9_from_import_json_specter_descriptor_carries_bip380_checksum() {
         .as_str()
         .expect("specter wallet must carry `descriptor` field");
     assert_descriptor_has_checksum(desc, "Specter `descriptor` JSON field");
+}
+
+// ============================================================================
+// v0.28.7 Slug 4 — taproot envelope refusal on --from-import-json.
+//
+// Fix-α: any taproot descriptor (P2tr singlesig or P2trMulti tr-multi-a /
+// tr-sortedmulti-a) pumped through `export-wallet --from-import-json` must be
+// refused at the EmitInputs gate in `run_from_import_json`. Detection uses
+// parse-side `script_type` (not string-sniff). Error text must contain
+// "taproot descriptors are not yet supported".
+//
+// Two sub-cases tested via inline envelopes piped on stdin:
+//   • P2tr (singlesig): tr([b8688df1/86'/0'/0']xpub.../<0;1>/*)
+//   • P2trMulti (tr-sortedmulti-a): tr(NUMS, sortedmulti_a(2, ...))
+//
+// Descriptors lifted verbatim from existing fixture files:
+//   tests/fixtures/wallet_import/core-bip86-mainnet.json (P2tr)
+//   tests/fixtures/wallet_import/bsms-2line-tr-nums.txt  (P2trMulti)
+// Both are known-good parseable by miniscript.
+// ============================================================================
+
+#[test]
+fn p_slug4_taproot_envelope_refused_on_from_import_json() {
+    // P2tr singlesig descriptor (BIP-86, from core-bip86-mainnet.json).
+    let p2tr_desc = "tr([b8688df1/86'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#039zy36w";
+    // P2trMulti descriptor (tr-sortedmulti-a with NUMS internal key, hex form).
+    // Uses the hex NUMS point (50929b74...) with its correct BIP-380 checksum
+    // 7ks7xg9c (Python BIP-380 polymod-verified). Equivalent form to
+    // tr(NUMS,...)#rgn6fk37 in bsms-2line-tr-nums.txt, but with the explicit
+    // hex point so miniscript's verify_checksum agrees without NUMS expansion.
+    let p2tr_multi_desc = "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,sortedmulti_a(2,[b8688df1/86'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[5436d724/86'/0'/0']xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx/<0;1>/*))#7ks7xg9c";
+
+    // Construct minimal ImportJsonEnvelope JSON arrays for each descriptor.
+    // Fields match `BundleJsonView` exactly (serde drops unknown; required
+    // fields: schema_version, mode, network, template, descriptor, account,
+    // origin_path, origin_paths, master_fingerprint, ms1, mk1, md1,
+    // multisig, privacy_preserving).
+    let make_envelope = |descriptor: &str| -> String {
+        serde_json::json!([{
+            "schema_version": "1",
+            "source_format": "bitcoin-core",
+            "bundle": {
+                "schema_version": "4",
+                "mode": "watch-only",
+                "network": "mainnet",
+                "template": null,
+                "descriptor": descriptor,
+                "account": 0,
+                "origin_path": null,
+                "origin_paths": null,
+                "master_fingerprint": null,
+                "ms1": [],
+                "mk1": [],
+                "md1": [],
+                "multisig": null,
+                "privacy_preserving": false
+            }
+        }])
+        .to_string()
+    };
+
+    let cases: &[(&str, &str)] = &[
+        ("P2tr-singlesig", p2tr_desc),
+        ("P2trMulti-sortedmulti_a", p2tr_multi_desc),
+    ];
+
+    for (label, descriptor) in cases {
+        let envelope_str = make_envelope(descriptor);
+        for fmt in &["bitcoin-core", "sparrow", "coldcard", "electrum"] {
+            let out = Command::cargo_bin("mnemonic")
+                .unwrap()
+                .args(["export-wallet", "--format", fmt, "--from-import-json", "-"])
+                .write_stdin(envelope_str.as_bytes())
+                .output()
+                .expect("mnemonic spawn");
+            assert_ne!(
+                out.status.code(),
+                Some(0),
+                "[{label} → {fmt}]: expected taproot refusal (non-zero exit), got success"
+            );
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                stderr.contains("taproot descriptors are not yet supported"),
+                "[{label} → {fmt}]: expected taproot-refusal stderr, got: {stderr}"
+            );
+        }
+    }
 }

@@ -13,7 +13,7 @@ use crate::wallet_export::{
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
     BsmsEmitter, BsmsForm, ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter,
     JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
-    WalletFormatEmitter,
+    WalletFormatEmitter, WalletScriptType,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -610,6 +610,26 @@ fn run_from_import_json<W: Write, E: Write>(
             ))
         })?;
     let script_type = script_type_from_descriptor(&parsed_ms)?;
+
+    // v0.28.7 — Slug 4 Fix-α: refuse taproot envelopes at the single
+    // EmitInputs gate. The wallet_import path doesn't surface taproot
+    // internal-key designation (NUMS vs raw xonly) in the envelope wire
+    // shape; rather than propagate the gap silently to every emitter via
+    // `taproot_internal_key: None`, refuse here. Detection uses parse-side
+    // script_type (not string-sniff). Fix-β (envelope-field addition for
+    // v0.29+) tracked at FOLLOWUP `wallet-import-taproot-internal-key`
+    // (resolved v0.28.7 via Fix-α).
+    if matches!(script_type, WalletScriptType::P2tr | WalletScriptType::P2trMulti) {
+        return Err(ToolkitError::BadInput(
+            "--from-import-json: taproot descriptors are not yet supported on \
+             the export-from-envelope path. The wallet_import path doesn't \
+             surface taproot internal-key designation (NUMS vs raw xonly). \
+             Use --format <emitter> --descriptor <body> directly, or wait \
+             for v0.29+ envelope wire-shape evolution. FOLLOWUP: \
+             `wallet-import-taproot-internal-key`."
+                .into(),
+        ));
+    }
 
     // F9 fix (v0.28.2): re-emit via miniscript's canonical Display so
     // `canonical_descriptor` carries the BIP-380 `#<8-char>` checksum

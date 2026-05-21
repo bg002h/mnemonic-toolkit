@@ -264,6 +264,11 @@ pub enum ToolkitError {
         signer_pubkey: String,
         reason: String,
     },
+    /// Import-side parity of `BsmsTaprootRefused`. v0.28.7+: refused at
+    /// `BsmsParser::parse` entry. No `script_type` field — the import parser
+    /// has no `WalletScriptType` in scope at parse time (see
+    /// `design/cycle-3-p0-recon.md` Slug 1 lock α).
+    BsmsTaprootImportRefused,
     /// v0.28.0 P8B (plan-doc §S.8) — `mnemonic export-wallet --format bsms`
     /// refused because the requested template / descriptor resolves to a
     /// taproot script-type (`P2tr` / `P2trMulti`). BIP-129 §1 prerequisites
@@ -467,6 +472,9 @@ impl ToolkitError {
             // SignatureMismatch — caller controls the strictness gate).
             ToolkitError::BsmsRound1Malformed { .. }
             | ToolkitError::BsmsSignatureMismatch { .. } => 2,
+            // v0.28.7 — BSMS taproot import refusal. Exit 2 matches emit-side
+            // `BsmsTaprootRefused` (same refusal class).
+            ToolkitError::BsmsTaprootImportRefused => 2,
             // v0.28.0 P8B — BSMS taproot refusal at export-wallet. Exit 2
             // (parse / refusal class) matches the prior `ToolkitError::BadInput`
             // text this variant replaces at `wallet_export/bsms.rs:emit`.
@@ -523,6 +531,7 @@ impl ToolkitError {
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
             ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
             ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
+            ToolkitError::BsmsTaprootImportRefused => "BsmsTaprootImportRefused",
             ToolkitError::BsmsTaprootRefused { .. } => "BsmsTaprootRefused",
         }
     }
@@ -674,6 +683,15 @@ impl ToolkitError {
                 "import-wallet: --bsms-round1: BIP-129 signature verification failed for \
                  record {record_index} (signer pubkey {signer_pubkey}): {reason}"
             ),
+            // v0.28.7 — import-side taproot refusal parity with BsmsTaprootRefused.
+            ToolkitError::BsmsTaprootImportRefused => {
+                "--format bsms does not support taproot import; BIP-129 §1 prerequisites \
+                 do not yet include BIP-386. Real import support is tracked at FOLLOWUP \
+                 `bsms-import-taproot-refusal-parity` (resolved v0.28.7). Use \
+                 --format bitcoin-core (Core-importable) or --format sparrow \
+                 (Sparrow JSON, taproot-capable) for taproot watch-only setup."
+                    .to_string()
+            }
             // v0.28.0 P8B (plan-doc §S.8) — tightened BSMS taproot refusal.
             // Replaces the v0.27.0 `ToolkitError::BadInput("--format bsms does
             // not support taproot descriptors; ...")` text. The per-script-type
