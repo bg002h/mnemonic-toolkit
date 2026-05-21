@@ -829,11 +829,16 @@ FOLLOWUP):
   HMAC-SHA256 per BIP-129 §Encryption; STANDARD + EXTENDED token widths).
   Encrypted blobs lack the `BSMS 1.0` header so `--format bsms` is
   REQUIRED. MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
-  Per-Signer TOKEN variants + Round-1 encrypted records deferred to
-  FOLLOWUPs `bsms-encryption-per-signer-tokens` +
-  `bsms-encryption-round1-decrypt-then-verify`. Cross-impl validated
-  against BIP-129 Test Vector 3 (STANDARD-mode Signer 1) in
-  `crates/mnemonic-toolkit/src/bsms_crypto.rs` unit tests.
+  Encrypted Round-1 decrypt-then-verify shipped in v0.31.2/v0.32.1;
+  per-Signer TOKEN variants (repeatable `--bsms-encryption-token`)
+  shipped in v0.32.2. **Cross-implementation validated** against (a)
+  BIP-129 Test Vector 3 (`crates/mnemonic-toolkit/src/bsms_crypto.rs`
+  unit tests) AND (b) the independent Coinkite Python reference
+  (`coinkite/bsms-bitcoin-secure-multisig-setup`, pinned SHA
+  `c30abe3a`) via vendored cross-impl fixtures — see
+  `crates/mnemonic-toolkit/tests/external/README.md` for the regen
+  recipe. Both Round-1 (STANDARD) + Round-2 (EXTENDED) directions
+  cross-validated.
 - ~~**Sparrow taproot descriptor-passthrough**~~ — shipped in v0.31.1
   via the Step 6 path-split at `wallet_import/sparrow.rs` (taproot
   MULTISIG branch). Taproot SINGLESIG template-mode (Bip86
