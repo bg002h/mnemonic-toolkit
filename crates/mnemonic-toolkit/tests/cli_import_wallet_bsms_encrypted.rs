@@ -669,3 +669,102 @@ fn two_token_stdin_refused() {
         "expected single-stdin refusal; got: {stderr}"
     );
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// v0.32.3 — Coinkite Python cross-implementation smoke (vendored fixtures)
+//
+// `bsms-coinkite-xref-round2-2of3.dat` is a hex MAC||ciphertext wire
+// produced by the INDEPENDENT Coinkite reference's `bsms.encryption.encrypt`
+// (pinned SHA c30abe3a, EXTENDED 16-byte token) over the real
+// `bsms-2line-multi-2of3.txt` Round-2 descriptor. See
+// `tests/external/README.md` for the regen recipe.
+// ──────────────────────────────────────────────────────────────────────
+
+const XREF_TOKEN_HEX: &str = "00112233445566778899aabbccddeeff";
+
+#[test]
+fn coinkite_xref_round2_full_plaintext_byte_equal() {
+    // R0 I1 — the strong cross-impl pin: decrypt the Coinkite-generated
+    // wire with the toolkit's library primitives and assert the recovered
+    // plaintext byte-equals the source plaintext over its FULL length
+    // (exercises the keystream across all ~460 bytes, not just the
+    // descriptor line).
+    use mnemonic_toolkit::bsms_crypto::{decrypt, derive_encryption_key};
+    let wire_hex =
+        std::fs::read_to_string(fixture_path("bsms-coinkite-xref-round2-2of3.dat")).unwrap();
+    let wire = hex::decode(wire_hex.trim()).unwrap();
+    let (mac, ct) = wire.split_at(32);
+    let token_raw = hex::decode(XREF_TOKEN_HEX).unwrap();
+    let enc_key = derive_encryption_key(&token_raw);
+    let iv: [u8; 16] = mac[..16].try_into().unwrap();
+    let recovered = decrypt(ct, &enc_key, &iv).unwrap();
+
+    let expected = std::fs::read(fixture_path("bsms-2line-multi-2of3.txt")).unwrap();
+    assert_eq!(
+        recovered.as_slice(),
+        expected.as_slice(),
+        "Coinkite-encrypted wire must decrypt byte-for-byte to the source plaintext"
+    );
+}
+
+#[test]
+fn coinkite_xref_round2_descriptor_imports() {
+    // End-to-end CLI cross-impl: feed the Coinkite wire through
+    // import-wallet; assert the imported descriptor equals the descriptor
+    // from importing the PLAINTEXT directly. Also the first EXTENDED-token
+    // wire that actually DECRYPTS via the CLI.
+    let wire = fixture_path("bsms-coinkite-xref-round2-2of3.dat");
+    let token = fixture_path("bsms-coinkite-xref-round2-2of3-token.hex");
+    let via_cipher = mnemonic()
+        .args(["import-wallet", "--format", "bsms"])
+        .args(["--blob"])
+        .arg(&wire)
+        .args(["--bsms-encryption-token"])
+        .arg(&token)
+        .args(["--json"])
+        .assert()
+        .success();
+    let cipher_stderr = String::from_utf8(via_cipher.get_output().stderr.clone()).unwrap();
+    assert!(
+        cipher_stderr.contains("BIP-129 encrypted Round-2 envelope decrypted")
+            && cipher_stderr.contains("token width 32 hex chars")
+            && cipher_stderr.contains("MAC verified"),
+        "expected EXTENDED-token decrypt NOTICE; got: {cipher_stderr}"
+    );
+    let cipher_json: serde_json::Value =
+        serde_json::from_slice(&via_cipher.get_output().stdout).unwrap();
+
+    let plaintext = fixture_path("bsms-2line-multi-2of3.txt");
+    let via_plain = mnemonic()
+        .args(["import-wallet", "--format", "bsms"])
+        .args(["--blob"])
+        .arg(&plaintext)
+        .args(["--json"])
+        .assert()
+        .success();
+    let plain_json: serde_json::Value =
+        serde_json::from_slice(&via_plain.get_output().stdout).unwrap();
+
+    assert_eq!(
+        cipher_json[0]["bundle"]["descriptor"], plain_json[0]["bundle"]["descriptor"],
+        "Coinkite-decrypted import descriptor must equal the plaintext import descriptor"
+    );
+}
+
+#[test]
+fn coinkite_xref_round2_wrong_token_mac_mismatch() {
+    let wire = fixture_path("bsms-coinkite-xref-round2-2of3.dat");
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    // Flip the last hex char of the EXTENDED token: ...eeff → ...eefe.
+    std::fs::write(tmp.path(), b"00112233445566778899aabbccddeefe\n").unwrap();
+    mnemonic()
+        .args(["import-wallet", "--format", "bsms"])
+        .args(["--blob"])
+        .arg(&wire)
+        .args(["--bsms-encryption-token"])
+        .arg(tmp.path())
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("MAC verification failed"));
+}
