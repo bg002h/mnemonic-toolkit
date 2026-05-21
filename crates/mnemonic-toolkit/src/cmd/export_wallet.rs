@@ -79,6 +79,8 @@ pub struct ExportWalletArgs {
     ///                (secret; decoded inline via seedqr::decode)
     ///   entropy      raw entropy hex (secret)
     ///   xpub         BIP-32 extended public key
+    ///   master_xpub  depth-0 master xpub (Coldcard singlesig only;
+    ///                see SPEC_export_wallet §5.1)
     ///   fingerprint  4-byte master fingerprint (hex)
     ///   path         BIP-32 derivation path
     ///   wif          Wallet Import Format private key (secret)
