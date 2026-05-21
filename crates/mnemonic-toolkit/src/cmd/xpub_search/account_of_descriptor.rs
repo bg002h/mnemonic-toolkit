@@ -151,22 +151,39 @@ impl SeedIntakeArgs for AccountOfDescriptorArgs {
 }
 
 /// Per-mode JSON body for account-of-descriptor.
+///
+/// v0.29.0 SemVer-minor wire-shape break: converted from struct to tagged
+/// enum. `#[serde(tag = "result")]` emits `"result": "match"` /
+/// `"result": "no_match"`. The `matched_cosigners` field moves to the `Match`
+/// variant only; `NoMatch` carries envelope-scope fields.
+/// Closes FOLLOWUP `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
 #[derive(Debug, Serialize)]
-pub struct AccountOfDescriptorResult {
-    /// `"match"` or `"no_match"`.
-    pub result: &'static str,
-    /// Matched cosigners. Empty array on no-match.
-    pub matched_cosigners: Vec<MatchedCosignerJson>,
-    /// Total cosigner positions in the descriptor.
-    pub cosigners_total: usize,
-    /// Number of candidates exhausted per cosigner (templates × accounts +
-    /// add-paths).
-    pub searched_count_per_cosigner: usize,
-    /// Detected descriptor shape: `literal_xpub` / `md1` / `bip388_json`.
-    pub descriptor_shape: DescriptorShape,
-    /// Cosigners flagged as `unspendable_internal_key: true` (e.g. taproot
-    /// NUMS sentinel). Empty array when none.
-    pub unspendable_internal_keys: Vec<usize>,
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum AccountOfDescriptorResult {
+    /// Match: matched cosigner positions populated.
+    Match {
+        /// Matched cosigners (non-empty).
+        matched_cosigners: Vec<MatchedCosignerJson>,
+        /// Total cosigner positions in the descriptor.
+        cosigners_total: usize,
+        /// Number of candidates exhausted per cosigner.
+        searched_count_per_cosigner: usize,
+        /// Detected descriptor shape.
+        descriptor_shape: DescriptorShape,
+        /// Cosigners flagged as unspendable internal key (taproot NUMS sentinel).
+        unspendable_internal_keys: Vec<usize>,
+    },
+    /// No match: envelope-scope fields preserved; matched_cosigners absent.
+    NoMatch {
+        /// Total cosigner positions in the descriptor.
+        cosigners_total: usize,
+        /// Number of candidates exhausted per cosigner.
+        searched_count_per_cosigner: usize,
+        /// Detected descriptor shape.
+        descriptor_shape: DescriptorShape,
+        /// Cosigners flagged as unspendable internal key.
+        unspendable_internal_keys: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -177,11 +194,7 @@ pub struct MatchedCosignerJson {
     pub account: Option<u32>,
 }
 
-/// v0.27.1 Phase 5a API-discipline scaffolding for `AccountOfDescriptorResult`.
-/// Mirrors `path_of_xpub::build_path_match` discipline; the `matched_cosigners`
-/// vec is required non-empty for match and is pinned to `vec![]` on no-match.
-/// Tracked by FOLLOWUP
-/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+/// Construct an `AccountOfDescriptorResult::Match` variant.
 pub(super) fn build_account_match(
     matched_cosigners: Vec<MatchedCosignerJson>,
     cosigners_total: usize,
@@ -189,8 +202,7 @@ pub(super) fn build_account_match(
     descriptor_shape: DescriptorShape,
     unspendable_internal_keys: Vec<usize>,
 ) -> AccountOfDescriptorResult {
-    AccountOfDescriptorResult {
-        result: "match",
+    AccountOfDescriptorResult::Match {
         matched_cosigners,
         cosigners_total,
         searched_count_per_cosigner,
@@ -199,15 +211,14 @@ pub(super) fn build_account_match(
     }
 }
 
+/// Construct an `AccountOfDescriptorResult::NoMatch` variant.
 pub(super) fn build_account_no_match(
     cosigners_total: usize,
     searched_count_per_cosigner: usize,
     descriptor_shape: DescriptorShape,
     unspendable_internal_keys: Vec<usize>,
 ) -> AccountOfDescriptorResult {
-    AccountOfDescriptorResult {
-        result: "no_match",
-        matched_cosigners: Vec::new(),
+    AccountOfDescriptorResult::NoMatch {
         cosigners_total,
         searched_count_per_cosigner,
         descriptor_shape,

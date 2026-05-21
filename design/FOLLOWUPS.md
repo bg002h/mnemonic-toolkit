@@ -97,7 +97,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/{path_of_xpub,passphrase_of_xpub,account_of_descriptor}.rs` (3 structs); update `tests/fixtures/v0_27_0_envelopes/` companion fixture dir per Q5c discipline (capture v0.28.0 fixtures, convert v0.27.0 cells to `#[ignore]` with SemVer rationale).
 - **What:** Refactor each result struct to `enum FooResult { Match { ...required fields... }, NoMatch }` with serde-tagged enum + skip-on-no-match for the match-only fields. The wire shape changes: no-match no longer emits `"path": null, "template": null, "account": null` — those keys are omitted entirely. Consumers parsing via `Option<String>` are unaffected; raw JSON inspectors checking `.path is null` would break. Document in CHANGELOG `### Changed (wire shape)` per v0.26.0 → v0.27.0 precedent. Phase 5a's private builders become natural construction sites for the new enum variants.
 - **Why deferred:** PATCH bump (v0.27.x) doesn't allow wire-shape replacement. mnemonic-gui at the consumed pin grep'd 0 external direct-literal hits (Phase 0 recon §4) so future option (c) — move the struct definitions into a private module + re-export only typed builders — is unblocked at the moment a SemVer minor bump opens the wire-shape change window.
-- **Status:** open
+- **Status:** `resolved 49cb211f230eb4becd773e2053bb63eb15fe07cc` — mnemonic-toolkit-v0.29.0 cycle. All 3 result types (`PathOfXpubResult`, `PassphraseOfXpubResult`, `AccountOfDescriptorResult`) converted to `#[serde(tag = "result", rename_all = "snake_case")]` tagged enums with `Match { ... }` + `NoMatch { ... }` variants. JSON wire-shape break: no-match no longer emits `"path": null, "template": null, "account": null` — keys are absent on `no_match`. Discriminator field name preserved as `"result"` (`"match"` / `"no_match"`). 3 v0.27.0 envelope drift cells (`tests/cli_xpub_search_drift_v0_27_0.rs:80, 142, 189`) marked `#[ignore]` with SemVer rationale referencing this slug. This is the SemVer-minor cliff driver for v0.29.0.
 - **Tier:** `v0.28+`
 
 ### `pr-26-import-provenance-enum-internal-refactor` — replace ParsedImport's `(Option<BsmsAuditFields>, Option<CoreSourceMetadata>)` with `ImportProvenance` enum
@@ -2513,7 +2513,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/error.rs` — enum declaration + each `match self { ... }` block that exhaustively matches `ToolkitError`.
 - **What:** Sort `ToolkitError` variant declarations alphabetically by name. Reorder the corresponding arms in each exhaustive `match self` block to match. No semantic change; pure refactor.
 - **Why deferred:** Out of scope for v0.27.2 (item 2 scoped as "codify the Convention", not "apply retroactively"). Retroactive sort touches `error.rs` substantially (50+ variants moved + 4 match blocks × 50 arms reordered = ~250 line moves) — better as a dedicated cleanup commit in v0.27.3 or v0.28 cycle, where the diff is clearly scoped to "no semantic change, alphabetical sort only".
-- **Status:** open
+- **Status:** `resolved 49cb211f230eb4becd773e2053bb63eb15fe07cc` — mnemonic-toolkit-v0.29.0 cycle, **shipped as dedicated bisect-hygiene commit** `ea2695a` (per R0-I3 lock; separate from the version-bump commit). Pure reorder: 44 variants sorted alphabetically; ~132 arm reorders across `Display`, `exit_code`, `kind` exhaustive match blocks + 1 partial-match `details` (7 named arms). All `exit_code` multi-variant `|` groupings broken into single-variant arms post-sort (new FOLLOWUP `error-rs-exit-code-arm-fragmentation-post-sort` for future re-grouping decision). Diff stat: 317 insertions + 328 deletions. P0 recon corrected count: 44 variants × 3 exhaustive blocks (not 50+ × 4 per FOLLOWUPS body — body was overstated).
 - **Tier:** `v0.28+`
 
 ### `pr-26-import-provenance-three-variant-cleanup` — three-variant cleanup for ImportProvenance::Bsms(Option<_>)
@@ -2530,7 +2530,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   ```
   The `bsms_audit()` accessor naturally returns `Some(&audit)` only for `BsmsSixLine` and `None` for `BsmsTwoLine` and `BitcoinCore`. Eliminates the residual Option inside the variant. Update the construction site at `bsms.rs:266` to match: `audit.map(ImportProvenance::BsmsSixLine).unwrap_or(ImportProvenance::BsmsTwoLine)` or pattern-match.
 - **Why deferred:** Design-aesthetic improvement, not a correctness fix. The shipped shape already eliminates the representable-invalid pair the v0.27.1 audit flagged. Patch-tier cycle (v0.27.2) doesn't need this; v0.28+ wire-shape cycle is a natural home.
-- **Status:** open
+- **Status:** `resolved 49cb211f230eb4becd773e2053bb63eb15fe07cc` — mnemonic-toolkit-v0.29.0 cycle. **P0 STRICT-GATE locked the "3-variant" framing as a stale-since-filing scope; actual work is a 1-variant split** (`Bsms(Option<BsmsAuditFields>)` → `BsmsSixLine(BsmsAuditFields)` + `BsmsTwoLine` unit variant) since the enum had grown to 8 variants post-v0.28 expansion (BitcoinCore + Coldcard + ColdcardMultisig + Electrum + Jade + Sparrow + Specter + Bsms). Alphabetical insertion position: `BsmsSixLine < BsmsTwoLine` (`S` < `T`); both between `BitcoinCore` and `Coldcard`. Updated all 7 accessor `match self {}` blocks at `wallet_import/mod.rs:147-266` + 5 test cells + construction site at `bsms.rs:342-345`. `bsms_audit()` accessor now naturally returns `Some(&audit)` for `BsmsSixLine` and `None` for `BsmsTwoLine`. Construction-site line drifted `:266` → `:342` since slug filing.
 - **Tier:** `v0.28+`
 
 ### `gui-schema-mirror-lockstep-discipline` — codify GUI schema-mirror lockstep invariant in CLAUDE.md
@@ -2744,3 +2744,27 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.28+-test-hygiene`
 - **Tags:** `wallet`
 - **Companion:** parent `bsms-import-taproot-refusal-parity` (resolved v0.28.7).
+
+
+### `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification` — document that GUI schema-mirror only gates clap flag-name parity, NOT JSON wire-shape
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.29.0 Cycle 4 plan-doc R0 opus review (`design/agent-reports/v0_29_0-plan-doc-r0-review.md` §I1). Plan-doc's first draft assumed the GUI's `schema_mirror.rs` integration test would catch JSON wire-shape drift from the xpub-search tagged-enum conversion. Opus R0 caught that the gate enforces **clap flag-name set parity** between hand-maintained `SubcommandSchema` and `gui-schema` JSON output — NOT runtime JSON wire-shape from CLI subcommands.
+- **Where:** `mnemonic-gui/tests/schema_mirror.rs:91-121` + `mnemonic-gui/tests/xpub_search_schema_mirror.rs` — gate iterates flag names + dropdown enum values. `mnemonic-toolkit`'s `gui-schema` subcommand at `cmd/gui_schema.rs` — emits clap surface JSON only.
+- **What:** GUI's runtime consumers of `mnemonic xpub-search --json` output (or any other subcommand's `--json` output) have NO automated drift gate. They must self-update when the wire-shape changes. Options: (a) extend `gui-schema` to include per-subcommand `--json` output-shape declarations; (b) file separate per-consumer regression tests on the GUI side that exercise the `--json` output and assert shape invariants; (c) document the gap in CLAUDE.md + accept manual coordination on wire-shape evolution. **Recommended:** option (c) for v0.29.x (document); option (b) at v0.30+ for the high-traffic subcommands (xpub-search, import-wallet, export-wallet).
+- **Why deferred:** v0.29.0 Cycle 4 documented the gap inline (CHANGELOG note + this FOLLOWUP) but didn't extend the gate. Extending the gate is a non-trivial design + implementation pass spanning both repos.
+- **Status:** `open`
+- **Tier:** `v0.29+`
+- **Tags:** `wallet`
+- **Companion:** none (cross-repo discipline gap).
+
+
+### `error-rs-exit-code-arm-fragmentation-post-sort` — record that post-sort, all `exit_code` arms are single-variant; re-grouping for readability is a separate decision
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.29.0 Cycle 4 plan-doc R0 opus review (`design/agent-reports/v0_29_0-plan-doc-r0-review.md` §I2). Pre-Cycle-4 `error.rs::exit_code` match used multi-variant `|` groupings (e.g., 18 variants `=> 2`); post-Cycle-4 alphabetical sort interleaves different-exit variants, forcing every arm to single-variant form. Post-sort the file has 44 single-variant arms.
+- **Where:** `crates/mnemonic-toolkit/src/error.rs` `exit_code` match block (post-Cycle-4: L428-473).
+- **What:** Decide future readability stance. Three options: (a) keep single-variant arms forever (clearest 1:1 variant→code mapping; CLAUDE.md alphabetical lock takes priority over grouping); (b) re-group by exit code in a non-alphabetical block (sacrifices alphabetical-by-variant lock); (c) introduce a separate `const EXIT_CODE_TABLE: &[(&str, u8)]` and use a function dispatch (decouples ordering from grouping; new abstraction layer). **Recommended:** (a) — accept the fragmentation as the cost of alphabetical lock + low-friction grep.
+- **Why deferred:** Readability decision, not a correctness or convention question. The 44-arm fragmented form ships v0.29.0; re-grouping if desired can land any future cycle.
+- **Status:** `open`
+- **Tier:** `v0.29+`
+- **Tags:** none
+- **Companion:** parent `error-rs-retroactive-alphabetical-sort` (resolved v0.29.0).

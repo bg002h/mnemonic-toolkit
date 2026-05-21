@@ -161,7 +161,12 @@ fn account_of_descriptor_multisig_no_match_exits_4() {
         .clone();
     let v: Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
     assert_eq!(v["result"], "no_match");
-    assert_eq!(v["matched_cosigners"].as_array().unwrap().len(), 0);
+    // v0.29.0 SemVer-minor: NoMatch variant omits matched_cosigners (not empty array).
+    assert!(
+        !v.as_object().unwrap().contains_key("matched_cosigners"),
+        "NoMatch must NOT emit matched_cosigners key; got {:?}",
+        v.as_object().unwrap().keys().collect::<Vec<_>>()
+    );
     assert_eq!(v["cosigners_total"], 3);
 }
 

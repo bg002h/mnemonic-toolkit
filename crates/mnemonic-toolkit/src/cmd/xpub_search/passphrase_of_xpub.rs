@@ -162,34 +162,42 @@ impl SeedIntakeArgs for PassphraseOfXpubArgs {
 }
 
 /// Per-mode JSON body for passphrase-of-xpub. Same shape as
-/// `PathOfXpubResult` per plan §6.5; kept as a separate struct so future
-/// divergence stays clean. Top-level fields are flattened into the
-/// `XpubSearchEnvelope` JSON: `schema_version` + `mode` + these fields.
+/// `PathOfXpubResult` per plan §6.5; kept as a separate type so future
+/// divergence stays clean.
+///
+/// v0.29.0 SemVer-minor wire-shape break: converted from struct to tagged
+/// enum. Mirrors `PathOfXpubResult` conversion.
 #[derive(Debug, Serialize)]
-pub struct PassphraseOfXpubResult {
-    /// `"match"` or `"no_match"`.
-    pub result: &'static str,
-    /// Matched derivation path, `null` on no-match.
-    pub path: Option<String>,
-    /// Matched template name (`"bip84"`, `"bip48-wsh"`, or the literal
-    /// `--add-path` string), `null` on no-match.
-    pub template: Option<String>,
-    /// Matched account index (None for `--add-path` templates without an
-    /// account token, and on no-match).
-    pub account: Option<u32>,
-    /// The target xpub after SLIP-0132 normalization (always emitted).
-    pub target_xpub_canonical: String,
-    /// The original SLIP-0132 prefix when the target was alt-prefixed; null
-    /// for canonical xpub/tpub input or for mk1-card input. Always emitted
-    /// (`null` when absent — no `skip_serializing_if`).
-    pub target_xpub_variant: Option<&'static str>,
-    /// Count of candidates exhausted (paths × templates × add-paths).
-    pub searched_count: usize,
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum PassphraseOfXpubResult {
+    /// Match: all search fields populated.
+    Match {
+        /// Matched derivation path (e.g. `"m/84'/0'/0'"`).
+        path: String,
+        /// Matched template name.
+        template: String,
+        /// Matched account index (None for `--add-path` templates without an
+        /// account token).
+        account: Option<u32>,
+        /// The target xpub after SLIP-0132 normalization.
+        target_xpub_canonical: String,
+        /// The original SLIP-0132 prefix when alt-prefixed; null otherwise.
+        target_xpub_variant: Option<&'static str>,
+        /// Count of candidates exhausted (paths × templates × add-paths).
+        searched_count: usize,
+    },
+    /// No match: envelope-scope fields preserved; search fields absent.
+    NoMatch {
+        /// The target xpub after SLIP-0132 normalization.
+        target_xpub_canonical: String,
+        /// The original SLIP-0132 prefix when alt-prefixed; null otherwise.
+        target_xpub_variant: Option<&'static str>,
+        /// Count of candidates exhausted.
+        searched_count: usize,
+    },
 }
 
-/// v0.27.1 Phase 5a API-discipline scaffolding for `PassphraseOfXpubResult`.
-/// Mirrors `path_of_xpub::build_path_match` discipline. Tracked by FOLLOWUP
-/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+/// Construct a `PassphraseOfXpubResult::Match` variant.
 pub(super) fn build_passphrase_match(
     path: String,
     template: String,
@@ -198,10 +206,9 @@ pub(super) fn build_passphrase_match(
     target_xpub_variant: Option<&'static str>,
     searched_count: usize,
 ) -> PassphraseOfXpubResult {
-    PassphraseOfXpubResult {
-        result: "match",
-        path: Some(path),
-        template: Some(template),
+    PassphraseOfXpubResult::Match {
+        path,
+        template,
         account,
         target_xpub_canonical,
         target_xpub_variant,
@@ -209,16 +216,13 @@ pub(super) fn build_passphrase_match(
     }
 }
 
+/// Construct a `PassphraseOfXpubResult::NoMatch` variant.
 pub(super) fn build_passphrase_no_match(
     target_xpub_canonical: String,
     target_xpub_variant: Option<&'static str>,
     searched_count: usize,
 ) -> PassphraseOfXpubResult {
-    PassphraseOfXpubResult {
-        result: "no_match",
-        path: None,
-        template: None,
-        account: None,
+    PassphraseOfXpubResult::NoMatch {
         target_xpub_canonical,
         target_xpub_variant,
         searched_count,

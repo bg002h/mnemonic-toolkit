@@ -15,7 +15,7 @@
 //! - 6-line: `BSMS 1.0\n<TOKEN>\n<descriptor>#<checksum>\n<DERIVATION_PATH>\n
 //!   <FIRST_ADDRESS>\n<SIGNATURE>` (legacy lenient 6-line shape; audit fields
 //!   preserved via `ParsedImport::bsms_audit()` accessor; backed by
-//!   `ImportProvenance::Bsms(Some(...))`). DEPRECATED in v0.28.0; will be
+//!   `ImportProvenance::BsmsSixLine(...)`). DEPRECATED in v0.28.0; will be
 //!   removed in a future minor version. See SPEC §10.4.
 //!
 //! Network detection (SPEC §4.2 step 8, §7.0.a locked): inspect the BIP-48
@@ -339,7 +339,10 @@ impl WalletFormatParser for BsmsParser {
             cosigners,
             network,
             threshold,
-            provenance: ImportProvenance::Bsms(audit),
+            provenance: match audit {
+                Some(a) => ImportProvenance::BsmsSixLine(a),
+                None => ImportProvenance::BsmsTwoLine,
+            },
         }])
     }
 }

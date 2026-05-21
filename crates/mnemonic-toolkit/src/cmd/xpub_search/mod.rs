@@ -140,10 +140,9 @@ mod tests {
     fn xpub_search_envelope_serde_round_trip_match() {
         let envelope = XpubSearchEnvelope {
             schema_version: "1",
-            body: XpubSearchJson::PathOfXpub(PathOfXpubResult {
-                result: "match",
-                path: Some("m/84'/0'/0'".to_string()),
-                template: Some("bip84".to_string()),
+            body: XpubSearchJson::PathOfXpub(PathOfXpubResult::Match {
+                path: "m/84'/0'/0'".to_string(),
+                template: "bip84".to_string(),
                 account: Some(0),
                 target_xpub_canonical: "xpub6...".to_string(),
                 target_xpub_variant: Some("zpub"),
@@ -163,29 +162,38 @@ mod tests {
     }
 
     #[test]
-    fn xpub_search_envelope_no_variant_serializes_as_null() {
-        let env_no_variant = XpubSearchEnvelope {
+    fn xpub_search_envelope_no_match_omits_path_template_account() {
+        // v0.29.0 SemVer-minor: NoMatch variant omits path/template/account
+        // fields entirely (previously emitted as null). target_xpub_variant
+        // remains in NoMatch variant and serializes as null when None.
+        let env_no_match = XpubSearchEnvelope {
             schema_version: "1",
-            body: XpubSearchJson::PathOfXpub(PathOfXpubResult {
-                result: "no_match",
-                path: None,
-                template: None,
-                account: None,
+            body: XpubSearchJson::PathOfXpub(PathOfXpubResult::NoMatch {
                 target_xpub_canonical: "xpub6...".to_string(),
                 target_xpub_variant: None,
                 searched_count: 7,
             }),
         };
-        let v = serde_json::to_value(&env_no_variant).expect("serialize");
-        // Plan §3.4 lock: `target_xpub_variant` is always emitted; None
-        // serializes as `null` (no `skip_serializing_if`).
+        let v = serde_json::to_value(&env_no_match).expect("serialize");
+        assert_eq!(v["result"], "no_match");
+        // target_xpub_variant is None → serializes as null (still in NoMatch variant).
         assert!(
             v["target_xpub_variant"].is_null(),
-            "None variant must serialize as null; got {:?}",
+            "None target_xpub_variant must serialize as null; got {:?}",
             v["target_xpub_variant"]
         );
-        assert!(v["path"].is_null());
-        assert!(v["account"].is_null());
-        assert!(v["template"].is_null());
+        // v0.29.0 shape: path/template/account are absent (not null) on no_match.
+        assert!(
+            !v.as_object().unwrap().contains_key("path"),
+            "NoMatch must NOT emit path key"
+        );
+        assert!(
+            !v.as_object().unwrap().contains_key("account"),
+            "NoMatch must NOT emit account key"
+        );
+        assert!(
+            !v.as_object().unwrap().contains_key("template"),
+            "NoMatch must NOT emit template key"
+        );
     }
 }

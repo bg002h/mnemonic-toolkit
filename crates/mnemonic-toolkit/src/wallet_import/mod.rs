@@ -57,8 +57,9 @@ pub(crate) trait WalletFormatParser {
 /// pair on `ParsedImport`. Exactly one variant per parse — enforced at the type
 /// level.
 ///
-/// See `design/FOLLOWUPS.md::pr-26-import-provenance-enum-internal-refactor`
-/// for rationale (v0.27.1 Phase 5b deferral).
+/// See `design/FOLLOWUPS.md::pr-26-import-provenance-three-variant-cleanup`
+/// for rationale. v0.29.0: split `Bsms(Option<BsmsAuditFields>)` into two
+/// distinct unit/newtype variants per P0 lock (2-variant split, not 3).
 ///
 /// Visibility is `pub(crate)` to match the existing `ParsedImport` /
 /// `BsmsAuditFields` / `CoreSourceMetadata` types (all `pub(crate)` per
@@ -69,15 +70,15 @@ pub(crate) trait WalletFormatParser {
 pub(crate) enum ImportProvenance {
     /// Bitcoin Core `listdescriptors` parse (`wallet_import/bitcoin_core.rs`).
     BitcoinCore(CoreSourceMetadata),
-    /// BSMS Round-2 parse (`wallet_import/bsms.rs`). Holds `Option` because
-    /// the lenient 2-line excerpt shape carries no audit fields (token /
-    /// signature / first_address / derivation_path absent); the 6-line full
-    /// BIP-129 Round-2 shape populates `Some(BsmsAuditFields)`.
-    Bsms(Option<BsmsAuditFields>),
+    /// BSMS Round-2 6-line (full BIP-129 shape) parse. Carries audit fields
+    /// (token / signature / first_address / derivation_path).
+    BsmsSixLine(BsmsAuditFields),
+    /// BSMS Round-2 2-line (excerpt / lenient shape) parse. No audit fields.
+    BsmsTwoLine,
     /// Coldcard single-sig generic-wallet-export JSON parse
     /// (`wallet_import/coldcard.rs`). SPEC §11.3. Inserted in
     /// alphabetical-by-variant-name slot per CLAUDE.md discipline (between
-    /// `Bsms` and `ColdcardMultisig`).
+    /// `BsmsTwoLine` and `ColdcardMultisig`).
     ///
     /// Constructed by `ColdcardParser::parse` (Phase P3B). The
     /// `cmd/import_wallet.rs` dispatch arm at P3C plumbs this variant to
@@ -139,13 +140,14 @@ pub(crate) enum ImportProvenance {
 }
 
 impl ImportProvenance {
-    /// Back-compat accessor: returns `Some(&audit)` for the `Bsms` variant
-    /// when audit fields are present (6-line shape); `None` for the 2-line
-    /// excerpt shape or for any non-BSMS variant.
+    /// Returns `Some(&audit)` for the `BsmsSixLine` variant; `None` for
+    /// `BsmsTwoLine` (2-line excerpt shape has no audit fields) or any
+    /// non-BSMS variant.
     pub(crate) fn bsms_audit(&self) -> Option<&BsmsAuditFields> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(audit) => audit.as_ref(),
+            Self::BsmsSixLine(audit) => Some(audit),
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -159,7 +161,8 @@ impl ImportProvenance {
     pub(crate) fn source_metadata(&self) -> Option<&CoreSourceMetadata> {
         match self {
             Self::BitcoinCore(meta) => Some(meta),
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -176,7 +179,8 @@ impl ImportProvenance {
     pub(crate) fn coldcard_source_metadata(&self) -> Option<&coldcard::ColdcardSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -194,7 +198,8 @@ impl ImportProvenance {
     pub(crate) fn jade_source_metadata(&self) -> Option<&jade::JadeSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -214,7 +219,8 @@ impl ImportProvenance {
     ) -> Option<&electrum::ElectrumSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(meta) => Some(meta),
@@ -230,7 +236,8 @@ impl ImportProvenance {
     pub(crate) fn sparrow_source_metadata(&self) -> Option<&sparrow::SparrowSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -247,7 +254,8 @@ impl ImportProvenance {
     pub(crate) fn specter_source_metadata(&self) -> Option<&specter::SpecterSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
-            Self::Bsms(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
             Self::Electrum(_) => None,
@@ -502,7 +510,7 @@ mod provenance_tests {
 
     #[test]
     fn provenance_accessors_return_references_not_owned() {
-        let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
+        let p = ImportProvenance::BsmsSixLine(sample_bsms_audit());
         let _: Option<&BsmsAuditFields> = p.bsms_audit();
         let _: Option<&CoreSourceMetadata> = p.source_metadata();
     }
@@ -516,16 +524,16 @@ mod provenance_tests {
 
     #[test]
     fn provenance_bsms_no_audit_variant_yields_none_bsms_audit() {
-        let p = ImportProvenance::Bsms(None);
-        assert!(p.bsms_audit().is_none(), "Bsms(None) variant yields no bsms_audit (2-line shape)");
-        assert!(p.source_metadata().is_none(), "Bsms(None) variant does not expose source_metadata");
+        let p = ImportProvenance::BsmsTwoLine;
+        assert!(p.bsms_audit().is_none(), "BsmsTwoLine variant yields no bsms_audit (2-line shape)");
+        assert!(p.source_metadata().is_none(), "BsmsTwoLine variant does not expose source_metadata");
     }
 
     #[test]
     fn provenance_bsms_variant_yields_some_bsms_audit_and_none_source_metadata() {
-        let p = ImportProvenance::Bsms(Some(sample_bsms_audit()));
-        assert!(p.bsms_audit().is_some(), "Bsms(Some) variant exposes bsms_audit");
-        assert!(p.source_metadata().is_none(), "Bsms variant does not expose source_metadata");
+        let p = ImportProvenance::BsmsSixLine(sample_bsms_audit());
+        assert!(p.bsms_audit().is_some(), "BsmsSixLine variant exposes bsms_audit");
+        assert!(p.source_metadata().is_none(), "BsmsSixLine variant does not expose source_metadata");
     }
 
     /// P0B.2 regression guard: behavior on the existing 2 variants is
@@ -543,18 +551,18 @@ mod provenance_tests {
             "BitcoinCore → source_metadata Some"
         );
 
-        let bsms_some = ImportProvenance::Bsms(Some(sample_bsms_audit()));
-        assert!(bsms_some.bsms_audit().is_some(), "Bsms(Some) → bsms_audit Some");
+        let bsms_some = ImportProvenance::BsmsSixLine(sample_bsms_audit());
+        assert!(bsms_some.bsms_audit().is_some(), "BsmsSixLine → bsms_audit Some");
         assert!(
             bsms_some.source_metadata().is_none(),
-            "Bsms(Some) → source_metadata None"
+            "BsmsSixLine → source_metadata None"
         );
 
-        let bsms_none = ImportProvenance::Bsms(None);
-        assert!(bsms_none.bsms_audit().is_none(), "Bsms(None) → bsms_audit None");
+        let bsms_none = ImportProvenance::BsmsTwoLine;
+        assert!(bsms_none.bsms_audit().is_none(), "BsmsTwoLine → bsms_audit None");
         assert!(
             bsms_none.source_metadata().is_none(),
-            "Bsms(None) → source_metadata None"
+            "BsmsTwoLine → source_metadata None"
         );
     }
 }

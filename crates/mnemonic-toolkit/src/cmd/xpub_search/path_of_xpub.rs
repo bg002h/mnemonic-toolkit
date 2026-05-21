@@ -139,37 +139,48 @@ impl SeedIntakeArgs for PathOfXpubArgs {
 }
 
 /// Per-mode JSON body for path-of-xpub. Top-level fields are flattened into
-/// the `XpubSearchEnvelope` JSON: `schema_version` + `mode` + these fields.
+/// the `XpubSearchEnvelope` JSON: `schema_version` + `mode` + `result` tag +
+/// variant fields.
+///
+/// v0.29.0 SemVer-minor wire-shape break: converted from struct with nullable
+/// optional fields to tagged enum. `#[serde(tag = "result")]` emits
+/// `"result": "match"` / `"result": "no_match"` discriminator and drops the
+/// null-emitting optional fields from the no-match variant.
+/// Closes FOLLOWUP `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
 #[derive(Debug, Serialize)]
-pub struct PathOfXpubResult {
-    /// `"match"` or `"no_match"`.
-    pub result: &'static str,
-    /// Matched derivation path, `null` on no-match.
-    pub path: Option<String>,
-    /// Matched template name (`"bip84"`, `"bip48-wsh"`, or the literal
-    /// `--add-path` string), `null` on no-match.
-    pub template: Option<String>,
-    /// Matched account index (None for `--add-path` templates without an
-    /// account token, and on no-match).
-    pub account: Option<u32>,
-    /// The target xpub after SLIP-0132 normalization (always emitted).
-    pub target_xpub_canonical: String,
-    /// The original SLIP-0132 prefix when the target was alt-prefixed; null
-    /// for canonical xpub/tpub input or for mk1-card input. Always emitted
-    /// (`null` when absent — no `skip_serializing_if`).
-    pub target_xpub_variant: Option<&'static str>,
-    /// Count of candidates exhausted (paths × templates × add-paths).
-    pub searched_count: usize,
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum PathOfXpubResult {
+    /// Match: all search fields populated.
+    Match {
+        /// Matched derivation path (e.g. `"m/84'/0'/0'"`).
+        path: String,
+        /// Matched template name (`"bip84"`, `"bip48-wsh"`, or the literal
+        /// `--add-path` string).
+        template: String,
+        /// Matched account index (None for `--add-path` templates without an
+        /// account token).
+        account: Option<u32>,
+        /// The target xpub after SLIP-0132 normalization.
+        target_xpub_canonical: String,
+        /// The original SLIP-0132 prefix when the target was alt-prefixed; null
+        /// for canonical xpub/tpub input or for mk1-card input.
+        target_xpub_variant: Option<&'static str>,
+        /// Count of candidates exhausted (paths × templates × add-paths).
+        searched_count: usize,
+    },
+    /// No match: envelope-scope fields preserved; search fields absent.
+    NoMatch {
+        /// The target xpub after SLIP-0132 normalization.
+        target_xpub_canonical: String,
+        /// The original SLIP-0132 prefix when the target was alt-prefixed; null
+        /// for canonical xpub/tpub input or for mk1-card input.
+        target_xpub_variant: Option<&'static str>,
+        /// Count of candidates exhausted (paths × templates × add-paths).
+        searched_count: usize,
+    },
 }
 
-/// v0.27.1 Phase 5a API-discipline scaffolding for `PathOfXpubResult`.
-///
-/// Construct a match-arm result that enforces the `result:"match"` ↔
-/// `Some(path/template)` correlation at the call site. Fields remain `pub` for
-/// back-compat (wire-shape is byte-preserved); the type-level invariant fix
-/// (tagged enum + `#[serde(skip_serializing_if)]`) requires the wire-shape
-/// change deferred to v0.28+ — tracked by FOLLOWUP
-/// `xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`.
+/// Construct a `PathOfXpubResult::Match` variant.
 ///
 /// `account` remains `Option<u32>` per existing semantics (None for
 /// `--add-path` templates without an account token).
@@ -181,10 +192,9 @@ pub(super) fn build_path_match(
     target_xpub_variant: Option<&'static str>,
     searched_count: usize,
 ) -> PathOfXpubResult {
-    PathOfXpubResult {
-        result: "match",
-        path: Some(path),
-        template: Some(template),
+    PathOfXpubResult::Match {
+        path,
+        template,
         account,
         target_xpub_canonical,
         target_xpub_variant,
@@ -192,18 +202,14 @@ pub(super) fn build_path_match(
     }
 }
 
-/// Construct a no-match-arm result. Fields representing the matched payload
-/// are pinned to `None` at the boundary; envelope-scope fields are preserved.
+/// Construct a `PathOfXpubResult::NoMatch` variant.
+/// Envelope-scope fields (canonical xpub, variant, searched count) are preserved.
 pub(super) fn build_path_no_match(
     target_xpub_canonical: String,
     target_xpub_variant: Option<&'static str>,
     searched_count: usize,
 ) -> PathOfXpubResult {
-    PathOfXpubResult {
-        result: "no_match",
-        path: None,
-        template: None,
-        account: None,
+    PathOfXpubResult::NoMatch {
         target_xpub_canonical,
         target_xpub_variant,
         searched_count,

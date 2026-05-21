@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.29.0] — 2026-05-21
+
+**SemVer-MINOR release.** Driver: xpub-search result wire-shape replacement (struct → tagged enum). Paired with `mnemonic-gui-v0.14.0` (downstream wire-shape consumer).
+
+### Wire-shape break (SemVer-minor)
+
+- **`xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution`** — `PathOfXpubResult`, `PassphraseOfXpubResult`, and `AccountOfDescriptorResult` are now `#[serde(tag = "result", rename_all = "snake_case")]` tagged enums with `Match { ... }` and `NoMatch { ... }` variants. Consumers checking `.path === null` (or similar null-on-no-match patterns) break — the `path` / `template` / `account` keys are absent on `no_match` rather than null. Discriminator field name preserved as `"result"` (`"match"` / `"no_match"`). 3 v0.27.0 envelope drift cells marked `#[ignore]` with SemVer rationale.
+
+### Refactors (no wire-shape impact)
+
+- **`pr-26-import-provenance-three-variant-cleanup`** — Split `ImportProvenance::Bsms(Option<BsmsAuditFields>)` → `BsmsSixLine(BsmsAuditFields)` + `BsmsTwoLine` (unit variant). P0 STRICT-GATE locked this as a 1-variant split (NOT the FOLLOWUPS body's stale "3-variant" framing). All 7 accessor match blocks + 5 test cells + 1 construction site updated.
+
+- **`error-rs-retroactive-alphabetical-sort`** — Pure reorder: 44 `ToolkitError` variants sorted alphabetically; ~132 arm reorders across `Display`, `exit_code`, `kind` exhaustive match blocks + 1 partial-match `details`. `exit_code` multi-variant grouped patterns broken into single-variant arms post-sort (new FOLLOWUP `error-rs-exit-code-arm-fragmentation-post-sort` for future readability pass). Shipped as a separate commit on the same branch (per bisect-hygiene lock R0-I3).
+
+### Tests
+
+- 2028 → 2025 (-3 net, 3 cells `#[ignore]`-gated for SemVer rationale on v0.27.0 envelope drift fixtures).
+- `gui-schema` JSON byte-identical between v0.28.7 and v0.29.0 — confirms zero clap surface drift; the wire-shape break is in serde output only, not in CLI flag definitions.
+
+### GUI lockstep
+
+Paired tag `mnemonic-gui-v0.14.0`: pin bump v0.28.4 → v0.29.0; schema-mirror unchanged (clap surface unchanged; flag-name parity holds). The new FOLLOWUP `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification` documents that GUI's runtime consumers of xpub-search JSON have NO automated drift gate.
+
+### Note
+
+Cycle 4 of v0.28+ residual FOLLOWUP release plan (Wave 3 SemVer-minor cliff). See `design/BRAINSTORM_v0_28_plus_residual_followups.md` + `design/PLAN_mnemonic_toolkit_v0_29_0.md` + `design/cycle-4-p0-recon.md`. Opus plan-doc R0 review YELLOW (4 Important folded inline) → R1 GREEN → end-of-cycle GREEN (0C/0I/0M).
+
+---
+
 ## mnemonic-toolkit [0.28.7] — 2026-05-20
 
 Patch release: 4 hardening FOLLOWUPs from the post-A/B/C residual backlog (Wave 2).
