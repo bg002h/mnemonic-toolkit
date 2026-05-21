@@ -81,6 +81,7 @@ pub const SECRET_NODE_TYPES: &[&str] = &[
     "ms1",
     "bip38",
     "electrum-phrase",
+    "seedqr",
 ];
 
 /// Token-form strings of every `SlotSubkey` variant whose

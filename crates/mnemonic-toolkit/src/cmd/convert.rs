@@ -30,6 +30,13 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeType {
     Phrase,
+    /// v0.31.6 — SeedQR digit-string (48/60/72/84/96 ASCII digits encoding
+    /// a BIP-39 phrase per the SeedSigner SeedQR spec). Secret-bearing;
+    /// decoded inline via `crate::seedqr::decode` at `convert::run`
+    /// stdin-resolution time (L808+), then substituted as a `Phrase` node
+    /// for the downstream conversion dispatch. Closes
+    /// `seedqr-digits-from-input-unification` FOLLOWUP.
+    Seedqr,
     Entropy,
     Xpub,
     Xprv,
@@ -48,6 +55,7 @@ impl NodeType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Phrase => "phrase",
+            Self::Seedqr => "seedqr",
             Self::Entropy => "entropy",
             Self::Xpub => "xpub",
             Self::Xprv => "xprv",
@@ -66,6 +74,7 @@ impl NodeType {
     pub fn from_token(t: &str) -> Option<Self> {
         Some(match t {
             "phrase" => Self::Phrase,
+            "seedqr" => Self::Seedqr,
             "entropy" => Self::Entropy,
             "xpub" => Self::Xpub,
             "xprv" => Self::Xprv,
@@ -86,6 +95,7 @@ impl NodeType {
         matches!(
             self,
             Self::Phrase
+                | Self::Seedqr
                 | Self::Entropy
                 | Self::Xprv
                 | Self::Wif
@@ -134,7 +144,7 @@ pub fn parse_from_input(s: &str) -> Result<FromInput, String> {
     }
     let node = NodeType::from_token(token).ok_or_else(|| {
         format!(
-            "unknown --from node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address",
+            "unknown --from node {:?}; expected one of: phrase, seedqr, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address",
             token
         )
     })?;
@@ -160,6 +170,8 @@ pub struct ConvertArgs {
     ///
     /// `<node>` is one of:
     ///   phrase           BIP-39 mnemonic (secret)
+    ///   seedqr           SeedQR digit-string, 48/60/72/84/96 ASCII digits
+    ///                    encoding a BIP-39 phrase (secret; input-only)
     ///   entropy          raw entropy hex (secret)
     ///   xpub             BIP-32 extended public key
     ///   xprv             BIP-32 extended private key (secret)
@@ -577,6 +589,21 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Phrase, Fingerprint)
             | (Phrase, Ms1)
             | (Phrase, Wif)        // SPEC-A v0.6.1
+            // v0.31.6 — SeedQR is a digit-encoded BIP-39 phrase. `seedqr`
+            // decodes to a phrase then projects to any phrase-reachable
+            // target. `(Seedqr, Phrase)` IS meaningful (the canonical
+            // decode operation), distinguishing it from the
+            // `(Phrase, Phrase)` identity barrier. Closes
+            // `seedqr-digits-from-input-unification`.
+            | (Seedqr, Phrase)
+            | (Seedqr, Entropy)
+            | (Seedqr, Xpub)
+            | (Seedqr, Xprv)
+            | (Seedqr, Fingerprint)
+            | (Seedqr, Ms1)
+            | (Seedqr, Wif)
+            | (Seedqr, Bip38)
+            | (Seedqr, Address)
             | (Entropy, Xpub)
             | (Entropy, Xprv)
             | (Entropy, Fingerprint)
@@ -824,6 +851,11 @@ pub fn run<R: Read, W: Write, E: Write>(
                     t
                 ))
             })?;
+            // NB: `seedqr` is intentionally absent from the `--to`
+            // PossibleValuesParser list (L207) — it is an INPUT-only node
+            // (`--from seedqr=`), so clap rejects `--to seedqr` at parse-time
+            // (exit 2). Emitting a SeedQR digit-string is the job of
+            // `mnemonic seedqr encode`.
             targets.push(n);
         }
     }
@@ -865,13 +897,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     //    `--from phrase --to wif --passphrase x` does NOT spuriously
     //    fire the ignored-passphrase warning (phrase → seed → master
     //    → derive at path → leaf privkey → WIF traverses PBKDF2).
-    let edge_uses_pbkdf2 = matches!(primary.node, NodeType::Phrase | NodeType::Entropy)
-        && targets.iter().any(|t| {
-            matches!(
-                t,
-                NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
-            )
-        });
+    // v0.31.6 — Seedqr decodes to a BIP-39 phrase, so it traverses the
+    // same PBKDF2 (phrase → seed) path as Phrase for derivation targets.
+    let edge_uses_pbkdf2 =
+        matches!(primary.node, NodeType::Seedqr | NodeType::Phrase | NodeType::Entropy)
+            && targets.iter().any(|t| {
+                matches!(
+                    t,
+                    NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
+                )
+            });
     // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS
     // meaningful; suppress the "ignored" warning for BIP-38 edges.
     let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge;
@@ -1058,19 +1093,32 @@ fn compute_outputs(
     let secp = Secp256k1::new();
 
     match from {
-        Phrase | Entropy => {
-            // BIP-39 source — derive once, project.
+        Seedqr | Phrase | Entropy => {
+            // BIP-39 source — derive once, project. v0.31.6: Seedqr decodes
+            // its digit-string to a BIP-39 phrase, then folds into the same
+            // entropy-projection path. Unlike (Phrase, Phrase), the
+            // (Seedqr, Phrase) edge IS permitted (the canonical decode).
             // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
             // Drop+Zeroize; tracked by FOLLOWUP
             // `rust-bip39-mnemonic-zeroize-upstream`.
-            let entropy: zeroize::Zeroizing<Vec<u8>> = if from == Phrase {
-                let m = Mnemonic::parse_in(language.into(), value)
-                    .map_err(ToolkitError::Bip39)?;
-                zeroize::Zeroizing::new(m.to_entropy())
-            } else {
-                zeroize::Zeroizing::new(hex::decode(value).map_err(|e| {
+            let entropy: zeroize::Zeroizing<Vec<u8>> = match from {
+                Seedqr => {
+                    let phrase =
+                        mnemonic_toolkit::seedqr::decode(value).map_err(|e| {
+                            ToolkitError::BadInput(format!("seedqr: convert: decode: {e}"))
+                        })?;
+                    let m = Mnemonic::parse_in(language.into(), &phrase)
+                        .map_err(ToolkitError::Bip39)?;
+                    zeroize::Zeroizing::new(m.to_entropy())
+                }
+                Phrase => {
+                    let m = Mnemonic::parse_in(language.into(), value)
+                        .map_err(ToolkitError::Bip39)?;
+                    zeroize::Zeroizing::new(m.to_entropy())
+                }
+                _ => zeroize::Zeroizing::new(hex::decode(value).map_err(|e| {
                     ToolkitError::BadInput(format!("--from entropy hex-decode: {e}"))
-                })?)
+                })?),
             };
 
             let needs_derive = targets
@@ -1136,6 +1184,7 @@ fn compute_outputs(
                     Path => return Err(ToolkitError::BadInput(
                         "--to path is informational; not emitted as a value".into(),
                     )),
+                    Seedqr => unreachable!("--to seedqr is refused at target-parse in convert::run"),
                     Mk1 => unreachable!("classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"),
                     Bip38 => {
                         // SPEC v0.7 §12 + v0.8 §12.b — composite phrase/entropy → wif → bip38.
@@ -1652,6 +1701,7 @@ mod secret_taxonomy_parity_tests {
 
     declare_node_type_variants!(
         Phrase,
+        Seedqr,
         Entropy,
         Xpub,
         Xprv,
