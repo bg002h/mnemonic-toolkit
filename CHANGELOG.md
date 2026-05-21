@@ -6,6 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.2] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: Sparrow taproot SINGLESIG (Bip86 `tr(@0/**)` template-mode) wallets now import successfully via the standard substitution path. Closes Cycle 9 (`sparrow-taproot-singlesig-template-mode-import` FOLLOWUP — the same-session follow-on filed at Cycle 8 close).
+
+### Changed
+
+- **`mnemonic import-wallet --format sparrow`** with Bip86 taproot singlesig wallets (template-mode emit: `tr(@0/**)` per `wallet_export/sparrow.rs:195`) now succeeds. The Step 5 `@N/**` → `[fp/path]xpub/<0;1>/*` substitution loop produces a clean `tr([fp/86'/0'/0']xpub.../<0;1>/*)` descriptor that flows through `concrete_keys_to_placeholders` + `parse_descriptor` per Phase 0 P0 recon (empirically verified at master HEAD `7fa721d`).
+- Cycle 8's narrow refusal block at `wallet_import/sparrow.rs::parse` Step 6 (`has_tr && has_at_placeholder` arm) is REMOVED. The path-split discriminator (`is_descriptor_passthrough`) stays: descriptor-passthrough (taproot MULTISIG) still bypasses Step 5; otherwise template-mode (incl. taproot singlesig) flows through substitution.
+
+### Added
+
+- 2 new sparrow-taproot integration cells: `taproot_singlesig_template_imports_via_substitution` (fixture-driven happy path) + `taproot_singlesig_envelope_blocked_by_wallet_import_taproot_internal_key` (boundary cell documenting the orthogonal `wallet-import-taproot-internal-key` FOLLOWUP that still blocks `--from-import-json` re-emission for ALL taproot envelopes — same boundary that applies to taproot multisig from Cycle 8).
+- New fixture `tests/fixtures/wallet_import/sparrow-singlesig-p2tr.json` (Bip86 m/86'/0'/0' singlesig) — closes the p2wpkh / p2sh-p2wpkh / p2tr fixture parity gap.
+- Cycle 9 in-file unit test conversion: `parse_p2tr_singlesig_refused` → `parse_p2tr_singlesig_imports_via_substitution`.
+
+### Documentation
+
+- `docs/manual/src/45-foreign-formats.md` §"Taproot import" rewritten to describe BOTH branches (v0.31.1 multisig descriptor-passthrough + v0.31.2 singlesig template-mode substitution). Anchor `#taproot-import-shipped-v0311` preserved (R0 M1 fold). Round-trip note added covering the orthogonal `wallet-import-taproot-internal-key` gap.
+
+### Test totals
+
+- 1097 cells (up from 1095 in v0.31.1; +2 net).
+
+### Cycle topology
+
+Cycle 9 of the v0.28+ residual queue closes the same-session follow-on filed at Cycle 8 close. The v0.28+ residual queue (Cycles 3-9) is fully closed across {`v0.28.5`, `v0.28.6`, `v0.28.7`, `v0.29.0`, `v0.30.0`, `v0.30.1`, `v0.31.0`, `v0.31.1`, `v0.31.2`}.
+
+### R0 review
+
+Opus R0 plan-doc review GREEN (0C / 3I / 3M). Persisted to `design/agent-reports/v0_31_2-plan-doc-r0-review.md`. All 3 Important findings folded inline pre-Phase-2: I1 (sparrow.rs rustdoc + fn-level docstring drift) + I2 (under-specified round-trip cell — converted to orthogonal-boundary cell after empirical discovery that `--from-import-json` refuses ALL taproot envelopes) + I3 (fixture asymmetry — added `sparrow-singlesig-p2tr.json`).
+
+---
+
 ## mnemonic-toolkit [0.31.1] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: Sparrow taproot multisig wallets (`tr-multi-a` / `tr-sortedmulti-a` descriptor-passthrough shape) now import successfully. Closes Cycle 8 (`sparrow-taproot-descriptor-passthrough-import-support` FOLLOWUP) — **the final cycle in the v0.28+ residual queue.**
