@@ -6,6 +6,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.5] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: `mnemonic seedqr {encode, decode}` word-count support widened from `{12, 24}` → `{12, 15, 18, 21, 24}` (the complete BIP-39 word-count set). Closes `seedqr-15-18-21-word-counts` FOLLOWUP filed at v0.30.0 Cycle 5 brainstorm close.
+
+### Changed
+
+- `seedqr::decode` digit-length gate at `crates/mnemonic-toolkit/src/seedqr.rs`: from `len != 48 && len != 96` to `matches!(len, 48 | 60 | 72 | 84 | 96)`. The new gate accepts 60/72/84 digits = 15/18/21 BIP-39 words × 4 decimal digits per word.
+- `seedqr::encode` word-count gate: from `words.len() != 12 && words.len() != 24` to `matches!(words.len(), 12 | 15 | 18 | 21 | 24)`.
+- Error texts updated: `"invalid digit count (expected 48 or 96; got N)"` → `"invalid digit count (expected 48, 60, 72, 84, or 96; got N)"`; `"invalid word count: N (only 12 or 24 supported)"` → `"invalid word count: N (only 12, 15, 18, 21, or 24 supported)"`.
+
+### Added
+
+- 9 new in-file lib unit cells: `decode_15_word_canonical`, `encode_15_word_canonical`, `round_trip_15_word`, and the 18 + 21-word equivalents.
+- 1 new lib cell: `encode_rejects_22_word_count` — boundary refusal between 21 and 24 (locks the no-silent-accept claim).
+- 3 CLI happy-path cell conversions: `encode_rejects_{15,18,21}_word_count` → `encode_accepts_{15,18,21}_word_count` with byte-exact expected-digits stdout assertions.
+- 1 new CLI JSON-envelope cell: `encode_json_mode_15_word` — confirms `word_count: 15` emits in the JSON envelope (R0 I3b fold).
+- Canonical Trezor zero-entropy vectors documented in the lib `tests` mod (15-word "abandon ×14 + address"; 18-word "abandon ×17 + agent"; 21-word "abandon ×20 + admit"). Derived empirically via `mnemonic convert --from entropy=<20/24/28-byte-zeros> --to phrase`.
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md` `mnemonic seedqr` section: `--digits` / `--from phrase=` documentation reflects all 5 word counts. §"Scope" retitled to "(v0.30.0, widened in v0.31.5)" with the new word-count enumeration + SeedSigner spec rationale. Canonical error-text quotes in §"Stderr / exit codes" updated.
+
+### Test totals
+
+- 2162 cells passing; 12 ignored. +10 net (vs v0.31.4 baseline 2152).
+
+### Cycle topology
+
+Cycle 12 — third cycle of the v0.32+ tier. 7 v0.32+ FOLLOWUPs remain from cycles 5-7 (2 SeedQR + 2 Electrum + 3 BIP-129). Toolkit-only (no GUI lockstep; no clap surface change).
+
+### Review
+
+- Plan-doc opus R0: YELLOW 0C/3I/0M — all 3 Importants folded inline pre-Phase-2 (I1 risk-register error-text claim factually wrong; I3a drop duplicate boundary cells; I3b add JSON-envelope cell).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.31.4] — 2026-05-21
 
 **SemVer-PATCH release.** Defensive hardening: widens the descriptor-passthrough discriminator at `wallet_import/sparrow.rs::parse` Step 6 from the literal substring `script_template.contains("@0/**")` to a regex `Regex::new(r"@\d+/\*\*").is_match(...)`. Closes `sparrow-import-detection-regex-defensive-widening` FOLLOWUP filed at v0.31.2 Cycle 9 close (end-of-cycle opus M1 finding).
