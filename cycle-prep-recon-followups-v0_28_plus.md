@@ -93,3 +93,72 @@
 ## No-action recommendation
 
 This is a pure recon dossier; no brainstorm or implementation triggered. Next-cycle scheduling is user-discretion.
+
+---
+
+# Addendum — 5 additional v0.28+ slugs (2026-05-20)
+
+Round 2 recon dispatched 5 parallel Explore agents on the v0.28+ slugs missed by the original `bsms-|wallet-import|sparrow|coldcard|green|import-wallet|cross-format` prefix grep. HEAD at recon time: `eda8f58`.
+
+## Per-slug verification
+
+### xpub-search-result-type-level-invariant-blocked-on-wire-shape-evolution
+- **`crates/mnemonic-toolkit/src/cmd/xpub_search/path_of_xpub.rs:144`:** ACCURATE — `PathOfXpubResult` struct at cited line.
+- **`crates/mnemonic-toolkit/src/cmd/xpub_search/passphrase_of_xpub.rs:169`:** ACCURATE — `PassphraseOfXpubResult` struct at cited line.
+- **`crates/mnemonic-toolkit/src/cmd/xpub_search/account_of_descriptor.rs:155`:** ACCURATE — `AccountOfDescriptorResult` struct at cited line.
+- **`tests/fixtures/v0_27_0_envelopes/`:** ACCURATE — directory exists with 6 fixture files.
+- **Cross-cutting:** Structs remain as-is (not refactored to enums); wire-shape conversion pending v0.28+ SemVer-minor bump. Ready-to-brainstorm.
+
+### plan-smoke-step4-ms1-on-bundle-not-supported
+- **`design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` §6.3 step 4 (L793):** ACCURATE — plan-doc smoke recipe still references nonexistent `--ms1` flag.
+- **`mnemonic bundle --help`:** No `--ms1` flag present (binary check confirms FOLLOWUP claim).
+- **Cross-cutting:** Pure doc-only fix; rewrite step 4 to use `--slot @0.phrase=` or remove. ~5-line change. Ready-to-brainstorm.
+
+### error-rs-retroactive-alphabetical-sort
+- **`crates/mnemonic-toolkit/src/error.rs`:** "DRIFTED-by-7 variants" — 3 BSMS variants (BsmsRound1Malformed, BsmsSignatureMismatch, BsmsTaprootRefused) added in v0.27.0-v0.28.0 since filing now sit at the END of the enum.
+- **Current sort state:** unsorted-original-order (insertion-order, pre-v0.27.2 convention).
+- **Variant count:** 43.
+- **Cross-cutting:** Scope estimate: enum reorder (~50 lines) + 3 match blocks (Display, exit_code, kind) — ~250 arm rewrites total. Best handled as a single "sort-only, no semantic change" commit. Wait until all non-exhaustive variant insertions for current cycle work are finalized before sorting.
+
+### pr-26-import-provenance-three-variant-cleanup
+- **`crates/mnemonic-toolkit/src/wallet_import/mod.rs` (`ImportProvenance` enum at ~L57):** ACCURATE — `Bsms(Option<BsmsAuditFields>)` shape unchanged; three-variant refactor not yet applied.
+- **`bsms.rs:332` construction site:** ACCURATE.
+- **Cross-cutting:** No drift; Status `open` confirmed. The `Bsms(Option<_>)` design improvement is still pending.
+
+### wallet-import-taproot-internal-key
+- **`cmd/export_wallet.rs:650` (`taproot_internal_key: None` in EmitInputs):** ACCURATE — FOLLOWUP cited at L647-649 comment.
+- **`wallet_export/bsms.rs:66-76`:** ACCURATE — taproot refusal with BIP-386 message; FOLLOWUP `bsms-taproot-emit` cited at L76.
+- **Per-exporter taproot_internal_key logic:** DRIFTED-by-unknown — no `taproot_internal_key: None` patterns in coldcard/jade/sparrow/electrum/specter. The body's per-exporter framing doesn't match current code (issue scope is the `run_from_import_json` gate, not per-exporter).
+- **Cross-cutting:** **Scope may be smaller than the FOLLOWUP body claims.** Verify whether per-exporter coverage was the original intent OR if the envelope-gate fix at run_from_import_json is sufficient. Re-validate before brainstorm.
+
+---
+
+## Round 2 aggregate
+
+| Slug | Status | Notes |
+|---|---|---|
+| xpub-search-result-type-level-invariant | ✅ ACCURATE | ready-to-brainstorm |
+| plan-smoke-step4-ms1-on-bundle | ✅ ACCURATE | tiny doc-only fix |
+| error-rs-retroactive-alphabetical-sort | ⚠️ **Scope drift** | +3 variants since filing; reorder scope grew |
+| pr-26-import-provenance-three-variant-cleanup | ✅ ACCURATE | shape unchanged |
+| wallet-import-taproot-internal-key | ⚠️ **Scope drift** | per-exporter claim doesn't match code |
+
+**3 ACCURATE / 2 scope-drift.**
+
+## Combined backlog (Round 1 + Round 2 = 15 v0.28+ open slugs reconned)
+
+- ✅ ACCURATE (8 ready-to-brainstrom): bsms-bip129-encryption-envelope, wallet-import-jade-seedqr, wallet-import-electrum-encrypted, import-wallet-envelope-schema-version-narrative-drift, cross-format-refusal-matrix-include-coldcard-multisig, xpub-search-result-type-level-invariant, plan-smoke-step4-ms1-on-bundle, pr-26-import-provenance-three-variant-cleanup.
+- 🔧 Line-drift only (3 mechanical at brainstorm-write): bsms-import-taproot-refusal-parity, green-emitter-multisig-refusal-template-only, sparrow-taproot-descriptor-passthrough-import-support.
+- ⚠️ Body amended (2): coldcard-legacy-mk1-mk2-top-level-xpub-inference (parser implemented; fixture+tests gap only), wallet-import-format-mismatch-matrix-completion (post-v0.28.0 expansion noted).
+- ⚠️ **Round 2 scope drift surfaced (2): re-validate before brainstorm** — `error-rs-retroactive-alphabetical-sort` (scope grew +3 variants), `wallet-import-taproot-internal-key` (per-exporter framing doesn't match code).
+
+## Highest-leverage next-cycle candidates
+
+| Candidate | Effort | Why high-leverage |
+|---|---|---|
+| `plan-smoke-step4-ms1-on-bundle-not-supported` | ~30 min | Tiny doc-only fix; single PLAN_*.md edit |
+| `error-rs-retroactive-alphabetical-sort` | ~2-4 hours | Mechanical refactor, no semantic change; clearly delimited scope (43 variants × 4 match blocks); should ship before more variants accumulate |
+| `cross-format-refusal-matrix-include-coldcard-multisig` | ~1 hour | Already-filed; opus-recommended; ~30 LOC test update |
+| `pr-26-import-provenance-three-variant-cleanup` | ~1 day | Pure type refactor; clear scope; no wire-format change |
+| `import-wallet-envelope-schema-version-narrative-drift` | ~1 hour | Doc-only rename clarification |
+
