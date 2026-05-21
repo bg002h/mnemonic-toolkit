@@ -22,35 +22,35 @@ use bip39::{Language, Mnemonic};
 /// boundary via `cmd::seedqr::map_seedqr_error`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeedqrError {
-    InvalidDigits { got: usize },
-    InvalidDigitChar { pos: usize, ch: char },
-    InvalidWordIndex { pos: usize, idx: u16 },
-    InvalidWordCount { got: usize },
     ChecksumFailure(String),
+    InvalidDigitChar { pos: usize, ch: char },
+    InvalidDigits { got: usize },
+    InvalidWordCount { got: usize },
+    InvalidWordIndex { pos: usize, idx: u16 },
 }
 
 impl std::fmt::Display for SeedqrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SeedqrError::InvalidDigits { got } => write!(
+            SeedqrError::ChecksumFailure(msg) => write!(
                 f,
-                "invalid digit count (expected 48 or 96; got {got})",
+                "BIP-39 checksum failure: {msg}",
             ),
             SeedqrError::InvalidDigitChar { pos, ch } => write!(
                 f,
                 "invalid character at position {pos}: {ch:?}",
             ),
-            SeedqrError::InvalidWordIndex { pos, idx } => write!(
+            SeedqrError::InvalidDigits { got } => write!(
                 f,
-                "invalid word index {idx} at position {pos} (must be 0..=2047)",
+                "invalid digit count (expected 48 or 96; got {got})",
             ),
             SeedqrError::InvalidWordCount { got } => write!(
                 f,
                 "invalid word count: {got} (only 12 or 24 supported)",
             ),
-            SeedqrError::ChecksumFailure(msg) => write!(
+            SeedqrError::InvalidWordIndex { pos, idx } => write!(
                 f,
-                "BIP-39 checksum failure: {msg}",
+                "invalid word index {idx} at position {pos} (must be 0..=2047)",
             ),
         }
     }
@@ -80,7 +80,7 @@ pub fn decode(input: &str) -> Result<String, SeedqrError> {
     let wordlist = Language::English.word_list();
     let mut words: Vec<&'static str> = Vec::with_capacity(len / 4);
     for (group, chunk) in stripped.as_bytes().chunks(4).enumerate() {
-        // SAFETY: chunk is 4 ASCII bytes per prior digit-validation loop.
+        // Invariant: chunk is 4 ASCII bytes per the prior digit-validation loop.
         let s = std::str::from_utf8(chunk).expect("ASCII digits");
         let idx: u16 = s.parse().expect("4 ASCII digits parse to u16");
         if idx as usize >= wordlist.len() {
