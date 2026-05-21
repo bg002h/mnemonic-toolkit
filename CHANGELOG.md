@@ -6,6 +6,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.32.1] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: `import-wallet --bsms-round1` now accepts ENCRYPTED Round-1 KEY records (hex `MAC || ciphertext`) in addition to plaintext 5-line records, decrypting them with the shared `--bsms-encryption-token` before the existing BIP-322 signature verify. Closes `bsms-encryption-round1-decrypt-then-verify` FOLLOWUP — the first of the three BIP-129-encryption follow-ons from Cycle 7. Closes the TV-3 decrypt-then-refuse boundary.
+
+### Changed
+
+- `--bsms-round1 <FILE>` auto-detects encrypted vs plaintext records (`is_encrypted_bsms_record`: raw hex with no `BSMS 1.0` header → encrypted). Encrypted records decrypt via the same `bsms_crypto` recipe as the Round-2 path (PBKDF2-SHA512 → AES-256-CTR → HMAC-SHA256, Encrypt-and-MAC), MAC-verify, then flow into the existing `parse_round1` + BIP-322 verify.
+- The `--bsms-encryption-token` is now read + width-validated ONCE (new `BsmsToken` struct + `read_and_validate_bsms_token`) and shared between the Round-1 verify path and the Round-2 descriptor-decrypt block (de-duplicating the token read; prerequisite for the per-Signer-token follow-on). The stdin-contention guard was hoisted above the Round-1 verify path so the dual-stdin (`--blob=- AND --bsms-encryption-token=-`) refusal fires before the token consumes stdin.
+- New shared `decrypt_bsms_record(text, token, ctx)` helper backs both decrypt paths (the Round-2 block now consumes it; NOTICE + error text byte-identical).
+
+### Added
+
+- 5 integration cells: `tv3_round1_decrypt_then_verify`, `round1_encrypted_without_token_refused`, `round1_encrypted_wrong_token_mac_mismatch`, `round1_plaintext_still_verifies_no_misclassify`, `round1_encrypted_decrypt_ok_but_sig_fail` (lenient NOTICE + `--bsms-verify-strict` fatal; fixture built via test-time re-encryption with the `bsms_crypto` pub primitives). 1 in-file unit cell for `is_encrypted_bsms_record`.
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md`: `--bsms-round1` documents the dual plaintext/encrypted intake; `--bsms-encryption-token` documents the shared Round-1+Round-2 usage; new encrypted-Round-1 stderr NOTICE row.
+
+### Behavior preservation
+
+- The encrypted Round-2 `--blob` path (NOTICE + MAC + parser refusal of TV-3's 5-line record) is byte-identical (12 prior encrypted-suite cells green). A plaintext Round-1 record via `--bsms-round1` (no token) still verifies — the encrypted-detection never mis-classifies plaintext (the `BSMS 1.0` header is not all-hex).
+
+### Test totals
+
+- 2198 cells passing; 12 ignored. +6 net (vs v0.32.0 baseline 2192).
+
+### Cycle topology
+
+Cycle 15 — sixth cycle of the v0.32+ tier; first of the sequential BIP-129-BSMS arc (`bsms-encryption-round1-decrypt-then-verify` → `bsms-encryption-per-signer-tokens` → `bsms-encryption-cross-impl-coinkite-python-smoke`). No new flag → no GUI lockstep. 4 v0.32+ FOLLOWUPs remain (2 Electrum + 2 BIP-129).
+
+### Review
+
+- Plan-doc opus R0: GREEN 0C/1I/2M (hoist-site reorder + cite-existing-TV3-test + decrypt-OK-sig-FAIL cell, all folded inline).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.32.0] — 2026-05-21
 
 **SemVer-MINOR release.** New `--variant <standard|compact>` flag adds CompactSeedQR support to `mnemonic seedqr`. Closes `seedqr-compact-variant` FOLLOWUP — the last of the four SeedQR follow-ons from the v0.30.0 introductory cycle.
