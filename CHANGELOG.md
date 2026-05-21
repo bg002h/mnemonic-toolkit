@@ -6,6 +6,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.32.0] — 2026-05-21
+
+**SemVer-MINOR release.** New `--variant <standard|compact>` flag adds CompactSeedQR support to `mnemonic seedqr`. Closes `seedqr-compact-variant` FOLLOWUP — the last of the four SeedQR follow-ons from the v0.30.0 introductory cycle.
+
+CompactSeedQR (SeedSigner's binary-mode QR variant) stores the raw BIP-39 entropy bytes instead of the decimal word-index digits. The toolkit represents the payload as lowercase hex: 16 bytes (32 hex chars) for 12-word, 32 bytes (64 hex chars) for 24-word. Per SeedSigner's `CompactSeedQrEncoder` (primary-source verified), only 12 and 24 words are compact-supported.
+
+### Added
+
+- `--variant <standard|compact>` flag (default `standard`) on both `mnemonic seedqr encode` and `mnemonic seedqr decode`. Derived `SeedqrVariant` ValueEnum.
+- `seedqr::encode_compact` / `seedqr::decode_compact` library primitives. `encode_compact` = `Mnemonic::to_entropy()` → hex (the to_entropy bytes are exactly the SeedSigner compact payload: 11-bit index pack minus checksum). `decode_compact` = hex → byte-count check {16,32} → `from_entropy_in` → phrase.
+- 3 library-local `SeedqrError` variants: `CompactInvalidHex`, `CompactByteCountUnsupported`, `CompactWordCountUnsupported`.
+- 18 new test cells (10 lib unit + 8 CLI integration): compact encode/decode/round-trip 12+24, JSON-envelope `variant: compact`, 15-word + 20-byte + invalid-hex refusals, uppercase/whitespace-hex acceptance, standard-decode-of-64-char-hex clean-error footgun check.
+
+### Changed
+
+- `SeedqrEnvelope.variant` field (present since v0.30.0, hardcoded `"standard"`) now reflects the selected variant on both emit sites. The `digits` field holds the payload (decimal for standard, hex for compact).
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md` `mnemonic seedqr`: synopsis + flags document `--variant`; §Scope flips CompactSeedQR from "deferred" to shipped (12/24 only, hex form); new worked example with the `xxd -r -p | qrencode -8` binary-QR render recipe.
+
+### Test totals
+
+- 2192 cells passing; 12 ignored. +18 net (vs v0.31.6 baseline 2174).
+
+### Cross-repo lockstep
+
+`--variant` is a net-new flag NAME on TWO subcommands (seedqr-encode + seedqr-decode) → trips the GUI `schema_mirror` flag-NAME-parity gate. Paired GUI release `mnemonic-gui-v0.17.0` (Cycle 14b) adds the `--variant` dropdown to both schema entries + bumps the toolkit pin. Tracked at FOLLOWUP `gui-seedqr-variant-flag-mirror`.
+
+### Cycle topology
+
+Cycle 14 — fifth cycle of the v0.32+ tier; the **first 0.32.x MINOR release** and the close of the SeedQR-completion arc (all four v0.30.0 SeedQR follow-ons now shipped: bundle-slot v0.31.3, 15/18/21 word-counts v0.31.5, --from unification v0.31.6, compact-variant v0.32.0). 5 v0.32+ FOLLOWUPs remain (2 Electrum + 3 BIP-129).
+
+### Review
+
+- Plan-doc opus R0: GREEN 0C/0I/3M (all folded inline: derived ValueEnum; +3 CLI test cells; citation line-drift).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.31.6] — 2026-05-21
 
 **SemVer-PATCH release.** Surface unification + deprecation: the SeedQR digit-string input is unified into the shared `--from <node>=<value>` grammar via a new `NodeType::Seedqr`. `mnemonic convert --from seedqr=<digits> --to <node>` is now wired end-to-end, and `mnemonic seedqr decode` gains the canonical `--from seedqr=<digits>` form. The original `--digits` flag is preserved as a deprecated alias (stderr notice; removal in a future release). Closes `seedqr-digits-from-input-unification` FOLLOWUP filed at v0.30.0 Cycle 5 plan-doc R0 §I4.
