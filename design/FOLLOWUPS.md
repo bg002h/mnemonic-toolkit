@@ -2837,7 +2837,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`SEEDQR_ENCODE_FLAGS` + `SEEDQR_DECODE_FLAGS`); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `mnemonic-toolkit-v0.32.0`.
 - **What:** Add `--variant` (Dropdown `["standard", "compact"]`, default standard) to BOTH seedqr schema entries; bump toolkit pin v0.31.6 → v0.32.0. No `SECRET_NODE_TYPES` change this cycle (no new node type), so the supply-chain drift gate stays quiet. GUI v0.17.0 (MINOR — paired with toolkit MINOR).
 - **Why deferred:** Cross-repo; ships as Cycle 14b immediately following the toolkit tag (lockstep).
-- **Status:** `open`
+- **Status:** `resolved 456d2a2` — mnemonic-gui-v0.17.0 (Cycle 14b). Added `--variant` Dropdown (`["standard","compact"]`, default standard) to both `SEEDQR_ENCODE_FLAGS` + `SEEDQR_DECODE_FLAGS` (new `SEEDQR_VARIANTS` const). Toolkit pin v0.31.6 → v0.32.0. No `SECRET_NODE_TYPES` change (CompactSeedQR added no new NodeType) so the supply-chain drift gate stayed quiet. 353 GUI cells; schema_mirror green with `--variant` on both subcommands.
 - **Tier:** `v0.32+-gui-lockstep`
 - **Tags:** none
 - **Companion:** parent `seedqr-compact-variant` (resolved v0.32.0).
