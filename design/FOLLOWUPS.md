@@ -2620,14 +2620,32 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-19, promoted from `design/v0_28_0-cycle-followups.md` during Phase P14A triage. Surfaced during Phase P1B-v2 execution (instance A, `v0.28.0/p1-sparrow-v2`); SPEC §11.1 implementation discovery.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` (parse-step-6 taproot refusal — `script_template.contains("tr(")` short-circuit returning `ImportWalletParse("taproot scripts are not yet supported ...")`).
+  - `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` Step 6 (path-split at v0.31.1; previously parse-step-6 taproot refusal).
   - `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:215-219` (emit-side taproot descriptor-passthrough).
-- **What:** v0.29+: Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refuses taproot scripts; full taproot import requires a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
-- **Why deferred:** P1B is the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough support symmetric across all 6 new parsers (Sparrow/Specter/Coldcard/etc.).
-- **Status:** open
+- **What:** v0.29+: Sparrow's emit ships taproot wallets as DESCRIPTOR-PASSTHROUGH (concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` instead of `@N/**` placeholders). The P1B parse path substitutes `@N/**` placeholders and refused taproot scripts; full taproot import required a parallel parse path that detects descriptor-passthrough shape via heuristic (e.g., `[fp/path]xpub` substring vs `@N/**`) and consumes the embedded concrete-keys descriptor verbatim via `concrete_keys_to_placeholders`.
+- **Why deferred:** P1B was the first per-parser cycle; taproot import is a non-trivial second parse path with its own sniff/refusal matrix. Better to ship singlesig + sortedmulti coverage first and dedicate a follow-on cycle to taproot multisig + descriptor-passthrough.
+- **Status:** resolved (Cycle 8 / v0.31.1).
+- **Resolved by:** `mnemonic-toolkit-v0.31.1` (`3bf0794`). Implementation at `wallet_import/sparrow.rs::parse` Step 6 path-split (`has_tr && !has_at_placeholder` → descriptor-passthrough; skips Step 5 substitution; feeds `script_template` directly through `concrete_keys_to_placeholders` → `parse_descriptor`). 6 integration cells in `tests/cli_import_wallet_sparrow_taproot.rs`. Plan-doc R0 opus review YELLOW 2C/4I/3M (caught heuristic ambiguity between taproot multisig descriptor-passthrough and taproot singlesig template-mode; folded inline with narrow refusal for template-mode + follow-on FOLLOWUP).
+- **Narrowing:** taproot SINGLESIG (Bip86: `tr(@0/**)` template-mode) is NOT shipped in v0.31.1 — preserved as a narrow refusal. Tracked at follow-on FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`.
 - **Tier:** `v0.29+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-sparrow` (resolved v0.28.0).
+- **Companion:** parent `wallet-import-sparrow` (resolved v0.28.0). Follow-on `sparrow-taproot-singlesig-template-mode-import` (v0.31+) tracks the singlesig-template-mode work.
+
+
+### `sparrow-taproot-singlesig-template-mode-import` — Bip86 `tr(@0/**)` template-mode import
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.1 Cycle 8 close. Plan-doc R0 opus review caught that the descriptor-passthrough heuristic (`!script_template.contains("@0/**")`) does NOT classify taproot SINGLESIG correctly: Sparrow's `Bip86` template emits `tr(@0/**)` (template-mode with placeholder), not descriptor-passthrough. Cycle 8 ships taproot MULTISIG descriptor-passthrough only; preserves narrow refusal for taproot singlesig template-mode.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs` Step 6 path-split (the `has_tr && has_at_placeholder` branch refuses with stderr citing this FOLLOWUP slug).
+  - `crates/mnemonic-toolkit/src/wallet_export/sparrow.rs:195` (`CliTemplate::Bip86 => "tr(@0/**)"`) — confirms the template-mode shape.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_sparrow.rs:305` (`sparrow_taproot_singlesig_refused`) — refusal-side regression cell continues to enforce.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_sparrow_taproot.rs::taproot_singlesig_template_still_refused` — Cycle 8 boundary cell.
+- **What:** v0.31+: ship taproot SINGLESIG (Bip86) import via template-mode substitution. Implementation: under the path-split's `has_tr && has_at_placeholder` branch, substitute `@0/**` → `[fp/path]xpub/<0;1>/*` (mirrors the non-taproot template-mode substitution at the existing Step 5 loop), then feed through `concrete_keys_to_placeholders` → `parse_descriptor`. The pipeline likely accepts `tr([fp/path]xpub/<0;1>/*)` but this is UNVERIFIED — first Phase of the follow-on cycle is a TV-style cross-validation against rust-miniscript's taproot singlesig handling.
+- **Why deferred:** Cycle 8 was scoped to descriptor-passthrough specifically. Expanding to template-mode taproot singlesig is a separate path-split branch + its own integration test surface + a verification step against rust-miniscript's taproot acceptance. Better to ship the descriptor-passthrough case alone and dedicate a follow-on cycle.
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `sparrow-taproot-descriptor-passthrough-import-support` (resolved v0.31.1).
 
 ### `coldcard-legacy-mk1-mk2-top-level-xpub-inference` — legacy Coldcard wallet.json top-level xpub support (PARSER IMPLEMENTED; fixture + tests remain)
 
