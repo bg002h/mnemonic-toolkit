@@ -543,15 +543,15 @@ mnemonic export-wallet --from-import-json envelope.json \
 diff coldcard-ms-2of3-p2wsh-with-xfp.txt coldcard_ms_re.txt
 ```
 
-> **Format-name asymmetry note.** `--format coldcard-multisig` is
-> accepted only on the **import** side (sniffs Coldcard's text
-> multisig setup file). On the **export** side, `--format coldcard`
-> emits Coldcard-multisig text when paired with a multisig
-> `--template` (e.g., `wsh-sortedmulti`) — see SPEC v0.8 §5.2. The
-> single `coldcard` export value covers both single-sig JSON
-> (singlesig templates) and multisig text (multisig templates);
-> tracked for export-side flag-name alignment as FOLLOWUP
-> `export-wallet-coldcard-multisig-alias`.
+> **Format-name parity (v0.28.4+).** Both `--format coldcard` and
+> `--format coldcard-multisig` are accepted on the **export** side
+> (v0.28.4 closed the prior asymmetry). The two values produce
+> identical output for multisig templates; `coldcard-multisig`
+> additionally refuses singlesig templates (`bip44`/`bip49`/`bip84`)
+> with a pointer to `--format coldcard`. The recipe above uses
+> `--format coldcard` for backward compatibility with v0.28.0–v0.28.3
+> readers; `--format coldcard-multisig --template wsh-sortedmulti
+> --threshold 2` is equivalent on v0.28.4+.
 
 ## Blockstream Jade (`--format jade`) {#jade-multisig}
 

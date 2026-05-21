@@ -467,3 +467,92 @@ fn cell_1_coldcard_bip84_vector_consistency_with_derive_pipeline() {
         "expected `xpub: xpub6...` prefix from `mnemonic convert`; got {xpub_line:?}",
     );
 }
+
+// ============================================================================
+// v0.28.4 (A1) — `--format coldcard-multisig` export-side alias for `coldcard`
+// with multisig-template precheck. Closes format-name asymmetry FOLLOWUP
+// `export-wallet-coldcard-multisig-alias` from the manual-v0.2.0 cycle's
+// P1b R0 architect §F4.
+// ============================================================================
+
+#[test]
+fn export_wallet_coldcard_multisig_format_wsh_sortedmulti_2_of_3_emits_text() {
+    // Happy path: `--format coldcard-multisig --template wsh-sortedmulti
+    // --threshold 2` produces the same Coldcard-multisig text output as
+    // `--format coldcard --template wsh-sortedmulti --threshold 2` (the
+    // multisig-template arm of ColdcardEmitter::emit delegates identically).
+    let out = assert_cmd::Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format", "coldcard-multisig",
+            "--template", "wsh-sortedmulti",
+            "--threshold", "2",
+            "--network", "mainnet",
+            "--account", "0",
+            "--slot", "@0.xpub=xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX",
+            "--slot", "@0.fingerprint=b8688df1",
+            "--slot", "@0.path=m/48'/0'/0'/2'",
+            "--slot", "@1.xpub=xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6",
+            "--slot", "@1.fingerprint=28645006",
+            "--slot", "@1.path=m/48'/0'/0'/2'",
+            "--slot", "@2.xpub=xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx",
+            "--slot", "@2.fingerprint=5436d724",
+            "--slot", "@2.path=m/48'/0'/0'/2'",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // The Coldcard multisig text format starts with "Name: <wallet>" and
+    // "Policy: K of N" lines (no separate header banner line).
+    assert!(
+        stdout.contains("Name:"),
+        "expected Coldcard multisig 'Name:' field, got: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("Policy: 2 of 3"),
+        "expected 'Policy: 2 of 3', got: {stdout:?}"
+    );
+}
+
+#[test]
+fn export_wallet_coldcard_multisig_format_refuses_singlesig_template_bip84() {
+    let out = assert_cmd::Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format", "coldcard-multisig",
+            "--template", "bip84",
+            "--network", "mainnet",
+            "--account", "0",
+            "--slot", "@0.xpub=xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9",
+            "--slot", "@0.fingerprint=5436d724",
+        ])
+        .output()
+        .expect("mnemonic spawn");
+    assert_ne!(out.status.code(), Some(0), "must refuse");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--format coldcard-multisig requires a multisig --template"),
+        "expected multisig-required refusal, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("--format coldcard"),
+        "expected pointer to `--format coldcard` for singlesig, got: {stderr}"
+    );
+}
+
+#[test]
+fn export_wallet_coldcard_multisig_format_refuses_no_template() {
+    let out = assert_cmd::Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format", "coldcard-multisig",
+            "--network", "mainnet",
+            "--account", "0",
+        ])
+        .output()
+        .expect("mnemonic spawn");
+    assert_ne!(out.status.code(), Some(0), "must refuse");
+}

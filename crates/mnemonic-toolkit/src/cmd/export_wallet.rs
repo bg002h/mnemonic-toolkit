@@ -26,6 +26,8 @@ pub enum CliExportFormat {
     Bip388,
     #[value(name = "coldcard")]
     Coldcard,
+    #[value(name = "coldcard-multisig")]
+    ColdcardMultisig,
     #[value(name = "jade")]
     Jade,
     #[value(name = "sparrow")]
@@ -462,6 +464,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
             CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
             CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
             CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
             CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
@@ -480,6 +483,29 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
         CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::ColdcardMultisig => {
+            // v0.28.4 (A1): `coldcard-multisig` alias requires a multisig
+            // template; singlesig templates route through `--format coldcard`
+            // per chapter-45 § Coldcard. Refuse-with-pointer rather than
+            // silently delegating, so the import-side acceptance of both
+            // `coldcard` and `coldcard-multisig` is mirrored by an
+            // export-side semantic distinction.
+            use crate::template::CliTemplate;
+            match inputs.template {
+                Some(
+                    CliTemplate::WshMulti
+                    | CliTemplate::WshSortedMulti
+                    | CliTemplate::ShWshMulti
+                    | CliTemplate::ShWshSortedMulti
+                    | CliTemplate::TrMultiA
+                    | CliTemplate::TrSortedMultiA,
+                ) => ColdcardEmitter::emit(&inputs),
+                _ => Err(ToolkitError::BadInput(
+                    "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
+                        .into(),
+                )),
+            }
+        }
         CliExportFormat::Jade => JadeEmitter::emit(&inputs),
         CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
         CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
@@ -638,6 +664,7 @@ fn run_from_import_json<W: Write, E: Write>(
             }
             CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
             CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
             CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
             CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
@@ -656,6 +683,29 @@ fn run_from_import_json<W: Write, E: Write>(
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
         CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::ColdcardMultisig => {
+            // v0.28.4 (A1): `coldcard-multisig` alias requires a multisig
+            // template; singlesig templates route through `--format coldcard`
+            // per chapter-45 § Coldcard. Refuse-with-pointer rather than
+            // silently delegating, so the import-side acceptance of both
+            // `coldcard` and `coldcard-multisig` is mirrored by an
+            // export-side semantic distinction.
+            use crate::template::CliTemplate;
+            match inputs.template {
+                Some(
+                    CliTemplate::WshMulti
+                    | CliTemplate::WshSortedMulti
+                    | CliTemplate::ShWshMulti
+                    | CliTemplate::ShWshSortedMulti
+                    | CliTemplate::TrMultiA
+                    | CliTemplate::TrSortedMultiA,
+                ) => ColdcardEmitter::emit(&inputs),
+                _ => Err(ToolkitError::BadInput(
+                    "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
+                        .into(),
+                )),
+            }
+        }
         CliExportFormat::Jade => JadeEmitter::emit(&inputs),
         CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
         CliExportFormat::Specter => SpecterEmitter::emit(&inputs),

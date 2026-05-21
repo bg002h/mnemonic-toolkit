@@ -2662,10 +2662,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - Export side does NOT accept `--format coldcard-multisig`: `crates/mnemonic-toolkit/src/wallet_export/mod.rs` `enum CliExportFormat` — only `Coldcard` variant exists. Multisig text emit is reached via `--format coldcard --template wsh-sortedmulti` (and equivalent multisig templates), which template-dispatches to `emit_coldcard_multisig_text` (`wallet_export/coldcard.rs:42-55`).
 - **What:** v0.28+ ergonomic-surface fix: add `coldcard-multisig` as a `CliExportFormat` variant that aliases to `Coldcard` with a multisig-template precheck (refusal pointer for singlesig templates). Surfaces flag-name parity between the import and export value sets so a reader who sees `--format coldcard-multisig` accepted on import doesn't trip on the asymmetric export rejection. Requires paired `mnemonic-gui/src/schema/mnemonic.rs` update per CLAUDE.md schema-mirror invariant.
 - **Why deferred:** manual-v0.2.0 cycle is content-audit-only at scope; F4's user-facing prose fix (use `--format coldcard --template wsh-sortedmulti --threshold 2` + add asymmetry note paragraph) is sufficient for the documentation deliverable. Toolkit surface-enlargement triggers GUI schema-mirror lockstep and warrants its own cycle.
-- **Status:** open
+- **Status:** `resolved 5ef6aae7d7f60a485eb10a1637be473f96fd9ab0` — mnemonic-toolkit-v0.28.4 cycle added `CliExportFormat::ColdcardMultisig` variant with multisig-template precheck. 4 dispatch arms (2 in run(), 2 in run_from_import_json()) delegate to existing `ColdcardEmitter::emit` for multisig templates; refuse singlesig with pointer text to `--format coldcard`. Chapter-45 asymmetry note rewritten to "Format-name parity (v0.28.4+)" historical-context. Paired GUI tag `mnemonic-gui-v0.13.0` bumps schema-mirror to consume the new value.
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
-- **Companion:** none (mnemonic-gui needs a paired CliExportFormat dropdown-value addition when this fold lands).
+- **Companion:** mnemonic-gui-v0.13.0 (paired tag; schema-mirror lockstep).
 
 ### `emitinputs-canonical-descriptor-checksum-invariant-enforcement` — defensive type/assertion for the `#checksum` invariant on `EmitInputs.canonical_descriptor`
 
@@ -2708,3 +2708,15 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `manual-v0.3+-audit`
 - **Companion:** SKIP_STEMS in `docs/manual/tests/verify-examples.sh` carries the 4 transcript-stem exclusion list; remove those entries once this FOLLOWUP closes.
+
+
+### `cross-format-refusal-matrix-include-coldcard-multisig` — extend cross-format refusal matrix to cover new ColdcardMultisig variant
+
+- **Surfaced:** 2026-05-20, mnemonic-toolkit-v0.28.4 cycle opus reviewer §Cross-cutting. Filed inline per architect's PROCEED-TO-COMMIT with Important-as-FOLLOWUP recommendation.
+- **Where:** `crates/mnemonic-toolkit/tests/cli_export_wallet_from_import_json.rs:592-593` carries `TEMPLATE_ONLY_DESTS = &["coldcard", "electrum", "jade", "sparrow"]`; `REFUSAL_STDERR_PATTERNS` at L815 matches via substring `"requires --template"`; cell count assertion at L871 hardcodes `32 = 8 × 4` (sources × destinations).
+- **What:** Add `"coldcard-multisig"` to `TEMPLATE_ONLY_DESTS` so the refusal-matrix exercises the new variant on the `--from-import-json` path. BUT: the new arm's refusal text is `"--format coldcard-multisig requires a multisig --template"` — the substring `"requires --template"` is NOT present (intervening word "a multisig"). Either: (a) broaden `REFUSAL_STDERR_PATTERNS` to ALSO match `"requires a multisig --template"`, OR (b) tighten the new arm's refusal text to `"--format coldcard-multisig requires --template (must be multisig...)"`. Plus bump the matrix size assertion 32 → 40 (5 dests × 8 sources).
+- **Why deferred:** v0.28.4 cycle scope was the variant + dispatch arms + GUI lockstep. Matrix-test extension is independent test hygiene; would add ~30 LOC of test updates and is non-blocking (no test currently fails, since the matrix doesn't include the new variant).
+- **Status:** `open`
+- **Tier:** `v0.28+-test-hygiene`
+- **Tags:** `wallet`
+- **Companion:** parent v0.28.4 cycle commit (toolkit side).

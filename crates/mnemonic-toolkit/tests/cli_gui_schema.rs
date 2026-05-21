@@ -250,11 +250,13 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
         .map(|c| c.as_str().unwrap())
         .collect();
     // SPEC v0.8: 8 vendor formats; v0.27.0 adds `bsms` (BIP-129 Round-2
-    // emitter) for a total of 9.
+    // emitter) for a total of 9; v0.28.4 adds `coldcard-multisig` alias
+    // (export-side semantic precheck) for a total of 10.
     for vendor in [
         "bitcoin-core",
         "bip388",
         "coldcard",
+        "coldcard-multisig",
         "jade",
         "sparrow",
         "specter",
@@ -264,7 +266,7 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
     ] {
         assert!(choices.contains(&vendor), "format must include {vendor}");
     }
-    assert_eq!(choices.len(), 9);
+    assert_eq!(choices.len(), 10);
 }
 
 #[test]

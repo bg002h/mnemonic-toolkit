@@ -6,6 +6,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.4] — 2026-05-20
+
+Patch release: closes the `--format coldcard-multisig` asymmetry between `import-wallet` (accepts both `coldcard` and `coldcard-multisig`) and `export-wallet` (previously only accepted `coldcard`). The new `CliExportFormat::ColdcardMultisig` variant aliases the existing `Coldcard` dispatch with a multisig-template precheck: singlesig templates (`bip44`/`bip49`/`bip84`) refuse with a pointer to `--format coldcard`; multisig templates (`wsh-sortedmulti`/`wsh-multi`/`sh-wsh-*`/`tr-*-a`) delegate to the same `ColdcardEmitter::emit` path that `--format coldcard` already uses. Closes FOLLOWUP `export-wallet-coldcard-multisig-alias`. Paired with `mnemonic-gui-v0.13.0` for schema-mirror lockstep.
+
+### Added
+
+- `--format coldcard-multisig` value on `mnemonic export-wallet` (and `mnemonic export-wallet --from-import-json -`). Refuses singlesig templates with pointer text to `--format coldcard` for SS export.
+
+### Changed
+
+- chapter-45 § Coldcard multisig § "Format-name asymmetry note" prose rewritten to "Format-name parity (v0.28.4+)" with the historical-context framing.
+
+### Tests
+
+- 3 new cells in `tests/cli_export_wallet_coldcard.rs` (happy path + 2 refusal paths). Plus `tests/cli_gui_schema.rs:267` `export_wallet` format-dropdown vendor-count assertion bumped 9 → 10 to include the new variant. Total toolkit cells: 2001 → 2004.
+
+### Companion releases
+
+- `mnemonic-gui-v0.13.0` — paired GUI schema-mirror + dropdown wiring update.
+
+---
+
 ## mnemonic-toolkit [0.28.3] — 2026-05-20
 
 Patch release: compile-time enforcement of the `EmitInputs.canonical_descriptor` BIP-380 `#<8-char-csum>` suffix invariant via the new `CheckedDescriptor<'_>` newtype in `wallet_export/mod.rs`. Pre-v0.28.3 the invariant was documented at `wallet_export/bsms.rs:86-90` and enforced only by convention at construction sites — a future code path that constructed `EmitInputs` from a stripped-body descriptor would silently regress BSMS L2 + Specter `descriptor` JSON field + Green plaintext (latent class surfaced by F9 in the manual-v0.2.0 audit cycle). Closes FOLLOWUP `emitinputs-canonical-descriptor-checksum-invariant-enforcement`. No CLI surface change; no GUI lockstep.
