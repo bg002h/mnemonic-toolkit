@@ -318,30 +318,43 @@ diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
      <(jq -S . sparrow_re.json)
 ```
 
-### Taproot import (shipped v0.31.1)
+### Taproot import (shipped v0.31.1 + v0.31.2) {#taproot-import-shipped-v0311}
 
-Sparrow's emit side ships taproot wallets as *descriptor-passthrough*
-(concrete `[fp/path]xpub` keys embedded in
-`defaultPolicy.miniscript.script` instead of `@N/**` placeholders).
-**v0.31.1+ Cycle 8** ships the import-side counterpart via a path-split
-at `wallet_import/sparrow.rs::parse` Step 6: descriptor-passthrough
-shape (`tr(` AND no `@0/**` placeholder) bypasses Step 5 substitution
-and feeds `script_template` directly through the existing
-`concrete_keys_to_placeholders` → `parse_descriptor` pipeline. Closes
-FOLLOWUP `sparrow-taproot-descriptor-passthrough-import-support`.
+Sparrow's emit side ships taproot wallets in two shapes:
+
+- **Taproot MULTISIG** (`tr-multi-a` / `tr-sortedmulti-a` per
+  `wallet_export/sparrow.rs:215-219`) → *descriptor-passthrough*:
+  concrete `[fp/path]xpub` keys embedded in
+  `defaultPolicy.miniscript.script` directly (no `@N/**` placeholders).
+- **Taproot SINGLESIG** (Bip86 per `wallet_export/sparrow.rs:195`) →
+  *template-mode*: standard `@0/**` placeholder (e.g. `tr(@0/**)`).
+
+**v0.31.1+ Cycle 8** shipped the descriptor-passthrough import side
+via a path-split at `wallet_import/sparrow.rs::parse` Step 6:
+descriptor-passthrough shape (`tr(` AND no `@0/**` placeholder)
+bypasses Step 5 substitution and feeds `script_template` directly
+through the existing `concrete_keys_to_placeholders` →
+`parse_descriptor` pipeline. Closes FOLLOWUP
+`sparrow-taproot-descriptor-passthrough-import-support`.
+
+**v0.31.2+ Cycle 9** collapsed the narrow refusal for taproot
+SINGLESIG template-mode by routing `tr(@0/**)` through the standard
+Step 5 substitution branch. The resulting
+`tr([fp/86'/0'/0']xpub.../<0;1>/*)` descriptor is accepted cleanly by
+the existing pipeline. Closes FOLLOWUP
+`sparrow-taproot-singlesig-template-mode-import`.
 
 The export-wallet side requires a recognized `--template` (no
 descriptor-passthrough); taproot-multisig emit is supported via
 `--template tr-multi-a` / `tr-sortedmulti-a`. Import auto-sniff still
 fires (sniff is `policyType`-based, not script-content-based).
 
-**Narrowing:** taproot SINGLESIG (Bip86: `tr(@0/**)` template-mode) is
-NOT shipped in v0.31.1 — that template-mode shape would substitute to
-`tr([fp/path]xpub/<0;1>/*)` before parse, which exercises the pipeline
-in an untested way. Filed forward as FOLLOWUP
-`sparrow-taproot-singlesig-template-mode-import` for a follow-on
-cycle. v0.31.1 refuses with `error: import-wallet: sparrow: taproot
-singlesig templates (`tr(@N/**)`) are not yet supported …` (exit 2).
+**Round-trip note:** import → JSON envelope works for both taproot
+shapes; re-emission via `export-wallet --from-import-json` is gated on
+the orthogonal FOLLOWUP `wallet-import-taproot-internal-key` (envelope
+wire-shape doesn't yet surface NUMS-vs-raw-xonly internal-key
+designation). To re-emit, use `--format <emitter> --descriptor <body>`
+directly.
 
 ## Specter-DIY (`--format specter`) {#specter-diy}
 
@@ -822,10 +835,11 @@ FOLLOWUP):
   against BIP-129 Test Vector 3 (STANDARD-mode Signer 1) in
   `crates/mnemonic-toolkit/src/bsms_crypto.rs` unit tests.
 - ~~**Sparrow taproot descriptor-passthrough**~~ — shipped in v0.31.1
-  via the Step 6 path-split at `wallet_import/sparrow.rs`. See
-  [§Taproot import](#taproot-import-shipped-v0311) above. Taproot
-  singlesig template-mode (Bip86 `tr(@0/**)`) remains refused; tracked
-  at FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`.
+  via the Step 6 path-split at `wallet_import/sparrow.rs` (taproot
+  MULTISIG branch). Taproot SINGLESIG template-mode (Bip86
+  `tr(@0/**)`) shipped in v0.31.2 by collapsing the narrow refusal
+  into the general substitution path. See
+  [§Taproot import](#taproot-import-shipped-v0311) above.
 - ~~**Jade SeedQR variant**~~ — shipped in v0.30.0 as a vendor-neutral subsurface. See [`mnemonic seedqr`](40-cli-reference/41-mnemonic.md#mnemonic-seedqr).
 - ~~**Electrum encrypted wallet files**~~ — shipped in v0.30.1 as
   watch-only passthrough (parses plaintext xpub/derivation/etc., ignores
