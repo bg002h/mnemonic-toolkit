@@ -1604,35 +1604,59 @@ English-wordlist index is rendered as a 4-digit zero-padded decimal.
 ### Synopsis
 
 ```text
-mnemonic seedqr decode --from seedqr=<VALUE|-> [--json-out <PATH>]
-mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
+mnemonic seedqr decode --from seedqr=<VALUE|-> [--variant <standard|compact>] [--json-out <PATH>]
+mnemonic seedqr encode --from phrase=<VALUE|-> [--variant <standard|compact>] [--json-out <PATH>]
 ```
 
 ### Flags
 
 `decode`:
 
-- `--from seedqr=<VALUE|->`: **(canonical, v0.31.6+)** SeedQR numeric digit string (48, 60, 72, 84, or 96 ASCII digits — corresponding to 12 / 15 / 18 / 21 / 24-word BIP-39 phrases). `seedqr=-` reads from stdin. Only the `seedqr` node type is accepted; other node types are refused.
-- `--digits <VALUE|->`: **(DEPRECATED, v0.31.6)** the original digit-string flag. Still accepted, but emits a stderr deprecation notice directing to `--from seedqr=`; will be removed in a future release. Mutually exclusive with `--from` (clap-level conflict; exit 64). Exactly one of `--from seedqr=` or `--digits` is required.
+- `--from seedqr=<VALUE|->`: **(canonical, v0.31.6+)** the SeedQR payload. Under `--variant standard` (default) this is a numeric digit string (48, 60, 72, 84, or 96 ASCII digits — 12 / 15 / 18 / 21 / 24-word phrases). Under `--variant compact` this is lowercase hex of the raw BIP-39 entropy bytes (32 hex chars = 16 bytes = 12-word; 64 hex chars = 32 bytes = 24-word). `seedqr=-` reads from stdin. Only the `seedqr` node type is accepted.
+- `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). See [§Scope](#scope-v0300-widened-in-v0315-v0320) below.
+- `--digits <VALUE|->`: **(DEPRECATED, v0.31.6)** the original digit-string flag (Standard variant only). Still accepted, but emits a stderr deprecation notice directing to `--from seedqr=`; will be removed in a future release. Mutually exclusive with `--from` (clap-level conflict; exit 64). Exactly one of `--from seedqr=` or `--digits` is required.
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
 
-The equivalent conversion is also reachable via `mnemonic convert --from seedqr=<digits> --to phrase` (the `seedqr` node type was unified into the shared `--from` grammar in v0.31.6).
+The equivalent Standard conversion is also reachable via `mnemonic convert --from seedqr=<digits> --to phrase` (the `seedqr` node type was unified into the shared `--from` grammar in v0.31.6).
 
 `encode`:
 
-- `--from phrase=<VALUE|->`: BIP-39 phrase (12, 15, 18, 21, or 24 English words). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
-- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+- `--from phrase=<VALUE|->`: BIP-39 phrase (12, 15, 18, 21, or 24 English words for Standard; 12 or 24 only for Compact). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
+- `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
 
 Both subsubcommands emit an argv-leakage advisory on stderr when the
 secret is supplied inline (e.g., `--from seedqr=<value>`, the deprecated
 `--digits <value>`, or `--from phrase=<value>`).
 Use the stdin form (`-`) to avoid the advisory.
 
-### Scope (v0.30.0, widened in v0.31.5)
+### Scope (v0.30.0, widened in v0.31.5 + v0.32.0)
 
-- **Variants:** Standard SeedQR only. CompactSeedQR (raw entropy bytes encoded in QR binary mode) is deferred — tracked at FOLLOWUP `seedqr-compact-variant`.
-- **Word counts:** 12 / 15 / 18 / 21 / 24 — the complete BIP-39 word-count set. (v0.30.0 shipped 12 + 24 only; v0.31.5 widened to all 5 per FOLLOWUP `seedqr-15-18-21-word-counts`.) The SeedSigner SeedQR spec body documents 12 and 24 explicitly; 15 / 18 / 21 are BIP-39-standard and trivially extend (SeedQR encodes 4 decimal digits per BIP-39 word index, agnostic to word count).
+- **Variants:** Standard SeedQR (decimal digit string) + CompactSeedQR (v0.32.0+; raw BIP-39 entropy bytes, the SeedSigner binary-mode QR payload, represented on the CLI as lowercase hex). Select via `--variant <standard|compact>` (default `standard`).
+  - **Standard** word counts: 12 / 15 / 18 / 21 / 24 — the complete BIP-39 word-count set (v0.30.0 shipped 12 + 24; v0.31.5 widened to all 5 per FOLLOWUP `seedqr-15-18-21-word-counts`). SeedQR encodes 4 decimal digits per BIP-39 word index, agnostic to word count.
+  - **Compact** word counts: **12 and 24 only**, matching SeedSigner's `CompactSeedQrEncoder` (which strips the trailing checksum bits for exactly those two cases). 15 / 18 / 21 are refused for compact (`compact: invalid word count: N (CompactSeedQR supports only 12 or 24)`). The compact payload equals the raw BIP-39 entropy: 16 bytes (12-word) or 32 bytes (24-word).
 - **Language:** English only. SeedQR's open spec defines the encoding against the BIP-39 English wordlist.
+
+### Worked example — compact encode + binary QR render
+
+The CLI emits the compact payload as hex; pipe through `xxd -r -p` to get
+the raw bytes for a binary-mode QR:
+
+```sh
+mnemonic seedqr encode --variant compact --from phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+# → 00000000000000000000000000000000   (16 entropy bytes as 32 hex chars)
+
+mnemonic seedqr encode --variant compact --from phrase='…' \
+  | xxd -r -p \
+  | qrencode -8 -o compact-seedqr.png   # -8 = byte mode
+```
+
+Decode a scanned CompactSeedQR (hex of the scanned bytes):
+
+```sh
+mnemonic seedqr decode --variant compact --from seedqr=00000000000000000000000000000000
+# → abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
 
 ### Worked example — decode
 
