@@ -6,6 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.32.3] — 2026-05-21
+
+**SemVer-PATCH release** (test/fixture/doc-only). Pins the toolkit's BIP-129 §Encryption implementation against the independent Coinkite Python reference via vendored cross-impl fixtures. Closes `bsms-encryption-cross-impl-coinkite-python-smoke` FOLLOWUP — the **third and final** BIP-129-BSMS arc step. With this, the entire `bsms-bip129-encryption-envelope` Cycle-7 follow-on arc is retired.
+
+### Added
+
+- `crates/mnemonic-toolkit/tests/fixtures/wallet_import/bsms-coinkite-xref-round2-2of3.dat` — a hex `MAC || ciphertext` wire produced by the independent Coinkite reference's `bsms.encryption.encrypt()` (pinned SHA `c30abe3a6d9823b6a3003e89acd66b9f38e11f1c`, frozen 2023-01-24) over the real `bsms-2line-multi-2of3.txt` Round-2 descriptor with an EXTENDED 16-byte token. Combined with the existing `bsms-encrypted-standard-tv3.dat` (Coinkite-generated TV-3 Round-1, STANDARD 8-byte token), both record kinds + both token widths are now cross-validated.
+- `crates/mnemonic-toolkit/tests/external/regen_coinkite_vectors.py` + `README.md` — the deterministic regeneration script (reads plaintext as exact bytes, token stripped; self-verifies by re-decrypting its own output before writing) + documentation (pinned SHA, `pyaes` venv recipe, vendored-vs-live-CI rationale).
+- 3 integration cells: `coinkite_xref_round2_full_plaintext_byte_equal` (the strong pin — decrypt the Coinkite wire via `bsms_crypto` + assert byte-equality over the FULL ~460-byte plaintext), `coinkite_xref_round2_descriptor_imports` (end-to-end CLI import; first EXTENDED-token wire that actually decrypts via the CLI), `coinkite_xref_round2_wrong_token_mac_mismatch` (exit 2).
+
+### Documentation
+
+- `docs/manual/src/45-foreign-formats.md`: BSMS-encrypted-envelopes bullet documents the cross-impl validation against the Coinkite reference + the regen pointer.
+
+### Scope note
+
+The originating FOLLOWUP also sketched a LIVE CI-gated smoke (clone Coinkite + run `python3 test.py`). That was intentionally NARROWED to vendored-only (no clone/pip/network in CI) per a deliberate user scope-lock — the Coinkite repo is frozen, the toolkit crypto is already byte-exact against BIP-129 TV-3, and a live external-clone CI surface adds fragility for marginal drift-detection value. The live-CI residual is explicitly WAIVED (not deferred); the `regen_coinkite_vectors.py` script is the documented manual-refresh path.
+
+### Test totals
+
+- 2209 cells passing; 12 ignored. +3 net (vs v0.32.2 baseline 2206).
+
+### Cycle topology
+
+Cycle 17 — eighth cycle of the v0.32+ tier; **closes the BIP-129-BSMS arc** (round1-decrypt-then-verify v0.32.1 + per-signer-tokens v0.32.2 + cross-impl-coinkite-smoke v0.32.3). 2 v0.32+ FOLLOWUPs remain (both Electrum). No GUI lockstep (test-only).
+
+### Review
+
+- Plan-doc opus R0: GREEN 0C/1I/2M (full-plaintext-equality cell + regen newline self-verify + scope-audit closure note, all folded inline).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.32.2] — 2026-05-21
 
 **SemVer-PATCH release.** `--bsms-encryption-token` is now repeatable, enabling per-Signer BIP-129 encryption tokens (BIP-129 line 74: "one common TOKEN for all Signers, or one per Signer"). Closes `bsms-encryption-per-signer-tokens` FOLLOWUP — the second of the three BIP-129-encryption follow-ons from Cycle 7. Purely additive: a single `--bsms-encryption-token` is unchanged; supplying it multiple times (previously a clap error) now pairs tokens with Signers.
