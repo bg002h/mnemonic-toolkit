@@ -482,7 +482,7 @@ Create `crates/mnemonic-toolkit/src/cmd/seedqr.rs`:
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::secret_advisory::secret_in_argv_warning;
-use crate::seedqr::{decode as seedqr_decode, encode as seedqr_encode, SeedqrError};
+use mnemonic_toolkit::seedqr::{decode as seedqr_decode, encode as seedqr_encode, SeedqrError};
 use clap::{Args, Subcommand};
 use std::io::{Read, Write};
 
