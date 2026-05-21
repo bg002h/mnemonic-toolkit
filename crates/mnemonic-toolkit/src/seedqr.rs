@@ -37,10 +37,16 @@ impl std::fmt::Display for SeedqrError {
                 write!(f, "invalid character at position {pos}: {ch:?}",)
             }
             SeedqrError::InvalidDigits { got } => {
-                write!(f, "invalid digit count (expected 48 or 96; got {got})",)
+                write!(
+                    f,
+                    "invalid digit count (expected 48, 60, 72, 84, or 96; got {got})",
+                )
             }
             SeedqrError::InvalidWordCount { got } => {
-                write!(f, "invalid word count: {got} (only 12 or 24 supported)",)
+                write!(
+                    f,
+                    "invalid word count: {got} (only 12, 15, 18, 21, or 24 supported)",
+                )
             }
             SeedqrError::InvalidWordIndex { pos, idx } => write!(
                 f,
@@ -57,9 +63,11 @@ pub fn decode(input: &str) -> Result<String, SeedqrError> {
     // Strip all ASCII whitespace.
     let stripped: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
 
-    // Validate length.
+    // Validate length. v0.31.5: widened from {48, 96} to the full BIP-39
+    // word-count set {48, 60, 72, 84, 96} (= 12, 15, 18, 21, 24 words × 4
+    // digits/word) per `seedqr-15-18-21-word-counts` FOLLOWUP closure.
     let len = stripped.len();
-    if len != 48 && len != 96 {
+    if !matches!(len, 48 | 60 | 72 | 84 | 96) {
         return Err(SeedqrError::InvalidDigits { got: len });
     }
 
@@ -103,8 +111,9 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
         .map(|w| w.to_lowercase())
         .collect();
 
-    // Validate word count.
-    if words.len() != 12 && words.len() != 24 {
+    // Validate word count. v0.31.5: widened from {12, 24} to the full
+    // BIP-39 word-count set per `seedqr-15-18-21-word-counts` FOLLOWUP.
+    if !matches!(words.len(), 12 | 15 | 18 | 21 | 24) {
         return Err(SeedqrError::InvalidWordCount { got: words.len() });
     }
 
@@ -144,6 +153,22 @@ mod tests {
     const PHRASE_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
     const DIGITS_24: &str = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000102";
 
+    // v0.31.5 canonical BIP-39 15-word zero-entropy vector. Derived
+    // empirically via `mnemonic convert --from entropy=00..00 (20 bytes)
+    // --to phrase`. Last word "address" = BIP-39 index 27.
+    const PHRASE_15: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address";
+    const DIGITS_15: &str = "000000000000000000000000000000000000000000000000000000000027";
+
+    // v0.31.5 canonical BIP-39 18-word zero-entropy vector. 24 bytes of
+    // zeros → last word "agent" = BIP-39 index 39.
+    const PHRASE_18: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent";
+    const DIGITS_18: &str = "000000000000000000000000000000000000000000000000000000000000000000000039";
+
+    // v0.31.5 canonical BIP-39 21-word zero-entropy vector. 28 bytes of
+    // zeros → last word "admit" = BIP-39 index 29.
+    const PHRASE_21: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit";
+    const DIGITS_21: &str = "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
+
     #[test]
     fn decode_12_word_canonical() {
         assert_eq!(decode(DIGITS_12).unwrap(), PHRASE_12);
@@ -174,6 +199,56 @@ mod tests {
     fn round_trip_24_word() {
         let encoded = encode(PHRASE_24).unwrap();
         assert_eq!(decode(&encoded).unwrap(), PHRASE_24);
+    }
+
+    // v0.31.5 — happy paths for 15/18/21-word BIP-39-valid phrases.
+
+    #[test]
+    fn decode_15_word_canonical() {
+        assert_eq!(decode(DIGITS_15).unwrap(), PHRASE_15);
+    }
+
+    #[test]
+    fn encode_15_word_canonical() {
+        assert_eq!(encode(PHRASE_15).unwrap(), DIGITS_15);
+    }
+
+    #[test]
+    fn round_trip_15_word() {
+        let encoded = encode(PHRASE_15).unwrap();
+        assert_eq!(decode(&encoded).unwrap(), PHRASE_15);
+    }
+
+    #[test]
+    fn decode_18_word_canonical() {
+        assert_eq!(decode(DIGITS_18).unwrap(), PHRASE_18);
+    }
+
+    #[test]
+    fn encode_18_word_canonical() {
+        assert_eq!(encode(PHRASE_18).unwrap(), DIGITS_18);
+    }
+
+    #[test]
+    fn round_trip_18_word() {
+        let encoded = encode(PHRASE_18).unwrap();
+        assert_eq!(decode(&encoded).unwrap(), PHRASE_18);
+    }
+
+    #[test]
+    fn decode_21_word_canonical() {
+        assert_eq!(decode(DIGITS_21).unwrap(), PHRASE_21);
+    }
+
+    #[test]
+    fn encode_21_word_canonical() {
+        assert_eq!(encode(PHRASE_21).unwrap(), DIGITS_21);
+    }
+
+    #[test]
+    fn round_trip_21_word() {
+        let encoded = encode(PHRASE_21).unwrap();
+        assert_eq!(decode(&encoded).unwrap(), PHRASE_21);
     }
 
     #[test]
@@ -252,12 +327,24 @@ mod tests {
         ));
     }
 
+    // v0.31.5 — `encode_rejects_18_word_count` removed: the old cell
+    // synthesized an 18-word string and asserted refusal. v0.31.5 widens
+    // the gate to accept 12/15/18/21/24, so 18-word inputs now go
+    // through the BIP-39-checksum-validation path. Replaced by:
+    // - `encode_18_word_canonical` + `decode_18_word_canonical` +
+    //   `round_trip_18_word` (happy-path coverage above).
+    // - `encode_rejects_22_word_count` below — exercises a new
+    //   not-in-{12,15,18,21,24} boundary value.
+
     #[test]
-    fn encode_rejects_18_word_count() {
-        let bad = "abandon ".repeat(17) + "about";
+    fn encode_rejects_22_word_count() {
+        // v0.31.5 — 22 words is between two valid sizes (21 and 24) so
+        // it lands in the new gate's refusal arm. Confirms the
+        // gate-widening did not silently accept arbitrary word counts.
+        let bad = "abandon ".repeat(21) + "about";
         assert!(matches!(
             encode(&bad),
-            Err(SeedqrError::InvalidWordCount { got: 18 })
+            Err(SeedqrError::InvalidWordCount { got: 22 })
         ));
     }
 

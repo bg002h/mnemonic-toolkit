@@ -288,37 +288,72 @@ fn encode_rejects_13_word_count() {
         ));
 }
 
+// v0.31.5 — 15/18/21-word counts are now ACCEPTED (previously refused).
+// Canonical zero-entropy vectors derived via `mnemonic convert --from
+// entropy=00..00 (20/24/28 bytes) --to phrase`.
+
 #[test]
-fn encode_rejects_15_word_count() {
-    let bad = "abandon ".repeat(14) + "about";
+fn encode_accepts_15_word_count() {
+    // 20 bytes of zeros → "abandon ×14 + address". BIP-39 index of
+    // "address" is 27.
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address";
+    let expected_digits = "000000000000000000000000000000000000000000000000000000000027";
     mnemonic()
         .args(["seedqr", "encode", "--from"])
-        .arg(format!("phrase={bad}"))
+        .arg(format!("phrase={phrase}"))
         .assert()
-        .failure()
-        .code(1);
+        .success()
+        .stdout(format!("{expected_digits}\n"));
 }
 
 #[test]
-fn encode_rejects_18_word_count() {
-    let bad = "abandon ".repeat(17) + "about";
+fn encode_accepts_18_word_count() {
+    // 24 bytes of zeros → "abandon ×17 + agent". BIP-39 index 39.
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent";
+    let expected_digits = "000000000000000000000000000000000000000000000000000000000000000000000039";
     mnemonic()
         .args(["seedqr", "encode", "--from"])
-        .arg(format!("phrase={bad}"))
+        .arg(format!("phrase={phrase}"))
         .assert()
-        .failure()
-        .code(1);
+        .success()
+        .stdout(format!("{expected_digits}\n"));
 }
 
 #[test]
-fn encode_rejects_21_word_count() {
-    let bad = "abandon ".repeat(20) + "about";
+fn encode_accepts_21_word_count() {
+    // 28 bytes of zeros → "abandon ×20 + admit". BIP-39 index 29.
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit";
+    let expected_digits = "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
     mnemonic()
         .args(["seedqr", "encode", "--from"])
-        .arg(format!("phrase={bad}"))
+        .arg(format!("phrase={phrase}"))
         .assert()
-        .failure()
-        .code(1);
+        .success()
+        .stdout(format!("{expected_digits}\n"));
+}
+
+#[test]
+fn encode_json_mode_15_word() {
+    // R0 I3b fold — JSON-envelope happy path for a new word count.
+    // Confirms `word_count: 15` emits correctly.
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address";
+    let expected_digits = "000000000000000000000000000000000000000000000000000000000027";
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    let path = tmp.path();
+    mnemonic()
+        .args(["seedqr", "encode", "--from"])
+        .arg(format!("phrase={phrase}"))
+        .args(["--json-out", path.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout("");
+    let json: Value = serde_json::from_reader(std::fs::File::open(path).unwrap()).unwrap();
+    assert_eq!(json["schema_version"], "1");
+    assert_eq!(json["operation"], "encode");
+    assert_eq!(json["variant"], "standard");
+    assert_eq!(json["word_count"], 15);
+    assert_eq!(json["phrase"], phrase);
+    assert_eq!(json["digits"], expected_digits);
 }
 
 #[test]

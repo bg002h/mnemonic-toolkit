@@ -1611,22 +1611,22 @@ mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
 
 `decode`:
 
-- `--digits <VALUE|->`: SeedQR numeric digit string (48 or 96 ASCII digits). `-` reads from stdin.
+- `--digits <VALUE|->`: SeedQR numeric digit string (48, 60, 72, 84, or 96 ASCII digits — corresponding to 12 / 15 / 18 / 21 / 24-word BIP-39 phrases). `-` reads from stdin.
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
 
 `encode`:
 
-- `--from phrase=<VALUE|->`: BIP-39 phrase (12 or 24 English words). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
+- `--from phrase=<VALUE|->`: BIP-39 phrase (12, 15, 18, 21, or 24 English words). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
 
 Both subsubcommands emit an argv-leakage advisory on stderr when the
 secret is supplied inline (e.g., `--digits <value>` or `--from phrase=<value>`).
 Use the stdin form (`-`) to avoid the advisory.
 
-### Scope (v0.30.0)
+### Scope (v0.30.0, widened in v0.31.5)
 
-- **Variants:** Standard SeedQR only. CompactSeedQR (raw entropy bytes encoded in QR binary mode) is deferred.
-- **Word counts:** 12 + 24 only. 15 / 18 / 21 deferred.
+- **Variants:** Standard SeedQR only. CompactSeedQR (raw entropy bytes encoded in QR binary mode) is deferred — tracked at FOLLOWUP `seedqr-compact-variant`.
+- **Word counts:** 12 / 15 / 18 / 21 / 24 — the complete BIP-39 word-count set. (v0.30.0 shipped 12 + 24 only; v0.31.5 widened to all 5 per FOLLOWUP `seedqr-15-18-21-word-counts`.) The SeedSigner SeedQR spec body documents 12 and 24 explicitly; 15 / 18 / 21 are BIP-39-standard and trivially extend (SeedQR encodes 4 decimal digits per BIP-39 word index, agnostic to word count).
 - **Language:** English only. SeedQR's open spec defines the encoding against the BIP-39 English wordlist.
 
 ### Worked example — decode
@@ -1731,11 +1731,11 @@ The two outputs match byte-for-byte.
 
 ### Stderr templates
 
-- `seedqr: decode: invalid digit count (expected 48 or 96; got N)`
+- `seedqr: decode: invalid digit count (expected 48, 60, 72, 84, or 96; got N)`
 - `seedqr: decode: invalid character at position N: <char>`
 - `seedqr: decode: invalid word index N at position M (must be 0..=2047)`
 - `seedqr: decode: BIP-39 checksum failure: <bip39-crate-diagnostic>`
-- `seedqr: encode: invalid word count: N (only 12 or 24 supported)`
+- `seedqr: encode: invalid word count: N (only 12, 15, 18, 21, or 24 supported)`
 - `seedqr: encode: BIP-39 checksum failure: <bip39-crate-diagnostic>`
 - `seedqr encode only accepts phrase=<value> or phrase=-`
 
