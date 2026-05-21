@@ -140,11 +140,26 @@ fn map_seedqr_error(e: SeedqrError, action: &str) -> ToolkitError {
 }
 ```
 
-**Exit code:** all `SeedqrError` variants → exit 2 (data-error class via `ToolkitError::BadInput` exit code).
+**Exit code:** all `SeedqrError` variants → exit **1** (via `ToolkitError::BadInput` mapping; verified `error.rs:429`). Sibling `seed-xor` / `slip39` / `final-word` all use the same exit-1 class for lib-local error surfaces.
 
 **Stderr templates:** `seedqr: decode: <diagnostic>` / `seedqr: encode: <diagnostic>` (e.g., `seedqr: decode: invalid digit count (expected 48 or 96; got 50)`).
 
 **No `error.rs` changes.** `ToolkitError` enum + cascade match blocks remain untouched. (R0 C1 fold removes the original Phase 3 entirely.)
+
+### Secret-memory hygiene (added per plan-doc R0 I2 fold)
+
+Both `--from phrase=...` (encode) and `--digits ...` (decode) carry BIP-39 secret material. Cycle B (v0.10.0) established the toolkit-wide page-pin discipline. Phase 2 implementation MUST mirror `cmd/seed_xor.rs:163-178` precedent:
+
+- **argv-leakage advisory:** call `secret_in_argv_warning(stderr, "--from phrase=", "--from phrase=-")` for inline `--from phrase=<value>`; call `secret_in_argv_warning(stderr, "--digits ", "--digits -")` for inline `--digits <value>`.
+- **`Zeroizing<String>` wrapping:** the resolved phrase + the resolved digits + the decoded phrase + the computed digits all wrap in `Zeroizing<String>`.
+- **`mlock::pin_pages_for(..)` page pins:** apply to the resolved phrase and computed digits byte buffers.
+- **Residual stdout leak:** the toolkit's convention accepts the stdout-side phrase/digits emission as crossing the secret boundary at the user-explicit-output point.
+
+### Secret-classification (added per plan-doc R0 I3 fold)
+
+`crates/mnemonic-toolkit/src/secrets.rs::flag_is_secret` enumerates secret-bearing CLI flags for GUI consumers. Phase 2 implementation MUST add `"--digits"` to the match arm (unconditionally-secret flag-level inclusion) and an accompanying `--digits classifies as secret` test cell.
+
+**Why `--from` is NOT added:** `--from` secrecy is value-dependent (`phrase=<value>` is secret; `xpub=<value>` is not). The `secret_taxonomy::SECRET_NODE_TYPES` mechanism covers this. Flag-level inclusion is appropriate ONLY for unconditionally-secret flags; `--digits` qualifies (SeedQR-encoded BIP-39 seed → always secret).
 
 ## SemVer + lockstep (locked, R0 C2 + I8 folds)
 
@@ -174,7 +189,7 @@ fn map_seedqr_error(e: SeedqrError, action: &str) -> ToolkitError {
 - **Synthesis policy:** SeedQR's algorithm is deterministic (`format(index, '04d')` per BIP-39 word index). No device capture needed; fixtures synthesize directly from canonical BIP-39 test vectors.
 - **Canonical sources:**
   - Trezor's BIP-39 12-word vector: `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about` → entropy `00…00`, indices all-0 except last word `0003` → digits `000000000000000000000000000000000000000000000003` (44 zeros + `0003`).
-  - Trezor's BIP-39 24-word vector: `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art` → indices all-0 except last word `art` (BIP-39 index `0099`) → 92 zeros + `0099`.
+  - Trezor's BIP-39 24-word vector: `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art` → indices all-0 except last word `art` (BIP-39 0-indexed position `102`; verified against the BIP-39 English wordlist file) → 92 zeros + `0102`.
 - **Cross-impl smoke recipe** (documented in manual chapter):
   - Reference impl: SeedSigner's `seedsigner` Python tools at `https://github.com/SeedSigner/seedsigner` (exact symbol path locked at Phase 0 A4 per R0 I7).
   - Recipe: feed both impls the same BIP-39 phrase; assert byte-identical digit strings.
