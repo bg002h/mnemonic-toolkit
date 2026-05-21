@@ -6,6 +6,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.30.1] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: encrypted Electrum wallets (`use_encryption: true`) now import as watch-only instead of refusing at parse time. Closes Cycle 6 (`wallet-import-electrum-encrypted` FOLLOWUP, resolved as watch-only-passthrough per Cycle 6b R0 fold).
+
+### Changed
+
+- **`mnemonic import-wallet --format electrum`** with `use_encryption: true` wallets now succeeds, emitting a stderr NOTICE advisory and importing only the plaintext watch-only material (`keystore.{xpub,derivation,root_fingerprint,label}` + multisig analogues). Previously refused at parse time. The encrypted fields (`keystore.{seed,xprv,passphrase,keypairs}`) are ignored.
+- Per Electrum's `electrum/keystore.py`, the field-level encryption protects only seed-material fields; watch-only fields are plaintext under both encrypted and unencrypted wallets. The pre-v0.30.1 refusal was over-restrictive in principle.
+- Stderr advisory text: `"notice: import-wallet: electrum: wallet is encrypted (use_encryption=true); importing watch-only material only (encrypted seed/xprv/passphrase/keypairs fields ignored). To extract the encrypted seed, use 'electrum --decrypt-wallet' out-of-band then re-import the plaintext wallet."`
+
+### Added
+
+- 4 new integration-test cells in `tests/cli_import_wallet_electrum.rs` (singlesig + multisig watch-only happy paths + auto-sniff + plaintext-no-regression).
+- New fixture `tests/fixtures/wallet_import/electrum-encrypted-watch-only-multisig-2of3.json`.
+- Manual chapter-45 §"Encrypted wallets" rewritten across 3 stale-deferred sites; chapter-41 stderr-templates table gains a NOTICE row.
+
+### Architectural pivot (Cycle 6b R0 fold)
+
+The Cycle 6a brainstorm (`design/BRAINSTORM_v0_31_0_electrum_encrypted_v1_path_b.md`, ARCHIVED) assumed the toolkit needed to decrypt `seed`/`xprv` fields. Cycle 6b opus R0 review caught that the Electrum parser reads ONLY plaintext `xpub`/`derivation`/`fingerprint`/`label` — encrypted fields are NEVER consumed. The `--decrypt-password*` flag family (3-form: `--decrypt-password VAL` + `--decrypt-password-file PATH` + `--decrypt-password-stdin`) and supporting machinery were dropped. The 6a-shipped `electrum_crypto.rs` library stays in-tree as an internal utility for a future seed-extraction subcommand (filed forward as FOLLOWUP `electrum-crypto-seed-extraction-subcommand`). No CLI surface change in v0.30.1 → no GUI lockstep.
+
+### Renamed
+
+- `tests/fixtures/wallet_import/electrum-encrypted-refused.json` → `electrum-encrypted-watch-only-singlesig.json` (xpub now a real plaintext value reused from the existing standard-bip84-mainnet fixture; seed/xprv kept as placeholder base64).
+
+### FOLLOWUP closure
+
+- **Closed (resolved-watch-only-passthrough):** `wallet-import-electrum-encrypted`. The FOLLOWUP body's pre-v0.30.0 "PBKDF2 + AES-CBC" scheme citation was wrong; corrected to "sha256d + AES-256-CBC" per Cycle 6 P0 recon §A1.
+
+### Newly filed FOLLOWUPs
+
+- `electrum-crypto-seed-extraction-subcommand` — future use case for the 6a-shipped `electrum_crypto.rs` library (e.g., `mnemonic convert --from electrum-encrypted-wallet --to phrase` or a dedicated subcommand). Tier `v0.31+`.
+- `wallet-import-electrum-encrypted-storage-format-b` — Electrum's Format B whole-file storage encryption (version-byte + AES-CBC + 4-byte MAC). NOT JSON-parseable; out of scope of Cycle 6's Format A focus. Tier `v0.31+`.
+
+### Note
+
+Cycle 6 of v0.28+ residual FOLLOWUP release plan, executed as two-session split (6a: library + design; 6b: R0 fold + watch-only-passthrough + ship). Opus brainstorm R0 caught a foundational design error in 6a (RED verdict; Path A pivot). Plan-doc R0 YELLOW (4 mechanical Importants) folded inline. See `design/BRAINSTORM_v0_30_1_electrum_encrypted_watch_only.md` + `design/PLAN_mnemonic_toolkit_v0_30_1.md`.
+
+---
+
 ## mnemonic-toolkit [0.30.0] — 2026-05-21
 
 **SemVer-MINOR release.** New top-level `mnemonic seedqr` subcommand for SeedQR encode/decode. Paired with `mnemonic-gui-v0.15.0` (schema-mirror lockstep). Cycle 5 of v0.28+ residual FOLLOWUP release plan.
