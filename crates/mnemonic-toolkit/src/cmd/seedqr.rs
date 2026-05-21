@@ -9,8 +9,8 @@
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::secret_advisory::secret_in_argv_warning;
-use mnemonic_toolkit::seedqr::{decode as seedqr_decode, encode as seedqr_encode, SeedqrError};
 use clap::{Args, Subcommand};
+use mnemonic_toolkit::seedqr::{decode as seedqr_decode, encode as seedqr_encode, SeedqrError};
 use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
@@ -109,11 +109,20 @@ fn run_decode<R: Read, W: Write, E: Write>(
 
     // Canonical 48/96-digit form for JSON envelope echo.
     let canonical_digits: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(
-        digits.chars().filter(|c| !c.is_ascii_whitespace()).collect(),
+        digits
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .collect(),
     );
     let word_count = phrase.split_whitespace().count();
 
-    emit_decode_output(args, phrase.as_str(), canonical_digits.as_str(), word_count, stdout)
+    emit_decode_output(
+        args,
+        phrase.as_str(),
+        canonical_digits.as_str(),
+        word_count,
+        stdout,
+    )
 }
 
 fn run_encode<R: Read, W: Write, E: Write>(
@@ -157,7 +166,13 @@ fn run_encode<R: Read, W: Write, E: Write>(
     );
     let word_count = canonical_phrase.split_whitespace().count();
 
-    emit_encode_output(args, canonical_phrase.as_str(), digits.as_str(), word_count, stdout)
+    emit_encode_output(
+        args,
+        canonical_phrase.as_str(),
+        digits.as_str(),
+        word_count,
+        stdout,
+    )
 }
 
 fn emit_decode_output<W: Write>(
@@ -176,16 +191,14 @@ fn emit_decode_output<W: Write>(
             phrase,
             digits,
         };
-        let json = serde_json::to_string_pretty(&envelope).map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: decode: json serialize: {e}"))
-        })?;
+        let json = serde_json::to_string_pretty(&envelope)
+            .map_err(|e| ToolkitError::BadInput(format!("seedqr: decode: json serialize: {e}")))?;
         std::fs::write(path, json).map_err(|e| {
             ToolkitError::BadInput(format!("seedqr: decode: json-out write to {path:?}: {e}"))
         })?;
     } else {
-        writeln!(stdout, "{phrase}").map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: decode: stdout write: {e}"))
-        })?;
+        writeln!(stdout, "{phrase}")
+            .map_err(|e| ToolkitError::BadInput(format!("seedqr: decode: stdout write: {e}")))?;
     }
     Ok(0)
 }
@@ -206,16 +219,14 @@ fn emit_encode_output<W: Write>(
             phrase,
             digits,
         };
-        let json = serde_json::to_string_pretty(&envelope).map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: encode: json serialize: {e}"))
-        })?;
+        let json = serde_json::to_string_pretty(&envelope)
+            .map_err(|e| ToolkitError::BadInput(format!("seedqr: encode: json serialize: {e}")))?;
         std::fs::write(path, json).map_err(|e| {
             ToolkitError::BadInput(format!("seedqr: encode: json-out write to {path:?}: {e}"))
         })?;
     } else {
-        writeln!(stdout, "{digits}").map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: encode: stdout write: {e}"))
-        })?;
+        writeln!(stdout, "{digits}")
+            .map_err(|e| ToolkitError::BadInput(format!("seedqr: encode: stdout write: {e}")))?;
     }
     Ok(0)
 }

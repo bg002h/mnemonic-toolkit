@@ -32,22 +32,16 @@ pub enum SeedqrError {
 impl std::fmt::Display for SeedqrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SeedqrError::ChecksumFailure(msg) => write!(
-                f,
-                "BIP-39 checksum failure: {msg}",
-            ),
-            SeedqrError::InvalidDigitChar { pos, ch } => write!(
-                f,
-                "invalid character at position {pos}: {ch:?}",
-            ),
-            SeedqrError::InvalidDigits { got } => write!(
-                f,
-                "invalid digit count (expected 48 or 96; got {got})",
-            ),
-            SeedqrError::InvalidWordCount { got } => write!(
-                f,
-                "invalid word count: {got} (only 12 or 24 supported)",
-            ),
+            SeedqrError::ChecksumFailure(msg) => write!(f, "BIP-39 checksum failure: {msg}",),
+            SeedqrError::InvalidDigitChar { pos, ch } => {
+                write!(f, "invalid character at position {pos}: {ch:?}",)
+            }
+            SeedqrError::InvalidDigits { got } => {
+                write!(f, "invalid digit count (expected 48 or 96; got {got})",)
+            }
+            SeedqrError::InvalidWordCount { got } => {
+                write!(f, "invalid word count: {got} (only 12 or 24 supported)",)
+            }
             SeedqrError::InvalidWordIndex { pos, idx } => write!(
                 f,
                 "invalid word index {idx} at position {pos} (must be 0..=2047)",
@@ -84,7 +78,10 @@ pub fn decode(input: &str) -> Result<String, SeedqrError> {
         let s = std::str::from_utf8(chunk).expect("ASCII digits");
         let idx: u16 = s.parse().expect("4 ASCII digits parse to u16");
         if idx as usize >= wordlist.len() {
-            return Err(SeedqrError::InvalidWordIndex { pos: group * 4, idx });
+            return Err(SeedqrError::InvalidWordIndex {
+                pos: group * 4,
+                idx,
+            });
         }
         words.push(wordlist[idx as usize]);
     }
@@ -123,7 +120,8 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
         let idx = wordlist
             .iter()
             .position(|w| *w == word.as_str())
-            .expect("bip39::Mnemonic::parse_in already validated word membership") as u16;
+            .expect("bip39::Mnemonic::parse_in already validated word membership")
+            as u16;
         digits.push_str(&format!("{idx:04}"));
     }
 
@@ -187,37 +185,55 @@ mod tests {
     #[test]
     fn decode_rejects_wrong_length_47() {
         let bad = &DIGITS_12[..47];
-        assert!(matches!(decode(bad), Err(SeedqrError::InvalidDigits { got: 47 })));
+        assert!(matches!(
+            decode(bad),
+            Err(SeedqrError::InvalidDigits { got: 47 })
+        ));
     }
 
     #[test]
     fn decode_rejects_wrong_length_49() {
         let bad = format!("{DIGITS_12}0");
-        assert!(matches!(decode(&bad), Err(SeedqrError::InvalidDigits { got: 49 })));
+        assert!(matches!(
+            decode(&bad),
+            Err(SeedqrError::InvalidDigits { got: 49 })
+        ));
     }
 
     #[test]
     fn decode_rejects_wrong_length_95() {
         let bad = &DIGITS_24[..95];
-        assert!(matches!(decode(bad), Err(SeedqrError::InvalidDigits { got: 95 })));
+        assert!(matches!(
+            decode(bad),
+            Err(SeedqrError::InvalidDigits { got: 95 })
+        ));
     }
 
     #[test]
     fn decode_rejects_wrong_length_97() {
         let bad = format!("{DIGITS_24}0");
-        assert!(matches!(decode(&bad), Err(SeedqrError::InvalidDigits { got: 97 })));
+        assert!(matches!(
+            decode(&bad),
+            Err(SeedqrError::InvalidDigits { got: 97 })
+        ));
     }
 
     #[test]
     fn decode_rejects_non_digit_char() {
         let bad = "00000000000000000000000000000000000000000000000A";
-        assert!(matches!(decode(bad), Err(SeedqrError::InvalidDigitChar { pos: 47, ch: 'A' })));
+        assert!(matches!(
+            decode(bad),
+            Err(SeedqrError::InvalidDigitChar { pos: 47, ch: 'A' })
+        ));
     }
 
     #[test]
     fn decode_rejects_word_index_out_of_range() {
         let bad = format!("9999{}", &DIGITS_12[4..]);
-        assert!(matches!(decode(&bad), Err(SeedqrError::InvalidWordIndex { pos: 0, idx: 9999 })));
+        assert!(matches!(
+            decode(&bad),
+            Err(SeedqrError::InvalidWordIndex { pos: 0, idx: 9999 })
+        ));
     }
 
     #[test]
@@ -230,13 +246,19 @@ mod tests {
     #[test]
     fn encode_rejects_13_word_count() {
         let bad = format!("{PHRASE_12} abandon");
-        assert!(matches!(encode(&bad), Err(SeedqrError::InvalidWordCount { got: 13 })));
+        assert!(matches!(
+            encode(&bad),
+            Err(SeedqrError::InvalidWordCount { got: 13 })
+        ));
     }
 
     #[test]
     fn encode_rejects_18_word_count() {
         let bad = "abandon ".repeat(17) + "about";
-        assert!(matches!(encode(&bad), Err(SeedqrError::InvalidWordCount { got: 18 })));
+        assert!(matches!(
+            encode(&bad),
+            Err(SeedqrError::InvalidWordCount { got: 18 })
+        ));
     }
 
     #[test]
