@@ -281,3 +281,158 @@ fn plaintext_2line_multi_2of3_no_regression() {
         .assert()
         .success();
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// v0.32.1 — encrypted Round-1 decrypt-then-verify (--bsms-round1)
+// ──────────────────────────────────────────────────────────────────────
+
+const TV3_TOKEN_HEX: &str = "a54044308ceac9b7";
+
+/// Helper: decrypt the TV-3 encrypted Round-1 wire to recover the
+/// plaintext 5-line BSMS record (via the library primitives).
+fn tv3_decrypted_plaintext() -> String {
+    use mnemonic_toolkit::bsms_crypto::{decrypt, derive_encryption_key};
+    let wire_hex = std::fs::read_to_string(fixture_path("bsms-encrypted-standard-tv3.dat")).unwrap();
+    let wire = hex::decode(wire_hex.trim()).unwrap();
+    let (mac, ct) = wire.split_at(32);
+    let token_raw = hex::decode(TV3_TOKEN_HEX).unwrap();
+    let enc_key = derive_encryption_key(&token_raw);
+    let iv: [u8; 16] = mac[..16].try_into().unwrap();
+    let pt = decrypt(ct, &enc_key, &iv).unwrap();
+    String::from_utf8(pt.to_vec()).unwrap()
+}
+
+/// Helper: re-encrypt a plaintext Round-1 record with the TV-3 token
+/// (computing MAC + IV per BIP-129) → hex `MAC || ciphertext` wire.
+fn reencrypt_with_tv3_token(plaintext: &str) -> String {
+    use mnemonic_toolkit::bsms_crypto::{
+        compute_mac, derive_encryption_key, derive_hmac_key, encrypt,
+    };
+    let token_raw = hex::decode(TV3_TOKEN_HEX).unwrap();
+    let enc_key = derive_encryption_key(&token_raw);
+    let hmac_key = derive_hmac_key(&enc_key);
+    let mac = compute_mac(&hmac_key, TV3_TOKEN_HEX, plaintext.as_bytes());
+    let iv: [u8; 16] = mac[..16].try_into().unwrap();
+    let ct = encrypt(plaintext.as_bytes(), &enc_key, &iv);
+    hex::encode([&mac[..], &ct[..]].concat())
+}
+
+#[test]
+fn tv3_round1_decrypt_then_verify() {
+    // The TV-3 encrypted Round-1 record, fed via --bsms-round1 + token,
+    // decrypts + MAC-verifies + BIP-322-verifies (verified=true).
+    let dat = fixture_path("bsms-encrypted-standard-tv3.dat");
+    let token = fixture_path("bsms-encrypted-standard-tv3-token.hex");
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(&dat)
+        .args(["--bsms-encryption-token"])
+        .arg(&token)
+        .args(["--json"])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("BIP-129 encrypted Round-1 record 0 decrypted")
+            && stderr.contains("MAC verified"),
+        "expected Round-1 decrypt NOTICE; got: {stderr}"
+    );
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let v = &json["bsms_round1_verifications"][0];
+    assert_eq!(v["signature_verified"], true, "TV-3 Round-1 must verify; got: {stdout}");
+}
+
+#[test]
+fn round1_encrypted_without_token_refused() {
+    let dat = fixture_path("bsms-encrypted-standard-tv3.dat");
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(&dat)
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("looks encrypted")
+            && stderr.contains("no --bsms-encryption-token was supplied"),
+        "expected no-token refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn round1_encrypted_wrong_token_mac_mismatch() {
+    let dat = fixture_path("bsms-encrypted-standard-tv3.dat");
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), b"a54044308ceac9b8\n").unwrap(); // flipped last char
+    mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(&dat)
+        .args(["--bsms-encryption-token"])
+        .arg(tmp.path())
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("MAC verification failed"));
+}
+
+#[test]
+fn round1_plaintext_still_verifies_no_misclassify() {
+    // A plaintext 5-line Round-1 record via --bsms-round1 (no token) still
+    // verifies — the encrypted-detection must NOT mis-classify plaintext
+    // (it starts with the `BSMS 1.0` header → not all-hex).
+    let plaintext_fixture = "tests/fixtures/bsms_round1/tv1-no-encryption-pubkey-signer1.bsms";
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1", plaintext_fixture, "--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
+}
+
+#[test]
+fn round1_encrypted_decrypt_ok_but_sig_fail() {
+    // R0 M2 — an encrypted Round-1 record that decrypts + MAC-verifies OK
+    // but whose plaintext has a corrupted BIP-322 signature: lenient mode
+    // → NOTICE + Failed status (exit 0); --bsms-verify-strict → fatal.
+    let plaintext = tv3_decrypted_plaintext();
+    // Corrupt the base64 SIG (last line): flip its first char to a
+    // different valid base64 char (keeps the 5-line shape + valid base64).
+    let mut lines: Vec<&str> = plaintext.lines().collect();
+    let sig = lines.pop().unwrap();
+    let first = sig.chars().next().unwrap();
+    let flipped = if first == 'A' { 'B' } else { 'A' };
+    let bad_sig: String = std::iter::once(flipped).chain(sig.chars().skip(1)).collect();
+    let corrupted = format!("{}\n{}\n", lines.join("\n"), bad_sig);
+    let wire_hex = reencrypt_with_tv3_token(&corrupted);
+
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), wire_hex.as_bytes()).unwrap();
+    let token = fixture_path("bsms-encrypted-standard-tv3-token.hex");
+
+    // Lenient: decrypt OK, NOTICE, verify-failed status, exit 0.
+    let lenient = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(tmp.path())
+        .args(["--bsms-encryption-token"])
+        .arg(&token)
+        .args(["--json"])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(lenient.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("record 0 decrypted") && stderr.contains("signature verification failed"),
+        "expected decrypt-OK + verify-FAIL NOTICE; got: {stderr}"
+    );
+
+    // Strict: same record → fatal.
+    mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(tmp.path())
+        .args(["--bsms-encryption-token"])
+        .arg(&token)
+        .args(["--bsms-verify-strict"])
+        .assert()
+        .failure();
+}

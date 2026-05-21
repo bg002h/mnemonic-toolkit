@@ -248,9 +248,39 @@ pub fn run<R: Read, W: Write, E: Write>(
         ));
     }
 
+    // v0.31.0 — Cycle 7b stdin-contention guard, HOISTED above the Round-1
+    // verify + token read (v0.32.1 Cycle 15). `verify_bsms_round1_files`
+    // runs before the blob match, so the token must be read first; the
+    // dual-stdin refusal must therefore fire before the token consumes
+    // stdin. Uses `args` directly (no dependency on the later `blob_path`
+    // binding); in standalone Round-1 mode `args.blob` is None so the
+    // guard does not fire.
+    if let (Some(blob_p), Some(token_p)) = (&args.blob, &args.bsms_encryption_token) {
+        if blob_p.as_os_str() == "-" && token_p.as_os_str() == "-" {
+            return Err(ToolkitError::BadInput(
+                "--blob=- and --bsms-encryption-token=- cannot both read from stdin".to_string(),
+            ));
+        }
+    }
+
+    // v0.32.1 — read + width-validate the shared `--bsms-encryption-token`
+    // ONCE, before both the Round-1 verify path and the Round-2 decrypt
+    // block. Shared-token mode; per-Signer tokens are a follow-on cycle.
+    let bsms_token: Option<BsmsToken> = match &args.bsms_encryption_token {
+        Some(path) => Some(read_and_validate_bsms_token(path, stdin)?),
+        None => None,
+    };
+
     // v0.27.0 — BIP-129 Round-1 BIP-322 ECDSA verify (independent of --blob).
+    // v0.32.1 — encrypted Round-1 records (hex MAC||ciphertext) are decrypted
+    // with `bsms_token` before parse + BIP-322 verify.
     let round1_verifications = if !args.bsms_round1.is_empty() {
-        verify_bsms_round1_files(&args.bsms_round1, args.bsms_verify_strict, stderr)?
+        verify_bsms_round1_files(
+            &args.bsms_round1,
+            args.bsms_verify_strict,
+            bsms_token.as_ref(),
+            stderr,
+        )?
     } else {
         Vec::new()
     };
@@ -269,19 +299,8 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     };
 
-    // v0.31.0 — Cycle 7b stdin-contention guard. When the user supplies
-    // BOTH `--blob -` AND `--bsms-encryption-token -`, both would race
-    // for the same stdin channel. The blob read at this site consumes
-    // stdin first, leaving the token read with empty input. Refuse the
-    // dual-stdin combination explicitly per R0 I2.
-    if let Some(token_path) = &args.bsms_encryption_token {
-        if blob_path.as_os_str() == "-" && token_path.as_os_str() == "-" {
-            return Err(ToolkitError::BadInput(
-                "--blob=- and --bsms-encryption-token=- cannot both read from stdin"
-                    .to_string(),
-            ));
-        }
-    }
+    // (v0.32.1 — the dual-stdin guard + token read were hoisted above the
+    // Round-1 verify path; see the `bsms_token` binding earlier in this fn.)
 
     // Read blob.
     let mut blob = read_blob(blob_path, stdin)?;
@@ -839,63 +858,26 @@ electrum|jade|sparrow|specter>"
     // non-interactive CLI flow has no timing-oracle exposure (the
     // process exits on first mismatch; no repeated probe surface).
     if format_str == "bsms" {
-        if let Some(token_path) = &args.bsms_encryption_token {
-            let token_hex = read_bsms_token(token_path, stdin)?;
-            let token_raw = hex::decode(&token_hex).map_err(|e| {
-                ToolkitError::BadInput(format!(
-                    "--bsms-encryption-token: token file contents not valid hex: {e}"
-                ))
-            })?;
-            if token_raw.len() != 8 && token_raw.len() != 16 {
-                return Err(ToolkitError::BadInput(format!(
-                    "--bsms-encryption-token: token must be 8 bytes STANDARD (16 hex chars) or 16 bytes EXTENDED (32 hex chars); got {} bytes ({} hex chars)",
-                    token_raw.len(),
-                    token_hex.len(),
-                )));
-            }
+        if let Some(token) = &bsms_token {
+            // v0.32.1 — consume the hoisted+validated shared token. The
+            // blob is the encrypted Round-2 descriptor wire (hex
+            // MAC||ciphertext); decrypt + MAC-verify, then hand the
+            // plaintext to BsmsParser.
             let blob_hex = std::str::from_utf8(&blob).map_err(|_| {
                 ToolkitError::ImportWalletParse(
                     "import-wallet: bsms: encrypted Round-2 blob must be valid UTF-8 hex"
                         .to_string(),
                 )
             })?;
-            let wire = hex::decode(blob_hex.trim()).map_err(|e| {
-                ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: bsms: encrypted Round-2 wire is not valid hex: {e}"
-                ))
-            })?;
-            if wire.len() < 32 + 1 {
-                return Err(ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: bsms: encrypted Round-2 wire too short ({} bytes; need MAC (32) + at least 1 ciphertext byte)",
-                    wire.len(),
-                )));
-            }
-            let (mac_recv, ciphertext) = wire.split_at(32);
-            let enc_key = mnemonic_toolkit::bsms_crypto::derive_encryption_key(&token_raw);
-            let hmac_key = mnemonic_toolkit::bsms_crypto::derive_hmac_key(&enc_key);
-            let iv: [u8; 16] = mac_recv[..16]
-                .try_into()
-                .expect("32-byte MAC slice has 16-byte prefix");
-            let plaintext = mnemonic_toolkit::bsms_crypto::decrypt(ciphertext, &enc_key, &iv)
-                .map_err(|e| ToolkitError::ImportWalletParse(format!("import-wallet: bsms: {e}")))?;
-            let mac_expected = mnemonic_toolkit::bsms_crypto::compute_mac(
-                &hmac_key,
-                &token_hex,
-                &plaintext,
-            );
-            if mac_recv != mac_expected.as_slice() {
-                return Err(ToolkitError::BsmsMacMismatch {
-                    token_len_hex: token_hex.len(),
-                });
-            }
+            let plaintext = decrypt_bsms_record(blob_hex, token, "bsms: encrypted Round-2 wire")?;
             writeln!(
                 stderr,
                 "notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width {} hex chars; MAC verified)",
-                token_hex.len(),
+                token.hex.len(),
             )
             .map_err(ToolkitError::Io)?;
             // Replace blob with the decrypted plaintext for downstream parser.
-            blob = plaintext.to_vec();
+            blob = plaintext.into_bytes();
         }
     }
 
@@ -1910,6 +1892,88 @@ fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, Too
     Ok(raw.trim().to_lowercase())
 }
 
+/// v0.31.0+ — a decoded BIP-129 encryption TOKEN, held once after a single
+/// read so the Round-1 verify path (`verify_bsms_round1_files`) and the
+/// Round-2 descriptor-decrypt block can share it without re-reading stdin.
+/// `hex` is the lowercase ASCII-hex form (the PBKDF2 salt is `raw`; the
+/// HMAC input prefix is `hex`).
+struct BsmsToken {
+    hex: String,
+    raw: Vec<u8>,
+}
+
+/// Read + width-validate the `--bsms-encryption-token` once. Mirrors the
+/// width gate previously inline in the Round-2 decrypt block (8-byte
+/// STANDARD / 16-byte EXTENDED per BIP-129).
+fn read_and_validate_bsms_token<R: Read>(
+    path: &PathBuf,
+    stdin: &mut R,
+) -> Result<BsmsToken, ToolkitError> {
+    let hex = read_bsms_token(path, stdin)?;
+    let raw = hex::decode(&hex).map_err(|e| {
+        ToolkitError::BadInput(format!(
+            "--bsms-encryption-token: token file contents not valid hex: {e}"
+        ))
+    })?;
+    if raw.len() != 8 && raw.len() != 16 {
+        return Err(ToolkitError::BadInput(format!(
+            "--bsms-encryption-token: token must be 8 bytes STANDARD (16 hex chars) or 16 bytes EXTENDED (32 hex chars); got {} bytes ({} hex chars)",
+            raw.len(),
+            hex.len(),
+        )));
+    }
+    Ok(BsmsToken { hex, raw })
+}
+
+/// True iff `text` is a BIP-129 encrypted record wire (hex `MAC || ciphertext`)
+/// rather than a plaintext Round-1 record. Plaintext records always begin
+/// with the `BSMS 1.0` header (space + non-hex letters); an encrypted wire
+/// is raw lowercase/uppercase hex with no header.
+fn is_encrypted_bsms_record(text: &str) -> bool {
+    let t = text.trim();
+    !t.is_empty()
+        && !t.starts_with(crate::wallet_import::bsms_round1::BSMS_HEADER)
+        && t.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Decrypt a BIP-129 encrypted record wire (hex `MAC || ciphertext`) with
+/// `token`, MAC-verifying per the §Encryption Encrypt-and-MAC ordering, and
+/// return the UTF-8 plaintext. Shared by the Round-2 descriptor-decrypt
+/// block and the Round-1 verify path; `ctx` labels error messages for the
+/// caller's record kind (e.g. `"bsms: encrypted Round-2 wire"` or
+/// `"--bsms-round1: encrypted record N"`).
+fn decrypt_bsms_record(text: &str, token: &BsmsToken, ctx: &str) -> Result<String, ToolkitError> {
+    let wire = hex::decode(text.trim()).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!("import-wallet: {ctx} is not valid hex: {e}"))
+    })?;
+    if wire.len() < 32 + 1 {
+        return Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: {ctx} too short ({} bytes; need MAC (32) + at least 1 ciphertext byte)",
+            wire.len(),
+        )));
+    }
+    let (mac_recv, ciphertext) = wire.split_at(32);
+    let enc_key = mnemonic_toolkit::bsms_crypto::derive_encryption_key(&token.raw);
+    let hmac_key = mnemonic_toolkit::bsms_crypto::derive_hmac_key(&enc_key);
+    let iv: [u8; 16] = mac_recv[..16]
+        .try_into()
+        .expect("32-byte MAC slice has 16-byte prefix");
+    let plaintext = mnemonic_toolkit::bsms_crypto::decrypt(ciphertext, &enc_key, &iv)
+        .map_err(|e| ToolkitError::ImportWalletParse(format!("import-wallet: {ctx}: {e}")))?;
+    let mac_expected =
+        mnemonic_toolkit::bsms_crypto::compute_mac(&hmac_key, &token.hex, &plaintext);
+    if mac_recv != mac_expected.as_slice() {
+        return Err(ToolkitError::BsmsMacMismatch {
+            token_len_hex: token.hex.len(),
+        });
+    }
+    String::from_utf8(plaintext.to_vec()).map_err(|_| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: {ctx}: decrypted record is not valid UTF-8"
+        ))
+    })
+}
+
 fn hex_lower(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -1952,6 +2016,7 @@ enum Round1VerificationStatus {
 fn verify_bsms_round1_files(
     paths: &[PathBuf],
     strict: bool,
+    token: Option<&BsmsToken>,
     stderr: &mut dyn Write,
 ) -> Result<Vec<Round1Verification>, ToolkitError> {
     use crate::wallet_import::bsms_round1::{parse_round1, signer_pubkey};
@@ -1969,7 +2034,31 @@ fn verify_bsms_round1_files(
                 i
             )));
         }
-        let text = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
+        let raw_text = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
+        // v0.32.1 — encrypted Round-1 records (hex MAC||ciphertext) are
+        // decrypted with the shared token before parse + BIP-322 verify.
+        // Plaintext records (5-line `BSMS 1.0\n…`) pass through unchanged.
+        let text = if is_encrypted_bsms_record(&raw_text) {
+            let token = token.ok_or_else(|| {
+                ToolkitError::BadInput(format!(
+                    "--bsms-round1: record {i} looks encrypted (hex MAC||ciphertext) but no --bsms-encryption-token was supplied"
+                ))
+            })?;
+            let plaintext = decrypt_bsms_record(
+                &raw_text,
+                token,
+                &format!("--bsms-round1: encrypted record {i}"),
+            )?;
+            writeln!(
+                stderr,
+                "notice: import-wallet: --bsms-round1: BIP-129 encrypted Round-1 record {i} decrypted (token width {} hex chars; MAC verified)",
+                token.hex.len(),
+            )
+            .map_err(ToolkitError::Io)?;
+            plaintext
+        } else {
+            raw_text
+        };
         let record = parse_round1(&text)?;
         let pk_hex = hex::encode(signer_pubkey(&record).serialize());
 
@@ -2074,6 +2163,31 @@ fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// v0.32.1 — `is_encrypted_bsms_record` discriminates a plaintext
+    /// 5-line Round-1 record (starts with `BSMS 1.0`) from an encrypted
+    /// hex `MAC||ciphertext` wire.
+    #[test]
+    fn is_encrypted_bsms_record_discrimination() {
+        // Plaintext Round-1 → false (header is not all-hex).
+        assert!(!is_encrypted_bsms_record(
+            "BSMS 1.0\n00\n[59865f44/48'/0'/0'/2']026d15\nSigner 1 key\nH6DXgq...\n"
+        ));
+        // Pure hex wire → true.
+        assert!(is_encrypted_bsms_record(
+            "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899abcd"
+        ));
+        // Uppercase hex (with surrounding whitespace) → true.
+        assert!(is_encrypted_bsms_record("  AABBCCDD\n  "));
+        // Empty / whitespace-only → false.
+        assert!(!is_encrypted_bsms_record(""));
+        assert!(!is_encrypted_bsms_record("   \n\t "));
+        // Non-hex non-BSMS text → false (e.g. odd punctuation).
+        assert!(!is_encrypted_bsms_record("hello world"));
+        // Odd-length hex is still "looks encrypted" (caught later by
+        // hex::decode in decrypt_bsms_record, not by the discriminator).
+        assert!(is_encrypted_bsms_record("abc"));
+    }
 
     /// v0.27.1 Phase 1 C1 fold: canonicalize-failed arm of
     /// `emit_roundtrip_stderr_warning` emits a stderr warning with the
