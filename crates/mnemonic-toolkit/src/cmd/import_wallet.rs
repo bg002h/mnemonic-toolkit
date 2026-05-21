@@ -201,8 +201,14 @@ pub struct ImportWalletArgs {
     /// stripped. Encrypted blobs don't carry the `BSMS 1.0` header so
     /// they don't auto-sniff as BSMS; `--format bsms` is REQUIRED.
     /// MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
+    /// v0.32.2 — repeatable: one TOKEN per Signer (BIP-129 line 74). A
+    /// SINGLE `--bsms-encryption-token` is SHARED (decrypts all encrypted
+    /// Round-1 records + the Round-2 blob; backward-compatible with
+    /// v0.31.0/v0.32.1). MULTIPLE tokens are paired POSITIONALLY with
+    /// `--bsms-round1` records (token[i] ↔ record[i]); requires N matching
+    /// all-encrypted records + no encrypted Round-2 `--blob`.
     #[arg(long = "bsms-encryption-token", value_name = "FILE|-")]
-    pub bsms_encryption_token: Option<PathBuf>,
+    pub bsms_encryption_token: Vec<PathBuf>,
 
     /// v0.27.0 — make BIP-129 Round-1 SIG verification failures fatal.
     /// Without this flag, verify mismatches emit a stderr NOTICE and proceed
@@ -255,30 +261,54 @@ pub fn run<R: Read, W: Write, E: Write>(
     // stdin. Uses `args` directly (no dependency on the later `blob_path`
     // binding); in standalone Round-1 mode `args.blob` is None so the
     // guard does not fire.
-    if let (Some(blob_p), Some(token_p)) = (&args.blob, &args.bsms_encryption_token) {
-        if blob_p.as_os_str() == "-" && token_p.as_os_str() == "-" {
+    // v0.32.2 — single-stdin-per-invocation across the Vec of tokens + blob.
+    // At most one stdin consumer: refuse 2+ token `-` entries, and refuse
+    // any token `-` co-existing with `--blob=-`.
+    let token_stdin_count = args
+        .bsms_encryption_token
+        .iter()
+        .filter(|p| p.as_os_str() == "-")
+        .count();
+    if token_stdin_count > 1 {
+        return Err(ToolkitError::BadInput(
+            "at most one --bsms-encryption-token=- per invocation (single stdin per invocation)"
+                .to_string(),
+        ));
+    }
+    if let Some(blob_p) = &args.blob {
+        if blob_p.as_os_str() == "-" && token_stdin_count > 0 {
             return Err(ToolkitError::BadInput(
                 "--blob=- and --bsms-encryption-token=- cannot both read from stdin".to_string(),
             ));
         }
     }
 
-    // v0.32.1 — read + width-validate the shared `--bsms-encryption-token`
-    // ONCE, before both the Round-1 verify path and the Round-2 decrypt
-    // block. Shared-token mode; per-Signer tokens are a follow-on cycle.
-    let bsms_token: Option<BsmsToken> = match &args.bsms_encryption_token {
-        Some(path) => Some(read_and_validate_bsms_token(path, stdin)?),
-        None => None,
-    };
+    // v0.32.2 — gap-h guard (R0 I1): per-Signer tokens (N>1) require N
+    // matching `--bsms-round1` records. With zero records, the positional
+    // count check in `verify_bsms_round1_files` would never fire, so guard
+    // here before the token read.
+    if args.bsms_encryption_token.len() > 1 && args.bsms_round1.is_empty() {
+        return Err(ToolkitError::BadInput(
+            "per-Signer tokens (multiple --bsms-encryption-token) require matching --bsms-round1 records; none supplied".to_string(),
+        ));
+    }
+
+    // v0.32.1 — read + width-validate each `--bsms-encryption-token` ONCE,
+    // before both the Round-1 verify path and the Round-2 decrypt block.
+    // v0.32.2 — a Vec: 1 token = SHARED (backward-compat); N>1 = per-Signer.
+    let mut bsms_tokens: Vec<BsmsToken> = Vec::with_capacity(args.bsms_encryption_token.len());
+    for path in &args.bsms_encryption_token {
+        bsms_tokens.push(read_and_validate_bsms_token(path, stdin)?);
+    }
 
     // v0.27.0 — BIP-129 Round-1 BIP-322 ECDSA verify (independent of --blob).
     // v0.32.1 — encrypted Round-1 records (hex MAC||ciphertext) are decrypted
-    // with `bsms_token` before parse + BIP-322 verify.
+    // with the token(s) before parse + BIP-322 verify.
     let round1_verifications = if !args.bsms_round1.is_empty() {
         verify_bsms_round1_files(
             &args.bsms_round1,
             args.bsms_verify_strict,
-            bsms_token.as_ref(),
+            &bsms_tokens,
             stderr,
         )?
     } else {
@@ -857,28 +887,37 @@ electrum|jade|sparrow|specter>"
     // ordering. MAC compare uses byte-by-byte equality: single-attempt
     // non-interactive CLI flow has no timing-oracle exposure (the
     // process exits on first mismatch; no repeated probe surface).
-    if format_str == "bsms" {
-        if let Some(token) = &bsms_token {
-            // v0.32.1 — consume the hoisted+validated shared token. The
-            // blob is the encrypted Round-2 descriptor wire (hex
-            // MAC||ciphertext); decrypt + MAC-verify, then hand the
-            // plaintext to BsmsParser.
-            let blob_hex = std::str::from_utf8(&blob).map_err(|_| {
-                ToolkitError::ImportWalletParse(
-                    "import-wallet: bsms: encrypted Round-2 blob must be valid UTF-8 hex"
-                        .to_string(),
-                )
-            })?;
-            let plaintext = decrypt_bsms_record(blob_hex, token, "bsms: encrypted Round-2 wire")?;
-            writeln!(
-                stderr,
-                "notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width {} hex chars; MAC verified)",
-                token.hex.len(),
-            )
-            .map_err(ToolkitError::Io)?;
-            // Replace blob with the decrypted plaintext for downstream parser.
-            blob = plaintext.into_bytes();
+    if format_str == "bsms" && !bsms_tokens.is_empty() {
+        // v0.32.2 — the Round-2 `--blob` decrypt is a single-share,
+        // single-token operation. Per-Signer tokens (N>1) pair with
+        // `--bsms-round1` records only; an encrypted Round-2 blob with
+        // multiple tokens is ambiguous → refuse. (Reached only after the
+        // Round-1 verify path above, per the error-precedence design.)
+        if bsms_tokens.len() > 1 {
+            return Err(ToolkitError::BadInput(format!(
+                "Round-2 --blob decrypt requires exactly one --bsms-encryption-token; got {} (per-Signer tokens pair with --bsms-round1 records only)",
+                bsms_tokens.len(),
+            )));
         }
+        let token = &bsms_tokens[0];
+        // v0.32.1 — consume the hoisted+validated shared token. The
+        // blob is the encrypted Round-2 descriptor wire (hex
+        // MAC||ciphertext); decrypt + MAC-verify, then hand the
+        // plaintext to BsmsParser.
+        let blob_hex = std::str::from_utf8(&blob).map_err(|_| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: bsms: encrypted Round-2 blob must be valid UTF-8 hex".to_string(),
+            )
+        })?;
+        let plaintext = decrypt_bsms_record(blob_hex, token, "bsms: encrypted Round-2 wire")?;
+        writeln!(
+            stderr,
+            "notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width {} hex chars; MAC verified)",
+            token.hex.len(),
+        )
+        .map_err(ToolkitError::Io)?;
+        // Replace blob with the decrypted plaintext for downstream parser.
+        blob = plaintext.into_bytes();
     }
 
     let mut parsed: Vec<ParsedImport> = match format_str {
@@ -2013,14 +2052,44 @@ enum Round1VerificationStatus {
 /// Read + parse + verify each `--bsms-round1 <FILE>` entry. Lenient default:
 /// verify failure emits stderr NOTICE + sets `status: Failed { reason }`;
 /// strict (`--bsms-verify-strict`) makes verify failure fatal.
+///
+/// v0.32.2 — `tokens` carries 0, 1, or N decryption tokens:
+/// - 0 tokens: encrypted records → `BadInput` (no token).
+/// - 1 token: SHARED — decrypts every encrypted record (backward-compat).
+/// - N>1 tokens (per-Signer): requires ALL records encrypted AND
+///   `tokens.len() == paths.len()`; `token[i]` decrypts `record[i]`.
 fn verify_bsms_round1_files(
     paths: &[PathBuf],
     strict: bool,
-    token: Option<&BsmsToken>,
+    tokens: &[BsmsToken],
     stderr: &mut dyn Write,
 ) -> Result<Vec<Round1Verification>, ToolkitError> {
     use crate::wallet_import::bsms_round1::{parse_round1, signer_pubkey};
     use crate::wallet_import::bsms_verify::verify_round1_signature;
+
+    // v0.32.2 — per-Signer (N>1) pairing pre-checks. With multiple tokens,
+    // every record must be encrypted and the counts must match so the
+    // positional `token[i] ↔ record[i]` mapping is unambiguous.
+    if tokens.len() > 1 {
+        if tokens.len() != paths.len() {
+            return Err(ToolkitError::BadInput(format!(
+                "per-Signer tokens: supplied {} --bsms-encryption-token but {} --bsms-round1 record(s); counts must match for positional pairing",
+                tokens.len(),
+                paths.len(),
+            )));
+        }
+        for (i, path) in paths.iter().enumerate() {
+            if path.as_os_str() == "-" {
+                continue; // stdin refusal handled in the main loop below
+            }
+            let probe = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
+            if !is_encrypted_bsms_record(&probe) {
+                return Err(ToolkitError::BadInput(format!(
+                    "per-Signer tokens: --bsms-round1 record {i} is plaintext, but multiple --bsms-encryption-token were supplied; per-Signer mode requires every record to be encrypted (or supply a single shared token)"
+                )));
+            }
+        }
+    }
 
     let mut out = Vec::with_capacity(paths.len());
     for (i, path) in paths.iter().enumerate() {
@@ -2036,14 +2105,20 @@ fn verify_bsms_round1_files(
         }
         let raw_text = std::fs::read_to_string(path).map_err(ToolkitError::Io)?;
         // v0.32.1 — encrypted Round-1 records (hex MAC||ciphertext) are
-        // decrypted with the shared token before parse + BIP-322 verify.
-        // Plaintext records (5-line `BSMS 1.0\n…`) pass through unchanged.
+        // decrypted before parse + BIP-322 verify. Plaintext records
+        // (5-line `BSMS 1.0\n…`) pass through unchanged.
+        // v0.32.2 — token selection: shared (1 token → tokens[0] for every
+        // record) or per-Signer positional (N tokens → tokens[i]).
         let text = if is_encrypted_bsms_record(&raw_text) {
-            let token = token.ok_or_else(|| {
-                ToolkitError::BadInput(format!(
-                    "--bsms-round1: record {i} looks encrypted (hex MAC||ciphertext) but no --bsms-encryption-token was supplied"
-                ))
-            })?;
+            let token = match tokens.len() {
+                0 => {
+                    return Err(ToolkitError::BadInput(format!(
+                        "--bsms-round1: record {i} looks encrypted (hex MAC||ciphertext) but no --bsms-encryption-token was supplied"
+                    )))
+                }
+                1 => &tokens[0],
+                _ => &tokens[i], // counts validated equal above
+            };
             let plaintext = decrypt_bsms_record(
                 &raw_text,
                 token,

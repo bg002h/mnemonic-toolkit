@@ -302,19 +302,33 @@ fn tv3_decrypted_plaintext() -> String {
     String::from_utf8(pt.to_vec()).unwrap()
 }
 
-/// Helper: re-encrypt a plaintext Round-1 record with the TV-3 token
+/// Helper: re-encrypt a plaintext Round-1 record with an arbitrary token
 /// (computing MAC + IV per BIP-129) → hex `MAC || ciphertext` wire.
-fn reencrypt_with_tv3_token(plaintext: &str) -> String {
+fn reencrypt_with_token(plaintext: &str, token_hex: &str) -> String {
     use mnemonic_toolkit::bsms_crypto::{
         compute_mac, derive_encryption_key, derive_hmac_key, encrypt,
     };
-    let token_raw = hex::decode(TV3_TOKEN_HEX).unwrap();
+    let token_raw = hex::decode(token_hex).unwrap();
     let enc_key = derive_encryption_key(&token_raw);
     let hmac_key = derive_hmac_key(&enc_key);
-    let mac = compute_mac(&hmac_key, TV3_TOKEN_HEX, plaintext.as_bytes());
+    let mac = compute_mac(&hmac_key, token_hex, plaintext.as_bytes());
     let iv: [u8; 16] = mac[..16].try_into().unwrap();
     let ct = encrypt(plaintext.as_bytes(), &enc_key, &iv);
     hex::encode([&mac[..], &ct[..]].concat())
+}
+
+/// Helper: re-encrypt with the TV-3 token (back-compat shim for the
+/// Cycle-15 cell).
+fn reencrypt_with_tv3_token(plaintext: &str) -> String {
+    reencrypt_with_token(plaintext, TV3_TOKEN_HEX)
+}
+
+/// Write `contents` to a fresh temp file, returning the keep-alive handle
+/// (caller binds it so the file outlives the command).
+fn temp_with(contents: &str) -> tempfile::NamedTempFile {
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), contents.as_bytes()).unwrap();
+    tmp
 }
 
 #[test]
@@ -435,4 +449,223 @@ fn round1_encrypted_decrypt_ok_but_sig_fail() {
         .args(["--bsms-verify-strict"])
         .assert()
         .failure();
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// v0.32.2 — per-Signer tokens (repeatable --bsms-encryption-token)
+// ──────────────────────────────────────────────────────────────────────
+
+const TOKEN_B_HEX: &str = "b1b2b3b4b5b6b7b8";
+
+#[test]
+fn per_signer_two_tokens_two_records_positional() {
+    // Two encrypted Round-1 records, each with its own token, paired
+    // positionally (token[i] ↔ record[i]). Both decrypt + verify.
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&pt, TOKEN_B_HEX));
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1 = temp_with(TOKEN_B_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1.path())
+        .args(["--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
+    assert_eq!(json["bsms_round1_verifications"][1]["signature_verified"], true);
+}
+
+#[test]
+fn single_token_shared_still_decrypts_all() {
+    // One token shared across TWO encrypted records (backward-compatible).
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let tok = temp_with(TV3_TOKEN_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok.path())
+        .args(["--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
+    assert_eq!(json["bsms_round1_verifications"][1]["signature_verified"], true);
+}
+
+#[test]
+fn per_signer_token_count_mismatch_refused() {
+    // 2 records + 3 tokens → N>1 ≠ record count → refuse.
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&pt, TOKEN_B_HEX));
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1 = temp_with(TOKEN_B_HEX);
+    let tok2 = temp_with(TV3_TOKEN_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok2.path())
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("counts must match for positional pairing"),
+        "expected count-mismatch refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn per_signer_mixed_plaintext_encrypted_refused() {
+    // 2 tokens but record[1] is plaintext → per-Signer mode requires all
+    // records encrypted → refuse.
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&pt); // plaintext
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1 = temp_with(TOKEN_B_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1.path())
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("per-Signer mode requires every record to be encrypted"),
+        "expected mixed-mode refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn per_signer_multi_token_with_encrypted_blob_refused() {
+    // N>1 tokens + an encrypted Round-2 --blob → ambiguous → refuse.
+    // (Reached only after the Round-1 records verify.)
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&pt, TOKEN_B_HEX));
+    let blob = fixture_path("bsms-encrypted-standard-tv3.dat");
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1 = temp_with(TOKEN_B_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--format", "bsms", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--blob"])
+        .arg(&blob)
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1.path())
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("Round-2 --blob decrypt requires exactly one --bsms-encryption-token"),
+        "expected multi-token-blob refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn multi_token_zero_records_refused() {
+    // R0 I1 gap-h — N>1 tokens with NO --bsms-round1 records → refuse
+    // (tokens would otherwise be read + silently discarded). A `--blob`
+    // is supplied to satisfy clap's `--blob required_unless bsms_round1`
+    // so the runtime gap-h guard (which runs before blob processing) is
+    // reached rather than clap's usage error.
+    let blob = fixture_path("bsms-encrypted-standard-tv3.dat");
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1 = temp_with(TOKEN_B_HEX);
+    let assertion = mnemonic()
+        .args(["import-wallet", "--format", "bsms", "--blob"])
+        .arg(&blob)
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1.path())
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("require matching --bsms-round1 records; none supplied"),
+        "expected gap-h refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn per_signer_token_i_mac_mismatch_cites_index() {
+    // R0 M2 — 2 records + 2 tokens where token[1] is WRONG for record[1]
+    // (record[1] encrypted with TOKEN_B but token[1] supplied is the TV-3
+    // token) → MAC mismatch on record index 1.
+    let pt = tv3_decrypted_plaintext();
+    let rec0 = temp_with(&reencrypt_with_token(&pt, TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&pt, TOKEN_B_HEX));
+    let tok0 = temp_with(TV3_TOKEN_HEX);
+    let tok1_wrong = temp_with(TV3_TOKEN_HEX); // wrong for rec1 (needs TOKEN_B)
+    mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok0.path())
+        .args(["--bsms-encryption-token"])
+        .arg(tok1_wrong.path())
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("MAC verification failed"));
+}
+
+#[test]
+fn two_token_stdin_refused() {
+    // Two --bsms-encryption-token=- → single-stdin-per-invocation refusal.
+    let rec0 = temp_with(&reencrypt_with_token(&tv3_decrypted_plaintext(), TV3_TOKEN_HEX));
+    let rec1 = temp_with(&reencrypt_with_token(&tv3_decrypted_plaintext(), TOKEN_B_HEX));
+    let assertion = mnemonic()
+        .args(["import-wallet", "--bsms-round1"])
+        .arg(rec0.path())
+        .args(["--bsms-round1"])
+        .arg(rec1.path())
+        .args(["--bsms-encryption-token", "-", "--bsms-encryption-token", "-"])
+        .write_stdin(TV3_TOKEN_HEX)
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("at most one --bsms-encryption-token=- per invocation"),
+        "expected single-stdin refusal; got: {stderr}"
+    );
 }
