@@ -2874,10 +2874,21 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` `FromInput` + `NodeType` enum + `parse_from_input`; `crates/mnemonic-toolkit/src/cmd/seedqr.rs::SeedqrDecodeArgs.digits` (current `--digits` flag).
 - **What:** Long-term surface unification across all `--from`-shaped subcommands. Today: `convert` uses `--from <node>=<value>`; `seed-xor` / `slip39` / `seedqr-encode` use `--from phrase=...`; but `seedqr-decode` uses a bespoke `--digits <value>` flag because SeedQR digits are a distinct surface from the existing `phrase/xpub/xprv/ms1/...` types. The asymmetry creates a long-term inconsistency. **Proposed:** extend `FromInput` with a `seedqr=<value>` node type, then deprecate `--digits` in favor of `--from seedqr=...`. Migration path: v0.30+ accepts BOTH `--digits` (deprecated; emits stderr warning) AND `--from seedqr=...` (canonical); a future v0.31+ removes `--digits`.
 - **Why deferred:** Cycle 5 scope was the standalone seedqr surface. Extending `FromInput` to include `seedqr=` would have been a global change touching every consumer of `FromInput`; out of scope for the introductory cycle.
-- **Status:** `open`
+- **Status:** `resolved 5f0b7b4` — mnemonic-toolkit-v0.31.6 Cycle 13. Added `NodeType::Seedqr` (enum position 1) wired as a first-class input node through `classify_edge` + `is_supported_direct_edge` + `compute_outputs`. `mnemonic convert --from seedqr=<digits> --to <node>` end-to-end (Option 3). `mnemonic seedqr decode --from seedqr=` canonical; `--digits` deprecated (stderr notice + clap `conflicts_with`, exit 64). **Design note:** the FOLLOWUP-body migration ("v0.31+ removes `--digits`") + the R0 substitute-to-Phrase approach were BOTH superseded — `--digits` is kept as a deprecated alias (not removed) and Seedqr is wired natively (substitution would have collapsed the `(Seedqr, Phrase)` decode into the `(Phrase, Phrase)` identity barrier). 12 integration cells; 2174 total. End-of-cycle opus GREEN. `--digits` removal tracked as a future cycle (no slug filed yet — revisit after one deprecation-window release).
 - **Tier:** `v0.30+`
 - **Tags:** none
-- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0); follow-on `gui-seedqr-decode-from-flag-mirror` (GUI v0.16.2 schema_mirror lockstep — `--from` net-new flag on seedqr-decode).
+
+### `gui-seedqr-decode-from-flag-mirror` — mnemonic-gui schema mirror for the v0.31.6 seedqr-decode --from flag
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.6 Cycle 13 close. Unlike the value-content additions of Cycles 10/12 (which the schema_mirror gate ignores), v0.31.6 adds a NET-NEW flag NAME (`--from`) to `mnemonic seedqr decode` — this DOES trip the GUI `schema_mirror` flag-NAME-parity gate.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`seedqr-decode` SubcommandSchema flag list); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `mnemonic-toolkit-v0.31.6`.
+- **What:** Add `--from` to the `seedqr-decode` schema entry (and document `--digits` as deprecated-but-present); bump toolkit pin v0.31.3 → v0.31.6 (cumulative catch-up across v0.31.4/v0.31.5/v0.31.6). The supply-chain drift gate at `src/secrets.rs::v0_3_canonical_fallback::SECRET_NODE_TYPES` will fire on the pin bump (v0.31.6 added `"seedqr"` to `SECRET_NODE_TYPES`) — acknowledge via snapshot update. GUI v0.16.2 (PATCH).
+- **Why deferred:** Cross-repo; ships as Cycle 13b immediately following the toolkit tag (lockstep).
+- **Status:** `open`
+- **Tier:** `v0.32+-gui-lockstep`
+- **Tags:** none
+- **Companion:** parent `seedqr-digits-from-input-unification` (resolved v0.31.6).
 
 
 ### `electrum-crypto-seed-extraction-subcommand` — future use of v0.30.1's electrum_crypto library for seed extraction
