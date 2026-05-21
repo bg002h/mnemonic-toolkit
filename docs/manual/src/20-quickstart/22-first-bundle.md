@@ -60,13 +60,13 @@ mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk
 6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
 
 # md1 (wallet policy)
-md1zsxdspqqqpm6jzzqqvqz6qu79mg9p2sgfff6p2eph8wftp5uf6gqnlgzqqqnymv0
-md1zsxdspq259s3jnsrcrhnlagpftrf9apnc3m9fy8uqfc85cha4nqnh5k67ey2hzyc
-md1zsxdspqjd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nvqhuuyvzgaejah6
+md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
+md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d
+md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn
 
-md1zs-xdspq-qqpm6-jzzqq-vqz6q-u79mg-9p2sg-fff6p-2eph8-wftp5-uf6gq-nlgzq-qqnym-v0
-md1zs-xdspq-259s3-jnsrc-rhnla-gpftr-f9apn-c3m9f-y8uqf-c85ch-a4nqn-h5k67-ey2hz-yc
-md1zs-xdspq-jd65m-vwcur-9usda-twuqv-q6z70-r9nwr-gk6xn-6l8gy-6nvqh-uuyvz-gaeja-h6
+md1fg-dxlpq-pqpm6-jzzqq-vqpdq-w0za5-zs4gy-y55aq-4vsmn-hy4s6-wyayp-u34c7-raqu8-np
+md1fg-dxlpq-f2zcg-efcpu-pmel7-5q543-5j7se-ugaj5-jr7qy-ur6vt-76es5-cdeyr-q7zdy-0d
+md1fg-dxlpq-3xa2d-k8vwp-j7gx7-4hwqx-qdp08-3jehp-5tdrf-a0n5z-dfkqc-dlrvn-h5r62-jn
 
 # === Wallet bundle: bip84, mainnet ===
 # ms1: 1c017
@@ -90,7 +90,7 @@ For this single-sig wallet:
 |---|---|---|
 | **ms1** | `ms10entrsqq…34v7f` | Engrave on the *secret* card. Recovers the seed. |
 | **mk1** | `mk1qprsqhp…854wq4` (line 1) and `mk1qprsqhp…ma0nh` (line 2) | Engrave on the *key* card. Two strings because the xpub is too long to fit one BCH-checksummed group at the toolkit's chunking density. |
-| **md1** | `md1zsxdspq…` (three lines) | Engrave on the *descriptor* card. Three strings encode the wallet policy and bind it to the xpub. |
+| **md1** | `md1fgdxlpq…` (three lines) | Engrave on the *descriptor* card. Three strings encode the wallet policy and bind it to the xpub. |
 
 The last block is **not** part of the engraving — it's a bundle
 *summary* showing the version stamps (`1c017`), the master fingerprint,

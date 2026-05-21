@@ -1,3 +1,4 @@
+warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
 ms1_decode: ok decoded successfully
 ms1_entropy_match: ok ms1 byte-identical
 mk1_decode: ok decoded successfully

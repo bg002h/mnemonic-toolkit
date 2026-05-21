@@ -54,41 +54,13 @@ if [ ! -d "$TRANSCRIPTS" ]; then
   exit 0
 fi
 
-# Pre-v0.15.0-wire-format-break legacy transcripts in chapters 22/23/24
-# are out-of-scope for the manual-v0.2.0 content audit (Q2 lock); their
-# captured cards are forward-incompatible with the v0.28.x decoder.
-# Tracked for refresh in `design/FOLLOWUPS.md` →
-# `manual-chapters-22-23-24-post-v0.15.0-wire-format-refresh`.
-SKIP_STEMS=(
-  '22-first-bundle.cmd'
-  '23-verify.cmd'
-  '24-recover.cmd'
-  '24-recover-md1.cmd'
-)
-
-is_skipped() {
-  local base
-  base=$(basename "$1")
-  for s in "${SKIP_STEMS[@]}"; do
-    if [ "$base" = "$s" ]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
 # Recursive .cmd discovery; exclude cli-help/ subdir (--help snapshots,
 # not transcripts).
 mapfile -t cmd_files < <(find "$TRANSCRIPTS" -type f -name '*.cmd' -not -path '*/cli-help/*' | sort)
 
 fail=0
 count=0
-skipped=0
 for cmd_file in "${cmd_files[@]}"; do
-  if is_skipped "$cmd_file"; then
-    skipped=$((skipped + 1))
-    continue
-  fi
   count=$((count + 1))
   out_file="${cmd_file%.cmd}.out"
   err_file="${cmd_file%.cmd}.err"
@@ -154,8 +126,4 @@ if [ "$fail" -ne 0 ]; then
   echo "[verify-examples] FAILED ($count transcripts checked)" >&2
   exit 1
 fi
-if [ "$skipped" -gt 0 ]; then
-  echo "[verify-examples] OK ($count transcripts pass; $skipped skipped per SKIP_STEMS)"
-else
-  echo "[verify-examples] OK ($count transcripts pass)"
-fi
+echo "[verify-examples] OK ($count transcripts pass)"

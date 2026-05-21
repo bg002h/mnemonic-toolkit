@@ -1,2 +1,3 @@
+warning: secret material on argv (--from ms1=) — pipe via --from ms1=- to avoid /proc/$PID/cmdline exposure
 phrase: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
