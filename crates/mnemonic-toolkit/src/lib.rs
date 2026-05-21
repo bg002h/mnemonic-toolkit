@@ -26,6 +26,12 @@
 //!   `Slip39Error` per the same pattern as `seed_xor`. The CLI handler
 //!   in `src/cmd/slip39.rs` (P2, future) converts `Slip39Error` into
 //!   `ToolkitError` at the boundary.
+//! - `seedqr` — SeedQR encode/decode subcommand (v0.30.0). Defines a
+//!   small, self-contained `SeedqrError` so the library surface does
+//!   not pull in the binary-private `ToolkitError`. The CLI handler in
+//!   `src/cmd/seedqr.rs` (P2) converts `SeedqrError` into
+//!   `ToolkitError::BadInput` at the boundary via
+//!   `map_seedqr_error(e, action)`.
 //! - `secret_taxonomy` (v0.14.0): public `pub const &[&str]` arrays of
 //!   secret-class node / slot-subkey token strings. Mirrors the
 //!   private `NodeType::is_secret_bearing` /
@@ -60,4 +66,5 @@ pub mod secret_taxonomy;
 /// GUI-side drift gate asserts the two lists agree.
 pub mod secrets;
 pub mod seed_xor;
+pub mod seedqr;
 pub mod slip39;
