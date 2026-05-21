@@ -55,7 +55,11 @@ pub struct SeedqrEncodeArgs {
 }
 
 /// Maps a library-local `SeedqrError` to a CLI-boundary `ToolkitError`.
-fn map_seedqr_error(e: SeedqrError, action: &str) -> ToolkitError {
+/// `pub(crate)` since v0.31.3 so the `--slot @N.seedqr=` consumer
+/// branches in `cmd/bundle.rs`, `cmd/verify_bundle.rs`, and
+/// `cmd/export_wallet.rs` can reuse the canonical mapping (avoids
+/// error-text drift across three call sites).
+pub(crate) fn map_seedqr_error(e: SeedqrError, action: &str) -> ToolkitError {
     ToolkitError::BadInput(format!("seedqr: {action}: {e}"))
 }
 

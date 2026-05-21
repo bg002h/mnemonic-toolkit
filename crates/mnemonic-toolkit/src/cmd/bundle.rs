@@ -97,6 +97,8 @@ pub struct BundleArgs {
     /// Grammar: `@N.<subkey>=<value>`, where N is the slot index
     /// (u8) and `<subkey>` is one of:
     ///   phrase       BIP-39 mnemonic (secret)
+    ///   seedqr       48 or 96 ASCII digits encoding a BIP-39 phrase
+    ///                (secret; decoded inline via seedqr::decode)
     ///   entropy      raw entropy hex (secret)
     ///   xpub         BIP-32 extended public key
     ///   fingerprint  4-byte master fingerprint (hex)
@@ -433,12 +435,30 @@ pub(crate) fn resolve_slots(
     for (idx, slot_inputs) in by_index {
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
-        if subkeys.contains(&SlotSubkey::Phrase) {
-            let phrase = slot_inputs
-                .iter()
-                .find(|s| s.subkey == SlotSubkey::Phrase)
-                .map(|s| s.value.as_str())
-                .expect("contains() asserts presence");
+        if subkeys.contains(&SlotSubkey::Phrase) || subkeys.contains(&SlotSubkey::Seedqr) {
+            // v0.31.3 — Seedqr digest = secret-bearing materialization of
+            // a BIP-39 phrase. Decode at slot-emit time then dispatch
+            // identically to the Phrase path. `is_legal_set` refuses
+            // co-occurrence of Phrase + Seedqr in the same slot, so the
+            // owned-String binding is unambiguous.
+            let decoded_phrase: String;
+            let phrase: &str = if subkeys.contains(&SlotSubkey::Seedqr) {
+                let digits = slot_inputs
+                    .iter()
+                    .find(|s| s.subkey == SlotSubkey::Seedqr)
+                    .map(|s| s.value.as_str())
+                    .expect("contains() asserts presence");
+                decoded_phrase = mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
+                    crate::cmd::seedqr::map_seedqr_error(e, &format!("slot @{idx} decode"))
+                })?;
+                &decoded_phrase
+            } else {
+                slot_inputs
+                    .iter()
+                    .find(|s| s.subkey == SlotSubkey::Phrase)
+                    .map(|s| s.value.as_str())
+                    .expect("contains() asserts presence")
+            };
             let lang = language.unwrap_or_default();
             let pass = passphrase.unwrap_or("");
             let acc = crate::derive::derive_full(
@@ -1109,10 +1129,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         }
         for (idx, slot_path) in &by_index_path {
             let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
-            // Only phrase-bearing slots route through this override path.
+            // Only phrase-bearing slots route through this override path
+            // (incl. v0.31.3 Seedqr materialization which decodes to phrase).
             // Xpub-bearing slots are handled by the per-slot binding loop's
             // existing override logic at bundle.rs:1018-1029.
-            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
+            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
+                && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+            {
                 continue;
             }
             let user_path = DerivationPath::from_str(&slot_path.value).map_err(|e| {
