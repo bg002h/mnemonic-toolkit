@@ -2547,14 +2547,19 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-20, v0.28.0 cycle close (Phase P14A). Carved out from the canonical `bsms-bip129-full-cutover` entry sub-item (c) so the encryption-envelope work has a dedicated tracking slug independent of the parent entry's lenient-parser deprecation cadence.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — current 4-line parser (post-v0.28.0) consumes plaintext shapes only.
-  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` §2 — byte-level construction of the STANDARD/EXTENDED encryption envelopes.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs` — plaintext parser (4-line / 6-line) unchanged; encrypted-Round-2 path is orchestrator-side at `cmd/import_wallet.rs` (per Cycle 6/7 precedent of pre-decrypting before passing plaintext to format parsers).
+  - `crates/mnemonic-toolkit/src/bsms_crypto.rs` — library shipped Cycle 7a `62da111` (20 unit cells incl. BIP-129 TV-3 cross-validation).
+  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — orchestrator decrypt block + new `--bsms-encryption-token <FILE|->` clap arg + `read_bsms_token` helper + stdin-contention guard.
+  - `crates/mnemonic-toolkit/src/error.rs` — new `BsmsMacMismatch { token_len_hex }` variant (typed per the body's original recommendation).
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms_encrypted.rs` — 12 integration cells.
+  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` §2 — byte-level construction of the STANDARD/EXTENDED encryption envelopes (inherited by Cycle 7 P0 recon; no decay).
 - **What:** v0.28+: ship BIP-129 §Encryption STANDARD/EXTENDED envelope support. Key derivation: PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY). Decrypt: AES-256-CTR over ciphertext; verify HMAC-SHA256 MAC. CLI surface: new flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. Cross-impl smoke against Coinkite Python ref (`github.com/coinkite/bsms-bitcoin-secure-multisig-setup` `test.py`). Refusal text on bad token / MAC mismatch should be discriminated from format errors with its own typed error variant.
-- **Why deferred:** v0.28.0 cycle shipped the BIP-129-canonical 4-line plaintext parser; encryption envelope is a distinct cryptographic surface with its own attack-surface review requirements (PBKDF2 work-factor choice, AES-CTR nonce handling, MAC-then-decrypt vs decrypt-then-MAC ordering, key-material argv leak vectors). Worth its own cycle.
-- **Status:** open
+- **AES-CTR variant disambiguation note:** the BIP citing RFC 3686 leaves the counter-width choice ambiguous (RFC 3686 uses a nonce+IV+counter split). Coinkite Python `bsms/encryption.py:34` (`pyaes.AESModeOfOperationCTR(key, pyaes.Counter(int(iv.hex(), 16)))`) treats the full 16-byte IV as a single 128-bit big-endian counter. Cycle 7a R0 opus review caught the `Ctr64BE` vs `Ctr128BE` ambiguity in the brainstorm skeleton; `Ctr128BE<Aes256>` is the locked variant, empirically confirmed by TV-3 decrypt cell.
+- **Status:** resolved (Cycle 7 / v0.31.0).
+- **Resolved by:** `mnemonic-toolkit-v0.31.0` (`e2e62ce`) + `mnemonic-gui-v0.16.0` (`a1aeb5a`). End-of-cycle: 12 integration cells in `tests/cli_import_wallet_bsms_encrypted.rs` + 20 unit cells in `bsms_crypto::tests`; install-pin-check CI green on tag; GUI schema_mirror green.
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
-- **Companion:** parent canonical entry `bsms-bip129-full-cutover` (sub-item (c)).
+- **Companion:** parent canonical entry `bsms-bip129-full-cutover` (sub-item (c)). Cycle 7 child slugs: `bsms-encryption-per-signer-tokens`, `bsms-encryption-round1-decrypt-then-verify`, `bsms-encryption-cross-impl-coinkite-python-smoke`.
 
 ### `wallet-import-jade-seedqr` — Blockstream Jade SeedQR ingest surface
 
@@ -2856,3 +2861,43 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
 - **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the Format B carve-out).
+
+
+### `bsms-encryption-per-signer-tokens` — per-Signer BIP-129 TOKEN variants
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.0 Cycle 7b close. Per BIP-129 line 74: "Depending on the use case, the Coordinator can decide whether to share one common TOKEN for all Signers, or to have one per Signer." Cycle 7b ships SHARED-TOKEN mode only (single `--bsms-encryption-token <FILE|->`).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (orchestrator decrypt block; currently consumes one token regardless of how many `--bsms-round1` records are also supplied).
+- **What:** v0.31+: extend the orchestrator decrypt to accept per-Signer tokens (e.g., `--bsms-encryption-token <FILE>` becomes repeatable + each invocation pairs with a `--bsms-round1 <FILE>` record). Required API: change the flag from `Option<PathBuf>` to `Vec<PathBuf>` (CLI break — careful with the existing single-flag consumers); add per-record token-to-Signer pairing logic.
+- **Why deferred:** Cycle 7 scope was BIP-129 §Encryption MVP (shared TOKEN). Per-Signer variants are a separate orchestration with their own UX design (how does the user know which token goes with which Signer's record?). Worth its own cycle.
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `bsms-bip129-encryption-envelope` (shared-TOKEN resolved v0.31.0).
+
+
+### `bsms-encryption-round1-decrypt-then-verify` — encrypted Round-1 KEY records
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.0 Cycle 7b close. BIP-129 §Round 1 Signer specifies encrypted Round-1 KEY records (5-line shape: `BSMS 1.0\nhex-TOKEN\nKEY\ndescription\nbase64-SIG`) which the Coordinator receives + decrypts + verifies via the per-Signer Round-1 BIP-322 signature verify path (already shipped v0.27.0 via `--bsms-round1`). Cycle 7b's orchestrator decrypts an encrypted Round-2 wire but does NOT integrate decrypt-then-verify with the `--bsms-round1` flow.
+- **Where:**
+  - `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` orchestrator: `--bsms-round1 <FILE>` flow (plaintext-only) + the new `--bsms-encryption-token <FILE|->` decrypt are currently separate paths.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms_round1.rs` + `bsms_verify.rs` — Round-1 parser + BIP-322 verify (plaintext-only).
+  - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` §"Test Vectors" — TV-3 + TV-4 contain encrypted Round-1 records with full cross-validated values.
+  - `crates/mnemonic-toolkit/tests/cli_import_wallet_bsms_encrypted.rs::tv3_decrypt_emits_notice_advisory` — currently exercises the decrypt-success-then-parse-refusal boundary (TV-3's 5-line plaintext fails the Round-2-only `BsmsParser`).
+- **What:** v0.31+: extend the orchestrator to detect encrypted Round-1 records (the user supplies `--bsms-round1 <FILE>` containing a hex `MAC||ciphertext` blob), decrypt via `bsms_crypto::decrypt` + verify MAC, then dispatch to the existing Round-1 BIP-322 verify path. Closes the TV-3 boundary; enables actual Coordinator-side workflow.
+- **Why deferred:** Cycle 7b scope was Round-2 encrypted decrypt only (Signer-side workflow). Round-1 encrypted-then-verify needs additional orchestration + integration test surface.
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `bsms-bip129-encryption-envelope` (resolved v0.31.0).
+
+
+### `bsms-encryption-cross-impl-coinkite-python-smoke` — automated cross-impl test against Coinkite Python ref
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.0 Cycle 7b close. Cycle 7a/7b cross-checks `bsms_crypto` against the BIP-129 + v0.27.0-recon-dossier locked TV-3 values (already byte-exact). Cycle 7b does NOT clone Coinkite's `bsms-bitcoin-secure-multisig-setup` repo + run `test.py` against the toolkit binary as a CI-gated cross-impl smoke.
+- **Where:** new CI workflow + new test file (TBD). Coinkite ref: `https://github.com/coinkite/bsms-bitcoin-secure-multisig-setup` (`bsms/bip129.py`, `bsms/encryption.py`, `test.py`).
+- **What:** v0.31+: ship an automated cross-impl test that (a) clones the Coinkite repo to a `tests/external/bsms-coinkite-python` location (gitignored or git-submodule); (b) runs `python3 test.py` to verify the Python ref still passes its own TVs; (c) re-encrypts a known plaintext + token via Python, hex-encodes the wire, feeds into `mnemonic import-wallet --bsms-encryption-token`; (d) cross-validates the round-trip. Gates the toolkit's BIP-129 implementation against any future Coinkite-Python changes (TV-pinning + behavior-pinning).
+- **Why deferred:** Cycle 7b ships byte-exact cross-validation against the BIP-129 §Test Vectors values inherited from the v0.27.0 dossier; automated cross-impl smoke against the Python ref is a separate CI surface. Lower-priority than the integration coverage already shipped.
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `bsms-bip129-encryption-envelope` (resolved v0.31.0).
