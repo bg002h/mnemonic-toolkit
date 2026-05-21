@@ -2826,10 +2826,21 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** new variant code path in `crates/mnemonic-toolkit/src/seedqr.rs` + new CLI flag `--variant compact` in `crates/mnemonic-toolkit/src/cmd/seedqr.rs` + SeedSigner ref impl at `src/seedsigner/models/encode_qr.py::CompactSeedQrEncoder` (binary mode).
 - **What:** Add CompactSeedQR ingest + emit. Per SeedSigner spec, CompactSeedQR encodes raw BIP-39 entropy bytes in QR's binary mode (16 bytes for 12-word phrases; 32 for 24-word). Implementation requires: (a) explicit `--variant <standard|compact>` flag (default `standard`); (b) explicit `--word-count <12|24>` flag (binary mode has no length-based disambiguation); (c) JSON envelope `variant` field already-locked at `"standard"|"compact"`. Sniff is ambiguous (16/32 raw bytes carry no distinguishing signature), so explicit flags are required.
 - **Why deferred:** Cycle 5 locked Standard SeedQR only. Sniff-ambiguity for binary mode requires UX design (explicit flags + word-count required). Out of scope for the v0.30.0 introductory cycle.
-- **Status:** `open`
+- **Status:** `resolved 3dedfe7` — mnemonic-toolkit-v0.32.0 Cycle 14. New `--variant <standard|compact>` derived ValueEnum flag (default standard) on `seedqr encode` + `decode`. `encode_compact`/`decode_compact` library primitives + 3 `SeedqrError` variants. CompactSeedQR payload = raw BIP-39 entropy bytes as lowercase hex (16B/12-word, 32B/24-word); SeedSigner-faithful (12/24 only; 15/18/21 refused). Primary-source verified vs SeedSigner `CompactSeedQrEncoder`. **Superseded the FOLLOWUP-body's `--word-count` requirement** — byte-count (16/32) disambiguates word-count on decode + the phrase determines it on encode, so the explicit `--word-count` flag (item b) is NOT needed; the user-confirmed design uses hex-text representation (item: no binary file I/O this cycle) + `--variant` (item a) + dynamic JSON `variant` field (item c, already present since v0.30.0). 18 new cells; 2192 total. End-of-cycle opus GREEN. With this closure, **all four v0.30.0 SeedQR follow-ons are shipped** (bundle-slot v0.31.3 + 15/18/21-word-counts v0.31.5 + --from-unification v0.31.6 + compact-variant v0.32.0).
 - **Tier:** `v0.30+`
 - **Tags:** none
-- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0); follow-on `gui-seedqr-variant-flag-mirror` (GUI v0.17.0 schema_mirror lockstep — `--variant` net-new flag on seedqr-encode + seedqr-decode).
+
+### `gui-seedqr-variant-flag-mirror` — mnemonic-gui schema mirror for the v0.32.0 seedqr --variant flag
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.32.0 Cycle 14 close. `--variant` is a NET-NEW flag NAME on BOTH `mnemonic seedqr encode` AND `mnemonic seedqr decode` — trips the GUI `schema_mirror` flag-NAME-parity gate on both subcommand schemas.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`SEEDQR_ENCODE_FLAGS` + `SEEDQR_DECODE_FLAGS`); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `mnemonic-toolkit-v0.32.0`.
+- **What:** Add `--variant` (Dropdown `["standard", "compact"]`, default standard) to BOTH seedqr schema entries; bump toolkit pin v0.31.6 → v0.32.0. No `SECRET_NODE_TYPES` change this cycle (no new node type), so the supply-chain drift gate stays quiet. GUI v0.17.0 (MINOR — paired with toolkit MINOR).
+- **Why deferred:** Cross-repo; ships as Cycle 14b immediately following the toolkit tag (lockstep).
+- **Status:** `open`
+- **Tier:** `v0.32+-gui-lockstep`
+- **Tags:** none
+- **Companion:** parent `seedqr-compact-variant` (resolved v0.32.0).
 
 
 ### `seedqr-15-18-21-word-counts` — extend SeedQR encode/decode to 15/18/21-word phrases
