@@ -44,7 +44,7 @@ impl WalletFormatEmitter for Bip388Emitter {
             )?
         } else {
             // Descriptor passthrough.
-            descriptor_to_bip388_wallet_policy(inputs.canonical_descriptor)?
+            descriptor_to_bip388_wallet_policy(&inputs.canonical_descriptor)?
         };
         serde_json::to_string_pretty(&value)
             .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))

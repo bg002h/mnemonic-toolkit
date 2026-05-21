@@ -23,7 +23,7 @@ impl WalletFormatEmitter for BitcoinCoreEmitter {
 
     fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
         let value = format_bitcoin_core_importdescriptors(
-            inputs.canonical_descriptor,
+            &inputs.canonical_descriptor,
             inputs.range,
             inputs.timestamp,
             inputs.bitcoin_core_version,

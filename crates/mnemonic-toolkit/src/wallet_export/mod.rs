@@ -334,15 +334,76 @@ pub(crate) trait WalletFormatEmitter {
     fn extension() -> &'static str;
 }
 
+/// v0.28.3 (A2): compile-time enforcement of the `EmitInputs.canonical_descriptor`
+/// BIP-380 `#<8-char-csum>` suffix invariant. Pre-v0.28.3 the invariant was
+/// documented at `wallet_export/bsms.rs:86-90` and enforced only by convention
+/// at construction sites; a future code path that built `EmitInputs` from a
+/// stripped-body descriptor would silently regress BSMS L2 + Specter
+/// `descriptor` JSON field + Green plaintext (latent class surfaced by F9).
+///
+/// `CheckedDescriptor::new` validates the suffix and returns `Result` on
+/// failure; `Deref<Target = str>` lets consumers continue to bind via
+/// `inputs.canonical_descriptor` with auto-deref to `&str`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CheckedDescriptor<'a>(&'a str);
+
+impl<'a> CheckedDescriptor<'a> {
+    /// Construct a `CheckedDescriptor` from a descriptor string that MUST
+    /// end with `#<8-char-csum>` per BIP-380. Returns `Err(BadInput)` if
+    /// the suffix is missing, the wrong length, or not ASCII-alphanumeric.
+    pub(crate) fn new(desc: &'a str) -> Result<Self, crate::error::ToolkitError> {
+        let pos = desc.rfind('#').ok_or_else(|| {
+            crate::error::ToolkitError::BadInput(format!(
+                "CheckedDescriptor: missing BIP-380 `#<csum>` suffix in: {desc:?}"
+            ))
+        })?;
+        let csum = &desc[pos + 1..];
+        if csum.len() != 8 {
+            return Err(crate::error::ToolkitError::BadInput(format!(
+                "CheckedDescriptor: BIP-380 checksum must be 8 chars, got {} in: {desc:?}",
+                csum.len()
+            )));
+        }
+        if !csum.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(crate::error::ToolkitError::BadInput(format!(
+                "CheckedDescriptor: BIP-380 checksum must be ASCII-alphanumeric, got {csum:?} in: {desc:?}"
+            )));
+        }
+        Ok(Self(desc))
+    }
+
+    /// Return the underlying descriptor string (with `#<csum>` suffix).
+    #[allow(dead_code)] // Available for future callers; not used by current emitters (Deref covers them).
+    pub(crate) fn as_str(&self) -> &'a str {
+        self.0
+    }
+}
+
+impl std::ops::Deref for CheckedDescriptor<'_> {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.0
+    }
+}
+
+impl std::fmt::Display for CheckedDescriptor<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// SPEC v0.8 §12 — single struct threaded through `WalletFormatEmitter::emit`
 /// carrying all data each per-format emitter needs.
 /// Built in `cmd::export_wallet::run` after template + slot resolution and
 /// watch-only validation; the resulting reference is borrowed by emitters.
 #[allow(dead_code)] // Phase 0 adds the struct; Phase 1+ emitters consume it.
 pub(crate) struct EmitInputs<'a> {
-    /// Canonical descriptor with `#checksum` suffix (from `pipeline::build_descriptor_string`
-    /// for the template path, or pre-canonicalized for the `--descriptor` path).
-    pub canonical_descriptor: &'a str,
+    /// Canonical descriptor with BIP-380 `#<8-char-csum>` suffix. The
+    /// `CheckedDescriptor<'_>` newtype (defined above) enforces the
+    /// suffix at construction time; consumers bind via auto-deref to
+    /// `&str` (e.g., `let line2 = inputs.canonical_descriptor;` in
+    /// `bsms.rs`).
+    pub canonical_descriptor: CheckedDescriptor<'a>,
     /// Resolved slots in slot-index order. Empty when `--descriptor` was used
     /// without `--template` (descriptor-passthrough path).
     pub resolved_slots: &'a [ResolvedSlot],
@@ -385,4 +446,68 @@ pub(crate) struct EmitInputs<'a> {
     /// Silently ignored by every other emitter (per the per-format
     /// ignored-input contract).
     pub bsms_form: BsmsForm,
+}
+
+#[cfg(test)]
+mod checked_descriptor_tests {
+    //! v0.28.3 (A2) — unit tests for the `CheckedDescriptor<'_>` newtype
+    //! that compile-time-enforces the `EmitInputs.canonical_descriptor`
+    //! BIP-380 `#<8-char-csum>` suffix invariant. Forward-looking defensive
+    //! engineering per the manual-v0.2.0 cycle's P1b R1 architect §F9
+    //! Axis B observation; brainstorm at
+    //! `design/BRAINSTORM_followups_abc_release_plan.md`.
+
+    use super::CheckedDescriptor;
+
+    const VALID_DESC: &str = "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#tk4vnxy8";
+
+    #[test]
+    fn accepts_descriptor_with_canonical_8char_checksum() {
+        let checked = CheckedDescriptor::new(VALID_DESC).expect("valid descriptor");
+        assert_eq!(checked.as_str(), VALID_DESC);
+    }
+
+    #[test]
+    fn rejects_missing_checksum_suffix() {
+        let desc = "wpkh([5436d724/84'/0'/0']xpub.../<0;1>/*)";
+        let err = CheckedDescriptor::new(desc).expect_err("missing checksum must error");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("missing"),
+            "expected missing-checksum error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn rejects_wrong_length_checksum() {
+        let desc = "wpkh([5436d724/84'/0'/0']xpub.../<0;1>/*)#abc123";
+        let err = CheckedDescriptor::new(desc).expect_err("wrong-length must error");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("must be 8"),
+            "expected length-rule error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn rejects_non_alphanumeric_checksum() {
+        // 8 chars but contains non-alphanumeric — no embedded `#` so `rfind`
+        // finds only the one delimiter.
+        let desc = "wpkh([5436d724/84'/0'/0']xpub.../<0;1>/*)#abc!!!!!";
+        let err = CheckedDescriptor::new(desc).expect_err("non-alphanumeric must error");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("alphanumeric"),
+            "expected alphanumeric-rule error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn deref_to_str_for_consumer_compat() {
+        let checked = CheckedDescriptor::new(VALID_DESC).expect("valid");
+        let s: &str = &checked;
+        assert_eq!(s, VALID_DESC);
+        assert!(checked.contains("wpkh"));
+        assert!(checked.starts_with("wpkh"));
+    }
 }

@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.3] — 2026-05-20
+
+Patch release: compile-time enforcement of the `EmitInputs.canonical_descriptor` BIP-380 `#<8-char-csum>` suffix invariant via the new `CheckedDescriptor<'_>` newtype in `wallet_export/mod.rs`. Pre-v0.28.3 the invariant was documented at `wallet_export/bsms.rs:86-90` and enforced only by convention at construction sites — a future code path that constructed `EmitInputs` from a stripped-body descriptor would silently regress BSMS L2 + Specter `descriptor` JSON field + Green plaintext (latent class surfaced by F9 in the manual-v0.2.0 audit cycle). Closes FOLLOWUP `emitinputs-canonical-descriptor-checksum-invariant-enforcement`. No CLI surface change; no GUI lockstep.
+
+### Added
+
+- `CheckedDescriptor<'a>(&'a str)` newtype in `wallet_export/mod.rs` with `new() -> Result<Self, ToolkitError>` constructor that validates the BIP-380 `#<8-char-csum>` suffix (missing-`#` / wrong-length / non-alphanumeric all return `BadInput`). Carries `Deref<Target = str>` + `Display` impls so existing consumer code continues to work via auto-deref.
+
+### Changed
+
+- `EmitInputs.canonical_descriptor` field type from `&'a str` → `CheckedDescriptor<'a>` (compile-time invariant guarantee).
+- 2 construction sites in `cmd/export_wallet.rs` (the `--template`/`--descriptor` path at L438 and the `--from-import-json` path at L609) wrap via `CheckedDescriptor::new(...)?` before `EmitInputs` construction.
+- 5 consumer-site adjustments where `Deref` auto-coerce didn't fire automatically (`bip388.rs:47`, `bitcoin_core.rs:26`, `bsms.rs:103`, `sparrow.rs:216` with explicit `let desc: &str = &inputs.canonical_descriptor` annotation, `specter.rs:68`).
+- `wallet_export/bsms.rs:86-90` invariant comment updated from "by convention" to "by type / compile-time-guaranteed".
+
+### Tests
+
+- 5 new inline unit cells in `wallet_export/mod.rs#[cfg(test)] mod checked_descriptor_tests` (mirrors `bsms.rs:219` convention): constructor positive + 3 negative paths (missing `#`, wrong-length, non-alphanumeric) + `Deref`-coercion compat. Total toolkit cells: 1996 → 2001.
+
+---
+
 ## mnemonic-toolkit [0.28.2] — 2026-05-20
 
 Patch release: `export-wallet --from-import-json` BSMS / Specter / Green emitters now carry the BIP-380 `#<8-char>` checksum on the descriptor surface, restoring the `EmitInputs.canonical_descriptor` invariant documented at `wallet_export/bsms.rs:86-90`. Pre-fix, the `--from-import-json` path stripped the checksum via `descriptor_body_no_csum` and passed the body verbatim into emitters that expect the canonical form; downstream BSMS coordinators (Coldcard Mk4) reject Round-2 blobs whose descriptor line lacks `#checksum`. Surfaced by the `manual-v0.2.0` content-audit cycle finding F9 (P1b R1 classification at `design/agent-reports/manual-v0_2_0-p1b-r1-classification.md`). No CLI surface change; no GUI lockstep required.

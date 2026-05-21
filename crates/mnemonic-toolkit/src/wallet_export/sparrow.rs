@@ -213,7 +213,7 @@ fn build_miniscript_script(
         // policy parser, which substring-matches on `script` for policy
         // detection).
         CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => {
-            let desc = inputs.canonical_descriptor;
+            let desc: &str = &inputs.canonical_descriptor;
             let script = desc.rfind('#').map_or(desc, |pos| &desc[..pos]);
             Ok(script.to_string())
         }

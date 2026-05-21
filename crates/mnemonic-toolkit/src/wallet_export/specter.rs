@@ -65,7 +65,7 @@ pub(crate) fn emit_specter_wallet_json(inputs: &EmitInputs) -> Result<String, To
     let wallet = SpecterWallet {
         label: inputs.wallet_name,
         blockheight: 0,
-        descriptor: inputs.canonical_descriptor,
+        descriptor: &inputs.canonical_descriptor,
         devices,
     };
 

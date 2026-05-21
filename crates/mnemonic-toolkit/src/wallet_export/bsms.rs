@@ -84,10 +84,12 @@ impl WalletFormatEmitter for BsmsEmitter {
         }
 
         // Lines 1 + 2 are shared between the 2-line and 4-line shapes. Line 2
-        // is `EmitInputs.canonical_descriptor` verbatim — the canonical
-        // builder (`wallet_export::pipeline::build_descriptor_string`) and
-        // descriptor-passthrough both produce strings with the `#<checksum>`
-        // suffix already attached.
+        // is `EmitInputs.canonical_descriptor` verbatim — its type
+        // `CheckedDescriptor<'_>` (added v0.28.3 / A2) enforces the BIP-380
+        // `#<8-char-csum>` suffix invariant at construction time. Pre-v0.28.3
+        // the invariant was enforced by convention at construction sites;
+        // post-v0.28.3 it's compile-time-guaranteed. `Deref<Target = str>`
+        // means this binding continues to work as `&str` for `format!`.
         let line1 = "BSMS 1.0";
         let line2 = inputs.canonical_descriptor;
 
@@ -100,7 +102,7 @@ impl WalletFormatEmitter for BsmsEmitter {
                 // keeps the cross-emitter contract minimal — other formats
                 // do their own parse where needed (e.g., bitcoin_core.rs:48).
                 let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(
-                    inputs.canonical_descriptor,
+                    &inputs.canonical_descriptor,
                 )
                 .map_err(|e| {
                     ToolkitError::DescriptorParse(format!(

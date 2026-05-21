@@ -435,7 +435,7 @@ pub fn run<W: Write, E: Write>(
     let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
 
     let inputs = EmitInputs {
-        canonical_descriptor: &canonical,
+        canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical)?,
         resolved_slots: resolved_slots_ref,
         template: template_opt,
         script_type,
@@ -606,7 +606,7 @@ fn run_from_import_json<W: Write, E: Write>(
     let threshold = envelope.bundle.multisig.as_ref().map(|m| m.threshold);
 
     let inputs = EmitInputs {
-        canonical_descriptor: &canonical_descriptor,
+        canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical_descriptor)?,
         resolved_slots: &resolved_slots,
         // template is always None for descriptor-mode (envelope is
         // always descriptor-mode per §3.2.1).
