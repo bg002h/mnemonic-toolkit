@@ -2503,7 +2503,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` §6.3 step 4 (end-user smoke recipe).
 - **What:** v0.28+ doc-only fix: the smoke recipe step 4 says `mnemonic bundle --import-json /tmp/env.json --ms1 "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"`. `BundleArgs` doesn't expose `--ms1` (that's import-wallet's surface); seed overlay on bundle is `--slot @N.phrase=` only. Rewrite step 4 as `--slot @0.phrase="..."`.
 - **Why deferred:** Plan-doc bug; smoke recipe is informational and the load-bearing acceptance is the integration cell `cross_format_bsms_to_bitcoin_core_to_import_round_trip` (which uses the correct flags).
-- **Status:** open
+- **Status:** `resolved 9d7eeaf79332b188c2eacc74ec712591d215349e` — mnemonic-toolkit-v0.28.5 cycle replaced the nonexistent `--ms1` flag in §6.3 step 4 with `--slot @0.phrase=` per `mnemonic bundle --help`.
 - **Tier:** `v0.28+` (doc-only).
 - **Companion:** none.
 
@@ -2648,7 +2648,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:87` (outer envelope const `IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION = "1"`) vs `crates/mnemonic-toolkit/src/cmd/import_wallet.rs:975` (inner BundleJson literal `"4"`).
 - **What:** v0.28+: the dual `schema_version` fields share a name but have independent rev numbers (envelope wire-shape vs BundleJson wire-shape). Per CLAUDE.md plan-doc verification discipline, this duality is a silent footgun for future readers / parser authors. Recommend renaming one to disambiguate (`envelope_schema_version` vs `bundle_schema_version`) OR adding a doc-comment at both sites cross-referencing the other.
 - **Why deferred:** Rename is wire-shape-breaking; affects GUI schema mirror + every downstream JSON consumer. Documentation fix is low-risk but OOS for P11 (matrix coverage, not envelope redesign).
-- **Status:** open
+- **Status:** `resolved 9d7eeaf79332b188c2eacc74ec712591d215349e` — mnemonic-toolkit-v0.28.5 cycle added cross-reference doc-comments at both `schema_version` constant sites in `cmd/import_wallet.rs` (outer envelope L87 + inner BundleJson literal at L975); future readers / parser authors now have at-site disambiguation between the two fields.
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
 - **Companion:** none.

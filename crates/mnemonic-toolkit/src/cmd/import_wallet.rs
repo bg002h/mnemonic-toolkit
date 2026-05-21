@@ -81,9 +81,22 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-/// v0.27.0 SPEC §3.2 — `import-wallet --json` envelope schema version.
-/// Pinned at "1" (first version; no migration). Phase 6 documents this in
-/// the manual; future bumps update both sites + the SPEC.
+/// SPEC v0.28.x — OUTER envelope schema version (current: "1").
+///
+/// **Disambiguation:** the toolkit carries TWO `schema_version` fields:
+/// 1. This OUTER constant — the `--json` envelope wire-shape version
+///    (governs `--from-import-json` array semantics + `import_provenance`
+///    field set).
+/// 2. The INNER `BundleJson.schema_version` literal at `:~975`
+///    (current: "4") — governs the bundle payload wire-shape (governs
+///    `bundle.mk1`/`bundle.md1`/etc. field set inside each envelope entry).
+///
+/// Both fields share the name `schema_version` but evolve independently.
+/// Future readers / parser authors: when extending the envelope wire-shape,
+/// bump THIS constant; when extending the bundle payload wire-shape, bump
+/// the inner BundleJson literal. Cross-cite both when either changes.
+/// Tracked as FOLLOWUP `import-wallet-envelope-schema-version-narrative-drift`
+/// (resolved v0.28.5).
 pub(crate) const IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION: &str = "1";
 
 #[derive(Args, Debug, Clone)]
@@ -972,6 +985,12 @@ fn emit_json_envelope<W: Write, E: Write>(
         };
 
         let bundle_json = BundleJson {
+            // INNER BundleJson schema_version (current: "4"). Governs the
+            // bundle payload wire-shape (mk1/md1/etc fields). See the OUTER
+            // envelope schema_version doc-comment at L87 for the
+            // disambiguation rule; cross-cite both when either changes.
+            // FOLLOWUP `import-wallet-envelope-schema-version-narrative-drift`
+            // resolved v0.28.5.
             schema_version: "4",
             mode: mode_str,
             network: network_human_name(p.network),

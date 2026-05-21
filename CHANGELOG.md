@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.5] — 2026-05-20
+
+Patch release: 2 doc-only fixes closing v0.28+ FOLLOWUPs surfaced in the post-A/B/C recon dossier.
+
+### Documentation
+
+- **`design/PLAN_v0_27_0_bsms_round_trip_and_wallet_import_handoff.md` §6.3 step 4** — Replace nonexistent `--ms1` flag (which doesn't exist on the `bundle` subcommand) with `--slot @0.phrase=` per `mnemonic bundle --help`. Closes FOLLOWUP `plan-smoke-step4-ms1-on-bundle-not-supported`.
+
+- **`cmd/import_wallet.rs:87 + :975`** — Add cross-reference doc-comments at both `schema_version` constant sites (outer envelope `"1"` + inner BundleJson `"4"`). The two constants share the name but evolve independently; comments now make the disambiguation explicit at-site. Closes FOLLOWUP `import-wallet-envelope-schema-version-narrative-drift`.
+
+### Note
+
+Cycle 1 of the v0.28+ residual FOLLOWUP release plan (see `design/BRAINSTORM_v0_28_plus_residual_followups.md`). Wave 1 first ship. No CLI surface change; no test cell changes; no GUI lockstep.
+
+---
+
 ## mnemonic-toolkit [0.28.4] — 2026-05-20
 
 Patch release: closes the `--format coldcard-multisig` asymmetry between `import-wallet` (accepts both `coldcard` and `coldcard-multisig`) and `export-wallet` (previously only accepted `coldcard`). The new `CliExportFormat::ColdcardMultisig` variant aliases the existing `Coldcard` dispatch with a multisig-template precheck: singlesig templates (`bip44`/`bip49`/`bip84`) refuse with a pointer to `--format coldcard`; multisig templates (`wsh-sortedmulti`/`wsh-multi`/`sh-wsh-*`/`tr-*-a`) delegate to the same `ColdcardEmitter::emit` path that `--format coldcard` already uses. Closes FOLLOWUP `export-wallet-coldcard-multisig-alias`. Paired with `mnemonic-gui-v0.13.0` for schema-mirror lockstep.

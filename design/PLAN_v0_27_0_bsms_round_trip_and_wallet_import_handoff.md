@@ -790,7 +790,7 @@ mnemonic export-wallet --from-import-json /tmp/env.json --format bitcoin-core > 
 mnemonic import-wallet --format bitcoin-core --blob /tmp/core.json --json | grep -o '"descriptor":"[^"]*"'
 
 # Step 4: Synthesize an m*1-bundle from the watch-only import (uses the BSMS envelope)
-mnemonic bundle --import-json /tmp/env.json --ms1 "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+mnemonic bundle --import-json /tmp/env.json --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 ```
 
 (Step 3 uses `grep -o` rather than `jq` to avoid an external tool dependency in the smoke recipe.)
