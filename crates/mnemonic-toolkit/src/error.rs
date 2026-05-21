@@ -10,17 +10,51 @@ use serde_json::json;
 pub enum ToolkitError {
     BadInput(String),
     Bip39(bip39::Error),
+    /// SPEC §4.11.b BIP-388 distinct-key violation at bundle creation. Exit 2.
+    /// `i` and `j` are the colliding slot indices (i < j) under
+    /// `(xpub, derivation_path_string)` raw-string equality per §4.11.b
+    /// normalization domain.
+    Bip388Distinctness { i: u8, j: u8 },
+    /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
+    /// Re-emitted from `check_key_vector_distinctness` post-binding under
+    /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
+    Bip388VerifyDistinctness,
     Bitcoin(BitcoinErrorKind),
-    MsCodec(ms_codec::Error),
-    MkCodec(mk_codec::Error),
-    MdCodec(md_codec::Error),
-    ModeViolation {
-        // mode/flag are read by `details()` for SPEC §5.5 JSON output (wired in v0.1+ JSON path).
-        #[allow(dead_code)]
-        mode: &'static str,
-        #[allow(dead_code)]
-        flag: &'static str,
-        message: &'static str,
+    /// v0.27.0 — `mnemonic import-wallet --bsms-round1 <FILE>` parsed a
+    /// blob that does not meet BIP-129 §Round 1 record syntax (line count
+    /// != 5 after CRLF normalize, line 1 != `BSMS 1.0`, malformed line-3
+    /// KEY field, malformed line-5 base64 SIG, line-4 description carries
+    /// `\n` or `\r`, etc.). Exit 2 — parse-class error.
+    BsmsRound1Malformed { reason: String },
+    /// v0.27.0 — BIP-129 §Round 1 BIP-322 ECDSA recoverable signature
+    /// verification failed: signature recovered to a different pubkey than
+    /// the one declared on the record's line 3, OR recovery itself failed.
+    /// Exit 2 — explicit failure (NOT a stderr NOTICE; the user opted into
+    /// verify by supplying `--bsms-round1` + `--bsms-verify-strict`).
+    BsmsSignatureMismatch {
+        record_index: usize,
+        signer_pubkey: String,
+        reason: String,
+    },
+    /// Import-side parity of `BsmsTaprootRefused`. v0.28.7+: refused at
+    /// `BsmsParser::parse` entry. No `script_type` field — the import parser
+    /// has no `WalletScriptType` in scope at parse time (see
+    /// `design/cycle-3-p0-recon.md` Slug 1 lock α).
+    BsmsTaprootImportRefused,
+    /// v0.28.0 P8B (plan-doc §S.8) — `mnemonic export-wallet --format bsms`
+    /// refused because the requested template / descriptor resolves to a
+    /// taproot script-type (`P2tr` / `P2trMulti`). BIP-129 §1 prerequisites
+    /// pre-date BIP-386 — there is no published canonicalization for taproot
+    /// descriptors in the BSMS Round-2 wire shape. The carried `script_type`
+    /// drives the per-script-type discriminator in the rendered message
+    /// (P2tr → singlesig hint; P2trMulti → multisig hint). Real emit is
+    /// tracked at FOLLOWUP `bsms-taproot-emit` (upstream-blocked).
+    ///
+    /// Exit 2 (parse / refusal class) — same routing as the prior
+    /// `ToolkitError::BadInput` text this variant replaces at
+    /// `wallet_export/bsms.rs:emit`.
+    BsmsTaprootRefused {
+        script_type: crate::wallet_export::WalletScriptType,
     },
     /// SPEC §6.1 exit-4 verify-bundle mismatch variant. `card` identifies the
     /// mismatching card (e.g., "mk1", "md1", or "mk1[N]" for multisig cosigner N).
@@ -29,21 +63,12 @@ pub enum ToolkitError {
         card: String,
         message: String,
     },
-    #[allow(dead_code)]
-    NetworkMismatch {
-        xpub_network: &'static str,
-        expected: &'static str,
-    },
-    FutureFormat {
-        source: &'static str,
-        detail: String,
-    },
-    /// SPEC §6.2 v0.2 multisig configuration error (threshold/cosigner-count
-    /// out of range, k > n, etc.). Exit 1 (user-input).
-    #[allow(dead_code)]
-    MultisigConfig {
-        message: String,
-    },
+    /// v0.26.0 compare-cost subcommand error. SPEC §9.
+    CompareCost(crate::cost::CompareCostError),
+    /// SPEC_convert_v0_6.md §3 / §4 refusal — convert subcommand rejects
+    /// a (from, to) pair as cryptographically unrecoverable, sibling-pivot,
+    /// or otherwise invalid. Exit 2.
+    ConvertRefusal(String),
     /// SPEC §6.2 v0.2 cosigner-spec parse error
     /// (`--cosigner=<xpub>:<fp>:<path>`). Exit 1.
     #[allow(dead_code)]
@@ -56,6 +81,20 @@ pub enum ToolkitError {
     CosignersFile {
         message: String,
     },
+    /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
+    /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
+    DeriveChildLengthNotApplicable,
+    /// SPEC_derive_child_v0_7.md §7 — `--length <N>` falls outside the
+    /// per-app valid range. Exit 2.
+    DeriveChildLengthOutOfRange {
+        app: &'static str,
+        length: u32,
+        valid_text: &'static str,
+    },
+    /// SPEC_derive_child_v0_7.md §7 — `--application rsa|rsa-gpg` deferred
+    /// pending rsa-crate stability (RUSTSEC-2023-0071 unpatched as of v0.8.0).
+    /// `dice` shipped in v0.8 Phase 7. Exit 2.
+    DeriveChildUnsupportedApp,
     /// SPEC §6.7 descriptor parse error (lex/resolve/walk failure). Exit 2.
     /// Distinct from `ModeViolation` (SPEC §6.9, flag-combination errors):
     /// `DescriptorParse` covers descriptor *content* failures.
@@ -66,31 +105,17 @@ pub enum ToolkitError {
     DescriptorReparseFailed {
         detail: String,
     },
-    /// SPEC §4.11.b BIP-388 distinct-key violation at bundle creation. Exit 2.
-    /// `i` and `j` are the colliding slot indices (i < j) under
-    /// `(xpub, derivation_path_string)` raw-string equality per §4.11.b
-    /// normalization domain.
-    Bip388Distinctness { i: u8, j: u8 },
-    /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
-    /// Re-emitted from `check_key_vector_distinctness` post-binding under
-    /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
-    Bip388VerifyDistinctness,
-    /// SPEC §6.6 row 4 (conflict) / row 8 (gap) / §6.6.b (invalid subkey set)
-    /// `--slot @N.<subkey>=<value>` validation violation at bundle creation.
-    /// Exit 2. Wired into `bundle_run` in Phase C.
-    #[allow(dead_code)]
-    SlotInputViolation {
-        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey".
-        kind: &'static str,
-        message: String,
+    /// v0.26.0 wallet-import cycle — cross-cutting `@env:<VAR>` sentinel
+    /// resolution failed. Either the env-var was unset (`Unset`) or the
+    /// `<VAR>` token failed POSIX env-var-name validation (`InvalidName`).
+    /// Exit 1 (Tier-1, user-input class) per SPEC_wallet_import_v0_26_0.md §2.3.
+    /// Carries the offending `--flag` name for stderr disambiguation across
+    /// the 6 secret-flag surfaces enumerated in SPEC §3.1.
+    EnvVarMissing {
+        flag: String,
+        var: String,
+        reason: EnvVarMissingReason,
     },
-    /// SPEC_convert_v0_6.md §3 / §4 refusal — convert subcommand rejects
-    /// a (from, to) pair as cryptographically unrecoverable, sibling-pivot,
-    /// or otherwise invalid. Exit 2.
-    ConvertRefusal(String),
-    /// SPEC_export_wallet_v0_7.md §3 watch-only refusal — phrase / entropy /
-    /// xprv / wif slot supplied to `export-wallet`. Exit 2.
-    ExportWalletSecretInput,
     /// SPEC_export_wallet_v0_7.md §7 — sparrow / specter format stub. Exit 2.
     /// v0.8.1 Phase 2 + Phase 3 promoted Sparrow + Specter to real formats;
     /// no construction site remains in the codebase. Variant retained for
@@ -98,14 +123,6 @@ pub enum ToolkitError {
     /// removal from a `#[non_exhaustive]` enum).
     #[allow(dead_code)]
     ExportWalletFormatStub(&'static str),
-    #[allow(dead_code)]
-    /// SPEC_export_wallet_v0_7.md §4 — taproot multisig templates
-    /// (`tr-multi-a`, `tr-sortedmulti-a`) are not yet supported by
-    /// `mnemonic export-wallet` because constructing `tr(<internal-key>,
-    /// multi_a(...))` requires picking an internal-key designation (NUMS vs
-    /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
-    /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
-    ExportWalletTaprootMultisigUnsupported(&'static str),
     /// SPEC_export_wallet_v0_8.md §4 — missing-info refusal. Each per-format
     /// emitter's `collect_missing` returns the set of `MissingField` entries
     /// it cannot synthesize from the supplied slots/descriptor; this variant
@@ -117,20 +134,21 @@ pub enum ToolkitError {
         format: &'static str,
         missing: Vec<crate::wallet_export::MissingField>,
     },
-    /// SPEC_derive_child_v0_7.md §7 — `--application rsa|rsa-gpg` deferred
-    /// pending rsa-crate stability (RUSTSEC-2023-0071 unpatched as of v0.8.0).
-    /// `dice` shipped in v0.8 Phase 7. Exit 2.
-    DeriveChildUnsupportedApp,
-    /// SPEC_derive_child_v0_7.md §7 — `--length <N>` falls outside the
-    /// per-app valid range. Exit 2.
-    DeriveChildLengthOutOfRange {
-        app: &'static str,
-        length: u32,
-        valid_text: &'static str,
+    /// SPEC_export_wallet_v0_7.md §3 watch-only refusal — phrase / entropy /
+    /// xprv / wif slot supplied to `export-wallet`. Exit 2.
+    ExportWalletSecretInput,
+    #[allow(dead_code)]
+    /// SPEC_export_wallet_v0_7.md §4 — taproot multisig templates
+    /// (`tr-multi-a`, `tr-sortedmulti-a`) are not yet supported by
+    /// `mnemonic export-wallet` because constructing `tr(<internal-key>,
+    /// multi_a(...))` requires picking an internal-key designation (NUMS vs
+    /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
+    /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
+    ExportWalletTaprootMultisigUnsupported(&'static str),
+    FutureFormat {
+        source: &'static str,
+        detail: String,
     },
-    /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
-    /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
-    DeriveChildLengthNotApplicable,
     /// v0.24.0 §2.C.1 (D34/I5 fold) — a typed `--ms1` / `--mk1` / `--md1`
     /// flag was supplied a value whose HRP prefix does not match the flag's
     /// expected codec. Toolkit-internal validation (not a clap parser
@@ -143,40 +161,6 @@ pub enum ToolkitError {
         flag: &'static str,
         expected: &'static str,
         got: String,
-    },
-    /// v0.24.0 §2.C.1 (D34/I5 fold) — a positional `<STRING>` argument did
-    /// not begin with a recognized HRP prefix (`ms1` / `mk1` / `md1`). Exit 2.
-    UnknownHrp {
-        got: String,
-        expected_one_of: Vec<&'static str>,
-    },
-    /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
-    /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
-    /// UnparseableInput).
-    Repair(crate::repair::RepairError),
-    /// v0.26.0 compare-cost subcommand error. SPEC §9.
-    CompareCost(crate::cost::CompareCostError),
-    /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
-    /// Synthesized by `repair::try_repair_and_short_circuit` on
-    /// repair-success; `?`-propagated through the helper hierarchy up to
-    /// the run() boundary; main.rs special-cases this variant to suppress
-    /// the Display impl from writing to stderr (per plan-doc R2 I1 — the
-    /// repair report already wrote a clean stderr summary; appending the
-    /// Display text would be confusing noise).
-    RepairShortCircuit { exit_code: u8 },
-    /// v0.22.0 repair feature — std::io::Error from emit_repair_report
-    /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
-    Io(std::io::Error),
-    /// v0.26.0 wallet-import cycle — cross-cutting `@env:<VAR>` sentinel
-    /// resolution failed. Either the env-var was unset (`Unset`) or the
-    /// `<VAR>` token failed POSIX env-var-name validation (`InvalidName`).
-    /// Exit 1 (Tier-1, user-input class) per SPEC_wallet_import_v0_26_0.md §2.3.
-    /// Carries the offending `--flag` name for stderr disambiguation across
-    /// the 6 secret-flag surfaces enumerated in SPEC §3.1.
-    EnvVarMissing {
-        flag: String,
-        var: String,
-        reason: EnvVarMissingReason,
     },
     /// v0.26.0 — sniff returned 0 or ≥2 format matches; user must supply
     /// `--format`. Tier-1 (exit 1). Emitted by `cmd::import_wallet::run` via
@@ -227,6 +211,58 @@ pub enum ToolkitError {
     /// `wallet_import::bitcoin_core::BitcoinCoreParser::parse`.
     #[allow(dead_code)]
     ImportWalletXprvForbidden,
+    /// v0.22.0 repair feature — std::io::Error from emit_repair_report
+    /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
+    Io(std::io::Error),
+    MdCodec(md_codec::Error),
+    MkCodec(mk_codec::Error),
+    ModeViolation {
+        // mode/flag are read by `details()` for SPEC §5.5 JSON output (wired in v0.1+ JSON path).
+        #[allow(dead_code)]
+        mode: &'static str,
+        #[allow(dead_code)]
+        flag: &'static str,
+        message: &'static str,
+    },
+    MsCodec(ms_codec::Error),
+    /// SPEC §6.2 v0.2 multisig configuration error (threshold/cosigner-count
+    /// out of range, k > n, etc.). Exit 1 (user-input).
+    #[allow(dead_code)]
+    MultisigConfig {
+        message: String,
+    },
+    #[allow(dead_code)]
+    NetworkMismatch {
+        xpub_network: &'static str,
+        expected: &'static str,
+    },
+    /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
+    /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
+    /// UnparseableInput).
+    Repair(crate::repair::RepairError),
+    /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
+    /// Synthesized by `repair::try_repair_and_short_circuit` on
+    /// repair-success; `?`-propagated through the helper hierarchy up to
+    /// the run() boundary; main.rs special-cases this variant to suppress
+    /// the Display impl from writing to stderr (per plan-doc R2 I1 — the
+    /// repair report already wrote a clean stderr summary; appending the
+    /// Display text would be confusing noise).
+    RepairShortCircuit { exit_code: u8 },
+    /// SPEC §6.6 row 4 (conflict) / row 8 (gap) / §6.6.b (invalid subkey set)
+    /// `--slot @N.<subkey>=<value>` validation violation at bundle creation.
+    /// Exit 2. Wired into `bundle_run` in Phase C.
+    #[allow(dead_code)]
+    SlotInputViolation {
+        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey".
+        kind: &'static str,
+        message: String,
+    },
+    /// v0.24.0 §2.C.1 (D34/I5 fold) — a positional `<STRING>` argument did
+    /// not begin with a recognized HRP prefix (`ms1` / `mk1` / `md1`). Exit 2.
+    UnknownHrp {
+        got: String,
+        expected_one_of: Vec<&'static str>,
+    },
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
     /// candidate set. Exit 4 (sibling to `BundleMismatch` /
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
@@ -247,42 +283,6 @@ pub enum ToolkitError {
     XpubSearchNoMatch {
         mode: &'static str,
         searched: usize,
-    },
-    /// v0.27.0 — `mnemonic import-wallet --bsms-round1 <FILE>` parsed a
-    /// blob that does not meet BIP-129 §Round 1 record syntax (line count
-    /// != 5 after CRLF normalize, line 1 != `BSMS 1.0`, malformed line-3
-    /// KEY field, malformed line-5 base64 SIG, line-4 description carries
-    /// `\n` or `\r`, etc.). Exit 2 — parse-class error.
-    BsmsRound1Malformed { reason: String },
-    /// v0.27.0 — BIP-129 §Round 1 BIP-322 ECDSA recoverable signature
-    /// verification failed: signature recovered to a different pubkey than
-    /// the one declared on the record's line 3, OR recovery itself failed.
-    /// Exit 2 — explicit failure (NOT a stderr NOTICE; the user opted into
-    /// verify by supplying `--bsms-round1` + `--bsms-verify-strict`).
-    BsmsSignatureMismatch {
-        record_index: usize,
-        signer_pubkey: String,
-        reason: String,
-    },
-    /// Import-side parity of `BsmsTaprootRefused`. v0.28.7+: refused at
-    /// `BsmsParser::parse` entry. No `script_type` field — the import parser
-    /// has no `WalletScriptType` in scope at parse time (see
-    /// `design/cycle-3-p0-recon.md` Slug 1 lock α).
-    BsmsTaprootImportRefused,
-    /// v0.28.0 P8B (plan-doc §S.8) — `mnemonic export-wallet --format bsms`
-    /// refused because the requested template / descriptor resolves to a
-    /// taproot script-type (`P2tr` / `P2trMulti`). BIP-129 §1 prerequisites
-    /// pre-date BIP-386 — there is no published canonicalization for taproot
-    /// descriptors in the BSMS Round-2 wire shape. The carried `script_type`
-    /// drives the per-script-type discriminator in the rendered message
-    /// (P2tr → singlesig hint; P2trMulti → multisig hint). Real emit is
-    /// tracked at FOLLOWUP `bsms-taproot-emit` (upstream-blocked).
-    ///
-    /// Exit 2 (parse / refusal class) — same routing as the prior
-    /// `ToolkitError::BadInput` text this variant replaces at
-    /// `wallet_export/bsms.rs:emit`.
-    BsmsTaprootRefused {
-        script_type: crate::wallet_export::WalletScriptType,
     },
 }
 
@@ -426,59 +426,50 @@ impl ToolkitError {
     /// helpers per SPEC §6.4.3 / §6.4.4 / §6.4.5 routing tables.
     pub fn exit_code(&self) -> u8 {
         match self {
-            ToolkitError::BadInput(_) | ToolkitError::Bip39(_) | ToolkitError::Bitcoin(_) => 1,
-            ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
-            ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
-            ToolkitError::MdCodec(e) => md_codec_exit_code(e),
-            ToolkitError::ModeViolation { .. }
-            | ToolkitError::NetworkMismatch { .. }
-            | ToolkitError::DescriptorParse(_)
-            | ToolkitError::Bip388Distinctness { .. }
-            | ToolkitError::SlotInputViolation { .. }
-            | ToolkitError::ConvertRefusal(_)
-            | ToolkitError::ExportWalletSecretInput
-            | ToolkitError::ExportWalletFormatStub(_)
-            | ToolkitError::ExportWalletTaprootMultisigUnsupported(_)
-            | ToolkitError::ExportWalletMissingFields { .. }
-            | ToolkitError::DeriveChildUnsupportedApp
-            | ToolkitError::DeriveChildLengthOutOfRange { .. }
-            | ToolkitError::DeriveChildLengthNotApplicable
-            | ToolkitError::HrpMismatch { .. }
-            | ToolkitError::UnknownHrp { .. }
-            | ToolkitError::Repair(_) => 2,
-            ToolkitError::CompareCost(e) => e.exit_code(),
-            ToolkitError::FutureFormat { .. } => 3,
-            ToolkitError::BundleMismatch { .. }
-            | ToolkitError::DescriptorReparseFailed { .. }
-            | ToolkitError::Bip388VerifyDistinctness
-            | ToolkitError::XpubSearchNoMatch { .. } => 4,
-            ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
-            ToolkitError::Io(_) => 1,
-            ToolkitError::MultisigConfig { .. }
-            | ToolkitError::CosignerSpec { .. }
-            | ToolkitError::CosignersFile { .. } => 1,
-            ToolkitError::EnvVarMissing { .. } => 1,
-            // v0.26.0 wallet-import tier table per SPEC §2.3.
-            ToolkitError::ImportWalletAmbiguousFormat(_)
-            | ToolkitError::ImportWalletFormatMismatch { .. } => 1,
-            ToolkitError::ImportWalletParse(_)
-            | ToolkitError::ImportWalletXprvForbidden
-            | ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
-            ToolkitError::ImportWalletSeedMismatch { .. } => 4,
-            // v0.27.0 — BSMS Round-1 parse/verify failures. Both exit 2
-            // (parse-class for Malformed; explicit-fail for SignatureMismatch
-            // when --bsms-verify-strict is set; lenient-default path emits
-            // stderr NOTICE + signature_verified: false instead of returning
-            // SignatureMismatch — caller controls the strictness gate).
-            ToolkitError::BsmsRound1Malformed { .. }
-            | ToolkitError::BsmsSignatureMismatch { .. } => 2,
-            // v0.28.7 — BSMS taproot import refusal. Exit 2 matches emit-side
-            // `BsmsTaprootRefused` (same refusal class).
+            ToolkitError::BadInput(_) => 1,
+            ToolkitError::Bip39(_) => 1,
+            ToolkitError::Bip388Distinctness { .. } => 2,
+            ToolkitError::Bip388VerifyDistinctness => 4,
+            ToolkitError::Bitcoin(_) => 1,
+            ToolkitError::BsmsRound1Malformed { .. } => 2,
+            ToolkitError::BsmsSignatureMismatch { .. } => 2,
             ToolkitError::BsmsTaprootImportRefused => 2,
-            // v0.28.0 P8B — BSMS taproot refusal at export-wallet. Exit 2
-            // (parse / refusal class) matches the prior `ToolkitError::BadInput`
-            // text this variant replaces at `wallet_export/bsms.rs:emit`.
             ToolkitError::BsmsTaprootRefused { .. } => 2,
+            ToolkitError::BundleMismatch { .. } => 4,
+            ToolkitError::CompareCost(e) => e.exit_code(),
+            ToolkitError::ConvertRefusal(_) => 2,
+            ToolkitError::CosignerSpec { .. } => 1,
+            ToolkitError::CosignersFile { .. } => 1,
+            ToolkitError::DeriveChildLengthNotApplicable => 2,
+            ToolkitError::DeriveChildLengthOutOfRange { .. } => 2,
+            ToolkitError::DeriveChildUnsupportedApp => 2,
+            ToolkitError::DescriptorParse(_) => 2,
+            ToolkitError::DescriptorReparseFailed { .. } => 4,
+            ToolkitError::EnvVarMissing { .. } => 1,
+            ToolkitError::ExportWalletFormatStub(_) => 2,
+            ToolkitError::ExportWalletMissingFields { .. } => 2,
+            ToolkitError::ExportWalletSecretInput => 2,
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => 2,
+            ToolkitError::FutureFormat { .. } => 3,
+            ToolkitError::HrpMismatch { .. } => 2,
+            ToolkitError::ImportWalletAmbiguousFormat(_) => 1,
+            ToolkitError::ImportWalletFormatMismatch { .. } => 1,
+            ToolkitError::ImportWalletParse(_) => 2,
+            ToolkitError::ImportWalletSeedMismatch { .. } => 4,
+            ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
+            ToolkitError::ImportWalletXprvForbidden => 2,
+            ToolkitError::Io(_) => 1,
+            ToolkitError::MdCodec(e) => md_codec_exit_code(e),
+            ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
+            ToolkitError::ModeViolation { .. } => 2,
+            ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
+            ToolkitError::MultisigConfig { .. } => 1,
+            ToolkitError::NetworkMismatch { .. } => 2,
+            ToolkitError::Repair(_) => 2,
+            ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
+            ToolkitError::SlotInputViolation { .. } => 2,
+            ToolkitError::UnknownHrp { .. } => 2,
+            ToolkitError::XpubSearchNoMatch { .. } => 4,
         }
     }
 
@@ -489,50 +480,50 @@ impl ToolkitError {
         match self {
             ToolkitError::BadInput(_) => "BadInput",
             ToolkitError::Bip39(_) => "Bip39",
-            ToolkitError::Bitcoin(_) => "Bitcoin",
-            ToolkitError::MsCodec(_) => "MsCodec",
-            ToolkitError::MkCodec(_) => "MkCodec",
-            ToolkitError::MdCodec(_) => "MdCodec",
-            ToolkitError::ModeViolation { .. } => "ModeViolation",
-            ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
-            ToolkitError::BundleMismatch { .. } => "BundleMismatch",
-            ToolkitError::FutureFormat { .. } => "FutureFormat",
-            ToolkitError::MultisigConfig { .. } => "MultisigConfig",
-            ToolkitError::CosignerSpec { .. } => "CosignerSpec",
-            ToolkitError::CosignersFile { .. } => "CosignersFile",
-            ToolkitError::DescriptorParse(_) => "DescriptorParse",
-            ToolkitError::DescriptorReparseFailed { .. } => "DescriptorReparseFailed",
             ToolkitError::Bip388Distinctness { .. } => "Bip388Distinctness",
             ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
-            ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
+            ToolkitError::Bitcoin(_) => "Bitcoin",
+            ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
+            ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
+            ToolkitError::BsmsTaprootImportRefused => "BsmsTaprootImportRefused",
+            ToolkitError::BsmsTaprootRefused { .. } => "BsmsTaprootRefused",
+            ToolkitError::BundleMismatch { .. } => "BundleMismatch",
+            ToolkitError::CompareCost(_) => "CompareCost",
             ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
-            ToolkitError::ExportWalletSecretInput => "ExportWalletSecretInput",
+            ToolkitError::CosignerSpec { .. } => "CosignerSpec",
+            ToolkitError::CosignersFile { .. } => "CosignersFile",
+            ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
+            ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
+            ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
+            ToolkitError::DescriptorParse(_) => "DescriptorParse",
+            ToolkitError::DescriptorReparseFailed { .. } => "DescriptorReparseFailed",
+            ToolkitError::EnvVarMissing { .. } => "EnvVarMissing",
             ToolkitError::ExportWalletFormatStub(_) => "ExportWalletFormatStub",
+            ToolkitError::ExportWalletMissingFields { .. } => "ExportWalletMissingFields",
+            ToolkitError::ExportWalletSecretInput => "ExportWalletSecretInput",
             ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => {
                 "ExportWalletTaprootMultisigUnsupported"
             }
-            ToolkitError::ExportWalletMissingFields { .. } => "ExportWalletMissingFields",
-            ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
-            ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
-            ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
+            ToolkitError::FutureFormat { .. } => "FutureFormat",
             ToolkitError::HrpMismatch { .. } => "HrpMismatch",
-            ToolkitError::UnknownHrp { .. } => "UnknownHrp",
-            ToolkitError::Repair(_) => "Repair",
-            ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
-            ToolkitError::CompareCost(_) => "CompareCost",
-            ToolkitError::Io(_) => "Io",
-            ToolkitError::EnvVarMissing { .. } => "EnvVarMissing",
             ToolkitError::ImportWalletAmbiguousFormat(_) => "ImportWalletAmbiguousFormat",
             ToolkitError::ImportWalletFormatMismatch { .. } => "ImportWalletFormatMismatch",
             ToolkitError::ImportWalletParse(_) => "ImportWalletParse",
             ToolkitError::ImportWalletSeedMismatch { .. } => "ImportWalletSeedMismatch",
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
             ToolkitError::ImportWalletXprvForbidden => "ImportWalletXprvForbidden",
+            ToolkitError::Io(_) => "Io",
+            ToolkitError::MdCodec(_) => "MdCodec",
+            ToolkitError::MkCodec(_) => "MkCodec",
+            ToolkitError::ModeViolation { .. } => "ModeViolation",
+            ToolkitError::MsCodec(_) => "MsCodec",
+            ToolkitError::MultisigConfig { .. } => "MultisigConfig",
+            ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
+            ToolkitError::Repair(_) => "Repair",
+            ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
+            ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
-            ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
-            ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
-            ToolkitError::BsmsTaprootImportRefused => "BsmsTaprootImportRefused",
-            ToolkitError::BsmsTaprootRefused { .. } => "BsmsTaprootRefused",
         }
     }
 
@@ -542,136 +533,13 @@ impl ToolkitError {
         match self {
             ToolkitError::BadInput(m) => m.clone(),
             ToolkitError::Bip39(e) => crate::friendly::friendly_bip39(e),
-            ToolkitError::Bitcoin(e) => crate::friendly::friendly_bitcoin(e),
-            ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
-            ToolkitError::MkCodec(e) => crate::friendly::friendly_mk_codec(e),
-            ToolkitError::MdCodec(e) => crate::friendly::friendly_md_codec(e),
-            ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
-            ToolkitError::NetworkMismatch {
-                xpub_network,
-                expected,
-            } => format!(
-                "xpub network {} does not match --network {}",
-                xpub_network, expected,
-            ),
-            ToolkitError::BundleMismatch { card, message } => {
-                format!("bundle mismatch on {}: {}; if the engraved bundle was produced at a non-zero BIP-32 account, pass --account <N> to match (default 0)",
-                    card, message)
-            }
-            ToolkitError::FutureFormat { source, detail } => format!(
-                "{} reserved-not-emitted: {}; deferred to v0.2+",
-                source, detail,
-            ),
-            ToolkitError::MultisigConfig { message } => message.clone(),
-            ToolkitError::CosignerSpec {
-                cosigner_idx,
-                message,
-            } => format!("--cosigner[{}]: {}", cosigner_idx, message),
-            ToolkitError::CosignersFile { message } => {
-                format!("--cosigners-file: {}", message)
-            }
-            ToolkitError::DescriptorParse(m) => m.clone(),
-            ToolkitError::DescriptorReparseFailed { detail } => {
-                format!("descriptor re-parse failed during verify-bundle: {detail}")
-            }
             ToolkitError::Bip388Distinctness { i, j } => {
                 format!("BIP-388 distinct-key violation: slot @{i} and slot @{j} resolve to identical (xpub, path)")
             }
             ToolkitError::Bip388VerifyDistinctness => {
                 "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys".to_string()
             }
-            ToolkitError::SlotInputViolation { message, .. } => message.clone(),
-            ToolkitError::ConvertRefusal(m) => m.clone(),
-            ToolkitError::ExportWalletSecretInput => crate::wallet_export::REFUSAL_SECRET_INPUT.to_string(),
-            ToolkitError::ExportWalletFormatStub(name) => crate::wallet_export::format_stub_message(name),
-            ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
-                crate::wallet_export::taproot_multisig_unsupported_message(name)
-            }
-            ToolkitError::ExportWalletMissingFields { format, missing } => {
-                crate::wallet_export::build_missing_fields_refusal(format, missing)
-            }
-            ToolkitError::DeriveChildUnsupportedApp => {
-                // SPEC_derive_child_v0_8.md §7 byte-exact stderr text. v0.8
-                // lifts `dice` to in-scope; `rsa` and `rsa-gpg` remain deferred
-                // per Phase 6 RSA-crate security spike (RUSTSEC-2023-0071
-                // unpatched as of 2026-05-07).
-                "--application <rsa|rsa-gpg> is out-of-scope: the rsa crate has unpatched \
-                 timing-attack advisory RUSTSEC-2023-0071 and BIP-85 RSA / RSA-GPG demand is \
-                 limited; deferred pending crate stability + user demand."
-                    .to_string()
-            }
-            ToolkitError::DeriveChildLengthOutOfRange {
-                app,
-                length,
-                valid_text,
-            } => format!(
-                "--length {length} out of range for --application {app} (valid: {valid_text})",
-            ),
-            ToolkitError::DeriveChildLengthNotApplicable => {
-                "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
-                    .to_string()
-            }
-            ToolkitError::HrpMismatch { flag, expected, got } => {
-                format!(
-                    "{flag} expects a value with HRP '{expected}', got '{got}' \
-                     (HRP is not BCH-protected; re-type the prefix)"
-                )
-            }
-            ToolkitError::UnknownHrp { got, expected_one_of } => {
-                format!(
-                    "positional argument '{got}' does not begin with a recognized \
-                     HRP prefix (expected one of: {})",
-                    expected_one_of.join(", ")
-                )
-            }
-            ToolkitError::Repair(e) => format!("{e}"),
-            ToolkitError::RepairShortCircuit { .. } => {
-                // R2 I1: main.rs special-cases this variant to skip
-                // writing this message to stderr (the repair report
-                // already emitted its own clean stderr summary).
-                String::new()
-            }
-            ToolkitError::Io(e) => format!("I/O error: {e}"),
-            // v0.26.0 variants in alphabetical order (canonical ordering for
-            // I2 multi-PR convergence).
-            ToolkitError::CompareCost(e) => format!("{e}"),
-            ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
-                EnvVarMissingReason::Unset => format!(
-                    "{flag}: env-var {var} referenced by sentinel is not set"
-                ),
-                EnvVarMissingReason::InvalidName => {
-                    format!("{flag}: invalid env-var name `{var}`")
-                }
-            },
-            ToolkitError::ImportWalletAmbiguousFormat(detail) => detail.clone(),
-            ToolkitError::ImportWalletFormatMismatch { supplied, sniffed } => format!(
-                "import-wallet: --format {supplied} supplied but blob looks like {sniffed}"
-            ),
-            ToolkitError::ImportWalletParse(detail) => detail.clone(),
-            ToolkitError::ImportWalletSeedMismatch {
-                cosigner_index,
-                derived_xpub,
-                blob_xpub,
-                path,
-            } => format!(
-                "import-wallet: cosigner {cosigner_index}: supplied seed produces \
-                 xpub {derived_xpub} at path {path}; blob declares {blob_xpub}"
-            ),
-            ToolkitError::ImportWalletWatchOnlyViolation(i) => format!(
-                "import-wallet: cosigner {i} has entropy populated post-parse; \
-                 watch-only invariant violated (internal bug)"
-            ),
-            ToolkitError::ImportWalletXprvForbidden => {
-                "import-wallet: bitcoin-core: xprv-bearing descriptor refused; \
-                 re-run `bitcoin-cli listdescriptors` without `true` to get \
-                 xpub-only output"
-                    .to_string()
-            }
-            ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
-                "no match in searched set: mode={mode}, paths searched={searched}; \
-                 widen the range with --max-account / --number-of-accounts, or supply \
-                 additional templates via --add-path"
-            ),
+            ToolkitError::Bitcoin(e) => crate::friendly::friendly_bitcoin(e),
             ToolkitError::BsmsRound1Malformed { reason } => format!(
                 "import-wallet: --bsms-round1: BIP-129 Round-1 record malformed: {reason}"
             ),
@@ -708,6 +576,127 @@ impl ToolkitError {
                  (Sparrow JSON, taproot-capable) for taproot watch-only setup.",
                 crate::wallet_export::script_type_short_name(script_type)
             ),
+            ToolkitError::BundleMismatch { card, message } => {
+                format!("bundle mismatch on {}: {}; if the engraved bundle was produced at a non-zero BIP-32 account, pass --account <N> to match (default 0)",
+                    card, message)
+            }
+            ToolkitError::CompareCost(e) => format!("{e}"),
+            ToolkitError::ConvertRefusal(m) => m.clone(),
+            ToolkitError::CosignerSpec {
+                cosigner_idx,
+                message,
+            } => format!("--cosigner[{}]: {}", cosigner_idx, message),
+            ToolkitError::CosignersFile { message } => {
+                format!("--cosigners-file: {}", message)
+            }
+            ToolkitError::DeriveChildLengthNotApplicable => {
+                "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
+                    .to_string()
+            }
+            ToolkitError::DeriveChildLengthOutOfRange {
+                app,
+                length,
+                valid_text,
+            } => format!(
+                "--length {length} out of range for --application {app} (valid: {valid_text})",
+            ),
+            ToolkitError::DeriveChildUnsupportedApp => {
+                // SPEC_derive_child_v0_8.md §7 byte-exact stderr text. v0.8
+                // lifts `dice` to in-scope; `rsa` and `rsa-gpg` remain deferred
+                // per Phase 6 RSA-crate security spike (RUSTSEC-2023-0071
+                // unpatched as of 2026-05-07).
+                "--application <rsa|rsa-gpg> is out-of-scope: the rsa crate has unpatched \
+                 timing-attack advisory RUSTSEC-2023-0071 and BIP-85 RSA / RSA-GPG demand is \
+                 limited; deferred pending crate stability + user demand."
+                    .to_string()
+            }
+            ToolkitError::DescriptorParse(m) => m.clone(),
+            ToolkitError::DescriptorReparseFailed { detail } => {
+                format!("descriptor re-parse failed during verify-bundle: {detail}")
+            }
+            ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
+                EnvVarMissingReason::Unset => format!(
+                    "{flag}: env-var {var} referenced by sentinel is not set"
+                ),
+                EnvVarMissingReason::InvalidName => {
+                    format!("{flag}: invalid env-var name `{var}`")
+                }
+            },
+            ToolkitError::ExportWalletFormatStub(name) => crate::wallet_export::format_stub_message(name),
+            ToolkitError::ExportWalletMissingFields { format, missing } => {
+                crate::wallet_export::build_missing_fields_refusal(format, missing)
+            }
+            ToolkitError::ExportWalletSecretInput => crate::wallet_export::REFUSAL_SECRET_INPUT.to_string(),
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
+                crate::wallet_export::taproot_multisig_unsupported_message(name)
+            }
+            ToolkitError::FutureFormat { source, detail } => format!(
+                "{} reserved-not-emitted: {}; deferred to v0.2+",
+                source, detail,
+            ),
+            ToolkitError::HrpMismatch { flag, expected, got } => {
+                format!(
+                    "{flag} expects a value with HRP '{expected}', got '{got}' \
+                     (HRP is not BCH-protected; re-type the prefix)"
+                )
+            }
+            ToolkitError::ImportWalletAmbiguousFormat(detail) => detail.clone(),
+            ToolkitError::ImportWalletFormatMismatch { supplied, sniffed } => format!(
+                "import-wallet: --format {supplied} supplied but blob looks like {sniffed}"
+            ),
+            ToolkitError::ImportWalletParse(detail) => detail.clone(),
+            ToolkitError::ImportWalletSeedMismatch {
+                cosigner_index,
+                derived_xpub,
+                blob_xpub,
+                path,
+            } => format!(
+                "import-wallet: cosigner {cosigner_index}: supplied seed produces \
+                 xpub {derived_xpub} at path {path}; blob declares {blob_xpub}"
+            ),
+            ToolkitError::ImportWalletWatchOnlyViolation(i) => format!(
+                "import-wallet: cosigner {i} has entropy populated post-parse; \
+                 watch-only invariant violated (internal bug)"
+            ),
+            ToolkitError::ImportWalletXprvForbidden => {
+                "import-wallet: bitcoin-core: xprv-bearing descriptor refused; \
+                 re-run `bitcoin-cli listdescriptors` without `true` to get \
+                 xpub-only output"
+                    .to_string()
+            }
+            ToolkitError::Io(e) => format!("I/O error: {e}"),
+            ToolkitError::MdCodec(e) => crate::friendly::friendly_md_codec(e),
+            ToolkitError::MkCodec(e) => crate::friendly::friendly_mk_codec(e),
+            ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
+            ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
+            ToolkitError::MultisigConfig { message } => message.clone(),
+            ToolkitError::NetworkMismatch {
+                xpub_network,
+                expected,
+            } => format!(
+                "xpub network {} does not match --network {}",
+                xpub_network, expected,
+            ),
+            ToolkitError::Repair(e) => format!("{e}"),
+            ToolkitError::RepairShortCircuit { .. } => {
+                // R2 I1: main.rs special-cases this variant to skip
+                // writing this message to stderr (the repair report
+                // already emitted its own clean stderr summary).
+                String::new()
+            }
+            ToolkitError::SlotInputViolation { message, .. } => message.clone(),
+            ToolkitError::UnknownHrp { got, expected_one_of } => {
+                format!(
+                    "positional argument '{got}' does not begin with a recognized \
+                     HRP prefix (expected one of: {})",
+                    expected_one_of.join(", ")
+                )
+            }
+            ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
+                "no match in searched set: mode={mode}, paths searched={searched}; \
+                 widen the range with --max-account / --number-of-accounts, or supply \
+                 additional templates via --add-path"
+            ),
         }
     }
 
@@ -716,6 +705,15 @@ impl ToolkitError {
     #[allow(dead_code)]
     pub fn details(&self) -> Option<serde_json::Value> {
         match self {
+            ToolkitError::Bip388Distinctness { i, j } => Some(json!({ "i": i, "j": j })),
+            ToolkitError::BundleMismatch { card, .. } => Some(json!({ "card": card })),
+            ToolkitError::CosignerSpec { cosigner_idx, .. } => Some(json!({
+                "cosigner_idx": cosigner_idx,
+            })),
+            ToolkitError::FutureFormat { source, detail } => Some(json!({
+                "source": source,
+                "detail": detail,
+            })),
             ToolkitError::ModeViolation { mode, flag, .. } => Some(json!({
                 "mode": mode,
                 "flag": flag,
@@ -727,15 +725,6 @@ impl ToolkitError {
                 "xpub_network": xpub_network,
                 "expected": expected,
             })),
-            ToolkitError::BundleMismatch { card, .. } => Some(json!({ "card": card })),
-            ToolkitError::FutureFormat { source, detail } => Some(json!({
-                "source": source,
-                "detail": detail,
-            })),
-            ToolkitError::CosignerSpec { cosigner_idx, .. } => Some(json!({
-                "cosigner_idx": cosigner_idx,
-            })),
-            ToolkitError::Bip388Distinctness { i, j } => Some(json!({ "i": i, "j": j })),
             ToolkitError::SlotInputViolation { kind, .. } => Some(json!({ "kind": kind })),
             _ => None,
         }
