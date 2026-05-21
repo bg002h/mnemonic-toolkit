@@ -2685,7 +2685,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `.github/workflows/manual.yml` "Audit manual" step (post-`52f33f7`) passes `MD_BIN=true` to `make audit`. The flag-coverage gate at `docs/manual/tests/lint.sh` per-subcommand `--help` extraction short-circuits via "no flags parsed... skipping" warnings for every `md` subcommand. Same gap class as the pre-cycle mnemonic-side situation, restricted to the `md` sibling-codec CLI.
 - **What:** v0.28+ ci-hygiene: add a `cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v<latest> md-cli` step to `manual.yml` analogous to the existing mk-cli install at lines 72-77. Then pass `MD_BIN=md` to `make audit`. The flag-coverage gate at `docs/manual/tests/lint.sh` will then exercise `md <subcommand> --help` against the real binary. Pin the tag to the install.sh-locked sibling-CLI tag (currently `descriptor-mnemonic-md-cli-v0.6.0` per `scripts/install.sh:35`).
 - **Why deferred:** manual-v0.2.0 cycle scope was the v0.28.0 P13A/P13B audit (chapter-45 + chapter-39 + the chapter-41 inheritance composite). MD-sibling-CLI promotion is independent — it gates `md`-chapter (chapter-42) coverage, which wasn't audited in this cycle.
-- **Status:** `open`
+- **Status:** `resolved cefffcc63e97573de78ed3c34d335a0b435cc338` — manual-v0.2.1 cycle landed real `md` binary install step in `manual.yml` mirroring the mk-cli pattern at L72-77; flag-coverage gate now exercises `md <subcommand> --help` against the cargo-installed binary.
 - **Tier:** `v0.28+-ci-hygiene`
 - **Companion:** `manual-ms-bin-real-binary-promote` (sibling successor; same partition).
 
@@ -2695,7 +2695,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `.github/workflows/manual.yml` "Audit manual" step (post-`52f33f7`) passes `MS_BIN=true` to `make audit`. Same gap class as the mnemonic-side situation, restricted to the `ms` sibling-codec CLI.
 - **What:** v0.28+ ci-hygiene: add a `cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v<latest> ms-cli` step to `manual.yml`. Then pass `MS_BIN=ms` to `make audit`. The flag-coverage gate will then exercise `ms <subcommand> --help` against the real binary. Pin the tag to the install.sh-locked sibling-CLI tag (currently `ms-cli-v0.4.0` per `scripts/install.sh:38`).
 - **Why deferred:** Same scope-rationale as `manual-md-bin-real-binary-promote` — MS-sibling-CLI promotion gates `ms`-chapter (chapter-43) coverage, which wasn't audited in this cycle.
-- **Status:** `open`
+- **Status:** `resolved cefffcc63e97573de78ed3c34d335a0b435cc338` — manual-v0.2.1 cycle landed real `ms` binary install step in `manual.yml` mirroring the mk-cli pattern at L72-77; flag-coverage gate now exercises `ms <subcommand> --help` against the cargo-installed binary.
 - **Tier:** `v0.28+-ci-hygiene`
 - **Companion:** `manual-md-bin-real-binary-promote` (sibling successor; same partition).
 
