@@ -16,6 +16,16 @@ use crate::error::ToolkitError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SlotSubkey {
     Phrase,
+    /// v0.31.3 — SeedQR digit-string (48 or 96 ASCII digits encoding a
+    /// BIP-39 phrase per the SeedSigner SeedQR spec). Secret-bearing;
+    /// decoded inline via `seedqr::decode` at slot-emit time, then
+    /// dispatched through the same materialization path as `Phrase`.
+    /// Position-critical: declared BEFORE `Entropy` so derived `Ord`
+    /// slots Seedqr at position 1, making `[Seedqr, Path]` and
+    /// `[Seedqr, Fingerprint, Path]` ascending-sorted (parallel to the
+    /// existing `[Phrase, Path]` / `[Phrase, Fingerprint, Path]`
+    /// v0.19.0 §6.6.b exception).
+    Seedqr,
     Entropy,
     Xpub,
     /// SPEC_export_wallet_v0_8.md §2 + §5.1 — depth-0 master xpub for slot
@@ -35,6 +45,7 @@ impl SlotSubkey {
     pub fn from_token(tok: &str) -> Option<Self> {
         Some(match tok {
             "phrase" => Self::Phrase,
+            "seedqr" => Self::Seedqr,
             "entropy" => Self::Entropy,
             "xpub" => Self::Xpub,
             "master_xpub" => Self::MasterXpub,
@@ -48,6 +59,7 @@ impl SlotSubkey {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Phrase => "phrase",
+            Self::Seedqr => "seedqr",
             Self::Entropy => "entropy",
             Self::Xpub => "xpub",
             Self::MasterXpub => "master_xpub",
@@ -58,7 +70,10 @@ impl SlotSubkey {
         }
     }
     pub fn is_secret_bearing(self) -> bool {
-        matches!(self, Self::Phrase | Self::Entropy | Self::Xprv | Self::Wif)
+        matches!(
+            self,
+            Self::Phrase | Self::Seedqr | Self::Entropy | Self::Xprv | Self::Wif
+        )
     }
     pub fn is_watch_only(self) -> bool {
         matches!(
@@ -144,7 +159,7 @@ pub fn parse_slot_input(s: &str) -> Result<SlotInput, ParseError> {
     }
     let subkey = SlotSubkey::from_token(subkey_tok).ok_or_else(|| {
         ParseError(format!(
-            "unknown slot subkey {:?}; expected one of: phrase, entropy, xpub, fingerprint, path, wif, xprv",
+            "unknown slot subkey {:?}; expected one of: phrase, seedqr, entropy, xpub, master_xpub, fingerprint, path, wif, xprv",
             subkey_tok
         ))
     })?;
@@ -275,6 +290,8 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
             subkeys.as_slice(),
             [SlotSubkey::Phrase, SlotSubkey::Path]
                 | [SlotSubkey::Phrase, SlotSubkey::Fingerprint, SlotSubkey::Path]
+                | [SlotSubkey::Seedqr, SlotSubkey::Path]
+                | [SlotSubkey::Seedqr, SlotSubkey::Fingerprint, SlotSubkey::Path]
         );
 
         if has_secret && has_watch && !exempted_v0_19_0 {
@@ -315,6 +332,7 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
     matches!(
         set,
         [Phrase]
+            | [Seedqr]
             | [Entropy]
             | [Xpub]
             | [Wif]
@@ -328,6 +346,8 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
             | [Xpub, MasterXpub, Fingerprint, Path]
             | [Phrase, Path]
             | [Phrase, Fingerprint, Path]
+            | [Seedqr, Path]
+            | [Seedqr, Fingerprint, Path]
     )
 }
 
@@ -370,6 +390,7 @@ mod tests {
 
     declare_slot_subkey_variants!(
         Phrase,
+        Seedqr,
         Entropy,
         Xpub,
         MasterXpub,
@@ -440,6 +461,27 @@ mod tests {
             parse_slot_input("@1.entropy=0102").unwrap(),
             slot(1, SlotSubkey::Entropy, "0102")
         );
+    }
+    /// v0.31.3 — `@N.seedqr=<digit-string>` parses as a typed
+    /// `SlotSubkey::Seedqr`. The decode itself is deferred to slot-emit
+    /// time inside `cmd/bundle.rs` (et al.); the parser is value-shape-agnostic.
+    #[test]
+    fn parse_happy_seedqr() {
+        let digits = "000100020003000400050006000700080009001000110012";
+        assert_eq!(
+            parse_slot_input(&format!("@0.seedqr={digits}")).unwrap(),
+            slot(0, SlotSubkey::Seedqr, digits)
+        );
+    }
+    /// v0.31.3 — `@N.seedqr=-` triggers the existing stdin-sentinel
+    /// pathway (`apply_slot_stdin`) because `Seedqr.is_secret_bearing()`
+    /// returns true.
+    #[test]
+    fn parse_seedqr_stdin_sentinel() {
+        let parsed = parse_slot_input("@0.seedqr=-").unwrap();
+        assert_eq!(parsed.subkey, SlotSubkey::Seedqr);
+        assert!(parsed.is_stdin_sentinel(),
+            "@0.seedqr=- must be a stdin sentinel; got is_stdin_sentinel()=false");
     }
     #[test]
     fn parse_happy_xpub() {
@@ -548,6 +590,13 @@ mod tests {
     #[test]
     fn validate_single_phrase_passes() {
         validate_slot_set(&[slot(0, SlotSubkey::Phrase, "x")]).unwrap();
+    }
+
+    /// v0.31.3 — `[Seedqr]` alone is legal (parallels `[Phrase]`; decode
+    /// happens at slot-emit time so structural validation is content-blind).
+    #[test]
+    fn validate_single_seedqr_passes() {
+        validate_slot_set(&[slot(0, SlotSubkey::Seedqr, "x")]).unwrap();
     }
 
     #[test]
@@ -710,6 +759,47 @@ mod tests {
             slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
         ])
         .unwrap();
+    }
+
+    /// v0.31.3 — `[Seedqr, Path]` parallels `[Phrase, Path]` per the v0.19.0
+    /// SPEC §6.6.b exemption (non-canonical-descriptor explicit-origin
+    /// form). Decode happens at slot-emit time; the structural validator
+    /// is content-blind.
+    #[test]
+    fn validate_seedqr_plus_path_passes_v0_19_0() {
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Seedqr, "<digit-string>"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+
+    /// v0.31.3 — `[Seedqr, Fingerprint, Path]` parallels
+    /// `[Phrase, Fingerprint, Path]`.
+    #[test]
+    fn validate_seedqr_plus_fingerprint_plus_path_passes_v0_19_0() {
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Seedqr, "<digit-string>"),
+            slot(0, SlotSubkey::Fingerprint, "deadbeef"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+
+    /// v0.31.3 — `[Seedqr, Xpub]` is REFUSED (secret+watch-only conflict;
+    /// Seedqr is secret-bearing per `is_secret_bearing`).
+    #[test]
+    fn validate_seedqr_plus_xpub_still_conflict() {
+        let e = validate_slot_set(&[
+            slot(0, SlotSubkey::Seedqr, "x"),
+            slot(0, SlotSubkey::Xpub, "xpub-stub"),
+        ])
+        .unwrap_err();
+        if let ToolkitError::SlotInputViolation { kind, .. } = e {
+            assert_eq!(kind, "conflict");
+        } else {
+            panic!("expected SlotInputViolation");
+        }
     }
 
     #[test]
