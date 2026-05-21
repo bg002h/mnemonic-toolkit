@@ -191,6 +191,19 @@ pub struct ImportWalletArgs {
     #[arg(long = "bsms-round1", value_name = "FILE")]
     pub bsms_round1: Vec<PathBuf>,
 
+    /// v0.31.0 — BIP-129 encryption-envelope Round-2 decrypt. Reads the
+    /// session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512
+    /// key derivation + AES-256-CTR decrypt + HMAC-SHA256 verify per
+    /// BIP-129 §Encryption. Combine with `--format bsms` to decrypt
+    /// encrypted Round-2 wallet shares from a Coordinator. Token file
+    /// contents: lowercase ASCII hex (16 chars for STANDARD mode, 32
+    /// chars for EXTENDED mode); leading/trailing whitespace + newlines
+    /// stripped. Encrypted blobs don't carry the `BSMS 1.0` header so
+    /// they don't auto-sniff as BSMS; `--format bsms` is REQUIRED.
+    /// MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
+    #[arg(long = "bsms-encryption-token", value_name = "FILE|-")]
+    pub bsms_encryption_token: Option<PathBuf>,
+
     /// v0.27.0 — make BIP-129 Round-1 SIG verification failures fatal.
     /// Without this flag, verify mismatches emit a stderr NOTICE and proceed
     /// with `signature_verified: false`. With this flag, verify mismatch is
@@ -256,8 +269,22 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     };
 
+    // v0.31.0 — Cycle 7b stdin-contention guard. When the user supplies
+    // BOTH `--blob -` AND `--bsms-encryption-token -`, both would race
+    // for the same stdin channel. The blob read at this site consumes
+    // stdin first, leaving the token read with empty input. Refuse the
+    // dual-stdin combination explicitly per R0 I2.
+    if let Some(token_path) = &args.bsms_encryption_token {
+        if blob_path.as_os_str() == "-" && token_path.as_os_str() == "-" {
+            return Err(ToolkitError::BadInput(
+                "--blob=- and --bsms-encryption-token=- cannot both read from stdin"
+                    .to_string(),
+            ));
+        }
+    }
+
     // Read blob.
-    let blob = read_blob(blob_path, stdin)?;
+    let mut blob = read_blob(blob_path, stdin)?;
 
     // SPEC §6: sniff dispatch.
     let sniff_outcome = sniff_format(&blob);
@@ -792,6 +819,86 @@ electrum|jade|sparrow|specter>"
     // variants don't exist yet). The arms are preserved here for
     // alphabetical-source-grep parity + so per-parser P{N}C diffs touch
     // a SINGLE arm per site (matrix-discipline lock per plan-doc §B.2 #6).
+    // v0.31.0 Cycle 7b — BIP-129 encryption-envelope Round-2 decrypt.
+    // When --bsms-encryption-token is supplied AND --format bsms, decrypt
+    // the wire blob via bsms_crypto BEFORE handing to BsmsParser::parse
+    // (preserves the parser-trait surface; orchestrator owns the
+    // cross-cycle integration).
+    //
+    // BIP-129 wire shape (§Encryption line 84-85):
+    //   wire = hex(MAC || ciphertext)
+    //   MAC  = HMAC-SHA256(HMAC_KEY, hex_ascii(TOKEN) || plaintext)
+    //   IV   = first 16 bytes of MAC
+    //   HMAC_KEY = SHA256(ENCRYPTION_KEY)
+    //   ENCRYPTION_KEY = PBKDF2-SHA512("No SPOF", TOKEN_raw, 2048, 32)
+    //
+    // AE ordering: BIP-129 §Encryption line 165 = Encrypt-and-MAC →
+    // decrypt FIRST, then compute MAC over plaintext, then compare to
+    // received MAC. AES-CTR has no padding-oracle exposure under this
+    // ordering. MAC compare uses byte-by-byte equality: single-attempt
+    // non-interactive CLI flow has no timing-oracle exposure (the
+    // process exits on first mismatch; no repeated probe surface).
+    if format_str == "bsms" {
+        if let Some(token_path) = &args.bsms_encryption_token {
+            let token_hex = read_bsms_token(token_path, stdin)?;
+            let token_raw = hex::decode(&token_hex).map_err(|e| {
+                ToolkitError::BadInput(format!(
+                    "--bsms-encryption-token: token file contents not valid hex: {e}"
+                ))
+            })?;
+            if token_raw.len() != 8 && token_raw.len() != 16 {
+                return Err(ToolkitError::BadInput(format!(
+                    "--bsms-encryption-token: token must be 8 bytes STANDARD (16 hex chars) or 16 bytes EXTENDED (32 hex chars); got {} bytes ({} hex chars)",
+                    token_raw.len(),
+                    token_hex.len(),
+                )));
+            }
+            let blob_hex = std::str::from_utf8(&blob).map_err(|_| {
+                ToolkitError::ImportWalletParse(
+                    "import-wallet: bsms: encrypted Round-2 blob must be valid UTF-8 hex"
+                        .to_string(),
+                )
+            })?;
+            let wire = hex::decode(blob_hex.trim()).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: bsms: encrypted Round-2 wire is not valid hex: {e}"
+                ))
+            })?;
+            if wire.len() < 32 + 1 {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: bsms: encrypted Round-2 wire too short ({} bytes; need MAC (32) + at least 1 ciphertext byte)",
+                    wire.len(),
+                )));
+            }
+            let (mac_recv, ciphertext) = wire.split_at(32);
+            let enc_key = mnemonic_toolkit::bsms_crypto::derive_encryption_key(&token_raw);
+            let hmac_key = mnemonic_toolkit::bsms_crypto::derive_hmac_key(&enc_key);
+            let iv: [u8; 16] = mac_recv[..16]
+                .try_into()
+                .expect("32-byte MAC slice has 16-byte prefix");
+            let plaintext = mnemonic_toolkit::bsms_crypto::decrypt(ciphertext, &enc_key, &iv)
+                .map_err(|e| ToolkitError::ImportWalletParse(format!("import-wallet: bsms: {e}")))?;
+            let mac_expected = mnemonic_toolkit::bsms_crypto::compute_mac(
+                &hmac_key,
+                &token_hex,
+                &plaintext,
+            );
+            if mac_recv != mac_expected.as_slice() {
+                return Err(ToolkitError::BsmsMacMismatch {
+                    token_len_hex: token_hex.len(),
+                });
+            }
+            writeln!(
+                stderr,
+                "notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width {} hex chars; MAC verified)",
+                token_hex.len(),
+            )
+            .map_err(ToolkitError::Io)?;
+            // Replace blob with the decrypted plaintext for downstream parser.
+            blob = plaintext.to_vec();
+        }
+    }
+
     let mut parsed: Vec<ParsedImport> = match format_str {
         "bsms" => BsmsParser::parse(&blob, stderr)?,
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
@@ -1782,6 +1889,25 @@ fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Vec<u8>, ToolkitE
     } else {
         fs::read(path).map_err(ToolkitError::Io)
     }
+}
+
+/// v0.31.0 Cycle 7b — read the BIP-129 session TOKEN from a file or stdin.
+/// Returns the lowercased + whitespace-stripped hex string. Mirrors
+/// `read_blob`'s `path.as_os_str() == "-"` precedent.
+fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, ToolkitError> {
+    let raw = if path.as_os_str() == "-" {
+        let mut buf = String::new();
+        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
+        buf
+    } else {
+        fs::read_to_string(path).map_err(|e| {
+            ToolkitError::BadInput(format!(
+                "--bsms-encryption-token: cannot read token file {}: {e}",
+                path.display()
+            ))
+        })?
+    };
+    Ok(raw.trim().to_lowercase())
 }
 
 fn hex_lower(bytes: &[u8]) -> String {

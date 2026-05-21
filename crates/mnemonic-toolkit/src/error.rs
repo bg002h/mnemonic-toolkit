@@ -20,6 +20,14 @@ pub enum ToolkitError {
     /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
     Bip388VerifyDistinctness,
     Bitcoin(BitcoinErrorKind),
+    /// v0.31.0 — `mnemonic import-wallet --format bsms --bsms-encryption-token <FILE|->`
+    /// decrypted a BIP-129 encryption-envelope wire blob but the HMAC-SHA256
+    /// MAC verify failed: either the supplied TOKEN is wrong, or the wire
+    /// blob has been tampered with. Per BIP-129 §Encryption (Encrypt-and-MAC
+    /// ordering), the MAC is recomputed over decrypted plaintext and
+    /// compared to the received MAC (first 32 bytes of wire). Exit 2 —
+    /// authentication-class refusal (typed per FOLLOWUP body recommendation).
+    BsmsMacMismatch { token_len_hex: usize },
     /// v0.27.0 — `mnemonic import-wallet --bsms-round1 <FILE>` parsed a
     /// blob that does not meet BIP-129 §Round 1 record syntax (line count
     /// != 5 after CRLF normalize, line 1 != `BSMS 1.0`, malformed line-3
@@ -431,6 +439,7 @@ impl ToolkitError {
             ToolkitError::Bip388Distinctness { .. } => 2,
             ToolkitError::Bip388VerifyDistinctness => 4,
             ToolkitError::Bitcoin(_) => 1,
+            ToolkitError::BsmsMacMismatch { .. } => 2,
             ToolkitError::BsmsRound1Malformed { .. } => 2,
             ToolkitError::BsmsSignatureMismatch { .. } => 2,
             ToolkitError::BsmsTaprootImportRefused => 2,
@@ -483,6 +492,7 @@ impl ToolkitError {
             ToolkitError::Bip388Distinctness { .. } => "Bip388Distinctness",
             ToolkitError::Bip388VerifyDistinctness => "Bip388VerifyDistinctness",
             ToolkitError::Bitcoin(_) => "Bitcoin",
+            ToolkitError::BsmsMacMismatch { .. } => "BsmsMacMismatch",
             ToolkitError::BsmsRound1Malformed { .. } => "BsmsRound1Malformed",
             ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
             ToolkitError::BsmsTaprootImportRefused => "BsmsTaprootImportRefused",
@@ -540,6 +550,9 @@ impl ToolkitError {
                 "bundle violates BIP-388 distinct-key rule; regenerate with distinct keys".to_string()
             }
             ToolkitError::Bitcoin(e) => crate::friendly::friendly_bitcoin(e),
+            ToolkitError::BsmsMacMismatch { token_len_hex } => format!(
+                "import-wallet: bsms: BIP-129 MAC verification failed (token width {token_len_hex} hex chars; wrong token or tampered ciphertext)"
+            ),
             ToolkitError::BsmsRound1Malformed { reason } => format!(
                 "import-wallet: --bsms-round1: BIP-129 Round-1 record malformed: {reason}"
             ),

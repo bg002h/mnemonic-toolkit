@@ -800,10 +800,16 @@ FOLLOWUP):
 - **BSMS Round-1 token-only** (`wallet-import-bsms-round-1`) — the
   pre-descriptor handshake. No workaround until Round-1 parsing
   ships; the descriptor is not yet assembled at Round-1.
-- **BSMS encrypted envelopes** per BIP-129 §5
-  (`bsms-bip129-encryption-envelope`). Workaround: decrypt
-  out-of-band with the coordinator's key, then feed the plaintext
-  into `import-wallet`.
+- ~~**BSMS encrypted envelopes** per BIP-129 §5~~ — shipped in v0.31.0
+  via `--bsms-encryption-token <FILE|->` (PBKDF2-SHA512 + AES-256-CTR +
+  HMAC-SHA256 per BIP-129 §Encryption; STANDARD + EXTENDED token widths).
+  Encrypted blobs lack the `BSMS 1.0` header so `--format bsms` is
+  REQUIRED. MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
+  Per-Signer TOKEN variants + Round-1 encrypted records deferred to
+  FOLLOWUPs `bsms-encryption-per-signer-tokens` +
+  `bsms-encryption-round1-decrypt-then-verify`. Cross-impl validated
+  against BIP-129 Test Vector 3 (STANDARD-mode Signer 1) in
+  `crates/mnemonic-toolkit/src/bsms_crypto.rs` unit tests.
 - **Sparrow taproot descriptor-passthrough**
   (`sparrow-taproot-descriptor-passthrough-import-support`) — see
   [§4 above](#sparrow-wallet) deferral note.
