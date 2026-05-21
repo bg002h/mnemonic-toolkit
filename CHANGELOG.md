@@ -6,6 +6,49 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.32.2] — 2026-05-21
+
+**SemVer-PATCH release.** `--bsms-encryption-token` is now repeatable, enabling per-Signer BIP-129 encryption tokens (BIP-129 line 74: "one common TOKEN for all Signers, or one per Signer"). Closes `bsms-encryption-per-signer-tokens` FOLLOWUP — the second of the three BIP-129-encryption follow-ons from Cycle 7. Purely additive: a single `--bsms-encryption-token` is unchanged; supplying it multiple times (previously a clap error) now pairs tokens with Signers.
+
+### Changed
+
+- `import-wallet --bsms-encryption-token`: `Option<PathBuf>` → `Vec<PathBuf>` (clap-derive auto-Append, mirroring `--bsms-round1`). Pairing:
+  - **1 token (SHARED)** → decrypts every encrypted Round-1 record + the Round-2 `--blob` (backward-compatible; byte-identical to v0.31.0/v0.32.1).
+  - **N>1 tokens (PER-SIGNER positional)** → `token[i]` decrypts `--bsms-round1` `record[i]`; requires (a) ≥1 record, (b) all records encrypted, (c) `N == record count`, (d) no encrypted Round-2 `--blob`.
+- `verify_bsms_round1_files` takes `tokens: &[BsmsToken]` + the positional pre-checks + per-record token selection.
+- Generalized the single-stdin guard: at most one `--bsms-encryption-token=-`; refuse `--blob=- AND any token=-`.
+
+### Added
+
+- 8 integration cells: positional happy-path; single-token-shared (2 records); count-mismatch refusal; mixed plaintext/encrypted refusal; multi-token + encrypted-Round-2-blob refusal; gap-h (N>1 tokens + 0 records) refusal; per-record-`i` MAC-mismatch attribution; two-stdin-token refusal. (2nd encrypted record built via a generalized `reencrypt_with_token` test helper using the `bsms_crypto` pub primitives.)
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md`: `--bsms-encryption-token` documents repeatability + the shared-vs-positional rules + per-Signer constraints + single-stdin-token rule.
+
+### Behavior preservation
+
+- All single-token paths (Round-1 shared decrypt + Round-2 blob decrypt) are byte-identical to v0.32.1 (the prior 17 encrypted-suite cells + 15 round1 cells green).
+
+### Test totals
+
+- 2206 cells passing; 12 ignored. +8 net (vs v0.32.1 baseline 2198).
+
+### Cross-repo lockstep
+
+GUI lockstep is OPTIONAL (not gate-forced): the GUI `schema_mirror` compares clap flag-NAME parity, and `--bsms-encryption-token`'s name is unchanged — only its `repeating` cardinality changed. Tracked at FOLLOWUP `gui-bsms-encryption-token-repeating-mirror` (GUI v0.17.1: flip the FlagSchema `repeating: false → true` so the GUI can add multiple token rows). Non-blocking.
+
+### Cycle topology
+
+Cycle 16 — seventh cycle of the v0.32+ tier; second of the sequential BIP-129-BSMS arc. SemVer-PATCH (additive). 3 v0.32+ FOLLOWUPs remain (2 Electrum + 1 BIP-129 `bsms-encryption-cross-impl-coinkite-python-smoke`).
+
+### Review
+
+- Plan-doc opus R0: YELLOW 0C/2I/2M (gap-h guard + error-precedence doc + Append-idiom + 2 cells, all folded inline).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.32.1] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: `import-wallet --bsms-round1` now accepts ENCRYPTED Round-1 KEY records (hex `MAC || ciphertext`) in addition to plaintext 5-line records, decrypting them with the shared `--bsms-encryption-token` before the existing BIP-322 signature verify. Closes `bsms-encryption-round1-decrypt-then-verify` FOLLOWUP — the first of the three BIP-129-encryption follow-ons from Cycle 7. Closes the TV-3 decrypt-then-refuse boundary.
