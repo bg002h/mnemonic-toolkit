@@ -2932,10 +2932,21 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (orchestrator decrypt block; currently consumes one token regardless of how many `--bsms-round1` records are also supplied).
 - **What:** v0.31+: extend the orchestrator decrypt to accept per-Signer tokens (e.g., `--bsms-encryption-token <FILE>` becomes repeatable + each invocation pairs with a `--bsms-round1 <FILE>` record). Required API: change the flag from `Option<PathBuf>` to `Vec<PathBuf>` (CLI break — careful with the existing single-flag consumers); add per-record token-to-Signer pairing logic.
 - **Why deferred:** Cycle 7 scope was BIP-129 §Encryption MVP (shared TOKEN). Per-Signer variants are a separate orchestration with their own UX design (how does the user know which token goes with which Signer's record?). Worth its own cycle.
-- **Status:** `open`
+- **Status:** `resolved 72a55f1` — mnemonic-toolkit-v0.32.2 Cycle 16. `--bsms-encryption-token` → `Vec<PathBuf>` (clap auto-Append). Pairing: 1 token = SHARED (decrypts all encrypted Round-1 records + Round-2 blob; backward-compatible byte-identical); N>1 = PER-SIGNER positional (token[i] ↔ --bsms-round1 record[i]). Edge guards: gap-h (N>1 + 0 records → BadInput), multi-token + encrypted-Round-2-blob → BadInput (single share = single token), mixed plaintext/encrypted under N>1 → BadInput, single-stdin-token guard generalized. `verify_bsms_round1_files(tokens: &[BsmsToken])` with positional pre-checks (count + all-encrypted) + per-record token selection. 8 integration cells; 2206 total. SemVer-PATCH (purely additive — no break; the FOLLOWUP-body "CLI break" framing was loose). End-of-cycle opus GREEN 10/10 (per-token MAC-verify isolation audited).
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
-- **Companion:** parent `bsms-bip129-encryption-envelope` (shared-TOKEN resolved v0.31.0).
+- **Companion:** parent `bsms-bip129-encryption-envelope` (shared-TOKEN resolved v0.31.0); follow-on `gui-bsms-encryption-token-repeating-mirror` (optional GUI v0.17.1).
+
+### `gui-bsms-encryption-token-repeating-mirror` — GUI repeating flip for the v0.32.2 per-Signer token
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.32.2 Cycle 16 close. The toolkit made `--bsms-encryption-token` repeatable; the GUI's `FlagSchema` for it is `repeating: false` (`src/schema/mnemonic.rs:1736`). The schema_mirror gate compares flag-NAME parity only (the flag name is unchanged), so this does NOT auto-fire — GUI lockstep is OPTIONAL.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`--bsms-encryption-token` FlagSchema `repeating` field); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `v0.32.2`.
+- **What:** Flip `repeating: false → true` so the GUI's flag-repeat UI can add multiple `--bsms-encryption-token` rows for per-Signer mode; bump the toolkit pin. GUI v0.17.1 (PATCH; GUI-functional, not gate-forced).
+- **Why deferred:** Non-blocking (gate not tripped). Bundle with the next GUI lockstep OR ship standalone when convenient.
+- **Status:** `open`
+- **Tier:** `v0.32+-gui-help-only`
+- **Tags:** none
+- **Companion:** parent `bsms-encryption-per-signer-tokens` (resolved v0.32.2).
 
 
 ### `bsms-encryption-round1-decrypt-then-verify` — encrypted Round-1 KEY records
