@@ -6,6 +6,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.0] — 2026-05-21
+
+**SemVer-MINOR release.** New `--bsms-encryption-token <FILE|->` flag on `mnemonic import-wallet` for BIP-129 §Encryption envelope decrypt. Closes Cycle 7 (`bsms-bip129-encryption-envelope` FOLLOWUP).
+
+### Added
+
+- **`mnemonic import-wallet --bsms-encryption-token <FILE|->`** — BIP-129 encryption-envelope Round-2 decrypt. Reads session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512(`b"No SPOF"`, TOKEN_raw, 2048, 32) → ENCRYPTION_KEY → SHA256(EK) → HMAC_KEY → AES-256-CTR (Ctr128BE; full 16-byte IV as 128-bit BE counter) + HMAC-SHA256 verify per BIP-129 §Encryption. Combine with `--format bsms`. Token width: 16 hex chars STANDARD (8 raw bytes) or 32 hex chars EXTENDED (16 raw bytes). Encrypted blobs lack the `BSMS 1.0` header so `--format bsms` is REQUIRED for the encrypted path. Stdin-contention guard refuses dual `--blob=- + --bsms-encryption-token=-`.
+- New `BsmsMacMismatch { token_len_hex }` `ToolkitError` variant (typed per FOLLOWUP body recommendation; exit 2). Alphabetical insertion BEFORE `BsmsRound1Malformed`. Stderr template: `error: import-wallet: bsms: BIP-129 MAC verification failed (token width N hex chars; wrong token or tampered ciphertext)`.
+- Stderr NOTICE on successful decrypt: `notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width N hex chars; MAC verified)`.
+- New library module `mnemonic_toolkit::bsms_crypto` (shipped pre-tag in Cycle 7a `62da111`): pub `derive_encryption_key` / `derive_hmac_key` / `compute_mac` / `decrypt` / `encrypt` + library-local `BsmsCryptoError`. 20 unit cells incl. BIP-129 TV-3 cross-validation.
+- New Cargo dep `ctr = "0.9"` (added Cycle 7a; sibling of `cbc` from RustCrypto block-modes family).
+- 12 new integration cells in `tests/cli_import_wallet_bsms_encrypted.rs`.
+- New fixtures: `bsms-encrypted-standard-tv3.dat` + `bsms-encrypted-standard-tv3-token.hex` (BIP-129 §Test Vectors STANDARD-mode Signer 1 wire + token).
+
+### Documentation
+
+- Chapter-41 `mnemonic import-wallet` flag table gains `--bsms-encryption-token` row.
+- Chapter-41 stderr-templates table gains BIP-129 decrypt NOTICE + MAC-mismatch Error rows.
+- Chapter-45 §"BSMS encrypted envelopes" deferral converted to v0.31.0-shipped strikethrough with cross-impl-vs-BIP-129-TV-3 citation.
+
+### Architectural notes
+
+Cycle 7 executed as two-session split (7a: library + R0 + recon; 7b: CLI + parser integration + ship). Cycle 7a opus R0 caught the `Ctr64BE` vs `Ctr128BE` critical pre-implementation. Cycle 7b opus R0 (YELLOW 2C/7I/4M) caught the orchestrator-insertion-site mismatch + `BsmsMacMismatch` alphabetical-slot off-by-one before integration. Both R0 cycles paid off the discipline.
+
+Library-side primitives verified byte-exact against BIP-129 + Coinkite Python ref. TV-3 cross-validation locked in unit cells: ENCRYPTION_KEY=`7673ffd9…`, HMAC_KEY=`3d4c4228…`, MAC=`fbdbdb64…`, IV=`fbdbdb64…` (first 16 of MAC). The full 304-hex-char TV-3 wire is the load-bearing integration fixture.
+
+NOTE on TV-3 plaintext shape: BIP-129 TV-3 is a Round-1 KEY record (5-line). The current `BsmsParser` handles Round-2 (4-line/6-line). The decrypt-success-then-parser-refusal boundary is documented in `tv3_decrypt_emits_notice_advisory`. A future cycle (`bsms-encryption-round1-decrypt-then-verify`) adds Round-1 decrypt-then-verify integration.
+
+### FOLLOWUP closure
+
+- **Closed:** `bsms-bip129-encryption-envelope` (resolved by Cycle 7 / v0.31.0; canonical entry).
+- **Closed (cross-cite):** `wallet-import-bsms-encrypted` (v0.27+ predecessor; superseded by the canonical entry).
+
+### Newly filed FOLLOWUPs
+
+- `bsms-encryption-per-signer-tokens` — per-Signer TOKEN variants (BIP-129 line 74 allows per-Signer or shared TOKEN; Cycle 7b ships shared-TOKEN only). Tier `v0.31+`.
+- `bsms-encryption-round1-decrypt-then-verify` — encrypted Round-1 KEY records (Cycle 7b ships encrypted Round-2 only). Tier `v0.31+`.
+- `bsms-encryption-cross-impl-coinkite-python-smoke` — automated cross-impl test against Coinkite Python ref (Cycle 7b cross-checks against the locked recon-dossier values; automated cross-impl smoke is a separate test harness). Tier `v0.31+`.
+
+### Tests
+
+- 71 lib + 743 integration cells (incl. 12 new + 20 Cycle 7a bsms_crypto); clippy clean; manual lint 6/6 PASS.
+
+---
+
 ## mnemonic-toolkit [0.30.1] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: encrypted Electrum wallets (`use_encryption: true`) now import as watch-only instead of refusing at parse time. Closes Cycle 6 (`wallet-import-electrum-encrypted` FOLLOWUP, resolved as watch-only-passthrough per Cycle 6b R0 fold).
