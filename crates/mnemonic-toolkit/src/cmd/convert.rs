@@ -854,8 +854,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // NB: `seedqr` is intentionally absent from the `--to`
             // PossibleValuesParser list (L207) — it is an INPUT-only node
             // (`--from seedqr=`), so clap rejects `--to seedqr` at parse-time
-            // (exit 2). Emitting a SeedQR digit-string is the job of
-            // `mnemonic seedqr encode`.
+            // (clap's raw exit 2 is remapped to exit 64 / EX_USAGE by the
+            // sysexits main wrapper). Emitting a SeedQR digit-string is the
+            // job of `mnemonic seedqr encode`.
             targets.push(n);
         }
     }

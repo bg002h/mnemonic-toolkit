@@ -6,6 +6,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.6] — 2026-05-21
+
+**SemVer-PATCH release.** Surface unification + deprecation: the SeedQR digit-string input is unified into the shared `--from <node>=<value>` grammar via a new `NodeType::Seedqr`. `mnemonic convert --from seedqr=<digits> --to <node>` is now wired end-to-end, and `mnemonic seedqr decode` gains the canonical `--from seedqr=<digits>` form. The original `--digits` flag is preserved as a deprecated alias (stderr notice; removal in a future release). Closes `seedqr-digits-from-input-unification` FOLLOWUP filed at v0.30.0 Cycle 5 plan-doc R0 §I4.
+
+### Added
+
+- `NodeType::Seedqr` in `cmd/convert.rs` (declared at enum position 1, after Phrase). First-class input node through `classify_edge` + `is_supported_direct_edge` + `compute_outputs`. Supported edges: `(Seedqr, {Phrase, Entropy, Xpub, Xprv, Fingerprint, Ms1, Wif, Bip38, Address})`. The `(Seedqr, Phrase)` edge IS permitted (the canonical decode) — distinct from the `(Phrase, Phrase)` identity barrier.
+- `mnemonic seedqr decode --from seedqr=<VALUE|->` canonical input form. Only the `seedqr` node type is accepted on `seedqr decode --from`; other node types are refused (exit 1).
+- 12 integration cells in `tests/cli_seedqr_from_unification.rs` covering both surfaces (convert seedqr→phrase/entropy/xpub + stdin + invalid-digits + `--to seedqr` clap rejection; seedqr-decode canonical `--from` + stdin + `--digits` deprecation notice + both-flags clap conflict + required-input + non-seedqr-node refusal).
+
+### Changed
+
+- `mnemonic seedqr decode`: `--digits` is now DEPRECATED. Still accepted, but emits a stderr notice (`--digits is deprecated; use --from seedqr=<VALUE|-> instead`) and is mutually exclusive with `--from` (clap-level `conflicts_with`; exit 64 EX_USAGE at parse-time). Exactly one of `--from seedqr=` or `--digits` is required.
+- `NodeType::Seedqr` is secret-bearing (decodes to a BIP-39 phrase) → added to `is_secret_bearing`, `secret_taxonomy::SECRET_NODE_TYPES`, and the `declare_node_type_variants!` parity macro. `is_argv_secret_bearing` auto-flows → `--from seedqr=` emits the argv-leakage advisory. `edge_uses_pbkdf2` extended to include Seedqr (decodes to phrase → PBKDF2 derivation path).
+- `--to seedqr` is intentionally absent from the `--to` PossibleValuesParser list (input-only node); clap rejects it at parse-time (exit 64).
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md`: `mnemonic convert` node list + `--from` / `--to` rows document the `seedqr` input-only node. `mnemonic seedqr decode` synopsis + flags + worked-example switched to the canonical `--from seedqr=` form; `--digits` documented as deprecated. Flag-coverage lint gate green.
+
+### Test totals
+
+- 2174 cells passing; 12 ignored. +12 net (vs v0.31.5 baseline 2162).
+
+### Cross-repo lockstep
+
+`--from` is a NET-NEW flag name on `seedqr decode` — this trips the GUI `schema_mirror` flag-NAME-parity gate (unlike the value-content additions of Cycles 10/12). Paired GUI release `mnemonic-gui-v0.16.2` (Cycle 13b) adds `--from` to the `seedqr-decode` SubcommandSchema + bumps the toolkit pin. Tracked at FOLLOWUP `gui-seedqr-decode-from-flag-mirror`.
+
+### Cycle topology
+
+Cycle 13 — fourth cycle of the v0.32+ tier (first of the sequential SeedQR-completion pair; `seedqr-compact-variant` remains for the MINOR v0.32.0 cycle). Toolkit side; GUI lockstep follows as 13b.
+
+### Review
+
+- Plan-doc opus R0: YELLOW 0C/3I/1M — all folded inline pre-Phase-2 (I1 substitution-cascade ordering; I2 `flag_is_secret("--digits")` preserved; I3 clap-level conflicts_with; M1 stdin end-to-end cell). NOTE: the substitution-to-Phrase approach (R0 I1) was later replaced during Phase 2 with native Seedqr edge-wiring after discovering `(Phrase, Phrase)` is an identity barrier — the `(Seedqr, Phrase)` decode must remain distinct.
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.31.5] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: `mnemonic seedqr {encode, decode}` word-count support widened from `{12, 24}` → `{12, 15, 18, 21, 24}` (the complete BIP-39 word-count set). Closes `seedqr-15-18-21-word-counts` FOLLOWUP filed at v0.30.0 Cycle 5 brainstorm close.
