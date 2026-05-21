@@ -2574,14 +2574,17 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-20, v0.28.0 cycle close (Phase P14A). Deferred from Phase P6 per the Q2 lock; filed forward for v0.28+.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/electrum.rs` (v0.28.0 P6 ships plaintext Electrum 4.x wallet-file ingest; encrypted variants short-circuit refuse at parse time).
-  - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — references this slug.
-- **What:** v0.28+: decrypt Electrum's stretched-key envelope (Electrum's bespoke AES-based wallet encryption per `electrum.crypto.pw_decode` / `pw_encode`), then route plaintext through the existing Electrum parser. Alternatives: (a) implement the Electrum decryption primitive in-process (PBKDF2 + AES-CBC over the wallet file body); (b) refuse with a stderr pointer telling users to decrypt out-of-band via Electrum CLI (`electrum decrypt <path>`) and re-import the plaintext. Option (b) is the v0.28.0 default per Q2 lock — refusal text at parse time directs users at this slug.
-- **Why deferred:** Phase P6 cycle scope was plaintext Electrum 4.x wallet-file ingest only (per Q2 lock). Electrum's encryption is a distinct cryptographic surface; user-direction was to defer rather than vendor Electrum's crypto stack inline. The out-of-band decrypt-via-Electrum-CLI workflow covers the common case.
-- **Status:** open
+  - `crates/mnemonic-toolkit/src/wallet_import/electrum.rs` (v0.28.0 P6 ships plaintext Electrum 4.x wallet-file ingest; v0.30.1 downgrades the encrypted-wallet refusal at L305-313 to a watch-only-passthrough advisory).
+  - `docs/manual/src/45-foreign-formats.md` §"Encrypted wallets" — documents the watch-only-passthrough behavior + the out-of-band `electrum --decrypt-wallet` recipe for seed extraction.
+- **What:** v0.28+ filing assumed full decrypt was needed. Cycle 6b R0 opus review (2026-05-21) corrected this: per Electrum's `electrum/keystore.py`, the field-level encryption protects ONLY `keystore.{seed,xprv,passphrase,keypairs}`. The fields the toolkit parser reads (`keystore.{xpub,derivation,root_fingerprint,label}` + multisig analogues) are PLAINTEXT under both encrypted and unencrypted wallets. The pre-v0.30.1 refusal was over-restrictive in principle — watch-only import has all the material it needs without touching the encrypted fields. v0.30.1 ships the watch-only-passthrough: refusal → stderr NOTICE advisory + parse continues with the plaintext xpub/derivation/etc.
+- **Scheme citation correction:** the original body cited "stretched-key envelope" and "PBKDF2 + AES-CBC over the wallet file body". Both claims were wrong:
+  - Electrum's actual field-level scheme is **`sha256d(password) + AES-256-CBC + PKCS7 + base64`** (no key-stretching; no PBKDF2). Verified at Cycle 6 P0 recon §A1 against `electrum/crypto.py::_pw_decode_raw`.
+  - The "wallet file body" claim conflated Format A (field-level encryption inside plaintext JSON; Cycle 6 scope) with Format B (whole-file storage encryption with version-byte + 4-byte MAC; out of scope, filed as `wallet-import-electrum-encrypted-storage-format-b`).
+- **Status:** resolved (watch-only-passthrough per Cycle 6b R0 fold; v0.30.1).
+- **Resolved by:** `mnemonic-toolkit-v0.30.1` (`11fd38f`). End-of-cycle opus review of Cycle 6a brainstorm (verdict RED → Path A fold; persisted at `design/agent-reports/v0_31_0-brainstorm-r0-review.md`); plan-doc R0 YELLOW (4 mechanical Importants folded inline; persisted at `design/agent-reports/v0_30_1-plan-doc-r0-review.md`).
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-electrum` (resolved v0.28.0).
+- **Companion:** parent `wallet-import-electrum` (resolved v0.28.0). Cycle 6 child slugs: `electrum-crypto-seed-extraction-subcommand` (future use of the 6a-shipped library) + `wallet-import-electrum-encrypted-storage-format-b` (Format B carve-out).
 
 ### `wallet-import-format-mismatch-matrix-completion` — cross-format mismatch symmetry
 
@@ -2829,3 +2832,27 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.30+`
 - **Tags:** none
 - **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+
+
+### `electrum-crypto-seed-extraction-subcommand` — future use of v0.30.1's electrum_crypto library for seed extraction
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.1 Cycle 6b close (the Path A R0 fold made the 6a-shipped library unused-by-CLI).
+- **Where:** `crates/mnemonic-toolkit/src/electrum_crypto.rs` (library shipped Cycle 6a `1724477`; 18 unit cells + cross-impl smoke vs Python `cryptography` backend). Currently referenced by no CLI module.
+- **What:** Surface a new CLI consumer for the `electrum_crypto::decrypt_field` primitive. Two candidate shapes: (a) extend `mnemonic convert` with a new `--from electrum-encrypted-seed=<base64>` source; (b) dedicated `mnemonic electrum-decrypt` subcommand taking an encrypted seed string + password and emitting the plaintext seed. The library's `derive_key` + `decrypt_field` + `encrypt_field` (symmetric helper) are all production-ready; only the CLI integration is missing.
+- **Why deferred:** Cycle 6 was reinterpreted as watch-only-passthrough (no decryption needed for import-wallet per opus R0). The library is correct but has no user-visible surface yet. A future cycle ships the consumer when the seed-extraction use case is prioritized.
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `wallet-import-electrum-encrypted` (resolved v0.30.1 as watch-only-passthrough).
+
+
+### `wallet-import-electrum-encrypted-storage-format-b` — Electrum Format B whole-file storage encryption
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.1 Cycle 6b close (Cycle 6 P0 recon §A2 distinguished Format A field-level encryption (in-scope, resolved as watch-only-passthrough) from Format B whole-file storage encryption (out-of-scope)).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/electrum.rs` (sniff + parse pipeline). Format B wallets are NOT JSON-parseable at the file level; the current parser fails at JSON parse with a different error.
+- **What:** Per Electrum's `electrum/crypto.py::pw_encode_with_version_and_mac`, Format B encrypts the ENTIRE wallet file body (not just sensitive fields). Wire format: `base64(version_byte || iv (16 bytes) || aes_cbc(plaintext + PKCS7, key, iv) || mac (4 bytes))` where MAC = `sha256(plaintext)[:4]`. To support Format B, the toolkit would need: (a) sniff to detect a non-JSON-parseable base64 blob as candidate Format B; (b) decrypt-and-parse-as-JSON pipeline; (c) password-input CLI surface (the very `--decrypt-password*` family Cycle 6b dropped, but here actually needed). Format B + Format A field-encryption together would cover Electrum's full encryption surface.
+- **Why deferred:** Cycle 6 scope was Format A only. Format B requires the password-flag infrastructure; the v0.30.1 fix only addressed the field-level case (which turned out not to need a password at all under the watch-only-passthrough reframing).
+- **Status:** `open`
+- **Tier:** `v0.31+`
+- **Tags:** `wallet`
+- **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the Format B carve-out).
