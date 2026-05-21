@@ -2850,10 +2850,22 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` slot-input pipeline + `crates/mnemonic-toolkit/src/slot_input.rs` (slot value-source variants).
 - **What:** Add a new slot input source `--slot @N.seedqr=<file>` that reads a SeedQR file at slot-emit time and decodes it inline (via the `seedqr::decode` library primitive) into a BIP-39 phrase, then feeds the phrase into the normal slot machinery. Tightens the integration between SeedQR and bundle emission without forcing a two-step `mnemonic seedqr decode | mnemonic bundle --slot @N.phrase=-` shell pipeline.
 - **Why deferred:** Cycle 5 locked the seedqr surface as a standalone subcommand (paralleling seed-xor/slip39/final-word). Bundle-slot integration is a separate cross-subcommand wiring decision; user-direction may prefer the standalone form indefinitely.
-- **Status:** `open` (defer-to-future-decision; not committed to the next cycle).
+- **Status:** `resolved b08645b` — mnemonic-toolkit-v0.31.3 Cycle 10. New `SlotSubkey::Seedqr` variant declared at enum position 1 (after Phrase, before Entropy) so derived `Ord` produces ascending-sorted legal-set patterns `[Seedqr]`, `[Seedqr, Path]`, `[Seedqr, Fingerprint, Path]` mirroring the v0.19.0 SPEC §6.6.b exception for Phrase. `--slot @N.seedqr=<digit-string>` is now accepted on `mnemonic bundle` + `mnemonic verify-bundle` (refused on `mnemonic export-wallet` per the SPEC §3 watch-only-by-definition invariant). Value is decoded inline via `mnemonic_toolkit::seedqr::decode` at slot-emit time; resulting phrase materializes through the same `derive_full` + `ResolvedSlot` path as `--slot @N.phrase=`. `cmd/seedqr.rs::map_seedqr_error` promoted to `pub(crate)` for canonical error-text reuse across the 3 consumer sites. 15 new cells (9 integration + 6 lib unit); 2150 cells passing total. End-of-cycle opus review GREEN 0C/0I/0M. SemVer-PATCH per the GUI schema_mirror gate scope clarification (flag-NAME parity gate doesn't fire on value-content additions). 1 follow-on FOLLOWUP filed: `gui-seedqr-slot-subkey-help-mirror`.
 - **Tier:** `v0.30+`
 - **Tags:** none
-- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0); follow-on `gui-seedqr-slot-subkey-help-mirror` (optional GUI help-text mirror; non-blocking).
+
+
+### `gui-seedqr-slot-subkey-help-mirror` — optional mnemonic-gui mirror of the v0.31.3 seedqr slot subkey
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.31.3 Cycle 10 close. Cycle 10 R0 I1 fold pivoted the SemVer from MINOR to PATCH after verifying that the GUI `schema_mirror` integration test compares clap flag-NAME parity, NOT value-enumeration content. A new `--slot` value-enumeration token (`seedqr`) therefore does NOT auto-fire the drift gate. Filing this entry as the load-bearing tracker for the optional GUI-side help-text + dropdown surface update.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (slot-subkey help-text + dropdown enumerations if any); `mnemonic-gui/pinned-upstream.toml` toolkit pin bump to `mnemonic-toolkit-v0.31.3`.
+- **What:** Update the GUI schema-mirror's `--slot` help-text to enumerate `seedqr` + extend any dropdown surfaces that expose the slot-subkey list. Bump the toolkit pin so GUI users can invoke `--slot @N.seedqr=<digit-string>` via the GUI's input controls. Bump GUI version to `v0.16.1` (PATCH; GUI-internal help-text + pin bump only — no schema-mirror gate violation).
+- **Why deferred:** The schema_mirror gate compares clap flag-NAME parity, not value-enumeration content; the new `seedqr` token does NOT fire the gate. GUI help/dropdown improvement is desirable for discoverability but not blocking.
+- **Status:** `open`
+- **Tier:** `v0.32+-gui-help-only`
+- **Tags:** none
+- **Companion:** parent `seedqr-bundle-slot-integration` (resolved v0.31.3).
 
 
 ### `seedqr-digits-from-input-unification` — extend `FromInput` with `seedqr=<value>` and deprecate `--digits`
