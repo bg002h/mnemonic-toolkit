@@ -97,6 +97,6 @@ Read design/CYCLE_6_KICKOFF.md and proceed with Cycle 6b (electrum-encrypted par
 
 ## Repo state at session-end (post-Cycle-6a)
 
-- mnemonic-toolkit master HEAD: TBD (post-Phase-1 commit).
+- mnemonic-toolkit master HEAD: `1724477` (Cycle 6a Phase 1 — electrum_crypto.rs library + 18 unit cells).
 - mnemonic-gui master HEAD: `5582e22` (Cycle 5 paired GUI commit, unchanged from Cycle 5 close).
 - Both Cycle 5 tags pushed; CI green.
