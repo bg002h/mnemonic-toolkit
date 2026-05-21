@@ -47,7 +47,7 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_eighteen_subcommands() {
+fn gui_schema_lists_all_twenty_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
@@ -59,9 +59,10 @@ fn gui_schema_lists_all_eighteen_subcommands() {
     // `inspect` (describe-card-contents). v0.26.0 lands three features in
     // lockstep: `compare-cost` (wsh-vs-tr per-spending-condition cost), the
     // `xpub-search` umbrella (4 flattened modes), and `import-wallet`
-    // (third-party wallet blob → bundle). After all three, the list carries
+    // (third-party wallet blob → bundle). After all three, the list carried
     // 18 subcommands: 12 base + `compare-cost` + 4 xpub-search-* +
-    // `import-wallet`. gui-schema + help filtered out.
+    // `import-wallet`. v0.30.0 adds `seedqr-decode` + `seedqr-encode`
+    // (SeedQR encode/decode); total is now 20. gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
@@ -76,6 +77,8 @@ fn gui_schema_lists_all_eighteen_subcommands() {
             "repair",
             "seed-xor-combine",
             "seed-xor-split",
+            "seedqr-decode",
+            "seedqr-encode",
             "slip39-combine",
             "slip39-split",
             "verify-bundle",
@@ -84,7 +87,7 @@ fn gui_schema_lists_all_eighteen_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 18 user-facing subcommands must appear (nested split/combine \
+        "all 20 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
