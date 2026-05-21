@@ -29,9 +29,17 @@ pub enum SeedqrAction {
 
 #[derive(Args, Debug, Clone)]
 pub struct SeedqrDecodeArgs {
-    /// SeedQR numeric digit string (48 or 96 ASCII digits). `-` reads from stdin.
-    #[arg(long = "digits", value_name = "VALUE|-")]
-    pub digits: String,
+    /// DEPRECATED (v0.31.6): use `--from seedqr=<VALUE|->` instead.
+    /// SeedQR numeric digit string (48/60/72/84/96 ASCII digits). `-` reads
+    /// from stdin. Emits a stderr deprecation warning when used; will be
+    /// removed in a future release.
+    #[arg(long = "digits", value_name = "VALUE|-", conflicts_with = "from")]
+    pub digits: Option<String>,
+
+    /// Canonical input form (v0.31.6): `--from seedqr=<VALUE|->`. Only the
+    /// `seedqr` node type is accepted on `seedqr decode`. `-` reads from stdin.
+    #[arg(long = "from", value_name = "seedqr=<VALUE|->", value_parser = parse_from_input)]
+    pub from: Option<FromInput>,
 
     /// Write JSON envelope to PATH (stdout empty when set).
     #[arg(long = "json-out", value_name = "PATH")]
@@ -93,16 +101,48 @@ fn run_decode<R: Read, W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
-    // Argv-leakage advisory for inline form.
-    if args.digits != "-" {
-        secret_in_argv_warning(stderr, "--digits ", "--digits -");
-    }
+    // v0.31.6 — resolve the input source. Clap `conflicts_with` already
+    // guarantees `--digits` and `--from` are not BOTH set; here we handle
+    // the (a) `--digits` deprecated path, (b) `--from seedqr=` canonical
+    // path, (c) neither-supplied required-input refusal.
+    let raw_value: String = match (&args.digits, &args.from) {
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents --digits + --from"),
+        (None, None) => {
+            return Err(ToolkitError::BadInput(
+                "seedqr decode requires an input: --from seedqr=<VALUE|-> (canonical) or --digits <VALUE|-> (deprecated)".into(),
+            ));
+        }
+        (Some(d), None) => {
+            // Deprecated `--digits` path. Emit a stderr deprecation notice.
+            let _ = writeln!(
+                stderr,
+                "notice: --digits is deprecated; use --from seedqr=<VALUE|-> instead (--digits will be removed in a future release)"
+            );
+            if d != "-" {
+                secret_in_argv_warning(stderr, "--digits ", "--digits -");
+            }
+            d.clone()
+        }
+        (None, Some(fi)) => {
+            // Canonical `--from seedqr=` path. Reject non-seedqr node types.
+            if fi.node != NodeType::Seedqr {
+                return Err(ToolkitError::BadInput(format!(
+                    "seedqr decode --from accepts only the `seedqr` node type; got `{}`",
+                    fi.node.as_str()
+                )));
+            }
+            if fi.value != "-" {
+                secret_in_argv_warning(stderr, "--from seedqr=", "--from seedqr=-");
+            }
+            fi.value.clone()
+        }
+    };
 
-    // Resolve --digits value (inline or stdin); wrap in Zeroizing.
-    let digits: zeroize::Zeroizing<String> = if args.digits == "-" {
+    // Resolve value (inline or stdin); wrap in Zeroizing.
+    let digits: zeroize::Zeroizing<String> = if raw_value == "-" {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
-        zeroize::Zeroizing::new(args.digits.clone())
+        zeroize::Zeroizing::new(raw_value)
     };
     let _pin_digits = mnemonic_toolkit::mlock::pin_pages_for(digits.as_bytes());
 

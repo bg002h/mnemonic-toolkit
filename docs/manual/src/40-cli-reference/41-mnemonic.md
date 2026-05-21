@@ -587,9 +587,10 @@ auto-fire under pipes (same mechanism `mnemonic-gui` uses).
 
 ## `mnemonic convert`
 
-Single-format conversion across the 13-node typed graph: `phrase`,
-`entropy`, `xpub`, `xprv`, `wif`, `fingerprint`, `path`, `ms1`, `mk1`,
-`bip38`, `minikey`, `electrum-phrase`, `address`.
+Single-format conversion across the typed node graph: `phrase`,
+`seedqr` (input-only, v0.31.6+), `entropy`, `xpub`, `xprv`, `wif`,
+`fingerprint`, `path`, `ms1`, `mk1`, `bip38`, `minikey`,
+`electrum-phrase`, `address`.
 
 ### Synopsis
 
@@ -601,8 +602,8 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | source node (`phrase=…`, `entropy=…`, `xpub=…`, `xprv=…`, `wif=…`, `ms1=…`, `mk1=…`, `bip38=…`, `minikey=…`, `electrum-phrase=…`); `=-` reads from stdin |
-| `--to <TO>` | target node; repeating for multi-output |
+| `--from <FROM>` | source node (`phrase=…`, `seedqr=…`, `entropy=…`, `xpub=…`, `xprv=…`, `wif=…`, `ms1=…`, `mk1=…`, `bip38=…`, `minikey=…`, `electrum-phrase=…`); `=-` reads from stdin. `seedqr=<digits>` (v0.31.6+) decodes a 48/60/72/84/96-digit SeedQR string to a BIP-39 phrase then projects to any phrase-reachable target |
+| `--to <TO>` | target node; repeating for multi-output. `seedqr` is NOT a valid target (input-only); use `mnemonic seedqr encode` to emit a SeedQR digit-string |
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | derivation path override |
@@ -1603,7 +1604,7 @@ English-wordlist index is rendered as a 4-digit zero-padded decimal.
 ### Synopsis
 
 ```text
-mnemonic seedqr decode --digits <VALUE|-> [--json-out <PATH>]
+mnemonic seedqr decode --from seedqr=<VALUE|-> [--json-out <PATH>]
 mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
 ```
 
@@ -1611,8 +1612,11 @@ mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
 
 `decode`:
 
-- `--digits <VALUE|->`: SeedQR numeric digit string (48, 60, 72, 84, or 96 ASCII digits — corresponding to 12 / 15 / 18 / 21 / 24-word BIP-39 phrases). `-` reads from stdin.
+- `--from seedqr=<VALUE|->`: **(canonical, v0.31.6+)** SeedQR numeric digit string (48, 60, 72, 84, or 96 ASCII digits — corresponding to 12 / 15 / 18 / 21 / 24-word BIP-39 phrases). `seedqr=-` reads from stdin. Only the `seedqr` node type is accepted; other node types are refused.
+- `--digits <VALUE|->`: **(DEPRECATED, v0.31.6)** the original digit-string flag. Still accepted, but emits a stderr deprecation notice directing to `--from seedqr=`; will be removed in a future release. Mutually exclusive with `--from` (clap-level conflict; exit 64). Exactly one of `--from seedqr=` or `--digits` is required.
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+
+The equivalent conversion is also reachable via `mnemonic convert --from seedqr=<digits> --to phrase` (the `seedqr` node type was unified into the shared `--from` grammar in v0.31.6).
 
 `encode`:
 
@@ -1620,7 +1624,8 @@ mnemonic seedqr encode --from phrase=<VALUE|-> [--json-out <PATH>]
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
 
 Both subsubcommands emit an argv-leakage advisory on stderr when the
-secret is supplied inline (e.g., `--digits <value>` or `--from phrase=<value>`).
+secret is supplied inline (e.g., `--from seedqr=<value>`, the deprecated
+`--digits <value>`, or `--from phrase=<value>`).
 Use the stdin form (`-`) to avoid the advisory.
 
 ### Scope (v0.30.0, widened in v0.31.5)
@@ -1632,7 +1637,7 @@ Use the stdin form (`-`) to avoid the advisory.
 ### Worked example — decode
 
 ```sh
-mnemonic seedqr decode --digits 000000000000000000000000000000000000000000000003
+mnemonic seedqr decode --from seedqr=000000000000000000000000000000000000000000000003
 ```
 
 Stdout:
@@ -1644,7 +1649,7 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 JSON envelope form:
 
 ```sh
-mnemonic seedqr decode --digits 000000000000000000000000000000000000000000000003 --json-out /tmp/decode.json
+mnemonic seedqr decode --from seedqr=000000000000000000000000000000000000000000000003 --json-out /tmp/decode.json
 cat /tmp/decode.json
 ```
 
