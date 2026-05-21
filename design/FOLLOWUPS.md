@@ -2862,7 +2862,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (slot-subkey help-text + dropdown enumerations if any); `mnemonic-gui/pinned-upstream.toml` toolkit pin bump to `mnemonic-toolkit-v0.31.3`.
 - **What:** Update the GUI schema-mirror's `--slot` help-text to enumerate `seedqr` + extend any dropdown surfaces that expose the slot-subkey list. Bump the toolkit pin so GUI users can invoke `--slot @N.seedqr=<digit-string>` via the GUI's input controls. Bump GUI version to `v0.16.1` (PATCH; GUI-internal help-text + pin bump only — no schema-mirror gate violation).
 - **Why deferred:** The schema_mirror gate compares clap flag-NAME parity, not value-enumeration content; the new `seedqr` token does NOT fire the gate. GUI help/dropdown improvement is desirable for discoverability but not blocking.
-- **Status:** `open`
+- **Status:** `resolved 4c1dde5` — mnemonic-gui-v0.16.1 (Cycle 10b). Toolkit pin `mnemonic-toolkit-v0.31.0 → v0.31.3` (cumulative catch-up across v0.31.1 + v0.31.2 + v0.31.3); `src/form/slot_editor.rs::SlotSubkey::Seedqr` variant added at enum position 1 (mirrors toolkit enum-position correctness); supply-chain drift snapshot at `src/secrets.rs::v0_3_canonical_fallback::SECRET_SLOT_SUBKEYS` extended to `["phrase", "seedqr", "entropy", "xprv", "wif"]` (compile-time drift gate fired as designed; acknowledged by snapshot update); `tests/secrets.rs::secret_slot_subkeys_set_pinned` expectation updated. 353 cells passing.
 - **Tier:** `v0.32+-gui-help-only`
 - **Tags:** none
 - **Companion:** parent `seedqr-bundle-slot-integration` (resolved v0.31.3).
