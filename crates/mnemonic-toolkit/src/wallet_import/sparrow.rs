@@ -301,16 +301,40 @@ impl WalletFormatParser for SparrowParser {
             keystores.push(parse_keystore(i, ks)?);
         }
 
-        // Step 6 (early): refuse taproot scripts. Sparrow's emit at
-        // `wallet_export/sparrow.rs:215-219` ships taproot as descriptor-
-        // passthrough (no `@N/**` placeholder shape — the canonical
-        // descriptor with `[fp/path]xpub` keys is embedded directly). The
-        // P1B `@N/**` substitution path does not handle that shape; taproot
-        // import lands in a future cycle (cycle-followup
-        // `sparrow-taproot-descriptor-passthrough-import-support`).
-        if script_template.contains("tr(") {
+        // Step 6 (v0.31.1 Cycle 8): split path for taproot multisig
+        // descriptor-passthrough.
+        //
+        // Sparrow's emit at `wallet_export/sparrow.rs:215-219` ships TAPROOT
+        // MULTISIG templates (`tr-multi-a` / `tr-sortedmulti-a`) as
+        // descriptor-passthrough: concrete `[fp/path]xpub` keys are embedded
+        // in `script_template` directly (no `@N/**` placeholders). All other
+        // templates — including taproot SINGLESIG (`Bip86 => "tr(@0/**)"`
+        // at `wallet_export/sparrow.rs:195`) — ship with `@N/**`
+        // placeholders.
+        //
+        // Detection:
+        //   has_tr             = script_template.contains("tr(")
+        //   has_at_placeholder = script_template.contains("@0/**")
+        //   descriptor-passthrough (taproot multisig) = has_tr && !has_at_placeholder
+        //                       → skip Step 5 substitution; feed script_template directly.
+        //   taproot SINGLESIG template (`tr(@0/**)`) = has_tr && has_at_placeholder
+        //                       → preserve narrow refusal (separate FOLLOWUP
+        //                         `sparrow-taproot-singlesig-template-mode-import`
+        //                         filed at Cycle 8 close).
+        //   non-taproot template = !has_tr && has_at_placeholder → substitute (existing path).
+        //
+        // Closes `sparrow-taproot-descriptor-passthrough-import-support`.
+        let has_tr = script_template.contains("tr(");
+        let has_at_placeholder = script_template.contains("@0/**");
+        let is_descriptor_passthrough = has_tr && !has_at_placeholder;
+        if has_tr && has_at_placeholder {
+            // Taproot SINGLESIG template (Bip86: `tr(@0/**)`). Scope-out
+            // of Cycle 8; preserve refusal. See FOLLOWUP
+            // `sparrow-taproot-singlesig-template-mode-import` for the
+            // follow-on cycle that ships substitution-then-parse for this
+            // template-mode shape.
             return Err(ToolkitError::ImportWalletParse(
-                "import-wallet: sparrow: parse error: taproot scripts are not yet supported (Sparrow's taproot emit uses descriptor-passthrough; P1B's @N/** substitution path does not cover it)".to_string(),
+                "import-wallet: sparrow: parse error: taproot singlesig templates (`tr(@N/**)`) are not yet supported; v0.31.1 ships taproot MULTISIG via descriptor-passthrough only. FOLLOWUP `sparrow-taproot-singlesig-template-mode-import` tracks the singlesig template-mode work.".to_string(),
             ));
         }
 
@@ -318,30 +342,40 @@ impl WalletFormatParser for SparrowParser {
         // Apply longest-N first to avoid prefix collisions when N ≥ 10
         // (`@1` is a prefix of `@10`). Mirrors
         // `cmd/xpub_search/descriptor_intake.rs:212-218` discipline.
-        let mut substituted = script_template.clone();
-        let mut indices: Vec<usize> = (0..n).collect();
-        indices.sort_by_key(|i| std::cmp::Reverse(i.to_string().len()));
-        for i in indices {
-            let placeholder = format!("@{i}/**");
-            let ks = &keystores[i];
-            // Strip leading `m/` from derivation; brackets carry path
-            // sans the `m` prefix per BIP-380 / BIP-389.
-            let path_no_m = ks
-                .derivation
-                .strip_prefix("m/")
-                .unwrap_or(ks.derivation.as_str().strip_prefix('m').unwrap_or(&ks.derivation));
-            let bracketed = if path_no_m.is_empty() {
-                format!("[{fp}]{xpub}/<0;1>/*", fp = ks.master_fingerprint, xpub = ks.xpub)
-            } else {
-                format!(
-                    "[{fp}/{path}]{xpub}/<0;1>/*",
-                    fp = ks.master_fingerprint,
-                    path = path_no_m,
-                    xpub = ks.xpub,
-                )
-            };
-            substituted = substituted.replace(&placeholder, &bracketed);
-        }
+        //
+        // Skipped for descriptor-passthrough mode (taproot multisig): the
+        // script_template already carries concrete `[fp/path]xpub` keys;
+        // substitution is a no-op + the leftover-placeholder regex below
+        // also no-ops (no `@N/**` present to leave behind).
+        let substituted = if is_descriptor_passthrough {
+            script_template.clone()
+        } else {
+            let mut substituted = script_template.clone();
+            let mut indices: Vec<usize> = (0..n).collect();
+            indices.sort_by_key(|i| std::cmp::Reverse(i.to_string().len()));
+            for i in indices {
+                let placeholder = format!("@{i}/**");
+                let ks = &keystores[i];
+                // Strip leading `m/` from derivation; brackets carry path
+                // sans the `m` prefix per BIP-380 / BIP-389.
+                let path_no_m = ks
+                    .derivation
+                    .strip_prefix("m/")
+                    .unwrap_or(ks.derivation.as_str().strip_prefix('m').unwrap_or(&ks.derivation));
+                let bracketed = if path_no_m.is_empty() {
+                    format!("[{fp}]{xpub}/<0;1>/*", fp = ks.master_fingerprint, xpub = ks.xpub)
+                } else {
+                    format!(
+                        "[{fp}/{path}]{xpub}/<0;1>/*",
+                        fp = ks.master_fingerprint,
+                        path = path_no_m,
+                        xpub = ks.xpub,
+                    )
+                };
+                substituted = substituted.replace(&placeholder, &bracketed);
+            }
+            substituted
+        };
         // Sanity: no leftover `@N/**` placeholders. (If the script_template
         // refers to an `@i` beyond `keystores.len()`, the substitution would
         // leave it intact — surface as a parse error rather than feeding

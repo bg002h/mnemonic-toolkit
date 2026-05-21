@@ -6,6 +6,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.1] — 2026-05-21
+
+**SemVer-PATCH release.** Behavior expansion: Sparrow taproot multisig wallets (`tr-multi-a` / `tr-sortedmulti-a` descriptor-passthrough shape) now import successfully. Closes Cycle 8 (`sparrow-taproot-descriptor-passthrough-import-support` FOLLOWUP) — **the final cycle in the v0.28+ residual queue.**
+
+### Changed
+
+- **`mnemonic import-wallet --format sparrow`** with taproot multisig wallets (Sparrow descriptor-passthrough shape: concrete `[fp/path]xpub` keys embedded in `defaultPolicy.miniscript.script` without `@N/**` placeholders) now succeeds. Previously refused at `wallet_import/sparrow.rs::parse` Step 6 with "taproot scripts are not yet supported".
+- Detection heuristic at `sparrow.rs` Step 6: `has_tr && !has_at_placeholder` = descriptor-passthrough (skip Step 5 substitution; feed `script_template` directly through `concrete_keys_to_placeholders` → `parse_descriptor`). Per Sparrow emit-side at `wallet_export/sparrow.rs:215-219`, only `CliTemplate::TrMultiA` / `TrSortedMultiA` currently ship as descriptor-passthrough.
+- Taproot SINGLESIG (Bip86: `tr(@0/**)` template-mode) is NOT shipped in v0.31.1 — preserves a narrow refusal with updated stderr template citing the follow-on FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`. The R0 reviewer caught this ambiguity (descriptor-passthrough vs template-mode for taproot) before Phase 2; explicit narrow refusal locks Cycle 8's scope.
+
+### Added
+
+- 6 new integration cells in `tests/cli_import_wallet_sparrow_taproot.rs` covering: tr-multi-a 2-of-3 NUMS happy path + envelope-carries-canonical-descriptor verification + auto-sniff + taproot-singlesig-template-still-refused boundary + 2 no-regression cells (P2WPKH singlesig + wsh-sortedmulti).
+- New fixture `tests/fixtures/wallet_import/sparrow-tr-multi-a-nums-2of3.json` (copied from emit-side `tests/export_wallet/sparrow_tr_multi_a_nums_2of3.json` — round-trip-compatible).
+
+### Documentation
+
+- Chapter-45 §"Deferral — taproot import" rewritten as §"Taproot import (shipped v0.31.1)" with the descriptor-passthrough pipeline citation + the narrowing note for taproot singlesig.
+- Chapter-45 deferrals-list bullet converted to v0.31.1-shipped strikethrough.
+
+### FOLLOWUP closure
+
+- **Closed:** `sparrow-taproot-descriptor-passthrough-import-support` (resolved by Cycle 8 / v0.31.1).
+
+### Newly filed FOLLOWUPs
+
+- `sparrow-taproot-singlesig-template-mode-import` — Bip86 `tr(@0/**)` template-mode import (Cycle 8 ships descriptor-passthrough only). Tier `v0.31+`.
+
+### Wave 4 closure milestone
+
+This cycle closes the v0.28+ residual FOLLOWUP queue. Cycles 5/6/7/8 + 6a/6b/7a/7b split-cycles all SHIPPED this session-pair. The toolkit's Wave-4 parser-cycle work is complete; future work is queued under v0.32+-tier slugs (per-Signer BSMS tokens, Round-1 encrypted records, taproot singlesig, etc.).
+
+### Tests
+
+- 71 lib + 743+ integration cells (incl. 6 new sparrow-taproot); clippy clean; manual lint 6/6 PASS.
+
+---
+
 ## mnemonic-toolkit [0.31.0] — 2026-05-21
 
 **SemVer-MINOR release.** New `--bsms-encryption-token <FILE|->` flag on `mnemonic import-wallet` for BIP-129 §Encryption envelope decrypt. Closes Cycle 7 (`bsms-bip129-encryption-envelope` FOLLOWUP).

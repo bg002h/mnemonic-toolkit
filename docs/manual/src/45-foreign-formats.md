@@ -318,19 +318,30 @@ diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
      <(jq -S . sparrow_re.json)
 ```
 
-### Deferral — taproot import
+### Taproot import (shipped v0.31.1)
 
 Sparrow's emit side ships taproot wallets as *descriptor-passthrough*
 (concrete `[fp/path]xpub` keys embedded in
 `defaultPolicy.miniscript.script` instead of `@N/**` placeholders).
-v0.28.0's Sparrow *parse* path refuses any blob whose script contains
-`tr(` with the byte-exact error `error: import-wallet: sparrow:
-taproot scripts are not yet supported …` (exit 2). The export-wallet
-side requires a recognized `--template` (no descriptor-passthrough);
-taproot-multisig emit is supported via `--template tr-multi-a` /
-`tr-sortedmulti-a`. Full taproot **import** support (parsing
-Sparrow's descriptor-passthrough-on-emit shape) is queued as FOLLOWUP
-`sparrow-taproot-descriptor-passthrough-import-support`.
+**v0.31.1+ Cycle 8** ships the import-side counterpart via a path-split
+at `wallet_import/sparrow.rs::parse` Step 6: descriptor-passthrough
+shape (`tr(` AND no `@0/**` placeholder) bypasses Step 5 substitution
+and feeds `script_template` directly through the existing
+`concrete_keys_to_placeholders` → `parse_descriptor` pipeline. Closes
+FOLLOWUP `sparrow-taproot-descriptor-passthrough-import-support`.
+
+The export-wallet side requires a recognized `--template` (no
+descriptor-passthrough); taproot-multisig emit is supported via
+`--template tr-multi-a` / `tr-sortedmulti-a`. Import auto-sniff still
+fires (sniff is `policyType`-based, not script-content-based).
+
+**Narrowing:** taproot SINGLESIG (Bip86: `tr(@0/**)` template-mode) is
+NOT shipped in v0.31.1 — that template-mode shape would substitute to
+`tr([fp/path]xpub/<0;1>/*)` before parse, which exercises the pipeline
+in an untested way. Filed forward as FOLLOWUP
+`sparrow-taproot-singlesig-template-mode-import` for a follow-on
+cycle. v0.31.1 refuses with `error: import-wallet: sparrow: taproot
+singlesig templates (`tr(@N/**)`) are not yet supported …` (exit 2).
 
 ## Specter-DIY (`--format specter`) {#specter-diy}
 
@@ -810,9 +821,11 @@ FOLLOWUP):
   `bsms-encryption-round1-decrypt-then-verify`. Cross-impl validated
   against BIP-129 Test Vector 3 (STANDARD-mode Signer 1) in
   `crates/mnemonic-toolkit/src/bsms_crypto.rs` unit tests.
-- **Sparrow taproot descriptor-passthrough**
-  (`sparrow-taproot-descriptor-passthrough-import-support`) — see
-  [§4 above](#sparrow-wallet) deferral note.
+- ~~**Sparrow taproot descriptor-passthrough**~~ — shipped in v0.31.1
+  via the Step 6 path-split at `wallet_import/sparrow.rs`. See
+  [§Taproot import](#taproot-import-shipped-v0311) above. Taproot
+  singlesig template-mode (Bip86 `tr(@0/**)`) remains refused; tracked
+  at FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`.
 - ~~**Jade SeedQR variant**~~ — shipped in v0.30.0 as a vendor-neutral subsurface. See [`mnemonic seedqr`](40-cli-reference/41-mnemonic.md#mnemonic-seedqr).
 - ~~**Electrum encrypted wallet files**~~ — shipped in v0.30.1 as
   watch-only passthrough (parses plaintext xpub/derivation/etc., ignores
