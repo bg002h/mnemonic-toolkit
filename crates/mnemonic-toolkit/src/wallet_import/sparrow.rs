@@ -325,17 +325,30 @@ impl WalletFormatParser for SparrowParser {
         //
         // Detection:
         //   has_tr             = script_template.contains("tr(")
-        //   has_at_placeholder = script_template.contains("@0/**")
+        //   has_at_placeholder = regex `@\d+/**` (any digit index)
         //   descriptor-passthrough (taproot multisig) = has_tr && !has_at_placeholder
         //                       → skip Step 5 substitution; feed script_template directly.
         //   otherwise (template-mode; non-taproot OR taproot singlesig)
         //                       → run Step 5 substitution.
         //
+        // v0.31.4 (Cycle 11) defensive widening: `has_at_placeholder`
+        // was a literal substring check for `@0/**`. Sparrow's current
+        // emit at `wallet_export/sparrow.rs:230` always indexes from
+        // `(0..n)` so `@0/**` is always present in template-mode
+        // blobs, but a hypothetical future emit-side change (e.g.,
+        // 2-of-2 with cosigner indexing starting at 1) would have
+        // silently mis-classified `wpkh(@1/**)` as descriptor-passthrough.
+        // The regex `@\d+/**` matches any digit index. Mirrors the
+        // `sparrow.rs:566` precedent (`Regex::new(r"@\d+(?:/\*\*)?")`).
+        //
         // Closes `sparrow-taproot-descriptor-passthrough-import-support`
         // (Cycle 8) + `sparrow-taproot-singlesig-template-mode-import`
-        // (Cycle 9).
+        // (Cycle 9) + `sparrow-import-detection-regex-defensive-widening`
+        // (Cycle 11).
         let has_tr = script_template.contains("tr(");
-        let has_at_placeholder = script_template.contains("@0/**");
+        let has_at_placeholder = regex::Regex::new(r"@\d+/\*\*")
+            .expect("at-placeholder regex is a fixed string literal")
+            .is_match(&script_template);
         let is_descriptor_passthrough = has_tr && !has_at_placeholder;
 
         // Step 5: substitute `@i/**` → `[fp/derivation_no_m]xpub/<0;1>/*`.
@@ -1074,6 +1087,73 @@ mod tests {
         assert_eq!(parsed[0].cosigners.len(), 1);
         assert_eq!(parsed[0].network, bitcoin::Network::Bitcoin);
         assert_eq!(parsed[0].threshold, None);
+    }
+
+    /// v0.31.4 (Cycle 11) defensive widening regression — the Step 6
+    /// `has_at_placeholder` discriminator regex `@\d+/**` must match
+    /// every template-mode placeholder shape regardless of cosigner
+    /// index, AND must NOT match descriptor-passthrough shapes that
+    /// don't contain an `@N/**` placeholder. Closes
+    /// `sparrow-import-detection-regex-defensive-widening`.
+    #[test]
+    fn at_placeholder_regex_matches_only_template_mode_shapes() {
+        let re = regex::Regex::new(r"@\d+/\*\*").expect("regex literal");
+        // Positive cases — any digit index, any wrapper.
+        for s in &[
+            "@0/**",
+            "@1/**",
+            "@10/**",
+            "wpkh(@0/**)",
+            "wpkh(@1/**)",
+            "wsh(sortedmulti(2,@0/**,@1/**,@2/**))",
+            "tr(@0/**)",
+        ] {
+            assert!(
+                re.is_match(s),
+                "regex should match template-mode shape {s:?}"
+            );
+        }
+        // Negative cases — descriptor-passthrough OR malformed.
+        for s in &[
+            "",
+            "@/**",
+            "@0/*",
+            "@a/**",
+            "tr([5436d724/86'/0'/0']xpub6CAYwo2AfKJy1cdFGBAgLvCrZULhEkZ9C9s4GGXwXzHvNPguMWBcVrGEDjP2ZJdX92gVWLeLrNVVmipTrKqrwMy2eT282xKEyHMbPDrcD9e/<0;1>/*)",
+            "wsh(multi(2,[fp/path]xpub.../<0;1>/*,[fp/path]xpub.../<0;1>/*))",
+        ] {
+            assert!(
+                !re.is_match(s),
+                "regex should NOT match non-template-mode shape {s:?}"
+            );
+        }
+    }
+
+    /// v0.31.4 backward-compat regression — the v0.31.3 `@0/**`
+    /// substring path still routes template-mode shapes through
+    /// Step 5 substitution after the regex widening. Locks the
+    /// no-behavior-change claim under the current Sparrow emit
+    /// invariant (`wallet_export/sparrow.rs:230` indexes from
+    /// `(0..n)`).
+    #[test]
+    fn parse_at_0_placeholder_still_routes_to_template_mode_substitution() {
+        // sparrow-singlesig-p2wpkh.json carries `wpkh(@0/**)` (the
+        // existing fixture used at fixture_singlesig_p2wpkh_parses_clean).
+        // After the v0.31.4 regex widening, this fixture must continue
+        // to route through template-mode substitution (NOT
+        // descriptor-passthrough) — the substituted descriptor body
+        // carries the concrete `[fp/path]xpub/<0;1>/*` form.
+        let blob = load_fixture("sparrow-singlesig-p2wpkh.json");
+        let parsed = parse(&blob).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let p = &parsed[0];
+        // BIP-84 origin path m/84'/0'/0' substituted into the descriptor.
+        assert!(
+            p.cosigners[0].path_raw.contains("84'"),
+            "BIP-84 origin path must survive template-mode substitution; got: {}",
+            p.cosigners[0].path_raw
+        );
+        assert_eq!(p.threshold, None);
     }
 
     #[test]
