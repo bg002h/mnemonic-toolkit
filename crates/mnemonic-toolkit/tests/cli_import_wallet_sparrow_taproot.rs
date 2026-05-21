@@ -1,15 +1,21 @@
-//! v0.31.1 — Sparrow taproot descriptor-passthrough import integration tests.
+//! v0.31.1 + v0.31.2 — Sparrow taproot import integration tests.
 //!
-//! Validates the v0.31.1 Cycle 8 path-split at `wallet_import/sparrow.rs::parse`
-//! Step 6: descriptor-passthrough shape (no `@0/**` placeholder; concrete
-//! `[fp/path]xpub` keys embedded directly) bypasses Step 5 substitution
-//! and feeds the script directly into the existing
-//! `concrete_keys_to_placeholders` → `parse_descriptor` pipeline.
+//! Validates BOTH branches of the path-split at
+//! `wallet_import/sparrow.rs::parse` Step 6:
 //!
-//! Per `wallet_export/sparrow.rs:195`, taproot SINGLESIG (Bip86) still
-//! emits TEMPLATE mode (`tr(@0/**)`) and is still REFUSED (separate
-//! FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`). The
-//! refusal test for that case lives at `cli_import_wallet_sparrow.rs:305`.
+//! - v0.31.1 Cycle 8: descriptor-passthrough shape (no `@0/**`
+//!   placeholder; concrete `[fp/path]xpub` keys embedded directly)
+//!   bypasses Step 5 substitution and feeds the script directly into
+//!   the existing `concrete_keys_to_placeholders` → `parse_descriptor`
+//!   pipeline. Covers taproot MULTISIG (`tr-multi-a` /
+//!   `tr-sortedmulti-a` per `wallet_export/sparrow.rs:215-219`).
+//!
+//! - v0.31.2 Cycle 9: taproot SINGLESIG template-mode (Bip86:
+//!   `tr(@0/**)` per `wallet_export/sparrow.rs:195`) routes through
+//!   the standard substitution branch, producing
+//!   `tr([fp/86'/0'/0']xpub.../<0;1>/*)`. Cycle 8's narrow refusal was
+//!   removed (FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`
+//!   closed).
 
 use assert_cmd::Command;
 use std::path::PathBuf;
@@ -92,35 +98,87 @@ fn tr_multi_a_nums_2of3_sniffs_as_sparrow() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Boundary: taproot SINGLESIG (Bip86) still refused (template-mode)
+// v0.31.2 — taproot SINGLESIG (Bip86) template-mode happy path
 // ──────────────────────────────────────────────────────────────────────
 
 #[test]
-fn taproot_singlesig_template_still_refused() {
-    // Cycle 8 ships taproot MULTISIG descriptor-passthrough only. Taproot
-    // SINGLESIG (Bip86: `tr(@0/**)` template-mode) is still refused via
-    // the path-split's `has_tr && has_at_placeholder` branch. Filed
-    // forward as FOLLOWUP `sparrow-taproot-singlesig-template-mode-import`.
-    let blob = r#"{
-        "name":"bip86-0","network":"mainnet","policyType":"SINGLE","scriptType":"P2TR",
-        "defaultPolicy":{"name":"Default","miniscript":{"script":"tr(@0/**)"}},
-        "keystores":[{
-            "label":"bip86-0","source":"SW_WATCH","walletModel":"SPARROW",
-            "keyDerivation":{"masterFingerprint":"5436d724","derivation":"m/86'/0'/0'"},
-            "extendedPublicKey":"xpub6CAYwo2AfKJy1cdFGBAgLvCrZULhEkZ9C9s4GGXwXzHvNPguMWBcVrGEDjP2ZJdX92gVWLeLrNVVmipTrKqrwMy2eT282xKEyHMbPDrcD9e"
-        }]
-    }"#;
+fn taproot_singlesig_template_imports_via_substitution() {
+    // v0.31.2 Cycle 9: taproot SINGLESIG (Bip86: `tr(@0/**)` template-mode)
+    // now joins the general template-mode substitution path. The
+    // `@0/**` placeholder is replaced with the concrete
+    // `[5436d724/86'/0'/0']xpub.../<0;1>/*` form and the resulting
+    // descriptor is parsed cleanly. Closes
+    // `sparrow-taproot-singlesig-template-mode-import`.
+    let blob = fixture_path("sparrow-singlesig-p2tr.json");
     let assertion = mnemonic()
-        .args(["import-wallet", "--blob", "-", "--format", "sparrow"])
-        .write_stdin(blob.to_string())
+        .args(["import-wallet", "--format", "sparrow"])
+        .arg("--blob")
+        .arg(&blob)
+        .args(["--json"])
         .assert()
-        .failure()
-        .code(2);
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("[5436d724/86'/0'/0']")
+            && stdout.contains("xpub6CAYwo2AfKJy1cdFGBAgLvCrZULhEkZ9C9s4GGXwXzHvNPguMWBcVrGEDjP2ZJdX92gVWLeLrNVVmipTrKqrwMy2eT282xKEyHMbPDrcD9e"),
+        "expected substituted taproot descriptor with concrete origin+xpub; got: {stdout}"
+    );
+    assert!(
+        stdout.contains("tr(") && stdout.contains("<0;1>/*"),
+        "expected tr() wrapping + multipath suffix; got: {stdout}"
+    );
+}
+
+#[test]
+fn taproot_singlesig_envelope_blocked_by_wallet_import_taproot_internal_key() {
+    // Boundary cell — documents an ORTHOGONAL prior FOLLOWUP gap that
+    // Cycle 9 does NOT address: `wallet-import-taproot-internal-key`.
+    //
+    // The v0.31.2 wallet_import/sparrow path now produces a clean JSON
+    // envelope for taproot singlesig (verified by
+    // `taproot_singlesig_template_imports_via_substitution` above).
+    // However, the export-from-envelope path
+    // (`export-wallet --from-import-json`) refuses ALL taproot envelopes
+    // because the envelope wire-shape doesn't surface the BIP-341
+    // internal-key designation (NUMS sentinel vs raw xonly). This is the
+    // same boundary that applies to taproot MULTISIG (Cycle 8) envelopes.
+    //
+    // Cycle 9 ships taproot singlesig IMPORT only — re-emission via
+    // `--from-import-json` is gated on the separate FOLLOWUP
+    // `wallet-import-taproot-internal-key` shipping the envelope
+    // wire-shape extension.
+    let blob = fixture_path("sparrow-singlesig-p2tr.json");
+
+    // Import → JSON envelope works.
+    let round1 = mnemonic()
+        .args(["import-wallet", "--format", "sparrow"])
+        .arg("--blob")
+        .arg(&blob)
+        .args(["--json"])
+        .assert()
+        .success();
+    let envelope = String::from_utf8(round1.get_output().stdout.clone()).unwrap();
+    assert!(
+        envelope.contains("\"source_format\": \"sparrow\""),
+        "envelope must declare source_format=sparrow; got: {envelope}"
+    );
+
+    // Re-emit via --from-import-json refuses (taproot-envelope gap).
+    let assertion = mnemonic()
+        .args([
+            "export-wallet",
+            "--format",
+            "sparrow",
+            "--from-import-json",
+            "-",
+        ])
+        .write_stdin(envelope)
+        .assert()
+        .failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("taproot singlesig templates")
-            && stderr.contains("sparrow-taproot-singlesig-template-mode-import"),
-        "expected v0.31.1 narrow-refusal message for taproot singlesig templates; got: {stderr}"
+        stderr.contains("taproot") && stderr.contains("wallet-import-taproot-internal-key"),
+        "expected wallet-import-taproot-internal-key refusal message; got: {stderr}"
     );
 }
 

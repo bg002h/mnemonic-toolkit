@@ -302,10 +302,12 @@ fn sparrow_malformed_missing_script_exits_parse_error() {
 }
 
 #[test]
-fn sparrow_taproot_singlesig_refused() {
-    // P1B taproot deferral: tr(...) scripts refused at parse-time pending
-    // future descriptor-passthrough support (cycle-followup
-    // `sparrow-taproot-descriptor-passthrough-import-support`).
+fn sparrow_taproot_singlesig_imports_via_substitution() {
+    // v0.31.2 Cycle 9: taproot SINGLESIG template-mode (Bip86: `tr(@0/**)`)
+    // imports via the standard substitution path; the resulting
+    // `tr([fp/86'/0'/0']xpub.../<0;1>/*)` descriptor flows through
+    // `concrete_keys_to_placeholders` + `parse_descriptor` cleanly.
+    // Closes `sparrow-taproot-singlesig-template-mode-import`.
     let blob = r#"{
         "name":"bip86-0","network":"mainnet","policyType":"SINGLE","scriptType":"P2TR",
         "defaultPolicy":{"name":"Default","miniscript":{"script":"tr(@0/**)"}},
@@ -317,15 +319,21 @@ fn sparrow_taproot_singlesig_refused() {
     }"#;
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "sparrow"])
+        .args(["import-wallet", "--blob", "-", "--format", "sparrow", "--json"])
         .write_stdin(blob.to_string())
         .assert()
-        .failure()
-        .code(2);
-    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    // Bip86 substitution: descriptor body carries the concrete origin +
+    // xpub stitched through Step 5.
     assert!(
-        stderr.contains("taproot") && stderr.contains("not yet supported"),
-        "expected taproot-deferred refusal; got: {stderr}"
+        stdout.contains("[5436d724/86'/0'/0']")
+            && stdout.contains("xpub6CAYwo2AfKJy1cdFGBAgLvCrZULhEkZ9C9s4GGXwXzHvNPguMWBcVrGEDjP2ZJdX92gVWLeLrNVVmipTrKqrwMy2eT282xKEyHMbPDrcD9e"),
+        "expected substituted taproot descriptor with concrete origin+xpub; got: {stdout}"
+    );
+    assert!(
+        stdout.contains("tr(") && stdout.contains("<0;1>/*"),
+        "expected tr() wrapping + multipath suffix; got: {stdout}"
     );
 }
 
