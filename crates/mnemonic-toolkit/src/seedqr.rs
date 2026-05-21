@@ -23,6 +23,15 @@ use bip39::{Language, Mnemonic};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeedqrError {
     ChecksumFailure(String),
+    /// v0.32.0 — CompactSeedQR decode: input is not valid hex.
+    CompactInvalidHex(String),
+    /// v0.32.0 — CompactSeedQR decode: hex decodes to a byte count other
+    /// than 16 (12-word) or 32 (24-word). 20/24/28 (15/18/21-word) are
+    /// valid BIP-39 entropy sizes but NOT compact-supported per SeedSigner.
+    CompactByteCountUnsupported { got: usize },
+    /// v0.32.0 — CompactSeedQR encode: word count other than 12 or 24.
+    /// SeedSigner's CompactSeedQrEncoder handles only those two.
+    CompactWordCountUnsupported { got: usize },
     InvalidDigitChar { pos: usize, ch: char },
     InvalidDigits { got: usize },
     InvalidWordCount { got: usize },
@@ -33,6 +42,17 @@ impl std::fmt::Display for SeedqrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SeedqrError::ChecksumFailure(msg) => write!(f, "BIP-39 checksum failure: {msg}",),
+            SeedqrError::CompactInvalidHex(msg) => {
+                write!(f, "compact: invalid hex: {msg}")
+            }
+            SeedqrError::CompactByteCountUnsupported { got } => write!(
+                f,
+                "compact: invalid byte count (expected 16 for 12-word or 32 for 24-word; got {got})",
+            ),
+            SeedqrError::CompactWordCountUnsupported { got } => write!(
+                f,
+                "compact: invalid word count: {got} (CompactSeedQR supports only 12 or 24)",
+            ),
             SeedqrError::InvalidDigitChar { pos, ch } => {
                 write!(f, "invalid character at position {pos}: {ch:?}",)
             }
@@ -137,6 +157,52 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
     Ok(digits)
 }
 
+/// Encode a BIP-39 phrase into a CompactSeedQR payload as lowercase hex
+/// (v0.32.0).
+///
+/// CompactSeedQR (SeedSigner `CompactSeedQrEncoder`) stores the raw BIP-39
+/// entropy bytes in the QR's byte mode — i.e. the 11-bit word indices
+/// packed with the trailing checksum bits stripped, which is exactly
+/// `Mnemonic::to_entropy()`. The reference impl handles only 12-word
+/// (16 bytes) and 24-word (32 bytes) seeds; other word counts are refused.
+pub fn encode_compact(phrase: &str) -> Result<String, SeedqrError> {
+    let words: Vec<String> = phrase
+        .split_whitespace()
+        .map(|w| w.to_lowercase())
+        .collect();
+
+    if !matches!(words.len(), 12 | 24) {
+        return Err(SeedqrError::CompactWordCountUnsupported { got: words.len() });
+    }
+
+    let normalized = words.join(" ");
+    let m = Mnemonic::parse_in(Language::English, &normalized)
+        .map_err(|e| SeedqrError::ChecksumFailure(e.to_string()))?;
+
+    Ok(hex::encode(m.to_entropy()))
+}
+
+/// Decode a CompactSeedQR hex payload into a BIP-39 phrase (v0.32.0).
+///
+/// Strips ASCII whitespace, hex-decodes (case-insensitive), refuses byte
+/// counts other than 16 (12-word) / 32 (24-word) — note 20/24/28 are valid
+/// BIP-39 entropy sizes (15/18/21-word) but NOT compact-supported per
+/// SeedSigner — then recomputes the BIP-39 checksum to produce the phrase.
+pub fn decode_compact(input: &str) -> Result<String, SeedqrError> {
+    let stripped: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+
+    let bytes = hex::decode(&stripped).map_err(|e| SeedqrError::CompactInvalidHex(e.to_string()))?;
+
+    if !matches!(bytes.len(), 16 | 32) {
+        return Err(SeedqrError::CompactByteCountUnsupported { got: bytes.len() });
+    }
+
+    let m = Mnemonic::from_entropy_in(Language::English, &bytes)
+        .map_err(|e| SeedqrError::ChecksumFailure(e.to_string()))?;
+
+    Ok(m.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +234,83 @@ mod tests {
     // zeros → last word "admit" = BIP-39 index 29.
     const PHRASE_21: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit";
     const DIGITS_21: &str = "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
+
+    // v0.32.0 CompactSeedQR vectors. Payload = raw BIP-39 entropy bytes
+    // as hex. All-zero entropy: 12-word = 16 zero bytes (32 hex chars);
+    // 24-word = 32 zero bytes (64 hex chars).
+    const COMPACT_HEX_12: &str = "00000000000000000000000000000000";
+    const COMPACT_HEX_24: &str =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+
+    #[test]
+    fn encode_compact_12_word() {
+        assert_eq!(encode_compact(PHRASE_12).unwrap(), COMPACT_HEX_12);
+    }
+
+    #[test]
+    fn encode_compact_24_word() {
+        assert_eq!(encode_compact(PHRASE_24).unwrap(), COMPACT_HEX_24);
+    }
+
+    #[test]
+    fn decode_compact_12_word() {
+        assert_eq!(decode_compact(COMPACT_HEX_12).unwrap(), PHRASE_12);
+    }
+
+    #[test]
+    fn decode_compact_24_word() {
+        assert_eq!(decode_compact(COMPACT_HEX_24).unwrap(), PHRASE_24);
+    }
+
+    #[test]
+    fn round_trip_compact_12_word() {
+        let hex = encode_compact(PHRASE_12).unwrap();
+        assert_eq!(decode_compact(&hex).unwrap(), PHRASE_12);
+    }
+
+    #[test]
+    fn round_trip_compact_24_word() {
+        let hex = encode_compact(PHRASE_24).unwrap();
+        assert_eq!(decode_compact(&hex).unwrap(), PHRASE_24);
+    }
+
+    #[test]
+    fn encode_compact_rejects_15_word() {
+        // 15-word is a valid BIP-39 + Standard-SeedQR shape, but
+        // CompactSeedQR (SeedSigner) supports only 12/24.
+        assert!(matches!(
+            encode_compact(PHRASE_15),
+            Err(SeedqrError::CompactWordCountUnsupported { got: 15 })
+        ));
+    }
+
+    #[test]
+    fn decode_compact_rejects_invalid_hex() {
+        assert!(matches!(
+            decode_compact("zz00"),
+            Err(SeedqrError::CompactInvalidHex(_))
+        ));
+    }
+
+    #[test]
+    fn decode_compact_rejects_20_byte_count() {
+        // 20 bytes = 15-word entropy size; valid BIP-39 entropy but NOT
+        // compact-supported. Must be caught BEFORE from_entropy_in.
+        let twenty_bytes_hex = "00".repeat(20);
+        assert!(matches!(
+            decode_compact(&twenty_bytes_hex),
+            Err(SeedqrError::CompactByteCountUnsupported { got: 20 })
+        ));
+    }
+
+    #[test]
+    fn decode_compact_accepts_uppercase_and_whitespace() {
+        // hex crate is case-insensitive; decode_compact strips ASCII whitespace.
+        let upper_spaced = "AA BB CC DD EE FF 00 11 22 33 44 55 66 77 88 99";
+        // 16 bytes → 12-word phrase (whatever it decodes to; just must succeed).
+        let phrase = decode_compact(upper_spaced).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+    }
 
     #[test]
     fn decode_12_word_canonical() {
