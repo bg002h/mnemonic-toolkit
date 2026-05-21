@@ -101,6 +101,6 @@ New section in chapter-45 §"BSMS" or chapter-41 §`mnemonic import-wallet` docu
 
 ## Repo state at session-end (post-Cycle-7a)
 
-- mnemonic-toolkit master HEAD: TBD (post-7a commit; backfilled here at 7a close).
+- mnemonic-toolkit master HEAD: `62da111` (Cycle 7a — bsms_crypto.rs + R0 + recon).
 - mnemonic-gui master HEAD: `5582e22` (Cycle 5 paired GUI commit; unchanged since v0.30.0 ship).
 - Last toolkit tag: `mnemonic-toolkit-v0.30.1` (Cycle 6b ship `11fd38f`).
