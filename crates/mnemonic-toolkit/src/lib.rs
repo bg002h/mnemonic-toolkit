@@ -32,6 +32,16 @@
 //!   `src/cmd/seedqr.rs` (P2) converts `SeedqrError` into
 //!   `ToolkitError::BadInput` at the boundary via
 //!   `map_seedqr_error(e, action)`.
+//! - `electrum_crypto` — Electrum field-level encryption decrypt + encrypt
+//!   primitives (v0.31.0 / Cycle 6a). Implements Electrum's
+//!   `pw_encode_bytes` / `pw_decode_bytes` (Format A field-level
+//!   encryption: `sha256d(password) + AES-256-CBC + PKCS7 + base64`).
+//!   Defines a library-local `ElectrumDecryptError` per the same
+//!   pattern. The CLI handler in `src/cmd/import_wallet.rs` (Cycle 6b
+//!   Phase 3) converts via a boundary mapper to `ToolkitError::BadInput`
+//!   at orchestrator pre-decrypt time. Format B (whole-file storage
+//!   encryption) is out of scope; tracked as FOLLOWUP
+//!   `wallet-import-electrum-encrypted-storage-format-b`.
 //! - `secret_taxonomy` (v0.14.0): public `pub const &[&str]` arrays of
 //!   secret-class node / slot-subkey token strings. Mirrors the
 //!   private `NodeType::is_secret_bearing` /
@@ -46,6 +56,7 @@
 //!   bump); adding entries is additive and minor-safe. Consumed by
 //!   `mnemonic-gui` v0.4.0+.
 
+pub mod electrum_crypto;
 pub mod final_word;
 // `mlock` uses POSIX `libc::mlock` / `libc::munlock` / `libc::sysconf` /
 // `_SC_PAGESIZE`. None of those symbols exist in `libc`'s Windows

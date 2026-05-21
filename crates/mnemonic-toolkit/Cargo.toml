@@ -20,6 +20,9 @@ path = "src/main.rs"
 ms-codec = "0.2.0"
 mk-codec = "0.3.1"
 md-codec = "0.34.0"
+aes = "0.8"
+base64 = "0.22"
+cbc = "0.1"
 hmac = "0.12"
 miniscript = { version = "13", default-features = false, features = ["std"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
