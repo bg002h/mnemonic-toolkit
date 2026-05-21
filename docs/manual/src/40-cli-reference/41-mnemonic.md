@@ -1675,11 +1675,50 @@ Pipe to a QR generator:
 mnemonic seedqr encode --from phrase="abandon ... about" | qrencode -o out.png -
 ```
 
+### Worked example — 24-word vector
+
+The canonical Trezor 24-word `all-abandon-art` vector encodes to 92
+zero-padded digits followed by `0102` (BIP-39 English index of "art"):
+
+```sh
+mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+```
+
+Stdout:
+
+```text
+000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000102
+```
+
+Round-tripping through `decode` yields the original 24-word phrase
+byte-for-byte.
+
 ### Cross-impl smoke recipe
 
-Verify byte-identical output against the SeedSigner Python reference at
-`src/seedsigner/models/encode_qr.py::SeedQrEncoder` (recipe finalized at commit time using the symbol
-path recorded in `design/cycle-5-p0-recon.md` §A4).
+`mnemonic seedqr encode` is byte-identical to SeedSigner's Python
+reference encoder at `src/seedsigner/models/encode_qr.py::SeedQrEncoder`.
+Verify locally:
+
+```sh
+git clone https://github.com/SeedSigner/seedsigner /tmp/ss
+cd /tmp/ss
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from seedsigner.models.encode_qr import SeedQrEncoder
+phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+enc = SeedQrEncoder(mnemonic=phrase.split())
+print(enc.data)
+"
+```
+
+Expected: `000000000000000000000000000000000000000000000003`. Compare
+against the toolkit:
+
+```sh
+mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+```
+
+The two outputs match byte-for-byte.
 
 ### Exit codes
 
