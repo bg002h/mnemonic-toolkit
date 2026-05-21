@@ -2885,7 +2885,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`seedqr-decode` SubcommandSchema flag list); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `mnemonic-toolkit-v0.31.6`.
 - **What:** Add `--from` to the `seedqr-decode` schema entry (and document `--digits` as deprecated-but-present); bump toolkit pin v0.31.3 → v0.31.6 (cumulative catch-up across v0.31.4/v0.31.5/v0.31.6). The supply-chain drift gate at `src/secrets.rs::v0_3_canonical_fallback::SECRET_NODE_TYPES` will fire on the pin bump (v0.31.6 added `"seedqr"` to `SECRET_NODE_TYPES`) — acknowledge via snapshot update. GUI v0.16.2 (PATCH).
 - **Why deferred:** Cross-repo; ships as Cycle 13b immediately following the toolkit tag (lockstep).
-- **Status:** `open`
+- **Status:** `resolved 0c55cfd` — mnemonic-gui-v0.16.2 (Cycle 13b). Added `--from` to `SEEDQR_DECODE_FLAGS` (`NodeValueComposite(["seedqr"])`) + `--digits` → `required: false` (deprecated). Toolkit pin v0.31.3 → v0.31.6 (cumulative catch-up across v0.31.4 + v0.31.5 + v0.31.6). `SECRET_NODE_TYPES` supply-chain drift snapshot + `tests/secrets.rs` pinned-set both += `"seedqr"` (compile-time drift gate fired on pin bump; acknowledged). 353 GUI cells passing; schema_mirror green. Known gap deferred (no FOLLOWUP): `convert` GUI form shares one `NODE_TYPES` const for `--from`/`--to` dropdowns; `seedqr` (input-only) not added to avoid wrongly offering `--to seedqr`; not gate-affecting.
 - **Tier:** `v0.32+-gui-lockstep`
 - **Tags:** none
 - **Companion:** parent `seedqr-digits-from-input-unification` (resolved v0.31.6).
