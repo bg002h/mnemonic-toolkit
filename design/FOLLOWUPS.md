@@ -2564,10 +2564,11 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — references this slug as the SeedQR-side carve-out.
 - **What:** v0.28+: ingest Blockstream Jade SeedQR shape — BIP-39 entropy encoded as a numeric-string QR payload per Jade firmware's SeedQR convention. May be folded into the `--format jade` parser via a sniff branch, OR shipped as a distinct `--format jade-seedqr` value depending on user-direction (single-blob vs multi-format ambiguity). Either path needs sniff signature, ms1 entropy extraction, and the same envelope shape as P5.
 - **Why deferred:** Phase P5 cycle scope was the JSON `get_registered_multisig` reply shape only (per Q1 lock). SeedQR is a distinct surface (numeric encoding vs JSON; entropy-only vs wallet-policy) and warrants its own cycle.
-- **Status:** open
+- **Status:** resolved (superseded by `seedqr-encode-decode-subcommand` per Cycle 5 / v0.30.0). The architectural pivot in Cycle 5 brainstorm rejected the wallet-import framing — SeedQR carries a BIP-39 SEED (not a wallet policy), and is an open SeedSigner spec (not Jade-proprietary). Shipped as a top-level `mnemonic seedqr decode|encode` subcommand instead. See `design/BRAINSTORM_v0_30_0_seedqr.md` §"Architectural pivot" for the rationale.
+- **Resolved by:** Cycle 5 / `mnemonic-toolkit-v0.30.0` (`56dd2b6`) + paired `mnemonic-gui-v0.15.0` (`5582e22`).
 - **Tier:** `v0.28+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-jade` (resolved v0.28.0; this is the deferred SeedQR carve-out).
+- **Companion:** parent `wallet-import-jade` (resolved v0.28.0; this is the deferred SeedQR carve-out, now resolved by a different surface). New slug `seedqr-encode-decode-subcommand` documents the v0.30.0 implementation.
 
 ### `wallet-import-electrum-encrypted` — encrypted Electrum 4.x wallet ingest
 
@@ -2768,3 +2769,63 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.29+`
 - **Tags:** none
 - **Companion:** parent `error-rs-retroactive-alphabetical-sort` (resolved v0.29.0).
+
+
+### `seedqr-encode-decode-subcommand` — canonical reference for the v0.30.0 SeedQR subcommand (resolved)
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.0 Cycle 5 brainstorm (`design/BRAINSTORM_v0_30_0_seedqr.md`). Replaces the predecessor wallet-import framing under the slug `wallet-import-jade-seedqr`.
+- **Where:** `crates/mnemonic-toolkit/src/seedqr.rs` (library: `decode` / `encode` + `SeedqrError`) + `crates/mnemonic-toolkit/src/cmd/seedqr.rs` (CLI: `SeedqrArgs` + `map_seedqr_error`) + `docs/manual/src/40-cli-reference/41-mnemonic.md` (manual chapter) + `mnemonic-gui/src/schema/mnemonic.rs` (schema-mirror entries).
+- **What:** Top-level `mnemonic seedqr decode|encode` subsubcommand. Standard SeedQR only; 12 + 24 word phrases; English-locked. Library-local `SeedqrError` → `ToolkitError::BadInput` boundary mapper. JSON envelope `{schema_version, operation, variant, word_count, phrase, digits}`. Vendor-neutral slug (SeedSigner-originated open spec; adopted by Jade / Coldcard / Cobo / Krux).
+- **Status:** resolved (Cycle 5 / v0.30.0).
+- **Resolved by:** `mnemonic-toolkit-v0.30.0` (`56dd2b6`) + `mnemonic-gui-v0.15.0` (`5582e22`). End-of-cycle opus review GREEN (0C/0I/1M cosmetic; `design/agent-reports/v0_30_0-end-of-cycle-review.md`). install-pin-check CI green on tag.
+- **Tier:** `v0.30+` (entry kept as cross-cite anchor; child v0.30+ slugs reference this as parent).
+- **Tags:** none
+- **Companion:** parent `wallet-import-jade-seedqr` (resolved-superseded by this slug); child slugs `seedqr-compact-variant`, `seedqr-15-18-21-word-counts`, `seedqr-bundle-slot-integration`, `seedqr-digits-from-input-unification`.
+
+
+### `seedqr-compact-variant` — CompactSeedQR (binary entropy QR encoding)
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.0 Cycle 5 brainstorm close. Deferred from Cycle 5 per the variant-scope lock.
+- **Where:** new variant code path in `crates/mnemonic-toolkit/src/seedqr.rs` + new CLI flag `--variant compact` in `crates/mnemonic-toolkit/src/cmd/seedqr.rs` + SeedSigner ref impl at `src/seedsigner/models/encode_qr.py::CompactSeedQrEncoder` (binary mode).
+- **What:** Add CompactSeedQR ingest + emit. Per SeedSigner spec, CompactSeedQR encodes raw BIP-39 entropy bytes in QR's binary mode (16 bytes for 12-word phrases; 32 for 24-word). Implementation requires: (a) explicit `--variant <standard|compact>` flag (default `standard`); (b) explicit `--word-count <12|24>` flag (binary mode has no length-based disambiguation); (c) JSON envelope `variant` field already-locked at `"standard"|"compact"`. Sniff is ambiguous (16/32 raw bytes carry no distinguishing signature), so explicit flags are required.
+- **Why deferred:** Cycle 5 locked Standard SeedQR only. Sniff-ambiguity for binary mode requires UX design (explicit flags + word-count required). Out of scope for the v0.30.0 introductory cycle.
+- **Status:** `open`
+- **Tier:** `v0.30+`
+- **Tags:** none
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+
+
+### `seedqr-15-18-21-word-counts` — extend SeedQR encode/decode to 15/18/21-word phrases
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.0 Cycle 5 brainstorm close. Deferred from Cycle 5 per the word-count-scope lock.
+- **Where:** `crates/mnemonic-toolkit/src/seedqr.rs` (`SeedqrError::InvalidWordCount` matches `12|24` only at v0.30.0; widen to `12|15|18|21|24`); `crates/mnemonic-toolkit/tests/cli_seedqr.rs` (the 5 wrong-word-count refusal cells exercise 13/15/18/21/25 — 15/18/21 must move from refusal to happy-path on this FOLLOWUP).
+- **What:** Widen SeedQR encode/decode word-count support from `{12, 24}` to `{12, 15, 18, 21, 24}`. SeedSigner's SeedQR spec is explicit about 12+24; 15/18/21 are BIP-39 standard but not in the original SeedQR specification. Validate against SeedSigner's reference implementation: if their encoder accepts these word-counts cleanly, ship; if it doesn't, file a spec-clarification.
+- **Why deferred:** Cycle 5 locked 12+24 only per the SeedQR spec's explicit canonical word-counts. Widening to all BIP-39 word-counts requires (a) verification that the SeedSigner ref impl accepts them; (b) extending the unit + integration test matrix; (c) JSON envelope's `word_count` field already supports arbitrary values so no envelope evolution needed.
+- **Status:** `open`
+- **Tier:** `v0.30+`
+- **Tags:** none
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+
+
+### `seedqr-bundle-slot-integration` — `mnemonic bundle --slot @N.seedqr=<file>` auto-decode at slot-emit
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.0 Cycle 5 brainstorm close.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` slot-input pipeline + `crates/mnemonic-toolkit/src/slot_input.rs` (slot value-source variants).
+- **What:** Add a new slot input source `--slot @N.seedqr=<file>` that reads a SeedQR file at slot-emit time and decodes it inline (via the `seedqr::decode` library primitive) into a BIP-39 phrase, then feeds the phrase into the normal slot machinery. Tightens the integration between SeedQR and bundle emission without forcing a two-step `mnemonic seedqr decode | mnemonic bundle --slot @N.phrase=-` shell pipeline.
+- **Why deferred:** Cycle 5 locked the seedqr surface as a standalone subcommand (paralleling seed-xor/slip39/final-word). Bundle-slot integration is a separate cross-subcommand wiring decision; user-direction may prefer the standalone form indefinitely.
+- **Status:** `open` (defer-to-future-decision; not committed to the next cycle).
+- **Tier:** `v0.30+`
+- **Tags:** none
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
+
+
+### `seedqr-digits-from-input-unification` — extend `FromInput` with `seedqr=<value>` and deprecate `--digits`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.30.0 Cycle 5 plan-doc R0 opus review (`design/agent-reports/v0_30_0-plan-doc-r0-review.md` §I4).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs` `FromInput` + `NodeType` enum + `parse_from_input`; `crates/mnemonic-toolkit/src/cmd/seedqr.rs::SeedqrDecodeArgs.digits` (current `--digits` flag).
+- **What:** Long-term surface unification across all `--from`-shaped subcommands. Today: `convert` uses `--from <node>=<value>`; `seed-xor` / `slip39` / `seedqr-encode` use `--from phrase=...`; but `seedqr-decode` uses a bespoke `--digits <value>` flag because SeedQR digits are a distinct surface from the existing `phrase/xpub/xprv/ms1/...` types. The asymmetry creates a long-term inconsistency. **Proposed:** extend `FromInput` with a `seedqr=<value>` node type, then deprecate `--digits` in favor of `--from seedqr=...`. Migration path: v0.30+ accepts BOTH `--digits` (deprecated; emits stderr warning) AND `--from seedqr=...` (canonical); a future v0.31+ removes `--digits`.
+- **Why deferred:** Cycle 5 scope was the standalone seedqr surface. Extending `FromInput` to include `seedqr=` would have been a global change touching every consumer of `FromInput`; out of scope for the introductory cycle.
+- **Status:** `open`
+- **Tier:** `v0.30+`
+- **Tags:** none
+- **Companion:** parent `seedqr-encode-decode-subcommand` (resolved v0.30.0).
