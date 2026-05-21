@@ -9,9 +9,32 @@
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::secret_advisory::secret_in_argv_warning;
-use clap::{Args, Subcommand};
-use mnemonic_toolkit::seedqr::{decode as seedqr_decode, encode as seedqr_encode, SeedqrError};
+use clap::{Args, Subcommand, ValueEnum};
+use mnemonic_toolkit::seedqr::{
+    decode as seedqr_decode, decode_compact as seedqr_decode_compact, encode as seedqr_encode,
+    encode_compact as seedqr_encode_compact, SeedqrError,
+};
 use std::io::{Read, Write};
+
+/// v0.32.0 — SeedQR variant selector. `standard` (default) is the
+/// decimal-digit numeric form; `compact` is the SeedSigner CompactSeedQR
+/// binary-mode payload (raw BIP-39 entropy bytes), represented on the CLI
+/// as lowercase hex. Compact supports 12 + 24 words only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum SeedqrVariant {
+    #[default]
+    Standard,
+    Compact,
+}
+
+impl SeedqrVariant {
+    fn as_str(self) -> &'static str {
+        match self {
+            SeedqrVariant::Standard => "standard",
+            SeedqrVariant::Compact => "compact",
+        }
+    }
+}
 
 #[derive(Args, Debug)]
 pub struct SeedqrArgs {
@@ -38,8 +61,15 @@ pub struct SeedqrDecodeArgs {
 
     /// Canonical input form (v0.31.6): `--from seedqr=<VALUE|->`. Only the
     /// `seedqr` node type is accepted on `seedqr decode`. `-` reads from stdin.
+    /// For `--variant compact` the value is lowercase hex (entropy bytes);
+    /// for `--variant standard` it is the decimal digit string.
     #[arg(long = "from", value_name = "seedqr=<VALUE|->", value_parser = parse_from_input)]
     pub from: Option<FromInput>,
+
+    /// SeedQR variant (v0.32.0): `standard` (decimal digits, default) or
+    /// `compact` (CompactSeedQR entropy bytes as hex; 12/24 words only).
+    #[arg(long = "variant", value_enum, default_value_t = SeedqrVariant::Standard)]
+    pub variant: SeedqrVariant,
 
     /// Write JSON envelope to PATH (stdout empty when set).
     #[arg(long = "json-out", value_name = "PATH")]
@@ -56,6 +86,11 @@ pub struct SeedqrEncodeArgs {
         required = true,
     )]
     pub from: FromInput,
+
+    /// SeedQR variant (v0.32.0): `standard` (decimal digits, default) or
+    /// `compact` (CompactSeedQR entropy bytes as hex; 12/24 words only).
+    #[arg(long = "variant", value_enum, default_value_t = SeedqrVariant::Standard)]
+    pub variant: SeedqrVariant,
 
     /// Write JSON envelope to PATH (stdout empty when set).
     #[arg(long = "json-out", value_name = "PATH")]
@@ -146,12 +181,20 @@ fn run_decode<R: Read, W: Write, E: Write>(
     };
     let _pin_digits = mnemonic_toolkit::mlock::pin_pages_for(digits.as_bytes());
 
-    // Decode via library primitive.
-    let phrase_plain = seedqr_decode(digits.as_str()).map_err(|e| map_seedqr_error(e, "decode"))?;
+    // Decode via library primitive (variant-dispatched). Standard reads
+    // decimal digits; compact reads hex entropy bytes.
+    let phrase_plain = match args.variant {
+        SeedqrVariant::Standard => {
+            seedqr_decode(digits.as_str()).map_err(|e| map_seedqr_error(e, "decode"))?
+        }
+        SeedqrVariant::Compact => {
+            seedqr_decode_compact(digits.as_str()).map_err(|e| map_seedqr_error(e, "decode"))?
+        }
+    };
     let phrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(phrase_plain);
     let _pin_phrase = mnemonic_toolkit::mlock::pin_pages_for(phrase.as_bytes());
 
-    // Canonical 48/96-digit form for JSON envelope echo.
+    // Canonical payload (whitespace-stripped) for JSON envelope echo.
     let canonical_digits: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(
         digits
             .chars()
@@ -196,8 +239,16 @@ fn run_encode<R: Read, W: Write, E: Write>(
     };
     let _pin_phrase = mnemonic_toolkit::mlock::pin_pages_for(phrase.as_bytes());
 
-    // Encode via library primitive.
-    let digits_plain = seedqr_encode(phrase.as_str()).map_err(|e| map_seedqr_error(e, "encode"))?;
+    // Encode via library primitive (variant-dispatched). Standard emits
+    // decimal digits; compact emits hex entropy bytes.
+    let digits_plain = match args.variant {
+        SeedqrVariant::Standard => {
+            seedqr_encode(phrase.as_str()).map_err(|e| map_seedqr_error(e, "encode"))?
+        }
+        SeedqrVariant::Compact => {
+            seedqr_encode_compact(phrase.as_str()).map_err(|e| map_seedqr_error(e, "encode"))?
+        }
+    };
     let digits: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(digits_plain);
     let _pin_digits = mnemonic_toolkit::mlock::pin_pages_for(digits.as_bytes());
 
@@ -230,7 +281,7 @@ fn emit_decode_output<W: Write>(
         let envelope = SeedqrEnvelope {
             schema_version: "1",
             operation: "decode",
-            variant: "standard",
+            variant: args.variant.as_str(),
             word_count,
             phrase,
             digits,
@@ -258,7 +309,7 @@ fn emit_encode_output<W: Write>(
         let envelope = SeedqrEnvelope {
             schema_version: "1",
             operation: "encode",
-            variant: "standard",
+            variant: args.variant.as_str(),
             word_count,
             phrase,
             digits,

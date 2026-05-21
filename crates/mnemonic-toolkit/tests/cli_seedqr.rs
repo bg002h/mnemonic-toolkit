@@ -246,6 +246,127 @@ fn encode_json_mode_12_word() {
     assert_eq!(json["digits"], DIGITS_12);
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// v0.32.0 — CompactSeedQR (--variant compact)
+// ──────────────────────────────────────────────────────────────────────
+
+const COMPACT_HEX_12: &str = "00000000000000000000000000000000";
+const COMPACT_HEX_24: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
+
+#[test]
+fn encode_compact_12_word_cli() {
+    mnemonic()
+        .args(["seedqr", "encode", "--variant", "compact", "--from"])
+        .arg(format!("phrase={PHRASE_12}"))
+        .assert()
+        .success()
+        .stdout(format!("{COMPACT_HEX_12}\n"));
+}
+
+#[test]
+fn decode_compact_12_word_cli() {
+    mnemonic()
+        .args(["seedqr", "decode", "--variant", "compact", "--from"])
+        .arg(format!("seedqr={COMPACT_HEX_12}"))
+        .assert()
+        .success()
+        .stdout(format!("{PHRASE_12}\n"));
+}
+
+#[test]
+fn decode_compact_24_word_cli() {
+    // R0 M2 — 24-word CLI happy path (64-hex).
+    mnemonic()
+        .args(["seedqr", "decode", "--variant", "compact", "--from"])
+        .arg(format!("seedqr={COMPACT_HEX_24}"))
+        .assert()
+        .success()
+        .stdout(format!("{PHRASE_24}\n"));
+}
+
+#[test]
+fn encode_compact_json_envelope() {
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    let path = tmp.path();
+    mnemonic()
+        .args(["seedqr", "encode", "--variant", "compact", "--from"])
+        .arg(format!("phrase={PHRASE_12}"))
+        .args(["--json-out", path.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout("");
+    let json: Value = serde_json::from_reader(std::fs::File::open(path).unwrap()).unwrap();
+    assert_eq!(json["operation"], "encode");
+    assert_eq!(json["variant"], "compact");
+    assert_eq!(json["word_count"], 12);
+    assert_eq!(json["phrase"], PHRASE_12);
+    assert_eq!(json["digits"], COMPACT_HEX_12); // payload field holds the hex
+}
+
+#[test]
+fn compact_round_trip_via_cli() {
+    let enc = mnemonic()
+        .args(["seedqr", "encode", "--variant", "compact", "--from"])
+        .arg(format!("phrase={PHRASE_24}"))
+        .assert()
+        .success();
+    let hex = String::from_utf8(enc.get_output().stdout.clone())
+        .unwrap()
+        .trim()
+        .to_string();
+    mnemonic()
+        .args(["seedqr", "decode", "--variant", "compact", "--from"])
+        .arg(format!("seedqr={hex}"))
+        .assert()
+        .success()
+        .stdout(format!("{PHRASE_24}\n"));
+}
+
+#[test]
+fn encode_compact_rejects_15_word_cli() {
+    let fifteen = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address";
+    let assertion = mnemonic()
+        .args(["seedqr", "encode", "--variant", "compact", "--from"])
+        .arg(format!("phrase={fifteen}"))
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("compact") && stderr.contains("only 12 or 24"),
+        "expected compact word-count refusal; got: {stderr}"
+    );
+}
+
+#[test]
+fn decode_compact_uppercase_and_whitespace_hex() {
+    // R0 M2 — hex is case-insensitive + whitespace-stripped. 16 bytes → 12-word.
+    mnemonic()
+        .args(["seedqr", "decode", "--variant", "compact", "--from"])
+        .arg("seedqr=AABB CCDD EEFF 0011 2233 4455 6677 8899")
+        .assert()
+        .success();
+}
+
+#[test]
+fn standard_decode_of_64_char_hex_clean_error() {
+    // R0 M2 / footgun check — a 64-char all-zero compact hex under
+    // --variant standard: 64 ∉ {48,60,72,84,96} → clean InvalidDigits
+    // error (exit 1), NOT a panic.
+    let assertion = mnemonic()
+        .args(["seedqr", "decode", "--from"])
+        .arg(format!("seedqr={COMPACT_HEX_24}"))
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("invalid digit count"),
+        "expected clean InvalidDigits error; got: {stderr}"
+    );
+}
+
 #[test]
 fn encode_json_mode_24_word() {
     let tmp = tempfile::NamedTempFile::new().unwrap();
