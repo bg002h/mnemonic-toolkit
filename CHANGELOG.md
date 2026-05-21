@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.31.4] — 2026-05-21
+
+**SemVer-PATCH release.** Defensive hardening: widens the descriptor-passthrough discriminator at `wallet_import/sparrow.rs::parse` Step 6 from the literal substring `script_template.contains("@0/**")` to a regex `Regex::new(r"@\d+/\*\*").is_match(...)`. Closes `sparrow-import-detection-regex-defensive-widening` FOLLOWUP filed at v0.31.2 Cycle 9 close (end-of-cycle opus M1 finding).
+
+Under the current Sparrow emit invariant (`wallet_export/sparrow.rs:230` indexes placeholders from `(0..n)`) `@0/**` is always present in template-mode blobs, so v0.31.4 produces **no behavior change** in the field. The widening is purely defensive — a hypothetical future emit-side change (e.g., a Sparrow patch that indexes cosigners from 1, or a non-canonical template producer) would have silently mis-classified `wpkh(@1/**)` as descriptor-passthrough under the substring discriminator; the regex catches any digit-indexed placeholder.
+
+### Changed
+
+- `crates/mnemonic-toolkit/src/wallet_import/sparrow.rs::parse` Step 6: `has_at_placeholder` predicate now uses `regex::Regex::new(r"@\d+/\*\*").expect("at-placeholder regex is a fixed string literal").is_match(&script_template)`. Inline `Regex::new` per the project's established pattern at `sparrow.rs:555/566/678`, `bsms.rs:501/520`, `bitcoin_core.rs:530/553/561`, etc. (the R0 reviewer caught that my initial `LazyLock` choice had ZERO usages anywhere in the crate; folded to the precedent).
+
+### Added
+
+- 2 in-file lib unit cells: `at_placeholder_regex_matches_only_template_mode_shapes` (regex-unit; 7 positive cases + 5 negative cases) + `parse_at_0_placeholder_still_routes_to_template_mode_substitution` (backward-compat regression locking the no-behavior-change claim against the existing `sparrow-singlesig-p2wpkh.json` fixture).
+
+### Test totals
+
+- 2152 cells passing; 12 ignored. +2 net (vs v0.31.3 baseline 2150).
+
+### Cycle topology
+
+Cycle 11 — second cycle of the v0.32+ tier. 8 v0.32+ FOLLOWUPs remain from cycles 5-9. Toolkit-only (no GUI lockstep; no clap surface change).
+
+### Review
+
+- Plan-doc opus R0: YELLOW (0C/2I/1M) — both Importants folded inline pre-Phase-2 (I1 LazyLock → inline Regex::new(); I2 test surface → regex-unit + backward-compat cells).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.31.3] — 2026-05-21
 
 **SemVer-PATCH release.** Behavior expansion: new `SlotSubkey::Seedqr` variant. `--slot @N.seedqr=<digit-string>` is now accepted on `mnemonic bundle` + `mnemonic verify-bundle` (refused on `mnemonic export-wallet` per the SPEC §3 watch-only-by-definition invariant). The value is a 48- or 96-digit SeedQR string per the SeedSigner SeedQR spec; it's decoded inline via the existing `seedqr::decode` library primitive at slot-emit time, and the resulting BIP-39 phrase is materialized into the slot identically to a `--slot @N.phrase=` invocation. Closes Cycle 10 (`seedqr-bundle-slot-integration` FOLLOWUP — the first v0.32+ tier follow-on from Cycle 5's introductory `mnemonic seedqr` subcommand).
