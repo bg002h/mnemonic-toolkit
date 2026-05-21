@@ -49,11 +49,17 @@
 //!   placeholders` → `parse_descriptor::parse_descriptor` pipeline that BSMS
 //!   and Bitcoin Core use. Network detection mirrors BSMS (`network_from_
 //!   origins` via BIP-48 coin-type on first cosigner origin path).
-//! - Taproot multisig (`tr(NUMS, ...)`) descriptors are emitted by Sparrow as
-//!   descriptor-passthrough (no `@N/**` placeholder shape) — these are not
-//!   yet supported by Phase P1B; refusal is filed at SPEC §11.1 future-work.
-//!   For P1B, the parse REFUSES descriptors whose `script` field contains
-//!   `tr(` (taproot multisig path) and emits an explicit ImportWalletParse.
+//! - Taproot import (v0.31.1 + v0.31.2): Sparrow's taproot emit covers
+//!   both shapes — taproot MULTISIG (`tr(NUMS, multi_a(...))` /
+//!   `tr(NUMS, sortedmulti_a(...))`) ships as descriptor-passthrough with
+//!   concrete `[fp/path]xpub` keys embedded directly; taproot SINGLESIG
+//!   (Bip86: `tr(@0/**)`) ships in template-mode with placeholder.
+//!   v0.31.1 Cycle 8 introduced the Step 6 path-split for the
+//!   descriptor-passthrough branch (`has_tr && !has_at_placeholder` →
+//!   skip Step 5 substitution; feed `script_template` directly).
+//!   v0.31.2 Cycle 9 collapsed the taproot-singlesig narrow refusal into
+//!   the general template-mode substitution branch (the existing Step 5
+//!   loop handles `tr(@0/**)` → `tr([fp/86'/0'/0']xpub/<0;1>/*)` cleanly).
 
 use super::{
     pipeline::concrete_keys_to_placeholders, validate_watch_only_resolved, ImportProvenance,
@@ -205,10 +211,12 @@ impl WalletFormatParser for SparrowParser {
     ///    MULTI requires N≥2.
     /// 4. Per-keystore: extract `masterFingerprint`, `derivation`, `xpub`.
     /// 5. Substitute `@i/**` → `[fp/derivation_no_m]xpub/<0;1>/*` in the
-    ///    miniscript script.
-    /// 6. Refuse if substituted script contains `tr(` (taproot is
-    ///    descriptor-passthrough in Sparrow's emit and not yet supported on
-    ///    the import side — P1B SPEC §11.1 future-work).
+    ///    miniscript script (skipped under v0.31.1 descriptor-passthrough
+    ///    mode where `script_template` already carries concrete keys).
+    /// 6. Path-split (v0.31.1 + v0.31.2): `has_tr && !has_at_placeholder`
+    ///    = descriptor-passthrough (taproot multisig; skip Step 5).
+    ///    Otherwise = substitute. Taproot singlesig (Bip86 `tr(@0/**)`)
+    ///    takes the substitution branch (v0.31.2 Cycle 9).
     /// 7. Feed through `concrete_keys_to_placeholders` → `parse_descriptor`.
     /// 8. Build `ResolvedSlot` cosigners with origin + xpub typed values.
     /// 9. Emit stderr NOTICE per SPEC §2.4 listing dropped envelope fields.
@@ -301,42 +309,34 @@ impl WalletFormatParser for SparrowParser {
             keystores.push(parse_keystore(i, ks)?);
         }
 
-        // Step 6 (v0.31.1 Cycle 8): split path for taproot multisig
-        // descriptor-passthrough.
+        // Step 6 (v0.31.2 Cycle 9): full taproot import via path-split.
         //
-        // Sparrow's emit at `wallet_export/sparrow.rs:215-219` ships TAPROOT
-        // MULTISIG templates (`tr-multi-a` / `tr-sortedmulti-a`) as
-        // descriptor-passthrough: concrete `[fp/path]xpub` keys are embedded
-        // in `script_template` directly (no `@N/**` placeholders). All other
-        // templates — including taproot SINGLESIG (`Bip86 => "tr(@0/**)"`
-        // at `wallet_export/sparrow.rs:195`) — ship with `@N/**`
-        // placeholders.
+        // Sparrow's emit at `wallet_export/sparrow.rs` ships taproot in TWO
+        // shapes:
+        // - MULTISIG (`tr-multi-a` / `tr-sortedmulti-a`) → DESCRIPTOR-
+        //   PASSTHROUGH: concrete `[fp/path]xpub` keys embedded in
+        //   `script_template` directly (no `@N/**` placeholders). Skip
+        //   Step 5 substitution; feed `script_template` directly.
+        // - SINGLESIG (`Bip86`: `tr(@0/**)`) → TEMPLATE-MODE: standard
+        //   `@N/**` placeholder substitution (v0.31.2; collapsed Cycle 8's
+        //   narrow refusal). Produces `tr([fp/86'/0'/0']xpub/<0;1>/*)`
+        //   which `concrete_keys_to_placeholders` + `parse_descriptor`
+        //   accept cleanly.
         //
         // Detection:
         //   has_tr             = script_template.contains("tr(")
         //   has_at_placeholder = script_template.contains("@0/**")
         //   descriptor-passthrough (taproot multisig) = has_tr && !has_at_placeholder
         //                       → skip Step 5 substitution; feed script_template directly.
-        //   taproot SINGLESIG template (`tr(@0/**)`) = has_tr && has_at_placeholder
-        //                       → preserve narrow refusal (separate FOLLOWUP
-        //                         `sparrow-taproot-singlesig-template-mode-import`
-        //                         filed at Cycle 8 close).
-        //   non-taproot template = !has_tr && has_at_placeholder → substitute (existing path).
+        //   otherwise (template-mode; non-taproot OR taproot singlesig)
+        //                       → run Step 5 substitution.
         //
-        // Closes `sparrow-taproot-descriptor-passthrough-import-support`.
+        // Closes `sparrow-taproot-descriptor-passthrough-import-support`
+        // (Cycle 8) + `sparrow-taproot-singlesig-template-mode-import`
+        // (Cycle 9).
         let has_tr = script_template.contains("tr(");
         let has_at_placeholder = script_template.contains("@0/**");
         let is_descriptor_passthrough = has_tr && !has_at_placeholder;
-        if has_tr && has_at_placeholder {
-            // Taproot SINGLESIG template (Bip86: `tr(@0/**)`). Scope-out
-            // of Cycle 8; preserve refusal. See FOLLOWUP
-            // `sparrow-taproot-singlesig-template-mode-import` for the
-            // follow-on cycle that ships substitution-then-parse for this
-            // template-mode shape.
-            return Err(ToolkitError::ImportWalletParse(
-                "import-wallet: sparrow: parse error: taproot singlesig templates (`tr(@N/**)`) are not yet supported; v0.31.1 ships taproot MULTISIG via descriptor-passthrough only. FOLLOWUP `sparrow-taproot-singlesig-template-mode-import` tracks the singlesig template-mode work.".to_string(),
-            ));
-        }
 
         // Step 5: substitute `@i/**` → `[fp/derivation_no_m]xpub/<0;1>/*`.
         // Apply longest-N first to avoid prefix collisions when N ≥ 10
@@ -923,9 +923,12 @@ mod tests {
         }
     }
 
-    /// Refusal: `tr(...)` scripts (taproot) are not yet supported.
+    /// v0.31.2 Cycle 9 — taproot singlesig template-mode imports via the
+    /// standard substitution path. Previously refused at Cycle 8 narrow
+    /// refusal block (now removed); `tr(@0/**)` substitutes to
+    /// `tr([fp/86'/0'/0']xpub.../<0;1>/*)` which the pipeline accepts.
     #[test]
-    fn parse_p2tr_singlesig_refused() {
+    fn parse_p2tr_singlesig_imports_via_substitution() {
         let blob = br#"{
             "name":"bip86-0","network":"mainnet","policyType":"SINGLE","scriptType":"P2TR",
             "defaultPolicy":{"name":"Default","miniscript":{"script":"tr(@0/**)"}},
@@ -935,11 +938,15 @@ mod tests {
                 "extendedPublicKey":"xpub6CAYwo2AfKJy1cdFGBAgLvCrZULhEkZ9C9s4GGXwXzHvNPguMWBcVrGEDjP2ZJdX92gVWLeLrNVVmipTrKqrwMy2eT282xKEyHMbPDrcD9e"
             }]
         }"#;
-        let err = parse(blob).unwrap_err();
-        let msg = format!("{err:?}");
+        let parsed = parse(blob).unwrap();
+        assert_eq!(parsed.len(), 1, "Bip86 emits exactly one ParsedImport");
+        let p = &parsed[0];
+        assert_eq!(p.cosigners.len(), 1);
+        // Sparrow Bip86 singlesig: derivation path m/86'/0'/0' → BIP-86 mainnet.
         assert!(
-            msg.contains("taproot") && msg.contains("not yet supported"),
-            "expected taproot-refusal message; got: {msg}"
+            p.cosigners[0].path_raw.contains("86'"),
+            "cosigner path_raw must reflect m/86'/0'/0'; got: {}",
+            p.cosigners[0].path_raw
         );
     }
 
