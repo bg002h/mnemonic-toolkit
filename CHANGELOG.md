@@ -6,6 +6,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.30.0] — 2026-05-21
+
+**SemVer-MINOR release.** New top-level `mnemonic seedqr` subcommand for SeedQR encode/decode. Paired with `mnemonic-gui-v0.15.0` (schema-mirror lockstep). Cycle 5 of v0.28+ residual FOLLOWUP release plan.
+
+### Added
+
+- **`mnemonic seedqr decode|encode`** — new top-level subcommand for SeedQR encode/decode. SeedQR is an open spec originated by SeedSigner: BIP-39 mnemonic encoded as a numeric-string QR payload where each English-wordlist index is rendered as a 4-digit zero-padded decimal.
+  - `seedqr decode --digits <VALUE|->` reads a 48 or 96 ASCII-digit SeedQR string, validates BIP-39 checksum, emits the BIP-39 phrase.
+  - `seedqr encode --from phrase=<VALUE|->` reads a 12- or 24-word English BIP-39 phrase, emits the SeedQR numeric string.
+  - Both subsubcommands support `--json-out <PATH>` (envelope: `schema_version: "1"`, `operation: "decode"|"encode"`, `variant: "standard"`, `word_count`, `phrase`, `digits`).
+  - **Scope (v0.30.0):** Standard variant only; 12 + 24 words only; English-locked. CompactSeedQR + 15/18/21-word counts + bundle-slot integration filed as FOLLOWUPs.
+  - **Exit code:** all `SeedqrError` variants map to `ToolkitError::BadInput` (exit 1).
+- New library module `mnemonic_toolkit::seedqr` with `decode()` / `encode()` primitives + library-local `SeedqrError` enum (no new `ToolkitError` variants; mapped via `cmd::seedqr::map_seedqr_error` at the CLI boundary per `lib.rs:14-28` documented pattern matching `final_word` / `seed_xor` / `slip39`).
+- `secrets.rs::flag_is_secret` extended to include `"--digits"` (unconditionally secret).
+- Secret-memory hygiene applied to `cmd/seedqr.rs` mirroring `cmd/seed_xor.rs:163-178`: `Zeroizing<String>` on phrase/digits buffers, `mlock::pin_pages_for` page pins, `secret_in_argv_warning` advisories for inline-form input.
+
+### Documentation
+
+- New `## mnemonic seedqr` section in manual chapter-41 (`docs/manual/src/40-cli-reference/41-mnemonic.md`). Covers synopsis, flags, scope, worked examples (12-word + 24-word + JSON envelope), cross-impl smoke recipe vs SeedSigner Python reference at `src/seedsigner/models/encode_qr.py::SeedQrEncoder`, exit codes, stderr templates.
+- Chapter-45 `### Deferral — SeedQR` rewritten as `### SeedQR (Jade + SeedSigner + others)` redirecting users to the new subcommand. Chapter-45 "Jade SeedQR variant" bullet updated with strike-through redirect.
+
+### Architectural pivot
+
+Predecessor brainstorm filed this cycle under FOLLOWUP slug `wallet-import-jade-seedqr` with the assumption that SeedQR ingest would extend the `wallet-import` surface. Cycle 5 pivots on two findings: (a) SeedQR carries a BIP-39 seed (not a wallet policy), so the wallet-import envelope is the wrong surface — forcing it through requires synthetic empty-policy `ParsedImport`; (b) SeedQR is an open spec used by multiple vendors (SeedSigner originated; Jade / Coldcard / Cobo / Krux adopted), so the slug should not be vendor-named.
+
+### FOLLOWUP closure
+
+- **Closed (resolved-superseded):** `wallet-import-jade-seedqr` — superseded by new vendor-neutral slug `seedqr-encode-decode-subcommand` (Cycle 5; v0.30.0).
+
+### Newly filed FOLLOWUPs
+
+- `seedqr-compact-variant` — CompactSeedQR ingest (raw entropy bytes; 16/32 bytes; ambiguity-handling via explicit `--variant compact --word-count` flag).
+- `seedqr-15-18-21-word-counts` — 15/18/21-word BIP-39 phrases (60/72/84 digits).
+- `seedqr-bundle-slot-integration` — `mnemonic bundle --slot @N.seedqr=<file>` auto-decode at slot-emit.
+- `seedqr-digits-from-input-unification` — long-term surface unification: extend `FromInput` with `seedqr=<value>` node type; deprecate `--digits`.
+
+### Tests
+
+- 2025 → ~2057 (+~32 from `tests/cli_seedqr.rs` + 18 unit cells in `src/seedqr.rs`).
+- All 113 test result groups PASS; `cargo clippy --all-targets --workspace -- -D warnings` clean.
+
+### GUI lockstep
+
+Paired tag `mnemonic-gui-v0.15.0`: pin bump v0.29.0 → v0.30.0; schema-mirror gains two new `SubcommandSchema` entries (`seedqr-encode` + `seedqr-decode`) placed between `seed-xor-combine` and `slip39-split` per verb-ordering convention (create-side before recover-side).
+
+### Note
+
+Cycle 5 of v0.28+ residual FOLLOWUP release plan. See `design/BRAINSTORM_v0_30_0_seedqr.md` + `design/PLAN_mnemonic_toolkit_v0_30_0.md` + `design/cycle-5-p0-recon.md`. Opus brainstorm R0 YELLOW (2C/8I/5M) → R1 GREEN. Opus plan-doc R0 RED (4C/6I/5M) → R1 GREEN-with-fix → folded inline.
+
+---
+
 ## mnemonic-toolkit [0.29.0] — 2026-05-21
 
 **SemVer-MINOR release.** Driver: xpub-search result wire-shape replacement (struct → tagged enum). Paired with `mnemonic-gui-v0.14.0` (downstream wire-shape consumer).
