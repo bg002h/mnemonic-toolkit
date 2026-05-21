@@ -385,3 +385,123 @@ fn coldcard_select_descriptor_non_all_emits_notice_and_coerces() {
         "expected parse to succeed post-coerce; got: {stdout}"
     );
 }
+
+// ============================================================================
+// v0.28.6 — Legacy mk1/mk2 Coldcard wallet.json fallback (parser at
+// wallet_import/coldcard.rs:460-462 with SLIP-132 prefix inference at
+// :471-494). Parser implementation landed in commit 1304932 (v0.28.0
+// P3-v2 cycle); this cycle adds fixture + test coverage per FOLLOWUP
+// `coldcard-legacy-mk1-mk2-top-level-xpub-inference`.
+// ============================================================================
+
+#[test]
+fn coldcard_legacy_mk1_xpub_prefix_infers_bip44() {
+    let fixture = PathBuf::from("tests/fixtures/wallet_import")
+        .join("coldcard-mk1-legacy-bip44-mainnet.json");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard",
+            "--blob",
+            fixture.to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("envelope JSON");
+    let descriptor = envelope[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor present in envelope");
+    assert!(
+        descriptor.starts_with("pkh("),
+        "expected pkh() descriptor (BIP-44 from xpub prefix), got: {descriptor:?}"
+    );
+}
+
+#[test]
+fn coldcard_legacy_mk1_ypub_prefix_infers_bip49() {
+    let fixture = PathBuf::from("tests/fixtures/wallet_import")
+        .join("coldcard-mk1-legacy-bip49-mainnet.json");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard",
+            "--blob",
+            fixture.to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("envelope JSON");
+    let descriptor = envelope[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor present in envelope");
+    assert!(
+        descriptor.starts_with("sh(wpkh("),
+        "expected sh(wpkh() descriptor (BIP-49 from ypub prefix), got: {descriptor:?}"
+    );
+}
+
+#[test]
+fn coldcard_legacy_mk1_zpub_prefix_infers_bip84() {
+    let fixture = PathBuf::from("tests/fixtures/wallet_import")
+        .join("coldcard-mk1-legacy-bip84-mainnet.json");
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard",
+            "--blob",
+            fixture.to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("envelope JSON");
+    let descriptor = envelope[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor present in envelope");
+    assert!(
+        descriptor.starts_with("wpkh("),
+        "expected wpkh() descriptor (BIP-84 from zpub prefix), got: {descriptor:?}"
+    );
+}
+
+#[test]
+fn coldcard_legacy_mk1_unrecognized_prefix_refuses() {
+    use std::io::Write;
+    let tmpdir = tempfile::tempdir().expect("tempdir");
+    let path = tmpdir.path().join("coldcard-legacy-bad-prefix.json");
+    let mut f = std::fs::File::create(&path).unwrap();
+    f.write_all(
+        br#"{"xpub": "bogusprefix_not_a_slip132_xpub_at_all", "xfp": "5436D724", "chain": "BTC"}"#,
+    )
+    .unwrap();
+    drop(f);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard",
+            "--blob",
+            path.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("mnemonic spawn");
+    assert_ne!(out.status.code(), Some(0), "must refuse, got success");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("unrecognized SLIP-132 prefix"),
+        "expected SLIP-132 prefix refusal, got: {stderr}"
+    );
+}

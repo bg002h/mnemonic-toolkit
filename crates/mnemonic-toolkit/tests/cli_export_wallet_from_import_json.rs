@@ -590,7 +590,7 @@ const DESCRIPTOR_CAPABLE_DESTS: &[&str] = &["bitcoin-core", "bip388", "bsms"];
 /// cells below; the gap is logged at
 /// `design/v0_28_0-cycle-followups.md#green-emitter-multisig-refusal-template-only`.
 const TEMPLATE_ONLY_DESTS: &[&str] =
-    &["coldcard", "electrum", "jade", "sparrow"];
+    &["coldcard", "coldcard-multisig", "electrum", "jade", "sparrow"];
 
 // ============================================================================
 // P11A — Helper structured-output cells. Verify the helper's
@@ -813,6 +813,8 @@ const SOURCES_LACKING_WALLET_NAME: &[&str] = &["bsms", "coldcard-multisig"];
 /// its own message but they all contain one of these literals.
 const REFUSAL_STDERR_PATTERNS: &[&str] = &[
     "requires --template",
+    // v0.28.4: coldcard-multisig precheck emits this distinct phrase.
+    "requires a multisig --template",
     "descriptor passthrough is not supported",
     "does not support multisig",
     // Specter wallet-name path (descriptor mode with no wallet_name).
@@ -868,7 +870,7 @@ fn p11c_refusal_matrix_strict_template_only_dests() {
         "P11C strict-template-only refusal failures ({}/{cell_count}): {failures:#?}",
         failures.len()
     );
-    assert_eq!(cell_count, 32, "P11C strict matrix = 8×4 = 32 cells");
+    assert_eq!(cell_count, 40, "P11C strict matrix = 8×5 = 40 cells");
 }
 
 #[test]

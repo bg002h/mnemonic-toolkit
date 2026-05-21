@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.28.6] — 2026-05-20
+
+Patch release: 2 test-hygiene FOLLOWUPs from the post-A/B/C residual backlog.
+
+### Tests
+
+- **`cross-format-refusal-matrix-include-coldcard-multisig`** — Extend the `tests/cli_export_wallet_from_import_json.rs` refusal-matrix coverage to include the v0.28.4-added `--format coldcard-multisig` export variant. `TEMPLATE_ONLY_DESTS` grows to 5 entries; `REFUSAL_STDERR_PATTERNS` broadened to match the `"requires a multisig --template"` refusal substring (the v0.28.4 multisig-template precheck text); cell-count assertion bumped 32 → 40 (8 sources × 5 dests). Closes the FOLLOWUP filed in v0.28.4 cycle commit `826efbc`.
+
+- **`coldcard-legacy-mk1-mk2-top-level-xpub-inference`** — Legacy mk1/mk2 Coldcard `wallet.json` fallback parser (already implemented in commit `1304932` from v0.28.0 P3-v2 cycle) now has fixture + test coverage. 3 new fixtures in `tests/fixtures/wallet_import/coldcard-mk1-legacy-bip{44,49,84}-mainnet.json` carry the canonical SLIP-132 published test vectors (xpub/ypub/zpub from the spec's "Bitcoin Test Vectors" section); 4 new test cells in `tests/cli_import_wallet_coldcard.rs` exercise the `infer_bip_from_xpub_prefix` SLIP-132 mapping (BIP-44/49/84 happy paths + 1 unrecognized-prefix refusal). Total toolkit cells: 2004 → 2008.
+
+### Note
+
+Cycle 2 of the v0.28+ residual FOLLOWUP release plan (see `design/BRAINSTORM_v0_28_plus_residual_followups.md`). Wave 1 second ship. No CLI surface change; no toolkit src changes; no GUI lockstep.
+
+---
+
 ## mnemonic-toolkit [0.28.5] — 2026-05-20
 
 Patch release: 2 doc-only fixes closing v0.28+ FOLLOWUPs surfaced in the post-A/B/C recon dossier.
