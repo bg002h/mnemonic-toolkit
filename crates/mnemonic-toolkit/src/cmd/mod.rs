@@ -11,6 +11,7 @@ pub mod import_wallet;
 pub mod inspect;
 pub mod repair;
 pub mod seed_xor;
+pub mod seedqr;
 pub mod slip39;
 pub mod verify_bundle;
 pub mod xpub_search;

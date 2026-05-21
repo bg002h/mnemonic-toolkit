@@ -53,6 +53,7 @@ pub fn flag_is_secret(flag_name: &str) -> bool {
             | "--passphrase-stdin"
             | "--bip38-passphrase"
             | "--bip38-passphrase-stdin"
+            | "--digits"
             | "--ms1"
             | "--share"
     )
@@ -69,6 +70,7 @@ mod tests {
             "--passphrase-stdin",
             "--bip38-passphrase",
             "--bip38-passphrase-stdin",
+            "--digits",
             "--ms1",
             "--share",
         ] {
