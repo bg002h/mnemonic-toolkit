@@ -1052,7 +1052,7 @@ electrum|jade|sparrow|specter>"
         // Replace blob with the decrypted plaintext for downstream parser.
         // Re-wrap in Zeroizing (the orchestrator's `blob` is zeroizing; the
         // decrypted Round-2 descriptor is scrubbed on drop).
-        blob = Zeroizing::new(plaintext.into_bytes());
+        blob = Zeroizing::new(plaintext.as_bytes().to_vec());
         // Re-pin the decrypted Round-2 buffer; drop+munlock the prior guard.
         drop(std::mem::replace(
             &mut _pin_blob,
@@ -2175,7 +2175,11 @@ fn is_encrypted_bsms_record(text: &str) -> bool {
 /// block and the Round-1 verify path; `ctx` labels error messages for the
 /// caller's record kind (e.g. `"bsms: encrypted Round-2 wire"` or
 /// `"--bsms-round1: encrypted record N"`).
-fn decrypt_bsms_record(text: &str, token: &BsmsToken, ctx: &str) -> Result<String, ToolkitError> {
+fn decrypt_bsms_record(
+    text: &str,
+    token: &BsmsToken,
+    ctx: &str,
+) -> Result<Zeroizing<String>, ToolkitError> {
     let wire = hex::decode(text.trim()).map_err(|e| {
         ToolkitError::ImportWalletParse(format!("import-wallet: {ctx} is not valid hex: {e}"))
     })?;
@@ -2200,11 +2204,13 @@ fn decrypt_bsms_record(text: &str, token: &BsmsToken, ctx: &str) -> Result<Strin
             token_len_hex: token.hex.len(),
         });
     }
-    String::from_utf8(plaintext.to_vec()).map_err(|_| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: {ctx}: decrypted record is not valid UTF-8"
-        ))
-    })
+    String::from_utf8(plaintext.to_vec())
+        .map(Zeroizing::new)
+        .map_err(|_| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: {ctx}: decrypted record is not valid UTF-8"
+            ))
+        })
 }
 
 fn hex_lower(bytes: &[u8]) -> String {
@@ -2326,7 +2332,7 @@ fn verify_bsms_round1_files(
             .map_err(ToolkitError::Io)?;
             plaintext
         } else {
-            raw_text
+            Zeroizing::new(raw_text)
         };
         let record = parse_round1(&text)?;
         let pk_hex = hex::encode(signer_pubkey(&record).serialize());
