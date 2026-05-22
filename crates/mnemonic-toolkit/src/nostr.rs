@@ -9,11 +9,12 @@
 //! the secret is normalized to even-y so the emitted WIF controls the emitted
 //! address (see `normalize_to_even_y`).
 
-#![allow(unused_imports)] // skeleton — imports consumed by Tasks A1/A2/A3
-
+use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
+use crate::network::CliNetwork;
 use bitcoin::secp256k1::{Parity, PublicKey, Secp256k1, SecretKey, Signing, Verification, XOnlyPublicKey};
-use bitcoin::CompressedPublicKey;
+use bitcoin::{Address, CompressedPublicKey};
+use std::str::FromStr;
 use zeroize::Zeroizing;
 
 /// Normalize a secret to BIP-340 even-y form. If `d·G` has odd y, returns
@@ -86,6 +87,102 @@ mod normalize_tests {
             assert_eq!(xonly_before, xonly_after, "seed {seed}: x-only changed");
             assert_eq!(negated, parity_before == Parity::Odd, "seed {seed}: negate flag wrong");
         }
+    }
+}
+
+/// Even-y compressed pubkey (`02‖x`) from an x-only key.
+pub fn even_y_compressed(xonly: XOnlyPublicKey) -> CompressedPublicKey {
+    CompressedPublicKey(PublicKey::from_x_only_public_key(xonly, Parity::Even))
+}
+
+/// Render the Bitcoin address for an x-only nostr key under `script_type`.
+pub fn address_for<C: Verification>(
+    secp: &Secp256k1<C>,
+    xonly: XOnlyPublicKey,
+    script_type: ScriptType,
+    network: CliNetwork,
+) -> String {
+    let compressed = even_y_compressed(xonly);
+    match script_type {
+        ScriptType::P2pkh => Address::p2pkh(compressed, network.network_kind()).to_string(),
+        ScriptType::P2wpkh => Address::p2wpkh(&compressed, network.known_hrp()).to_string(),
+        ScriptType::P2shP2wpkh => Address::p2shwpkh(&compressed, network.network_kind()).to_string(),
+        ScriptType::P2tr => Address::p2tr(secp, xonly, None, network.known_hrp()).to_string(),
+    }
+}
+
+/// Build the checksummed Bitcoin descriptor wrapping the nostr key.
+pub fn descriptor_for(xonly: XOnlyPublicKey, script_type: ScriptType) -> Result<String, ToolkitError> {
+    let body = match script_type {
+        ScriptType::P2tr => format!("tr({xonly})"),
+        ScriptType::P2wpkh => format!("wpkh({})", even_y_compressed(xonly)),
+        ScriptType::P2pkh => format!("pkh({})", even_y_compressed(xonly)),
+        ScriptType::P2shP2wpkh => format!("sh(wpkh({}))", even_y_compressed(xonly)),
+    };
+    let desc = miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&body)
+        .map_err(|e| ToolkitError::NostrKeyParse(format!("descriptor build failed: {e}")))?;
+    Ok(desc.to_string()) // Display appends the BIP-380 `#checksum`
+}
+
+/// Plain compressed WIF for the (already even-y-normalized) secret.
+pub fn wif_for(secret: &SecretKey, network: CliNetwork) -> String {
+    bitcoin::PrivateKey { compressed: true, network: network.network_kind(), inner: *secret }.to_wif()
+}
+
+/// Electrum imported-key script-type prefix (verify exact strings vs Electrum
+/// source before release; `p2sh-p2wpkh` maps to Electrum's `p2wpkh-p2sh`).
+pub fn electrum_prefix(script_type: ScriptType) -> &'static str {
+    match script_type {
+        ScriptType::P2pkh => "p2pkh:",
+        ScriptType::P2wpkh => "p2wpkh:",
+        ScriptType::P2shP2wpkh => "p2wpkh-p2sh:",
+        ScriptType::P2tr => "p2tr:",
+    }
+}
+
+#[cfg(test)]
+mod derive_tests {
+    use super::*;
+    use crate::cmd::convert::ScriptType;
+    use crate::network::CliNetwork;
+    use std::str::FromStr;
+
+    fn secp() -> Secp256k1<bitcoin::secp256k1::All> { Secp256k1::new() }
+
+    // CRUX: for every script type, the WIF derived from an nsec must control the
+    // address derived from the corresponding npub. Iterate scalars to hit both
+    // even-y and odd-y originals (exercising the negate path).
+    #[test]
+    fn wif_controls_the_npub_address_all_script_types() {
+        for seed in 1u8..=10 {
+            let mut bytes = [0u8; 32];
+            bytes[31] = seed;
+            let sk = SecretKey::from_slice(&bytes).unwrap();
+            let (xonly, _) = sk.x_only_public_key(&secp());      // published npub key
+            let (norm, _) = normalize_to_even_y(&secp(), sk);
+            let (xonly_from_secret, _) = norm.x_only_public_key(&secp());
+            for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+                let a_pub = address_for(&secp(), xonly, st, CliNetwork::Mainnet);
+                let a_sec = address_for(&secp(), xonly_from_secret, st, CliNetwork::Mainnet);
+                assert_eq!(a_pub, a_sec, "seed {seed} {st:?}: WIF/npub address mismatch");
+            }
+            let wif = wif_for(&norm, CliNetwork::Mainnet);
+            let pk = bitcoin::PrivateKey::from_wif(&wif).unwrap();
+            let (_, parity) = pk.inner.x_only_public_key(&secp());
+            assert_eq!(parity, Parity::Even, "seed {seed}: WIF key not even-y");
+        }
+    }
+
+    #[test]
+    fn descriptor_has_checksum_and_round_trips() {
+        let xonly = decode_npub("npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg").unwrap();
+        let tr = descriptor_for(xonly, ScriptType::P2tr).unwrap();
+        assert!(tr.starts_with("tr(") && tr.contains('#'), "got {tr}");
+        let wpkh = descriptor_for(xonly, ScriptType::P2wpkh).unwrap();
+        assert!(wpkh.starts_with("wpkh(02") || wpkh.starts_with("wpkh(03"), "got {wpkh}");
+        // miniscript must accept our own checksummed output (round-trip).
+        assert!(miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&tr).is_ok());
+        assert!(miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&wpkh).is_ok());
     }
 }
 
