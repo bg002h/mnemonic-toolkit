@@ -129,8 +129,8 @@ pub fn wif_for(secret: &SecretKey, network: CliNetwork) -> String {
     bitcoin::PrivateKey { compressed: true, network: network.network_kind(), inner: *secret }.to_wif()
 }
 
-/// Electrum imported-key script-type prefix (verify exact strings vs Electrum
-/// source before release; `p2sh-p2wpkh` maps to Electrum's `p2wpkh-p2sh`).
+/// Electrum imported-key script-type prefix, per Electrum's `WIF_SCRIPT_TYPES`
+/// (`bitcoin.py`): nested-segwit is `p2wpkh-p2sh`; taproot is `p2tr` (newer Electrum).
 pub fn electrum_prefix(script_type: ScriptType) -> &'static str {
     match script_type {
         ScriptType::P2pkh => "p2pkh:",

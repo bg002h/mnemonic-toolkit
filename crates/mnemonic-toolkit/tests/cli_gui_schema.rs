@@ -64,7 +64,8 @@ fn gui_schema_lists_all_subcommands() {
     // `import-wallet`. v0.30.0 adds `seedqr-decode` + `seedqr-encode`
     // (SeedQR encode/decode), bringing it to 20. v0.33.0 adds
     // `electrum-decrypt` (Electrum field-encrypted secret → plaintext);
-    // total is now 21. gui-schema + help filtered out.
+    // total was 21. v0.34.0 adds `nostr` (wrap a nostr key as BTC
+    // address/descriptor/WIF); total is now 22. gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
@@ -77,6 +78,7 @@ fn gui_schema_lists_all_subcommands() {
             "final-word",
             "import-wallet",
             "inspect",
+            "nostr",
             "repair",
             "seed-xor-combine",
             "seed-xor-split",
@@ -90,7 +92,7 @@ fn gui_schema_lists_all_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 21 user-facing subcommands must appear (nested split/combine \
+        "all 22 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
