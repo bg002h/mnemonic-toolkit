@@ -89,12 +89,12 @@ nostr key (secret)
   script-type: p2wpkh
   descriptor:  wpkh(02e17b86d…0e02)#<csum>
   address:     bc1q…
-  wif:         L1aW…                    [SECRET]
+  wif:         L1aW…
   electrum:    p2wpkh:L1aW…             (Electrum ▸ Import private keys)
 ```
 - `--all-script-types`: descriptor/address rows repeat per type; single WIF; Electrum hint per type.
 - Electrum prefix tracks the script-type: `p2pkh:` / `p2wpkh:` / `p2wpkh-p2sh:` / `p2tr:`. **Plan-phase TODO:** verify the exact Electrum prefix strings against Electrum source (Electrum uses `p2wpkh-p2sh:`, not `p2sh-p2wpkh:`).
-- **Secret-on-stdout:** the WIF + the whole `--secret` block route through the **existing secret-on-stdout redaction pathway** (TTY-redacted; full when piped or `--json`), consistent with `convert`'s `wif`/`minikey` (`NodeType::is_secret_bearing`). nsec input is zeroized + mlock-pinned (follow `import-wallet`/`electrum-decrypt` precedent).
+- **Secret-on-stdout (corrected per plan R0 I4):** the toolkit has **no** shared stdout TTY-redaction pathway — `convert` emits WIF as plain text and `convert-minikey-stdout-redaction` is an OPEN follow-up. So `mnemonic nostr` emits the WIF **plainly** (consistent with `convert`); secret hygiene rests on (a) the inline-`--secret` argv-leak advisory, (b) `secrets::flag_is_secret` masking the input flags, and (c) zeroize + `mlock`-pin of the in-memory secret (follow `import-wallet`/`electrum-decrypt` precedent). A future shared-redaction follow-up could cover both `convert` and `nostr`.
 
 ---
 

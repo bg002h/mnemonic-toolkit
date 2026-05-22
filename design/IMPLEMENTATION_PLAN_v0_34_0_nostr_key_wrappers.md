@@ -4,7 +4,7 @@
 
 **Goal:** Add a `mnemonic nostr` subcommand that wraps an existing nostr key (`npub`/`nsec`) as Bitcoin addresses, descriptors, and (for `nsec`) a WIF — across taproot (key-path) and non-taproot (even-y) script types.
 
-**Architecture:** A pure-crypto library module (`src/nostr.rs`: NIP-19 decode + even-y normalization + address/descriptor/WIF derivation), then a thin CLI layer (`src/cmd/nostr.rs`) that parses args, calls the library, and renders output — mirroring the `electrum_crypto.rs ↔ cmd/electrum_decrypt.rs` split. No m-format cards (verified infeasible; see spec §10).
+**Architecture:** A binary-crate crypto/derivation module (`src/nostr.rs`: NIP-19 decode + even-y normalization + address/descriptor/WIF derivation), then a thin CLI layer (`src/cmd/nostr.rs`) that parses args, calls it, and renders output. **R0 C1 fix:** `nostr.rs` is a **binary-crate module** (`mod nostr;` in `main.rs`), NOT a `lib.rs` module — it depends on binary-crate types (`crate::error::ToolkitError`, `crate::cmd::convert::ScriptType`, `crate::network::CliNetwork`) that `lib.rs` does not re-export, and nothing external consumes nostr as a library API (the GUI consumes the CLI). The pure-crypto-in-`lib` convention (electrum_crypto/seedqr) is acknowledged and waived for this reason. No m-format cards (verified infeasible; see spec §10).
 
 **Tech Stack:** Rust; `bitcoin` 0.32 (re-exports `bech32` 0.11 + `secp256k1` 0.29); `miniscript` 13 (patched fork) for descriptor checksums; `zeroize`. Spec: `design/BRAINSTORM_v0_34_0_nostr_key_wrappers.md`. Source SHA baseline: `f501ec3`.
 
@@ -14,15 +14,14 @@
 
 ## File structure
 
-- **Create** `crates/mnemonic-toolkit/src/nostr.rs` — crypto/decode library (decode, normalize, address, descriptor, wif). One responsibility: nostr-key ↔ Bitcoin primitives.
+- **Create** `crates/mnemonic-toolkit/src/nostr.rs` — **binary-crate** crypto/decode module (decode, normalize, address, descriptor, wif). One responsibility: nostr-key ↔ Bitcoin primitives.
 - **Create** `crates/mnemonic-toolkit/src/cmd/nostr.rs` — clap `NostrArgs` + `run()` + output rendering.
 - **Create** `crates/mnemonic-toolkit/tests/cli_nostr.rs` — CLI integration cells.
-- **Modify** `crates/mnemonic-toolkit/src/error.rs` — add `NostrKeyParse(String)` variant (+ Display/exit_code).
-- **Modify** `crates/mnemonic-toolkit/src/lib.rs` — `pub mod nostr;`.
-- **Modify** `crates/mnemonic-toolkit/src/cmd/mod.rs` — `pub mod nostr;`.
-- **Modify** `crates/mnemonic-toolkit/src/main.rs` — `Command::Nostr` enum arm + dispatch arm.
-- **Modify** `crates/mnemonic-toolkit/src/secrets.rs` — mark `--secret` / `--secret-stdin` secret in `flag_is_secret`.
-- **Modify** `crates/mnemonic-toolkit/src/cmd/convert.rs` — make `ScriptType` + `parse_script_type_arg` reusable (already `pub`; confirm).
+- **Modify** `crates/mnemonic-toolkit/src/error.rs` — add `NostrKeyParse(String)` variant + `kind()` + `message()` + `exit_code()` arms (NO Display arm — Display delegates to `message()`; R0 C4).
+- **Modify** `crates/mnemonic-toolkit/src/main.rs` — `mod nostr;` (binary-crate module registration; R0 C1) + `Command::Nostr` enum arm + dispatch arm.
+- **Modify** `crates/mnemonic-toolkit/src/cmd/mod.rs` — `pub mod nostr;` (the CLI module).
+- **Modify** `crates/mnemonic-toolkit/src/secrets.rs` — mark `--secret` / `--secret-stdin` secret in `flag_is_secret` (single-arg by flag name; R0 C3).
+- **Modify** `crates/mnemonic-toolkit/src/cmd/convert.rs` — confirm `ScriptType` + `parse_script_type_arg` are `pub` AND **add `impl ScriptType { pub fn as_str(self) -> &'static str }`** (R0 C2 — it does not exist today).
 - **Modify** `docs/manual/src/40-cli-reference/41-mnemonic.md` — `nostr` subcommand chapter.
 - **Modify** `crates/mnemonic-toolkit/Cargo.toml` — version `0.34.0` (bech32 already transitive via `bitcoin`; use `bitcoin::bech32` re-export — no new Cargo.toml dep line).
 - **Cross-repo (paired)** `mnemonic-gui/src/schema/mnemonic.rs` + `mnemonic-gui/src/secrets.rs` + pin bump.
@@ -34,7 +33,9 @@
 ### Task A0.1: Add `NostrKeyParse` error variant
 
 **Files:**
-- Modify: `crates/mnemonic-toolkit/src/error.rs` (enum + `Display` + `exit_code`)
+- Modify: `crates/mnemonic-toolkit/src/error.rs` (enum + `kind()` + `message()` + `exit_code()`)
+
+> **R0 C4:** `impl Display for ToolkitError` (`error.rs:747-751`) delegates to `self.message()` — there is NO per-variant Display match to edit. The compiler-forced exhaustive matches are `kind()` (`error.rs:489-538`, no wildcard), `message()` (`error.rs:543-713`, no wildcard), and `exit_code()` (`error.rs:436`). `details()` (`error.rs:720-743`) has `_ => None` and needs no arm. Add arms to all THREE exhaustive matches + the enum.
 
 - [ ] **Step 1: Add the variant** — insert alphabetically between `NetworkMismatch` (`error.rs:243`) and `Repair` (`error.rs:250`) in `enum ToolkitError`:
 
@@ -44,32 +45,40 @@
     NostrKeyParse(String),
 ```
 
-- [ ] **Step 2: Add the `Display` arm** — at the matching alphabetical position in the `impl fmt::Display for ToolkitError` match (just before the `Repair` arm):
+- [ ] **Step 2: Add the `kind()` arm** — in `pub fn kind` (`error.rs:489-538`), alphabetically before the `Repair` arm:
 
 ```rust
-            ToolkitError::NostrKeyParse(msg) => write!(f, "nostr: {msg}"),
+            ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
 ```
 
-- [ ] **Step 3: Add the `exit_code` arm** — in `pub fn exit_code` (`error.rs:435`), alphabetically before `Repair`:
+- [ ] **Step 3: Add the `message()` arm** — in `pub fn message` (`error.rs:543-713`), alphabetically before the `Repair` arm:
+
+```rust
+            ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
+```
+
+(Match the surrounding arms' return type — if `message()` returns `String`, use `format!`; if it returns `Cow`/`&str` per-arm, mirror that. The user-facing prefix `nostr:` lives here since `Display` prepends `error: ` then calls `message()`.)
+
+- [ ] **Step 4: Add the `exit_code()` arm** — in `pub fn exit_code` (`error.rs:436`), between `NetworkMismatch` (`error.rs:476`) and `Repair` (`error.rs:477`):
 
 ```rust
             ToolkitError::NostrKeyParse(_) => 1,
 ```
 
-- [ ] **Step 4: Build** — Run: `cargo build -p mnemonic-toolkit`  Expected: compiles (if a `kind()` or other exhaustive match exists on `ToolkitError`, add a `NostrKeyParse` arm there too — the compiler will name the file:line of any non-exhaustive match; add `=> "nostr_key_parse"` or the local convention).
+- [ ] **Step 5: Build** — Run: `cargo build -p mnemonic-toolkit`  Expected: compiles cleanly (no non-exhaustive-match errors). If the compiler names another exhaustive match, add a `NostrKeyParse` arm there too.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add crates/mnemonic-toolkit/src/error.rs
 git commit -m "feat(nostr): add ToolkitError::NostrKeyParse variant" -m "Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
-### Task A0.2: Create empty `nostr` library module wired into the crate
+### Task A0.2: Create the `nostr` binary-crate module
 
 **Files:**
 - Create: `crates/mnemonic-toolkit/src/nostr.rs`
-- Modify: `crates/mnemonic-toolkit/src/lib.rs`
+- Modify: `crates/mnemonic-toolkit/src/main.rs` (R0 C1 — binary-crate module, NOT `lib.rs`)
 
 - [ ] **Step 1: Create the module with its doc header**
 
@@ -91,19 +100,64 @@ use bitcoin::CompressedPublicKey;
 use zeroize::Zeroizing;
 ```
 
-- [ ] **Step 2: Register the module** — add to `crates/mnemonic-toolkit/src/lib.rs` (alphabetically among the `pub mod` lines):
+- [ ] **Step 2: Register the module** — add to `crates/mnemonic-toolkit/src/main.rs` (near the other `mod` lines `mod cmd; mod error; mod network;` at `main.rs:5,12,16`):
 
 ```rust
-pub mod nostr;
+mod nostr;
 ```
+
+(Binary-crate module — `crate::error::ToolkitError`, `crate::cmd::convert::ScriptType`, `crate::network::CliNetwork` all resolve here; `mlock` is reached via `mnemonic_toolkit::mlock`.)
 
 - [ ] **Step 3: Build** — Run: `cargo build -p mnemonic-toolkit`  Expected: compiles (unused-import warnings OK for now).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/mnemonic-toolkit/src/nostr.rs crates/mnemonic-toolkit/src/lib.rs
-git commit -m "feat(nostr): scaffold nostr library module" -m "Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+git add crates/mnemonic-toolkit/src/nostr.rs crates/mnemonic-toolkit/src/main.rs
+git commit -m "feat(nostr): scaffold nostr binary-crate module" -m "Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+### Task A0.3: Add `ScriptType::as_str` (R0 C2)
+
+**Files:**
+- Modify: `crates/mnemonic-toolkit/src/cmd/convert.rs`
+
+- [ ] **Step 1: Add the method** — `ScriptType` (`convert.rs:357-362`) has no `impl`; add one (canonical strings that round-trip with `parse_script_type_arg` at `convert.rs:364`):
+
+```rust
+impl ScriptType {
+    /// Canonical lowercase tag (round-trips with `parse_script_type_arg`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScriptType::P2pkh => "p2pkh",
+            ScriptType::P2wpkh => "p2wpkh",
+            ScriptType::P2shP2wpkh => "p2sh-p2wpkh",
+            ScriptType::P2tr => "p2tr",
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Add a round-trip unit test** (in `convert.rs` tests):
+
+```rust
+#[test]
+fn script_type_as_str_round_trips() {
+    for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+        assert_eq!(parse_script_type_arg(st.as_str()).unwrap(), st);
+    }
+}
+```
+
+(Requires `ScriptType: PartialEq + Copy` — confirm the derive at `convert.rs:357`; add `#[derive(PartialEq)]` if missing, which is non-breaking.)
+
+- [ ] **Step 3: Run** — Run: `cargo test -p mnemonic-toolkit script_type_as_str_round_trips`  Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add crates/mnemonic-toolkit/src/cmd/convert.rs
+git commit -m "feat(convert): add ScriptType::as_str (reused by nostr)" -m "Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -122,11 +176,13 @@ git commit -m "feat(nostr): scaffold nostr library module" -m "Co-Authored-By: C
 mod decode_tests {
     use super::*;
 
-    // NIP-19 canonical vector (NIP-19 spec example).
-    const NPUB: &str = "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6";
-    const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe9";
-    // Same key as hex (NIP-19 spec).
-    const PUB_HEX: &str = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d";
+    // NIP-19 spec vectors. NOTE: the npub and nsec below are DISTINCT keys
+    // (not a keypair); each bech32↔hex row is internally consistent, which is
+    // all these decode tests assert. (R0 I3: prior plan used an invalid nsec
+    // checksum `…fe9` and falsely labelled the pair "same key".)
+    const NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
+    const PUB_HEX: &str = "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e";
+    const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
     const SEC_HEX: &str = "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa";
 
     #[test]
@@ -336,7 +392,7 @@ mod derive_tests {
 
     #[test]
     fn descriptor_has_checksum_and_expected_prefix() {
-        let xonly = decode_npub("npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6").unwrap();
+        let xonly = decode_npub("npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg").unwrap();
         let tr = descriptor_for(xonly, ScriptType::P2tr).unwrap();
         assert!(tr.starts_with("tr(") && tr.contains('#'), "got {tr}");
         let wpkh = descriptor_for(xonly, ScriptType::P2wpkh).unwrap();
@@ -432,7 +488,7 @@ mod cross_impl_fixture {
     #[test]
     fn pinned_addresses_for_known_key() {
         let secp = Secp256k1::new();
-        let xonly = decode_npub("npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6").unwrap();
+        let xonly = decode_npub("npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg").unwrap();
         // EXPECTED_* filled in Step 6 from the oracle output (no guessing).
         assert_eq!(address_for(&secp, xonly, ScriptType::P2tr, CliNetwork::Mainnet), EXPECTED_P2TR);
         assert_eq!(address_for(&secp, xonly, ScriptType::P2wpkh, CliNetwork::Mainnet), EXPECTED_P2WPKH);
@@ -506,6 +562,8 @@ pub struct NostrArgs {
     pub all_script_types: bool,
 
     /// Bitcoin network (affects address HRP + WIF version byte).
+    // R0 I5: `default_value_t` renders via ValueEnum::to_possible_value (compiles;
+    // cf. seedqr.rs:71). Do NOT add a `Default`/`#[default]` derive to CliNetwork.
     #[arg(long, value_enum, default_value_t = CliNetwork::Mainnet)]
     pub network: CliNetwork,
 
@@ -514,31 +572,32 @@ pub struct NostrArgs {
     pub json: bool,
 }
 
+// R0 I2: by-ref `&NostrArgs` + `Result<u8, ToolkitError>` (mirrors
+// cmd/electrum_decrypt.rs:85 + cmd/seedqr.rs:121; dispatch is `match &cli.command`).
 pub fn run<R: Read, W: Write, E: Write>(
-    _args: NostrArgs,
+    _args: &NostrArgs,
     _stdin: &mut R,
     _stdout: &mut W,
     _stderr: &mut E,
-) -> Result<(), ToolkitError> {
-    // require exactly one key input — clap `group="key"` makes it at-most-one;
-    // enforce required-ness here (see Task B5).
+) -> Result<u8, ToolkitError> {
+    // exactly-one key input is enforced by the struct-level ArgGroup (Task B5).
     todo!("implemented in B2–B5")
 }
 ```
 
 - [ ] **Step 2: Register the module** — add to `crates/mnemonic-toolkit/src/cmd/mod.rs` (alphabetically): `pub mod nostr;`
 
-- [ ] **Step 3: Wire the Command enum + dispatch** — in `crates/mnemonic-toolkit/src/main.rs`, add to `enum Command` (alphabetically near `ImportWallet`/`Seedqr`):
+- [ ] **Step 3: Wire the Command enum + dispatch** — in `crates/mnemonic-toolkit/src/main.rs`, add to `enum Command` (R0 M1: the enum is feature-grouped, NOT alphabetical — place naturally, e.g. after `Seedqr`):
 
 ```rust
     /// Wrap an existing nostr key (npub/nsec) as Bitcoin addresses/descriptors/WIF.
     Nostr(cmd::nostr::NostrArgs),
 ```
 
-and the dispatch arm (mirroring `Command::Convert`):
+and the dispatch arm — `run` returns the exit code directly, so NO `.map(|_| 0)` (mirrors `Command::ElectrumDecrypt`, `main.rs:121`):
 
 ```rust
-        Command::Nostr(args) => cmd::nostr::run(args, stdin, stdout, stderr).map(|_| 0),
+        Command::Nostr(args) => cmd::nostr::run(args, stdin, stdout, stderr),
 ```
 
 - [ ] **Step 4: Build** — Run: `cargo build -p mnemonic-toolkit`  Expected: compiles (the `todo!()` is fine for build; it would only panic if executed).
@@ -562,7 +621,7 @@ git commit -m "feat(nostr): NostrArgs + Command::Nostr wiring (stub run)" -m "Co
 use assert_cmd::Command; // matches the pattern used by other tests/cli_*.rs
 use predicates::prelude::*;
 
-const NPUB: &str = "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6";
+const NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
 
 #[test]
 fn pubkey_default_p2tr_emits_descriptor_and_address() {
@@ -587,11 +646,11 @@ Expected: FAIL — `run` hits `todo!()` / output absent.
 
 ```rust
 pub fn run<R: Read, W: Write, E: Write>(
-    args: NostrArgs,
+    args: &NostrArgs,
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
-) -> Result<(), ToolkitError> {
+) -> Result<u8, ToolkitError> {
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let types: Vec<ScriptType> = if args.all_script_types {
         vec![ScriptType::P2tr, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2pkh]
@@ -610,7 +669,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(stdout, "  descriptor:  {}", crate::nostr::descriptor_for(xonly, *st)?).map_err(ToolkitError::Io)?;
             writeln!(stdout, "  address:     {}", crate::nostr::address_for(&secp, xonly, *st, args.network)).map_err(ToolkitError::Io)?;
         }
-        return Ok(());
+        return Ok(0);
     }
 
     let _ = (stdin, stderr); // used by B3/B5
@@ -642,7 +701,7 @@ git commit -m "feat(nostr): pubkey path emits descriptor + address (default p2tr
 - [ ] **Step 1: Write failing tests**
 
 ```rust
-const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe9";
+const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 
 #[test]
 fn secret_emits_wif_and_electrum_hint() {
@@ -689,7 +748,7 @@ Expected: FAIL — secret path returns the "exactly one…" error.
     };
 
     if let Some(sec) = secret_input {
-        let _pin = crate::mlock::pin_pages_for(sec.as_bytes());
+        let _pin = mnemonic_toolkit::mlock::pin_pages_for(sec.as_bytes()); // R0 I1: lib module via crate name
         let raw = crate::nostr::decode_nsec(&sec)?;
         let (norm, negated) = crate::nostr::normalize_to_even_y(&secp, raw);
         if negated {
@@ -706,7 +765,7 @@ Expected: FAIL — secret path returns the "exactly one…" error.
             writeln!(stdout, "  electrum:    {}{wif}", crate::nostr::electrum_prefix(*st)).map_err(ToolkitError::Io)?;
         }
         writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
-        return Ok(());
+        return Ok(0);
     }
 ```
 
@@ -862,14 +921,15 @@ git commit -m "feat(nostr): required-exactly-one key group + refusal cells" -m "
 ```rust
 #[test]
 fn nostr_secret_flags_are_secret() {
-    assert!(flag_is_secret("nostr", "--secret"));
-    assert!(flag_is_secret("nostr", "--secret-stdin"));
-    assert!(!flag_is_secret("nostr", "--pubkey"));
-    assert!(!flag_is_secret("nostr", "--secret-file")); // path, not the secret itself
+    // R0 C3: flag_is_secret(flag_name: &str) — single arg, subcommand-agnostic.
+    assert!(flag_is_secret("--secret"));
+    assert!(flag_is_secret("--secret-stdin"));
+    assert!(!flag_is_secret("--pubkey"));
+    assert!(!flag_is_secret("--secret-file")); // path, not the secret itself
 }
 ```
 
-(Confirm `flag_is_secret`'s exact signature in `secrets.rs`; adapt the call form.)
+(`secrets.rs:49` `pub fn flag_is_secret(flag_name: &str) -> bool`. `--secret`/`--secret-stdin` become globally secret across subcommands — acceptable, only `nostr` uses these names. If `--secret`/`--secret-file`/`--secret-stdin` ever collide with another subcommand's non-secret flag, revisit.)
 
 - [ ] **Step 2: Run, verify it fails** — Run: `cargo test -p mnemonic-toolkit secrets:: ` Expected: FAIL.
 
@@ -965,7 +1025,7 @@ git -C /scratch/code/shibboleth/mnemonic-gui commit -m "feat(schema): mirror mne
 - §1 scope (both directions, npub+nsec, addr+WIF+descriptor, no cards) → A1/A3/B2/B3 ✓
 - §2 CLI surface (all flags, default p2tr, ArgGroup, autodetect) → B1/B2/B5 ✓
 - §3 crypto (npub decode+validate, even-y, p2tr BIP-86, descriptor checksum, nsec normalize+WIF) → A1/A2/A3 ✓
-- §4 output + secret-on-stdout + advisory → B3/B4 (NOTE: TTY-redaction of WIF on stdout is described in spec §4; B3 emits the WIF plainly — see Open Issue O1 below).
+- §4 output + advisory → B3/B4. **R0 I4:** no stdout TTY-redaction pathway exists in the toolkit (`convert` emits WIF plainly; `convert-minikey-stdout-redaction` is an OPEN follow-up). B3 emits WIF plainly — consistent with current behavior; hygiene rests on the argv advisory + `flag_is_secret`. Spec §4 corrected (no `[SECRET]` marker / redaction claim).
 - §5 errors (NostrKeyParse, all cases, exit 1, alphabetical) → A0.1/A1/B5 ✓
 - §6 testing (NIP-19 KAT, even-y crux, cross-impl fixture, network, secret hygiene, json) → A1/A2/A3/B3/B4 ✓
 - §7 lockstep (SemVer, schema_mirror, secret projection both sides, manual, gui-schema JSON, bech32 transitive) → C1–C5 ✓
@@ -974,10 +1034,10 @@ git -C /scratch/code/shibboleth/mnemonic-gui commit -m "feat(schema): mirror mne
 
 **3. Type consistency:** `ScriptType` (convert.rs), `CliNetwork`, `decode_npub`/`decode_nsec`/`normalize_to_even_y`/`address_for`/`descriptor_for`/`wif_for`/`electrum_prefix`/`even_y_compressed` names are used identically across A3, B2, B3, B4. `NostrArgs` field names (`pubkey`/`secret`/`secret_file`/`secret_stdin`/`script_type`/`all_script_types`/`network`/`json`) match the ArgGroup `args([...])` list in B5.
 
-**Open issues to confirm during execution (surface to reviewer, do not silently skip):**
-- **O1 — WIF stdout redaction.** Spec §4 says the `--secret` block routes through the existing secret-on-stdout TTY-redaction pathway (like `convert` wif/minikey). B3 currently writes the WIF plainly. Before C4, confirm whether `convert`'s redaction is automatic (a shared stdout wrapper) or opt-in per subcommand, and wire `nostr` into the same pathway. Add a redaction cell if applicable.
-- **O2 — Electrum prefix strings.** `electrum_prefix` (A3) uses `p2wpkh-p2sh:` for `p2sh-p2wpkh`; verify all four against Electrum source (spec §9 item 1) before C4.
-- **O3 — `ScriptType::as_str` / `parse_script_type_arg` visibility.** Confirm both are `pub` (convert.rs:67/364); if not, expose minimally.
+**Open issues:**
+- **O1 — WIF stdout redaction. RESOLVED (R0 I4):** no shared TTY-redaction pathway exists; emit WIF plainly (matching `convert`); spec §4 corrected. No redaction wiring/cell needed.
+- **O2 — Electrum prefix strings. OPEN:** `electrum_prefix` (A3 Step 3) uses `p2wpkh-p2sh:` for `p2sh-p2wpkh`; verify all four against Electrum source (`electrum/bitcoin.py` `SCRIPT_TYPES`) before C4. (Does not block compilation; only the hint string's exactness.)
+- **O3 — `ScriptType::as_str` / `parse_script_type_arg` visibility. RESOLVED (R0 C2):** `ScriptType::as_str` does NOT exist today — added in Task A0.3; `parse_script_type_arg` is `pub` (`convert.rs:364`, confirmed).
 
 ---
 
