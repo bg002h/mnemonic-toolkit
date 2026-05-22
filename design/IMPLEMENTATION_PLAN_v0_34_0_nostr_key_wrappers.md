@@ -679,7 +679,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 }
 ```
 
-(`ScriptType::as_str()` exists at `convert.rs:67`. Confirm it is `pub`; if not, expose a small `pub fn as_str` or reuse the existing display.)
+(`ScriptType::as_str()` is added in Task A0.3 — it does not exist today; it round-trips with `parse_script_type_arg`.)
 
 - [ ] **Step 4: Run, verify it passes**
 
@@ -769,7 +769,7 @@ Expected: FAIL — secret path returns the "exactly one…" error.
     }
 ```
 
-(`crate::mlock::pin_pages_for` is at `src/mlock.rs:90`. If `decode_nsec` should accept `&Zeroizing<String>`, deref to `&str` via `&sec`.)
+(`mnemonic_toolkit::mlock::pin_pages_for` is at `src/mlock.rs:90` — a lib module, hence the crate-name path. `decode_nsec(&sec)` works via `Zeroizing<String>` → `&str` deref coercion.)
 
 - [ ] **Step 4: Run, verify they pass**
 

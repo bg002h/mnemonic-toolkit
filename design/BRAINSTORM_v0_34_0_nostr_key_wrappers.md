@@ -131,7 +131,7 @@ All nostr-key decode/validation failures use a **dedicated `ToolkitError::NostrK
 
 ## §8 — Code layout / reuse map
 - **New:** `crates/mnemonic-toolkit/src/cmd/nostr.rs` (clap args + `run`); `crates/mnemonic-toolkit/src/nostr.rs` (NIP-19 bech32 decode, even-y normalization, key validation) — keep crypto in a library module, CLI thin (mirrors `electrum_crypto.rs` ↔ `cmd/electrum_decrypt.rs`).
-- **Reuse:** `ScriptType` + `parse_script_type_arg` + `CliNetwork` (refactor a shared `build_address_from_pubkey` alongside `convert.rs::build_address_from_xpub`); secret-on-stdout redaction pathway; `mlock` pinning; zeroize.
+- **Reuse:** `ScriptType` + `parse_script_type_arg` + `CliNetwork` (refactor a shared `build_address_from_pubkey` alongside `convert.rs::build_address_from_xpub`); `mlock` pinning; zeroize. (No shared secret-on-stdout redaction pathway exists — see §4 / plan R0 I4.)
 - **Wire:** new `Command::Nostr` arm in `crates/mnemonic-toolkit/src/main.rs` `enum Command` + dispatch in `cmd/mod.rs`; `gui_schema.rs` emission.
 
 ---
