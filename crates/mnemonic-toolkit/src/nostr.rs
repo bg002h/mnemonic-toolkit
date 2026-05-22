@@ -16,6 +16,18 @@ use bitcoin::secp256k1::{Parity, PublicKey, Secp256k1, SecretKey, Signing, Verif
 use bitcoin::CompressedPublicKey;
 use zeroize::Zeroizing;
 
+/// Normalize a secret to BIP-340 even-y form. If `d·G` has odd y, returns
+/// `n−d` (so the key matches the even-y `02‖x` address and the taproot
+/// internal key); else returns `d` unchanged. Returns `(normalized, negated?)`.
+/// The x-only pubkey is parity-independent, so it is unchanged either way.
+pub fn normalize_to_even_y<C: Signing>(secp: &Secp256k1<C>, secret: SecretKey) -> (SecretKey, bool) {
+    let (_xonly, parity) = secret.x_only_public_key(secp);
+    match parity {
+        Parity::Odd => (secret.negate(), true),
+        Parity::Even => (secret, false),
+    }
+}
+
 /// Decode an `npub1…` (NIP-19 bech32) or 64-hex string into an x-only key.
 pub fn decode_npub(input: &str) -> Result<XOnlyPublicKey, ToolkitError> {
     let bytes = decode_nostr_key(input, "npub")?;
@@ -53,6 +65,28 @@ fn decode_nostr_key(input: &str, expected_hrp: &str) -> Result<Zeroizing<Vec<u8>
         )));
     }
     Ok(Zeroizing::new(data))
+}
+
+#[cfg(test)]
+mod normalize_tests {
+    use super::*;
+
+    fn secp() -> Secp256k1<bitcoin::secp256k1::All> { Secp256k1::new() }
+
+    #[test]
+    fn normalized_secret_always_has_even_y_pubkey() {
+        for seed in 1u8..=20 {
+            let mut bytes = [0u8; 32];
+            bytes[31] = seed;
+            let sk = SecretKey::from_slice(&bytes).unwrap();
+            let (xonly_before, parity_before) = sk.x_only_public_key(&secp());
+            let (norm, negated) = normalize_to_even_y(&secp(), sk);
+            let (xonly_after, parity_after) = norm.x_only_public_key(&secp());
+            assert_eq!(parity_after, Parity::Even, "seed {seed}: not even-y after normalize");
+            assert_eq!(xonly_before, xonly_after, "seed {seed}: x-only changed");
+            assert_eq!(negated, parity_before == Parity::Odd, "seed {seed}: negate flag wrong");
+        }
+    }
 }
 
 #[cfg(test)]
