@@ -219,3 +219,30 @@ mod decode_tests {
         assert!(matches!(decode_npub("npub1notvalid"), Err(ToolkitError::NostrKeyParse(_))));
     }
 }
+
+#[cfg(test)]
+mod cross_impl_fixture {
+    use super::*;
+    use crate::cmd::convert::ScriptType;
+    use crate::network::CliNetwork;
+
+    // Independent oracle: pure-Python secp256k1 + BIP-340 lift_x + BIP-341/86
+    // taptweak + bech32/bech32m/base58check (NOT rust-bitcoin). Key = NIP-19
+    // npub10elf… (x-only 7e7e9c42…df4e); even-y compressed = 02‖x. Regenerate
+    // via tests/external/regen_nostr_vectors.md.
+    const NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
+    const EXPECTED_P2PKH: &str = "16vqz4S2bJ8F4r1rSrGU3RxkUReZYrr7X3";
+    const EXPECTED_P2WPKH: &str = "bc1qgyrepq5ukvwl7z7z5lk0066wx6vz75pn9ww6pv";
+    const EXPECTED_P2SH: &str = "3546dKS2XmpDUbyQrA7zmrbE2fayRvHWyJ";
+    const EXPECTED_P2TR: &str = "bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04";
+
+    #[test]
+    fn pinned_addresses_match_independent_oracle() {
+        let secp = Secp256k1::new();
+        let xonly = decode_npub(NPUB).unwrap();
+        assert_eq!(address_for(&secp, xonly, ScriptType::P2pkh, CliNetwork::Mainnet), EXPECTED_P2PKH);
+        assert_eq!(address_for(&secp, xonly, ScriptType::P2wpkh, CliNetwork::Mainnet), EXPECTED_P2WPKH);
+        assert_eq!(address_for(&secp, xonly, ScriptType::P2shP2wpkh, CliNetwork::Mainnet), EXPECTED_P2SH);
+        assert_eq!(address_for(&secp, xonly, ScriptType::P2tr, CliNetwork::Mainnet), EXPECTED_P2TR);
+    }
+}
