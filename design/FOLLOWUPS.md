@@ -2955,10 +2955,34 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — `read_blob` returns a plain `Vec<u8>`; the BIE1 decrypt path does `blob = decrypted.to_vec()`, dropping the `Zeroizing<Vec<u8>>` wrapper that `ecies_decrypt_storage` returns.
 - **What:** the import-wallet `blob: Vec<u8>` can hold secret material — a plaintext Electrum wallet with `use_encryption:false` already carries a seed in that Vec for ALL formats, and v0.33.2 newly writes *decrypted* BIE1 wallet JSON (which may carry seed/xprv) into it. The bytes are `mlock`-pinned (no swap) but never scrubbed before drop. Migrate the blob to a zeroizing field type (mirror `resolved-slot-derived-account-zeroizing-field`), scoped to the shared field so all 8 import paths benefit.
 - **Why deferred:** pre-existing property of the import path (not introduced by, but made slightly more load-bearing by, the BIE1 decrypt); the import OUTPUT is watch-only (non-secret); mlock-pin is in place. A field-type migration is its own focused change.
+- **Status:** `resolved` — `mnemonic-toolkit-v0.33.3`. `read_blob` → `Result<Zeroizing<Vec<u8>>>`; `blob` binding → `Zeroizing<Vec<u8>>`; BIE1 reassign `blob = plaintext.to_vec()` → `blob = plaintext;` (preserves the `ecies_decrypt_storage` `Zeroizing` wrapper, drops the lossy clone); BSMS Round-2 reassign re-wraps via `Zeroizing::new(into_bytes())`. All ~12 read sites compiled unchanged via `Zeroizing<Vec<u8>> → Vec<u8> → [u8]` deref coercion (no `&blob[..]` fixups). Type-only; 2253 cells unchanged. Plan opus R0 GREEN 0C/0I/3M → end-of-cycle GREEN 0C/0I/0M. SemVer PATCH; no GUI/manual/schema-mirror surface. Cited the `resolved-slot-derived-account-zeroizing-field` precedent.
+- **Tier:** `v0.33+`
+- **Tags:** `wallet`
+- **Companion:** parent `wallet-import-electrum-encrypted-storage-format-b` (resolved v0.33.2). Follow-ons filed at close: `bsms-decrypt-record-string-zeroizing` + `import-wallet-plaintext-blob-mlock-pin`.
+
+
+### `bsms-decrypt-record-string-zeroizing` — wrap `decrypt_bsms_record`'s plaintext `String` in `Zeroizing`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.33.3 close (blob-zeroizing R0 M1).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` `decrypt_bsms_record` (returns a plain `String`); consumed at the BSMS Round-2 reassign (`~:1043`) + the Round-1 decrypt path.
+- **What:** v0.33.3 scrubs the `blob` copy (the re-wrapped `Zeroizing::new(into_bytes())`), but the intermediate decrypted `String` returned by `decrypt_bsms_record` is itself un-zeroized before that wrap. Migrate the return type to `Zeroizing<String>`. Low sensitivity (the BSMS Round-2 plaintext is a watch-only descriptor, not seed/xprv), hence not folded into v0.33.3.
+- **Why deferred:** out of scope for the focused `blob`-binding migration; separate function-signature change with its own (minor) call-site churn.
 - **Status:** `open`
 - **Tier:** `v0.33+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-electrum-encrypted-storage-format-b` (resolved v0.33.2).
+- **Companion:** sibling `import-wallet-blob-zeroizing` (resolved v0.33.3).
+
+
+### `import-wallet-plaintext-blob-mlock-pin` — mlock-pin the non-BIE1 wallet blob
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.33.3 close (blob-zeroizing R0 M2).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` `run()` — only the BIE1 decrypt branch calls `mlock::pin_pages_for(&blob)`; the plaintext-import path (`use_encryption:false` Electrum wallet, seed-bearing) + all other formats never pin the blob.
+- **What:** the blob is now `Zeroizing` (scrubbed on drop, v0.33.3) but a plaintext seed-bearing wallet Vec sits swappable (un-`mlock`-pinned) for the lifetime of `run()`. Pin `&blob` after `read_blob` for ALL formats (not just BIE1). Orthogonal to zeroize-on-drop. NOTE the existing BIE1 pin is itself arm-scoped (dropped at the end of the decrypt arm) — a holistic fix should pin once at the `blob` binding for the whole `run()` scope.
+- **Why deferred:** orthogonal to the zeroize-on-drop migration; a pin-lifetime redesign (pin-at-binding) is its own change.
+- **Status:** `open`
+- **Tier:** `v0.33+`
+- **Tags:** `wallet`
+- **Companion:** sibling `import-wallet-blob-zeroizing` (resolved v0.33.3).
 
 
 ### `gui-import-wallet-decrypt-password-mirror` — GUI import-wallet FlagSchema for `--decrypt-password*`

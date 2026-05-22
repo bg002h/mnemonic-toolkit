@@ -85,6 +85,7 @@ use serde_json::json;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use zeroize::Zeroizing;
 
 /// SPEC v0.28.x — OUTER envelope schema version (current: "1").
 ///
@@ -426,8 +427,12 @@ pub fn run<R: Read, W: Write, E: Write>(
                 "notice: import-wallet: electrum: BIE1 user-password storage decrypted"
             )
             .map_err(ToolkitError::Io)?;
-            let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&plaintext);
-            blob = plaintext.to_vec();
+            // `plaintext` is already `Zeroizing<Vec<u8>>`; move it into `blob`
+            // (which is now `Zeroizing<Vec<u8>>` too) to preserve the wrapper —
+            // the recovered wallet JSON can carry seed/xprv material. Pin AFTER
+            // the move (the Vec move keeps the same heap buffer).
+            blob = plaintext;
+            let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&blob);
         }
         None => {
             // Not a storage-encrypted blob. If a password was supplied anyway,
@@ -1033,7 +1038,9 @@ electrum|jade|sparrow|specter>"
         )
         .map_err(ToolkitError::Io)?;
         // Replace blob with the decrypted plaintext for downstream parser.
-        blob = plaintext.into_bytes();
+        // Re-wrap in Zeroizing (the orchestrator's `blob` is zeroizing; the
+        // decrypted Round-2 descriptor is scrubbed on drop).
+        blob = Zeroizing::new(plaintext.into_bytes());
     }
 
     let mut parsed: Vec<ParsedImport> = match format_str {
@@ -2028,10 +2035,10 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
     args: &ImportWalletArgs,
     stdin: &mut R,
     stderr: &mut E,
-) -> Result<Option<zeroize::Zeroizing<String>>, ToolkitError> {
+) -> Result<Option<Zeroizing<String>>, ToolkitError> {
     if let Some(pw) = &args.decrypt_password {
         secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
-        Ok(Some(zeroize::Zeroizing::new(pw.clone())))
+        Ok(Some(Zeroizing::new(pw.clone())))
     } else if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             ToolkitError::BadInput(format!(
@@ -2039,11 +2046,11 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
                 path.display()
             ))
         })?;
-        Ok(Some(zeroize::Zeroizing::new(
+        Ok(Some(Zeroizing::new(
             raw.strip_suffix('\n').unwrap_or(&raw).to_string(),
         )))
     } else if args.decrypt_password_stdin {
-        Ok(Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?)))
+        Ok(Some(Zeroizing::new(read_stdin_passphrase(stdin)?)))
     } else {
         Ok(None)
     }
@@ -2064,13 +2071,21 @@ fn map_ecies_storage_error(e: EciesDecryptError) -> ToolkitError {
     }
 }
 
-fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Vec<u8>, ToolkitError> {
+/// Read the wallet blob into a `Zeroizing<Vec<u8>>` so the in-memory
+/// plaintext is scrubbed on drop. A plaintext Electrum wallet
+/// (`use_encryption:false`) can carry a seed, and the BIE1 decrypt path
+/// (`run()`) writes decrypted seed/xprv-bearing JSON into this buffer — the
+/// `Zeroizing` wrapper wipes it regardless of import format.
+fn read_blob<R: Read>(
+    path: &PathBuf,
+    stdin: &mut R,
+) -> Result<Zeroizing<Vec<u8>>, ToolkitError> {
     if path.as_os_str() == "-" {
-        let mut buf = Vec::new();
+        let mut buf = Zeroizing::new(Vec::new());
         stdin.read_to_end(&mut buf).map_err(ToolkitError::Io)?;
         Ok(buf)
     } else {
-        fs::read(path).map_err(ToolkitError::Io)
+        Ok(Zeroizing::new(fs::read(path).map_err(ToolkitError::Io)?))
     }
 }
 

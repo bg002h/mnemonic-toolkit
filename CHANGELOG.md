@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.33.3] — 2026-05-21
+
+**SemVer-PATCH — secret-memory hygiene.** The `import-wallet` orchestrator's wallet `blob` buffer is migrated from `Vec<u8>` to `Zeroizing<Vec<u8>>`, so in-memory wallet plaintext is scrubbed on drop. Closes the FOLLOWUP `import-wallet-blob-zeroizing` (filed at the v0.33.2 Cycle 19 Phase B close). Internal-only — no CLI/wire/GUI/manual surface change.
+
+### Fixed
+
+- `crates/mnemonic-toolkit/src/cmd/import_wallet.rs`: `read_blob` now returns `Zeroizing<Vec<u8>>`; the BIE1 decrypt reassign `blob = plaintext.to_vec()` becomes `blob = plaintext;` (preserving the `Zeroizing` wrapper from `ecies_decrypt_storage` instead of cloning into a plain `Vec`), and the BSMS Round-2 decrypt reassign re-wraps via `Zeroizing::new(...)`. A plaintext Electrum wallet (`use_encryption:false`) can carry a seed, and the v0.33.2 BIE1 path writes decrypted seed/xprv-bearing JSON into this buffer — both are now wiped on drop regardless of import format. Follows the `resolved-slot-derived-account-zeroizing-field` (v0.10.1) field-migration precedent.
+
+### Notes
+
+- Type-only change; all read sites compile unchanged via `Zeroizing<Vec<u8>> → Vec<u8> → [u8]` deref coercion. 2253 cells unchanged (full regression green; the `Zeroizing` guarantee is type-level — no runtime zeroize assertion, matching the v0.10.1 precedent).
+- Two pre-existing, out-of-scope hygiene gaps filed as follow-ons: `bsms-decrypt-record-string-zeroizing` (the `decrypt_bsms_record` intermediate `String`) + `import-wallet-plaintext-blob-mlock-pin` (the non-BIE1 blob is not `mlock`-pinned).
+
+### Review
+
+- Plan-doc opus R0 GREEN 0C/0I/3M (deref-coercion + mlock-reorder + reassigns verified); end-of-cycle opus GREEN 0C/0I/0M.
+
+---
+
 ## mnemonic-toolkit [0.33.2] — 2026-05-21
 
 **SemVer-PATCH — Electrum BIE1 storage-encrypted wallet import.** `mnemonic import-wallet` now decrypts and imports an Electrum **whole-file (user-password) storage-encrypted** wallet (`BIE1` magic) — the natural completion of the Electrum-encryption arc. Closes the FOLLOWUP `wallet-import-electrum-encrypted-storage-format-b`. SemVer PATCH (net-new flag NAMEs on an existing subcommand are additive — the Cycle-13 `--from` precedent — with mandatory GUI lockstep; MINOR is reserved for new top-level subcommands / breaking changes).
