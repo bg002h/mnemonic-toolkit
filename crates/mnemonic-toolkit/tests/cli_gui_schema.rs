@@ -47,7 +47,7 @@ fn gui_schema_top_level_cli_is_mnemonic() {
 }
 
 #[test]
-fn gui_schema_lists_all_twenty_subcommands() {
+fn gui_schema_lists_all_subcommands() {
     let v = run_gui_schema();
     let subs = v["subcommands"].as_array().expect("subcommands array");
     let names: Vec<&str> = subs.iter().map(|s| s["name"].as_str().unwrap()).collect();
@@ -70,6 +70,7 @@ fn gui_schema_lists_all_twenty_subcommands() {
             "compare-cost",
             "convert",
             "derive-child",
+            "electrum-decrypt",
             "export-wallet",
             "final-word",
             "import-wallet",
@@ -87,7 +88,7 @@ fn gui_schema_lists_all_twenty_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 20 user-facing subcommands must appear (nested split/combine \
+        "all 21 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
