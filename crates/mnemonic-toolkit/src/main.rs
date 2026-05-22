@@ -14,6 +14,7 @@ mod format;
 mod friendly;
 mod language;
 mod network;
+mod nostr;
 mod parse;
 mod parse_descriptor;
 mod repair;
