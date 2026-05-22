@@ -244,6 +244,9 @@ pub enum ToolkitError {
         xpub_network: &'static str,
         expected: &'static str,
     },
+    /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
+    /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
+    NostrKeyParse(String),
     /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
@@ -474,6 +477,7 @@ impl ToolkitError {
             ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
             ToolkitError::MultisigConfig { .. } => 1,
             ToolkitError::NetworkMismatch { .. } => 2,
+            ToolkitError::NostrKeyParse(_) => 1,
             ToolkitError::Repair(_) => 2,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::SlotInputViolation { .. } => 2,
@@ -529,6 +533,7 @@ impl ToolkitError {
             ToolkitError::MsCodec(_) => "MsCodec",
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
+            ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
@@ -690,6 +695,7 @@ impl ToolkitError {
                 "xpub network {} does not match --network {}",
                 xpub_network, expected,
             ),
+            ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
             ToolkitError::Repair(e) => format!("{e}"),
             ToolkitError::RepairShortCircuit { .. } => {
                 // R2 I1: main.rs special-cases this variant to skip
