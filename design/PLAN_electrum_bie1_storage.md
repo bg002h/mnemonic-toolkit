@@ -110,4 +110,67 @@ mod-n reduction correctness (KAT-pinned to pw123 scalar); empty-salt + 1024-iter
 
 ## 10. Acceptance (Phase A done)
 
-All KAT cells GREEN (3 Electrum ECIES KATs + scalar KAT + zlib KAT + storage wiring round-trip + all negatives); `cargo test -p mnemonic-toolkit` + `cargo clippy --all-targets -D warnings` clean; opus end-of-phase review GREEN; committed (no tag). Phase B (CLI/ship) scheduled separately.
+All KAT cells GREEN (3 Electrum ECIES KATs + scalar KAT + zlib KAT + storage wiring round-trip + all negatives); `cargo test -p mnemonic-toolkit` + `cargo clippy --all-targets -D warnings` clean; opus end-of-phase review GREEN; committed (no tag). **Phase A SHIPPED `a62cf15`.**
+
+---
+
+# PHASE B — CLI integration + ship (Cycle 19 continuation)
+
+**Status:** planned. Wires the Phase-A library into `import-wallet`, adds the password CLI surface, ships the toolkit release + mandatory GUI lockstep.
+
+## B1. CLI surface (`crates/mnemonic-toolkit/src/cmd/import_wallet.rs`)
+
+Add a 3-form password family to `ImportWalletArgs` (mirror `cmd/electrum_decrypt.rs:37-59`), but as an **optional** mutually-exclusive group (most imports are plaintext):
+```rust
+#[command(group(ArgGroup::new("import_decrypt_password_source")
+    .args(["decrypt_password", "decrypt_password_file", "decrypt_password_stdin"])
+    .required(false).multiple(false)))]
+```
+- `--decrypt-password <VALUE>` (inline; `secret_in_argv_warning`).
+- `--decrypt-password-file <PATH>` (read + strip one trailing `\n`).
+- `--decrypt-password-stdin` (bool; `read_stdin_passphrase`).
+
+A `resolve_import_decrypt_password(args, stdin, stderr) -> Result<Option<Zeroizing<String>>, _>` helper returns `None` when no form is set, else the resolved password (argv advisory on inline). `flag_is_secret` ALREADY covers `--decrypt-password` + `--decrypt-password-stdin` (added v0.33.1 for `electrum-decrypt`; the function is flag-NAME-based, not per-subcommand) — **no `secrets.rs` change**; `gui-schema` auto-emits `secret:true` for these on `import-wallet`.
+
+## B2. Detection + orchestrator pre-decrypt
+
+New library helper in `electrum_crypto.rs` (next to `EciesDecryptError`):
+```rust
+pub enum ElectrumStorageMagic { Bie1, Bie2 }
+/// Detect an Electrum storage-encrypted blob (base64 with BIE1/BIE2 magic).
+/// None for plaintext/JSON wallets (a JSON `{...}` is not valid base64, so
+/// no false-positive against the existing sniff paths).
+pub fn detect_storage_magic(blob: &[u8]) -> Option<ElectrumStorageMagic>;
+```
+(trims ASCII whitespace, base64-decodes with the SAME `base64::STANDARD` engine `ecies_decrypt_message` uses, requires `len >= 85`, matches `[0..4]`.) R0 M4: detection and decrypt MUST agree on the trimmed input — compute `let trimmed = std::str::from_utf8(&blob).ok()?.trim()` once and pass that SAME `trimmed` to `ecies_decrypt_storage` (do not trim differently in the two call sites). R0 M2 confirmed: detection is sound — every existing sniff requires JSON `{`/text prefixes; a BIE1 blob (`QklFM…`) sniffs NoMatch.
+
+Wire in `run()` **after `read_blob` (import_wallet.rs:336), BEFORE `sniff_format` (:339)** — the BSMS decrypt-then-parse precedent at `:890-921`:
+- `detect_storage_magic(&blob)`:
+  - `Some(Bie2)` → `ToolkitError::BadInput`: *"import-wallet: electrum: this wallet is encrypted with a hardware-device key (BIE2 / XPUB_PASSWORD); it cannot be decrypted from a password. Decrypt it in Electrum with the original device first, then re-import."* (before any password work).
+  - `Some(Bie1)` → require password (else error: *"…BIE1 storage-encrypted Electrum wallet detected; supply --decrypt-password / --decrypt-password-file / --decrypt-password-stdin"*). With password: `ecies_decrypt_storage(trimmed_blob_str, pw.as_bytes())` (map errors: `HmacMismatch | AesDecryptFailure` → unified non-leaky "decryption failed (wrong password or corrupted ciphertext)"; others → `BadInput`). Pin the password (`mlock::pin_pages_for`). Emit `notice: import-wallet: electrum: BIE1 user-password storage decrypted`. Replace `blob = decrypted.to_vec()`; `mlock::pin_pages_for(&blob)`. Then fall through to the normal sniff (→ Electrum) + parse.
+  - `None` → if a password WAS supplied, emit a soft `notice: …no storage-encrypted wallet detected; --decrypt-password* ignored` and proceed unchanged.
+- **`--format` precedence (R0 I2 — LOCKED):** detection + decrypt run UNCONDITIONALLY, independent of `--format` (so BIE2 is always refused and BIE1 is always decrypted-when-password-present). After the blob is replaced with the recovered JSON, the existing `--format`/sniff logic runs normally on that JSON. Consequences to document + test: `--format electrum` + BIE1 → decrypts then matches Electrum (happy). `--format bsms` (or any non-electrum) + BIE1 → decrypts (emits the BIE1 notice) then the existing mismatch arm fires `ImportWalletFormatMismatch{supplied:<fmt>, sniffed:electrum}` on the decrypted JSON (the notice-before-mismatch ordering is harmless: both on stderr; the mismatch is the correct verdict).
+- **stdin-contention guard (R0 I1 — unify to 3-way):** there are THREE potential stdin consumers — `--blob=-`, `--bsms-encryption-token=-` (already counted via `token_stdin_count` at :267-284), and the new `--decrypt-password-stdin`. Extend that existing hoisted guard region (:267-294) to count `--decrypt-password-stdin` as a stdin consumer in the SAME arithmetic and refuse if the total > 1 (covers blob-vs-password, token-vs-password, and blob-vs-token-vs-password). Do NOT add a separate ad-hoc blob-vs-password guard at the decrypt site (the password is resolved at ~:336, after `read_and_validate_bsms_token` at :299-302 would already have drained stdin — so the guard MUST be hoisted, not local).
+
+## B3. Secret hygiene
+
+Password `Zeroizing` + `mlock`. The decrypted whole-file JSON can carry seed/xprv material → `mlock`-pin the replacement `blob` bytes. R0 M2 (sharpened): `ecies_decrypt_storage` returns `Zeroizing<Vec<u8>>`, but the `blob = decrypted.to_vec()` reassignment DROPS that wrapper (the orchestrator's `blob: Vec<u8>` is not zeroizing). This is acceptable to ship given (a) the bytes are mlock-pinned, (b) the import output is watch-only (xpub/derivation only — the parser never reads seed/xprv), and (c) `read_blob` already returns a plain `Vec` for ALL formats (a plaintext `use_encryption:false` Electrum wallet already holds a seed in that Vec). BUT this cycle newly writes *decrypted* seed material into the plain Vec, so file `import-wallet-blob-zeroizing` as a now-load-bearing (not merely "pre-existing") hygiene FOLLOWUP. The import OUTPUT is watch-only — non-secret.
+
+## B4. Tests (`crates/mnemonic-toolkit/tests/cli_import_wallet_electrum_bie1.rs`)
+
+Vendored BIE1 storage fixture: `(wallet.json plaintext, password, wallet.bie1 base64 blob)`. **Regen:** `tests/external/regen_electrum_bie1_storage.py` — faithful to the verified Electrum source. PRIMARY: pure-Python `ecdsa` (point-mul) + stdlib (`hashlib` PBKDF2/sha512, `hmac`, `zlib`) + `cryptography` (AES-128-CBC); pin the spesmilo/electrum SHA in the README. FALLBACK (if `ecdsa` un-installable): generate via the toolkit's own ECIES encrypt (authoritatively validated by Phase-A's Electrum KATs) — documented as such. Cells: (1) `--blob wallet.bie1 --decrypt-password <pw>` → success + expected watch-only card/JSON; (2) wrong password → unified "decryption failed" + exit 64/nonzero; (3) BIE2 fixture → the hardware-device refusal; (4) BIE1 blob, no password → "supply --decrypt-password*"; (5) `--blob=- --decrypt-password-stdin` → stdin-contention refusal; (6) `--bsms-encryption-token=- --decrypt-password-stdin` → stdin-contention refusal (R0 I1 — the 3-way guard); (7) `--format bsms` + BIE1 blob + password → BIE1 decrypt notice THEN `ImportWalletFormatMismatch{bsms, electrum}` (R0 I2 — `--format`-independent decrypt precedence); (8) password supplied for a plaintext wallet → soft "ignored" notice + normal import; (9) `--decrypt-password` inline → argv advisory on stderr. Plus a `gui-schema` count assertion is unaffected (no new subcommand). **Lock the exact notice strings (R0 M5)** in the impl so cells #7/#8 assert on fixed text. **R0 M3:** the committed fixture's PRIMARY regen path is the independent pure-Python `ecdsa` script; the README records which path produced the committed bytes.
+
+## B5. Manual + ship
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md` — `import-wallet` section: document the 3 `--decrypt-password*` flags + the BIE1 auto-decrypt behavior + the BIE2 refusal. Run `make -C docs/manual lint`.
+- **SemVer: PATCH `v0.33.1 → v0.33.2`.** Net-new flag NAMEs on an existing subcommand (additive, non-breaking) follow the Cycle-13 `--from` precedent (PATCH v0.31.6 with mandatory GUI lockstep), NOT MINOR (MINOR is reserved for breaking changes / new top-level subcommands). **R0: confirm PATCH vs the architect's MINOR framing.**
+- `Cargo.toml` 0.33.1→0.33.2; `scripts/install.sh` pin; `CHANGELOG` `[0.33.2]`. Opus end-of-cycle review (secret-handling + crypto-wiring focus). Commit + tag `mnemonic-toolkit-v0.33.2` + push + GH release; verify `install-pin-check` CI.
+- Close FOLLOWUP `wallet-import-electrum-encrypted-storage-format-b` (resolved BIE1; note BIE2 carve-out + the `import-wallet-blob-zeroizing` hygiene FOLLOWUP filed).
+
+## B6. GUI lockstep (MANDATORY — new flag NAMEs on import-wallet)
+
+`mnemonic-gui`: add `--decrypt-password` (Text, **secret**), `--decrypt-password-file` (Path), `--decrypt-password-stdin` (Boolean, **secret**) to the `import-wallet` SubcommandSchema (`src/schema/mnemonic.rs`); the GUI `secrets::flag_is_secret` mirror already covers these names (v0.33.1 GUI lockstep) — confirm. Bump toolkit pin → v0.33.2. `schema_mirror` + `schema_mirror_secret_drift` green vs the pinned binary. Tag + GH release `mnemonic-gui-v0.18.1` (PATCH; new flags on existing subcommand). Close FOLLOWUP.
+
+## B7. Risks
+
+False-positive detection (mitigated: JSON `{` is not base64); stdin contention (guarded); the unified wrong-password message (no oracle — matches `electrum-decrypt`); SemVer call (R0 to confirm PATCH); fixture-gen authority (Phase-A KATs already establish crypto correctness; the storage fixture tests CLI wiring).
