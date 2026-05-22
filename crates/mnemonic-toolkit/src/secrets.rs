@@ -57,6 +57,8 @@ pub fn flag_is_secret(flag_name: &str) -> bool {
             | "--decrypt-password-stdin"
             | "--digits"
             | "--ms1"
+            | "--secret"
+            | "--secret-stdin"
             | "--share"
     )
 }
@@ -116,5 +118,13 @@ mod tests {
         assert!(!flag_is_secret(""));
         assert!(!flag_is_secret("--this-flag-does-not-exist"));
         assert!(!flag_is_secret("passphrase")); // missing leading `--`
+    }
+
+    #[test]
+    fn nostr_secret_flags_are_secret() {
+        assert!(flag_is_secret("--secret"));
+        assert!(flag_is_secret("--secret-stdin"));
+        assert!(!flag_is_secret("--secret-file")); // a path, not the secret itself
+        assert!(!flag_is_secret("--pubkey"));
     }
 }
