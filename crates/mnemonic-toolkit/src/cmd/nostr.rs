@@ -5,25 +5,33 @@
 use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
-use clap::Args;
+use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
+#[command(group(
+    // Exactly one key input is required. `--secret-stdin` is a bool: `false`
+    // does not count as present, so the group fires only when it is `true`.
+    ArgGroup::new("key")
+        .required(true)
+        .multiple(false)
+        .args(["pubkey", "secret", "secret_file", "secret_stdin"]),
+))]
 pub struct NostrArgs {
     /// Public key: `npub1…` (NIP-19) or 64-hex x-only. Watch-only outputs.
-    #[arg(long, group = "key")]
+    #[arg(long)]
     pub pubkey: Option<String>,
 
     /// Secret key: `nsec1…` (NIP-19) or 64-hex scalar. Adds WIF. SECRET — leaks via argv.
-    #[arg(long, group = "key")]
+    #[arg(long)]
     pub secret: Option<String>,
 
     /// Read the secret key from a file (avoids argv exposure).
-    #[arg(long = "secret-file", group = "key")]
+    #[arg(long = "secret-file")]
     pub secret_file: Option<std::path::PathBuf>,
 
     /// Read the secret key from stdin.
-    #[arg(long = "secret-stdin", group = "key")]
+    #[arg(long = "secret-stdin")]
     pub secret_stdin: bool,
 
     /// Address/descriptor script type. Defaults to `p2tr` when neither this nor

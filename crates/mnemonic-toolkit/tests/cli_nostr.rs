@@ -68,3 +68,22 @@ fn json_secret_has_wif_and_electrum() {
     assert!(v["wif"].is_string());
     assert!(v["outputs"][0]["electrum"].is_string());
 }
+
+#[test]
+fn no_key_input_is_refused() {
+    Command::cargo_bin("mnemonic").unwrap().args(["nostr"]).assert().failure();
+}
+
+#[test]
+fn pubkey_and_secret_together_is_refused() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--secret", NSEC])
+        .assert().failure();
+}
+
+#[test]
+fn nsec_to_pubkey_flag_is_refused() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NSEC])
+        .assert().failure().stderr(predicate::str::contains("HRP"));
+}
