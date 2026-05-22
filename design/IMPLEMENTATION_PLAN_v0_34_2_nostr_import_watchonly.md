@@ -4,7 +4,7 @@
 
 **Goal:** Add `mnemonic nostr --import readonly [--timestamp <now|UNIX>]` that appends a ready-to-paste Bitcoin Core **read-only** `importdescriptors` recipe (one array, one entry per requested script type) built from the watch-only descriptor(s).
 
-**Architecture:** Generalize the existing `wallet_export::bitcoin_core` importdescriptors emitter with a non-ranged single-key array builder (one JSON shape for both `export-wallet` HD and `nostr` raw-key), re-export it `pub(crate)`, reuse `export-wallet`'s `--timestamp` parser, and emit from `nostr`'s `run`. Watch-only only — spending is deferred (FOLLOWUP).
+**Architecture:** Add a **separate, sibling** non-ranged single-key array builder next to the existing `wallet_export::bitcoin_core::format_bitcoin_core_importdescriptors` (R0 M1: do NOT refactor/touch the existing ranged emitter — it backs a byte-exact bitcoin-core fixture). Re-export the new builder `pub(crate)`, reuse `export-wallet`'s `--timestamp` parser, and emit from `nostr`'s `run`. Watch-only only — spending is deferred (FOLLOWUP).
 
 **Tech Stack:** Rust; `serde_json`; existing `wallet_export::{bitcoin_core::format_bitcoin_core_importdescriptors, TimestampArg}` (`TimestampArg` is `pub(crate)` + `Copy`; `to_json` callable within `wallet_export`); `cmd::export_wallet::{parse_timestamp, TimestampArgValue}`; `nostr::descriptor_for`. Spec: `design/BRAINSTORM_v0_34_2_nostr_import_watchonly.md`. **Source baseline:** branch `v0.34.2-toolkit-hygiene` tip `563d86e` (code == `origin/master` `1d6436d`; deltas are docs-only).
 
@@ -225,7 +225,7 @@ fn parse_import_mode(s: &str) -> Result<ImportMode, String> {
 ```
 Then:
 - In the `if args.json { let envelope = NostrJson { … } }` construction, add `import: import_recipe.clone(),`.
-- In the human-readable `else` branch, AFTER the per-row loop, add:
+- In the human-readable `else` branch, emit the recipe LAST (R0 M2): in the **pubkey** path, after the per-row loop; in the **secret** path, after the trailing `  wif:         {wif}` line (`nostr.rs:184`) — so `import:` is the final line in both paths. The inserted block:
 ```rust
             if let Some(recipe) = &import_recipe {
                 let line = serde_json::to_string(recipe).map_err(|e| {
@@ -271,7 +271,7 @@ git commit -m "release(toolkit): mnemonic-toolkit v0.34.2 — nostr --import (re
 
 ## Task 4: paired GUI schema-mirror + ship (outward-facing)
 
-- [ ] **Step 1:** In `mnemonic-gui`, add `--import` (text/dropdown) + `--timestamp` (text) to the `nostr` `SubcommandSchema` (`src/schema/mnemonic.rs`); neither is secret (no `flag_is_secret` change). Bump the toolkit pin → `v0.34.2`. Run `cargo test -p mnemonic-gui schema_mirror` (with `MNEMONIC_BIN` = the v0.34.2 build) → green. Bump GUI version (PATCH) + CHANGELOG. Commit on a paired branch.
+- [ ] **Step 1:** In `mnemonic-gui`, add `--import` (kind **`text`** — its custom `value_parser` collapses to `text` in gui-schema, exactly like `--script-type`; NOT a dropdown — R0 M3) + `--timestamp` (kind `text`) to the `nostr` `SubcommandSchema` (`src/schema/mnemonic.rs`); neither is secret (no `flag_is_secret` change). Verify against the actual `mnemonic gui-schema` JSON for `nostr` (check the emitted `kind`, not just `--help`). Bump the toolkit pin → `v0.34.2`. Run `cargo test -p mnemonic-gui schema_mirror` (with `MNEMONIC_BIN` = the v0.34.2 build) → green. Bump GUI version (PATCH) + CHANGELOG. Commit on a paired branch.
 - [ ] **Step 2 (controller/user-authorized):** merge toolkit → master, push, tag `mnemonic-toolkit-v0.34.2` (AFTER the install.sh-bumped commit), GH release; then the paired GUI release.
 
 ---
