@@ -1857,7 +1857,7 @@ mnemonic nostr (--pubkey <PUBKEY> | --secret <SECRET> | --secret-file <FILE> | -
 | Flag | Purpose |
 |---|---|
 | `--pubkey <PUBKEY>` | Public key: `npub1…` (NIP-19 bech32) or 64-hex x-only. Emits watch-only outputs (no WIF) |
-| `--secret <SECRET>` | Secret key: `nsec1…` (NIP-19 bech32) or 64-hex scalar. Adds WIF + `electrum:` line. SECRET — leaks via argv; use `--secret-stdin` or `--secret-file` |
+| `--secret <SECRET>` | Secret key: `nsec1…` (NIP-19 bech32) or 64-hex scalar. Adds WIF + `electrum:` line (non-taproot script types only). SECRET — leaks via argv; use `--secret-stdin` or `--secret-file` |
 | `--secret-file <SECRET_FILE>` | Read the secret key from a file (avoids argv exposure) |
 | `--secret-stdin` | Read the secret key from stdin (avoids argv exposure) |
 | `--script-type <SCRIPT_TYPE>` | Address/descriptor script type: `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr`. Defaults to `p2tr` when neither this nor `--all-script-types` is given |
@@ -1883,16 +1883,18 @@ is required (clap arg-group; missing/multiple → exit 64).
 
 ### The `electrum:` line
 
-For `nsec` inputs each output row includes an `electrum:` line of the
-form `<prefix>:<WIF>`, where `<prefix>` mirrors the Electrum import
-convention:
+For `nsec` inputs, each non-taproot output row includes an `electrum:` line
+of the form `<prefix>:<WIF>`, where `<prefix>` mirrors the Electrum import
+convention (per Electrum's `WIF_SCRIPT_TYPES` in `bitcoin.py`). Taproot
+(`p2tr`) has no Electrum WIF-import path — Electrum's `WIF_SCRIPT_TYPES`
+has no `p2tr` entry — so no `electrum:` line is emitted for `p2tr`.
 
 | Script type | Electrum prefix |
 |---|---|
-| `p2tr` | `p2tr` |
-| `p2wpkh` | `p2wpkh` |
-| `p2sh-p2wpkh` | `p2wpkh-p2sh` |
-| `p2pkh` | (no prefix — bare WIF) |
+| `p2tr` | — (Electrum has no taproot private-key import) |
+| `p2wpkh` | `p2wpkh:` |
+| `p2sh-p2wpkh` | `p2wpkh-p2sh:` |
+| `p2pkh` | `p2pkh:` |
 
 Paste the `electrum:` value into Electrum ▸ Wallet ▸ Private Keys ▸ Import
 to sweep the address into an Electrum wallet of the matching script type.
@@ -1956,7 +1958,6 @@ nostr key (secret)
   script-type: p2tr
   descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
   address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
-  electrum:    p2tr:Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
   wif:         Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
 ```
 
@@ -1967,6 +1968,25 @@ warning: secret material on stdout — consider redirecting (e.g., '> file.txt' 
 ```
 
 (No argv warning because `--secret-stdin` was used.)
+
+Note: taproot (`p2tr`) emits no `electrum:` line — Electrum has no taproot
+private-key import path. Use `--script-type p2wpkh` to get the `electrum:`
+hint for a SegWit address:
+
+```sh
+echo 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5' \
+  | mnemonic nostr --secret-stdin --script-type p2wpkh
+```
+
+```text
+nostr key (secret)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2wpkh
+  descriptor:  wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#qayh3r2k
+  address:     bc1qgyrepq5ukvwl7z7z5lk0066wx6vz75pn9ww6pv
+  electrum:    p2wpkh:Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
+  wif:         Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
+```
 
 ### Worked example — even-y normalization notice
 
@@ -2010,7 +2030,8 @@ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8
 ```
 
 For `nsec` inputs the object additionally carries `"wif": "<WIF>"` at the
-top level and each `outputs` entry includes `"electrum": "<prefix>:<WIF>"`.
+top level and each non-taproot `outputs` entry includes
+`"electrum": "<prefix>:<WIF>"` (taproot entries omit the `"electrum"` key).
 
 ---
 

@@ -130,13 +130,14 @@ pub fn wif_for(secret: &SecretKey, network: CliNetwork) -> String {
 }
 
 /// Electrum imported-key script-type prefix, per Electrum's `WIF_SCRIPT_TYPES`
-/// (`bitcoin.py`): nested-segwit is `p2wpkh-p2sh`; taproot is `p2tr` (newer Electrum).
-pub fn electrum_prefix(script_type: ScriptType) -> &'static str {
+/// (`bitcoin.py`). `None` for taproot — Electrum has no `p2tr` entry, so a
+/// taproot private key has no Electrum WIF-import path.
+pub fn electrum_prefix(script_type: ScriptType) -> Option<&'static str> {
     match script_type {
-        ScriptType::P2pkh => "p2pkh:",
-        ScriptType::P2wpkh => "p2wpkh:",
-        ScriptType::P2shP2wpkh => "p2wpkh-p2sh:",
-        ScriptType::P2tr => "p2tr:",
+        ScriptType::P2pkh => Some("p2pkh:"),
+        ScriptType::P2wpkh => Some("p2wpkh:"),
+        ScriptType::P2shP2wpkh => Some("p2wpkh-p2sh:"),
+        ScriptType::P2tr => None,
     }
 }
 

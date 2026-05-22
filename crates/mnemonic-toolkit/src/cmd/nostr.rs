@@ -156,7 +156,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 script_type: st.as_str().to_owned(),
                 descriptor: crate::nostr::descriptor_for(xonly, *st)?,
                 address: crate::nostr::address_for(&secp, xonly, *st, args.network).to_string(),
-                electrum: Some(format!("{}{wif}", crate::nostr::electrum_prefix(*st))),
+                electrum: crate::nostr::electrum_prefix(*st).map(|p| format!("{p}{wif}")),
             });
         }
 
@@ -177,7 +177,9 @@ pub fn run<R: Read, W: Write, E: Write>(
                 writeln!(stdout, "  script-type: {}", row.script_type).map_err(ToolkitError::Io)?;
                 writeln!(stdout, "  descriptor:  {}", row.descriptor).map_err(ToolkitError::Io)?;
                 writeln!(stdout, "  address:     {}", row.address).map_err(ToolkitError::Io)?;
-                writeln!(stdout, "  electrum:    {}", row.electrum.as_deref().unwrap_or("")).map_err(ToolkitError::Io)?;
+                if let Some(elec) = &row.electrum {
+                    writeln!(stdout, "  electrum:    {elec}").map_err(ToolkitError::Io)?;
+                }
             }
             writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
         }

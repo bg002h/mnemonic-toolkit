@@ -124,3 +124,18 @@ fn all_script_types_emits_p2pkh_row() {
         .stdout(predicate::str::contains("script-type: p2pkh"))
         .stdout(predicate::str::contains("script-type: p2sh-p2wpkh"));
 }
+
+#[test]
+fn p2tr_secret_has_no_electrum_line_but_p2wpkh_does() {
+    // taproot: no Electrum WIF import → no electrum hint
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret", NSEC, "--script-type", "p2tr"])
+        .assert().success()
+        .stdout(predicate::str::contains("electrum:").not())
+        .stdout(predicate::str::contains("wif:"));
+    // p2wpkh: Electrum import supported → electrum hint present
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
+        .assert().success()
+        .stdout(predicate::str::contains("electrum:    p2wpkh:"));
+}
