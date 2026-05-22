@@ -2943,10 +2943,34 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **CLI surface:** the v0.33.0 `--decrypt-password*` family lives on the NEW `electrum-decrypt` subcommand, NOT on `import-wallet`. Wiring storage-decrypt into `import-wallet` adds those flags to `import-wallet` (net-new flag NAMEs on that subcommand → MANDATORY GUI schema-mirror lockstep) OR routes via a new dedicated path. So the "password infra already exists" framing is only half-true.
 - **Out of scope — BIE2 / XPUB_PASSWORD (hardware-device):** cannot be decrypted from a password at all; the EC privkey is the wallet's own master key held by the hardware device. A password-only toolkit has no decrypt path. Carve out as a distinct followup (or document as permanently unsupported) at implementation time.
 - **Why deferred:** Re-scoped 2026-05-21 (Cycle 19): the queue treated this as a small "sniff + reuse decrypt_field" cycle, but P0 recon showed it is a full ECIES implementation. User decision (Cycle 19): **correct the followup + defer** — do NOT build on the corrected (larger) premise without a dedicated brainstorm/sizing pass.
-- **Status:** `open` (re-scoped; crypto corrected; NOT started)
+- **Status:** `resolved` — Cycle 19, two phases. **Phase A** `a62cf15` (mnemonic-toolkit master): `electrum_crypto.rs` ECIES BIE1 library (`derive_storage_eckey` PBKDF2-SHA512→mod-n via `crypto-bigint`; `ecies_decrypt_message`; `ecies_decrypt_storage` + `flate2` zlib; `EciesDecryptError`), verified byte-exact against Electrum's OWN committed `test_decrypt_message` KATs (pw123 + 3 BIE1 blobs) + a Python-stdlib zlib oracle. **Phase B** `mnemonic-toolkit-v0.33.2` (Cycle 19 ship): `import-wallet --decrypt-password{,-file,-stdin}` (optional exclusive ArgGroup) + `detect_storage_magic` + orchestrator decrypt-before-sniff (mirrors BSMS decrypt-then-parse) + BIE2 refusal + 3-way stdin guard + manual. SemVer PATCH (net-new flags on existing subcommand; Cycle-13 `--from` precedent). 2253 cells (+16); independent pure-Python `ecdsa` fixture (cross-impl witness of the zlib→ECIES framing). Plan-doc opus R0 (Phase A YELLOW→R1 GREEN; Phase B YELLOW→R1 GREEN); end-of-cycle opus GREEN. **BIE2 carve-out:** detected + refused (no password decrypt path; permanently unsupported). New FOLLOWUPs filed: `import-wallet-blob-zeroizing` (hygiene) + `gui-import-wallet-decrypt-password-mirror` (GUI lockstep).
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the storage-encryption carve-out); sibling `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0 — its `--decrypt-password*` surface is on `electrum-decrypt`, not `import-wallet`, and its `decrypt_field` AES-256 primitive is NOT reusable here).
+- **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the storage-encryption carve-out); sibling `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0).
+
+
+### `import-wallet-blob-zeroizing` — scrub the decrypted/plaintext wallet blob `Vec<u8>`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.33.2 Cycle 19 Phase B (end-of-cycle opus I1).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — `read_blob` returns a plain `Vec<u8>`; the BIE1 decrypt path does `blob = decrypted.to_vec()`, dropping the `Zeroizing<Vec<u8>>` wrapper that `ecies_decrypt_storage` returns.
+- **What:** the import-wallet `blob: Vec<u8>` can hold secret material — a plaintext Electrum wallet with `use_encryption:false` already carries a seed in that Vec for ALL formats, and v0.33.2 newly writes *decrypted* BIE1 wallet JSON (which may carry seed/xprv) into it. The bytes are `mlock`-pinned (no swap) but never scrubbed before drop. Migrate the blob to a zeroizing field type (mirror `resolved-slot-derived-account-zeroizing-field`), scoped to the shared field so all 8 import paths benefit.
+- **Why deferred:** pre-existing property of the import path (not introduced by, but made slightly more load-bearing by, the BIE1 decrypt); the import OUTPUT is watch-only (non-secret); mlock-pin is in place. A field-type migration is its own focused change.
+- **Status:** `open`
+- **Tier:** `v0.33+`
+- **Tags:** `wallet`
+- **Companion:** parent `wallet-import-electrum-encrypted-storage-format-b` (resolved v0.33.2).
+
+
+### `gui-import-wallet-decrypt-password-mirror` — GUI import-wallet FlagSchema for `--decrypt-password*`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.33.2 Cycle 19 Phase B close. NEW flag NAMEs (`--decrypt-password`, `--decrypt-password-file`, `--decrypt-password-stdin`) on `import-wallet` → the GUI `schema_mirror` flag-NAME-parity gate trips. MANDATORY lockstep.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`import-wallet` SubcommandSchema); `pinned-upstream.toml` + `Cargo.toml` toolkit pin → v0.33.2.
+- **What:** add the three flags to the import-wallet FlagSchema: `--decrypt-password` (Text, **secret**), `--decrypt-password-file` (Path, non-secret), `--decrypt-password-stdin` (Boolean, **secret**). The GUI `secrets::flag_is_secret` mirror already covers these names (v0.33.1 / GUI v0.18.0 lockstep) — `schema_mirror_secret_drift` stays green; confirm. Bump pin → v0.33.2. GUI v0.18.1 (PATCH).
+- **Why deferred:** cross-repo authoring; shipped as the paired Cycle-19-Phase-B GUI release immediately after the toolkit tag.
+- **Status:** `open`
+- **Tier:** `v0.33+-gui-lockstep`
+- **Tags:** none
+- **Companion:** parent `wallet-import-electrum-encrypted-storage-format-b` (resolved v0.33.2).
 
 
 ### `bsms-encryption-per-signer-tokens` — per-Signer BIP-129 TOKEN variants

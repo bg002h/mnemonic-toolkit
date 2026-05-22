@@ -396,6 +396,39 @@ pub fn ecies_decrypt_storage(
     Ok(out)
 }
 
+/// Magic-byte discriminator for an Electrum storage-encrypted wallet file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElectrumStorageMagic {
+    /// `BIE1` — user-password ECIES (decryptable via [`ecies_decrypt_storage`]).
+    Bie1,
+    /// `BIE2` — hardware-device (xpub) ECIES (NOT password-decryptable).
+    Bie2,
+}
+
+/// Detect whether a wallet-file blob is an Electrum storage-encrypted blob.
+///
+/// A storage-encrypted Electrum wallet file is a single base64 line whose
+/// decoded 4-byte prefix is the magic `BIE1` (user-password) or `BIE2`
+/// (hardware-device). Returns `None` for plaintext / JSON wallets: a JSON
+/// `{...}` contains `{`, which is not in the base64 alphabet, so the decode
+/// fails — no false-positive against the JSON / text-prefix sniff paths.
+///
+/// Trims ASCII whitespace (files commonly carry a trailing newline) and uses
+/// the same `base64::STANDARD` engine as [`ecies_decrypt_message`], so a
+/// positive detection guarantees the same trimmed input feeds the decrypt.
+pub fn detect_storage_magic(blob: &[u8]) -> Option<ElectrumStorageMagic> {
+    let trimmed = std::str::from_utf8(blob).ok()?.trim();
+    let raw = BASE64.decode(trimmed).ok()?;
+    if raw.len() < 85 {
+        return None;
+    }
+    match &raw[0..4] {
+        b"BIE1" => Some(ElectrumStorageMagic::Bie1),
+        b"BIE2" => Some(ElectrumStorageMagic::Bie2),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -862,5 +895,53 @@ mod tests {
         assert!(EciesDecryptError::Bie2Unsupported
             .to_string()
             .contains("hardware-device"));
+    }
+
+    // ── detect_storage_magic (Phase B) ────────────────────────────────────
+
+    #[test]
+    fn detect_storage_magic_bie1() {
+        assert_eq!(
+            detect_storage_magic(BIE1_KAT1.as_bytes()),
+            Some(ElectrumStorageMagic::Bie1)
+        );
+    }
+
+    #[test]
+    fn detect_storage_magic_bie1_tolerates_trailing_newline() {
+        let with_nl = format!("{BIE1_KAT1}\n");
+        assert_eq!(
+            detect_storage_magic(with_nl.as_bytes()),
+            Some(ElectrumStorageMagic::Bie1)
+        );
+    }
+
+    #[test]
+    fn detect_storage_magic_bie2() {
+        let bie2 = mutate_blob(BIE1_KAT1, |r| r[3] = b'2'); // BIE1 -> BIE2
+        assert_eq!(
+            detect_storage_magic(bie2.as_bytes()),
+            Some(ElectrumStorageMagic::Bie2)
+        );
+    }
+
+    #[test]
+    fn detect_storage_magic_none_for_json_wallet() {
+        // A plaintext Electrum JSON wallet — `{` is not in the base64 alphabet.
+        let json = br#"{"seed_version": 18, "use_encryption": false, "wallet_type": "standard"}"#;
+        assert_eq!(detect_storage_magic(json), None);
+    }
+
+    #[test]
+    fn detect_storage_magic_none_for_short_base64() {
+        let short = BASE64.encode([0u8; 40]);
+        assert_eq!(detect_storage_magic(short.as_bytes()), None);
+    }
+
+    #[test]
+    fn detect_storage_magic_none_for_non_bie_base64() {
+        // Valid base64, >=85 bytes, but magic is not BIE1/BIE2.
+        let other = BASE64.encode([0x41u8; 90]);
+        assert_eq!(detect_storage_magic(other.as_bytes()), None);
     }
 }

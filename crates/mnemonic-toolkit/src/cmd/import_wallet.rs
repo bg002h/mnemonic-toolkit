@@ -75,7 +75,12 @@ use crate::wallet_import::{
     specter::SpecterParser,
     ParsedImport, SelectDescriptor, WalletFormatParser,
 };
-use clap::Args;
+use crate::cmd::convert::read_stdin_passphrase;
+use crate::secret_advisory::secret_in_argv_warning;
+use clap::{ArgGroup, Args};
+use mnemonic_toolkit::electrum_crypto::{
+    detect_storage_magic, ecies_decrypt_storage, EciesDecryptError, ElectrumStorageMagic,
+};
 use serde_json::json;
 use std::fs;
 use std::io::{Read, Write};
@@ -100,6 +105,17 @@ use std::path::PathBuf;
 pub(crate) const IMPORT_WALLET_ENVELOPE_SCHEMA_VERSION: &str = "1";
 
 #[derive(Args, Debug, Clone)]
+#[command(group(
+    // v0.33.2 — optional, mutually-exclusive password source for Electrum
+    // BIE1 storage-encrypted wallets. Unlike `electrum-decrypt`'s group, this
+    // is NOT required (most imports are plaintext); the password is only
+    // consumed when a BIE1 blob is detected. `--decrypt-password-stdin` is a
+    // bool: `false` does not count as present in the group.
+    ArgGroup::new("import_decrypt_password_source")
+        .args(["decrypt_password", "decrypt_password_file", "decrypt_password_stdin"])
+        .required(false)
+        .multiple(false),
+))]
 pub struct ImportWalletArgs {
     /// Path to the third-party wallet blob; `-` reads from stdin.
     /// v0.27.0: required UNLESS `--bsms-round1` is supplied (Round-1 verify
@@ -216,6 +232,24 @@ pub struct ImportWalletArgs {
     /// `BsmsSignatureMismatch` exit 2.
     #[arg(long = "bsms-verify-strict")]
     pub bsms_verify_strict: bool,
+
+    /// v0.33.2 — password for an Electrum BIE1 storage-encrypted wallet
+    /// (inline). Only used when `--blob` is a `BIE1` storage blob; ignored
+    /// otherwise. Emits an argv-leakage advisory — prefer
+    /// `--decrypt-password-file` or `--decrypt-password-stdin`.
+    #[arg(long = "decrypt-password", value_name = "VALUE")]
+    pub decrypt_password: Option<String>,
+
+    /// v0.33.2 — read the BIE1 decryption password from a file (trailing
+    /// newline stripped).
+    #[arg(long = "decrypt-password-file", value_name = "PATH")]
+    pub decrypt_password_file: Option<PathBuf>,
+
+    /// v0.33.2 — read the BIE1 decryption password from stdin (raw,
+    /// NULL-byte preserving). Cannot co-exist with any other stdin consumer
+    /// (`--blob=-`, `--bsms-encryption-token=-`).
+    #[arg(long = "decrypt-password-stdin")]
+    pub decrypt_password_stdin: bool,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -282,6 +316,25 @@ pub fn run<R: Read, W: Write, E: Write>(
             ));
         }
     }
+    // v0.33.2 — `--decrypt-password-stdin` (Electrum BIE1) is a THIRD stdin
+    // consumer. The password is resolved later (at the BIE1 decrypt site,
+    // after `read_blob` + the token read have already drained stdin), so this
+    // guard MUST be hoisted here. Covers every pair with blob=- and token=-.
+    if args.decrypt_password_stdin {
+        if let Some(blob_p) = &args.blob {
+            if blob_p.as_os_str() == "-" {
+                return Err(ToolkitError::BadInput(
+                    "--blob=- and --decrypt-password-stdin cannot both read from stdin".to_string(),
+                ));
+            }
+        }
+        if token_stdin_count > 0 {
+            return Err(ToolkitError::BadInput(
+                "--bsms-encryption-token=- and --decrypt-password-stdin cannot both read from stdin"
+                    .to_string(),
+            ));
+        }
+    }
 
     // v0.32.2 — gap-h guard (R0 I1): per-Signer tokens (N>1) require N
     // matching `--bsms-round1` records. With zero records, the positional
@@ -334,6 +387,69 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // Read blob.
     let mut blob = read_blob(blob_path, stdin)?;
+
+    // v0.33.2 — Electrum BIE1 whole-file storage decrypt, BEFORE sniff.
+    // A storage-encrypted Electrum wallet file is a single base64 blob (magic
+    // BIE1/BIE2), NOT JSON — so it must be decrypted to wallet JSON before the
+    // sniff/parse pipeline (which expects JSON/text). Detection is
+    // `--format`-independent (BIE2 is always refused; BIE1 is always decrypted
+    // when a password is present); after replacement the normal `--format` /
+    // sniff logic runs on the recovered JSON. Mirrors the BSMS decrypt-then-
+    // parse orchestration below (preserves the parser-trait surface).
+    match detect_storage_magic(&blob) {
+        Some(ElectrumStorageMagic::Bie2) => {
+            return Err(ToolkitError::BadInput(
+                "import-wallet: electrum: this wallet is encrypted with a hardware-device key \
+                 (BIE2 / XPUB_PASSWORD); it cannot be decrypted from a password. Decrypt it in \
+                 Electrum with the original device first, then re-import."
+                    .to_string(),
+            ));
+        }
+        Some(ElectrumStorageMagic::Bie1) => {
+            let password = resolve_import_decrypt_password(args, stdin, stderr)?.ok_or_else(|| {
+                ToolkitError::BadInput(
+                    "import-wallet: electrum: BIE1 storage-encrypted wallet detected; supply the \
+                     wallet password via --decrypt-password, --decrypt-password-file, or \
+                     --decrypt-password-stdin"
+                        .to_string(),
+                )
+            })?;
+            let _pin_pw = mnemonic_toolkit::mlock::pin_pages_for(password.as_bytes());
+            // Detection already confirmed the trimmed UTF-8 base64 form.
+            let trimmed = std::str::from_utf8(&blob)
+                .expect("detect_storage_magic confirmed valid UTF-8")
+                .trim();
+            let plaintext = ecies_decrypt_storage(trimmed, password.as_bytes())
+                .map_err(map_ecies_storage_error)?;
+            writeln!(
+                stderr,
+                "notice: import-wallet: electrum: BIE1 user-password storage decrypted"
+            )
+            .map_err(ToolkitError::Io)?;
+            let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&plaintext);
+            blob = plaintext.to_vec();
+        }
+        None => {
+            // Not a storage-encrypted blob. If a password was supplied anyway,
+            // it is irrelevant — emit a soft advisory and proceed unchanged.
+            if args.decrypt_password.is_some()
+                || args.decrypt_password_file.is_some()
+                || args.decrypt_password_stdin
+            {
+                // An inline --decrypt-password still leaked via argv even though
+                // it goes unused — warn about the leak that already happened.
+                if args.decrypt_password.is_some() {
+                    secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
+                }
+                writeln!(
+                    stderr,
+                    "notice: import-wallet: no BIE1 storage-encrypted wallet detected; \
+                     --decrypt-password* ignored"
+                )
+                .map_err(ToolkitError::Io)?;
+            }
+        }
+    }
 
     // SPEC §6: sniff dispatch.
     let sniff_outcome = sniff_format(&blob);
@@ -1900,6 +2016,52 @@ fn emit_summary<W: Write>(stdout: &mut W, parsed: &[ParsedImport]) -> Result<(),
         writeln!(stdout, "entropy={entropy_str}").map_err(ToolkitError::Io)?;
     }
     Ok(())
+}
+
+/// v0.33.2 — resolve the optional Electrum BIE1 decryption password from the
+/// `--decrypt-password{,-file,-stdin}` group. Returns `None` when no form is
+/// supplied. Mirrors `cmd/electrum_decrypt.rs` resolution: the inline form
+/// emits the argv-leakage advisory; the file form strips one trailing
+/// newline; the stdin form is NULL-byte-preserving. The ArgGroup guarantees
+/// at most one form is set.
+fn resolve_import_decrypt_password<R: Read, E: Write>(
+    args: &ImportWalletArgs,
+    stdin: &mut R,
+    stderr: &mut E,
+) -> Result<Option<zeroize::Zeroizing<String>>, ToolkitError> {
+    if let Some(pw) = &args.decrypt_password {
+        secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
+        Ok(Some(zeroize::Zeroizing::new(pw.clone())))
+    } else if let Some(path) = &args.decrypt_password_file {
+        let raw = std::fs::read_to_string(path).map_err(|e| {
+            ToolkitError::BadInput(format!(
+                "--decrypt-password-file: cannot read {}: {e}",
+                path.display()
+            ))
+        })?;
+        Ok(Some(zeroize::Zeroizing::new(
+            raw.strip_suffix('\n').unwrap_or(&raw).to_string(),
+        )))
+    } else if args.decrypt_password_stdin {
+        Ok(Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Map a library-local `EciesDecryptError` to a CLI-boundary `ToolkitError`.
+/// The wrong-password / corruption modes (`HmacMismatch`, `AesDecryptFailure`)
+/// are UNIFIED into one non-leaky message (mirrors `electrum-decrypt`).
+fn map_ecies_storage_error(e: EciesDecryptError) -> ToolkitError {
+    match e {
+        EciesDecryptError::HmacMismatch | EciesDecryptError::AesDecryptFailure => {
+            ToolkitError::BadInput(
+                "import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)"
+                    .to_string(),
+            )
+        }
+        other => ToolkitError::BadInput(format!("import-wallet: electrum: {other}")),
+    }
 }
 
 fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Vec<u8>, ToolkitError> {
