@@ -40,17 +40,21 @@ Order: Task 1 (mlock) then Task 2 (zeroize), so Task 2's rewrite of the Round-2 
     let mut _pin_blob = mnemonic_toolkit::mlock::pin_pages_for(&blob);
 ```
 
-- [ ] **Step 2: Re-pin at the BIE1 reassign.** REPLACE the existing line at `:435` — `let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&blob);` — with a reassignment of the single guard (this drops the original-buffer guard → munlocks the freed original):
+- [ ] **Step 2: Re-pin at the BIE1 reassign (R1 I1-NEW — `mem::replace`-drop, lint-clean).** REPLACE the existing line at `:435` — `let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&blob);` — with:
 ```rust
-            _pin_blob = mnemonic_toolkit::mlock::pin_pages_for(&blob);
+            // Pin the new buffer, then drop (munlock) the prior guard. mem::replace
+            // READS the old guard (so no `unused_assignments`) and makes the munlock
+            // explicit; ordering is pin-new-before-munlock-old (the freed original is
+            // not yet realloc'd). Replaces the old arm-local `_pin_pt`.
+            drop(std::mem::replace(&mut _pin_blob, mnemonic_toolkit::mlock::pin_pages_for(&blob)));
 ```
 
 - [ ] **Step 3: Re-pin at the Round-2 reassign.** After the `:1043` reassign (whose RHS Task 2 rewrites), add:
 ```rust
-        _pin_blob = mnemonic_toolkit::mlock::pin_pages_for(&blob);
+        drop(std::mem::replace(&mut _pin_blob, mnemonic_toolkit::mlock::pin_pages_for(&blob)));
 ```
 
-- [ ] **Step 4: Build + clippy + no-regression.** Run `cargo build -p mnemonic-toolkit` → compiles. Run `cargo clippy -p mnemonic-toolkit --all-targets -- -D warnings`. The reassigned RAII guard's value is "used" only via its `Drop` (munlock-on-overwrite); if clippy fires `unused_assignments` on `_pin_blob`, that lint does not model `Drop` side-effects — add `#[allow(unused_assignments)]` on the `let mut _pin_blob` statement WITH a one-line comment ("each reassignment's Drop munlocks the prior buffer — the assignment IS the effect"). Resolve per the actual clippy output (the underscore prefix already suppresses `unused_variables`). Run `cargo test -p mnemonic-toolkit import_wallet` + `cargo test -p mnemonic-toolkit --test cli_import_wallet_electrum_bie1 --test cli_import_wallet_bsms --test cli_import_wallet_bsms_encrypted --test cli_import_wallet_electrum` → ALL pass UNCHANGED (hardening must not change behavior).
+- [ ] **Step 4: Build + clippy + no-regression.** Run `cargo build -p mnemonic-toolkit` → compiles. Run `cargo clippy -p mnemonic-toolkit --all-targets -- -D warnings` → **clean** with no attribute needed: the `mem::replace` form has NO direct reassignment statement (so `unused_assignments` never fires) and `_pin_blob` is used via `&mut` (so `unused_variables` never fires — the leading underscore is harmless). Run `cargo test -p mnemonic-toolkit import_wallet` + `cargo test -p mnemonic-toolkit --test cli_import_wallet_electrum_bie1 --test cli_import_wallet_bsms --test cli_import_wallet_bsms_encrypted --test cli_import_wallet_electrum` → ALL pass UNCHANGED (hardening must not change behavior).
 
 - [ ] **Step 5: Commit** (stage ONLY import_wallet.rs):
 ```bash
@@ -146,4 +150,4 @@ git commit -m "release(toolkit): mnemonic-toolkit v0.34.1 — import-wallet secr
 
 **3. Type consistency:** `decrypt_bsms_record -> Result<Zeroizing<String>, ToolkitError>`; both consumers unify to `Zeroizing<String>`; `parse_round1(&str)` unchanged via deref. `_pin_blob` is the single `let mut` guard reassigned at `:435`(replaced)/`:1043`-after; clippy resolution noted.
 
-**R0 fold status:** C1 (Critical) folded — single re-pinned guard replaces the parallel-guard hazard. I1 (Important) folded — justification corrected (by-construction unconditional pin + disproportionate harness cost), declining the test with an accurate rationale. M1 folded. Re-dispatch R0 (→ R1) to confirm 0C/0I before implementation.
+**Review status:** R0 (YELLOW 1C/1I) → folded → R1 (YELLOW 0C/1I-NEW) → folded → **GREEN**. C1 (stale-munlock) resolved + R1-confirmed-correct (single re-pinned guard). I1 (testability) resolved (by-construction unconditional pin + disproportionate harness cost). I1-NEW (the fold's `#[allow]` mis-placement) resolved → `drop(std::mem::replace(&mut _pin_blob, …))` at both reassign sites (lint-clean, no attribute). M1/M1-NEW cosmetic. Reviews persisted to `design/agent-reports/v0_34_1-plan-r0-review.md` + `-r1-review.md`. Cleared to implement (0C/0I).
