@@ -834,7 +834,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_watch_only`.
 - **What:** Watch-only path emits the conditional depth advisory before the unconditional account-index hazard. SPEC §5.2 lists "watch-only mode warning" as item 3 without specifying the sub-order between these two. Phase 5 fixtures don't cover stderr ordering.
 - **Why deferred:** SPEC-ambiguous; Phase 5 doesn't pin the ordering.
-- **Status:** `open`
+- **Status:** `resolved` — moot / resolved-by-refactor. The cited `bundle.rs::bundle_watch_only` was DELETED in `bc59ee3` (v0.4.2 Phase M.3, ~990 lines of legacy CLI dispatch removed); the watch-only path is now folded into `bundle.rs::run` (mode via `bundle.any_secret_bearing()`, `bundle.rs:678`). The specific two-advisory sub-order site no longer exists; re-file with current citations if a real ordering ambiguity persists. (cycle-prep recon 2026-05-22, SHA `1d6436d`.)
 - **Tier:** `v0.1-nice-to-have`
 
 ### `spec-2-2-2-vs-5-4-checks-count-prose` — SPEC §2.2.2 prose says "four checks" but §5.4 schema mandates 9-element array
@@ -931,7 +931,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs:200` (inside `bundle_watch_only`).
 - **What:** A redundant guard exists that would emit `BadInput` (exit 1) if `--master-fingerprint` is missing. Unreachable in practice — the mode-violation pre-check at `cmd/bundle.rs:93` rejects the same condition earlier with exit 2 + byte-exact §6.6 text. Future-refactor inconsistency risk.
 - **Why deferred:** not currently triggered; v0.2 will refactor mode dispatch and naturally clean this up.
-- **Status:** `open`
+- **Status:** `resolved` — resolved-by-refactor `bc59ee3` (v0.4.2 Phase M.3 deleted `bundle_watch_only` + its ~990 lines of legacy CLI dispatch). The redundant guard no longer exists — exactly the refactor the entry predicted. (cycle-prep recon 2026-05-22, SHA `1d6436d`.)
 - **Tier:** `v0.2`
 
 ### `friendly-mapper-unit-test-gaps` — friendly-mapper unit tests cover only 3 of ~70 match arms
@@ -949,7 +949,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/Cargo.toml:27`.
 - **What:** No `use hex` statement in any source module. Inert dependency carried from ms-cli precedent or SPEC §10.3 dep list.
 - **Why deferred:** user's `feedback_dont_drop_reserved_deps` rule applies — confirm with user before removal. v0.2 may use `hex` for new error-message formatting (e.g., printing fingerprints in mode-violation output), in which case the dep activates naturally.
-- **Status:** `open`
+- **Status:** `resolved` — obsolete. `hex` is now used in non-test source across `bundle.rs` (`:565,:1286`), `convert.rs` (`:1132,:1164,:1415,:1520`), `import_wallet.rs` (`:2146,:2183,:2338`), and `nostr.rs` (`:50`, v0.34.0); the "unused" premise is false and removing the dep would break the build. (Citation `Cargo.toml:27` drifted to `:40`.) cycle-prep recon 2026-05-22, SHA `1d6436d`.
 - **Tier:** `v0.1-nice-to-have`
 
 ### `parse_template-regex-line-ref` — SPEC v0.3 §4.9 step 2 cites wrong line range
@@ -2802,7 +2802,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/error.rs` `exit_code` match block (post-Cycle-4: L428-473).
 - **What:** Decide future readability stance. Three options: (a) keep single-variant arms forever (clearest 1:1 variant→code mapping; CLAUDE.md alphabetical lock takes priority over grouping); (b) re-group by exit code in a non-alphabetical block (sacrifices alphabetical-by-variant lock); (c) introduce a separate `const EXIT_CODE_TABLE: &[(&str, u8)]` and use a function dispatch (decouples ordering from grouping; new abstraction layer). **Recommended:** (a) — accept the fragmentation as the cost of alphabetical lock + low-friction grep.
 - **Why deferred:** Readability decision, not a correctness or convention question. The 44-arm fragmented form ships v0.29.0; re-grouping if desired can land any future cycle.
-- **Status:** `open`
+- **Status:** `resolved` — closed with decision (a): keep the single-variant `exit_code` arms (the CLAUDE.md alphabetical-by-variant lock takes priority over grouping; 1:1 variant→code mapping + low-friction grep). Post-v0.34.0 the block is 45 single-variant arms (`error.rs:438`). No code change. cycle-prep recon 2026-05-22, SHA `1d6436d`.
 - **Tier:** `v0.29+`
 - **Tags:** none
 - **Companion:** parent `error-rs-retroactive-alphabetical-sort` (resolved v0.29.0).
