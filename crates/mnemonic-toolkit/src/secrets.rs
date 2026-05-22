@@ -53,6 +53,8 @@ pub fn flag_is_secret(flag_name: &str) -> bool {
             | "--passphrase-stdin"
             | "--bip38-passphrase"
             | "--bip38-passphrase-stdin"
+            | "--decrypt-password"
+            | "--decrypt-password-stdin"
             | "--digits"
             | "--ms1"
             | "--share"
@@ -70,6 +72,8 @@ mod tests {
             "--passphrase-stdin",
             "--bip38-passphrase",
             "--bip38-passphrase-stdin",
+            "--decrypt-password",
+            "--decrypt-password-stdin",
             "--digits",
             "--ms1",
             "--share",
@@ -83,6 +87,9 @@ mod tests {
         // --mk1 = xpub (non-secret); --md1 = descriptor (non-secret).
         // --account / --template / --network / --from / --to / --no-auto-repair
         // are non-secret-bearing (or value-dependent, handled elsewhere).
+        // --decrypt-password-file holds a filesystem PATH, not the secret
+        // itself — the inline --decrypt-password / --decrypt-password-stdin
+        // forms carry the secret value and ARE classified secret above.
         for name in [
             "--mk1",
             "--md1",
@@ -94,6 +101,8 @@ mod tests {
             "--no-auto-repair",
             "--threshold",
             "--language",
+            "--decrypt-password-file",
+            "--ciphertext",
         ] {
             assert!(
                 !flag_is_secret(name),

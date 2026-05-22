@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.33.1] — 2026-05-21
+
+**SemVer-PATCH — secret-classification fix.** `secrets::flag_is_secret` now classifies the v0.33.0 `electrum-decrypt` password flags `--decrypt-password` and `--decrypt-password-stdin` as secret. This was a gap: the CLI runtime already treated `--decrypt-password` as secret (it fires `secret_in_argv_warning`), but the `flag_is_secret` projection — which drives `mnemonic-gui`'s password-field masking, paste-warn / run-confirm modals, and exit-time zeroize sweeps — omitted them. The `gui-schema` v5 `secret` field for these two flags now emits `true`. This is the exact class the GUI's `schema_mirror_secret_drift` gate exists to catch (the v0.3.0–v0.3.2 BIP-39 persistence-leak class).
+
+### Fixed
+
+- `crates/mnemonic-toolkit/src/secrets.rs`: add `--decrypt-password` + `--decrypt-password-stdin` to `flag_is_secret`. `--decrypt-password-file` is deliberately NOT classified secret (its value is a filesystem path, not the secret itself) — locked by a new entry in the non-secret unit-test list, alongside `--ciphertext` (encrypted material, not plaintext secret).
+
+### Cross-repo lockstep
+
+This is the prerequisite for the paired `mnemonic-gui-v0.18.0` (Cycle 18b): the GUI pins v0.33.1 and mirrors `secret: true` on the two password flags, keeping the `schema_mirror_secret_drift` gate green. Tracked at FOLLOWUP `gui-electrum-decrypt-subcommand-mirror`.
+
+### Test totals
+
+- 2223 cells passing (+2 net: the two new secret-flag unit-test assertions).
+
+---
+
 ## mnemonic-toolkit [0.33.0] — 2026-05-21
 
 **SemVer-MINOR release.** New `mnemonic electrum-decrypt` subcommand surfaces the (previously dead-code) `electrum_crypto::decrypt_field` primitive: decrypt an Electrum field-encrypted secret (`base64(iv ‖ aes-256-cbc(plaintext + PKCS7))`, key = `sha256d(password)`) and emit the recovered plaintext (Electrum-native seed phrase or BIP-32 xprv). Closes `electrum-crypto-seed-extraction-subcommand` FOLLOWUP — the first of the final v0.32+ Electrum pair.
