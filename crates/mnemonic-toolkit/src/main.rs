@@ -69,6 +69,8 @@ enum Command {
     ImportWallet(cmd::import_wallet::ImportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
+    /// decrypt an Electrum field-encrypted secret (seed phrase / xprv) with a password
+    ElectrumDecrypt(cmd::electrum_decrypt::ElectrumDecryptArgs),
     /// emit the set of BIP-39 last words that yield a valid checksum for an N-1 partial phrase
     FinalWord(cmd::final_word::FinalWordArgs),
     /// split a BIP-39 phrase into N XOR shares OR combine N shares back into a phrase
@@ -115,6 +117,9 @@ fn main() -> ExitCode {
         }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
+        }
+        Command::ElectrumDecrypt(args) => {
+            cmd::electrum_decrypt::run(args, stdin, stdout, stderr)
         }
         Command::FinalWord(args) => cmd::final_word::run(args, stdin, stdout, stderr),
         Command::SeedXor(args) => cmd::seed_xor::run(args, stdin, stdout, stderr),

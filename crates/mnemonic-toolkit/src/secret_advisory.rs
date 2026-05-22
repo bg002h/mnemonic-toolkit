@@ -47,11 +47,20 @@ pub fn secret_in_argv_warning<W: Write>(stderr: &mut W, flag: &str, alternative:
 /// No-op for kinds other than `Ms1` (mk1 / md1 are not secret-bearing).
 pub fn secret_on_stdout_warning<W: Write + ?Sized>(kind: crate::repair::CardKind, stderr: &mut W) {
     if matches!(kind, crate::repair::CardKind::Ms1) {
-        let _ = writeln!(
-            stderr,
-            "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"
-        );
+        secret_on_stdout_warning_unconditional(stderr);
     }
+}
+
+/// Unconditional form of [`secret_on_stdout_warning`] for callers whose
+/// stdout payload is ALWAYS secret material and is not a `CardKind`
+/// (e.g. `electrum-decrypt`'s recovered Electrum seed phrase / xprv).
+/// Added v0.33.0. The `CardKind`-gated wrapper above delegates here for
+/// `Ms1` (behavior-preserving).
+pub(crate) fn secret_on_stdout_warning_unconditional<W: Write + ?Sized>(stderr: &mut W) {
+    let _ = writeln!(
+        stderr,
+        "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"
+    );
 }
 
 /// Emit a `--json-out <path>` world-readable / group-readable advisory

@@ -4,6 +4,7 @@ pub mod bundle;
 pub mod compare_cost;
 pub mod convert;
 pub mod derive_child;
+pub mod electrum_decrypt;
 pub mod export_wallet;
 pub mod final_word;
 pub mod gui_schema;
