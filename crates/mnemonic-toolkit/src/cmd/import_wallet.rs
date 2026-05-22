@@ -389,6 +389,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Read blob.
     let mut blob = read_blob(blob_path, stdin)?;
 
+    // v0.34.1 — pin the blob for ALL formats (was BIE1-only). A plaintext
+    // `use_encryption:false` Electrum wallet is seed-bearing yet was swappable.
+    // `blob` is reassigned on the BIE1 + Round-2 arms; this SINGLE guard is
+    // re-pinned at each via `mem::replace` (pin new, then drop+munlock the freed
+    // original) so exactly one live guard pins the current buffer — mlock locks
+    // don't stack, so a stale end-of-fn munlock would un-pin a live secret.
+    let mut _pin_blob = mnemonic_toolkit::mlock::pin_pages_for(&blob);
+
     // v0.33.2 — Electrum BIE1 whole-file storage decrypt, BEFORE sniff.
     // A storage-encrypted Electrum wallet file is a single base64 blob (magic
     // BIE1/BIE2), NOT JSON — so it must be decrypted to wallet JSON before the
@@ -432,7 +440,11 @@ pub fn run<R: Read, W: Write, E: Write>(
             // the recovered wallet JSON can carry seed/xprv material. Pin AFTER
             // the move (the Vec move keeps the same heap buffer).
             blob = plaintext;
-            let _pin_pt = mnemonic_toolkit::mlock::pin_pages_for(&blob);
+            // Re-pin the recovered-JSON buffer; drop+munlock the prior guard.
+            drop(std::mem::replace(
+                &mut _pin_blob,
+                mnemonic_toolkit::mlock::pin_pages_for(&blob),
+            ));
         }
         None => {
             // Not a storage-encrypted blob. If a password was supplied anyway,
@@ -1041,6 +1053,11 @@ electrum|jade|sparrow|specter>"
         // Re-wrap in Zeroizing (the orchestrator's `blob` is zeroizing; the
         // decrypted Round-2 descriptor is scrubbed on drop).
         blob = Zeroizing::new(plaintext.into_bytes());
+        // Re-pin the decrypted Round-2 buffer; drop+munlock the prior guard.
+        drop(std::mem::replace(
+            &mut _pin_blob,
+            mnemonic_toolkit::mlock::pin_pages_for(&blob),
+        ));
     }
 
     let mut parsed: Vec<ParsedImport> = match format_str {
