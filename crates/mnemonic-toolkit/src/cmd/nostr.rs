@@ -45,6 +45,26 @@ pub struct NostrArgs {
     pub json: bool,
 }
 
+/// One row of output (per script type) in the JSON envelope.
+#[derive(serde::Serialize)]
+struct OutputRow {
+    script_type: String,
+    descriptor: String,
+    address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    electrum: Option<String>,
+}
+
+/// Top-level JSON envelope for `--json`.
+#[derive(serde::Serialize)]
+struct NostrJson {
+    kind: &'static str, // "public" | "secret"
+    x_only: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wif: Option<String>,
+    outputs: Vec<OutputRow>,
+}
+
 // Signature MUST match the sibling pattern (by-ref args, Result<u8>); the
 // dispatch is `match &cli.command`. Verify against cmd/electrum_decrypt.rs.
 pub fn run<R: Read, W: Write, E: Write>(
@@ -62,12 +82,36 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     if let Some(p) = args.pubkey.as_deref() {
         let xonly = crate::nostr::decode_npub(p)?;
-        writeln!(stdout, "nostr key (public)").map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
+
+        // Build rows once; used by both render paths.
+        let mut rows: Vec<OutputRow> = Vec::with_capacity(types.len());
         for st in &types {
-            writeln!(stdout, "  script-type: {}", st.as_str()).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "  descriptor:  {}", crate::nostr::descriptor_for(xonly, *st)?).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "  address:     {}", crate::nostr::address_for(&secp, xonly, *st, args.network)).map_err(ToolkitError::Io)?;
+            rows.push(OutputRow {
+                script_type: st.as_str().to_owned(),
+                descriptor: crate::nostr::descriptor_for(xonly, *st)?,
+                address: crate::nostr::address_for(&secp, xonly, *st, args.network).to_string(),
+                electrum: None,
+            });
+        }
+
+        if args.json {
+            let envelope = NostrJson {
+                kind: "public",
+                x_only: xonly.to_string(),
+                wif: None,
+                outputs: rows,
+            };
+            serde_json::to_writer_pretty(&mut *stdout, &envelope)
+                .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
+            writeln!(stdout).map_err(ToolkitError::Io)?;
+        } else {
+            writeln!(stdout, "nostr key (public)").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
+            for row in &rows {
+                writeln!(stdout, "  script-type: {}", row.script_type).map_err(ToolkitError::Io)?;
+                writeln!(stdout, "  descriptor:  {}", row.descriptor).map_err(ToolkitError::Io)?;
+                writeln!(stdout, "  address:     {}", row.address).map_err(ToolkitError::Io)?;
+            }
         }
         return Ok(0);
     }
@@ -94,16 +138,40 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(stderr, "notice: nostr: secret normalized to even-y (BIP-340) for address consistency").map_err(ToolkitError::Io)?;
         }
         let (xonly, _) = norm.x_only_public_key(&secp);
-        writeln!(stdout, "nostr key (secret)").map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
         let wif = crate::nostr::wif_for(&norm, args.network);
+
+        // Build rows once; used by both render paths.
+        let mut rows: Vec<OutputRow> = Vec::with_capacity(types.len());
         for st in &types {
-            writeln!(stdout, "  script-type: {}", st.as_str()).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "  descriptor:  {}", crate::nostr::descriptor_for(xonly, *st)?).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "  address:     {}", crate::nostr::address_for(&secp, xonly, *st, args.network)).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "  electrum:    {}{wif}", crate::nostr::electrum_prefix(*st)).map_err(ToolkitError::Io)?;
+            rows.push(OutputRow {
+                script_type: st.as_str().to_owned(),
+                descriptor: crate::nostr::descriptor_for(xonly, *st)?,
+                address: crate::nostr::address_for(&secp, xonly, *st, args.network).to_string(),
+                electrum: Some(format!("{}{wif}", crate::nostr::electrum_prefix(*st))),
+            });
         }
-        writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
+
+        if args.json {
+            let envelope = NostrJson {
+                kind: "secret",
+                x_only: xonly.to_string(),
+                wif: Some(wif.clone()),
+                outputs: rows,
+            };
+            serde_json::to_writer_pretty(&mut *stdout, &envelope)
+                .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
+            writeln!(stdout).map_err(ToolkitError::Io)?;
+        } else {
+            writeln!(stdout, "nostr key (secret)").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
+            for row in &rows {
+                writeln!(stdout, "  script-type: {}", row.script_type).map_err(ToolkitError::Io)?;
+                writeln!(stdout, "  descriptor:  {}", row.descriptor).map_err(ToolkitError::Io)?;
+                writeln!(stdout, "  address:     {}", row.address).map_err(ToolkitError::Io)?;
+                writeln!(stdout, "  electrum:    {}", row.electrum.as_deref().unwrap_or("")).map_err(ToolkitError::Io)?;
+            }
+            writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
+        }
         return Ok(0);
     }
 

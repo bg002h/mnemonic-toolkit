@@ -36,3 +36,35 @@ fn secret_via_stdin_works() {
         .success()
         .stdout(predicate::str::contains("wif:"));
 }
+
+#[test]
+fn all_script_types_emits_four() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--all-script-types"])
+        .assert().success()
+        .stdout(predicate::str::contains("tr("))
+        .stdout(predicate::str::contains("wpkh("))
+        .stdout(predicate::str::contains("sh(wpkh("));
+}
+
+#[test]
+fn json_output_is_valid_and_has_fields() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--json"])
+        .assert().success().get_output().stdout.clone();
+    let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(v["kind"], "public");
+    assert!(v["outputs"][0]["descriptor"].is_string());
+    assert!(v["outputs"][0]["address"].is_string());
+}
+
+#[test]
+fn json_secret_has_wif_and_electrum() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh", "--json"])
+        .assert().success().get_output().stdout.clone();
+    let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(v["kind"], "secret");
+    assert!(v["wif"].is_string());
+    assert!(v["outputs"][0]["electrum"].is_string());
+}
