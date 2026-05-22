@@ -361,6 +361,18 @@ pub enum ScriptType {
     P2tr,
 }
 
+impl ScriptType {
+    /// Canonical lowercase tag (round-trips with `parse_script_type_arg`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScriptType::P2pkh => "p2pkh",
+            ScriptType::P2wpkh => "p2wpkh",
+            ScriptType::P2shP2wpkh => "p2sh-p2wpkh",
+            ScriptType::P2tr => "p2tr",
+        }
+    }
+}
+
 pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
     match s {
         "p2pkh" => Ok(ScriptType::P2pkh),
@@ -1774,5 +1786,17 @@ mod secret_taxonomy_parity_tests {
         assert!(!NodeType::MiniKey.is_secret_bearing());
         assert!(NodeType::MiniKey.is_argv_secret_bearing());
         assert!(!SECRET_NODE_TYPES.contains(&"minikey"));
+    }
+}
+
+#[cfg(test)]
+mod script_type_tests {
+    use super::*;
+
+    #[test]
+    fn script_type_as_str_round_trips() {
+        for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+            assert_eq!(parse_script_type_arg(st.as_str()).unwrap(), st);
+        }
     }
 }
