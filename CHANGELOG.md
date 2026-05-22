@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.34.2] — 2026-05-22
+
+**SemVer-PATCH — `mnemonic nostr --import` (read-only Bitcoin Core importdescriptors) + FOLLOWUPS hygiene.** New `nostr --import readonly` appends a ready-to-paste **watch-only** `importdescriptors` recipe built from the address descriptor(s) (`active:false`/`internal:false`, single-key non-ranged); `--all-script-types` emits one array with all four. New `nostr --timestamp <now|unix>` (default `0` = rescan-from-genesis) reuses export-wallet's parser. A shared `wallet_export::import_array_single` builder owns the JSON shape (the existing ranged export-wallet emitter is untouched). `--import spending|both` is reserved (deferred — FOLLOWUP `nostr-import-spending-descriptors`). No new secret on stdout (read-only). Also closes 4 stale/no-op FOLLOWUPs from a cycle-prep recon (`hex-dep-unused`, `dead-inner-guard-bundle-watch-only`, `watch-only-stderr-warning-suborder`, `error-rs-exit-code-arm-fragmentation-post-sort`). Paired GUI schema-mirror lockstep (`--import`/`--timestamp` on `nostr`).
+
 ## mnemonic-toolkit [0.34.1] — 2026-05-22
 
 **SemVer-PATCH — import-wallet secret-memory hygiene.** Closes two FOLLOWUPs from v0.33.3: (1) `import-wallet-plaintext-blob-mlock-pin` — the wallet `blob` is now `mlock`-pinned for ALL formats via a single re-pinned guard (previously only the BIE1 decrypt arm), so a plaintext `use_encryption:false` seed-bearing Electrum wallet no longer sits swappable; (2) `bsms-decrypt-record-string-zeroizing` — `decrypt_bsms_record` returns `Zeroizing<String>` so the intermediate decrypted BSMS record is scrubbed on drop. Internal type/lifetime only — no CLI/wire/GUI/manual surface change.

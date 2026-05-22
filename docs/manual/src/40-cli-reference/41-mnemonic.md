@@ -1864,7 +1864,27 @@ mnemonic nostr (--pubkey <PUBKEY> | --secret <SECRET> | --secret-file <FILE> | -
 | `--all-script-types` | Emit descriptor + address for all four script types (`p2tr`, `p2wpkh`, `p2sh-p2wpkh`, `p2pkh`) |
 | `--network <NETWORK>` | Bitcoin network — affects address HRP and WIF version byte. One of `mainnet` / `testnet` / `signet` / `regtest` (default `mainnet`) |
 | `--json` | Emit JSON instead of the human-readable block |
+| `--import <IMPORT>` | Append a ready-to-paste Bitcoin Core `importdescriptors` recipe for the derived address(es). `readonly` = watch-only (the pubkey descriptor). `spending` / `both` are reserved for a future cycle (rejected with a "deferred" message) |
+| `--timestamp <TIMESTAMP>` | Bitcoin Core rescan anchor for `--import`: `now` or unix seconds. Default `0` (rescan from genesis to discover an existing key's funds) |
 | `--help` | Print help |
+
+### Bitcoin Core import (`--import readonly`)
+
+With `--import readonly`, an `import:` line is appended carrying a ready-to-paste
+**watch-only** `importdescriptors` recipe built from the address descriptor(s)
+(`active: false`, `internal: false`, `timestamp` from `--timestamp`, default `0`).
+With `--all-script-types`, one array carries all four watch-only descriptors —
+paste it once to watch every address type.
+
+```text
+$ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg --script-type p2wpkh --import readonly
+  …
+  import:      importdescriptors '[{"active":false,"desc":"wpkh(02…)#csum","internal":false,"timestamp":0}]'
+```
+
+Paste the single-quoted array into Bitcoin Core: `bitcoin-cli importdescriptors '<array>'`.
+Only the **public** descriptor is emitted (no private key); a *spending* recipe
+(embedding the WIF) is deferred to a future cycle.
 
 Exactly one of `--pubkey` / `--secret` / `--secret-file` / `--secret-stdin`
 is required (clap arg-group; missing/multiple → exit 64).

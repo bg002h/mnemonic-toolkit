@@ -3046,3 +3046,50 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
 - **Companion:** parent `bsms-bip129-encryption-envelope` (resolved v0.31.0; arc fully retired v0.32.3).
+
+
+### `nostr-import-spending-descriptors` — spending (private) importdescriptors on `mnemonic nostr`
+
+- **Surfaced:** 2026-05-22, mnemonic-toolkit-v0.34.2 (`nostr --import readonly` close). v0.34.2 ships READ-ONLY only; `--import spending|both` is reserved (parser rejects with a "deferred" message).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/nostr.rs` (`parse_import_mode` + the `run` emission); a new spending-descriptor builder (the watch-only path uses `wallet_export::import_array_single` on the pubkey descriptor).
+- **What:** enable `--import=spending|both`: emit a SPENDING importdescriptors recipe embedding the WIF — `wpkh(<WIF>)#csum` / `pkh(<WIF>)` / `sh(wpkh(<WIF>))` / `tr(<WIF>)` (Bitcoin Core descriptor wallets support `tr(<WIF>)` key-path spend, BIP-86 — unlike Electrum). Requires a secret input (`--secret*`); `--pubkey` + spending → refuse. Adds secret material to stdout → fire the secret-on-stdout advisory (the read-only path does NOT). Companion: a spending importdescriptors surface on `convert` (`--from wif=/xprv=`).
+- **Why deferred:** v0.34.2 scope-locked to watch-only (user direction 2026-05-22). Spending embeds the private key in the descriptor + import JSON — its own secret-handling + UX pass.
+- **Status:** `open`
+- **Tier:** `v0.34+`
+- **Tags:** `wallet`
+- **Companion:** parent `nostr-key-wrappers` (v0.34.0); read-only shipped v0.34.2.
+
+
+### `export-wallet-timestamp-default-zero` — make `--timestamp` default `0` everywhere (currently `now` on export-wallet)
+
+- **Surfaced:** 2026-05-22, mnemonic-toolkit-v0.34.2. `nostr --timestamp` defaults to `0` (rescan-from-genesis — discovers an existing key's funds); `export-wallet`'s `--timestamp` defaults to `"now"` (`crates/mnemonic-toolkit/src/cmd/export_wallet.rs:117`). User wants `0` as the consistent default everywhere.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/export_wallet.rs:117` (`default_value = "now"` on `--timestamp`).
+- **What:** change export-wallet's `--timestamp` default `"now"` → `"0"`. This is a **behavior change** to the emitted `importdescriptors` recipe (default rescan-from-genesis instead of watch-going-forward) — a heavier default rescan; warrants its own SemVer call + a deliberate decision (some users prefer `now` for a fresh wallet). Pair with the docs sweep below.
+- **Why deferred:** behavior change to an existing flag's default; not bundled into the v0.34.2 additive-flag PATCH.
+- **Status:** `open`
+- **Tier:** `v0.34+`
+- **Tags:** `wallet`
+- **Companion:** sibling `timestamp-zero-default-docs-sweep`.
+
+
+### `timestamp-zero-default-docs-sweep` — update docs for the `0` default once it lands everywhere
+
+- **Surfaced:** 2026-05-22, mnemonic-toolkit-v0.34.2.
+- **Where:** `docs/manual/` (any chapter implying `--timestamp` defaults to `now`) + any SPEC mentioning the timestamp default.
+- **What:** once `export-wallet-timestamp-default-zero` lands, update all documentation that states/implies `--timestamp` defaults to `now` to reflect the `0` default. (v0.34.2's `nostr` manual already documents `0`.)
+- **Why deferred:** docs-only follow-on to the behavior change above.
+- **Status:** `open`
+- **Tier:** `v0.34+`
+- **Tags:** none
+- **Companion:** sibling `export-wallet-timestamp-default-zero`.
+
+
+### `cargo-lock-version-bump-lockstep` — version bumps must regenerate + commit `Cargo.lock`; add a `--locked` CI guard
+
+- **Surfaced:** 2026-05-22, mnemonic-toolkit-v0.34.2. During v0.34.2 staging, `Cargo.lock`'s `mnemonic-toolkit` entry was found at `0.34.0` while `Cargo.toml` had been bumped through `0.34.1` → so **the `mnemonic-toolkit-v0.34.1` tag shipped with a stale lock** (`git show mnemonic-toolkit-v0.34.1:Cargo.lock` → `version = "0.34.0"`; `git show mnemonic-toolkit-v0.34.1:crates/mnemonic-toolkit/Cargo.toml` → `version = "0.34.1"`).
+- **Impact:** the default installer path for `mnemonic` is `cargo install --locked --git … --tag mnemonic-toolkit-v0.34.1 mnemonic-toolkit` (`scripts/install.sh` uses `$LOCKED="--locked"` + git+tag for the toolkit). `--locked` refuses to update the lock, so a `Cargo.toml`/`Cargo.lock` version mismatch makes that install **fail** on the v0.34.1 tag. v0.34.2 corrects the lock (`cargo build --locked -p mnemonic-toolkit` passes), restoring the path — but v0.34.1 remains a broken-for-`--locked`-install intermediate tag.
+- **Why CI missed it:** `install-pin-check` only greps the `install.sh` self-pin string against the tag; it never runs an actual `--locked` install/build, so a stale lock is invisible to it.
+- **What:** (a) version-bump discipline — every `Cargo.toml` version bump MUST be followed by `cargo build` (or `cargo update -p mnemonic-toolkit --precise <ver>`) to regenerate `Cargo.lock`, and the lock change committed in the same release commit; (b) add a CI guard — a `cargo build --locked -p mnemonic-toolkit` (or `cargo metadata --locked`) step in the release/check workflow so a `Cargo.toml`/`Cargo.lock` mismatch fails fast at tag time.
+- **Status:** `open`
+- **Tier:** `v0.34+`
+- **Tags:** `wallet`
