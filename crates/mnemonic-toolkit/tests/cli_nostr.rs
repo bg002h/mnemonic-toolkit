@@ -87,3 +87,40 @@ fn nsec_to_pubkey_flag_is_refused() {
         .args(["nostr", "--pubkey", NSEC])
         .assert().failure().stderr(predicate::str::contains("HRP"));
 }
+
+#[test]
+fn secret_inline_warns_on_argv_and_stdout() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
+        .assert().success()
+        .stderr(predicate::str::contains("secret material on argv (--secret"))
+        .stderr(predicate::str::contains("secret material on stdout"));
+}
+
+#[test]
+fn secret_stdin_warns_on_stdout_but_not_argv() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret-stdin", "--script-type", "p2tr"])
+        .write_stdin(format!("{NSEC}\n"))
+        .assert().success()
+        .stderr(predicate::str::contains("secret material on stdout"))
+        .stderr(predicate::str::contains("secret material on argv").not());
+}
+
+#[test]
+fn pubkey_path_has_no_wif_or_electrum() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB])
+        .assert().success()
+        .stdout(predicate::str::contains("wif:").not())
+        .stdout(predicate::str::contains("electrum:").not());
+}
+
+#[test]
+fn all_script_types_emits_p2pkh_row() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--all-script-types"])
+        .assert().success()
+        .stdout(predicate::str::contains("script-type: p2pkh"))
+        .stdout(predicate::str::contains("script-type: p2sh-p2wpkh"));
+}

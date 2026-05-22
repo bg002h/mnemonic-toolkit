@@ -5,6 +5,7 @@
 use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
+use crate::secret_advisory::{secret_in_argv_warning, secret_on_stdout_warning_unconditional};
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -126,7 +127,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // Resolve a secret from --secret / --secret-file / --secret-stdin.
     let secret_input: Option<zeroize::Zeroizing<String>> = if let Some(s) = &args.secret {
-        writeln!(stderr, "warning: nostr: --secret was passed inline and is visible in process args; prefer --secret-file or --secret-stdin").map_err(ToolkitError::Io)?;
+        secret_in_argv_warning(stderr, "--secret", "--secret-stdin");
         Some(zeroize::Zeroizing::new(s.clone()))
     } else if let Some(path) = &args.secret_file {
         Some(zeroize::Zeroizing::new(std::fs::read_to_string(path).map_err(ToolkitError::Io)?.trim().to_string()))
@@ -180,6 +181,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
         }
+        secret_on_stdout_warning_unconditional(stderr);
         return Ok(0);
     }
 
