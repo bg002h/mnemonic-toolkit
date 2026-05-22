@@ -12,6 +12,17 @@
 \usepackage{makeidx}
 \makeindex
 
+% --- Strikethrough support (`~~...~~`) ---------------------------------------
+% pandoc emits soul's \st{} for strikethrough, and its DEFAULT template
+% loads the package that defines it. This manual uses a custom template
+% (`--template=pandoc/templates/manual.latex`), which omits that
+% conditional injection — so \st was undefined and the PDF build broke the
+% moment roadmap "shipped" items started using ~~strikethrough~~ in
+% src/45-foreign-formats.md. Define \st via ulem's \sout, which (unlike
+% soul's \st) robustly handles nested formatting like \textbf{...}.
+\usepackage[normalem]{ulem}
+\newcommand{\st}[1]{\sout{#1}}
+
 % --- Primer-box rendering for `:::primer` fenced divs ------------------------
 \usepackage{mdframed}
 \usepackage{xcolor}
