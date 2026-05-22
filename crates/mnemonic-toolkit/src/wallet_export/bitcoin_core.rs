@@ -84,3 +84,46 @@ pub(crate) fn format_bitcoin_core_importdescriptors(
 
     Ok(Value::Array(entries))
 }
+
+/// Build an `importdescriptors` array of NON-ranged, single-key, watch-only
+/// entries (one per descriptor). Unlike `format_bitcoin_core_importdescriptors`
+/// (HD/ranged), each entry omits `range` and is `active:false`/`internal:false`
+/// — a single watched address. Used by `mnemonic nostr --import readonly`.
+pub(crate) fn import_array_single(descs: &[String], timestamp: TimestampArg) -> Value {
+    Value::Array(
+        descs
+            .iter()
+            .map(|desc| {
+                json!({
+                    "desc": desc,
+                    "active": false,
+                    "internal": false,
+                    "timestamp": timestamp.to_json(),
+                })
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod import_single_tests {
+    use super::*;
+
+    #[test]
+    fn single_key_array_is_nonranged_watchonly() {
+        let descs = vec![
+            "wpkh(027e7e9c42)#aaaaaaaa".to_string(),
+            "tr(7e7e9c42)#bbbbbbbb".to_string(),
+        ];
+        let v = import_array_single(&descs, TimestampArg::Unix(0));
+        let arr = v.as_array().expect("array");
+        assert_eq!(arr.len(), 2);
+        for (i, e) in arr.iter().enumerate() {
+            assert_eq!(e["desc"], descs[i]);
+            assert_eq!(e["active"], false);
+            assert_eq!(e["internal"], false);
+            assert_eq!(e["timestamp"], 0);
+            assert!(e.get("range").is_none(), "single-key entry must omit range");
+        }
+    }
+}

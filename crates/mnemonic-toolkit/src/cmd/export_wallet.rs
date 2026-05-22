@@ -213,7 +213,7 @@ fn parse_range(s: &str) -> Result<(u32, u32), String> {
     Ok((start, end))
 }
 
-fn parse_timestamp(s: &str) -> Result<TimestampArgValue, String> {
+pub(crate) fn parse_timestamp(s: &str) -> Result<TimestampArgValue, String> {
     if s == "now" {
         Ok(TimestampArgValue(TimestampArg::Now))
     } else {
