@@ -6,6 +6,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.33.0] — 2026-05-21
+
+**SemVer-MINOR release.** New `mnemonic electrum-decrypt` subcommand surfaces the (previously dead-code) `electrum_crypto::decrypt_field` primitive: decrypt an Electrum field-encrypted secret (`base64(iv ‖ aes-256-cbc(plaintext + PKCS7))`, key = `sha256d(password)`) and emit the recovered plaintext (Electrum-native seed phrase or BIP-32 xprv). Closes `electrum-crypto-seed-extraction-subcommand` FOLLOWUP — the first of the final v0.32+ Electrum pair.
+
+### Added
+
+- `mnemonic electrum-decrypt` subcommand. Architect+user-locked Option A (dedicated subcommand, NOT a `convert` source — the decrypted node-type (phrase vs xprv) is unknowable pre-decryption, which `convert`'s commit-types-up-front model cannot express).
+  - `--ciphertext <VALUE|->` (the base64 field; `-` from stdin; not secret).
+  - 3-form password family: `--decrypt-password <VAL>` (inline; argv-leakage advisory) + `--decrypt-password-file <PATH>` + `--decrypt-password-stdin`. Bound by a struct-level clap arg-group (exactly one required, mutually exclusive; missing/multiple → exit 64).
+  - `--json-out <PATH>` (envelope `{schema_version, operation, plaintext}`; no password echo; world-readable advisory).
+- New `secret_advisory::secret_on_stdout_warning_unconditional` — the existing `CardKind::Ms1`-gated helper cannot fire for a free-form Electrum plaintext; the gated wrapper now delegates to the unconditional form for `Ms1` (behavior-preserving).
+- 12 integration cells (3 password forms + wrong-password + bad-base64 + arg-group none/conflict + stdin-contention + ciphertext-stdin + json-envelope-no-password-echo + realistic-seed fixture via `encrypt_field` + world-readable advisory).
+
+### Security / secret-handling
+
+- Inline `--decrypt-password` emits the argv-leakage advisory; the recovered plaintext on stdout emits a secret-on-stdout advisory; the `--json-out` path emits a world-readable-permissions advisory (the `seed_xor`/`slip39`/`final_word` precedent). Password + plaintext are `Zeroizing` + `mlock`-pinned. NO password echo in the JSON envelope.
+- Format A field encryption carries no MAC, so a wrong password (PKCS7-unpad refusal) and a non-UTF-8 result are unified into one `"decryption failed (wrong password or corrupted ciphertext)"` message (no failure-mode leak).
+
+### Documentation
+
+- `docs/manual/src/40-cli-reference/41-mnemonic.md`: new `## mnemonic electrum-decrypt` reference section.
+
+### Test totals
+
+- 2221 cells passing; 12 ignored. +12 net (vs v0.32.3 baseline 2209).
+
+### Cross-repo lockstep
+
+NEW subcommand → the GUI `schema_mirror` gate requires a new `SubcommandSchema` entry. Paired `mnemonic-gui-v0.18.0` (Cycle 18b) adds the `electrum-decrypt` schema + bumps the toolkit pin. Tracked at FOLLOWUP `gui-electrum-decrypt-subcommand-mirror`.
+
+### Cycle topology
+
+Cycle 18 — first 0.33.x MINOR; surfaces the Cycle-6a electrum_crypto library (Format A field decryption). 1 v0.32+ FOLLOWUP remains: `wallet-import-electrum-encrypted-storage-format-b` (whole-file Format B; reuses this cycle's `--decrypt-password*` surface).
+
+### Review
+
+- Plan-doc opus R0: YELLOW 0C/3I (secret-advisory mechanics: unconditional-stdout helper + `warn_if_world_readable` precedent + struct-level ArgGroup, all folded inline).
+- End-of-cycle opus: GREEN.
+
+---
+
 ## mnemonic-toolkit [0.32.3] — 2026-05-21
 
 **SemVer-PATCH release** (test/fixture/doc-only). Pins the toolkit's BIP-129 §Encryption implementation against the independent Coinkite Python reference via vendored cross-impl fixtures. Closes `bsms-encryption-cross-impl-coinkite-python-smoke` FOLLOWUP — the **third and final** BIP-129-BSMS arc step. With this, the entire `bsms-bip129-encryption-envelope` Cycle-7 follow-on arc is retired.

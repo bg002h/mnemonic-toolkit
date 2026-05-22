@@ -62,7 +62,9 @@ fn gui_schema_lists_all_subcommands() {
     // (third-party wallet blob → bundle). After all three, the list carried
     // 18 subcommands: 12 base + `compare-cost` + 4 xpub-search-* +
     // `import-wallet`. v0.30.0 adds `seedqr-decode` + `seedqr-encode`
-    // (SeedQR encode/decode); total is now 20. gui-schema + help filtered out.
+    // (SeedQR encode/decode), bringing it to 20. v0.33.0 adds
+    // `electrum-decrypt` (Electrum field-encrypted secret → plaintext);
+    // total is now 21. gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
