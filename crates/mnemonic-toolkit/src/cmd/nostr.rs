@@ -48,12 +48,33 @@ pub struct NostrArgs {
 // Signature MUST match the sibling pattern (by-ref args, Result<u8>); the
 // dispatch is `match &cli.command`. Verify against cmd/electrum_decrypt.rs.
 pub fn run<R: Read, W: Write, E: Write>(
-    _args: &NostrArgs,
-    _stdin: &mut R,
-    _stdout: &mut W,
-    _stderr: &mut E,
+    args: &NostrArgs,
+    stdin: &mut R,
+    stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
-    // Implemented in B2–B5. The exactly-one-key invariant becomes a required
-    // ArgGroup in B5.
-    todo!("implemented in B2–B5")
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let types: Vec<ScriptType> = if args.all_script_types {
+        vec![ScriptType::P2tr, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2pkh]
+    } else {
+        vec![args.script_type.unwrap_or(ScriptType::P2tr)]
+    };
+
+    if let Some(p) = args.pubkey.as_deref() {
+        let xonly = crate::nostr::decode_npub(p)?;
+        writeln!(stdout, "nostr key (public)").map_err(ToolkitError::Io)?;
+        writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
+        for st in &types {
+            writeln!(stdout, "  script-type: {}", st.as_str()).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  descriptor:  {}", crate::nostr::descriptor_for(xonly, *st)?).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  address:     {}", crate::nostr::address_for(&secp, xonly, *st, args.network)).map_err(ToolkitError::Io)?;
+        }
+        return Ok(0);
+    }
+
+    // --secret* path is implemented in B3; B5 makes the key group required.
+    let _ = (stdin, stderr);
+    Err(ToolkitError::NostrKeyParse(
+        "exactly one of --pubkey / --secret / --secret-file / --secret-stdin is required".into(),
+    ))
 }
