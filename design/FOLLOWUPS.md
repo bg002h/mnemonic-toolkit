@@ -2908,10 +2908,22 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/electrum_crypto.rs` (library shipped Cycle 6a `1724477`; 18 unit cells + cross-impl smoke vs Python `cryptography` backend). Currently referenced by no CLI module.
 - **What:** Surface a new CLI consumer for the `electrum_crypto::decrypt_field` primitive. Two candidate shapes: (a) extend `mnemonic convert` with a new `--from electrum-encrypted-seed=<base64>` source; (b) dedicated `mnemonic electrum-decrypt` subcommand taking an encrypted seed string + password and emitting the plaintext seed. The library's `derive_key` + `decrypt_field` + `encrypt_field` (symmetric helper) are all production-ready; only the CLI integration is missing.
 - **Why deferred:** Cycle 6 was reinterpreted as watch-only-passthrough (no decryption needed for import-wallet per opus R0). The library is correct but has no user-visible surface yet. A future cycle ships the consumer when the seed-extraction use case is prioritized.
-- **Status:** `open`
+- **Status:** `resolved fa71e77` — mnemonic-toolkit-v0.33.0 Cycle 18. Chose candidate shape (b): dedicated `mnemonic electrum-decrypt` subcommand (NOT a `convert` source — architect-locked Option A: the decrypted node-type (phrase vs xprv) is unknowable pre-decryption, which `convert`'s commit-types-up-front model cannot express; also collides with the `(Phrase, ElectrumPhrase)` artifact-class refusal). Surface: `--ciphertext <VALUE|->` + 3-form password group (struct-level `ArgGroup` exactly-one-required+exclusive: `--decrypt-password <VAL>` / `-file` / `-stdin`) + `--json-out <PATH>` ({schema_version, operation, plaintext}; no password echo). Secret hygiene: password + plaintext `Zeroizing` + `mlock`-pinned; inline-pw argv advisory + plaintext-on-stdout advisory + json-out world-readable advisory. Format A carries no MAC → wrong-pw (PKCS7-unpad refusal) + non-UTF-8 unified into one "decryption failed" message (no failure-mode leak). New `secret_advisory::secret_on_stdout_warning_unconditional` (Ms1-gated helper delegates). 12 integration cells; 2221 total (+12). Plan-doc opus R0 YELLOW 0C/3I (folded); end-of-cycle opus GREEN. First of the final v0.32+ Electrum pair; `wallet-import-electrum-encrypted-storage-format-b` (Format B whole-file) remains and reuses this `--decrypt-password*` surface + sha256d crypto.
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-electrum-encrypted` (resolved v0.30.1 as watch-only-passthrough).
+- **Companion:** parent `wallet-import-electrum-encrypted` (resolved v0.30.1 as watch-only-passthrough); follow-on `gui-electrum-decrypt-subcommand-mirror` (mandatory GUI v0.18.0 lockstep — NEW subcommand).
+
+
+### `gui-electrum-decrypt-subcommand-mirror` — GUI SubcommandSchema for `mnemonic electrum-decrypt`
+
+- **Surfaced:** 2026-05-21, mnemonic-toolkit-v0.33.0 Cycle 18 close. The toolkit added the NEW `electrum-decrypt` subcommand (gui-schema now lists 21 subcommands). The GUI `schema_mirror` gate compares the full subcommand list + per-subcommand flag-NAME set, so a NEW subcommand is a HARD gate trip — GUI lockstep is MANDATORY.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (new `ELECTRUM_DECRYPT_FLAGS` SubcommandSchema + registration in the subcommand list); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `v0.33.0`.
+- **What:** Add the `electrum-decrypt` SubcommandSchema mirroring the clap surface: `--ciphertext` (text/path), `--decrypt-password` (text), `--decrypt-password-file` (path), `--decrypt-password-stdin` (boolean), `--json-out` (path), plus the global `--no-auto-repair`. Register in the subcommand list (alphabetically after `derive-child`). Bump the toolkit pin → v0.33.0. GUI v0.18.0 (MINOR — new subcommand surface).
+- **Why deferred:** Cross-repo authoring; shipped as the paired Cycle 18b GUI release immediately after the toolkit tag.
+- **Status:** `open`
+- **Tier:** `v0.33+-gui-lockstep`
+- **Tags:** none
+- **Companion:** parent `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0).
 
 
 ### `wallet-import-electrum-encrypted-storage-format-b` — Electrum Format B whole-file storage encryption
@@ -2920,10 +2932,11 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/wallet_import/electrum.rs` (sniff + parse pipeline). Format B wallets are NOT JSON-parseable at the file level; the current parser fails at JSON parse with a different error.
 - **What:** Per Electrum's `electrum/crypto.py::pw_encode_with_version_and_mac`, Format B encrypts the ENTIRE wallet file body (not just sensitive fields). Wire format: `base64(version_byte || iv (16 bytes) || aes_cbc(plaintext + PKCS7, key, iv) || mac (4 bytes))` where MAC = `sha256(plaintext)[:4]`. To support Format B, the toolkit would need: (a) sniff to detect a non-JSON-parseable base64 blob as candidate Format B; (b) decrypt-and-parse-as-JSON pipeline; (c) password-input CLI surface (the very `--decrypt-password*` family Cycle 6b dropped, but here actually needed). Format B + Format A field-encryption together would cover Electrum's full encryption surface.
 - **Why deferred:** Cycle 6 scope was Format A only. Format B requires the password-flag infrastructure; the v0.30.1 fix only addressed the field-level case (which turned out not to need a password at all under the watch-only-passthrough reframing).
+- **Dependency now satisfied:** v0.33.0 Cycle 18 (`electrum-crypto-seed-extraction-subcommand`) shipped the `--decrypt-password` / `--decrypt-password-file` / `--decrypt-password-stdin` family (struct-level `ArgGroup`) + the `sha256d` key-derivation crypto on the `mnemonic electrum-decrypt` subcommand. Format B reuses this exact surface; the only NEW work is (a) sniff a non-JSON base64 blob as candidate Format B, (b) strip+verify the `version_byte` + 4-byte `sha256(plaintext)[:4]` MAC (the inner `iv ‖ aes-cbc` IS Format A — reuse `decrypt_field`), (c) decrypt-then-parse-as-JSON in the import-wallet pipeline. The crypto + password infra are no longer blockers — this is now a parser/sniff cycle.
 - **Status:** `open`
 - **Tier:** `v0.31+`
 - **Tags:** `wallet`
-- **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the Format B carve-out).
+- **Companion:** parent `wallet-import-electrum-encrypted` (Format A resolved v0.30.1 as watch-only-passthrough; this is the Format B carve-out); sibling `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0; supplies the `--decrypt-password*` surface this reuses).
 
 
 ### `bsms-encryption-per-signer-tokens` — per-Signer BIP-129 TOKEN variants
