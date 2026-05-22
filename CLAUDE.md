@@ -37,6 +37,7 @@ See `design/FOLLOWUPS.md` entry `gui-schema-mirror-lockstep-discipline` for the 
 
 ## Conventions
 
+- **MANDATORY pre-implementation R0 gate — NO code before GREEN (0C/0I).** Every brainstorm spec and implementation plan-doc MUST pass an opus architect **R0 review BEFORE any implementation begins**. R0 is mandatory — never skipped, never deferred "until after a first cut." Implementation (writing code, dispatching implementer subagents) MUST NOT start until the reviewer-loop has **converged to 0 Critical / 0 Important** — fold findings → persist the review verbatim to `design/agent-reports/` → re-dispatch → repeat until GREEN. **Proceeding past ANY gate (start coding, advance to the next phase, tag, ship) with an open Critical or Important finding is prohibited.** This is a hard gate at every level: brainstorm spec, plan-doc, and per-phase execution. (See the two reviewer-loop bullets below for the per-fold / per-phase mechanics this gate builds on.)
 - Reference implementation in `crates/mnemonic-toolkit/`.
 - Design artifacts in `design/`: `BRAINSTORM_*`, `SPEC_*`, `IMPLEMENTATION_PLAN_*`, `FOLLOWUPS.md`.
 - Per-phase opus reviews persist to `design/agent-reports/`.
