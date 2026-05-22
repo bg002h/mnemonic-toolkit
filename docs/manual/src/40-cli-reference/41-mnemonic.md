@@ -941,6 +941,57 @@ See [Deterministic child secrets via BIP-85](#deterministic-child-secrets-via-bi
 
 ---
 
+## `mnemonic electrum-decrypt`
+
+Decrypt an Electrum **field-encrypted** secret (a base64 `iv ‖
+aes-256-cbc(plaintext + PKCS7)` blob, key = `sha256d(password)` per
+Electrum's `_hash_password` version 1) and emit the recovered plaintext —
+an Electrum-native seed phrase or a BIP-32 xprv (the keystore type
+determines which; the wire carries no discriminator, so the output is
+emitted opaquely). Surfaces the `electrum_crypto::decrypt_field` library
+primitive (cross-impl-validated against the Python `cryptography` backend).
+
+### Synopsis
+
+```sh
+mnemonic electrum-decrypt --ciphertext <VALUE|-> (--decrypt-password <VAL> | --decrypt-password-file <PATH> | --decrypt-password-stdin) [--json-out <PATH>]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--ciphertext <VALUE\|->` | the Electrum field-encrypted secret as base64; `-` reads from stdin. NOT secret (it is ciphertext) — no argv advisory |
+| `--decrypt-password <VALUE>` | decryption password (inline); emits an argv-leakage advisory — prefer the stdin/file forms. Exactly one password form is required |
+| `--decrypt-password-file <PATH>` | read the password from a file (single trailing newline stripped) |
+| `--decrypt-password-stdin` | read the password from stdin (raw, NULL-byte preserving); single stdin per invocation (mutually exclusive with `--ciphertext -`) |
+| `--json-out <PATH>` | emit a JSON envelope (`{schema_version, operation, plaintext}`; no password echo) instead of plain text on stdout; emits a world-readable-permissions advisory if the file is group/other-readable |
+| `--help` | print help |
+
+The three password forms are mutually exclusive and exactly one is
+required (clap arg-group; missing/multiple → exit 64). A wrong password
+(or corrupted ciphertext) surfaces as `electrum-decrypt: decryption failed
+(wrong password or corrupted ciphertext)` (exit 1) — Format A field
+encryption carries no MAC, so the two underlying failure modes (PKCS7
+unpad refusal / non-UTF-8 result) are reported uniformly. The recovered
+plaintext on stdout is secret material and emits a secret-on-stdout
+advisory.
+
+### Worked example
+
+```sh
+mnemonic electrum-decrypt \
+  --ciphertext ABEiM0RVZneImaq7zN3u/zY0181f7qAY/NWiVQFLdHE= \
+  --decrypt-password-stdin <<<'test-password'
+# → hello world
+```
+
+For a whole-file-encrypted Electrum wallet (Format B), see
+[§Foreign formats](../45-foreign-formats.md) — that path is
+`import-wallet`, not `electrum-decrypt`.
+
+---
+
 ## `mnemonic final-word`
 
 Given an N-1 word BIP-39 partial phrase, emit the lexicographically
