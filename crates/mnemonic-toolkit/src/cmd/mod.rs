@@ -10,6 +10,7 @@ pub mod final_word;
 pub mod gui_schema;
 pub mod import_wallet;
 pub mod inspect;
+pub mod nostr;
 pub mod repair;
 pub mod seed_xor;
 pub mod seedqr;

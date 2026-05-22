@@ -78,6 +78,8 @@ enum Command {
     SeedXor(cmd::seed_xor::SeedXorArgs),
     /// encode/decode SeedQR (BIP-39 mnemonic ↔ numeric digit-string QR payload)
     Seedqr(cmd::seedqr::SeedqrArgs),
+    /// Wrap an existing nostr key (npub/nsec) as Bitcoin addresses/descriptors/WIF.
+    Nostr(cmd::nostr::NostrArgs),
     /// split a master secret into SLIP-39 K-of-N shares OR combine shares back (Trezor-compatible)
     Slip39(cmd::slip39::Slip39Args),
     /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
@@ -125,6 +127,7 @@ fn main() -> ExitCode {
         Command::FinalWord(args) => cmd::final_word::run(args, stdin, stdout, stderr),
         Command::SeedXor(args) => cmd::seed_xor::run(args, stdin, stdout, stderr),
         Command::Seedqr(args) => cmd::seedqr::run(args, stdin, stdout, stderr),
+        Command::Nostr(args) => cmd::nostr::run(args, stdin, stdout, stderr),
         Command::Slip39(args) => cmd::slip39::run(args, stdin, stdout, stderr),
         Command::GuiSchema(args) => {
             // Re-derive the clap `Command` tree via CommandFactory so the
