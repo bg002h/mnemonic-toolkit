@@ -2920,10 +2920,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (new `ELECTRUM_DECRYPT_FLAGS` SubcommandSchema + registration in the subcommand list); `mnemonic-gui/pinned-upstream.toml` + `Cargo.toml` toolkit pin → `v0.33.0`.
 - **What:** Add the `electrum-decrypt` SubcommandSchema mirroring the clap surface: `--ciphertext` (text/path), `--decrypt-password` (text), `--decrypt-password-file` (path), `--decrypt-password-stdin` (boolean), `--json-out` (path), plus the global `--no-auto-repair`. Register in the subcommand list (alphabetically after `derive-child`). Bump the toolkit pin → v0.33.0. GUI v0.18.0 (MINOR — new subcommand surface).
 - **Why deferred:** Cross-repo authoring; shipped as the paired Cycle 18b GUI release immediately after the toolkit tag.
-- **Status:** `open`
+- **Status:** `resolved mnemonic-gui d5ec089` — mnemonic-gui-v0.18.0 Cycle 18b. Added `ELECTRUM_DECRYPT_FLAGS` SubcommandSchema + `electrum-decrypt` registration (after `derive-child`); toolkit pin v0.32.0 → v0.33.1. **Surfaced + fixed a secret-classification gap mid-lockstep:** the toolkit v0.33.0 `gui-schema` emitted NO secret flags for electrum-decrypt (the CLI fires `secret_in_argv_warning` for `--decrypt-password`, but `secrets::flag_is_secret` omitted it), so the `schema_mirror_secret_drift` gate would have rejected a secure GUI mirror. Fixed in toolkit **v0.33.1** (`4bd9053`: added `--decrypt-password` + `--decrypt-password-stdin` to `flag_is_secret`); GUI then pinned v0.33.1 + mirrored `secret: true` on the two inline password forms (`--decrypt-password-file` = path, non-secret; `--ciphertext` = encrypted material, non-secret). 353 GUI cells; `schema_mirror` (flag-name parity incl. electrum-decrypt) + `schema_mirror_secret_drift` both green vs the pinned v0.33.1 binary.
 - **Tier:** `v0.33+-gui-lockstep`
 - **Tags:** none
-- **Companion:** parent `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0).
+- **Companion:** parent `electrum-crypto-seed-extraction-subcommand` (resolved v0.33.0; secret-classification fix v0.33.1).
 
 
 ### `wallet-import-electrum-encrypted-storage-format-b` — Electrum Format B whole-file storage encryption
