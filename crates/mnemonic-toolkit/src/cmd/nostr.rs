@@ -72,8 +72,41 @@ pub fn run<R: Read, W: Write, E: Write>(
         return Ok(0);
     }
 
-    // --secret* path is implemented in B3; B5 makes the key group required.
-    let _ = (stdin, stderr);
+    // Resolve a secret from --secret / --secret-file / --secret-stdin.
+    let secret_input: Option<zeroize::Zeroizing<String>> = if let Some(s) = &args.secret {
+        writeln!(stderr, "warning: nostr: --secret was passed inline and is visible in process args; prefer --secret-file or --secret-stdin").map_err(ToolkitError::Io)?;
+        Some(zeroize::Zeroizing::new(s.clone()))
+    } else if let Some(path) = &args.secret_file {
+        Some(zeroize::Zeroizing::new(std::fs::read_to_string(path).map_err(ToolkitError::Io)?.trim().to_string()))
+    } else if args.secret_stdin {
+        let mut buf = String::new();
+        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
+        Some(zeroize::Zeroizing::new(buf.trim().to_string()))
+    } else {
+        None
+    };
+
+    if let Some(sec) = secret_input {
+        let _pin = mnemonic_toolkit::mlock::pin_pages_for(sec.as_bytes());
+        let raw = crate::nostr::decode_nsec(&sec)?;
+        let (norm, negated) = crate::nostr::normalize_to_even_y(&secp, raw);
+        if negated {
+            writeln!(stderr, "notice: nostr: secret normalized to even-y (BIP-340) for address consistency").map_err(ToolkitError::Io)?;
+        }
+        let (xonly, _) = norm.x_only_public_key(&secp);
+        writeln!(stdout, "nostr key (secret)").map_err(ToolkitError::Io)?;
+        writeln!(stdout, "  x-only:      {xonly}").map_err(ToolkitError::Io)?;
+        let wif = crate::nostr::wif_for(&norm, args.network);
+        for st in &types {
+            writeln!(stdout, "  script-type: {}", st.as_str()).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  descriptor:  {}", crate::nostr::descriptor_for(xonly, *st)?).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  address:     {}", crate::nostr::address_for(&secp, xonly, *st, args.network)).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "  electrum:    {}{wif}", crate::nostr::electrum_prefix(*st)).map_err(ToolkitError::Io)?;
+        }
+        writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
+        return Ok(0);
+    }
+
     Err(ToolkitError::NostrKeyParse(
         "exactly one of --pubkey / --secret / --secret-file / --secret-stdin is required".into(),
     ))
