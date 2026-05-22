@@ -201,9 +201,9 @@ mod derive_tests {
 mod decode_tests {
     use super::*;
 
-    // NIP-19 spec vectors. NOTE: the npub and nsec below are DISTINCT keys
-    // (not a keypair); each bech32↔hex row is internally consistent, which is
-    // all these decode tests assert.
+    // NIP-19 spec vectors — the canonical matched keypair: the nsec scalar
+    // 67dea2ed… normalized to even-y has pubkey x-only 7e7e9c42… == the npub.
+    // Each bech32↔hex row is independently asserted by the decode tests.
     const NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
     const PUB_HEX: &str = "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e";
     const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
