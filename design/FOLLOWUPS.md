@@ -2967,7 +2967,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` `decrypt_bsms_record` (returns a plain `String`); consumed at the BSMS Round-2 reassign (`~:1043`) + the Round-1 decrypt path.
 - **What:** v0.33.3 scrubs the `blob` copy (the re-wrapped `Zeroizing::new(into_bytes())`), but the intermediate decrypted `String` returned by `decrypt_bsms_record` is itself un-zeroized before that wrap. Migrate the return type to `Zeroizing<String>`. Low sensitivity (the BSMS Round-2 plaintext is a watch-only descriptor, not seed/xprv), hence not folded into v0.33.3.
 - **Why deferred:** out of scope for the focused `blob`-binding migration; separate function-signature change with its own (minor) call-site churn.
-- **Status:** `open`
+- **Status:** `resolved` — mnemonic-toolkit-v0.34.1. `decrypt_bsms_record` return type → `Result<Zeroizing<String>, ToolkitError>` (wrapped at the `String::from_utf8` site); Round-2 consumer `into_bytes()` → `as_bytes().to_vec()` (cannot move out of `Zeroizing`); Round-1 `else`-arm wraps `raw_text` so the `if/else` unifies to `Zeroizing<String>` (`parse_round1(&str)` via deref). Type-only; 66 BSMS cells unchanged; opus plan R0→R1 GREEN.
 - **Tier:** `v0.33+`
 - **Tags:** `wallet`
 - **Companion:** sibling `import-wallet-blob-zeroizing` (resolved v0.33.3).
@@ -2979,7 +2979,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` `run()` — only the BIE1 decrypt branch calls `mlock::pin_pages_for(&blob)`; the plaintext-import path (`use_encryption:false` Electrum wallet, seed-bearing) + all other formats never pin the blob.
 - **What:** the blob is now `Zeroizing` (scrubbed on drop, v0.33.3) but a plaintext seed-bearing wallet Vec sits swappable (un-`mlock`-pinned) for the lifetime of `run()`. Pin `&blob` after `read_blob` for ALL formats (not just BIE1). Orthogonal to zeroize-on-drop. NOTE the existing BIE1 pin is itself arm-scoped (dropped at the end of the decrypt arm) — a holistic fix should pin once at the `blob` binding for the whole `run()` scope.
 - **Why deferred:** orthogonal to the zeroize-on-drop migration; a pin-lifetime redesign (pin-at-binding) is its own change.
-- **Status:** `open`
+- **Status:** `resolved` — mnemonic-toolkit-v0.34.1. A single `let mut _pin_blob` guard is pinned at the `blob` binding (covers ALL formats incl. the plaintext seed-bearing path) and re-pinned via `drop(std::mem::replace(&mut _pin_blob, pin_pages_for(&blob)))` at the BIE1 + Round-2 reassigns — so exactly one live guard pins the current buffer (the prior arm-local `_pin_pt` is replaced). R0 caught the stale-`munlock` hazard of a parallel run-scoped guard (mlock locks don't stack); the re-pinned-single-guard avoids it. 94 import-wallet cells unchanged; opus plan R0→R1 GREEN.
 - **Tier:** `v0.33+`
 - **Tags:** `wallet`
 - **Companion:** sibling `import-wallet-blob-zeroizing` (resolved v0.33.3).
