@@ -152,6 +152,10 @@
     "Ypub",
     "Zpub",
     "Upub",
-    "Vpub"
+    "Vpub",
+    "nostr",
+    "npub",
+    "nsec",
+    "NIP"
   ]
 }

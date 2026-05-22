@@ -1,11 +1,12 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Ten subcommands:
+The integration-layer CLI for the m-format constellation. Eleven subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`import-wallet`](#mnemonic-import-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
-[`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39), and
+[`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39),
+[`nostr`](#mnemonic-nostr), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
 semantics). Run any with `--help` for the latest flag set; this chapter
 mirrors v0.13.0.
@@ -1827,6 +1828,189 @@ The two outputs match byte-for-byte.
 - `seedqr: encode: invalid word count: N (only 12, 15, 18, 21, or 24 supported)`
 - `seedqr: encode: BIP-39 checksum failure: <bip39-crate-diagnostic>`
 - `seedqr encode only accepts phrase=<value> or phrase=-`
+
+---
+
+## `mnemonic nostr`
+
+Wrap an existing nostr key (`npub`/`nsec`, NIP-19 bech32 or 64-hex) as
+Bitcoin addresses, descriptors, and (for `nsec`) a WIF. Taproot (`p2tr`)
+is the default and the native x-only mapping for nostr keys — the
+x-only pubkey is used directly as the taproot internal key, yielding a
+key-path-only P2TR output. Non-taproot script types (`p2pkh`,
+`p2wpkh`, `p2sh-p2wpkh`) use the BIP-340 even-y `02‖x` compressed
+form of the x-only pubkey.
+
+For `nsec` inputs, the secret is **normalized to even-y** (BIP-340): if
+`d·G` has odd y, the toolkit uses `n−d` instead so the emitted WIF
+controls the emitted address. A `notice:` is printed on stderr when
+the normalization negates the key.
+
+### Synopsis
+
+```sh
+mnemonic nostr (--pubkey <PUBKEY> | --secret <SECRET> | --secret-file <FILE> | --secret-stdin) [OPTIONS]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--pubkey <PUBKEY>` | Public key: `npub1…` (NIP-19 bech32) or 64-hex x-only. Emits watch-only outputs (no WIF) |
+| `--secret <SECRET>` | Secret key: `nsec1…` (NIP-19 bech32) or 64-hex scalar. Adds WIF + `electrum:` line. SECRET — leaks via argv; use `--secret-stdin` or `--secret-file` |
+| `--secret-file <SECRET_FILE>` | Read the secret key from a file (avoids argv exposure) |
+| `--secret-stdin` | Read the secret key from stdin (avoids argv exposure) |
+| `--script-type <SCRIPT_TYPE>` | Address/descriptor script type: `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr`. Defaults to `p2tr` when neither this nor `--all-script-types` is given |
+| `--all-script-types` | Emit descriptor + address for all four script types (`p2tr`, `p2wpkh`, `p2sh-p2wpkh`, `p2pkh`) |
+| `--network <NETWORK>` | Bitcoin network — affects address HRP and WIF version byte. One of `mainnet` / `testnet` / `signet` / `regtest` (default `mainnet`) |
+| `--json` | Emit JSON instead of the human-readable block |
+| `--help` | Print help |
+
+Exactly one of `--pubkey` / `--secret` / `--secret-file` / `--secret-stdin`
+is required (clap arg-group; missing/multiple → exit 64).
+
+### Secret-handling notes
+
+- `--secret` passes the key via process arguments, which are visible in
+  `/proc/$PID/cmdline` and `ps` output. The toolkit emits a warning:
+  `warning: secret material on argv (--secret) — pipe via --secret-stdin
+  to avoid /proc/$PID/cmdline exposure`. Prefer `--secret-stdin` or
+  `--secret-file` in scripts and when a shoulder-surfing observer is a
+  concern.
+- WIF output is secret material. The toolkit always emits:
+  `warning: secret material on stdout — consider redirecting (e.g.,
+  '> file.txt' or '| age -e ...')`.
+
+### The `electrum:` line
+
+For `nsec` inputs each output row includes an `electrum:` line of the
+form `<prefix>:<WIF>`, where `<prefix>` mirrors the Electrum import
+convention:
+
+| Script type | Electrum prefix |
+|---|---|
+| `p2tr` | `p2tr` |
+| `p2wpkh` | `p2wpkh` |
+| `p2sh-p2wpkh` | `p2wpkh-p2sh` |
+| `p2pkh` | (no prefix — bare WIF) |
+
+Paste the `electrum:` value into Electrum ▸ Wallet ▸ Private Keys ▸ Import
+to sweep the address into an Electrum wallet of the matching script type.
+
+### Worked example — `npub` (watch-only, default `p2tr`)
+
+```sh
+mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg
+```
+
+Stdout:
+
+```text
+nostr key (public)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2tr
+  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
+  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
+```
+
+The same key, all four script types:
+
+```sh
+mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg \
+  --all-script-types
+```
+
+```text
+nostr key (public)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2tr
+  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
+  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
+  script-type: p2wpkh
+  descriptor:  wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#qayh3r2k
+  address:     bc1qgyrepq5ukvwl7z7z5lk0066wx6vz75pn9ww6pv
+  script-type: p2sh-p2wpkh
+  descriptor:  sh(wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e))#kh0cqr4q
+  address:     3546dKS2XmpDUbyQrA7zmrbE2fayRvHWyJ
+  script-type: p2pkh
+  descriptor:  pkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#9xj4dc7r
+  address:     16vqz4S2bJ8F4r1rSrGU3RxkUReZYrr7X3
+```
+
+Note that `p2tr` uses the bare x-only key, while `p2wpkh`, `p2sh-p2wpkh`,
+and `p2pkh` use the BIP-340 even-y `02‖x` compressed form
+(`027e7e9c42…`).
+
+### Worked example — `nsec` via stdin
+
+```sh
+echo 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5' \
+  | mnemonic nostr --secret-stdin
+```
+
+Stdout:
+
+```text
+nostr key (secret)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2tr
+  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
+  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
+  electrum:    p2tr:Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
+  wif:         Kzhcun32YwFnMsQGdJB5fyYTS84TmHb4hs4xQ6BL8ef94vvceGvP
+```
+
+Stderr:
+
+```text
+warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+```
+
+(No argv warning because `--secret-stdin` was used.)
+
+### Worked example — even-y normalization notice
+
+When the raw nostr secret has odd y, the toolkit negates the scalar and
+prints a notice:
+
+```sh
+mnemonic nostr --secret-stdin <<< '0000000000000000000000000000000000000000000000000000000000000006'
+```
+
+Stderr (in addition to the secret-on-stdout advisory):
+
+```text
+notice: nostr: secret normalized to even-y (BIP-340) for address consistency
+```
+
+The emitted WIF and address correspond to the normalized (even-y) key,
+not the raw scalar, so `WIF → address` is always self-consistent.
+
+### JSON output (`--json`)
+
+`--json` emits a single JSON object on stdout:
+
+```sh
+mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg \
+  --json
+```
+
+```json
+{
+  "kind": "public",
+  "x_only": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+  "outputs": [
+    {
+      "script_type": "p2tr",
+      "descriptor": "tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr",
+      "address": "bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04"
+    }
+  ]
+}
+```
+
+For `nsec` inputs the object additionally carries `"wif": "<WIF>"` at the
+top level and each `outputs` entry includes `"electrum": "<prefix>:<WIF>"`.
 
 ---
 
