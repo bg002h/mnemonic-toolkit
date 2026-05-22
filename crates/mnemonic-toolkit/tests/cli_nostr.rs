@@ -139,3 +139,73 @@ fn p2tr_secret_has_no_electrum_line_but_p2wpkh_does() {
         .assert().success()
         .stdout(predicate::str::contains("electrum:    p2wpkh:"));
 }
+
+fn import_json_from_stdout(s: &str) -> serde_json::Value {
+    let inner = s
+        .split("importdescriptors '")
+        .nth(1)
+        .expect("import line present")
+        .split("'\n")
+        .next()
+        .expect("closing quote");
+    serde_json::from_str(inner).expect("valid importdescriptors JSON")
+}
+
+#[test]
+fn import_readonly_emits_watchonly_recipe() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--script-type", "p2wpkh", "--import", "readonly"])
+        .assert().success().get_output().stdout.clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(s.contains("import:      importdescriptors '["), "got: {s}");
+    let v = import_json_from_stdout(&s);
+    assert_eq!(v[0]["active"], false);
+    assert_eq!(v[0]["internal"], false);
+    assert_eq!(v[0]["timestamp"], 0); // default
+    assert!(v[0]["desc"].as_str().unwrap().starts_with("wpkh("));
+    assert!(v[0].get("range").is_none());
+}
+
+#[test]
+fn import_all_script_types_one_array_four_entries() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--all-script-types", "--import", "readonly"])
+        .assert().success().get_output().stdout.clone();
+    let v = import_json_from_stdout(&String::from_utf8(out).unwrap());
+    assert_eq!(v.as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn import_spending_and_both_are_refused() {
+    for mode in ["spending", "both"] {
+        Command::cargo_bin("mnemonic").unwrap()
+            .args(["nostr", "--pubkey", NPUB, "--import", mode])
+            .assert().failure().stderr(predicate::str::contains("deferred to a future cycle"));
+    }
+}
+
+#[test]
+fn import_timestamp_flag_overrides_default() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--script-type", "p2tr", "--import", "readonly", "--timestamp", "now"])
+        .assert().success().get_output().stdout.clone();
+    let v = import_json_from_stdout(&String::from_utf8(out).unwrap());
+    assert_eq!(v[0]["timestamp"], "now");
+}
+
+#[test]
+fn no_import_flag_emits_no_recipe() {
+    Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB])
+        .assert().success().stdout(predicate::str::contains("import:").not());
+}
+
+#[test]
+fn import_in_json_envelope() {
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--pubkey", NPUB, "--import", "readonly", "--json"])
+        .assert().success().get_output().stdout.clone();
+    let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    assert!(v["import"].is_array());
+    assert_eq!(v["import"][0]["active"], false);
+}

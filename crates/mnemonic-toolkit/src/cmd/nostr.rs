@@ -9,6 +9,49 @@ use crate::secret_advisory::{secret_in_argv_warning, secret_on_stdout_warning_un
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ImportMode {
+    ReadOnly,
+}
+
+/// `--import` value parser. Only `readonly` is supported in v0.34.2; `spending`
+/// and `both` are reserved (forward-compatible) and rejected with a clear note.
+fn parse_import_mode(s: &str) -> Result<ImportMode, String> {
+    match s {
+        "readonly" => Ok(ImportMode::ReadOnly),
+        "spending" | "both" => Err(
+            "--import: 'spending'/'both' is deferred to a future cycle; only 'readonly' is supported"
+                .into(),
+        ),
+        other => Err(format!("--import must be 'readonly'; got {other:?}")),
+    }
+}
+
+/// Build the read-only `importdescriptors` recipe from the rows' descriptors
+/// (one non-ranged watch-only entry per script type), or `None` if `--import`
+/// was not given.
+fn build_import_recipe(args: &NostrArgs, rows: &[OutputRow]) -> Option<serde_json::Value> {
+    if args.import == Some(ImportMode::ReadOnly) {
+        let descs: Vec<String> = rows.iter().map(|r| r.descriptor.clone()).collect();
+        Some(crate::wallet_export::import_array_single(&descs, args.timestamp.0))
+    } else {
+        None
+    }
+}
+
+/// Emit the `import:` line (compact `importdescriptors '<json>'`) when present.
+fn emit_import_line<W: Write>(
+    stdout: &mut W,
+    recipe: &Option<serde_json::Value>,
+) -> Result<(), ToolkitError> {
+    if let Some(recipe) = recipe {
+        let line = serde_json::to_string(recipe)
+            .map_err(|e| ToolkitError::BadInput(format!("nostr: import recipe serialize: {e}")))?;
+        writeln!(stdout, "  import:      importdescriptors '{line}'").map_err(ToolkitError::Io)?;
+    }
+    Ok(())
+}
+
 #[derive(Args, Debug)]
 #[command(group(
     // Exactly one key input is required. `--secret-stdin` is a bool: `false`
@@ -52,6 +95,18 @@ pub struct NostrArgs {
     /// Emit JSON instead of the human-readable block.
     #[arg(long)]
     pub json: bool,
+
+    /// Emit a ready-to-paste Bitcoin Core `importdescriptors` recipe for the
+    /// derived address(es). `readonly` = watch-only (the pubkey descriptor).
+    /// `spending`/`both` are reserved (future cycle).
+    #[arg(long, value_parser = parse_import_mode)]
+    pub import: Option<ImportMode>,
+
+    /// Bitcoin Core `importdescriptors` rescan anchor: `now` or unix seconds.
+    /// Default `0` (rescan from genesis to discover an existing key's funds).
+    /// Only used with `--import`.
+    #[arg(long, value_parser = crate::cmd::export_wallet::parse_timestamp, default_value = "0")]
+    pub timestamp: crate::cmd::export_wallet::TimestampArgValue,
 }
 
 /// One row of output (per script type) in the JSON envelope.
@@ -72,6 +127,8 @@ struct NostrJson {
     #[serde(skip_serializing_if = "Option::is_none")]
     wif: Option<String>,
     outputs: Vec<OutputRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    import: Option<serde_json::Value>,
 }
 
 // Signature MUST match the sibling pattern (by-ref args, Result<u8>); the
@@ -103,12 +160,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             });
         }
 
+        let import_recipe = build_import_recipe(args, &rows);
+
         if args.json {
             let envelope = NostrJson {
                 kind: "public",
                 x_only: xonly.to_string(),
                 wif: None,
                 outputs: rows,
+                import: import_recipe.clone(),
             };
             serde_json::to_writer_pretty(&mut *stdout, &envelope)
                 .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
@@ -121,6 +181,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 writeln!(stdout, "  descriptor:  {}", row.descriptor).map_err(ToolkitError::Io)?;
                 writeln!(stdout, "  address:     {}", row.address).map_err(ToolkitError::Io)?;
             }
+            emit_import_line(stdout, &import_recipe)?;
         }
         return Ok(0);
     }
@@ -160,12 +221,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             });
         }
 
+        let import_recipe = build_import_recipe(args, &rows);
+
         if args.json {
             let envelope = NostrJson {
                 kind: "secret",
                 x_only: xonly.to_string(),
                 wif: Some(wif.clone()),
                 outputs: rows,
+                import: import_recipe.clone(),
             };
             serde_json::to_writer_pretty(&mut *stdout, &envelope)
                 .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
@@ -182,6 +246,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 }
             }
             writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
+            emit_import_line(stdout, &import_recipe)?;
         }
         secret_on_stdout_warning_unconditional(stderr);
         return Ok(0);
