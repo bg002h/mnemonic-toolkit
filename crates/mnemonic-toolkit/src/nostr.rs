@@ -149,28 +149,38 @@ mod derive_tests {
 
     fn secp() -> Secp256k1<bitcoin::secp256k1::All> { Secp256k1::new() }
 
-    // CRUX: for every script type, the WIF derived from an nsec must control the
-    // address derived from the corresponding npub. Iterate scalars to hit both
-    // even-y and odd-y originals (exercising the negate path).
+    // CRUX: the WIF derived from an nsec must control the key behind the npub.
+    // Iterate scalars to hit both even-y and odd-y originals; an odd-y seed
+    // fails the parity/x-only asserts below unless `wif_for` encoded `n−d`
+    // (not raw `d`). `any_negated` guards against a seed range that never
+    // exercises the negate path (which would give false confidence).
     #[test]
     fn wif_controls_the_npub_address_all_script_types() {
+        let secp = secp();
+        let mut any_negated = false;
         for seed in 1u8..=10 {
             let mut bytes = [0u8; 32];
             bytes[31] = seed;
             let sk = SecretKey::from_slice(&bytes).unwrap();
-            let (xonly, _) = sk.x_only_public_key(&secp());      // published npub key
-            let (norm, _) = normalize_to_even_y(&secp(), sk);
-            let (xonly_from_secret, _) = norm.x_only_public_key(&secp());
-            for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
-                let a_pub = address_for(&secp(), xonly, st, CliNetwork::Mainnet);
-                let a_sec = address_for(&secp(), xonly_from_secret, st, CliNetwork::Mainnet);
-                assert_eq!(a_pub, a_sec, "seed {seed} {st:?}: WIF/npub address mismatch");
-            }
+            let (xonly, _) = sk.x_only_public_key(&secp); // published npub key
+            let (norm, negated) = normalize_to_even_y(&secp, sk);
+            any_negated |= negated;
+            // The WIF key, at its ACTUAL parity, must be the even-y point whose
+            // x-only equals the npub — i.e. it controls the npub-derived address.
             let wif = wif_for(&norm, CliNetwork::Mainnet);
             let pk = bitcoin::PrivateKey::from_wif(&wif).unwrap();
-            let (_, parity) = pk.inner.x_only_public_key(&secp());
-            assert_eq!(parity, Parity::Even, "seed {seed}: WIF key not even-y");
+            let (wif_xonly, wif_parity) = pk.inner.x_only_public_key(&secp);
+            assert_eq!(wif_parity, Parity::Even, "seed {seed}: WIF key is odd-y");
+            assert_eq!(wif_xonly, xonly, "seed {seed}: WIF x-only != npub");
+            // Smoke: address_for renders a non-empty address for every type.
+            for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+                assert!(
+                    !address_for(&secp, xonly, st, CliNetwork::Mainnet).is_empty(),
+                    "seed {seed} {st:?}: empty address"
+                );
+            }
         }
+        assert!(any_negated, "seed range never exercised the even-y negate path");
     }
 
     #[test]
@@ -179,7 +189,8 @@ mod derive_tests {
         let tr = descriptor_for(xonly, ScriptType::P2tr).unwrap();
         assert!(tr.starts_with("tr(") && tr.contains('#'), "got {tr}");
         let wpkh = descriptor_for(xonly, ScriptType::P2wpkh).unwrap();
-        assert!(wpkh.starts_with("wpkh(02") || wpkh.starts_with("wpkh(03"), "got {wpkh}");
+        // even-y compressed form is always `02…` (never `03…`).
+        assert!(wpkh.starts_with("wpkh(02"), "got {wpkh}");
         // miniscript must accept our own checksummed output (round-trip).
         assert!(miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&tr).is_ok());
         assert!(miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&wpkh).is_ok());
