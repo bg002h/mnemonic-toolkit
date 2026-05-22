@@ -2967,7 +2967,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (`import-wallet` SubcommandSchema); `pinned-upstream.toml` + `Cargo.toml` toolkit pin → v0.33.2.
 - **What:** add the three flags to the import-wallet FlagSchema: `--decrypt-password` (Text, **secret**), `--decrypt-password-file` (Path, non-secret), `--decrypt-password-stdin` (Boolean, **secret**). The GUI `secrets::flag_is_secret` mirror already covers these names (v0.33.1 / GUI v0.18.0 lockstep) — `schema_mirror_secret_drift` stays green; confirm. Bump pin → v0.33.2. GUI v0.18.1 (PATCH).
 - **Why deferred:** cross-repo authoring; shipped as the paired Cycle-19-Phase-B GUI release immediately after the toolkit tag.
-- **Status:** `open`
+- **Status:** `resolved mnemonic-gui 655e8f5` — mnemonic-gui-v0.18.1. Added the three `--decrypt-password*` flags to the import-wallet SubcommandSchema (`secret:true` on `--decrypt-password` + `--decrypt-password-stdin`; `--decrypt-password-file` non-secret); toolkit pin v0.33.1 → v0.33.2. `schema_mirror` (flag-name parity incl. the new flags) + `schema_mirror_secret_drift` (the secret projection on import-wallet) both green vs the pinned binary. 353 GUI cells.
 - **Tier:** `v0.33+-gui-lockstep`
 - **Tags:** none
 - **Companion:** parent `wallet-import-electrum-encrypted-storage-format-b` (resolved v0.33.2).
