@@ -23,6 +23,7 @@ mnemonic repair
 mnemonic inspect
 mnemonic compare-cost
 mnemonic nostr
+mnemonic silent-payment
 mnemonic xpub-search path-of-xpub
 mnemonic xpub-search account-of-descriptor
 mnemonic xpub-search address-of-xpub

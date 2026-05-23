@@ -1,6 +1,6 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Eleven subcommands:
+The integration-layer CLI for the m-format constellation. Twelve subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`import-wallet`](#mnemonic-import-wallet),
