@@ -20,6 +20,7 @@
     "coinkite",
     "bech",
     "bcrt",
+    "mlock",
     "bruteforce",
     "entr",
     "feerate",

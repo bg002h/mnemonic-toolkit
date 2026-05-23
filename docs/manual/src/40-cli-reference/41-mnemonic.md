@@ -6,7 +6,7 @@ The integration-layer CLI for the m-format constellation. Eleven subcommands:
 [`import-wallet`](#mnemonic-import-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
 [`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39),
-[`nostr`](#mnemonic-nostr), and
+[`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
 semantics). Run any with `--help` for the latest flag set; this chapter
 mirrors v0.13.0.
@@ -2053,6 +2053,40 @@ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8
 For `nsec` inputs the object additionally carries `"wif": "<WIF>"` at the
 top level and each non-taproot `outputs` entry includes
 `"electrum": "<prefix>:<WIF>"` (taproot entries omit the `"electrum"` key).
+
+---
+
+## `mnemonic silent-payment` {#mnemonic-silent-payment}
+
+Derive a [BIP-352](https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki) **Silent Payments** *receiver* static address from a seed-bearing secret. A silent payment address (`sp1…` mainnet, `tsp1…` testnet/signet/regtest) is published once; senders derive a unique on-chain output for each payment with no on-chain link and no sender↔receiver interaction.
+
+```text
+mnemonic silent-payment --secret <SEED> [OPTIONS]
+mnemonic silent-payment --secret-stdin [OPTIONS]
+```
+
+The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at `m/352'/<coin>'/<account>'/0'/0`; the base (unlabeled) address encodes the compressed pubkeys `B_scan ‖ B_spend`. A labeled address (`--label <m>`, m≥1) encodes `B_scan ‖ B_m` where `B_m = B_spend + hash_BIP0352/Label(b_scan ‖ m)·G`.
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--secret <SEED>` | seed-bearing secret: BIP-39 phrase / ms1 / entropy-hex / master xprv. A single private key (WIF/minikey) is refused — it cannot derive `m/352'`. SECRET: leaks via argv; prefer `--secret-file` / `--secret-stdin` |
+| `--secret-file <PATH>` | read the seed-bearing secret from a file (avoids argv exposure) |
+| `--secret-stdin` | read the seed-bearing secret from stdin |
+| `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet) |
+| `--account <N>` | BIP-32 account index `m/352'/coin'/<account>'/…` (default 0) |
+| `--label <m>` | emit a labeled address for label m (repeatable); **m≥1**. `--label 0` is refused — m=0 is the reserved BIP-352 change label and must never be published |
+| `--json` | emit a JSON envelope instead of the human-readable block |
+| `--help` | print help |
+
+### Output
+
+The address(es) and the scan/spend **public** keys are publishable — hand the base address to senders. The command also emits the **scan private key** (`b_scan`, the *online / hot* key a watch-server uses to scan) and the **spend private key** (`b_spend`, the *COLD* key with full spending authority) behind the `secret material on stdout` advisory (the secret is `mlock`-pinned + zeroized). Treat them differently: never paste `b_spend` into a scanning service.
+
+### Scope
+
+This derives the **receiver** address only. **Sender** output construction (which needs the sender's input private keys + ECDH) and **chain scanning** (which needs blockchain data) are out of scope — `mnemonic` has no transaction inputs, no chain access, and does not sign.
 
 ---
 
