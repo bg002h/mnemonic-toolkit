@@ -95,6 +95,8 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // v0.34.7 argv-hardening: deny other-UID /proc/$PID/cmdline reads + core dumps.
+    mnemonic_toolkit::process_hardening::set_non_dumpable();
     let cli = match Cli::try_parse() {
         Ok(c) => c,
         Err(e) => {

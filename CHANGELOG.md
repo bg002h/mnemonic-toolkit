@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.34.7] — 2026-05-23
+
+**SemVer-PATCH — process argv-hardening (`PR_SET_DUMPABLE`).** `mnemonic` now calls `prctl(PR_SET_DUMPABLE, 0)` at the top of `main()` (Linux; no-op elsewhere), making `/proc/$PID/` unreadable to OTHER non-root UIDs and disabling core dumps — so a secret passed inline on argv (against the `--*-stdin` advice) can no longer be harvested by another user via `/proc/$PID/cmdline` or a core file. The residual same-UID `/proc/cmdline` window is documented + accepted (a same-UID attacker already has ptrace/`/proc/mem` access). The in-place argv-overwrite alternative was deliberately declined (glibc/musl/static-linking-fragile + racy). New `mnemonic_toolkit::process_hardening` lib module. Cross-repo: the same hardening lands in md-cli v0.6.1 / ms-cli v0.4.1 / mk-cli v0.4.2 (install.sh pins bumped). Closes `argv-overwrite-after-parse`.
+
 ## mnemonic-toolkit [0.34.6] — 2026-05-22
 
 **SemVer-PATCH — `import-wallet --network` signet/regtest disambiguation.** New `import-wallet --network <mainnet|testnet|signet|regtest>` re-binds the imported network to recover signet/regtest semantics from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so v0.26.0 collapsed all three to testnet). The override is honored only WITHIN the parsed coin-type class (testnet ↔ {testnet,signet,regtest}; mainnet ↔ mainnet); a cross-class request is refused (`ImportWalletNetworkClassMismatch`, exit 1) because the blob's xpub prefix is coin-type-bound. Adds `CliNetwork::to_bitcoin_network`. Paired GUI schema-mirror lockstep + manual. Closes `wallet-import-signet-regtest-disambiguation`.
