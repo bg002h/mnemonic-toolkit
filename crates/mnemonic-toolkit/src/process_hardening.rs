@@ -9,7 +9,7 @@
 //! It does NOT hide cmdline from the SAME UID (a same-UID attacker already has
 //! ptrace / `/proc/$PID/mem` access to the live process) — that residual is
 //! accepted; this is the reliable, non-fragile companion to the `--*-stdin`
-//! argv-leakage advisories ([`crate::secret_advisory`]). Best-effort: a
+//! argv-leakage advisories (`secret_advisory`). Best-effort: a
 //! `prctl` failure is ignored. The in-place argv-overwrite alternative was
 //! deliberately declined (glibc/musl/static-linking-fragile + racy); see the
 //! `argv-overwrite-after-parse` FOLLOWUP closure.
