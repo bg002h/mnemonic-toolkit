@@ -593,10 +593,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // `Ambiguous` and `NoMatch` are tolerated (user opted in
             // explicitly).
             //
-            // The mismatch matrix is intentionally narrow at P3C (BSMS +
-            // BitcoinCore + ColdcardMultisig + Sparrow + Specter); full N×N
-            // symmetry across the 8 formats lands incrementally per
-            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            // v0.34.4: the off-diagonal matrix is now COMPLETE for this arm —
+            // refuses all 7 sibling formats. Closes
+            // `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
             match sniff_outcome {
                 SniffOutcome::Bsms => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
@@ -614,6 +613,18 @@ pub fn run<R: Read, W: Write, E: Write>(
                     return Err(ToolkitError::ImportWalletFormatMismatch {
                         supplied: "coldcard".to_string(),
                         sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "coldcard".to_string(),
+                        sniffed: "jade".to_string(),
                     });
                 }
                 SniffOutcome::Sparrow => {
@@ -696,10 +707,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // upper arms (SPEC §6.1). Only reject when sniff strongly pinned
             // a different format; Ambiguous/NoMatch are tolerated.
             //
-            // The mismatch matrix is intentionally narrow at P6C (BSMS +
-            // BitcoinCore + Coldcard + ColdcardMultisig + Sparrow + Specter);
-            // full N×N symmetry across the 8 formats lands incrementally per
-            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            // v0.34.4: the off-diagonal matrix is now COMPLETE for this arm —
+            // refuses all 7 sibling formats. Closes
+            // `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
             match sniff_outcome {
                 SniffOutcome::Bsms => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
@@ -723,6 +733,12 @@ pub fn run<R: Read, W: Write, E: Write>(
                     return Err(ToolkitError::ImportWalletFormatMismatch {
                         supplied: "electrum".to_string(),
                         sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "electrum".to_string(),
+                        sniffed: "jade".to_string(),
                     });
                 }
                 SniffOutcome::Sparrow => {
@@ -807,10 +823,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // strongly pinned a DIFFERENT format; `Ambiguous` and `NoMatch`
             // are tolerated (the user opted in to sparrow explicitly).
             //
-            // The mismatch matrix is intentionally narrow at P1C (BSMS +
-            // BitcoinCore + ColdcardMultisig); full N×N symmetry across the
-            // 8 formats lands incrementally per cycle-followup
-            // `wallet-import-format-mismatch-matrix-completion`.
+            // v0.34.4: the off-diagonal matrix is now COMPLETE for this arm —
+            // refuses all 7 sibling formats. Closes
+            // `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
             match sniff_outcome {
                 SniffOutcome::Bsms => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
@@ -824,10 +839,34 @@ pub fn run<R: Read, W: Write, E: Write>(
                         sniffed: "bitcoin-core".to_string(),
                     });
                 }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
                 SniffOutcome::ColdcardMultisig => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
                         supplied: "sparrow".to_string(),
                         sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "jade".to_string(),
+                    });
+                }
+                SniffOutcome::Specter => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "sparrow".to_string(),
+                        sniffed: "specter".to_string(),
                     });
                 }
                 _ => {}
@@ -843,10 +882,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             // `Ambiguous` and `NoMatch` are tolerated (the user opted in to
             // specter explicitly).
             //
-            // The mismatch matrix expands to include `Sparrow` (vs P1C's
-            // matrix, which only listed Bsms/BitcoinCore/ColdcardMultisig);
-            // full N×N symmetry across the 8 formats lands incrementally per
-            // cycle-followup `wallet-import-format-mismatch-matrix-completion`.
+            // v0.34.4: the off-diagonal matrix is now COMPLETE for this arm —
+            // refuses all 7 sibling formats. Closes
+            // `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
             match sniff_outcome {
                 SniffOutcome::Bsms => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
@@ -860,10 +898,28 @@ pub fn run<R: Read, W: Write, E: Write>(
                         sniffed: "bitcoin-core".to_string(),
                     });
                 }
+                SniffOutcome::Coldcard => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "coldcard".to_string(),
+                    });
+                }
                 SniffOutcome::ColdcardMultisig => {
                     return Err(ToolkitError::ImportWalletFormatMismatch {
                         supplied: "specter".to_string(),
                         sniffed: "coldcard-multisig".to_string(),
+                    });
+                }
+                SniffOutcome::Electrum => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "electrum".to_string(),
+                    });
+                }
+                SniffOutcome::Jade => {
+                    return Err(ToolkitError::ImportWalletFormatMismatch {
+                        supplied: "specter".to_string(),
+                        sniffed: "jade".to_string(),
                     });
                 }
                 SniffOutcome::Sparrow => {
