@@ -2171,7 +2171,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-18, Phase 0 R0 architect review I2 fold (during §7.0.a SPEC amendment) + cited in `wallet_import/bsms.rs:14-15` of Phase 2.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:14-15` — module-level doc comment citing the FOLLOWUP for the canonical testnet collapse rule.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:24-26` — module-level doc comment citing the FOLLOWUP for the canonical testnet collapse rule. (Cite refreshed against SHA `9b94a7d` 2026-05-22.)
   - `design/SPEC_wallet_import_v0_26_0.md` §4.2 step 8 — explicit normative text: "Signet and regtest are not distinguishable from testnet via origin-path inspection... imported as testnet."
   - Future `wallet_import/bitcoin_core.rs` (Phase 3) — same coin-type extraction will share this behavior.
 - **What:** BIP-129 BSMS + Bitcoin Core `listdescriptors` origin annotations use coin-type `1` for testnet, signet, AND regtest — the blob is intrinsically ambiguous. v0.26.0 picks `Network::Testnet` as the canonical interpretation. v0.27+ may add either (a) a `--network signet|regtest` override on `import-wallet` (post-parse network re-binding), or (b) a separate origin-path-side disambiguator (e.g., a sibling `network_hint:` annotation that some wallets emit). User-direction needed before implementation.
@@ -2209,18 +2209,18 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-18, v0.27.0 cycle Phase 2 BIP-129 recon (`design/agent-reports/v0_27_0-phase-2-bip129-recon.md`). v0.27.0's Path B-lite ships BIP-129 Round-1 verify (`--bsms-round1`) + BIP-129 Round-2 4-line emit (`--bsms-form 4-line`), but does NOT pivot the v0.26.0 6-line lenient input parser nor implement the encryption-envelope MAC surface.
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:105-127` — the v0.26.0 6-line lenient parser (`6 =>` arm of the line-count match) whose `signature` field has no agreed verify semantics under BIP-129. Citation verified against origin/master SHA `176443e` 2026-05-19.
+  - `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:146` — the v0.26.0 6-line lenient parser (`6 =>` arm of the line-count match) whose `signature` field has no agreed verify semantics under BIP-129. Citation refreshed against SHA `9b94a7d` 2026-05-22 (the `6 =>` arm of the line-count match).
   - `design/SPEC_wallet_import_v0_26_0.md:152` — the documented lenient-input framing that motivated the 6-line shape.
   - `design/agent-reports/v0_27_0-phase-2-bip129-recon.md` — full BIP-129 spec recon (verbatim quotes from §Specification → Round 1, Round 2, Encryption + 5 in-spec test vectors).
 - **What:** v0.28+ remaining sub-items (a) and (c) and (d):
   - (a) **Deprecate v0.26.0 6-line lenient parser.** Stderr DEPRECATION notice when 6-line input is detected; planned removal in a future minor version. *Shipped v0.28.0 (commit `1444c51`)*: the BIP-129-canonical 4-line Round-2 parser is now the default ingest path; 6-line lenient input still parses but fires a stderr DEPRECATION NOTICE. Final removal (d) deferred to a future minor.
   - (b) **Add BIP-129-faithful 4-line Round-2 input parser.** `BSMS 1.0` / `<descriptor>#<checksum>` / `<path-restrictions>` / `<first-address>`. Cross-validates the descriptor against the supplied path-restrictions + first-address (BIP-129 §Round 2 verify gate). *Shipped v0.28.0 (commit `1444c51`)*: 4-line parser + path-restrictions cross-validation + first-address byte-exact verify per SPEC §10.
-  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** PBKDF2-SHA512(`"No SPOF"`, TOKEN_raw_bytes, c=2048, dkLen=32) → ENCRYPTION_KEY → HMAC_KEY = SHA256(ENCRYPTION_KEY); AES-256-CTR decrypt of ciphertext + HMAC-SHA256 MAC verify per BIP-129 §Encryption. New CLI flag `--bsms-encryption-token <FILE|->` carrying the raw nonce. *Remains open* — carved out into the dedicated sibling FOLLOWUP `bsms-bip129-encryption-envelope` (v0.28+) for tracking.
+  - (c) **Add encryption-envelope (STANDARD/EXTENDED) support.** *Shipped v0.31.0 (Cycle 7)*: `import-wallet --bsms-encryption-token <FILE|->` — PBKDF2-SHA512 + AES-256-CTR decrypt + HMAC-SHA256 verify per BIP-129 §Encryption (repeatable per-Signer at v0.32.2). Resolved as the dedicated sibling `bsms-bip129-encryption-envelope`.
   - (d) Drop the v0.26.0 6-line shape (and possibly the 2-line lenient excerpt) after a stable-version deprecation window. *Remains open* — the v0.28.0 deprecation NOTICE in sub-item (a) starts the window; removal deferred to a future minor.
   - (e) Document the v0.26.0 → v0.27 → v0.28 BSMS history in `design/SPEC_wallet_import_v0_28+.md` + manual chapter at `docs/manual/src/40-cli-reference/41-mnemonic.md`. *Shipped v0.28.0 (commit `d18787f` via P13)*: SPEC_wallet_import_v0_28_0.md §10 + manual chapter updates land in lockstep with the v0.28.0 ship.
 - **v0.28.0 sub-deliverable note:** sub-item (b) BIP-129-canonical 4-line Round-2 parser shipped in commit `1444c51`; sub-item (a) deprecation NOTICE for 6-line shape ships alongside; sub-item (e) SPEC + manual coverage lands at P13. Sub-items (c) encryption envelope and (d) drop legacy shapes remain open and are tracked under the canonical entry (this one) plus the dedicated sibling FOLLOWUP `bsms-bip129-encryption-envelope` for the encryption-envelope work specifically.
 - **Why deferred from v0.27.0:** Scope. v0.27.0 Path B-lite focuses on BIP-129 Round-1 verify + Round-2 emit (the two clean primitives that close the round-trip cycle). Adding the encryption-envelope primitives in v0.27.0 would ~double the cycle scope; deprecating v0.26.0's lenient parser pre-needs a stable BIP-129-faithful replacement input path (which requires the 4-line parser of (b) here). v0.28+ cycle.
-- **Status:** open (sub-items (c) + (d) remain; (a)/(b)/(e) shipped at v0.28.0).
+- **Status:** open — ONLY sub-item (d) remains: final removal of the deprecated 6-line lenient parser arm (`wallet_import/bsms.rs:146`) + `ImportProvenance::BsmsSixLine`. (a)/(b)/(e) shipped v0.28.0; (c) shipped v0.31.0 (sibling `bsms-bip129-encryption-envelope`). (d) is a behavior change (the 6-line path still parses-with-deprecation-notice today) → future SemVer **MINOR**, not bundled into v0.34.3 hygiene. Sub-item scope corrected 2026-05-22 via wallet-cluster cycle-prep recon (SHA `9b94a7d`).
 - **Tier:** `v0.27-cycle-close`
 - **Tags:** `wallet`
 - **Companion:** sibling of `bsms-verify-signatures` (v0.27.0 closes the Round-1 SIG subset of the original FOLLOWUP body's intent; this entry covers what stays open after that closure). Sibling carve-out: `bsms-bip129-encryption-envelope` (v0.28+; sub-item (c) tracked separately).
@@ -2371,7 +2371,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: ingest BSMS Round-1 share files (per-cosigner contribution prior to coordinator assembly; carries token + signer-fingerprint + xpub but NOT the assembled descriptor). Multi-share collation requires N-of-N Round-1 inputs to produce a single Round-2-equivalent bundle; semantically distinct from single-blob ingest.
 - **Why deferred:** v0.26.0 scope was BSMS Round-2 only. Round-1 multi-share orchestration is a multi-input pipeline (vs Round-2's single-blob ingest); needs its own CLI surface (e.g., `--shares share1 share2 share3` repeating-flag) and threshold-consistency invariants.
-- **Status:** open
+- **Status:** resolved — superseded by v0.27.0 `import-wallet --bsms-round1 <FILE>` (repeating; BIP-129 Round-1 record BIP-322 verify; `--bsms-verify-strict`). The in-scope subset (Round-1 record ingest + verify) shipped; the body's remaining intent — coordinator-side *assembly* of a multisig descriptor from N Round-1 shares (the proposed `--shares` collation) — is OUT OF SCOPE for an import/verify/backup tool (same category as the deliberately-excluded signing/PSBT; opus architect disposition 2026-05-22: DISPOSITION A). Users coordinate in Sparrow/Specter/Coldcard, then `import-wallet` the resulting Round-2 blob (supported, plaintext or encrypted). If a concrete user wants coordinator mode, file a fresh, deliberately-scoped slug with its own brainstorm/R0. Cross-ref `bsms-verify-signatures` (v0.27.0 Round-1 SIG closure) + sibling `bsms-encryption-round1-decrypt-then-verify`. Closed 2026-05-22 via wallet-cluster cycle-prep recon (SHA `9b94a7d`).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2383,7 +2383,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - `docs/manual/src/45-foreign-formats.md` §"What's NOT supported" — cites this slug.
 - **What:** v0.27+: decrypt BSMS encrypted-envelope shape per BIP-129 §5 (AES-CTR over the Round-2 payload keyed by a coordinator-shared token-derived key), then route the decrypted plaintext through the existing Round-2 parser. Requires CLI flag for the decryption key material (e.g., `--bsms-key <hex>` or `@env:BSMS_KEY` sentinel) and clear stderr templates for decryption failure vs format failure.
 - **Why deferred:** v0.26.0 scope was unencrypted BSMS Round-2 only. Encrypted-envelope decryption is a distinct cryptographic surface that warrants its own design discussion (key material handling, argv leak vectors, key-derivation choice). The user can decrypt out-of-band today and pipe plaintext into `import-wallet`.
-- **Status:** open
+- **Status:** resolved — shipped v0.31.0 (`import-wallet --bsms-encryption-token <FILE|->`: BIP-129 §Encryption envelope = PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 verify-before-decrypt). The CLI flag the body speculated as `--bsms-key` shipped as `--bsms-encryption-token`; encrypted Round-1 records landed v0.32.1, per-Signer tokens v0.32.2. The "current parser handles unencrypted Round-2 only" framing above is superseded. Resolved alongside sibling `bsms-bip129-encryption-envelope` (Cycle 7). Closed 2026-05-22 via wallet-cluster cycle-prep recon (SHA `9b94a7d`).
 - **Tier:** `v0.27`
 - **Companion:** none.
 
@@ -2467,7 +2467,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-05-19, v0.27.0 Phase 3 deferral (revised from `bsms-taproot-6-line`).
 - **Where:**
-  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:69-76` — `BsmsEmitter::emit()` refuses taproot scripts (P2tr / P2trMulti) with `ToolkitError::BadInput`. Note: `BsmsEmitter::collect_missing` at `bsms.rs:58-62` returns an empty vec; the `IncompatibleFormatForTemplate` variant defined in `wallet_export/mod.rs` is not on the BSMS refusal path. Citation verified against origin/master SHA `1abd9d1` 2026-05-19.
+  - `crates/mnemonic-toolkit/src/wallet_export/bsms.rs:64-79` — `BsmsEmitter::emit()` refuses taproot scripts (P2tr / P2trMulti) with `ToolkitError::BadInput`. Note: `BsmsEmitter::collect_missing` at `bsms.rs:58-62` returns an empty vec; the `IncompatibleFormatForTemplate` variant defined in `wallet_export/mod.rs` is not on the BSMS refusal path. Citation refreshed against origin/master SHA `9b94a7d` 2026-05-22.
   - BIP-129 §1 Prerequisites — enumerates BIPs 32/43/44/45/48/67/86/87/174/350 + the SegWit BIPs; conspicuously does NOT include BIP-386 (`tr(...)`).
 - **What:** v0.28+: implement BSMS Round-2 emit for taproot descriptors (`tr(K)` and `tr(internal, multi_a(K,...))` / `tr(internal, sortedmulti_a(K,...))`). Blocked on a BIP-129 update adding BIP-386 to §1 prerequisites — without that prerequisite update, the BIP-129-canonical descriptor-line shape is undefined for tr() (specifically: how taproot internal-key + multi_a leaf set serialize into the line-2 descriptor body within the BIP-129 spec). Soft-blocker: track upstream BIP-129 PRs; revisit when a published canonicalization is available.
 - **v0.28.0 sub-deliverable note:** P8A+P8B (commit `158897f`) shipped a refusal-scaffold UX improvement: `--format bsms` taproot refusal text is now per-script-type discriminated (P2tr / P2trMulti); refusal text cites this FOLLOWUP slug and points users at `--format bitcoin-core` / `--format sparrow` alternatives. Real emit remains upstream-blocked on BIP-129 §1 prerequisites adding BIP-386; the v0.28.0 work is refusal-side hardening only.
@@ -2476,12 +2476,6 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.28+`.
 - **Tags:** `wallet`
 - **Companion:** `bsms-import-taproot-refusal-parity` (v0.28+; symmetric import-side refusal hardening + `extract_threshold` side-channel finding).
-
-### `bsms-bip129-full-cutover` — DUPLICATE STUB → see canonical entry above (line ~2207)
-
-- **Status:** open — consolidated 2026-05-19 during cycle-prep recon (source SHA `1abd9d1`). This was a v0.27.0 Phase 3 cycle-close re-filing of the same scope (4-line parser + encryption envelope + lenient-parser deprecation) as the canonical `bsms-bip129-full-cutover` entry filed at v0.27.0 Phase 2 (line ~2207). Per `feedback-per-phase-agents-forget-followup-status-flip` discipline (split-state hazard), all work tracking now happens at the canonical entry above. The canonical entry remains OPEN after v0.28.0 (sub-items (c) encryption envelope + (d) drop legacy shapes are deferred); v0.28.0 shipped sub-items (a) 6-line deprecation + (b) 4-line parser + (e) SPEC/manual coverage at commit `1444c51` + `d18787f`. This stub stays OPEN in lockstep with the canonical entry. Will mark resolved once the canonical entry resolves.
-- **Tier:** `v0.28+`.
-- **Tags:** `wallet`
 
 ### `wallet-import-taproot-internal-key` — `tr(sortedmulti_a(...))` envelope consumers silently lose internal-key designation
 
@@ -2790,7 +2784,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-gui/tests/schema_mirror.rs:91-121` + `mnemonic-gui/tests/xpub_search_schema_mirror.rs` — gate iterates flag names + dropdown enum values. `mnemonic-toolkit`'s `gui-schema` subcommand at `cmd/gui_schema.rs` — emits clap surface JSON only.
 - **What:** GUI's runtime consumers of `mnemonic xpub-search --json` output (or any other subcommand's `--json` output) have NO automated drift gate. They must self-update when the wire-shape changes. Options: (a) extend `gui-schema` to include per-subcommand `--json` output-shape declarations; (b) file separate per-consumer regression tests on the GUI side that exercise the `--json` output and assert shape invariants; (c) document the gap in CLAUDE.md + accept manual coordination on wire-shape evolution. **Recommended:** option (c) for v0.29.x (document); option (b) at v0.30+ for the high-traffic subcommands (xpub-search, import-wallet, export-wallet).
 - **Why deferred:** v0.29.0 Cycle 4 documented the gap inline (CHANGELOG note + this FOLLOWUP) but didn't extend the gate. Extending the gate is a non-trivial design + implementation pass spanning both repos.
-- **Status:** `open`
+- **Status:** open — option (c) [document the gap in CLAUDE.md] **shipped v0.34.3** (CLAUDE.md "GUI schema-mirror coverage" section now states the gate enforces clap flag-NAME parity only, NOT runtime `--json` wire-shape). Residual = option (b): per-consumer `--json` wire-shape regression tests on the GUI side for high-traffic subcommands (`xpub-search`/`import-wallet`/`export-wallet`), v0.30+. Narrowed 2026-05-22 (SHA `9b94a7d`).
 - **Tier:** `v0.29+`
 - **Tags:** `wallet`
 - **Companion:** none (cross-repo discipline gap).
