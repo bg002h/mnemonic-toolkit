@@ -552,6 +552,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn extract_threshold_refuses_taproot_multi_a_directly() {
+        // v0.34.3: direct unit coverage for the v0.28.7 defense-in-depth guard
+        // at `extract_threshold` (bsms.rs:496-497). The integration path can't
+        // reach it — parse-entry refuses the `tr(` substring first (bsms.rs:215)
+        // — so this asserts the guard directly on the multi_a / sortedmulti_a
+        // bodies. Closes FOLLOWUP `bsms-extract-threshold-defense-in-depth-direct-unit-test`.
+        assert!(matches!(
+            extract_threshold("tr(NUMS,sortedmulti_a(2,@0,@1))"),
+            Err(ToolkitError::BsmsTaprootImportRefused)
+        ));
+        assert!(matches!(
+            extract_threshold("tr(NUMS,multi_a(2,@0,@1))"),
+            Err(ToolkitError::BsmsTaprootImportRefused)
+        ));
+    }
+
     // ============================================================================
     // v0.28.0 Phase 7 (G1) — SPEC §10 4-line BIP-129-canonical parser units
     // ============================================================================

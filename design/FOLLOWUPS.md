@@ -2769,10 +2769,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 ### `bsms-extract-threshold-defense-in-depth-direct-unit-test` — defense-in-depth guard at `extract_threshold` is unit-test-unreachable
 
 - **Surfaced:** 2026-05-20, mnemonic-toolkit-v0.28.7 Phase 6 end-of-cycle opus review (`design/agent-reports/v0_28_7-phase-6-end-of-cycle-review.md`).
-- **Where:** `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:~493` (`extract_threshold` defense-in-depth guard added v0.28.7 Slug 1 returning `Err(BsmsTaprootImportRefused)` for `sortedmulti_a(` / `multi_a(` substrings).
+- **Where:** `crates/mnemonic-toolkit/src/wallet_import/bsms.rs:496-497` (`extract_threshold` defense-in-depth guard added v0.28.7 Slug 1 returning `Err(BsmsTaprootImportRefused)` for `sortedmulti_a(` / `multi_a(` substrings; cite refreshed against SHA `9b94a7d` 2026-05-22, was `~493`).
 - **What:** Add a `#[cfg(test)] mod tests` unit test in `wallet_import/bsms.rs` that directly invokes `extract_threshold("tr(NUMS,sortedmulti_a(2,@0,@1))")` and asserts `Err(BsmsTaprootImportRefused)`. The integration test cell `bsms_tr_sortedmulti_a_refused_via_extract_threshold_guard` at `tests/cli_import_wallet_bsms.rs` cannot reach the guard because the parse-entry refusal at `bsms.rs:215` fires FIRST on `tr(` substring. The guard at L493 is therefore shipped untested at v0.28.7.
-- **Why deferred:** Low priority — purely defense-in-depth regression-guard gap. Functional behavior is already pinned by the parse-entry guard; the guard at L493 is fallback protection if a future code path bypasses parse-entry refusal.
-- **Status:** `open`
+- **Why deferred:** Low priority — purely defense-in-depth regression-guard gap. Functional behavior is already pinned by the parse-entry guard; the guard at L496-497 is fallback protection if a future code path bypasses parse-entry refusal.
+- **Status:** resolved — v0.34.3. Added `extract_threshold_refuses_taproot_multi_a_directly` to `wallet_import/bsms.rs::tests` directly asserting `extract_threshold("tr(NUMS,{sortedmulti_a,multi_a}(...))") == Err(BsmsTaprootImportRefused)` (guard at `bsms.rs:496-497`; parse-entry refusal at `:215`). Cite drift fixed (was `~493`). Closed via wallet-cluster cycle-prep recon (SHA `9b94a7d`).
 - **Tier:** `v0.28+-test-hygiene`
 - **Tags:** `wallet`
 - **Companion:** parent `bsms-import-taproot-refusal-parity` (resolved v0.28.7).
