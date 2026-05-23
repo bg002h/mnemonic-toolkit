@@ -4,7 +4,7 @@
 
 **Goal:** New top-level subcommand `mnemonic silent-payment` deriving the BIP-352 **receiver** static address (base + labeled m≥1) from a seed-bearing secret, plus the scan/spend pubkeys, derivation paths, and (advisory-gated) the scan/spend private keys.
 
-**Architecture:** Mirrors the `mnemonic nostr` cycle — a pure library `src/silent_payment.rs` (derivation + label tweak + bech32m encode, unit-tested against BIP-352 vectors) + a thin `src/cmd/silent_payment.rs` (arg parse, secret intake, render). Hand-rolled with existing deps; no new crate.
+**Architecture (R0 C-1):** Mirrors the `mnemonic nostr` cycle — a **binary-private** module `src/silent_payment.rs` (declared `mod silent_payment;` in `main.rs`, **NOT** `pub mod` in `lib.rs`; it uses `crate::error::ToolkitError`, exactly like `nostr.rs`, because `error.rs` is binary-private) for derivation + label tweak + bech32m encode (unit-tested against BIP-352 vectors), + a thin `src/cmd/silent_payment.rs` (arg parse, secret resolution, render). Hand-rolled with existing deps; no new crate.
 
 **Tech Stack:** Rust; `bitcoin = "0.32"` (bip32 + secp256k1 0.29.1 + `bitcoin::bech32` = bech32 0.11.1); `sha2 = "0.10"` (tagged hash). Reuses `CliNetwork`, `secret_advisory`, `mlock`, `derive_slot` seed spine.
 
@@ -22,7 +22,7 @@
 
 ## Task 1: library `src/silent_payment.rs` (TDD against BIP-352 vectors)
 
-**Files:** new `crates/mnemonic-toolkit/src/silent_payment.rs`; `src/lib.rs` (`pub mod silent_payment;`).
+**Files:** new `crates/mnemonic-toolkit/src/silent_payment.rs`; `src/main.rs` (`mod silent_payment;` — **binary-private, NOT lib.rs**; uses `crate::error::ToolkitError` like `nostr.rs`).
 
 ### The module API (write these signatures)
 ```rust
@@ -62,7 +62,7 @@ pub fn derive_scan_spend<C: Signing>(secp: &Secp256k1<C>, master: &bitcoin::bip3
 
 - [ ] **Step 4: Add a seed→path derivation oracle test.** The BIP vectors don't exercise `m/352'`. Add a small independent check: a known (seed, account, network) → expected (b_scan, b_spend) computed by an independent reference (pure-Python or a hardcoded vector derived + cross-checked manually, per the nostr-cycle oracle pattern). Assert `derive_scan_spend` matches. Document the oracle's provenance in the test.
 
-- [ ] **Step 5: lib.rs** add `pub mod silent_payment;` (near `pub mod nostr;` if present, else alphabetical). `cargo test -p mnemonic-toolkit --lib silent_payment` GREEN; clippy clean.
+- [ ] **Step 5: main.rs** add `mod silent_payment;` (near `mod nostr;` — binary-private; do NOT add to lib.rs). The `#[cfg(test)] mod tests` runs under the BIN test target (`cargo test -p mnemonic-toolkit silent_payment`, not `--lib`, per the v0.34.3 wallet_import lesson). GREEN; clippy clean.
 
 - [ ] **Step 6: Commit.** `git commit -m "feat(silent-payment): BIP-352 receiver address derivation library (vector-validated)"`
 
@@ -72,7 +72,7 @@ pub fn derive_scan_spend<C: Signing>(secp: &Secp256k1<C>, master: &bitcoin::bip3
 
 **Files:** `src/error.rs`; new `src/cmd/silent_payment.rs`; `src/cmd/mod.rs`; `src/main.rs`.
 
-- [ ] **Step 1 (C3): `ToolkitError::SilentPayment(String)`** — add the variant + all four match arms (`Display`/`message`/`exit_code`/`kind`) **alphabetically** (after `Seedqr*`/before `Slip39*`-class — verify exact neighbors at impl). `exit_code` = 1 (parse/usage class, like nostr). `message()` via `format!`/`.clone()` per the `error.rs` `message()` mechanism (NOT Display `write!`).
+- [ ] **Step 1 (C3, R0 I-2): `ToolkitError::SilentPayment(String)`** — add the variant + all four blocks (variant def + `Display`/`message`/`exit_code`/`kind`) **between `RepairShortCircuit` (`error.rs:270`) and `SlotInputViolation` (`error.rs:275`)** ("Silent" < "Slot"; NOT near a `Seedqr*`/`Slip39*` variant — those don't exist, they're library-local errors). `exit_code` = 1 (parse/usage class, like nostr). `message()` via `format!`/`.clone()` per the `error.rs::message()` mechanism (NOT a `Display` `write!`).
 
 - [ ] **Step 2: `SilentPaymentArgs`** (clap) in `cmd/silent_payment.rs`, mirroring `cmd/nostr.rs`:
   - `--secret <STRING>` / `--secret-file <PATH>` / `--secret-stdin` (mutually exclusive ArgGroup) — **seed-bearing** (phrase / ms1 / entropy / master-xprv). Help text: "seed-bearing secret (phrase / ms1 / entropy / master-xprv) — single-key WIF/minikey is refused (cannot derive m/352')".
@@ -82,13 +82,19 @@ pub fn derive_scan_spend<C: Signing>(secp: &Secp256k1<C>, master: &bitcoin::bip3
   - `--json`.
 
 - [ ] **Step 3: `run<R,W,E>(args, stdin, stdout, stderr) -> Result<u8>`** (mirror `cmd::nostr::run`):
-  - Resolve the secret → entropy/seed → master `Xpriv` (refuse WIF/minikey single-key inputs with `SilentPayment(...)`; reuse the seed-resolution path). `mlock`-pin + `Zeroizing` the seed.
+  - Resolve the secret → master `Xpriv` via a NEW helper `resolve_master_xpriv(secret: &str, network: CliNetwork) -> Result<Xpriv, ToolkitError>` in `cmd/silent_payment.rs` (R0 I-1 — no existing single helper does this; primitives are scattered). Value-sniff in order:
+    1. **xprv/tprv** → `bitcoin::bip32::Xpriv::from_str(s)` (Ok → master directly).
+    2. **ms1…** (HRP `ms`) → `ms_codec::decode` → `Payload::Entr` entropy bytes → `bip39::Mnemonic::from_entropy_in(Language::English, &entropy)` → `derive_slot::derive_master_seed(&mnemonic, "")` → `Xpriv::new_master(network.network_kind(), &seed)`.
+    3. **BIP-39 phrase** (contains ASCII whitespace / parses via `Mnemonic::parse_in(Language::English, s)`) → `derive_master_seed("")` → `Xpriv::new_master`.
+    4. **entropy hex** (16/20/24/28/32 bytes) → `Mnemonic::from_entropy_in` → seed → `Xpriv::new_master`.
+    5. else → `ToolkitError::SilentPayment("expected a seed-bearing secret (BIP-39 phrase / ms1 / entropy-hex / xprv); a single private key (WIF/minikey) cannot derive m/352'")` — this refuses WIF/minikey by exclusion with a clear message.
+    Empty BIP-39 passphrase in v1 (a `--passphrase` override is a deferred FOLLOWUP). `mlock`-pin + `Zeroizing` the seed/entropy intermediates (mirror `derive_slot`).
   - Inline `--secret` → `secret_advisory::secret_in_argv_warning("--secret", "--secret-stdin")`.
   - `derive_scan_spend` → b_scan/b_spend; pubkeys B_scan/B_spend.
   - Emit (human): base address; one labeled address per `--label m` (m≥1); `B_scan`/`B_spend` (compressed hex) + the two derivation paths. Then the **secret block** (after `secret_advisory::secret_on_stdout_warning_unconditional`): **(C4)** `scan_priv (b_scan) — online/hot key` and `spend_priv (b_spend) — COLD, full spending authority`.
   - `--json`: `{ kind, network, account, address (base), labeled: [{m, address}], scan_pubkey, spend_pubkey, scan_path, spend_path, scan_priv?, spend_priv? }`. Privkeys only in the secret-input path.
 
-- [ ] **Step 4: register** in `cmd/mod.rs` (`pub mod silent_payment;`) + `main.rs`: add `SilentPayment(cmd::silent_payment::SilentPaymentArgs)` to `enum Command` + a dispatch arm calling `cmd::silent_payment::run(...)`. (Process-hardening hook from v0.34.7 stays first in main.)
+- [ ] **Step 4: register** in `cmd/mod.rs` (`pub mod silent_payment;`) + `main.rs`: add `SilentPayment(cmd::silent_payment::SilentPaymentArgs)` to `enum Command` (`main.rs:60-95`, insertion-ordered — place near `Nostr` ~`:82`) + a dispatch arm (`main.rs:113-145`) calling `cmd::silent_payment::run(...)`. (R0 M-3: enum is insertion-ordered, not alphabetical; schema_mirror is order-insensitive.) The v0.34.7 process-hardening hook stays first in `main()`.
 
 - [ ] **Step 5: integration tests** `tests/cli_silent_payment.rs` — base address from a known phrase (mainnet sp1 + testnet tsp1); a labeled address (`--label 1`); `--label 0` refused (exit 1, "reserved change label"); WIF input refused; `--json` shape; secret-on-stdout + argv advisories fire; `--pubkey`-less (no privkeys leaked when... n/a — SP always takes a secret). Reuse a fixture seed whose sp address is cross-checkable.
 
@@ -98,9 +104,9 @@ pub fn derive_scan_spend<C: Signing>(secp: &Secp256k1<C>, master: &bitcoin::bip3
 
 ## Task 3: secret-taxonomy + manual + version artifacts
 
-- [ ] **Step 1 (C5): `secret_taxonomy.rs`** — `flag_is_secret` already covers `--secret`/`--secret-stdin` globally by flag-name (nostr precedent), so silent-payment's secret flags are covered with NO change. Update the rationale comment that said "only nostr uses these names" → "nostr + silent-payment". Confirm `--secret-file` stays non-secret (path). The `secret_taxonomy_pin`/GUI projection is unchanged (no new secret VALUE-bearing node type).
+- [ ] **Step 1 (C5, R0 M-1): `src/secrets.rs`** — `flag_is_secret` (`secrets.rs:49-64`) already covers `--secret`/`--secret-stdin` globally by flag-name (nostr precedent), so silent-payment's secret flags are covered with NO change. Update the rationale comment ("only nostr uses these names" → "nostr + silent-payment") + the `nostr_secret_flags_are_secret` test note at `secrets.rs:124-129`. Confirm `--secret-file` stays non-secret (path). `secret_taxonomy.rs` (NodeType/SlotSubkey token arrays) + the GUI `secret_taxonomy_pin` projection are unchanged (no new secret VALUE-bearing node type).
 - [ ] **Step 2: manual chapter** — `docs/manual/src/40-cli-reference/41-mnemonic.md`: add a `## mnemonic silent-payment` section (synopsis + flag table incl. `--secret*`/`--network`/`--account`/`--label`/`--json`/`--help` + a description of base vs labeled + the m=0 refusal + sender/scanning out-of-scope note). Add to the TOC. Flag-coverage lint REQUIRES every flag documented. Add any new cspell words (e.g. `sp1`, `tsp`, `BIP0352` — verify which trip cspell).
-- [ ] **Step 3: version** `Cargo.toml` `0.34.7 → 0.35.0`; `cargo build` regen lock. `install.sh` self-pin `mnemonic-toolkit-v0.34.7 → v0.35.0`.
+- [ ] **Step 3: version** `Cargo.toml` `0.34.7 → 0.35.0`; `cargo build` regen lock. `scripts/install.sh:32` self-pin `mnemonic-toolkit-v0.34.7 → v0.35.0` (R0 M-2 — known release-CI failure if missed).
 - [ ] **Step 4: CHANGELOG `[0.35.0]`** — new `silent-payment` subcommand (BIP-352 receiver address; base + labels m≥1; scan/spend privkeys advisory-gated; sender/scanning out of scope; vector-validated). File FOLLOWUPs: `silent-payment-change-address-m0` (deferred change emission) + `silent-payment-labels-scanning-helper` (any sender/scan helper, v1+).
 - [ ] **Step 5: manual lint** `make -C docs/manual lint MNEMONIC_BIN=... MD_BIN=md MS_BIN=ms MK_BIN=mk` → 6/6 (with the new section + flags documented). Commit.
 
@@ -117,7 +123,7 @@ pub fn derive_scan_spend<C: Signing>(secp: &Secp256k1<C>, master: &bitcoin::bip3
 
 ## R0 MUST-VERIFY (architect-flagged)
 1. **bech32 0.11.1 method names** — `Fe32::Q` (=Fe32(0) ✓), `ByteIterExt::bytes_to_fes` ✓, `Fe32IterExt::with_checksum::<Bech32m>` ✓, `Hrp::parse` ✓, the `Encoder::chars()` finalizer (verify the exact finalize call). Import path `bitcoin::bech32::primitives::iter::{ByteIterExt,Fe32IterExt}` (verify re-export depth).
-2. **secp256k1 0.29.1** — `Scalar::from_be_bytes([u8;32]) -> Result<_,OutOfRangeError>` ✓ (key.rs scalar.rs:68), `PublicKey::add_exp_tweak<C:Verification>` ✓ (key.rs:556). Confirm signature/arg order at impl.
+2. **secp256k1 0.29.1** — `Scalar::from_be_bytes([u8;32]) -> Result<_,OutOfRangeError>` ✓ (scalar.rs:68), `PublicKey::add_exp_tweak(mut self, secp, &Scalar) -> Result<PublicKey,_>` ✓ (key.rs:556 — takes **self by value**; call as `b_spend_pub.add_exp_tweak(&secp,&t)` — works via `PublicKey: Copy`; computes `B_spend + t·G`, NOT `t·B_spend`). The `labeled_spend_key` signature may take `b_spend_pub: PublicKey` (by value) to match.
 3. **Vector harness** — vectors give raw scan/spend HEX (not seeds); index 0 = base, then per-label in `labels` order. Confirm the JSON field names (`scan_priv_key`/`spend_priv_key`/`labels`/`expected.addresses`) against the downloaded file.
 4. **m=0 / labels** — base always emitted + independent of labels; `--label 0` refused.
 5. **error-variant alphabetical neighbors** in all 4 `error.rs` match blocks.
