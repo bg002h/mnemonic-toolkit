@@ -19,6 +19,7 @@
     "ciphertext",
     "coinkite",
     "bech",
+    "bcrt",
     "bruteforce",
     "entr",
     "feerate",
