@@ -14,9 +14,9 @@
 
 **Verified facts (live source, SHA d330240):**
 - `ParsedImport.network: bitcoin::Network` (`wallet_import/mod.rs:292`); parser produces only `Bitcoin` (coin-type-0) or `Testnet` (coin-type-1) per SPEC §4.2 step 8.
-- `CliNetwork` (`network.rs:12`) derives `ValueEnum` `#[clap(rename_all="lower")]` → parses mainnet|testnet|signet|regtest; has `coin_type()` (Mainnet→0; Testnet/Signet/Regtest→1) + `as_str()`. **No `to_bitcoin_network()` yet** (add it).
+- `CliNetwork` (`network.rs:12`) derives `ValueEnum` `#[clap(rename_all="lower")]` → parses mainnet|testnet|signet|regtest; has `coin_type() -> u32` (Mainnet→0; Testnet/Signet/Regtest→1) + `human_name() -> &'static str` (NOT `as_str()`). **No `to_bitcoin_network()` yet** (add it).
 - Initial parse: `let mut parsed: Vec<ParsedImport> = match format_str {…}` at `import_wallet.rs:1119-1135`. Override applies right after (the `mut` Vec), before seed overlay.
-- Emit uses `network_human_name(p.network)` (`import_wallet.rs:1440`, inside `BundleJson`); `network_human_name` (`:2033-2041`) handles ALL 4 networks + `_=>"unknown"` → override→Signet/Regtest labels correctly. JSON path: `v[0]["bundle"]["network"]`.
+- Emit calls the free fn `network_human_name(p.network)` (`import_wallet.rs:2033-2041`) in the `BundleJson{…}` initializer (`:1440`); it handles ALL 4 networks + `_=>"unknown"` → override→Signet/Regtest labels correctly. JSON path: `v[0]["bundle"]["network"]` (envelope array `:1315`, `env.insert("bundle",…)` `:1691`).
 - `ToolkitError` ImportWallet* variants (`error.rs:178-221`): alphabetical; new variant slots between `ImportWalletFormatMismatch` (184) and `ImportWalletParse` (196). exit_code arms at `error.rs:467-470` (FormatMismatch=1).
 - Fixtures: `core-testnet-bip84.json` (coin-type-1/Testnet), `core-bip84-mainnet.json` (coin-type-0/Bitcoin) — both exist.
 - GUI: `IMPORT_WALLET_FLAGS` (`mnemonic-gui/src/schema/mnemonic.rs:1655`); `NETWORKS` const (`:29`); import-wallet SubcommandSchema (`:2802`).
@@ -57,20 +57,18 @@
     },
 ```
 
-- [ ] **Step 3: Add the match arms** for the new variant in `error.rs` — `message()` (or `Display`), `exit_code()`, and `kind()`. Mirror the structure of the sibling `ImportWalletFormatMismatch` arms (find each block and insert alphabetically):
-  - **message/Display:**
+- [ ] **Step 3: Add the match arms** for the new variant in `error.rs`. **VERIFIED (R0):** the rendering mechanism is `pub fn message(&self) -> String` (`error.rs:547`) — arms return a `String` via `format!(…)` (NOT a `Display` `write!(f,…)`; `Display` @`error.rs:753-755` wraps `message()` with an `error: {}` prefix). Insert each arm alphabetically (between the `ImportWalletFormatMismatch` and `ImportWalletParse` arms in each block):
+  - **`message()`** (insert between `error.rs:664`/`:665`, mirroring the FormatMismatch `format!` arm at `:662-664`):
 ```rust
-            ToolkitError::ImportWalletNetworkClassMismatch { requested, parsed_coin_type } => write!(
-                f,
+            ToolkitError::ImportWalletNetworkClassMismatch { requested, parsed_coin_type } => format!(
                 "import-wallet: --network {requested} is incompatible with the imported \
                  wallet's coin-type-{parsed_coin_type} network. The blob's xpub prefix is \
                  coin-type-bound (coin-type-1 ↔ testnet/signet/regtest; coin-type-0 ↔ mainnet); \
                  omit --network to use the coin-type-derived network."
             ),
 ```
-  - **exit_code:** `ToolkitError::ImportWalletNetworkClassMismatch { .. } => 1,`
-  - **kind:** `ToolkitError::ImportWalletNetworkClassMismatch { .. } => "ImportWalletNetworkClassMismatch",`
-  - (Match the EXACT shape/signature of the existing arms — read the three blocks first; the message block may be `Display` or a `message()` method per CLAUDE.md note.)
+  - **`exit_code()`** (insert between `:468`/`:469`): `ToolkitError::ImportWalletNetworkClassMismatch { .. } => 1,`
+  - **`kind()`** (insert between `:524`/`:525`): `ToolkitError::ImportWalletNetworkClassMismatch { .. } => "ImportWalletNetworkClassMismatch",`
 
 - [ ] **Step 4: Build check.** `cargo build -p mnemonic-toolkit` → compiles (exhaustive matches satisfied).
 
@@ -185,7 +183,7 @@ Expected: FAIL (currently `--network` is an unrecognized argument).
                 if first.network == bitcoin::Network::Bitcoin { 0 } else { 1 };
             if override_net.coin_type() != parsed_coin_type {
                 return Err(ToolkitError::ImportWalletNetworkClassMismatch {
-                    requested: override_net.as_str().to_string(),
+                    requested: override_net.human_name().to_string(),
                     parsed_coin_type,
                 });
             }
@@ -260,8 +258,8 @@ git commit -m "docs(manual): import-wallet --network signet/regtest override fla
 
 **Files:** `mnemonic-gui/src/schema/mnemonic.rs`, `mnemonic-gui/pinned-upstream.toml`, `mnemonic-gui/Cargo.toml`, `mnemonic-gui/CHANGELOG.md`.
 
-- [ ] **Step 1: Add `--network`** to `IMPORT_WALLET_FLAGS` (`mnemonic-gui/src/schema/mnemonic.rs:1655`), canonical position, `kind: FlagKind::Dropdown(NETWORKS)` (reusing the existing `NETWORKS` const at `:29`), `secret: false`, `default_value: None` (clap `Option<CliNetwork>` has no default), `required:false`, `repeating:false`, `global:false`.
-- [ ] **Step 2: Bump toolkit pin** `pinned-upstream.toml` + `Cargo.toml` git-dep tag `mnemonic-toolkit-v0.34.5` → `-v0.34.6` (lockstep, both).
+- [ ] **Step 1: Add `--network`** to `IMPORT_WALLET_FLAGS` (`mnemonic-gui/src/schema/mnemonic.rs:1655`), canonical position, with ALL required `FlagSchema` fields (mirror the `--format` entry's shape): `name: "--network"`, `kind: FlagKind::Dropdown(NETWORKS)` (reusing the `NETWORKS` const at `:29`), `required: false`, `repeating: false`, `help: "(v0.34.6) re-bind the imported network to disambiguate signet/regtest from the coin-type-1→testnet collapse; honored only within the parsed coin-type class."`, `secret: false`, `default_value: None` (clap `Option<CliNetwork>` has no default), `global: false`.
+- [ ] **Step 2: Bump toolkit pin** `pinned-upstream.toml:22` + `Cargo.toml:42` git-dep tag **`mnemonic-toolkit-v0.34.2` → `-v0.34.6`** (lockstep, both). **NOTE (R0):** the GUI pin is currently at **v0.34.2** (v0.34.3/v0.34.4/v0.34.5 were toolkit-only, no CLI-surface change → no GUI lockstep), so the only schema-mirror delta to backfill is `--network` on import-wallet — no cumulative backfill of other flags is required.
 - [ ] **Step 3: Bump GUI version** `mnemonic-gui/Cargo.toml` (current 0.19.1 → 0.19.2) + `cargo build --lib` (regen lock).
 - [ ] **Step 4: GUI CHANGELOG** `[0.19.2]` — schema-mirror lockstep for toolkit v0.34.6 `import-wallet --network`.
 - [ ] **Step 5: Schema-mirror gates** with `MNEMONIC_BIN` = the local v0.34.6 binary: `cargo test --test schema_mirror --test schema_mirror_secret_drift --test gui_schema_conditional_drift --test secret_taxonomy_pin` → green; then full GUI suite + clippy.
@@ -273,6 +271,6 @@ git commit -m "docs(manual): import-wallet --network signet/regtest override fla
 
 - **Spec coverage:** flag + override + cross-class guard + error + helper + 6 tests + manual + GUI mirror + FOLLOWUP close. ✓
 - **No placeholders:** flag decl, override block, error variant + arms, helper, all 6 test cells written verbatim; fixtures verified to exist. ✓
-- **Type consistency:** `CliNetwork::coin_type()`/`as_str()` exist; new `to_bitcoin_network`; `ParsedImport.network: bitcoin::Network`; `network_human_name` covers all 4. (Confirm `coin_type()` return type for the `u32` comparison at impl.) ✓
+- **Type consistency (R0-verified):** `CliNetwork::coin_type() -> u32` + `human_name() -> &'static str` exist (NOT `as_str()`); new `to_bitcoin_network`; `ParsedImport.network: bitcoin::Network`; `network_human_name` (free fn @:2033) covers all 4; `error.rs::message()` returns `String` via `format!`. ✓
 - **SemVer/lockstep:** PATCH; new flag NAME → GUI `schema_mirror` (Task 5) + manual (Task 3) mandatory. ✓
 - **Risk:** low-medium — additive flag + guarded re-bind; the load-bearing `network_human_name`-handles-all-4 risk is cleared; main care is the error.rs match-arm structure (read before editing) + the GUI pin-resolves-after-toolkit-tag ordering.
