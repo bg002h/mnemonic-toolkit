@@ -2760,7 +2760,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` — Coldcard, Sparrow, Specter, Electrum dispatch arms.
 - **What:** Extend each arm to refuse all wrong-format sniff outcomes symmetrically. Closes the 8×7 = 56-cell full off-diagonal matrix.
 - **Why deferred:** Cycle 3 scope was locked at Option B (original 3-arm narrow set) per user decision 2026-05-20.
-- **Status:** `open`
+- **Status:** resolved — v0.34.4. All 10 residual off-diagonal arms added (coldcard→electrum,jade; electrum→jade; sparrow→coldcard,electrum,jade,specter; specter→coldcard,electrum,jade); the 8×7 = 56-cell off-diagonal matrix is now complete (bitcoin-core/bsms/coldcard-multisig/jade were already 7/7). 10 new cells in `tests/cli_import_wallet_format_mismatch_matrix.rs`; the 4 modified block comments refreshed. Closed via cycle-prep recon audit (SHA `f4d553e`).
 - **Tier:** `v0.28+-test-hygiene`
 - **Tags:** `wallet`
 - **Companion:** parent `wallet-import-format-mismatch-matrix-completion` (resolved v0.28.7).
