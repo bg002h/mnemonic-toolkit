@@ -30,6 +30,7 @@ mod specter;
 
 pub(crate) use bip388::Bip388Emitter;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
+pub(crate) use bitcoin_core::import_array_single;
 pub use bsms::BsmsForm;
 pub(crate) use bsms::BsmsEmitter;
 // v0.28.0 P8B (plan-doc §S.8) — re-export the per-script-type discriminator
@@ -39,7 +40,6 @@ pub(crate) use bsms::BsmsEmitter;
 // minimum surface needed for `error.rs` to render the variant.
 pub(crate) use bsms::script_type_short_name;
 pub(crate) use coldcard::ColdcardEmitter;
-pub(crate) use bitcoin_core::import_array_single;
 pub(crate) use electrum::ElectrumEmitter;
 pub(crate) use green::GreenEmitter;
 pub(crate) use jade::JadeEmitter;

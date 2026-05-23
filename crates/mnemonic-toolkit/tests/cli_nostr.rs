@@ -209,3 +209,24 @@ fn import_in_json_envelope() {
     assert!(v["import"].is_array());
     assert_eq!(v["import"][0]["active"], false);
 }
+
+#[test]
+fn import_readonly_from_nsec_emits_only_pubkey_descriptor() {
+    // Load-bearing secret-hygiene guard: `--import readonly` on a SECRET input
+    // must emit only the *public* pubkey descriptor — never the WIF — into the
+    // watch-only recipe. The WIF still appears in its own `wif:` field; it must
+    // NOT leak into the importdescriptors JSON.
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh", "--import", "readonly"])
+        .assert().success().get_output().stdout.clone();
+    let s = String::from_utf8(out).unwrap();
+    let wif = s
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("wif:").map(|t| t.trim().to_string()))
+        .expect("wif line present on the secret path");
+    let v = import_json_from_stdout(&s);
+    let desc = v[0]["desc"].as_str().unwrap();
+    assert!(desc.starts_with("wpkh("), "import desc must be a pubkey descriptor, got: {desc}");
+    let import_json = serde_json::to_string(&v).unwrap();
+    assert!(!import_json.contains(&wif), "WIF leaked into the import recipe: {import_json}");
+}
