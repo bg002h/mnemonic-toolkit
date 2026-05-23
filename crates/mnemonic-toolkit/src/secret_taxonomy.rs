@@ -84,6 +84,26 @@ pub const SECRET_NODE_TYPES: &[&str] = &[
     "seedqr",
 ];
 
+/// Token-form strings of every `NodeType` variant whose **wider**
+/// `is_argv_secret_bearing()` predicate returns `true` — the persistence set
+/// `SECRET_NODE_TYPES` PLUS `MiniKey` (Casascius mini-key, a private-key
+/// encoding). This is the argv-leakage / stdout-redaction superset, mirrored
+/// by `NodeType::is_argv_secret_bearing` at `cmd/convert.rs:117`. Kept in
+/// lockstep by the `secret_taxonomy_argv_parity_with_is_argv_secret_bearing`
+/// parity test. Downstream argv-redaction consumers (e.g. a GUI run-confirm
+/// preview) should use THIS set, not the narrower `SECRET_NODE_TYPES`.
+pub const SECRET_NODE_TYPES_ARGV: &[&str] = &[
+    "phrase",
+    "entropy",
+    "xprv",
+    "wif",
+    "ms1",
+    "bip38",
+    "electrum-phrase",
+    "seedqr",
+    "minikey",
+];
+
 /// Token-form strings of every `SlotSubkey` variant whose
 /// `is_secret_bearing()` returns `true`. Mirrors
 /// `slot_input::SlotSubkey::is_secret_bearing` at

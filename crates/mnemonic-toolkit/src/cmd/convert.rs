@@ -1684,7 +1684,7 @@ fn resolve_env_sentinels(args: &ConvertArgs) -> Result<ConvertArgs, ToolkitError
 #[cfg(test)]
 mod secret_taxonomy_parity_tests {
     use super::NodeType;
-    use mnemonic_toolkit::secret_taxonomy::SECRET_NODE_TYPES;
+    use mnemonic_toolkit::secret_taxonomy::{SECRET_NODE_TYPES, SECRET_NODE_TYPES_ARGV};
 
     /// Declare the complete list of `NodeType` variants exactly once.
     /// This macro produces BOTH (a) the `ALL_NODE_TYPE_VARIANTS` const
@@ -1756,6 +1756,21 @@ mod secret_taxonomy_parity_tests {
                 predicate,
                 v.as_str(),
                 in_taxonomy,
+            );
+        }
+    }
+
+    #[test]
+    fn secret_taxonomy_argv_parity_with_is_argv_secret_bearing() {
+        for &v in ALL_NODE_TYPE_VARIANTS {
+            let predicate = v.is_argv_secret_bearing();
+            let in_taxonomy = SECRET_NODE_TYPES_ARGV.contains(&v.as_str());
+            assert_eq!(
+                predicate, in_taxonomy,
+                "drift: NodeType::{:?}.is_argv_secret_bearing()={} but \
+                 secret_taxonomy::SECRET_NODE_TYPES_ARGV.contains({:?})={}. \
+                 The wider argv-leakage set must equal SECRET_NODE_TYPES + MiniKey.",
+                v, predicate, v.as_str(), in_taxonomy
             );
         }
     }
