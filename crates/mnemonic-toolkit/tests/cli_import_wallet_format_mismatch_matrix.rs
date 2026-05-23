@@ -5,6 +5,9 @@
 //! arms (Coldcard / Sparrow / Specter / Electrum) have additional residual
 //! gaps discovered during P0 recon — tracked at NEW FOLLOWUP
 //! `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
+//!
+//! v0.34.4: those residual gaps are RESOLVED — the 8×7 off-diagonal matrix
+//! is now complete (see the matrix-completion section below).
 
 use assert_cmd::Command;
 
