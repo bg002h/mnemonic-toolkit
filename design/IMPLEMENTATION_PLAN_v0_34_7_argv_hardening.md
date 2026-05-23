@@ -17,7 +17,9 @@
 - `libc` dep: toolkit ✓, ms-cli ✓; **md-cli ✗ + mk-cli ✗ (must add `libc = "0.2"`)**.
 - Toolkit has a lib (`mnemonic_toolkit::mlock` precedent for libc FFI lib modules).
 - Phase-1 advisory at `secret_advisory.rs:37` (warns, no mutation) — unchanged.
-- Current versions/pins: toolkit 0.34.6; md-cli v0.6.0, ms-cli v0.4.0, mk-cli v0.4.1 (install.sh + GUI pinned-upstream). GUI 0.19.2.
+- Current versions: toolkit 0.34.6; md-cli 0.6.0, ms-cli 0.4.0, mk-cli 0.4.1; GUI 0.19.2.
+- **Pins (R0-verified live):** `install.sh` = md `descriptor-mnemonic-md-cli-v0.6.0`, ms `ms-cli-v0.4.0`, mk `mk-cli-v0.4.1`, toolkit self `v0.34.6` (NOTE the **non-uniform** prefixes — md carries `descriptor-mnemonic-md-cli-`; ms/mk are un-prefixed). GUI `pinned-upstream.toml` = toolkit `v0.34.6`, md `…-md-cli-v0.6.0`, ms `ms-cli-v0.4.0`, **mk `mk-cli-v0.4.0`** (⚠️ the GUI mk pin is ALREADY a version behind — never bumped for mk-cli v0.4.1).
+- **Codec publish prereqs (R0-verified on crates.io):** md-codec 0.35.0 ✓, ms-codec 0.2.0 ✓, mk-codec 0.3.1 ✓ — all published, so the 3 sibling-CLI `cargo publish` steps (their `=`/caret codec path-deps) resolve.
 
 ---
 
@@ -117,7 +119,7 @@ Same as Task 1 (ADD `libc = "0.2"`). Hook in `crates/mk-cli/src/main.rs` (first 
 
 **Files:** `mnemonic-gui/pinned-upstream.toml` (md/ms/mk + toolkit tags), `Cargo.toml` (toolkit git-dep tag + GUI version), `Cargo.lock`, `CHANGELOG.md`.
 
-- [ ] **Step 1:** `pinned-upstream.toml`: toolkit `v0.34.6 → v0.34.7`; md `…-md-cli-v0.6.0 → -v0.6.1`; ms `ms-cli-v0.4.0 → -v0.4.1`; mk `mk-cli-v0.4.1 → -v0.4.2`. `Cargo.toml` git-dep toolkit tag `v0.34.6 → v0.34.7`.
+- [ ] **Step 1:** `pinned-upstream.toml`: toolkit `v0.34.6 → v0.34.7`; md `…-md-cli-v0.6.0 → -v0.6.1`; ms `ms-cli-v0.4.0 → -v0.4.1`; **mk `mk-cli-v0.4.0 → mk-cli-v0.4.2`** (R0 I1 — the GUI mk pin is currently `v0.4.0`, NOT v0.4.1; this is a 2-version catch-up bump, not v0.4.1→v0.4.2). `Cargo.toml` git-dep toolkit tag `v0.34.6 → v0.34.7`.
 - [ ] **Step 2:** GUI version `0.19.2 → 0.19.3`; `cargo build --lib` (regen lock; fetch toolkit v0.34.7).
 - [ ] **Step 3:** Schema gates with `MNEMONIC_BIN`=v0.34.7 binary: `schema_mirror` + `schema_mirror_secret_drift` + `gui_schema_conditional_drift` + `secret_taxonomy_pin` green (NO new flag → no schema delta; the `secret_taxonomy_pin` + supply-chain snapshot unchanged). Full suite + clippy.
 - [ ] **Step 4:** GUI CHANGELOG `[0.19.3]` — pin bumps for the argv-hardening sibling/toolkit releases (no schema change).
@@ -125,7 +127,7 @@ Same as Task 1 (ADD `libc = "0.2"`). Hook in `crates/mk-cli/src/main.rs` (first 
 
 ## Task 6: Release train (GATED — user go-ahead per cadence; crates.io re-confirm)
 
-Order (siblings first so the toolkit/GUI pins resolve):
+Order (siblings first so the toolkit/GUI pins resolve). **Codec publish prereqs all satisfied (R0-verified): md-codec 0.35.0, ms-codec 0.2.0, mk-codec 0.3.1 are on crates.io** — the sibling `cargo publish` steps resolve. Run `cargo publish --dry-run` first per crate as a final guard.
 - [ ] **6a:** md-cli — merge→master, push, tag `descriptor-mnemonic-md-cli-v0.6.1`, GH release, **`cargo publish` (crates.io — RE-CONFIRM)**.
 - [ ] **6b:** ms-cli — tag `ms-cli-v0.4.1`, GH release, **`cargo publish`**.
 - [ ] **6c:** mk-cli — tag `mk-cli-v0.4.2`, GH release, **`cargo publish`**.
