@@ -42,3 +42,10 @@ VERDICT: RED (1C/2I) — crypto + APIs + vectors verified correct; fold C-1 (bin
 
 ## Fold disposition (controller) — round 0 → R1
 Folding: C-1 (binary-private `mod silent_payment;` in main.rs, keep ToolkitError sigs); I-1 (specify `resolve_master_xpriv` value-sniff classifier with exact decode steps + empty-passphrase + `--passphrase` follow-on note); I-2 (neighbors `RepairShortCircuit`/`SlotInputViolation`); M-1 (secrets.rs path); M-2 (scripts/install.sh:32); M-3 (Command insertion near Nostr); M-4 (add_exp_tweak self-by-value note). Re-dispatching R1.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+All folds VERIFIED against live source: **C-1** (`mod nostr;` is binary-private @`main.rs:17`, uses `crate::error::ToolkitError`, absent from lib.rs — plan now mirrors with `mod silent_payment;`); **I-1** (all `resolve_master_xpriv` primitives exist with cited sigs: `Xpriv::from_str`, `ms_codec::decode`→`Payload::Entr` @`convert.rs:1405-1412`, `Mnemonic::{parse_in,from_entropy_in}`, `derive_slot::derive_master_seed`@:32, `Xpriv::new_master`@:59; **sniff order proven false-positive-free** — xprv base58check-prefix, ms1 bech32-HRP, phrase checksum-validated before contiguous-hex, structurally disjoint); **I-2** (`SilentPayment` between `RepairShortCircuit`@:270 and `SlotInputViolation`@:275 in all blocks: variant def, exit_code @492-3, kind @549-50, message @717-23; Seedqr*/Slip39* confirmed nonexistent); **M-1** (`secrets.rs:49-64`), **M-2** (`scripts/install.sh:32`), **M-3** (Command insertion-ordered near Nostr), **M-4** (add_exp_tweak self-by-value). No new drift; crypto/C1/vectors unchanged.
+Two new doc Minors: **M-a** dispatch cite `113-145`→`113-147`; **M-b** error.rs has a 5th per-variant block (`Option<serde_json::Value>` detail, `_=>None` @764-766) — `SilentPayment(String)` correctly falls through (no arm needed; note so the implementer doesn't search). Both FOLDED.
+**0C/0I gate satisfied — implementation may proceed.**
