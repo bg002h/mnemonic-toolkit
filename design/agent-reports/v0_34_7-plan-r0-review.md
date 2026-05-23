@@ -40,3 +40,8 @@ Fold I1 (+ M1/M2 notes) → re-dispatch R1.
 
 ## Fold disposition (controller) — round 0 → R1
 Folded: I1 (GUI mk pin v0.4.1→v0.4.0 actual; bump v0.4.0→v0.4.2 catch-up + verified-line fix); M1 (note non-uniform install.sh pin prefixes); M2 (add codec-published confirmation — md-codec 0.35.0 / ms-codec 0.2.0 / mk-codec 0.3.1 all on crates.io). M3 no action. Re-dispatching R1.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+I1 fold VERIFIED: GUI `pinned-upstream.toml:52` mk pin is live `mk-cli-v0.4.0`; plan now bumps `v0.4.0 → v0.4.2` (catch-up) with R0-I1 annotation. M2 VERIFIED: md-codec 0.35.0 / ms-codec 0.2.0 / mk-codec 0.3.1 published on crates.io (dep specs `=0.35.0`/`=0.2.0`/`0.3.1` resolve). M1 VERIFIED (non-uniform install.sh prefixes noted). Core mechanics re-confirmed: module+test sound, hook placements (toolkit :97, md-cli :223, ms-cli :101, mk-cli :49), lib-module placement (`pub mod mlock;` precedent), libc status (add to md-cli+mk-cli; present in toolkit+ms-cli), all 5 version bumps match live Cargo.toml, release order intact. One new out-of-scope Minor (pre-existing stale comment in mk-cli Cargo.toml:21-24). **0C/0I gate satisfied — implementation may proceed.**
