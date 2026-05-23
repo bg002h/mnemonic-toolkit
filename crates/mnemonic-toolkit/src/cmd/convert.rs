@@ -106,14 +106,14 @@ impl NodeType {
     }
 
     /// SPEC v0.9.0 §1 item 1 — superset of `is_secret_bearing()` that adds
-    /// MiniKey (Casascius mini-key — a private-key encoding). This widens
-    /// the secret-bearing tag specifically for the argv-leakage advisory:
-    /// MiniKey is part of survey §5 toolkit row "convert --from minikey=".
-    /// The narrower `is_secret_bearing()` predicate is preserved because
-    /// it gates separate stdout-redaction / secret-on-stdout machinery
-    /// (`convert.rs:769, 796`) whose MiniKey behavior is intentionally
-    /// distinct (a separate `convert-minikey-stdout-redaction` follow-up
-    /// covers widening THAT predicate).
+    /// MiniKey (Casascius mini-key — a private-key encoding). Used for the
+    /// argv-leakage advisory AND (since v0.34.5) the stdout-redaction
+    /// machinery — the `from_value` JSON echo + the secret-on-stdout warning
+    /// both gate on THIS predicate, so a MiniKey input is redacted on stdout
+    /// like any other private key. MiniKey is part of survey §5 toolkit row
+    /// "convert --from minikey=". The narrower `is_secret_bearing()` remains
+    /// the PERSISTENCE-class set (mirrored by `secret_taxonomy::SECRET_NODE_TYPES`);
+    /// the wider set here is mirrored by `secret_taxonomy::SECRET_NODE_TYPES_ARGV`.
     pub fn is_argv_secret_bearing(self) -> bool {
         self.is_secret_bearing() || matches!(self, Self::MiniKey)
     }
