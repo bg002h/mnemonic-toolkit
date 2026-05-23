@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.34.5] — 2026-05-22
+
+**SemVer-PATCH — MiniKey stdout-redaction hardening + `SECRET_NODE_TYPES_ARGV`.** `convert --from minikey=<KEY> --to wif --json` no longer echoes the Casascius mini-key (a private key) unredacted in the JSON `from_value` field: the two `convert` stdout-redaction call sites now use the wider `is_argv_secret_bearing()` predicate (which includes MiniKey) instead of the narrow `is_secret_bearing()` (`:1042` from_value is the real fix; `:1069` secret-on-stdout is a no-op for MiniKey today but kept on one predicate). Promotes `pub const secret_taxonomy::SECRET_NODE_TYPES_ARGV` (the public mirror of that wide set = persistence set + `minikey`), locked by a new parity test against `is_argv_secret_bearing`. Additive public const → no GUI lockstep (existing `SECRET_NODE_TYPES` snapshot unchanged). Closes `convert-minikey-stdout-redaction` + `secret-taxonomy-argv-superset-promotion`.
+
 ## mnemonic-toolkit [0.34.4] — 2026-05-22
 
 **SemVer-PATCH — `import-wallet` format-mismatch matrix completion.** Completes the 8×7 off-diagonal `--format X` vs sniff-as-Y refusal matrix: adds the 10 residual `ImportWalletFormatMismatch` arms (coldcard→electrum/jade; electrum→jade; sparrow→coldcard/electrum/jade/specter; specter→coldcard/electrum/jade) so an explicit `--format` against a blob of a different detected format always refuses cleanly (exit 1) instead of attempting a wrong-format parse. `Ambiguous`/`NoMatch` sniff outcomes remain tolerated (explicit opt-in). 10 new cells in `tests/cli_import_wallet_format_mismatch_matrix.rs`. No CLI surface change → no GUI/manual lockstep. Closes `wallet-import-format-mismatch-matrix-completion-discovered-gaps`.
