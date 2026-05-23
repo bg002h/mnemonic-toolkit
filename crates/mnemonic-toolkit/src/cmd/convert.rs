@@ -1039,7 +1039,10 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // 9) Emit.
     if args.json {
-        let from_value = if primary.node.is_secret_bearing() {
+        // v0.34.5: redact via the WIDER `is_argv_secret_bearing` (adds MiniKey,
+        // a Casascius private-key carrier) so `--from minikey= --json` does not
+        // echo the private key in `from_value`. Closes `convert-minikey-stdout-redaction`.
+        let from_value = if primary.node.is_argv_secret_bearing() {
             None
         } else {
             Some(primary_value.as_str())
@@ -1066,7 +1069,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // 10) §7 secret-on-stdout warning.
-    if outputs.iter().any(|(n, _)| n.is_secret_bearing()) {
+    // v0.34.5: `is_argv_secret_bearing` widens to MiniKey for stdout-redaction
+    // parity with the `from_value` path above. MiniKey is currently
+    // output-unreachable (one-way `MiniKey→Wif`), so this is a no-op today —
+    // it keeps both redaction pathways on a single predicate.
+    if outputs.iter().any(|(n, _)| n.is_argv_secret_bearing()) {
         let _ = writeln!(
             stderr,
             "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')",

@@ -244,3 +244,30 @@ fn refusal_wif_to_minikey_one_way() {
         stderr,
     )
 }
+
+// ============================================================================
+// v0.34.5 — MiniKey stdout-redaction: the echoed `from_value` in --json must
+// be redacted (MiniKey is a private-key carrier). Closes
+// `convert-minikey-stdout-redaction`.
+// ============================================================================
+
+#[test]
+fn minikey_input_redacted_in_json_from_value() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["convert", "--from", &format!("minikey={VEC22_KEY}"), "--to", "wif", "--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid convert JSON");
+    assert_eq!(v["from_node"], "minikey");
+    assert!(
+        v["from_value"].is_null(),
+        "minikey from_value must be redacted in --json; got: {}",
+        v["from_value"]
+    );
+    // The decoded WIF output is itself secret-bearing and still appears in `to`.
+    assert!(v["to"][0]["value"].as_str().unwrap().starts_with('5'));
+    // The minikey private key must NOT leak anywhere in the JSON.
+    assert!(!stdout.contains(VEC22_KEY), "minikey input leaked into JSON: {stdout}");
+}
