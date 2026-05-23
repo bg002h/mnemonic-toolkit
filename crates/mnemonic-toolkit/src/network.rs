@@ -54,6 +54,16 @@ impl CliNetwork {
             CliNetwork::Regtest => "regtest",
         }
     }
+
+    /// The `bitcoin::Network` for this CLI network (1:1 mapping).
+    pub fn to_bitcoin_network(self) -> bitcoin::Network {
+        match self {
+            CliNetwork::Mainnet => bitcoin::Network::Bitcoin,
+            CliNetwork::Testnet => bitcoin::Network::Testnet,
+            CliNetwork::Signet => bitcoin::Network::Signet,
+            CliNetwork::Regtest => bitcoin::Network::Regtest,
+        }
+    }
 }
 
 #[cfg(test)]

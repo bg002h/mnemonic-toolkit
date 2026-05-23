@@ -185,6 +185,15 @@ pub enum ToolkitError {
         supplied: String,
         sniffed: String,
     },
+    /// v0.34.6 — `import-wallet --network <X>` requested a network in a
+    /// different coin-type class than the imported blob's coin-type-derived
+    /// network. The blob's xpub prefix is coin-type-bound (coin-type-1 ↔
+    /// testnet/signet/regtest; coin-type-0 ↔ mainnet), so cross-class
+    /// re-binding would contradict the key material. Tier-1 (exit 1).
+    ImportWalletNetworkClassMismatch {
+        requested: String,
+        parsed_coin_type: u32,
+    },
     /// v0.26.0 wallet-import cycle — blob parse failed (BIP-380 checksum,
     /// header line, descriptor body, JSON shape, etc.). Tier-2 (exit 2) per
     /// SPEC_wallet_import_v0_26_0.md §2.3. Carries an opaque detail message
@@ -466,6 +475,7 @@ impl ToolkitError {
             ToolkitError::HrpMismatch { .. } => 2,
             ToolkitError::ImportWalletAmbiguousFormat(_) => 1,
             ToolkitError::ImportWalletFormatMismatch { .. } => 1,
+            ToolkitError::ImportWalletNetworkClassMismatch { .. } => 1,
             ToolkitError::ImportWalletParse(_) => 2,
             ToolkitError::ImportWalletSeedMismatch { .. } => 4,
             ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
@@ -522,6 +532,7 @@ impl ToolkitError {
             ToolkitError::HrpMismatch { .. } => "HrpMismatch",
             ToolkitError::ImportWalletAmbiguousFormat(_) => "ImportWalletAmbiguousFormat",
             ToolkitError::ImportWalletFormatMismatch { .. } => "ImportWalletFormatMismatch",
+            ToolkitError::ImportWalletNetworkClassMismatch { .. } => "ImportWalletNetworkClassMismatch",
             ToolkitError::ImportWalletParse(_) => "ImportWalletParse",
             ToolkitError::ImportWalletSeedMismatch { .. } => "ImportWalletSeedMismatch",
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
@@ -661,6 +672,12 @@ impl ToolkitError {
             ToolkitError::ImportWalletAmbiguousFormat(detail) => detail.clone(),
             ToolkitError::ImportWalletFormatMismatch { supplied, sniffed } => format!(
                 "import-wallet: --format {supplied} supplied but blob looks like {sniffed}"
+            ),
+            ToolkitError::ImportWalletNetworkClassMismatch { requested, parsed_coin_type } => format!(
+                "import-wallet: --network {requested} is incompatible with the imported \
+                 wallet's coin-type-{parsed_coin_type} network. The blob's xpub prefix is \
+                 coin-type-bound (coin-type-1 ↔ testnet/signet/regtest; coin-type-0 ↔ mainnet); \
+                 omit --network to use the coin-type-derived network."
             ),
             ToolkitError::ImportWalletParse(detail) => detail.clone(),
             ToolkitError::ImportWalletSeedMismatch {

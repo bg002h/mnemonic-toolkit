@@ -76,6 +76,7 @@ use crate::wallet_import::{
     ParsedImport, SelectDescriptor, WalletFormatParser,
 };
 use crate::cmd::convert::read_stdin_passphrase;
+use crate::network::CliNetwork;
 use crate::secret_advisory::secret_in_argv_warning;
 use clap::{ArgGroup, Args};
 use mnemonic_toolkit::electrum_crypto::{
@@ -251,6 +252,14 @@ pub struct ImportWalletArgs {
     /// (`--blob=-`, `--bsms-encryption-token=-`).
     #[arg(long = "decrypt-password-stdin")]
     pub decrypt_password_stdin: bool,
+
+    /// v0.34.6: re-bind the imported network to disambiguate signet/regtest
+    /// from the coin-type-1→testnet collapse (SPEC §4.2 step 8). Honored ONLY
+    /// within the parsed coin-type class (testnet ↔ {testnet,signet,regtest};
+    /// mainnet ↔ mainnet); cross-class is refused. Absent = use the
+    /// coin-type-derived network. Closes `wallet-import-signet-regtest-disambiguation`.
+    #[arg(long, value_name = "NETWORK")]
+    pub network: Option<CliNetwork>,
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -1133,6 +1142,27 @@ electrum|jade|sparrow|specter>"
             )));
         }
     };
+
+    // v0.34.6: `--network` override (signet/regtest disambiguation). The
+    // override must stay WITHIN the parsed coin-type class — the blob's xpub
+    // prefix is coin-type-bound (parser yields only Bitcoin/coin-type-0 or
+    // Testnet/coin-type-1). Closes `wallet-import-signet-regtest-disambiguation`.
+    if let Some(override_net) = args.network {
+        if let Some(first) = parsed.first() {
+            let parsed_coin_type: u32 =
+                if first.network == bitcoin::Network::Bitcoin { 0 } else { 1 };
+            if override_net.coin_type() != parsed_coin_type {
+                return Err(ToolkitError::ImportWalletNetworkClassMismatch {
+                    requested: override_net.human_name().to_string(),
+                    parsed_coin_type,
+                });
+            }
+            let rebound = override_net.to_bitcoin_network();
+            for p in parsed.iter_mut() {
+                p.network = rebound;
+            }
+        }
+    }
 
     // Seed overlay (SPEC §8.3). Apply BEFORE select-descriptor filter so
     // the user's overlay-args index the canonical cosigner ordering.
