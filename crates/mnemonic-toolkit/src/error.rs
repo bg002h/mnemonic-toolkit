@@ -268,6 +268,11 @@ pub enum ToolkitError {
     /// repair report already wrote a clean stderr summary; appending the
     /// Display text would be confusing noise).
     RepairShortCircuit { exit_code: u8 },
+    /// v0.35.0 — `mnemonic silent-payment` BIP-352 receiver-address derivation
+    /// failure: a non-seed-bearing secret (WIF/minikey), the reserved `m=0`
+    /// change label, or a derivation/label-tweak error. Exit 1 (parse/usage
+    /// class, like `NostrKeyParse`).
+    SilentPayment(String),
     /// SPEC §6.6 row 4 (conflict) / row 8 (gap) / §6.6.b (invalid subkey set)
     /// `--slot @N.<subkey>=<value>` validation violation at bundle creation.
     /// Exit 2. Wired into `bundle_run` in Phase C.
@@ -490,6 +495,7 @@ impl ToolkitError {
             ToolkitError::NostrKeyParse(_) => 1,
             ToolkitError::Repair(_) => 2,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
+            ToolkitError::SilentPayment(_) => 1,
             ToolkitError::SlotInputViolation { .. } => 2,
             ToolkitError::UnknownHrp { .. } => 2,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
@@ -547,6 +553,7 @@ impl ToolkitError {
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::SilentPayment(_) => "SilentPayment",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
@@ -720,6 +727,7 @@ impl ToolkitError {
                 // already emitted its own clean stderr summary).
                 String::new()
             }
+            ToolkitError::SilentPayment(msg) => format!("silent-payment: {msg}"),
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {
                 format!(

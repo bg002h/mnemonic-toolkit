@@ -12,6 +12,7 @@ pub mod import_wallet;
 pub mod inspect;
 pub mod nostr;
 pub mod repair;
+pub mod silent_payment;
 pub mod seed_xor;
 pub mod seedqr;
 pub mod slip39;
