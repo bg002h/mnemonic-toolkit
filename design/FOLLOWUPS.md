@@ -2176,7 +2176,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - Future `wallet_import/bitcoin_core.rs` (Phase 3) — same coin-type extraction will share this behavior.
 - **What:** BIP-129 BSMS + Bitcoin Core `listdescriptors` origin annotations use coin-type `1` for testnet, signet, AND regtest — the blob is intrinsically ambiguous. v0.26.0 picks `Network::Testnet` as the canonical interpretation. v0.27+ may add either (a) a `--network signet|regtest` override on `import-wallet` (post-parse network re-binding), or (b) a separate origin-path-side disambiguator (e.g., a sibling `network_hint:` annotation that some wallets emit). User-direction needed before implementation.
 - **Why deferred:** Surface-area trade-off: adding `--network` to `import-wallet` introduces a flag that 99% of users will never set (BIP-129 blobs don't carry signet/regtest as a separate type today), but the ambiguity exists and warrants explicit handling for users who run signet/regtest workflows. Testnet collapse is a safe v0.26.0 default.
-- **Status:** open
+- **Status:** resolved — v0.34.6. Added `import-wallet --network <mainnet|testnet|signet|regtest>` (option (a), the primary suggestion). Re-binds `ParsedImport.network` post-parse, guarded to the parsed coin-type class (testnet↔{testnet,signet,regtest}; mainnet↔mainnet); cross-class → `ImportWalletNetworkClassMismatch` (exit 1) since the blob's xpub prefix is coin-type-bound. New `CliNetwork::to_bitcoin_network` helper. 6 cells in `tests/cli_import_wallet_network_override.rs`. Paired GUI schema-mirror (`--network` Dropdown(NETWORKS) on import-wallet) + manual. Closed via cycle-prep recon (SHA `d330240`).
 - **Tier:** `v0.27`
 - **Companion:** none.
 

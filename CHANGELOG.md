@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.34.6] — 2026-05-22
+
+**SemVer-PATCH — `import-wallet --network` signet/regtest disambiguation.** New `import-wallet --network <mainnet|testnet|signet|regtest>` re-binds the imported network to recover signet/regtest semantics from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so v0.26.0 collapsed all three to testnet). The override is honored only WITHIN the parsed coin-type class (testnet ↔ {testnet,signet,regtest}; mainnet ↔ mainnet); a cross-class request is refused (`ImportWalletNetworkClassMismatch`, exit 1) because the blob's xpub prefix is coin-type-bound. Adds `CliNetwork::to_bitcoin_network`. Paired GUI schema-mirror lockstep + manual. Closes `wallet-import-signet-regtest-disambiguation`.
+
 ## mnemonic-toolkit [0.34.5] — 2026-05-22
 
 **SemVer-PATCH — MiniKey stdout-redaction hardening + `SECRET_NODE_TYPES_ARGV`.** `convert --from minikey=<KEY> --to wif --json` no longer echoes the Casascius mini-key (a private key) unredacted in the JSON `from_value` field: the two `convert` stdout-redaction call sites now use the wider `is_argv_secret_bearing()` predicate (which includes MiniKey) instead of the narrow `is_secret_bearing()` (`:1042` from_value is the real fix; `:1069` secret-on-stdout is a no-op for MiniKey today but kept on one predicate). Promotes `pub const secret_taxonomy::SECRET_NODE_TYPES_ARGV` (the public mirror of that wide set = persistence set + `minikey`), locked by a new parity test against `is_argv_secret_bearing`. Additive public const → no GUI lockstep (existing `SECRET_NODE_TYPES` snapshot unchanged). Closes `convert-minikey-stdout-redaction` + `secret-taxonomy-argv-superset-promotion`.
