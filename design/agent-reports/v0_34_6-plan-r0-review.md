@@ -43,3 +43,8 @@ Folded all 3 Important + M1 + M2 into the plan-doc:
 - M2: corrected `network_human_name` description (free fn).
 - M3: left (pre-existing, out of scope).
 Re-dispatching R1 against the folded plan.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+All three Important folds verified correct against live source: I1 (`message() -> String` via `format!`; insertion points `:664/:665`, `:468/:469`, `:524/:525` confirmed), I2 (`CliNetwork::human_name` @`network.rs:49-56`; no `as_str()`), I3 (live GUI pins = `v0.34.2` @`Cargo.toml:42` + `pinned-upstream.toml:22`; bump v0.34.2→v0.34.6; v0.34.3/4/5 toolkit-only confirmed via CHANGELOG → no cumulative backfill). Both Minor folds verified (M1 all 8 `FlagSchema` fields incl. `help`; M2 free-fn wording). Core mechanics re-confirmed (override placement @:1135, guard `coin_type()->u32`, JSON path `v[0]["bundle"]["network"]`, fixtures exist, version artifacts). One new cosmetic Minor **M4** (stale "after `as_str`" anchor in Task 1 Step 1 → "after `human_name`") — **FOLDED**; non-blocking. **0C/0I gate satisfied — implementation may proceed.**

@@ -28,7 +28,7 @@
 
 **Files:** `src/network.rs`, `src/error.rs`.
 
-- [ ] **Step 1: Add the helper** to `CliNetwork`'s `impl` block in `network.rs` (after `as_str`):
+- [ ] **Step 1: Add the helper** to `CliNetwork`'s `impl` block in `network.rs` (after `human_name`):
 
 ```rust
     /// The `bitcoin::Network` for this CLI network (1:1 mapping).
