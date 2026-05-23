@@ -22,7 +22,7 @@ The wallet-cluster recon (`cycle-prep-recon-wallet-cluster.md`, SHA `9b94a7d`) f
 - `import-wallet --bsms-encryption-token <FILE|->` exists (v0.31.0): PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 per BIP-129 §Encryption.
 - `import-wallet --bsms-round1 <FILE>` exists (v0.27.0): repeating, BIP-322 Round-1 record **verify** (not assembly).
 - `wallet_import/bsms.rs`: line-count match arms `2=>`L108, `4=>`L116, **`6=>`L146**, `other=>`L188; the `extract_threshold` taproot guard at **L496-497**; parse-entry `tr(` refusal at **L215-216**.
-- `wallet_export/bsms.rs`: `fn emit` L64, taproot refusal match `P2tr|P2trMulti` at **L79** (comment L70-76).
+- `wallet_export/bsms.rs`: `fn emit` L64, taproot refusal match `P2tr|P2trMulti` at **L79** (comment block L65-76).
 - `bsms.rs` signet doc comment at **L24-26**.
 - Siblings already resolved: `bsms-bip129-encryption-envelope` (Cycle 7/v0.31.0), `bsms-verify-signatures` (v0.27.0), `wallet-export-bsms-emitter` (v0.27.0).
 
@@ -192,7 +192,7 @@ git commit -m "release(toolkit): mnemonic-toolkit v0.34.3 — wallet-cluster FOL
 
 ## Self-review (writing-plans)
 
-- **Spec coverage:** all 8 recon slugs accounted for — closed (encrypted, round-1, extract-threshold-test), rewritten (cutover→d + dedup), cite-refreshed (taproot-emit, signet), narrowed (schema-mirror-wire-shape), + the slug-8 doc (c). ✓
+- **Spec coverage:** 7 of the 8 recon slugs dispositioned this cycle — closed (encrypted, round-1, extract-threshold-test), rewritten (cutover→d + dedup), cite-refreshed (taproot-emit, signet), narrowed (schema-mirror-wire-shape), + the CLAUDE.md doc (c). The 8th (`wallet-import-format-mismatch-matrix-completion-discovered-gaps`) is deliberately **deferred** per the recon's "Deferred to their own decisions" section (needs a per-pair matrix audit first) — not touched here. ✓
 - **No placeholders:** every FOLLOWUP edit, the test code, and the CLAUDE.md paragraph are written out verbatim. ✓
 - **Type consistency:** test uses `ToolkitError::BsmsTaprootImportRefused` (confirmed variant at `bsms.rs:497`) + `extract_threshold` (confirmed `pub(super) fn` at `bsms.rs:489`). ✓
 - **SemVer / lockstep:** PATCH; no flag-NAME change → no GUI `schema_mirror` / manual lockstep. ✓
