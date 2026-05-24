@@ -247,6 +247,50 @@ pub(crate) fn script_type_from_descriptor(
     }
 }
 
+/// SPEC v0.37 §2.2 — map a parsed (non-taproot) `Descriptor` to its
+/// `CliTemplate`. Unlike `script_type_from_descriptor`, this preserves the
+/// sorted/unsorted multisig distinction (the descriptor carries it verbatim),
+/// so the inverse `WalletScriptType → CliTemplate` ambiguity does not arise.
+/// Used by the `--from-import-json` path to re-emit to template-requiring
+/// formats. `sortedmulti(` is checked before `multi(` (the latter is a
+/// substring of the former). Taproot is refused upstream on that path; the
+/// `Tr(_)` arm is defensive (the `Bare(_)` arm mirrors
+/// `script_type_from_descriptor`'s `DescriptorParse` and is doubly-unreachable,
+/// since that fn rejects `Bare` before this one is called).
+pub(crate) fn template_from_descriptor(
+    d: &MsDescriptor<DescriptorPublicKey>,
+) -> Result<CliTemplate, ToolkitError> {
+    use miniscript::descriptor::ShInner;
+    use miniscript::Descriptor::*;
+    let is_sorted = d.to_string().contains("sortedmulti(");
+    match d {
+        Pkh(_) => Ok(CliTemplate::Bip44),
+        Wpkh(_) => Ok(CliTemplate::Bip84),
+        Sh(s) => match s.as_inner() {
+            ShInner::Wpkh(_) => Ok(CliTemplate::Bip49),
+            ShInner::Wsh(_) => Ok(if is_sorted {
+                CliTemplate::ShWshSortedMulti
+            } else {
+                CliTemplate::ShWshMulti
+            }),
+            ShInner::Ms(_) => Err(ToolkitError::BadInput(
+                "--from-import-json: legacy bare P2SH multisig (sh(multi)/sh(sortedmulti)) has no export-wallet template; use --format bitcoin-core for descriptor passthrough".into(),
+            )),
+        },
+        Wsh(_) => Ok(if is_sorted {
+            CliTemplate::WshSortedMulti
+        } else {
+            CliTemplate::WshMulti
+        }),
+        Tr(_) => Err(ToolkitError::BadInput(
+            "--from-import-json: taproot descriptors are refused upstream; template_from_descriptor should not be reached for taproot".into(),
+        )),
+        Bare(_) => Err(ToolkitError::DescriptorParse(
+            "wallet-export descriptor must have a top-level Pkh/Wpkh/Sh/Wsh wrapper".into(),
+        )),
+    }
+}
+
 /// SPEC v0.8 §4 — missing-info refusal field enumeration. Per the SPEC:
 /// per-slot fields are discriminants 1-3 (`MasterFingerprint`, `DerivationPath`,
 /// `Xpub`); globals are 4-7 (`ScriptType`, `Threshold`, `WalletName`,
@@ -529,5 +573,68 @@ mod checked_descriptor_tests {
         assert_eq!(s, VALID_DESC);
         assert!(checked.contains("wpkh"));
         assert!(checked.starts_with("wpkh"));
+    }
+}
+
+#[cfg(test)]
+mod template_from_descriptor_tests {
+    use super::*;
+    use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+    use std::str::FromStr;
+
+    fn t(desc: &str) -> Result<crate::template::CliTemplate, crate::error::ToolkitError> {
+        let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+        template_from_descriptor(&d)
+    }
+
+    // Two real account xpubs for multisig fixtures (mainnet).
+    const X1: &str = "[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*";
+    const X2: &str = "[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*";
+    const WPKH: &str = "wpkh([b8688df1/84'/0'/0']xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/0/*)#pe2p8fkm";
+
+    #[test]
+    fn wpkh_to_bip84() {
+        assert_eq!(t(WPKH).unwrap(), crate::template::CliTemplate::Bip84);
+    }
+    #[test]
+    fn pkh_to_bip44() {
+        let d = "pkh([b8688df1/44'/0'/0']xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/0/*)";
+        assert_eq!(t(d).unwrap(), crate::template::CliTemplate::Bip44);
+    }
+    #[test]
+    fn shwpkh_to_bip49() {
+        let d = "sh(wpkh([b8688df1/49'/0'/0']xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/0/*))";
+        assert_eq!(t(d).unwrap(), crate::template::CliTemplate::Bip49);
+    }
+    #[test]
+    fn wsh_sortedmulti_to_wsh_sortedmulti() {
+        let d = format!("wsh(sortedmulti(2,{X1},{X2}))");
+        assert_eq!(t(&d).unwrap(), crate::template::CliTemplate::WshSortedMulti);
+    }
+    #[test]
+    fn wsh_multi_to_wsh_multi() {
+        let d = format!("wsh(multi(2,{X1},{X2}))");
+        assert_eq!(t(&d).unwrap(), crate::template::CliTemplate::WshMulti);
+    }
+    #[test]
+    fn shwsh_sortedmulti_to_sh_wsh_sortedmulti() {
+        let d = format!("sh(wsh(sortedmulti(2,{X1},{X2})))");
+        assert_eq!(t(&d).unwrap(), crate::template::CliTemplate::ShWshSortedMulti);
+    }
+    #[test]
+    fn shwsh_multi_to_sh_wsh_multi() {
+        let d = format!("sh(wsh(multi(2,{X1},{X2})))");
+        assert_eq!(t(&d).unwrap(), crate::template::CliTemplate::ShWshMulti);
+    }
+    #[test]
+    fn sortedmulti_not_misread_as_multi() {
+        // Guard: "sortedmulti(" contains "multi(" — must NOT resolve to WshMulti.
+        let d = format!("wsh(sortedmulti(2,{X1},{X2}))");
+        assert_ne!(t(&d).unwrap(), crate::template::CliTemplate::WshMulti);
+    }
+    #[test]
+    fn sh_bare_multi_errs() {
+        let d = format!("sh(sortedmulti(2,{X1},{X2}))");
+        assert!(t(&d).is_err(), "legacy bare P2SH multisig has no template");
     }
 }
