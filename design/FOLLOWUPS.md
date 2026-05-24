@@ -3107,3 +3107,38 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.35+`
 - **Tags:** none
+
+### `verify-message-bip322-full-format` — `--format bip322-full` (BIP-322 full encoding)
+- **Where:** `crates/mnemonic-toolkit/src/verify_message.rs::verify_bip322` (currently `verify_simple_encoded` only).
+- **What:** v0.36.0 ships BIP-322 *simple* verify only. The crate also exposes `verify_full_encoded` (a different signature encoding: full to_sign transaction base64 vs witness-stack base64 — NOT interchangeable, so it needs a distinct `--format bip322-full`, not an auto-fallback). Add it if/when a full-format vector is requested.
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `electrum-phrase-address-refusal-honest-wording` — refine the electrum→address refusal message
+- **Where:** `crates/mnemonic-toolkit/src/cmd/convert.rs:460` (the shared one-way-barrier message, interpolated for `(electrum-phrase, address)`).
+- **What:** the shared message says "cryptographically unrecoverable … one-way derivation barrier" — technically imprecise for electrum-phrase→address (it's *unimplemented*, not unrecoverable; Electrum uses a different PBKDF2 salt + non-BIP-44 paths). Add a dedicated `(ElectrumPhrase, _)` refusal arm with honest wording before the shared barrier. Deferred from v0.36.0 (R0 disposition (b): don't widen scope / touch shared plumbing this cycle).
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `electrum-native-seed-address-derivation` — derive Electrum-correct addresses from an Electrum native seed
+- **Where:** `crates/mnemonic-toolkit/src/electrum.rs` (currently seed-version + phrase↔entropy only) + `cmd/convert.rs` (the `(ElectrumPhrase, address)` edge is refused).
+- **What:** real feature surfaced by the v0.36.0 electrum spot-check: implement Electrum's own derivation — `PBKDF2-HMAC-SHA512(seed, "electrum"+passphrase, 2048)` → BIP-32 root → legacy `m/0/i`,`m/1/i` (version 01) / segwit paths (version 100) — so an Electrum seed can produce its Electrum-correct addresses. Distinct from BIP-39/BIP-44; today the edge is honestly refused rather than producing wrong addresses. Validate against Electrum's `test_wallet_vertical.py` vectors.
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `verify-message-format-requested-debug-string` — decouple `format_requested` JSON field from Debug
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_message.rs` (`format!("{:?}", args.format).to_lowercase()`).
+- **What:** the `--json` `format_requested` field is derived from the clap enum's `Debug` impl. Correct today (`Bip322`→`"bip322"`), but a future multi-word `VerifyFormat` variant (e.g. `Bip322Full` per the full-format FOLLOWUP) would silently emit `"bip322full"`. Map explicitly when that lands. (Per-phase review M2, confidence-below-threshold.)
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `gui-decode-address-verify-message-schema-mirror` — GUI SubcommandSchemas for the two v0.36.0 subcommands
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs`.
+- **What:** v0.36.0 adds `decode-address` + `verify-message` (net-new clap surface). The GUI schema mirror must add both `SubcommandSchema`s (no secret flags → no secret-projection delta) + bump the toolkit pin. Shipped in lockstep as `mnemonic-gui` MINOR (Phase 5). Companion record; closed when the paired GUI release ships.
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
