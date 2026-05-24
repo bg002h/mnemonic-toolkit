@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.36.4] — 2026-05-24
+
+**SemVer-PATCH — install-pin staleness (config/CI/installer only; no code change).** Closes `manual-yml-and-install-sh-sibling-gui-pin-staleness`. The default installer (`scripts/install.sh`) pinned `mnemonic-gui-v0.10.0` — 11 versions behind the live GUI v0.21.1 — so it handed users a badly-stale GUI; bumped to `mnemonic-gui-v0.21.1`. Also bumped the lagging sibling-CLI pins in `manual.yml` (mk-cli v0.4.1→v0.4.2, md-cli v0.6.0→v0.6.1, ms-cli v0.4.0→v0.4.1, matching `install.sh`) and `quickstart.yml` (mk-cli v0.2.0→v0.4.2 — a 3rd stale site found in R0). None of these were gated by install-pin-check (which only checks the `mnemonic` self-pin); the manual/quickstart workflows validate them lazily on their next docs/tag trigger. `manual-gui.yml` is intentionally version-locked to its GUI-manual authoring snapshot and left untouched. The README-version guard (v0.36.3) forced both README markers → 0.36.4 in lockstep.
+
+Files `export-wallet-from-import-json-template-format-reemit` (a real CLI limitation surfaced by test-running the documented round-trips: template-requiring foreign formats can't re-emit via `--from-import-json`; 5 chapter-45 round-trip recipes are impossible as written — deferred to a MINOR feature cycle per user decision) and updates `manual-prose-command-execution-gate` with that coupling. Plan opus R0 (RED 0C/1I → R1 GREEN).
+
 ## mnemonic-toolkit [0.36.3] — 2026-05-24
 
 **SemVer-PATCH — documentation refresh (docs/test-only; no code change).** Remedies the gaps found by a full documentation audit (`cycle-prep-recon-documentation-audit.md`):
