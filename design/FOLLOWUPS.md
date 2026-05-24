@@ -3242,3 +3242,12 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.37+`
 - **Tags:** none
+
+### `m-format-indel-asymmetric-delete-budget` — allow a larger budget for too-long/delete recovery (the `t`-unbounded direction)
+- **Surfaced:** 2026-05-24, post-v0.37.1 (controller + user, tracing the spec's too-long/too-short asymmetry).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/repair.rs` (`--max-indel` `value_parser!(u8).range(0..=4)`) + `indel.rs::collect_data_delete` (too-long producer) vs `collect_data_insert` (too-short producer).
+- **What:** v0.37.1 caps BOTH directions at `--max-indel ≤ 4`. That ceiling is the BCH error-decoder's `t = 4` capacity — but it only binds the **too-short** direction (which leans on the error-decoder to solve the inserted placeholder). The **too-long / delete-and-validate** direction needs NO correction: deleting the truly-inserted char reproduces the exact original codeword (`residue == 0`), so it is bounded only by enumeration cost `C(L, j)` and the ~32⁻¹³ false-positive floor (negligible well past j=4). Refinement: expose a larger budget for the delete direction — either a separate `--max-delete <N>` (allowing e.g. j≤6) or an internal asymmetric cap that lets too-long search further than too-short — independent of, and orthogonal to, `m-format-indel-erasure-decode-extend-to-8` (which lifts only the too-short side, and requires a sibling-codec change). Real risk is runtime: `C(L, j)` for L≈108 grows fast (j=6 ≈ 10⁹ candidates → seconds-to-minutes), so any extension needs a runtime guard/notice and likely a benchmark-driven cap. Own R0.
+- **SemVer:** PATCH if internal-cap-only; if a new `--max-delete` flag is added ⇒ still PATCH (additive flag) BUT triggers GUI `schema_mirror` + manual mirror lockstep.
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
