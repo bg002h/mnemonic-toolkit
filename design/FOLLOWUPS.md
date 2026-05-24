@@ -3158,3 +3158,19 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.36+`
 - **Tags:** none
+
+### `manual-prose-command-execution-gate` — execute documented recipes in the manual lint
+- **Surfaced:** 2026-05-24, v0.36.3 documentation audit (G5).
+- **Where:** `docs/manual/tests/lint.sh` (6 stages) + `docs/manual/src/45-foreign-formats.md` (round-trip recipes).
+- **What:** the manual lint validates flag NAMES (stage 4), spelling, links, glossary, index — but NEVER EXECUTES the documented commands. The v0.28.1 round-trip breakage (all 6 chapter-45 `export-wallet` recipes failed; `design/AUDIT_FINDINGS_manual_v0_28_0_content.md`) shipped silently for exactly this reason and was fixed reactively. Build a lint stage / integration test that extracts the documented round-trip recipes (or a curated subset) and RUNS them against the pinned binary, asserting success + (where feasible) expected output. `feedback_architect_must_run_prose_commands` records the manual discipline; this automates it. Also consider adding lychee `--include-fragments` to validate intra-doc `#anchor` links (the v0.36.3 cycle found `#mnemonic-xpub-search` would dangle with no lint backstop). Meatier; own cycle + R0.
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `manual-yml-sibling-cli-pin-staleness` — manual.yml sibling-CLI install pins lag install.sh
+- **Surfaced:** 2026-05-24, v0.36.3 R0 (M2).
+- **Where:** `.github/workflows/manual.yml:77/84/88` vs `scripts/install.sh:35/38/41`.
+- **What:** the manual CI workflow installs `mk-cli-v0.4.1` / `descriptor-mnemonic-md-cli-v0.6.0` / `ms-cli-v0.4.0` while `install.sh` pins `v0.4.2` / `v0.6.1` / `v0.4.1`. Pre-existing drift; does not affect the `mnemonic` flag-coverage (the only gate the v0.36.3 cycle wired). Bump `manual.yml` to match `install.sh` (or derive from a shared pin). Low priority.
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
