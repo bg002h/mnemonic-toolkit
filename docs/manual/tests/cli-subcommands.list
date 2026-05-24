@@ -26,6 +26,9 @@ mnemonic nostr
 mnemonic silent-payment
 mnemonic decode-address
 mnemonic verify-message
+mnemonic electrum-decrypt
+mnemonic seedqr encode
+mnemonic seedqr decode
 mnemonic xpub-search path-of-xpub
 mnemonic xpub-search account-of-descriptor
 mnemonic xpub-search address-of-xpub
