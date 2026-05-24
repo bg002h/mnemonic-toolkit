@@ -10,7 +10,10 @@ Top-level integration crate for the **m-format constellation** of Bitcoin self-c
 | **mk1** | [`mk-codec`](https://github.com/bg002h/mnemonic-key) | xpub + origin (master fingerprint + BIP path) |
 | **md1** | [`md-codec`](https://github.com/bg002h/descriptor-mnemonic) | wallet policy (template + bound xpub) |
 
-Status: **v0.8.0 shipped** (2026-05-07; **breaking change** to BIP-38 composite-edge passphrase semantics — see [CHANGELOG](CHANGELOG.md) migration sentence). Single-sig BIP-44/49/84/86 + multisig (`wsh-multi`, `wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`, `tr-sortedmulti-a`) + user-supplied BIP-388 descriptors + multi-leaf taproot + multi-source full multisig (`--slot @N.phrase=...` per cosigner). BIP-388 distinct-key conformance enforced symmetrically across `bundle` and `verify-bundle`. v0.7 added BIP-38 / Casascius mini-key / Electrum native seed / address derivation to `mnemonic convert`, plus the `mnemonic export-wallet` and `mnemonic derive-child` subcommands. v0.8 layers in distinct BIP-38 vs BIP-39 passphrase channels, raw-stdin passphrase input (BIP-38 V3 NULL-byte), 4 non-English Electrum wordlists, taproot-multisig export via `--taproot-internal-key <nums|@N>`, descriptor → BIP-388 wallet_policy interop, BIP-85 phrase-master input + language codes + testnet emission + DICE app. Mainnet / testnet / signet / regtest.
+<!-- toolkit-version: 0.36.3 -->
+Status: **v0.36.x** — twenty `mnemonic` subcommands (see [Subcommands](#subcommands)). The `mnemonic` CLI spans seed/key/descriptor handling across the m-format constellation: 3-card bundle synthesis + round-trip verification; single-sig (BIP-44/49/84/86) + multisig + BIP-388 descriptors + multi-leaf taproot + multi-source full multisig; cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum); seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius mini-key / Electrum native seed); backup splitting (Coldcard seed-XOR, SLIP-39, SeedQR); BIP-85 child derivation; BIP-352 silent-payment receiver addresses; nostr key wrapping; legacy + BIP-322 message verification; address decoding; and BCH error-correction / inspection. Mainnet / testnet / signet / regtest. Secret-input hygiene throughout (zeroize + `mlock` + argv-leak advisories + `*-stdin` / `@env:` channels).
+
+For the authoritative, always-current CLI reference see the **[end-user manual](docs/manual/)** (single source of truth, lint-gated against the live `--help` surface); for the full release history see **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Install
 
@@ -29,34 +32,34 @@ installs each component via `cargo install --locked --git --tag` into
 files touched. Requires `cargo` + `git` + a C toolchain.
 
 To install just this toolkit's `mnemonic` binary (no constellation
-siblings):
+siblings), use the installer's `--only` flag (it carries the
+current version pin, so it never goes stale):
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.13.0 mnemonic-toolkit
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --only mnemonic
 ```
 
 ## Subcommands
 
-- **`mnemonic bundle`** — synthesize a 3-card bundle (ms1 + mk1 + md1) from BIP-39 phrase / entropy / multi-source seed input, or a watch-only 2-card bundle from xpub.
-- **`mnemonic verify-bundle`** — re-derive and check parity across the 3 cards; reports per-card pass/fail and cross-binding integrity.
-- **`mnemonic convert`** — single-format conversions across the 13-node typed graph (`phrase`, `entropy`, `xpub`, `xprv`, `wif`, `fingerprint`, `path`, `ms1`, `mk1`, `bip38`, `minikey`, `electrum-phrase`, `address`). v0.8 adds `--bip38-passphrase` (distinct from `--passphrase`; BREAKING on composite arms), `--passphrase-stdin` (raw-stdin passphrase preserving NULL bytes), and `--electrum-language` (English + 4 non-English Electrum wordlists).
-- **`mnemonic export-wallet`** *(v0.7)* — emit watch-only wallet artifacts in Bitcoin Core `importdescriptors` JSON (default) or BIP-388 `wallet_policy` JSON. Sparrow / Specter formats stubbed. v0.8 adds `--taproot-internal-key <nums|@N>` (unblocks `tr-multi-a` / `tr-sortedmulti-a`) and `--descriptor + --format bip388` interop.
-- **`mnemonic derive-child`** *(v0.7)* — BIP-85 deterministic child entropy. 7 applications in scope: `bip39` (v0.8: 9 BIP-85-coded languages), `hd-seed` (v0.8: testnet), `xprv` (v0.8: testnet), `hex`, `password-base64`, `password-base85`, `dice` (v0.8 §"DICE", BIP-85 v1.3.0). v0.8 also adds `--from phrase=...` (with `--passphrase` for BIP-39 mnemonic extension) and stdin via `--from <node>=-`. RSA + RSA-GPG deferred to v0.9 pending RUSTSEC-2023-0071 patch.
+Twenty `mnemonic` subcommands, grouped below. Run any with `--help`, or see the
+**[CLI reference chapter](docs/manual/src/40-cli-reference/41-mnemonic.md)** for
+the authoritative, per-flag documentation.
+
+- **Bundle** — `bundle` (synthesize the 3-card ms1+mk1+md1 backup, or watch-only 2-card from xpub), `verify-bundle` (re-derive + parity-check across cards).
+- **Convert / derive** — `convert` (seed/key conversions across the typed graph: phrase / entropy / xpub / xprv / wif / fingerprint / path / ms1 / mk1 / bip38 / minikey / electrum-phrase / address), `derive-child` (BIP-85 child entropy/keys).
+- **Wallet import / export** — `import-wallet` (third-party blob → m-format bundle: Bitcoin Core, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), `export-wallet` (watch-only artifacts: Bitcoin Core importdescriptors, BIP-388 wallet_policy, BSMS), `decode-address` (address → network / script type / witness version / scriptPubKey).
+- **Backup splitting** — `seed-xor` (Coldcard BIP-39 XOR split/combine), `slip39` (SLIP-39 K-of-N Shamir), `seedqr` (SeedSigner SeedQR encode/decode).
+- **Keys & messages** — `nostr` (wrap an nsec/npub as BTC addresses/descriptors/WIF), `silent-payment` (BIP-352 receiver address), `verify-message` (legacy signmessage + BIP-322), `final-word` (BIP-39 checksum-completion words).
+- **Decrypt / repair / inspect** — `electrum-decrypt` (Electrum field-encrypted secret), `repair` (BCH error-correct ms1/mk1/md1), `inspect` (describe a card), `compare-cost` (wsh-vs-tr spending-condition cost), `xpub-search` (locate an xpub/descriptor/address/passphrase under a seed).
+- **Introspection** — `gui-schema` (emit the GUI-overlay flag-surface schema; no user-facing semantics).
 
 The three cards engrave together as a coherent backup. Each card is independently BCH-checksummed by its sibling codec; the toolkit cross-binds them via the 4-byte `policy_id_stub` (`SHA-256(canonical wallet-policy preimage)[0..4]`) carried on each mk1 card and computable from each md1 card.
 
 ## Documentation
 
-- [`design/SPEC_convert_v0_6.md`](design/SPEC_convert_v0_6.md) — `mnemonic convert` SPEC (current; with v0.7 amendments §10.a / §11 / §12 / §13 / §14 for address / SPEC-pin / BIP-38 / Casascius / Electrum).
-- [`design/SPEC_export_wallet_v0_7.md`](design/SPEC_export_wallet_v0_7.md) — `mnemonic export-wallet` SPEC (v0.7).
-- [`design/SPEC_derive_child_v0_7.md`](design/SPEC_derive_child_v0_7.md) — `mnemonic derive-child` SPEC (v0.7, BIP-85).
-- [`design/SPEC_mnemonic_toolkit_v0_5.md`](design/SPEC_mnemonic_toolkit_v0_5.md) — current bundle/verify-bundle SPEC (v0.5 cycle delta — typed-DerivationPath BIP-388 reversal, four-case ms1 short-circuit, mk1 cosigner-mapping diagnostic, legacy CLI flag deletion).
-- [`design/SPEC_mnemonic_toolkit_v0_4.md`](design/SPEC_mnemonic_toolkit_v0_4.md) — predecessor (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
-- [`design/SPEC_mnemonic_toolkit_v0_3.md`](design/SPEC_mnemonic_toolkit_v0_3.md) — predecessor (descriptor-mode foundation).
-- [`design/SPEC_mnemonic_toolkit_v0_2.md`](design/SPEC_mnemonic_toolkit_v0_2.md) — multisig foundation.
-- [`design/SPEC_mnemonic_toolkit_v0_1.md`](design/SPEC_mnemonic_toolkit_v0_1.md) — single-sig foundation.
-- [`CHANGELOG.md`](CHANGELOG.md) — release notes.
-- [`design/FOLLOWUPS.md`](design/FOLLOWUPS.md) — deferred-work tracker.
+- **[`docs/manual/`](docs/manual/)** — the end-user manual: the single source of truth for the m-format constellation CLI surface (`mnemonic` / `md` / `ms` / `mk`), lint-gated against the live `--help` output. Tagged builds attach a PDF to the GitHub release.
+- [`CHANGELOG.md`](CHANGELOG.md) — full release history.
+- [`design/`](design/) — SPECs, implementation plans, per-cycle architect reviews, and [`design/FOLLOWUPS.md`](design/FOLLOWUPS.md) (deferred-work tracker).
 
 ## License
 

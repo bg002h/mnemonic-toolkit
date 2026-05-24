@@ -6,6 +6,9 @@ Top-level integration CLI for the **m-format constellation** of Bitcoin self-cus
 
 Installs as binary `mnemonic`.
 
+<!-- toolkit-version: 0.36.3 -->
+Status: **v0.36.x** — twenty `mnemonic` subcommands spanning 3-card bundle synthesis + verification, seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius / Electrum), cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), backup splitting (seed-XOR, SLIP-39, SeedQR), BIP-85 derivation, BIP-352 silent-payment addresses, nostr key wrapping, legacy + BIP-322 message verification, address decoding, and BCH repair / inspection. Mainnet / testnet / signet / regtest. See **[CHANGELOG.md](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md)** for the release history.
+
 | Card | Format | What's on it |
 |---|---|---|
 | **ms1** | [`ms-codec`](https://github.com/bg002h/mnemonic-secret) | BIP-39 entropy (recovers the seed) |
@@ -16,16 +19,45 @@ The three cards engrave together as a coherent backup. Each card is independentl
 
 ## Installation
 
-`cargo install mnemonic-toolkit` is gated on the three sibling codecs reaching crates.io; until then build from the GitHub tag:
+`cargo install mnemonic-toolkit` is gated on the three sibling codecs reaching crates.io; until then install from the GitHub tag via the in-repo installer (it carries the current version pin):
 
 ```bash
-git clone --branch mnemonic-toolkit-v0.8.0 https://github.com/bg002h/mnemonic-toolkit
-cd mnemonic-toolkit
-cargo build --release --bin mnemonic
-./target/release/mnemonic --help
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --only mnemonic
 ```
 
-## Quickstart
+Or build a specific tag directly: `cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.36.3 mnemonic-toolkit`.
+
+## Subcommands & reference
+
+Twenty `mnemonic` subcommands — `bundle` / `verify-bundle`, `convert` / `derive-child`, `import-wallet` / `export-wallet` / `decode-address`, `seed-xor` / `slip39` / `seedqr`, `nostr` / `silent-payment` / `verify-message` / `final-word`, `electrum-decrypt` / `repair` / `inspect` / `compare-cost` / `xpub-search`, and `gui-schema`. Run any with `--help`.
+
+The **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/docs/manual)** is the authoritative, always-current CLI reference (lint-gated against the live `--help` surface), with worked examples and round-trip recipes for every subcommand and foreign-wallet format. The repo-root [`README`](https://github.com/bg002h/mnemonic-toolkit/blob/master/README.md) has the grouped subcommand inventory.
+
+<details><summary>Quickstart (bundle + verify-bundle)</summary>
+
+```bash
+# Full mode (single-sig): phrase → 3-card bundle.
+mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84
+
+# Watch-only (single-sig): xpub + master fingerprint → 2-card bundle (mk1 + md1).
+mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --template bip84
+
+# Multisig 2-of-3 (watch-only with distinct cosigners — the production shape).
+mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+    --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
+    --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
+    --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
+
+# Round-trip verification: confirm the engraved bundle decodes against the original phrase.
+mnemonic verify-bundle --phrase "abandon abandon ... art" \
+    --network mainnet --template bip84 \
+    --ms1 ms1... --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
+```
+
+`--json` is available on `bundle` / `verify-bundle` for tooling.
+</details>
+
+## Templates and networks
 
 ```bash
 # Full mode (single-sig): phrase → 3-card bundle.
@@ -171,16 +203,9 @@ mnemonic derive-child --from "xprv=xprv9s21..." \
 
 ## Documentation
 
-- [SPEC `convert` v0.6 (+ v0.7/v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_convert_v0_6.md) — `mnemonic convert` 13-node typed graph.
-- [SPEC `export-wallet` v0.7 (+ v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_export_wallet_v0_7.md) — Bitcoin Core / BIP-388 emit pipelines.
-- [SPEC `derive-child` v0.7 (+ v0.8 amendments)](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_derive_child_v0_7.md) — BIP-85 derivations.
-- [SPEC v0.5](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_5.md) — current bundle/verify-bundle SPEC.
-- [SPEC v0.4](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_4.md) — predecessor (BIP-388 + `--slot` + multi-leaf taproot + schema-4).
-- [SPEC v0.3](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_3.md) — descriptor-mode foundation.
-- [SPEC v0.2](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_2.md) — multisig foundation.
-- [SPEC v0.1](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/SPEC_mnemonic_toolkit_v0_1.md) — single-sig foundation.
-- [CHANGELOG](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md) — release notes (v0.8.0 [BREAKING] entry includes the v0.7 → v0.8 BIP-38 composite-edge migration sentence).
-- [FOLLOWUPS](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/FOLLOWUPS.md) — deferred-work tracker.
+- **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/docs/manual)** — authoritative, always-current CLI reference (lint-gated against the live `--help`), with per-subcommand chapters + worked examples.
+- [CHANGELOG](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md) — full release history.
+- [`design/`](https://github.com/bg002h/mnemonic-toolkit/tree/master/design) — SPECs, implementation plans, per-cycle architect reviews, and [FOLLOWUPS](https://github.com/bg002h/mnemonic-toolkit/blob/master/design/FOLLOWUPS.md).
 - Sibling pointers: [`md-codec`](https://github.com/bg002h/descriptor-mnemonic), [`mk-codec`](https://github.com/bg002h/mnemonic-key), [`ms-codec`](https://github.com/bg002h/mnemonic-secret).
 
 ## License
