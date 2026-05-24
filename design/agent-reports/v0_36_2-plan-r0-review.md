@@ -74,3 +74,17 @@ VERDICT: RED (0C/2I)
 
 ## Fold disposition (controller) — R2 → R3
 Folded M-1 (closes I-1+I-2): Phase-1 Step-4 now carries an EXPLICIT per-route `source_file` requirement + a verified non-obvious-mappings table (xpub-search×3 → `xpub_search/seed_intake.rs` for --ms1 + `<mode>.rs` for --passphrase; seedqr-decode → `seedqr.rs`; inspect/repair --ms1 → `src/repair.rs`; seed-xor/slip39 → their cmd files; rest → own `cmd/<name>.rs`). Phase-2 --from notes seedqr-decode/-encode → `seedqr.rs`. Re-dispatch R3.
+
+---
+
+## R3 (round 3) — VERDICT: GREEN (0C/0I)
+Reviewer agentId a7500a303beb296c8. M-1 fold VERIFIED — every route→file→anchor resolves to a real file with a real matching token (reviewer quoted line numbers for all 25 flag + 7 --from + 4 --slot routes):
+- xpub-search×3 --ms1 → `xpub_search/seed_intake.rs:104` (`secret_in_argv_warning("--ms1","--ms1-stdin")`); --passphrase → per-mode `path_of_xpub.rs:253`/`account_of_descriptor.rs:303`/`passphrase_of_xpub.rs:279`.
+- seedqr-decode --digits/--from → `seedqr.rs:157/177/235`. inspect/repair --ms1 → `repair.rs:145` (`value=="-"`)/`:223 expand_dashes`/`:251 resolve_groups`.
+- import-wallet --ms1 → `import_wallet.rs:1297 @env:`; verify-bundle --ms1 → `verify_bundle.rs:924 @env:`; --decrypt-password → import_wallet.rs:468/2143.
+- nostr --secret → nostr.rs:191; silent-payment → silent_payment.rs:192/210; electrum-decrypt → electrum_decrypt.rs:103.
+- --slot: bundle `bundle.rs:1922 apply_slot_stdin`; verify-bundle `:980`; import-wallet @env:; export-wallet `export_wallet.rs:256 validate_watch_only`.
+- --share collision (M2) distinct: slip39-combine `slip39.rs:584 "--share -"` vs seed-xor-combine `seed_xor.rs:287 "--share phrase="`.
+Flattened gui-schema route keys match the source enum variants (mod.rs:62-72; `mode:"path-of-xpub"`@:154) → closure keys align with the declared source_file map.
+
+**0C/0I gate satisfied (R0 RED 3I → R1 RED 1I → R2 RED 2I → R3 GREEN). Implementation may proceed.**
