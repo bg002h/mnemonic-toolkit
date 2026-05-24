@@ -49,3 +49,14 @@ VERDICT: RED (2C/2I)
 - **I2:** move the `Cargo.toml`→0.36.3 bump to the FIRST phase (new Phase 0 release-prep-start: Cargo.toml + Cargo.lock + install.sh:32), so the guard's `CARGO_PKG_VERSION`=0.36.3 matches the marker in every subsequent phase.
 - **M1:** restructure subsumes the README SPEC-pointer block. **M2:** file `manual-yml-sibling-cli-pin-staleness` FOLLOWUP.
 Re-dispatch R1.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+Reviewer agentId a2917769a309746c7. All 4 R0 findings + 2 minors VERIFIED folded:
+- C1: guard checks BOTH READMEs (CARGO_MANIFEST_DIR/README.md = crate-published; ../../README.md = repo-root); Phase-3 refreshes both (crate README stale spots @:22/:172-184 covered). Guard string-concat compiles.
+- C2: all 6 intro slugs re-derived under pandoc-gfm auto_identifiers — only xpub-search has a (v0.26.0) suffix (→ `mnemonic-xpub-search-v0.26.0`, dangles) → explicit `{#mnemonic-xpub-search}` anchor; other 5 (repair@2248/inspect@2446/compare-cost@3049/electrum-decrypt@956/seedqr@1656) auto-slug clean. NO second C2-class break. False lint-backstop claim removed.
+- I1: G2 = stage-4 flag-coverage vs fresh binary. I2: Phase 0 bumps Cargo.toml→0.36.3 first (guard reads CARGO_PKG_VERSION). M1 SPEC-block subsumed; M2 FOLLOWUP filed.
+**Residual Minors (non-blocking, FOLDED):** M-a (C2 rationale slug string GitHub→pandoc `-v0.26.0`); M-b (Path::join idiom). Both folded into the plan.
+
+**0C/0I gate satisfied (R0 RED 2C/2I → R1 GREEN). Implementation may proceed.**

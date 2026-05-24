@@ -48,7 +48,7 @@ The Phase-3 README guard asserts `<!-- toolkit-version: {env!("CARGO_PKG_VERSION
 
 **Files:** `docs/manual/src/40-cli-reference/41-mnemonic.md`, `docs/manual/src/60-appendices/68-release-history.md`
 
-- [ ] **Step 1a — C2 anchor FIRST:** the `## \`mnemonic xpub-search\` (v0.26.0)` heading (`41-mnemonic.md:2553`) auto-slugs to `mnemonic-xpub-search-v0260` (version suffix) — a link `#mnemonic-xpub-search` would DANGLE. Add an explicit `{#mnemonic-xpub-search}` anchor to that heading (mirror the silent-payment/decode-address/verify-message explicit-anchor convention `:2061/:2100/:2124`). The other 5 (`repair`/`inspect`/`compare-cost`/`electrum-decrypt`/`seedqr`) auto-slug cleanly (clean headings) → `#mnemonic-repair` etc. resolve.
+- [ ] **Step 1a — C2 anchor FIRST:** the `## \`mnemonic xpub-search\` (v0.26.0)` heading (`41-mnemonic.md:2553`) auto-slugs to `mnemonic-xpub-search-v0.26.0` (R1 M-a: pandoc-gfm `auto_identifiers` RETAINS periods — not GitHub's `-v0260`) — a link `#mnemonic-xpub-search` would DANGLE. Add an explicit `{#mnemonic-xpub-search}` anchor to that heading (mirror the silent-payment/decode-address/verify-message explicit-anchor convention `:2061/:2100/:2124`). The other 5 (`repair`/`inspect`/`compare-cost`/`electrum-decrypt`/`seedqr`) auto-slug cleanly (clean headings) → `#mnemonic-repair` etc. resolve.
 - [ ] **Step 1b — G3:** rewrite the `41-mnemonic.md:3` intro to enumerate ALL 20 subcommands (add `electrum-decrypt`, `seedqr`, `repair`, `inspect`, `compare-cost`, `xpub-search` as links) + correct the count ("Twenty subcommands"). **HAND-VERIFY all 6 new slugs** by deriving the GFM auto-slug for each (backticks stripped, lowercased, spaces→hyphens) — do NOT rely on the lint to catch a dangling fragment: lychee runs WITHOUT `--include-fragments` (`lint.sh:57`) and index-bidirectional checks `\index{}` not anchors, so a broken intra-doc `#…` ships silently. (A `--include-fragments` lint upgrade is out of scope → note in the G5/M-class FOLLOWUP set.)
 - [ ] **Step 2 — G4:** `41-mnemonic.md:14` "this chapter mirrors v0.13.0" → version-agnostic ("Run any with `--help` for the authoritative flag set; this reference tracks the current release."); `68-release-history.md:66` "as of v0.1's tag." → generalize or refresh.
 - [ ] **Step 3** — `make -C docs/manual lint …` GREEN (markdownlint + cspell + lychee + index-bidirectional must still pass with the new intro links). Commit.
@@ -73,9 +73,10 @@ fn both_readmes_carry_current_version_marker() {
     let want = env!("CARGO_PKG_VERSION"); // = Cargo.toml (0.36.3 after Phase 0)
     let marker = format!("<!-- toolkit-version: {want} -->");
     for rel in ["README.md", "../../README.md"] { // crate-dir + repo-root
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/").to_string() + rel;
+        // R1 M-b: Path::join idiom (platform-correct, no string concat).
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
         let body = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {path}: {e}"));
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         assert!(
             body.contains(&marker),
             "{path} must carry `{marker}` (READMEs decayed to v0.8.0 once); update \
