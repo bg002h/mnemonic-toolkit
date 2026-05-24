@@ -67,6 +67,10 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
 /// silenced only around the call so the crate's internal panic text does not
 /// leak to stderr; the hook is restored immediately after. (In the CLI this runs
 /// single-threaded; the catch is also exercised by a unit regression test.)
+///
+/// NOTE: the global panic-hook swap is NOT thread-safe — if a future feature
+/// ever calls this from multiple threads (e.g. batch verification), the hook
+/// swap races. The toolkit is single-threaded today; revisit if that changes.
 fn verify_bip322(address: &str, message: &str, signature: &str) -> Result<bool, ToolkitError> {
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));

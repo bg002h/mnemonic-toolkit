@@ -31,3 +31,19 @@ VERDICT: RED (1C/0I)
 **M1 FIXED:** `p2sh_uncompressed_pubkey_does_not_panic` regression test added (reproduces the exact panic pre-fix; passes post-fix). Full suite 2348 pass (+1), clippy clean.
 **M2:** acknowledged, deferred (below confidence threshold; no multi-word format variant exists).
 Re-dispatching to reviewer to confirm the C1 fix.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+Reviewer agentId a03688bc51d0f1575. C1 fix VERIFIED correct + complete against the vendored crate source:
+- catch_unwind genuinely intercepts the synchronous `verify.rs:168` `wpubkey_hash().unwrap()` panic (call chain verify_simple_encoded→verify_simple→verify_full→verify_full_p2wpkh(is_p2sh=true)→:168, all inside the closure; unwind strategy active). ✓
+- Both call sites (`:99` Bip322, `:107` Auto-else) propagate via `?`; grep confirms only two call sites. ✓
+- Regression test reproduces the GENUINE panic path (P2SH + valid uncompressed pubkey + grind-matched 71/72-byte DER passing all upstream gates), not an earlier Err. ✓
+- AssertUnwindSafe justified (closure captures only &str; verification pure; hook swap outside closure). ✓
+- well-formed-but-invalid → Ok(false) preserved (final verify_ecdsa/verify_schnorr returns Err via .context, not panic; `bip322_wrong_message_invalid` passes). Only an unwinding panic → Err. ✓
+- catch_unwind is the correct BLANKET mitigation: the same untrusted path also has `.expect()` at verify.rs:175/178/250/253 (un-recoverable via Result); a narrow uncompressed-pubkey pre-check would patch only :168 and duplicate crate internals. ✓
+- Compile spot-checks: `VerifyMessage(String)` @error.rs:300, exit_code 1 @:512, `.message()` @:579; base64 0.22 direct dep; pin `=0.0.10` matches the inspected panic site (can't silently move under a patch bump). ✓
+
+**Residual Minors (non-blocking):** (1) global panic-hook swap not thread-safe → FOLDED a one-line NOTE in the doc comment for future multithreaded callers. (2) optional extra regression test for the `.expect()` sites — deferred (not required for GREEN).
+
+**Per-phase gate satisfied (0C/0I). Phases 3+4 complete; proceeding to Phase 5 (GUI).**
