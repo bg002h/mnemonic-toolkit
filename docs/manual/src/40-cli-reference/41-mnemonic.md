@@ -2286,8 +2286,9 @@ mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one chunk corrected (`REPAIR_APPLIED`); stdout = repair report + corrected chunks |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`) |
+| `5` | at least one chunk corrected (`REPAIR_APPLIED`), incl. a unique `--max-indel` recovery; stdout = repair report + corrected chunks |
+| `4` | `--max-indel` found multiple equally-valid candidates (ambiguous); all are printed — choose manually |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) |
 | `1` | I/O error or other generic failure |
 
 ### Worked example
@@ -2470,16 +2471,17 @@ the `--json` envelope instead has the shape:
     {
       "recovered": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
       "indel_count": 1,
-      "region": "data",
-      "direction": "delete"
+      "region": "data-part",
+      "direction": "deleted"
     }
   ]
 }
 ```
 
 `status` is `"unique"` (one candidate, exit 5) or `"ambiguous"` (multiple,
-exit 4). `region` is `"data"` or `"prefix"`. `direction` is `"delete"`
-(too-long input) or `"insert"` (too-short input). The indel envelope is NOT
+exit 4). `region` is `"data-part"` or `"prefix"`. `direction` is `"deleted"`
+(removed an added char — too-long input) or `"inserted"` (restored a dropped
+char — too-short input). The indel envelope is NOT
 emitted for the `Unrecoverable` outcome — that surfaces via the normal error
 path (exit 2, no JSON on stdout).
 

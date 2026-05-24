@@ -3227,7 +3227,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 ### `m-format-indel-plus-substitution` — combine indel recovery with substitution correction sharing the t=4 budget
 - **Surfaced:** 2026-05-24, v0.37.1 cycle-close (FOLLOWUP (d)).
-- **Where:** `crates/mnemonic-toolkit/src/indel.rs::recover_deleted` / `recover_inserted` — v0.37.1 accepts a candidate iff its BCH corrections are a **subset of the inserted-placeholder positions** (∅ for delete/prefix). Any residual BCH correction at a non-placeholder position signals a simultaneous substitution and causes the candidate to be rejected.
+- **Where:** `crates/mnemonic-toolkit/src/indel.rs::collect_data_delete` / `collect_data_insert` / `collect_prefix` (candidate producers) + the per-kind `IndelOracle` (`repair.rs::Ms1IndelOracle` / `mk1_chunk_solve`) — v0.37.1 accepts a candidate iff its BCH corrections are a **subset of the inserted-placeholder positions** (∅ for delete/prefix). Any residual BCH correction at a non-placeholder position signals a simultaneous substitution and causes the candidate to be rejected.
 - **What:** allow mixed indel+substitution recovery sharing the t=4 budget: j_indel + e_subst ≤ 4. A 1-indel + 1-substitution simultaneous corruption (j=1, e=1) is plausible (a handwritten card with one transposed character AND one wrong character). The placeholder-subset check would relax from `corrections ⊆ placeholders` to `|corrections \ placeholders| ≤ e_budget`. Cost is bounded (same BCH decode; just a weaker accept gate); the real risk is false-positive rate from the wider accept window. Own R0.
 - **SemVer:** PATCH (behavior extension of existing `--max-indel` flag; no new surface).
 - **Status:** `open`
