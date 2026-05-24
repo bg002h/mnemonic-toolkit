@@ -35,6 +35,17 @@ pub struct SilentPaymentArgs {
     #[arg(long = "secret-stdin")]
     pub secret_stdin: bool,
 
+    /// BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase /
+    /// ms1 / entropy-hex inputs; ignored (with a warning) for an xprv input
+    /// (the xprv IS the master). SECRET — leaks via argv; prefer --passphrase-stdin.
+    #[arg(long)]
+    pub passphrase: Option<String>,
+
+    /// Read the BIP-39 passphrase from stdin (whitespace-preserving; mutually
+    /// exclusive with --passphrase, and with --secret-stdin — one stdin per run).
+    #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
+
     /// Bitcoin network: mainnet → `sp` address + coin-type 0; testnet/signet/
     /// regtest → `tsp` address + coin-type 1.
     #[arg(long, value_enum, default_value_t = CliNetwork::Mainnet)]
@@ -48,6 +59,11 @@ pub struct SilentPaymentArgs {
     /// m=0 is the reserved BIP-352 change label and is refused (never publish it).
     #[arg(long = "label")]
     pub label: Vec<u32>,
+
+    /// Also emit the BIP-352 m=0 CHANGE address. For the wallet's OWN change
+    /// detection ONLY — never hand it out as a receiving address.
+    #[arg(long = "change-address")]
+    pub change_address: bool,
 
     /// Emit JSON instead of the human-readable block.
     #[arg(long)]
@@ -67,6 +83,13 @@ struct SilentPaymentJson {
     address: String, // base (unlabeled)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     labeled: Vec<LabeledAddr>,
+    // BIP-352 m=0 change address (only when --change-address). The warning
+    // sibling is emitted in the same envelope so a JSON consumer can't surface
+    // `change_address` as a receive target.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    change_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    change_address_warning: Option<&'static str>,
     scan_pubkey: String,
     spend_pubkey: String,
     scan_path: String,
@@ -77,19 +100,34 @@ struct SilentPaymentJson {
 
 /// Resolve a seed-bearing secret string → master `Xpriv`. Value-sniff order:
 /// xprv/tprv → ms1 → BIP-39 phrase → entropy-hex → else refuse (covers WIF/minikey).
-/// Empty BIP-39 passphrase in v1 (a `--passphrase` override is a deferred FOLLOWUP).
-fn resolve_master_xpriv(secret: &str, network: CliNetwork) -> Result<Xpriv, ToolkitError> {
+/// `passphrase` is the BIP-39 mnemonic-extension passphrase ("25th word"), applied
+/// to the phrase/ms1/entropy paths; the xprv path is passphrase-independent (the
+/// xprv IS the master) and warns if a passphrase was nonetheless supplied.
+fn resolve_master_xpriv<E: Write>(
+    secret: &str,
+    passphrase: &str,
+    network: CliNetwork,
+    stderr: &mut E,
+) -> Result<Xpriv, ToolkitError> {
     let s = secret.trim();
     let to_master = |entropy: &[u8]| -> Result<Xpriv, ToolkitError> {
         let mnemonic = bip39::Mnemonic::from_entropy_in(bip39::Language::English, entropy)
             .map_err(|e| ToolkitError::SilentPayment(format!("entropy → BIP-39 mnemonic: {e}")))?;
-        let seed = crate::derive_slot::derive_master_seed(&mnemonic, "");
+        let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
         Xpriv::new_master(network.network_kind(), &seed[..])
             .map_err(|e| ToolkitError::SilentPayment(format!("master xpriv: {e}")))
     };
 
     // 1. xprv/tprv master (unambiguous base58check + version prefix).
     if let Ok(xpriv) = Xpriv::from_str(s) {
+        if !passphrase.is_empty() {
+            writeln!(
+                stderr,
+                "warning: --passphrase ignored — an xprv/tprv input is already the master key \
+                 (BIP-39 passphrase applies only to phrase/ms1/entropy inputs)"
+            )
+            .map_err(ToolkitError::Io)?;
+        }
         return Ok(xpriv);
     }
     // 2. ms1 → entropy (unambiguous bech32 `ms` HRP).
@@ -109,7 +147,7 @@ fn resolve_master_xpriv(secret: &str, network: CliNetwork) -> Result<Xpriv, Tool
     if s.split_whitespace().count() >= 2 {
         let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, s)
             .map_err(|e| ToolkitError::SilentPayment(format!("BIP-39 phrase: {e}")))?;
-        let seed = crate::derive_slot::derive_master_seed(&mnemonic, "");
+        let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
         return Xpriv::new_master(network.network_kind(), &seed[..])
             .map_err(|e| ToolkitError::SilentPayment(format!("master xpriv: {e}")));
     }
@@ -141,6 +179,13 @@ pub fn run<R: Read, W: Write, E: Write>(
                 .into(),
         ));
     }
+    // Single stdin per invocation — refuse the two-readers case BEFORE any read.
+    if args.passphrase_stdin && args.secret_stdin {
+        return Err(ToolkitError::SilentPayment(
+            "--passphrase-stdin cannot be combined with --secret-stdin (single stdin per invocation)"
+                .into(),
+        ));
+    }
 
     // Resolve the seed-bearing secret (with argv-leak advisory for inline).
     let secret: Zeroizing<String> = if let Some(s) = &args.secret {
@@ -159,8 +204,20 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
     let _pin = mnemonic_toolkit::mlock::pin_pages_for(secret.as_bytes());
 
+    // Resolve the BIP-39 passphrase. Whitespace is SIGNIFICANT (PBKDF2 salt) —
+    // read via read_stdin_passphrase (NOT .trim()) for the stdin path.
+    let passphrase: Zeroizing<String> = if let Some(p) = &args.passphrase {
+        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+        Zeroizing::new(p.clone())
+    } else if args.passphrase_stdin {
+        Zeroizing::new(crate::cmd::convert::read_stdin_passphrase(stdin)?)
+    } else {
+        Zeroizing::new(String::new())
+    };
+    let _pin_pass = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
+
     let secp = bitcoin::secp256k1::Secp256k1::new();
-    let master = resolve_master_xpriv(&secret, args.network)?;
+    let master = resolve_master_xpriv(&secret, &passphrase, args.network, stderr)?;
     let coin = args.network.coin_type();
     let (b_scan, b_spend) = crate::silent_payment::derive_scan_spend(&secp, &master, coin, args.account)?;
     let b_scan_pub = b_scan.public_key(&secp);
@@ -174,6 +231,19 @@ pub fn run<R: Read, W: Write, E: Write>(
         labeled.push(LabeledAddr { m, address: crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &b_m) });
     }
 
+    // BIP-352 m=0 CHANGE address (opt-in; additive). Internal change-detection
+    // ONLY — must never be handed out as a receiving address.
+    const CHANGE_WARNING: &str =
+        "BIP-352 m=0 change label — internal change detection only; never publish as a receiving address";
+    let change_address: Option<String> = if args.change_address {
+        let b_m0 = crate::silent_payment::labeled_spend_key(&secp, &b_scan, b_spend_pub, 0)?;
+        Some(crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &b_m0))
+    } else {
+        None
+    };
+    let change_address_warning: Option<&'static str> =
+        change_address.as_ref().map(|_| CHANGE_WARNING);
+
     let scan_path = format!("m/352'/{coin}'/{}'/1'/0", args.account);
     let spend_path = format!("m/352'/{coin}'/{}'/0'/0", args.account);
     let scan_priv = hex::encode(b_scan.secret_bytes());
@@ -185,6 +255,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             account: args.account,
             address: base,
             labeled,
+            change_address,
+            change_address_warning,
             scan_pubkey: hex::encode(b_scan_pub.serialize()),
             spend_pubkey: hex::encode(b_spend_pub.serialize()),
             scan_path,
@@ -200,6 +272,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(stdout, "  address:      {base}").map_err(ToolkitError::Io)?;
         for l in &labeled {
             writeln!(stdout, "  label {:<7} {}", l.m, l.address).map_err(ToolkitError::Io)?;
+        }
+        if let Some(ch) = &change_address {
+            writeln!(stdout, "  change_addr:  {ch}   (BIP-352 m=0 CHANGE — internal change detection ONLY; never hand out as a receiving address)").map_err(ToolkitError::Io)?;
         }
         writeln!(stdout, "  scan_pubkey:  {}", hex::encode(b_scan_pub.serialize())).map_err(ToolkitError::Io)?;
         writeln!(stdout, "  spend_pubkey: {}", hex::encode(b_spend_pub.serialize())).map_err(ToolkitError::Io)?;
