@@ -1715,4 +1715,41 @@ mod tests {
             other => panic!("expected Unique, got {other:?}"),
         }
     }
+
+    // ============================================================================
+    // Phase 3 — P1 prefix producer + ambiguity contract
+    // ============================================================================
+
+    /// Drop the 'm' from the "ms1" prefix → "s10entrs…"; data-part intact.
+    /// The prefix producer must restore it (Inserted direction, Prefix region).
+    #[test]
+    fn indel_ms1_prefix_dropped_m_recovers() {
+        let s = VALID_MS1.strip_prefix('m').unwrap().to_string(); // "s10entrs…"
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
+                assert_eq!(c.direction, crate::indel::IndelDirection::Inserted);
+                assert_eq!(c.indel_count, 1);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// Insert a stray char inside the prefix: "ms1…" → "msx1…"; data-part intact.
+    /// The prefix producer must remove the extra char (Deleted direction, Prefix region).
+    #[test]
+    fn indel_ms1_prefix_extra_char_recovers() {
+        let s = format!("msx1{}", &VALID_MS1[3..]); // "msx10entrs…"
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
+                assert_eq!(c.direction, crate::indel::IndelDirection::Deleted);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
 }

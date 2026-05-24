@@ -88,15 +88,45 @@ pub fn recover_indel(
     }
 }
 
-// Phase 3+ fills the body; keep Vec (not slice) so push works without signature churn.
-#[allow(dead_code, clippy::ptr_arg)]
+/// Restore the known `{hrp}1` prefix within exactly `j` edits and validate
+/// the reassembled candidate. For split point `p` in the clamped range
+/// `[(3-j).., (3+j)]`, if `levenshtein(&input[..p], "{hrp}1") == j` (exactly
+/// j — the outer `1..=max_indel` loop assigns the precise `indel_count`),
+/// reconstruct `cand = "{hrp}1" + input[p..]` and validate via the oracle.
+/// `direction` = Inserted if `p < 3` (chars were dropped from prefix) else
+/// Deleted (an extra char was present in the prefix).
 fn collect_prefix(
-    _input: &str,
-    _hrp: &str,
-    _j: usize,
-    _oracle: &dyn IndelOracle,
-    _out: &mut Vec<IndelCandidate>,
+    input: &str,
+    hrp: &str,
+    j: usize,
+    oracle: &dyn IndelOracle,
+    out: &mut Vec<IndelCandidate>,
 ) {
+    let k = format!("{hrp}1"); // known 3-char prefix, e.g. "ms1"
+    let chars: Vec<char> = input.chars().collect();
+    let lo = 3usize.saturating_sub(j);
+    let hi = (3 + j).min(chars.len());
+    for p in lo..=hi {
+        let head: String = chars[..p].iter().collect();
+        if levenshtein(&head, &k) != j {
+            continue; // exactly j edits in the prefix region
+        }
+        let tail: String = chars[p..].iter().collect();
+        let cand = format!("{k}{tail}");
+        if let Some(rec) = oracle.validate(&cand, &BTreeSet::new()) {
+            let direction = if p < 3 {
+                IndelDirection::Inserted
+            } else {
+                IndelDirection::Deleted
+            };
+            out.push(IndelCandidate {
+                recovered: rec,
+                indel_count: j,
+                region: IndelRegion::Prefix,
+                direction,
+            });
+        }
+    }
 }
 
 /// All k-element subsets of indices [0, n), each a sorted Vec<usize> (lexicographic).
@@ -220,8 +250,7 @@ fn data_part_bounds(input: &str, hrp: &str) -> Option<usize> {
 }
 
 /// Standard DP edit distance (small inputs — prefix region ≤ ~7 chars).
-// used from Phase 3+
-#[allow(dead_code, clippy::needless_range_loop)]
+#[allow(clippy::needless_range_loop)]
 fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -263,6 +292,48 @@ mod tests {
         assert_eq!(
             recover_indel("ms1qqqq", "ms", 0, &NoOracle),
             IndelOutcome::Unrecoverable
+        );
+    }
+
+    /// R0 I2 load-bearing dedup test: P1 and P2 can recover the SAME string
+    /// with different region/direction. dedup_by_recovered must collapse them
+    /// (keyed on `recovered` only), NOT the derived PartialEq (which would
+    /// leave both → false Ambiguous).
+    #[test]
+    fn dedup_collapses_same_recovered_with_differing_metadata() {
+        let mut hits = vec![
+            IndelCandidate {
+                recovered: "ms1xyz".into(),
+                indel_count: 1,
+                region: IndelRegion::Prefix,
+                direction: IndelDirection::Inserted,
+            },
+            IndelCandidate {
+                recovered: "ms1xyz".into(),
+                indel_count: 1,
+                region: IndelRegion::DataPart,
+                direction: IndelDirection::Deleted,
+            },
+        ];
+        dedup_by_recovered(&mut hits);
+        assert_eq!(hits.len(), 1);
+    }
+
+    /// Ambiguity contract: a mock oracle that accepts every candidate (recovered
+    /// = the candidate string itself) produces ≥2 DISTINCT recovered strings
+    /// from a typical input → Ambiguous.
+    #[test]
+    fn recover_indel_reports_ambiguous_on_multiple_distinct_recovered() {
+        struct AcceptAll;
+        impl IndelOracle for AcceptAll {
+            fn validate(&self, candidate: &str, _allowed: &BTreeSet<usize>) -> Option<String> {
+                Some(candidate.to_string())
+            }
+        }
+        let outcome = recover_indel("ms1qpzr", "ms", 1, &AcceptAll);
+        assert!(
+            matches!(outcome, IndelOutcome::Ambiguous(ref v) if v.len() >= 2),
+            "got {outcome:?}"
         );
     }
 }
