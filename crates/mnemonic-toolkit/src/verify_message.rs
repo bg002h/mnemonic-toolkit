@@ -58,8 +58,29 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
 }
 
 /// BIP-322 *simple* verify — P2WPKH / P2SH-P2WPKH / P2TR (crate refuses P2PKH).
-fn verify_bip322(address: &str, message: &str, signature: &str) -> bool {
-    bip322::verify_simple_encoded(address.trim(), message, signature).is_ok()
+///
+/// The pinned `bip322 0.0.10` crate can **panic** on adversarial input — e.g. a
+/// P2SH address whose witness carries a valid *uncompressed* pubkey reaches
+/// `wpubkey_hash().unwrap()` (`bip322/src/verify.rs:168`). We take untrusted
+/// public input, so we isolate any panic with `catch_unwind` and surface it as a
+/// clean error instead of crashing (exit 101). The default panic hook is
+/// silenced only around the call so the crate's internal panic text does not
+/// leak to stderr; the hook is restored immediately after. (In the CLI this runs
+/// single-threaded; the catch is also exercised by a unit regression test.)
+fn verify_bip322(address: &str, message: &str, signature: &str) -> Result<bool, ToolkitError> {
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        bip322::verify_simple_encoded(address.trim(), message, signature).is_ok()
+    }));
+    std::panic::set_hook(prev_hook);
+    outcome.map_err(|_| {
+        ToolkitError::VerifyMessage(
+            "BIP-322 verification could not be performed for this address/signature \
+             (malformed or unsupported witness)"
+                .into(),
+        )
+    })
 }
 
 pub(crate) fn verify_message(
@@ -75,7 +96,7 @@ pub(crate) fn verify_message(
             format_matched: "legacy",
         }),
         SigFormat::Bip322 => Ok(VerifyOutcome {
-            valid: verify_bip322(address, message, signature),
+            valid: verify_bip322(address, message, signature)?,
             format_matched: "bip322",
         }),
         SigFormat::Auto if is_p2pkh => Ok(VerifyOutcome {
@@ -83,7 +104,7 @@ pub(crate) fn verify_message(
             format_matched: "legacy",
         }),
         SigFormat::Auto => Ok(VerifyOutcome {
-            valid: verify_bip322(address, message, signature),
+            valid: verify_bip322(address, message, signature)?,
             format_matched: "bip322",
         }),
     }
@@ -177,5 +198,55 @@ mod tests {
     #[test]
     fn malformed_address_errors() {
         assert!(verify_message("not-an-address", "m", "AAAA", SigFormat::Auto).is_err());
+    }
+
+    // C1 regression: the pinned bip322 0.0.10 crate panics (wpubkey_hash().unwrap())
+    // on a P2SH address whose BIP-322 witness carries a 65-byte UNCOMPRESSED pubkey.
+    // The toolkit takes untrusted public input, so this MUST be a clean error/false,
+    // never a process crash. We craft a 2-item witness [dummy-sig, uncompressed-key].
+    fn craft_uncompressed_p2sh_sig() -> String {
+        use base64::Engine;
+        use bitcoin::consensus::encode::serialize;
+        use bitcoin::secp256k1::{Message as SecpMsg, SecretKey};
+        use bitcoin::Witness;
+        let secp = Secp256k1::new();
+        let sk = SecretKey::from_slice(&[0x22u8; 32]).unwrap();
+        // A VALID uncompressed pubkey (real curve point) — passes
+        // PublicKey::from_slice + the pubkey-equality guard, but wpubkey_hash()
+        // errors on uncompressed → the crate's `.unwrap()` panics.
+        let uncompressed = sk.public_key(&secp).serialize_uncompressed().to_vec();
+        // A structurally-valid DER signature of total length 71 or 72 (so it
+        // passes the crate's length + from_der + SIGHASH_ALL gates and REACHES
+        // the panic at verify.rs:168). Grind the digest for the right length.
+        let mut der_plus_sighash = Vec::new();
+        for n in 0u32.. {
+            let digest = bitcoin::hashes::sha256::Hash::hash(&n.to_le_bytes());
+            use bitcoin::hashes::Hash as _;
+            let sig = secp.sign_ecdsa(&SecpMsg::from_digest(digest.to_byte_array()), &sk);
+            let mut der = sig.serialize_der().to_vec();
+            der.push(0x01); // SIGHASH_ALL
+            if matches!(der.len(), 71 | 72) {
+                der_plus_sighash = der;
+                break;
+            }
+        }
+        let mut w = Witness::new();
+        w.push(der_plus_sighash);
+        w.push(uncompressed);
+        base64::engine::general_purpose::STANDARD.encode(serialize(&w))
+    }
+
+    #[test]
+    fn p2sh_uncompressed_pubkey_does_not_panic() {
+        // P2SH (non-segwit) mainnet address; the address layer can't see the
+        // redeem script, so it routes to bip322 under auto/bip322.
+        let addr = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+        let sig = craft_uncompressed_p2sh_sig();
+        // Must return (Err or Ok(valid=false)) — reaching this assert at all
+        // proves no panic unwound out of the crate.
+        let r = verify_message(addr, "hello", &sig, SigFormat::Bip322);
+        assert!(r.is_err() || !r.unwrap().valid);
+        let r2 = verify_message(addr, "hello", &sig, SigFormat::Auto);
+        assert!(r2.is_err() || !r2.unwrap().valid);
     }
 }
