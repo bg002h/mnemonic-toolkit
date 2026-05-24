@@ -61,3 +61,16 @@ VERDICT: RED (0C/1I)
 - **M-A:** export-wallet `--slot` anchor = prefer the runtime token (`validate_watch_only` call-site, verify it's in `cmd/export_wallet.rs` at impl; else `wallet_export/mod.rs` "watch-only by definition") over the doc-comment tokens.
 - **M-B:** drop the trailing "…" — `--from` set is exactly the 7 listed.
 Re-dispatch R2.
+
+---
+
+## R2 (round 2) — VERDICT: RED (0C/2I)
+Reviewer agentId a70cde428f158b63e. I-A/M-A/M-B VERIFIED landed (import-wallet --slot @env: anchors present @import_wallet.rs:1297-1317; export-wallet `validate_watch_only` @export_wallet.rs:13,256,334; --from closed set of 7). Two NEW Important, one root cause:
+- **I-1:** flattened nested-subcommand `source_file` mis-resolution — gui-schema emits `xpub-search-path-of-xpub` etc. (`gui_schema.rs:1002` hyphen-flatten); files are `src/cmd/xpub_search/<mode>.rs` + `seed_intake.rs`, NOT `src/cmd/xpub-search-path-of-xpub.rs`. Also `seedqr-decode`→`src/cmd/seedqr.rs`. Generic `<subcommand>.rs` rule → missing-file panic.
+- **I-2:** inspect/repair `--ms1` stdin route is in SHARED `src/repair.rs` (`value == "-"` @:145, `resolve_groups`/`expand_dashes` @:223/:251), NOT `cmd/inspect.rs`/`cmd/repair.rs` (which carry only the doc-phrase) → no anchor in the named file.
+- **M-1 (root cause):** plan never commits a per-route `source_file` table for the 16 backfilled routes; the generic rule is wrong for flattened subcommands + shared-library routes.
+
+VERDICT: RED (0C/2I)
+
+## Fold disposition (controller) — R2 → R3
+Folded M-1 (closes I-1+I-2): Phase-1 Step-4 now carries an EXPLICIT per-route `source_file` requirement + a verified non-obvious-mappings table (xpub-search×3 → `xpub_search/seed_intake.rs` for --ms1 + `<mode>.rs` for --passphrase; seedqr-decode → `seedqr.rs`; inspect/repair --ms1 → `src/repair.rs`; seed-xor/slip39 → their cmd files; rest → own `cmd/<name>.rs`). Phase-2 --from notes seedqr-decode/-encode → `seedqr.rs`. Re-dispatch R3.
