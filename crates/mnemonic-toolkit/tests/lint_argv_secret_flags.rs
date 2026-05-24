@@ -27,6 +27,14 @@
 //!     subcommand accepts — so no per-node enumeration is needed, R0 I1).
 //!  3. `--slot` axis — subcommands declaring `--slot`.
 //!
+//! Boundary (v0.36.2 end-of-cycle M1): axis-1 completeness is TRANSITIVE on
+//! `secrets::flag_is_secret` (gui-schema's `secret` bit = `flag_is_secret(name)`).
+//! A future secret VALUE flag added with a name absent from `flag_is_secret` AND
+//! not routed via `--from`/`--slot` would escape this closure — but it would also
+//! escape the runtime advisory / zeroize / GUI-mask (a far more visible defect),
+//! so `flag_is_secret` is the authoritative source this gate is anchored to, by
+//! design. There is no separate gate over `flag_is_secret` completeness itself.
+//!
 //! `source_file` is EXPLICIT per route (R2 M-1): gui-schema FLATTENS nested
 //! subcommands (`xpub-search-path-of-xpub`, `seedqr-decode`) and some stdin
 //! routes live in SHARED modules (`src/repair.rs`), so it is NOT derivable from
