@@ -1,12 +1,14 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Twelve subcommands:
+The integration-layer CLI for the m-format constellation. Fourteen subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`import-wallet`](#mnemonic-import-wallet),
 [`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
 [`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39),
-[`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment), and
+[`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment),
+[`decode-address`](#mnemonic-decode-address),
+[`verify-message`](#mnemonic-verify-message), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
 semantics). Run any with `--help` for the latest flag set; this chapter
 mirrors v0.13.0.
@@ -2087,6 +2089,69 @@ The address(es) and the scan/spend **public** keys are publishable — hand the 
 ### Scope
 
 This derives the **receiver** address only. **Sender** output construction (which needs the sender's input private keys + ECDH) and **chain scanning** (which needs blockchain data) are out of scope — `mnemonic` has no transaction inputs, no chain access, and does not sign.
+
+---
+
+## `mnemonic decode-address` {#mnemonic-decode-address}
+
+Decode a Bitcoin address string into its facts: the network(s) it is valid for, script type, witness version, and scriptPubKey. Public-data utility — no secrets, no key material; the inverse of `convert --to address`.
+
+```text
+mnemonic decode-address <ADDRESS> [--json]
+```
+
+The address layer cannot disambiguate testnet / testnet4 / signet (shared `tb1` and base58 prefixes), so `networks` reports the full set the address is valid for; `regtest` (`bcrt1`) is distinct.
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `<ADDRESS>` | the address to decode (positional); P2PKH / P2SH / P2WPKH / P2WSH / P2TR, any network |
+| `--json` | emit a JSON envelope instead of the human-readable block |
+| `--help` | print help |
+
+### Output
+
+`networks` (the valid-for set), `script_type` (`p2pkh`/`p2sh`/`p2wpkh`/`p2wsh`/`p2tr`), `witness_version` (segwit only; absent for legacy), and `script_pubkey` (hex). An unparseable address exits non-zero.
+
+---
+
+## `mnemonic verify-message` {#mnemonic-verify-message}
+
+**Verify** a Bitcoin message signature (verification only — `mnemonic` never signs). Two formats are supported and partition cleanly by address type:
+
+- **legacy** "Bitcoin Signed Message" (the `signmessage`/`verifymessage` format) — **P2PKH only**.
+- **[BIP-322](https://github.com/bitcoin/bips/blob/master/bip-0322.mediawiki) simple** — **P2WPKH / P2SH-P2WPKH / P2TR**.
+
+```text
+mnemonic verify-message --address <ADDR> --message <MSG> --signature <B64> [--format <auto|legacy|bip322>]
+mnemonic verify-message --address <ADDR> --message-stdin --signature <B64>
+```
+
+With `--format auto` (default) the format is chosen by address type: P2PKH → legacy, segwit/taproot → BIP-322. `--format legacy` on a non-P2PKH address is refused (legacy verification is P2PKH-only).
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--address <ADDR>` | the address the message was signed by |
+| `--message <MSG>` | the signed message, inline (exact bytes) |
+| `--message-file <PATH>` | read the message from a file (a single trailing newline is stripped) |
+| `--message-stdin` | read the message from stdin (a single trailing newline is stripped) |
+| `--signature <B64>` | the signature (base64): a 65-byte recoverable sig (legacy) or a BIP-322 witness encoding |
+| `--format <auto\|legacy\|bip322>` | signature format (default `auto` — legacy for P2PKH, BIP-322 otherwise) |
+| `--json` | emit a JSON envelope instead of the human-readable line |
+| `--help` | print help |
+
+Exactly one of `--message` / `--message-file` / `--message-stdin` is required.
+
+### Exit codes
+
+A **valid** signature exits 0. A cleanly-decoded signature that simply does **not** verify exits 1 with the structured `valid: false` result on stdout (no error on stderr). Malformed input — a bad address, an undecodable signature, or `--format legacy` on a non-P2PKH address — exits 1 with an error on stderr.
+
+### Scope
+
+Verification only. Signing is out of scope. Taproot **script-path** and arbitrary-script (BIP-322 *full*) signatures are not yet covered (BIP-322 *simple* only).
 
 ---
 
