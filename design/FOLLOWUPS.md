@@ -3147,6 +3147,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Surfaced:** 2026-05-24, v0.36.1 end-of-cycle review.
 - **Where:** `crates/mnemonic-toolkit/tests/lint_argv_secret_flags.rs` (`CANONICAL_FLAG_ROWS` + `assert_eq!(CANONICAL_FLAG_ROWS.len(), 28)`).
 - **What:** the hand-curated `CANONICAL_FLAG_ROWS` table (self-described as "the canonical enumeration of secret-bearing argv flag-rows") froze at v0.13.0 and now omits every post-v0.13.0 secret-bearing argv flag: `nostr --secret` (v0.34.0), `silent-payment --secret` (v0.35.0), and `silent-payment --passphrase`/`--passphrase-stdin` (v0.36.1). It fails no test (curated list + hardcoded count + per-row evidence, with NO closure deriving rows from clap), so the decay is silent. The security-load-bearing projections (`secrets::flag_is_secret` + runtime `secret_in_argv_warning`) ARE correct + complete; this is the AUDIT table only. Fix: either rebuild `CANONICAL_FLAG_ROWS` from the clap surface (closure — fails when a new secret argv flag is unlisted) or backfill all missing post-v0.13.0 rows + bump the count. Prefer the closure (leading gate, not a lagging checklist).
+- **Status:** `resolved` (v0.36.2)
+- **Tier:** `v0.36+`
+- **Tags:** none
+
+### `import-wallet-ms1-argv-advisory-gap` — `import-wallet --ms1` fires no secret-in-argv advisory
+- **Surfaced:** 2026-05-24, v0.36.2 R0 (I3 NOTE).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/import_wallet.rs` (`--ms1` intake).
+- **What:** `import-wallet --ms1` is secret-bearing argv but fires NO `secret_in_argv_warning` (unlike most secret-argv flags). Its non-argv channel is the `@env:VAR` sentinel only — so NOT a missing-route leak (the v0.36.2 closure anchors it on `@env:`), but the runtime argv-leak ADVISORY is absent for consistency with sibling secret flags. Add a `secret_in_argv_warning(stderr, "--ms1", "@env:VAR / --ms1-stdin")`-style advisory. Pre-existing; out of scope for the v0.36.2 test-only cycle.
 - **Status:** `open`
 - **Tier:** `v0.36+`
 - **Tags:** none

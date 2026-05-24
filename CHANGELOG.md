@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.36.2] — 2026-05-24
+
+**SemVer-PATCH — test/lint hardening (no CLI surface change).** Rebuilds the argv-leakage audit (`tests/lint_argv_secret_flags.rs`) from a hand-frozen 28-row `CANONICAL_FLAG_ROWS` (frozen at v0.13.0; silently omitted 16 post-v0.13.0 secret-argv routes — nostr/silent-payment/electrum-decrypt/import-wallet/inspect/repair/verify-bundle/xpub-search/seedqr) into a **clap-derived 3-axis closure**: flag-NAME routes from `mnemonic gui-schema` (`secret && !boolean`), `--from` subcommands, and `--slot` subcommands, each **set-equal-checked against the live surface** (a new OR removed secret-argv route now fails the gate — a leading indicator, not a lagging hand-checklist) plus a per-route non-argv-channel evidence anchor (`*-stdin` / `=-` / `@env:` / refusal) with explicit `source_file` mapping. Audit-only: the enforced secret projections (`flag_is_secret` + `secret_in_argv_warning`) were already correct + complete (R0 exhaustively verified no real leak). Closes `lint-argv-secret-flags-canonical-table-rebuild-from-clap`; files `import-wallet-ms1-argv-advisory-gap`. Plan opus R0 (RED 3I→1I→2I→GREEN over 4 rounds) + end-of-cycle GREEN.
+
 ## mnemonic-toolkit [0.36.1] — 2026-05-24
 
 **SemVer-PATCH — two additive flags on `mnemonic silent-payment`.**
