@@ -111,9 +111,12 @@ fn export_wallet_from_import_json_to_template_only_format_refuses_with_helpful_m
             .assert()
             .failure();
         let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+        // v0.37.0: `envelope_v0_27_0.json` is sh(multi(...)) → P2shMulti, which
+        // has no export-wallet template, so the auto-derive refuses with the
+        // new legacy-P2SH message (NOT the old "requires --template").
         assert!(
-            stderr.contains("requires --template") || stderr.contains("descriptor passthrough is not supported"),
-            "format {fmt} must refuse descriptor-mode with the existing emitter-contract message; got: {stderr}"
+            stderr.contains("legacy bare P2SH") || stderr.contains("has no export-wallet template"),
+            "format {fmt} must refuse the sh(multi) envelope with the P2shMulti template-derivation message; got: {stderr}"
         );
     }
 }
@@ -532,6 +535,86 @@ fn run_export_from_import_envelope(
     }
 }
 
+/// As `run_export_from_import_envelope`, but threads an explicit
+/// `--wallet-name` into the export step (v0.37 §5.3 — the from-import-json
+/// path defaults the name to `imported-descriptor`, so a matched name is
+/// required for any name-sensitive round-trip comparison).
+fn run_export_from_import_envelope_named(
+    source_fixture: &Path,
+    source_format: &str,
+    dest_format: &str,
+    wallet_name: &str,
+) -> ExportResult {
+    let import = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", source_fixture.to_str().unwrap(),
+            "--format", source_format, "--json",
+        ])
+        .output()
+        .expect("import-wallet failed to spawn");
+    let envelope_json = String::from_utf8(import.stdout).expect("envelope stdout non-utf8");
+    let export = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet", "--from-import-json", "-",
+            "--format", dest_format, "--wallet-name", wallet_name,
+        ])
+        .write_stdin(envelope_json.clone())
+        .output()
+        .expect("export-wallet failed to spawn");
+    ExportResult {
+        stdout: String::from_utf8_lossy(&export.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&export.stderr).into_owned(),
+        exit_code: export.status.code().unwrap_or(-1),
+        envelope_json,
+    }
+}
+
+/// v0.37.0 — the newly-unblocked re-emit pairs SUCCEED and produce output
+/// carrying the expected descriptor/script-type. (SPEC §5.2.) These are the
+/// recipes that chapter-45 documents and that were impossible pre-v0.37.
+#[test]
+fn p11d_template_autoderive_success_cells() {
+    // (source, dest, expected substring in stdout)
+    let cases: &[(&str, &str, &str)] = &[
+        // singlesig (bip84) re-emits
+        ("bitcoin-core", "sparrow", "wpkh"),
+        ("bitcoin-core", "electrum", "\"wallet_type\": \"standard\""),
+        ("electrum", "coldcard", "p2wpkh"),
+        // multisig (wsh-sortedmulti) re-emits
+        ("sparrow", "coldcard-multisig", "Format: P2WSH"),
+        ("jade", "jade", "Format: P2WSH"),
+        ("specter", "sparrow", "wsh"),
+    ];
+    let mut failures: Vec<String> = Vec::new();
+    for (src, dest, needle) in cases {
+        let fixture = fixture_path(happy_path_fixture(src));
+        let res = run_export_from_import_envelope_named(&fixture, src, dest, "roundtrip-test");
+        if res.exit_code != 0 {
+            failures.push(format!("[{src} → {dest}] expected success, exit={}; stderr={}", res.exit_code, res.stderr));
+        } else if !res.stdout.contains(needle) {
+            failures.push(format!("[{src} → {dest}] stdout missing expected `{needle}`; got: {}", res.stdout));
+        }
+    }
+    assert!(failures.is_empty(), "P11D success-cell failures: {failures:#?}");
+}
+
+/// v0.37.0 regression guard — the descriptor-passthrough/template-agnostic
+/// formats keep `template: None`, so the auto-derive does NOT change their
+/// behavior. `format_requires_template` partition is the source of this
+/// guarantee; assert these formats still re-emit successfully from a
+/// singlesig envelope unchanged. (SPEC §5.5.)
+#[test]
+fn p11e_passthrough_formats_unaffected_by_autoderive() {
+    let fixture = fixture_path(happy_path_fixture("bitcoin-core"));
+    for dest in ["bitcoin-core", "bip388", "bsms"] {
+        let res = run_export_from_import_envelope(&fixture, "bitcoin-core", dest);
+        assert_eq!(res.exit_code, 0, "[bitcoin-core → {dest}] passthrough must still succeed; stderr={}", res.stderr);
+        assert!(!res.stdout.is_empty(), "[bitcoin-core → {dest}] non-empty output expected");
+    }
+}
+
 /// Per-source canonical happy-path fixture map. Each entry maps a
 /// `--format <source>` enum value to the canonical fixture file that
 /// parses cleanly + produces a descriptor-mode envelope.
@@ -571,6 +654,11 @@ const ALL_SOURCES: &[&str] = &[
     "specter",
 ];
 
+/// Sources whose happy-path fixture is a singlesig wallet (→ bip84 under
+/// v0.37 template auto-derive). The other 5 sources are wsh(sortedmulti)
+/// multisig (→ wsh-sortedmulti).
+const SINGLESIG_SOURCES: &[&str] = &["bitcoin-core", "coldcard", "electrum"];
+
 /// Descriptor-capable destinations — accept any descriptor-mode
 /// envelope without `--template`. Verified at `wallet_export/*.rs`:
 /// bitcoin-core (always), bip388 (always), bsms (refuses ONLY when
@@ -609,8 +697,11 @@ fn p11a_helper_returns_zero_exit_on_happy_path_descriptor_capable_dest() {
 
 #[test]
 fn p11a_helper_returns_nonzero_exit_on_template_only_dest_refusal() {
-    let p = fixture_path(happy_path_fixture("bsms"));
-    let res = run_export_from_import_envelope(&p, "bsms", "sparrow");
+    // v0.37.0: bsms → sparrow now SUCCEEDS (auto-derived wsh-sortedmulti).
+    // Use a cell that still genuinely refuses: singlesig source →
+    // coldcard-multisig (multisig-only file-import surface).
+    let p = fixture_path(happy_path_fixture("bitcoin-core"));
+    let res = run_export_from_import_envelope(&p, "bitcoin-core", "coldcard-multisig");
     assert_ne!(res.exit_code, 0, "expected refusal exit on template-only dest");
     assert!(res.stdout.is_empty(), "no stdout on refusal");
     assert!(!res.stderr.is_empty(), "refusal must surface a stderr message");
@@ -819,6 +910,9 @@ const REFUSAL_STDERR_PATTERNS: &[&str] = &[
     "does not support multisig",
     // Specter wallet-name path (descriptor mode with no wallet_name).
     "--wallet-name",
+    // v0.37.0: jade singlesig refusal (template IS set on the from-import-json
+    // path, so it bypasses the old "requires --template" message).
+    "emits multisig wallet config only",
 ];
 
 fn assert_refusal(res: &ExportResult, src: &str, dest: &str) {
@@ -837,40 +931,51 @@ fn assert_refusal(res: &ExportResult, src: &str, dest: &str) {
     );
 }
 
+/// v0.37.0 — `--from-import-json` now auto-derives the `--template` from the
+/// envelope descriptor for template-requiring formats, so the 40-cell matrix
+/// is no longer all-refusals. Each cell must match the equivalent direct
+/// `--template <derived>` invocation (SPEC §0 invariant). The 6 cells that
+/// still refuse are the 3 singlesig sources → {coldcard-multisig, jade}
+/// (multisig-only file-import surfaces); the other 34 succeed.
 #[test]
-fn p11c_refusal_matrix_strict_template_only_dests() {
+fn p11c_template_only_dest_matrix_post_autoderive() {
     let mut cell_count = 0;
     let mut failures: Vec<String> = Vec::new();
     for src in ALL_SOURCES {
+        let is_singlesig = SINGLESIG_SOURCES.contains(src);
         let fixture = fixture_path(happy_path_fixture(src));
         for dest in TEMPLATE_ONLY_DESTS {
             cell_count += 1;
+            // Singlesig → {coldcard-multisig, jade} refuses (multisig-only).
+            let expected_refuse =
+                is_singlesig && (*dest == "coldcard-multisig" || *dest == "jade");
             let res = run_export_from_import_envelope(&fixture, src, dest);
-            if res.exit_code == 0 {
+            if expected_refuse {
+                if res.exit_code == 0 {
+                    failures.push(format!(
+                        "[{src} → {dest}] expected refusal but exit=0; stdout={}",
+                        res.stdout
+                    ));
+                } else if !REFUSAL_STDERR_PATTERNS.iter().any(|p| res.stderr.contains(p)) {
+                    failures.push(format!(
+                        "[{src} → {dest}] refusal stderr unmatched; got: {}",
+                        res.stderr
+                    ));
+                }
+            } else if res.exit_code != 0 {
                 failures.push(format!(
-                    "[{src} → {dest}] expected refusal but exit=0; stdout={}",
-                    res.stdout
-                ));
-                continue;
-            }
-            if !REFUSAL_STDERR_PATTERNS
-                .iter()
-                .any(|p| res.stderr.contains(p))
-            {
-                failures.push(format!(
-                    "[{src} → {dest}] refusal stderr did not match any expected \
-                     pattern; got: {}",
-                    res.stderr
+                    "[{src} → {dest}] expected success but exit={}; stderr={}",
+                    res.exit_code, res.stderr
                 ));
             }
         }
     }
     assert!(
         failures.is_empty(),
-        "P11C strict-template-only refusal failures ({}/{cell_count}): {failures:#?}",
+        "P11C post-auto-derive matrix failures ({}/{cell_count}): {failures:#?}",
         failures.len()
     );
-    assert_eq!(cell_count, 40, "P11C strict matrix = 8×5 = 40 cells");
+    assert_eq!(cell_count, 40, "P11C matrix = 8×5 = 40 cells");
 }
 
 #[test]
@@ -891,9 +996,8 @@ fn p11c_refusal_matrix_specter_no_wallet_name() {
 #[test]
 fn p11c_green_descriptor_passthrough_singlesig_passes_multisig_refused() {
     // Per `happy_path_fixture`: bitcoin-core / coldcard / electrum are
-    // singlesig (bip84); bsms / coldcard-multisig / jade / sparrow /
-    // specter are multisig (sortedmulti 2of3 or analogous).
-    const SINGLESIG_SOURCES: &[&str] = &["bitcoin-core", "coldcard", "electrum"];
+    // singlesig (bip84) — see module-level `SINGLESIG_SOURCES`; bsms /
+    // coldcard-multisig / jade / sparrow / specter are multisig.
     const MULTISIG_SOURCES: &[&str] = &[
         "bsms", "coldcard-multisig", "jade", "sparrow", "specter",
     ];

@@ -42,6 +42,20 @@ pub enum CliExportFormat {
     Bsms,
 }
 
+/// SPEC v0.37 §2.3 — formats whose file-import surface refuses a bare
+/// descriptor and requires a `--template`. On the `--from-import-json` path
+/// these receive a template derived from the envelope descriptor; all other
+/// formats (descriptor-passthrough / template-agnostic) keep `template: None`
+/// (regression guard: bip388/sparrow branch on `template.is_some()`).
+/// Exhaustive (no `_` arm) so a new `CliExportFormat` variant forces a decision.
+fn format_requires_template(f: CliExportFormat) -> bool {
+    use CliExportFormat::*;
+    match f {
+        Sparrow | Coldcard | ColdcardMultisig | Jade | Electrum => true,
+        BitcoinCore | Bip388 | Bsms | Green | Specter => false,
+    }
+}
+
 #[derive(Args, Debug)]
 pub struct ExportWalletArgs {
     /// Pre-built template name. Mutually-required-one-of with --descriptor.
@@ -658,17 +672,30 @@ fn run_from_import_json<W: Write, E: Write>(
     // Threshold from envelope's bundle.multisig.threshold (None for N=1).
     let threshold = envelope.bundle.multisig.as_ref().map(|m| m.threshold);
 
+    // SPEC v0.37 §2.3 — derive the template from the envelope descriptor for
+    // template-requiring formats (sparrow/coldcard/jade/electrum) so they can
+    // re-emit; passthrough formats keep None (bip388/sparrow branch on
+    // template.is_some()). Taproot is already refused above (§2.4), so the
+    // derivation never sees Tr.
+    let derived_template: Option<CliTemplate> = if format_requires_template(args.format) {
+        Some(crate::wallet_export::template_from_descriptor(&parsed_ms)?)
+    } else {
+        None
+    };
+
     let inputs = EmitInputs {
         canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical_descriptor)?,
         resolved_slots: &resolved_slots,
-        // template is always None for descriptor-mode (envelope is
-        // always descriptor-mode per §3.2.1).
-        template: None,
+        // v0.37: auto-derived for template-requiring formats; None for
+        // descriptor-passthrough formats (preserves their passthrough path).
+        template: derived_template,
         script_type,
         network,
         account: envelope.bundle.account,
         threshold,
-        threshold_user_supplied: false, // envelope-derived, not user-supplied
+        // envelope's bundle.multisig.threshold is authoritative when present;
+        // mirrors the direct path's `threshold_user_supplied: args.threshold.is_some()`.
+        threshold_user_supplied: threshold.is_some(),
         wallet_name: &wallet_name_resolved,
         wallet_name_was_user_supplied: args.wallet_name.is_some(),
         // taproot internal key: v0.27.0 wallet-import path doesn't surface
