@@ -62,5 +62,6 @@ sibling. The retired path-dictionary mirror (md-codec v0.11) was
 the last invariant of this kind to close in lockstep across mk1.
 
 For the in-progress and shipped milestones across the four repos,
-see each repo's `CHANGELOG.md` directly; the manual is a snapshot
-as of v0.1's tag.
+see each repo's `CHANGELOG.md` directly — the authoritative,
+continuously-updated release record. This manual tracks the current
+release; the CLI reference mirrors the live `--help` surface.

@@ -1,17 +1,21 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Fourteen subcommands:
+The integration-layer CLI for the m-format constellation. Twenty subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
 [`import-wallet`](#mnemonic-import-wallet),
-[`derive-child`](#mnemonic-derive-child), [`final-word`](#mnemonic-final-word),
-[`seed-xor`](#mnemonic-seed-xor), [`slip39`](#mnemonic-slip39),
+[`derive-child`](#mnemonic-derive-child),
+[`electrum-decrypt`](#mnemonic-electrum-decrypt),
+[`final-word`](#mnemonic-final-word), [`seed-xor`](#mnemonic-seed-xor),
+[`seedqr`](#mnemonic-seedqr), [`slip39`](#mnemonic-slip39),
 [`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment),
 [`decode-address`](#mnemonic-decode-address),
-[`verify-message`](#mnemonic-verify-message), and
+[`verify-message`](#mnemonic-verify-message), [`repair`](#mnemonic-repair),
+[`inspect`](#mnemonic-inspect), [`compare-cost`](#mnemonic-compare-cost),
+[`xpub-search`](#mnemonic-xpub-search), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
-semantics). Run any with `--help` for the latest flag set; this chapter
-mirrors v0.13.0.
+semantics). Run any with `--help` for the authoritative flag set; this
+reference tracks the current release.
 
 ---
 
@@ -2550,7 +2554,7 @@ the full per-error taxonomy.
 |---|---|
 | Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: secret material on stdout — consider redirecting ...` |
 
-## `mnemonic xpub-search` (v0.26.0)
+## `mnemonic xpub-search` (v0.26.0) {#mnemonic-xpub-search}
 
 Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — given a seed (or xpub), find which derivation produces a target xpub / descriptor / address / passphrase. v0.26.0 ships four modes:
 
