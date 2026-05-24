@@ -90,7 +90,7 @@ pub fn recover_indel(
     }
 }
 
-// Phase 1+ fills the body; keep Vec (not slice) so push works without signature churn.
+// Phase 3+ fills the body; keep Vec (not slice) so push works without signature churn.
 #[allow(dead_code, clippy::ptr_arg)]
 fn collect_prefix(
     _input: &str,
@@ -101,15 +101,68 @@ fn collect_prefix(
 ) {
 }
 
-// Phase 1+ fills the body; keep Vec (not slice) so push works without signature churn.
-#[allow(dead_code, clippy::ptr_arg)]
+/// All k-element subsets of indices [0, n), each a sorted Vec<usize> (lexicographic).
+pub(crate) fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    if k == 0 {
+        out.push(Vec::new());
+        return out;
+    }
+    if k > n {
+        return out;
+    }
+    let mut idx: Vec<usize> = (0..k).collect();
+    loop {
+        out.push(idx.clone());
+        let mut i = k;
+        loop {
+            if i == 0 {
+                return out;
+            }
+            i -= 1;
+            if idx[i] != i + n - k {
+                break;
+            }
+        }
+        idx[i] += 1;
+        for j in (i + 1)..k {
+            idx[j] = idx[j - 1] + 1;
+        }
+    }
+}
+
 fn collect_data_delete(
-    _input: &str,
-    _hrp: &str,
-    _j: usize,
-    _oracle: &dyn IndelOracle,
-    _out: &mut Vec<IndelCandidate>,
+    input: &str,
+    hrp: &str,
+    j: usize,
+    oracle: &dyn IndelOracle,
+    out: &mut Vec<IndelCandidate>,
 ) {
+    let Some(dstart) = data_part_bounds(input, hrp) else {
+        return;
+    };
+    let data: Vec<char> = input[dstart..].chars().collect();
+    if data.len() <= j {
+        return;
+    }
+    let allowed = BTreeSet::new();
+    for combo in combinations(data.len(), j) {
+        let kept: String = data
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !combo.contains(i))
+            .map(|(_, c)| *c)
+            .collect();
+        let cand = format!("{hrp}1{kept}");
+        if let Some(rec) = oracle.validate(&cand, &allowed) {
+            out.push(IndelCandidate {
+                recovered: rec,
+                indel_count: j,
+                region: IndelRegion::DataPart,
+                direction: IndelDirection::Deleted,
+            });
+        }
+    }
 }
 
 // Phase 2+ fills the body; keep Vec (not slice) so push works without signature churn.
@@ -132,8 +185,6 @@ fn dedup_by_recovered(hits: &mut Vec<IndelCandidate>) {
 }
 
 /// Returns `Some(hrp.len()+1)` iff `input` starts with `"{hrp}1"`, else `None`.
-// used from Phase 1+
-#[allow(dead_code)]
 fn data_part_bounds(input: &str, hrp: &str) -> Option<usize> {
     if input.starts_with(&format!("{hrp}1")) {
         Some(hrp.len() + 1)

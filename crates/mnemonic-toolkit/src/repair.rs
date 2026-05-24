@@ -29,7 +29,7 @@ use mk_codec::string_layer::bch::{
     bch_code_for_length, hrp_expand, polymod_run,
 };
 use mk_codec::string_layer::bch_decode::{decode_long_errors, decode_regular_errors};
-#[allow(unused_imports)] // used from Phase 2+ (Ms1IndelOracle / Mk1IndelOracle)
+use crate::indel::IndelOracle;
 use std::collections::BTreeSet;
 use std::io::{IsTerminal, Read, Write};
 
@@ -854,6 +854,51 @@ fn apply_ms_corrections(
     (corrected, positions)
 }
 
+/// ms1 oracle — single string is the whole card; delegate to ms-codec.
+/// Pure-indel: accept only if all corrections are within `allowed` (the
+/// inserted-placeholder positions; empty for the delete producer ⇒ already-valid).
+pub(crate) struct Ms1IndelOracle;
+impl IndelOracle for Ms1IndelOracle {
+    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+        match ms_codec::decode_with_correction(cand) {
+            Ok((_t, _p, corrections)) => {
+                if corrections.iter().all(|c| allowed.contains(&c.position)) {
+                    let (corrected, _) = apply_ms_corrections(cand, &corrections);
+                    Some(corrected)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    }
+}
+
+/// Phase 1 — per-card-kind entry point for indel recovery.
+/// Dispatches to the per-kind oracle; returns the `IndelOutcome` or a
+/// toolkit error. mk1 and md1 stubs completed in later phases.
+// used from Phase 5+ (CLI wiring)
+#[allow(dead_code)]
+pub(crate) fn recover_indel_card(
+    kind: CardKind,
+    chunks: &[String],
+    max_indel: usize,
+) -> Result<crate::indel::IndelOutcome, ToolkitError> {
+    match kind {
+        CardKind::Ms1 => {
+            // ms1 is single-chunk; recover on the sole chunk.
+            let chunk = chunks
+                .first()
+                .ok_or(ToolkitError::Repair(RepairError::EmptyInput))?;
+            Ok(crate::indel::recover_indel(chunk, "ms", max_indel, &Ms1IndelOracle))
+        }
+        CardKind::Mk1 => Ok(crate::indel::IndelOutcome::Unrecoverable), // Phase 4 implements mk1
+        CardKind::Md1 => Err(ToolkitError::BadInput(
+            "repair --max-indel: indel recovery is not yet supported for chunked md1".into(),
+        )),
+    }
+}
+
 /// **v0.23.0 — D29 migration helper.** Delegate md1 chunk-set repair to
 /// `md_codec::decode_with_correction` (full-decode semantics per Q1 lock;
 /// atomic per D28). Translate the codec's `Error` taxonomy back into
@@ -1554,5 +1599,44 @@ mod tests {
             !msg.contains("did you mean"),
             "Display should NOT append suffix for ambiguous neighbor; got: {msg}"
         );
+    }
+
+    // ============================================================================
+    // Phase 1 — indel recovery: too-long (delete-and-validate) + ms1 oracle
+    // ============================================================================
+
+    /// ms1 too-long by 1: insert one extra data char at data-index 10
+    /// (full-string index 13 = "ms1" prefix len 3 + 10). The delete
+    /// producer must find and remove it, recovering VALID_MS1.
+    #[test]
+    fn indel_ms1_too_long_by_one_recovers() {
+        // Insert one extra data char after the "ms1" prefix, at a mid-data index.
+        let data_start = 3; // "ms1"
+        let mut s = String::from(VALID_MS1);
+        s.insert(data_start + 10, 'q'); // one inserted char → too long by 1
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.direction, crate::indel::IndelDirection::Deleted);
+                assert_eq!(c.region, crate::indel::IndelRegion::DataPart);
+                assert_eq!(c.indel_count, 1);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// ms1 too-long by 2: insert two extra data chars. The delete producer
+    /// with max_indel=2 must find and remove both, recovering VALID_MS1.
+    #[test]
+    fn indel_ms1_too_long_by_two_recovers() {
+        let mut s = String::from(VALID_MS1);
+        s.insert(3 + 10, 'q');
+        s.insert(3 + 5, 'p'); // two inserted chars
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 2, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
     }
 }
