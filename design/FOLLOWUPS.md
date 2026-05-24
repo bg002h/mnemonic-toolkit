@@ -3142,3 +3142,11 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.36+`
 - **Tags:** none
+
+### `lint-argv-secret-flags-canonical-table-rebuild-from-clap` — rebuild the argv-leakage audit table (decay)
+- **Surfaced:** 2026-05-24, v0.36.1 end-of-cycle review.
+- **Where:** `crates/mnemonic-toolkit/tests/lint_argv_secret_flags.rs` (`CANONICAL_FLAG_ROWS` + `assert_eq!(CANONICAL_FLAG_ROWS.len(), 28)`).
+- **What:** the hand-curated `CANONICAL_FLAG_ROWS` table (self-described as "the canonical enumeration of secret-bearing argv flag-rows") froze at v0.13.0 and now omits every post-v0.13.0 secret-bearing argv flag: `nostr --secret` (v0.34.0), `silent-payment --secret` (v0.35.0), and `silent-payment --passphrase`/`--passphrase-stdin` (v0.36.1). It fails no test (curated list + hardcoded count + per-row evidence, with NO closure deriving rows from clap), so the decay is silent. The security-load-bearing projections (`secrets::flag_is_secret` + runtime `secret_in_argv_warning`) ARE correct + complete; this is the AUDIT table only. Fix: either rebuild `CANONICAL_FLAG_ROWS` from the clap surface (closure — fails when a new secret argv flag is unlisted) or backfill all missing post-v0.13.0 rows + bump the count. Prefer the closure (leading gate, not a lagging checklist).
+- **Status:** `open`
+- **Tier:** `v0.36+`
+- **Tags:** none
