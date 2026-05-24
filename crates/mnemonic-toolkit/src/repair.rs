@@ -1639,4 +1639,80 @@ mod tests {
             other => panic!("expected Unique, got {other:?}"),
         }
     }
+
+    // ============================================================================
+    // Phase 2 — indel recovery: too-short (placeholder-then-decode) ms1
+    // ============================================================================
+
+    /// ms1 too-short by 1: drop a NON-'q' data char (index 1 = 'e') → the
+    /// placeholder 'q' inserted at that position differs from the true symbol,
+    /// so the BCH decoder must SOLVE it (1 correction at that pos). The
+    /// pure-indel ⊆ rule accepts because the only correction is at the
+    /// placeholder position.
+    #[test]
+    fn indel_ms1_too_short_by_one_bch_solves_dropped_char() {
+        // VALID_MS1 data part: indices 0='0', 1='e', 2='n', 3='t', 4='r', 5='s', 6..='q'
+        // Drop data index 1 ('e') → full-string index 3+1 = 4.
+        let mut s = String::from(VALID_MS1);
+        s.remove(3 + 1); // remove data index 1 ('e')
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.direction, crate::indel::IndelDirection::Inserted);
+                assert_eq!(c.region, crate::indel::IndelRegion::DataPart);
+                assert_eq!(c.indel_count, 1);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// ms1 too-short by 1, placeholder collision: drop a 'q' (data index 8,
+    /// which is a 'q' in the long run). The placeholder 'q' is EXACT (zero
+    /// corrections). The pure-indel ⊆ rule's empty-correction path: ∅ ⊆ {8}
+    /// is true, so it is accepted.
+    #[test]
+    fn indel_ms1_too_short_placeholder_collision_dropped_q() {
+        // Data index 8 is a 'q' in the long run ("ms10entrSQQQQ…", data chars
+        // 0='0',1='e',2='n',3='t',4='r',5='s',6='q',7='q',8='q',...).
+        let mut s = String::from(VALID_MS1);
+        s.remove(3 + 8); // a 'q'
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// pure-indel rejection: drop one char AND substitute another → the
+    /// recovery needs a correction OUTSIDE the placeholder set → ⊆ rule
+    /// rejects → Unrecoverable.
+    #[test]
+    fn indel_ms1_pure_indel_rejects_indel_plus_substitution() {
+        // substitute data index 2 ('n' → 'p'); then drop data index 1 ('e').
+        let mut chars: Vec<char> = VALID_MS1.chars().collect();
+        chars[3 + 2] = if chars[3 + 2] == 'p' { 'z' } else { 'p' };
+        let mut s: String = chars.into_iter().collect();
+        s.remove(3 + 1);
+        let oracle = Ms1IndelOracle;
+        assert_eq!(
+            crate::indel::recover_indel(&s, "ms", 1, &oracle),
+            crate::indel::IndelOutcome::Unrecoverable
+        );
+    }
+
+    /// ms1 too-short by 2: drop two non-'q' chars and recover with
+    /// max_indel=2. Remove higher-index first so the second remove offset
+    /// remains valid.
+    #[test]
+    fn indel_ms1_too_short_by_two_recovers() {
+        let mut s = String::from(VALID_MS1);
+        s.remove(3 + 5); // 's' at data index 5 — remove higher index first
+        s.remove(3 + 1); // 'e' at data index 1
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 2, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
 }

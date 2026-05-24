@@ -62,8 +62,6 @@ pub trait IndelOracle {
 
 /// ALPHABET[0]; any fixed symbol works — the BCH decoder solves the true
 /// value, and the subset-check tolerates a placeholder==true-symbol collision.
-// used from Phase 1+
-#[allow(dead_code)]
 pub(crate) const PLACEHOLDER_CHAR: char = 'q';
 
 /// Engine entry point. `input` is one full m*1 string (one ms1, or ONE mk1
@@ -165,15 +163,43 @@ fn collect_data_delete(
     }
 }
 
-// Phase 2+ fills the body; keep Vec (not slice) so push works without signature churn.
-#[allow(dead_code, clippy::ptr_arg)]
 fn collect_data_insert(
-    _input: &str,
-    _hrp: &str,
-    _j: usize,
-    _oracle: &dyn IndelOracle,
-    _out: &mut Vec<IndelCandidate>,
+    input: &str,
+    hrp: &str,
+    j: usize,
+    oracle: &dyn IndelOracle,
+    out: &mut Vec<IndelCandidate>,
 ) {
+    let Some(dstart) = data_part_bounds(input, hrp) else {
+        return;
+    };
+    let data: Vec<char> = input[dstart..].chars().collect();
+    let slots = data.len() + j; // post-insertion length
+    for combo in combinations(slots, j) {
+        // `combo` = the post-insertion indices that are placeholders.
+        let mut built: Vec<char> = Vec::with_capacity(slots);
+        let mut src = data.iter();
+        for i in 0..slots {
+            if combo.contains(&i) {
+                built.push(PLACEHOLDER_CHAR);
+            } else if let Some(c) = src.next() {
+                built.push(*c);
+            }
+        }
+        if built.len() != slots {
+            continue; // ran out of source chars (shouldn't happen for valid combos)
+        }
+        let allowed: BTreeSet<usize> = combo.iter().copied().collect();
+        let cand = format!("{hrp}1{}", built.iter().collect::<String>());
+        if let Some(rec) = oracle.validate(&cand, &allowed) {
+            out.push(IndelCandidate {
+                recovered: rec,
+                indel_count: j,
+                region: IndelRegion::DataPart,
+                direction: IndelDirection::Inserted,
+            });
+        }
+    }
 }
 
 // used from recover_indel (Phase 1+); dead_code because recover_indel itself is
