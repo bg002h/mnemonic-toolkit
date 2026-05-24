@@ -3233,3 +3233,12 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.37+`
 - **Tags:** none
+
+### `m-format-indel-hrpmismatch-suggestion-fallback` — fall back to the HrpMismatch "did you mean" suggestion when indel recovery fails
+- **Surfaced:** 2026-05-24, v0.37.1 Phase-5 review (Minor m-hrp) + end-of-cycle.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/repair.rs::run` (the `IndelOutcome::Unrecoverable` arm returns `RepairError::IndelUnrecoverable`) + `repair.rs::is_indel_trigger` (now includes `HrpMismatch` so prefix-region indels engage) + `resolve_groups`' `relax_hrp_for_indel`.
+- **What:** v0.37.1 makes `HrpMismatch` an indel trigger so prefix-region indels recover (`--ms1 s10…` → restore `ms1`). Opt-in cost: at `--max-indel ≥ 1`, a *genuine* wrong-HRP typo (e.g. `mk1real` to `--ms1`) now enters indel search and, on failure, returns the generic `IndelUnrecoverable` (exit 2) instead of the `HrpMismatch` "did you mean 'mk'?" Levenshtein-1 suggestion (the default `--max-indel 0` path still gives it). Refinement: when indel recovery returns `Unrecoverable` AND the originating `repair_card` error was `HrpMismatch`, surface the ORIGINAL `HrpMismatch` (with its suggestion) rather than `IndelUnrecoverable` — keeps prefix recovery AND the helpful typo hint. (Documented v0.37.1 in plan §1.7 + CHANGELOG as the known opt-in tradeoff.)
+- **SemVer:** PATCH (error-message/exit refinement; no surface change).
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
