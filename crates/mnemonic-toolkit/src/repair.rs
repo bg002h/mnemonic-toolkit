@@ -874,6 +874,64 @@ impl IndelOracle for Ms1IndelOracle {
     }
 }
 
+/// ⊆-gated single-chunk BCH solve for mk1 (parse + residue + optional
+/// correction). Returns the canonical (re-encoded) chunk iff it parses,
+/// BCH-validates/solves, and every correction position ∈ `allowed`; `None`
+/// otherwise.
+///
+/// This exists because `mk_codec::decode` self-corrects up to t=4 UNGUARDED
+/// (`mk-codec string_layer/bch.rs` `bch_correct_*`), which would silently
+/// apply substitutions and defeat the pure-indel ⊆ rule. So we solve the
+/// single chunk here under the gate and hand `decode` an already-clean chunk.
+fn mk1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+    let (values, code) = parse_chunk(cand, 0, CardKind::Mk1).ok()?;
+    let target = CardKind::Mk1.target_residue(code)?;
+    let residue = polymod_residue("mk", &values, target, code);
+    if residue == 0 {
+        // Already a valid codeword (delete producer / placeholder collision).
+        return Some(encode_chunk("mk", &values));
+    }
+    let (positions, mags) = match code {
+        BchCode::Regular => decode_regular_errors(residue, values.len()),
+        BchCode::Long => decode_long_errors(residue, values.len()),
+    }?;
+    if !positions.iter().all(|p| allowed.contains(p)) {
+        return None; // a correction outside the placeholder set ⇒ not pure-indel
+    }
+    let mut corrected = values.clone();
+    for (&p, &m) in positions.iter().zip(&mags) {
+        if p >= corrected.len() {
+            return None;
+        }
+        corrected[p] ^= m;
+    }
+    if polymod_residue("mk", &corrected, target, code) != 0 {
+        return None; // defensive re-verify
+    }
+    Some(encode_chunk("mk", &corrected))
+}
+
+/// mk1 oracle — ⊆-gated solve the single failing chunk (mk_codec::decode
+/// self-corrects t≤4 UNGUARDED, which would defeat the pure-indel rule), then
+/// confirm full-card reassembly via `mk_codec::decode(&[&str])` on the clean
+/// chunk.
+pub(crate) struct Mk1IndelOracle {
+    pub all_chunks: Vec<String>,
+    pub failing_index: usize,
+}
+impl IndelOracle for Mk1IndelOracle {
+    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+        let corrected_chunk = mk1_chunk_solve(cand, allowed)?;
+        let mut chunks = self.all_chunks.clone();
+        chunks[self.failing_index] = corrected_chunk.clone();
+        let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+        match mk_codec::decode(&refs) {
+            Ok(_) => Some(corrected_chunk),
+            Err(_) => None,
+        }
+    }
+}
+
 /// Phase 1 — per-card-kind entry point for indel recovery.
 /// Dispatches to the per-kind oracle; returns the `IndelOutcome` or a
 /// toolkit error. mk1 and md1 stubs completed in later phases.
@@ -892,7 +950,26 @@ pub(crate) fn recover_indel_card(
                 .ok_or(ToolkitError::Repair(RepairError::EmptyInput))?;
             Ok(crate::indel::recover_indel(chunk, "ms", max_indel, &Ms1IndelOracle))
         }
-        CardKind::Mk1 => Ok(crate::indel::IndelOutcome::Unrecoverable), // Phase 4 implements mk1
+        CardKind::Mk1 => {
+            // Locate the single failing chunk (the one normal per-chunk repair
+            // cannot handle). An indel lands in ONE chunk; siblings stay intact.
+            let failing: Vec<usize> = chunks
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| repair_chunk_one(CardKind::Mk1, *i, c).is_err())
+                .map(|(i, _)| i)
+                .collect();
+            if failing.len() != 1 {
+                // 0 or >1 failing: out of single-region v1 scope.
+                return Ok(crate::indel::IndelOutcome::Unrecoverable);
+            }
+            let f = failing[0];
+            let oracle = Mk1IndelOracle {
+                all_chunks: chunks.to_vec(),
+                failing_index: f,
+            };
+            Ok(crate::indel::recover_indel(&chunks[f], "mk", max_indel, &oracle))
+        }
         CardKind::Md1 => Err(ToolkitError::BadInput(
             "repair --max-indel: indel recovery is not yet supported for chunked md1".into(),
         )),
@@ -1751,5 +1828,100 @@ mod tests {
             }
             other => panic!("expected Unique, got {other:?}"),
         }
+    }
+
+    // ============================================================================
+    // Phase 4 — mk1 per-chunk recovery + reassembly oracle
+    // ============================================================================
+
+    // The two chunks of ONE bip84 mk1 card (chunk0 = long-code, chunk1 =
+    // regular-code); verified to reassemble via `mk_codec::decode`.
+    //
+    // NOTE (Phase 4, see report): there is NO standalone single-string mk1
+    // card to test against — a realistic mk1 card carries a 73-byte compact
+    // xpub, which exceeds SINGLE_STRING_LONG_BYTES (56), so every mk1 card is
+    // chunked (mk-codec `string_layer/pipeline.rs` source comment; confirmed
+    // empirically: `decode([C1])` → `ChunkedHeaderMalformed("received 1
+    // chunks, header declares total_chunks = 2")`). The plan's hypothetical
+    // "single-chunk card" fixture cannot reassemble. The single-failing-chunk
+    // recovery path (one indel in ONE chunk of a multi-chunk card, validated
+    // through the reassembly oracle) is the real, supported case — and is what
+    // these `recover_indel`-driven tests exercise via a hand-built
+    // `Mk1IndelOracle` whose `all_chunks` carries BOTH real chunks.
+    const MK1_CARD_C0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
+    const MK1_CARD_C1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+
+    /// One chunk (chunk 1) of a 2-chunk card, too long by one inserted data
+    /// char → the delete producer recovers it through the per-chunk ⊆-gated
+    /// solve, and the reassembly oracle (carrying the intact chunk 0) confirms.
+    /// Drives `recover_indel` directly with a hand-built `Mk1IndelOracle`.
+    #[test]
+    fn indel_mk1_single_failing_chunk_too_long_recovers() {
+        assert!(
+            mk_codec::decode(&[MK1_CARD_C0, MK1_CARD_C1]).is_ok(),
+            "fixture must reassemble"
+        );
+        let mut s = String::from(MK1_CARD_C1);
+        s.insert(3 + 10, 'q');
+        let oracle = Mk1IndelOracle {
+            all_chunks: vec![MK1_CARD_C0.to_string(), s.clone()],
+            failing_index: 1,
+        };
+        match crate::indel::recover_indel(&s, "mk", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// One chunk (chunk 1) of a 2-chunk card, too short by one dropped data
+    /// char → the insert producer's BCH solve recovers the missing symbol, and
+    /// the reassembly oracle confirms against the intact chunk 0.
+    #[test]
+    fn indel_mk1_single_failing_chunk_too_short_recovers() {
+        let mut s = String::from(MK1_CARD_C1);
+        s.remove(3 + 10); // drop a data char
+        let oracle = Mk1IndelOracle {
+            all_chunks: vec![MK1_CARD_C0.to_string(), s.clone()],
+            failing_index: 1,
+        };
+        match crate::indel::recover_indel(&s, "mk", 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// Two-chunk card; corrupt ONLY chunk 1 (insert a char). recover_indel_card
+    /// must locate chunk 1 as the failing chunk, recover it, and confirm
+    /// reassembly via mk_codec::decode([chunk0, recovered_chunk1]).
+    #[test]
+    fn indel_mk1_multichunk_one_corrupted_chunk_recovers_via_recover_indel_card() {
+        assert!(
+            mk_codec::decode(&[MK1_CARD_C0, MK1_CARD_C1]).is_ok(),
+            "fixture must reassemble"
+        );
+        let mut bad_c1 = String::from(MK1_CARD_C1);
+        bad_c1.insert(3 + 12, 'q'); // too long by 1, in chunk 1
+        let chunks = vec![MK1_CARD_C0.to_string(), bad_c1];
+        match recover_indel_card(CardKind::Mk1, &chunks, 1).expect("ok") {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, MK1_CARD_C1); // recovered chunk == original chunk 1
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// Corrupt BOTH chunks → more than one failing chunk → exceeds single-region
+    /// v1 → Unrecoverable.
+    #[test]
+    fn indel_mk1_multichunk_two_failing_is_unrecoverable() {
+        let mut c0 = String::from(MK1_CARD_C0);
+        c0.insert(3 + 5, 'q');
+        let mut c1 = String::from(MK1_CARD_C1);
+        c1.insert(3 + 5, 'q');
+        let chunks = vec![c0, c1];
+        assert_eq!(
+            recover_indel_card(CardKind::Mk1, &chunks, 1).expect("ok"),
+            crate::indel::IndelOutcome::Unrecoverable
+        );
     }
 }
