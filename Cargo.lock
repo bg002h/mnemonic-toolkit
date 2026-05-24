@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.36.0"
+version = "0.36.1"
 dependencies = [
  "aes",
  "assert_cmd",

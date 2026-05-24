@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.36.1] — 2026-05-24
+
+**SemVer-PATCH — two additive flags on `mnemonic silent-payment`.**
+
+- **`--passphrase` / `--passphrase-stdin`** — derive the silent-payment address for a BIP-39-passphrase-protected ("25th word") wallet. The passphrase threads into the phrase/ms1/entropy-hex derivation; an xprv input is passphrase-independent and warns-and-ignores. `--passphrase-stdin` reads whitespace-preserving (significant PBKDF2 salt), is `conflicts_with` `--passphrase`, and is refused alongside `--secret-stdin` (one stdin per invocation). Secret-class (zeroize + mlock + argv-leak advisory; already covered by `flag_is_secret`). Absent → byte-identical to v0.35.0/v0.36.0 (empty passphrase).
+- **`--change-address`** — also emit the BIP-352 **m=0 change address** (`B_scan ‖ B_m=0`), additive to the normal output and unmistakably tagged "internal change detection only; never hand out as a receiving address" (human line + JSON `change_address` + a `change_address_warning` sibling marker so a JSON consumer can't surface it as a receive target). `--label 0` remains refused as the separate publish-path guard.
+
+Closes FOLLOWUPs `silent-payment-passphrase` + `silent-payment-change-address-m0`. Paired GUI schema-mirror lockstep (3 new flag NAMES). Plan opus R0 GREEN (0C/0I) + per-phase review GREEN + end-of-cycle GREEN.
+
 ## mnemonic-toolkit [0.36.0] — 2026-05-23
 
 **SemVer-MINOR — two new public-data subcommands: `decode-address` + `verify-message`.**

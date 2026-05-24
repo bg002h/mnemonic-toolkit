@@ -3094,7 +3094,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Surfaced:** 2026-05-23, v0.35.0 `mnemonic silent-payment` (architect consult C2). The cycle refuses `--label 0` (m=0 is the reserved change label that must NEVER be published) and defers emitting the change address.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/silent_payment.rs` (`--label 0` refusal) + `src/silent_payment.rs` (`labeled_spend_key`, which already handles any m).
 - **What:** add a dedicated `--change-address` flag that emits the m=0 labeled address explicitly tagged "change — DO NOT publish" (per BIP-352 §Labels). The crypto already supports it (`labeled_spend_key(secp, b_scan, b_spend, 0)`); this is a UX/safety surface only. Needs a deliberate footgun-guard (clear labeling) so a user can't paste it as a receiving address.
-- **Status:** `open`
+- **Status:** `resolved` (v0.36.1)
 - **Tier:** `v0.35+`
 - **Tags:** none
 
@@ -3104,7 +3104,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Surfaced:** 2026-05-23, v0.35.0 `mnemonic silent-payment`. v1 resolves seed-bearing secrets (phrase/ms1/entropy/xprv) with an EMPTY BIP-39 passphrase (`resolve_master_xpriv` calls `derive_master_seed(&mnemonic, "")`), so the derived address is for the no-passphrase wallet only.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/silent_payment.rs::resolve_master_xpriv` (the `derive_master_seed(&mnemonic, "")` calls).
 - **What:** add a `--passphrase` / `--passphrase-stdin` flag (already secret-classed in `secrets.rs::flag_is_secret`) threaded into `derive_master_seed`, so a passphrase-protected wallet's silent-payment address can be derived. (The xprv input path is passphrase-independent — the xprv IS the master.)
-- **Status:** `open`
+- **Status:** `resolved` (v0.36.1)
 - **Tier:** `v0.35+`
 - **Tags:** none
 

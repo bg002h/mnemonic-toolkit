@@ -2076,15 +2076,20 @@ The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at
 | `--secret <SEED>` | seed-bearing secret: BIP-39 phrase / ms1 / entropy-hex / master xprv. A single private key (WIF/minikey) is refused — it cannot derive `m/352'`. SECRET: leaks via argv; prefer `--secret-file` / `--secret-stdin` |
 | `--secret-file <PATH>` | read the seed-bearing secret from a file (avoids argv exposure) |
 | `--secret-stdin` | read the seed-bearing secret from stdin |
+| `--passphrase <P>` | BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase / ms1 / entropy-hex inputs; **ignored (with a warning) for an xprv input** (the xprv is already the master). SECRET: leaks via argv; prefer `--passphrase-stdin` |
+| `--passphrase-stdin` | read the BIP-39 passphrase from stdin (whitespace-preserving — significant PBKDF2 salt). Mutually exclusive with `--passphrase`, and with `--secret-stdin` (one stdin per invocation) |
 | `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet) |
 | `--account <N>` | BIP-32 account index `m/352'/coin'/<account>'/…` (default 0) |
 | `--label <m>` | emit a labeled address for label m (repeatable); **m≥1**. `--label 0` is refused — m=0 is the reserved BIP-352 change label and must never be published |
+| `--change-address` | also emit the BIP-352 **m=0 change address** — for the wallet's OWN change detection ONLY; **never hand it out as a receiving address** (additive; the base address is still emitted) |
 | `--json` | emit a JSON envelope instead of the human-readable block |
 | `--help` | print help |
 
 ### Output
 
 The address(es) and the scan/spend **public** keys are publishable — hand the base address to senders. The command also emits the **scan private key** (`b_scan`, the *online / hot* key a watch-server uses to scan) and the **spend private key** (`b_spend`, the *COLD* key with full spending authority) behind the `secret material on stdout` advisory (the secret is `mlock`-pinned + zeroized). Treat them differently: never paste `b_spend` into a scanning service.
+
+A BIP-39 `--passphrase` derives the address for the *passphrase-protected* wallet (a different wallet than the no-passphrase default); whitespace in the passphrase is significant. `--change-address` adds the m=0 change address (with a `change_address_warning` in the JSON envelope) — it is the receiver's own change-detection address and must never be published; `--label 0` remains refused as the separate publish-path guard.
 
 ### Scope
 
