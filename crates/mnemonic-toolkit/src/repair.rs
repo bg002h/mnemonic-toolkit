@@ -254,18 +254,34 @@ pub(crate) fn resolve_groups<R: Read>(
     args: &impl CardArgs,
     subcmd_name: &'static str,
     stdin: &mut R,
+    relax_hrp_for_indel: bool,
 ) -> Result<Vec<(CardKind, Vec<String>)>, ToolkitError> {
     // D34/I5 — strict per-flag HRP validation. `--ms1 mk1xxx` rejects with
     // `ToolkitError::HrpMismatch { flag: "--ms1", expected: "ms", got: "mk" }`.
     // `-` (stdin sentinel) is exempt; expanded after this check.
-    if let Some(v) = args.ms1() {
-        validate_flag_hrp("--ms1", "ms", v)?;
-    }
-    for v in args.mk1() {
-        validate_flag_hrp("--mk1", "mk", v)?;
-    }
-    for v in args.md1() {
-        validate_flag_hrp("--md1", "md", v)?;
+    //
+    // **Phase-5 indel amendment:** when `relax_hrp_for_indel` is set
+    // (`repair --max-indel ≥ 1`), the strict typed-flag HRP pre-gate is
+    // SKIPPED so a prefix-region indel — which looks like an HRP mismatch
+    // (`--ms1 s10…` = `ms1…` with a dropped 'm') — flows through to
+    // `repair_card` → `parse_chunk`, surfacing `RepairError::HrpMismatch`
+    // there, which `is_indel_trigger` engages. The typed flag already
+    // declares the intended kind, so the value still routes to the correct
+    // bucket below; without this relaxation the Phase-3 prefix producer
+    // would be CLI-unreachable (§1.7). The POSITIONAL gate
+    // (`classify_hrp_prefix`) stays strict regardless — a missing-prefix
+    // positional cannot self-identify its kind. `inspect` always passes
+    // `false` (its behavior is unchanged).
+    if !relax_hrp_for_indel {
+        if let Some(v) = args.ms1() {
+            validate_flag_hrp("--ms1", "ms", v)?;
+        }
+        for v in args.mk1() {
+            validate_flag_hrp("--mk1", "mk", v)?;
+        }
+        for v in args.md1() {
+            validate_flag_hrp("--md1", "md", v)?;
+        }
     }
 
     // Seed per-kind buckets from flag-form values (flag-form first per plan).
@@ -394,7 +410,6 @@ pub enum RepairError {
         expected: &'static str,
         found: String,
     },
-    #[allow(dead_code)] // used from Phase 5+ (CLI wiring)
     IndelUnrecoverable {
         hrp: &'static str,
         max_indel: usize,
@@ -932,11 +947,54 @@ impl IndelOracle for Mk1IndelOracle {
     }
 }
 
-/// Phase 1 — per-card-kind entry point for indel recovery.
-/// Dispatches to the per-kind oracle; returns the `IndelOutcome` or a
-/// toolkit error. mk1 and md1 stubs completed in later phases.
-// used from Phase 5+ (CLI wiring)
-#[allow(dead_code)]
+/// True iff the failure class warrants engaging the indel search (§1.7).
+///
+/// Included: `HrpMismatch | TooManyErrors | PostCorrectionDecodeFailed |
+/// UnparseableInput | ReservedInvalidLength`. **`HrpMismatch` is INCLUDED**
+/// (Phase-5 R0 amendment) so a prefix-region indel engages: `parse_chunk`
+/// validates the HRP before length, so dropping 'm' from `ms1…` surfaces as
+/// `HrpMismatch { found: "s" }`; excluding it would make the Phase-3 prefix
+/// producer CLI-unreachable. Tradeoff: with `--max-indel ≥ 1` a genuine
+/// wrong-HRP typo enters indel search and, failing, returns
+/// `IndelUnrecoverable` (exit 2) instead of the "did you mean" suggestion
+/// (opt-in only; default `--max-indel 0` preserves the suggestion).
+///
+/// Excluded: `EmptyInput | UnsupportedCodeVariant | IndelUnrecoverable`
+/// (no recoverable indel class; pass through to today's typed error).
+///
+/// Implemented as an exhaustive `match` so a future new `RepairError` variant
+/// forces a compile-time decision here rather than silently defaulting.
+pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
+    match e {
+        RepairError::HrpMismatch { .. }
+        | RepairError::TooManyErrors { .. }
+        | RepairError::PostCorrectionDecodeFailed { .. }
+        | RepairError::UnparseableInput { .. }
+        | RepairError::ReservedInvalidLength { .. } => true,
+        RepairError::EmptyInput
+        | RepairError::UnsupportedCodeVariant { .. }
+        | RepairError::IndelUnrecoverable { .. } => false,
+    }
+}
+
+/// Exit-code decision for the indel CLI path (§1.6). Precedence within the
+/// emitting outcomes: ambiguous(4) > recovered/repaired(5) > already-valid(0).
+/// (Unrecoverable(2) is handled out-of-band via the `Err` short-circuit in
+/// `run()`, so it never reaches this helper.)
+pub(crate) fn indel_exit_code(ambiguous_seen: bool, total_repairs: usize) -> u8 {
+    if ambiguous_seen {
+        4
+    } else if total_repairs == 0 {
+        0
+    } else {
+        5
+    }
+}
+
+/// Per-card-kind entry point for indel recovery. Dispatches to the per-kind
+/// oracle; returns the `IndelOutcome` or a toolkit error. ms1 = single chunk;
+/// mk1 = locate-the-single-failing-chunk + reassembly oracle; md1 = refused
+/// (`BadInput`, not yet supported — FOLLOWUP (b)).
 pub(crate) fn recover_indel_card(
     kind: CardKind,
     chunks: &[String],
@@ -1923,5 +1981,61 @@ mod tests {
             recover_indel_card(CardKind::Mk1, &chunks, 1).expect("ok"),
             crate::indel::IndelOutcome::Unrecoverable
         );
+    }
+
+    // ============================================================================
+    // Phase 5 — CLI exit-code precedence + indel-trigger classification (unit)
+    // ============================================================================
+
+    /// `indel_exit_code` precedence: ambiguous(4) > recovered/repaired(5) >
+    /// already-valid(0). The Ambiguous CLI path is cryptographically
+    /// unreachable with real vectors (13/15-symbol checksum → ~2⁻⁶⁵
+    /// collision), so this unit test is the canonical coverage for the
+    /// exit-4 mapping (cf. the Phase-3 engine `recover_indel_reports_ambiguous`
+    /// test which covers the Ambiguous *outcome*).
+    #[test]
+    fn indel_exit_code_precedence() {
+        assert_eq!(indel_exit_code(true, 0), 4); // ambiguous wins
+        assert_eq!(indel_exit_code(true, 5), 4);
+        assert_eq!(indel_exit_code(false, 0), 0); // nothing recovered
+        assert_eq!(indel_exit_code(false, 3), 5); // recovered/repaired
+    }
+
+    /// `is_indel_trigger` set (§1.7 — HrpMismatch INCLUDED so a prefix-region
+    /// indel engages; the non-triggers pass through to today's typed error).
+    #[test]
+    fn is_indel_trigger_set() {
+        use RepairError::*;
+        assert!(is_indel_trigger(&HrpMismatch {
+            chunk_index: 0,
+            expected: "ms",
+            found: "s".into()
+        }));
+        assert!(is_indel_trigger(&TooManyErrors {
+            chunk_index: 0,
+            bound: 8
+        }));
+        assert!(is_indel_trigger(&UnparseableInput {
+            chunk_index: 0,
+            detail: "x".into()
+        }));
+        assert!(is_indel_trigger(&ReservedInvalidLength {
+            chunk_index: 0,
+            data_part_len: 94
+        }));
+        assert!(is_indel_trigger(&PostCorrectionDecodeFailed {
+            chunk_index: Some(0),
+            detail: "x".into()
+        }));
+        assert!(!is_indel_trigger(&EmptyInput));
+        assert!(!is_indel_trigger(&UnsupportedCodeVariant {
+            chunk_index: 0,
+            hrp: "ms",
+            data_part_len: 100
+        }));
+        assert!(!is_indel_trigger(&IndelUnrecoverable {
+            hrp: "ms",
+            max_indel: 1
+        }));
     }
 }

@@ -101,7 +101,8 @@ pub fn run<R: Read, W: Write, E: Write>(
     // exit 5 short-circuit.
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
-    let groups = repair::resolve_groups(args, "inspect", stdin)?;
+    // `inspect` has no indel mode; always keep the strict typed-flag HRP gate.
+    let groups = repair::resolve_groups(args, "inspect", stdin, false)?;
     let mut any_ms1 = false;
 
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic

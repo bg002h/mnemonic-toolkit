@@ -15,7 +15,8 @@
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
-use crate::repair::{self, CardArgs, CardKind, RepairOutcome};
+use crate::indel::{IndelCandidate, IndelOutcome, IndelRegion, IndelDirection};
+use crate::repair::{self, CardArgs, CardKind, RepairError, RepairOutcome};
 use crate::secret_advisory::secret_on_stdout_warning;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -58,6 +59,12 @@ pub struct RepairArgs {
     #[arg(long)]
     pub json: bool,
 
+    /// Maximum insert/delete (indel) distance to search when a chunk fails
+    /// normal repair — recovers a single transcribed character that was added
+    /// (too long) or dropped (too short). 0 disables (default). ms1/mk1 only.
+    #[arg(long, value_name = "N", default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub max_indel: u8,
+
     /// v0.24.0 §2.C.1 — positional `<STRING>...` intake. Each value
     /// self-identifies by HRP prefix (`ms1` / `mk1` / `md1`) and is routed
     /// to the same internal storage as the matching typed flag. Unknown
@@ -90,36 +97,99 @@ pub fn run<R: Read, W: Write, E: Write>(
     args: &RepairArgs,
     stdin: &mut R,
     stdout: &mut W,
-    _stderr: &mut E,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
-    let groups = repair::resolve_groups(args, "repair", stdin)?;
+    // When indel search is active, relax the strict typed-flag HRP pre-gate so
+    // a prefix-region indel (`--ms1 s10…` = `ms1…` minus 'm') reaches
+    // `repair_card` and engages the indel trigger via `RepairError::HrpMismatch`
+    // (§1.7). At `--max-indel 0` the gate stays strict — today's behavior.
+    let groups = repair::resolve_groups(args, "repair", stdin, args.max_indel >= 1)?;
 
     let mut total_repairs = 0usize;
     let mut any_ms1 = false;
+    let mut ambiguous_seen = false;
+
+    // Runtime notice for the slower search budgets (combinatorial blow-up at
+    // j ≥ 3 over a long-code data-part).
+    if args.max_indel >= 3 {
+        writeln!(
+            stderr,
+            "repair: searching up to {} indels; this may take a few seconds",
+            args.max_indel
+        )
+        .ok();
+    }
 
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic
-    // output regardless of CLI arg ordering.
+    // output regardless of CLI arg ordering. Multi-group (e.g. `--ms1 X
+    // --mk1 Y`) is supported: the indel branch must NOT early-return on the
+    // non-fatal (Ambiguous / recovered) outcomes, so every group still emits
+    // (R0 I1). Only Unrecoverable short-circuits (exit 2).
     for (kind, chunks) in &groups {
-        let outcome = repair::repair_card(*kind, chunks)?;
-        total_repairs += outcome.repairs.len();
-        if matches!(kind, CardKind::Ms1) {
-            any_ms1 = true;
-        }
-        if args.json {
-            emit_repair_json(&outcome, stdout)?;
-        } else {
-            emit_repair_text(&outcome, stdout)?;
+        match repair::repair_card(*kind, chunks) {
+            Ok(outcome) => {
+                total_repairs += outcome.repairs.len();
+                if matches!(kind, CardKind::Ms1) {
+                    any_ms1 = true;
+                }
+                if args.json {
+                    emit_repair_json(&outcome, stdout)?;
+                } else {
+                    emit_repair_text(&outcome, stdout)?;
+                }
+            }
+            Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
+                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize)? {
+                    IndelOutcome::Unique(c) => {
+                        if matches!(kind, CardKind::Ms1) {
+                            any_ms1 = true;
+                        }
+                        if args.json {
+                            emit_indel_json("unique", &[&c], stdout)?;
+                        } else {
+                            emit_indel_text(&[&c], stdout)?;
+                        }
+                        total_repairs += 1;
+                    }
+                    IndelOutcome::Ambiguous(v) => {
+                        if matches!(kind, CardKind::Ms1) {
+                            any_ms1 = true;
+                        }
+                        let refs: Vec<&IndelCandidate> = v.iter().collect();
+                        if args.json {
+                            emit_indel_json("ambiguous", &refs, stdout)?;
+                        } else {
+                            emit_indel_text(&refs, stdout)?;
+                        }
+                        writeln!(
+                            stderr,
+                            "repair: ambiguous — {} candidates within --max-indel {}; choose manually",
+                            v.len(),
+                            args.max_indel
+                        )
+                        .ok();
+                        ambiguous_seen = true;
+                    }
+                    IndelOutcome::Unrecoverable => {
+                        return Err(ToolkitError::Repair(RepairError::IndelUnrecoverable {
+                            hrp: kind.hrp(),
+                            max_indel: args.max_indel as usize,
+                        }));
+                    }
+                }
+            }
+            Err(e) => return Err(e.into()),
         }
     }
 
-    // D9: emit sensitive-secret stderr warning when ms1 was repaired (regardless
-    // of whether corrections fired — even pass-through of a valid ms1 to
-    // stdout is sensitive material on stdout).
+    // D9: emit sensitive-secret stderr warning when ms1 hit stdout (regardless
+    // of whether corrections fired — even pass-through of a valid ms1, or a
+    // recovered/ambiguous ms1 candidate, is sensitive material on stdout).
     if any_ms1 {
-        secret_on_stdout_warning(CardKind::Ms1, _stderr);
+        secret_on_stdout_warning(CardKind::Ms1, stderr);
     }
 
-    Ok(if total_repairs == 0 { 0 } else { 5 })
+    Ok(repair::indel_exit_code(ambiguous_seen, total_repairs))
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {
@@ -208,5 +278,122 @@ fn kind_str(kind: CardKind) -> &'static str {
         CardKind::Ms1 => "ms1",
         CardKind::Mk1 => "mk1",
         CardKind::Md1 => "md1",
+    }
+}
+
+// ============================================================================
+// Phase 5 — indel (`--max-indel`) recovery output.
+// ============================================================================
+
+/// JSON envelope for an indel recovery emission. `status` is one of
+/// `"unique"` / `"ambiguous"`; the `Unrecoverable` outcome surfaces via the
+/// `Err`/exit-2 path and emits NO JSON (so `status` has no
+/// `"unrecoverable"` value). Wire-shape is NOT schema_mirror-gated — GUI
+/// consumers self-update per the paired-PR rule.
+#[derive(serde::Serialize)]
+struct IndelJson<'a> {
+    schema_version: &'static str,
+    status: &'static str,
+    candidates: Vec<IndelCandidateJson<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct IndelCandidateJson<'a> {
+    recovered: &'a str,
+    indel_count: usize,
+    region: &'static str,
+    direction: &'static str,
+}
+
+fn region_str(r: IndelRegion) -> &'static str {
+    match r {
+        IndelRegion::Prefix => "prefix",
+        IndelRegion::DataPart => "data-part",
+    }
+}
+
+fn direction_str(d: IndelDirection) -> &'static str {
+    match d {
+        IndelDirection::Inserted => "inserted",
+        IndelDirection::Deleted => "deleted",
+    }
+}
+
+fn candidate_json(c: &IndelCandidate) -> IndelCandidateJson<'_> {
+    IndelCandidateJson {
+        recovered: &c.recovered,
+        indel_count: c.indel_count,
+        region: region_str(c.region),
+        direction: direction_str(c.direction),
+    }
+}
+
+/// Text-form indel emission — each recovered string on its own line (mirrors
+/// the corrected-chunks tail of `emit_repair_text`).
+fn emit_indel_text<W: Write>(cands: &[&IndelCandidate], stdout: &mut W) -> Result<(), ToolkitError> {
+    for c in cands {
+        writeln!(stdout, "{}", c.recovered).map_err(ToolkitError::Io)?;
+    }
+    Ok(())
+}
+
+/// JSON-form indel emission — single `IndelJson` envelope on stdout.
+fn emit_indel_json<W: Write>(
+    status: &'static str,
+    cands: &[&IndelCandidate],
+    stdout: &mut W,
+) -> Result<(), ToolkitError> {
+    let envelope = IndelJson {
+        schema_version: "1",
+        status,
+        candidates: cands.iter().map(|c| candidate_json(c)).collect(),
+    };
+    let body = serde_json::to_string(&envelope)
+        .map_err(|e| ToolkitError::BadInput(format!("indel JSON serialize: {e}")))?;
+    writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Ambiguous CLI exit path is cryptographically unreachable with real
+    /// vectors (~2⁻⁶⁵ checksum collision), so this unit test is the canonical
+    /// coverage for the multi-candidate emit helpers. Hand-build a 2-candidate
+    /// Vec (one Prefix/Inserted, one DataPart/Deleted) and assert both the
+    /// text-form (one recovered per line) and the JSON envelope shape.
+    #[test]
+    fn emit_indel_two_candidate_text_and_json() {
+        let a = IndelCandidate {
+            recovered: "ms1aaa".to_string(),
+            indel_count: 1,
+            region: IndelRegion::Prefix,
+            direction: IndelDirection::Inserted,
+        };
+        let b = IndelCandidate {
+            recovered: "ms1bbb".to_string(),
+            indel_count: 1,
+            region: IndelRegion::DataPart,
+            direction: IndelDirection::Deleted,
+        };
+        let refs = vec![&a, &b];
+
+        let mut text = Vec::new();
+        emit_indel_text(&refs, &mut text).unwrap();
+        assert_eq!(String::from_utf8(text).unwrap(), "ms1aaa\nms1bbb\n");
+
+        let mut json = Vec::new();
+        emit_indel_json("ambiguous", &refs, &mut json).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&json).expect("valid JSON envelope");
+        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["status"], "ambiguous");
+        assert_eq!(v["candidates"][0]["recovered"], "ms1aaa");
+        assert_eq!(v["candidates"][0]["region"], "prefix");
+        assert_eq!(v["candidates"][0]["direction"], "inserted");
+        assert_eq!(v["candidates"][1]["recovered"], "ms1bbb");
+        assert_eq!(v["candidates"][1]["region"], "data-part");
+        assert_eq!(v["candidates"][1]["direction"], "deleted");
     }
 }

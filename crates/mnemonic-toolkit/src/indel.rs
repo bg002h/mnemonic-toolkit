@@ -11,8 +11,6 @@
 
 use std::collections::BTreeSet;
 
-// used from Phase 1+
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndelRegion {
     Prefix,
@@ -20,8 +18,6 @@ pub enum IndelRegion {
 }
 
 /// The repair OPERATION applied to the corrupted input to recover the original.
-// used from Phase 1+
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndelDirection {
     /// Restored dropped char(s) — input was too short.
@@ -40,8 +36,6 @@ pub struct IndelCandidate {
     pub direction: IndelDirection,
 }
 
-// used from Phase 1+
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndelOutcome {
     Unique(IndelCandidate),
@@ -54,8 +48,6 @@ pub enum IndelOutcome {
 /// placeholders we inserted (∅ for delete/prefix producers). Returns the
 /// canonical recovered full-string iff the candidate decodes cleanly AND its
 /// BCH corrections ⊆ `allowed`.
-// used from Phase 1+
-#[allow(dead_code)]
 pub trait IndelOracle {
     fn validate(&self, candidate: &str, allowed: &BTreeSet<usize>) -> Option<String>;
 }
@@ -66,8 +58,6 @@ pub(crate) const PLACEHOLDER_CHAR: char = 'q';
 
 /// Engine entry point. `input` is one full m*1 string (one ms1, or ONE mk1
 /// chunk). `hrp` ∈ {"ms","mk"}. Produces the dedup'd outcome.
-// used from Phase 5+ (CLI wiring)
-#[allow(dead_code)]
 pub fn recover_indel(
     input: &str,
     hrp: &str,
@@ -232,9 +222,6 @@ fn collect_data_insert(
     }
 }
 
-// used from recover_indel (Phase 1+); dead_code because recover_indel itself is
-// dead until Phase 5.
-#[allow(dead_code)]
 fn dedup_by_recovered(hits: &mut Vec<IndelCandidate>) {
     hits.sort_by(|a, b| a.recovered.cmp(&b.recovered));
     hits.dedup_by(|a, b| a.recovered == b.recovered);
