@@ -549,3 +549,34 @@ fn decode_emits_seed_version_info_line_segwit() {
         "stderr missing Segwit info-line; got: {stderr:?}",
     );
 }
+
+// ============================================================================
+// v0.36.0 — refusal lock-test (spot-check finding)
+// ============================================================================
+//
+// `electrum-phrase` is entropy-extraction-ONLY: the toolkit deliberately does
+// NOT derive addresses from an Electrum native seed (Electrum uses a different
+// PBKDF2 salt + non-BIP-44 paths than BIP-39, so a BIP-39/BIP-44-style
+// derivation would silently produce WRONG addresses). The valid-edge guard
+// refuses `(electrum-phrase, address)`. This pins that honest refusal so a
+// future edge-table change can't accidentally enable a wrong derivation.
+// (See design/IMPLEMENTATION_PLAN_v0_36_0_verify_decode_address.md Phase 2.)
+#[test]
+fn electrum_phrase_to_address_is_refused() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("electrum-phrase={SEGWIT_PHRASE}"),
+            "--to",
+            "address",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("electrum-phrase"),
+        "refusal stderr must name the electrum-phrase edge; got: {stderr:?}",
+    );
+}
