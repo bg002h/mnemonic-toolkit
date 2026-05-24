@@ -3193,6 +3193,43 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/repair.rs` (BCH substitution correction; `bch_code_for_length` picks the code variant FROM the length, so wrong-length inputs error as `RepairError::ReservedInvalidLength` `:406` / `UnsupportedCodeVariant` `:414`); `cmd/repair.rs` + `cmd/inspect.rs` (`inspect` reports `byte_length` `cmd/inspect.rs:195` but no recovery); `cmd/final_word.rs` (the enumerate-candidates-validate-by-checksum analogue); sibling codecs' `decode`/`decode_with_correction` (the per-candidate validation oracle).
 - **What:** recover an `m*1` string where a character was **inserted (too long)** or **dropped (too short)** during hand-copy/engraving — so it no longer decodes. **Distinct from `mnemonic repair`**, which is BCH *substitution* correction at FIXED length; an indel shifts every subsequent symbol and breaks the BCH codeword, so this needs a different algorithm. Likely **toolkit-side enumerate-and-validate** (delete each position for too-long; insert each of 32 charset symbols at each position for too-short) using the codec `decode` as oracle — probably no sibling-codec change. **Open decisions (brainstorm):** surface (flag on `repair` vs new subcommand — affects GUI/manual lockstep); indel direction + budget (default off-by-1); which HRPs (md1 chunked / mk1 long-codes / ms1 secret-bearing); ambiguity output contract; combine-with-substitution (likely defer); secret-on-stdout advisory for ms1. bech32m checksum is the validity oracle (charset = `ALPHABET`, `repair.rs:28`). **DO NOT plan on the bech32 upstream `Corrector`** — still unavailable (v0.11.1).
 - **SemVer:** MINOR if new subcommand; PATCH if additive flag on `repair`.
+- **Resolution (v0.37.1):** Shipped `mnemonic repair --max-indel <N>` (ms1+mk1; toolkit-only enumerate-and-validate around the existing BCH decode — `indel.rs` engine, two producers (prefix restore + data-part delete/placeholder-solve), per-kind oracles in `repair.rs`). j≤4 (the BCH t=4 error-correction ceiling); exit 0/5/4/2; `HrpMismatch` joins the indel trigger so prefix-region indels recover. md1 (chunked) refused — FOLLOWUP `m-format-indel-md1-chunked`. Brainstorm + plan opus R0→R1 GREEN; per-phase reviews GREEN.
+- **Status:** `resolved`
+- **Tier:** `v0.37+`
+- **Tags:** none
+
+### `m-format-indel-erasure-decode-extend-to-8` — extend too-short recovery from j≤4 to j≤8 via erasure-decode
+- **Surfaced:** 2026-05-24, v0.37.1 cycle-close (FOLLOWUP (a)).
+- **What:** v0.37.1 too-short recovery is bounded at j≤4 because it reuses the existing BCH error-decoder (capacity t=4). Erasure-decode (position-known symbols) has capacity 2t=8 per the BCP code theory; adding a `decode_with_erasures(positions: &[usize])` primitive to the sibling codecs would double the reach for dropped-character recovery. **Sibling-codec change required** — this is a new primitive in `mnemonic-secret` (`ms_codec`), `mnemonic-key` (`mk_codec`), and `descriptor-mnemonic` (`md_codec`); the toolkit consumes it. Companion FOLLOWUP entries are to be filed in each sibling repo `design/FOLLOWUPS.md` in lockstep when this is scheduled (per CLAUDE.md cross-repo convention).
+- **SemVer:** PATCH if flag-extension only (j stays ≤4 → ≤8 with no surface change, just a wider default budget).
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
+- **Companion:** `mnemonic-secret/design/FOLLOWUPS.md`, `mnemonic-key/design/FOLLOWUPS.md`, `descriptor-mnemonic/design/FOLLOWUPS.md` — entries to be filed in lockstep when scheduled.
+
+### `m-format-indel-md1-chunked` — md1 indel recovery (currently refused)
+- **Surfaced:** 2026-05-24, v0.37.1 cycle-close (FOLLOWUP (b)).
+- **Where:** `crates/mnemonic-toolkit/src/indel.rs::recover_indel_card` — `md1` hits the `CardKind::Md1 => Err(ToolkitError::BadInput(...))` refusal arm.
+- **What:** md1 is chunked: each chunk has an independent BCH codeword, PLUS there is a corruptible `read_bits(6)+1` chunk-count header in the first chunk's data-part. An indel in any chunk shifts ALL subsequent data in that chunk's BCH scope (same as ms1/mk1), but a chunk-count header corruption could also surface as a wrong-length parse. The chunked topology makes the indel search non-trivial: per-chunk indel (each chunk independently) handles the common case, but a dropped/inserted separator could corrupt the inter-chunk boundary. Own R0 to nail the scope before impl.
+- **SemVer:** PATCH (additive; `--max-indel` flag already exists; md1 just becomes un-refused).
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
+
+### `m-format-indel-cross-region-split` — recover indels distributed across BOTH prefix and data-part simultaneously
+- **Surfaced:** 2026-05-24, v0.37.1 cycle-close (FOLLOWUP (c)).
+- **Where:** `crates/mnemonic-toolkit/src/indel.rs` — v0.37.1 P1 (prefix producer) and P2 (data-part producer) run INDEPENDENTLY; a candidate requires ALL corrections to be within a single region (prefix OR data). A cross-region split (e.g. one prefix drop + one data drop) is not attempted.
+- **What:** v1 is single-region-per-attempt. Cross-region recovery (j_prefix indels + j_data indels, j_prefix + j_data ≤ N) would require a combined search over both regions simultaneously. Combinatorial cost: O(len_prefix × len_data × 32^j_insert) — likely too expensive at j≥2 without a smarter search strategy (early-BCH pruning). Defer until there is a real user case.
+- **SemVer:** PATCH (extends the search space of an existing flag; no new surface).
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
+
+### `m-format-indel-plus-substitution` — combine indel recovery with substitution correction sharing the t=4 budget
+- **Surfaced:** 2026-05-24, v0.37.1 cycle-close (FOLLOWUP (d)).
+- **Where:** `crates/mnemonic-toolkit/src/indel.rs::recover_deleted` / `recover_inserted` — v0.37.1 accepts a candidate iff its BCH corrections are a **subset of the inserted-placeholder positions** (∅ for delete/prefix). Any residual BCH correction at a non-placeholder position signals a simultaneous substitution and causes the candidate to be rejected.
+- **What:** allow mixed indel+substitution recovery sharing the t=4 budget: j_indel + e_subst ≤ 4. A 1-indel + 1-substitution simultaneous corruption (j=1, e=1) is plausible (a handwritten card with one transposed character AND one wrong character). The placeholder-subset check would relax from `corrections ⊆ placeholders` to `|corrections \ placeholders| ≤ e_budget`. Cost is bounded (same BCH decode; just a weaker accept gate); the real risk is false-positive rate from the wider accept window. Own R0.
+- **SemVer:** PATCH (behavior extension of existing `--max-indel` flag; no new surface).
 - **Status:** `open`
 - **Tier:** `v0.37+`
 - **Tags:** none

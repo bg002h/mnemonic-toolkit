@@ -2278,6 +2278,7 @@ mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1
 | `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--md1` |
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--mk1` |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
+| `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1 only (md1 not yet supported) |
 | `--help` | print help |
 
 ### Exit codes
@@ -2379,6 +2380,19 @@ consumed natively per the unchanged Mk1 branch).
 | Corrected `ms1` emitted to stdout | `warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '\| age -e ...')` |
 | Repair fired and emitted ≥ 1 correction | `repair: applied K correction(s) across J chunk(s)` |
 
+### Recovering an incorrect-length card (`--max-indel`) {#mnemonic-repair-max-indel}
+
+`mnemonic repair` corrects substitution errors at a FIXED length. When a
+character was inserted or dropped during hand-copy (so the string is the
+wrong length and no longer decodes), pass `--max-indel <N>` (1–4) to also
+search for that indel. The search covers the data-part (delete-and-validate
+for too-long; BCH-solve the omitted symbol for too-short) and the `ms1`/`mk1`
+prefix. Outcomes: a unique recovery prints the corrected string (exit 5, like
+any repair); multiple equally-valid candidates print all of them (exit 4 —
+choose manually); none within the budget exits 2. `ms1` candidates are secret
+material (the usual stderr advisory applies). `md1` (chunked) is not yet
+supported. Default `0` disables the search (behavior unchanged).
+
 ### `--no-auto-repair` interaction
 
 The standalone `mnemonic repair` subcommand IGNORES the global
@@ -2444,6 +2458,30 @@ The standalone `mnemonic repair --json` invocation still emits the
 v0.22.0 `RepairJson` envelope (without the D20 discriminator fields) —
 the discriminator marks emission as "auto-fire short-circuit" vs
 "user-invoked repair subcommand."
+
+When `--max-indel ≥ 1` triggers the indel engine and produces a result,
+the `--json` envelope instead has the shape:
+
+```json
+{
+  "schema_version": "1",
+  "status": "unique",
+  "candidates": [
+    {
+      "recovered": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "indel_count": 1,
+      "region": "data",
+      "direction": "delete"
+    }
+  ]
+}
+```
+
+`status` is `"unique"` (one candidate, exit 5) or `"ambiguous"` (multiple,
+exit 4). `region` is `"data"` or `"prefix"`. `direction` is `"delete"`
+(too-long input) or `"insert"` (too-short input). The indel envelope is NOT
+emitted for the `Unrecoverable` outcome — that surfaces via the normal error
+path (exit 2, no JSON on stdout).
 
 ---
 

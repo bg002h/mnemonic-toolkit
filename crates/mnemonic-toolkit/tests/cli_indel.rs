@@ -177,6 +177,24 @@ fn json_unique_envelope_shape() {
     assert_eq!(v["candidates"][0]["recovered"], VALID_MS1);
 }
 
+/// Test 12 — ms1 successful indel recovery fires the secret-material stderr advisory.
+/// Folds Phase-5 review Minor m-adv: the advisory was asserted to fire by code
+/// inspection (`any_ms1 = true` → `secret_on_stdout_warning`) but had no
+/// integration assertion. MNEMONIC_FORCE_TTY=1 ensures deterministic TTY-positive
+/// advisory emission (mirrors cli_bundle_slip0132_info.rs convention).
+#[test]
+fn ms1_indel_recovery_fires_secret_advisory() {
+    const ADVISORY: &str =
+        "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')";
+    let bad = ins_data(VALID_MS1, 10, 'q');
+    cmd()
+        .args(["repair", "--ms1", &bad, "--max-indel", "1"])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains(VALID_MS1))
+        .stderr(predicate::str::contains(ADVISORY));
+}
+
 /// Test 11 — multi-group both emit → exit 5; stdout contains BOTH the recovered
 /// VALID_MS1 (indel path) AND the valid passthrough mk1 chunks (normal path).
 /// Guards R0 I1 — no group is skipped by the indel branch's control flow.
