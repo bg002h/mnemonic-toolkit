@@ -29,6 +29,8 @@ use mk_codec::string_layer::bch::{
     bch_code_for_length, hrp_expand, polymod_run,
 };
 use mk_codec::string_layer::bch_decode::{decode_long_errors, decode_regular_errors};
+#[allow(unused_imports)] // used from Phase 2+ (Ms1IndelOracle / Mk1IndelOracle)
+use std::collections::BTreeSet;
 use std::io::{IsTerminal, Read, Write};
 
 use crate::error::ToolkitError;
@@ -392,6 +394,11 @@ pub enum RepairError {
         expected: &'static str,
         found: String,
     },
+    #[allow(dead_code)] // used from Phase 5+ (CLI wiring)
+    IndelUnrecoverable {
+        hrp: &'static str,
+        max_indel: usize,
+    },
     TooManyErrors {
         chunk_index: usize,
         bound: usize,
@@ -478,6 +485,12 @@ impl std::fmt::Display for RepairError {
                     "repair: chunk {chunk_index} HRP mismatch — expected '{expected}', found '{found}' (HRP is not BCH-protected; re-type the prefix){suggestion_suffix}"
                 )
             }
+            RepairError::IndelUnrecoverable { hrp, max_indel } => write!(
+                f,
+                "repair: chunk could not be recovered within --max-indel {max_indel} (HRP '{hrp}'); \
+                the string may have more than {max_indel} inserted/dropped characters, \
+                or a different error class"
+            ),
             RepairError::TooManyErrors { chunk_index, bound } => write!(
                 f,
                 "repair: chunk {chunk_index} has too many errors to correct uniquely (exceeds singleton bound = {bound}); cannot suggest correction"

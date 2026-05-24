@@ -13,6 +13,7 @@ mod env_sentinel;
 mod error;
 mod format;
 mod friendly;
+mod indel;
 mod language;
 mod network;
 mod nostr;
