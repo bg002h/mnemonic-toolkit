@@ -66,3 +66,20 @@ Folding ALL:
 - **M3:** decode_address `run<R,W,E>(args,stdin,stdout,stderr)` 4-arg uniform (ignore stdin).
 - Dispositions (b)(c)(d)(e) folded verbatim into the plan; pin `bip322 = "=0.0.10"`.
 Re-dispatching R1 via SendMessage to a81c65b57207226bb.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+Reviewer agentId a9d563c2b6ca95390. All R0 folds VERIFIED against live registry source:
+- **C1:** `convert.rs:175` already documents entropy; Phase 1 now lock-test only; loose `contains("entropy")` can't false-fail. ✓
+- **C2:** `is_signed_by_address` P2PKH-only (bitcoin-0.32.8/sign_message.rs:146-161 → Err(UnsupportedAddressType) for non-P2PKH); bip322 refuses P2PKH (verify.rs:67-98, `_=>Err(UnsupportedAddress)`@95) — exact complements. Core sketch type-checks: `is_signed_by_address(&secp,&addr,sha256d::Hash)` matches `signed_msg_hash(&str)->sha256d::Hash`; double `parse_addr` idempotent/harmless. ✓
+- **I1:** `VerifyMessage` slot between `UnknownHrp`(287-290) / `XpubSearchNoMatch`(308-311) in def + exit_code(500-501) + kind(558-559) + message(732-743); details `_=>None`@773. U<V<X correct. ✓
+- **I2:** `AddressType: Display` (mod.rs:81-89) yields lowercase "p2pkh".."p2a"; `script_type: String` consistent. ✓
+- **M1:** vec neighbors confirmed exact (convert@76/derive-child@77; verify-bundle@92/xpub-search-account@93). ✓
+- **M2:** `Network::Testnet4` EXISTS (network.rs:83; "testnet4"@352) — no compile-blocker; tb1 valid for testnet/testnet4/signet. ✓
+- **M3 + dispositions (b)(c)(d)(e):** all sound. ✓
+- **Bonus confirmations:** import path `bitcoin::address::{Address,AddressType,NetworkUnchecked}` valid (NetworkUnchecked NOT re-exported at crate root → this path is required); `secp-recovery` already active transitively (bsms_verify.rs:50 calls recover_pubkey; Cargo.toml only declares ["base64"]) → `is_signed_by_address`/`from_base64` available with NO new feature flag; bip322 `bitcoin 0.32.5` unifies with toolkit 0.32.8 (no dup); BIP-322 oracle vectors real (bip322 lib.rs:42).
+
+**Residual Minor (non-blocking, fold during impl):** `cli_gui_schema.rs:98` assert-message string also embeds "23" → update to 25 with the line-69 comment. FOLDED into plan M1.
+
+**0C/0I gate satisfied — implementation may proceed.**

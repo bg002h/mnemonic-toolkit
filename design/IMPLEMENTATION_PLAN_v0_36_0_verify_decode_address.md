@@ -17,7 +17,7 @@
 - **SemVer MINOR → v0.36.0** (two new top-level subcommands). New dep `bip322 0.0.10`. `Cargo.lock` regen (per `cargo-lock-version-bump-lockstep`).
 - **GUI lockstep (MINOR):** add `decode-address` + `verify-message` `SubcommandSchema`s to `mnemonic-gui/src/schema/mnemonic.rs`; pin bump → GUI MINOR. NO secret flags ⇒ no secret-projection delta. Run `schema_mirror` with `MNEMONIC_BIN=<v0.36.0>`.
 - **Manual lockstep:** two new chapters under `docs/manual/src/40-cli-reference/41-mnemonic.md`; convert freebie line; **add both subcommands to `docs/manual/tests/cli-subcommands.list`** so flag-coverage actually checks them (the v0.35.0 lesson — that file's omission silently un-wires the chapter check).
-- **`cli_gui_schema.rs`** `gui_schema_lists_all_subcommands` is a hardcoded **sorted vec** (`:71-101`), not a count. Insert `"decode-address"` between `"convert"`(:76) and `"derive-child"`(:77); insert `"verify-message"` between `"verify-bundle"`(:92) and `"xpub-search-account-of-descriptor"`(:93) (`verify-b` < `verify-m`). Update the prose count comment (:69) to 25.
+- **`cli_gui_schema.rs`** `gui_schema_lists_all_subcommands` is a hardcoded **sorted vec** (`:71-101`), not a count. Insert `"decode-address"` between `"convert"`(:76) and `"derive-child"`(:77); insert `"verify-message"` between `"verify-bundle"`(:92) and `"xpub-search-account-of-descriptor"`(:93) (`verify-b` < `verify-m`). Update the count in **both** the prose comment (:69) AND the `assert_eq!` failure-message string (`:98` "all 23 user-facing subcommands…") → 25 (R1 Minor).
 - The freebie touches NO clap flag NAME (the `convert --from`/`--to` node list is free-text `node=value`, not a clap `ValueEnum`) ⇒ no `schema_mirror` impact for Phase 1.
 
 ---
