@@ -35,7 +35,7 @@ This is the recommended path until crates.io publication completes:
 cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit.git mnemonic-toolkit
 cargo install --locked --git https://github.com/bg002h/descriptor-mnemonic.git md-cli
 cargo install --locked --git https://github.com/bg002h/mnemonic-secret.git ms-cli
-cargo install --locked --git https://github.com/bg002h/mnemonic-key.git --tag mk-cli-v0.2.0 --bin mk
+cargo install --locked --git https://github.com/bg002h/mnemonic-key.git --bin mk
 ```
 
 Each command compiles the source and writes the binary into

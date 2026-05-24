@@ -25,7 +25,7 @@ The three cards engrave together as a coherent backup. Each card is independentl
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --only mnemonic
 ```
 
-Or build a specific tag directly: `cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.36.3 mnemonic-toolkit`.
+Or pin a specific release tag directly: `cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-vX.Y.Z mnemonic-toolkit` (use the latest tag from the [releases page](https://github.com/bg002h/mnemonic-toolkit/releases)).
 
 ## Subcommands & reference
 
