@@ -779,3 +779,23 @@ fn run_from_import_json<W: Write, E: Write>(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod format_requires_template_tests {
+    use super::{format_requires_template, CliExportFormat::*};
+
+    /// v0.37.0 regression guard (SPEC §2.3): the exact template-requiring vs
+    /// passthrough partition. If a future change flips a passthrough format
+    /// (esp. bip388, which branches output on `template.is_some()`) into the
+    /// inject set, this fails at the source — stronger than the behavioral
+    /// `p11e_passthrough_formats_unaffected_by_autoderive` guard.
+    #[test]
+    fn partition_is_exact() {
+        for f in [Sparrow, Coldcard, ColdcardMultisig, Jade, Electrum] {
+            assert!(format_requires_template(f), "{f:?} must require a template");
+        }
+        for f in [BitcoinCore, Bip388, Bsms, Green, Specter] {
+            assert!(!format_requires_template(f), "{f:?} must be passthrough (template stays None)");
+        }
+    }
+}

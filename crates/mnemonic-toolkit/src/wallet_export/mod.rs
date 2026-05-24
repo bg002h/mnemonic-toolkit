@@ -633,8 +633,14 @@ mod template_from_descriptor_tests {
         assert_ne!(t(&d).unwrap(), crate::template::CliTemplate::WshMulti);
     }
     #[test]
-    fn sh_bare_multi_errs() {
+    fn sh_bare_sortedmulti_errs() {
         let d = format!("sh(sortedmulti(2,{X1},{X2}))");
-        assert!(t(&d).is_err(), "legacy bare P2SH multisig has no template");
+        assert!(t(&d).is_err(), "legacy bare P2SH sortedmulti has no template");
+    }
+    #[test]
+    fn sh_bare_multi_errs() {
+        // The unsorted sibling routes through the same ShInner::Ms arm.
+        let d = format!("sh(multi(2,{X1},{X2}))");
+        assert!(t(&d).is_err(), "legacy bare P2SH multi has no template");
     }
 }
