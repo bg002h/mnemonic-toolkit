@@ -3187,3 +3187,12 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `resolved`
 - **Tier:** `v0.36+`
 - **Tags:** none
+
+### `m-format-incorrect-length-recovery` — recover m*1 (md1/mk1/ms1) strings of incorrect length (indel recovery)
+- **Surfaced:** 2026-05-24, user feature request (post-v0.37.0). Full handoff: `design/CONTINUITY_m_format_incorrect_length_recovery.md`.
+- **Where:** `crates/mnemonic-toolkit/src/repair.rs` (BCH substitution correction; `bch_code_for_length` picks the code variant FROM the length, so wrong-length inputs error as `RepairError::ReservedInvalidLength` `:406` / `UnsupportedCodeVariant` `:414`); `cmd/repair.rs` + `cmd/inspect.rs` (`inspect` reports `byte_length` `cmd/inspect.rs:195` but no recovery); `cmd/final_word.rs` (the enumerate-candidates-validate-by-checksum analogue); sibling codecs' `decode`/`decode_with_correction` (the per-candidate validation oracle).
+- **What:** recover an `m*1` string where a character was **inserted (too long)** or **dropped (too short)** during hand-copy/engraving — so it no longer decodes. **Distinct from `mnemonic repair`**, which is BCH *substitution* correction at FIXED length; an indel shifts every subsequent symbol and breaks the BCH codeword, so this needs a different algorithm. Likely **toolkit-side enumerate-and-validate** (delete each position for too-long; insert each of 32 charset symbols at each position for too-short) using the codec `decode` as oracle — probably no sibling-codec change. **Open decisions (brainstorm):** surface (flag on `repair` vs new subcommand — affects GUI/manual lockstep); indel direction + budget (default off-by-1); which HRPs (md1 chunked / mk1 long-codes / ms1 secret-bearing); ambiguity output contract; combine-with-substitution (likely defer); secret-on-stdout advisory for ms1. bech32m checksum is the validity oracle (charset = `ALPHABET`, `repair.rs:28`). **DO NOT plan on the bech32 upstream `Corrector`** — still unavailable (v0.11.1).
+- **SemVer:** MINOR if new subcommand; PATCH if additive flag on `repair`.
+- **Status:** `open`
+- **Tier:** `v0.37+`
+- **Tags:** none
