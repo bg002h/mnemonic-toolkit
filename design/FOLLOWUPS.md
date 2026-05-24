@@ -3167,10 +3167,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.36+`
 - **Tags:** none
 
-### `manual-yml-sibling-cli-pin-staleness` — manual.yml sibling-CLI install pins lag install.sh
-- **Surfaced:** 2026-05-24, v0.36.3 R0 (M2).
-- **Where:** `.github/workflows/manual.yml:77/84/88` vs `scripts/install.sh:35/38/41`.
-- **What:** the manual CI workflow installs `mk-cli-v0.4.1` / `descriptor-mnemonic-md-cli-v0.6.0` / `ms-cli-v0.4.0` while `install.sh` pins `v0.4.2` / `v0.6.1` / `v0.4.1`. Pre-existing drift; does not affect the `mnemonic` flag-coverage (the only gate the v0.36.3 cycle wired). Bump `manual.yml` to match `install.sh` (or derive from a shared pin). Low priority.
+### `manual-yml-and-install-sh-sibling-gui-pin-staleness` — manual.yml + install.sh non-`mnemonic` pins lag
+- **Surfaced:** 2026-05-24, v0.36.3 R0 (M2) + end-of-cycle (M1).
+- **Where:** `.github/workflows/manual.yml:77/84/88`; `scripts/install.sh:35/38/41` (siblings) + `:44` (GUI).
+- **What:** TWO pin-staleness sites, neither gated by install-pin-check (which only checks the `mnemonic` self-pin @install.sh:32):
+  (1) `manual.yml:77/84/88` installs `mk-cli-v0.4.1` / `descriptor-mnemonic-md-cli-v0.6.0` / `ms-cli-v0.4.0` while `install.sh` pins `v0.4.2` / `v0.6.1` / `v0.4.1`.
+  (2) **`install.sh:44` pins `mnemonic-gui-v0.10.0` — far behind the live GUI v0.21.1** (impacts actual installs: the default all-5 `install.sh` would install a 10-version-stale GUI). Bump to the current GUI tag.
+  Pre-existing drift; neither affects the `mnemonic` flag-coverage this cycle wired. Bump both to current tags (ideally derive from a shared pin / add a gate). The GUI pin (2) is the higher-impact one.
 - **Status:** `open`
 - **Tier:** `v0.36+`
 - **Tags:** none
