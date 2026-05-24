@@ -39,3 +39,10 @@ VERDICT: RED (0C/1I)
 - **M3:** add the multisig inverse-ambiguity note to the `export-wallet-from-import-json-template-format-reemit` FOLLOWUP.
 - **M4:** use the canonical slug in the v0.36.4 CHANGELOG.
 Re-dispatch R1.
+
+---
+
+## R1 (round 1) — VERDICT: GREEN (0C/0I)
+Reviewer agentId a9c33f8d63bf10cb6. All folds verified: I1 (manual.yml/quickstart.yml paths exclude their own workflow files → pins validate lazily; this cycle's gates = rust [fires on Cargo.toml/crates] + install-pin-check [tag]); M1 (quickstart.yml:71 sole stale pin, mk-cli-v0.4.2 exists); M2 (manual-gui.yml runtime-derives from pinned-upstream.toml, correctly excluded); M3 (multisig inverse-ambiguity note present); M4 (canonical slug). README-marker lockstep CONFIRMED handled: both markers @README.md:13 + crates/.../README.md:9 (only 2 source occurrences); guard loops both vs CARGO_PKG_VERSION; rust job runs it. All 4 bump-target tags verified live (gui-v0.21.1, mk-cli-v0.4.2, md-cli-v0.6.1, ms-cli-v0.4.1); install.sh siblings already current. 0.36.4 tag/CHANGELOG don't pre-exist.
+
+**0C/0I gate satisfied (R0 RED 0C/1I → R1 GREEN). Implementation may proceed.**
