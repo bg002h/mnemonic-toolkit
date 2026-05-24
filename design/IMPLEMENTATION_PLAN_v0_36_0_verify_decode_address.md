@@ -17,21 +17,23 @@
 - **SemVer MINOR → v0.36.0** (two new top-level subcommands). New dep `bip322 0.0.10`. `Cargo.lock` regen (per `cargo-lock-version-bump-lockstep`).
 - **GUI lockstep (MINOR):** add `decode-address` + `verify-message` `SubcommandSchema`s to `mnemonic-gui/src/schema/mnemonic.rs`; pin bump → GUI MINOR. NO secret flags ⇒ no secret-projection delta. Run `schema_mirror` with `MNEMONIC_BIN=<v0.36.0>`.
 - **Manual lockstep:** two new chapters under `docs/manual/src/40-cli-reference/41-mnemonic.md`; convert freebie line; **add both subcommands to `docs/manual/tests/cli-subcommands.list`** so flag-coverage actually checks them (the v0.35.0 lesson — that file's omission silently un-wires the chapter check).
-- **`cli_gui_schema.rs`** `gui_schema_lists_all_subcommands`: 23 → **25** (add `decode-address`, `verify-message`).
+- **`cli_gui_schema.rs`** `gui_schema_lists_all_subcommands` is a hardcoded **sorted vec** (`:71-101`), not a count. Insert `"decode-address"` between `"convert"`(:76) and `"derive-child"`(:77); insert `"verify-message"` between `"verify-bundle"`(:92) and `"xpub-search-account-of-descriptor"`(:93) (`verify-b` < `verify-m`). Update the prose count comment (:69) to 25.
 - The freebie touches NO clap flag NAME (the `convert --from`/`--to` node list is free-text `node=value`, not a clap `ValueEnum`) ⇒ no `schema_mirror` impact for Phase 1.
 
 ---
 
-## Phase 1 — Freebie: `convert --from` help lists `entropy`
+## Phase 1 — convert `--from entropy` lock-test (+ optional wording enrichment)
+
+> **R0 C1 CORRECTION:** the "freebie" was a FALSE POSITIVE. `convert.rs:175` ALREADY documents the entropy node: `///   entropy          raw entropy hex (secret)`. Root cause: the controller's grep patterns (survey + recon) omitted the literal "entropy", so the existing row was never seen. There is **no missing row to add**. Phase 1 is recharacterized: a regression lock-test (valuable) + an OPTIONAL one-line wording enrichment.
 
 **Files:**
-- Modify: `crates/mnemonic-toolkit/src/cmd/convert.rs:171-188` (the `--from` long-help node enum)
-- Test: `crates/mnemonic-toolkit/tests/cli_convert.rs` (or the existing convert test file — grep at impl)
-- Modify: `docs/manual/src/40-cli-reference/41-mnemonic.md` (convert `--from` node list)
+- Modify (OPTIONAL): `crates/mnemonic-toolkit/src/cmd/convert.rs:175` (enrich the existing entropy row's wording)
+- Test: `crates/mnemonic-toolkit/tests/cli_convert.rs` (or existing convert test file — grep at impl)
+- Modify (only if Step 3 done): `docs/manual/src/40-cli-reference/41-mnemonic.md`
 
-**Context:** `convert.rs:147` and `:862` error strings already enumerate `entropy`; `--to` possible-values already includes it; `convert --from entropy=<hex>` already works. Only the `--from` **long-help doc-comment** (`:171-185`) omits the `entropy` row. Pure doc + lock-test.
+**Context:** `convert.rs:147` + `:862` error strings, `--to` possible-values, AND the `--from` long-help (`:175`) all already name `entropy`; `convert --from entropy=<hex>` already works. So this phase adds regression coverage, not a fix.
 
-- [ ] **Step 1 — RED: regression test** the entropy edge is supported.
+- [ ] **Step 1 — regression lock-test** (PASS-on-write — behavior + help both already correct):
 
 ```rust
 // tests/cli_convert.rs (new test)
@@ -42,31 +44,19 @@ fn convert_from_entropy_to_phrase_is_supported() {
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
     assert!(String::from_utf8_lossy(&out.stdout).contains("abandon abandon abandon"));
 }
-```
 
-- [ ] **Step 2** — run it; expect PASS (behavior already exists — this is a lock-test, not a driver). Run: `cargo test --test cli_convert convert_from_entropy_to_phrase_is_supported`.
-
-- [ ] **Step 3 — fix the help doc-comment.** In the `///` block at `convert.rs:172-185`, insert after the `seedqr` row (line 173-176) and before `xprv` (line 177):
-
-```rust
-    ///   entropy          raw BIP-39 entropy as hex (16/20/24/28/32 bytes; secret)
-```
-
-- [ ] **Step 4 — assert the help text now lists entropy.**
-
-```rust
 #[test]
-fn convert_help_from_lists_entropy_node() {
+fn convert_help_from_documents_entropy_node() {
     let out = run_mnemonic(&["convert", "--help"]);
-    let help = String::from_utf8_lossy(&out.stdout);
-    // The `<node> is one of:` enum must name entropy.
-    assert!(help.contains("entropy") && help.contains("raw BIP-39 entropy"));
+    // Loose assert (R0): the existing row already says "entropy" — do NOT
+    // assert specific wording so the optional Step-3 enrichment can't break it.
+    assert!(String::from_utf8_lossy(&out.stdout).contains("entropy"));
 }
 ```
 
-- [ ] **Step 5** — `cargo test --test cli_convert` → both PASS.
-- [ ] **Step 6 — manual mirror.** Add the `entropy` node row to the convert `--from` enumeration in `41-mnemonic.md`.
-- [ ] **Step 7 — commit.** `git add crates/mnemonic-toolkit/src/cmd/convert.rs crates/mnemonic-toolkit/tests/cli_convert.rs docs/manual/src/40-cli-reference/41-mnemonic.md`
+- [ ] **Step 2** — `cargo test --test cli_convert convert_from_entropy` → both PASS (lock-tests).
+- [ ] **Step 3 — (OPTIONAL) wording enrichment.** If desired, refine `convert.rs:175` `raw entropy hex (secret)` → `raw entropy hex, 16/20/24/28/32 bytes (secret)` (matches the byte-length set the parser accepts). Drive with a RED→GREEN test asserting the byte-length phrase IF taken; otherwise SKIP this step. Mirror to manual only if taken.
+- [ ] **Step 4 — commit.** `git add crates/mnemonic-toolkit/tests/cli_convert.rs` (+ convert.rs/manual only if Step 3 taken).
 
 ---
 
@@ -99,8 +89,8 @@ fn electrum_phrase_to_address_is_refused() {
 ```
 
 - [ ] **Step 2** — run; expect PASS. `cargo test --test cli_convert electrum_`.
-- [ ] **Step 3 — (R0-gated) honest wording.** *Only if R0 approves touching the shared message.* Options for R0: (a) add a dedicated `(ElectrumPhrase, _)` refusal arm with an honest message before the shared barrier; (b) leave `:460` as-is (the loose test in Step 1 passes either way). **Default: defer to R0 disposition; do NOT widen scope unilaterally.**
-- [ ] **Step 4 — commit** (folds into Phase 1's convert commit if same files, else separate).
+- [ ] **Step 3 — (R0 disposition (b)) LEAVE `convert.rs:460` as-is.** The shared barrier message is reused by many edges; the loose lock-test (`contains("electrum")`) passes because the message interpolates `from.as_str()`="electrum-phrase". Honest-wording refinement deferred to FOLLOWUP `electrum-phrase-address-refusal-honest-wording`. Do NOT touch the shared refusal plumbing this cycle.
+- [ ] **Step 4 — commit** (folds into Phase 1's convert/test commit).
 
 ---
 
@@ -124,8 +114,8 @@ use bitcoin::{Address, Network, address::NetworkUnchecked};
 use crate::error::ToolkitError;
 
 pub(crate) struct DecodedAddress {
-    pub networks: Vec<&'static str>,   // address layer can't disambiguate testnet/signet/regtest
-    pub script_type: &'static str,     // p2pkh|p2sh|p2wpkh|p2wsh|p2tr|unknown
+    pub networks: Vec<&'static str>,   // address layer can't disambiguate testnet/testnet4/signet
+    pub script_type: String,           // p2pkh|p2sh|p2wpkh|p2wsh|p2tr|p2a|unknown (via AddressType Display)
     pub witness_version: Option<u8>,   // Some(0|1|…) for segwit, None for legacy
     pub script_pubkey_hex: String,
     pub address_normalized: String,
@@ -135,18 +125,22 @@ pub(crate) fn decode_address(input: &str) -> Result<DecodedAddress, ToolkitError
     let unchecked: Address<NetworkUnchecked> = input.trim().parse()
         .map_err(|e| ToolkitError::DecodeAddress(format!("not a valid Bitcoin address: {e}")))?;
     // Determine which networks this address is valid for (prefix/HRP based).
+    // R0 M2: tb1 HRP is valid for Testnet|Testnet4|Signet (NOT regtest, which is
+    // the distinct bcrt1 HRP). Include testnet4 in the probe set.
     let mut networks = Vec::new();
     for (label, net) in [("mainnet", Network::Bitcoin), ("testnet", Network::Testnet),
-                          ("signet", Network::Signet), ("regtest", Network::Regtest)] {
+                          ("testnet4", Network::Testnet4), ("signet", Network::Signet),
+                          ("regtest", Network::Regtest)] {
         if unchecked.is_valid_for_network(net) { networks.push(label); }
     }
     // assume_checked is safe post-validation; pick the first matching net for script derivation.
     let checked = unchecked.clone().assume_checked();
     let spk = checked.script_pubkey();
-    let script_type = match checked.address_type() {
-        Some(t) => address_type_str(t),   // map AddressType → &'static str
-        None => "unknown",
-    };
+    // R0 I2: AddressType is #[non_exhaustive] (6 variants incl P2a). Use the
+    // crate's Display (yields lowercase "p2pkh"…"p2tr"/"p2a") — forward-compatible,
+    // no enumeration, no compile-blocking 5-arm match.
+    let script_type: String = checked.address_type().map(|t| t.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     let witness_version = checked.witness_program().map(|wp| wp.version().to_num());
     Ok(DecodedAddress {
         networks, script_type, witness_version,
@@ -156,7 +150,7 @@ pub(crate) fn decode_address(input: &str) -> Result<DecodedAddress, ToolkitError
 }
 ```
 
-(`address_type_str` maps `AddressType::{P2pkh,P2sh,P2wpkh,P2wsh,P2tr}` → the lowercase strings; confirm exact `AddressType` variants + `witness_program()`/`version().to_num()` API at impl against `bitcoin 0.32.8`.)
+(`script_type` is now `String`, not `&'static str` — adjust the struct field. `wp.version().to_num() -> u8` confirmed (R0). `is_valid_for_network`/`assume_checked`/`witness_program`/`script_pubkey` all confirmed @ bitcoin 0.32.8.)
 
 **CLI (`cmd/decode_address.rs`):** `DecodeAddressArgs { address: String (positional), json: bool }`; `run<W,E>(...)`. Human output lists the 5 fields; `--json` emits `{address, networks:[…], script_type, witness_version, script_pubkey, valid:true}`.
 
@@ -188,10 +182,12 @@ fn p2tr_witness_v1() {
 #[test]
 fn invalid_address_errors() { assert!(decode_address("not-an-address").is_err()); }
 #[test]
-fn testnet_signet_regtest_ambiguity_reported_as_set() {
+fn tb1_hrp_valid_for_testnet_testnet4_signet_not_regtest() {
     let d = decode_address("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx").unwrap();
-    // tb1 HRP is testnet AND signet
+    // tb1 HRP is valid for testnet + testnet4 + signet; regtest is bcrt1 (distinct).
     assert!(d.networks.contains(&"testnet") && d.networks.contains(&"signet"));
+    assert!(d.networks.contains(&"testnet4"));
+    assert!(!d.networks.contains(&"regtest"));
 }
 ```
 
@@ -209,74 +205,96 @@ fn testnet_signet_regtest_ambiguity_reported_as_set() {
 
 ## Phase 4 — `mnemonic verify-message` (legacy + BIP-322, verify-only)
 
+> **R0 C2 — address-type partition (load-bearing).** `bitcoin 0.32.8`'s `is_signed_by_address` is **P2PKH-ONLY** (`sign_message.rs:146-161` → `Err(UnsupportedAddressType)` for segwit/wrapped/taproot). The `bip322` crate is the **complement**: it supports P2WPKH/P2SH-P2WPKH/P2TR and **refuses P2PKH** (`verify.rs:67-98`). So the two partition cleanly by address type. Design:
+> - **legacy** path → P2PKH only.
+> - **bip322** path → P2WPKH / P2SH-P2WPKH / P2TR.
+> - **auto** → P2PKH ⇒ legacy; else ⇒ bip322.
+> - `--format legacy` on a non-P2PKH address ⇒ honest `VerifyMessage` error ("legacy signmessage verification is P2PKH-only; use --format bip322 or auto for segwit/taproot"), NOT the misleading "bad base64" message.
+
 **Files:**
-- Modify: `crates/mnemonic-toolkit/Cargo.toml` (`bip322 = "0.0.10"`)
+- Modify: `crates/mnemonic-toolkit/Cargo.toml` (`bip322 = "=0.0.10"` — exact pin per R0 disposition (e); crate name is `bip322`, NOT `bip322-rs`)
 - Create: `crates/mnemonic-toolkit/src/verify_message.rs` (core)
 - Create: `crates/mnemonic-toolkit/src/cmd/verify_message.rs` (CLI)
-- Modify: `error.rs` (+`VerifyMessage(String)` — alpha placement in the legacy-unsorted V-region; **R0 to pin exact spot** — candidate: between `Unset`@320 and `XpubParse`@336)
-- Modify: `main.rs` + `cmd/mod.rs`
+- Modify: `error.rs` (+`VerifyMessage(String)` — **R0 I1: between `UnknownHrp`(285-290) and `XpubSearchNoMatch`(291-311)** in the variant def + `exit_code`(500-501) + `kind`(558-559) + `message`(732-743); NO `details` arm — String payload falls through `_=>None`@773)
+- Modify: `main.rs` (`mod verify_message;`; `Command::VerifyMessage`; dispatch) + `cmd/mod.rs` (`pub mod verify_message;`)
 - Test: `crates/mnemonic-toolkit/tests/cli_verify_message.rs`
-- Modify: `cli_gui_schema.rs` (add `"verify-message"`; →25), manual, `cli-subcommands.list`
+- Modify: `cli_gui_schema.rs` (insert `"verify-message"` between `"verify-bundle"`/`"xpub-search-account-of-descriptor"`), manual, `cli-subcommands.list`
 
 **Core API (`verify_message.rs`):**
 
 ```rust
 //! Binary-private: PUBLIC message-signature verification. NO secrets, NO signing.
+//! Address-type partition (R0 C2): legacy=P2PKH only; bip322=P2WPKH/P2SH-P2WPKH/P2TR.
 use bitcoin::sign_message::{signed_msg_hash, MessageSignature};
-use bitcoin::{Address, address::NetworkUnchecked};
+use bitcoin::address::{Address, AddressType, NetworkUnchecked};
 use bitcoin::secp256k1::Secp256k1;
 use crate::error::ToolkitError;
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum SigFormat { Legacy, Bip322, Auto }
 
 pub(crate) struct VerifyOutcome {
     pub valid: bool,
-    pub format_matched: &'static str,   // "legacy" | "bip322" | "none"
+    pub format_matched: &'static str,   // "legacy" | "bip322"
 }
 
-pub(crate) fn verify_message(
-    address: &str, message: &str, signature: &str, fmt: SigFormat,
-) -> Result<VerifyOutcome, ToolkitError> {
-    let try_legacy = |.| -> Option<bool> {
-        let sig = MessageSignature::from_base64(signature).ok()?;   // only 65-byte recoverable decodes
-        let addr: Address<NetworkUnchecked> = address.parse().ok()?;
-        let addr = addr.assume_checked();
-        let digest = signed_msg_hash(message);
-        let secp = Secp256k1::verification_only();
-        sig.is_signed_by_address(&secp, &addr, digest).ok()
-    };
-    let try_bip322 = |.| -> bool {
-        bip322::verify_simple_encoded(address, message, signature).is_ok()
-    };
+fn parse_addr(address: &str) -> Result<bitcoin::Address, ToolkitError> {
+    let a: Address<NetworkUnchecked> = address.trim().parse()
+        .map_err(|e| ToolkitError::VerifyMessage(format!("invalid address: {e}")))?;
+    Ok(a.assume_checked())
+}
+
+/// Legacy "Bitcoin Signed Message" verify — P2PKH ONLY (bitcoin 0.32.8 limit).
+fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, ToolkitError> {
+    let addr = parse_addr(address)?;
+    if addr.address_type() != Some(AddressType::P2pkh) {
+        return Err(ToolkitError::VerifyMessage(
+            "legacy signmessage verification is P2PKH-only; use --format bip322 or auto \
+             for segwit/taproot addresses".into()));
+    }
+    let sig = MessageSignature::from_base64(signature).map_err(|e|
+        ToolkitError::VerifyMessage(format!("signature is not a valid base64 recoverable signature: {e}")))?;
+    let digest = signed_msg_hash(message);
+    let secp = Secp256k1::verification_only();
+    sig.is_signed_by_address(&secp, &addr, digest)
+        .map_err(|e| ToolkitError::VerifyMessage(format!("legacy verify failed: {e}")))
+}
+
+/// BIP-322 simple verify — P2WPKH/P2SH-P2WPKH/P2TR (crate refuses P2PKH).
+fn verify_bip322(address: &str, message: &str, signature: &str) -> bool {
+    bip322::verify_simple_encoded(address.trim(), message, signature).is_ok()
+}
+
+pub(crate) fn verify_message(address: &str, message: &str, signature: &str, fmt: SigFormat)
+    -> Result<VerifyOutcome, ToolkitError>
+{
+    let is_p2pkh = parse_addr(address)?.address_type() == Some(AddressType::P2pkh);
     match fmt {
-        SigFormat::Legacy => Ok(mk(try_legacy().ok_or_else(|| ToolkitError::VerifyMessage(
-            "signature is not a valid legacy (65-byte recoverable) base64 signature".into()))?, "legacy")),
-        SigFormat::Bip322 => Ok(mk(try_bip322(), "bip322")),
-        SigFormat::Auto => {
-            if let Some(v) = try_legacy() { return Ok(mk(v, "legacy")); }
-            Ok(mk(try_bip322(), "bip322"))
-        }
+        SigFormat::Legacy => Ok(VerifyOutcome { valid: verify_legacy(address, message, signature)?, format_matched: "legacy" }),
+        SigFormat::Bip322 => Ok(VerifyOutcome { valid: verify_bip322(address, message, signature), format_matched: "bip322" }),
+        SigFormat::Auto if is_p2pkh => Ok(VerifyOutcome { valid: verify_legacy(address, message, signature)?, format_matched: "legacy" }),
+        SigFormat::Auto => Ok(VerifyOutcome { valid: verify_bip322(address, message, signature), format_matched: "bip322" }),
     }
 }
 ```
 
-(Pseudocode `|.|` = closures; finalize at impl. `is_signed_by_address(secp, address, msg_hash) -> Result<bool>` confirmed in `bitcoin 0.32.8`. `mk(valid, fmt)` builds `VerifyOutcome`. Decide at impl whether `--format bip322` should also try `verify_full_encoded` as a fallback to `verify_simple_encoded`.)
+(`is_signed_by_address(&self, secp, &Address, sha256d::Hash) -> Result<bool,_>` + `signed_msg_hash(&str)->sha256d::Hash` confirmed @ bitcoin 0.32.8 (R0). R0 disposition (c): `--format bip322` uses `verify_simple_encoded` ONLY — do NOT fall back to `verify_full_encoded` (different signature encodings: witness-stack vs full-tx base64); full-format → future `--format bip322-full` FOLLOWUP.)
 
-**CLI (`cmd/verify_message.rs`):** `VerifyMessageArgs { address: String, message: Option<String>, message_file: Option<PathBuf>, message_stdin: bool (ArgGroup, default ""? — decide: message is REQUIRED, one-of the three), signature: String, format: VerifyFormat (clap ValueEnum: auto|legacy|bip322, default auto), json: bool }`. `run<R,W,E>`. **Exit code:** invalid signature ⇒ non-zero (precedent: a verify tool signals failure via exit; emit structured result first). `--json` ⇒ `{address, format_matched, valid, format_requested}`. NO secret flags.
+**CLI (`cmd/verify_message.rs`):** `VerifyMessageArgs { address: String (--address, required), message/message_file/message_stdin (one-of via ArgGroup; message is required content), signature: String (--signature, required), format: VerifyFormat (clap ValueEnum auto|legacy|bip322, default auto), json: bool }`. `run<R,W,E>(args,stdin,stdout,stderr)`. **Exit code (R0 disposition (d)):** malformed/undecodable input (bad address, bad base64, `--format legacy` on non-P2PKH) ⇒ `VerifyMessage` error → exit 1 (stderr). Cleanly-decoded-but-`valid==false` ⇒ exit 1 with the structured `valid:false` result on stdout (human + `--json`), no stderr error. `--json` ⇒ `{address, format_requested, format_matched, valid}`. NO secret flags, NO mlock (verification is public).
 
 **Test oracles:**
-- **Legacy:** source a known-good vector from the `bitcoin` crate `sign_message` tests OR generate one externally and hard-code `(address, message, base64_sig)`; assert valid==true, and a tampered message ⇒ valid==false.
-- **BIP-322:** the **BIP-322 spec test vectors** — P2WPKH address `bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l`, message `""` and `"Hello World"` with their published `verify_simple_encoded` signatures (cross-checked against the `bip322` crate's own tests); assert valid==true; wrong-message ⇒ valid==false. Add a P2TR BIP-322 vector if the spec/crate provides one.
+- **Legacy (P2PKH):** hard-code a known-good `(P2PKH address, message, base64_sig)` vector (source: `bitcoin` crate `sign_message` tests or an external signer; the address MUST be P2PKH per C2). Assert valid==true; tampered message ⇒ valid==false; a non-P2PKH address with `--format legacy` ⇒ `VerifyMessage` error.
+- **BIP-322:** the crate's own / BIP-322 mediawiki vector — P2WPKH `bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l`, messages `""` and `"Hello World"` with their published `verify_simple_encoded` signatures (R0-confirmed = the crate's `SEGWIT_ADDRESS` test). Assert valid==true; wrong-message ⇒ valid==false.
+- **auto dispatch:** P2PKH vector resolves via legacy; segwit vector via bip322 (assert `format_matched`).
 
-- [ ] **Step 1** — add `bip322 = "0.0.10"` to Cargo.toml; `cargo build` (confirms shared `bitcoin 0.32.8`, no duplicate; regen Cargo.lock).
+- [ ] **Step 1** — add `bip322 = "=0.0.10"` to Cargo.toml; `cargo build` (confirms shared `bitcoin 0.32.8`, no duplicate; regen Cargo.lock).
 - [ ] **Step 2 — RED unit tests** (legacy valid/invalid + BIP-322 spec vectors valid/invalid + auto-dispatch).
 - [ ] **Step 3** — run; expect FAIL (module absent).
 - [ ] **Step 4** — implement `verify_message.rs` core (legacy + bip322 + auto).
 - [ ] **Step 5** — add `ToolkitError::VerifyMessage(String)` (per R0 placement; `message` ⇒ `format!("verify-message: {msg}")`; exit 1; kind `"VerifyMessage"`).
 - [ ] **Step 6** — implement `cmd/verify_message.rs`; register in `main.rs` + `cmd/mod.rs`.
 - [ ] **Step 7 — CLI integration tests**: legacy + bip322 valid/invalid; `--format` override; `--message-stdin`; non-zero exit on invalid; `--json` shape.
-- [ ] **Step 8** — add `"verify-message"` to `cli_gui_schema.rs` (→25); manual chapter; `cli-subcommands.list` += `mnemonic verify-message`.
+- [ ] **Step 8** — insert `"verify-message"` between `"verify-bundle"`(:92)/`"xpub-search-account-of-descriptor"`(:93) in `cli_gui_schema.rs` (count comment →25); manual chapter; `cli-subcommands.list` += `mnemonic verify-message`.
 - [ ] **Step 9** — full suite + clippy GREEN.
 - [ ] **Step 10 — per-phase opus review** → persist `design/agent-reports/v0_36_0-phase-4-r0-review.md` → fold → GREEN → commit.
 
@@ -297,7 +315,7 @@ pub(crate) fn verify_message(
 ## Phase 6 — Release + end-of-cycle gate
 
 - [ ] **Step 1 — toolkit version/lock/install/changelog:** `Cargo.toml` 0.36.0; `Cargo.lock` regen (`cargo update -p mnemonic-toolkit` in-repo); `scripts/install.sh:32` self-pin `mnemonic-toolkit-v0.36.0`; `CHANGELOG.md` `[0.36.0]` MINOR entry.
-- [ ] **Step 2 — FOLLOWUPS:** close/file as needed (e.g., file `verify-message-bip322-full-format-coverage` if `verify_full_encoded` deferred; `decode-address-scriptpubkey-to-address-reverse` if reverse deferred; note `electrum-native-seed-address-derivation` as a real future feature surfaced by the spot-check).
+- [ ] **Step 2 — FOLLOWUPS:** file (per R0 dispositions): `verify-message-bip322-full-format` (`--format bip322-full` via `verify_full_encoded`); `electrum-phrase-address-refusal-honest-wording` (refine `convert.rs:460` for the electrum edge); `electrum-native-seed-address-derivation` (real future feature — Electrum PBKDF2("electrum")+m/0/i derivation, surfaced by the spot-check); optionally `decode-address-scriptpubkey-to-address-reverse`.
 - [ ] **Step 3 — manual lint:** `make -C docs/manual lint MNEMONIC_BIN=<v0.36.0> MD_BIN=md MS_BIN=ms MK_BIN=mk` → flag-coverage now checks both new chapters + convert freebie; 0 errors.
 - [ ] **Step 4 — end-of-cycle opus review** (whole-cycle diff) → persist `design/agent-reports/v0_36_0-end-of-cycle-review.md` verbatim → fold any Minors → GREEN.
 - [ ] **Step 5 — ship toolkit:** merge→master (ff), tag `mnemonic-toolkit-v0.36.0`, push, GH release; verify rust + manual + install-pin-check CI.
@@ -308,5 +326,5 @@ pub(crate) fn verify_message(
 ## Self-review (writing-plans checklist)
 
 - **Spec coverage:** Freebie (P1), electrum lock-tests (P2), decode-address (P3), verify-message legacy+BIP-322 (P4), GUI (P5), release (P6). ✓ All four user items covered.
-- **Type consistency:** `DecodedAddress`, `VerifyOutcome`, `SigFormat` used consistently; `ToolkitError::{DecodeAddress,VerifyMessage}(String)` String-payload (no detail-block arm). ✓
-- **Open R0 questions (flagged, not placeholders):** (a) exact alphabetical slot for `VerifyMessage` in the legacy-unsorted tail; (b) whether to refine the electrum refusal message (`:460`) or leave it; (c) `--format bip322` simple-vs-full fallback; (d) verify-message invalid-signature exit-code convention (non-zero vs always-0-with-json); (e) `bip322 0.0.x` dep acceptability (rust-bitcoin org, verify-only). These are design judgments for the architect, not unspecified impl details.
+- **Type consistency:** `DecodedAddress` (`script_type: String`), `VerifyOutcome`, `SigFormat` used consistently; `ToolkitError::{DecodeAddress,VerifyMessage}(String)` String-payload (no detail-block arm). ✓
+- **R0 dispositions folded (all RESOLVED):** C1 (no phantom freebie — lock-test only); C2 (legacy=P2PKH / bip322=segwit+taproot partition); I1 (`VerifyMessage` between `UnknownHrp`/`XpubSearchNoMatch`); I2 (`AddressType::to_string()`); M1 (exact gui_schema vec positions); M2 (testnet4 + rename); M3 (4-arg run). (a) slot fixed; (b) electrum `:460` left as-is + FOLLOWUP; (c) bip322 simple-only + FOLLOWUP for full; (d) exit-code convention pinned; (e) dep acceptable, exact-pinned `=0.0.10` `bip322`.
