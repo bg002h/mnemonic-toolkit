@@ -6,7 +6,7 @@ Top-level integration CLI for the **m-format constellation** of Bitcoin self-cus
 
 Installs as binary `mnemonic`.
 
-<!-- toolkit-version: 0.36.4 -->
+<!-- toolkit-version: 0.37.0 -->
 Status: **v0.36.x** — twenty `mnemonic` subcommands spanning 3-card bundle synthesis + verification, seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius / Electrum), cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), backup splitting (seed-XOR, SLIP-39, SeedQR), BIP-85 derivation, BIP-352 silent-payment addresses, nostr key wrapping, legacy + BIP-322 message verification, address decoding, and BCH repair / inspection. Mainnet / testnet / signet / regtest. See **[CHANGELOG.md](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md)** for the release history.
 
 | Card | Format | What's on it |
