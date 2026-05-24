@@ -66,14 +66,17 @@ fn gui_schema_lists_all_subcommands() {
     // `electrum-decrypt` (Electrum field-encrypted secret → plaintext);
     // total was 21. v0.34.0 adds `nostr` (wrap a nostr key as BTC
     // address/descriptor/WIF); total was 22. v0.35.0 adds `silent-payment`
-    // (BIP-352 receiver address derivation); total is now 23. gui-schema +
-    // help filtered out.
+    // (BIP-352 receiver address derivation); total was 23. v0.36.0 adds
+    // `decode-address` (address → network/type/witness/scriptPubKey) and
+    // `verify-message` (legacy + BIP-322 signature verify); total is now 25.
+    // gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
             "bundle",
             "compare-cost",
             "convert",
+            "decode-address",
             "derive-child",
             "electrum-decrypt",
             "export-wallet",
@@ -90,12 +93,13 @@ fn gui_schema_lists_all_subcommands() {
             "slip39-combine",
             "slip39-split",
             "verify-bundle",
+            "verify-message",
             "xpub-search-account-of-descriptor",
             "xpub-search-address-of-xpub",
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 23 user-facing subcommands must appear (nested split/combine \
+        "all 25 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

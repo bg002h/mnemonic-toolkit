@@ -3,6 +3,7 @@
 pub mod bundle;
 pub mod compare_cost;
 pub mod convert;
+pub mod decode_address;
 pub mod derive_child;
 pub mod electrum_decrypt;
 pub mod export_wallet;
@@ -17,4 +18,5 @@ pub mod seed_xor;
 pub mod seedqr;
 pub mod slip39;
 pub mod verify_bundle;
+pub mod verify_message;
 pub mod xpub_search;

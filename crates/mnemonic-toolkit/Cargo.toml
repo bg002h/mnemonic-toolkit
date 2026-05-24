@@ -35,6 +35,11 @@ regex = "1"
 sha2 = "0.10"
 bip38 = "1.1"
 bip39 = { version = "2", features = ["all-languages"] }
+# v0.36.0 `mnemonic verify-message` — BIP-322 simple/full message-signature
+# VERIFY (rust-bitcoin org crate; depends on bitcoin ^0.32.5 → shares our
+# bitcoin 0.32.8, no duplicate). Exact-pinned (0.0.x churn). Legacy
+# ("Bitcoin Signed Message") verify uses bitcoin::sign_message directly.
+bip322 = "=0.0.10"
 bitcoin = { version = "0.32", features = ["base64"] }
 clap = { version = "4", features = ["derive"] }
 hex = "0.4"

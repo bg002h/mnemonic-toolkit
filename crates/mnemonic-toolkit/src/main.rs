@@ -4,6 +4,7 @@ mod bip85;
 mod bundle_unified;
 mod cmd;
 mod cost;
+mod decode_address;
 mod derive;
 mod derive_address;
 mod derive_slot;
@@ -24,6 +25,7 @@ mod slip0132;
 mod slot_input;
 mod synthesize;
 mod template;
+mod verify_message;
 mod wallet_export;
 mod wallet_import;
 mod wordlists;
@@ -65,6 +67,8 @@ enum Command {
     VerifyBundle(cmd::verify_bundle::VerifyBundleArgs),
     /// convert between seed/key formats (BIP-39 / BIP-32 / WIF / ms1 / mk1)
     Convert(cmd::convert::ConvertArgs),
+    /// decode a Bitcoin address → network(s) / script type / witness version / scriptPubKey
+    DecodeAddress(cmd::decode_address::DecodeAddressArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
     /// import a third-party wallet blob into an m-format bundle (v0.26.0 Phase 2: BSMS Round-2 only)
@@ -95,6 +99,8 @@ enum Command {
     CompareCost(cmd::compare_cost::CompareCostArgs),
     /// search for a target (xpub, descriptor, address, or passphrase) under a seed or xpub
     XpubSearch(cmd::xpub_search::XpubSearchArgs),
+    /// verify a Bitcoin message signature (legacy P2PKH signmessage + BIP-322 segwit/taproot)
+    VerifyMessage(cmd::verify_message::VerifyMessageArgs),
 }
 
 fn main() -> ExitCode {
@@ -117,6 +123,7 @@ fn main() -> ExitCode {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
         Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::DecodeAddress(args) => cmd::decode_address::run(args, stdin, stdout, stderr),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
         }
@@ -145,6 +152,7 @@ fn main() -> ExitCode {
         Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
         Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout).map(|_| 0),
+        Command::VerifyMessage(args) => cmd::verify_message::run(args, stdin, stdout, stderr),
         Command::XpubSearch(args) => {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }

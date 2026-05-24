@@ -89,6 +89,10 @@ pub enum ToolkitError {
     CosignersFile {
         message: String,
     },
+    /// v0.36.0 `mnemonic decode-address` — the supplied string is not a valid
+    /// Bitcoin address (bad prefix/HRP/checksum). Exit 1. Public-data utility,
+    /// no secrets.
+    DecodeAddress(String),
     /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
     /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
     DeriveChildLengthNotApplicable,
@@ -288,6 +292,12 @@ pub enum ToolkitError {
         got: String,
         expected_one_of: Vec<&'static str>,
     },
+    /// v0.36.0 `mnemonic verify-message` — message-signature verification
+    /// could not be performed (bad address, undecodable signature, or
+    /// `--format legacy` on a non-P2PKH address). Exit 1. A cleanly-decoded
+    /// signature that simply does NOT verify is NOT this error — that path
+    /// emits a structured `valid:false` result. Public-data, no secrets.
+    VerifyMessage(String),
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
     /// candidate set. Exit 4 (sibling to `BundleMismatch` /
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
@@ -466,6 +476,7 @@ impl ToolkitError {
             ToolkitError::ConvertRefusal(_) => 2,
             ToolkitError::CosignerSpec { .. } => 1,
             ToolkitError::CosignersFile { .. } => 1,
+            ToolkitError::DecodeAddress(_) => 1,
             ToolkitError::DeriveChildLengthNotApplicable => 2,
             ToolkitError::DeriveChildLengthOutOfRange { .. } => 2,
             ToolkitError::DeriveChildUnsupportedApp => 2,
@@ -498,6 +509,7 @@ impl ToolkitError {
             ToolkitError::SilentPayment(_) => 1,
             ToolkitError::SlotInputViolation { .. } => 2,
             ToolkitError::UnknownHrp { .. } => 2,
+            ToolkitError::VerifyMessage(_) => 1,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
         }
     }
@@ -522,6 +534,7 @@ impl ToolkitError {
             ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
             ToolkitError::CosignerSpec { .. } => "CosignerSpec",
             ToolkitError::CosignersFile { .. } => "CosignersFile",
+            ToolkitError::DecodeAddress(_) => "DecodeAddress",
             ToolkitError::DeriveChildLengthNotApplicable => "DeriveChildLengthNotApplicable",
             ToolkitError::DeriveChildLengthOutOfRange { .. } => "DeriveChildLengthOutOfRange",
             ToolkitError::DeriveChildUnsupportedApp => "DeriveChildUnsupportedApp",
@@ -556,6 +569,7 @@ impl ToolkitError {
             ToolkitError::SilentPayment(_) => "SilentPayment",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
+            ToolkitError::VerifyMessage(_) => "VerifyMessage",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
         }
     }
@@ -625,6 +639,7 @@ impl ToolkitError {
             ToolkitError::CosignersFile { message } => {
                 format!("--cosigners-file: {}", message)
             }
+            ToolkitError::DecodeAddress(m) => format!("decode-address: {m}"),
             ToolkitError::DeriveChildLengthNotApplicable => {
                 "--length not applicable for --application <hd-seed|xprv> (output is fixed-size)"
                     .to_string()
@@ -736,6 +751,7 @@ impl ToolkitError {
                     expected_one_of.join(", ")
                 )
             }
+            ToolkitError::VerifyMessage(m) => format!("verify-message: {m}"),
             ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
                 "no match in searched set: mode={mode}, paths searched={searched}; \
                  widen the range with --max-account / --number-of-accounts, or supply \
