@@ -43,3 +43,21 @@ VERDICT: RED (0C/3I)
 - **I3:** add `@env:`-class anchors (`@env:`, `resolve_env_sentinels`, `needs_env_sentinel_resolution`) to the recognized evidence set; `import-wallet --ms1` + `verify-bundle --ms1` anchor on `@env:`. File a separate FOLLOWUP for import-wallet `--ms1` missing argv-advisory (pre-existing; out of scope).
 - **M1** seed = 9 (not 6). **M2** note --share collision (route-keyed). **M3** state evidence-vs-closure orthogonality in the doc.
 Re-dispatch R1 after fold.
+
+---
+
+## R1 (round 1) — VERDICT: RED (0C/1I)
+Reviewer agentId a2c6f5f5dedf0f7bc. I1+I2 collapse VERIFIED sound (--from set = exactly 7 {convert, derive-child, final-word, seed-xor-split, slip39-split, seedqr-decode, seedqr-encode}; --slot set = exactly 4 {bundle, verify-bundle, export-wallet, import-wallet}; `=-` route value-uniform → no coverage lost). I3 @env: anchors load-bearing in verify_bundle.rs:937/943 + import_wallet.rs:1308/1311 for --ms1. M1 (9 rows, 16 missing), M2 (--share collision), M3 (orthogonality) all confirmed. secret_taxonomy+flag_is_secret lib-public; xpub-search ×3 correct (address-of-xpub carries neither --ms1 nor --passphrase).
+
+**I-A (NEW, fold-completeness gap):** the I3 `@env:` extension was applied to the Phase-1 flag-NAME axis but NOT propagated to the Phase-2 `--slot` axis. `import-wallet --slot @N.phrase=` is secret (`import_wallet.rs:1044-1051` accepts only `phrase`) and its ONLY non-argv channel is `@env:` (`import_wallet.rs:1314-1317` `resolve_env_var_sentinel`) — NOT slot-stdin (grep: zero `slot_stdin`/`apply_slot_stdin` in import_wallet.rs) and NOT the export-wallet refusal. So Phase-2 Step-3's `--slot` allowlist (slot-stdin OR refusal) is UNSATISFIABLE for import-wallet → a RED test the implementer can't satisfy without un-reviewed deviation. FIX: add `@env:`-class anchors to the `--slot` allowlist (plan lines 25 + 54).
+
+**M-A (Minor):** export-wallet refusal anchor tokens `"secret subkeys"`/`"REFUSED"` exist ONLY in the doc comment (`export_wallet.rs:92`); the load-bearing runtime refusal is `wallet_export/mod.rs:60,108` (`validate_watch_only` / "watch-only by definition"). Satisfiable as-is (grep hits the doc comment) but anchoring on the runtime token is more robust. Optional.
+**M-B (Minor):** the Phase-2 Step-2 `--from` list appends "…" but the set is exactly 7 (closed); drop the ellipsis.
+
+VERDICT: RED (0C/1I)
+
+## Fold disposition (controller) — R1 → R2
+- **I-A:** add `@env:`-class anchors (`@env:`/`resolve_env_sentinels`/`needs_env_sentinel_resolution`/`resolve_env_var_sentinel`) to the Phase-2 `--slot` evidence allowlist (lines 25 + 54); import-wallet `--slot` anchors on `@env:`.
+- **M-A:** export-wallet `--slot` anchor = prefer the runtime token (`validate_watch_only` call-site, verify it's in `cmd/export_wallet.rs` at impl; else `wallet_export/mod.rs` "watch-only by definition") over the doc-comment tokens.
+- **M-B:** drop the trailing "…" — `--from` set is exactly the 7 listed.
+Re-dispatch R2.
