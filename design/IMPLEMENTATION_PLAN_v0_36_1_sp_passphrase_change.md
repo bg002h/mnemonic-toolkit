@@ -61,7 +61,10 @@ pub passphrase: Option<String>,
 #[arg(long = "passphrase-stdin", conflicts_with = "passphrase")]
 pub passphrase_stdin: bool,
 ```
-- [ ] **Step 4 — resolve + thread.** In `run` (after the secret is resolved): guard `if args.passphrase_stdin && args.secret_stdin { return Err(ToolkitError::SilentPayment("--passphrase-stdin cannot be combined with --secret-stdin (single stdin per invocation)".into())); }`. Resolve `passphrase: Zeroizing<String>` from `--passphrase` (argv-leak warning via `secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin")`) / `--passphrase-stdin` (read stdin) / else `""`. mlock-pin it. Change `resolve_master_xpriv(secret, network)` → `resolve_master_xpriv(secret, &passphrase, network)`; pass `&passphrase` into both `derive_master_seed` calls (`:86`,`:112`). On the xprv branch, if `!passphrase.is_empty()` emit `writeln!(stderr, "warning: --passphrase ignored — an xprv/tprv input is already the master key")`.
+- [ ] **Step 4 — resolve + thread.**
+  - **(M1) Hoist the dual-stdin guard to the TOP of `run`** (alongside the `--label 0` refusal @:138, BEFORE any stdin read — matches derive_child.rs:129-134): `if args.passphrase_stdin && args.secret_stdin { return Err(ToolkitError::SilentPayment("--passphrase-stdin cannot be combined with --secret-stdin (single stdin per invocation)".into())); }`.
+  - Resolve `passphrase: Zeroizing<String>` from `--passphrase` (argv-leak warning via `secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin")`) / `--passphrase-stdin` / else empty. **(M2) For `--passphrase-stdin`, read via `crate::cmd::convert::read_stdin_passphrase` (`pub(crate)` @convert.rs:719), NOT `.trim()`** — a BIP-39 passphrase is byte-exact PBKDF2 salt and leading/trailing whitespace is significant (convert.rs:814-818 / derive_child.rs:149-163 precedent). mlock-pin the resolved passphrase.
+  - **(M5) Edit set:** `resolve_master_xpriv(secret, network)` → `resolve_master_xpriv(secret, &passphrase, network)` — fn sig @:81, the `to_master` closure @:83 must capture `passphrase`, the two `derive_master_seed(&mnemonic, "")` calls @:86,:112 → `&passphrase`, and the ONE caller in `run` @:163. On the xprv branch (@:92-94), if `!passphrase.is_empty()` emit `writeln!(stderr, "warning: --passphrase ignored — an xprv/tprv input is already the master key (BIP-39 passphrase applies only to phrase/ms1/entropy inputs)")`.
 - [ ] **Step 5** — run Step-1 test → PASS. Add: `--passphrase-stdin` works (stdin); `--passphrase` + `--secret-stdin` allowed (passphrase inline); `--passphrase-stdin` + `--secret-stdin` refused; xprv + `--passphrase` warns + ignores (address == no-passphrase xprv address).
 - [ ] **Step 6** — full suite + clippy; commit.
 
@@ -91,10 +94,12 @@ fn change_address_emits_tagged_m0_distinct_from_base() {
 }
 
 #[test]
-fn change_address_json_field() {
+fn change_address_json_field_with_never_publish_marker() {
     let v = run_json(&["silent-payment", "--secret", PHRASE, "--change-address", "--json"]);
     assert!(v["change_address"].as_str().unwrap().starts_with("sp1q"));
     assert_ne!(v["change_address"], v["address"]);
+    // (M3) explicit never-publish marker so a JSON consumer can't surface it as a receive target
+    assert!(v["change_address_warning"].as_str().unwrap().to_lowercase().contains("never"));
 }
 
 #[test]
@@ -112,8 +117,8 @@ fn change_address_absent_by_default() {
 #[arg(long = "change-address")]
 pub change_address: bool,
 ```
-- [ ] **Step 4 — JSON field:** add to `SilentPaymentJson` (`:63`): `#[serde(skip_serializing_if = "Option::is_none")] change_address: Option<String>,`.
-- [ ] **Step 5 — emit.** In `run`, after computing `labeled`: if `args.change_address`, compute `let change = encode_sp_address(hrp, &b_scan_pub, &labeled_spend_key(&secp, &b_scan, b_spend_pub, 0)?);`. JSON: set `change_address: Some(change)`. Human: after the labeled lines, `writeln!(stdout, "  change_addr:  {change}   (BIP-352 m=0 CHANGE — internal change detection ONLY; never hand out as a receiving address)")`.
+- [ ] **Step 4 — JSON fields (M3):** add to `SilentPaymentJson` (`:63`): `#[serde(skip_serializing_if = "Option::is_none")] change_address: Option<String>,` AND `#[serde(skip_serializing_if = "Option::is_none")] change_address_warning: Option<&'static str>,` — the sibling never-publish marker (a bare `change_address` is a machine-readable receive-target footgun; a GUI/automation consumer must see the warning in the same envelope).
+- [ ] **Step 5 — emit.** In `run`, after computing `labeled`: if `args.change_address`, compute `let change = crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &crate::silent_payment::labeled_spend_key(&secp, &b_scan, b_spend_pub, 0)?);`. JSON: set `change_address: Some(change)` + `change_address_warning: Some("BIP-352 m=0 change label — internal change detection only; never publish as a receiving address")`. Human: after the labeled lines, `writeln!(stdout, "  change_addr:  {change}   (BIP-352 m=0 CHANGE — internal change detection ONLY; never hand out as a receiving address)")`.
 - [ ] **Step 6** — run tests → PASS; full suite + clippy; commit.
 
 ---
