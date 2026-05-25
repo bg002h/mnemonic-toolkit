@@ -23,3 +23,19 @@ Implementation functionally sound (the three compose orthogonally; version/CHANG
 - No HRP regression; `indel_exit_code` 3-arg everywhere; scope clean (no GUI/codec/tag in branch; `--max-subst` schema_mirror correctly deferred to post-tag GUI v0.21.3).
 
 ## Remaining post-tag (correctly deferred): tag+push (clean tree first); paired GUI v0.21.3 (`--max-subst` → REPAIR_FLAGS Number{0..=4} + pin bump).
+
+---
+
+## End-of-cycle R1 (GREEN-confirm) — fold `63f82d6`
+
+**Round:** end-of-cycle R1. **Reviewer:** feature-dev:code-reviewer (opus). **Date:** 2026-05-24.
+**Scope:** verify the I1+I2 fold (`63f82d6`) resolves both Importants + introduces no regression; R0-confirmed-sound surfaces re-checked unperturbed.
+
+### Verdict: GREEN — 0 Critical / 0 Important — ship-ready
+
+- **I1 RESOLVED** — `indel_ms1_all_three_cross_region_plus_substitution` (`repair.rs:2095`) is load-bearing, not vacuous. Corruption sound: subst `data[4]` full-idx7 'r'→'p' (non-'q', real BCH-solve), drop `data[1]` full-idx4 'e' (drop-idx 4 < subst-idx 7 ⇒ 'p' survives shift to idx6), strip leading 'm'. Asserted triple `(CrossRegion, indel_count=2, subst_count=1)` is only satisfiable by exercising all three: `region==CrossRegion` requires `j_prefix>0 && j_data>0` (`indel.rs:95-110`); no cheaper degenerate path yields it. CLI cell `ms1_all_three_cross_region_plus_substitution_exit_4` (`tests/cli_indel.rs:376`) mirrors the corruption → exit 4 + stdout VALID_MS1 + verify WARNING (`cmd/repair.rs:222`).
+- **I2 RESOLVED** — manual `--json` `region` enum (`41-mnemonic.md:2511`) now lists `"data-part"`/`"prefix"`/`"cross-region"`; `--max-indel` prose (`:2392-2393`) notes the cross-region split. Accurate vs `region_str` (`cmd/repair.rs:348`).
+- **No regression** — `63f82d6` is tests + manual ONLY; engine APIs the new tests call all pre-exist (`indel.rs:78/25/51/38`). Versions 0.37.3 ×5, CHANGELOG, 3 resolved FOLLOWUPs, non-breaking guarantees, exit invariant — all unperturbed.
+- **Minors carried:** M1 no action; M2 (manual repair-table "mutually exclusive" — PRE-EXISTING; source "May be combined per D35", proven by `multi_group_both_emit_exit_5`) → file a docs FOLLOWUP, not a ship blocker.
+
+Gate cleared (0C/0I). Cleared to ship v0.37.3.
