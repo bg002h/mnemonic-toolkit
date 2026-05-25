@@ -66,7 +66,14 @@ and return `Option<(String, usize)>` (the `usize` = `off`); the `residue==0` ear
 
 - [ ] **Step 1 — failing test** (`repair.rs` tests): take `VALID_MS1`, drop one data char AND substitute another; assert `recover_indel(corrupted, "ms", 1, /*e_subst*/1, &Ms1IndelOracle)` is `Unique` with `recovered == VALID_MS1` and `subst_count == 1`. Plus: same corruption with `e_subst=0` → `Unrecoverable` (pure-indel rejects). Plus mk1/md1 single-chunk indel+subst (1 chunk of the 2/3-chunk fixtures) → Unique, subst_count=1.
 - [ ] **Step 2 — run, expect FAIL** (signature mismatch / not yet recovering): `cargo test -p mnemonic-toolkit --bins indel_subst -v`.
-- [ ] **Step 3 — implement** the signature + gate changes above across `indel.rs` + the 4 oracle sites + `recover_indel_card`. Update the existing engine tests' `validate` mocks (`NoOracle`, `AcceptAll`) + the Phase-0/1/2/3 `recover_indel(...)` call sites to the new 5-arg signature (pass `e_subst=0` to preserve their pure-indel assertions).
+- [ ] **Step 3 — implement** the signature + gate changes above across `indel.rs` + the 4 oracle sites + `recover_indel_card`. **EXHAUSTIVE call-site update (R0 I1 — every one of these compile-breaks at the signature change; re-grep line numbers first, they will have drifted):**
+  - `IndelOracle::validate` impls (gate + tuple return): `repair.rs` `Ms1IndelOracle:886`, `Mk1IndelOracle:987`, `Md1IndelOracle:1009`; the `mk1_chunk_solve:910` / `md1_chunk_solve:950` helpers (gain `e_subst`, return `Option<(String, usize)>`, `residue==0` path returns `(…, 0)`).
+  - test mocks `NoOracle` (`indel.rs:271`) + `AcceptAll` (`indel.rs:315`) → new `validate(&self, _, _, _e_subst) -> Option<(String, usize)>` (e.g. `AcceptAll` returns `Some((candidate.to_string(), 0))`).
+  - `recover_indel(...)` 5-arg (add `e_subst`): `repair.rs:1082,1102,1123` (the 3 `recover_indel_card` arms) + test calls `repair.rs:1844,1863,1885,1907,1925,1939,1955,1972,2019,2036` + `indel.rs:280,320` (pass `e_subst=0` in all tests to preserve pure-indel assertions).
+  - `recover_indel_card(...)` 4-arg (add `e_subst`): `cmd/repair.rs:142` + test calls `repair.rs:2054,2072,2152,2163,2177` (pass `0`).
+  - `md1_chunk_solve(...)` direct test calls `repair.rs:2188,2190` (`indel_md1_chunk_solve_rejects_out_of_set_substitution`): add `e_subst=0` AND adapt the tuple return — e.g. `md1_chunk_solve(&bad, &allowed, 0).is_none()` and `md1_chunk_solve(MD1_C1, &allowed, 0).map(|(s,_)| s).as_deref() == Some(MD1_C1)`.
+  - (`indel_exit_code` call sites are Phase 3, not here.)
+  Trial `cargo build -p mnemonic-toolkit --tests` after wiring to flush any missed site before running tests.
 - [ ] **Step 4 — run, expect PASS**: `cargo test -p mnemonic-toolkit --bins` (new + all prior green; the `e_subst=0` call sites keep pure-indel behavior). `cargo clippy --all-targets -- -D warnings` clean.
 - [ ] **Step 5 — commit** `feat(indel): Phase 1 — substitution accept gate (|corrections\placeholders|≤E) + subst_count`.
 
@@ -108,7 +115,7 @@ pub fn recover_indel(input, hrp, max_indel, e_subst, oracle) -> IndelOutcome {
     match hits.len() { 0 => Unrecoverable, 1 => Unique(...), _ => Ambiguous(hits) }
 }
 ```
-Extract `prefix_restorations` (from `collect_prefix`'s window+levenshtein, but yielding the data-part + j_prefix instead of validating) and `data_variants` (from `collect_data_delete`+`collect_data_insert`, yielding `(cand_full, allowed, direction)` for a given j_data; j_data=0 → the as-is candidate). Delete the old `collect_*` once subsumed. `direction` for CrossRegion is the data-part direction (documented; metadata-only — dedup is on `recovered`).
+Extract `prefix_restorations` (from `collect_prefix`'s window+levenshtein, but yielding the data-part + j_prefix instead of validating) and `data_variants` (from `collect_data_delete`+`collect_data_insert`, yielding `(cand_full, allowed, direction)` for a given j_data; j_data=0 → the as-is candidate). Delete the old `collect_*` once subsumed. **`prefix_restorations` yield contract (R0 M3 — pin exactly, off-by-one risk):** the `j_prefix=0` case yields `(input_data_part, 0, _)` iff `data_part_bounds(input, hrp)` is `Some` (prefix intact); each `j_prefix ≥ 1` case enumerates split points `p ∈ [3.saturating_sub(j_prefix) ..= (3+j_prefix).min(len)]`, keeps those with `levenshtein(&chars[..p], k) == j_prefix` (exact, as the old `collect_prefix`), and yields `(chars[p..], j_prefix, Inserted if p<3 else Deleted)`. Total prefix-edit count stays in `1..=max_indel`. `direction` for CrossRegion is the data-part direction (documented; metadata-only — dedup is on `recovered`).
 
 - [ ] **Step 1 — failing test:** `VALID_MS1` with the leading `m` dropped (prefix indel) AND one data char dropped (data indel); `recover_indel(corrupted, "ms", 2, 0, &Ms1IndelOracle)` → `Unique`, `recovered==VALID_MS1`, `region==CrossRegion`, `indel_count==2`. Plus regression: the existing prefix-only and data-only tests still pass (now via the unified path).
 - [ ] **Step 2 — run, expect FAIL.**
@@ -128,6 +135,7 @@ Extract `prefix_restorations` (from `collect_prefix`'s window+levenshtein, but y
 pub max_subst: u8,
 ```
 - **Thread** `args.max_subst as usize` into `recover_indel_card(*kind, chunks, args.max_indel as usize, args.max_subst as usize)`.
+- **No-op notice (R0 M1):** `--max-subst` only takes effect via the indel path (gated by `args.max_indel >= 1`). If `args.max_subst >= 1 && args.max_indel == 0`, print a one-line stderr notice ("notice: --max-subst has no effect without --max-indel ≥ 1") before the loop (silent-default-with-notice convention).
 - **Exit helper** (`repair.rs:1055`) — extend signature + fold substitution into the 4-tier:
 ```rust
 pub(crate) fn indel_exit_code(ambiguous_seen: bool, substitution_seen: bool, total_repairs: usize) -> u8 {
@@ -165,9 +173,9 @@ IndelOutcome::Unrecoverable => {
 
 - [ ] **Step 1 — failing test** (`tests/cli_indel.rs`): a genuine wrong-HRP value (`--ms1 mk1<valid mk1 data>` — or a short `--ms1 mk1xxx`) with `--max-indel 1` → indel search fails → exit reflects the original `HrpMismatch` and stderr contains the "did you mean" / HRP-mismatch message (NOT "could not be recovered within --max-indel"). Plus regression: a recoverable prefix-drop (`--ms1 s10…`) still recovers (exit 5), proving the fallback only fires on genuine failure.
 - [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement** the `Unrecoverable`-arm branch.
+- [ ] **Step 3 — implement** the `Unrecoverable`-arm branch. **Also fold R0 I2 (doc drift):** update the `is_indel_trigger` doc-comment (`repair.rs:~1028-1031`), which currently documents the OLD behavior ("wrong-HRP … returns `IndelUnrecoverable` instead of the 'did you mean' suggestion") — now REVERSED: a wrong-HRP that fails indel search falls back to the original `HrpMismatch` suggestion. Audit the v0.37.x `CHANGELOG.md` entries for the same now-stale claim and correct any narrative (the manual exit-2 row stays accurate — same exit code).
 - [ ] **Step 4 — run, expect PASS**; full test; clippy clean.
-- [ ] **Step 5 — commit** `feat(indel): Phase 4 — HrpMismatch suggestion-fallback on Unrecoverable`.
+- [ ] **Step 5 — commit** `feat(indel): Phase 4 — HrpMismatch suggestion-fallback on Unrecoverable (+ doc-comment fix)`.
 
 ### Phase 5 — lockstep + release-prep (v0.37.3)
 **Files:** `mnemonic-gui` (paired), `docs/manual/.../41-mnemonic.md`, `design/FOLLOWUPS.md`, `Cargo.toml`, `Cargo.lock`, both READMEs, `scripts/install.sh`, `CHANGELOG.md`.
@@ -176,7 +184,7 @@ IndelOutcome::Unrecoverable => {
 - [ ] **Step 3 — version v0.37.3:** `Cargo.toml`; `cargo check` + **stage `Cargo.lock`**; both README `<!-- toolkit-version: -->` markers; `scripts/install.sh:32` pin `mnemonic-toolkit-v0.37.3`; `CHANGELOG.md` entry (SemVer PATCH; `--max-subst` candidate-list model + exit-4-verify; cross-region; HrpMismatch fallback; toolkit-only; erasure→8 still open; GUI v0.21.3 paired).
 - [ ] **Step 4 — verify:** `cargo test -p mnemonic-toolkit` green (NO blanket `--include-ignored` — mlock G2 env-gated); clippy clean; manual lint green; `readme_version_current` green.
 - [ ] **Step 5 — commit** `release(indel): v0.37.3 — cross-region + --max-subst + HrpMismatch fallback`.
-- [ ] **Step 6 — GUI paired PR (post-tag):** `mnemonic-gui v0.21.3` — add `max-subst` to `REPAIR_FLAGS` (`FlagKind::Number{min:0, max:NumberMax::Static(4)}`), bump toolkit pin → v0.37.3; `schema_mirror` green. (Can only run after the toolkit tag.)
+- [ ] **Step 6 — GUI paired PR (post-tag):** `mnemonic-gui v0.21.3` — add `max-subst` to `REPAIR_FLAGS` (`FlagKind::Number{min:0, max:NumberMax::Static(4)}`), bump toolkit pin → v0.37.3; `schema_mirror` green. (Can only run after the toolkit tag.) **R0 M2:** write the new flag's comment as "ms1/mk1/md1" — do NOT copy the stale "ms1/mk1 only" phrasing from the existing `--max-indel` comment (`mnemonic-gui/src/schema/mnemonic.rs:~1562`, stale since md1 un-refused in v0.37.2).
 
 ## §3 Test corpus (consolidated — the §11 integration matrix)
 1. ms1 indel+subst (j=1,e=1) → Unique, subst_count=1, exit 4 + WARNING (Phase 1 engine + Phase 3 CLI).
@@ -202,7 +210,7 @@ IndelOutcome::Unrecoverable => {
 This plan-doc faces mandatory opus R0 (0C/0I) BEFORE Phase 1. Per-phase reviews persist to `design/agent-reports/indel-v2-phase-N-review.md`. End-of-cycle review before tag.
 
 ## §6 Rn fold log
-- _(R0: pending dispatch.)_
+- **R0 (plan-doc):** RED 0C/2I/3M (`design/agent-reports/indel-v2-plan-R0-review.md`). Design confirmed sound (the three compose; Phase-4 ownership, exit invariant, gate logic all verified). Folded: **I1** exhaustive Phase-1 call-site inventory (5 `recover_indel_card` + 2 `md1_chunk_solve` test sites + the tuple-return `.as_deref()` adaptation; trial `cargo build --tests`); **I2** Phase-4 updates the `is_indel_trigger` doc-comment (+ CHANGELOG narrative) that documented the now-reversed wrong-HRP behavior; **M1** Phase-3 stderr no-op notice when `--max-subst≥1 && --max-indel==0`; **M3** pinned the `prefix_restorations` yield contract; **M2** Phase-5 GUI comment says "ms1/mk1/md1" (not the stale "ms1/mk1 only"). → R1 dispatched.
 
 ## §7 Next steps
 R0 → fold → GREEN → Phases 1-5 (per-phase TDD + review) → end-of-cycle review → tag `mnemonic-toolkit-v0.37.3` → paired `mnemonic-gui v0.21.3`.
