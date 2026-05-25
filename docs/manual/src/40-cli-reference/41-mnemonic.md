@@ -2278,7 +2278,7 @@ mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1
 | `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--md1` |
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--mk1` |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
-| `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1 only (md1 not yet supported) |
+| `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1/md1 |
 | `--help` | print help |
 
 ### Exit codes
@@ -2391,8 +2391,9 @@ for too-long; BCH-solve the omitted symbol for too-short) and the `ms1`/`mk1`
 prefix. Outcomes: a unique recovery prints the corrected string (exit 5, like
 any repair); multiple equally-valid candidates print all of them (exit 4 —
 choose manually); none within the budget exits 2. `ms1` candidates are secret
-material (the usual stderr advisory applies). `md1` (chunked) is not yet
-supported. Default `0` disables the search (behavior unchanged).
+material (the usual stderr advisory applies). `md1` (chunked) recovers
+per-chunk like mk1, with cross-chunk reassembly validation. Default `0`
+disables the search (behavior unchanged).
 
 ### `--no-auto-repair` interaction
 

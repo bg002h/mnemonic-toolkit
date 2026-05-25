@@ -146,17 +146,19 @@ fn max_indel_5_is_clap_usage_error() {
         .stderr(predicate::str::contains("0..=4"));
 }
 
-/// Test 9 — md1 refusal → exit 1 (BadInput); stderr cites the not-yet-supported
-/// message. A short md1 triggers (parse fails → trigger), then refusal.
+/// Test 9 — md1 multi-chunk indel recovery (v0.37.2; md1 un-refused). Corrupt
+/// ONE chunk of a real 3-chunk md1 card; recover_indel locates + restores it.
 #[test]
-fn md1_indel_refusal_exit_1() {
+fn md1_multichunk_one_corrupted_recovers_exit_5() {
+    const MD1_C0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    const MD1_C1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+    const MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+    let bad_c1 = ins_data(MD1_C1, 12, 'q'); // one inserted data char
     cmd()
-        .args(["repair", "--md1", "md1xxxx", "--max-indel", "1"])
+        .args(["repair", "--md1", MD1_C0, "--md1", &bad_c1, "--md1", MD1_C2, "--max-indel", "1"])
         .assert()
-        .code(1)
-        .stderr(predicate::str::contains(
-            "not yet supported for chunked md1",
-        ));
+        .code(5)
+        .stdout(predicate::str::contains(MD1_C1));
 }
 
 /// Test 10 — --json unique shape: status "unique" + candidates[0].recovered == VALID_MS1.
