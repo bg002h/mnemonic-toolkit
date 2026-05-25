@@ -189,10 +189,19 @@ pub fn run<R: Read, W: Write, E: Write>(
                         ambiguous_seen = true;
                     }
                     IndelOutcome::Unrecoverable => {
-                        return Err(ToolkitError::Repair(RepairError::IndelUnrecoverable {
-                            hrp: kind.hrp(),
-                            max_indel: args.max_indel as usize,
-                        }));
+                        return match e {
+                            // Phase 4: a genuine wrong-HRP value entered indel
+                            // search (because `is_indel_trigger` includes
+                            // `HrpMismatch`), failed to recover, and deserves
+                            // its original "did you mean" suggestion rather than
+                            // the generic "could not be recovered within
+                            // --max-indel" message.
+                            RepairError::HrpMismatch { .. } => Err(e.into()),
+                            _ => Err(ToolkitError::Repair(RepairError::IndelUnrecoverable {
+                                hrp: kind.hrp(),
+                                max_indel: args.max_indel as usize,
+                            })),
+                        };
                     }
                 }
             }

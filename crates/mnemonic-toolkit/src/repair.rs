@@ -1054,10 +1054,13 @@ impl IndelOracle for Md1IndelOracle {
 /// (Phase-5 R0 amendment) so a prefix-region indel engages: `parse_chunk`
 /// validates the HRP before length, so dropping 'm' from `ms1…` surfaces as
 /// `HrpMismatch { found: "s" }`; excluding it would make the Phase-3 prefix
-/// producer CLI-unreachable. Tradeoff: with `--max-indel ≥ 1` a genuine
-/// wrong-HRP typo enters indel search and, failing, returns
-/// `IndelUnrecoverable` (exit 2) instead of the "did you mean" suggestion
-/// (opt-in only; default `--max-indel 0` preserves the suggestion).
+/// producer CLI-unreachable. When a genuine wrong-HRP value enters indel
+/// search and fails to recover, `cmd::repair::run` falls back to the
+/// **original `HrpMismatch` error** (with its "did you mean" suggestion)
+/// rather than the generic `IndelUnrecoverable` message (Phase 4 —
+/// v0.37.3). At `--max-indel 0` the strict pre-gate fires before
+/// `is_indel_trigger` is ever reached, so the suggestion is always
+/// preserved at the default.
 ///
 /// Excluded: `EmptyInput | UnsupportedCodeVariant | IndelUnrecoverable`
 /// (no recoverable indel class; pass through to today's typed error).

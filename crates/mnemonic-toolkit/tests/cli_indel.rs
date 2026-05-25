@@ -309,3 +309,46 @@ fn ms1_indel_plus_subst_json_confident_false() {
     assert_eq!(v["confident"], false, "confident should be false for subst-bearing recovery");
     assert_eq!(v["candidates"][0]["subst_count"], 1, "subst_count should be 1");
 }
+
+// ============================================================================
+// Phase 4 — HrpMismatch suggestion-fallback
+// ============================================================================
+
+/// Phase 4 Test A — genuine wrong-HRP value passed to --ms1 with --max-indel 1:
+/// indel search fails (it's a real mk1 string passed to --ms1, not an ms1
+/// indel) and the original HrpMismatch message is surfaced instead of the
+/// generic "could not be recovered within --max-indel" message.
+///
+/// `mk1qprsqhpqqsq3cq...` is a valid mk1 chunk passed to `--ms1`. With
+/// --max-indel 1 the strict HRP pre-gate is relaxed, `repair_card` surfaces
+/// `RepairError::HrpMismatch { found: "mk" }`, `is_indel_trigger` fires, but
+/// `recover_indel_card` returns `Unrecoverable` (genuine HRP typo, not an
+/// ms1 indel). Phase 4 falls back to the original HrpMismatch Display which
+/// contains "HRP mismatch" (the stable substring always present in the
+/// Display; "did you mean" only fires when found-HRP is Levenshtein-1 from
+/// exactly one known HRP — "mk" is equidistant from both "ms" and "md" so no
+/// suggestion appears here, but the HRP-mismatch message itself is restored).
+#[test]
+fn genuine_wrong_hrp_falls_back_to_suggestion_not_indel_unrecoverable() {
+    cmd()
+        .args(["repair", "--ms1", MK1_C0, "--max-indel", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("HRP mismatch"))
+        .stderr(predicate::str::contains("could not be recovered within --max-indel").not());
+}
+
+/// Phase 4 Test B (regression) — a recoverable prefix-drop (dropping the
+/// leading 'm' from a valid ms1 string) still recovers with exit 5 when
+/// --max-indel 1 is set. This confirms the HrpMismatch fallback ONLY fires
+/// on genuine indel-Unrecoverable cases, not on the prefix-drop case where
+/// the indel engine succeeds.
+#[test]
+fn prefix_drop_still_recovers_under_phase4() {
+    let bad = VALID_MS1.strip_prefix('m').unwrap(); // "s10entrs…"
+    cmd()
+        .args(["repair", "--ms1", bad, "--max-indel", "1"])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains(VALID_MS1));
+}
