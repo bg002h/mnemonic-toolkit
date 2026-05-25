@@ -2389,7 +2389,9 @@ character was inserted or dropped during hand-copy (so the string is the
 wrong length and no longer decodes), pass `--max-indel <N>` (1–4) to also
 search for that indel. The search covers the data-part (delete-and-validate
 for too-long; BCH-solve the omitted symbol for too-short) and the `ms1`/`mk1`
-prefix. Outcomes: a unique recovery prints the corrected string (exit 5, like
+prefix; it also considers indels split across **both** the prefix and the
+data-part simultaneously (tagged `cross-region`), within the `--max-indel`
+budget. Outcomes: a unique recovery prints the corrected string (exit 5, like
 any repair); multiple equally-valid candidates print all of them (exit 4 —
 choose manually); none within the budget exits 2. `ms1` candidates are secret
 material (the usual stderr advisory applies). `md1` (chunked) recovers
@@ -2506,7 +2508,8 @@ the `--json` envelope instead has the shape:
 exit 4). `confident` is `true` iff every candidate has `subst_count == 0`
 (pure-indel recovery — no substitution was needed); `false` when any
 candidate required a substitution (exit 4, VERIFY-ME advisory). `region` is
-`"data-part"` or `"prefix"`. `direction` is `"deleted"` (removed an added
+`"data-part"`, `"prefix"`, or `"cross-region"` (the indel spanned both the
+prefix and the data-part). `direction` is `"deleted"` (removed an added
 char — too-long input) or `"inserted"` (restored a dropped char — too-short
 input). `subst_count` is the number of substitution corrections beyond the
 indel placeholders that the BCH decoder applied for that candidate (0 for a

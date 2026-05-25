@@ -352,3 +352,40 @@ fn prefix_drop_still_recovers_under_phase4() {
         .code(5)
         .stdout(predicate::str::contains(VALID_MS1));
 }
+
+// ============================================================================
+// End-of-cycle I1 — "all three at once" integration cell
+// ============================================================================
+
+/// End-of-cycle I1: prefix-drop + data-drop + data-substitution combined.
+///
+/// Mirrors the engine unit test `indel_ms1_all_three_cross_region_plus_substitution`
+/// at the CLI level.  Corruption recipe (same indices as the engine test):
+///   1. Substitute data[4] (full[7]) 'r' → 'p'  (non-'q' — BCH must solve).
+///   2. Drop     data[1] (full[4]) 'e'            (drop-idx < subst-idx, shift-safe).
+///   3. Strip    leading 'm'                       (prefix indel).
+///
+/// With `--max-indel 2 --max-subst 1` the engine recovers VALID_MS1.  Because
+/// the result bears a substitution, the CLI emits exit 4 + the "verify it
+/// controls your funds" WARNING on stderr + VALID_MS1 on stdout.
+/// (Exit 4 is acceptable for the integration cell — exit-code semantics for
+/// subst-bearing recoveries are a CLI policy, independent of whether the
+/// engine result is Unique or Ambiguous; the precise Unique/cross-region/subst
+/// proof is the engine unit test above.)
+#[test]
+fn ms1_all_three_cross_region_plus_substitution_exit_4() {
+    // Step 1: substitute data[4]='r' → 'p'.
+    let mut chars: Vec<char> = VALID_MS1.chars().collect();
+    chars[3 + 4] = 'p'; // 'r' → 'p'
+    // Step 2: drop data[1]='e'.
+    let mut s: String = chars.into_iter().collect();
+    s.remove(3 + 1);
+    // Step 3: strip leading 'm'.
+    let bad = s.strip_prefix('m').unwrap().to_string();
+    cmd()
+        .args(["repair", "--ms1", &bad, "--max-indel", "2", "--max-subst", "1"])
+        .assert()
+        .code(4)
+        .stdout(predicate::str::contains(VALID_MS1))
+        .stderr(predicate::str::contains("verify it controls your funds"));
+}

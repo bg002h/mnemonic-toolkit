@@ -2079,6 +2079,44 @@ mod tests {
         }
     }
 
+    /// indel-v2 end-of-cycle I1: "all three at once" — prefix drop, data drop,
+    /// and data substitution combined.  With max_indel=2, e_subst=1 the
+    /// cross-region two-level search must recover VALID_MS1 and tag the result
+    /// `CrossRegion` with indel_count==2, subst_count==1.
+    ///
+    /// Corruption recipe (applied in order so the data substitution survives
+    /// the subsequent remove):
+    ///   1. Substitute data[4] (full[7]) 'r' → 'p'  (non-'q', real subst for BCH).
+    ///   2. Remove  data[1] (full[4]) 'e'            (drop-idx < subst-idx, shift-safe).
+    ///   3. Strip leading 'm'                         (prefix indel).
+    ///
+    /// Final corrupted string: "s10ntpsqqq…" (len 48, missing 'm' + 'e', 'r'→'p').
+    #[test]
+    fn indel_ms1_all_three_cross_region_plus_substitution() {
+        // Step 1 — substitute data[4]='r' → 'p' (non-'q', so BCH must solve it).
+        let mut chars: Vec<char> = VALID_MS1.chars().collect();
+        assert_eq!(chars[3 + 4], 'r', "fixture: data[4] must be 'r'");
+        chars[3 + 4] = 'p';
+        // Step 2 — drop data[1]='e' (lower index than the substitution, so the
+        // substituted char survives the Vec shift).
+        let mut s: String = chars.into_iter().collect();
+        assert_eq!(s.chars().nth(3 + 1), Some('e'), "fixture: data[1] must be 'e'");
+        s.remove(3 + 1);
+        // Step 3 — strip leading 'm' (prefix indel).
+        let s = s.strip_prefix('m').unwrap().to_string();
+        // Recover with N=2, E=1.
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 2, 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.region, crate::indel::IndelRegion::CrossRegion);
+                assert_eq!(c.subst_count, 1);
+                assert_eq!(c.indel_count, 2);
+            }
+            other => panic!("expected Unique cross-region+subst, got {other:?}"),
+        }
+    }
+
     // ============================================================================
     // Phase 4 — mk1 per-chunk recovery + reassembly oracle
     // ============================================================================
