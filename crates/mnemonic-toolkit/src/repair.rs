@@ -2049,6 +2049,32 @@ mod tests {
     }
 
     // ============================================================================
+    // Phase 2 (indel-v2) — cross-region two-level search
+    // ============================================================================
+
+    /// indel-v2 Phase 2: drop the leading 'm' (prefix indel) AND drop one
+    /// mid-data char (data indel). With max_indel=2 the two-level search must
+    /// allocate 1 edit to the prefix region and 1 to the data region, recover
+    /// VALID_MS1, and tag the result `CrossRegion` with indel_count==2.
+    #[test]
+    fn indel_ms1_cross_region_prefix_and_data_recovers() {
+        // Drop the leading 'm' (prefix indel) AND drop one data char (data indel).
+        let mut s = VALID_MS1.strip_prefix('m').unwrap().to_string(); // "s10entrs…"
+        // Drop a mid/late data position (post-prefix-drop string indices).
+        let drop_at = s.len() - 8;
+        s.remove(drop_at);
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.region, crate::indel::IndelRegion::CrossRegion);
+                assert_eq!(c.indel_count, 2);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    // ============================================================================
     // Phase 4 — mk1 per-chunk recovery + reassembly oracle
     // ============================================================================
 

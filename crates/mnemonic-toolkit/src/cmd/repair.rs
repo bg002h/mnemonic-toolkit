@@ -309,6 +309,7 @@ fn region_str(r: IndelRegion) -> &'static str {
     match r {
         IndelRegion::Prefix => "prefix",
         IndelRegion::DataPart => "data-part",
+        IndelRegion::CrossRegion => "cross-region",
     }
 }
 
