@@ -131,7 +131,7 @@ const MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlr
 ```
 - [ ] **Step 1 — failing tests** (`repair.rs` test mod): (a) `assert!(md_codec::chunk::reassemble(&[MD1_C0,MD1_C1,MD1_C2]).is_ok())` precondition. (b) corrupt ONLY MD1_C1 with one inserted data char → `recover_indel_card(CardKind::Md1, &[C0, bad_C1, C2], 1)` → `Unique` with `recovered == MD1_C1`. (c) too-short (drop a data char in C1) → `Unique`. (d) two chunks corrupted → `Unrecoverable`. (e) `md1_chunk_solve` ⊆ rejection: a chunk with a substitution outside the placeholder set → `None`.
 - [ ] **Step 2 — run, expect FAIL** (`Md1IndelOracle`/`md1_chunk_solve` undefined; Md1 arm is the BadInput refusal): `cargo test -p mnemonic-toolkit --bins indel_md1 -v`.
-- [ ] **Step 3 — implement** §2.1–§2.5. (`use std::collections::BTreeSet;` already imported.)
+- [ ] **Step 3 — implement** §2.1–§2.5. (`use std::collections::BTreeSet;` already imported.) **Also fold R0 doc Minors:** update `recover_indel_card`'s doc comment (`repair.rs:~994-997`, currently "md1 = refused … not yet supported") to describe the md1 recovery; update `indel.rs` `recover_indel` doc (`:60`, `hrp ∈ {"ms","mk"}`) and the module header (`:6`) to include `"md"`.
 - [ ] **Step 4 — run, expect PASS**: `cargo test -p mnemonic-toolkit --bins` (all prior green + new). `cargo clippy --all-targets -- -D warnings` clean.
 - [ ] **Step 5 — commit** `feat(indel): Phase 1 — md1 per-chunk recovery (mirror mk1; reassemble oracle)`.
 
@@ -160,7 +160,7 @@ const MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlr
 This plan-doc faces mandatory opus R0 (0C/0I) BEFORE Phase 1. Per-phase reviews persist to `design/agent-reports/m-format-indel-md1-phase-N-review.md`. End-of-cycle review before tag.
 
 ## §7 Rn fold log
-- _(R0: pending dispatch.)_
+- **R0 (plan-doc):** **GREEN 0C/0I** (`design/agent-reports/m-format-indel-md1-phase-0-r0-review.md`). All load-bearing facts verified against source: md-codec pub API (`MD_REGULAR_CONST`/`polymod_run`/`decode_regular_errors`/`reassemble`); shared codex32 regular params mk==md (`GEN_REGULAR` + `REGULAR_SHIFT=60` + `REGULAR_MASK` + **`POLYMOD_INIT=0x23181b3`** — the 4th invariant, also identical → residues match bit-for-bit); md regular-only; `unwrap_string` hard-verifies the BCH checksum so `reassemble` requires valid chunks (NOT self-correcting → ⊆ guarantee preserved, stronger than mk1); no regression to the non-indel md1 delegation path (it doesn't call `target_residue`); failing-chunk location cannot misfire. 2 non-blocking doc Minors (M1 `indel.rs` `{"ms","mk"}`→add "md"; M2 `recover_indel_card` doc still says md1 refused) folded into Phase 1 Step 3 — doc-only, no R1 re-dispatch (per architect). **Cleared for Phase 1.**
 
 ## §8 Next steps
 R0 → fold → GREEN → Phase 1 → Phase 2 → end-of-cycle review → tag `mnemonic-toolkit-v0.37.2` (no GUI PR).
