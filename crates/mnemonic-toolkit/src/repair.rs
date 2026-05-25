@@ -883,12 +883,21 @@ fn apply_ms_corrections(
 /// inserted-placeholder positions; empty for the delete producer ⇒ already-valid).
 pub(crate) struct Ms1IndelOracle;
 impl IndelOracle for Ms1IndelOracle {
-    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+    fn validate(
+        &self,
+        cand: &str,
+        allowed: &BTreeSet<usize>,
+        e_subst: usize,
+    ) -> Option<(String, usize)> {
         match ms_codec::decode_with_correction(cand) {
             Ok((_t, _p, corrections)) => {
-                if corrections.iter().all(|c| allowed.contains(&c.position)) {
+                let off = corrections
+                    .iter()
+                    .filter(|c| !allowed.contains(&c.position))
+                    .count();
+                if off <= e_subst {
                     let (corrected, _) = apply_ms_corrections(cand, &corrections);
-                    Some(corrected)
+                    Some((corrected, off))
                 } else {
                     None
                 }
@@ -907,20 +916,25 @@ impl IndelOracle for Ms1IndelOracle {
 /// (`mk-codec string_layer/bch.rs` `bch_correct_*`), which would silently
 /// apply substitutions and defeat the pure-indel ⊆ rule. So we solve the
 /// single chunk here under the gate and hand `decode` an already-clean chunk.
-fn mk1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+fn mk1_chunk_solve(
+    cand: &str,
+    allowed: &BTreeSet<usize>,
+    e_subst: usize,
+) -> Option<(String, usize)> {
     let (values, code) = parse_chunk(cand, 0, CardKind::Mk1).ok()?;
     let target = CardKind::Mk1.target_residue(code)?;
     let residue = polymod_residue("mk", &values, target, code);
     if residue == 0 {
         // Already a valid codeword (delete producer / placeholder collision).
-        return Some(encode_chunk("mk", &values));
+        return Some((encode_chunk("mk", &values), 0));
     }
     let (positions, mags) = match code {
         BchCode::Regular => decode_regular_errors(residue, values.len()),
         BchCode::Long => decode_long_errors(residue, values.len()),
     }?;
-    if !positions.iter().all(|p| allowed.contains(p)) {
-        return None; // a correction outside the placeholder set ⇒ not pure-indel
+    let off = positions.iter().filter(|p| !allowed.contains(p)).count();
+    if off > e_subst {
+        return None; // too many corrections outside the placeholder set
     }
     let mut corrected = values.clone();
     for (&p, &m) in positions.iter().zip(&mags) {
@@ -932,7 +946,7 @@ fn mk1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
     if polymod_residue("mk", &corrected, target, code) != 0 {
         return None; // defensive re-verify
     }
-    Some(encode_chunk("mk", &corrected))
+    Some((encode_chunk("mk", &corrected), off))
 }
 
 /// ⊆-gated single-chunk BCH solve for md1 — mirror of `mk1_chunk_solve`
@@ -947,20 +961,25 @@ fn mk1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
 /// `Md1IndelOracle` then confirms the solved chunk against the full set via
 /// `md_codec::chunk::reassemble` (which does NOT self-correct, so the chunk
 /// must already be a valid codeword).
-fn md1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+fn md1_chunk_solve(
+    cand: &str,
+    allowed: &BTreeSet<usize>,
+    e_subst: usize,
+) -> Option<(String, usize)> {
     let (values, code) = parse_chunk(cand, 0, CardKind::Md1).ok()?;
     let target = CardKind::Md1.target_residue(code)?; // None for Long ⇒ reject
     let residue = polymod_residue("md", &values, target, code);
     if residue == 0 {
         // Already a valid codeword (delete producer / placeholder collision).
-        return Some(encode_chunk("md", &values));
+        return Some((encode_chunk("md", &values), 0));
     }
     let (positions, mags) = match code {
         BchCode::Regular => decode_regular_errors(residue, values.len()),
         BchCode::Long => return None, // md has no long decoder
     }?;
-    if !positions.iter().all(|p| allowed.contains(p)) {
-        return None; // a correction outside the placeholder set ⇒ not pure-indel
+    let off = positions.iter().filter(|p| !allowed.contains(p)).count();
+    if off > e_subst {
+        return None; // too many corrections outside the placeholder set
     }
     let mut corrected = values.clone();
     for (&p, &m) in positions.iter().zip(&mags) {
@@ -972,7 +991,7 @@ fn md1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
     if polymod_residue("md", &corrected, target, code) != 0 {
         return None; // defensive re-verify
     }
-    Some(encode_chunk("md", &corrected))
+    Some((encode_chunk("md", &corrected), off))
 }
 
 /// mk1 oracle — ⊆-gated solve the single failing chunk (mk_codec::decode
@@ -984,13 +1003,18 @@ pub(crate) struct Mk1IndelOracle {
     pub failing_index: usize,
 }
 impl IndelOracle for Mk1IndelOracle {
-    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
-        let corrected_chunk = mk1_chunk_solve(cand, allowed)?;
+    fn validate(
+        &self,
+        cand: &str,
+        allowed: &BTreeSet<usize>,
+        e_subst: usize,
+    ) -> Option<(String, usize)> {
+        let (corrected_chunk, off) = mk1_chunk_solve(cand, allowed, e_subst)?;
         let mut chunks = self.all_chunks.clone();
         chunks[self.failing_index] = corrected_chunk.clone();
         let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
         match mk_codec::decode(&refs) {
-            Ok(_) => Some(corrected_chunk),
+            Ok(_) => Some((corrected_chunk, off)),
             Err(_) => None,
         }
     }
@@ -1006,13 +1030,18 @@ pub(crate) struct Md1IndelOracle {
     pub failing_index: usize,
 }
 impl IndelOracle for Md1IndelOracle {
-    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
-        let corrected_chunk = md1_chunk_solve(cand, allowed)?;
+    fn validate(
+        &self,
+        cand: &str,
+        allowed: &BTreeSet<usize>,
+        e_subst: usize,
+    ) -> Option<(String, usize)> {
+        let (corrected_chunk, off) = md1_chunk_solve(cand, allowed, e_subst)?;
         let mut chunks = self.all_chunks.clone();
         chunks[self.failing_index] = corrected_chunk.clone();
         let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
         match md_codec::chunk::reassemble(&refs) {
-            Ok(_) => Some(corrected_chunk),
+            Ok(_) => Some((corrected_chunk, off)),
             Err(_) => None,
         }
     }
@@ -1072,6 +1101,7 @@ pub(crate) fn recover_indel_card(
     kind: CardKind,
     chunks: &[String],
     max_indel: usize,
+    e_subst: usize,
 ) -> Result<crate::indel::IndelOutcome, ToolkitError> {
     match kind {
         CardKind::Ms1 => {
@@ -1079,7 +1109,7 @@ pub(crate) fn recover_indel_card(
             let chunk = chunks
                 .first()
                 .ok_or(ToolkitError::Repair(RepairError::EmptyInput))?;
-            Ok(crate::indel::recover_indel(chunk, "ms", max_indel, &Ms1IndelOracle))
+            Ok(crate::indel::recover_indel(chunk, "ms", max_indel, e_subst, &Ms1IndelOracle))
         }
         CardKind::Mk1 => {
             // Locate the single failing chunk (the one normal per-chunk repair
@@ -1099,7 +1129,7 @@ pub(crate) fn recover_indel_card(
                 all_chunks: chunks.to_vec(),
                 failing_index: f,
             };
-            Ok(crate::indel::recover_indel(&chunks[f], "mk", max_indel, &oracle))
+            Ok(crate::indel::recover_indel(&chunks[f], "mk", max_indel, e_subst, &oracle))
         }
         CardKind::Md1 => {
             // Mirror the Mk1 arm: locate the single failing chunk (an indel
@@ -1120,7 +1150,7 @@ pub(crate) fn recover_indel_card(
                 all_chunks: chunks.to_vec(),
                 failing_index: f,
             };
-            Ok(crate::indel::recover_indel(&chunks[f], "md", max_indel, &oracle))
+            Ok(crate::indel::recover_indel(&chunks[f], "md", max_indel, e_subst, &oracle))
         }
     }
 }
@@ -1841,7 +1871,7 @@ mod tests {
         let mut s = String::from(VALID_MS1);
         s.insert(data_start + 10, 'q'); // one inserted char → too long by 1
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
                 assert_eq!(c.recovered, VALID_MS1);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Deleted);
@@ -1860,7 +1890,7 @@ mod tests {
         s.insert(3 + 10, 'q');
         s.insert(3 + 5, 'p'); // two inserted chars
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 2, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -1882,7 +1912,7 @@ mod tests {
         let mut s = String::from(VALID_MS1);
         s.remove(3 + 1); // remove data index 1 ('e')
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
                 assert_eq!(c.recovered, VALID_MS1);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Inserted);
@@ -1904,7 +1934,7 @@ mod tests {
         let mut s = String::from(VALID_MS1);
         s.remove(3 + 8); // a 'q'
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -1922,7 +1952,46 @@ mod tests {
         s.remove(3 + 1);
         let oracle = Ms1IndelOracle;
         assert_eq!(
-            crate::indel::recover_indel(&s, "ms", 1, &oracle),
+            crate::indel::recover_indel(&s, "ms", 1, 0, &oracle),
+            crate::indel::IndelOutcome::Unrecoverable
+        );
+    }
+
+    /// Phase 1 (indel-v2): drop one data char AND substitute another → needs
+    /// exactly 1 placeholder + 1 substitution. With `e_subst=1` the relaxed
+    /// accept gate (`|corrections \ placeholders| ≤ E`) recovers VALID_MS1 and
+    /// reports `subst_count == 1`. (Same corruption as the e0 rejection test
+    /// below; here the budget admits it.)
+    #[test]
+    fn indel_ms1_indel_plus_substitution_recovers_with_e1() {
+        // substitute data index 2 ('n'); then drop data index 1 ('e'). idx 1 < 2,
+        // so the substitution at idx 2 stays a substitution after the drop (the
+        // dropped char is at a LOWER index; the higher index just shifts down).
+        let mut chars: Vec<char> = VALID_MS1.chars().collect();
+        chars[3 + 2] = if chars[3 + 2] == 'p' { 'z' } else { 'p' }; // substitute data idx 2
+        let mut s: String = chars.into_iter().collect();
+        s.remove(3 + 1); // drop data idx 1
+        let oracle = Ms1IndelOracle;
+        match crate::indel::recover_indel(&s, "ms", 1, 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.subst_count, 1);
+            }
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// Phase 1 (indel-v2): the same indel+substitution corruption is REJECTED
+    /// at `e_subst=0` (pure-indel) — the substitution is outside the placeholder
+    /// set, so `|corrections \ placeholders| = 1 > 0`.
+    #[test]
+    fn indel_ms1_indel_plus_substitution_rejected_at_e0() {
+        let mut chars: Vec<char> = VALID_MS1.chars().collect();
+        chars[3 + 2] = if chars[3 + 2] == 'p' { 'z' } else { 'p' };
+        let mut s: String = chars.into_iter().collect();
+        s.remove(3 + 1);
+        assert_eq!(
+            crate::indel::recover_indel(&s, "ms", 1, 0, &Ms1IndelOracle),
             crate::indel::IndelOutcome::Unrecoverable
         );
     }
@@ -1936,7 +2005,7 @@ mod tests {
         s.remove(3 + 5); // 's' at data index 5 — remove higher index first
         s.remove(3 + 1); // 'e' at data index 1
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 2, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -1952,7 +2021,7 @@ mod tests {
     fn indel_ms1_prefix_dropped_m_recovers() {
         let s = VALID_MS1.strip_prefix('m').unwrap().to_string(); // "s10entrs…"
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
                 assert_eq!(c.recovered, VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
@@ -1969,7 +2038,7 @@ mod tests {
     fn indel_ms1_prefix_extra_char_recovers() {
         let s = format!("msx1{}", &VALID_MS1[3..]); // "msx10entrs…"
         let oracle = Ms1IndelOracle;
-        match crate::indel::recover_indel(&s, "ms", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
                 assert_eq!(c.recovered, VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
@@ -2016,7 +2085,7 @@ mod tests {
             all_chunks: vec![MK1_CARD_C0.to_string(), s.clone()],
             failing_index: 1,
         };
-        match crate::indel::recover_indel(&s, "mk", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "mk", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -2033,8 +2102,34 @@ mod tests {
             all_chunks: vec![MK1_CARD_C0.to_string(), s.clone()],
             failing_index: 1,
         };
-        match crate::indel::recover_indel(&s, "mk", 1, &oracle) {
+        match crate::indel::recover_indel(&s, "mk", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    /// Phase 1 (indel-v2): one chunk of a 2-chunk mk1 card, too short by one
+    /// dropped data char AND with one substituted data char. With `e_subst=1`
+    /// the relaxed per-chunk solve recovers the original chunk and reports
+    /// `subst_count == 1`; the reassembly oracle confirms against intact chunk 0.
+    #[test]
+    fn indel_mk1_single_failing_chunk_indel_plus_substitution_recovers_with_e1() {
+        // substitute a data char (data idx 20), then drop a LOWER data idx (10)
+        // so the substitution remains a substitution after the shift.
+        let mut chars: Vec<char> = MK1_CARD_C1.chars().collect();
+        let sub_full = 3 + 20;
+        chars[sub_full] = if chars[sub_full] == 'q' { 'p' } else { 'q' };
+        let mut s: String = chars.into_iter().collect();
+        s.remove(3 + 10); // drop a data char at a lower index
+        let oracle = Mk1IndelOracle {
+            all_chunks: vec![MK1_CARD_C0.to_string(), s.clone()],
+            failing_index: 1,
+        };
+        match crate::indel::recover_indel(&s, "mk", 1, 1, &oracle) {
+            crate::indel::IndelOutcome::Unique(c) => {
+                assert_eq!(c.recovered, MK1_CARD_C1);
+                assert_eq!(c.subst_count, 1);
+            }
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -2051,7 +2146,7 @@ mod tests {
         let mut bad_c1 = String::from(MK1_CARD_C1);
         bad_c1.insert(3 + 12, 'q'); // too long by 1, in chunk 1
         let chunks = vec![MK1_CARD_C0.to_string(), bad_c1];
-        match recover_indel_card(CardKind::Mk1, &chunks, 1).expect("ok") {
+        match recover_indel_card(CardKind::Mk1, &chunks, 1, 0).expect("ok") {
             crate::indel::IndelOutcome::Unique(c) => {
                 assert_eq!(c.recovered, MK1_CARD_C1); // recovered chunk == original chunk 1
             }
@@ -2069,7 +2164,7 @@ mod tests {
         c1.insert(3 + 5, 'q');
         let chunks = vec![c0, c1];
         assert_eq!(
-            recover_indel_card(CardKind::Mk1, &chunks, 1).expect("ok"),
+            recover_indel_card(CardKind::Mk1, &chunks, 1, 0).expect("ok"),
             crate::indel::IndelOutcome::Unrecoverable
         );
     }
@@ -2149,7 +2244,7 @@ mod tests {
         let mut bad = String::from(MD1_C1);
         bad.insert(3 + 12, 'q'); // insert one data char into chunk 1
         let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
-        match recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok") {
+        match recover_indel_card(CardKind::Md1, &chunks, 1, 0).expect("ok") {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -2160,7 +2255,7 @@ mod tests {
         let mut bad = String::from(MD1_C1);
         bad.remove(3 + 12); // drop one data char
         let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
-        match recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok") {
+        match recover_indel_card(CardKind::Md1, &chunks, 1, 0).expect("ok") {
             crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -2174,7 +2269,7 @@ mod tests {
         c1.insert(3 + 5, 'q');
         let chunks = vec![c0, c1, MD1_C2.to_string()];
         assert_eq!(
-            recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok"),
+            recover_indel_card(CardKind::Md1, &chunks, 1, 0).expect("ok"),
             crate::indel::IndelOutcome::Unrecoverable
         );
     }
@@ -2185,8 +2280,11 @@ mod tests {
         // md1_chunk_solve must reject it even though BCH could "correct" it.
         let bad = flip_at(MD1_C1, 12);
         let allowed: BTreeSet<usize> = BTreeSet::new(); // delete-producer ⇒ ∅
-        assert_eq!(md1_chunk_solve(&bad, &allowed), None);
+        assert!(md1_chunk_solve(&bad, &allowed, 0).is_none());
         // The clean chunk (residue 0) round-trips through the solver.
-        assert_eq!(md1_chunk_solve(MD1_C1, &allowed).as_deref(), Some(MD1_C1));
+        assert_eq!(
+            md1_chunk_solve(MD1_C1, &allowed, 0).map(|(s, _)| s).as_deref(),
+            Some(MD1_C1)
+        );
     }
 }

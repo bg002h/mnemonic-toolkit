@@ -139,7 +139,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
-                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize)? {
+                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize, 0)? {
                     IndelOutcome::Unique(c) => {
                         if matches!(kind, CardKind::Ms1) {
                             any_ms1 = true;
@@ -370,12 +370,14 @@ mod tests {
             indel_count: 1,
             region: IndelRegion::Prefix,
             direction: IndelDirection::Inserted,
+            subst_count: 0,
         };
         let b = IndelCandidate {
             recovered: "ms1bbb".to_string(),
             indel_count: 1,
             region: IndelRegion::DataPart,
             direction: IndelDirection::Deleted,
+            subst_count: 0,
         };
         let refs = vec![&a, &b];
 

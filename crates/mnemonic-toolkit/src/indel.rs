@@ -34,6 +34,9 @@ pub struct IndelCandidate {
     pub indel_count: usize,
     pub region: IndelRegion,
     pub direction: IndelDirection,
+    /// Number of substitutions used beyond the inserted placeholders, i.e.
+    /// `|corrections \ placeholders|`. `0` for a pure-indel recovery.
+    pub subst_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,11 +48,17 @@ pub enum IndelOutcome {
 }
 
 /// Per-kind single-string validator. `allowed` are the data-part indices of
-/// placeholders we inserted (∅ for delete/prefix producers). Returns the
-/// canonical recovered full-string iff the candidate decodes cleanly AND its
-/// BCH corrections ⊆ `allowed`.
+/// placeholders we inserted (∅ for delete/prefix producers). `e_subst` is the
+/// substitution-tolerance budget. Returns `Some((recovered, subst_count))` iff
+/// the candidate decodes cleanly AND `|corrections \ allowed| ≤ e_subst`, where
+/// `subst_count = |corrections \ allowed|` (`0` for a pure-indel recovery).
 pub trait IndelOracle {
-    fn validate(&self, candidate: &str, allowed: &BTreeSet<usize>) -> Option<String>;
+    fn validate(
+        &self,
+        candidate: &str,
+        allowed: &BTreeSet<usize>,
+        e_subst: usize,
+    ) -> Option<(String, usize)>;
 }
 
 /// ALPHABET[0]; any fixed symbol works — the BCH decoder solves the true
@@ -62,13 +71,14 @@ pub fn recover_indel(
     input: &str,
     hrp: &str,
     max_indel: usize,
+    e_subst: usize,
     oracle: &dyn IndelOracle,
 ) -> IndelOutcome {
     let mut hits: Vec<IndelCandidate> = Vec::new();
     for j in 1..=max_indel {
-        collect_prefix(input, hrp, j, oracle, &mut hits); // P1
-        collect_data_delete(input, hrp, j, oracle, &mut hits); // P2 too-long
-        collect_data_insert(input, hrp, j, oracle, &mut hits); // P2 too-short
+        collect_prefix(input, hrp, j, e_subst, oracle, &mut hits); // P1
+        collect_data_delete(input, hrp, j, e_subst, oracle, &mut hits); // P2 too-long
+        collect_data_insert(input, hrp, j, e_subst, oracle, &mut hits); // P2 too-short
     }
     dedup_by_recovered(&mut hits);
     match hits.len() {
@@ -89,6 +99,7 @@ fn collect_prefix(
     input: &str,
     hrp: &str,
     j: usize,
+    e_subst: usize,
     oracle: &dyn IndelOracle,
     out: &mut Vec<IndelCandidate>,
 ) {
@@ -103,7 +114,7 @@ fn collect_prefix(
         }
         let tail: String = chars[p..].iter().collect();
         let cand = format!("{k}{tail}");
-        if let Some(rec) = oracle.validate(&cand, &BTreeSet::new()) {
+        if let Some((rec, sc)) = oracle.validate(&cand, &BTreeSet::new(), e_subst) {
             let direction = if p < 3 {
                 IndelDirection::Inserted
             } else {
@@ -114,6 +125,7 @@ fn collect_prefix(
                 indel_count: j,
                 region: IndelRegion::Prefix,
                 direction,
+                subst_count: sc,
             });
         }
     }
@@ -153,6 +165,7 @@ fn collect_data_delete(
     input: &str,
     hrp: &str,
     j: usize,
+    e_subst: usize,
     oracle: &dyn IndelOracle,
     out: &mut Vec<IndelCandidate>,
 ) {
@@ -172,12 +185,13 @@ fn collect_data_delete(
             .map(|(_, c)| *c)
             .collect();
         let cand = format!("{hrp}1{kept}");
-        if let Some(rec) = oracle.validate(&cand, &allowed) {
+        if let Some((rec, sc)) = oracle.validate(&cand, &allowed, e_subst) {
             out.push(IndelCandidate {
                 recovered: rec,
                 indel_count: j,
                 region: IndelRegion::DataPart,
                 direction: IndelDirection::Deleted,
+                subst_count: sc,
             });
         }
     }
@@ -187,6 +201,7 @@ fn collect_data_insert(
     input: &str,
     hrp: &str,
     j: usize,
+    e_subst: usize,
     oracle: &dyn IndelOracle,
     out: &mut Vec<IndelCandidate>,
 ) {
@@ -211,12 +226,13 @@ fn collect_data_insert(
         }
         let allowed: BTreeSet<usize> = combo.iter().copied().collect();
         let cand = format!("{hrp}1{}", built.iter().collect::<String>());
-        if let Some(rec) = oracle.validate(&cand, &allowed) {
+        if let Some((rec, sc)) = oracle.validate(&cand, &allowed, e_subst) {
             out.push(IndelCandidate {
                 recovered: rec,
                 indel_count: j,
                 region: IndelRegion::DataPart,
                 direction: IndelDirection::Inserted,
+                subst_count: sc,
             });
         }
     }
@@ -269,7 +285,7 @@ mod tests {
 
     struct NoOracle;
     impl IndelOracle for NoOracle {
-        fn validate(&self, _: &str, _: &BTreeSet<usize>) -> Option<String> {
+        fn validate(&self, _: &str, _: &BTreeSet<usize>, _e_subst: usize) -> Option<(String, usize)> {
             None
         }
     }
@@ -277,7 +293,7 @@ mod tests {
     #[test]
     fn recover_indel_empty_budget_is_unrecoverable() {
         assert_eq!(
-            recover_indel("ms1qqqq", "ms", 0, &NoOracle),
+            recover_indel("ms1qqqq", "ms", 0, 0, &NoOracle),
             IndelOutcome::Unrecoverable
         );
     }
@@ -294,12 +310,14 @@ mod tests {
                 indel_count: 1,
                 region: IndelRegion::Prefix,
                 direction: IndelDirection::Inserted,
+                subst_count: 0,
             },
             IndelCandidate {
                 recovered: "ms1xyz".into(),
                 indel_count: 1,
                 region: IndelRegion::DataPart,
                 direction: IndelDirection::Deleted,
+                subst_count: 0,
             },
         ];
         dedup_by_recovered(&mut hits);
@@ -313,11 +331,16 @@ mod tests {
     fn recover_indel_reports_ambiguous_on_multiple_distinct_recovered() {
         struct AcceptAll;
         impl IndelOracle for AcceptAll {
-            fn validate(&self, candidate: &str, _allowed: &BTreeSet<usize>) -> Option<String> {
-                Some(candidate.to_string())
+            fn validate(
+                &self,
+                candidate: &str,
+                _allowed: &BTreeSet<usize>,
+                _e_subst: usize,
+            ) -> Option<(String, usize)> {
+                Some((candidate.to_string(), 0))
             }
         }
-        let outcome = recover_indel("ms1qpzr", "ms", 1, &AcceptAll);
+        let outcome = recover_indel("ms1qpzr", "ms", 1, 0, &AcceptAll);
         assert!(
             matches!(outcome, IndelOutcome::Ambiguous(ref v) if v.len() >= 2),
             "got {outcome:?}"
