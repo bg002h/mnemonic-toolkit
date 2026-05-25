@@ -46,6 +46,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `manual-repair-flag-mutex-inaccuracy` — repair/inspect flag-table says `--ms1/--mk1/--md1` "mutually exclusive" but source allows combining per D35
+
+- **Surfaced:** 2026-05-24, indel-v2 (v0.37.3) end-of-cycle review (M2). PRE-EXISTING inaccuracy, not introduced this cycle. The manual's `mnemonic repair` flag table describes `--ms1`, `--mk1`, `--md1` as "mutually exclusive with" one another, but the actual CLI permits combining them (multi-group repair, one HRP per card): source doc-comments say "May be combined with … per D35" and the test `multi_group_both_emit_exit_5` proves a combined `--ms1 … --mk1 …` invocation emits both repairs at exit 5.
+- **Where:** `docs/manual/src/40-cli-reference/41-mnemonic.md:2277-2279` (repair table — three rows each say "mutually exclusive with" the other two HRP flags). **Check the class:** the `inspect` table at `:2546` (and adjacent `--mk1`/`--md1` inspect rows) likely repeats the same "mutually exclusive" wording — verify whether `inspect` actually rejects multi-group before deciding to fix or leave it (inspect may genuinely be single-group). Source ground truth: `crates/mnemonic-toolkit/src/cmd/repair.rs:39,46,52` ("May be combined … per D35").
+- **What:** Replace the "mutually exclusive with `--mk1` / `--md1`" clause in each repair-table row with the accurate "may be combined with `--mk1` / `--md1` (one HRP per card; per D35)" wording mirroring the source doc-comments. Audit the inspect table for the same class and fix iff inspect also allows combining; otherwise leave inspect as-is and add a one-line note that repair (not inspect) supports multi-group. No code/flag change — manual prose only; manual lint (flag-NAMES) does not gate this prose.
+- **Why deferred:** Out of scope for the v0.37.3 indel cycle (the cycle touched repair behavior, not the mutex documentation); pre-existing since the multi-group repair feature shipped. Natural fold target: any future docs-refresh PATCH or a repair-surface cycle.
+- **Status:** `open`
+- **Tier:** `docs`
+
 ### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope
 
 - **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (see `design/agent-reports/pr-26-post-merge-comprehensive-review.md` — C1 + I7). The SPEC §7.4 stderr warning is the only non-JSON-mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly; if `canonicalize_bitcoin_core` errors (parser / canonicalizer disagreement, non-UTF-8 input, internal serde mismatch) the function returns `Ok(())` with no diagnostic. JSON mode drops the error reason via `.ok()` → envelope shows surface `"canonicalize_failed"` only.
