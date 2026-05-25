@@ -40,6 +40,10 @@ use crate::error::ToolkitError;
 // repair paths delegate to sibling codecs' native APIs.)
 pub(crate) const MK_REGULAR_TARGET: u128 = mk_codec::MK_REGULAR_CONST;
 pub(crate) const MK_LONG_TARGET: u128 = mk_codec::MK_LONG_CONST;
+// md is regular-only (no long code) → no MD_LONG_TARGET. Re-acquired from
+// md-codec for the indel path (the non-indel md1 repair delegates to
+// md_codec::decode_with_correction and never calls target_residue).
+pub(crate) const MD_REGULAR_TARGET: u128 = md_codec::bch::MD_REGULAR_CONST;
 
 /// Singleton bound for BCH(93,80,8) regular code: 2t = 8 (correct up to t=4
 /// substitutions). Reported in `RepairError::TooManyErrors` for user
@@ -65,20 +69,25 @@ impl CardKind {
         }
     }
 
-    /// Per-HRP × per-code target residue for the Mk1 branch (the only
-    /// branch that still uses the toolkit-side `polymod_residue` path).
-    /// Returns `None` for an HRP/code pair the upstream codec does not
-    /// define. Post-v0.23.0 the Ms1 + Md1 arms are removed because those
-    /// branches delegate to the sibling codecs' native APIs and never call
-    /// this helper.
+    /// Per-HRP × per-code target residue for the toolkit-side
+    /// `polymod_residue` path. Used by the Mk1 branch (non-indel repair +
+    /// indel) and — since the v0.37.2 md1 indel work — the Md1 branch's
+    /// indel path (`md1_chunk_solve` / `repair_chunk_one(Md1, …)`). Returns
+    /// `None` for an HRP/code pair the upstream codec does not define.
+    ///
+    /// Ms1 still delegates entirely to ms-codec's native API and never calls
+    /// this helper (its arm stays `None`). md is regular-only, so `(Md1,
+    /// Long)` is also `None` (a long-code md chunk is undefined → the `None`
+    /// return triggers `UnsupportedCodeVariant`, a safe-fail path). The
+    /// non-indel md1 repair path still delegates to
+    /// `md_codec::decode_with_correction` and does not call this helper.
     fn target_residue(self, code: BchCode) -> Option<u128> {
         match (self, code) {
             (Self::Mk1, BchCode::Regular) => Some(MK_REGULAR_TARGET),
             (Self::Mk1, BchCode::Long) => Some(MK_LONG_TARGET),
-            // Ms1 + Md1 never call this helper post-v0.23.0; if a future
-            // refactor reintroduces a direct call, the None return triggers
-            // `UnsupportedCodeVariant` which is a safe-fail path.
-            (Self::Ms1, _) | (Self::Md1, _) => None,
+            (Self::Md1, BchCode::Regular) => Some(MD_REGULAR_TARGET),
+            // ms1 delegates to ms-codec; md is regular-only (no long code).
+            (Self::Ms1, _) | (Self::Md1, BchCode::Long) => None,
         }
     }
 }
@@ -926,6 +935,46 @@ fn mk1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
     Some(encode_chunk("mk", &corrected))
 }
 
+/// ⊆-gated single-chunk BCH solve for md1 — mirror of `mk1_chunk_solve`
+/// (md is regular-only). Reuses the shared-codex32-generator machinery
+/// (`polymod_residue` + `decode_regular_errors`) with the md target:
+/// md's `GEN_REGULAR` / `REGULAR_SHIFT` / `REGULAR_MASK` / `POLYMOD_INIT`
+/// are byte-identical to mk's, so the toolkit-side residue matches md's
+/// own bit-for-bit once the md target constant is applied.
+///
+/// Returns the canonical (re-encoded) chunk iff it parses, BCH-validates or
+/// -solves, and every correction position ∈ `allowed`; `None` otherwise.
+/// `Md1IndelOracle` then confirms the solved chunk against the full set via
+/// `md_codec::chunk::reassemble` (which does NOT self-correct, so the chunk
+/// must already be a valid codeword).
+fn md1_chunk_solve(cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+    let (values, code) = parse_chunk(cand, 0, CardKind::Md1).ok()?;
+    let target = CardKind::Md1.target_residue(code)?; // None for Long ⇒ reject
+    let residue = polymod_residue("md", &values, target, code);
+    if residue == 0 {
+        // Already a valid codeword (delete producer / placeholder collision).
+        return Some(encode_chunk("md", &values));
+    }
+    let (positions, mags) = match code {
+        BchCode::Regular => decode_regular_errors(residue, values.len()),
+        BchCode::Long => return None, // md has no long decoder
+    }?;
+    if !positions.iter().all(|p| allowed.contains(p)) {
+        return None; // a correction outside the placeholder set ⇒ not pure-indel
+    }
+    let mut corrected = values.clone();
+    for (&p, &m) in positions.iter().zip(&mags) {
+        if p >= corrected.len() {
+            return None;
+        }
+        corrected[p] ^= m;
+    }
+    if polymod_residue("md", &corrected, target, code) != 0 {
+        return None; // defensive re-verify
+    }
+    Some(encode_chunk("md", &corrected))
+}
+
 /// mk1 oracle — ⊆-gated solve the single failing chunk (mk_codec::decode
 /// self-corrects t≤4 UNGUARDED, which would defeat the pure-indel rule), then
 /// confirm full-card reassembly via `mk_codec::decode(&[&str])` on the clean
@@ -941,6 +990,28 @@ impl IndelOracle for Mk1IndelOracle {
         chunks[self.failing_index] = corrected_chunk.clone();
         let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
         match mk_codec::decode(&refs) {
+            Ok(_) => Some(corrected_chunk),
+            Err(_) => None,
+        }
+    }
+}
+
+/// md1 oracle — ⊆-gated solve the single failing chunk, then confirm
+/// full-set reassembly via `md_codec::chunk::reassemble` (which does NOT
+/// self-correct — it `unwrap_string`s each chunk via a hard codex32
+/// checksum verify, then cross-chunk-validates — so the solved chunk must
+/// already be a valid codeword; `md1_chunk_solve` produces exactly that).
+pub(crate) struct Md1IndelOracle {
+    pub all_chunks: Vec<String>,
+    pub failing_index: usize,
+}
+impl IndelOracle for Md1IndelOracle {
+    fn validate(&self, cand: &str, allowed: &BTreeSet<usize>) -> Option<String> {
+        let corrected_chunk = md1_chunk_solve(cand, allowed)?;
+        let mut chunks = self.all_chunks.clone();
+        chunks[self.failing_index] = corrected_chunk.clone();
+        let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+        match md_codec::chunk::reassemble(&refs) {
             Ok(_) => Some(corrected_chunk),
             Err(_) => None,
         }
@@ -993,8 +1064,10 @@ pub(crate) fn indel_exit_code(ambiguous_seen: bool, total_repairs: usize) -> u8 
 
 /// Per-card-kind entry point for indel recovery. Dispatches to the per-kind
 /// oracle; returns the `IndelOutcome` or a toolkit error. ms1 = single chunk;
-/// mk1 = locate-the-single-failing-chunk + reassembly oracle; md1 = refused
-/// (`BadInput`, not yet supported — FOLLOWUP (b)).
+/// mk1 = locate-the-single-failing-chunk + `mk_codec::decode` reassembly
+/// oracle; md1 = locate-the-single-failing-chunk + `md_codec::chunk::reassemble`
+/// reassembly oracle (mirrors mk1; v0.37.2 — resolves FOLLOWUP
+/// `m-format-indel-md1-chunked`).
 pub(crate) fn recover_indel_card(
     kind: CardKind,
     chunks: &[String],
@@ -1028,9 +1101,27 @@ pub(crate) fn recover_indel_card(
             };
             Ok(crate::indel::recover_indel(&chunks[f], "mk", max_indel, &oracle))
         }
-        CardKind::Md1 => Err(ToolkitError::BadInput(
-            "repair --max-indel: indel recovery is not yet supported for chunked md1".into(),
-        )),
+        CardKind::Md1 => {
+            // Mirror the Mk1 arm: locate the single failing chunk (an indel
+            // lands in ONE chunk; siblings stay intact), then run the engine
+            // on it with the reassembly-gated oracle.
+            let failing: Vec<usize> = chunks
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| repair_chunk_one(CardKind::Md1, *i, c).is_err())
+                .map(|(i, _)| i)
+                .collect();
+            if failing.len() != 1 {
+                // 0 or >1 failing: out of single-region v1 scope.
+                return Ok(crate::indel::IndelOutcome::Unrecoverable);
+            }
+            let f = failing[0];
+            let oracle = Md1IndelOracle {
+                all_chunks: chunks.to_vec(),
+                failing_index: f,
+            };
+            Ok(crate::indel::recover_indel(&chunks[f], "md", max_indel, &oracle))
+        }
     }
 }
 
@@ -2037,5 +2128,65 @@ mod tests {
             hrp: "ms",
             max_indel: 1
         }));
+    }
+
+    // ---- Phase 1: md1 indel recovery (mirror mk1) ----
+    //
+    // Real 3-chunk bip84 md1 card (from `mnemonic bundle`), verified to
+    // reassemble. Corruption injection targets a mid-data index in the
+    // failing chunk so the indel engine sees a single failing chunk.
+    const MD1_C0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    const MD1_C1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+    const MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+
+    #[test]
+    fn indel_md1_fixture_reassembles() {
+        assert!(md_codec::chunk::reassemble(&[MD1_C0, MD1_C1, MD1_C2]).is_ok());
+    }
+
+    #[test]
+    fn indel_md1_one_chunk_too_long_recovers() {
+        let mut bad = String::from(MD1_C1);
+        bad.insert(3 + 12, 'q'); // insert one data char into chunk 1
+        let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
+        match recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok") {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn indel_md1_one_chunk_too_short_recovers() {
+        let mut bad = String::from(MD1_C1);
+        bad.remove(3 + 12); // drop one data char
+        let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
+        match recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok") {
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
+            other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn indel_md1_two_failing_is_unrecoverable() {
+        let mut c0 = String::from(MD1_C0);
+        c0.insert(3 + 5, 'q');
+        let mut c1 = String::from(MD1_C1);
+        c1.insert(3 + 5, 'q');
+        let chunks = vec![c0, c1, MD1_C2.to_string()];
+        assert_eq!(
+            recover_indel_card(CardKind::Md1, &chunks, 1).expect("ok"),
+            crate::indel::IndelOutcome::Unrecoverable
+        );
+    }
+
+    #[test]
+    fn indel_md1_chunk_solve_rejects_out_of_set_substitution() {
+        // A pure substitution (no indel) is NOT in the placeholder set, so
+        // md1_chunk_solve must reject it even though BCH could "correct" it.
+        let bad = flip_at(MD1_C1, 12);
+        let allowed: BTreeSet<usize> = BTreeSet::new(); // delete-producer ⇒ ∅
+        assert_eq!(md1_chunk_solve(&bad, &allowed), None);
+        // The clean chunk (residue 0) round-trips through the solver.
+        assert_eq!(md1_chunk_solve(MD1_C1, &allowed).as_deref(), Some(MD1_C1));
     }
 }

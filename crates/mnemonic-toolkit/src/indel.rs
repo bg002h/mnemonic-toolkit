@@ -3,7 +3,7 @@
 //! design/BRAINSTORM_m_format_incorrect_length_recovery.md.
 //!
 //! Two candidate producers feed one per-kind validator (`IndelOracle`):
-//!   P1 prefix-region restore to the known `ms1`/`mk1` prefix;
+//!   P1 prefix-region restore to the known `ms1`/`mk1`/`md1` prefix;
 //!   P2 data-region — delete-and-validate (too long) / placeholder-then-decode
 //!      (too short, BCH solves the missing symbol).
 //! Pure-indel only: a candidate's BCH corrections must be ⊆ the placeholder
@@ -57,7 +57,7 @@ pub trait IndelOracle {
 pub(crate) const PLACEHOLDER_CHAR: char = 'q';
 
 /// Engine entry point. `input` is one full m*1 string (one ms1, or ONE mk1
-/// chunk). `hrp` ∈ {"ms","mk"}. Produces the dedup'd outcome.
+/// or md1 chunk). `hrp` ∈ {"ms","mk","md"}. Produces the dedup'd outcome.
 pub fn recover_indel(
     input: &str,
     hrp: &str,
