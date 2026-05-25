@@ -1078,11 +1078,13 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
 }
 
 /// Exit-code decision for the indel CLI path (§1.6). Precedence within the
-/// emitting outcomes: ambiguous(4) > recovered/repaired(5) > already-valid(0).
+/// emitting outcomes: ambiguous-or-substitution(4) > recovered/repaired(5) >
+/// already-valid(0). `substitution_seen` is true when at least one candidate
+/// used a substitution beyond the placeholder positions (`subst_count >= 1`).
 /// (Unrecoverable(2) is handled out-of-band via the `Err` short-circuit in
 /// `run()`, so it never reaches this helper.)
-pub(crate) fn indel_exit_code(ambiguous_seen: bool, total_repairs: usize) -> u8 {
-    if ambiguous_seen {
+pub(crate) fn indel_exit_code(ambiguous_seen: bool, substitution_seen: bool, total_repairs: usize) -> u8 {
+    if ambiguous_seen || substitution_seen {
         4
     } else if total_repairs == 0 {
         0
@@ -2199,18 +2201,21 @@ mod tests {
     // Phase 5 — CLI exit-code precedence + indel-trigger classification (unit)
     // ============================================================================
 
-    /// `indel_exit_code` precedence: ambiguous(4) > recovered/repaired(5) >
-    /// already-valid(0). The Ambiguous CLI path is cryptographically
-    /// unreachable with real vectors (13/15-symbol checksum → ~2⁻⁶⁵
-    /// collision), so this unit test is the canonical coverage for the
-    /// exit-4 mapping (cf. the Phase-3 engine `recover_indel_reports_ambiguous`
-    /// test which covers the Ambiguous *outcome*).
+    /// `indel_exit_code` precedence: ambiguous-or-substitution(4) >
+    /// recovered/repaired(5) > already-valid(0). The Ambiguous CLI path is
+    /// cryptographically unreachable with real vectors (13/15-symbol checksum
+    /// → ~2⁻⁶⁵ collision), so this unit test is the canonical coverage for
+    /// the exit-4 mapping (cf. the Phase-3 engine
+    /// `recover_indel_reports_ambiguous` test which covers the Ambiguous
+    /// *outcome*).
     #[test]
     fn indel_exit_code_precedence() {
-        assert_eq!(indel_exit_code(true, 0), 4); // ambiguous wins
-        assert_eq!(indel_exit_code(true, 5), 4);
-        assert_eq!(indel_exit_code(false, 0), 0); // nothing recovered
-        assert_eq!(indel_exit_code(false, 3), 5); // recovered/repaired
+        assert_eq!(indel_exit_code(false, false, 0), 0); // nothing recovered
+        assert_eq!(indel_exit_code(false, false, 5), 5); // recovered/repaired
+        assert_eq!(indel_exit_code(true, false, 0), 4); // ambiguous wins
+        assert_eq!(indel_exit_code(true, false, 5), 4);
+        assert_eq!(indel_exit_code(false, true, 1), 4); // substitution wins
+        assert_eq!(indel_exit_code(true, true, 0), 4); // ambiguous+subst wins
     }
 
     /// `is_indel_trigger` set (§1.7 — HrpMismatch INCLUDED so a prefix-region

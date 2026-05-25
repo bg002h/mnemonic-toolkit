@@ -40,6 +40,19 @@ fn ins_data(s: &str, i: usize, c: char) -> String {
     out
 }
 
+/// Replace the data-part char at data-index `i` (full-string index `3 + i`)
+/// with the next char in the bech32 alphabet (cyclic), simulating a
+/// substitution (wrong-but-in-place) transcription error.
+fn flip_data(s: &str, i: usize) -> String {
+    const BECH32_CHARSET: &[u8] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let mut out: Vec<u8> = s.bytes().collect();
+    let full_idx = 3 + i;
+    let c = out[full_idx];
+    let pos = BECH32_CHARSET.iter().position(|&b| b == c).expect("char in bech32 alphabet");
+    out[full_idx] = BECH32_CHARSET[(pos + 1) % BECH32_CHARSET.len()];
+    String::from_utf8(out).unwrap()
+}
+
 /// Build a command with the deterministic-advisory TTY env set.
 fn cmd() -> Command {
     let mut c = Command::cargo_bin("mnemonic").unwrap();
@@ -220,4 +233,79 @@ fn multi_group_both_emit_exit_5() {
         .stdout(predicate::str::contains(VALID_MS1))
         .stdout(predicate::str::contains(MK1_C0))
         .stdout(predicate::str::contains(MK1_C1));
+}
+
+// ============================================================================
+// Phase 3 — --max-subst CLI surface tests
+// ============================================================================
+
+/// Phase 3 Test A — ms1 with one dropped data char PLUS one substituted data
+/// char, recovered under --max-indel 1 --max-subst 1 → Unique, subst_count=1,
+/// exit 4 + verify WARNING on stderr.
+///
+/// Construction: drop data-index 1 ('e') to make it too short by 1, then flip
+/// data-index 5 (in the corrupted string) to introduce a substitution.
+/// With --max-subst 1, the engine tolerates the substitution beyond the
+/// placeholder, yielding a subst_count=1 candidate → exit 4 + WARNING.
+#[test]
+fn ms1_indel_plus_subst_exit_4_with_verify_warning() {
+    // Step 1: drop data index 1 → too short by 1
+    let dropped = drop_data(VALID_MS1, 1);
+    // Step 2: flip data index 5 in the already-dropped string → substitution
+    let bad = flip_data(&dropped, 5);
+    cmd()
+        .args(["repair", "--ms1", &bad, "--max-indel", "1", "--max-subst", "1"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("verify it controls your funds"));
+}
+
+/// Phase 3 Test B — no-op notice: --max-subst 1 without --max-indel (default 0)
+/// emits the "no effect without --max-indel" notice on stderr, and exits 0
+/// (the string is valid — only the notice is asserted here).
+#[test]
+fn ms1_max_subst_without_indel_is_noop_notice() {
+    cmd()
+        .args(["repair", "--ms1", VALID_MS1, "--max-subst", "1"])
+        .assert()
+        .stderr(predicate::str::contains("no effect without --max-indel"));
+}
+
+/// Phase 3 Test C — --max-subst 0 regression: a pure-indel recovery under the
+/// default --max-subst 0 still exits 5 (byte-identical to v0.37.2 behavior).
+#[test]
+fn ms1_max_subst_0_regression_pure_indel_exit_5() {
+    let bad = ins_data(VALID_MS1, 10, 'q'); // too long by 1
+    cmd()
+        .args(["repair", "--ms1", &bad, "--max-indel", "1"]) // --max-subst defaults 0
+        .assert()
+        .code(5);
+}
+
+/// Phase 3 Test D — --max-subst 5 is rejected by clap (range 0..=4).
+#[test]
+fn max_subst_5_rejected_by_clap() {
+    cmd()
+        .args(["repair", "--ms1", VALID_MS1, "--max-indel", "1", "--max-subst", "5"])
+        .assert()
+        .failure();
+}
+
+/// Phase 3 Test E — --json with a subst-bearing recovery: confident == false,
+/// candidates[0].subst_count == 1.
+#[test]
+fn ms1_indel_plus_subst_json_confident_false() {
+    let dropped = drop_data(VALID_MS1, 1);
+    let bad = flip_data(&dropped, 5);
+    let out = cmd()
+        .args(["repair", "--ms1", &bad, "--max-indel", "1", "--max-subst", "1", "--json"])
+        .assert()
+        .code(4)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
+    assert_eq!(v["confident"], false, "confident should be false for subst-bearing recovery");
+    assert_eq!(v["candidates"][0]["subst_count"], 1, "subst_count should be 1");
 }

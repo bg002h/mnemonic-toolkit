@@ -65,6 +65,12 @@ pub struct RepairArgs {
     #[arg(long, value_name = "N", default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=4))]
     pub max_indel: u8,
 
+    /// Also tolerate up to E substitution (wrong-but-in-place) errors alongside the
+    /// indels (default 0 = pure indel). A recovery that used a substitution is printed
+    /// as a VERIFY-ME candidate (exit 4), not a confident correction. ms1/mk1/md1.
+    #[arg(long, value_name = "E", default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=4))]
+    pub max_subst: u8,
+
     /// v0.24.0 §2.C.1 — positional `<STRING>...` intake. Each value
     /// self-identifies by HRP prefix (`ms1` / `mk1` / `md1`) and is routed
     /// to the same internal storage as the matching typed flag. Unknown
@@ -108,6 +114,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut total_repairs = 0usize;
     let mut any_ms1 = false;
     let mut ambiguous_seen = false;
+    let mut substitution_seen = false;
+
+    // No-op notice: --max-subst only takes effect when --max-indel >= 1.
+    if args.max_subst >= 1 && args.max_indel == 0 {
+        writeln!(stderr, "notice: --max-subst has no effect without --max-indel \u{2265} 1").ok();
+    }
 
     // Runtime notice for the slower search budgets (combinatorial blow-up at
     // j ≥ 3 over a long-code data-part).
@@ -139,10 +151,13 @@ pub fn run<R: Read, W: Write, E: Write>(
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
-                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize, 0)? {
+                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize, args.max_subst as usize)? {
                     IndelOutcome::Unique(c) => {
                         if matches!(kind, CardKind::Ms1) {
                             any_ms1 = true;
+                        }
+                        if c.subst_count >= 1 {
+                            substitution_seen = true;
                         }
                         if args.json {
                             emit_indel_json("unique", &[&c], stdout)?;
@@ -154,6 +169,9 @@ pub fn run<R: Read, W: Write, E: Write>(
                     IndelOutcome::Ambiguous(v) => {
                         if matches!(kind, CardKind::Ms1) {
                             any_ms1 = true;
+                        }
+                        if v.iter().any(|c| c.subst_count >= 1) {
+                            substitution_seen = true;
                         }
                         let refs: Vec<&IndelCandidate> = v.iter().collect();
                         if args.json {
@@ -189,7 +207,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         secret_on_stdout_warning(CardKind::Ms1, stderr);
     }
 
-    Ok(repair::indel_exit_code(ambiguous_seen, total_repairs))
+    // Substitution-bearing recovery advisory: candidates used a substitution
+    // and are NOT confirmed corrections; the user must verify independently.
+    if substitution_seen {
+        writeln!(stderr, "repair: WARNING \u{2014} candidate(s) required a substitution and are NOT confirmed corrections; derive an address from each and verify it controls your funds before trusting any (some may be false positives)").ok();
+    }
+
+    Ok(repair::indel_exit_code(ambiguous_seen, substitution_seen, total_repairs))
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {
@@ -288,12 +312,14 @@ fn kind_str(kind: CardKind) -> &'static str {
 /// JSON envelope for an indel recovery emission. `status` is one of
 /// `"unique"` / `"ambiguous"`; the `Unrecoverable` outcome surfaces via the
 /// `Err`/exit-2 path and emits NO JSON (so `status` has no
-/// `"unrecoverable"` value). Wire-shape is NOT schema_mirror-gated — GUI
-/// consumers self-update per the paired-PR rule.
+/// `"unrecoverable"` value). `confident` is `true` iff all candidates have
+/// `subst_count == 0` (pure-indel recovery). Wire-shape is NOT
+/// schema_mirror-gated — GUI consumers self-update per the paired-PR rule.
 #[derive(serde::Serialize)]
 struct IndelJson<'a> {
     schema_version: &'static str,
     status: &'static str,
+    confident: bool,
     candidates: Vec<IndelCandidateJson<'a>>,
 }
 
@@ -303,6 +329,7 @@ struct IndelCandidateJson<'a> {
     indel_count: usize,
     region: &'static str,
     direction: &'static str,
+    subst_count: usize,
 }
 
 fn region_str(r: IndelRegion) -> &'static str {
@@ -326,6 +353,7 @@ fn candidate_json(c: &IndelCandidate) -> IndelCandidateJson<'_> {
         indel_count: c.indel_count,
         region: region_str(c.region),
         direction: direction_str(c.direction),
+        subst_count: c.subst_count,
     }
 }
 
@@ -344,9 +372,11 @@ fn emit_indel_json<W: Write>(
     cands: &[&IndelCandidate],
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
+    let confident = cands.iter().all(|c| c.subst_count == 0);
     let envelope = IndelJson {
         schema_version: "1",
         status,
+        confident,
         candidates: cands.iter().map(|c| candidate_json(c)).collect(),
     };
     let body = serde_json::to_string(&envelope)
@@ -392,11 +422,14 @@ mod tests {
             serde_json::from_slice(&json).expect("valid JSON envelope");
         assert_eq!(v["schema_version"], "1");
         assert_eq!(v["status"], "ambiguous");
+        assert_eq!(v["confident"], true); // both have subst_count=0
         assert_eq!(v["candidates"][0]["recovered"], "ms1aaa");
         assert_eq!(v["candidates"][0]["region"], "prefix");
         assert_eq!(v["candidates"][0]["direction"], "inserted");
+        assert_eq!(v["candidates"][0]["subst_count"], 0);
         assert_eq!(v["candidates"][1]["recovered"], "ms1bbb");
         assert_eq!(v["candidates"][1]["region"], "data-part");
         assert_eq!(v["candidates"][1]["direction"], "deleted");
+        assert_eq!(v["candidates"][1]["subst_count"], 0);
     }
 }
