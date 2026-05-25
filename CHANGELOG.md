@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.3] — 2026-05-24
+
+**SemVer-PATCH — three combined extensions to `mnemonic repair --max-indel` (toolkit-only; no GUI lockstep until GUI v0.21.3).** Resolves `m-format-indel-cross-region-split`, `m-format-indel-plus-substitution`, and `m-format-indel-hrpmismatch-suggestion-fallback`. `m-format-indel-erasure-decode-extend-to-8` remains open.
+
+1. **Cross-region two-level search.** `recover_indel` restructured as a `prefix_restorations × data_variants` product search; `IndelRegion::CrossRegion` captures simultaneous prefix+data indels. The single-region producers are subsumed (byte-identical output at N=1); cross-region split becomes reachable within the existing `--max-indel` budget.
+
+2. **`--max-subst <E>` candidate-list + verify-advisory (exit 4 on substitution-bearing).** New flag (0..=4, default 0) widens the oracle accept gate from `corrections ⊆ placeholders` to `|corrections \ placeholders| ≤ E`. `IndelCandidate.subst_count` counts residual substitutions. A candidate with `subst_count ≥ 1` is printed as a VERIFY-ME candidate (exit 4, not exit 5); `confident: bool` in `--json` is `true` iff all candidates have `subst_count == 0`. The BCH budget is shared: `placeholders + substitutions ≤ 4`. `--max-subst` without `--max-indel ≥ 1` is a no-op (stderr notice emitted). Non-breaking guarantees: a true indel recovery is always in the candidate set (widening the accept gate never drops correct candidates); exit 5 = trust / exit 4 = verify invariant is preserved across all combinations. **GUI `schema_mirror` lockstep: `mnemonic-gui v0.21.3` (add `--max-subst` to `REPAIR_FLAGS`) is the post-tag paired PR.**
+
+3. **HrpMismatch suggestion-fallback.** Phase 4 of this cycle reversed the v0.37.1 opt-in tradeoff: when `--max-indel ≥ 1` engages and indel recovery fails for an input whose originating `repair_card` error was `HrpMismatch`, the original `HrpMismatch` error (with its "did you mean" suggestion) is now surfaced instead of the generic `IndelUnrecoverable` — so prefix-region recovery AND the helpful typo hint are preserved together. (The v0.37.1 CHANGELOG did not explicitly claim the old behavior; Phase 4 resolved it before tagging.)
+
+R0→R2 GREEN + per-phase reviews GREEN.
+
 ## mnemonic-toolkit [0.37.2] — 2026-05-24
 
 **SemVer-PATCH — md1 indel recovery un-refused in `mnemonic repair --max-indel`.** Closes `m-format-indel-md1-chunked`. Mirrors the v0.37.1 mk1 path onto md (toolkit-only — md-codec already exposes `bch::MD_REGULAR_CONST` and `chunk::reassemble`; shared codex32 generator). Re-acquires `MD_REGULAR_TARGET` from `md_codec::bch::MD_REGULAR_CONST`, extends `target_residue(Md1, Regular) => Some(...)`, and mirrors `Mk1IndelOracle`/`mk1_chunk_solve` as `Md1IndelOracle`/`md1_chunk_solve` with the cross-chunk oracle = `md_codec::chunk::reassemble` (which does NOT self-correct, avoiding the unguarded-correction concern). Per-chunk length-restore + BCH-solve locates the corrupted chunk; reassembly validates the recovered set. No new CLI flag or subcommand → NO GUI `schema_mirror` lockstep (flag-name `--max-indel` already existed; md1 just stops being refused). Manual updated: `--max-indel` options table row and prose subsection now cover ms1/mk1/md1. Per-phase review GREEN.

@@ -61,7 +61,7 @@ pub struct RepairArgs {
 
     /// Maximum insert/delete (indel) distance to search when a chunk fails
     /// normal repair — recovers a single transcribed character that was added
-    /// (too long) or dropped (too short). 0 disables (default). ms1/mk1 only.
+    /// (too long) or dropped (too short). 0 disables (default). ms1/mk1/md1.
     #[arg(long, value_name = "N", default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=4))]
     pub max_indel: u8,
 

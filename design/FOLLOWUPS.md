@@ -3222,7 +3222,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/indel.rs` — v0.37.1 P1 (prefix producer) and P2 (data-part producer) run INDEPENDENTLY; a candidate requires ALL corrections to be within a single region (prefix OR data). A cross-region split (e.g. one prefix drop + one data drop) is not attempted.
 - **What:** v1 is single-region-per-attempt. Cross-region recovery (j_prefix indels + j_data indels, j_prefix + j_data ≤ N) would require a combined search over both regions simultaneously. Combinatorial cost: O(len_prefix × len_data × 32^j_insert) — likely too expensive at j≥2 without a smarter search strategy (early-BCH pruning). Defer until there is a real user case.
 - **SemVer:** PATCH (extends the search space of an existing flag; no new surface).
-- **Status:** `open`
+- **Resolution (v0.37.3):** Shipped: `recover_indel` restructured into a two-level prefix×data search (`prefix_restorations` × `data_variants`); `IndelRegion::CrossRegion`; subsumes the single-region producers (byte-identical at N=1).
+- **Status:** `resolved`
 - **Tier:** `v0.37+`
 - **Tags:** none
 
@@ -3231,7 +3232,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/indel.rs::collect_data_delete` / `collect_data_insert` / `collect_prefix` (candidate producers) + the per-kind `IndelOracle` (`repair.rs::Ms1IndelOracle` / `mk1_chunk_solve`) — v0.37.1 accepts a candidate iff its BCH corrections are a **subset of the inserted-placeholder positions** (∅ for delete/prefix). Any residual BCH correction at a non-placeholder position signals a simultaneous substitution and causes the candidate to be rejected.
 - **What:** allow mixed indel+substitution recovery sharing the t=4 budget: j_indel + e_subst ≤ 4. A 1-indel + 1-substitution simultaneous corruption (j=1, e=1) is plausible (a handwritten card with one transposed character AND one wrong character). The placeholder-subset check would relax from `corrections ⊆ placeholders` to `|corrections \ placeholders| ≤ e_budget`. Cost is bounded (same BCH decode; just a weaker accept gate); the real risk is false-positive rate from the wider accept window. Own R0.
 - **SemVer:** PATCH (behavior extension of existing `--max-indel` flag; no new surface).
-- **Status:** `open`
+- **Resolution (v0.37.3):** Shipped: new `--max-subst <E>` (0..=4, default 0); oracle gate relaxed to `|corrections\placeholders| ≤ E`; `IndelCandidate.subst_count`; candidate-list + verify advisory + exit 4 on substitution-bearing (exit 5 reserved for pure-indel-unique). Toolkit-only error-decoder approximation; `erasure-decode-extend-to-8` stays open for the half-price-erasure version.
+- **Status:** `resolved`
 - **Tier:** `v0.37+`
 - **Tags:** none
 
@@ -3240,7 +3242,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/repair.rs::run` (the `IndelOutcome::Unrecoverable` arm returns `RepairError::IndelUnrecoverable`) + `repair.rs::is_indel_trigger` (now includes `HrpMismatch` so prefix-region indels engage) + `resolve_groups`' `relax_hrp_for_indel`.
 - **What:** v0.37.1 makes `HrpMismatch` an indel trigger so prefix-region indels recover (`--ms1 s10…` → restore `ms1`). Opt-in cost: at `--max-indel ≥ 1`, a *genuine* wrong-HRP typo (e.g. `mk1real` to `--ms1`) now enters indel search and, on failure, returns the generic `IndelUnrecoverable` (exit 2) instead of the `HrpMismatch` "did you mean 'mk'?" Levenshtein-1 suggestion (the default `--max-indel 0` path still gives it). Refinement: when indel recovery returns `Unrecoverable` AND the originating `repair_card` error was `HrpMismatch`, surface the ORIGINAL `HrpMismatch` (with its suggestion) rather than `IndelUnrecoverable` — keeps prefix recovery AND the helpful typo hint. (Documented v0.37.1 in plan §1.7 + CHANGELOG as the known opt-in tradeoff.)
 - **SemVer:** PATCH (error-message/exit refinement; no surface change).
-- **Status:** `open`
+- **Resolution (v0.37.3):** Shipped: on `Unrecoverable` for an originating `HrpMismatch`, surface the original suggestion instead of `IndelUnrecoverable`.
+- **Status:** `resolved`
 - **Tier:** `v0.37+`
 - **Tags:** none
 

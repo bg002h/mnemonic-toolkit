@@ -2279,6 +2279,7 @@ mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--mk1` |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
 | `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1/md1 |
+| `--max-subst <E>` | also tolerate up to E (0–4, default 0) substitution errors alongside the indels; a recovery that used a substitution is printed as a VERIFY-ME candidate (exit 4), not a confident correction |
 | `--help` | print help |
 
 ### Exit codes
@@ -2287,7 +2288,7 @@ mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
 | `5` | at least one chunk corrected (`REPAIR_APPLIED`), incl. a unique `--max-indel` recovery; stdout = repair report + corrected chunks |
-| `4` | `--max-indel` found multiple equally-valid candidates (ambiguous); all are printed — choose manually |
+| `4` | ambiguous (multiple candidates) **or a candidate required ≥1 substitution** — verify each before trusting; all candidates are printed |
 | `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) |
 | `1` | I/O error or other generic failure |
 
@@ -2395,6 +2396,26 @@ material (the usual stderr advisory applies). `md1` (chunked) recovers
 per-chunk like mk1, with cross-chunk reassembly validation. Default `0`
 disables the search (behavior unchanged).
 
+### Recovering an indel that also has a wrong character (`--max-subst`) {#mnemonic-repair-max-subst}
+
+`--max-subst <E>` (default 0) widens the indel search to also accept
+candidates that have up to E **substitution** (wrong-but-in-place)
+errors alongside the indel. A substitution is a position whose
+corrected symbol differs from the original but is NOT one of the
+inserted placeholder positions — so it required an additional BCH
+correction beyond the indel itself. The shared BCH budget is
+`placeholders + substitutions ≤ 4` (the `t = 4` singleton bound),
+meaning `--max-indel` and `--max-subst` draw from the same pool.
+
+Candidates that needed a substitution are printed as **VERIFY-ME**
+candidates (exit 4 — same as ambiguous), NOT as confident corrections
+(exit 5). This is intentional: the BCH code cannot distinguish a
+genuine indel+substitution from a longer-distance all-substitution
+error at the same budget; the user should verify the recovered string
+against independent notes before trusting it. `--max-subst` has no
+effect without `--max-indel ≥ 1` (a notice is printed to stderr if
+only `--max-subst` is passed).
+
 ### `--no-auto-repair` interaction
 
 The standalone `mnemonic repair` subcommand IGNORES the global
@@ -2468,10 +2489,12 @@ the `--json` envelope instead has the shape:
 {
   "schema_version": "1",
   "status": "unique",
+  "confident": true,
   "candidates": [
     {
       "recovered": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
       "indel_count": 1,
+      "subst_count": 0,
       "region": "data-part",
       "direction": "deleted"
     }
@@ -2480,11 +2503,16 @@ the `--json` envelope instead has the shape:
 ```
 
 `status` is `"unique"` (one candidate, exit 5) or `"ambiguous"` (multiple,
-exit 4). `region` is `"data-part"` or `"prefix"`. `direction` is `"deleted"`
-(removed an added char — too-long input) or `"inserted"` (restored a dropped
-char — too-short input). The indel envelope is NOT
-emitted for the `Unrecoverable` outcome — that surfaces via the normal error
-path (exit 2, no JSON on stdout).
+exit 4). `confident` is `true` iff every candidate has `subst_count == 0`
+(pure-indel recovery — no substitution was needed); `false` when any
+candidate required a substitution (exit 4, VERIFY-ME advisory). `region` is
+`"data-part"` or `"prefix"`. `direction` is `"deleted"` (removed an added
+char — too-long input) or `"inserted"` (restored a dropped char — too-short
+input). `subst_count` is the number of substitution corrections beyond the
+indel placeholders that the BCH decoder applied for that candidate (0 for a
+pure-indel recovery). The indel envelope is NOT emitted for the
+`Unrecoverable` outcome — that surfaces via the normal error path (exit 2, no
+JSON on stdout).
 
 ---
 
