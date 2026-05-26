@@ -17,6 +17,21 @@ The integration-layer CLI for the m-format constellation. Twenty subcommands:
 semantics). Run any with `--help` for the authoritative flag set; this
 reference tracks the current release.
 
+> **Recovering a forgotten BIP-39 passphrase.** If you have your seed
+> words (entropy) but not the BIP-39 passphrase (the optional "25th
+> word"), `mnemonic` cannot brute-force it. A BIP-39 passphrase has no
+> internal verifier — every candidate yields a valid-looking wallet — so
+> correctness is only definable against a value you already know (an
+> address, xpub, or master-fingerprint), which is outside this tool's
+> scope. An external open-source tool does exactly this:
+> [**btcrecover**](https://github.com/3rdIteration/btcrecover) (maintained
+> fork; [original](https://github.com/gurnec/btcrecover)) searches
+> passphrase candidates and confirms each by deriving an address / xpub /
+> master-fingerprint at common default paths and matching your known
+> value. Pointer current as of 2026-05-25; run untrusted recovery tools
+> offline, on an air-gapped machine. This mirrors the `mnemonic --help`
+> footer.
+
 ---
 
 ## `mnemonic bundle`

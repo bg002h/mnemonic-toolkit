@@ -19,6 +19,26 @@ fn top_level_help_lists_subcommands() {
 }
 
 #[test]
+fn top_level_help_points_to_btcrecover_for_passphrase_recovery() {
+    // The recon decision (2026-05-25): `mnemonic` cannot brute-force a
+    // forgotten BIP-39 passphrase (no internal verifier — success is only
+    // definable against a known address/xpub/fingerprint). The top-level
+    // after_help footer points users at btcrecover, which does. Assert the
+    // load-bearing substrings only (name + maintained repo + date stamp);
+    // exact rendering is clap-version-sensitive.
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("btcrecover"))
+        .stdout(predicate::str::contains(
+            "https://github.com/3rdIteration/btcrecover",
+        ))
+        .stdout(predicate::str::contains("2026-05-25"));
+}
+
+#[test]
 fn bundle_help_shows_slot_and_template_flags() {
     Command::cargo_bin("mnemonic")
         .unwrap()

@@ -164,6 +164,7 @@
     "NIP",
     "indel",
     "Indel",
-    "Unrecoverable"
+    "Unrecoverable",
+    "btcrecover"
   ]
 }

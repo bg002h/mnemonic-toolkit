@@ -36,11 +36,35 @@ use error::ToolkitError;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
+/// Top-level `after_help` footer (renders on both `mnemonic -h` and
+/// `mnemonic --help`). Points users who hold the entropy but have lost the
+/// BIP-39 passphrase at btcrecover: `mnemonic` cannot brute-force a
+/// passphrase, because a BIP-39 passphrase has no internal verifier —
+/// every candidate yields a valid-looking wallet, so correctness is only
+/// definable against a known address/xpub/master-fingerprint, an
+/// external-derivation-oracle attack outside this tool's scope. Date-stamped
+/// per the 2026-05-25 recon decision; guarded by
+/// `cli_help_fixtures::top_level_help_points_to_btcrecover_for_passphrase_recovery`
+/// and mirrored in `docs/manual/src/40-cli-reference/41-mnemonic.md`.
+const PASSPHRASE_RECOVERY_HELP: &str = "\
+RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
+  If you have your seed words (entropy) but not the BIP-39 passphrase
+  (the optional \"25th word\"), `mnemonic` cannot brute-force it. An
+  external open-source tool can: btcrecover searches passphrase
+  candidates and confirms each by deriving an address / xpub /
+  master-fingerprint at common default paths and matching a value you
+  already know.
+    btcrecover (maintained):  https://github.com/3rdIteration/btcrecover
+    original:                 https://github.com/gurnec/btcrecover
+  Pointer current as of 2026-05-25. Run untrusted recovery tools
+  offline, on an air-gapped machine.";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "mnemonic",
     about = "engraving-bundle CLI for the m-format star (ms1 + mk1 + md1)",
-    version
+    version,
+    after_help = PASSPHRASE_RECOVERY_HELP
 )]
 struct Cli {
     /// v0.22.0 — skip auto-fire repair on decode failures; preserve
