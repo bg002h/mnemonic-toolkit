@@ -1,6 +1,6 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.37.3"
+version = "0.37.4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

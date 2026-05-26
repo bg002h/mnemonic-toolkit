@@ -355,6 +355,7 @@ fn run_full<W: Write, E: Write>(
         args.account,
         args.language,
         args.passphrase.as_deref(),
+        args.multisig_path_family.unwrap_or_default(),
     )?;
     let n = resolved.len() as u8;
     let threshold = args.threshold.unwrap_or(n);
@@ -443,6 +444,7 @@ fn run_watch_only<W: Write, E: Write>(
         args.account,
         args.language,
         args.passphrase.as_deref(),
+        args.multisig_path_family.unwrap_or_default(),
     )?;
     let n = resolved.len() as u8;
     let threshold = args.threshold.unwrap_or(n);
@@ -545,6 +547,7 @@ fn run_multisig<W: Write, E: Write>(
         args.account,
         args.language,
         args.passphrase.as_deref(),
+        args.multisig_path_family.unwrap_or_default(),
     )?;
     let n = resolved.len() as u8;
     let threshold = args.threshold.unwrap_or(1);

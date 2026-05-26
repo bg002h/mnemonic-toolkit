@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.4] — 2026-05-26
+
+**SemVer-PATCH — bug fix: `--multisig-path-family bip48` now reaches seed/entropy-mode multisig derivation (toolkit-only; no GUI lockstep — pre-existing flag, no new clap surface).**
+
+- **Fix.** In seed- or entropy-slot multisig template mode, `bundle` / `export-wallet` / `verify-bundle` derived cosigner keys at the BIP-87 fallback path `m/87'/<coin>'/<account>'` regardless of `--multisig-path-family`, while the JSON `multisig.path_family` field reported the requested family — an internal inconsistency, and the BIP-48 path `m/48'/<coin>'/<account>'/<script_type>'` was unreachable from a seed. Root cause: `resolve_slots` derived via `template.derivation_path()` (documented single-sig-only; returns the BIP-87 fallback for all multisig templates) and never received the family flag. The flag is now threaded into `resolve_slots` and applied at the phrase, entropy, and xpub-path-absent derivation sites via `MultisigPathFamily::default_origin_path(network, account, template.bip48_script_type())`. `derive_bip32_from_entropy` becomes a thin wrapper over the new `derive_bip32_from_entropy_at_path`; `derive_full_at_path` is its phrase-level sibling.
+- **Backward compatibility.** For the default `bip87` family the computed path is byte-identical to the prior `template.derivation_path()` output, so every pre-fix default-family bundle is unchanged (full suite 2430/0). `mk1` and `md1` remain mutually consistent (both derive origins from the corrected `ResolvedSlot.path`).
+- **Tests (Property A, partial).** New `tests/cli_cross_start_convergence.rs` — 7 cross-start convergence cells asserting that the same key entered as a seed, xpub, descriptor, or wallet file yields byte-identical `mk1`+`md1`: A1/A2/A4/A5 (single-sig), A6 (multisig bip87), A7 (multisig bip48 — the cell that surfaced this bug), A1-neg. Documented findings: F1 (bitcoin-core splits the `<0;1>` multipath, so wallet-file convergence is descriptor-shape-scoped), F2 (a mislabeled in-repo bip84 xpub fixture, sidestepped by in-test derivation). Cell A8 (non-canonical descriptor) + Property B bijections (`xpub↔mk1`, `descriptor↔md1`) deferred to FOLLOWUP `cross-start-convergence-remaining-cells`.
+- Retroactive architect R0: `design/agent-reports/v0_37_4-f3-fix-review.md`. Design: `design/SPEC_cross_start_convergence_and_bijection_tests.md`.
+
 ## mnemonic-toolkit [0.37.3] — 2026-05-24
 
 **SemVer-PATCH — three combined extensions to `mnemonic repair --max-indel` (toolkit-only; no GUI lockstep until GUI v0.21.3).** Resolves `m-format-indel-cross-region-split`, `m-format-indel-plus-substitution`, and `m-format-indel-hrpmismatch-suggestion-fallback`. `m-format-indel-erasure-decode-extend-to-8` remains open.

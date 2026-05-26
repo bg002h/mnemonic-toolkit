@@ -351,6 +351,7 @@ fn bundle_run_unified<W: Write, E: Write>(
         args.account,
         args.language,
         args.passphrase.as_deref(),
+        args.multisig_path_family.unwrap_or_default(),
     )?;
 
     // SPEC §4.11.b BIP-388 distinct-key check on resolved slots.
@@ -421,6 +422,7 @@ pub(crate) fn resolve_slots(
     account: u32,
     language: Option<CliLanguage>,
     passphrase: Option<&str>,
+    multisig_path_family: MultisigPathFamily,
 ) -> Result<(Vec<ResolvedSlot>, Vec<(u8, &'static str)>), ToolkitError> {
     use std::collections::BTreeMap;
     let mut by_index: BTreeMap<u8, Vec<&SlotInput>> = BTreeMap::new();
@@ -434,6 +436,20 @@ pub(crate) fn resolve_slots(
     // for the emit_unified info-line. BTreeMap iteration is slot-index
     // ascending → no re-sort needed downstream.
     let mut slip0132_signals: Vec<(u8, &'static str)> = Vec::new();
+    // F3 fix: for multisig templates the per-cosigner derivation path comes
+    // from `--multisig-path-family` (BIP-87 default → m/87'/coin'/account';
+    // BIP-48 → m/48'/coin'/account'/script') — NOT `template.derivation_path`,
+    // which returns the BIP-87 fallback for ALL multisig templates and so
+    // silently ignored the flag for seed/entropy slots. For BIP-87 the path is
+    // identical, so every pre-fix default-family bundle is byte-unchanged. For
+    // single-sig this is None and the template path is used as before.
+    let multisig_acct_path: Option<DerivationPath> = if template.is_multisig() {
+        let script_type = template.bip48_script_type().unwrap_or(0);
+        let p = multisig_path_family.default_origin_path(network, account, script_type);
+        Some(DerivationPath::from_str(&p).expect("family origin paths are well-formed"))
+    } else {
+        None
+    };
     for (idx, slot_inputs) in by_index {
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
@@ -463,9 +479,12 @@ pub(crate) fn resolve_slots(
             };
             let lang = language.unwrap_or_default();
             let pass = passphrase.unwrap_or("");
-            let acc = crate::derive::derive_full(
-                phrase, pass, lang, network, template, account,
-            )?;
+            let acc = match &multisig_acct_path {
+                Some(p) => crate::derive::derive_full_at_path(phrase, pass, lang, network, p)?,
+                None => {
+                    crate::derive::derive_full(phrase, pass, lang, network, template, account)?
+                }
+            };
             // v0.10.1: DerivedAccount.entropy is Zeroizing<Vec<u8>>; the
             // hand-rolled impl Drop is gone. `into_parts` remains the
             // canonical consuming-move path (returns bare Vec<u8> per the
@@ -519,10 +538,15 @@ pub(crate) fn resolve_slots(
                     (parsed, p.value.clone())
                 }
                 None => {
-                    // v0.5.1: Path absent → fall back to template's per-network
-                    // origin path so xpub-only watch-only slots can verify
-                    // against fixtures built at the same path.
-                    let dp = template.derivation_path(network, account);
+                    // v0.5.1: Path absent → fall back to the default origin path
+                    // so xpub-only watch-only slots verify against fixtures built
+                    // at the same path. F3 fix: for multisig templates this is the
+                    // --multisig-path-family path, not the BIP-87-only template
+                    // fallback.
+                    let dp = match &multisig_acct_path {
+                        Some(p) => p.clone(),
+                        None => template.derivation_path(network, account),
+                    };
                     let raw = dp.to_string();
                     (dp, raw)
                 }
@@ -569,9 +593,23 @@ pub(crate) fn resolve_slots(
             })?;
             let lang = language.unwrap_or_default();
             let pass = passphrase.unwrap_or("");
-            let acc = crate::derive_slot::derive_bip32_from_entropy(
-                &entropy_bytes, pass, lang, network, template, account,
-            )?;
+            let acc = match &multisig_acct_path {
+                Some(p) => crate::derive_slot::derive_bip32_from_entropy_at_path(
+                    &entropy_bytes,
+                    pass,
+                    lang,
+                    network,
+                    p,
+                )?,
+                None => crate::derive_slot::derive_bip32_from_entropy(
+                    &entropy_bytes,
+                    pass,
+                    lang,
+                    network,
+                    template,
+                    account,
+                )?,
+            };
             // v0.10.1: `into_parts` returns bare Vec<u8> per caller-wrap
             // contract (Zeroizing-drives-scrub semantics live on the field).
             // The derived `entropy` is discarded here (the user-supplied

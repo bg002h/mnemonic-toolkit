@@ -55,6 +55,24 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `docs`
 
+### `cross-start-convergence-remaining-cells` — finish the cross-start convergence + standalone-bijection test matrix
+
+- **Surfaced:** 2026-05-26, v0.37.4 cross-start-convergence cycle (architect review I2). The SPEC `design/SPEC_cross_start_convergence_and_bijection_tests.md` specified 14 cells across 2 files; v0.37.4 shipped 7 (Property A: A1, A2, A1-neg, A4, A5, A6, A7). The remainder were deferred so the F3 bug fix would not be coupled to longer test-authoring.
+- **Where:** `crates/mnemonic-toolkit/tests/cli_cross_start_convergence.rs` (add A8) + a new `crates/mnemonic-toolkit/tests/cli_standalone_bijections.rs` (B1–B6).
+- **What:** A8 — non-canonical `wsh(andor)` descriptor ≡ BSMS wallet-file convergence (verify BSMS accepts a non-canonical miniscript descriptor through import→bundle). B1/B2 — `xpub → mk1 → xpub` (+ fingerprint + path reverse edges); B3 — multisig per-cosigner `xpub↔mk1`; B4/B5/B6 — `descriptor → md1 → descriptor` (canonical single-sig / non-canonical / multisig) via `md_codec::chunk::reassemble`.
+- **Why deferred:** Orthogonal coverage (bijection round-trips), not gating the F3 fix; A8 carries BSMS-of-non-canonical risk worth its own pass.
+- **Status:** `open`
+- **Tier:** `v0.37+-test-coverage`
+
+### `multisig-tr-bip48-script-type-3-policy` — decide whether `tr-*` + `--multisig-path-family bip48` (→ `m/48'/.../3'`) is refused or remains honored
+
+- **Surfaced:** 2026-05-26, v0.37.4 F3 fix architect review (edge case). With the F3 fix, `tr-multi-a` / `tr-sortedmulti-a` + `--multisig-path-family bip48` now derive at `m/48'/<coin>'/<account>'/3'` (`template.bip48_script_type()` returns `Some(3)` for taproot). BIP-48 officially defines only script-types 1 (sh-wsh) and 2 (wsh); `3` for taproot is a convention, not standardized.
+- **Where:** `crates/mnemonic-toolkit/src/template.rs` (`bip48_script_type`), `crates/mnemonic-toolkit/src/parse.rs` (`default_origin_path`). The `3` convention pre-exists at `synthesize.rs` (`synthesize_multisig_full`) and `cmd/xpub_search/candidate_paths.rs`.
+- **What:** Decide + document whether honoring `bip48` for taproot multisig (deriving at `/3'`) is intentional (current behavior — honors an explicit flag, consistent with the pre-existing convention) or should be refused as out-of-spec. Review recommendation: document as intentional rather than reopen.
+- **Why deferred:** Policy question, not a defect; current behavior is internally consistent.
+- **Status:** `open`
+- **Tier:** `v1+`
+
 ### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope
 
 - **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (see `design/agent-reports/pr-26-post-merge-comprehensive-review.md` — C1 + I7). The SPEC §7.4 stderr warning is the only non-JSON-mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly; if `canonicalize_bitcoin_core` errors (parser / canonicalizer disagreement, non-UTF-8 input, internal serde mismatch) the function returns `Ok(())` with no diagnostic. JSON mode drops the error reason via `.ok()` → envelope shows surface `"canonicalize_failed"` only.

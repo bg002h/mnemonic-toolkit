@@ -80,6 +80,27 @@ pub fn derive_full(
     )
 }
 
+/// Path-explicit sibling of [`derive_full`]: derive the account key at an
+/// explicit BIP-32 `path` (e.g. a BIP-48 multisig path) instead of the
+/// template default. Used by the multisig branch of `resolve_slots` so
+/// `--multisig-path-family bip48` reaches the real seed derivation (F3 fix).
+pub(crate) fn derive_full_at_path(
+    phrase: &str,
+    passphrase: &str,
+    language: CliLanguage,
+    network: CliNetwork,
+    path: &DerivationPath,
+) -> Result<DerivedAccount, ToolkitError> {
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize;
+    // tracked by FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`. Lifetime
+    // here is minimal: parse → to_entropy → drop on function return.
+    let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
+    let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
+    crate::derive_slot::derive_bip32_from_entropy_at_path(
+        &entropy, passphrase, language, network, path,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

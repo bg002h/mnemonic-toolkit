@@ -343,6 +343,7 @@ pub fn run<W: Write, E: Write>(
             args.account,
             args.language,
             None,
+            args.multisig_path_family.unwrap_or_default(),
         )?;
         // SPEC §3 invariant: validator runs on the resolved-slot set.
         validate_watch_only_resolved(&resolved)?;

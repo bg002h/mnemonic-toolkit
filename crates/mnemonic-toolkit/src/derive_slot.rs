@@ -33,12 +33,13 @@ pub fn derive_master_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u
     Zeroizing::new(mnemonic.to_seed(passphrase))
 }
 
-/// entropy → mnemonic-in-language → seed → master xpriv → derive at template
-/// path → (entropy, master_fingerprint, account_xpub, account_path).
+/// entropy → derive at the template's default path → `DerivedAccount`.
 ///
-/// `entropy.len()` must be a BIP-39-valid length (16/20/24/28/32 bytes); the
-/// caller is responsible for validation. `Mnemonic::from_entropy_in` rejects
-/// invalid lengths with `ToolkitError::Bip39`.
+/// Thin wrapper over [`derive_bip32_from_entropy_at_path`]: it resolves the
+/// path via `template.derivation_path` (the BIP-87 fallback for all multisig
+/// templates) and delegates the derivation. `entropy.len()` must be a
+/// BIP-39-valid length (16/20/24/28/32 bytes); invalid lengths are rejected as
+/// `ToolkitError::Bip39` downstream.
 pub(crate) fn derive_bip32_from_entropy(
     entropy: &[u8],
     passphrase: &str,
@@ -46,6 +47,28 @@ pub(crate) fn derive_bip32_from_entropy(
     network: CliNetwork,
     template: CliTemplate,
     account: u32,
+) -> Result<DerivedAccount, ToolkitError> {
+    // Single-sig + multisig-BIP-87 (default) path. `template.derivation_path`
+    // returns the BIP-87 fallback `m/87'/coin'/account'` for ALL multisig
+    // templates; a non-default `--multisig-path-family` (e.g. bip48) must route
+    // through `derive_bip32_from_entropy_at_path` with the family path computed
+    // by `resolve_slots` (F3 fix). For BIP-87 the two paths are identical, so
+    // this wrapper is behaviourally unchanged for every pre-fix caller.
+    let path = template.derivation_path(network, account);
+    derive_bip32_from_entropy_at_path(entropy, passphrase, language, network, &path)
+}
+
+/// Path-explicit sibling of [`derive_bip32_from_entropy`]: derive the account
+/// key at an arbitrary BIP-32 `path` rather than the template default. Lets a
+/// non-default `--multisig-path-family` (BIP-48: `m/48'/coin'/account'/script'`)
+/// reach the actual derivation — not just the JSON metadata field — so the
+/// emitted mk1/md1 origins match the derived key (F3 fix).
+pub(crate) fn derive_bip32_from_entropy_at_path(
+    entropy: &[u8],
+    passphrase: &str,
+    language: CliLanguage,
+    network: CliNetwork,
+    path: &DerivationPath,
 ) -> Result<DerivedAccount, ToolkitError> {
     // SAFETY: third-party-blocked — `bip39::Mnemonic` + `bitcoin::bip32::Xpriv`
     // have no Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
@@ -60,9 +83,8 @@ pub(crate) fn derive_bip32_from_entropy(
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 
-    let path = template.derivation_path(network, account);
     let account_xpriv = master
-        .derive_priv(&secp, &path)
+        .derive_priv(&secp, path)
         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
     let account_xpub = Xpub::from_priv(&secp, &account_xpriv);
 
@@ -85,7 +107,7 @@ pub(crate) fn derive_bip32_from_entropy(
         master_fingerprint,
         account_xpub,
         account_xpriv,
-        account_path: path,
+        account_path: path.clone(),
         _entropy_pin: entropy_pin,
     })
 }
