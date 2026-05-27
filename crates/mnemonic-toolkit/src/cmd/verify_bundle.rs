@@ -680,8 +680,18 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
             new_paths[*idx as usize] = crate::cmd::bundle::derivation_path_to_origin(&user_path);
         }
-        descriptor_resolved.path_decl.paths =
-            md_codec::origin_path::PathDeclPaths::Divergent(new_paths);
+        // F4 (v0.37.5): mirror bundle.rs's collapse of identical inferred paths
+        // to `Shared` so verify-bundle's `expected` md1 matches the bundle's
+        // emitted md1 byte-for-byte for elided-origin uniform-path descriptors.
+        // Benign today (md1_xpub_match is pubkey-only), but keeps the two
+        // symmetric default-inference sites consistent and future-proofs a
+        // tightened md1 comparison.
+        let all_same = new_paths.windows(2).all(|w| w[0] == w[1]);
+        descriptor_resolved.path_decl.paths = if all_same {
+            md_codec::origin_path::PathDeclPaths::Shared(new_paths[0].clone())
+        } else {
+            md_codec::origin_path::PathDeclPaths::Divergent(new_paths)
+        };
     }
 
     // Per-slot descriptor-mode binding loop using mutated path_decl as the

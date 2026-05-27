@@ -50,7 +50,7 @@ New v0.2 flags (added to `BundleArgs`):
 - v0.1's `--xpub <X> --master-fingerprint <FP>` continues to work for single-sig watch-only. Single-sig invocations under a v0.2 binary produce the same encoded card strings as under v0.1 (per §9.4 closure).
 - `--cosigner` and `--cosigners-file` are **mutually exclusive** (runtime pre-check; exit 2 + byte-exact §6.6 text).
 - `--xpub` is **mutually exclusive** with `--cosigner` and `--cosigners-file` (runtime pre-check; exit 2 + byte-exact §6.6 text). Use `--xpub` for single-sig watch-only; `--cosigner`/`--cosigners-file` for multisig watch-only.
-- `--account` defaults to `0` everywhere; non-default values produce `PathDeclPaths::Divergent` md1 declarations (per §4.6 delta).
+- `--account` defaults to `0` everywhere; non-default values produce `PathDeclPaths::Divergent` md1 declarations (per §4.6 delta) **when cosigners' accounts/paths actually differ**. A *uniform* non-zero account shared by all cosigners stays `PathDeclPaths::Shared` per §4.2's "all cosigners share an origin path → Shared" rule (clarified v0.37.5 / finding F4: the elided-origin default-path inference collapses identical inferred paths to `Shared`, matching `parse_descriptor`'s `all_paths_same` and `synthesize_unified`'s `all_same || n==1`). `Divergent` is for genuinely distinct per-cosigner paths only.
 - `--multisig-path-family` is informational for full mode (toolkit derives all cosigners from a single seed; the family selects the path template); for watch-only mode it's the default for cosigners whose specs omit `<path>`. Per-cosigner explicit paths in `--cosigner=<xpub>:<fp>:<path>` always override the family default.
 
 ### §2.1.1 Full mode (delta)

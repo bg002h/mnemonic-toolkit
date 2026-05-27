@@ -1202,7 +1202,19 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             defaulted_indices.retain(|i| i != idx);
         }
 
-        resolved_placeholders.path_decl.paths = PathDeclPaths::Divergent(new_paths);
+        // F4 fix: collapse identical inferred per-`@N` paths to `Shared` — the
+        // canonical form `parse_descriptor` (all_paths_same) and
+        // `synthesize_unified` (all_same || n==1) already use. Without this, an
+        // elided-origin descriptor emitted `Divergent([p,p,p])` while the
+        // explicit-origin / wallet-import path emitted `Shared(p)` for the SAME
+        // wallet → byte-different md1 (cross-start non-convergence). `new_paths`
+        // is non-empty (n >= 1 enforced upstream); a 1-element vec is all-same.
+        let all_same = new_paths.windows(2).all(|w| w[0] == w[1]);
+        resolved_placeholders.path_decl.paths = if all_same {
+            PathDeclPaths::Shared(new_paths[0].clone())
+        } else {
+            PathDeclPaths::Divergent(new_paths)
+        };
     }
 
     // Resolve each @i slot using the per-@i annotation path from the descriptor.

@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.5] — 2026-05-26
+
+**SemVer-PATCH — F4 bug fix: elided-origin descriptors emit canonical `PathDecl::Shared` for identical inferred paths (cross-start md1 convergence); completes the cross-start convergence + standalone-bijection test matrix (toolkit-only; no GUI lockstep — no clap surface change).**
+
+- **F4 fix.** A multisig descriptor with **elided origins** (e.g. `wsh(andor(pkh(@0/<0;1>/*),...))`, no inline `[fp/path]`) bundled via `bundle --descriptor` emitted `PathDecl::Divergent([p,p,p])` for identical inferred paths, while the explicit-origin / wallet-import path emitted `PathDecl::Shared(p)` — byte-different md1 for the SAME wallet (cross-start non-convergence). The non-canonical default-path inference (`cmd/bundle.rs`) now collapses identical inferred per-`@N` paths to `Shared`, matching `parse_descriptor` (`all_paths_same`) and `synthesize_unified` (`all_same || n==1`); the symmetric verify-bundle inference (`cmd/verify_bundle.rs`) gets the same collapse. **No functional impact** — verify-bundle validates md1 via decode + wallet_policy + xpub-multiset, never the path_decl encoding; derived addresses and wallet semantics are identical. `Divergent` is retained for genuinely distinct per-cosigner paths (SPEC §4.2). Trigger is narrow: only elided-origin descriptor-mode bundles (canonical templates + inline-origin descriptors already emit `Shared`).
+- **Tests.** Completes the Property A (cross-start convergence) + Property B (standalone bijection) matrix begun in v0.37.4: new `tests/cli_standalone_bijections.rs` (B1–B6: `xpub↔mk1` + reverse fp/path edges, multisig per-cosigner; `descriptor↔md1` canonical/non-canonical/multisig via `md_codec::chunk` round-trip) + cell A8 (non-canonical `wsh(andor)` descriptor ≡ BSMS wallet-file — the cell that drove the F4 fix). Full matrix 14/14; full suite 2437/0.
+- Retroactive architect R0: `design/agent-reports/v0_37_5-f4-fix-review.md`. Resolves FOLLOWUP `cross-start-convergence-remaining-cells`.
+
 ## mnemonic-toolkit [0.37.4] — 2026-05-26
 
 **SemVer-PATCH — bug fix: `--multisig-path-family bip48` now reaches seed/entropy-mode multisig derivation (toolkit-only; no GUI lockstep — pre-existing flag, no new clap surface).**

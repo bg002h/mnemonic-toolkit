@@ -411,3 +411,57 @@ fn a7_multisig_bip48_seed_vs_bsms_walletfile_converge() {
 
     assert_cards_converge(&seed, &wf, "A7 multisig bip48 seed vs BSMS wallet-file");
 }
+
+// ===========================================================================
+// A8 — non-canonical `wsh(andor)` descriptor ≡ BSMS wallet-file (watch-only).
+// Each placeholder key carries an explicit `/<0;1>/*` use-site so BOTH starts
+// describe the SAME ranged wallet (a bare `@N` yields a no-wildcard use-site —
+// a different wallet). Convergence proves the descriptor-mode synthesis and the
+// BSMS import→bundle path agree for a non-canonical miniscript policy.
+//
+// This cell drove the F4 fix: the elided-origin default-path inference
+// (bundle.rs) emitted `PathDecl::Divergent([p,p,p])` for identical inferred
+// paths while the explicit-origin wallet-import path emitted `PathDecl::Shared`
+// → byte-different md1 for the same wallet. F4 now collapses identical inferred
+// paths to `Shared`, matching parse_descriptor + synthesize_unified.
+// ===========================================================================
+#[test]
+fn a8_non_canonical_descriptor_vs_bsms_walletfile_converge() {
+    let placeholder = "wsh(andor(pkh(@0/<0;1>/*),after(12000000),or_i(and_v(v:pkh(@1/<0;1>/*),older(4032)),and_v(v:pkh(@2/<0;1>/*),older(32768)))))";
+    let mut slots: Vec<String> = Vec::new();
+    let mut keys: Vec<String> = Vec::new();
+    for (i, p) in MS_PHRASES.iter().enumerate() {
+        let (xpub, fp) = derive_account_xpub(p, "m/48'/0'/0'/2'");
+        slots.push("--slot".into());
+        slots.push(format!("@{i}.xpub={xpub}"));
+        slots.push("--slot".into());
+        slots.push(format!("@{i}.fingerprint={fp}"));
+        keys.push(format!("[{fp}/48'/0'/0'/2']{xpub}/<0;1>/*"));
+    }
+    let mut dargs: Vec<String> = [
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        placeholder,
+        "--json",
+        "--no-engraving-card",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    dargs.extend(slots);
+    let desc_start = bundle_json_owned(&dargs);
+
+    let concrete = format!(
+        "wsh(andor(pkh({}),after(12000000),or_i(and_v(v:pkh({}),older(4032)),and_v(v:pkh({}),older(32768)))))",
+        keys[0], keys[1], keys[2]
+    );
+    let wf = walletfile_to_bundle("bsms", &bsms_2line(&concrete));
+
+    assert_cards_converge(
+        &desc_start,
+        &wf,
+        "A8 non-canonical wsh(andor) descriptor vs BSMS wallet-file",
+    );
+}
