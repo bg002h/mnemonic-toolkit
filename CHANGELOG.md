@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.6] — 2026-05-27
+
+**SemVer-PATCH — taproot-multisig + `--multisig-path-family bip48` now emits a non-standard-path stderr advisory (bless + warn; toolkit-only, no GUI lockstep — stderr only, no clap surface change).**
+
+- **Bless + warn.** BIP-48 standardizes only script-type `1'` (sh-wsh) and `2'` (wsh). Taproot multisig templates (`tr-multi-a` / `tr-sortedmulti-a`) under `--multisig-path-family bip48` derive at `m/48'/<coin>'/<account>'/3'` — a toolkit convention, not part of BIP-48. The toolkit continues to **honor** the explicit flag (exit 0, cards emitted) but now emits a stderr advisory pointing to `--multisig-path-family bip87` (`m/87'/…`) for a standardized taproot multisig path. Resolves FOLLOWUP `multisig-tr-bip48-script-type-3-policy`.
+- **Where.** Logic centralized in a pure, unit-tested helper `CliTemplate::bip48_nonstandard_script_type_warning(family)` (single source of truth); emitted on stderr by `bundle`, `export-wallet`, and `verify-bundle` (every command that derives the `3'` path). Silent for the `bip87` family, for wsh/sh-wsh (standardized `1'`/`2'`), and for single-sig. Exit codes unchanged.
+- **Tests.** `tests/cli_tr_bip48_advisory.rs` (5 cells: bundle/export-wallet/verify-bundle fire for tr+bip48; bip87 + wsh+bip48 stay silent) + a `template.rs` unit test. Full suite 2443/0.
+
 ## mnemonic-toolkit [0.37.5] — 2026-05-26
 
 **SemVer-PATCH — F4 bug fix: elided-origin descriptors emit canonical `PathDecl::Shared` for identical inferred paths (cross-start md1 convergence); completes the cross-start convergence + standalone-bijection test matrix (toolkit-only; no GUI lockstep — no clap surface change).**

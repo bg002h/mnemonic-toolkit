@@ -343,6 +343,15 @@ fn bundle_run_unified<W: Write, E: Write>(
         .template
         .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
 
+    // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn): taproot
+    // multisig under --multisig-path-family bip48 derives at the non-standard
+    // m/48'/.../3'. Honor it, but advise on stderr at creation time.
+    if let Some(w) = template
+        .bip48_nonstandard_script_type_warning(args.multisig_path_family.unwrap_or_default())
+    {
+        let _ = writeln!(stderr, "{w}");
+    }
+
     // Resolve slots into ResolvedSlot vec.
     let (resolved, slip0132_signals) = resolve_slots(
         &slots,

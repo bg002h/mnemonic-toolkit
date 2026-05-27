@@ -279,6 +279,18 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
+    // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn): mirror
+    // the bundle/export-wallet advisory so re-deriving a taproot+bip48 bundle
+    // under verify-bundle surfaces the same non-standard m/48'/.../3' notice.
+    // Fires once here (template-mode only; descriptor mode escaped at the top
+    // and refuses --multisig-path-family).
+    if let Some(w) = args
+        .template_unchecked()
+        .bip48_nonstandard_script_type_warning(args.multisig_path_family.unwrap_or_default())
+    {
+        let _ = writeln!(stderr, "{w}");
+    }
+
     crate::slot_input::validate_slot_set(&args.slot)?;
     let n = args
         .slot

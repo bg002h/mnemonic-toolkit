@@ -72,7 +72,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/template.rs` (`bip48_script_type`), `crates/mnemonic-toolkit/src/parse.rs` (`default_origin_path`). The `3` convention pre-exists at `synthesize.rs` (`synthesize_multisig_full`) and `cmd/xpub_search/candidate_paths.rs`.
 - **What:** Decide + document whether honoring `bip48` for taproot multisig (deriving at `/3'`) is intentional (current behavior — honors an explicit flag, consistent with the pre-existing convention) or should be refused as out-of-spec. Review recommendation: document as intentional rather than reopen.
 - **Why deferred:** Policy question, not a defect; current behavior is internally consistent.
-- **Status:** `open`
+- **Resolution (v0.37.6): bless + warn.** Decided to KEEP honoring the explicit flag (deriving at `m/48'/.../3'`) and emit a stderr advisory at every command that derives the `3'` path (`bundle`, `export-wallet`, `verify-bundle`), pointing to `--multisig-path-family bip87` for a standardized path. Logic centralized in the pure helper `CliTemplate::bip48_nonstandard_script_type_warning(family)` (unit-tested); integration tests in `tests/cli_tr_bip48_advisory.rs`. Stderr-only → no GUI/manual lockstep.
+- **Status:** `resolved` mnemonic-toolkit-v0.37.6
 - **Tier:** `v1+`
 
 ### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope

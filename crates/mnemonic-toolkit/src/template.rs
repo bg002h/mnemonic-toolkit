@@ -4,6 +4,7 @@
 //! (origin paths), §4.6.3 (per-template wrapper tag + body).
 
 use crate::network::CliNetwork;
+use crate::parse::MultisigPathFamily;
 use bitcoin::bip32::DerivationPath;
 use clap::ValueEnum;
 use md_codec::origin_path::{OriginPath, PathComponent};
@@ -232,6 +233,36 @@ impl CliTemplate {
         }
     }
 
+    /// Advisory when this (template, family) combo will derive at a BIP-48
+    /// script-type component that BIP-48 does not standardize.
+    ///
+    /// BIP-48 defines only `1'` (sh-wsh) and `2'` (wsh). The toolkit also
+    /// supports taproot multisig, which `bip48_script_type` maps to `3'` —
+    /// a toolkit convention, NOT part of BIP-48. We honor an explicit
+    /// `--multisig-path-family bip48` for taproot (deriving at
+    /// `m/48'/<coin>'/<account>'/3'`) rather than refusing it, but emit this
+    /// stderr advisory so the user knows the `3'` path is non-standard
+    /// (resolves FOLLOWUP `multisig-tr-bip48-script-type-3-policy`: bless +
+    /// warn). Returns `Some(message)` only for taproot multisig under the
+    /// `bip48` family; `None` for every standardized combo (1'/2'), for the
+    /// `bip87` family, and for single-sig.
+    pub fn bip48_nonstandard_script_type_warning(
+        &self,
+        family: MultisigPathFamily,
+    ) -> Option<&'static str> {
+        if family == MultisigPathFamily::Bip48 && self.bip48_script_type() == Some(3) {
+            Some(
+                "warning: taproot multisig under --multisig-path-family bip48 derives at \
+                 m/48'/<coin>'/<account>'/3'; BIP-48 standardizes only script-type 1' (sh-wsh) \
+                 and 2' (wsh), so the 3' (taproot) component is a toolkit convention, not part of \
+                 BIP-48. Use --multisig-path-family bip87 (m/87'/<coin>'/<account>') for a \
+                 standardized taproot multisig path.",
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn human_name(&self) -> &'static str {
         match self {
             CliTemplate::Bip44 => "bip44",
@@ -251,6 +282,32 @@ impl CliTemplate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bip48_nonstandard_warning_only_for_taproot_under_bip48() {
+        // Taproot multisig + bip48 → warns (derives at the non-standard 3').
+        assert!(CliTemplate::TrMultiA
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip48)
+            .is_some());
+        assert!(CliTemplate::TrSortedMultiA
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip48)
+            .is_some());
+        // Taproot under the default bip87 family → no warning (m/87' path).
+        assert!(CliTemplate::TrSortedMultiA
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip87)
+            .is_none());
+        // Standardized bip48 script-types (1' sh-wsh, 2' wsh) → no warning.
+        assert!(CliTemplate::WshSortedMulti
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip48)
+            .is_none());
+        assert!(CliTemplate::ShWshSortedMulti
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip48)
+            .is_none());
+        // Single-sig → no warning under any family.
+        assert!(CliTemplate::Bip86
+            .bip48_nonstandard_script_type_warning(MultisigPathFamily::Bip48)
+            .is_none());
+    }
 
     #[test]
     fn origin_path_strings() {

@@ -334,6 +334,14 @@ pub fn run<W: Write, E: Write>(
         d.to_string()
     } else {
         let template = args.template.expect("checked above");
+        // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn):
+        // taproot multisig under --multisig-path-family bip48 derives at the
+        // non-standard m/48'/.../3'. Honor it, but advise on stderr.
+        if let Some(w) = template
+            .bip48_nonstandard_script_type_warning(args.multisig_path_family.unwrap_or_default())
+        {
+            let _ = writeln!(stderr, "{w}");
+        }
         // Resolve slots through the shared bundle helper. Watch-only-only at
         // this point — phrase/entropy/xprv/wif rejected by validate_watch_only.
         let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
