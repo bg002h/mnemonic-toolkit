@@ -3114,7 +3114,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Impact:** the default installer path for `mnemonic` is `cargo install --locked --git … --tag mnemonic-toolkit-v0.34.1 mnemonic-toolkit` (`scripts/install.sh` uses `$LOCKED="--locked"` + git+tag for the toolkit). `--locked` refuses to update the lock, so a `Cargo.toml`/`Cargo.lock` version mismatch makes that install **fail** on the v0.34.1 tag. v0.34.2 corrects the lock (`cargo build --locked -p mnemonic-toolkit` passes), restoring the path — but v0.34.1 remains a broken-for-`--locked`-install intermediate tag.
 - **Why CI missed it:** `install-pin-check` only greps the `install.sh` self-pin string against the tag; it never runs an actual `--locked` install/build, so a stale lock is invisible to it.
 - **What:** (a) version-bump discipline — every `Cargo.toml` version bump MUST be followed by `cargo build` (or `cargo update -p mnemonic-toolkit --precise <ver>`) to regenerate `Cargo.lock`, and the lock change committed in the same release commit; (b) add a CI guard — a `cargo build --locked -p mnemonic-toolkit` (or `cargo metadata --locked`) step in the release/check workflow so a `Cargo.toml`/`Cargo.lock` mismatch fails fast at tag time.
-- **Status:** `open`
+- **Resolution (2026-05-27):** part (b) shipped — `.github/workflows/rust.yml` now runs a fail-fast `cargo metadata --locked --format-version 1 > /dev/null` step ("Verify Cargo.lock is up to date") before the build, on both ubuntu + macos. A `Cargo.toml`/`Cargo.lock` version mismatch (the v0.34.1 failure mode) now errors in CI on every push/PR that touches `crates/**`, `Cargo.toml`, `Cargo.lock`, or the workflow. Part (a) (regenerate+stage the lock at bump time) is now enforced by (b) rather than relying on discipline alone. actionlint-clean.
+- **Status:** `resolved` (CI `--locked` guard added 2026-05-27)
 - **Tier:** `v0.34+`
 - **Tags:** `wallet`
 

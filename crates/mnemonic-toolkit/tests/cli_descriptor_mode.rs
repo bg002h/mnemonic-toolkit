@@ -44,8 +44,12 @@ fn descriptor_full_singlesig_bip84_emits_valid_bundle() {
 
 #[test]
 fn descriptor_watch_only_singlesig_emits_no_ms1() {
-    // Use the bip84 xpub for the trezor-24 seed (well-known test vector).
-    let xpub = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V";
+    // The bip84 (m/84'/0'/0') xpub for the trezor-24 seed, consistent with
+    // TREZOR_FP_HEX (5436d724). (Pre-v0.37.6 this used the trezor-*12*-word
+    // seed's xpub by mistake — fp 73c5da0a — pairing an xpub and fingerprint
+    // from different seeds; watch-only never cross-checks them, so the test
+    // still passed. Corrected to the real 24-word xpub so the slot is honest.)
+    let xpub = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()

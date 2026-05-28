@@ -36,6 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # FOLLOWUP cargo-lock-version-bump-lockstep: fail CI when Cargo.lock is
+      # stale relative to Cargo.toml (e.g. a version bump that forgot to
+      # regenerate/commit the lockfile). `--locked` errors if resolution would
+      # need to change the committed lock; `cargo metadata` resolves without
+      # compiling, so this is a fast fail-fast guard before the build.
+      - name: Verify Cargo.lock is up to date (--locked guard)
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
       - name: Show ulimit -l (diagnostic)
         run: ulimit -l || true
 
