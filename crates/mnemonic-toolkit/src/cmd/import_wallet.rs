@@ -1776,6 +1776,35 @@ fn emit_json_envelope<W: Write, E: Write>(
                 }),
             );
         }
+        // v0.37.8 — Coldcard-multisig provenance envelope field. Mirrors
+        // the per-format-distinct field-name discipline
+        // (`coldcard_multisig_source_metadata`): surfaces ONLY when the parse
+        // was Coldcard-multisig-shaped. Carries `name`, `policy_k`/`policy_n`,
+        // `script_format`, `xfp_*` telemetry, `dropped_fields` — same shape
+        // as Jade's nested `coldcard_compat` subobject (Jade delegates this
+        // parser). Added so `export-wallet --from-import-json` can lift the
+        // wallet name back through round-trips.
+        if let Some(meta) = p.provenance.coldcard_multisig_source_metadata() {
+            let script_format_str = match meta.script_format {
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2wsh => "P2WSH",
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2shP2wsh => {
+                    "P2SH-P2WSH"
+                }
+                crate::wallet_import::coldcard_multisig::ColdcardMsFormat::P2sh => "P2SH",
+            };
+            env.insert(
+                "coldcard_multisig_source_metadata".to_string(),
+                json!({
+                    "name": meta.name,
+                    "policy_k": meta.policy.k,
+                    "policy_n": meta.policy.n,
+                    "script_format": script_format_str,
+                    "xfp_was_blob_supplied": meta.xfp_was_blob_supplied,
+                    "xfp_header_disagreed": meta.xfp_header_disagreed,
+                    "dropped_fields": meta.dropped_fields,
+                }),
+            );
+        }
         // v0.28.0 Phase P6C — Electrum provenance envelope field. Mirrors
         // the per-format-distinct field-name discipline
         // (`electrum_source_metadata`): surfaces ONLY when the parse was

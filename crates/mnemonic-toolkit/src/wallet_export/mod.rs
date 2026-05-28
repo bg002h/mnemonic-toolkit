@@ -498,10 +498,13 @@ pub(crate) struct EmitInputs<'a> {
     /// `<template-human-name>-<account>` when `--wallet-name` is absent;
     /// for the descriptor path, falls back to `"imported-descriptor"`.
     pub wallet_name: &'a str,
-    /// `true` when the user explicitly supplied `--wallet-name`. Phase 3's
-    /// `SpecterEmitter::collect_missing` checks this field: Specter requires
-    /// an explicit wallet name (UX rationale per SPEC §13 R1-L1 fold).
-    pub wallet_name_was_user_supplied: bool,
+    /// `true` when `wallet_name` is non-default — either the user explicitly
+    /// supplied `--wallet-name` OR the value was lifted from the import-JSON
+    /// envelope's per-format source metadata (v0.37.8 universal-name-lift).
+    /// `SpecterEmitter::collect_missing` checks this field: Specter rejects the
+    /// silent `"imported-descriptor"` fallback (UX rationale per SPEC §13 R1-L1
+    /// fold); both explicit and lifted sources satisfy "non-default."
+    pub wallet_name_is_non_default: bool,
     pub taproot_internal_key: Option<TaprootInternalKey>,
     pub range: (u32, u32),
     pub timestamp: TimestampArg,

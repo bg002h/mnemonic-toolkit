@@ -1,13 +1,10 @@
-1,7c1
+1,6d0
 < # Coldcard Multisig setup file — firmware variant with leading XFP: header.
 < # Toolkit-emit-shape: shared Derivation header + per-cosigner <XFP>: <xpub> lines.
 < # 2-of-3 mainnet P2WSH. The XFP header + each per-cosigner <XFP>: prefix uses
 < # `xpub.fingerprint()` (per SPEC §11.4.1 computed-formula) so the parse path is
 < # the silent-match row of the 5-row truth table.
 < # xpubs reused from bsms-2line-sortedmulti-2of3.txt.
-< Name: TestMs2of3
----
-> Name: imported-descriptor
 11,13d4
 < XFP: 34A3A4F1
 < 

@@ -31,7 +31,7 @@ impl WalletFormatEmitter for SpecterEmitter {
     fn collect_missing(inputs: &EmitInputs) -> Vec<MissingField> {
         // SPEC §13 R1-L1: Specter requires explicit `--wallet-name`.
         let mut out = Vec::new();
-        if !inputs.wallet_name_was_user_supplied {
+        if !inputs.wallet_name_is_non_default {
             out.push(MissingField::WalletName);
         }
         out

@@ -111,7 +111,9 @@ fn cell_2_specter_multi_2of3_byte_exact() {
 /// the SPEC §4 missing-info channel. Specter's UX requires an explicit
 /// label; emitting a wallet with the default-derived name produces a UI
 /// regression. `SpecterEmitter::collect_missing` returns
-/// `MissingField::WalletName` whenever `wallet_name_was_user_supplied = false`.
+/// `MissingField::WalletName` whenever `wallet_name_is_non_default = false`
+/// (v0.37.8 renamed: the field is true when the user supplied `--wallet-name`
+/// OR a name was lifted from the envelope's source metadata).
 #[test]
 fn cell_3_specter_missing_wallet_name_refusal_byte_exact() {
     let out = Command::cargo_bin("mnemonic")

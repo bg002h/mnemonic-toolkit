@@ -450,8 +450,11 @@ pub fn run<W: Write, E: Write>(
     // SPEC v0.8 §2 — wallet name: user-supplied via `--wallet-name <STRING>`
     // (Phase 1.7 wiring); falls back to `<template-human-name>-<account>` for
     // the template path or `"imported-descriptor"` for the descriptor path.
-    // The `wallet_name_was_user_supplied` flag lets Phase 3 SpecterEmitter
-    // distinguish user-supplied from default — Specter requires explicit names.
+    // The `wallet_name_is_non_default` flag (v0.37.8 rename) lets Phase 3
+    // SpecterEmitter distinguish non-default from default — Specter rejects
+    // the silent `"imported-descriptor"` fallback. Both explicit `--wallet-name`
+    // and v0.37.8's source-metadata lift on `--from-import-json` count as
+    // non-default.
     let wallet_name_resolved: String = match args.wallet_name.as_ref() {
         Some(name) => name.clone(),
         None => match template_opt {
@@ -476,7 +479,7 @@ pub fn run<W: Write, E: Write>(
         threshold: threshold_opt,
         threshold_user_supplied: args.threshold.is_some(),
         wallet_name: &wallet_name_resolved,
-        wallet_name_was_user_supplied: args.wallet_name.is_some(),
+        wallet_name_is_non_default: args.wallet_name.is_some(),
         taproot_internal_key: args.taproot_internal_key,
         range: args.range,
         timestamp: args.timestamp.0,
@@ -688,11 +691,23 @@ fn run_from_import_json<W: Write, E: Write>(
     // appends `#<csum>` per BIP-380 §Checksum-on-emit.
     let canonical_descriptor = parsed_ms.to_string();
 
-    // Wallet name: --wallet-name explicit OR default `imported-descriptor`
-    // (same as the descriptor-mode path at run() line ~385-391).
+    // Wallet name: --wallet-name explicit > envelope-lifted source name >
+    // default `imported-descriptor`. v0.37.8 universal-name-lift: the
+    // envelope carries the original wallet name in one of six per-format
+    // source-metadata projections (sparrow.label / specter.label /
+    // jade.coldcard_compat.name / electrum.wallet_name / source_metadata.
+    // wallet_name / coldcard_multisig_source_metadata.name); lifting it
+    // dissolves the Specter `MissingField::WalletName` refusal on
+    // round-trip and gives sparrow/jade/coldcard-multisig/electrum a
+    // semantically meaningful label instead of the placeholder. The
+    // lifted name also flips `wallet_name_is_non_default = true` below
+    // (the rename from `wallet_name_was_user_supplied` is the rename
+    // that unlocks counting the lifted-name case as "non-default").
+    let lifted_wallet_name: Option<String> = envelope.resolved_wallet_name();
     let wallet_name_resolved: String = args
         .wallet_name
         .clone()
+        .or_else(|| lifted_wallet_name.clone())
         .unwrap_or_else(|| "imported-descriptor".to_string());
 
     // Threshold from envelope's bundle.multisig.threshold (None for N=1).
@@ -723,7 +738,7 @@ fn run_from_import_json<W: Write, E: Write>(
         // mirrors the direct path's `threshold_user_supplied: args.threshold.is_some()`.
         threshold_user_supplied: threshold.is_some(),
         wallet_name: &wallet_name_resolved,
-        wallet_name_was_user_supplied: args.wallet_name.is_some(),
+        wallet_name_is_non_default: args.wallet_name.is_some() || lifted_wallet_name.is_some(),
         // taproot internal key: v0.27.0 wallet-import path doesn't surface
         // taproot internal-key designation; reject taproot envelopes here
         // (file FOLLOWUP `wallet-import-taproot-internal-key` for v0.28+).

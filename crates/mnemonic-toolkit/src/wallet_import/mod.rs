@@ -190,6 +190,27 @@ impl ImportProvenance {
         }
     }
 
+    /// Coldcard-multisig-specific accessor: returns `Some(&metadata)` only for
+    /// the `ColdcardMultisig` variant. Added v0.37.8 (universal source-name
+    /// lift) so the `--json` envelope can carry the wallet name on
+    /// coldcard-multisig imports; consumed by
+    /// `cmd::import_wallet::emit_json_envelope`.
+    pub(crate) fn coldcard_multisig_source_metadata(
+        &self,
+    ) -> Option<&coldcard_multisig::ColdcardMultisigSourceMetadata> {
+        match self {
+            Self::BitcoinCore(_) => None,
+            Self::BsmsSixLine(_) => None,
+            Self::BsmsTwoLine => None,
+            Self::Coldcard(_) => None,
+            Self::ColdcardMultisig(meta) => Some(meta),
+            Self::Electrum(_) => None,
+            Self::Jade(_) => None,
+            Self::Sparrow(_) => None,
+            Self::Specter(_) => None,
+        }
+    }
+
     /// Jade-specific accessor: returns `Some(&metadata)` only for the
     /// `Jade` variant. Consumed by the `--json` envelope emitter in
     /// `cmd::import_wallet::emit_json_envelope` (P5C wiring). Mirrors

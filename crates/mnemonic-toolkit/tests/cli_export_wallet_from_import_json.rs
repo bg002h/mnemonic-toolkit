@@ -895,10 +895,18 @@ fn p11b_happy_path_matrix_all_sources_all_descriptor_capable_dests() {
 // Total target ≈ 32 + 3 + 5 = 40 cells.
 // ============================================================================
 
-/// Sources whose canonical happy-path fixture lacks a `wallet_name` in
-/// the envelope's `source_metadata` (specter then refuses descriptor +
-/// no wallet_name).
-const SOURCES_LACKING_WALLET_NAME: &[&str] = &["bsms", "coldcard-multisig"];
+/// Sources whose canonical happy-path envelope carries no liftable
+/// wallet name (Specter then refuses descriptor + no wallet_name).
+///
+/// v0.37.8 universal source-name lift narrowed this set: every
+/// name-carrying format (sparrow / specter / jade / electrum /
+/// bitcoin-core / coldcard-multisig) now flows its source `name`
+/// through `ImportJsonEnvelope::resolved_wallet_name`, so Specter's
+/// `MissingField::WalletName` no longer fires on those. BSMS's
+/// BIP-129 Round-2 wire shape has no wallet-name field, so it stays
+/// in the refusal cohort. Pinned by
+/// `cli_export_wallet_universal_name_lift::specter_target_*`.
+const SOURCES_LACKING_WALLET_NAME: &[&str] = &["bsms"];
 
 /// Allowed refusal stderr substrings. Each template-only emitter has
 /// its own message but they all contain one of these literals.

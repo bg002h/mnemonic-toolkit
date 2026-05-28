@@ -65,9 +65,77 @@ pub(crate) struct ImportJsonEnvelope {
     /// `"bsms"` or `"bitcoin-core"`.
     pub(crate) source_format: String,
     pub(crate) bundle: BundleJsonView,
-    // Phase 5 does NOT need `bsms_audit`, `source_metadata`, `roundtrip`,
-    // or `bsms_round1_verifications` for the consumer paths; serde drops
+    // v0.37.8 — per-format source-metadata fields, deserialized as
+    // opaque `serde_json::Value` (each format's projection-shape lives in
+    // `cmd::import_wallet::emit_json_envelope`; the consumer here only
+    // path-walks them via `resolved_wallet_name`). All optional + serde
+    // `default` so envelopes from format families not carrying a
+    // wallet-name (or older toolkits) deserialize unchanged. Only the
+    // wallet-name lift consumes these; future consumers may grow.
+    #[serde(default)]
+    pub(crate) source_metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) sparrow_source_metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) specter_source_metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) jade_source_metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) electrum_source_metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) coldcard_multisig_source_metadata: Option<serde_json::Value>,
+    // Phase 5 still does not need `bsms_audit`, `roundtrip`, or
+    // `bsms_round1_verifications` for the consumer paths; serde drops
     // unknown fields by default.
+}
+
+impl ImportJsonEnvelope {
+    /// v0.37.8 — universal source-name lift. Returns the wallet name carried
+    /// in the envelope's per-format source-metadata projection, if any of the
+    /// six name-carrying formats parsed populated it. Probed in import-order
+    /// priority (bitcoin-core → sparrow → specter → jade → electrum →
+    /// coldcard-multisig); per the spec, at most one of the six is populated
+    /// per envelope (each is emitted ONLY when the matching parser claimed
+    /// the input), so the order is a defensive tie-break, not a precedence
+    /// statement.
+    ///
+    /// Consumed by `cmd::export_wallet::run_from_import_json` to flow the
+    /// lifted name into `EmitInputs.wallet_name` AND the
+    /// `wallet_name_is_non_default` flag so the Specter `MissingField::
+    /// WalletName` path doesn't fire on a lifted name (SPEC §13 R1-L1).
+    pub(crate) fn resolved_wallet_name(&self) -> Option<String> {
+        // (probe_root, json_path) — `&["a","b"]` walks `obj["a"]["b"]`.
+        let probes: &[(&Option<serde_json::Value>, &[&str])] = &[
+            (&self.source_metadata, &["wallet_name"]),
+            (&self.sparrow_source_metadata, &["label"]),
+            (&self.specter_source_metadata, &["label"]),
+            (&self.jade_source_metadata, &["coldcard_compat", "name"]),
+            (&self.electrum_source_metadata, &["wallet_name"]),
+            (&self.coldcard_multisig_source_metadata, &["name"]),
+        ];
+        for (root, path) in probes {
+            if let Some(v) = root.as_ref() {
+                if let Some(name) = walk_str(v, path) {
+                    if !name.is_empty() {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Walk a nested `serde_json::Value` along `path`, returning the leaf as
+/// `&str` if it terminates at a non-null string. Designed for the universal
+/// source-name lift (`ImportJsonEnvelope::resolved_wallet_name`); kept
+/// general so future per-format probes can reuse it.
+fn walk_str<'a>(v: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
+    let mut cur = v;
+    for key in path {
+        cur = cur.get(*key)?;
+    }
+    cur.as_str()
 }
 
 /// Deserialization mirror of `crate::format::BundleJson`. Field order
@@ -664,5 +732,201 @@ mod tests {
             "present fingerprint must emit no NOTICE; got: {stderr_str}"
         );
         assert_eq!(slot.fingerprint, fp);
+    }
+
+    // ========================================================================
+    // v0.37.8 — universal source-name lift unit tests. 7 cells total: 6
+    // per-format positive cells (one per name-carrying format) + 1 negative
+    // cell (no metadata → None). Each builds a minimal `ImportJsonEnvelope`
+    // with the one populated metadata field that exercises the
+    // `resolved_wallet_name` walker for its format. The 8th name-carrying
+    // CLI format (coldcard singlesig) has no `name` field — explicitly
+    // omitted from scope per SPEC §C3.
+    // ========================================================================
+
+    /// Build a minimal `ImportJsonEnvelope` with no per-format metadata
+    /// populated. Bundle is a placeholder — `resolved_wallet_name` only
+    /// inspects the six `*_source_metadata` fields.
+    fn empty_envelope_for_name_lift_test() -> ImportJsonEnvelope {
+        ImportJsonEnvelope {
+            schema_version: "1".to_string(),
+            source_format: "test".to_string(),
+            bundle: BundleJsonView {
+                schema_version: "4".to_string(),
+                mode: "watch-only".to_string(),
+                network: "mainnet".to_string(),
+                template: None,
+                descriptor: None,
+                account: 0,
+                origin_path: None,
+                origin_paths: None,
+                master_fingerprint: None,
+                ms1: vec![],
+                mk1: vec![],
+                md1: vec![],
+                multisig: None,
+                privacy_preserving: false,
+            },
+            source_metadata: None,
+            sparrow_source_metadata: None,
+            specter_source_metadata: None,
+            jade_source_metadata: None,
+            electrum_source_metadata: None,
+            coldcard_multisig_source_metadata: None,
+        }
+    }
+
+    /// Unit cell 1/7 — no per-format metadata populated ⇒ no name lift.
+    /// Guards against accidental fall-through fabrication.
+    #[test]
+    fn resolved_wallet_name_returns_none_when_no_source_metadata_populated() {
+        let env = empty_envelope_for_name_lift_test();
+        assert_eq!(env.resolved_wallet_name(), None);
+    }
+
+    /// Unit cell 2/7 — sparrow projection lifts the top-level `label` key.
+    #[test]
+    fn resolved_wallet_name_lifts_sparrow_label() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.sparrow_source_metadata = Some(serde_json::json!({
+            "label": "wsh-sortedmulti-0",
+            "policy_type": "MULTI",
+            "script_type": "P2WSH",
+            "dropped_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            Some("wsh-sortedmulti-0".to_string())
+        );
+    }
+
+    /// Unit cell 3/7 — specter projection lifts the top-level `label` key.
+    #[test]
+    fn resolved_wallet_name_lifts_specter_label() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.specter_source_metadata = Some(serde_json::json!({
+            "label": "VaultColdStorage",
+            "blockheight": 750000,
+            "devices": [],
+            "dropped_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            Some("VaultColdStorage".to_string())
+        );
+    }
+
+    /// Unit cell 4/7 — jade projection lifts the NESTED
+    /// `coldcard_compat.name` key (not the top-level `name`). This cell
+    /// guards `walk_str`'s multi-step path traversal end-to-end.
+    #[test]
+    fn resolved_wallet_name_lifts_jade_nested_coldcard_compat_name() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.jade_source_metadata = Some(serde_json::json!({
+            "coldcard_compat": {
+                "name": "TestMs2of3",
+                "policy_k": 2,
+                "policy_n": 3,
+                "script_format": "P2WSH",
+                "xfp_was_blob_supplied": true,
+                "xfp_header_disagreed": false,
+                "dropped_fields": []
+            },
+            "jade_specific_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            Some("TestMs2of3".to_string())
+        );
+    }
+
+    /// Unit cell 5/7 — electrum projection lifts the top-level
+    /// `wallet_name` key.
+    #[test]
+    fn resolved_wallet_name_lifts_electrum_wallet_name() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.electrum_source_metadata = Some(serde_json::json!({
+            "seed_version": 17,
+            "wallet_type": "standard",
+            "wallet_name": "Daily",
+            "dropped_fields": []
+        }));
+        assert_eq!(env.resolved_wallet_name(), Some("Daily".to_string()));
+    }
+
+    /// Unit cell 6/7 — bitcoin-core projection (the `source_metadata` key
+    /// without a per-format prefix) lifts the top-level `wallet_name`.
+    #[test]
+    fn resolved_wallet_name_lifts_bitcoin_core_wallet_name() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.source_metadata = Some(serde_json::json!({
+            "wallet_name": "bip84_mainnet",
+            "active": true,
+            "internal": false,
+            "range": [0, 1000],
+            "dropped_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            Some("bip84_mainnet".to_string())
+        );
+    }
+
+    /// Unit cell 7/7 — coldcard-multisig projection lifts top-level `name`.
+    /// Mirrors `coldcard_compat.name` shape minus the wrapper key (Jade
+    /// nests it; coldcard-multisig is direct).
+    #[test]
+    fn resolved_wallet_name_lifts_coldcard_multisig_name() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.coldcard_multisig_source_metadata = Some(serde_json::json!({
+            "name": "TestMs2of3",
+            "policy_k": 2,
+            "policy_n": 3,
+            "script_format": "P2WSH",
+            "xfp_was_blob_supplied": true,
+            "xfp_header_disagreed": false,
+            "dropped_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            Some("TestMs2of3".to_string())
+        );
+    }
+
+    /// Sub-cell — `walk_str` returns None when an intermediate key is
+    /// missing. Guards against fabricated leaves on partial envelopes
+    /// (e.g., a jade envelope that omits `coldcard_compat` wrapper).
+    #[test]
+    fn walk_str_returns_none_on_missing_intermediate_key() {
+        let v = serde_json::json!({"a": {"b": "leaf"}});
+        assert_eq!(walk_str(&v, &["a", "b"]), Some("leaf"));
+        assert_eq!(walk_str(&v, &["a", "c"]), None);
+        assert_eq!(walk_str(&v, &["missing"]), None);
+        // Non-string leaf returns None (matches the `walk_str` contract).
+        let v2 = serde_json::json!({"a": {"b": 42}});
+        assert_eq!(walk_str(&v2, &["a", "b"]), None);
+    }
+
+    /// End-of-cycle R0 M1 fold — defensive cell pinning the `!name.
+    /// is_empty()` filter at `resolved_wallet_name`. If a future
+    /// emitter (or a hand-crafted envelope) populates a per-format
+    /// metadata field with a literal empty string, the lift must
+    /// behave as if the field is absent — falling back to the
+    /// `imported-descriptor` default rather than emitting an
+    /// empty-string wallet name.
+    #[test]
+    fn resolved_wallet_name_returns_none_on_empty_string_leaf() {
+        let mut env = empty_envelope_for_name_lift_test();
+        env.sparrow_source_metadata = Some(serde_json::json!({
+            "label": "",
+            "policy_type": "MULTI",
+            "script_type": "P2WSH",
+            "dropped_fields": []
+        }));
+        assert_eq!(
+            env.resolved_wallet_name(),
+            None,
+            "empty-string leaf must NOT lift; falls through to default"
+        );
     }
 }
