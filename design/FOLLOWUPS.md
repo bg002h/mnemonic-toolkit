@@ -76,6 +76,37 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved` mnemonic-toolkit-v0.37.6
 - **Tier:** `v1+`
 
+### `sparrow-from-import-json-wallet-name-preservation` — `--from-import-json --format sparrow` resets `name`/`label` to the export default instead of preserving the source name
+
+- **Surfaced:** 2026-05-27, manual-prose-execution-gate cycle Phase-2 capture of `roundtrip-sparrow-singlesig`. The chapter-45 sparrow round-trip recipe (`45-foreign-formats.md:305-320`) implied a clean semantic round-trip but the captured `diff` is non-empty: `name`/`label` change from the fixture's `"bip84-0"` to export-wallet's default `"imported-descriptor"`. Tracked in the cycle's commit + chapter prose addendum.
+- **Where:** `src/cmd/export_wallet.rs:679` (`wallet_name_resolved = args.wallet_name.clone().unwrap_or_else(|| "imported-descriptor".to_string())`) — applies to all `--from-import-json` paths. The envelope's source-provenance carries the original wallet name in `provenance.source_metadata` (sparrow parser populates from `name` field), but `run_from_import_json` doesn't lift it into `wallet_name_resolved` when `--wallet-name` is absent.
+- **What:** When `--wallet-name` is absent on `--from-import-json`, prefer the envelope's source-provenance wallet-name (if any) over the static `imported-descriptor` default. Apply to sparrow (round-trip impact); consider whether specter/jade/coldcard should follow (specter's recipe at `:404-411` passes `--wallet-name` explicitly to demonstrate this very thing — could lift name there too). Behavior-change MINOR (round-trip output shifts); own R0; no flag change → no GUI lockstep.
+- **Why deferred:** out of scope for the manual-prose-gate cycle (which is gate-establishment + transcript coverage); fix surfaces as a separate behavior change.
+- **Status:** `open`
+- **Tier:** `v0.37+-cli-fix`
+
+### `manual-anchor-dangler-backlog-cleanup` — manual has ~174 real intra-doc `#anchor` danglers; enable lychee `--include-fragments` on build output once cleaned
+
+- **Surfaced:** 2026-05-27, manual-prose-execution-gate cycle Phase-1 pre-flight (per R0 I4 fold of `SPEC_manual_prose_execution_gate.md`).
+- **Where:** `docs/manual/build/m-format-manual.md` (post-`make md` concatenated single document); empirical run: `lychee --offline --include-fragments --no-progress build/m-format-manual.md` → **174 errors / 603 unique anchor references**. Per-source-file run (`lychee … src/`) gives 97 errors but mostly cross-file false positives — the build-output approach is the right architectural locus.
+- **What:** Three failure classes identified in the pre-flight enumeration:
+  1. **URL-encoded spaces** (e.g. `#welcome-to-the-m-format%20constellation` ×6) — markdown writer encoded a space in the link, but pandoc's slug uses a hyphen. Mechanical fix: replace `%20` with `-` in offending links.
+  2. **Missing `worked-example-*` definitions** (~10 referenced, no matching `{#worked-example-*}` anchor in any source) — references to anchors that were never created.
+  3. **Slug-rule mismatches** (e.g. `#when-to-use-bip-85-vs.-multisig`, `#xprv-xpub`) — link author's slug-guess differs from pandoc's actual slugification (handling of `.`, `/`, multiple hyphens).
+- **Approach (pre-designed):** Run lychee against the **build output** (`build/m-format-manual.md`), not the per-file `src/` (lychee per-file can't see cross-file pandoc concat). Add a new lint stage that depends on `make md`, OR add a separate `make anchor-check` target wired into `make audit`. Once the 174 danglers are fixed (or an honest baseline-snapshot mechanism is built), enable lychee `--include-fragments` (anchor-only enum default at v0.24.2; the toolchain version is already pinned).
+- **Why deferred:** 174 cross-cutting prose edits is well beyond this cycle's scope; an `--exclude` list of 174 items would silence the check; the build-output integration adds Makefile dependency complexity. Own cycle with the empirical taxonomy already in hand.
+- **Status:** `open`
+- **Tier:** `v0.37+-docs-hygiene`
+
+### `manual-yml-sibling-pin-vs-install-sh-drift-gate` — add static gate that `manual.yml` sibling-binary install pins match `scripts/install.sh`
+
+- **Surfaced:** 2026-05-27, manual-prose-execution-gate cycle Piece 2 (defense-in-depth complement to the closed parent FOLLOWUP `manual-yml-and-install-sh-sibling-gui-pin-staleness`).
+- **Where:** `.github/workflows/manual.yml:72-88` (cargo-install steps for `mk-cli@<tag>`, `md-cli@<tag>`, `ms-cli@<tag>`) ↔ `scripts/install.sh:35,38,41` (canonical sibling pins).
+- **What:** The parent FOLLOWUP fixed the symptom (sibling pins were stale) v0.36.4; today they match. But no static gate enforces this — they can drift again. Mirror the pattern of `install-pin-check.yml` (which gates the toolkit self-pin against the tag): add a CI step that asserts `manual.yml`'s `mk-cli@`/`md-cli@`/`ms-cli@` tags equal `install.sh`'s corresponding pins. Per `feedback_fix_the_class_hunt_for_second_instance.md`: prefer a gate over hand-fixed instances.
+- **Why deferred:** out of scope for this cycle (which is prose-gate + transcripts + harness hardening). Trivial follow-on once tackled.
+- **Status:** `open`
+- **Tier:** `v0.37+-ci-hygiene`
+
 ### `path-raw-bracketed-vs-bare-convention-unification` — `ResolvedSlot.path_raw` is overloaded (bracketed `[fp/path]` from envelope path vs bare from `resolve_slots`); unify
 
 - **Surfaced:** 2026-05-27, v0.37.7 F5 fix R0 review (M1). Root cause of F5 (export-wallet --from-import-json corrupting Coldcard/Jade/Electrum derivations) is `mk1_card_to_resolved_slot` (`wallet_import/json_envelope.rs:282`) populating `ResolvedSlot.path_raw` as a bracketed `[fp/path]` origin-annotation, while `resolve_slots` (`cmd/bundle.rs:547,628`) populates it as a bare derivation path. F5 was fixed at the export-wallet from-import-json BOUNDARY (normalize to `format!("m/{}", s.path)`) to avoid rippling into `bundle --import-json`, but the underlying overload remains.
@@ -3199,12 +3230,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.36+`
 - **Tags:** none
 
-### `manual-prose-command-execution-gate` — execute documented recipes in the manual lint
+### `manual-prose-command-execution-gate` ✅ RESOLVED 2026-05-27 — execute documented recipes in the manual lint
 - **Surfaced:** 2026-05-24, v0.36.3 documentation audit (G5).
 - **Where:** `docs/manual/tests/lint.sh` (6 stages) + `docs/manual/src/45-foreign-formats.md` (round-trip recipes).
 - **What:** the manual lint validates flag NAMES (stage 4), spelling, links, glossary, index — but NEVER EXECUTES the documented commands. The v0.28.1 round-trip breakage (all 6 chapter-45 `export-wallet` recipes failed; `design/AUDIT_FINDINGS_manual_v0_28_0_content.md`) shipped silently for exactly this reason and was fixed reactively. Build a lint stage / integration test that extracts the documented round-trip recipes (or a curated subset) and RUNS them against the pinned binary, asserting success + (where feasible) expected output. `feedback_architect_must_run_prose_commands` records the manual discipline; this automates it. Also consider adding lychee `--include-fragments` to validate intra-doc `#anchor` links (the v0.36.3 cycle found `#mnemonic-xpub-search` would dangle with no lint backstop). Meatier; own cycle + R0.
 - **v0.36.4 finding (coupling):** test-running the 6 chapter-45 round-trips revealed **5 are impossible as written** (sparrow/coldcard/jade/electrum: `--from-import-json` carries a descriptor + `conflicts_with --template`, but these template-requiring file-formats reject a bare descriptor — "descriptor passthrough is not supported"). They are BLOCKED on the `export-wallet-from-import-json-template-format-reemit` CLI fix. The gate can initially cover the WORKING recipes (specter via `--wallet-name`; descriptor-passthrough re-emits to bitcoin-core/bip388/bsms) and expand once the CLI fix lands. (specter @:405 works; sparrow @:313 / coldcard @:481,:564 / jade @:639 / electrum @:752 broken.)
-- **Status:** `open`
+- **Resolution (2026-05-27):** the harness was already complete and CI-wired before this cycle (`verify-examples.sh` + Makefile `audit` + `manual.yml` "Audit manual" step). The cycle added the missing transcript coverage: **6 chapter-45 round-trip recipes** in `docs/manual/transcripts/foreign-formats/` (sparrow/specter/coldcard-SS/coldcard-MS/jade/electrum), all unblocked by v0.37.0's `export-wallet-from-import-json-template-format-reemit`. Plus harness hardening: `verify-examples.sh` `:=true` defaults → `:?` required so a misconfigured CI errors fast instead of vacuously passing (Piece 2). Plus chapter-45 prose addenda noting the two non-empty-diff recipes (sparrow `:321` + coldcard-MS `:573`). Full audit green: `[verify-examples] OK (20 transcripts pass)`. Piece 3 (lychee `--include-fragments`) deferred to FOLLOWUP `manual-anchor-dangler-backlog-cleanup` (pre-flight surfaced 174 build-output danglers — broader backlog). New side-FOLLOWUPs filed: `manual-yml-sibling-pin-vs-install-sh-drift-gate` (defense-in-depth) + `sparrow-from-import-json-wallet-name-preservation` (CLI-fix; sparrow recipe's non-empty diff). Specs + R0/R1 reviews at `design/SPEC_manual_prose_execution_gate.md` + `design/agent-reports/manual-prose-gate-R{0,1}-review.md` (R0 RED 1C/4I/3M → R1 GREEN).
+- **Status:** `resolved` (2026-05-27)
 - **Tier:** `v0.36+`
 - **Tags:** none
 

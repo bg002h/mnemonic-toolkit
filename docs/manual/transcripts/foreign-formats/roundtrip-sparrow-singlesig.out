@@ -1,0 +1,8 @@
+15c15
+<       "label": "bip84-0",
+---
+>       "label": "imported-descriptor",
+20c20
+<   "name": "bip84-0",
+---
+>   "name": "imported-descriptor",

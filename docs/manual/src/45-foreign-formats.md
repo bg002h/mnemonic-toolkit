@@ -319,6 +319,14 @@ diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
      <(jq -S . sparrow_re.json)
 ```
 
+> **Note on the diff.** As written above, the `diff` is **non-empty**:
+> the recipe omits `--wallet-name`, so export-wallet's default
+> (`imported-descriptor`) replaces the original `name` / `label`
+> fields. Semantic equivalence (xpub / derivation / policy) is the
+> contract; to round-trip the wallet name verbatim, pass
+> `--wallet-name "<original-name>"`. Tracked at FOLLOWUP
+> `sparrow-from-import-json-wallet-name-preservation`.
+
 ### Taproot import (shipped v0.31.1 + v0.31.2) {#taproot-import-shipped-v0311}
 
 Sparrow's emit side ships taproot wallets in two shapes:
@@ -571,6 +579,11 @@ mnemonic export-wallet --from-import-json envelope.json \
 diff coldcard-ms-2of3-p2wsh-with-xfp.txt coldcard_ms_re.txt
 ```
 
+> **Note on the diff.** The `diff` is **non-empty** by design:
+> Coldcard-multisig re-emit strips fixture comment lines and writes a
+> normalized header order. Semantic equivalence (xpubs / derivation /
+> threshold / policy) is preserved.
+>
 > **Format-name parity (v0.28.4+).** Both `--format coldcard` and
 > `--format coldcard-multisig` are accepted on the **export** side
 > (v0.28.4 closed the prior asymmetry). The two values produce

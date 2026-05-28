@@ -43,10 +43,18 @@ for arg in "$@"; do
 done
 
 : "${TRANSCRIPTS:?TRANSCRIPTS is required}"
-: "${MNEMONIC_BIN:=true}"
-: "${MD_BIN:=true}"
-: "${MS_BIN:=true}"
-: "${MK_BIN:=true}"
+# Manual-prose-execution-gate hardening (Piece 2 of FOLLOWUP
+# `manual-prose-command-execution-gate`): require explicit binary paths. The
+# pre-hardening defaults (`:= true`) made an unset env var silently resolve to
+# `/bin/true`, so any md/ms/mk-using transcript would vacuously pass in a
+# misconfigured CI or unparameterized direct invocation. The Makefile
+# (`docs/manual/Makefile:42-45`) defaults all four via `?=` to cargo-run
+# invocations, so `make audit` still works; direct script invocation now
+# fails fast with a clear message instead of silently passing.
+: "${MNEMONIC_BIN:?MNEMONIC_BIN is required (path to mnemonic binary)}"
+: "${MD_BIN:?MD_BIN is required (path to md binary)}"
+: "${MS_BIN:?MS_BIN is required (path to ms binary)}"
+: "${MK_BIN:?MK_BIN is required (path to mk binary)}"
 : "${FIXTURES_DIR:=}"
 
 if [ ! -d "$TRANSCRIPTS" ]; then

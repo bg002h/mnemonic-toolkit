@@ -1,0 +1,19 @@
+1,7c1
+< # Coldcard Multisig setup file — firmware variant with leading XFP: header.
+< # Toolkit-emit-shape: shared Derivation header + per-cosigner <XFP>: <xpub> lines.
+< # 2-of-3 mainnet P2WSH. The XFP header + each per-cosigner <XFP>: prefix uses
+< # `xpub.fingerprint()` (per SPEC §11.4.1 computed-formula) so the parse path is
+< # the silent-match row of the 5-row truth table.
+< # xpubs reused from bsms-2line-sortedmulti-2of3.txt.
+< Name: TestMs2of3
+---
+> Name: imported-descriptor
+11,13d4
+< XFP: 34A3A4F1
+< 
+< 34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+15c6,7
+< B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx
+---
+> B7F7DFEA: xpub6Do6nvsnp3yr1aTMEM98hpcJP8QuZi9qq82HefnkGChp7CsE2Jsh8u69jG79jnu7cuLmYNV2zimbx1wFy4wfXfq8eAaFv7JyUz3oexjBTDJ
+> 34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
