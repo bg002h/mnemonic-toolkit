@@ -76,6 +76,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `resolved` mnemonic-toolkit-v0.37.6
 - **Tier:** `v1+`
 
+### `path-raw-bracketed-vs-bare-convention-unification` — `ResolvedSlot.path_raw` is overloaded (bracketed `[fp/path]` from envelope path vs bare from `resolve_slots`); unify
+
+- **Surfaced:** 2026-05-27, v0.37.7 F5 fix R0 review (M1). Root cause of F5 (export-wallet --from-import-json corrupting Coldcard/Jade/Electrum derivations) is `mk1_card_to_resolved_slot` (`wallet_import/json_envelope.rs:282`) populating `ResolvedSlot.path_raw` as a bracketed `[fp/path]` origin-annotation, while `resolve_slots` (`cmd/bundle.rs:547,628`) populates it as a bare derivation path. F5 was fixed at the export-wallet from-import-json BOUNDARY (normalize to `format!("m/{}", s.path)`) to avoid rippling into `bundle --import-json`, but the underlying overload remains.
+- **Latent cosmetic bug uncovered by R0:** `bundle --import-json --json` emits a polluted `bundle.multisig.cosigners[].origin_path` field (`bundle.rs:767,1000-1004`) of shape `"m/[fp/path]"` (bracket inside the path string). Not asserted by any test; not blocking.
+- **What:** Unify the convention: either (a) source-fix `mk1_card_to_resolved_slot` to produce bare `m/path` and update bracket-consumers (`import_wallet.rs::origin_path_from_bracket` callers, `coldcard_multisig.rs:658`) accordingly, OR (b) introduce a typed wrapper that makes the convention explicit. Approach (a) is simpler and additionally fixes the bundle cosmetic pollution.
+- **Why deferred:** F5 boundary fix is correct + verified ripple-free; source-fix is broader scope. Track for a future cleanup cycle.
+- **Status:** `open`
+- **Tier:** `v0.37+-refactor`
+
 ### `pr-26-roundtrip-warning-suppression` — surface canonicalize / UTF-8 errors instead of swallowing them in `emit_roundtrip_stderr_warning` + JSON envelope
 
 - **Surfaced:** 2026-05-19, post-merge comprehensive review of PR #26 (see `design/agent-reports/pr-26-post-merge-comprehensive-review.md` — C1 + I7). The SPEC §7.4 stderr warning is the only non-JSON-mode feedback that a Bitcoin Core blob isn't round-tripping byte-exactly; if `canonicalize_bitcoin_core` errors (parser / canonicalizer disagreement, non-UTF-8 input, internal serde mismatch) the function returns `Ok(())` with no diagnostic. JSON mode drops the error reason via `.ok()` → envelope shows surface `"canonicalize_failed"` only.
