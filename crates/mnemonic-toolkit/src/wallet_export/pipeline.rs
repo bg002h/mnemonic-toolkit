@@ -31,16 +31,22 @@ pub(crate) fn build_descriptor_string(
 }
 
 pub(super) fn key_origin_str(slot: &ResolvedSlot, fallback_path: &str) -> String {
-    let fp = slot.fingerprint.to_string().to_lowercase();
-    // path_raw may include leading "m/" or not; miniscript wants no "m/" prefix
-    // inside `[fp/...]`. Strip it.
-    let raw = if slot.path_raw.is_empty() {
-        fallback_path.trim_start_matches("m/").trim_start_matches('m').to_string()
+    // For a slot with an origin path, the bracketed annotation is rebuilt from
+    // the typed fingerprint+path (`bracketed_origin()`). For the pathless
+    // (degenerate / WIF) slot, `bracketed_origin()` would be just `[fp]`, which
+    // drops the BIP-32 origin — so we keep the path-bearing `fallback_path`
+    // branch (the template-derived default). miniscript wants no `m/` prefix
+    // inside `[fp/...]`. See SPEC_path_raw_bracketed_bare_unification.md §5 C4.
+    if slot.origin_path_bare().is_empty() {
+        let fp = slot.fingerprint.to_string().to_lowercase();
+        let raw = fallback_path
+            .trim_start_matches("m/")
+            .trim_start_matches('m')
+            .trim_start_matches('/');
+        format!("[{fp}/{raw}]")
     } else {
-        slot.path_raw.trim_start_matches("m/").trim_start_matches('m').to_string()
-    };
-    let raw = raw.trim_start_matches('/');
-    format!("[{fp}/{raw}]")
+        slot.bracketed_origin()
+    }
 }
 
 pub(super) fn template_origin_path_no_m(
@@ -217,4 +223,48 @@ fn strip_multipath_suffix(full: &str) -> Result<String, ToolkitError> {
             ))
         })
         .map(str::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+    use std::str::FromStr;
+
+    const SAMPLE_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
+
+    fn slot_with_path(path: DerivationPath) -> ResolvedSlot {
+        ResolvedSlot {
+            xpub: Xpub::from_str(SAMPLE_XPUB).unwrap(),
+            fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
+            path,
+            path_raw: String::new(),
+            entropy: None,
+            master_xpub: None,
+            _entropy_pin: None,
+        }
+    }
+
+    // T5(e) (SPEC_path_raw_bracketed_bare_unification.md §8, R0 C-2) —
+    // `key_origin_str` must keep the path-bearing fallback for a pathless
+    // (default-path) slot rather than dropping to a bare `[fp]` that would
+    // corrupt the exported descriptor key.
+    #[test]
+    fn key_origin_str_pathless_slot_uses_path_bearing_fallback() {
+        let pathless = slot_with_path(DerivationPath::default());
+        assert_eq!(
+            key_origin_str(&pathless, "84'/0'/0'"),
+            "[deadbeef/84'/0'/0']",
+            "pathless slot must use the path-bearing fallback, not bare [fp]"
+        );
+        // also accepts an `m/`-prefixed fallback
+        assert_eq!(key_origin_str(&pathless, "m/84'/0'/0'"), "[deadbeef/84'/0'/0']");
+    }
+
+    // A path-bearing slot renders from its typed path (ignores the fallback).
+    #[test]
+    fn key_origin_str_path_bearing_slot_uses_bracketed_origin() {
+        let slot = slot_with_path(DerivationPath::from_str("48'/0'/0'/2'").unwrap());
+        assert_eq!(key_origin_str(&slot, "84'/0'/0'"), "[deadbeef/48'/0'/0'/2']");
+    }
 }

@@ -318,7 +318,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     let derivations: Vec<String> = inputs
         .resolved_slots
         .iter()
-        .map(|s| normalize_path(&s.path_raw))
+        .map(|s| normalize_path(&s.origin_path_bare()))
         .collect();
     let derivation = if !derivations.is_empty()
         && derivations.windows(2).all(|w| w[0] == w[1])

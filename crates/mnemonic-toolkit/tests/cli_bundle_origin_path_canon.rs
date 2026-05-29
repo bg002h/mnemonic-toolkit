@@ -70,3 +70,39 @@ fn bundle_descriptor_mode_noncanonical_path_renders_canonical() {
         v["origin_path"]
     );
 }
+
+// T10 (Amendment A4) — `export-wallet` with a non-canonical `--slot @N.path=`
+// renders the origin CANONICAL (`84h` → `84'`) in the emitted wallet file,
+// since emitters now derive the origin from the typed DerivationPath rather
+// than the raw user string. Exercised via the electrum `derivation` field
+// (the consumer that previously echoed `path_raw` verbatim).
+#[test]
+fn export_wallet_noncanonical_path_renders_canonical() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "electrum",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={SAMPLE_XPUB}"),
+            "--slot",
+            "@0.fingerprint=deadbeef",
+            "--slot",
+            "@0.path=84h/0h/0h",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).expect("electrum JSON");
+    assert_eq!(
+        v["keystore"]["derivation"].as_str(),
+        Some("m/84'/0'/0'"),
+        "non-canonical @N.path=84h must canonicalize in export output (A4); got {:?}",
+        v["keystore"]["derivation"]
+    );
+}

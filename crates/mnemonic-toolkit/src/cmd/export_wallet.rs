@@ -628,24 +628,11 @@ fn run_from_import_json<W: Write, E: Write>(
     // Decode mk1 → ResolvedSlots per §3.6.1. v0.27.1 Phase 2 I5 fold:
     // stderr carries the origin_fingerprint substitution NOTICE if any
     // mk1 card omits the master fingerprint.
-    let mut resolved_slots = envelope_to_resolved_slots(&envelope, stderr)?;
-    // F5 fix: `mk1_card_to_resolved_slot` populates `path_raw` as a bracketed
-    // `[fp/path]` origin-annotation (overloaded convention), but the export
-    // emitters (coldcard-multisig, electrum, sparrow, pipeline) consume
-    // `ResolvedSlot.path_raw` expecting the BARE `m/...` derivation path (the
-    // `resolve_slots` convention from `cmd/bundle.rs:547`). The bracket made
-    // coldcard/jade emit the `m/0'/0'` placeholder and electrum emit an invalid
-    // `derivation` field. Normalize `path_raw` to a bare `m/...` path HERE, at
-    // the export-from-import-json boundary, so all emitters get a consistent
-    // shape (matches the user-`@N.path=m/...`-supplied direct path). Scoped to
-    // this fn — `bundle --import-json` calls `envelope_to_resolved_slots`
-    // separately (`bundle.rs:1534`) and its `path_raw` consumers are cosmetic
-    // envelope-JSON fields (not card emission), so it's untouched by this fix;
-    // unifying the underlying convention is FOLLOWUP
-    // `path-raw-bracketed-vs-bare-convention-unification`.
-    for s in &mut resolved_slots {
-        s.path_raw = format!("m/{}", s.path);
-    }
+    let resolved_slots = envelope_to_resolved_slots(&envelope, stderr)?;
+    // (v0.37.9 — the F5 `path_raw` boundary band-aid is gone: emitters now
+    // render origins via `ResolvedSlot::origin_path_bare()` / `bracketed_origin()`
+    // derived from the typed `fingerprint`+`path`, so no `path_raw` normalization
+    // is needed. FOLLOWUP `path-raw-bracketed-vs-bare-convention-unification`.)
 
     // Derive network from envelope.
     let network = cli_network_from_str(&envelope.bundle.network)?;

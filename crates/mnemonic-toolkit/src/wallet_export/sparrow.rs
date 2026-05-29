@@ -127,7 +127,7 @@ pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, To
             wallet_model: "SPARROW",
             key_derivation: SparrowKeyDerivation {
                 master_fingerprint: s.fingerprint.to_string().to_lowercase(),
-                derivation: normalize_derivation(&s.path_raw, template, inputs),
+                derivation: normalize_derivation(&s.origin_path_bare(), template, inputs),
             },
             extended_public_key: s.xpub.to_string(),
         })

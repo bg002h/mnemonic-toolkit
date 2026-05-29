@@ -160,13 +160,16 @@ fn emit_electrum_multisig_json(inputs: &EmitInputs) -> Result<String, ToolkitErr
     for (i, slot) in inputs.resolved_slots.iter().enumerate() {
         let key = format!("x{}/", i + 1);
         let xpub_str = render_slip132_xpub(inputs.script_type, &slot.xpub, inputs.network)?;
-        let derivation = if !slot.path_raw.is_empty() {
-            slot.path_raw.clone()
-        } else {
-            inputs
-                .template
-                .expect("checked")
-                .origin_path_str(inputs.network, inputs.account)
+        let derivation = {
+            let bare = slot.origin_path_bare();
+            if !bare.is_empty() {
+                bare
+            } else {
+                inputs
+                    .template
+                    .expect("checked")
+                    .origin_path_str(inputs.network, inputs.account)
+            }
         };
         let mut keystore = Map::new();
         keystore.insert("type".into(), Value::String("bip32".into()));
