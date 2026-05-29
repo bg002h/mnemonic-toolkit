@@ -4,11 +4,13 @@
 #
 # Targets:
 #   make md            — concatenated markdown to build/m-format-manual.md
+#   make html          — concatenated HTML to build/m-format-manual.html (lychee fragment-gate target — preserves {#id} anchors as id="…")
 #   make pdf           — typeset PDF to build/m-format-manual.pdf (needs pandoc + xelatex; consumes figures/cache/)
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
-#   make audit         — `lint` + `verify-examples` umbrella (CI runs this)
+#   make anchor-check  — lychee --include-fragments on build/m-format-manual.html; baseline-snapshot enforcement
+#   make audit         — `lint` + `verify-examples` + `anchor-check` umbrella (CI runs this)
 #   make lint          — markdownlint + cspell + lychee + flag-coverage + glossary-coverage + index bidirectional
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
@@ -124,6 +126,29 @@ $(BUILD_DIR)/m-format-manual.md: $(MD_SRC) $(FILTERS_DIR)/strip-latex-from-md.lu
 		$(MD_SRC)
 
 # ---------------------------------------------------------------------------
+# HTML render path: --to html (preserves {#id} anchors as id="…", required
+# by the anchor-check lychee fragment-gate which can't read them out of GFM
+# output — pandoc-GFM emits `## Heading {#id}` as `## Heading` only).
+# Uses MD_FILTER_ARGS (strip-latex + primer-box) to match the GFM intent;
+# explicitly NOT PDF_FILTER_ARGS (which carries wrap-long-code, not needed
+# for the HTML consumed only by lychee).
+# ---------------------------------------------------------------------------
+.PHONY: html
+html: $(BUILD_DIR)/m-format-manual.html
+
+$(BUILD_DIR)/m-format-manual.html: $(MD_SRC) $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+	$(PANDOC) \
+		--from markdown \
+		--to html \
+		--standalone \
+		--toc \
+		--toc-depth=3 \
+		$(MD_FILTER_ARGS) \
+		$(PANDOC_METADATA) \
+		--output $@ \
+		$(MD_SRC)
+
+# ---------------------------------------------------------------------------
 # PDF render path: pandoc --to latex → xelatex → makeindex → xelatex → xelatex
 # ---------------------------------------------------------------------------
 .PHONY: pdf
@@ -219,11 +244,26 @@ verify-examples:
 		FIXTURES_DIR="$(FIXTURES_DIR)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
 
+# ---------------------------------------------------------------------------
+# Anchor-dangler gate (intra-doc #fragment check against html build output).
+# Lychee can't see {#id} anchors out of pandoc-GFM (which discards them);
+# the HTML target preserves them as id="…". The baseline-snapshot
+# mechanism allows the gate to fire on NEW danglers while accommodating
+# the existing ~residual until each is ratcheted down per heading-fix /
+# link-update PR. See design/SPEC_manual_anchor_dangler_cleanup.md.
+# ---------------------------------------------------------------------------
+.PHONY: anchor-check
+anchor-check: $(BUILD_DIR)/m-format-manual.html
+	@bash $(TESTS_DIR)/anchor-check.sh \
+		BUILD_HTML="$(BUILD_DIR)/m-format-manual.html" \
+		BASELINE="$(TESTS_DIR)/anchor-dangler-baseline.txt"
+
 # `make audit` umbrella target: lint (static gates) + verify-examples
-# (transcript replay against real binaries). CI runs `make audit`; local
-# fast iteration uses `make lint` alone.
+# (transcript replay against real binaries) + anchor-check (intra-doc
+# fragment gate against html). CI runs `make audit`; local fast iteration
+# uses `make lint` alone.
 .PHONY: audit
-audit: lint verify-examples
+audit: lint verify-examples anchor-check
 
 # ---------------------------------------------------------------------------
 # Lint

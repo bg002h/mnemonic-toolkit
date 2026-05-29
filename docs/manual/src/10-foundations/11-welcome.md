@@ -91,7 +91,7 @@ Most readers want one of three things:
    recovery, migration, wallet export, and BIP-85 children.
 3. **"I want to know how this compares to SLIP-39 / Shamir / naked
    BIP-39."** Read [Part V — Comparing & contrasting]
-   (#m-format constellation-vs-slip-39-vs-naked-bip-39-vs-shamir).
+   (#m-format-vs-slip-39-vs-naked-bip-39-vs-shamir).
 
 The CLI reference (Part IV) and the appendices (Part VI) are
 consulted, not read top-to-bottom.

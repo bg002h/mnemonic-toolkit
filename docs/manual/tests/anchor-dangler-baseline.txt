@@ -1,0 +1,7 @@
+auto-fire-behavior-all-three-subcommands-v0250
+auto-fire-on-decode-failure-v0221
+exporting-to-bitcoin-core-bip-388-sparrow-specter
+manual-coverage
+mnemonic-bundle
+mnemonic-export-wallet
+mnemonic-import-wallet

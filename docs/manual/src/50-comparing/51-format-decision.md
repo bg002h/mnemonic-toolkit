@@ -56,7 +56,7 @@ Some workflows are simpler with the standalone CLIs:
 The next chapters compare narrower pairs:
 [`mnemonic` vs `ms`](#mnemonic-toolkit-vs-ms-cli),
 [`mnemonic` vs `md`](#mnemonic-toolkit-vs-md-cli),
-[m-format constellation vs other backup standards](#m-format constellation-vs-slip-39-vs-naked-bip-39-vs-shamir),
+[m-format constellation vs other backup standards](#m-format-vs-slip-39-vs-naked-bip-39-vs-shamir),
 [single-sig vs multisig](#single-sig-vs-multisig-decision-tree),
 [BIP-39 vs BIP-38 passphrases](#bip-39-vs-bip-38-passphrases),
 [Bitcoin Core importdescriptors vs BIP-388](#bitcoin-core-importdescriptors-vs-bip-388-wallet-policy).
