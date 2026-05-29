@@ -231,23 +231,24 @@ fn multi_arg(kind: &str, inputs: &EmitInputs, n: usize) -> Result<String, Toolki
     Ok(format!("{kind}({k},{})", placeholders.join(",")))
 }
 
-/// Derivation field: normalize per-slot `path_raw` (multisig) or the
-/// template's singlesig origin path. Sparrow expects `m/...` form
-/// without trailing slash and without descriptor wildcards.
+/// Derivation field: normalize the per-slot bare origin path (multisig; from
+/// `ResolvedSlot::origin_path_bare()`) or the template's singlesig origin path.
+/// Sparrow expects `m/...` form without trailing slash and without descriptor
+/// wildcards.
 fn normalize_derivation(
-    path_raw: &str,
+    bare_path: &str,
     template: crate::template::CliTemplate,
     inputs: &EmitInputs,
 ) -> String {
     if template.is_multisig() {
-        if path_raw.starts_with('m') {
+        if bare_path.starts_with('m') {
             // Covers both `m/...` and bare `m`.
-            path_raw.to_string()
-        } else if path_raw.is_empty() {
+            bare_path.to_string()
+        } else if bare_path.is_empty() {
             // Fall back to the multisig family default (BIP-48 wsh or BIP-87).
             template.origin_path_str(inputs.network, inputs.account)
         } else {
-            format!("m/{path_raw}")
+            format!("m/{bare_path}")
         }
     } else {
         // Singlesig: always use the template-derived origin path.

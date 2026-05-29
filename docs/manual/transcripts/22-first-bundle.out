@@ -27,7 +27,7 @@ md1fg-dxlpq-3xa2d-k8vwp-j7gx7-4hwqx-qdp08-3jehp-5tdrf-a0n5z-dfkqc-dlrvn-h5r62-jn
 # ms1: 1c017
 # mk1: 1c017
 # fingerprint: 73c5da0a
-# origin path: 84'/0'/0'
+# origin path: m/84'/0'/0'
 # Template: bip84
 # md1: 1c01
 warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')

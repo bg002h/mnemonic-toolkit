@@ -303,8 +303,9 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
 
     // Derivation line: shared origin path if all cosigners agree;
     // otherwise the `m/0'/0'` placeholder per Coldcard convention. The
-    // toolkit's per-slot `path_raw` carries the user-supplied origin or
-    // template-derived default; both forms are normalized to `m/...` here.
+    // per-slot bare origin (v0.37.9 — `ResolvedSlot::origin_path_bare()`)
+    // carries the user-supplied origin or template-derived default; both
+    // forms are normalized to `m/...` here.
     let normalize_path = |p: &str| -> String {
         if p.starts_with('m') {
             // Covers both `m/...` and bare `m` (Coldcard accepts both).

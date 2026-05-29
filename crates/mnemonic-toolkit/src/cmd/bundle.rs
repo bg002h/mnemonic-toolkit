@@ -731,13 +731,14 @@ fn emit_unified<W: Write, E: Write>(
     }
 
     // v0.5 Phase E: absent paths emit null in JSON (was Some("m") via the
-    // normalize_origin_path "" → "m" branch). path_raw.is_empty() is the
-    // SPEC §4.11.b absent-path sentinel; null is the JSON wire-format absent.
-    fn origin_path_for_json(path_raw: &str) -> Option<String> {
-        if path_raw.is_empty() {
+    // normalize_origin_path "" → "m" branch). The empty-string sentinel
+    // (v0.37.9 — from `ResolvedSlot::origin_path_bare()` for a default path) is
+    // the SPEC §4.11.b absent-path marker; null is the JSON wire-format absent.
+    fn origin_path_for_json(bare_path: &str) -> Option<String> {
+        if bare_path.is_empty() {
             None
         } else {
-            Some(normalize_origin_path(path_raw))
+            Some(normalize_origin_path(bare_path))
         }
     }
 
