@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.9] — 2026-05-29
+
+**SemVer-PATCH — internal refactor: delete the overloaded `ResolvedSlot.path_raw` field; derive the origin annotation on demand from the typed `fingerprint` + `path` via two new methods (`origin_path_bare()` / `bracketed_origin()`). Resolves FOLLOWUP `path-raw-bracketed-vs-bare-convention-unification`.**
+
+- **Fixes the live cosmetic bug**: `bundle --import-json --json` no longer emits `multisig.cosigners[].origin_path` of shape `"m/[fp/path]"` (bracketed origin with a spurious `m/` prefix and a fingerprint already carried in the sibling `master_fingerprint` field). Cosigner `origin_path` is now bare `m/...`. The engraving-card per-slot origin line is likewise bare (`fp @ m/...`) instead of the bracketed, fingerprint-duplicated form.
+- **Dissolves the v0.37.7 F5 band-aid** structurally: emitters (electrum / coldcard / sparrow / the descriptor key + bip388 keys_info) now derive origins from the typed path rather than reading an overloaded string, so the `export_wallet.rs` `path_raw` boundary normalization is gone.
+- **Behavior-value changes (no key/flag/wire-key change; `--json` keys unchanged):**
+  - `bundle --json` and `export-wallet` now render a CANONICAL origin path (`48h` → `48'`, `m/`-normalized) when a user supplies a non-canonical `--slot @N.path=` — the origin is derived from the typed `DerivationPath` (which folds `h`→`'`).
+  - The `ResolvedSlot`-vector BIP-388 distinctness check now compares the typed `path` (converging with the descriptor-mode `check_key_vector_distinctness`); same-xpub cosigners whose paths differ only in `h`-vs-`'` notation now collide (exit 2), per the v0.5 §4.11.b typed-equality reversal.
+  - The `ImportWalletSeedMismatch` error's `at path …` clause now prints the bare `m/...` origin instead of the bracketed `[fp/…]` form.
+- Toolkit-internal (`ResolvedSlot` is binary-private); no clap surface change → no GUI schema-mirror or manual flag-coverage lockstep. GUI `--json` consumers self-update via the paired-PR rule. Two manual transcripts re-captured for the bare-origin rendering. Full suite 2482/0; reviews persisted to `design/agent-reports/path-raw-unification-*`.
+
 ## mnemonic-toolkit [0.37.8] — 2026-05-28
 
 **SemVer-PATCH — universal source-name lift: `export-wallet --from-import-json` preserves the wallet name through every name-carrying format (sparrow / specter / jade / electrum / bitcoin-core / coldcard-multisig) instead of defaulting to the `imported-descriptor` placeholder. Resolves FOLLOWUP `sparrow-from-import-json-wallet-name-preservation` (broadened from sparrow-only to all 6 name-carrying formats per "fix the class, not the instance"). Toolkit-only; no GUI lockstep — no clap surface change.**
