@@ -3331,3 +3331,12 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `v0.37+`
 - **Tags:** none
+
+### `mk1-depth-child-compensating-check-watch` — toolkit depth-check compensates for mk1's unenforced depth/child reconstruction
+
+- **Surfaced:** 2026-05-29, mk-codec test-hardening cycle.
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:494-503` (the SPEC §4.5 path-depth==xpub-depth check) compensates for `mk-codec`'s unvalidated depth/child reconstruction.
+- **What:** If `mk-codec` resolves its `mk1-depth-child-lossless-by-construction-unenforced` FOLLOWUP via option (a) (encode-time `XpubDepthMismatch`), this toolkit-side compensating check may become redundant and reviewable for removal. Until then it is load-bearing — do not drop it.
+- **Status:** `open`
+- **Tier:** `monitoring`
+- **Companion:** `mnemonic-key` (mk-codec) FOLLOWUP `mk1-depth-child-lossless-by-construction-unenforced`.
