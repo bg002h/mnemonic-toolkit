@@ -673,3 +673,60 @@ fn bundle_import_json_stderr_threshold_coldcard_multisig_3of5() {
     let stderr = import_then_bundle_stderr("coldcard-multisig", &p);
     assert_threshold_stderr(&stderr, 3, 5);
 }
+
+// ============================================================================
+// T1/T2 (SPEC_path_raw_bracketed_bare_unification.md §8) — `bundle --import-json`
+// must emit BARE origin paths, not the bracketed `m/[fp/path]` pollution.
+// Regression guards for the §1.1 cosmetic bug (path_raw deletion cycle).
+// ============================================================================
+
+// T1 — multisig cosigner JSON `origin_path` is bare `m/48'/0'/0'/2'`, not
+// the bracketed `m/[fp/48'/0'/0'/2']` that the overloaded path_raw produced.
+#[test]
+fn bundle_import_json_cosigner_origin_path_is_bare_not_bracketed() {
+    let p = fixture_path("envelope_v0_27_0.json");
+    let val = run_bundle_import_json_file(&p);
+    let cosigners = val["multisig"]["cosigners"]
+        .as_array()
+        .expect("multisig.cosigners array");
+    assert_eq!(cosigners.len(), 3, "2-of-3 fixture has 3 cosigners");
+    for c in cosigners {
+        let op = c["origin_path"].as_str().expect("origin_path string");
+        assert_eq!(
+            op, "m/48'/0'/0'/2'",
+            "cosigner origin_path must be bare m/path (was the bracketed m/[fp/path]); got {op}"
+        );
+        assert!(
+            !op.contains('['),
+            "origin_path must not carry a bracket; got {op}"
+        );
+    }
+}
+
+// T2 — the engraving-card text (no --json) shows the bare origin, not the
+// fingerprint-duplicated bracket `(fp @ [fp/path])`.
+#[test]
+fn bundle_import_json_engraving_card_origin_is_bare() {
+    let p = fixture_path("envelope_v0_27_0.json");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            p.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    // The per-slot engraving-card summary (`@N: … (fp @ origin)`) is on stderr.
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("b8688df1 @ m/48'/0'/0'/2'"),
+        "engraving card must show bare `fp @ m/path`; got stderr:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("@ [b8688df1"),
+        "engraving card must NOT show the bracketed fingerprint-duplicated origin; got stderr:\n{stderr}"
+    );
+}

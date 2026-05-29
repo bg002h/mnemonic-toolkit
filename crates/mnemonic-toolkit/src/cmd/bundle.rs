@@ -752,7 +752,7 @@ fn emit_unified<W: Write, E: Write>(
     if args.json {
         let template = args.template.map(|t| t.human_name());
         let (multisig_info, origin_path, origin_paths) = if n == 1 {
-            (None, origin_path_for_json(&resolved[0].path_raw), None)
+            (None, origin_path_for_json(&resolved[0].origin_path_bare()), None)
         } else {
             let cosigners: Vec<CosignerEntry> = resolved
                 .iter()
@@ -764,7 +764,7 @@ fn emit_unified<W: Write, E: Write>(
                     } else {
                         Some(s.fingerprint.to_string().to_lowercase())
                     },
-                    origin_path: normalize_origin_path(&s.path_raw),
+                    origin_path: s.origin_path_bare(),
                     xpub: s.xpub.to_string(),
                 })
                 .collect();
@@ -997,10 +997,9 @@ fn build_unified_card(
                 } else {
                     Some(s.fingerprint.to_string().to_lowercase())
                 },
-                origin_path: if s.path_raw.is_empty() {
-                    None
-                } else {
-                    Some(s.path_raw.clone())
+                origin_path: match s.origin_path_bare() {
+                    p if p.is_empty() => None,
+                    p => Some(p),
                 },
             }
         })

@@ -624,6 +624,41 @@ impl ResolvedSlot {
     pub fn is_secret_bearing(&self) -> bool {
         self.entropy.is_some()
     }
+
+    /// Bare BIP-32 derivation path in `m/...` form, or `""` for the
+    /// pathless/degenerate slot (`path == DerivationPath::default()`, e.g. the
+    /// `--slot @N.wif=` slot at `cmd/bundle.rs:674`).
+    ///
+    /// This is the single rendering chokepoint for the bare origin-path form
+    /// that emit consumers need (the former bare-convention reads of the
+    /// deleted `path_raw` field). The `""` return reproduces the old
+    /// `path_raw.is_empty()` sentinel that the JSON/wallet-file consumers
+    /// branch on (`DerivationPath::default().to_string()` is `""` in
+    /// `bitcoin` 0.32, so a default path maps to the absent-path sentinel).
+    /// See `design/SPEC_path_raw_bracketed_bare_unification.md` §3.
+    pub fn origin_path_bare(&self) -> String {
+        if self.path == DerivationPath::default() {
+            String::new()
+        } else {
+            format!("m/{}", self.path)
+        }
+    }
+
+    /// BIP-380 bracketed origin annotation `[fp/comps]` (lowercase fingerprint,
+    /// no `m/` inside), or `[fp]` for the pathless/degenerate slot. Rebuilt from
+    /// the typed `fingerprint` + `path`; reproduces every former bracketed
+    /// `path_raw` producer byte-for-byte for path-sensitive consumers
+    /// (`DerivationPath` Display writes `/`-joined hardened-`'` components with
+    /// no leading `m`/`/`). For descriptor-key construction.
+    /// See `design/SPEC_path_raw_bracketed_bare_unification.md` §3.
+    pub fn bracketed_origin(&self) -> String {
+        let fp = self.fingerprint.to_string().to_lowercase();
+        if self.path == DerivationPath::default() {
+            format!("[{fp}]")
+        } else {
+            format!("[{fp}/{}]", self.path)
+        }
+    }
 }
 
 /// v0.4.1 Phase H.3+H.4 — synthesize a multi-source or hybrid multisig bundle.
@@ -808,6 +843,43 @@ mod tests {
         let bytes = xpub_to_65(&xpub);
         assert_eq!(&bytes[0..32], xpub.chain_code.to_bytes().as_slice());
         assert_eq!(&bytes[32..65], xpub.public_key.serialize().as_slice());
+    }
+
+    // T5 (SPEC_path_raw_bracketed_bare_unification.md §8) — `origin_path_bare()`
+    // / `bracketed_origin()` render correctness + the pillar-3 default-path
+    // sentinel invariant.
+    #[test]
+    fn origin_render_methods_bare_and_bracketed() {
+        let (_, _, xpub) = fixture_full(CliTemplate::Bip84, CliNetwork::Mainnet);
+        let fp = Fingerprint::from_str("deadbeef").unwrap();
+        let mk_slot = |path: DerivationPath| ResolvedSlot {
+            xpub,
+            fingerprint: fp,
+            path,
+            path_raw: String::new(), // deleted in Phase 3; irrelevant to methods under test
+            entropy: None,
+            master_xpub: None,
+            _entropy_pin: None,
+        };
+        // (a) normal slot — bare `m/...`, bracketed `[fp/...]`
+        let s = mk_slot(DerivationPath::from_str("48'/0'/0'/2'").unwrap());
+        assert_eq!(s.origin_path_bare(), "m/48'/0'/0'/2'");
+        assert_eq!(s.bracketed_origin(), "[deadbeef/48'/0'/0'/2']");
+        // (b) default-path slot — empty sentinel + bare `[fp]`
+        let d = mk_slot(DerivationPath::default());
+        assert_eq!(d.origin_path_bare(), "");
+        assert_eq!(d.bracketed_origin(), "[deadbeef]");
+        // (c) no double-bracket, single fingerprint
+        assert_eq!(s.bracketed_origin().matches('[').count(), 1);
+        assert_eq!(s.bracketed_origin().matches("deadbeef").count(), 1);
+        // (d) pillar-3 invariant: DerivationPath::default() renders to ""
+        assert_eq!(DerivationPath::default().to_string(), "");
+        // bonus: fingerprint casing is normalized to lowercase (M-1)
+        let up = ResolvedSlot {
+            fingerprint: Fingerprint::from_str("ABCD1234").unwrap(),
+            ..mk_slot(DerivationPath::from_str("84'/0'/0'").unwrap())
+        };
+        assert_eq!(up.bracketed_origin(), "[abcd1234/84'/0'/0']");
     }
 
     #[test]
