@@ -331,13 +331,12 @@ impl WalletFormatParser for ColdcardParser {
         })?;
 
         // Step 8: single ResolvedSlot.
-        let (xpub, fp, path, path_raw) = build_slot_fields(&wrapped)?;
+        let (xpub, fp, path) = build_slot_fields(&wrapped)?;
         debug_assert_eq!(xpub_to_65(&xpub), parsed_keys[0].payload);
         let cosigners: Vec<ResolvedSlot> = vec![ResolvedSlot {
             xpub,
             fingerprint: fp,
             path,
-            path_raw,
             entropy: None,
             master_xpub: None,
             _entropy_pin: None,
@@ -493,13 +492,14 @@ fn infer_bip_from_xpub_prefix(
     }
 }
 
-/// Build the typed slot fields (xpub, fingerprint, path, path_raw) from the
-/// synthesized descriptor body. Mirrors `wallet_import/specter.rs:398`
-/// `build_slot_fields` — coldcard descriptors carry exactly one origin
-/// annotation (single-sig: exactly one slot).
+/// Build the typed slot fields (xpub, fingerprint, path) from the synthesized
+/// descriptor body. Mirrors `wallet_import/specter.rs` `build_slot_fields` —
+/// coldcard descriptors carry exactly one origin annotation (single-sig:
+/// exactly one slot). The bracketed origin is rebuilt on demand from
+/// fingerprint+path via `ResolvedSlot::bracketed_origin()`.
 fn build_slot_fields(
     descriptor_body: &str,
-) -> Result<(Xpub, Fingerprint, DerivationPath, String), ToolkitError> {
+) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
     use regex::Regex;
     use std::sync::OnceLock;
     static R: OnceLock<Regex> = OnceLock::new();
@@ -531,7 +531,6 @@ fn build_slot_fields(
             "import-wallet: coldcard: parse error: derivation-path parse: {e}"
         ))
     })?;
-    let path_raw = format!("[{fp_hex}{path_raw_inner}]");
 
     let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
     let xpub = Xpub::from_str(&neutral).map_err(|e| {
@@ -539,7 +538,7 @@ fn build_slot_fields(
             "import-wallet: coldcard: parse error: xpub decode: {e}"
         ))
     })?;
-    Ok((xpub, fp, path, path_raw))
+    Ok((xpub, fp, path))
 }
 
 /// Recompute the BIP-380 checksum for the descriptor body. Mirrors

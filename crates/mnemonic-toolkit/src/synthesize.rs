@@ -585,14 +585,17 @@ pub fn synthesize_multisig_watch_only(
 
 /// v0.4.1 Phase H.3 — per-slot post-binding shape for multi-source / hybrid
 /// multisig synthesis. Carries entropy iff the slot is secret-bearing.
-/// `path_raw` preserves the user-supplied raw path string for SPEC §4.11.b
-/// raw-equality.
+///
+/// The origin annotation is derived on demand from the typed `fingerprint` +
+/// `path` via `origin_path_bare()` / `bracketed_origin()` (v0.37.9 — the
+/// formerly-stored `path_raw: String` was a denormalized, overloaded cache;
+/// see `design/SPEC_path_raw_bracketed_bare_unification.md`). Distinctness
+/// (SPEC §4.11.b, v0.5 reversal) compares the typed `path`.
 #[derive(Debug, Clone)]
 pub struct ResolvedSlot {
     pub xpub: Xpub,
     pub fingerprint: Fingerprint,
     pub path: DerivationPath,
-    pub path_raw: String,
     /// Some(entropy_bytes) for secret-bearing slots; None for watch-only.
     ///
     /// v0.10.1: migrated from `Option<Vec<u8>>` to `Option<Zeroizing<Vec<u8>>>`
@@ -856,7 +859,6 @@ mod tests {
             xpub,
             fingerprint: fp,
             path,
-            path_raw: String::new(), // deleted in Phase 3; irrelevant to methods under test
             entropy: None,
             master_xpub: None,
             _entropy_pin: None,
@@ -1210,7 +1212,6 @@ mod tests {
                 xpub,
                 fingerprint: master_fp,
                 path: path.clone(),
-                path_raw: path.to_string(),
                 entropy: None,
                 master_xpub: None,
                 _entropy_pin: None,
@@ -1331,7 +1332,6 @@ mod tests {
                 xpub,
                 fingerprint: master_fp,
                 path: path.clone(),
-                path_raw: path.to_string(),
                 entropy: Some(zeroize::Zeroizing::new(entropy)),
                 master_xpub: None,
                 _entropy_pin: None,
@@ -1444,7 +1444,6 @@ mod tests {
                 xpub,
                 fingerprint: master_fp,
                 path: path.clone(),
-                path_raw: path_str,
                 entropy: entropy_field,
                 master_xpub: None,
                 _entropy_pin: entropy_pin,

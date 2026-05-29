@@ -238,7 +238,6 @@ mod tests {
             xpub: Xpub::from_str(SAMPLE_XPUB).unwrap(),
             fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
             path,
-            path_raw: String::new(),
             entropy: None,
             master_xpub: None,
             _entropy_pin: None,

@@ -22,7 +22,8 @@
 //! §2.4 stderr template.
 //!
 //! Per SPEC §8.3 line "derivation uses `.path` (typed `DerivationPath`)
-//! for the cryptographic operation; the error report uses `.path_raw`".
+//! for the cryptographic operation; the error report uses
+//! `.origin_path_bare()`" (v0.37.9 — formerly the deleted `.path_raw`).
 //!
 //! Re-uses `synthesize::derive_xpub_at_path` shape (an existing
 //! toolkit-side derivation helper) by inlining the master-xpriv +
@@ -176,7 +177,7 @@ pub(crate) fn apply_seed_overlay(
                     cosigner_index: i,
                     derived_xpub: derived_xpub.to_string(),
                     blob_xpub: bundle.cosigners[i].xpub.to_string(),
-                    path: bundle.cosigners[i].path_raw.clone(),
+                    path: bundle.cosigners[i].origin_path_bare(),
                 });
             }
 

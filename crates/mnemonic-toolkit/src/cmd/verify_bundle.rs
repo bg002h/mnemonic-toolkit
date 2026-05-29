@@ -740,11 +740,10 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 }
             };
 
-        let (xpub, fingerprint, path, path_raw, ent_opt): (
+        let (xpub, fingerprint, path, ent_opt): (
             BipXpub,
             bitcoin::bip32::Fingerprint,
             bitcoin::bip32::DerivationPath,
-            String,
             Option<Vec<u8>>,
         ) = if subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
             || subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
@@ -787,7 +786,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy).clone()))
+            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()))
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -803,19 +802,16 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
                 .and_then(|s| bitcoin::bip32::Fingerprint::from_str(&s.value).ok())
                 .unwrap_or_default();
-            let (path, path_raw) = match slot_inputs
+            let path = match slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Path)
             {
-                Some(p) => {
-                    let parsed = bitcoin::bip32::DerivationPath::from_str(&p.value).map_err(|e| {
-                        ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
-                    })?;
-                    (parsed, p.value.clone())
-                }
-                None => (anno_path.clone(), anno_path.to_string()),
+                Some(p) => bitcoin::bip32::DerivationPath::from_str(&p.value).map_err(|e| {
+                    ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+                })?,
+                None => anno_path.clone(),
             };
-            (xpub, fp, path, path_raw, None)
+            (xpub, fp, path, None)
         } else {
             return Err(ToolkitError::DescriptorReparseFailed {
                 detail: format!(
@@ -831,7 +827,6 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             xpub,
             fingerprint,
             path,
-            path_raw,
             entropy,
             master_xpub: None,
             _entropy_pin: entropy_pin,

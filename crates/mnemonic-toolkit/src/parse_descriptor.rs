@@ -1198,9 +1198,10 @@ fn check_anno_match(
 /// typed `DerivationPath` form folds `h`-notation into `'`-notation, so
 /// `48h/0h/0h/2h` and `48'/0'/0'/2'` compare EQUAL and produce a collision.
 ///
-/// Raw user input (`path_raw: String`) is preserved separately for round-trip
-/// fidelity but not consulted for collision detection. v0.4 raw-string equality
-/// is REVERSED — see SPEC v0.5 §4.11.b deliberate-reversal paragraph.
+/// Collision detection consults only the typed `path` (v0.4 raw-string
+/// equality is REVERSED — see SPEC v0.5 §4.11.b deliberate-reversal paragraph).
+/// v0.37.9 deleted the formerly-separate `path_raw: String` cache; the typed
+/// `DerivationPath` is the single source of truth.
 ///
 /// Symmetric across bundle creation (exit 2 via §6.6 row 13) and verify-bundle
 /// (caller re-wraps to `Bip388VerifyDistinctness` for exit 4 + §4.11.c text).
@@ -1237,12 +1238,6 @@ fn push_binding(
         i,
         fp: fp.to_bytes(),
     });
-    // SPEC §4.11.b raw-string equality fallback: when the binding source has
-    // no separately-tracked raw path string (the descriptor placeholder
-    // resolver canonicalizes `h`→`'` during parse), the path's typed
-    // canonical form is used. Phase B/D unified slot path supplies a
-    // genuine raw string from `--slot @N.path=<value>` instead.
-    let path_raw = path.to_string();
     // Per v0.4.3 Phase N: per-slot entropy lives on ResolvedSlot. Legacy
     // descriptor-mode binding sets entropy: None for all slots; @0's entropy
     // (when --phrase is supplied) is set separately in bind_full_mode after
@@ -1255,7 +1250,6 @@ fn push_binding(
         xpub: *xpub,
         fingerprint: fp,
         path,
-        path_raw,
         entropy: None,
         master_xpub: None,
         _entropy_pin: None,
@@ -1825,22 +1819,6 @@ mod tests {
             xpub: x,
             fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
             path,
-            // Default tests: path_raw == typed canonical form (legacy semantics).
-            path_raw: p.to_string(),
-            entropy: None,
-            master_xpub: None,
-            _entropy_pin: None,
-        }
-    }
-    /// Variant: explicitly set `path_raw` distinct from the typed path string
-    /// (for testing v0.4.1 raw-string distinctness with `h`-vs-`'` notation).
-    fn cinfo_raw(x: Xpub, p: &str, raw: &str) -> CosignerKeyInfo {
-        let path = DerivationPath::from_str(p).unwrap();
-        CosignerKeyInfo {
-            xpub: x,
-            fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
-            path,
-            path_raw: raw.to_string(),
             entropy: None,
             master_xpub: None,
             _entropy_pin: None,
@@ -1933,23 +1911,25 @@ mod tests {
         let h_form = "48h/0h/0h/2h";
         // Under v0.5, the typed DerivationPath folds h → ', so both notations
         // produce the same DerivationPath value and collide for distinctness.
+        // (Post-path_raw-deletion: the typed `path` is built directly from each
+        // notation; no separate raw string exists.)
         let err = ckd(vec![
-            cinfo_raw(xpub_a(), canonical, canonical),
-            cinfo_raw(xpub_a(), canonical, h_form),
+            cinfo(xpub_a(), canonical),
+            cinfo(xpub_a(), h_form),
         ])
         .expect_err("v0.5 typed-equality treats h-form and apostrophe-form as the same path");
         assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
     }
 
-    // v0.4.1 H.6 — raw-string equality: identical raw strings collide.
+    // v0.4.1 H.6 — identical xpub + identical path collide.
     #[test]
     fn bip388_identical_raw_paths_collide() {
         let raw = "48'/0'/0'/2'";
         let err = ckd(vec![
-            cinfo_raw(xpub_a(), raw, raw),
-            cinfo_raw(xpub_a(), raw, raw),
+            cinfo(xpub_a(), raw),
+            cinfo(xpub_a(), raw),
         ])
-        .expect_err("identical xpub + identical raw path must collide");
+        .expect_err("identical xpub + identical path must collide");
         assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
     }
 

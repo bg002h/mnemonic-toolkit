@@ -1400,13 +1400,14 @@ fn emit_json_envelope<W: Write, E: Write>(
 
         // Per §3.2.1 row `origin_path` / `origin_paths`: mutually exclusive
         // per SPEC §5.3. Extract per-cosigner path string from the bracket-
-        // form `path_raw` produced by the wallet-import parsers
-        // (`[fp_hex/48'/0'/0'/2']`); strip the fingerprint prefix so the
-        // wire-shape matches `cmd/bundle.rs` (`m/48'/0'/0'/2'`).
+        // bare `m/48'/0'/0'/2'` origin path, derived from the typed
+        // fingerprint+path (matches `cmd/bundle.rs`). The foreign-format import
+        // regex always captures ≥1 path component, so these are never empty
+        // (SPEC_path_raw_bracketed_bare_unification.md §5 C11 reachability).
         let paths: Vec<String> = p
             .cosigners
             .iter()
-            .map(|c| origin_path_from_bracket(&c.path_raw))
+            .map(|c| c.origin_path_bare())
             .collect();
         let (origin_path, origin_paths) = if n == 1 {
             (paths.first().cloned(), None)
@@ -1428,7 +1429,7 @@ fn emit_json_envelope<W: Write, E: Write>(
                 .map(|(i, s)| CosignerEntry {
                     index: i,
                     master_fingerprint: Some(s.fingerprint.to_string().to_lowercase()),
-                    origin_path: origin_path_from_bracket(&s.path_raw),
+                    origin_path: s.origin_path_bare(),
                     xpub: s.xpub.to_string(),
                 })
                 .collect();
@@ -1933,21 +1934,6 @@ fn emit_json_envelope<W: Write, E: Write>(
         .map_err(|e| ToolkitError::BadInput(format!("import-wallet --json serialize: {e}")))?;
     writeln!(stdout, "{text}").map_err(ToolkitError::Io)?;
     Ok(())
-}
-
-/// Extract the m/-prefixed origin path from a wallet-import-parsed
-/// `path_raw` (bracket form: `[fp_hex/48'/0'/0'/2']`). The bracket form is
-/// produced by `wallet_import::bsms::extract_origin_components` and the
-/// Bitcoin Core sibling; it carries the fingerprint inline because the
-/// bracketed-origin annotation is BIP-380 syntax. The v0.27.0 envelope's
-/// `origin_path` (and `multisig.cosigners[].origin_path`) wire-shape mirrors
-/// `cmd/bundle.rs:617-625` (`m/48'/0'/0'/2'`); strip `[fp_hex` and `]` here.
-fn origin_path_from_bracket(path_raw: &str) -> String {
-    let inner = path_raw.trim_start_matches('[').trim_end_matches(']');
-    match inner.find('/') {
-        Some(slash) => format!("m{}", &inner[slash..]),
-        None => "m".to_string(),
-    }
 }
 
 /// SPEC §3.2.1 row `multisig.path_family` — detection from the BIP-43

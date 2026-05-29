@@ -106,3 +106,44 @@ fn export_wallet_noncanonical_path_renders_canonical() {
         v["keystore"]["derivation"]
     );
 }
+
+// T6 (Amendment A2) — `check_resolved_slots_distinctness` now compares the
+// TYPED DerivationPath (h folds to '), converging with the descriptor-mode
+// twin `check_key_vector_distinctness`. Two cosigners with the same xpub and
+// paths differing only in `h`-vs-`'` notation must COLLIDE (BIP-388, exit 2);
+// pre-A2 the raw-string compare would have let them through.
+#[test]
+fn bundle_distinctness_h_vs_apostrophe_paths_collide() {
+    let assert = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={SAMPLE_XPUB}"),
+            "--slot",
+            "@0.fingerprint=deadbeef",
+            "--slot",
+            "@0.path=48h/0h/0h/2h",
+            "--slot",
+            &format!("@1.xpub={SAMPLE_XPUB}"),
+            "--slot",
+            "@1.fingerprint=deadbeef",
+            "--slot",
+            "@1.path=48'/0'/0'/2'",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("BIP-388 distinct-key violation"),
+        "h-vs-' same-xpub paths must collide under typed-path distinctness; got stderr:\n{stderr}"
+    );
+}

@@ -289,13 +289,12 @@ fn parse_entry(
 
     let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
     for (slot_idx, _) in parsed_keys.iter().enumerate() {
-        let (xpub, fp, path, path_raw) = build_slot_fields(descriptor_body_no_csum, slot_idx, idx)?;
+        let (xpub, fp, path) = build_slot_fields(descriptor_body_no_csum, slot_idx, idx)?;
         debug_assert_eq!(xpub_to_65(&xpub), parsed_keys[slot_idx].payload);
         cosigners.push(ResolvedSlot {
             xpub,
             fingerprint: fp,
             path,
-            path_raw,
             entropy: None,
             master_xpub: None,
             _entropy_pin: None,
@@ -413,7 +412,7 @@ fn parse_range_field(v: Option<&Value>) -> Result<Option<(u64, u64)>, ToolkitErr
 /// prefix carries the correct format tag).
 fn extract_origin_components(
     descriptor_body: &str,
-) -> Result<Vec<(Fingerprint, DerivationPath, String, String)>, ToolkitError> {
+) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
     let re = origin_capture_regex();
     let mut out = Vec::new();
     for cap in re.captures_iter(descriptor_body) {
@@ -435,8 +434,7 @@ fn extract_origin_components(
                 "import-wallet: bitcoin-core: parse error: derivation-path parse: {e}"
             ))
         })?;
-        let path_raw = format!("[{fp_hex}{path_raw_inner}]");
-        out.push((fp, path, path_raw, xpub_str.to_string()));
+        out.push((fp, path, xpub_str.to_string()));
     }
     if out.is_empty() {
         return Err(ToolkitError::ImportWalletParse(
@@ -451,9 +449,9 @@ fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
     entry_idx: usize,
-) -> Result<(Xpub, Fingerprint, DerivationPath, String), ToolkitError> {
+) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
     let origins = extract_origin_components(descriptor_body)?;
-    let (fp, path, path_raw, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
+    let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: slot index {slot_idx} out of range"
         ))
@@ -464,11 +462,11 @@ fn build_slot_fields(
             "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: xpub decode for slot {slot_idx}: {e}"
         ))
     })?;
-    Ok((xpub, fp, path, path_raw))
+    Ok((xpub, fp, path))
 }
 
 fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String, String)],
+    origins: &[(Fingerprint, DerivationPath, String)],
     entry_idx: usize,
 ) -> Result<bitcoin::Network, ToolkitError> {
     if origins.is_empty() {
@@ -478,7 +476,7 @@ fn network_from_origins(
     }
     let coin_types: Vec<u32> = origins
         .iter()
-        .map(|(_, p, _, _)| coin_type_from_path(p, entry_idx))
+        .map(|(_, p, _)| coin_type_from_path(p, entry_idx))
         .collect::<Result<Vec<_>, _>>()?;
     let first = coin_types[0];
     for (i, ct) in coin_types.iter().enumerate().skip(1) {

@@ -394,13 +394,16 @@ fn bundle_run_unified<W: Write, E: Write>(
 }
 
 /// v0.4.1 H.5 BIP-388 distinct-key check on ResolvedSlot vector. Mirrors
-/// `check_key_vector_distinctness` for the unified path; comparison key
-/// is `(xpub.to_string(), path_raw)` raw-string equality per SPEC §4.11.b.
+/// `check_key_vector_distinctness` for the unified path; comparison key is
+/// `(xpub.to_string(), path)` on the TYPED `DerivationPath` (v0.5 §4.11.b
+/// deliberate-reversal: `h`/`'`-notation folds, so `48h/..` and `48'/..`
+/// collide — converges with the descriptor-mode twin per
+/// `SPEC_path_raw_bracketed_bare_unification.md` Amendment A2).
 fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), ToolkitError> {
     for i in 0..slots.len() {
         for j in (i + 1)..slots.len() {
             if slots[i].xpub.to_string() == slots[j].xpub.to_string()
-                && slots[i].path_raw == slots[j].path_raw
+                && slots[i].path == slots[j].path
             {
                 return Err(ToolkitError::Bip388Distinctness {
                     i: i as u8,
@@ -500,13 +503,11 @@ pub(crate) fn resolve_slots(
             // caller-wrap contract — re-wrap below at the ResolvedSlot
             // ctor boundary).
             let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
-            let path_raw = path.to_string();
             let entropy_pin = Some(Rc::new(pin_pages_for(&entropy[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
                 path,
-                path_raw,
                 // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
                 entropy: Some(zeroize::Zeroizing::new(entropy)),
                 master_xpub: None,
@@ -536,28 +537,23 @@ pub(crate) fn resolve_slots(
                 })?,
                 None => Fingerprint::default(),
             };
-            let (path, path_raw) = match slot_inputs
+            let path = match slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Path)
             {
-                Some(p) => {
-                    let parsed = DerivationPath::from_str(&p.value).map_err(|e| {
-                        ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
-                    })?;
-                    (parsed, p.value.clone())
-                }
+                Some(p) => DerivationPath::from_str(&p.value).map_err(|e| {
+                    ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+                })?,
                 None => {
                     // v0.5.1: Path absent → fall back to the default origin path
                     // so xpub-only watch-only slots verify against fixtures built
                     // at the same path. F3 fix: for multisig templates this is the
                     // --multisig-path-family path, not the BIP-87-only template
                     // fallback.
-                    let dp = match &multisig_acct_path {
+                    match &multisig_acct_path {
                         Some(p) => p.clone(),
                         None => template.derivation_path(network, account),
-                    };
-                    let raw = dp.to_string();
-                    (dp, raw)
+                    }
                 }
             };
             // v0.8.2 SPEC §5.1 — parse the optional `@N.master_xpub=` subkey
@@ -582,7 +578,6 @@ pub(crate) fn resolve_slots(
                 xpub,
                 fingerprint,
                 path,
-                path_raw,
                 entropy: None,
                 master_xpub,
                 _entropy_pin: None,
@@ -625,13 +620,11 @@ pub(crate) fn resolve_slots(
             // `entropy_bytes` is the canonical buffer for this slot);
             // the Drop on `acc` will scrub the now-orphaned husk.
             let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
-            let path_raw = path.to_string();
             let entropy_pin = Some(Rc::new(pin_pages_for(&entropy_bytes[..])));
             out.push(ResolvedSlot {
                 xpub,
                 fingerprint,
                 path,
-                path_raw,
                 // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
                 entropy: Some(zeroize::Zeroizing::new(entropy_bytes)),
                 master_xpub: None,
@@ -675,7 +668,6 @@ pub(crate) fn resolve_slots(
                 xpub,
                 fingerprint: Fingerprint::default(),
                 path: DerivationPath::default(),
-                path_raw: String::new(),
                 entropy: None,
                 master_xpub: None,
                 _entropy_pin: None,
@@ -1258,7 +1250,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         let anno_fp: Option<bitcoin::bip32::Fingerprint> =
             resolved_placeholders.fingerprint_annos[idx as usize];
 
-        let (xpub, fingerprint, path, path_raw, ent_opt) = if subkeys
+        let (xpub, fingerprint, path, ent_opt) = if subkeys
             .contains(&crate::slot_input::SlotSubkey::Phrase)
         {
             // SAFETY: third-party-blocked — `bip39::Mnemonic` +
@@ -1297,7 +1289,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy).clone()))
+            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()))
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -1318,19 +1310,16 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .and_then(|s| Fingerprint::from_str(&s.value).ok())
                 .or(anno_fp)
                 .unwrap_or_default();
-            let (path, path_raw) = match slot_inputs
+            let path = match slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Path)
             {
-                Some(p) => {
-                    let parsed = DerivationPath::from_str(&p.value).map_err(|e| {
-                        ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
-                    })?;
-                    (parsed, p.value.clone())
-                }
-                None => (anno_path.clone(), anno_path.to_string()),
+                Some(p) => DerivationPath::from_str(&p.value).map_err(|e| {
+                    ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
+                })?,
+                None => anno_path.clone(),
             };
-            (xpub, fp, path, path_raw, None)
+            (xpub, fp, path, None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {
             let entropy_hex = slot_inputs
                 .iter()
@@ -1363,7 +1352,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), anno_path.to_string(), Some((*entropy_bytes).clone()))
+            (xpub, master_fp, anno_path.clone(), Some((*entropy_bytes).clone()))
         } else {
             return Err(ToolkitError::BadInput(format!(
                 "--slot @{idx} subkey set {:?} not supported in descriptor mode in v0.4.2 \
@@ -1382,7 +1371,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             xpub,
             fingerprint,
             path,
-            path_raw,
             entropy,
             master_xpub: None,
             _entropy_pin: entropy_pin,
@@ -1399,7 +1387,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     }
 
     // SPEC §4.11.b BIP-388 distinct-key check (use bridging path: cosigners
-    // already carry path_raw + entropy per slot post-v0.4.3 N alias merge).
+    // already carry the typed path + entropy per slot post-v0.4.3 N alias merge).
     let dummy_binding = crate::parse_descriptor::DescriptorBinding {
         keys: keys.clone(),
         fingerprints: fingerprints.clone(),
@@ -1438,7 +1426,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 xpub: c.xpub,
                 fingerprint: c.fingerprint,
                 path: c.path.clone(),
-                path_raw: c.path_raw.clone(),
                 entropy: c.entropy.clone(),
                 master_xpub: None,
                 _entropy_pin: entropy_pin,
@@ -1626,7 +1613,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
                 cosigner_index: i,
                 derived_xpub: derived_xpub.to_string(),
                 blob_xpub: resolved_slots[i].xpub.to_string(),
-                path: resolved_slots[i].path_raw.clone(),
+                path: resolved_slots[i].origin_path_bare(),
             });
         }
         resolved_slots[i].entropy = Some(entropy);

@@ -347,19 +347,10 @@ pub(crate) fn mk1_card_to_resolved_slot<E: std::io::Write>(
             substituted
         }
     };
-    let path_raw = format!(
-        "[{}/{}]",
-        fingerprint.to_string().to_lowercase(),
-        card.origin_path
-            .to_string()
-            .trim_start_matches("m/")
-            .trim_start_matches('m'),
-    );
     Ok(ResolvedSlot {
         xpub: card.xpub,
         fingerprint,
         path: card.origin_path.clone(),
-        path_raw,
         entropy: None,
         master_xpub: None,
         _entropy_pin: None,

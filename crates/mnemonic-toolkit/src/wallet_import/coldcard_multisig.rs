@@ -486,7 +486,6 @@ pub(super) fn parse_text(
                 xpub: c.xpub,
                 fingerprint: c.fingerprint,
                 path: c.path.clone(),
-                path_raw: c.path_raw.clone(),
                 entropy: None,
                 master_xpub: None,
                 _entropy_pin: None,

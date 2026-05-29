@@ -248,7 +248,7 @@ impl WalletFormatParser for BsmsParser {
         // SPEC §4.2 step 9: build ResolvedSlot vec per cosigner; entropy=None.
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
         for (i, _) in parsed_keys.iter().enumerate() {
-            let (xpub, fp, path, path_raw) = build_slot_fields(descriptor_body_no_csum, i)?;
+            let (xpub, fp, path) = build_slot_fields(descriptor_body_no_csum, i)?;
             // Sanity: the slot's xpub matches the ParsedKey payload (the
             // ParsedKey payload was derived from the same xpub bytes).
             debug_assert_eq!(xpub_to_65(&xpub), parsed_keys[i].payload);
@@ -256,7 +256,6 @@ impl WalletFormatParser for BsmsParser {
                 xpub,
                 fingerprint: fp,
                 path,
-                path_raw,
                 entropy: None,
                 master_xpub: None,
                 _entropy_pin: None,
@@ -362,7 +361,7 @@ fn strip_trailing_empty<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
 /// shared `key_regex` pattern. Returned in declaration order.
 fn extract_origin_components(
     descriptor_body: &str,
-) -> Result<Vec<(Fingerprint, DerivationPath, String, String)>, ToolkitError> {
+) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
     let re = origin_capture_regex();
     let mut out = Vec::new();
     for cap in re.captures_iter(descriptor_body) {
@@ -384,10 +383,7 @@ fn extract_origin_components(
                 "import-wallet: bsms: parse error: derivation-path parse: {e}"
             ))
         })?;
-        // path_raw is the bracket-inner form `<fp>/<path>` (mirrors
-        // ResolvedSlot.path_raw conventions established by bundle.rs).
-        let path_raw = format!("[{fp_hex}{path_raw_inner}]");
-        out.push((fp, path, path_raw, xpub_str.to_string()));
+        out.push((fp, path, xpub_str.to_string()));
     }
     if out.is_empty() {
         return Err(ToolkitError::ImportWalletParse(
@@ -403,9 +399,9 @@ fn extract_origin_components(
 fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
-) -> Result<(Xpub, Fingerprint, DerivationPath, String), ToolkitError> {
+) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
     let origins = extract_origin_components(descriptor_body)?;
-    let (fp, path, path_raw, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
+    let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bsms: parse error: slot index {slot_idx} out of range"
         ))
@@ -416,7 +412,7 @@ fn build_slot_fields(
             "import-wallet: bsms: parse error: xpub decode for slot {slot_idx}: {e}"
         ))
     })?;
-    Ok((xpub, fp, path, path_raw))
+    Ok((xpub, fp, path))
 }
 
 /// SPEC §4.2 step 8 network detection. Inspects the BIP-48 coin-type child
@@ -425,7 +421,7 @@ fn build_slot_fields(
 /// for hardened `1'`. Other coin-types → parse error. Cosigner-to-cosigner
 /// heterogeneity → parse error (per SPEC §4.2 step 8 locked rule).
 fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String, String)],
+    origins: &[(Fingerprint, DerivationPath, String)],
 ) -> Result<bitcoin::Network, ToolkitError> {
     if origins.is_empty() {
         return Err(ToolkitError::ImportWalletParse(
@@ -434,7 +430,7 @@ fn network_from_origins(
     }
     let coin_types: Vec<u32> = origins
         .iter()
-        .map(|(_, p, _, _)| coin_type_from_path(p))
+        .map(|(_, p, _)| coin_type_from_path(p))
         .collect::<Result<Vec<_>, _>>()?;
     let first = coin_types[0];
     for (i, ct) in coin_types.iter().enumerate().skip(1) {
