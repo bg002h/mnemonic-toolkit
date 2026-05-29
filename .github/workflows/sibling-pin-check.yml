@@ -1,0 +1,116 @@
+name: sibling-pin-check
+
+# Fires on every push + PR + manual dispatch. Asserts that the
+# sibling-CLI `cargo install --git … --tag <pin>` lines in every
+# `.github/workflows/*.yml` file match the canonical pins in
+# `scripts/install.sh`'s `component_info` table.
+#
+# Scope: sibling pins only (md-cli, ms-cli, mk-cli). The toolkit
+# self-pin is gated by `install-pin-check.yml`; GUI repo pins are
+# gated by `mnemonic-gui` per `gui-schema-mirror-lockstep-discipline`.
+# GitHub Actions tool-dep pins (`actions/*`, `dtolnay/rust-toolchain`,
+# `lychee-v*`, `markdownlint-cli2@*`, `cspell@*`) are NOT in scope —
+# those are runner-tool versions, not sibling-CLI mirrors.
+#
+# Filed 2026-05-28 (FOLLOWUP `manual-yml-sibling-pin-vs-install-sh-
+# drift-gate`) as defense-in-depth complement to the v0.36.4 closed
+# parent FOLLOWUP `manual-yml-and-install-sh-sibling-gui-pin-staleness`
+# — the parent fixed the symptom; this gate prevents recurrence.
+# Spec: `design/SPEC_sibling_pin_drift_gate.md`. R0 review:
+# `design/agent-reports/sibling-pin-drift-gate-R0-review.md`.
+#
+# Recovery if this fails: update the drifted workflow file's `--tag`
+# argument to match the canonical pin in `scripts/install.sh`, OR
+# (if the workflow's pin is intentionally newer) update install.sh's
+# `component_info` arm to match, then re-push.
+
+on:
+  push:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  sibling-pins-match-install-sh:
+    name: sibling pins match install.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify sibling-CLI pins match scripts/install.sh
+        run: |
+          set -eu
+
+          INSTALL_SH=scripts/install.sh
+          if [ ! -f "$INSTALL_SH" ]; then
+            echo "::error::sibling-pin-check: $INSTALL_SH missing"
+            exit 1
+          fi
+
+          # Parse install.sh's `component_info` arms into a
+          # newline-separated `pkg|tag` table. Each canonical line has
+          # the shape:
+          #   echo "<pkg>|<repo-url>|<tag>|<bool>|<features-opt>"
+          # The toolkit arm uses pkg=mnemonic-toolkit (the SELF-pin —
+          # excluded; gated by install-pin-check.yml). Sibling arms
+          # have pkg=md-cli|ms-cli|mk-cli today; the gate is
+          # forward-compatible (unknown pkg in a workflow yields a
+          # `::warning::`, not a failure — see below).
+          CANONICAL=$(grep -oE 'echo "[a-z-]+\|https://[^"]+\|[^"|]+\|[^"|]*\|[^"]*"' "$INSTALL_SH" \
+            | sed -e 's/^echo "//' -e 's/"$//' \
+            | awk -F'|' 'BEGIN{OFS="|"} $1 != "mnemonic-toolkit" {print $1, $3}')
+
+          if [ -z "$CANONICAL" ]; then
+            echo "::error::sibling-pin-check: no sibling component_info arms parsed from $INSTALL_SH"
+            exit 1
+          fi
+
+          echo "Canonical sibling pins (from $INSTALL_SH):"
+          echo "$CANONICAL" | sed 's/^/  /'
+
+          # Look up canonical tag for a pkg from the parsed table.
+          # Echoes the tag on stdout (empty if pkg not in table).
+          canonical_tag_for() {
+            local pkg="$1"
+            echo "$CANONICAL" | awk -F'|' -v p="$pkg" '$1 == p {print $2; exit}'
+          }
+
+          # Single-pass scan: process-substitution feeds the loop in
+          # the current shell so $FAIL mutations propagate.
+          FAIL=0
+          for wf in .github/workflows/*.yml; do
+            case "$(basename "$wf")" in
+              sibling-pin-check.yml) continue ;;
+            esac
+            while IFS=: read -r lineno line; do
+              # Extract `--tag <tag>` (the tag argument).
+              tag=$(echo "$line" | grep -oE -- '--tag +[^ ]+' | awk '{print $2}')
+              # Extract `<pkg>` — the bareword AFTER `--tag <tag>`.
+              # Limited to standard cargo pkg-name charset (lowercase
+              # alphanumeric + `-` + `_`).
+              pkg=$(echo "$line" | grep -oE -- '--tag +[^ ]+ +[a-z][a-z0-9_-]*' \
+                    | awk '{print $3}')
+              if [ -z "$tag" ] || [ -z "$pkg" ]; then
+                echo "::warning::sibling-pin-check: $wf:$lineno: could not extract pkg/tag from cargo-install line — skipped"
+                continue
+              fi
+              canonical=$(canonical_tag_for "$pkg")
+              if [ -z "$canonical" ]; then
+                echo "::warning::sibling-pin-check: $wf:$lineno: unknown sibling '$pkg'; add a component_info arm in $INSTALL_SH to gate this pin"
+                continue
+              fi
+              if [ "$tag" != "$canonical" ]; then
+                echo "::error::sibling-pin-check: $wf:$lineno: $pkg pin '$tag' does not match $INSTALL_SH canonical '$canonical'"
+                FAIL=1
+              else
+                echo "  OK $wf:$lineno: $pkg $tag"
+              fi
+            done < <(grep -nE 'cargo install --git +https?://[^ ]+ +--tag +[^ ]+ +[a-z][a-z0-9_-]*' "$wf" || true)
+          done
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo "::error::sibling-pin-check: one or more sibling pins drifted from $INSTALL_SH"
+            exit 1
+          fi
+          echo "OK all sibling pins match $INSTALL_SH"
