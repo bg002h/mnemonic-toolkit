@@ -729,9 +729,9 @@ dependencies = [
 
 [[package]]
 name = "ms-codec"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "292ffbe328d72654d186147d169903d745141936cf88121bedebbe47560321ec"
+checksum = "6b27af1eb134d0a8228276ac28f5305ba529e998d78ac27e3d499863e7aaf8de"
 dependencies = [
  "codex32",
  "zeroize",
