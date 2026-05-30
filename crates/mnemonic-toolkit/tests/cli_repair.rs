@@ -109,6 +109,43 @@ fn cell_12_unrepairable_exits_2_with_too_many_errors_stderr() {
         .stderr(predicate::str::contains("singleton bound"));
 }
 
+/// Cell 12b (ms-codec 0.2.1 regression): `mnemonic repair --ms1` works for ALL
+/// BIP-39 entropy lengths, not just 12-word. Before ms-codec 0.2.1,
+/// `decode_with_correction` returned `TooManyErrors` on CLEAN 20/24/28/32-byte
+/// ms1 strings (a wrong `POLYMOD_INIT`), so `repair` exited 2 on a clean longer
+/// seed and could not repair a single-error one — silently broken end-to-end for
+/// 15/18/21/24-word backups. See
+/// `mnemonic-secret/design/BUG_decode_with_correction_length_divergence.md`.
+/// Fixtures generated in-test via `ms_codec::encode` (not hard-coded) so the cell
+/// stays valid across any future ms1 wire tweak.
+#[test]
+fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
+    use ms_codec::{Payload, Tag, encode};
+    for len in [20usize, 24, 28, 32] {
+        let entropy: Vec<u8> = (0..len as u8).collect();
+        let valid = encode(Tag::ENTR, &Payload::Entr(entropy)).expect("encode ms1");
+
+        // clean longer seed → exit 0 (already valid), no report. (Pre-0.2.1: exit 2.)
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["repair", "--ms1", &valid])
+            .assert()
+            .code(0)
+            .stdout(predicate::str::contains("# Repair report").not())
+            .stdout(predicate::str::contains(valid.as_str()));
+
+        // 1-error longer seed → exit 5 (repaired back to the original). (Pre-0.2.1: exit 2.)
+        let bad = flip_at(&valid, 5);
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["repair", "--ms1", &bad])
+            .assert()
+            .code(5)
+            .stdout(predicate::str::contains("# Repair report"))
+            .stdout(predicate::str::contains(valid.as_str()));
+    }
+}
+
 /// Cell 13: multi-chunk mk1 — supply 2 chunks, corrupt the second only,
 /// confirm exit 5 + both chunks emitted + only chunk 1 in the report.
 #[test]
