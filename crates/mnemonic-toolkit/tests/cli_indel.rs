@@ -82,6 +82,28 @@ fn ms1_too_short_recovers_exit_5() {
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
+/// Test 2b (ms-codec 0.2.1 regression, --max-indel half of architect scope D):
+/// the `Ms1IndelOracle` also delegates to `ms_codec::decode_with_correction`, so
+/// `repair --max-indel` was silently broken for 20/24/28/32-byte seeds pre-0.2.1
+/// (every length-restored candidate's decode returned `TooManyErrors` →
+/// `Unrecoverable` → exit 2, even for a recoverable single drop). One dropped
+/// payload char at each length must now recover (exit 5). Fixtures via
+/// `ms_codec::encode`. Companion to `cli_repair.rs::cell_12b` (substitution path).
+#[test]
+fn ms1_max_indel_recovers_all_entropy_lengths() {
+    use ms_codec::{Payload, Tag, encode};
+    for len in [20usize, 24, 28, 32] {
+        let entropy: Vec<u8> = (0..len as u8).collect();
+        let valid = encode(Tag::ENTR, &Payload::Entr(entropy)).expect("encode ms1");
+        let bad = drop_data(&valid, 10); // drop one payload char → too-short
+        cmd()
+            .args(["repair", "--ms1", &bad, "--max-indel", "1"])
+            .assert()
+            .code(5)
+            .stdout(predicate::str::contains(valid.as_str()));
+    }
+}
+
 /// Test 3 — ms1 PREFIX dropped-'m' → exit 5 (proves the HrpMismatch trigger
 /// amendment, §1.7). "s10entrs…" = VALID_MS1 with the leading 'm' gone.
 #[test]
