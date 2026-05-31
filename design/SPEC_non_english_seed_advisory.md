@@ -36,7 +36,7 @@ A pure helper — single message, unit-tested (precedent: the bip48 `bip48_nonst
 ```rust
 /// Returns a stderr advisory iff `lang` is a non-English BIP-39 wordlist (the
 /// language is load-bearing for the seed but is NOT carried by `form`). `form`
-/// names the language-dropping output ("an ms1 card", "a SeedQR", "raw entropy").
+/// names the language-dropping output ("an ms1 card", "raw entropy", "SLIP-39 shares").
 /// English → None (English self-recovers as the universal default).
 pub(crate) fn non_english_seed_advisory(lang: CliLanguage, form: &str) -> Option<String> {
     if lang == CliLanguage::English {
