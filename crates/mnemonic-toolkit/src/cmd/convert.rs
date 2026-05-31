@@ -946,6 +946,18 @@ pub fn run<R: Read, W: Write, E: Write>(
         );
     }
 
+    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
+    // `--to entropy` drops the wordlist language (raw entropy carries only bytes).
+    // Placed after ALL refusal guards so a refused edge never advises.
+    if targets.contains(&NodeType::Entropy) {
+        if let Some(msg) = crate::language::non_english_seed_advisory(
+            args.language.unwrap_or_default(),
+            "raw entropy",
+        ) {
+            let _ = writeln!(stderr, "{msg}");
+        }
+    }
+
     // 8) Compute outputs.
     let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
     let bip38_passphrase = effective_bip38_passphrase.as_deref();
