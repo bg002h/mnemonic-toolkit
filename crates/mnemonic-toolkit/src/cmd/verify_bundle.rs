@@ -598,7 +598,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         check_key_vector_distinctness, lex_placeholders, parse_descriptor, resolve_placeholders,
         DescriptorBinding, ParsedFingerprint, ParsedKey,
     };
-    use crate::synthesize::{synthesize_descriptor, xpub_to_65, CosignerKeyInfo};
+    use crate::synthesize::{xpub_to_65, CosignerKeyInfo};
 
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
@@ -610,6 +610,36 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             .to_string(),
         _ => unreachable!("clap conflicts_with rules out both"),
     };
+
+    // A1 P3b — bare-concrete fork: if the descriptor contains real xpubs (no
+    // @N placeholders), route directly to the concrete-to-resolved-slots helper
+    // and bypass the @N lex/resolve/slot-binding machinery entirely.
+    {
+        use crate::wallet_import::pipeline::{
+            classify_descriptor_form, descriptor_concrete_to_resolved_slots, DescriptorForm,
+        };
+        if classify_descriptor_form(&descriptor_str)? == DescriptorForm::Concrete {
+            let body_no_csum = crate::wallet_import::json_envelope::descriptor_body_no_csum(
+                &descriptor_str,
+                "--descriptor",
+            )?;
+            let (descriptor, cosigners) =
+                descriptor_concrete_to_resolved_slots(body_no_csum)?;
+            // BIP-388 distinctness: verify-bundle uses the exit-4 variant.
+            if dup_xpub_path(&cosigners) {
+                return Err(ToolkitError::Bip388VerifyDistinctness);
+            }
+            return verify_emit_from_expected(
+                args,
+                descriptor,
+                &cosigners,
+                no_auto_repair,
+                json_context,
+                stdout,
+                stderr,
+            );
+        }
+    }
 
     let occs =
         lex_placeholders(&descriptor_str).map_err(|e| ToolkitError::DescriptorReparseFailed {
@@ -864,7 +894,23 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     if is_non_canonical {
         descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
     }
-    let expected = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving)?;
+    return verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr);
+}
+
+/// Form-agnostic tail shared by both the @N path and the concrete-descriptor
+/// path: synthesize the expected Bundle from the already-resolved descriptor +
+/// cosigners, then emit the verify checks and write the result.
+fn verify_emit_from_expected<W: Write, E: Write>(
+    args: &VerifyBundleArgs,
+    descriptor: md_codec::Descriptor,
+    cosigners: &[crate::synthesize::ResolvedSlot],
+    no_auto_repair: bool,
+    json_context: bool,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    use crate::synthesize::synthesize_descriptor;
+    let expected = synthesize_descriptor(&descriptor, cosigners, args.privacy_preserving)?;
 
     // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
     // is_multisig := descriptor.n > 1.
@@ -897,6 +943,22 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         writeln!(stdout, "result: {}", result_str).ok();
     }
     Ok(if any_fail { 4 } else { 0 })
+}
+
+/// Returns true if any two slots share the same (xpub, path) pair.
+/// Used by the concrete-descriptor verify-bundle fork to enforce BIP-388
+/// distinctness (verify-bundle exits 4, not 2).
+fn dup_xpub_path(slots: &[crate::synthesize::ResolvedSlot]) -> bool {
+    for i in 0..slots.len() {
+        for j in (i + 1)..slots.len() {
+            if slots[i].xpub.to_string() == slots[j].xpub.to_string()
+                && slots[i].path == slots[j].path
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ============================================================================
