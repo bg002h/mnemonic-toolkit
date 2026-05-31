@@ -1,5 +1,6 @@
 //! Subcommand dispatch.
 
+pub mod addresses;
 pub mod bundle;
 pub mod compare_cost;
 pub mod convert;

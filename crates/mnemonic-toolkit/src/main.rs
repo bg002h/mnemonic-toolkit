@@ -93,6 +93,8 @@ enum Command {
     VerifyBundle(cmd::verify_bundle::VerifyBundleArgs),
     /// convert between seed/key formats (BIP-39 / BIP-32 / WIF / ms1 / mk1)
     Convert(cmd::convert::ConvertArgs),
+    /// list a wallet's receive/change addresses (batch, read-only)
+    Addresses(cmd::addresses::AddressesArgs),
     /// decode a Bitcoin address → network(s) / script type / witness version / scriptPubKey
     DecodeAddress(cmd::decode_address::DecodeAddressArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
@@ -149,6 +151,7 @@ fn main() -> ExitCode {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
         Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair),
         Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::Addresses(args) => cmd::addresses::run(args, stdin, stdout, stderr),
         Command::DecodeAddress(args) => cmd::decode_address::run(args, stdin, stdout, stderr),
         Command::ExportWallet(args) => {
             cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
