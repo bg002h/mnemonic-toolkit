@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.38.0] — 2026-05-31
+
+**SemVer-MINOR — new `mnemonic addresses` subcommand: batch watch-only address derivation.** The watch-only complement to `export-wallet --range`, mirroring `mk address`. Read-only public derivation — no private keys on stdout, no signing.
+
+- **`mnemonic addresses --from <SOURCE> --address-type <T>`** lists a wallet's receive/change addresses. `--from` accepts `xpub=` (an account xpub, derived directly) or the seed sources `phrase=`/`entropy=`/`seedqr=` (where `--address-type` selects the BIP-44/49/84/86 account path via `--account`, derived through `derive_bip32_from_entropy`). `--count N` (default 10) / `--range A,B` with a BIP-32 normal-index ceiling guard (out-of-range → exit 1, never a `from_normal_idx` panic); `--chain receive|change|both`; `--network` with a main-vs-test kind-agreement guard (xpub source); `--passphrase`/`--passphrase-stdin`, `@env:VAR`, and stdin `-` for secret values (single-stdin guard); `--json` (`{schema_version, source, address_type, network, account?, addresses:[{chain,index,address}]}`). The argv-leak advisory fires for inline secret values; the v0.37.11 non-English advisory does NOT fire (addresses are derived keys — the language is already applied).
+- **Internal: de-duplicated the address renderer + network-inference helpers.** `convert::build_address_from_xpub` / `xpub_search::render_address` (byte-identical copies) and the two `network_from_xpub` copies (convert + `address_of_xpub`) are lifted into a single `crate::address_render` module; `convert`, `xpub-search`, and `addresses` share them. Behavior-preserving (full suite unchanged).
+- No `--json` wire-shape change to existing subcommands; new clap flags trigger the GUI schema-mirror + manual lockstep (paired).
+
 ## mnemonic-toolkit [0.37.11] — 2026-05-30
 
 **SemVer-PATCH — stderr advisory when a non-English BIP-39 seed is encoded into a language-agnostic form (ms1 / raw entropy / SLIP-39 shares). Path A of the `mnem` wordlist-language footgun (the wire-format hint stays filed as `mnemonic-secret mnem-wordlist-language-hint-on-wire`, a v0.2 arc).**

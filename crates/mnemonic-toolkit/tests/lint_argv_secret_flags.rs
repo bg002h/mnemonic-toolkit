@@ -93,10 +93,13 @@ const FLAG_ROUTES: &[Route] = &[
     Route { subcommand: "xpub-search-path-of-xpub", flag: "--passphrase", source_file: "src/cmd/xpub_search/path_of_xpub.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
     Route { subcommand: "xpub-search-account-of-descriptor", flag: "--passphrase", source_file: "src/cmd/xpub_search/account_of_descriptor.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
     Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--passphrase", source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
+    // -- v0.38.0 (1): mnemonic addresses --
+    Route { subcommand: "addresses", flag: "--passphrase", source_file: "src/cmd/addresses.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
 ];
 
-// ── Axis 2: `--from` routes (7; `=-` value-uniform per subcommand) ──
+// ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
 const FROM_ROUTES: &[Route] = &[
+    Route { subcommand: "addresses", flag: "--from", source_file: "src/cmd/addresses.rs", evidence: &["=-", "value == \"-\""] },
     Route { subcommand: "convert", flag: "--from", source_file: "src/cmd/convert.rs", evidence: &["=-", "value == \"-\""] },
     Route { subcommand: "derive-child", flag: "--from", source_file: "src/cmd/derive_child.rs", evidence: &["=-", "value == \"-\""] },
     Route { subcommand: "final-word", flag: "--from", source_file: "src/cmd/final_word.rs", evidence: &["=-", "value == \"-\""] },

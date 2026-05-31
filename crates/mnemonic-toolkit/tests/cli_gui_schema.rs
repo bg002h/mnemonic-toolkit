@@ -68,11 +68,13 @@ fn gui_schema_lists_all_subcommands() {
     // address/descriptor/WIF); total was 22. v0.35.0 adds `silent-payment`
     // (BIP-352 receiver address derivation); total was 23. v0.36.0 adds
     // `decode-address` (address → network/type/witness/scriptPubKey) and
-    // `verify-message` (legacy + BIP-322 signature verify); total is now 25.
+    // `verify-message` (legacy + BIP-322 signature verify); total was 25.
+    // v0.38.0 adds `addresses` (batch watch-only address listing); total is now 26.
     // gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
+            "addresses",
             "bundle",
             "compare-cost",
             "convert",
