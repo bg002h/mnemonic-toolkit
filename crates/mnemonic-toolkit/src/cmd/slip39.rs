@@ -437,6 +437,13 @@ fn run_split<R: Read, W: Write, E: Write>(
         parse_master_to_entropy(&args.from, args.language, from_value.as_str())?;
     let _pin_master = mnemonic_toolkit::mlock::pin_pages_for(master_entropy.as_slice());
 
+    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
+    // SLIP-39 shares encode the master entropy (language-agnostic); the BIP-39
+    // wordlist language is dropped. Emitted after the phrase parse succeeds.
+    if let Some(msg) = crate::language::non_english_seed_advisory(args.language, "SLIP-39 shares") {
+        let _ = writeln!(stderr, "{msg}");
+    }
+
     // Build GroupSpec vec from --group args (R0 I4 fold:
     // order-preserving so group_idx matches argv position).
     let groups: Vec<GroupSpec> = args
@@ -642,6 +649,16 @@ fn run_combine<R: Read, W: Write, E: Write>(
     let master_entropy =
         slip39_combine(&shares, passphrase.as_bytes()).map_err(map_slip39_error)?;
     let _pin_master = mnemonic_toolkit::mlock::pin_pages_for(master_entropy.as_slice());
+
+    // v0.37.11 — non-English BIP-39 wordlist advisory: `--to entropy` drops the
+    // wordlist language (raw entropy carries only bytes). `--to phrase` re-encodes
+    // in `--language` and keeps it. Emitted after the combine succeeds.
+    if matches!(args.to, Slip39ToShape::Entropy) {
+        if let Some(msg) = crate::language::non_english_seed_advisory(args.language, "raw entropy")
+        {
+            let _ = writeln!(stderr, "{msg}");
+        }
+    }
 
     // Render output per --to.
     let output: zeroize::Zeroizing<String> = match args.to {
