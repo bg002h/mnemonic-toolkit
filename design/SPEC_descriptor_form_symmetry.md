@@ -22,7 +22,7 @@ Today the surfaces accept these **asymmetrically** (verified at `ea8ba88`):
 | `verify-bundle --descriptor` / `--descriptor-file` | ✅ `lex_placeholders` (`verify_bundle.rs:614`) | ❌ rejected (same) |
 | `export-wallet --descriptor` | ❌ rejected (`MsDescriptor::from_str`, `export_wallet.rs:332` — miniscript can't parse `@0`) | ✅ passthrough (`export_wallet.rs:332-334`) |
 
-A user holding a raw descriptor from their hardware wallet cannot feed it to `bundle`/`verify-bundle` (the card-producing surfaces), even though the exact converter to accept it — `wallet_import/pipeline.rs:concrete_keys_to_placeholders` — already exists and is used by all 8 `import-wallet` format parsers, and is already wired into `bundle`'s `--import-json` path (`bundle.rs:1644-1656`).
+A user holding a raw descriptor from their hardware wallet cannot feed it to `bundle`/`verify-bundle` (the card-producing surfaces), even though the exact converter to accept it — `wallet_import/pipeline.rs:concrete_keys_to_placeholders` — already exists and is used by all 8 `import-wallet` format parsers (and is invoked, for the md_codec tree only, on `bundle`'s `--import-json` path at `bundle.rs:1645` — though that path sources its ResolvedSlots from mk1 cards, not the descriptor; see §3.2).
 
 ## 2. Goal
 
