@@ -91,6 +91,38 @@ pub fn warn_if_world_readable<E: Write>(path: &Path, stderr: &mut E) {
     }
 }
 
+/// Security class of what a command wrote to stdout. Variant declaration order
+/// is ascending sensitivity (Template < WatchOnly < PrivateKeyMaterial) so
+/// `#[derive(Ord)]`'s `.max()` returns the most-sensitive class. "inert" is the
+/// ABSENCE of a class (modeled as `Option::None`), not a variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum OutputClass { Template, WatchOnly, PrivateKeyMaterial }
+
+/// Max over the artifacts a command wrote to stdout; `None` == all-inert → no line.
+pub fn worst_class_on_stdout(artifacts: &[OutputClass]) -> Option<OutputClass> {
+    artifacts.iter().copied().max()
+}
+
+/// Map a repaired/inspected card kind to its output class.
+pub fn card_kind_class(kind: crate::repair::CardKind) -> OutputClass {
+    match kind {
+        crate::repair::CardKind::Ms1 => OutputClass::PrivateKeyMaterial,
+        crate::repair::CardKind::Mk1 => OutputClass::WatchOnly,
+        crate::repair::CardKind::Md1 => OutputClass::Template,
+    }
+}
+
+/// Emit the one-line stderr class advisory. Inert outputs do NOT call this.
+pub fn emit_output_class_advisory<W: Write + ?Sized>(class: OutputClass, stderr: &mut W) {
+    let line = match class {
+        OutputClass::PrivateKeyMaterial =>
+            "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')",
+        OutputClass::WatchOnly => "note: stdout is watch-only — public keys only, cannot spend",
+        OutputClass::Template => "note: stdout is a keyless descriptor template (no keys)",
+    };
+    let _ = writeln!(stderr, "{line}");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +176,30 @@ mod tests {
             s.is_empty(),
             "0o600 must NOT emit advisory; got: {s}"
         );
+    }
+
+    #[test]
+    fn output_class_lattice_and_lines() {
+        use super::{OutputClass::*, worst_class_on_stdout, emit_output_class_advisory};
+        assert_eq!(worst_class_on_stdout(&[]), None);
+        assert_eq!(worst_class_on_stdout(&[Template, WatchOnly]), Some(WatchOnly));
+        assert_eq!(worst_class_on_stdout(&[WatchOnly, PrivateKeyMaterial, Template]), Some(PrivateKeyMaterial));
+        let mut b = Vec::new();
+        emit_output_class_advisory(PrivateKeyMaterial, &mut b);
+        assert_eq!(String::from_utf8(b).unwrap(),
+            "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')\n");
+        let mut b = Vec::new(); emit_output_class_advisory(WatchOnly, &mut b);
+        assert_eq!(String::from_utf8(b).unwrap(), "note: stdout is watch-only — public keys only, cannot spend\n");
+        let mut b = Vec::new(); emit_output_class_advisory(Template, &mut b);
+        assert_eq!(String::from_utf8(b).unwrap(), "note: stdout is a keyless descriptor template (no keys)\n");
+    }
+
+    #[test]
+    fn card_kind_maps_to_class() {
+        use super::{card_kind_class, OutputClass};
+        use crate::repair::CardKind;
+        assert_eq!(card_kind_class(CardKind::Ms1), OutputClass::PrivateKeyMaterial);
+        assert_eq!(card_kind_class(CardKind::Mk1), OutputClass::WatchOnly);
+        assert_eq!(card_kind_class(CardKind::Md1), OutputClass::Template);
     }
 }
