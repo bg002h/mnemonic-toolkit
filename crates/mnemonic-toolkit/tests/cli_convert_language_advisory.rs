@@ -4,7 +4,6 @@
 //! target is present; key-deriving targets (xprv/xpub/wif/...) do not fire.
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 
 // French / English all-zeros-entropy 12-word vectors (checksum-valid).
 const FRENCH_12: &str = "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille";

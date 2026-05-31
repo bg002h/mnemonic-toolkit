@@ -5,7 +5,6 @@
 //! `--language` is non-English. See `design/SPEC_non_english_seed_advisory.md`.
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 
 // Checksum-valid all-zeros-entropy vectors (generated via `convert --to phrase`).
 const FRENCH_12: &str = "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille";
