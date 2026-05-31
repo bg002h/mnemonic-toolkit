@@ -76,7 +76,7 @@ Pin each addendum's exact bytes in the SPEC's test cells.
 |---|---|---|
 | `ms encode` | **P** | `encode.rs:146` ms1 (entropy) — **net-new** |
 | `ms decode` | **P** | `decode.rs:101-102` entropy+phrase — **net-new** |
-| `ms derive` | **W** | `derive.rs:239-242` fp+account xpub; `:1-5` "no private keys" [architect correction] |
+| `ms derive` | **W** | `derive.rs:239-242` fp+account xpub; `:1-5` "no private keys"; coexists with its existing language-defaulted note `:246-248` → P4 cell asserts BOTH [m3] |
 | `ms inspect` | inert | `inspect.rs:110-125` OK/FAIL |
 | `ms verify` | inert | `verify.rs:116-158` OK/FAIL |
 | `ms vectors` | inert | fixed public test vectors |
@@ -85,22 +85,31 @@ Pin each addendum's exact bytes in the SPEC's test cells.
 
 **Resolving principles** (state in SPEC): (a) public key **material** you'd use to watch (xpub/address/descriptor/mk1) = watch-only; a bare derivation **path** or 4-byte **fingerprint** carries no usable key material → **inert** [folds I3]; (b) re-presenting the user's own public input, or a pass/fail/cost verdict, = inert; (c) a command that consumes a secret as INPUT but emits only public/derived metadata = inert; (d) class is per-exit-branch for branchy commands; (e) multi-artifact = max over artifacts on stdout.
 
-**Auto-repair short-circuit branch [folds C1].** `verify-bundle`, `xpub-search` (all 4 modes), `inspect`, and `convert` are inert on their NORMAL branch, but each can short-circuit into `repair::emit_repair_report` (`repair.rs:1333`) when given a correctable card with auto-repair — which writes the **repaired card to stdout** (exit 5) and must emit that card's class (Ms1→P, Mk1→W, Md1→T). So their §3 "inert" label applies to the normal branch ONLY; the auto-repair exit-5 branch emits a class line. Tests must cover both branches (§7, P3).
+**Auto-repair short-circuit branch [folds C1, scoped per R1-I-B].** `verify-bundle`, `xpub-search` (all 4 modes), `inspect`, and `convert` can short-circuit into `repair::emit_repair_report` (`repair.rs:1333`) on an **input-decode-FAILURE** path (`is_codec_decode_err`, mutually exclusive with the normal branch via `?`-propagated `RepairShortCircuit`) — which writes the **repaired card to stdout** (exit 5) and must emit that card's class (Ms1→P, Mk1→W, Md1→T). Branch semantics:
+- **`verify-bundle`, `xpub-search`** — inert on the NORMAL branch (verdict/search report); class line ONLY on the auto-repair exit-5 branch.
+- **`inspect`, `convert`** — NOT inert on the normal branch (inspect ms1→P `inspect.rs:156`; convert P/W/inert per its §3 row `convert.rs:1099`); the auto-repair short-circuit is a SEPARATE input-decode-failure branch that emits the repaired card's class. The two branches are mutually exclusive.
+
+Tests cover both branches per command (§7, P3).
 
 ## 4. Architecture
 
 ### 4.1 Toolkit helper (subsume D9 by complement)
 In `crates/mnemonic-toolkit/src/secret_advisory.rs`:
 ```rust
-pub enum OutputClass { PrivateKeyMaterial, WatchOnly, Template }
+pub enum OutputClass { PrivateKeyMaterial, WatchOnly, Template } // ordered P>W>T; inert = absence
 /// Emit the one-line stderr class advisory. Inert outputs do NOT call this.
 pub fn emit_output_class_advisory<W: Write + ?Sized>(class: OutputClass, stderr: &mut W);
+/// Max over the artifacts a command wrote to stdout. `None` == all-inert → emit nothing
+/// [folds R1-I-A]. Inert is the bottom of the lattice and is represented by the absence of
+/// a class, NOT an enum variant. Multi-artifact callers do:
+///   if let Some(c) = worst_class_on_stdout(&artifacts) { emit_output_class_advisory(c, stderr) }
+pub fn worst_class_on_stdout(artifacts: &[OutputClass]) -> Option<OutputClass>; // None if empty
 ```
 The `PrivateKeyMaterial` arm IS the (re-worded) D9 line. The legacy `secret_on_stdout_warning(CardKind, _)` + `secret_on_stdout_warning_unconditional` are **replaced** — route **every** current caller through `emit_output_class_advisory`/`worst_class_on_stdout` (re-grep the full caller set at plan time; at `18cfdce` it is):
 - the 3 inlined `PrivateKeyMaterial` literals: `derive_child.rs:308`, `bundle.rs:931`, `convert.rs:1102`;
 - the `_unconditional` callers: `silent_payment.rs:286`, `nostr.rs:251`, **`electrum_decrypt.rs:149`** [folds I1];
 - the slip39 **combine** variant `slip39.rs:684` (a FUSED line — replace the "reconstructed secret material" prefix with the unified P-line; KEEP "verify the recovered wallet's … address" as the §2.3 addendum) [M2];
-- **the auto-repair short-circuit** [folds C1 — the hidden emit site]: `repair.rs:1333` (`emit_repair_report` → `secret_on_stdout_warning(outcome.kind, _)`, writes the repaired card to stdout) AND the repair-command emit `cmd/repair.rs:216`. `emit_repair_report` is reached from `verify_bundle.rs` (6 sites), `xpub_search/seed_intake.rs:182` (all 4 xpub-search modes), `inspect.rs:135`, `convert.rs:994` — so those commands are inert on their NORMAL branch but emit the **repaired card's class** (CardKind→{Ms1:P, Mk1:W, Md1:T}) on the exit-5 auto-repair branch (see §3 note).
+- **the auto-repair short-circuit** [folds C1 — the hidden emit site]: `repair.rs:1333` (`emit_repair_report` → `secret_on_stdout_warning(outcome.kind, _)`, writes the repaired card to stdout) AND the repair-command emit `cmd/repair.rs:216`. `emit_repair_report` is reached from `verify_bundle.rs` (6 sites), `xpub_search/seed_intake.rs:182` (all 4 xpub-search modes), `inspect.rs:135`, `convert.rs:994` — on the **input-decode-failure** branch only — so each emits the **repaired card's class** (CardKind→{Ms1:P, Mk1:W, Md1:T}) on that exit-5 branch (verify-bundle/xpub-search are inert on the normal branch; inspect/convert emit their own §3-row class on the normal branch — see §3 note for the per-branch split).
 
 Keep `secret_in_argv_warning` and `warn_if_world_readable` unchanged (different advisories).
 
@@ -109,7 +118,7 @@ ms-cli does NOT depend on mnemonic-toolkit as a lib (independent crates). Duplic
 
 ### 4.3 Wiring rules
 - **Fixed-class commands** call `emit_output_class_advisory(<constant>, stderr)` at the point where the artifact is known to have been written to stdout.
-- **Multi-artifact commands** compute `worst_class_on_stdout` (bundle: secret-bearing predicate; repair/inspect: max over CardKind of cards on stdout; convert: any-secret-target predicate; import-wallet: entropy-on-stdout predicate) → one line.
+- **Multi-artifact commands** compute `worst_class_on_stdout` (bundle: secret-bearing predicate; repair/inspect: max over CardKind of cards on stdout; convert: max over targets per §3 — secret→P, xpub/addr/descriptor/mk1→W, path/fingerprint→inert; import-wallet: entropy-on-stdout predicate) → **one line, OR none when every artifact is inert** (e.g. `convert --to path`/`--to fingerprint`-only) [folds R1-I-A]. The convert normal gate uses `is_argv_secret_bearing()` (the live predicate, `convert.rs:1099`), not the narrower `SECRET_NODE_TYPES` — they differ only on output-unreachable minikey [m2].
 - **TTY gate removed** [C3] on final-word/seed-xor×2/slip39×2 — the advisory now fires unconditionally (the redirected case is the dangerous one).
 - **File-output suppression** [I5]: emit iff a wallet artifact is actually written to **stdout** this invocation. Exclusive-file paths (`seedqr --json-out`, `electrum-decrypt --json-out`) → no line. Side-effect-file paths (`final-word`/`slip39`/`seed-xor --json-out`, where stdout still carries the artifact) → still emit. `--json` mode → advisory still to **stderr** (JSON stays clean on stdout) [I6].
 - **Inert commands** call nothing; commands with no `stderr` param (`compare-cost`, `gui-schema`) are NOT given one.
