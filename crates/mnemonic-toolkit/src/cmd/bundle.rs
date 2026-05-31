@@ -283,6 +283,24 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
+    if descriptor_mode {
+        // Read the descriptor body here (the read inside bundle_run_unified_descriptor
+        // is off the Concrete early-fork path).
+        let body = match (&args.descriptor, &args.descriptor_file) {
+            (Some(s), None) => s.clone(),
+            (None, Some(p)) => std::fs::read_to_string(p)
+                .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display())))?
+                .trim_end()
+                .to_string(),
+            _ => unreachable!("DESCRIPTOR_AND_DESCRIPTOR_FILE guard above rules out both"),
+        };
+        use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
+        if classify_descriptor_form(&body)? == DescriptorForm::Concrete {
+            return bundle_run_concrete_descriptor(args, body, stdout, stderr);
+        }
+        // AtN: fall through to bundle_run_unified (re-reads the file as today).
+    }
+
     bundle_run_unified(args, stdin, stdout, stderr)
 }
 // ============================================================================
@@ -1458,6 +1476,47 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         stdout,
         stderr,
     )?;
+
+    if args.self_check {
+        self_check_bundle(&bundle, args)?;
+    }
+
+    Ok(())
+}
+
+/// Theme-A Phase 3a entry point — `bundle --descriptor <CONCRETE>`. Accepts a
+/// bare-concrete descriptor (inline `[fp/path]xpub` keys, no `@N` placeholders)
+/// and synthesizes a watch-only bundle without any `--slot` inputs. SPEC §3.2.
+fn bundle_run_concrete_descriptor<W: Write, E: Write>(
+    args: &BundleArgs,
+    body: String,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    use crate::wallet_import::pipeline::descriptor_concrete_to_resolved_slots;
+    let body_no_csum =
+        crate::wallet_import::json_envelope::descriptor_body_no_csum(&body, "--descriptor")?;
+    let (descriptor, resolved_slots) = descriptor_concrete_to_resolved_slots(body_no_csum)?;
+
+    // BIP-388 distinctness check — a pasted descriptor is untrusted, unlike
+    // the mk1-sourced path in bundle_run_from_import_json.
+    check_resolved_slots_distinctness(&resolved_slots)?;
+
+    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving)?;
+    let n = resolved_slots.len();
+    let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some()); // always false here
+    let any_watch = resolved_slots.iter().any(|s| s.entropy.is_none());
+    let mode = match (n, any_secret, any_watch) {
+        (1, true, _) => BundleMode::SingleSigFull,
+        (1, false, _) => BundleMode::SingleSigWatchOnly,
+        (_, true, true) => BundleMode::MultisigHybrid,
+        (_, true, false) => BundleMode::MultisigMultiSource,
+        (_, false, _) => BundleMode::MultisigWatchOnly,
+    };
+
+    // slip0132 signals are not applicable to a bare-concrete descriptor
+    // (the inline xpub prefix is canonical per SPEC §5.3).
+    emit_unified(args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
         self_check_bundle(&bundle, args)?;
