@@ -371,3 +371,41 @@ fn h5_hop_idempotence_singlesig_electrum_sparrow() {
     let (xpub, fp) = derive(TREZOR_24, "m/84'/0'/0'");
     assert_hop("electrum", "sparrow", &export_singlesig("electrum", &xpub, &fp)); // H5 SS SLIP-132
 }
+
+// ===========================================================================
+// A1 — concrete↔@N descriptor convergence (metamorphic: both forms must emit
+// the same md1 + mk1). Uses testnet, out-of-lex-order sortedmulti, both
+// cosigners origin-bearing.
+// ===========================================================================
+#[test]
+fn concrete_vs_atn_descriptor_converge_md1_mk1() {
+    use assert_cmd::Command;
+    let mnem = || Command::cargo_bin("mnemonic").unwrap();
+    // Out-of-lexicographic-order sortedmulti (97139860 before 704c7836), both
+    // inputs explicitly origin-bearing.
+    let concrete = "wsh(sortedmulti(2,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*))";
+    let atn = "wsh(sortedmulti(2,@0[97139860/48'/1'/2'/2']/<0;1>/*,@1[704c7836/48'/1'/3'/2']/<0;1>/*))";
+
+    let c = mnem().args(["bundle", "--descriptor", concrete, "--network", "testnet", "--json"]).output().unwrap();
+    let a = mnem().args(["bundle", "--descriptor", atn, "--network", "testnet",
+        "--slot", "@0.xpub=tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3",
+        "--slot", "@1.xpub=tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC",
+        "--json"]).output().unwrap();
+    assert!(c.status.success() && a.status.success(), "c={} a={}",
+        String::from_utf8_lossy(&c.stderr), String::from_utf8_lossy(&a.stderr));
+    let cv: serde_json::Value = serde_json::from_slice(&c.stdout).unwrap();
+    let av: serde_json::Value = serde_json::from_slice(&a.stdout).unwrap();
+    assert_eq!(cv["md1"], av["md1"], "md1 diverged");
+    assert_eq!(cv["mk1"], av["mk1"], "mk1 diverged");
+}
+
+#[test]
+fn concrete_duplicate_cosigner_rejected_bip388() {
+    use assert_cmd::Command;
+    let dup = "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*))";
+    let out = Command::cargo_bin("mnemonic").unwrap()
+        .args(["bundle", "--descriptor", dup, "--network", "testnet"]).output().unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).to_lowercase().contains("distinct"),
+        "{}", String::from_utf8_lossy(&out.stderr));
+}
