@@ -894,7 +894,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     if is_non_canonical {
         descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
     }
-    return verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr);
+    verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr)
 }
 
 /// Form-agnostic tail shared by both the @N path and the concrete-descriptor

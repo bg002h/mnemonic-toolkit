@@ -63,7 +63,7 @@ fn bundle_concrete_descriptor_produces_watch_only_cards() {
     // Real BundleJson wire-shape: md1 = Vec<String>, ms1 = length-N array with
     // "" sentinels for watch-only, mode = "watch-only".
     assert_eq!(v["mode"], "watch-only", "{v}");
-    assert!(v["md1"].as_array().map_or(false, |a| !a.is_empty()), "md1 array: {v}");
+    assert!(v["md1"].as_array().is_some_and(|a| !a.is_empty()), "md1 array: {v}");
     assert!(v["ms1"].as_array().unwrap().iter().all(|s| s == ""), "watch-only ms1 must be all empty: {v}");
 }
 
