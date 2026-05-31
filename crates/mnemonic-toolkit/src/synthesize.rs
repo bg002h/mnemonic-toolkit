@@ -9,7 +9,7 @@ use crate::format::{MkField, MsField};
 use crate::network::CliNetwork;
 use crate::parse::{CosignerSpec, MultisigPathFamily};
 use crate::template::CliTemplate;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
+use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::use_site_path::UseSitePath;
@@ -62,6 +62,33 @@ pub(crate) fn derivation_path_to_origin_path(p: &DerivationPath) -> OriginPath {
         })
         .collect();
     OriginPath { components }
+}
+
+/// Derive the mk1 card's `origin_path` so it round-trips the xpub it carries.
+///
+/// mk-codec compact-73 reconstructs `depth := component_count(origin_path)` and
+/// `child_number := last_component(origin_path)` (or `Normal{0}` empty); mk-codec
+/// 0.4.0 rejects any card whose xpub depth/child disagree (`XpubOriginPathMismatch`).
+/// The DESCRIPTOR origin (carried independently by md1's `path_decl`) may be deeper
+/// (an account xpub paired with a BIP-48 leaf path), shallower (a leaf xpub
+/// re-annotated with an account origin), or absent. We build a path of length
+/// `xpub.depth` whose terminal equals `xpub.child_number`, reusing the descriptor
+/// path's leading components for the (non-load-bearing, informational) intermediates.
+/// See `design/SPEC_toolkit_mk1_origin_path.md` §3.2.
+pub(crate) fn mk1_origin_path(xpub: &Xpub, descriptor_path: &DerivationPath) -> DerivationPath {
+    let depth = xpub.depth as usize;
+    if depth == 0 {
+        return DerivationPath::master(); // empty — no-path / depth-0 key (e.g. a WIF)
+    }
+    let comps: Vec<ChildNumber> = descriptor_path.into_iter().copied().collect();
+    let mut out: Vec<ChildNumber> = Vec::with_capacity(depth);
+    for i in 0..(depth - 1) {
+        // Reuse the descriptor path where available; pad absent intermediates with
+        // Normal{0} (honest filler — reads as obviously-synthetic in `inspect`).
+        out.push(comps.get(i).copied().unwrap_or(ChildNumber::Normal { index: 0 }));
+    }
+    out.push(xpub.child_number); // terminal MUST equal the xpub's child (round-trip)
+    DerivationPath::from(out)
 }
 
 /// Convert a `bitcoin::bip32::Xpub` to md-codec's 65-byte form:
@@ -134,7 +161,8 @@ pub fn synthesize_full(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     let path = template.derivation_path(network, account);
-    let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
+    let card =
+        mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
@@ -165,7 +193,8 @@ pub fn synthesize_watch_only(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     let path = template.derivation_path(network, account);
-    let card = mk_codec::KeyCard::new(vec![stub], Some(fingerprint), path, xpub);
+    let card =
+        mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
     let csi = derive_mk1_chunk_set_id(&stub);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
@@ -225,7 +254,7 @@ pub fn synthesize_descriptor(
             } else {
                 Some(c.fingerprint)
             },
-            c.path.clone(),
+            mk1_origin_path(&c.xpub, &c.path),
             c.xpub,
         );
         let csi = derive_mk1_chunk_set_id(&stub);
@@ -242,7 +271,7 @@ pub fn synthesize_descriptor(
                 } else {
                     Some(c.fingerprint)
                 },
-                c.path.clone(),
+                mk1_origin_path(&c.xpub, &c.path),
                 c.xpub,
             );
             let fp_bytes: [u8; 4] = c.xpub.fingerprint().to_bytes();
@@ -390,7 +419,7 @@ pub fn synthesize_multisig_full(
             } else {
                 Some(master_fingerprint)
             },
-            path.clone(),
+            mk1_origin_path(&xpub, &path),
             xpub,
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
@@ -491,19 +520,11 @@ pub fn synthesize_multisig_watch_only(
         paths.push(c.path.clone().unwrap_or_else(|| default_path.clone()));
     }
 
-    // 4. SPEC §4.5 path/xpub depth consistency check.
-    for (i, c) in cosigners.iter().enumerate() {
-        let path_depth = paths[i].len() as u8;
-        if path_depth != c.xpub.depth {
-            return Err(ToolkitError::CosignerSpec {
-                cosigner_idx: i,
-                message: format!(
-                    "path depth {} does not match xpub depth {}; xpub at depth {} expects path of depth {}",
-                    path_depth, c.xpub.depth, c.xpub.depth, c.xpub.depth
-                ),
-            });
-        }
-    }
+    // 4. (Removed v0.37.10) The former SPEC §4.5 path/xpub depth-consistency reject
+    //    is superseded by `mk1_origin_path`, which makes every mk1 card's origin_path
+    //    round-trip its xpub by construction (the descriptor path and the xpub may
+    //    legitimately differ in depth — account xpub + BIP-48 leaf path, etc.).
+    //    md1's path_decl still carries the full descriptor origin below.
 
     // 5. Determine PathDeclPaths variant.
     let origin_paths: Vec<OriginPath> = paths.iter().map(derivation_path_to_origin_path).collect();
@@ -560,7 +581,7 @@ pub fn synthesize_multisig_watch_only(
             } else {
                 Some(c.master_fingerprint)
             },
-            paths[i].clone(),
+            mk1_origin_path(&c.xpub, &paths[i]),
             c.xpub,
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
@@ -777,7 +798,7 @@ pub fn synthesize_unified(
             } else {
                 Some(s.fingerprint)
             },
-            s.path.clone(),
+            mk1_origin_path(&s.xpub, &s.path),
             s.xpub,
         );
         let csi = derive_mk1_chunk_set_id(&stub);
@@ -793,7 +814,7 @@ pub fn synthesize_unified(
                 } else {
                     Some(s.fingerprint)
                 },
-                s.path.clone(),
+                mk1_origin_path(&s.xpub, &s.path),
                 s.xpub,
             );
             let fp_bytes: [u8; 4] = s.xpub.fingerprint().to_bytes();
@@ -817,6 +838,63 @@ mod tests {
     use super::*;
     use crate::derive::derive_full;
     use crate::language::CliLanguage;
+
+    #[test]
+    fn mk1_origin_path_round_trips_every_class() {
+        use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+        use bitcoin::secp256k1::Secp256k1;
+        use std::str::FromStr;
+        let secp = Secp256k1::new();
+        let seed = [7u8; 32];
+        let master = Xpriv::new_master(bitcoin::NetworkKind::Main, &seed).unwrap();
+        let xpub_at = |p: &str| {
+            let path = DerivationPath::from_str(p).unwrap();
+            Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap())
+        };
+        // (xpub, descriptor_path) for each census class.
+        let cases: &[(Xpub, &str)] = &[
+            (xpub_at("m/84'/0'/0'"), "m/84'/0'/0'"),    // consistent 3→3 (no-op)
+            (xpub_at("m/48'/0'/0'"), "m/48'/0'/0'/2'"), // 3→4 truncate
+            (xpub_at("m/48'/0'/0'/2'"), "m/87'/0'/0'"), // 4→3 extend
+            (xpub_at("m/84'/0'/0'"), "m"),              // 3→0 pad
+            (xpub_at("m/0'"), "m/0'"),                  // depth-1
+        ];
+        for (xpub, dpath) in cases {
+            let out = mk1_origin_path(xpub, &DerivationPath::from_str(dpath).unwrap());
+            let comps: Vec<_> = out.into_iter().copied().collect();
+            assert_eq!(comps.len(), xpub.depth as usize, "len==depth for {dpath}");
+            assert_eq!(
+                *comps.last().unwrap(),
+                xpub.child_number,
+                "last==child for {dpath}"
+            );
+            // The card must now ENCODE (no XpubOriginPathMismatch).
+            let card = mk_codec::KeyCard::new(vec![[0xAAu8; 4]], None, out, *xpub);
+            assert!(
+                mk_codec::encode_with_chunk_set_id(&card, 0).is_ok(),
+                "encodes for {dpath}"
+            );
+        }
+    }
+
+    #[test]
+    fn mk1_origin_path_depth0_is_empty() {
+        // A WIF-style depth-0 xpub → empty path.
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let sk =
+            bitcoin::PrivateKey::from_wif("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn")
+                .unwrap();
+        let xpub = bitcoin::bip32::Xpub {
+            network: bitcoin::NetworkKind::Main,
+            depth: 0,
+            parent_fingerprint: Default::default(),
+            child_number: bitcoin::bip32::ChildNumber::Normal { index: 0 },
+            public_key: sk.public_key(&secp).inner,
+            chain_code: bitcoin::bip32::ChainCode::from([0u8; 32]),
+        };
+        let out = mk1_origin_path(&xpub, &bitcoin::bip32::DerivationPath::master());
+        assert_eq!(out.into_iter().count(), 0);
+    }
 
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
