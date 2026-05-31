@@ -3377,3 +3377,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred:** pre-existing; orthogonal to A1's `bundle`/`verify-bundle --descriptor` surface.
 - **Status:** open.
 - **Tier:** `hygiene`
+
+### `stale-foreign-format-transcripts-recapture-audit` — verify-examples baselines drifted from prior-cycle fixture/behavior changes
+
+- **Surfaced:** 2026-05-31, A1 (descriptor-form symmetry) end-of-cycle — re-capturing the coldcard transcript revealed master's `manual` CI verify-examples gate has accumulated stale baselines.
+- **Where:** `docs/manual/transcripts/` (`make -C docs/manual verify-examples`).
+- **What:** Two stale transcripts found; one fixed in A1, one OPEN:
+  1. **`foreign-formats/roundtrip-coldcard-multisig.out`** — RESOLVED in A1 (`<this cycle's commit>`). The v0.37.8 baseline encoded a since-fixed cosigner-xpub corruption (`B7F7DFEA: xpub6Do6nv…`, a key that exists nowhere else in the tree); the v0.37.9 `path_raw` deletion + v0.37.10 `mk1_origin_path` rework fixed the `envelope_to_resolved_slots` path but never re-captured this foreign-format transcript. Re-captured against current (correct) behavior: all 3 account xpubs preserved byte-for-byte, BIP-67 lex-sorted cosigner order (cosmetic per Coldcard upstream — order is not load-bearing for `sortedmulti`). Architect-reviewed.
+  2. **`cross-format-recipes/recipe-2-bitcoin-core-to-bundle.{out,err}`** — OPEN. `import-wallet --format bitcoin-core --select-descriptor active-receive` on `core-mainnet-receive-change-pair.json` now reports the seed-vs-blob mismatch as `blob declares xpub6FQya…` where the v0.37.8 baseline expected `xpub6DXqiLU…`. The fixture's corpus was expanded in v0.28.0 (`2a803e8`); the drift to `xpub6FQya` happened in a later pre-A1 cycle (v0.37.9–v0.38.0). **Before re-capturing, determine whether the `--select-descriptor`/xpub-extraction change is correct or a regression** — unlike coldcard's cosmetic reorder, this changes WHICH cosigner xpub is selected, so a blind re-capture risks pinning a regression. A1-independent (recipe-2 uses `bundle --import-json`, not `--descriptor`; apostrophe-path fixture, so A1's P0 `key_regex` superset-widening can't affect it).
+- **Why deferred (recipe-2):** the `--select-descriptor` behavior change needs its own investigation (correct vs regression) before the baseline is updated; out of A1's descriptor-symmetry scope.
+- **Status:** coldcard RESOLVED (A1); recipe-2 + a full transcript-suite audit OPEN.
+- **Tier:** `manual-hygiene`
