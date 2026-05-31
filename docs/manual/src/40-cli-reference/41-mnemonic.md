@@ -2159,7 +2159,7 @@ mnemonic addresses --from xpub=xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6K
 
 ### Output
 
-Text mode prints `  <index>  <address>` rows; with `--chain both` rows are grouped by a `receive (m/0/i):` / `change (m/1/i):` header. JSON mode emits `{ "schema_version": "1", "source", "address_type", "network", "account"?, "addresses": [ { "chain", "index", "address" }, … ] }` (`account` is present only for seed sources). Because the addresses are derived keys, the non-English wordlist advisory does **not** fire here (the language is already baked into the derivation).
+Text mode prints two-space-indented `<index>  <address>` rows; with `--chain both` rows are grouped by a `receive (m/0/i):` / `change (m/1/i):` header. JSON mode emits `{ "schema_version": "1", "source", "address_type", "network", "account"?, "addresses": [ { "chain", "index", "address" }, … ] }` (`account` is present only for seed sources). Because the addresses are derived keys, the non-English wordlist advisory does **not** fire here (the language is already baked into the derivation).
 
 ---
 
