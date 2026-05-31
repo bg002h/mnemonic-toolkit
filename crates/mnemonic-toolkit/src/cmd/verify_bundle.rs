@@ -2124,13 +2124,13 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
         let d = card.xpub.depth as usize;
         let mk_comps: Vec<bitcoin::bip32::ChildNumber> =
             card.origin_path.into_iter().copied().collect();
-        let overlap = mk_comps.len().min(md_path.components.len());
-        for k in 0..overlap {
-            let (mi, mh) = match mk_comps[k] {
+        // zip stops at the shorter (= the overlap = min(len)); compare each shared
+        // component. enumerate gives the 0-based index for the warning message.
+        for (k, (mk_c, md_c)) in mk_comps.iter().zip(md_path.components.iter()).enumerate() {
+            let (mi, mh) = match *mk_c {
                 bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
                 bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
             };
-            let md_c = md_path.components[k];
             if mi != md_c.value || mh != md_c.hardened {
                 writeln!(
                     stderr,

@@ -120,6 +120,14 @@ pub fn friendly_mk_codec(e: &mk_codec::Error) -> String {
             "mk1 card payload too large: bytecode_len {} > max_supported {}",
             bytecode_len, max_supported,
         ),
+        E::XpubOriginPathMismatch {
+            xpub_depth,
+            path_depth,
+            ..
+        } => format!(
+            "mk1 xpub/origin-path depth mismatch: xpub depth {} vs origin_path depth {} (toolkit bug — the mk1 card's path must round-trip its xpub)",
+            xpub_depth, path_depth,
+        ),
         // UnsupportedVersion routes via From → FutureFormat; never reached here.
         _ => format!("unhandled mk_codec::Error variant: {:?}", e),
     }
@@ -302,5 +310,18 @@ mod tests {
         let m = friendly_mk_codec(&mk_codec::Error::PathTooDeep(11));
         assert!(m.contains("11"));
         assert!(m.contains("max 10"));
+    }
+
+    #[test]
+    fn mk_codec_xpub_origin_path_mismatch() {
+        use bitcoin::bip32::ChildNumber;
+        let m = friendly_mk_codec(&mk_codec::Error::XpubOriginPathMismatch {
+            xpub_depth: 3,
+            path_depth: 4,
+            xpub_child: ChildNumber::Hardened { index: 0 },
+            path_child: None,
+        });
+        assert!(m.contains("depth mismatch"), "got: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
     }
 }

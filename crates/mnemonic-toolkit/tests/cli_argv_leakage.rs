@@ -114,6 +114,51 @@ fn bundle_slot_wif_stdin_succeeds() {
         .success();
 }
 
+// v0.37.10 — the 0.3.1 pin emitted a WIF mk1 card that ENCODED but could not DECODE
+// (decode_path rejected the empty/no-path origin as PathTooDeep(0)). mk-codec 0.4.0's
+// no-path/depth-0 support makes it round-trip: bundle the WIF, then `inspect` the
+// emitted mk1 card (which decodes via mk_codec::decode).
+#[test]
+fn bundle_wif_mk1_round_trips_via_inspect() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            "@0.wif=-",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .write_stdin(MAINNET_WIF.as_bytes())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
+    // MkField is #[serde(untagged)] → single-sig serializes as a flat array.
+    let mk1: Vec<String> = json["mk1"]
+        .as_array()
+        .expect("mk1 array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert!(!mk1.is_empty(), "bundle must emit an mk1 card for the WIF slot");
+    let mut args: Vec<String> = vec!["inspect".into()];
+    for c in &mk1 {
+        args.push("--mk1".into());
+        args.push(c.clone());
+    }
+    // The depth-0 / no-path card must now DECODE (the round-trip the 0.3.1 pin broke).
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success();
+}
+
 // ============================================================================
 // Cell 4 — `verify-bundle --slot @0.phrase=-`
 // ============================================================================

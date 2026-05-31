@@ -389,6 +389,7 @@ fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
         | mk_codec::Error::UnexpectedEnd
         | mk_codec::Error::TrailingBytes
         | mk_codec::Error::CardPayloadTooLarge { .. } => 2,
+        mk_codec::Error::XpubOriginPathMismatch { .. } => 2,
         // UnsupportedVersion is intercepted by From → FutureFormat.
         _ => 1,
     }

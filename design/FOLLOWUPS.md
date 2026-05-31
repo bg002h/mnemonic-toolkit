@@ -3337,6 +3337,16 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Surfaced:** 2026-05-29, mk-codec test-hardening cycle.
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:494-503` (the SPEC §4.5 path-depth==xpub-depth check) compensates for `mk-codec`'s unvalidated depth/child reconstruction.
 - **What:** If `mk-codec` resolves its `mk1-depth-child-lossless-by-construction-unenforced` FOLLOWUP via option (a) (encode-time `XpubDepthMismatch`), this toolkit-side compensating check may become redundant and reviewable for removal. Until then it is load-bearing — do not drop it.
-- **Status:** `open`
+- **Status:** `resolved 1cce14c` — mk-codec shipped option (a) (the guard, 0.3.2 + extended to depth-0 in 0.4.0). v0.37.10 re-pinned the toolkit to mk-codec 0.4.0 and **removed** the `synthesize_multisig_watch_only:494-503` compensating reject — it is now superseded by the `mk1_origin_path` helper, which makes every mk1 card consistent-by-construction. See `mk1-card-origin-path-vs-xpub-depth-consistency`.
 - **Tier:** `monitoring`
 - **Companion:** `mnemonic-key` (mk-codec) FOLLOWUP `mk1-depth-child-lossless-by-construction-unenforced`.
+
+### `mk1-card-origin-path-vs-xpub-depth-consistency` — mk1 card origin_path must round-trip its xpub; the descriptor origin differs in depth
+
+- **Surfaced:** 2026-05-30, re-pinning the toolkit to mk-codec 0.4.0 (whose encode-guard `XpubOriginPathMismatch` rejected 74 pre-existing tests). Subsumes the WIF-bundle-depth0 concern.
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs` (8 `KeyCard::new` sites), `cmd/verify_bundle.rs` (cross-checks), `wallet_import/json_envelope.rs` (`envelope_to_resolved_slots`).
+- **What:** The toolkit built every mk1 card with `origin_path = the DESCRIPTOR origin` (e.g. a depth-4 BIP-48 path) while the card carried an xpub at a different depth (e.g. a depth-3 account xpub exported by foreign multisig formats). On 0.3.1 (no guard) this silently emitted wrong-metadata mk1 cards. **Fix (v0.37.10):** a centralized `mk1_origin_path(xpub, descriptor_path)` helper derives the mk1 card's path from the xpub's own depth/child (truncate/extend/pad); md1's `path_decl` keeps the full descriptor origin independently; the verify-bundle cross-checks compare the decoded mk1 origin against md1's depth-`d` prefix (overlap-prefix); `bundle --import-json` sources the cosigner origin from the envelope metadata (md1), not the now-account-level mk1 card.
+- **Why deferred:** N/A — shipped in v0.37.10.
+- **Status:** `resolved 1cce14c` — toolkit v0.37.10 (mk-codec 0.4.0 adoption). Toolkit-only PATCH; no GUI/manual lockstep.
+- **Tier:** `cross-repo`
+- **Companion:** `mnemonic-key` (mk-codec) FOLLOWUP `mk1-no-path-depth0-support`.
