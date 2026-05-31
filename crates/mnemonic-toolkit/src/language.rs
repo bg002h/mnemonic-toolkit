@@ -56,9 +56,51 @@ impl From<CliLanguage> for bip39::Language {
     }
 }
 
+/// Returns a stderr advisory iff `lang` is a non-English BIP-39 wordlist (the
+/// language is load-bearing for the seed but is NOT carried by `form`). `form`
+/// names the language-dropping output ("an ms1 card", "raw entropy",
+/// "SLIP-39 shares"). English → None (English self-recovers as the universal
+/// default). v0.37.11 — path A of the `mnem` footgun; see
+/// `design/SPEC_non_english_seed_advisory.md`.
+pub(crate) fn non_english_seed_advisory(lang: CliLanguage, form: &str) -> Option<String> {
+    if lang == CliLanguage::English {
+        return None;
+    }
+    let name = lang.human_name();
+    Some(format!(
+        "warning: encoding a {name} BIP-39 seed as {form} — it carries only the \
+         entropy, not the wordlist language. Record \"{name}\" alongside the backup: \
+         recovering the entropy with English-defaulted software derives a DIFFERENT \
+         seed and a DIFFERENT wallet."
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn advisory_none_for_english() {
+        assert_eq!(
+            non_english_seed_advisory(CliLanguage::English, "an ms1 card"),
+            None
+        );
+    }
+
+    #[test]
+    fn advisory_some_for_french_with_form() {
+        let m = non_english_seed_advisory(CliLanguage::French, "an ms1 card").unwrap();
+        assert!(m.contains("french"), "{m}");
+        assert!(m.contains("an ms1 card"), "{m}");
+        assert!(m.contains("DIFFERENT"), "{m}");
+    }
+
+    #[test]
+    fn advisory_uses_kebab_name() {
+        let m =
+            non_english_seed_advisory(CliLanguage::SimplifiedChinese, "raw entropy").unwrap();
+        assert!(m.contains("simplified-chinese"), "{m}");
+    }
 
     #[test]
     fn default_is_english() {
