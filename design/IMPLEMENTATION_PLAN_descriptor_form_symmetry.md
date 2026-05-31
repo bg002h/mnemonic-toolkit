@@ -332,7 +332,7 @@ fn bundle_concrete_descriptor_produces_watch_only_cards() {
 Run: `cargo test -p mnemonic-toolkit --test cli_descriptor_concrete bundle_concrete_descriptor_produces_watch_only_cards`
 Expected: FAIL — current `bundle --descriptor` rejects bare concrete (`descriptor must contain at least one @N placeholder`) OR dies at the empty-slot gate.
 
-- [ ] **Step 3: Implement the early-fork** — in `bundle.rs run`, **AFTER the descriptor-mode mode-violation guards** (`bundle.rs:235-279`: `DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `--threshold`/`--multisig-path-family` mutexes), immediately before the `bundle_run_unified(...)` dispatch. [R0-I3 — `--descriptor` has NO clap `conflicts_with` for `--template`; the mutexes are code-level at `:235-279`, so forking at `:227` would let a concrete `--descriptor --template` silently ignore `--template`. The `@N` path errors at those guards, so the Concrete path must run them first.] Locate the `bundle_run_unified(args, ...)` call that follows the guard block and insert just above it:
+- [ ] **Step 3: Implement the early-fork** — in `bundle.rs run`, **AFTER the descriptor-mode mode-violation guards** (`bundle.rs:235-284`: `DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `--threshold`/`--multisig-path-family` mutexes), immediately before the `bundle_run_unified(args, ...)` dispatch at `:286`. [R0-I3 — `--descriptor` has NO clap `conflicts_with` for `--template`; the mutexes are code-level at `:235-279`, so forking at `:227` would let a concrete `--descriptor --template` silently ignore `--template`. The `@N` path errors at those guards, so the Concrete path must run them first.] Locate the `bundle_run_unified(args, ...)` call that follows the guard block and insert just above it:
 
 ```rust
     if descriptor_mode {
@@ -348,7 +348,9 @@ Expected: FAIL — current `bundle --descriptor` rejects bare concrete (`descrip
         };
         use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
         if classify_descriptor_form(&body)? == DescriptorForm::Concrete {
-            return bundle_run_concrete_descriptor(&args, body, stdout, stderr);
+            // `run`'s `args` is already `&BundleArgs` (bundle.rs:171), so pass
+            // it directly — `&args` would be `&&BundleArgs` (plan-R1 C1).
+            return bundle_run_concrete_descriptor(args, body, stdout, stderr);
         }
         // AtN: fall through to bundle_run_unified (re-reads the file as today).
     }
