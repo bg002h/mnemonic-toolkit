@@ -214,14 +214,13 @@ Recovers the full `Xpub` + `DerivationPath` per cosigner (the `[u8;65]` `ParsedK
 Run: `cargo test -p mnemonic-toolkit --lib concrete_to_resolved_slots`
 Expected: FAIL — helper not defined.
 
-- [ ] **Step 3: Implement** — add the imports at the top of `pipeline.rs` (next to existing `use`s; all already used by sibling `bsms.rs`):
+- [ ] **Step 3: Implement** — add ONLY the genuinely-new imports at the top of `pipeline.rs`. [R0-I1 — `pipeline.rs` ALREADY has `use std::str::FromStr;` (:21), `use bitcoin::bip32::Xpub;` (:19), `use crate::slip0132::normalize_xpub_prefix;` (:18); re-importing them is E0252/E0254. Verify the existing `use` block first.]
 
 ```rust
-use std::str::FromStr;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint};   // Xpub already imported at :19
 use crate::synthesize::{ResolvedSlot, xpub_to_65};
 use crate::parse_descriptor::parse_descriptor;
-use crate::slip0132::normalize_xpub_prefix;
+// std::str::FromStr (:21) + crate::slip0132::normalize_xpub_prefix (:18) already present.
 ```
 
 Then the helper:
@@ -315,21 +314,25 @@ fn bundle_concrete_descriptor_produces_watch_only_cards() {
         .output().unwrap();
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    // watch-only: md1 + two mk1 cards, NO ms1 secret card.
-    assert!(v["md1"].as_str().is_some(), "{v}");
-    assert_eq!(v["mk1"].as_array().map(|a| a.len()), Some(2), "{v}");
-    assert!(v.get("ms1").map(|x| x.is_null()).unwrap_or(true), "watch-only must omit ms1: {v}");
+    // Real BundleJson wire-shape (format.rs:119-145): md1 = Vec<String>,
+    // ms1 = length-N array with "" sentinels for watch-only, mode = "watch-only".
+    assert_eq!(v["mode"], "watch-only", "{v}");
+    assert!(v["md1"].as_array().map_or(false, |a| !a.is_empty()), "md1 array: {v}");
+    assert!(
+        v["ms1"].as_array().unwrap().iter().all(|s| s == ""),
+        "watch-only ms1 must be all empty-string sentinels: {v}"
+    );
 }
 ```
 
-(Before writing, confirm the bundle `--json` field names by running `mnemonic bundle --descriptor "<a known @N descriptor>" --slot @0.xpub=... --json` once, or `grep -n '"md1"\|"mk1"\|"ms1"' crates/mnemonic-toolkit/src/cmd/bundle.rs` — adjust the assertion keys to the real envelope shape if they differ.)
+(`BundleJson` shape confirmed at `format.rs:119-145`: `md1: Vec<String>`, `mk1: MkField` untagged (multisig = array-of-arrays), `ms1: MsField` length-N array with `""` watch-only sentinels, `mode: "full"|"watch-only"`. Do NOT use `.as_str()` on `md1`/`mk1` — they are arrays.)
 
 - [ ] **Step 2: Run — verify FAIL**
 
 Run: `cargo test -p mnemonic-toolkit --test cli_descriptor_concrete bundle_concrete_descriptor_produces_watch_only_cards`
 Expected: FAIL — current `bundle --descriptor` rejects bare concrete (`descriptor must contain at least one @N placeholder`) OR dies at the empty-slot gate.
 
-- [ ] **Step 3: Implement the early-fork** — in `bundle.rs run`, immediately after the `--import-json` short-circuit (`:223-225`) and the existing `let descriptor_mode = …` (`:227`), insert:
+- [ ] **Step 3: Implement the early-fork** — in `bundle.rs run`, **AFTER the descriptor-mode mode-violation guards** (`bundle.rs:235-279`: `DESCRIPTOR_AND_TEMPLATE`, `DESCRIPTOR_AND_DESCRIPTOR_FILE`, `--threshold`/`--multisig-path-family` mutexes), immediately before the `bundle_run_unified(...)` dispatch. [R0-I3 — `--descriptor` has NO clap `conflicts_with` for `--template`; the mutexes are code-level at `:235-279`, so forking at `:227` would let a concrete `--descriptor --template` silently ignore `--template`. The `@N` path errors at those guards, so the Concrete path must run them first.] Locate the `bundle_run_unified(args, ...)` call that follows the guard block and insert just above it:
 
 ```rust
     if descriptor_mode {
@@ -341,21 +344,21 @@ Expected: FAIL — current `bundle --descriptor` rejects bare concrete (`descrip
                 .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display())))?
                 .trim_end()
                 .to_string(),
-            _ => unreachable!("clap conflicts_with rules out both --descriptor and --descriptor-file"),
+            _ => unreachable!("DESCRIPTOR_AND_DESCRIPTOR_FILE guard above rules out both"),
         };
         use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
         if classify_descriptor_form(&body)? == DescriptorForm::Concrete {
-            return bundle_run_concrete_descriptor(args, body, stdout, stderr);
+            return bundle_run_concrete_descriptor(&args, body, stdout, stderr);
         }
         // AtN: fall through to bundle_run_unified (re-reads the file as today).
     }
 ```
 
-Then add the new function (place near `bundle_run_from_import_json`):
+Then add the new function (place near `bundle_run_from_import_json`; note `args: &BundleArgs` by-ref, mirroring `bundle_run_from_import_json` at `bundle.rs:1491` — `run`'s `args` is `&BundleArgs`):
 
 ```rust
 fn bundle_run_concrete_descriptor<W: Write, E: Write>(
-    args: BundleArgs,
+    args: &BundleArgs,
     body: String,
     stdout: &mut W,
     stderr: &mut E,
@@ -385,9 +388,9 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     // Emit: the real descriptor is already in args.descriptor/_file, so
     // emit_unified's descriptor_field picks it up — NO synthetic injection
     // (unlike from_import_json's :1680-1681).
-    emit_unified(&args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
+    emit_unified(args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
     if args.self_check {
-        self_check_bundle(&bundle, &args)?;
+        self_check_bundle(&bundle, args)?;
     }
     Ok(())
 }
@@ -411,71 +414,107 @@ git commit -m "feat(bundle): accept bare-concrete --descriptor (watch-only cards
 - Modify: `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (after `descriptor_str` read ~`:611`, before `lex_placeholders` `:614`)
 - Test: `crates/mnemonic-toolkit/tests/cli_descriptor_concrete.rs`
 
-- [ ] **Step 1: Write the failing test** — append:
+- [ ] **Step 1: Write the failing test** — append. **Card extraction is shape-sensitive** (`md1: Vec<String>`, multisig `mk1` = array-of-arrays), so MIRROR the produce→extract→verify pattern from an existing passing test rather than hand-navigating JSON: read `tests/cli_verify_bundle_full.rs` (and `cli_verify_bundle_multi_cosigner_mk1.rs`) for the exact helper that turns a `bundle --json` envelope into the `--md1`/`--mk1` flag vector (`--md1`/`--mk1` are `Vec<String>`, `num_args = 1..`, `verify_bundle.rs:82/:89`). Then:
 
 ```rust
 #[test]
 fn verify_bundle_concrete_matches_self_produced_cards() {
     // Produce a bundle from the concrete descriptor, then verify the SAME
-    // descriptor against those cards → exit 0.
+    // descriptor against those cards → exit 0. `flags_from_bundle_json` is
+    // the helper mirrored from cli_verify_bundle_multi_cosigner_mk1.rs that
+    // expands md1 (Vec<String>) + mk1 (array-of-arrays) into --md1/--mk1 args.
     let produced = mnemonic()
         .args(["bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet", "--json"])
         .output().unwrap();
     let v: serde_json::Value = serde_json::from_slice(&produced.stdout).unwrap();
-    let md1 = v["md1"].as_str().unwrap();
-    let mk1a = v["mk1"][0].as_str().unwrap();
-    let mk1b = v["mk1"][1].as_str().unwrap();
-    let out = mnemonic()
-        .args(["verify-bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet",
-               "--md1", md1, "--mk1", mk1a, "--mk1", mk1b])
-        .output().unwrap();
+    let mut args: Vec<String> =
+        vec!["verify-bundle".into(), "--descriptor".into(), CONCRETE_MULTI_APOS.into(),
+             "--network".into(), "testnet".into()];
+    args.extend(flags_from_bundle_json(&v)); // pushes --md1 <chunk>… --mk1 <chunk>…
+    let out = mnemonic().args(&args).output().unwrap();
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
 }
 ```
 
-(Confirm verify-bundle's card-input flags — `grep -n 'long = "md1"\|long = "mk1"' crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` — and adjust `--md1/--mk1` to the real flags/arity.)
+If no reusable helper exists in those files, write `flags_from_bundle_json` to expand `v["md1"].as_array()` (each → `--md1 <chunk>`) and `v["mk1"].as_array()` (each cosigner's chunk array → `--mk1 <chunk>`), per the real `MkField` multisig shape.
 
 - [ ] **Step 2: Run — verify FAIL**
 
 Run: `cargo test -p mnemonic-toolkit --test cli_descriptor_concrete verify_bundle_concrete_matches_self_produced_cards`
 Expected: FAIL — verify-bundle's `lex_placeholders` rejects bare concrete.
 
-- [ ] **Step 3: Implement** — in `verify_bundle.rs`, right after `descriptor_str` is materialized (`:603-611`) and before `let occs = lex_placeholders(...)` (`:614`):
+- [ ] **Step 3: Implement** — three parts.
+
+**(a) Extract the reusable emit tail.** The existing `descriptor_mode_verify_run` (`verify_bundle.rs:589`) tail at `:864-902` is partly `@N`-specific. Factor ONLY the form-agnostic part (`:867` synthesize + `:871-902` `SuppliedCards`/`emit_verify_checks`/output/`Ok(if any_fail {4} else {0})`) into a helper. **Do NOT include `:856` (`parse_descriptor(&descriptor_str,&keys,&fingerprints)` — re-parses the `@N` form, would FAIL on concrete) or `:864-866` (`if is_non_canonical { descriptor.path_decl = descriptor_resolved… }` — `descriptor_resolved` exists only on the `@N` path).**
+
+```rust
+fn verify_emit_from_expected<W: Write, E: Write>(
+    args: &VerifyBundleArgs,
+    descriptor: md_codec::Descriptor,
+    cosigners: &[crate::synthesize::ResolvedSlot],
+    no_auto_repair: bool,
+    json_context: bool,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    let expected = synthesize_descriptor(&descriptor, cosigners, args.privacy_preserving)?;
+    let supplied = SuppliedCards { ms1: &args.ms1, mk1: &args.mk1, md1: &args.md1 };
+    let checks = emit_verify_checks(&expected, &supplied, descriptor.n > 1, no_auto_repair, json_context, stdout, stderr)?;
+    let any_fail = checks.iter().any(|c| !c.passed);
+    let result_str = if any_fail { "mismatch" } else { "ok" };
+    if args.json {
+        let json = crate::format::VerifyBundleJson { schema_version: "4", result: result_str, checks };
+        serde_json::to_writer(&mut *stdout, &json).ok();
+        writeln!(stdout).ok();
+    } else {
+        for c in &checks {
+            let status = if c.passed { "ok" } else { "fail" };
+            if c.detail.is_empty() { writeln!(stdout, "{}: {}", c.name, status).ok(); }
+            else { writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok(); }
+        }
+        writeln!(stdout, "result: {}", result_str).ok();
+    }
+    Ok(if any_fail { 4 } else { 0 })
+}
+```
+
+Then in the `@N` path, replace its inline `:867-902` block with `return verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr);` (after its existing `:864-866` path_decl mutation). Confirm `cosigners`/`keys`/`fingerprints` variable names against `:850-866` and that `cosigners: Vec<CosignerKeyInfo>` (= `Vec<ResolvedSlot>`).
+
+**(b) Insert the Concrete fork** right after `descriptor_str` is materialized (`:603-611`) and before `let occs = lex_placeholders(...)` (`:614`):
 
 ```rust
     use crate::wallet_import::pipeline::{classify_descriptor_form, descriptor_concrete_to_resolved_slots, DescriptorForm};
     if classify_descriptor_form(&descriptor_str)? == DescriptorForm::Concrete {
         let body_no_csum = crate::wallet_import::json_envelope::descriptor_body_no_csum(&descriptor_str, "--descriptor")?;
-        let (descriptor, resolved_slots) = descriptor_concrete_to_resolved_slots(body_no_csum)?;
-        // Mirror the verify-flavored distinctness (exit-4), as the @N path
-        // does at verify_bundle.rs:852.
-        if check_resolved_slots_distinctness_verify(&resolved_slots).is_err() {
+        let (descriptor, cosigners) = descriptor_concrete_to_resolved_slots(body_no_csum)?;
+        // Verify-flavored distinctness (exit-4), mirroring the @N path's
+        // re-wrap at verify_bundle.rs:852-854. Explicit-origin concrete needs
+        // NO path_decl mutation (the helper's descriptor is already correct).
+        if dup_xpub_path(&cosigners) {
             return Err(ToolkitError::Bip388VerifyDistinctness);
         }
-        return verify_bundle_against_resolved(args, descriptor, resolved_slots, json_context, stdout, stderr);
+        return verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr);
     }
 ```
 
-This needs two small helpers. Add a thin distinctness check reusing bundle's logic (or inline the `(xpub,path)` dup scan):
+**(c) Distinctness scan helper** (verify-bundle has no `&[ResolvedSlot]` distinctness fn; `bundle.rs:402`'s is private — inline a scan):
 
 ```rust
-fn check_resolved_slots_distinctness_verify(slots: &[crate::synthesize::ResolvedSlot]) -> Result<(), ()> {
+fn dup_xpub_path(slots: &[crate::synthesize::ResolvedSlot]) -> bool {
     for i in 0..slots.len() {
         for j in (i + 1)..slots.len() {
             if slots[i].xpub.to_string() == slots[j].xpub.to_string() && slots[i].path == slots[j].path {
-                return Err(());
+                return true;
             }
         }
     }
-    Ok(())
+    false
 }
 ```
 
-And `verify_bundle_against_resolved` — extract the post-binding comparison tail of the existing verify function (from the `parse_descriptor(&descriptor_str, &keys, &fingerprints)` synthesis-and-compare at `:856+` onward) into a helper that takes the already-built `descriptor` + `resolved_slots` and runs the same card comparison the `@N` path runs. **Implementation note:** the `@N` path builds `keys`/`fingerprints`/`cosigners` from `--slot` then `synthesize_descriptor` + compares; the Concrete path supplies the same `descriptor` + `resolved_slots` directly. Factor the synthesize+compare tail so both call it.
-
 - [ ] **Step 4: Run — verify PASS + no regression**
 
-Run: `cargo test -p mnemonic-toolkit --test cli_descriptor_concrete verify_bundle_concrete_matches_self_produced_cards` then `cargo test -p mnemonic-toolkit --test cli_verify_bundle` (existing verify-bundle suite).
+Run: `cargo test -p mnemonic-toolkit --test cli_descriptor_concrete verify_bundle_concrete_matches_self_produced_cards` then the existing verify-bundle suites (`ls crates/mnemonic-toolkit/tests | grep verify_bundle` first — they are `cli_verify_bundle_full`, `cli_verify_bundle_multi_cosigner_mk1`, `cli_verify_bundle_watch_only`, etc.; run each with `--test <name>`).
 Expected: PASS, existing verify-bundle tests still green.
 
 - [ ] **Step 5: Commit**
@@ -645,7 +684,12 @@ git commit -m "test(descriptor): concrete↔@N convergence + BIP-388 distinctnes
 Run: `cargo build -p mnemonic-toolkit && make -C docs/manual lint MNEMONIC_BIN=../../target/debug/mnemonic MD_BIN=... MS_BIN=... MK_BIN=...`
 Expected: PASS — flag-coverage lint green (no new flag added, so it should already pass; the prose update keeps it consistent).
 
-- [ ] **Step 3: Bump the version** — `crates/mnemonic-toolkit/Cargo.toml` `version = "0.38.0"` → `"0.38.1"`. Check for a README version marker (`grep -rn '0.38.0' crates/mnemonic-toolkit/src crates/mnemonic-toolkit/tests README.md` — update `tests/readme_version_current.rs`-guarded sites if any).
+- [ ] **Step 3: Bump the version — FOUR sites.** [R0-I4 — `tests/readme_version_current.rs:27` requires the `<!-- toolkit-version: 0.38.1 -->` marker in BOTH READMEs, so missing one reds the suite at Step 4.]
+  - `crates/mnemonic-toolkit/Cargo.toml` `version = "0.38.0"` → `"0.38.1"`.
+  - `crates/mnemonic-toolkit/README.md` — the `<!-- toolkit-version: 0.38.0 -->` marker (~:9).
+  - repo-root `README.md` — the same marker.
+  - `CHANGELOG.md` — add the `## [0.38.1]` entry (per recent-cycle convention).
+  Verify with `grep -rn '0\.38\.0' crates/mnemonic-toolkit/README.md README.md CHANGELOG.md crates/mnemonic-toolkit/Cargo.toml` (all four must flip).
 
 - [ ] **Step 4: Full suite + audit**
 
@@ -675,7 +719,7 @@ git commit -m "docs+release(descriptor): manual prose for both --descriptor form
 
 **Spec coverage:** §3.1 classifier → Task 1; §3.2 helper → Task 2; §3.3 h-form + remap → Task 0 (regex) + Task 2 (remap); §3.4 bundle/verify/export wiring → Tasks 3a/3b/4; §3.5 errors → Tasks 1,2,4 (pinned strings); §4 SemVer → Task 6; §5 tests 1-9 → Tasks 0-5; §6 phases → Tasks 0-6; §9 FOLLOWUPs → Task 7. No gap.
 
-**Placeholder scan:** the verify-bundle synthesize+compare tail (Task 3b Step 3) is described structurally rather than as literal code, because it is an extract-and-reuse of existing verify logic whose exact span (`verify_bundle.rs:856+`) the implementer must read — flagged explicitly as "factor the synthesize+compare tail," not left as "TODO." The taproot cell (Task 5 Step 3) is conditional with a named FOLLOWUP fallback, not a placeholder.
+**Placeholder scan:** the verify-bundle synthesize+compare tail (Task 3b Step 3) is now given as literal `verify_emit_from_expected` code (post plan-R0-I2 fold) with the exact reusable span (`verify_bundle.rs:867 + :871-902`) and the `@N`-only lines to exclude (`:856`, `:864-866`) named. The taproot cell (Task 5 Step 3) is conditional with a named FOLLOWUP fallback, not a placeholder. Plan-R0 (2C/4I) folded: args by-ref, real `--json` assertions, dedup imports, verify-tail spec, fork-after-guards, 4 version sites.
 
 **Type consistency:** `DescriptorForm { AtN, Concrete }`, `classify_descriptor_form`, `is_at_n_form`, `descriptor_concrete_to_resolved_slots`, `ResolvedSlot { xpub, fingerprint, path, entropy, master_xpub, _entropy_pin }`, `check_resolved_slots_distinctness` used consistently across Tasks 1-5 and matching the SPEC.
 
