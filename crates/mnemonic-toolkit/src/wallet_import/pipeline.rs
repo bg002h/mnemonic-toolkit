@@ -35,7 +35,7 @@ use std::sync::OnceLock;
 fn key_regex() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
+        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
             .expect("key_regex is a fixed string literal")
     })
 }
@@ -161,5 +161,17 @@ mod tests {
         let desc = "wsh(thresh(2,older(144),older(288)))";
         let err = concrete_keys_to_placeholders(desc).unwrap_err();
         assert!(matches!(err, ToolkitError::ImportWalletParse(_)));
+    }
+
+    #[test]
+    fn hform_hardened_paths_accepted() {
+        // Core/Sparrow emit `h`-form (`/48h/1h/...`); the converter must
+        // accept it identically to apostrophe form.
+        let hform = "wsh(sortedmulti(2,[704c7836/48h/1h/3h/2h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48h/1h/2h/2h]tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
+        let (placeholder, keys, fps) = concrete_keys_to_placeholders(hform).unwrap();
+        assert_eq!(keys.len(), 2);
+        assert_eq!(fps[0].fp, [0x70, 0x4c, 0x78, 0x36]);
+        // The h-form path string is preserved verbatim into the @N form.
+        assert!(placeholder.contains("@0[704c7836/48h/1h/3h/2h]/<0;1>/*"), "{placeholder}");
     }
 }
