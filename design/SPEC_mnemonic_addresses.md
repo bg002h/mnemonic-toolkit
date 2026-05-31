@@ -82,7 +82,7 @@ Pure move + re-point; behavior byte-identical (covered by existing convert + xpu
 2. Address correctness — first N addresses match `convert --to address … --path m/0/i` (independent in-toolkit oracle) for all four `--address-type`s.
 3. phrase source + `--address-type p2wpkh` + `--account 0` → derives `m/84'/0'/0'` account → addresses match a known vector; `--passphrase` changes them; `entropy=`/`seedqr=` parity.
 4. `--account 1` derives a different account (addresses differ from account 0).
-5. `--count`/`--range` (incl. `A>B` → BadInput; conflict → clap error); **BIP-32 ceiling** — `--count 2147483648` SUCCEEDS (boundary; highest index 2^31−1) but `--count 2147483649` → BadInput; `--range 0,2147483648` → BadInput — all NOT panic.
+5. `--count`/`--range` (incl. `A>B` → BadInput; conflict → clap error); **BIP-32 ceiling** — `--count 2147483649` → BadInput and `--range 0,2147483648` → BadInput (CLI, reject before allocating, NOT panic); the `2^31` accept boundary is a **unit test** on `resolve_indices` (`Some(2147483648)` → Ok, `Some(2147483649)` → Err) — NOT a CLI run (it would eagerly build an 8 GB index Vec).
 6. `--chain receive|change|both` (chain indices + ordering).
 7. Network — xpub-inferred; `--network regtest` → `bcrt1…` (test-kind xpub); `--network mainnet` on a test xpub → BadInput (kind mismatch); seed source + `--network testnet` → `tb1…`.
 8. xpub source + `--account`/`--passphrase` → BadInput (don't apply).
