@@ -59,7 +59,7 @@ Resolve each site's language (bundle/convert: `Option` → `unwrap_or_default()`
 | command | gate (when a language-losing emit occurs) | `form` | site (once per invocation) |
 |---|---|---|---|
 | **`bundle`** | synthesized `bundle.any_secret_bearing()` (>=1 ms1) | `"an ms1 card"` | `emit_unified` (`bundle.rs:698`) — all 3 dispatch branches converge here |
-| **`convert`** | `targets.contains(&NodeType::Entropy)` (`convert.rs:850/874`) | `"raw entropy"` | once after target-parse |
+| **`convert`** | `targets.contains(&NodeType::Entropy)` → `"raw entropy"`; `targets.contains(&NodeType::Ms1)` → `"an ms1 card"` (C1 amendment) | `"raw entropy"` / `"an ms1 card"` | once each, after `compute_outputs` succeeds (I1 amendment) |
 | **`slip39 split`** | always (split -> shares lose the BIP-39 language) | `"SLIP-39 shares"` | once in the split run path |
 | **`slip39 combine`** | `--to == Slip39ToShape::Entropy` | `"raw entropy"` | once in the combine run path |
 | ~~`seedqr` / SeedQR~~ | — **no path produces a non-English SeedQR** (`seedqr encode` English-only + `convert --to seedqr` refused) | — | NONE — the footgun does not exist |
@@ -72,7 +72,7 @@ Resolve each site's language (bundle/convert: `Option` → `unwrap_or_default()`
 
 ### 3.3 Why `convert`'s key-deriving targets are excluded
 
-`--to xpub/xprv/wif/bip38/address/electrum-phrase` are DERIVED from the seed (the language was already applied to produce the correct key) — they ARE the key, with no re-recovery step where a language must be re-guessed. `--to phrase` keeps the language (it's a mnemonic in that language). Only `entropy` is a re-encodable seed-backup form that drops the language (`--to seedqr` is refused at parse, §2). So only `NodeType::Entropy` triggers the convert advisory.
+`--to xpub/xprv/wif/bip38/address/electrum-phrase` are DERIVED from the seed (the language was already applied to produce the correct key) — they ARE the key, with no re-recovery step where a language must be re-guessed. `--to phrase` keeps the language (it's a mnemonic in that language). The re-encodable seed-backup forms that drop the language are `entropy` **and `ms1`** (an ms1 card carries only the entropy — C1 amendment; `--to seedqr` is refused at parse, §2; `--to mk1` is unreachable from a phrase / refused, and mk1 anyway carries a derived xpub). So `NodeType::Entropy` **or `NodeType::Ms1`** triggers the convert advisory.
 
 ---
 
