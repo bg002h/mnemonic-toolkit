@@ -100,7 +100,7 @@ Resolve each site's language (bundle/convert: `Option` → `unwrap_or_default()`
 
 **Phase 1 — `bundle` site.** Emit at `emit_unified` (`bundle.rs:698`) when `any_secret_bearing()` + non-English. Integration tests (watch-only-no-fire + multisig-once + `--json`-stdout-unchanged).
 
-**Phase 2 — `convert` site.** Emit once when `targets.contains(&NodeType::Entropy)` + non-English. Integration tests (multi-target-once, key-target-no-fire, `--to seedqr`-still-rejected).
+**Phase 2 — `convert` site.** Emit once each when `targets.contains(&NodeType::Entropy)` (form "raw entropy") or `targets.contains(&NodeType::Ms1)` (form "an ms1 card") + non-English, after `compute_outputs` succeeds (C1 + I1 amendments). Integration tests (multi-target-once, key-target-no-fire, `--to ms1`-fires, malformed-phrase-no-advise, `--to seedqr`-still-rejected).
 
 **Phase 3 — `slip39` sites.** Emit on `split` (always, non-English → shares) + `combine` (`--to Entropy`, non-English). Integration tests.
 
