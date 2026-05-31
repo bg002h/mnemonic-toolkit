@@ -119,56 +119,65 @@ Both cross-checks key off `md_depth` today; after the fix the mk1 xpub is at dep
 
 **3.5a — `emit_watch_only_xpub_path_cross_check` (`:2117-2198`)** — replace Checks 1/2/3 with:
 
+**C1 fold (plan-R0):** the original "Check A = `d > md_depth` warns" fired on a *correct* 4→3 bundle (the helper extends the mk1 path to depth-4 > md1's depth-3; the cards are consistent — md1's TLV pubkey == the depth-4 xpub; md1 merely under-annotates). Replace the depth + terminal checks with an **overlap-prefix comparison** of the decoded `card.origin_path` vs `md_path`. One is a prefix of the other by construction (3→4: mk1 ⊆ md1; 4→3: md1 ⊆ mk1; 4→4: equal) → silent; a genuine disagreement on the shared prefix fires. It **subsumes** the old depth + terminal-child checks (the mk1 path's length is `xpub.depth` and terminal is `xpub.child`, by the encode guard).
+
 ```rust
-let d        = card.xpub.depth as usize;
-let md_depth = md_path.components.len();
+let d = card.xpub.depth as usize;
 
-// Check A (replaces old depth-equality Check 1): the card must not claim a node
-// DEEPER than md1's declared origin. d <= md_depth is fine (3→4 truncation);
-// d > md_depth means md1 cannot be this key's full origin.
-if d > md_depth {
-    warn!("cosigner[{i}] mk1 xpub depth ({d}) is deeper than md1 origin-path \
-           length ({md_depth}); the card claims a node below the declared origin \
-           — cards are internally inconsistent");
-}
-
-// Check B (replaces old terminal Check 2): the xpub's child_number must equal
-// md1's component at index d-1 (md1 TRUNCATED to the xpub's depth, terminal).
-// For 3→4 this compares against the ACCOUNT-level component (md_path[2]=0'),
-// NOT md_path.last() (=2') — exactly the change that dissolves the false-positive.
-if d >= 1 && d <= md_depth {
-    let md_at_prefix = md_path.components[d - 1];
-    let (xi, xh) = split_child(card.xpub.child_number);
-    if xi != md_at_prefix.value || xh != md_at_prefix.hardened {
-        warn!("cosigner[{i}] mk1 xpub child_number ({xi}{h}) does not match md1 \
-               origin-path component #{d} (…); cards are internally inconsistent");
+// Check 1 (overlap-prefix — replaces old depth Check 1 + terminal Check 2):
+let mk_comps: Vec<bitcoin::bip32::ChildNumber> =
+    card.origin_path.into_iter().copied().collect();
+let overlap = mk_comps.len().min(md_path.components.len());
+for k in 0..overlap {
+    let (mi, mh) = match mk_comps[k] {                // inline split (M1 fold)
+        bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
+        bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
+    };
+    let md_c = md_path.components[k];                  // PathComponent { value, hardened }
+    if mi != md_c.value || mh != md_c.hardened {
+        writeln!(stderr,
+            "warning: cosigner[{}] mk1 origin-path component #{} ({}{}) does not \
+             match md1 ({}{}); cards are internally inconsistent",
+            i, k + 1, mi, if mh {"'"} else {""}, md_c.value, if md_c.hardened {"'"} else {""}
+        ).ok();
+        break; // one warning per cosigner
     }
 }
+// A depth difference (d != md_depth) is NOT flagged — it is the legitimate
+// account-truncation (3→4) / leaf-extension (4→3) / under-annotation shape;
+// only overlap-disagreement is an inconsistency.
 
-// Check C (replaces old parent-fp Check 3, keyed off d not md_depth):
-// d == 0 → master xpub MUST have all-zero parent_fingerprint (existing branch).
-// d == 1 → existing pfp-vs-claimed-master logic, gated on d==1.
-// d >= 2 → skip (parent needs the seed; watch-only ceiling).
+// Check 2 (parent_fingerprint sanity, keyed off d — replaces old Check 3, M2 fold):
+let pfp = card.xpub.parent_fingerprint.to_bytes();
+if d == 0 {
+    // master xpub MUST have all-zero parent_fingerprint (existing branch).
+} else if d == 1 {
+    // PRESERVE the depth-1 claimed_master_fp fallback (md_fp_for(i) or
+    // card.origin_fingerprint), now gated on d == 1.
+}
+// d >= 2: parent_fp verified by emit_full_path_parent_fingerprint_check (needs ms1).
 ```
 
 **3.5b — `emit_full_path_parent_fingerprint_check` (`:2328`, `:2372-2382`, `:2341/2343/2399`)** — derive the parent at md1 truncated to **`d-1`** (the xpub's parent level), not `md_depth-1`:
 
 ```rust
 let d = card.xpub.depth as usize;
-if d < 2 { /* depth 0/1 handled by the structural branch */ continue; }
-if d > full_components.len() { continue; } // Check A above warns this case
+if d < 2 { /* depth 0/1 handled by the structural branch in 3.5a */ continue; }
+// Bounds: full[..d-1] needs d-1 <= full.len(). d == full.len()+1 (leaf one below
+// md1's origin, the 4→3 case) is VALID — full[..d-1] = all of full = the parent.
+if d - 1 > full_components.len() { continue; }
 let parent_path  = DerivationPath::from(full_components[..d - 1].to_vec());
 let parent_xpriv = master.derive_priv(&secp, &parent_path)?;
 let parent_xpub  = Xpub::from_priv(&secp, &parent_xpriv);
 // compare parent_xpub.fingerprint() vs card.xpub.parent_fingerprint (unchanged)
 ```
-Also gate `:2328` on `d < 2` (not `md_depth < 2`) and report `d` (not `md_depth`) at the depth prints.
+Also gate `:2328` on `d < 2` (not `md_depth < 2`) and report `d` (not `md_depth`) at the depth prints. **Known limitation (R4-adjacent):** this check derives the parent from the SEED at md1's stated origin; for a *re-annotated* 4→3 key (md1 origin fictional, e.g. `m/87'/0'/0'` for a real `m/48'/0'/0'/2'` leaf) the derived parent fp would mismatch — but this branch is reachable ONLY in full-path mode (ms1/seed supplied), and re-annotated 4→3 keys are watch-only imports (ms1 empty → emits the "unverified" notice, not a warning). If a full-path re-annotated 4→3 case ever arises it would false-warn; none exists in the suite — flag as a FOLLOWUP if one appears.
 
-**Correctness (verified by the architect):** (a) correct **3→4** — Check A `3>4`? no; Check B `md_path[2]=0'` vs child `0'` equal; Check C `d=3≥2` skip; parent at `full[..2]=m/48'/0'` = correct parent → **PASS, no warning**. (b) correct **4→4** leaf — parent at `full[..3]` = correct → **PASS**. (c) **genuine tampering** — child≠prefix-component, or `d>md_depth`, or wrong parent-fp → **FIRES**. Discriminating power moves from raw-depth-equality (can't tell correct-truncation from tampering) to prefix-terminal consistency (can).
+**Correctness (overlap-prefix):** (a) correct **3→4** — `mk_comps=[48',0',0']`, `md=[48',0',0',2']`, overlap=3, all match → silent; Check 2 `d=3≥2` skip; parent at `full[..2]=m/48'/0'` correct → **PASS**. (b) correct **4→3** leaf — `mk_comps=[87',0',0',2']`, `md=[87',0',0']`, overlap=3, all match → silent (the depth difference is NOT flagged) → **PASS** (the case the old Check A wrongly failed). (c) correct **4→4** — equal → **PASS**. (d) **genuine tampering** — the engraved card's path disagrees with md1 on the overlap → **FIRES**. Key-identity (right path, wrong key) is caught separately by the schema `mk1_xpub_match`.
 
 ### 3.6 C2 — rebuild the 2 tampered fixtures
 
-On 0.4.0 no public encoder bypasses the guard, so `mk_codec::encode(&tampered).expect(...)` can't construct an inconsistent card. Rebuild both via the **two-internally-consistent-cards-that-disagree** pattern (precedent `cross_check_mk1_child_number_ne_md1_last_warns:290-324`): build a consistent depth-2 mk1 card and pair it with a depth-3 md1 (so the new Check A `d=2 ≤ md_depth=3`, Check B `md_path[1]` ≠ the depth-2 card's child) → fires. Confirm a real depth-2-vs-depth-3 prefix-violating pairing is constructible.
+On 0.4.0 no public encoder bypasses the guard, so `mk_codec::encode(&tampered).expect(...)` can't construct an inconsistent card. Rebuild both via the **two-internally-consistent-cards-that-disagree** pattern (precedent `cross_check_mk1_child_number_ne_md1_last_warns:290-324`): build a CONSISTENT depth-2 mk1 card whose origin_path is e.g. `m/84'/1'` (child `1'`) and pair it with a depth-3 md1 whose `components[1]` is `0'` — so the new overlap-prefix Check 1 compares `mk_comps[1]=1'` vs `md_path.components[1]=0'` → **disagree on the overlap → fires** (M3: the depth-2 terminal MUST be pinned to differ from `md1.components[1]`, else the overlap matches and nothing fires). For the parent-fp fixture, emit a consistent depth-2 card whose `parent_fingerprint` differs from the value derivable from md1's depth-1 prefix (full-path mode) → `emit_full_path_parent_fingerprint_check` fires.
 
 ### 3.7 I2 — the 3→0 path: helper-pad (decided)
 
@@ -191,8 +200,8 @@ For a depth-3 watch-only xpub with no declared origin, the helper pads → `m/0/
 ## §5. Test plan
 
 1. **Helper unit tests** (`synthesize.rs` test mod): `mk1_origin_path` for all 6 classes — assert `out.len() == xpub.depth` && `out.last() == xpub.child_number`, and `mk_codec::encode_with_chunk_set_id` of a card built with it never returns `XpubOriginPathMismatch`.
-2. **Cross-check no-false-positive** (NEW integration test): a correct 3→4 multisig watch-only bundle AND a correct 4→4 bundle → `verify-bundle` emits NO `"internally inconsistent"` stderr.
-3. **C2** rebuilt tampered fixtures still fire the new Check A/B.
+2. **Cross-check no-false-positive** (NEW integration tests — MUST cover 4→3): a correct 3→4 multisig watch-only bundle, a correct **4→3** bundle (genuine depth-4 leaf + depth-3 md1 — the case the old Check A wrongly failed), AND a correct 4→4 bundle → `verify-bundle` emits NO `"internally inconsistent"` stderr.
+3. **C2** rebuilt tampered fixtures still fire the new overlap-prefix Check 1 (and the parent-fp Check).
 4. **3→0** `inspect --mk1 origin_path` pinned.
 5. **WIF round-trip regression** (§3.8).
 6. **FULL-suite gate (NEVER `--lib` only — the reverted-re-pin lesson):** `cargo test -p mnemonic-toolkit` 0 failures; `cargo clippy -p mnemonic-toolkit --all-targets -- -D warnings` (pre-existing drift confirmed-pre-existing-via-stash + deferred, not fixed here); `cargo +stable fmt -p mnemonic-toolkit -- --check`.
@@ -203,7 +212,7 @@ For a depth-3 watch-only xpub with no declared origin, the helper pads → `m/0/
 ## §6. Phases (architect's 5-phase plan)
 
 - **Phase 0 — helper + sites + reject-removal.** `mk1_origin_path` + `ChildNumber` import + 4 live sites (+ 4 test sites, no-op) + remove `synthesize_multisig_watch_only:494-503` + helper unit tests (§5.1).
-- **Phase 1 — cross-check redesign (load-bearing, §3.5).** Rewrite both `verify_bundle.rs` cross-checks (Checks A/B/C keyed off `d`; parent-fp at `full[..d-1]`) + the no-false-positive integration test (§5.2). Highest review scrutiny.
+- **Phase 1 — cross-check redesign (load-bearing, §3.5).** Rewrite both `verify_bundle.rs` cross-checks (overlap-prefix `card.origin_path` vs `md_path` + parent-fp keyed off `d` at `full[..d-1]`) + the no-false-positive integration tests incl. 4→3 (§5.2). Highest review scrutiny.
 - **Phase 2 — C2 tampered-fixture rebuild + 3→0 inspect pin** (§3.6, §3.7).
 - **Phase 3 — snapshot/transcript/convergence regen (~40 assertions) with semantic round-trip verification** (§5.7); fix the 2 `helper_multisig_*` test-helper fixtures at source (derive their xpub at the template path). Full-suite gate.
 - **Phase 4 — error-mirror arms (§3.8) + WIF regression + version 0.37.10 + FOLLOWUPs + end-of-cycle opus R0 → GREEN + clean-tree → ff-merge `master` + push + tag `mnemonic-toolkit-v0.37.10`.**
@@ -214,7 +223,7 @@ Per-phase: tests before impl where applicable; **full-suite** (not `--lib`) befo
 
 ## §7. Risks
 
-- **R1 — cross-check redesign is the riskiest piece** (§3.5). Mitigation: the no-false-positive integration test (§5.2) + the architect's verified case analysis (3→4 pass, 4→4 pass, tampering fires). Phase 1 gets highest review scrutiny.
+- **R1 — cross-check redesign is the riskiest piece** (§3.5). Mitigation: the overlap-prefix comparison (passes 3→4/4→3/4→4 by construction, fires on overlap-disagreement) + no-false-positive integration tests incl. **4→3** (§5.2). Phase 1 gets highest review scrutiny.
 - **R2 — snapshot-regen masking a real regression.** Mitigation: §5.7 semantic round-trip (decode → correct xpub), never blind byte-accept.
 - **R3 — the 3→0 fabricated `m/0/0/<child>` is user-visible** (`inspect`). Accepted + pinned (§3.7); Normal{0} filler reads as obviously synthetic.
 - **R4 — md1 path semantics OUT OF SCOPE.** This cycle changes only the mk1 card path; md1 keeps the full origin. A 4→3 case where md1 *should* carry a depth-4 origin (under-annotated source) is a separate FOLLOWUP, not this cycle.
