@@ -326,6 +326,14 @@ pub fn run<W: Write, E: Write>(
         None;
 
     let canonical = if let Some(desc) = &args.descriptor {
+        // @N-probe ONLY (NOT classify_descriptor_form — its rule 4 would reject
+        // origin-less concrete that passthrough accepts). SPEC §3.4.
+        if crate::wallet_import::pipeline::is_at_n_form(desc) {
+            return Err(ToolkitError::BadInput(
+                "export-wallet --descriptor accepts only concrete descriptors with inline keys; \
+                 for keyless @N templates use --template <T> --slot @N.xpub=… or --from-import-json".into(),
+            ));
+        }
         // Descriptor passthrough: parse + canonicalize via miniscript.
         use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
         use std::str::FromStr;

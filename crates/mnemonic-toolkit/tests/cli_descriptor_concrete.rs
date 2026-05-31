@@ -66,3 +66,20 @@ fn bundle_concrete_descriptor_produces_watch_only_cards() {
     assert!(v["md1"].as_array().map_or(false, |a| !a.is_empty()), "md1 array: {v}");
     assert!(v["ms1"].as_array().unwrap().iter().all(|s| s == ""), "watch-only ms1 must be all empty: {v}");
 }
+
+#[test]
+fn export_wallet_atn_descriptor_redirects() {
+    let atn = "wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,@1[97139860/48'/1'/2'/2']/<0;1>/*))";
+    let out = mnemonic().args(["export-wallet", "--descriptor", atn, "--network", "testnet"]).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("only concrete descriptors") && err.contains("--from-import-json"), "{err}");
+}
+
+#[test]
+fn export_wallet_originless_concrete_still_accepted() {
+    // Regression guard: origin-less concrete must NOT be rejected.
+    let originless = "wpkh(tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)";
+    let out = mnemonic().args(["export-wallet", "--descriptor", originless, "--network", "testnet"]).output().unwrap();
+    assert!(out.status.success(), "origin-less concrete must pass: {}", String::from_utf8_lossy(&out.stderr));
+}
