@@ -40,6 +40,48 @@ fn key_regex() -> &'static Regex {
     })
 }
 
+/// Cheap `@\d`-presence probe (the toolkit's `@N` placeholder form). NEW.
+fn at_n_probe() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"@\d").expect("AT_N_PROBE literal"))
+}
+
+/// `@N`-form probe for callers that must NOT trigger the rule-4 origin
+/// error (export-wallet passthrough accepts origin-less concrete). SPEC §3.4.
+pub(crate) fn is_at_n_form(s: &str) -> bool {
+    at_n_probe().is_match(s)
+}
+
+/// Which descriptor form a user string is. Discriminant only — no payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DescriptorForm {
+    /// `@N`-placeholder template (keys sourced per-surface).
+    AtN,
+    /// Bare-concrete form with inline `[fp/path]xpub` keys.
+    Concrete,
+}
+
+/// Classify a descriptor string via cheap probes. Pure; no conversion.
+/// Rule 1: both probes → mixed error. 2: `@\d` only → AtN. 3: key_regex
+/// only → Concrete. 4: neither → origin-required error (md-codec is NOT
+/// reached on this branch, so the error originates here — SPEC §3.1).
+pub(crate) fn classify_descriptor_form(input: &str) -> Result<DescriptorForm, ToolkitError> {
+    let has_at_n = at_n_probe().is_match(input);
+    let has_concrete = key_regex().is_match(input);
+    match (has_at_n, has_concrete) {
+        (true, true) => Err(ToolkitError::DescriptorParse(
+            "descriptor mixes @N placeholders with inline keys; use one form".into(),
+        )),
+        (true, false) => Ok(DescriptorForm::AtN),
+        (false, true) => Ok(DescriptorForm::Concrete),
+        (false, false) => Err(ToolkitError::DescriptorParse(
+            "descriptor has neither @N placeholders nor [fp/path]-annotated keys; \
+             concrete descriptors must carry a key origin, e.g. [<fp>/84h/0h/0h]xpub…"
+                .into(),
+        )),
+    }
+}
+
 /// Convert a descriptor body bearing concrete `[fp/path]xpub` keys into the
 /// placeholder form `[fp/path]@N` + accompanying `(ParsedKey,
 /// ParsedFingerprint)` pairs for `parse_descriptor::parse_descriptor`.
@@ -173,5 +215,25 @@ mod tests {
         assert_eq!(fps[0].fp, [0x70, 0x4c, 0x78, 0x36]);
         // The h-form path string is preserved verbatim into the @N form.
         assert!(placeholder.contains("@0[704c7836/48h/1h/3h/2h]/<0;1>/*"), "{placeholder}");
+    }
+
+    #[test]
+    fn classify_atn_concrete_mixed_garbage() {
+        // @N template → AtN.
+        assert_eq!(
+            classify_descriptor_form("wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,@1[97139860/48'/1'/2'/2']/<0;1>/*))").unwrap(),
+            DescriptorForm::AtN
+        );
+        // bare concrete → Concrete.
+        assert_eq!(
+            classify_descriptor_form("wpkh([704c7836/84'/0'/0']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)").unwrap(),
+            DescriptorForm::Concrete
+        );
+        // mixed @N + inline xpub → error (rule 1).
+        let mixed = "wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
+        assert!(classify_descriptor_form(mixed).unwrap_err().message().contains("mixes @N"));
+        // origin-less / keyless → rule-4 origin-required error.
+        let err = classify_descriptor_form("wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)").unwrap_err();
+        assert!(err.message().contains("must carry a key origin"), "{}", err.message());
     }
 }
