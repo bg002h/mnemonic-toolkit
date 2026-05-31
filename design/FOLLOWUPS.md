@@ -3350,3 +3350,30 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `resolved 1cce14c` — toolkit v0.37.10 (mk-codec 0.4.0 adoption). Toolkit-only PATCH; no GUI/manual lockstep.
 - **Tier:** `cross-repo`
 - **Companion:** `mnemonic-key` (mk-codec) FOLLOWUP `mk1-no-path-depth0-support`.
+
+### `output-type-stderr-advisory` — stderr one-line classification of what landed on stdout
+
+- **Surfaced:** 2026-05-31, A1 (descriptor-form symmetry) brainstorm — the user's "tell me what kind of wallet hit stdout" idea, deferred as a separate cycle per the brainstorm-stage architect review §(B).
+- **Where:** ~12 output-producing commands (`convert`, `bundle`, `export-wallet`, `addresses`, `import-wallet`, `derive-child`, `seedqr`, `silent-payment`, `electrum-decrypt`, `slip39`, `seed-xor`, `final-word`, `nostr`); the D9 secret-on-stdout advisory at `secret_advisory.rs:48-64` + the 4 inlined literals (`convert.rs:1099`, `bundle.rs:910`, `derive_child.rs:306`, `slip39.rs:684`).
+- **What:** Emit a one-line stderr classification of the stdout artifact's security nature: `private key material (can spend)` / `watch-only` / `template`. Subsume D9 by complement — keep D9's exact (transcript-pinned) text for the secret case, add positive lines for the rest, route both through ONE shared helper, consolidate the 4 inlined literals. **Hard requirement: all output-producing commands or none** (half-coverage reads as false safety — "no line = safe" when it means "uncovered"); inert-output commands (`decode-address`/`verify-message`/`inspect`/`compare-cost`) explicitly emit nothing, documented as such. 3 classes only (no single/multi or network secondary axes — the user's boundary is spend-capability). Serves the user's standing no-new-key-hazards constraint.
+- **Why deferred:** all-surfaces coverage + transcript re-capture is bigger than A1's 3-surface scope; the brainstorm-stage architect review made it the explicit next cycle (B).
+- **Status:** open. PATCH (stderr-only, precedent `silent-default-with-stderr-notice`); transcript re-capture is the bulk; no GUI/manual gate beyond prose.
+- **Tier:** `next-cycle`
+
+### `descriptor-origin-extraction-dedup` — consolidate the 6×build_slot_fields / 4×origin_capture_regex / 7th key_regex copy
+
+- **Surfaced:** 2026-05-31, A1 SPEC R0 (M4) — the new `descriptor_concrete_to_resolved_slots` (`wallet_import/pipeline.rs`) added a 7th origin-extraction pass (reusing the canonical widened `key_regex`).
+- **Where:** `build_slot_fields` duplicated in 6 import parsers (`bsms.rs:399`, `specter.rs`, `sparrow.rs`, `coldcard.rs`, `coldcard_multisig.rs`, `electrum.rs`); `extract_origin_components`/`origin_capture_regex` in 4 (`bsms.rs:362/:516`, `specter.rs:362`, `sparrow.rs:582`, `bitcoin_core.rs:413`); the new A1 recovery loop in `pipeline.rs`.
+- **What:** Consolidate all origin-extraction onto the single canonical (h-form-widened) `key_regex` + one shared `extract_origin_components`/`build_slot_fields` in `pipeline.rs`, parameterizing the per-parser error prefix. Dissolves the `import-parser-hform-origin-tolerance` follow-on automatically.
+- **Why deferred:** the per-parser error-prefix differences make it a moderate refactor; out of scope for A1's PATCH.
+- **Status:** open.
+- **Tier:** `hygiene`
+
+### `import-parser-hform-origin-tolerance` — import-wallet parsers' origin_capture_regex stays apostrophe-only
+
+- **Surfaced:** 2026-05-31, A1 SPEC R0 (C2 option-b decision) — A1 widened only `key_regex` (`pipeline.rs:38`) to accept `h`-form hardened paths; the import parsers' separate, byte-identical `origin_capture_regex` copies (`bsms.rs:516` et al.) were left apostrophe-only because the new `--descriptor` path does not call them.
+- **Where:** `wallet_import/{bsms,specter,sparrow,bitcoin_core}.rs` `origin_capture_regex`.
+- **What:** Whether the `import-wallet` per-format parsers should also accept `h`-form wallet-file descriptors (Core/Sparrow exports) is pre-existing scope; A1 did not change it. Dissolved automatically if `descriptor-origin-extraction-dedup` lands (single canonical widened regex).
+- **Why deferred:** pre-existing; orthogonal to A1's `bundle`/`verify-bundle --descriptor` surface.
+- **Status:** open.
+- **Tier:** `hygiene`

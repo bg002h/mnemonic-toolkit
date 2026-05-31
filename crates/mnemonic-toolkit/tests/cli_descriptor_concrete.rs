@@ -2,8 +2,27 @@
 use assert_cmd::Command;
 
 const CONCRETE_MULTI_APOS: &str = "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
+// Same wallet, `h`-form hardened paths (the primary motivating case: Bitcoin
+// Core `listdescriptors` / Sparrow emit `h`, not `'`). `48h` == `48'` as a
+// derivation path, so the cards must be byte-identical to the apostrophe form.
+const CONCRETE_MULTI_HFORM: &str = "wsh(sortedmulti(2,[704c7836/48h/1h/3h/2h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48h/1h/2h/2h]tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
 
 fn mnemonic() -> Command { Command::cargo_bin("mnemonic").unwrap() }
+
+/// End-to-end `h`-form on the primary motivating case: `bundle --descriptor`
+/// with `h`-hardened paths must succeed and produce byte-identical md1/mk1 to
+/// the apostrophe form (same derivation path, different notation).
+#[test]
+fn bundle_concrete_hform_converges_with_apostrophe() {
+    let h = mnemonic().args(["bundle", "--descriptor", CONCRETE_MULTI_HFORM, "--network", "testnet", "--json"]).output().unwrap();
+    let a = mnemonic().args(["bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet", "--json"]).output().unwrap();
+    assert!(h.status.success(), "h-form must be accepted: {}", String::from_utf8_lossy(&h.stderr));
+    assert!(a.status.success(), "{}", String::from_utf8_lossy(&a.stderr));
+    let hv: serde_json::Value = serde_json::from_slice(&h.stdout).unwrap();
+    let av: serde_json::Value = serde_json::from_slice(&a.stdout).unwrap();
+    assert_eq!(hv["md1"], av["md1"], "h-form md1 must equal apostrophe form");
+    assert_eq!(hv["mk1"], av["mk1"], "h-form mk1 must equal apostrophe form");
+}
 
 /// Expand a bundle JSON value into flat `--md1 <chunk>` and `--mk1 <chunk>`
 /// flag pairs suitable for passing to `verify-bundle`. The `mk1` field in
