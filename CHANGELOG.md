@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.10] — 2026-05-30
+
+**SemVer-PATCH — adopt `mk-codec 0.4.0` (no-path / depth-0 support) and make every mk1 card's `origin_path` round-trip the xpub it carries. Resolves FOLLOWUP `mk1-card-origin-path-vs-xpub-depth-consistency` (companion `mnemonic-key mk1-no-path-depth0-support`); flips `mk1-depth-child-compensating-check-watch`.**
+
+- **Re-pin `mk-codec` `0.3.1 → 0.4.0`.** 0.4.0 added an encode-time guard (`XpubOriginPathMismatch`) that rejects any mk1 `KeyCard` whose `xpub.depth`/`child_number` disagree with `origin_path` (compact-73 drops + reconstructs them from the path). Adopting it surfaced — and this release fixes — a latent correctness bug: on 0.3.1 the toolkit silently emitted **wrong-metadata mk1 cards** (chain_code/public_key correct so addresses derive, but the reconstructed BIP-32 depth/child wrong) across ~40 import/export/multisig flows.
+- **New `synthesize::mk1_origin_path(xpub, descriptor_path)` helper** at all 8 `KeyCard::new` sites derives the mk1 card's origin path from the xpub's own depth/child (truncate / extend / pad). Foreign multisig formats export an **account-level** xpub (`m/48'/0'/0'`, depth-3) with a **full-path** descriptor origin (`m/48'/0'/0'/2'`, depth-4); the mk1 card now carries the account-consistent path while md1's `path_decl` keeps the full descriptor origin independently. The depth-0 / no-path case (a WIF) round-trips as an empty path.
+- **`verify-bundle` cross-checks redesigned** to compare the decoded mk1 `origin_path` against md1 on their shared **prefix** (a depth difference is legitimate account-truncation / leaf-extension; only a genuine prefix disagreement is flagged), keyed off the xpub's own depth. No false-positive on correct 3→4 / 4→3 / 4→4 bundles.
+- **`bundle --import-json`** sources each cosigner's origin from the envelope's `bundle.origin_path[s]` metadata (the full descriptor origin) rather than the now-account-level mk1 card, so a re-imported origin matches the source descriptor.
+- The `bundle --slot @N.wif=…` mk1 card — a write-only card on 0.3.1 (`decode` rejected the empty origin as `PathTooDeep(0)`) — now round-trips (regression test: bundle → `inspect`).
+- The `synthesize_multisig_watch_only` SPEC §4.5 depth-reject loop is **removed** (superseded by the helper's consistent-by-construction cards). No CLI flag / subcommand / `--json` wire-shape change → no GUI schema-mirror, no manual lockstep.
+
 ## mnemonic-toolkit [0.37.9] — 2026-05-29
 
 **SemVer-PATCH — internal refactor: delete the overloaded `ResolvedSlot.path_raw` field; derive the origin annotation on demand from the typed `fingerprint` + `path` via two new methods (`origin_path_bare()` / `bracketed_origin()`). Resolves FOLLOWUP `path-raw-bracketed-vs-bare-convention-unification`.**

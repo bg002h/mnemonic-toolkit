@@ -143,6 +143,51 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
     );
 }
 
+// v0.37.10 — a depth-3 watch-only xpub with NO declared origin (the descriptor
+// carries no `[fp/path]` annotation) is the 3→0 class: `mk1_origin_path` pads the
+// (informational) intermediates with Normal{0} while preserving the xpub's own
+// terminal child (0'), so the emitted mk1 card round-trips. This pins the
+// synthetic origin_path contract (`m/0/0/0'`) as a deliberate, documented value.
+#[test]
+fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            "wpkh(@0/<0;1>/*)",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_24_BIP84_MAINNET_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_FP_HEX}"),
+            "--no-engraving-card",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
+    let mk1: Vec<String> = json["mk1"]
+        .as_array()
+        .expect("mk1 array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    let mut args: Vec<String> = vec!["inspect".into()];
+    for c in &mk1 {
+        args.push("--mk1".into());
+        args.push(c.clone());
+    }
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("origin_path: m/0/0/0'"));
+}
+
 // ============================================================================
 // Matrix cell #7: full bundle (BIP-39 phrase + zpub cosigner) →
 //   info-line → engraving card → secret warning.

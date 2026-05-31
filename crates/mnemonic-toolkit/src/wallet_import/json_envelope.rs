@@ -457,9 +457,9 @@ pub(crate) fn descriptor_body_no_csum<'a>(
 }
 
 /// Parse a `DerivationPath` from an envelope `origin_path` string
-/// (form `m/48'/0'/0'/2'`). Used by the consumer paths for slot
-/// path-equivalence + the `--ms1`-on-non-empty-slot conflict check.
-#[allow(dead_code)] // surfaced for consumer-side path-equivalence tests; v0.27.0 consumers source from mk1 decode
+/// (form `m/48'/0'/0'/2'`). v0.37.10: live — `envelope_to_resolved_slots` uses it
+/// to source the full descriptor origin from the envelope metadata (the mk1 card
+/// now carries the account-consistent, possibly-shorter path).
 pub(crate) fn derivation_path_from_envelope(
     s: &str,
     flag_label: &str,
