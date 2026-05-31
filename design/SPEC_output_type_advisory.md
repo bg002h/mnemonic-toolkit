@@ -45,7 +45,7 @@ Pin each addendum's exact bytes in the SPEC's test cells.
 |---|---|---|---|
 | `bundle` | **P**(cond)/**W** | `bundle.rs:909-917` md1(T)+mk1(W) always; `:895` ms1(P) gated `:928` | `any_secret_bearing()? P : W` |
 | `verify-bundle` | inert | match/mismatch verdict | |
-| `convert` | **P**(cond)/**W** | `convert.rs:1099` gate; `secret_taxonomy.rs:76-85` | `any(secret target)? P : W`; never inert [I1] |
+| `convert` | **P/W/inert**(cond) | `convert.rs:1099` gate; targets `:31-52`; `secret_taxonomy.rs:76-85` | max over targets {secret→P; xpub/address/descriptor/mk1→W; **path/fingerprint→inert**} [folds I3] |
 | `addresses` | **W** | `addresses.rs:248`; doc `:1` "watch-only" | |
 | `export-wallet` | **W** | `export_wallet.rs:246` "watch-only by SPEC §3" | incl. `--from-import-json` |
 | `import-wallet` | **W**(cond **P**) | `import_wallet.rs:2089-2138`; `:2111 entropy=` | P iff `entropy=` (seed overlay) on stdout |
@@ -83,7 +83,9 @@ Pin each addendum's exact bytes in the SPEC's test cells.
 | `ms repair` | **P** | `repair.rs:107-108` inline literal (already fires) |
 | `ms gui-schema` | inert | schema JSON |
 
-**Resolving principles** (state in SPEC): (a) public key-derived material (xpub/fingerprint/address/descriptor) = watch-only, not inert; (b) re-presenting the user's own public input, or a pass/fail/cost verdict, = inert; (c) a command that consumes a secret as INPUT but emits only public/derived metadata = inert; (d) class is per-exit-branch for branchy commands; (e) multi-artifact = max over artifacts on stdout.
+**Resolving principles** (state in SPEC): (a) public key **material** you'd use to watch (xpub/address/descriptor/mk1) = watch-only; a bare derivation **path** or 4-byte **fingerprint** carries no usable key material → **inert** [folds I3]; (b) re-presenting the user's own public input, or a pass/fail/cost verdict, = inert; (c) a command that consumes a secret as INPUT but emits only public/derived metadata = inert; (d) class is per-exit-branch for branchy commands; (e) multi-artifact = max over artifacts on stdout.
+
+**Auto-repair short-circuit branch [folds C1].** `verify-bundle`, `xpub-search` (all 4 modes), `inspect`, and `convert` are inert on their NORMAL branch, but each can short-circuit into `repair::emit_repair_report` (`repair.rs:1333`) when given a correctable card with auto-repair — which writes the **repaired card to stdout** (exit 5) and must emit that card's class (Ms1→P, Mk1→W, Md1→T). So their §3 "inert" label applies to the normal branch ONLY; the auto-repair exit-5 branch emits a class line. Tests must cover both branches (§7, P3).
 
 ## 4. Architecture
 
@@ -94,7 +96,13 @@ pub enum OutputClass { PrivateKeyMaterial, WatchOnly, Template }
 /// Emit the one-line stderr class advisory. Inert outputs do NOT call this.
 pub fn emit_output_class_advisory<W: Write + ?Sized>(class: OutputClass, stderr: &mut W);
 ```
-The `PrivateKeyMaterial` arm IS the (re-worded) D9 line. The legacy `secret_on_stdout_warning(CardKind, _)` + `secret_on_stdout_warning_unconditional` are **replaced**: the 3 inlined literals (`derive_child.rs:308`, `bundle.rs:931`, `convert.rs:1102`), the `_unconditional` callers (silent_payment, nostr), and the slip39 variant (`slip39.rs:684`) all route through `emit_output_class_advisory` (+ addenda where applicable). Keep `secret_in_argv_warning` and `warn_if_world_readable` unchanged (different advisories).
+The `PrivateKeyMaterial` arm IS the (re-worded) D9 line. The legacy `secret_on_stdout_warning(CardKind, _)` + `secret_on_stdout_warning_unconditional` are **replaced** — route **every** current caller through `emit_output_class_advisory`/`worst_class_on_stdout` (re-grep the full caller set at plan time; at `18cfdce` it is):
+- the 3 inlined `PrivateKeyMaterial` literals: `derive_child.rs:308`, `bundle.rs:931`, `convert.rs:1102`;
+- the `_unconditional` callers: `silent_payment.rs:286`, `nostr.rs:251`, **`electrum_decrypt.rs:149`** [folds I1];
+- the slip39 **combine** variant `slip39.rs:684` (a FUSED line — replace the "reconstructed secret material" prefix with the unified P-line; KEEP "verify the recovered wallet's … address" as the §2.3 addendum) [M2];
+- **the auto-repair short-circuit** [folds C1 — the hidden emit site]: `repair.rs:1333` (`emit_repair_report` → `secret_on_stdout_warning(outcome.kind, _)`, writes the repaired card to stdout) AND the repair-command emit `cmd/repair.rs:216`. `emit_repair_report` is reached from `verify_bundle.rs` (6 sites), `xpub_search/seed_intake.rs:182` (all 4 xpub-search modes), `inspect.rs:135`, `convert.rs:994` — so those commands are inert on their NORMAL branch but emit the **repaired card's class** (CardKind→{Ms1:P, Mk1:W, Md1:T}) on the exit-5 auto-repair branch (see §3 note).
+
+Keep `secret_in_argv_warning` and `warn_if_world_readable` unchanged (different advisories).
 
 ### 4.2 ms-cli helper (duplicate, byte-parity) [folds I4]
 ms-cli does NOT depend on mnemonic-toolkit as a lib (independent crates). Duplicate `OutputClass` + the emit helper into `mnemonic-secret/crates/ms-cli/src/advisory.rs` (alongside the existing `secret_in_argv_warning`). ms-cli `run(args)` is by-value and emits via `eprintln!`/`std::io::stderr()` — the helper takes `&mut impl Write` and callers pass `std::io::stderr().lock()` (or the helper wraps `eprintln!`). Replace `ms repair`'s inline literal (`cmd/repair.rs:107-108`). A **cross-repo byte-parity test** pins ms-cli's three lines identical to the toolkit's wording (precedent: `advisory.rs:1` "ported from mnemonic-toolkit"; `repair.rs:28` "Byte-matches …").
@@ -105,12 +113,15 @@ ms-cli does NOT depend on mnemonic-toolkit as a lib (independent crates). Duplic
 - **TTY gate removed** [C3] on final-word/seed-xor×2/slip39×2 — the advisory now fires unconditionally (the redirected case is the dangerous one).
 - **File-output suppression** [I5]: emit iff a wallet artifact is actually written to **stdout** this invocation. Exclusive-file paths (`seedqr --json-out`, `electrum-decrypt --json-out`) → no line. Side-effect-file paths (`final-word`/`slip39`/`seed-xor --json-out`, where stdout still carries the artifact) → still emit. `--json` mode → advisory still to **stderr** (JSON stays clean on stdout) [I6].
 - **Inert commands** call nothing; commands with no `stderr` param (`compare-cost`, `gui-schema`) are NOT given one.
+- **Emit at run-level [M4].** Several stdout helpers take only `stdout` (`seedqr::emit_*`, `import_wallet::emit_summary`, ms-cli `cmd/*::emit_*` use `println!`). The class advisory is emitted by the **run-level caller** (which has `stderr` / `std::io::stderr().lock()` in scope) AFTER the artifact is written — not inside the stdout-only helper. The helper signature `emit_output_class_advisory<W: Write + ?Sized>(class, &mut W)` accepts both a threaded `&mut W` and `std::io::stderr().lock()`.
 
 ## 5. D9 re-word + mechanical sweep [folds D9 call, M5]
-Re-wording `secret material on stdout` → `private key material (can spend)` touches, in the SAME PR:
-- ~15 transcript/doc mirrors: `docs/manual/transcripts/{22-first-bundle,24-recover,24-recover-mk1,41-inheritance}.out`, `docs/technical-manual/transcripts/mnemonic-bundle-bip84-abandon.out`, the foreign-formats export-wallet transcripts (gain watch-only lines), manual prose `docs/manual/src/40-cli-reference/41-mnemonic.md` (multiple), `43-ms.md:255`, quickstart mirrors.
-- ~9 toolkit + ~3 ms test files asserting `.contains("warning: secret material on stdout")` — re-pin to the new wording (and the conditional ones now assert the class predicate).
-Re-grep the exact file/line set at implementation time (citations decay). The manual-prose-execution gate (`verify-examples.sh` + `make audit`) is the forcing function: it stays RED until transcripts are re-captured — budget the re-capture as a required phase step, not an afterthought.
+Re-wording `secret material on stdout` → `private key material (can spend)` touches, in the SAME PR (re-grep the exact set at plan time — citations decay):
+- **FOUR doc trees, each with its own execution/lint gate** [folds I2] — all must be re-captured or their gate goes RED: `docs/manual` (`verify-examples.sh`; transcripts `{22-first-bundle,24-recover,24-recover-mk1,41-inheritance}.out` + foreign-formats export-wallet transcripts gaining watch-only lines; prose `src/40-cli-reference/41-mnemonic.md` (multiple), `43-ms.md:255`); `docs/technical-manual` (`mnemonic-bundle-bip84-abandon.out`); `docs/manual-gui` (its own `tests/verify-examples.sh`; `src/40-mnemonic/4b-slip39-combine.md`); `docs/quickstart` (its own `Makefile`; `src/20-singlesig/{23-bundle,26-recover}.md`, `src/30-multisig/32-bundle.md`).
+- **12 toolkit + 3 ms-cli test files** [folds I2] asserting `secret material on stdout`: toolkit `cli_bundle_full`, `cli_bundle_slip0132_info`, `cli_indel`, `cli_silent_payment`, `cli_nostr`, `cli_electrum_decrypt`, `cli_inspect`, `cli_slip39_advisories`, `cli_bundle_multisig`, `cli_bundle_watch_only`, `cli_derive_child`, `cli_secret_in_argv_warning`; ms-cli `tests/cli_repair.rs`, `src/main.rs`, `README.md`. Re-pin to the new wording (conditional ones now assert the class predicate).
+- The auto-repair short-circuit literal (`repair.rs:1333`) + `cmd/repair.rs:216` re-word too (per §4.1).
+
+The manual-prose-execution gate (`make audit` over all 4 doc trees' `verify-examples.sh` + `docs/quickstart/Makefile`) is the forcing function: each stays RED until its transcripts are re-captured — budget the re-capture (rebuild all 4 binaries first) as a required Phase-5 step, not an afterthought.
 
 ## 6. SemVer / lockstep [folds M3]
 - **PATCH** both (stderr-only, no new flag) — precedent `silent-default-with-stderr-notice` / v0.37.11.
@@ -123,15 +134,17 @@ Re-grep the exact file/line set at implementation time (citations decay). The ma
 - **TTY-gate removal:** the 5 commands emit the line when stdout is NOT a TTY (piped) — regression cell per command.
 - **File-output suppression:** `seedqr --json-out` / `electrum-decrypt --json-out` emit NO stdout-class line; `slip39 --json-out` still emits (artifact on stdout).
 - **`--json` stderr-parity:** for each newly-covered watch-only command, JSON clean on stdout + class line on stderr.
-- **Addenda preserved:** seed-xor/slip39/final-word addendum bytes pinned.
-- **Consolidation guard:** no orphaned `secret material on stdout` literal remains (grep-based test or the byte-parity test).
+- **Addenda preserved [M3]:** pin the exact addendum bytes for `final-word` (`final_word.rs:104`), `seed-xor split` (`seed_xor.rs:244`) + `combine`, `slip39 split` (`slip39.rs:548`) + `combine` (`slip39.rs:684`'s "verify the recovered wallet's … address" clause). NOTE the re-word turns each fused single line into TWO lines (unified P-line + addendum) — every TTY-gate-removal transcript captures a one-line→two-line change; size the re-capture accordingly.
+- **Auto-repair-branch cells [C1]:** for `verify-bundle` / `xpub-search` / `inspect` / `convert`, the normal branch emits NO line (inert), but a correctable-card-with-auto-repair input emits the repaired card's class (ms1→P) at exit 5. Test both branches.
+- **convert-inert cell [I3]:** `convert --to path` (and `--to fingerprint`) alone emits NO line (inert); `--to xpub --to path` emits the watch-only line (max).
+- **Consolidation guard:** no orphaned `secret material on stdout` literal remains anywhere (grep-based test) — covers `repair.rs:1333` + `cmd/repair.rs:216` + electrum-decrypt.
 - **ms-cli byte-parity:** ms-cli's 3 lines == toolkit's wording.
 
 ## 8. Phases (for the plan-doc)
 - **P0** — toolkit: `OutputClass` lattice + `emit_output_class_advisory` + `worst_class_on_stdout` helpers in `secret_advisory.rs`; unit tests (lattice max, exact bytes). Replace the legacy helpers' internals (keep call sites compiling).
 - **P1** — toolkit fixed-class wiring (derive-child/silent-payment/electrum-decrypt/seedqr/addresses/export-wallet) + TTY-gate drop (final-word/seed-xor/slip39) + addenda. Per-command cells.
 - **P2** — toolkit multi-artifact + conditional (bundle/convert/repair/inspect/import-wallet/nostr) via worst_class_on_stdout. Both-ways cells.
-- **P3** — toolkit inert audit (verify-bundle/decode-address/verify-message/compare-cost/gui-schema/xpub-search×4) — assert no line; file-output suppression cells.
+- **P3** — toolkit inert audit (verify-bundle/decode-address/verify-message/compare-cost/gui-schema/xpub-search×4) — assert no line on the NORMAL branch; re-route the auto-repair short-circuit (`repair.rs:1333`) through the class helper + assert the exit-5 branch DOES emit (ms1→P); file-output suppression + convert-inert (path/fingerprint) cells.
 - **P4** — ms-cli: duplicate enum+helper in `advisory.rs`; wire encode/decode(P)/derive(W)/repair(P); byte-parity test.
 - **P5** — D9 re-word sweep: transcripts re-captured + doc mirrors + test `.contains()` re-pins; `make audit` GREEN (both repos).
 - **P6** — versions (toolkit v0.38.2, ms-cli v0.5.1); FOLLOWUP `output-type-stderr-advisory-sibling-sweep-mk-md` filed (mirrored); end-of-cycle R0; ship (toolkit tag + ms crates.io).
