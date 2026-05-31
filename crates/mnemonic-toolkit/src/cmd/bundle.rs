@@ -713,6 +713,16 @@ fn emit_unified<W: Write, E: Write>(
     for (_idx, variant) in slip0132_signals.iter() {
         let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
     }
+    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
+    // a secret-bearing ms1 carries only the entropy, NOT the wordlist language.
+    if bundle.any_secret_bearing() {
+        if let Some(msg) = crate::language::non_english_seed_advisory(
+            args.language.unwrap_or_default(),
+            "an ms1 card",
+        ) {
+            let _ = writeln!(stderr, "{msg}");
+        }
+    }
     let n = resolved.len();
     let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
     // v0.4.2 Phase M reconciliation: legacy emit_*/descriptor_mode_emit
