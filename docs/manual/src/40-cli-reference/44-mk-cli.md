@@ -1,7 +1,7 @@
 # `mk` (mk-cli) reference
 
 The standalone CLI for the mk1 format (mnemonic-key / mk-codec).
-Six subcommands. Most users will use `mnemonic bundle` and
+Eight subcommands. Most users will use `mnemonic bundle` and
 `mnemonic verify-bundle` instead; `mk` is for direct key-card
 inspection, mk1-plate recovery from an air-gapped machine without
 shipping the secret-material code paths of the toolkit, or when
@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.4.0 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.6.0 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -366,6 +366,128 @@ runs from any working directory without a fixture-path dependency.
 mk vectors --out /tmp/mk-vectors
 # (stderr) wrote N vector file(s) to /tmp/mk-vectors
 ```
+
+---
+
+## `mk address`
+
+Render the receive/change addresses controlled by a card's xpub. Read-only
+public derivation — no private keys, no signing.
+
+The address type is inferred from the origin-path purpose **at canonical
+single-sig account depth** (`m/44'`→`p2pkh`, `49'`→`p2sh-p2wpkh`, `84'`→`p2wpkh`,
+`86'`→`p2tr`) and is overridable with `--address-type`. A card whose origin is
+not at account depth requires the explicit flag (and prints a stderr advisory
+that addresses are derived relative to the card's xpub). Multisig-cosigner cards
+(`m/48'`/`m/87'`) are **refused** — single-key addresses would not match the
+wallet; use descriptor tooling instead.
+
+### Synopsis
+
+```sh
+mk address [OPTIONS] <MK1-STRING>...
+```
+
+Use `-` as a positional argument to read one mk1 string per line from stdin.
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--address-type <TYPE>` | `p2pkh` \| `p2sh-p2wpkh` \| `p2wpkh` \| `p2tr`; defaults to the account-depth purpose heuristic |
+| `--count <N>` | number of addresses per chain, starting at index 0 (default 10); conflicts with `--range` |
+| `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
+| `--chain <WHICH>` | `receive` (default) \| `change` \| `both` |
+| `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes and must agree with its network kind |
+| `--json` | emit JSON output |
+
+### Worked example
+
+```sh
+mk address \
+  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
+  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
+  --count 3
+```
+
+### Output
+
+Text mode (receive chain):
+
+```text
+  0  bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+  1  bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g
+  2  bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z
+```
+
+With `--chain both`, rows are grouped by chain (`receive` then `change`).
+
+JSON mode:
+
+```json
+{
+  "schema_version": 1,
+  "xpub": "xpub6...",
+  "origin_path": "m/84'/0'/0'",
+  "address_type": "p2wpkh",
+  "network": "mainnet",
+  "addresses": [
+    { "chain": 0, "index": 0, "address": "bc1q..." },
+    { "chain": 0, "index": 1, "address": "bc1q..." }
+  ]
+}
+```
+
+---
+
+## `mk derive`
+
+Derive a child xpub at a relative path from the card's xpub. An xpub can only
+derive **unhardened** children (it has no private key); hardened components are
+rejected. The emitted `child_xpub` is composable — pipe it back into `mk encode`.
+Read-only; no signing.
+
+### Synopsis
+
+```sh
+mk derive [OPTIONS] <MK1-STRING>...
+```
+
+Exactly one of `--path` / `--index` is required. Use `-` as a positional to read
+mk1 strings from stdin.
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--path <REL>` | relative derivation path, unhardened only (e.g. `m/0/5`) |
+| `--index <N>` | single external-chain index — sugar for `--path m/0/<N>` |
+| `--json` | emit JSON output |
+
+### Worked example
+
+```sh
+mk derive \
+  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
+  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
+  --path m/0/5
+```
+
+### Output
+
+Text mode:
+
+```text
+parent_xpub:          xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
+parent_origin_path:   m/84'/0'/0'
+relative_path:        m/0/5
+child_xpub:           xpub6FrCS2gWHvogpRtNtG8qfs9QjHU9qVPL418V59XRrBQaJ5byrvkSYSwdbMsiBCeRM8U4tiDSHu13W7jNRSZs9bnmW7gDbjgB1NHY3aoNx5X
+child_fingerprint:    98442048
+depth:                5
+network:              mainnet
+```
+
+JSON mode emits the same fields as a `{ "schema_version": 1, … }` object.
 
 ---
 

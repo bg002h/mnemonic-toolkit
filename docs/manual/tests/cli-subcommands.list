@@ -60,3 +60,5 @@ mk inspect
 mk repair
 mk verify
 mk vectors
+mk address
+mk derive
