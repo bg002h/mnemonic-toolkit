@@ -6,7 +6,7 @@
 **Recon:** `cycle-prep-recon-mk1-card-origin-path-vs-xpub-depth-consistency.md` (census verified).
 **Design resolution:** opus architect (Q1 cross-check redesign / Q2 4→3 root cause / Q3 3→0 / Q4 verdict) — folded below.
 **R0 history:** v1 RED 2C/3I/3M (`design/agent-reports/toolkit-mk1-origin-path-spec-R0-review.md`); this v2 folds C1/C2/I1/I2/I3 + the architect resolution + recon corrections.
-**Resolves:** toolkit `mk1-wif-bundle-depth0-invalid-card`, `mk1-depth-child-compensating-check-watch`; companion `mnemonic-key mk1-no-path-depth0-support`.
+**Resolves:** files the new subsuming slug `mk1-card-origin-path-vs-xpub-depth-consistency` (subsumes the WIF-bundle-depth0 concern — that name was never filed toolkit-side) + flips `mk1-depth-child-compensating-check-watch`; companion `mnemonic-key mk1-no-path-depth0-support`.
 
 ---
 
