@@ -124,7 +124,7 @@ git commit -m "feat(advisory): OutputClass lattice + emit/worst/card_kind helper
 ```rust
 crate::secret_advisory::emit_output_class_advisory(crate::secret_advisory::OutputClass::<CLASS>, stderr);
 ```
-Replacing each command's current D9 / `_unconditional` call (or adding it where none exists). **Drop the TTY gate** (`if std::io::stdout().is_terminal()`) on `final-word`/`seed-xor split`/`seed-xor combine`/`slip39 split`/`slip39 combine` — emit unconditionally — and KEEP each command's bespoke clause as an ADDENDUM line AFTER the unified line (SPEC §2.3). **[folds I5]** Dropping the only `is_terminal()` call in a file orphans its `use std::io::IsTerminal` (and any `stdout()` binding) → `unused_imports` hard-fails the P6 clippy `-D warnings` gate AND reds the P1 commit — **remove the orphaned `IsTerminal` import in the same edit** (e.g. `slip39.rs:54`'s `use std::io::{IsTerminal, …}`).
+Replacing each command's current D9 / `_unconditional` call (or adding it where none exists). **Drop the TTY gate** (`if std::io::stdout().is_terminal()`) on `final-word`/`seed-xor split`/`seed-xor combine`/`slip39 split`/`slip39 combine` — emit unconditionally — and KEEP each command's bespoke clause as an ADDENDUM line AFTER the unified line (SPEC §2.3). **[folds I5]** Dropping the only `is_terminal()` call in a file orphans its `use std::io::IsTerminal` (and any `stdout()` binding) → `unused_imports` hard-fails the P6 clippy `-D warnings` gate AND reds the P1 commit — **remove the orphaned `IsTerminal` import in the same edit** — `slip39.rs:54`, `seed_xor.rs:24`, `final_word.rs:20` (all `use std::io::{IsTerminal, …}`) [M1]. Do NOT touch `compare_cost.rs:6`'s `IsTerminal` (its gate is not dropped).
 
 **Per-command checklist (P1 — fixed class):**
 
@@ -188,7 +188,7 @@ fn slip39_split_emits_on_pipe_not_just_tty() {
 ```
 Worked example — `addresses` (net-new W): at the run-level after the address table is written to stdout, `emit_output_class_advisory(OutputClass::WatchOnly, stderr);`.
 
-- [ ] **Step 4: Run — verify PASS + no regression** Run: `cargo test -p mnemonic-toolkit --test cli_output_class` then the touched commands' existing suites (`ls tests | grep -E 'slip39|seed_xor|final_word|seedqr|electrum|silent|derive_child|addresses|export'`). Existing `.contains("secret material on stdout")` assertions in those suites will FAIL (old wording) — that is expected; they are re-pinned in P5. To keep P1 green in isolation, update ONLY the assertions for commands wired in P1 to the new wording now (or defer all to P5 — pick one and note it; recommended: re-pin per-command as you wire, so each phase's suite is green).
+- [ ] **Step 4: Run — verify PASS + no regression, re-pinning the P1-touched suites IN P1** (so the P1 commit is green; only the cross-cutting/doc remainder defers to P5). Run `cargo test -p mnemonic-toolkit --test cli_output_class` + the touched suites (`ls tests | grep -E 'slip39|seed_xor|final_word|seedqr|electrum|silent|derive_child|addresses|export'`). Re-pin NOW, in P1: (a) positive `.contains("secret material on stdout")` → new P wording; (b) **the 4 TTY-gate NEGATIVE cells [R1-I-new]** — `cli_final_word_advisories.rs:72`, `cli_seed_xor_advisories.rs:96`, `cli_seed_xor_advisories.rs:133`, `cli_slip39_advisories.rs:310` — INVERT to assert the new P-line is PRESENT on piped stdout (they assert non-literal strings the `secret material on stdout` grep won't find). Each P1-command suite green at the P1 commit.
 
 - [ ] **Step 5: Commit** `git add` the 9 cmd files + the test; `git commit -m "feat(advisory): fixed-class wiring + drop TTY gate on 5 commands (B P1)"`
 
@@ -248,8 +248,10 @@ fn decode_address_is_inert() {
 }
 #[test]
 fn auto_repair_short_circuit_emits_class() {
-    // verify-bundle / xpub-search / inspect / convert given a 1-char-corrupt ms1 with auto-repair
-    // → exit 5, repaired ms1 on stdout → P line. (Construct a corrupt ms1 fixture; assert P_LINE.)
+    // verify-bundle / xpub-search / inspect / convert given a 1-char-corrupt card with auto-repair
+    // → exit 5, repaired card on stdout → class line. Cover ms1→P AND [M2 — locks the C1 widening]
+    // mk1→W and md1→T (the existing cli_auto_repair.rs:104 md1 cell only asserts stdout-only).
+    // Construct corrupt ms1/mk1/md1 fixtures; assert P_LINE / W_LINE / template line respectively.
 }
 #[test]
 fn seedqr_jsonout_file_is_inert() {
@@ -291,7 +293,7 @@ fn ms_derive_emits_watch_only_and_language_note() {
 }
 ```
 - [ ] **Step 2: Run — verify FAIL.**
-- [ ] **Step 3: Implement.** Add to `ms-cli/src/advisory.rs` the byte-identical `OutputClass` + `emit_output_class_advisory` (the three lines must be byte-for-byte the toolkit's — copy them). Wire: `ms encode`/`ms decode` → `emit(PrivateKeyMaterial)` (net-new, run-level after the stdout write); `ms derive` → `emit(WatchOnly)` at **run-level AFTER the whole `if args.json { } else { }` block (`~derive.rs:253`), UNCONDITIONAL** [folds I4 — the language note at `:246-249` is inside `else { if defaulted { } }`, so emitting "after the language note" would skip `--json`/non-defaulted invocations]; `ms repair` → replace the inline literal at `cmd/repair.rs:106-109` with `emit(PrivateKeyMaterial)`. (`ms derive` HAS a threaded `stderr` param; encode/decode/repair emit via `eprintln!`/`std::io::stderr()` — the helper's `&mut impl Write` accepts `&mut std::io::stderr().lock()`.) (ms-cli `run(args)` is by-value, emits via `eprintln!`/`std::io::stderr()` — pass `&mut std::io::stderr().lock()` or have the helper use `eprintln!`.)
+- [ ] **Step 3: Implement.** Add to `ms-cli/src/advisory.rs` the byte-identical `OutputClass` + `emit_output_class_advisory` (the three lines must be byte-for-byte the toolkit's — copy them). Wire: `ms encode`/`ms decode` → `emit(PrivateKeyMaterial)` (net-new, run-level after the stdout write — these have TWO stdout branches (`--json` vs text, `encode.rs:135`/`:90`); place the emit AFTER both converge so the `--json` path isn't missed [M3]); `ms derive` → `emit(WatchOnly)` at **run-level AFTER the whole `if args.json { } else { }` block (`~derive.rs:253`), UNCONDITIONAL** [folds I4 — the language note at `:246-249` is inside `else { if defaulted { } }`, so emitting "after the language note" would skip `--json`/non-defaulted invocations]; `ms repair` → replace the inline literal at `cmd/repair.rs:106-109` with `emit(PrivateKeyMaterial)`. (`ms derive` HAS a threaded `stderr` param; encode/decode/repair emit via `eprintln!`/`std::io::stderr()` — the helper's `&mut impl Write` accepts `&mut std::io::stderr().lock()`.) (ms-cli `run(args)` is by-value, emits via `eprintln!`/`std::io::stderr()` — pass `&mut std::io::stderr().lock()` or have the helper use `eprintln!`.)
 - [ ] **Step 4: Run — verify PASS** + **byte-parity test**: a test asserting ms-cli's 3 emitted lines equal the toolkit's literals (hard-code both, assert equal — cross-repo string sync guard). `cargo test -p ms-cli`.
 - [ ] **Step 5: Commit** (in mnemonic-secret) `git commit -m "feat(advisory): ms output-class stderr advisory + byte-parity (B P4)"`
 
@@ -303,7 +305,7 @@ fn ms_derive_emits_watch_only_and_language_note() {
 
 - [ ] **Step 1: Re-pin the REMAINING test assertions** (the P1/P2/P4-touched suites are already re-pinned in their own phase — see those Step-4 notes — so each phase commit stays green). `grep -rl 'secret material on stdout' crates/mnemonic-toolkit/tests` (11 asserting + `cli_secret_in_argv_warning.rs` comment-only [M2]) + `mnemonic-secret/crates/ms-cli/tests`. Three re-pin classes [folds I6]:
   - **positive `.contains("secret material on stdout")`** → new wording (or the class predicate for conditional commands);
-  - **NEGATIVE/absence assertions broken by the TTY-gate drop** (e.g. `cli_slip39_advisories.rs:311` `!stderr.contains("reconstructed secret material on stdout")` — slip39-combine now emits unconditionally) → **INVERT or DELETE**, do NOT "re-pin to new wording";
+  - **NEGATIVE/absence assertions broken by the TTY-gate drop [folds R1-I-new — the `secret material on stdout` grep does NOT find these; they assert DIFFERENT literals]. ALL FIVE, enumerated (discover by test-name pattern `piped.*does_not_emit` / `non.?tty`, not the literal):** `cli_slip39_advisories.rs:310-313` (`!contains("reconstructed secret material on stdout")`), `cli_final_word_advisories.rs:72-75` (`!contains("candidate list is secret material")`), `cli_seed_xor_advisories.rs:96-98` (`!contains("Seed XOR shares on stdout")`), `cli_seed_xor_advisories.rs:133-135` (`!contains("combined phrase is secret material")`). Each command now emits unconditionally → **INVERT** each to assert the new unified P-line IS PRESENT on piped (non-TTY) stdout (do NOT "re-pin to new wording"). **These MUST be folded in P1** (their commands are P1) to keep the P1 commit green — not deferred to P5;
   - **conditional-command** assertions → assert the class predicate (P vs W) both ways.
   `cargo test -p mnemonic-toolkit` + `cargo test -p ms-cli` GREEN.
 - [ ] **Step 2: Rebuild all 4 binaries** (mnemonic + md + ms + mk) from current source (MEMORY lesson — stale siblings cause false transcript drift).
