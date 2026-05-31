@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.38.1] — 2026-05-31
+
+**SemVer-PATCH — `bundle` / `verify-bundle --descriptor` now accept a bare concrete descriptor in addition to the `@N` template form; `export-wallet --descriptor` rejects a keyless `@N` template with a helpful pointer.**
+
+- **`bundle --descriptor` and `verify-bundle --descriptor`** now accept either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); both apostrophe and `h`-form hardened paths are accepted.
+- **`export-wallet --descriptor`** accepts a concrete descriptor (with or without key origins); a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json`.
+- **Internal: shared descriptor-form classifier + `descriptor_concrete_to_resolved_slots` helper** — single source of truth for both the form check and concrete-descriptor key extraction, shared across `bundle`, `verify-bundle`, and `export-wallet`.
+
 ## mnemonic-toolkit [0.38.0] — 2026-05-31
 
 **SemVer-MINOR — new `mnemonic addresses` subcommand: batch watch-only address derivation.** The watch-only complement to `export-wallet --range`, mirroring `mk address`. Read-only public derivation — no private keys on stdout, no signing.
