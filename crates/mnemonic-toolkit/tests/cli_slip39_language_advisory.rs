@@ -17,6 +17,13 @@ fn slip39(args: &[&str]) -> (String, String) {
         .args(args)
         .output()
         .unwrap();
+    // Every invocation in this file is a valid split/combine — assert success so the
+    // no-fire (`!contains`) assertions can never pass vacuously on an early error exit.
+    assert!(
+        out.status.success(),
+        "slip39 {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     (
         String::from_utf8(out.stdout).unwrap(),
         String::from_utf8(out.stderr).unwrap(),

@@ -1,14 +1,19 @@
-//! v0.37.11 — non-English BIP-39 wordlist-language advisory on `convert --to entropy`
-//! (path A of the `mnem` footgun). Raw entropy drops the wordlist language. The
-//! advisory fires (stderr) once when `--language` is non-English and a `entropy`
-//! target is present; key-deriving targets (xprv/xpub/wif/...) do not fire.
+//! v0.37.11 — non-English BIP-39 wordlist-language advisory on `convert` (path A of
+//! the `mnem` footgun). Both language-agnostic targets — raw entropy AND an ms1 card
+//! — drop the wordlist language. The advisory fires (stderr) when `--language` is
+//! non-English and an `entropy` or `ms1` target is present; key-deriving targets
+//! (xprv/xpub/wif/...) and the language-keeping `phrase` target do not fire. A
+//! malformed phrase errors out before any advisory (emit is post-`compute_outputs`).
 
 use assert_cmd::Command;
 
 // French / English all-zeros-entropy 12-word vectors (checksum-valid).
 const FRENCH_12: &str = "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille";
+// Same French head with a wrong final word → BIP-39 checksum failure (parse error).
+const FRENCH_12_BAD_CKSUM: &str = "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser";
 
 const ADVISORY_NEEDLE: &str = "BIP-39 seed as raw entropy";
+const ADVISORY_MS1: &str = "BIP-39 seed as an ms1 card";
 
 #[test]
 fn french_to_entropy_fires_advisory() {
@@ -68,6 +73,74 @@ fn english_to_entropy_no_advisory() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(!stderr.contains(ADVISORY_NEEDLE), "English must NOT fire: {stderr:?}");
+}
+
+#[test]
+fn french_to_ms1_fires_advisory() {
+    // C1 (end-of-cycle R0): an ms1 card is the canonical engravable language-losing
+    // form — must advise just like raw entropy.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
+            "--to", "ms1",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains(ADVISORY_MS1), "ms1 target must advise: {stderr:?}");
+    assert!(stderr.contains("french"), "{stderr:?}");
+}
+
+#[test]
+fn english_to_ms1_no_advisory() {
+    let english_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert", "--from", &format!("phrase={english_12}"), "--language", "english",
+            "--to", "ms1",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(!stderr.contains(ADVISORY_MS1), "English ms1 must NOT fire: {stderr:?}");
+}
+
+#[test]
+fn entropy_to_french_phrase_no_advisory() {
+    // M2 (end-of-cycle R0): a `phrase` target re-encodes the entropy in `--language`
+    // → the output IS the localized mnemonic, no language loss. (phrase→phrase is a
+    // refused identity edge, so the language-keeping case is exercised entropy→phrase.)
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert", "--from", "entropy=00000000000000000000000000000000", "--language",
+            "french", "--to", "phrase",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stdout.contains("abaisser"), "emits the French mnemonic: {stdout:?}");
+    assert!(!stderr.contains(ADVISORY_NEEDLE), "phrase target must NOT fire: {stderr:?}");
+    assert!(!stderr.contains(ADVISORY_MS1), "phrase target must NOT fire: {stderr:?}");
+}
+
+#[test]
+fn malformed_french_phrase_errors_without_advisory() {
+    // I1 (end-of-cycle R0): the advisory is emitted AFTER compute_outputs succeeds,
+    // so a bad-checksum phrase exits with an error and never advises.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert", "--from", &format!("phrase={FRENCH_12_BAD_CKSUM}"), "--language", "french",
+            "--to", "entropy",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(!stderr.contains(ADVISORY_NEEDLE), "must NOT advise-then-error: {stderr:?}");
 }
 
 #[test]

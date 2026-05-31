@@ -946,18 +946,6 @@ pub fn run<R: Read, W: Write, E: Write>(
         );
     }
 
-    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
-    // `--to entropy` drops the wordlist language (raw entropy carries only bytes).
-    // Placed after ALL refusal guards so a refused edge never advises.
-    if targets.contains(&NodeType::Entropy) {
-        if let Some(msg) = crate::language::non_english_seed_advisory(
-            args.language.unwrap_or_default(),
-            "raw entropy",
-        ) {
-            let _ = writeln!(stderr, "{msg}");
-        }
-    }
-
     // 8) Compute outputs.
     let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
     let bip38_passphrase = effective_bip38_passphrase.as_deref();
@@ -1011,6 +999,29 @@ pub fn run<R: Read, W: Write, E: Write>(
             return Err(orig);
         }
     };
+
+    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem`
+    // footgun): a language-agnostic target — raw entropy OR an ms1 card — drops
+    // the wordlist language (carries only the entropy bytes). Placed AFTER
+    // compute_outputs succeeds so a malformed phrase errors before advising;
+    // derived-key targets (xpub/xprv/wif/fingerprint) bake the language in and
+    // do not fire. Two distinct forms → at most one advisory per form present.
+    if targets.contains(&NodeType::Entropy) {
+        if let Some(msg) = crate::language::non_english_seed_advisory(
+            args.language.unwrap_or_default(),
+            "raw entropy",
+        ) {
+            let _ = writeln!(stderr, "{msg}");
+        }
+    }
+    if targets.contains(&NodeType::Ms1) {
+        if let Some(msg) = crate::language::non_english_seed_advisory(
+            args.language.unwrap_or_default(),
+            "an ms1 card",
+        ) {
+            let _ = writeln!(stderr, "{msg}");
+        }
+    }
 
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {
