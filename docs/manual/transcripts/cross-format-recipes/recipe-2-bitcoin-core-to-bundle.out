@@ -1,14 +1,17 @@
 # ms1 (omitted — descriptor watch-only mode)
 
 # mk1 (xpub + origin)
-mk1qpzr03pqqsq3phcjzwux3r03qvzg3vs7llvu2xd8x2rk7av9gmew82jq5zap9302ynhp37ggd6z5u4emag0zr8gh9upnjmzscgn534zzvhxg
-mk1qpzr03ppwyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jprztejzs7rlqq8jrxu6m936cj6e6c7
+mk1qpzr03zqqsq3phcjzwux3r03lczdfqyqsqygpqyqsqygpqyqsqyg9qyqsqyqfz9jrmlan3ge5uegwmm4s4r09ca2gzst59jmt7d27rw25lsr
+mk1qpzr03zpztz75f8wrrussm59fetnh6s7yxw3wtcr89csx44yjeexeprfycsm9dhrv3waxk7qqfk9slckgyvf0xg2rc057x40k9p57yllw56e
+mk1qpzr03zzy9sksy4fj74ly66we8
 
-mk1qp zr03p qqsq3 phcjz wux3r 03qvz g3vs7 llvu2 xd8x2 rk7av
-9gmew 82jq5 zap93 02ynh p37gg d6z5u 4emag 0zr8g h9upn jmzsc
-gn534 zzvhx g
-mk1qp zr03p pwyp4 dfykw fkgg6 fxyxe tdcmy thf4h sqzd3 v879j
-przte jzs7r lqq8j rxu6m 936cj 6e6c7
+mk1qp zr03z qqsq3 phcjz wux3r 03lcz dfqyq sqygp qyqsq ygpqy
+qsqyg 9qyqs qyqfz 9jrml an3ge 5uegw mm4s4 r09ca 2gzst 59jmt
+7d27r w25ls r
+mk1qp zr03z pztz7 5f8wr russm 59fet nh6s7 yxw3w tcr89 csx44
+yjeex eprfy csm9d hrv3w axk7q qfk9s lckgy vf0xg 2rc05 7x40k
+9p57y llw56 e
+mk1qp zr03z zy9sk sy4fj 74ly6 6we8
 
 # md1 (wallet policy)
 md1f0t85qspqpm6jzqqqksts6yd7y25z98x2rk7av9gmew82jq5zap9302ynhp37ggd6z5u4emcfp6yfs3m6acnl
@@ -16,4 +19,3 @@ md1f0t85qsdg0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8c58qfhtc
 
 md1f0-t85qs-pqpm6-jzqqq-ksts6-yd7y2-5z98x-2rk7a-v9gme-w82jq-5zap9-302yn-hp37g-gd6z5-u4emc-fp6yf-s3m6a-cnl
 md1f0-t85qs-dg0zr-8gh9u-pnjug-r26jf-vunvs-35jvg-djkm3-kghwn-t0qqy-mzc0u-tyzxy-hny9p-u8c58-qfhtc-q8h26-k
-
