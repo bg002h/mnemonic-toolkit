@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.37.11] — 2026-05-30
+
+**SemVer-PATCH — stderr advisory when a non-English BIP-39 seed is encoded into a language-agnostic form (ms1 / raw entropy / SLIP-39 shares). Path A of the `mnem` wordlist-language footgun (the wire-format hint stays filed as `mnemonic-secret mnem-wordlist-language-hint-on-wire`, a v0.2 arc).**
+
+- **The footgun.** A BIP-39 seed is `PBKDF2` over the *language-specific* mnemonic string, so the same entropy in a different wordlist language yields a different seed and a different wallet. ms1 cards, raw entropy, and SLIP-39 shares carry only the entropy — not the wordlist language. Recovering a non-English backup with English-defaulted third-party software silently derives the wrong wallet. `ms decode` already loud-warns on the decode side; this closes the **encode** side in the toolkit (the only place that sees `--language`).
+- **New `language::non_english_seed_advisory(lang, form)` helper** — single source of truth, returns `None` for English, else a stderr advisory naming the language (kebab `human_name()`) and the emitted form. Emitted at four chokepoints:
+  - `bundle` — once per secret-bearing invocation (single `emit_unified` chokepoint, not per-cosigner), `form = "an ms1 card"`.
+  - `convert --to entropy` — when an `entropy` target is present (key-deriving targets like `xprv`/`xpub`/`wif` bake the language in, so they do not fire).
+  - `slip39 split` — always (shares are language-agnostic), `form = "SLIP-39 shares"`.
+  - `slip39 combine --to entropy` — `--to phrase` re-encodes in `--language` and keeps it, so only the entropy shape fires.
+- Advisory is **stderr-only** — no new clap flag, no `--json` wire-shape change → no GUI schema-mirror, no manual lockstep. Matches the bip48 "bless + warn" stderr-advisory precedent. `--json` stdout stays byte-identical.
+
 ## mnemonic-toolkit [0.37.10] — 2026-05-30
 
 **SemVer-PATCH — adopt `mk-codec 0.4.0` (no-path / depth-0 support) and make every mk1 card's `origin_path` round-trip the xpub it carries. Resolves FOLLOWUP `mk1-card-origin-path-vs-xpub-depth-consistency` (companion `mnemonic-key mk1-no-path-depth0-support`); flips `mk1-depth-child-compensating-check-watch`.**
