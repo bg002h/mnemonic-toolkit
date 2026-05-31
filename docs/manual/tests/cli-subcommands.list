@@ -49,6 +49,7 @@ md repair
 # ms
 ms encode
 ms decode
+ms derive
 ms inspect
 ms verify
 ms vectors
