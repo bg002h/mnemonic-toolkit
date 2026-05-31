@@ -85,12 +85,20 @@ fn advisory_uses_kebab_name() {
 ```
 (Import path: `non_english_seed_advisory` is `pub(crate)` in `crate::language`.)
 
-- [ ] **Step 2 — Integration test** (`tests/cli_bundle_*` — e.g. a new `tests/cli_bundle_language_advisory.rs`): use a real **French** 12-word phrase const. Assert:
-  - `bundle --slot @0.phrase=<french> --language french --template bip84 --network mainnet --no-engraving-card` → stderr contains `"BIP-39 seed as an ms1 card"` + `"french"`.
-  - `--language english` (English phrase) → stderr does NOT contain the advisory.
+- [ ] **Step 2 — Integration test** (`tests/cli_bundle_*` — e.g. a new `tests/cli_bundle_language_advisory.rs`). **I3 — concrete checksum-valid vectors (all-zeros entropy; verified via `convert --to phrase`):**
+```rust
+// French all-zeros-entropy 12-word (word[0]=abaisser, word[11]=abeille).
+const FRENCH_12: &str = "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille";
+// English all-zeros-entropy 12-word (the canonical no-fire control).
+const ENGLISH_12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+```
+  Assert:
+  - `bundle --slot @0.phrase=<FRENCH_12> --language french --template bip84 --network mainnet --no-engraving-card` → stderr contains `"BIP-39 seed as an ms1 card"` + `"french"`.
+  - `--slot @0.phrase=<ENGLISH_12> --language english` → stderr does NOT contain the advisory.
   - a **watch-only** `--slot @0.xpub=<xpub> --slot @0.fingerprint=<fp> --language french` → does NOT (no ms1).
-  - a 2-of-2 multisig (both French phrase slots, `--language french`) → the advisory appears **exactly once** (count occurrences == 1).
+  - a 2-of-2 multisig (both FRENCH_12 phrase slots, `--language french`) → the advisory appears **exactly once** (`stderr.matches("BIP-39 seed as an ms1 card").count() == 1`).
   - `--json` → stdout parses as JSON unchanged; the advisory is on stderr only.
+  - **M2 note:** `bundle --import-json <french-secret-bearing-envelope> --language french` ALSO fires (emit lives in `emit_unified`, reached by the import-json branch) — this is correct (re-emitting ms1 still drops language); add one assertion or a comment so it's not read as accidental.
 
 - [ ] **Step 3 — Run** the bundle suite + the new test → green.
 
@@ -104,7 +112,7 @@ fn advisory_uses_kebab_name() {
 
 **Files:** Modify `crates/mnemonic-toolkit/src/cmd/convert.rs` (`run`, `:737`) + integration test.
 
-`run<R, W, E>(args: &ConvertArgs, …, stderr: &mut E, …)` has `args.language: Option<CliLanguage>` (`:245`) + `targets: Vec<NodeType>` (built `:850`, empty-guarded `:878`, refusal-checked `:884`). Insert the advisory **after the §3 refusal pre-check passes** (so a refused edge doesn't emit) and before the conversion emit, where `targets` + `args.language` + `stderr` are in scope (~`:890`; pin exact line at impl, NOT `:850/874` which bracket the parse loop — M-new-3).
+`run<R, W, E>(args: &ConvertArgs, …, stderr: &mut E, …)` has `args.language: Option<CliLanguage>` (`:245`) + `targets: Vec<NodeType>` (built `:850`). **I1 fold — insert AFTER ALL refusal guards**, not just the §3 pre-check loop (`:882-886`): there are 3 more `return Err` after it — WIF+`--path` (`:890`), `--xpub-prefix`-without-`--network` (`:896`), BIP-38-without-passphrase (`:905`) — plus the existing stderr-advisory cluster (`:926-947`). Insert **immediately after `:947`, before `compute_outputs` (`:952`)**, so a refused/failed edge never advises. `targets` + `args.language` + `stderr` are all in scope there.
 
 - [ ] **Step 1 — Add the emit**:
 ```rust
@@ -119,8 +127,8 @@ fn advisory_uses_kebab_name() {
 ```
 (Evaluated ONCE — `targets.contains` handles co-occurring `--to xpub,entropy` with a single advisory.)
 
-- [ ] **Step 2 — Integration test** (`tests/cli_convert_*`): French phrase const. Assert:
-  - `convert --from phrase=<french> --language french --to entropy` → stderr advisory (`"raw entropy"`).
+- [ ] **Step 2 — Integration test** (`tests/cli_convert_*`): declare `FRENCH_12` (the I3 const from Phase 1). Assert:
+  - `convert --from phrase=<FRENCH_12> --language french --to entropy` → stderr advisory (`"raw entropy"`).
   - `--to xpub,entropy` (French) → advisory appears exactly once.
   - `--to xprv` (French) → NO advisory; `--to phrase` (French) → NO advisory.
   - `--language english` `--to entropy` → NO advisory.
@@ -140,14 +148,14 @@ fn advisory_uses_kebab_name() {
 
 `run_split<R, W, E>(args, …, stderr)` has `args.language: CliLanguage` (`:132`, default english, NOT Option). `run_combine` has `args.language` (`:171`) + `args.to: Slip39ToShape` (`:168`, variants `Entropy` `:185` / `Phrase` `:188`).
 
-- [ ] **Step 1 — `run_split`**: split → shares always lose the language (phrase→entropy→shares). Add near the start (after arg/secret advisories, before/after `parse_master_to_entropy` at `:437`):
+- [ ] **Step 1 — `run_split`**: split → shares always lose the language (phrase→entropy→shares). Add **after `parse_master_to_entropy` succeeds (`:437`)** (I2 — a bad phrase shouldn't advise-then-error):
 ```rust
     if let Some(msg) = crate::language::non_english_seed_advisory(args.language, "SLIP-39 shares") {
         writeln!(stderr, "{msg}").ok();
     }
 ```
 
-- [ ] **Step 2 — `run_combine`**: only `--to Entropy` drops the language (`--to phrase` re-encodes in `args.language`). Add where `args.to`/`args.language`/`stderr` are in scope:
+- [ ] **Step 2 — `run_combine`**: only `--to Entropy` drops the language (`--to phrase` re-encodes in `args.language`). Add **after the successful `slip39_combine` (`:644`), before the `match args.to` output render (`:647`)** (I2 — a bad share shouldn't advise-then-error); `Slip39ToShape::Entropy` is at `:185`, `Phrase` `:187`:
 ```rust
     if matches!(args.to, Slip39ToShape::Entropy) {
         if let Some(msg) = crate::language::non_english_seed_advisory(args.language, "raw entropy") {
@@ -155,13 +163,12 @@ fn advisory_uses_kebab_name() {
         }
     }
 ```
-(Confirm the `Slip39ToShape` import / variant path at impl.)
 
-- [ ] **Step 3 — Integration test** (`tests/cli_slip39_*`): French phrase const. Assert:
-  - `slip39 split --from phrase=<french> --language french …` → stderr advisory (`"SLIP-39 shares"`).
-  - `--language english` split → NO advisory.
-  - `slip39 combine <french shares> --language french --to entropy` → advisory (`"raw entropy"`). (Generate the French shares via the split above.)
-  - `slip39 combine … --to phrase` (or default phrase form) → NO advisory.
+- [ ] **Step 3 — Integration test** (`tests/cli_slip39_*`): declare `FRENCH_12`/`ENGLISH_12` (the I3 consts). Assert:
+  - `slip39 split --from phrase=<FRENCH_12> --language french …` → stderr advisory (`"SLIP-39 shares"`).
+  - `slip39 split --from phrase=<ENGLISH_12> --language english …` → NO advisory.
+  - `slip39 combine <french shares> --language french --to entropy` → advisory (`"raw entropy"`). (Generate the French shares by capturing the `split --from phrase=<FRENCH_12> --language french` stdout.)
+  - `slip39 combine … --to phrase` (or the default phrase form) → NO advisory.
 
 - [ ] **Step 4 — Run** → green.
 
