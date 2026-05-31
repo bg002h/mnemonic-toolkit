@@ -310,7 +310,21 @@ pub(crate) fn envelope_to_resolved_slots<E: std::io::Write>(
         let card = mk_codec::decode(&chunk_refs).map_err(|e| {
             ToolkitError::BadInput(format!("--import-json: mk1[{i}] decode failed: {e}"))
         })?;
-        out.push(mk1_card_to_resolved_slot(&card, i, stderr)?);
+        let mut slot = mk1_card_to_resolved_slot(&card, i, stderr)?;
+        // v0.37.10: the mk1 card's origin_path is the account-consistent path (it
+        // round-trips the xpub it carries — a depth-3 account xpub annotated with a
+        // depth-4 BIP-48 descriptor origin yields a depth-3 mk1 path). The FULL
+        // descriptor origin lives in the envelope's bundle.origin_path[s] (md1's
+        // path_decl). Prefer it so the re-imported cosigner origin matches the source
+        // descriptor; the `mk1_origin_path` helper re-truncates for the emitted card.
+        let full_origin: Option<&str> = match &envelope.bundle.origin_paths {
+            Some(paths) => paths.get(i).map(|s| s.as_str()),
+            None => envelope.bundle.origin_path.as_deref(),
+        };
+        if let Some(s) = full_origin {
+            slot.path = derivation_path_from_envelope(s, "--import-json")?;
+        }
+        out.push(slot);
     }
     Ok(out)
 }
