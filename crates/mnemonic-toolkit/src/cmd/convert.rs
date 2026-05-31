@@ -17,7 +17,7 @@ use bip39::Mnemonic;
 use bitcoin::bip32 as bip32;
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::{Address, PrivateKey};
+use bitcoin::PrivateKey;
 use clap::Args;
 use serde::Serialize;
 use std::io::{Read, Write};
@@ -1288,7 +1288,9 @@ fn compute_outputs(
                             &entropy, pbkdf2_passphrase, language, network, &path,
                         )?;
                         let leaf_xpub = bip32::Xpub::from_priv(&secp, &leaf_xpriv);
-                        build_address_from_xpub(&secp, &leaf_xpub, script_type, network)
+                        crate::address_render::render_address_from_xpub(
+                            &secp, &leaf_xpub, script_type, network,
+                        )
                     }
                 };
                 out.push((t, v));
@@ -1339,8 +1341,12 @@ fn compute_outputs(
                         let child = xpub
                             .derive_pub(&secp, &path)
                             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-                        let net = args.network.unwrap_or_else(|| network_from_xpub(&xpub));
-                        build_address_from_xpub(&secp, &child, script_type, net)
+                        let net = args
+                            .network
+                            .unwrap_or_else(|| crate::address_render::network_from_xpub(&xpub));
+                        crate::address_render::render_address_from_xpub(
+                            &secp, &child, script_type, net,
+                        )
                     }
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
@@ -1588,37 +1594,9 @@ fn resolve_script_type(args: &ConvertArgs) -> Result<ScriptType, ToolkitError> {
     Err(refusal_address_no_script_type())
 }
 
-/// SPEC v0.7 §10.a — render an address from a child xpub (already derived to
-/// the leaf path) per the requested script-type and network.
-fn build_address_from_xpub<C: bitcoin::secp256k1::Verification>(
-    secp: &Secp256k1<C>,
-    child: &bip32::Xpub,
-    script_type: ScriptType,
-    network: CliNetwork,
-) -> String {
-    match script_type {
-        ScriptType::P2pkh => Address::p2pkh(child.to_pub(), network.network_kind()).to_string(),
-        ScriptType::P2wpkh => Address::p2wpkh(&child.to_pub(), network.known_hrp()).to_string(),
-        ScriptType::P2shP2wpkh => {
-            Address::p2shwpkh(&child.to_pub(), network.network_kind()).to_string()
-        }
-        ScriptType::P2tr => {
-            Address::p2tr(secp, child.to_x_only_pub(), None, network.known_hrp()).to_string()
-        }
-    }
-}
-
-/// SPEC v0.7 §10.a — infer `CliNetwork` from a parsed `Xpub` when `--network`
-/// is absent. `NetworkKind::Test` collapses testnet / signet / regtest into
-/// `Testnet` (the bech32 HRP `tb1...` is shared; signet/regtest disambiguation
-/// is not encoded in the version-byte prefix). `--network` overrides this when
-/// supplied.
-fn network_from_xpub(xpub: &bip32::Xpub) -> CliNetwork {
-    match xpub.network {
-        bitcoin::NetworkKind::Main => CliNetwork::Mainnet,
-        bitcoin::NetworkKind::Test => CliNetwork::Testnet,
-    }
-}
+// `build_address_from_xpub` + `network_from_xpub` moved to `crate::address_render`
+// (de-duplicated with the former xpub-search copies). Call sites below use
+// `crate::address_render::{render_address_from_xpub, network_from_xpub}`.
 
 // ============================================================================
 // SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers

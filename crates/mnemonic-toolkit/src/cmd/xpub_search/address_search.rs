@@ -8,7 +8,6 @@ use crate::cmd::convert::ScriptType;
 use crate::network::CliNetwork;
 use bitcoin::bip32::{DerivationPath, Xpub};
 use bitcoin::secp256k1::{Secp256k1, Verification};
-use bitcoin::Address;
 use std::str::FromStr;
 
 /// Per-target scan result.
@@ -27,27 +26,6 @@ pub struct AddressMatch {
     pub target: String,
     pub result: AddressMatchKind,
     pub script_type: ScriptType,
-}
-
-/// Build an address string from a child xpub, mirroring
-/// `cmd/convert.rs::build_address_from_xpub`. Inlined here (not pulled via
-/// `pub use`) to avoid exposing the convert.rs private fn surface.
-fn render_address<C: Verification>(
-    secp: &Secp256k1<C>,
-    child: &Xpub,
-    script_type: ScriptType,
-    network: CliNetwork,
-) -> String {
-    match script_type {
-        ScriptType::P2pkh => Address::p2pkh(child.to_pub(), network.network_kind()).to_string(),
-        ScriptType::P2wpkh => Address::p2wpkh(&child.to_pub(), network.known_hrp()).to_string(),
-        ScriptType::P2shP2wpkh => {
-            Address::p2shwpkh(&child.to_pub(), network.network_kind()).to_string()
-        }
-        ScriptType::P2tr => {
-            Address::p2tr(secp, child.to_x_only_pub(), None, network.known_hrp()).to_string()
-        }
-    }
 }
 
 /// Scan one or both chains for each target. First-match-per-target wins.
@@ -84,7 +62,8 @@ pub fn scan_xpub_for_addresses<C: Verification>(
                 Ok(c) => c,
                 Err(_) => continue,
             };
-            let addr = render_address(secp, &child, script_type, network);
+            let addr =
+                crate::address_render::render_address_from_xpub(secp, &child, script_type, network);
             rendered.push((*chain_name, i, addr));
         }
     }

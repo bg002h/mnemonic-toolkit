@@ -208,7 +208,9 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
 
     // 5) Network resolution: explicit --network wins; else inferred from the
     //    xpub version byte.
-    let network = args.network.unwrap_or_else(|| network_from_xpub(&xpub));
+    let network = args
+        .network
+        .unwrap_or_else(|| crate::address_render::network_from_xpub(&xpub));
 
     // 6) Scan.
     let secp = Secp256k1::verification_only();
@@ -354,11 +356,4 @@ fn detect_multisig_prefix(s: &str) -> Option<&'static str> {
     }
 }
 
-/// Mirror of `cmd/convert.rs::network_from_xpub` (private there). Kept inline
-/// so P3 doesn't depend on convert.rs internal visibility.
-fn network_from_xpub(xpub: &bitcoin::bip32::Xpub) -> CliNetwork {
-    match xpub.network {
-        bitcoin::NetworkKind::Main => CliNetwork::Mainnet,
-        bitcoin::NetworkKind::Test => CliNetwork::Testnet,
-    }
-}
+// `network_from_xpub` moved to `crate::address_render` (de-duplicated).

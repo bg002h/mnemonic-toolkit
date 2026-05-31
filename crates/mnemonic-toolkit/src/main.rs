@@ -1,5 +1,6 @@
 //! `mnemonic` — engraving-bundle CLI for the m-format star.
 
+mod address_render;
 mod bip85;
 mod bundle_unified;
 mod cmd;
