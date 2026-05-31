@@ -2113,78 +2113,64 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
             None => continue,
         };
 
-        // Check 1: depth.
-        let xpub_depth = card.xpub.depth as usize;
-        let md_depth = md_path.components.len();
-        if xpub_depth != md_depth {
-            writeln!(
-                stderr,
-                "warning: cosigner[{}] mk1 xpub depth ({}) does not match md1 origin-path length ({}); cards are internally inconsistent",
-                i, xpub_depth, md_depth
-            )
-            .ok();
-        }
-
-        // Check 2: child_number (last component, including hardened bit).
-        if !md_path.components.is_empty() {
-            let last = md_path.components.last().expect("non-empty");
-            let (xpub_idx, xpub_hardened) = match card.xpub.child_number {
+        // Check 1 (overlap-prefix, v0.37.10): compare the decoded mk1 origin_path
+        // against md1's origin on min(len). One is a prefix of the other by
+        // construction (3→4 truncate: mk1 ⊆ md1; 4→3 extend: md1 ⊆ mk1; 4→4: equal),
+        // so a depth difference is the legitimate truncation/extension/under-
+        // annotation shape — NOT flagged. Only a genuine disagreement on the shared
+        // prefix is an inconsistency. This subsumes the old depth + terminal-child
+        // checks (the mk1 path's length is xpub.depth and its terminal is
+        // xpub.child_number, by the mk-codec 0.4.0 encode guard).
+        let d = card.xpub.depth as usize;
+        let mk_comps: Vec<bitcoin::bip32::ChildNumber> =
+            card.origin_path.into_iter().copied().collect();
+        let overlap = mk_comps.len().min(md_path.components.len());
+        for k in 0..overlap {
+            let (mi, mh) = match mk_comps[k] {
                 bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
                 bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
             };
-            if xpub_idx != last.value || xpub_hardened != last.hardened {
+            let md_c = md_path.components[k];
+            if mi != md_c.value || mh != md_c.hardened {
                 writeln!(
                     stderr,
-                    "warning: cosigner[{}] mk1 xpub child_number ({}{}) does not match md1 origin-path last component ({}{}); cards are internally inconsistent",
+                    "warning: cosigner[{}] mk1 origin-path component #{} ({}{}) does not match md1 ({}{}); cards are internally inconsistent",
                     i,
-                    xpub_idx,
-                    if xpub_hardened { "'" } else { "" },
-                    last.value,
-                    if last.hardened { "'" } else { "" },
+                    k + 1,
+                    mi,
+                    if mh { "'" } else { "" },
+                    md_c.value,
+                    if md_c.hardened { "'" } else { "" },
                 )
                 .ok();
-            }
-        } else {
-            // md1 says depth 0 but xpub claims non-zero child_number → inconsistent.
-            let (xpub_idx, xpub_hardened) = match card.xpub.child_number {
-                bitcoin::bip32::ChildNumber::Normal { index } => (index, false),
-                bitcoin::bip32::ChildNumber::Hardened { index } => (index, true),
-            };
-            if xpub_idx != 0 || xpub_hardened {
-                writeln!(
-                    stderr,
-                    "warning: cosigner[{}] mk1 xpub child_number ({}{}) does not match md1 origin-path depth 0 (expected 0); cards are internally inconsistent",
-                    i,
-                    xpub_idx,
-                    if xpub_hardened { "'" } else { "" },
-                )
-                .ok();
+                break; // one warning per cosigner
             }
         }
 
-        // Check 3: parent_fingerprint structural sanity.
+        // Check 2: parent_fingerprint structural sanity, keyed off the xpub's OWN
+        // depth d (NOT md_depth). Depth >= 2 is verified by
+        // emit_full_path_parent_fingerprint_check (needs ms1 to derive the parent).
         let pfp = card.xpub.parent_fingerprint.to_bytes();
-        if md_depth == 0 {
+        if d == 0 {
             // Master xpub MUST have all-zero parent_fingerprint per BIP-32.
             if pfp != [0u8; 4] {
                 writeln!(
                     stderr,
-                    "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) is non-zero at md1 depth 0 (expected 00000000); cards are internally inconsistent",
+                    "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) is non-zero at depth 0 (expected 00000000); cards are internally inconsistent",
                     i, hex::encode(pfp)
                 )
                 .ok();
             }
-        } else if md_depth == 1 {
-            // At depth 1, parent IS the master. Cross-check against the
-            // master fingerprint claimed by md1 (TLV fingerprints) or mk1
-            // (origin_fingerprint). Skip if neither is supplied.
+        } else if d == 1 {
+            // At depth 1, parent IS the master. Cross-check against the master
+            // fingerprint claimed by md1 (TLV fingerprints) or mk1 (origin_fingerprint).
             let claimed_master_fp = md_fp_for(*i)
                 .or_else(|| card.origin_fingerprint.map(|f| f.to_bytes()));
             if let Some(master_fp) = claimed_master_fp {
                 if pfp != master_fp {
                     writeln!(
                         stderr,
-                        "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) does not match claimed master fingerprint ({}) at md1 depth 1; cards are internally inconsistent",
+                        "warning: cosigner[{}] mk1 xpub parent_fingerprint ({}) does not match claimed master fingerprint ({}) at depth 1; cards are internally inconsistent",
                         i,
                         hex::encode(pfp),
                         hex::encode(master_fp),
@@ -2193,9 +2179,8 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
                 }
             }
         }
-        // Deeper paths (depth >= 2) skip the parent_fingerprint check because
-        // the parent xpub would need to be derived from the master seed, which
-        // the watch-only path cannot do.
+        // Deeper paths (depth >= 2) skip here; emit_full_path_parent_fingerprint_check
+        // derives the parent from the seed (ms1) when available.
     }
 }
 
@@ -2325,9 +2310,11 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
             Some(p) => p,
             None => continue,
         };
-        if md_path.components.len() < 2 {
-            // Depth 0/1 handled by `emit_watch_only_xpub_path_cross_check`'s
-            // structural sanity branch; nothing to add here.
+        // Keyed off the xpub's OWN depth d (v0.37.10): the mk1 card's parent is at
+        // depth d-1, not md_depth-1 (md1 may be deeper/shallower than the xpub).
+        let d = card.xpub.depth as usize;
+        if d < 2 {
+            // Depth 0/1 handled by `emit_watch_only_xpub_path_cross_check`'s Check 2.
             continue;
         }
 
@@ -2340,7 +2327,7 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
                 stderr,
                 "notice: cosigner[{}] mk1 parent_fingerprint at depth {} unverified (requires ms1 to derive parent xpub)",
                 i,
-                md_path.components.len()
+                d
             )
             .ok();
             continue;
@@ -2369,16 +2356,22 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
             Err(_) => continue,
         };
 
-        // Convert md1 OriginPath → bitcoin DerivationPath, then truncate to
-        // path[..N-1] for the parent.
+        // Convert md1 OriginPath → bitcoin DerivationPath, then truncate to the
+        // xpub's PARENT level (full[..d-1]), not md_depth-1: the mk1 card's xpub is
+        // at depth d, so its parent is at depth d-1. d == full.len()+1 (the 4→3 leaf
+        // one below md1's origin) is valid — full[..d-1] = all of full = the parent.
         let full_path = match crate::cmd::bundle::origin_to_derivation_path(&md_path) {
             Ok(p) => p,
             Err(_) => continue,
         };
         let full_components: Vec<bitcoin::bip32::ChildNumber> = full_path.into_iter().copied().collect();
-        let parent_components: Vec<bitcoin::bip32::ChildNumber> = full_components
-            [..full_components.len() - 1]
-            .to_vec();
+        if d - 1 > full_components.len() {
+            // The xpub claims a node ≥2 levels below md1's origin; can't form the
+            // parent prefix. (Check 1's overlap-prefix already covers consistency.)
+            continue;
+        }
+        let parent_components: Vec<bitcoin::bip32::ChildNumber> =
+            full_components[..d - 1].to_vec();
         let parent_path = bitcoin::bip32::DerivationPath::from(parent_components);
 
         let parent_xpriv = match master.derive_priv(&secp, &parent_path) {
@@ -2396,7 +2389,7 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
                 i,
                 hex::encode(claimed_fp),
                 hex::encode(derived_fp),
-                md_path.components.len()
+                d
             )
             .ok();
         }

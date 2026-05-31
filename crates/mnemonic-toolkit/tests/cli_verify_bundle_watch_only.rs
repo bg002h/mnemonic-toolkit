@@ -236,49 +236,32 @@ fn cross_check_consistent_cards_silent_no_warning() {
         .stderr(predicate::str::contains(CROSS_CHECK_WARNING_PREFIX).not());
 }
 
-/// Cell (b) — mk1 depth ≠ md1 path length: warning. Constructed by
-/// re-encoding a decoded mk1 with a shorter origin path (depth 2 instead of
-/// the bundle's depth 3). The xpub bytes (chain_code + public_key) are
-/// preserved; only the path is shortened. On decode, `xpub.depth` is
-/// reconstructed from origin_path → 2, which disagrees with the unchanged
-/// md1 path-decl depth of 3 → cross-check fires.
+/// Cell (b) — mk1 origin_path disagrees with md1 on the shared PREFIX: warning.
+/// v0.37.10: the cross-check compares the full origin paths on their overlap (a
+/// depth difference alone is legitimate — account-truncation / leaf-extension).
+/// Built WITHOUT re-encoding (the 0.4.0 guard forbids inconsistent cards) by
+/// combining a bip49 mk1 (origin m/49'/0'/0') with a bip84 md1 (origin
+/// m/84'/0'/0'); they disagree at component #1 (49' vs 84') → cross-check fires.
 #[test]
-fn cross_check_mk1_depth_lt_md1_path_warns() {
-    use bitcoin::bip32::DerivationPath;
-    use std::str::FromStr;
-
-    let (mk1, md1) = gen_bundle_json(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--json",
+fn cross_check_mk1_origin_prefix_disagrees_warns() {
+    let (mk1_49, _) = gen_bundle_json(&[
+        "bundle", "--network", "mainnet", "--template", "bip49", "--slot",
+        &format!("@0.phrase={TREZOR_24}"), "--json",
     ]);
-    let mk_refs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
-    let original = mk_codec::decode(&mk_refs).expect("mk1 decodes");
-    // Synthesize a depth-2 path that preserves the hardened-bit pattern.
-    let tampered_path = DerivationPath::from_str("m/84'/0'").unwrap();
-    let tampered = mk_codec::KeyCard::new(
-        original.policy_id_stubs.clone(),
-        original.origin_fingerprint,
-        tampered_path,
-        original.xpub,
-    );
-    let tampered_strs = mk_codec::encode(&tampered).expect("re-encode succeeds");
-    let args = single_sig_watch_only_args(&tampered_strs, &md1, "bip84");
+    let (_, md1_84) = gen_bundle_json(&[
+        "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
+        &format!("@0.phrase={TREZOR_24}"), "--json",
+    ]);
+    // single_sig_watch_only_args derives the @0.xpub slot from mk1_49; we pass
+    // the bip49 mk1 + bip84 md1 so the supplied cards disagree on the prefix.
+    let args = single_sig_watch_only_args(&mk1_49, &md1_84, "bip84");
 
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(&args)
         .assert()
-        // verify-bundle exit code is unchanged by the cross-check; the
-        // synthesized expected bundle will still mismatch (path doesn't match
-        // bip84 template) — but we only assert the cross-check stderr line.
         .stderr(predicate::str::contains(
-            "mk1 xpub depth (2) does not match md1 origin-path length (3)",
+            "mk1 origin-path component #1 (49') does not match md1 (84')",
         ));
 }
 
@@ -319,7 +302,7 @@ fn cross_check_mk1_child_number_ne_md1_last_warns() {
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
-            "mk1 xpub child_number (0') does not match md1 origin-path last component (1')",
+            "mk1 origin-path component #3 (0') does not match md1 (1')",
         ));
 }
 
@@ -331,48 +314,72 @@ fn cross_check_mk1_child_number_ne_md1_last_warns() {
 /// fabricated origin_fingerprint that doesn't match → cross-check fires.
 #[test]
 fn cross_check_mk1_parent_fingerprint_mismatch_warns() {
-    use bitcoin::bip32::{DerivationPath, Fingerprint};
-    use std::str::FromStr;
-
-    let (mk1, md1) = gen_bundle_json(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--json",
+    // v0.37.10: built WITHOUT re-encoding (the 0.4.0 guard forbids inconsistent
+    // cards). Combine mk1 from seed A with ms1+md1 from a DIFFERENT seed B at the
+    // SAME template (origin paths match → the overlap-prefix Check 1 stays silent),
+    // so the full-path parent-fingerprint check derives the parent from B's seed
+    // and finds it ≠ mk1's (A's) parent_fingerprint → fires.
+    let (mk1_a, _) = gen_bundle_json(&[
+        "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
+        &format!("@0.phrase={TREZOR_24}"), "--json",
     ]);
-    let mk_refs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
-    let original = mk_codec::decode(&mk_refs).expect("mk1 decodes");
-    // Construct a depth-1 mk1 by shortening origin_path to m/84'. Then
-    // override origin_fingerprint to NOT match the xpub's parent_fingerprint.
-    // (At depth 1, parent_fingerprint must equal the claimed master
-    // fingerprint per BIP-32; the cross-check fires when they disagree.)
-    let depth1_path = DerivationPath::from_str("m/84'").unwrap();
-    let fake_master_fp = Fingerprint::from([0xde, 0xad, 0xbe, 0xef]);
-    let tampered = mk_codec::KeyCard::new(
-        original.policy_id_stubs.clone(),
-        Some(fake_master_fp),
-        depth1_path,
-        original.xpub,
-    );
-    let tampered_strs = mk_codec::encode(&tampered).expect("re-encode succeeds");
-    // Also re-shorten md1 path to depth 1 so that the depth/child checks
-    // don't dominate — but since we can't tamper md1 here, the depth(1) vs
-    // md1-depth(3) check will also fire. We still assert parent_fingerprint
-    // mismatch fires (the check at md_depth == 1 is what we want); use a
-    // multisig path-overrides crafted bundle would be cleaner but requires
-    // md_codec re-encode. Simpler: scope this cell to assert at minimum that
-    // SOME cross-check warning fires when we tampered the mk1.
-    let args = single_sig_watch_only_args(&tampered_strs, &md1, "bip84");
+    // Full bundle from seed B (same template) → extract ms1 + md1.
+    let out_b = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
+            &format!("@0.phrase={BIP39_TEST_2}"), "--json",
+        ])
+        .assert()
+        .success();
+    let json_b: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(out_b.get_output().stdout.clone()).unwrap())
+            .expect("valid bundle JSON");
+    let ms1_b: Vec<String> = json_b["ms1"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    let md1_b: Vec<String> = json_b["md1"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    // Full-path verify: --slot phrase=B (synthesis matches ms1_b), --ms1=B, but
+    // --mk1 = A's card → its parent_fingerprint disagrees with the parent derived
+    // from B's seed at md1's path[..d-1].
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--slot".into(),
+        format!("@0.phrase={BIP39_TEST_2}"),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "bip84".into(),
+    ];
+    for s in &ms1_b {
+        args.push("--ms1".into());
+        args.push(s.clone());
+    }
+    for s in &mk1_a {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1_b {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
 
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(&args)
         .assert()
-        .stderr(predicate::str::contains(CROSS_CHECK_WARNING_PREFIX));
+        .stderr(predicate::str::contains(
+            "does not match derived parent fingerprint",
+        ));
 }
 
 /// Cell (e) — multi-cosigner watch-only with one card inconsistent: warning
