@@ -16,7 +16,9 @@
 use crate::error::ToolkitError;
 use crate::parse_descriptor::{ParsedFingerprint, ParsedKey};
 use crate::slip0132::normalize_xpub_prefix;
-use bitcoin::bip32::Xpub;
+use crate::synthesize::{xpub_to_65, ResolvedSlot};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+use md_codec::Descriptor as MdDescriptor;
 use regex::Regex;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -163,6 +165,50 @@ pub(crate) fn concrete_keys_to_placeholders(
     Ok((placeholder_form, keys, fingerprints))
 }
 
+/// Bare-concrete (checksum-stripped) descriptor body → (parsed md_codec
+/// Descriptor, watch-only ResolvedSlots). Mirrors bsms.rs:219-265; recovers
+/// the full Xpub + path from the original base58 (the ParsedKey [u8;65]
+/// payload is lossy). SPEC §3.2.
+pub(crate) fn descriptor_concrete_to_resolved_slots(
+    body: &str,
+) -> Result<(MdDescriptor, Vec<ResolvedSlot>), ToolkitError> {
+    // Remap the converter's hard-coded "import-wallet: bsms:" prefix to a
+    // neutral DescriptorParse (the caller is bundle/verify-bundle).
+    let (placeholder_form, keys, fps) = concrete_keys_to_placeholders(body).map_err(|e| {
+        ToolkitError::DescriptorParse(
+            e.message()
+                .replace("import-wallet: bsms: parse error: ", ""),
+        )
+    })?;
+    let descriptor = crate::parse_descriptor::parse_descriptor(&placeholder_form, &keys, &fps)
+        .map_err(|e| ToolkitError::DescriptorParse(e.message()))?;
+
+    let mut slots: Vec<ResolvedSlot> = Vec::with_capacity(keys.len());
+    for (idx, cap) in key_regex().captures_iter(body).enumerate() {
+        let fp_hex = cap.get(1).expect("group 1").as_str();
+        let path_inner = cap.get(2).expect("group 2").as_str();
+        let xpub_str = cap.get(3).expect("group 3").as_str();
+        let fp_bytes = parse_fp_hex(fp_hex).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("fingerprint hex for slot {idx}: {e}"))
+        })?;
+        let path = DerivationPath::from_str(&format!("m{path_inner}"))
+            .map_err(|e| ToolkitError::DescriptorParse(format!("derivation path: {e}")))?;
+        let (neutral, _variant) = normalize_xpub_prefix(xpub_str)?;
+        let xpub = Xpub::from_str(&neutral)
+            .map_err(|e| ToolkitError::DescriptorParse(format!("xpub decode: {e}")))?;
+        debug_assert_eq!(xpub_to_65(&xpub), keys[idx].payload);
+        slots.push(ResolvedSlot {
+            xpub,
+            fingerprint: Fingerprint::from(fp_bytes),
+            path,
+            entropy: None,
+            master_xpub: None,
+            _entropy_pin: None,
+        });
+    }
+    Ok((descriptor, slots))
+}
+
 fn parse_fp_hex(s: &str) -> Result<[u8; 4], String> {
     if s.len() != 8 {
         return Err(format!("fingerprint must be 8 hex chars; got {}", s.len()));
@@ -235,5 +281,22 @@ mod tests {
         // origin-less / keyless → rule-4 origin-required error.
         let err = classify_descriptor_form("wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)").unwrap_err();
         assert!(err.message().contains("must carry a key origin"), "{}", err.message());
+    }
+
+    #[test]
+    fn concrete_to_resolved_slots_recovers_typed_fields() {
+        let body = "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
+        let (_descriptor, slots) = descriptor_concrete_to_resolved_slots(body).unwrap();
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0].fingerprint, bitcoin::bip32::Fingerprint::from([0x70, 0x4c, 0x78, 0x36]));
+        assert_eq!(slots[0].path, bitcoin::bip32::DerivationPath::from_str("m/48'/1'/3'/2'").unwrap());
+        assert_eq!(slots[1].fingerprint, bitcoin::bip32::Fingerprint::from([0x97, 0x13, 0x98, 0x60]));
+        assert!(slots.iter().all(|s| s.entropy.is_none()));
+    }
+
+    #[test]
+    fn concrete_helper_error_drops_bsms_prefix() {
+        let err = descriptor_concrete_to_resolved_slots("wsh(thresh(2,older(144),older(288)))").unwrap_err();
+        assert!(!err.message().contains("bsms"), "leaked converter prefix: {}", err.message());
     }
 }
