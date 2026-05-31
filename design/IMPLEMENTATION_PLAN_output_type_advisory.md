@@ -124,7 +124,7 @@ git commit -m "feat(advisory): OutputClass lattice + emit/worst/card_kind helper
 ```rust
 crate::secret_advisory::emit_output_class_advisory(crate::secret_advisory::OutputClass::<CLASS>, stderr);
 ```
-Replacing each command's current D9 / `_unconditional` call (or adding it where none exists). **Drop the TTY gate** (`if stderr.is_terminal()` / `if io::stdout().is_terminal()`) on `final-word`/`seed-xor split`/`seed-xor combine`/`slip39 split`/`slip39 combine` — emit unconditionally — and KEEP each command's bespoke clause as an ADDENDUM line printed AFTER the unified line (SPEC §2.3).
+Replacing each command's current D9 / `_unconditional` call (or adding it where none exists). **Drop the TTY gate** (`if std::io::stdout().is_terminal()`) on `final-word`/`seed-xor split`/`seed-xor combine`/`slip39 split`/`slip39 combine` — emit unconditionally — and KEEP each command's bespoke clause as an ADDENDUM line AFTER the unified line (SPEC §2.3). **[folds I5]** Dropping the only `is_terminal()` call in a file orphans its `use std::io::IsTerminal` (and any `stdout()` binding) → `unused_imports` hard-fails the P6 clippy `-D warnings` gate AND reds the P1 commit — **remove the orphaned `IsTerminal` import in the same edit** (e.g. `slip39.rs:54`'s `use std::io::{IsTerminal, …}`).
 
 **Per-command checklist (P1 — fixed class):**
 
@@ -133,8 +133,8 @@ Replacing each command's current D9 / `_unconditional` call (or adding it where 
 | `derive-child` | P | `derive_child.rs:308` | replace inlined literal → `emit_output_class_advisory(PrivateKeyMaterial, stderr)` |
 | `silent-payment` | P | `silent_payment.rs:286` | replace `_unconditional` call |
 | `electrum-decrypt` | P | `electrum_decrypt.rs:149` (stdout branch only) | replace `_unconditional`; `--json-out` branch stays no-line (I5) |
-| `seedqr encode` | P | `seedqr.rs:323` (stdout branch; `--json-out` exclusive→no line) | **add** (net-new) `emit(P)` in the stdout branch |
-| `seedqr decode` | P | `seedqr.rs:295` | **add** (net-new) |
+| `seedqr encode` | P | **run-level `run_encode` (`seedqr.rs:215`)** [folds I1 — `:323` is inside stdout-only `emit_encode_output`, no stderr] | **add** after `emit_encode_output(...)`, gated `if args.json_out.is_none() { emit(P, stderr) }` (file→inert, I5) |
+| `seedqr decode` | P | **run-level `run_decode` (`seedqr.rs:133`)** [folds I1 — `:295` is stdout-only `emit_decode_output`] | **add** after `emit_decode_output(...)`, gated `args.json_out.is_none()` |
 | `addresses` | W | `addresses.rs` run-level (post-render) | **add** `emit(WatchOnly)` |
 | `export-wallet` | W | `export_wallet.rs:250-254` run-level + `run_from_import_json` | **add** `emit(WatchOnly)` (incl. `--from-import-json`) |
 | `final-word` | P + addendum | `final_word.rs:101` (TTY-gated) | drop TTY gate; `emit(P)` then addendum `:104` text |
@@ -203,10 +203,10 @@ Worked example — `addresses` (net-new W): at the run-level after the address t
 | Command | Class expr (SPEC §3/§4.3) |
 |---|---|
 | `bundle` | `Some(if bundle.any_secret_bearing() { PrivateKeyMaterial } else { WatchOnly })` (replace the inlined literal at `bundle.rs:931`, which was gated on `any_secret_bearing`) |
-| `convert` | `worst_class_on_stdout(&outputs.iter().map(convert_target_class).collect::<Vec<_>>())` where `convert_target_class(t) = if t.is_argv_secret_bearing() { P } else if t.is_side_input_only() { /* path/fp → contributes nothing */ continue } else { W }` — build the Vec excluding side-input-only targets so all-path/fp → empty → None → no line. Replace the literal at `convert.rs:1102`. |
-| `repair` | `Some(card_kind_class(kind))` for the card on stdout (replace `cmd/repair.rs:216`'s `secret_on_stdout_warning(kind,_)`) |
-| `inspect` | `Some(card_kind_class(kind))` on the normal decode-success branch (`inspect.rs:156`) — was `any_ms1`→P only; now mk1→W, md1→T too |
-| `import-wallet` | `Some(if <entropy on stdout> { PrivateKeyMaterial } else { WatchOnly })` (the `entropy=` predicate near `import_wallet.rs:2111`) |
+| `convert` | **[folds I3 — `outputs.iter()` yields `&(NodeType, String)`, not `NodeType`]** at `convert.rs:1099` (stderr in scope), replace the literal at `:1102` with `if let Some(c) = worst_class_on_stdout(&outputs.iter().filter_map(\|(n,_)\| convert_target_class(*n)).collect::<Vec<_>>()) { emit_output_class_advisory(c, stderr) }`. Add `fn convert_target_class(t: NodeType) -> Option<OutputClass> { if t.is_argv_secret_bearing() { Some(PrivateKeyMaterial) } else if t.is_side_input_only() { None } else { Some(WatchOnly) } }` (predicates by-value `self` at `convert.rs:117,121`). `filter_map` drops `None` (path/fingerprint) → all-side-input → empty → `None` → no line. |
+| `repair` | **[folds C2]** `kind` is NOT in scope at `cmd/repair.rs:215-216` (the per-chunk kind is loop-local at `:144`; only `any_ms1` is tracked). Inside the existing chunk loop, collect `let mut kinds: Vec<OutputClass> = Vec::new();` pushing `card_kind_class(chunk_kind)` for each card written to stdout; replace `if any_ms1 { secret_on_stdout_warning(CardKind::Ms1, stderr) }` with `if let Some(c) = worst_class_on_stdout(&kinds) { emit_output_class_advisory(c, stderr) }` |
+| `inspect` | **[folds C2]** same — `inspect.rs:155-156` tracks only `any_ms1`; collect the `CardKind`s reaching stdout (loop var at `:111`) into `Vec<OutputClass>`, then `worst_class_on_stdout` + emit (now mk1→W, md1→T, not just ms1→P) |
+| `import-wallet` | **[folds I2 — `:2111` is inside `emit_summary` (stdout-only); `entropy=` there is a diagnostic flag, not key material]** emit at the run-level site `~import_wallet.rs:1257-1270` (stdout + stderr + `parsed` in scope): `let cls = if parsed.iter().flat_map(\|p\| &p.cosigners).any(\|c\| c.entropy.is_some()) { PrivateKeyMaterial } else { WatchOnly }; emit_output_class_advisory(cls, stderr)` (predicate confirmed `:1456/:2106`) |
 | `nostr` | npub branch (`:186`): `emit(WatchOnly)` (net-new); nsec branch (`:251`): `emit(PrivateKeyMaterial)` (replace `_unconditional`) |
 
 - [ ] **Step 1: Failing cells** — both-ways per command. Examples:
@@ -259,7 +259,7 @@ fn seedqr_jsonout_file_is_inert() {
 }
 ```
 - [ ] **Step 2: Run — verify FAIL/behavior.**
-- [ ] **Step 3: Implement.** (a) Re-route `emit_repair_report` (`repair.rs:1333`): replace `secret_on_stdout_warning(outcome.kind, stderr)` with `crate::secret_advisory::emit_output_class_advisory(crate::secret_advisory::card_kind_class(outcome.kind), stderr)`. (b) Confirm the inert commands (verify-bundle/decode-address/verify-message/compare-cost/gui-schema/xpub-search×4) emit nothing on the normal branch — they already have no D9 call, so no change beyond the test. (c) File-output suppression is already structural (electrum-decrypt/seedqr `--json-out` branches don't reach the stdout emit) — assert via the cells. (d) **Remove the now-unused legacy `secret_on_stdout_warning` + `secret_on_stdout_warning_unconditional`** from `secret_advisory.rs` (grep confirms zero callers first).
+- [ ] **Step 3: Implement.** (a) Re-route `emit_repair_report` (`repair.rs:1331-1334`) [folds C1 — the live code is `if matches!(outcome.kind, CardKind::Ms1) { secret_on_stdout_warning(outcome.kind, stderr); }`; the `Ms1` guard would leave mk1→W / md1→T SILENT]: **remove the `if matches!(outcome.kind, CardKind::Ms1)` guard** and emit unconditionally `crate::secret_advisory::emit_output_class_advisory(crate::secret_advisory::card_kind_class(outcome.kind), stderr)` (`RepairOutcome.kind: CardKind`, `repair.rs:408-409`). (b) Confirm the inert commands (verify-bundle/decode-address/verify-message/compare-cost/gui-schema/xpub-search×4) emit nothing on the normal branch — they already have no D9 call, so no change beyond the test. (c) File-output suppression is already structural (electrum-decrypt/seedqr `--json-out` branches don't reach the stdout emit) — assert via the cells. (d) **Remove the now-unused legacy `secret_on_stdout_warning` + `secret_on_stdout_warning_unconditional`** from `secret_advisory.rs` (grep confirms zero callers first).
 - [ ] **Step 4: Run — verify PASS.** `cargo build -p mnemonic-toolkit` (no dead-code, no unresolved). Consolidation guard: `! grep -rq 'secret material on stdout' crates/mnemonic-toolkit/src` (zero orphaned literals).
 - [ ] **Step 5: Commit** `git commit -m "feat(advisory): auto-repair re-route + inert audit + remove legacy D9 helpers (B P3)"`
 
@@ -291,7 +291,7 @@ fn ms_derive_emits_watch_only_and_language_note() {
 }
 ```
 - [ ] **Step 2: Run — verify FAIL.**
-- [ ] **Step 3: Implement.** Add to `ms-cli/src/advisory.rs` the byte-identical `OutputClass` + `emit_output_class_advisory` (the three lines must be byte-for-byte the toolkit's — copy them). Wire: `ms encode`/`ms decode` → `emit(PrivateKeyMaterial)` (net-new); `ms derive` → `emit(WatchOnly)` (after the existing language note); `ms repair` → replace the inline literal at `cmd/repair.rs:106-109` with `emit(PrivateKeyMaterial)`. (ms-cli `run(args)` is by-value, emits via `eprintln!`/`std::io::stderr()` — pass `&mut std::io::stderr().lock()` or have the helper use `eprintln!`.)
+- [ ] **Step 3: Implement.** Add to `ms-cli/src/advisory.rs` the byte-identical `OutputClass` + `emit_output_class_advisory` (the three lines must be byte-for-byte the toolkit's — copy them). Wire: `ms encode`/`ms decode` → `emit(PrivateKeyMaterial)` (net-new, run-level after the stdout write); `ms derive` → `emit(WatchOnly)` at **run-level AFTER the whole `if args.json { } else { }` block (`~derive.rs:253`), UNCONDITIONAL** [folds I4 — the language note at `:246-249` is inside `else { if defaulted { } }`, so emitting "after the language note" would skip `--json`/non-defaulted invocations]; `ms repair` → replace the inline literal at `cmd/repair.rs:106-109` with `emit(PrivateKeyMaterial)`. (`ms derive` HAS a threaded `stderr` param; encode/decode/repair emit via `eprintln!`/`std::io::stderr()` — the helper's `&mut impl Write` accepts `&mut std::io::stderr().lock()`.) (ms-cli `run(args)` is by-value, emits via `eprintln!`/`std::io::stderr()` — pass `&mut std::io::stderr().lock()` or have the helper use `eprintln!`.)
 - [ ] **Step 4: Run — verify PASS** + **byte-parity test**: a test asserting ms-cli's 3 emitted lines equal the toolkit's literals (hard-code both, assert equal — cross-repo string sync guard). `cargo test -p ms-cli`.
 - [ ] **Step 5: Commit** (in mnemonic-secret) `git commit -m "feat(advisory): ms output-class stderr advisory + byte-parity (B P4)"`
 
@@ -301,7 +301,11 @@ fn ms_derive_emits_watch_only_and_language_note() {
 
 **Files:** SPEC §5's enumerated set — re-grep at this point.
 
-- [ ] **Step 1: Re-pin test assertions.** `grep -rl 'secret material on stdout' crates/mnemonic-toolkit/tests` (≈12 files) + `mnemonic-secret/crates/ms-cli/tests` — update each `.contains(...)` to the new wording (or to the class predicate for conditional commands). `cargo test -p mnemonic-toolkit` + `cargo test -p ms-cli` GREEN.
+- [ ] **Step 1: Re-pin the REMAINING test assertions** (the P1/P2/P4-touched suites are already re-pinned in their own phase — see those Step-4 notes — so each phase commit stays green). `grep -rl 'secret material on stdout' crates/mnemonic-toolkit/tests` (11 asserting + `cli_secret_in_argv_warning.rs` comment-only [M2]) + `mnemonic-secret/crates/ms-cli/tests`. Three re-pin classes [folds I6]:
+  - **positive `.contains("secret material on stdout")`** → new wording (or the class predicate for conditional commands);
+  - **NEGATIVE/absence assertions broken by the TTY-gate drop** (e.g. `cli_slip39_advisories.rs:311` `!stderr.contains("reconstructed secret material on stdout")` — slip39-combine now emits unconditionally) → **INVERT or DELETE**, do NOT "re-pin to new wording";
+  - **conditional-command** assertions → assert the class predicate (P vs W) both ways.
+  `cargo test -p mnemonic-toolkit` + `cargo test -p ms-cli` GREEN.
 - [ ] **Step 2: Rebuild all 4 binaries** (mnemonic + md + ms + mk) from current source (MEMORY lesson — stale siblings cause false transcript drift).
 - [ ] **Step 3: Re-capture transcripts in ALL 4 doc trees** (each has its own gate): `docs/manual` (`make -C docs/manual audit MNEMONIC_BIN=… MD_BIN=… MS_BIN=… MK_BIN=…`), `docs/technical-manual`, `docs/manual-gui` (`make -C docs/manual-gui …` / its `tests/verify-examples.sh`), `docs/quickstart` (`docs/quickstart/Makefile`). For each failing transcript, regenerate the `.out`/`.err` (capture-not-author, per the coldcard/recipe-2 precedent) + update the prose mirror lines (`41-mnemonic.md`, `43-ms.md`, the gui/quickstart `.md`). Re-run each gate → GREEN.
 - [ ] **Step 4: Verify** all 4 gates green + full suites green (both repos).
