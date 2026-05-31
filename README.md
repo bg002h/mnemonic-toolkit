@@ -41,12 +41,12 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/ma
 
 ## Subcommands
 
-Twenty `mnemonic` subcommands, grouped below. Run any with `--help`, or see the
+Twenty-one `mnemonic` subcommands, grouped below. Run any with `--help`, or see the
 **[CLI reference chapter](docs/manual/src/40-cli-reference/41-mnemonic.md)** for
 the authoritative, per-flag documentation.
 
 - **Bundle** — `bundle` (synthesize the 3-card ms1+mk1+md1 backup, or watch-only 2-card from xpub), `verify-bundle` (re-derive + parity-check across cards).
-- **Convert / derive** — `convert` (seed/key conversions across the typed graph: phrase / entropy / xpub / xprv / wif / fingerprint / path / ms1 / mk1 / bip38 / minikey / electrum-phrase / address), `derive-child` (BIP-85 child entropy/keys).
+- **Convert / derive** — `convert` (seed/key conversions across the typed graph: phrase / entropy / xpub / xprv / wif / fingerprint / path / ms1 / mk1 / bip38 / minikey / electrum-phrase / address), `addresses` (list a wallet's receive/change addresses, batch watch-only), `derive-child` (BIP-85 child entropy/keys).
 - **Wallet import / export** — `import-wallet` (third-party blob → m-format bundle: Bitcoin Core, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), `export-wallet` (watch-only artifacts: Bitcoin Core importdescriptors, BIP-388 wallet_policy, BSMS), `decode-address` (address → network / script type / witness version / scriptPubKey).
 - **Backup splitting** — `seed-xor` (Coldcard BIP-39 XOR split/combine), `slip39` (SLIP-39 K-of-N Shamir), `seedqr` (SeedSigner SeedQR encode/decode).
 - **Keys & messages** — `nostr` (wrap an nsec/npub as BTC addresses/descriptors/WIF), `silent-payment` (BIP-352 receiver address), `verify-message` (legacy signmessage + BIP-322), `final-word` (BIP-39 checksum-completion words).

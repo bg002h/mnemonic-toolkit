@@ -29,7 +29,7 @@ Or pin a specific release tag directly: `cargo install --locked --git https://gi
 
 ## Subcommands & reference
 
-Twenty `mnemonic` subcommands — `bundle` / `verify-bundle`, `convert` / `derive-child`, `import-wallet` / `export-wallet` / `decode-address`, `seed-xor` / `slip39` / `seedqr`, `nostr` / `silent-payment` / `verify-message` / `final-word`, `electrum-decrypt` / `repair` / `inspect` / `compare-cost` / `xpub-search`, and `gui-schema`. Run any with `--help`.
+Twenty-one `mnemonic` subcommands — `bundle` / `verify-bundle`, `convert` / `addresses` / `derive-child`, `import-wallet` / `export-wallet` / `decode-address`, `seed-xor` / `slip39` / `seedqr`, `nostr` / `silent-payment` / `verify-message` / `final-word`, `electrum-decrypt` / `repair` / `inspect` / `compare-cost` / `xpub-search`, and `gui-schema`. Run any with `--help`.
 
 The **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/docs/manual)** is the authoritative, always-current CLI reference (lint-gated against the live `--help` surface), with worked examples and round-trip recipes for every subcommand and foreign-wallet format. The repo-root [`README`](https://github.com/bg002h/mnemonic-toolkit/blob/master/README.md) has the grouped subcommand inventory.
 
