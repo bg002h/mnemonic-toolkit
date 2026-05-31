@@ -131,13 +131,17 @@ pub fn run<R: Read, W: Write, E: Write>(
             &format!("--from {node}=-"),
         );
     }
-    if let Some(pp) = args.passphrase.as_deref() {
-        if !pp.starts_with("@env:") {
-            crate::secret_advisory::secret_in_argv_warning(
-                stderr,
-                "--passphrase",
-                "--passphrase-stdin",
-            );
+    // `--passphrase` only applies to seed sources (xpub rejects it below), so
+    // don't fire the advisory for an xpub source that's about to be refused (M2).
+    if from.node != NodeType::Xpub {
+        if let Some(pp) = args.passphrase.as_deref() {
+            if !pp.starts_with("@env:") {
+                crate::secret_advisory::secret_in_argv_warning(
+                    stderr,
+                    "--passphrase",
+                    "--passphrase-stdin",
+                );
+            }
         }
     }
 
@@ -190,7 +194,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr => {
             let language = args.language.unwrap_or_default();
             let network = args.network.unwrap_or(CliNetwork::Mainnet);
-            let entropy: Vec<u8> = match from.node {
+            // I1: scrub the intermediate entropy (master secret) on drop, matching
+            // convert's `Zeroizing<Vec<u8>>` convention (convert.rs:1147).
+            let entropy: zeroize::Zeroizing<Vec<u8>> = zeroize::Zeroizing::new(match from.node {
                 NodeType::Phrase => Mnemonic::parse_in(language.into(), &from_value)
                     .map_err(ToolkitError::Bip39)?
                     .to_entropy(),
@@ -204,7 +210,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                         .to_entropy()
                 }
                 _ => unreachable!(),
-            };
+            });
             let acct = derive_bip32_from_entropy(
                 &entropy,
                 &passphrase,

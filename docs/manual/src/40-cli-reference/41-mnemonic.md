@@ -2116,6 +2116,53 @@ This derives the **receiver** address only. **Sender** output construction (whic
 
 ---
 
+## `mnemonic addresses` {#mnemonic-addresses}
+
+List a wallet's receive/change addresses (batch). The watch-only complement to `export-wallet --range` and the multi-address sibling of `convert --to address`. Read-only public derivation — **no private keys reach stdout, and `mnemonic` never signs.**
+
+```text
+mnemonic addresses --from <SOURCE> --address-type <T> [--account <N>] \
+                   [--count <N> | --range <A,B>] [--chain <receive|change|both>] \
+                   [--network <NET>] [--passphrase <V> | --passphrase-stdin] [--language <L>] [--json]
+```
+
+`--from` accepts an account `xpub=` (derived directly) or a seed source (`phrase=` / `entropy=` / `seedqr=`). For a seed source, `--address-type` selects the BIP-44/49/84/86 account path (`p2pkh`→44', `p2sh-p2wpkh`→49', `p2wpkh`→84', `p2tr`→86') at `m/<purpose>'/<coin>'/<account>'`, and the addresses are `m/<chain>/<index>` under it. For an `xpub=` source the xpub *is* the account key, so `--account` / `--passphrase` do not apply (supplying them is an error). Secret values support `@env:VAR` and `-` (stdin).
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <SOURCE>` | `xpub=<v>` \| `phrase=<v>` \| `entropy=<hex>` \| `seedqr=<digits>`; `@env:VAR` / `-` (stdin) for secret values |
+| `--address-type <T>` | `p2pkh` \| `p2sh-p2wpkh` \| `p2wpkh` \| `p2tr` (required; selects the account path for seed sources and the render type) |
+| `--account <N>` | account index for seed sources (default 0; not applicable to `xpub=`) |
+| `--count <N>` | number of addresses per chain, from index 0 (default 10); conflicts with `--range` |
+| `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
+| `--chain <receive\|change\|both>` | which chain(s) to list (default `receive`) |
+| `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes (xpub source) or mainnet (seed source); must agree with an xpub's network kind |
+| `--passphrase <V>` | BIP-39 passphrase (seed sources); `@env:VAR` supported |
+| `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`) |
+| `--language <L>` | BIP-39 wordlist language for `phrase=`/`seedqr=` (default `english`) |
+| `--json` | emit a JSON envelope instead of the text rows |
+| `--help` | print help |
+
+`--count`/`--range` indices are bounded by the BIP-32 normal-index ceiling (`< 2^31`); an out-of-range request is rejected (never a panic).
+
+### Worked example
+
+```text
+mnemonic addresses --from xpub=xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a \
+  --address-type p2wpkh --count 3
+  0  bc1qfjxgzvdwrxh9ejp6jmdlr9tc6lfl6adcsx2z4f
+  1  bc1q399ww2924rlr6xn7j0fysjxnfjuy4p2v4769p3
+  2  bc1qtmra2ejp52grx486fr0nzndy8g7t4ee3amdht0
+```
+
+### Output
+
+Text mode prints `  <index>  <address>` rows; with `--chain both` rows are grouped by a `receive (m/0/i):` / `change (m/1/i):` header. JSON mode emits `{ "schema_version": "1", "source", "address_type", "network", "account"?, "addresses": [ { "chain", "index", "address" }, … ] }` (`account` is present only for seed sources). Because the addresses are derived keys, the non-English wordlist advisory does **not** fire here (the language is already baked into the derivation).
+
+---
+
 ## `mnemonic decode-address` {#mnemonic-decode-address}
 
 Decode a Bitcoin address string into its facts: the network(s) it is valid for, script type, witness version, and scriptPubKey. Public-data utility — no secrets, no key material; the inverse of `convert --to address`.

@@ -10,6 +10,7 @@
 mnemonic bundle
 mnemonic verify-bundle
 mnemonic convert
+mnemonic addresses
 mnemonic export-wallet
 mnemonic import-wallet
 mnemonic derive-child

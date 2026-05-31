@@ -101,7 +101,7 @@ fn gui_schema_lists_all_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 25 user-facing subcommands must appear (nested split/combine \
+        "all 26 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
