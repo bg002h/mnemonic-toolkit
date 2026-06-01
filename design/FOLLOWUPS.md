@@ -829,6 +829,8 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.2` (next minor; non-blocking for descriptor-mnemonic v0.18 release).
 
+- **2026-05-31 (cycle B):** `docs/technical-manual` is NOT CI-gated; cycle B's output-class advisory re-word was intentionally NOT applied there (P5 reverted it) because the stale v0.17 md1 makes a clean advisory-only re-capture impossible and a full re-capture would bake a `md1_decode: fail WireVersionMismatch`. When this FOLLOWUP's stale-md1 is fixed, ALSO re-word the D9→output-class advisory in the technical-manual transcripts (`ms1-{encode,decode}`, `mnemonic-bundle-bip84-abandon`, etc.) in the same pass.
+
 ### `lint-md-flag-coverage-vacuous-with-md_bin-true` — CI flag-coverage step skipped for md/ms/mnemonic via `MD_BIN=true` substitution
 
 - **Surfaced:** 2026-05-09, PR #11 architect review.
