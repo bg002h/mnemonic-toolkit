@@ -3413,4 +3413,4 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Severity:** Low — the positive cells anchor each repo's emitted line to its own source (within-repo drift is caught), so advisory wording can only diverge via a paired-PR miss, which the FOLLOWUP discipline + pairing gate guards against.
 - **Status:** open
 - **Tier:** `cross-repo` / `hardening`
-- **Companion:** `mnemonic-key` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`; `descriptor-mnemonic` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`; `mnemonic-secret` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`.
+- **Companion:** Affects the advisory-line constants ported into `mnemonic-key` (mk-cli), `descriptor-mnemonic` (md-cli), and `mnemonic-secret` (ms-cli) — each carries the same self-tautological `byte_parity_advisory_lines` pattern. Mirror FOLLOWUP entries are **not yet filed** in those repos (this toolkit entry is the canonical tracker); they would be added alongside whichever option is pursued. While `open`, cross-repo enforcement is convention + paired-PR discipline only (the status quo this entry documents).
