@@ -388,6 +388,10 @@ pub fn run<R: Read, W: Write, E: Write>(
             } else {
                 emit_round1_only_summary(stdout, &round1_verifications)?;
             }
+            // Output-class advisory (cycle B): INERT — this BSMS Round-1-only
+            // mode emits a pass/fail verification verdict + the record's public
+            // signer pubkey (no key material), analogous to verify-bundle.
+            // No advisory line (SPEC §3 resolving principles b + c).
             return Ok(0);
         }
     };
