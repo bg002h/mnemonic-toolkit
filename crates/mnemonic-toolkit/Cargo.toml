@@ -19,7 +19,7 @@ path = "src/main.rs"
 [dependencies]
 ms-codec = "0.2.1"
 mk-codec = "0.4.0"
-md-codec = "0.34.0"
+md-codec = "0.35"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"
