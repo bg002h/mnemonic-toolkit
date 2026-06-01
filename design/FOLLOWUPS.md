@@ -3414,3 +3414,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `cross-repo` / `hardening`
 - **Companion:** Affects the advisory-line constants ported into `mnemonic-key` (mk-cli), `descriptor-mnemonic` (md-cli), and `mnemonic-secret` (ms-cli) — each carries the same self-tautological `byte_parity_advisory_lines` pattern. Mirror FOLLOWUP entries are **not yet filed** in those repos (this toolkit entry is the canonical tracker); they would be added alongside whichever option is pursued. While `open`, cross-repo enforcement is convention + paired-PR discipline only (the status quo this entry documents).
+
+### `sibling-pin-check-skips-manual-prose-install-commands` — pin gate scans workflows but not manual/quickstart prose
+
+- **Surfaced:** 2026-06-01, mk SLIP-0132 (A2) end-of-cycle review (C1).
+- **Where:** `.github/workflows/sibling-pin-check.yml` (scans only `.github/workflows/*.yml` `cargo install --git … --tag` lines); blind to `docs/manual/src/**` prose install commands.
+- **What:** `docs/manual/src/40-cli-reference/44-mk-cli.md` carried a literal `cargo install … --tag mk-cli-v0.6.0 …` install command that the `sibling-pin-check.yml` gate does NOT scan (prose, not a workflow). It drifted across TWO cycles — the v0.6.1 re-pin (`752801f`) and the v0.7.0 re-pin both bumped install.sh + the workflows but skipped this manual line — so the manual told readers to install a version lacking the very feature the same chapter documents. Fixed at A2 (→ `mk-cli-v0.7.0`), but the gate gap remains. (Currently only `44-mk-cli.md:12` carries such a prose install command; md/ms chapters have none — but the class is unguarded.)
+- **Options:** extend the `sibling-pin-check.yml` scan to also match `cargo install --git … --tag <pkg>` lines in `docs/manual/src/**` (+ `quickstart` prose) against the install.sh canonical table; OR add a small `make -C docs/manual` lint that greps manual prose install commands against the pinned tags.
+- **Severity:** Medium — a stale prose pin silently ships a wrong-version install instruction to end users; undetected across 2 cycles.
+- **Status:** open
+- **Tier:** `ci-hardening`
+- **Companion:** none (toolkit-only; the manual lives here).
