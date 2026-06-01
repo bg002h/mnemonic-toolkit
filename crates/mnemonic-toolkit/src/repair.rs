@@ -1328,10 +1328,13 @@ pub fn emit_repair_report<O: Write + ?Sized, E: Write + ?Sized>(
         if outcome.repairs.len() == 1 { "" } else { "s" },
     )?;
 
-    // D9: sensitive-secret stderr warning when ms1 is being emitted to stdout.
-    if matches!(outcome.kind, CardKind::Ms1) {
-        crate::secret_advisory::secret_on_stdout_warning(outcome.kind, stderr);
-    }
+    // Output-class advisory: emit unconditionally for all card kinds
+    // (ms1→PrivateKeyMaterial, mk1→WatchOnly, md1→Template). Supersedes
+    // the former Ms1-only D9 guard (removed in Cycle B P3).
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::card_kind_class(outcome.kind),
+        stderr,
+    );
 
     Ok(())
 }

@@ -1,14 +1,12 @@
 //! Stderr advisory helpers for secret material.
 //!
-//! Two advisory classes live here:
+//! Three advisory classes live here:
 //!
 //! 1. **argv-leakage class** ([`secret_in_argv_warning`]) — emits a
 //!    uniform `warning: secret material on argv (<flag>) — pipe via
 //!    <alternative> to avoid /proc/$PID/cmdline exposure` line to stderr
 //!    for each inline-secret occurrence. No dedup; callers emit one
 //!    advisory per (flag, slot-index) so the user sees every leak site.
-//!    Mirrors the secret-on-stdout shape (cite `bundle.rs:697`,
-//!    `convert.rs:799`, `derive_child.rs:205`).
 //!
 //! 2. **path-permission class** ([`warn_if_world_readable`]) — emits a
 //!    `warning: --json-out <path> inherits umask (file may be
@@ -20,7 +18,15 @@
 //!    sites — `cmd/seed_xor.rs`, `cmd/final_word.rs`,
 //!    `cmd/slip39.rs`.
 //!
+//! 3. **stdout output-class** ([`emit_output_class_advisory`]) — emits a
+//!    single stderr line classifying the worst-case security nature of what
+//!    the command wrote to stdout (`PrivateKeyMaterial` / `WatchOnly` /
+//!    `Template`). Added Cycle B (v0.38.2). The legacy D9
+//!    `secret_on_stdout_warning{,_unconditional}` helpers were removed in
+//!    Cycle B P3 (all call sites migrated to `emit_output_class_advisory`).
+//!
 //! Authoritative reference:
+//! `design/SPEC_output_type_advisory.md`
 //! `design/SPEC_secret_memory_hygiene_v0_9_0.md` §1 item 1 + survey §6
 //! cross-cutting observation 4.
 
@@ -35,31 +41,6 @@ pub fn secret_in_argv_warning<W: Write>(stderr: &mut W, flag: &str, alternative:
     let _ = writeln!(
         stderr,
         "warning: secret material on argv ({flag}) — pipe via {alternative} to avoid /proc/$PID/cmdline exposure",
-    );
-}
-
-/// Emit a `secret-on-stdout` advisory when sensitive card material is
-/// being written to stdout (ms1 = BIP-39 entropy). Mirrors the bundle
-/// command's secret-on-stdout warning emission. Errors writing to
-/// `stderr` are silently swallowed (advisory is best-effort).
-///
-/// Added v0.22.0 for the `repair` + `inspect` features per plan D9.
-/// No-op for kinds other than `Ms1` (mk1 / md1 are not secret-bearing).
-pub fn secret_on_stdout_warning<W: Write + ?Sized>(kind: crate::repair::CardKind, stderr: &mut W) {
-    if matches!(kind, crate::repair::CardKind::Ms1) {
-        secret_on_stdout_warning_unconditional(stderr);
-    }
-}
-
-/// Unconditional form of [`secret_on_stdout_warning`] for callers whose
-/// stdout payload is ALWAYS secret material and is not a `CardKind`
-/// (e.g. `electrum-decrypt`'s recovered Electrum seed phrase / xprv).
-/// Added v0.33.0. The `CardKind`-gated wrapper above delegates here for
-/// `Ms1` (behavior-preserving).
-pub(crate) fn secret_on_stdout_warning_unconditional<W: Write + ?Sized>(stderr: &mut W) {
-    let _ = writeln!(
-        stderr,
-        "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"
     );
 }
 

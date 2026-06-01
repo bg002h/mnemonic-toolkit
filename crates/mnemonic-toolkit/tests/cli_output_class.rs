@@ -522,3 +522,210 @@ fn slip39_combine_emits_private_key_material() {
         .unwrap();
     assert!(stderr(&o).contains(P_LINE), "{}", stderr(&o));
 }
+
+// ============================================================
+// P3: inert commands — no advisory line on normal branch
+// ============================================================
+
+/// `decode-address` outputs address metadata (inert) — no advisory line.
+#[test]
+fn decode_address_is_inert() {
+    let o = mnemonic()
+        .args(["decode-address", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"])
+        .output()
+        .unwrap();
+    let s = stderr(&o);
+    assert!(
+        !s.contains("note: stdout") && !s.contains("warning: stdout carries"),
+        "decode-address must be inert: {s}"
+    );
+}
+
+/// `verify-bundle` on a correct bundle (normal branch) — no advisory line.
+#[test]
+fn verify_bundle_normal_is_inert() {
+    let bundle_json = {
+        let o = mnemonic()
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.phrase={ABANDON}"),
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--json",
+                "--no-engraving-card",
+            ])
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "bundle must succeed: {}", stderr(&o));
+        String::from_utf8(o.stdout).unwrap()
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let bundle_path = dir.path().join("bundle.json");
+    std::fs::write(&bundle_path, &bundle_json).unwrap();
+    let o = mnemonic()
+        .args([
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &format!("@0.phrase={ABANDON}"),
+            "--bundle-json",
+            bundle_path.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    let s = stderr(&o);
+    assert!(
+        !s.contains("note: stdout") && !s.contains("warning: stdout carries"),
+        "verify-bundle normal branch must be inert: {s}"
+    );
+}
+
+/// `compare-cost` outputs policy cost analysis (inert) — no advisory line.
+#[test]
+fn compare_cost_is_inert() {
+    let o = mnemonic()
+        .args(["compare-cost", "--miniscript", "pk(A)"])
+        .output()
+        .unwrap();
+    let s = stderr(&o);
+    assert!(
+        !s.contains("note: stdout") && !s.contains("warning: stdout carries"),
+        "compare-cost must be inert: {s}"
+    );
+}
+
+/// `xpub-search path-of-xpub` outputs a search result (inert) — no advisory line.
+#[test]
+fn xpub_search_path_of_xpub_is_inert() {
+    // A no-match result (exit 4) is still a normal branch with no secret on stdout.
+    let o = mnemonic()
+        .args([
+            "xpub-search",
+            "path-of-xpub",
+            "--phrase-stdin",
+            "--target-xpub",
+            // a random xpub that won't match → exits 4 quickly
+            "xpub661MyMwAqRbcGFkPHkfzFnYRJGxq8r6LfnEbEUvQLsxWXfxdF4tLcVEsDAZwTRVABN3czmTUGe1GHb1jCBUX7A4oeXMtKGmVPHqpSMvNks",
+            "--json",
+        ])
+        .write_stdin(format!("{ABANDON}\n"))
+        .output()
+        .unwrap();
+    let s = stderr(&o);
+    assert!(
+        !s.contains("note: stdout") && !s.contains("warning: stdout carries"),
+        "xpub-search path-of-xpub must be inert: {s}"
+    );
+}
+
+// ============================================================
+// P3: auto-repair short-circuit emits the correct output class
+// ============================================================
+
+/// Flip a single bech32 character at position `pos` in the data part
+/// (after the separator `1`). Same logic as `flip_at` in cli_auto_repair.rs.
+fn flip_bech32_p3(s: &str, pos: usize) -> String {
+    const ALPHA: &[u8] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let sep = s.rfind('1').unwrap();
+    let (pre, rest) = s.split_at(sep + 1);
+    let mut chars: Vec<u8> = rest.bytes().collect();
+    let idx = ALPHA.iter().position(|&b| b == chars[pos]).unwrap();
+    chars[pos] = ALPHA[(idx + 1) % ALPHA.len()];
+    format!("{pre}{}", String::from_utf8(chars).unwrap())
+}
+
+const AUTO_REPAIR_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+const AUTO_REPAIR_MD1_C0: &str =
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const AUTO_REPAIR_MD1_C1: &str =
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const AUTO_REPAIR_MD1_C2: &str =
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+const T_LINE: &str = "note: stdout is a keyless descriptor template (no keys)";
+
+/// Auto-repair short-circuit (inspect, 1-char-corrupt ms1) → exit 5,
+/// repaired ms1 on stdout → PrivateKeyMaterial (P) advisory line.
+#[test]
+fn auto_repair_short_circuit_ms1_emits_private_key_material() {
+    let bad = flip_bech32_p3(AUTO_REPAIR_MS1, 17);
+    let o = mnemonic()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args(["inspect", "--ms1", &bad])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    let s = stderr(&o);
+    assert!(s.contains(P_LINE), "ms1 auto-repair must emit P advisory: {s}");
+}
+
+/// Auto-repair short-circuit (inspect, 1-char-corrupt md1) → exit 5,
+/// repaired md1 on stdout → Template (T) advisory line. [folds C1 widening]
+#[test]
+fn auto_repair_short_circuit_md1_emits_template() {
+    let bad = flip_bech32_p3(AUTO_REPAIR_MD1_C0, 20);
+    let o = mnemonic()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args([
+            "inspect",
+            "--md1",
+            &bad,
+            "--md1",
+            AUTO_REPAIR_MD1_C1,
+            "--md1",
+            AUTO_REPAIR_MD1_C2,
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    let s = stderr(&o);
+    assert!(s.contains(T_LINE), "md1 auto-repair must emit T advisory: {s}");
+}
+
+/// Auto-repair short-circuit (convert, 1-char-corrupt ms1) → exit 5,
+/// repaired ms1 on stdout → PrivateKeyMaterial advisory line.
+#[test]
+fn auto_repair_short_circuit_convert_ms1_emits_private_key_material() {
+    let bad = flip_bech32_p3(AUTO_REPAIR_MS1, 17);
+    let o = mnemonic()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    let s = stderr(&o);
+    assert!(s.contains(P_LINE), "ms1 convert auto-repair must emit P advisory: {s}");
+}
+
+// ============================================================
+// P3: file-output suppression — --json-out → no stdout-class line
+// ============================================================
+
+/// `seedqr encode --json-out <file>` writes to file, not stdout → no advisory.
+#[test]
+fn seedqr_jsonout_file_is_inert() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("q.json");
+    let from_arg = format!("phrase={ABANDON}");
+    let o = mnemonic()
+        .args([
+            "seedqr",
+            "encode",
+            "--from",
+            &from_arg,
+            "--json-out",
+            p.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    let s = stderr(&o);
+    assert!(
+        !s.contains("warning: stdout carries"),
+        "file-output → no stdout-class line: {s}"
+    );
+}
