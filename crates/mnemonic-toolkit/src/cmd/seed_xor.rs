@@ -21,7 +21,7 @@ use clap::{Args, Subcommand};
 use mnemonic_toolkit::seed_xor::{
     seed_xor_combine, seed_xor_split, seed_xor_split_deterministic, SeedXorError,
 };
-use std::io::{IsTerminal, Read, Write};
+use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
 pub struct SeedXorArgs {
@@ -237,8 +237,13 @@ fn run_split<R: Read, W: Write, E: Write>(
         );
     }
 
-    // SPEC §2.6 row 2 — multi-secret K-of-N stdout-on-TTY advisory.
-    if !share_phrases.is_empty() && std::io::stdout().is_terminal() {
+    // SPEC §2.6 row 2 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
+    // Addendum with the bespoke safety clause follows the unified line.
+    if !share_phrases.is_empty() {
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+            stderr,
+        );
         let _ = writeln!(
             stderr,
             "warning: Seed XOR shares on stdout — each of the N={} lines is independently a complete BIP-39 phrase; ALL N shares are required to reconstruct the master; distribute them to N separate locations; do not paste this output into a single untrusted tool. Substitution of a wrong-but-valid-BIP-39 share is undetectable by Seed XOR — verify the recovered wallet's derived address before trusting it.",
@@ -361,13 +366,16 @@ fn run_combine<R: Read, W: Write, E: Write>(
         )?;
     }
 
-    // SPEC §2.6 row 3 — combine stdout-on-TTY advisory.
-    if std::io::stdout().is_terminal() {
-        let _ = writeln!(
-            stderr,
-            "warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet",
-        );
-    }
+    // SPEC §2.6 row 3 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
+    // Addendum with the bespoke safety clause follows the unified line.
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+        stderr,
+    );
+    let _ = writeln!(
+        stderr,
+        "warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet",
+    );
 
     Ok(0)
 }

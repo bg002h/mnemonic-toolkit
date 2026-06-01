@@ -57,8 +57,8 @@ fn stdin_route_does_not_emit_argv_leakage_advisory() {
 
 #[test]
 fn piped_stdout_does_not_emit_stdout_on_tty_advisory() {
-    // assert_cmd pipes stdout — IsTerminal returns false — TTY advisory
-    // must NOT fire. (Positive case requires a real TTY; tested manually.)
+    // TTY gate dropped (Cycle B P1): the P-line now fires unconditionally,
+    // even when stdout is piped (non-TTY). Inverted from the old NOT-assert.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("final-word")
@@ -70,8 +70,8 @@ fn piped_stdout_does_not_emit_stdout_on_tty_advisory() {
     assert!(out.status.success());
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        !stderr.contains("candidate list is secret material"),
-        "stdout-on-tty advisory must NOT fire when stdout is piped; got: {stderr}",
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "P-line must fire even on piped stdout after TTY-gate drop; got: {stderr}",
     );
 }
 

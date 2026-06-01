@@ -6,7 +6,7 @@
 
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
-use crate::secret_advisory::{secret_in_argv_warning, secret_on_stdout_warning_unconditional};
+use crate::secret_advisory::secret_in_argv_warning;
 use bitcoin::bip32::Xpriv;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -283,6 +283,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(stdout, "  scan_priv:    {scan_priv}   (online / hot key)").map_err(ToolkitError::Io)?;
         writeln!(stdout, "  spend_priv:   {spend_priv}   (COLD — full spending authority)").map_err(ToolkitError::Io)?;
     }
-    secret_on_stdout_warning_unconditional(stderr);
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+        stderr,
+    );
     Ok(0)
 }

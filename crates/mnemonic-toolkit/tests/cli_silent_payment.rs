@@ -76,7 +76,7 @@ fn secret_stdin_works_and_warns_stdout_not_argv() {
         .write_stdin(format!("{PHRASE}\n"))
         .assert().success()
         .stdout(predicate::str::contains(BASE_SP))
-        .stderr(predicate::str::contains("secret material on stdout"))
+        .stderr(predicate::str::contains("warning: stdout carries private key material (can spend)"))
         .stderr(predicate::str::contains("secret material on argv").not());
 }
 

@@ -51,7 +51,7 @@ use mnemonic_toolkit::slip39::{
 };
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-use std::io::{IsTerminal, Read, Write};
+use std::io::{Read, Write};
 
 const ENV_TEST_RNG: &str = "MNEMONIC_SLIP39_TEST_RNG";
 const ENV_TEST_IDENTIFIER: &str = "MNEMONIC_SLIP39_TEST_IDENTIFIER";
@@ -540,16 +540,17 @@ fn run_split<R: Read, W: Write, E: Write>(
         }
     }
 
-    // SPEC §2.6 row 2 — K-of-N stdout-on-TTY parameterized advisory.
-    if std::io::stdout().is_terminal() {
-        let total_shares: usize = rendered.iter().map(|g| g.len()).sum();
-        let _ = writeln!(
-            stderr,
-            "warning: SLIP-39 shares on stdout — N={total_shares} shares emitted across {g_count} groups (group-threshold {gt}); each share is independently secret material; distribute per your group/member-threshold policy; do not paste this output into a single untrusted tool",
-            g_count = rendered.len(),
-            gt = args.group_threshold,
-        );
-    }
+    // SPEC §2.6 row 2 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
+    // Addendum with the bespoke safety clause follows the unified line.
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+        stderr,
+    );
+    let _ = writeln!(
+        stderr,
+        "note: each share is secret material — distribute across separate locations; \
+        SLIP-39 shares have no authentication tag",
+    );
 
     // SPEC §2.6 row 5 — G9 iteration-exponent threshold advisory.
     if args.iteration_exponent >= 5 {
@@ -677,13 +678,16 @@ fn run_combine<R: Read, W: Write, E: Write>(
     writeln!(stdout, "{}", output.as_str())
         .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
 
-    // SPEC §2.6 row 3 — combine reconstructed-secret stdout-on-TTY.
-    if std::io::stdout().is_terminal() {
-        let _ = writeln!(
-            stderr,
-            "warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting",
-        );
-    }
+    // SPEC §2.6 row 3 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
+    // Addendum with the bespoke safety clause follows the unified line.
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+        stderr,
+    );
+    let _ = writeln!(
+        stderr,
+        "note: verify the recovered wallet's expected derived address before trusting",
+    );
 
     // --json-out side-effect (SPEC §2.3 combine schema).
     if let Some(path) = &args.json_out {

@@ -79,7 +79,8 @@ fn combine_inline_share_emits_argv_leakage_advisory_per_share() {
 
 #[test]
 fn piped_stdout_does_not_emit_kofn_tty_advisory() {
-    // assert_cmd pipes stdout → IsTerminal false → no K-of-N advisory
+    // TTY gate dropped (Cycle B P1): the P-line now fires unconditionally,
+    // even when stdout is piped (non-TTY). Inverted from the old NOT-assert.
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -94,8 +95,8 @@ fn piped_stdout_does_not_emit_kofn_tty_advisory() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        !stderr.contains("Seed XOR shares on stdout"),
-        "K-of-N TTY advisory must NOT fire when stdout is piped; got: {stderr}",
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "P-line must fire even on piped stdout after TTY-gate drop; got: {stderr}",
     );
 }
 
@@ -131,8 +132,8 @@ fn piped_stdout_combine_does_not_emit_tty_advisory() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        !stderr.contains("combined phrase is secret material"),
-        "combine TTY advisory must NOT fire when stdout is piped; got: {stderr}",
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "P-line must fire even on piped stdout after TTY-gate drop; got: {stderr}",
     );
 }
 

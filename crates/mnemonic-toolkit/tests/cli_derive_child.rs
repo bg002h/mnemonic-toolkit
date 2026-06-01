@@ -40,8 +40,8 @@ fn cell_1_bip39_12_words_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -71,8 +71,8 @@ fn cell_2_bip39_18_words_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -106,8 +106,8 @@ fn cell_2b_bip39_24_words_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -140,8 +140,8 @@ fn cell_3_hd_seed_wif_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -171,8 +171,8 @@ fn cell_4_xprv_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -202,8 +202,8 @@ fn cell_5_hex_reference_vector() {
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -230,8 +230,8 @@ fn cell_6a_pwd_base64_reference_vector() {
     assert_eq!(stdout, "dKLoepugzdVJvdL56ogNV\n");
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 
@@ -258,8 +258,8 @@ fn cell_6b_pwd_base85_reference_vector() {
     assert_eq!(stdout, "_s`{TW89)i4`\n");
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "secret-on-stdout warning expected; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "stdout-class advisory expected; got stderr: {stderr:?}"
     );
 }
 

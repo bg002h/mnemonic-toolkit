@@ -32,8 +32,8 @@ fn decrypt_inline_password_happy_path() {
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("secret material on argv (--decrypt-password")
-            && stderr.contains("secret material on stdout"),
-        "expected inline argv-leakage + secret-on-stdout advisories; got: {stderr}"
+            && stderr.contains("warning: stdout carries private key material (can spend)"),
+        "expected inline argv-leakage + stdout-class advisories; got: {stderr}"
     );
 }
 

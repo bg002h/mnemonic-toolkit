@@ -302,10 +302,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
 
     writeln!(stdout, "{output}").ok();
-    // SPEC §4 — every in-scope app emits secret material; warn on stdout.
-    let _ = writeln!(
+    // SPEC §4 — every in-scope app emits secret material; classify on stdout.
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial,
         stderr,
-        "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')",
     );
     Ok(())
 }

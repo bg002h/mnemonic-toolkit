@@ -17,7 +17,7 @@ use clap::Args;
 use mnemonic_toolkit::final_word::{
     final_word_candidates, FinalWordError, FinalWordLanguage,
 };
-use std::io::{IsTerminal, Read, Write};
+use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
 pub struct FinalWordArgs {
@@ -96,9 +96,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         )?;
     }
 
-    // SPEC §2.6 — stdout-on-TTY advisory. Fires only when stdout is a
-    // real terminal and we actually emitted candidate words.
-    if !candidates.is_empty() && std::io::stdout().is_terminal() {
+    // SPEC §2.6 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
+    // Addendum with the bespoke safety clause follows the unified line.
+    if !candidates.is_empty() {
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+            stderr,
+        );
         let _ = writeln!(
             stderr,
             "warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools",

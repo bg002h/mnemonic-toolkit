@@ -560,6 +560,11 @@ pub fn run<W: Write, E: Write>(
         // failure (broken pipe / disk full / closed handle) as a typed
         // I/O error rather than silently exiting 0 with empty stdout.
         writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
+        // Emit watch-only class advisory after stdout write (stdout branch only).
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::WatchOnly,
+            stderr,
+        );
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
@@ -809,6 +814,11 @@ fn run_from_import_json<W: Write, E: Write>(
         // failure (broken pipe / disk full / closed handle) as a typed
         // I/O error rather than silently exiting 0 with empty stdout.
         writeln!(stdout, "{emitted}").map_err(ToolkitError::Io)?;
+        // Emit watch-only class advisory after stdout write (stdout branch only).
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::WatchOnly,
+            stderr,
+        );
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
             .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;

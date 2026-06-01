@@ -255,6 +255,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     } else {
         emit_text(stdout, args.chain, &rows)?;
     }
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::WatchOnly,
+        stderr,
+    );
     Ok(0)
 }
 

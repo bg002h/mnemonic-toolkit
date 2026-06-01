@@ -16,9 +16,7 @@
 
 use crate::cmd::convert::{read_stdin_passphrase, read_stdin_to_string};
 use crate::error::ToolkitError;
-use crate::secret_advisory::{
-    secret_in_argv_warning, secret_on_stdout_warning_unconditional, warn_if_world_readable,
-};
+use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
 use clap::{ArgGroup, Args};
 use mnemonic_toolkit::electrum_crypto::{decrypt_field, ElectrumDecryptError};
 use std::io::{Read, Write};
@@ -146,7 +144,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     } else {
         writeln!(stdout, "{}", plaintext.as_str())
             .map_err(|e| ToolkitError::BadInput(format!("electrum-decrypt: stdout write: {e}")))?;
-        secret_on_stdout_warning_unconditional(stderr);
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+            stderr,
+        );
     }
     Ok(0)
 }

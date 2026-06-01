@@ -243,8 +243,8 @@ fn advisory_split_stdin_route_does_not_emit_argv_leakage() {
 
 #[test]
 fn advisory_k_of_n_stdout_silent_when_piped() {
-    // assert_cmd pipes stdout → IsTerminal false → row 2 advisory
-    // must NOT fire.
+    // TTY gate dropped (Cycle B P1): the P-line now fires unconditionally,
+    // even when stdout is piped (non-TTY). Inverted from the old NOT-assert.
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -262,8 +262,8 @@ fn advisory_k_of_n_stdout_silent_when_piped() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        !stderr.contains("SLIP-39 shares on stdout"),
-        "row 2 K-of-N advisory must NOT fire on piped stdout; got: {stderr}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "P-line must fire even on piped stdout after TTY-gate drop; got: {stderr}"
     );
 }
 
@@ -273,6 +273,8 @@ fn advisory_k_of_n_stdout_silent_when_piped() {
 
 #[test]
 fn advisory_combine_reconstructed_silent_when_piped() {
+    // TTY gate dropped (Cycle B P1): the P-line now fires unconditionally,
+    // even when stdout is piped (non-TTY). Inverted from the old NOT-assert.
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -289,16 +291,14 @@ fn advisory_combine_reconstructed_silent_when_piped() {
         .output()
         .unwrap();
     if !split_out.status.success() {
-        return; // round-trip can't proceed; piped-silence is testable in isolation
+        panic!("slip39 split failed: {}", String::from_utf8_lossy(&split_out.stderr));
     }
     let split_stdout = String::from_utf8(split_out.stdout).unwrap();
     let shares: Vec<&str> = split_stdout
         .lines()
         .filter(|l| !l.is_empty())
         .collect();
-    if shares.len() < 2 {
-        return;
-    }
+    assert!(shares.len() >= 2, "expected >=2 shares from 3,2 group");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("slip39")
@@ -308,8 +308,8 @@ fn advisory_combine_reconstructed_silent_when_piped() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        !stderr.contains("reconstructed secret material on stdout"),
-        "row 3 combine TTY advisory must NOT fire on piped stdout; got: {stderr}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "P-line must fire even on piped stdout after TTY-gate drop; got: {stderr}"
     );
 }
 

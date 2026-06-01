@@ -203,13 +203,22 @@ fn run_decode<R: Read, W: Write, E: Write>(
     );
     let word_count = phrase.split_whitespace().count();
 
-    emit_decode_output(
+    let result = emit_decode_output(
         args,
         phrase.as_str(),
         canonical_digits.as_str(),
         word_count,
         stdout,
-    )
+    );
+    // Emit class advisory at run-level (after stdout write), only when
+    // the artifact actually goes to stdout (not --json-out file).
+    if args.json_out.is_none() {
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+            stderr,
+        );
+    }
+    result
 }
 
 fn run_encode<R: Read, W: Write, E: Write>(
@@ -261,13 +270,22 @@ fn run_encode<R: Read, W: Write, E: Write>(
     );
     let word_count = canonical_phrase.split_whitespace().count();
 
-    emit_encode_output(
+    let result = emit_encode_output(
         args,
         canonical_phrase.as_str(),
         digits.as_str(),
         word_count,
         stdout,
-    )
+    );
+    // Emit class advisory at run-level (after stdout write), only when
+    // the artifact actually goes to stdout (not --json-out file).
+    if args.json_out.is_none() {
+        crate::secret_advisory::emit_output_class_advisory(
+            crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+            stderr,
+        );
+    }
+    result
 }
 
 fn emit_decode_output<W: Write>(
