@@ -3397,6 +3397,20 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `mnemonic-key/crates/mk-cli` (NO advisory module today — greenfield), `descriptor-mnemonic/crates/md-cli`.
 - **What:** Add the always-emit 3-class stderr advisory (byte-identical wording to `mnemonic-toolkit/src/secret_advisory.rs` — `private key material (can spend)` / `watch-only` / `template`) to: **mk** — `mk decode`/`derive`/`address`/`inspect` → watch-only; **md** — `md decode`/`encode` → **template** (the class's first real exercise — md1 IS a keyless template), `md address` → watch-only; inert subcommands emit nothing. Cross-repo byte-parity tests. Completes the constellation-wide "no advisory line ⟺ inert output" invariant.
 - **Why deferred:** mk/md outputs are non-secret (the false-safety asymmetry makes their interim silence benign — over-caution, no fund-loss path), unlike the secret-bearing mnemonic/ms surfaces shipped in Phase 1. mk-cli additionally has no advisory scaffold (only `process_hardening`).
-- **Status:** open. PATCH each (stderr-only); mk-cli + md-cli crates.io re-publish. **Bound:** close before the next constellation `install.sh` sibling-pin bump that re-pins mk/md.
+- **Status:** Resolved by the output-class-advisory Phase 2 cycle — mk-cli **v0.6.1** + md-cli **v0.6.2** + toolkit **v0.38.3** add the always-emit 1-line stderr output-class advisory (mk→watch-only; md→template, plus watch-only for `md address`); completes the constellation-wide 'no advisory line ⟺ inert stdout' invariant. Per-phase reviews persisted in mnemonic-toolkit `design/agent-reports/output-type-advisory-phase2-*`.
 - **Tier:** `next-cycle`
 - **Companion:** `mnemonic-key`, `descriptor-mnemonic` (mirror entries); `mnemonic-secret` companion (Phase 1 shipped ms).
+
+### `output-class-advisory-byte-parity-test-tautological` — cross-repo byte-parity tests are within-repo tautologies, not cross-repo drift gates
+
+- **Surfaced:** 2026-05-31, output-class-advisory Phase 2 cycle; Phase A (M1) + Phase B (M2) per-phase reviews.
+- **Where:** `mnemonic-toolkit/crates/mnemonic-toolkit/src/secret_advisory.rs` (tests), `mnemonic-secret/crates/ms-cli/` (tests), `mnemonic-key/crates/mk-cli/` (tests), `descriptor-mnemonic/crates/md-cli/` (tests).
+- **What:** The per-repo `byte_parity_advisory_lines` tests (and equivalents) assert each module's advisory-line constants equal an inline literal copy in the **same file** — a within-repo drift guard, not a cross-repo one. They do not `include_str!` or read the sibling source, so a divergence of the advisory wording in one repo will not be caught by the others. Real cross-repo byte-parity is currently enforced by convention and the paired-PR discipline only.
+- **Options:**
+  - Option (a): one canonical repo `include_str!`s the others (fragile across separate checkouts; requires explicit path coupling between independent repos).
+  - Option (b): pin the 3 literals in a shared committed fixture file that each repo's test reads (viable if repos share a monorepo structure or a checked-in fixture is propagated via a CI step).
+  - Option (c): accept convention-only enforcement and reword the module docs to stop claiming the test "enforces cross-repo parity" — replace the claim with "anchors this repo's emitted line to this source file."
+- **Severity:** Low — the positive cells anchor each repo's emitted line to its own source (within-repo drift is caught), so advisory wording can only diverge via a paired-PR miss, which the FOLLOWUP discipline + pairing gate guards against.
+- **Status:** open
+- **Tier:** `cross-repo` / `hardening`
+- **Companion:** `mnemonic-key` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`; `descriptor-mnemonic` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`; `mnemonic-secret` FOLLOWUP `output-class-advisory-byte-parity-test-tautological`.

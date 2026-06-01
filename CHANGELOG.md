@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.38.3] — 2026-06-01
+
+**SemVer-PATCH — output-class advisory Phase 2 lockstep + md-codec 0.35 (Tier-0 repair).**
+
+- **Phase 2 lockstep.** mk-cli **v0.6.1** + md-cli **v0.6.2** complete the constellation-wide always-emit one-line stderr output-class advisory: mk output-producing subcommands (`decode`, `derive`, `address`, `inspect`) now emit `note: stdout is watch-only …`; md output-producing subcommands (`decode`, `encode`) emit `note: stdout is a keyless descriptor template …`, `md address` emits `note: stdout is watch-only …`. Inert subcommands emit nothing. Closes FOLLOWUP `output-type-stderr-advisory-sibling-sweep-mk-md`. Files new FOLLOWUP `output-class-advisory-byte-parity-test-tautological` (low-severity hardening, cross-repo).
+- **md-codec 0.35 (Tier-0).** Toolkit re-pin from md-codec 0.34 → 0.35 (non-chunked descriptor decode for repair path, landed in Phase 0 of this cycle).
+
 ## mnemonic-toolkit [0.38.2] — 2026-05-31
 
 ### Added
