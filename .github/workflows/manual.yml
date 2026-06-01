@@ -74,14 +74,14 @@ jobs:
         # mnemonic-key workspace ships multiple binaries (mk-codec's
         # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
         # against a multi-binary workspace.
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.6.0 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.6.1 mk-cli
 
       - name: Install md-cli
         # Mirrors the mk-cli install pattern above. Use package-name
         # selector (`md-cli`) instead of `--bin md`: the descriptor-mnemonic
         # workspace ships multiple binaries. The `--features cli-compiler`
         # flag matches scripts/install.sh:35's component_info pin.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.6.1 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.6.2 md-cli --features cli-compiler
 
       - name: Install ms-cli
         # Mirrors the mk-cli + md-cli install patterns above.
