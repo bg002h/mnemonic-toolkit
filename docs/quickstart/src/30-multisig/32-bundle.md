@@ -100,7 +100,7 @@ fingerprint and origin path, plus the wallet's `policy_id_stub` —
 the cross-binding hash that every mk1 and the md1 carry, so mixing
 cards from different bundles is caught at verification time.
 
-The same `warning: secret material on stdout` reminder from the
+The same `warning: stdout carries private key material` reminder from the
 single-sig chapter applies, three times over: each cosigner's ms1
 contains their seed in encoded form. For a real bundle, redirect to
 a file (`> bundle.txt`) and either delete the file after engraving

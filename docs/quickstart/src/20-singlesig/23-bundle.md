@@ -79,7 +79,7 @@ md1zs-xdspq-jd65m-vwcur-9usda-twuqv-q6z70-r9nwr-gk6xn-6l8gy-6nvqh-uuyvz-gaeja-h6
 # origin path: 84'/0'/0'
 # Template: bip84
 # md1: 1c01
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 ## Reading the output
@@ -99,7 +99,7 @@ The metadata block at the end shows the version stamps (`1c017`),
 master fingerprint, origin path, template, and md1 version — useful
 for visually comparing two bundles, never engraved.
 
-The trailing `warning: secret material on stdout` is real. For a
+The trailing `warning: stdout carries private key material` is real. For a
 real bundle, redirect to a file (`> bundle.txt`) and either delete
 the file after engraving or pipe through `age -e` to encrypt at
 rest. The secret here is your seed phrase and the ms1 card derived

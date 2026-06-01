@@ -75,7 +75,7 @@ md1fg-dxlpq-3xa2d-k8vwp-j7gx7-4hwqx-qdp08-3jehp-5tdrf-a0n5z-dfkqc-dlrvn-h5r62-jn
 # origin path: 84'/0'/0'
 # Template: bip84
 # md1: 1c01
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 ## Reading the output
@@ -97,7 +97,7 @@ The last block is **not** part of the engraving — it's a bundle
 the origin path, the template, and the md1 version. Use it to
 visually compare two bundles.
 
-The trailing `warning: secret material on stdout` is real and worth
+The trailing `warning: stdout carries private key material` is real and worth
 heeding for production: redirect the output to a file or pipe to
 `age -e` for encryption-at-rest before saving.
 

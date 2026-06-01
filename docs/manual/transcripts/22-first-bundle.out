@@ -30,4 +30,4 @@ md1fg-dxlpq-3xa2d-k8vwp-j7gx7-4hwqx-qdp08-3jehp-5tdrf-a0n5z-dfkqc-dlrvn-h5r62-jn
 # origin path: m/84'/0'/0'
 # Template: bip84
 # md1: 1c01
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

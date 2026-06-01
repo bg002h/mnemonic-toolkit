@@ -402,7 +402,7 @@ warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phra
 warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
 warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
 info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 The `info:` line is the v0.19.0 silent-default-with-stderr-notice
@@ -1005,8 +1005,8 @@ required (clap arg-group; missing/multiple → exit 64). A wrong password
 (wrong password or corrupted ciphertext)` (exit 1) — Format A field
 encryption carries no MAC, so the two underlying failure modes (PKCS7
 unpad refusal / non-UTF-8 result) are reported uniformly. The recovered
-plaintext on stdout is secret material and emits a secret-on-stdout
-advisory.
+plaintext on stdout is private key material and emits the
+output-class advisory.
 
 ### Worked example
 
@@ -1591,8 +1591,8 @@ success). Mirror of SPEC §2.6 (6 rows).
 | Trigger | Stderr advisory |
 |---|---|
 | Inline secret on argv (`--from`, `--share`, `--passphrase`) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
-| `split` AND stdout is a TTY | `warning: SLIP-39 shares on stdout — N=<n> shares emitted across <g> groups (group-threshold <G>); each share is independently secret material; distribute per your group/member-threshold policy; do not paste this output into a single untrusted tool` |
-| `combine` AND stdout is a TTY | `warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting` |
+| `split` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: each share is secret material — distribute across separate locations; SLIP-39 shares have no authentication tag` |
+| `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 | `--iteration-exponent E` where E ≥ 5 | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second); Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values; E ≥ 10 may exceed 30s on weak hardware` |
 | Either `MNEMONIC_SLIP39_TEST_RNG` OR `MNEMONIC_SLIP39_TEST_IDENTIFIER` env-var set on a `split` invocation (always-on; not suppressible) | `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` |
@@ -1920,8 +1920,7 @@ is required (clap arg-group; missing/multiple → exit 64).
   `--secret-file` in scripts and when a shoulder-surfing observer is a
   concern.
 - WIF output is secret material. The toolkit always emits:
-  `warning: secret material on stdout — consider redirecting (e.g.,
-  '> file.txt' or '| age -e ...')`.
+  `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')`.
 
 ### The `electrum:` line
 
@@ -2006,7 +2005,7 @@ nostr key (secret)
 Stderr:
 
 ```text
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 (No argv warning because `--secret-stdin` was used.)
@@ -2039,7 +2038,7 @@ prints a notice:
 mnemonic nostr --secret-stdin <<< '0000000000000000000000000000000000000000000000000000000000000006'
 ```
 
-Stderr (in addition to the secret-on-stdout advisory):
+Stderr (in addition to the output-class advisory):
 
 ```text
 notice: nostr: secret normalized to even-y (BIP-340) for address consistency
@@ -2106,7 +2105,7 @@ The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at
 
 ### Output
 
-The address(es) and the scan/spend **public** keys are publishable — hand the base address to senders. The command also emits the **scan private key** (`b_scan`, the *online / hot* key a watch-server uses to scan) and the **spend private key** (`b_spend`, the *COLD* key with full spending authority) behind the `secret material on stdout` advisory (the secret is `mlock`-pinned + zeroized). Treat them differently: never paste `b_spend` into a scanning service.
+The address(es) and the scan/spend **public** keys are publishable — hand the base address to senders. The command also emits the **scan private key** (`b_scan`, the *online / hot* key a watch-server uses to scan) and the **spend private key** (`b_spend`, the *COLD* key with full spending authority) behind the `warning: stdout carries private key material` advisory (the secret is `mlock`-pinned + zeroized). Treat them differently: never paste `b_spend` into a scanning service.
 
 A BIP-39 `--passphrase` derives the address for the *passphrase-protected* wallet (a different wallet than the no-passphrase default); whitespace in the passphrase is significant. `--change-address` adds the m=0 change address (with a `change_address_warning` in the JSON envelope) — it is the receiver's own change-detection address and must never be published; `--label 0` remains refused as the separate publish-path guard.
 
@@ -2373,7 +2372,7 @@ Stderr:
 
 ```text
 repair: applied 1 correction across 1 chunk
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 Exit code: `5`.
@@ -2441,7 +2440,7 @@ consumed natively per the unchanged Mk1 branch).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Corrected `ms1` emitted to stdout | `warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '\| age -e ...')` |
+| Corrected `ms1` emitted to stdout | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` |
 | Repair fired and emitted ≥ 1 correction | `repair: applied K correction(s) across J chunk(s)` |
 
 ### Recovering an incorrect-length card (`--max-indel`) {#mnemonic-repair-max-indel}
@@ -2632,7 +2631,7 @@ entropy_hex: <suppressed; pass --reveal-secret to print>
 Stderr:
 
 ```text
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 ### JSON output (v0.27.0)
@@ -2686,7 +2685,7 @@ the full per-error taxonomy.
 
 | Trigger | Stderr advisory |
 |---|---|
-| Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: secret material on stdout — consider redirecting ...` |
+| Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: stdout carries private key material (can spend) — redirect or encrypt ...` |
 
 ## `mnemonic xpub-search` (v0.26.0) {#mnemonic-xpub-search}
 

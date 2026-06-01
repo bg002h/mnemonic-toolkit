@@ -32,7 +32,7 @@ Output:
 
 ```text
 phrase: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
-warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
 ```
 
 The phrase is the canonical BIP-39 12-word mnemonic. Your wallet of

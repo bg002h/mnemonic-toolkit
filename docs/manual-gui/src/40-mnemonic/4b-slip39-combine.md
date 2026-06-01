@@ -194,4 +194,4 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 |---|---|
 | Inline `--share <value>` | `warning: secret material on argv (--share) — pipe via --share - to avoid /proc/$PID/cmdline exposure` (one per inline share) |
 | Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
-| Stdout is a TTY AND reconstruction succeeded | byte-exact per `cmd/slip39.rs:595-598`: `warning: reconstructed secret material on stdout — verify the recovered wallet's expected derived address before trusting` |
+| Reconstruction succeeded (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
