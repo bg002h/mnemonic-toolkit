@@ -69,6 +69,30 @@ Text mode emits one mk1 string per line, one per chunk. JSON mode emits
 
 `code_variant` is `regular` or `long` per the BCH-code dispatch.
 
+### SLIP-0132 prefix acceptance (`--xpub`)
+
+`mk encode --xpub` (and `mk verify --xpub`) accept SLIP-0132
+extended-public-key prefixes in addition to the canonical `xpub`:
+mainnet `ypub`/`zpub` (single-sig) and `Ypub`/`Zpub` (BIP-48
+multisig), plus their testnet counterparts `upub`/`vpub` and
+`Upub`/`Vpub`. The prefix is normalized to the canonical `xpub`
+(mainnet) or `tpub` (testnet) before encoding — the key material is
+unchanged (same chain code, public key, depth, and parent
+fingerprint); only the four version bytes are rewritten. A one-line
+stderr note names the original prefix, e.g.:
+
+```text
+note: --xpub was a SLIP-0132 zpub (BIP-84 P2WPKH); normalized to canonical xpub — script type is conveyed by the origin path, not the key prefix
+```
+
+In mk1 the script type is conveyed by the card's origin path
+(`m/49'/…` → P2SH-P2WPKH, `m/84'/…` → P2WPKH, `m/48'/…/1'|2'` →
+BIP-48 multisig), not by the key prefix. When `--origin-path` is
+supplied and the prefix's implied script type contradicts it (for
+example a `zpub` with an `m/49'/…` path), `mk` refuses the input with
+a `UsageError` (exit 64) and an actionable message naming the
+expected path and the alternative prefix to use.
+
 ---
 
 ## `mk decode`
@@ -321,6 +345,13 @@ mk verify [OPTIONS] <MK1-STRING>...
 Without any expected-* flags, `mk verify` performs BCH-checksum and
 structural validation only. With expected flags, it additionally
 asserts content equality on each supplied field.
+
+`--xpub` accepts SLIP-0132 prefixes (ypub/zpub/Ypub/Zpub and the
+testnet upub/vpub/Upub/Vpub) on the same terms as `mk encode` — see
+[SLIP-0132 prefix acceptance](#slip-0132-prefix-acceptance---xpub)
+above: the expected xpub is normalized to canonical xpub/tpub before
+comparison, a stderr note names the original prefix, and a
+prefix↔origin-path script-type mismatch is refused.
 
 ### Worked example
 

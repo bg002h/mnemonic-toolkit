@@ -68,7 +68,7 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Install mk-cli
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.6.1 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.7.0 mk-cli
 
       - name: Lint quickstart
         working-directory: docs/quickstart

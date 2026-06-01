@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.38.4] — 2026-06-01
+
+**SemVer-PATCH — mk-cli v0.7.0 re-pin (SLIP-0132 prefix acceptance) + manual prose. No toolkit source or behavior change.**
+
+- **mk-cli re-pin v0.6.1 → v0.7.0** at the three install/CI sites (`scripts/install.sh`, `.github/workflows/manual.yml`, `.github/workflows/quickstart.yml`). mk-cli v0.7.0 lets `mk encode --xpub` and `mk verify --xpub` accept SLIP-0132 extended-public-key prefixes (mainnet `ypub`/`zpub`/`Ypub`/`Zpub`, testnet `upub`/`vpub`/`Upub`/`Vpub`), normalizing them to canonical `xpub`/`tpub` (key material unchanged; a stderr note names the original prefix) and refusing a prefix↔origin-path script-type mismatch with an actionable message.
+- **Manual prose.** Documented SLIP-0132 acceptance in `docs/manual/src/40-cli-reference/44-mk-cli.md` under `mk encode` (with a cross-reference from `mk verify`). No clap flag was added, so no GUI schema-mirror change and no toolkit-CLI flag-coverage change.
+
 ## mnemonic-toolkit [0.38.3] — 2026-06-01
 
 **SemVer-PATCH — output-class advisory Phase 2 lockstep + md-codec 0.35 (Tier-0 repair).**
