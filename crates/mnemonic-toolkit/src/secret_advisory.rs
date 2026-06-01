@@ -99,15 +99,11 @@ pub fn warn_if_world_readable<E: Write>(path: &Path, stderr: &mut E) {
 pub enum OutputClass { Template, WatchOnly, PrivateKeyMaterial }
 
 /// Max over the artifacts a command wrote to stdout; `None` == all-inert → no line.
-/// Wired in P2 (multi-artifact commands). Allow dead_code until then.
-#[allow(dead_code)]
 pub fn worst_class_on_stdout(artifacts: &[OutputClass]) -> Option<OutputClass> {
     artifacts.iter().copied().max()
 }
 
 /// Map a repaired/inspected card kind to its output class.
-/// Wired in P2/P3 (repair/inspect/auto-repair). Allow dead_code until then.
-#[allow(dead_code)]
 pub fn card_kind_class(kind: crate::repair::CardKind) -> OutputClass {
     match kind {
         crate::repair::CardKind::Ms1 => OutputClass::PrivateKeyMaterial,

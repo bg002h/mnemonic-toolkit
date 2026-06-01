@@ -18,7 +18,7 @@ const TREZOR_24_BIP84_MAINNET_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4J
 const TREZOR_24_BIP84_MAINNET_ZPUB: &str = "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S";
 
 const SECRET_WARNING: &str =
-    "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')";
+    "warning: stdout carries private key material (can spend)";
 
 /// Build the SPEC §5.5.a info-line for a recognized SLIP-0132 input prefix.
 /// Variant determines the neutral form: mainnet → xpub, testnet → tpub.

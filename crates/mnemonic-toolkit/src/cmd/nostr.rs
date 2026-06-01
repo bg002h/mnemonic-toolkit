@@ -5,7 +5,7 @@
 use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
-use crate::secret_advisory::{secret_in_argv_warning, secret_on_stdout_warning_unconditional};
+use crate::secret_advisory::{secret_in_argv_warning, emit_output_class_advisory, OutputClass};
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -183,6 +183,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             emit_import_line(stdout, &import_recipe)?;
         }
+        emit_output_class_advisory(OutputClass::WatchOnly, stderr);
         return Ok(0);
     }
 
@@ -248,7 +249,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(stdout, "  wif:         {wif}").map_err(ToolkitError::Io)?;
             emit_import_line(stdout, &import_recipe)?;
         }
-        secret_on_stdout_warning_unconditional(stderr);
+        emit_output_class_advisory(OutputClass::PrivateKeyMaterial, stderr);
         return Ok(0);
     }
 

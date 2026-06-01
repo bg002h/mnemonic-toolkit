@@ -46,11 +46,15 @@ fn watch_only_bip84_mainnet_omits_ms1_section() {
     assert!(stdout.contains("# mk1"), "stdout must contain # mk1 header");
     assert!(stdout.contains("# md1"), "stdout must contain # md1 header");
     // SPEC v0.6.1 §5.5.a — watch-only invocations (all ms1 == "" sentinel)
-    // do NOT emit the secret-on-stdout warning.
+    // emit the WatchOnly advisory (not the private-key-material warning).
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        !stderr.contains("warning: secret material on stdout"),
-        "watch-only bundle must NOT emit the secret-on-stdout warning; got stderr: {stderr:?}"
+        !stderr.contains("warning: stdout carries private key material"),
+        "watch-only bundle must NOT emit the private-key-material warning; got stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("note: stdout is watch-only"),
+        "watch-only bundle must emit the watch-only advisory; got stderr: {stderr:?}"
     );
 }
 

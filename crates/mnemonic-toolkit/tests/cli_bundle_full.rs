@@ -58,8 +58,8 @@ fn bundle_full_emits_secret_on_stdout_warning() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"),
-        "full bundle must emit the secret-on-stdout warning; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "full bundle must emit the private-key-material advisory; got stderr: {stderr:?}"
     );
 }
 
@@ -85,7 +85,7 @@ fn bundle_full_json_mode_emits_secret_on_stdout_warning() {
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("warning: secret material on stdout"),
-        "JSON-mode full bundle must emit the secret-on-stdout warning; got stderr: {stderr:?}"
+        stderr.contains("warning: stdout carries private key material (can spend)"),
+        "JSON-mode full bundle must emit the private-key-material advisory; got stderr: {stderr:?}"
     );
 }

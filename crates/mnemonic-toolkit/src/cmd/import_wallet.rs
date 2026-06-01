@@ -1269,6 +1269,15 @@ electrum|jade|sparrow|specter>"
         emit_summary(stdout, &parsed)?;
         emit_roundtrip_stderr_warning(stderr, &blob, format_str)?;
     }
+
+    // Output-class advisory: PrivateKeyMaterial when any cosigner carries
+    // entropy (seed overlay supplied), WatchOnly otherwise.
+    let cls = if parsed.iter().flat_map(|p| &p.cosigners).any(|c| c.entropy.is_some()) {
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial
+    } else {
+        crate::secret_advisory::OutputClass::WatchOnly
+    };
+    crate::secret_advisory::emit_output_class_advisory(cls, stderr);
     Ok(0)
 }
 

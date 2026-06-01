@@ -1091,19 +1091,31 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // 10) §7 secret-on-stdout warning.
-    // v0.34.5: `is_argv_secret_bearing` widens to MiniKey for stdout-redaction
-    // parity with the `from_value` path above. MiniKey is currently
-    // output-unreachable (one-way `MiniKey→Wif`), so this is a no-op today —
-    // it keeps both redaction pathways on a single predicate.
-    if outputs.iter().any(|(n, _)| n.is_argv_secret_bearing()) {
-        let _ = writeln!(
-            stderr,
-            "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')",
-        );
+    // 10) §7 output-class advisory. Map each output NodeType to its class
+    // (P if argv-secret-bearing, None if side-input-only like path/fingerprint,
+    // W otherwise) and emit the worst. All-inert → no line (None).
+    let classes: Vec<crate::secret_advisory::OutputClass> = outputs
+        .iter()
+        .filter_map(|(n, _)| convert_target_class(*n))
+        .collect();
+    if let Some(c) = crate::secret_advisory::worst_class_on_stdout(&classes) {
+        crate::secret_advisory::emit_output_class_advisory(c, stderr);
     }
 
     Ok(0)
+}
+
+/// Map a convert output NodeType to its advisory class.
+/// Returns None for side-input-only nodes (Path, Fingerprint) that are
+/// never "output" artifacts in the watch-only/private sense.
+fn convert_target_class(t: NodeType) -> Option<crate::secret_advisory::OutputClass> {
+    if t.is_argv_secret_bearing() {
+        Some(crate::secret_advisory::OutputClass::PrivateKeyMaterial)
+    } else if t.is_side_input_only() {
+        None
+    } else {
+        Some(crate::secret_advisory::OutputClass::WatchOnly)
+    }
 }
 
 // ============================================================================

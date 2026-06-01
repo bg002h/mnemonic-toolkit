@@ -94,7 +94,7 @@ fn secret_inline_warns_on_argv_and_stdout() {
         .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
         .assert().success()
         .stderr(predicate::str::contains("secret material on argv (--secret"))
-        .stderr(predicate::str::contains("secret material on stdout"));
+        .stderr(predicate::str::contains("warning: stdout carries private key material (can spend)"));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn secret_stdin_warns_on_stdout_but_not_argv() {
         .args(["nostr", "--secret-stdin", "--script-type", "p2tr"])
         .write_stdin(format!("{NSEC}\n"))
         .assert().success()
-        .stderr(predicate::str::contains("secret material on stdout"))
+        .stderr(predicate::str::contains("warning: stdout carries private key material (can spend)"))
         .stderr(predicate::str::contains("secret material on argv").not());
 }
 

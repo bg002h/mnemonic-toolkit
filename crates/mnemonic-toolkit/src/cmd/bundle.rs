@@ -921,16 +921,15 @@ fn emit_unified<W: Write, E: Write>(
             write!(stderr, "{}", card).ok();
         }
     }
-    // SPEC v0.6.1 §5.5.a: secret-on-stdout warning — last stderr write,
-    // matches convert.rs §7 byte-exactly. Fires only when at least one ms1
-    // slot is non-empty (BIP-39 entropy is on stdout); watch-only invocations
-    // (all ms1 == "" sentinels per §5.8) suppress it.
-    if bundle.any_secret_bearing() {
-        let _ = writeln!(
-            stderr,
-            "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')"
-        );
-    }
+    // SPEC §5.5.a: output-class advisory — PrivateKeyMaterial when any ms1
+    // slot is non-empty (BIP-39 entropy on stdout); WatchOnly otherwise
+    // (all ms1 == "" sentinels per §5.8). Always fires (Option never None).
+    let cls = if bundle.any_secret_bearing() {
+        crate::secret_advisory::OutputClass::PrivateKeyMaterial
+    } else {
+        crate::secret_advisory::OutputClass::WatchOnly
+    };
+    crate::secret_advisory::emit_output_class_advisory(cls, stderr);
     Ok(())
 }
 

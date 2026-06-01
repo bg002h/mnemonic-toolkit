@@ -222,7 +222,7 @@ fn json_unique_envelope_shape() {
 #[test]
 fn ms1_indel_recovery_fires_secret_advisory() {
     const ADVISORY: &str =
-        "warning: secret material on stdout — consider redirecting (e.g., '> file.txt' or '| age -e ...')";
+        "warning: stdout carries private key material (can spend)";
     let bad = ins_data(VALID_MS1, 10, 'q');
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"])

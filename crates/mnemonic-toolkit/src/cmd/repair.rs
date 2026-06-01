@@ -17,7 +17,6 @@
 use crate::error::ToolkitError;
 use crate::indel::{IndelCandidate, IndelOutcome, IndelRegion, IndelDirection};
 use crate::repair::{self, CardArgs, CardKind, RepairError, RepairOutcome};
-use crate::secret_advisory::secret_on_stdout_warning;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -112,7 +111,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     let groups = repair::resolve_groups(args, "repair", stdin, args.max_indel >= 1)?;
 
     let mut total_repairs = 0usize;
-    let mut any_ms1 = false;
+    let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
     let mut ambiguous_seen = false;
     let mut substitution_seen = false;
 
@@ -141,9 +140,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         match repair::repair_card(*kind, chunks) {
             Ok(outcome) => {
                 total_repairs += outcome.repairs.len();
-                if matches!(kind, CardKind::Ms1) {
-                    any_ms1 = true;
-                }
+                kinds.push(crate::secret_advisory::card_kind_class(*kind));
                 if args.json {
                     emit_repair_json(&outcome, stdout)?;
                 } else {
@@ -153,9 +150,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
                 match repair::recover_indel_card(*kind, chunks, args.max_indel as usize, args.max_subst as usize)? {
                     IndelOutcome::Unique(c) => {
-                        if matches!(kind, CardKind::Ms1) {
-                            any_ms1 = true;
-                        }
+                        kinds.push(crate::secret_advisory::card_kind_class(*kind));
                         if c.subst_count >= 1 {
                             substitution_seen = true;
                         }
@@ -167,9 +162,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                         total_repairs += 1;
                     }
                     IndelOutcome::Ambiguous(v) => {
-                        if matches!(kind, CardKind::Ms1) {
-                            any_ms1 = true;
-                        }
+                        kinds.push(crate::secret_advisory::card_kind_class(*kind));
                         if v.iter().any(|c| c.subst_count >= 1) {
                             substitution_seen = true;
                         }
@@ -209,11 +202,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // D9: emit sensitive-secret stderr warning when ms1 hit stdout (regardless
-    // of whether corrections fired — even pass-through of a valid ms1, or a
-    // recovered/ambiguous ms1 candidate, is sensitive material on stdout).
-    if any_ms1 {
-        secret_on_stdout_warning(CardKind::Ms1, stderr);
+    // Output-class advisory: worst class over all card kinds written to stdout.
+    // Supersedes D9 ms1-only gate: mk1→WatchOnly, md1→Template, ms1→PrivateKeyMaterial.
+    if let Some(c) = crate::secret_advisory::worst_class_on_stdout(&kinds) {
+        crate::secret_advisory::emit_output_class_advisory(c, stderr);
     }
 
     // Substitution-bearing recovery advisory: candidates used a substitution

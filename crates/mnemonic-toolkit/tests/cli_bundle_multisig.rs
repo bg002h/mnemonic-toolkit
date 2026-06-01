@@ -62,10 +62,14 @@ fn watch_only_multisig_distinct_cosigners_emits_distinct_cards() {
     // ms1 omitted in watch-only.
     assert!(stdout.contains("# ms1 (omitted"));
     // SPEC v0.6.1 §5.5.a — multisig watch-only (all ms1 == "" sentinels)
-    // does NOT emit the secret-on-stdout warning.
+    // emits the WatchOnly advisory, not the private-key-material warning.
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        !stderr.contains("warning: secret material on stdout"),
-        "multisig watch-only bundle must NOT emit the secret-on-stdout warning; got stderr: {stderr:?}"
+        !stderr.contains("warning: stdout carries private key material"),
+        "multisig watch-only bundle must NOT emit the private-key-material advisory; got stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("note: stdout is watch-only"),
+        "multisig watch-only bundle must emit the watch-only advisory; got stderr: {stderr:?}"
     );
 }

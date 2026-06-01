@@ -45,8 +45,8 @@ fn cell_15_ms1_text_form_structure_secret_suppressed_by_default() {
         .stdout(predicate::str::contains("bit_strength: 128"))
         // Without --reveal-secret, hex is replaced with a hint.
         .stdout(predicate::str::contains("<suppressed; pass --reveal-secret"))
-        // Sensitive-secret stderr warning fires whenever ms1 hits stdout.
-        .stderr(predicate::str::contains("secret material on stdout"));
+        // Private-key-material advisory fires whenever ms1 hits stdout.
+        .stderr(predicate::str::contains("warning: stdout carries private key material (can spend)"));
 }
 
 /// Cell 16: mk1 + md1 happy-paths — verify per-kind text structure

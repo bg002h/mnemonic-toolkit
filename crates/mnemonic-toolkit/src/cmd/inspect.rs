@@ -103,14 +103,12 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // `inspect` has no indel mode; always keep the strict typed-flag HRP gate.
     let groups = repair::resolve_groups(args, "inspect", stdin, false)?;
-    let mut any_ms1 = false;
+    let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
 
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic
     // output regardless of CLI arg ordering.
     for (kind, chunks) in &groups {
-        if matches!(kind, CardKind::Ms1) {
-            any_ms1 = true;
-        }
+        kinds.push(crate::secret_advisory::card_kind_class(*kind));
         let chunks_ref: Vec<&str> = chunks.iter().map(String::as_str).collect();
 
         let payload = match decode_card(*kind, &chunks_ref) {
@@ -148,12 +146,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // Secret-on-stdout discipline mirrors `cmd/repair.rs`: ms1 entropy is
-    // sensitive even when only the bit-strength summary is on stdout (we
-    // already write a length-hint to stdout). Warn whenever a Ms1 is being
-    // inspected to a non-secret stream.
-    if any_ms1 {
-        crate::secret_advisory::secret_on_stdout_warning(CardKind::Ms1, stderr);
+    // Output-class advisory: worst class over all card kinds inspected to stdout.
+    // Supersedes D9 ms1-only gate: mk1→WatchOnly, md1→Template, ms1→PrivateKeyMaterial.
+    if let Some(c) = crate::secret_advisory::worst_class_on_stdout(&kinds) {
+        crate::secret_advisory::emit_output_class_advisory(c, stderr);
     }
 
     Ok(0)
