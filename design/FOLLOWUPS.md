@@ -3359,7 +3359,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** ~12 output-producing commands (`convert`, `bundle`, `export-wallet`, `addresses`, `import-wallet`, `derive-child`, `seedqr`, `silent-payment`, `electrum-decrypt`, `slip39`, `seed-xor`, `final-word`, `nostr`); the D9 secret-on-stdout advisory at `secret_advisory.rs:48-64` + the 4 inlined literals (`convert.rs:1099`, `bundle.rs:910`, `derive_child.rs:306`, `slip39.rs:684`).
 - **What:** Emit a one-line stderr classification of the stdout artifact's security nature: `private key material (can spend)` / `watch-only` / `template`. Subsume D9 by complement — keep D9's exact (transcript-pinned) text for the secret case, add positive lines for the rest, route both through ONE shared helper, consolidate the 4 inlined literals. **Hard requirement: all output-producing commands or none** (half-coverage reads as false safety — "no line = safe" when it means "uncovered"); inert-output commands (`decode-address`/`verify-message`/`inspect`/`compare-cost`) explicitly emit nothing, documented as such. 3 classes only (no single/multi or network secondary axes — the user's boundary is spend-capability). Serves the user's standing no-new-key-hazards constraint.
 - **Why deferred:** all-surfaces coverage + transcript re-capture is bigger than A1's 3-surface scope; the brainstorm-stage architect review made it the explicit next cycle (B).
-- **Status:** open. PATCH (stderr-only, precedent `silent-default-with-stderr-notice`); transcript re-capture is the bulk; no GUI/manual gate beyond prose.
+- **Status:** Phase 1 SHIPPED 2026-05-31 (cycle B): mnemonic-toolkit v0.38.2 + ms-cli v0.5.1 — always-emit 3-class advisory on all mnemonic + ms output surfaces. Phase 2 (mk + md) = `output-type-stderr-advisory-sibling-sweep-mk-md`.
 - **Tier:** `next-cycle`
 
 ### `descriptor-origin-extraction-dedup` — consolidate the 6×build_slot_fields / 4×origin_capture_regex / 7th key_regex copy
@@ -3390,3 +3390,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Why deferred (recipe-2):** the `--select-descriptor` behavior change needs its own investigation (correct vs regression) before the baseline is updated; out of A1's descriptor-symmetry scope.
 - **Status:** RESOLVED 2026-05-31 — both stale transcripts re-captured (coldcard in A1; recipe-2 follow-on). Full transcript-suite audit done: after both fixes, `make audit` is GREEN (verify-examples 20/20), so no further stale baselines remain. Both were the same root cause: a v0.37.8-era account-vs-derived-xpub bug fixed by v0.37.9/.10's origin-path rework, whose foreign-format transcripts were never re-captured at the time.
 - **Tier:** `manual-hygiene`
+
+### `output-type-stderr-advisory-sibling-sweep-mk-md` — extend the output-class stderr advisory to mk-cli + md-cli (Phase 2)
+
+- **Surfaced:** 2026-05-31, cycle B Phase 1 ship (mnemonic + ms). Phasing per the brainstorm-stage architect review: secret-bearing surfaces (mnemonic, ms) first; the benign watch-only/template siblings (mk, md) second.
+- **Where:** `mnemonic-key/crates/mk-cli` (NO advisory module today — greenfield), `descriptor-mnemonic/crates/md-cli`.
+- **What:** Add the always-emit 3-class stderr advisory (byte-identical wording to `mnemonic-toolkit/src/secret_advisory.rs` — `private key material (can spend)` / `watch-only` / `template`) to: **mk** — `mk decode`/`derive`/`address`/`inspect` → watch-only; **md** — `md decode`/`encode` → **template** (the class's first real exercise — md1 IS a keyless template), `md address` → watch-only; inert subcommands emit nothing. Cross-repo byte-parity tests. Completes the constellation-wide "no advisory line ⟺ inert output" invariant.
+- **Why deferred:** mk/md outputs are non-secret (the false-safety asymmetry makes their interim silence benign — over-caution, no fund-loss path), unlike the secret-bearing mnemonic/ms surfaces shipped in Phase 1. mk-cli additionally has no advisory scaffold (only `process_hardening`).
+- **Status:** open. PATCH each (stderr-only); mk-cli + md-cli crates.io re-publish. **Bound:** close before the next constellation `install.sh` sibling-pin bump that re-pins mk/md.
+- **Tier:** `next-cycle`
+- **Companion:** `mnemonic-key`, `descriptor-mnemonic` (mirror entries); `mnemonic-secret` companion (Phase 1 shipped ms).

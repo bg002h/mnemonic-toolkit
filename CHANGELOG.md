@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.38.2] — 2026-05-31
+
+### Added
+- **Output-type stderr advisory (cycle B, Phase 1).** Every output-producing command now prints a one-line stderr classification of what it wrote to stdout: `warning: stdout carries private key material (can spend) …` / `note: stdout is watch-only …` / `note: stdout is a keyless descriptor template …`. Inert commands (verify-bundle, decode-address, verify-message, compare-cost, gui-schema, xpub-search) emit nothing, so absence of a line reliably means inert output. This subsumes the prior D9 "secret material on stdout" advisory (re-worded), drops the TTY gate on `final-word`/`seed-xor`/`slip39` (the redirected case is the one that matters), and makes spend-capability visible everywhere. stderr-only; no flag added. Phase 2 (`mk`/`md`) is FOLLOWUP `output-type-stderr-advisory-sibling-sweep-mk-md`.
+
 ## mnemonic-toolkit [0.38.1] — 2026-05-31
 
 **SemVer-PATCH — `bundle` / `verify-bundle --descriptor` now accept a bare concrete descriptor in addition to the `@N` template form; `export-wallet --descriptor` rejects a keyless `@N` template with a helpful pointer.**
