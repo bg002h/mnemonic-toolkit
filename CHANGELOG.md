@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.39.0] — 2026-06-02
+
+**SemVer-MINOR — `mnem` ms1 consume + emit (per-card wordlist language). Resolves the §6.3 non-English-seed footgun on the toolkit side.**
+
+- **ms-codec 0.3.0 adoption (via TEMP path-override; crates.io publish + override removal is Phase 3 Step 9 of this cycle).** ms-codec 0.3.0 adds a `mnem` ms1 payload kind that stores the BIP-39 wordlist language on the wire alongside the entropy. The toolkit consumes `mnem`-kind ms1 cards by reading the WIRE language for decoding (not `--language`), and emits a `mnem`-kind ms1 card whenever a source is non-English (so the language is faithfully preserved in the bundle). English sources and raw-entropy sources continue to emit the classic `entr`-kind ms1 (byte-identical with prior versions).
+- **Non-English seed footgun (§6.3) fixed for `bundle` and `convert --to ms1`.** A BIP-39 seed is `PBKDF2` over the language-specific mnemonic string; the same entropy decoded with the wrong language yields a different wallet. Prior to this release a non-English phrase engraved as an `entr` ms1 silently dropped the language on the wire, requiring the user to remember and supply `--language` at decode time. With `mnem` encoding the language is preserved on the wire; `ms decode` and `mnemonic inspect --ms1` recover it automatically.
+- **Manual prose.** Documented `mnem` auto-routing in `43-ms.md` (encode auto-routing, decode `mnem` behavior, inspect `kind`/`language` fields) and added concise faithful-preserve notes in `41-mnemonic.md` (bundle + convert sections, inspect `ms1` bullet).
+- **Wire-shape note.** A toolkit-emitted `mnem` ms1 is a new on-wire string shape in `bundle --json`/`export-wallet` envelopes. Any downstream consumer that re-decodes it needs ms-codec ≥0.3.0 or it will reject the string as `UnexpectedStringLength`. Tracked as FOLLOWUP `toolkit-mnem-ms1-wire-shape-downstream-consumers`.
+
 ## mnemonic-toolkit [0.38.4] — 2026-06-01
 
 **SemVer-PATCH — mk-cli v0.7.0 re-pin (SLIP-0132 prefix acceptance) + manual prose. No toolkit source or behavior change.**
