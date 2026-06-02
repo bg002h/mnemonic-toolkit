@@ -74,6 +74,21 @@ See [Your first bundle](#your-first-bundle) for a single-sig
 walkthrough; [Multi-source 2-of-3 multisig](#multi-source-2-of-3-multisig)
 for multisig.
 
+### Non-English seeds: `mnem` ms1 faithful preserve
+
+When `--language` is set to a non-English BIP-39 wordlist, `bundle`
+emits a **`mnem`-kind ms1 card** (ms-codec 0.3.0+) that stores the
+wordlist language on the wire. This means a future `ms decode` or
+`mnemonic inspect --ms1` can recover the phrase in the original
+language without the caller knowing or specifying `--language` at
+decode time. English sources (the default) continue to emit the
+classic `entr`-kind ms1 — byte-identical with prior toolkit versions.
+
+See [`ms encode` auto-routing](#entr-vs-mnem-payload-kind-auto-routing)
+in the `ms` reference for the full encoding spec. See FOLLOWUP
+`toolkit-mnem-ms1-wire-shape-downstream-consumers` for the
+downstream-compatibility note for GUI consumers.
+
 ### Non-canonical descriptor mode
 
 A descriptor is **canonical** when it matches one of the five wrapper
@@ -647,6 +662,14 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 
 See [Minimal recovery walkthrough](#minimal-recovery-walkthrough)
 and [Migrating from BIP-39 to the m-format](#migrating-from-bip-39-to-the-m-format).
+
+### Non-English ms1 output: `mnem` kind
+
+When `--from phrase=…` is used with a non-English `--language` and `--to ms1`,
+`convert` emits a **`mnem`-kind ms1** (ms-codec 0.3.0+) preserving the
+wordlist language on the wire — consistent with `bundle`'s behavior.
+English sources and `--from entropy=…` continue to emit the classic
+`entr`-kind ms1 (byte-identical with prior versions).
 
 ---
 
@@ -2585,9 +2608,12 @@ JSON on stdout).
 Describe the contents of an m-format card without performing any
 conversion. Per kind:
 
-- `ms1` — tag (`entr` for v0.1 ms-codec), payload kind, byte length,
-  bit strength (= 8 × bytes). Entropy hex is suppressed by default
-  (sensitive material); pass `--reveal-secret` to print it.
+- `ms1` — tag (`entr` for classic entropy-only ms1; `mnem` for
+  language-tagged ms1 produced by ms-cli v0.2+ for non-English
+  phrases), payload kind, byte length, bit strength (= 8 × bytes).
+  Entropy hex is suppressed by default (sensitive material); pass
+  `--reveal-secret` to print it. `mnem`-kind cards also report the
+  stored wordlist language (e.g. `language: japanese`).
 - `mk1` — policy-id-stub count, origin fingerprint (or `<absent>`
   for the privacy-preserving emission mode), origin path, xpub.
 - `md1` — placeholder count (`n`), root-tree tag (`Wpkh` / `Tr` /

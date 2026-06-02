@@ -26,6 +26,7 @@
     "scriptPubKey",
     "bruteforce",
     "entr",
+    "mnem",
     "feerate",
     "preimages",
     "rawtr",
