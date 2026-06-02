@@ -189,6 +189,14 @@ fn emit_inspect_text<W: Write>(
             writeln!(stdout, "kind: ms1").map_err(ToolkitError::Io)?;
             writeln!(stdout, "tag: {tag_str}").map_err(ToolkitError::Io)?;
             writeln!(stdout, "payload_kind: {:?}", payload.kind()).map_err(ToolkitError::Io)?;
+            // ms mnem Phase 3 Step 6: surface language for mnem cards.
+            if let ms_codec::Payload::Mnem { language: lang_code, .. } = payload {
+                let lang_name = ms_codec::consts::MNEM_LANGUAGE_NAMES
+                    .get(*lang_code as usize)
+                    .copied()
+                    .unwrap_or("unknown");
+                writeln!(stdout, "language: {lang_name}").map_err(ToolkitError::Io)?;
+            }
             writeln!(stdout, "byte_length: {}", bytes.len()).map_err(ToolkitError::Io)?;
             writeln!(stdout, "bit_strength: {bit_strength}").map_err(ToolkitError::Io)?;
             if reveal_secret {
@@ -258,6 +266,9 @@ enum InspectJson<'a> {
     Ms1 {
         tag: &'a str,
         payload_kind: String,
+        /// ms mnem Phase 3 Step 6: Some(name) for mnem cards; None for entr cards.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        language: Option<&'a str>,
         byte_length: usize,
         bit_strength: usize,
         entropy_hex: Option<String>,
@@ -285,9 +296,16 @@ fn emit_inspect_json<W: Write>(
         InspectPayload::Ms1 { tag, payload } => {
             let tag_str = std::str::from_utf8(tag.as_bytes()).unwrap_or("<non-utf8>");
             let bytes = payload.as_bytes();
+            // ms mnem Phase 3 Step 6: surface language name for mnem cards.
+            let language = if let ms_codec::Payload::Mnem { language: code, .. } = payload {
+                ms_codec::consts::MNEM_LANGUAGE_NAMES.get(*code as usize).copied()
+            } else {
+                None
+            };
             InspectJson::Ms1 {
                 tag: tag_str,
                 payload_kind: format!("{:?}", payload.kind()),
+                language,
                 byte_length: bytes.len(),
                 bit_strength: bytes.len() * 8,
                 entropy_hex: if reveal_secret {
@@ -333,6 +351,7 @@ mod inspect_envelope_tests {
         let body = InspectJson::Ms1 {
             tag: "entr",
             payload_kind: "Entr16".to_string(),
+            language: None,
             byte_length: 16,
             bit_strength: 128,
             entropy_hex: None,
