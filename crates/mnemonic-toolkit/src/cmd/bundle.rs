@@ -1657,10 +1657,21 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         // ms mnem Phase 3 (R2-I6): bind both Entr and Mnem payloads.
         // Populate slot.language from the wire for mnem cards (emit-only path —
         // this flow does NOT re-derive; xpub came from the envelope's mk1 chunk).
-        let (entropy_bytes, wire_lang_opt) = match payload {
-            ms_codec::Payload::Entr(bytes) => (Zeroizing::new(bytes), None),
+        //
+        // C2 regression fix: an Entr wire card is language-AGNOSTIC and MUST stay
+        // Entr on re-emit regardless of --language. Set language=English explicitly
+        // so synthesize_descriptor's unwrap_or(run_language) never fabricates a
+        // non-English language for it. An entr card emitted with English language
+        // produces the Entr payload (synthesize_descriptor's emit_lang == English
+        // branch → Payload::Entr), preserving the wire shape faithfully.
+        let (entropy_bytes, slot_lang) = match payload {
+            ms_codec::Payload::Entr(bytes) => (Zeroizing::new(bytes), bip39::Language::English),
             ms_codec::Payload::Mnem { entropy, language: wire_lang, .. } => {
-                (Zeroizing::new(entropy), Some(wire_lang))
+                let lang = crate::language::wire_code_to_bip39(wire_lang)
+                    .map_err(|e| ToolkitError::BadInput(format!(
+                        "--import-json: envelope.bundle.ms1[{i}] {e}"
+                    )))?;
+                (Zeroizing::new(entropy), lang)
             }
             _ => {
                 return Err(ToolkitError::BadInput(format!(
@@ -1669,12 +1680,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
             }
         };
         resolved_slots[i].entropy = Some(entropy_bytes);
-        if let Some(code) = wire_lang_opt {
-            resolved_slots[i].language = Some(crate::language::wire_code_to_bip39(code)
-                .map_err(|e| ToolkitError::BadInput(format!(
-                    "--import-json: envelope.bundle.ms1[{i}] {e}"
-                )))?);
-        }
+        resolved_slots[i].language = Some(slot_lang);
     }
 
     // §3.6 + Q5 — apply user seed overlay (--ms1 positional + --slot
@@ -1737,6 +1743,10 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
             });
         }
         resolved_slots[i].entropy = Some(entropy);
+        // C2 regression fix: set language explicitly from the user's --language
+        // so synthesize_descriptor's unwrap_or(run_language) is moot for this
+        // slot — the slot already carries the correct target language.
+        resolved_slots[i].language = Some(language.into());
     }
 
     // --ms1 positional overlay (vs --slot @N.phrase=). Repeat with the

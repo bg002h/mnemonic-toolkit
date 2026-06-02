@@ -587,3 +587,114 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
          got stderr: {stderr:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test (vii): C2 regression — import-json entr card MUST stay entr under --language
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Regression guard for the C1-fold regression introduced in 80f78fc:
+// `bundle --import-json <envelope-with-English-entr-ms1> --language japanese`
+// was silently re-emitting the entr card as a 51-char Japanese `mnem` card,
+// corrupting the wire language. An entr card is language-AGNOSTIC; re-labeling
+// it as Japanese is a silent lie.
+//
+// Root cause: the Entr arm in bundle_run_from_import_json set slot.language=None,
+// so synthesize_descriptor's `unwrap_or(run_language)` inherited --language
+// (japanese) and emitted mnem instead of entr. Fix: set language=English
+// explicitly for Entr wire cards.
+
+/// C2 regression: `bundle --import-json` with an English `entr` ms1[0] + `--language japanese`
+/// MUST re-emit the byte-identical 50-char `entr` card, NOT a 51-char `mnem` card.
+///
+/// This test is RED against pre-fix code (50-char entr → 51-char mnem) and GREEN after.
+#[test]
+fn import_json_entr_card_stays_entr_under_language_japanese() {
+    // Use all-zeros 16-byte entropy → well-known English entr card.
+    let entropy_en: Vec<u8> = vec![0x00u8; 16];
+    let en_ms1 = encode_entr(&entropy_en);
+    assert_eq!(en_ms1.len(), 50, "English entr precondition: must be 50 chars");
+
+    // Decode and confirm it IS an Entr payload before injecting.
+    let (_tag, payload_pre) = ms_codec::decode(&en_ms1).expect("en_ms1 must decode");
+    assert!(
+        matches!(payload_pre, ms_codec::Payload::Entr(_)),
+        "precondition: en_ms1 must be Payload::Entr, got {payload_pre:?}"
+    );
+
+    // Derive the xpub and fingerprint from the all-zeros entropy at bip84 path.
+    let xpub = derive_xpub_bip84(&entropy_en, bip39::Language::English);
+    let fp = derive_master_fp(&entropy_en, bip39::Language::English);
+
+    // Build singlesig wpkh descriptor.
+    let desc_body = format!("wpkh([{fp}/84'/0'/0']{xpub}/<0;1>/*)");
+    use miniscript::descriptor::checksum::Engine as CsEngine;
+    let mut ce = CsEngine::new();
+    ce.input(&desc_body).expect("ascii descriptor");
+    let csum = ce.checksum();
+    let descriptor = format!("{desc_body}#{csum}");
+
+    // Build a watch-only bundle using the descriptor so bundle JSON has descriptor != null.
+    let watch_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot", &format!("@0.xpub={xpub}"),
+            "--slot", &format!("@0.fingerprint={fp}"),
+            "--descriptor", &descriptor,
+            "--network", "mainnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let watch_stdout = String::from_utf8(watch_out.get_output().stdout.clone()).unwrap();
+    let mut bundle_v: serde_json::Value = serde_json::from_str(&watch_stdout).expect("watch JSON");
+
+    // Inject the English entr ms1 into the bundle.
+    bundle_v["ms1"] = serde_json::json!([en_ms1]);
+    bundle_v["mode"] = serde_json::json!("full");
+
+    // Wrap as import-wallet envelope.
+    let envelope_str = wrap_bundle_as_envelope(&bundle_v);
+
+    // Re-bundle with --language japanese — the entr card must stay entr.
+    let rebundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle", "--import-json", "-",
+            "--language", "japanese",
+            "--network", "mainnet",
+            "--json",
+        ])
+        .write_stdin(envelope_str.as_bytes())
+        .assert()
+        .success();
+
+    let rebundle_stdout = String::from_utf8(rebundle_out.get_output().stdout.clone()).unwrap();
+    let rebundle_v: serde_json::Value =
+        serde_json::from_str(&rebundle_stdout).expect("rebundle JSON");
+    let reemitted_ms1 = rebundle_v["ms1"].as_array().unwrap()[0].as_str().unwrap();
+
+    // CRITICAL: must be byte-identical to the original 50-char entr card.
+    // Pre-fix this was a 51-char mnem card (language corrupted to japanese).
+    assert_eq!(
+        reemitted_ms1, en_ms1,
+        "C2 regression: entr card under --language japanese MUST be byte-identical to original\n\
+         got:      {reemitted_ms1} (len={})\n\
+         expected: {en_ms1} (len=50)",
+        reemitted_ms1.len()
+    );
+    assert_eq!(
+        reemitted_ms1.len(), 50,
+        "C2 regression: re-emitted entr card must be 50 chars (entr), not 51 (mnem);\n\
+         got {reemitted_ms1:?}"
+    );
+
+    // Decode and confirm Payload::Entr — not Mnem.
+    let (_tag, payload) = ms_codec::decode(reemitted_ms1).expect("re-emitted ms1 must decode");
+    assert!(
+        matches!(payload, ms_codec::Payload::Entr(_)),
+        "C2 regression: re-emitted card must be Payload::Entr, got {payload:?}\n\
+         ms1 = {reemitted_ms1:?}"
+    );
+}
