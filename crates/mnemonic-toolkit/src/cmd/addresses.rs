@@ -214,7 +214,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             let acct = derive_bip32_from_entropy(
                 &entropy,
                 &passphrase,
-                language,
+                language.into(),
                 network,
                 template_for(args.address_type),
                 args.account,

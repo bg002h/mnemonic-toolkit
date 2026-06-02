@@ -169,7 +169,10 @@ where
                     // function exit. Mirrors `derive_slot.rs:77-84` precedent.
                     let entropy: Zeroizing<Vec<u8>> = Zeroizing::new(payload.as_bytes().to_vec());
                     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-                    Mnemonic::from_entropy_in(args.language().into(), &entropy[..])
+                    // ms mnem Phase 3: use per-card wire language (mnem cards) or
+                    // CLI --language (entr/legacy cards).
+                    let lang = crate::language::payload_bip39_language(&payload, args.language())?;
+                    Mnemonic::from_entropy_in(lang, &entropy[..])
                         .map_err(ToolkitError::Bip39)
                 }
                 Err(decode_err) => {

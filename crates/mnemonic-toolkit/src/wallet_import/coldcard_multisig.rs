@@ -488,6 +488,7 @@ pub(super) fn parse_text(
                 path: c.path.clone(),
                 entropy: None,
                 master_xpub: None,
+                language: None,
                 _entropy_pin: None,
             }
         })

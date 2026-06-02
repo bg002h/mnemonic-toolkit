@@ -392,7 +392,7 @@ fn run_full<W: Write, E: Write>(
         &args.md1,
         false,
         args.passphrase.as_deref(),
-        args.language.unwrap_or_default(),
+        args.language,
         args.network,
         stderr,
     );
@@ -439,7 +439,7 @@ fn run_watch_only<W: Write, E: Write>(
         &args.md1,
         false,
         args.passphrase.as_deref(),
-        args.language.unwrap_or_default(),
+        args.language,
         args.network,
         stderr,
     );
@@ -542,7 +542,7 @@ fn run_multisig<W: Write, E: Write>(
         &args.md1,
         true,
         args.passphrase.as_deref(),
-        args.language.unwrap_or_default(),
+        args.language,
         args.network,
         stderr,
     );
@@ -859,6 +859,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             path,
             entropy,
             master_xpub: None,
+            language: None,
             _entropy_pin: entropy_pin,
         });
         keys.push(ParsedKey {
@@ -2289,10 +2290,12 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
     supplied_md1: &[String],
     is_multisig: bool,
     passphrase: Option<&str>,
-    language: CliLanguage,
+    // `Some(x)` = user explicitly supplied `--language x`; `None` = defaulted.
+    language_opt: Option<CliLanguage>,
     network: CliNetwork,
     stderr: &mut E,
 ) {
+    let language = language_opt.unwrap_or_default();
     use bitcoin::bip32::{Xpriv, Xpub};
     use bitcoin::secp256k1::Secp256k1;
 
@@ -2396,19 +2399,45 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
         }
 
         // Full-path: ms1 supplied — derive parent xpub from seed.
-        // ms_codec::decode → Entr payload bytes.
-        let entropy: Vec<u8> = match ms_codec::decode(ms1_str) {
-            Ok((_tag, ms_codec::Payload::Entr(bytes))) => bytes,
-            // ms1 didn't decode or decoded to a non-Entr payload — the regular
-            // ms1_decode check surfaces decode errors via VerifyCheck; skip
-            // silently here so we don't double-report.
-            Ok(_) | Err(_) => continue,
+        // ms mnem Phase 3 (R2-I7): widen match to bind BOTH Entr and Mnem payloads;
+        // a mnem cosigner card previously silently `continue`d, skipping the cross-check.
+        let (entropy, card_lang) = match ms_codec::decode(ms1_str) {
+            Ok((_tag, ms_codec::Payload::Entr(bytes))) => (bytes, language.into()),
+            Ok((_tag, ms_codec::Payload::Mnem { language: wire_lang, entropy })) => {
+                // Per-card wire language wins over run-level --language.
+                let lang = match crate::language::wire_code_to_bip39(wire_lang) {
+                    Ok(l) => l,
+                    Err(_) => continue, // invalid wire code — skip silently
+                };
+                // Wire-wins note: emit if --language was explicit AND differs.
+                if let Some(cli_lang) = language_opt {
+                    let cli_bip39: bip39::Language = cli_lang.into();
+                    if cli_bip39 != lang {
+                        let wire_name = ms_codec::consts::MNEM_LANGUAGE_NAMES
+                            .get(wire_lang as usize)
+                            .copied()
+                            .unwrap_or("unknown");
+                        let _ = writeln!(
+                            stderr,
+                            "note: cosigner[{i}] ms1 carries wordlist language {wire_name}; \
+                             ignoring --language {}",
+                            cli_lang.human_name()
+                        );
+                    }
+                }
+                (entropy, lang)
+            }
+            // ms1 didn't decode — the regular ms1_decode check surfaces errors
+            // via VerifyCheck; skip silently here so we don't double-report.
+            Err(_) => continue,
+            // Forward-compat: unknown future payload kinds — skip silently.
+            Ok(_) => continue,
         };
+        let entropy: Vec<u8> = entropy;
 
         // entropy → mnemonic → seed → master xpriv. Mirrors descriptor-mode
-        // verify path at `verify_bundle.rs:644-664` and production
-        // `derive_slot::derive_bip32_from_entropy`.
-        let mnemonic = match bip39::Mnemonic::from_entropy_in(language.into(), &entropy) {
+        // verify path at `derive_slot::derive_bip32_from_entropy`.
+        let mnemonic = match bip39::Mnemonic::from_entropy_in(card_lang, &entropy) {
             Ok(m) => m,
             Err(_) => continue,
         };

@@ -6,10 +6,9 @@
 
 use crate::derive::DerivedAccount;
 use crate::error::{BitcoinErrorKind, ToolkitError};
-use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::template::CliTemplate;
-use bip39::Mnemonic;
+use bip39::{Language as Bip39Language, Mnemonic};
 use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
 use zeroize::Zeroizing;
@@ -43,7 +42,7 @@ pub fn derive_master_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u
 pub(crate) fn derive_bip32_from_entropy(
     entropy: &[u8],
     passphrase: &str,
-    language: CliLanguage,
+    language: Bip39Language,
     network: CliNetwork,
     template: CliTemplate,
     account: u32,
@@ -66,7 +65,7 @@ pub(crate) fn derive_bip32_from_entropy(
 pub(crate) fn derive_bip32_from_entropy_at_path(
     entropy: &[u8],
     passphrase: &str,
-    language: CliLanguage,
+    language: Bip39Language,
     network: CliNetwork,
     path: &DerivationPath,
 ) -> Result<DerivedAccount, ToolkitError> {
@@ -75,7 +74,7 @@ pub(crate) fn derive_bip32_from_entropy_at_path(
     // `rust-bitcoin-xpriv-zeroize-upstream`. Per-function lifetime is bounded
     // and the seed buffer is `Zeroizing<[u8; 64]>` via `derive_master_seed`.
     let mnemonic =
-        Mnemonic::from_entropy_in(language.into(), entropy).map_err(ToolkitError::Bip39)?;
+        Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
     let seed = derive_master_seed(&mnemonic, passphrase);
 
     let secp = Secp256k1::new();
@@ -128,7 +127,7 @@ pub(crate) fn derive_bip32_from_entropy_at_path(
 pub(crate) fn derive_bip32_at_path(
     entropy: &[u8],
     passphrase: &str,
-    language: CliLanguage,
+    language: Bip39Language,
     network: CliNetwork,
     path: &DerivationPath,
 ) -> Result<Xpriv, ToolkitError> {
@@ -136,7 +135,7 @@ pub(crate) fn derive_bip32_at_path(
     // have no Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
     // `rust-bitcoin-xpriv-zeroize-upstream`. Per-function lifetime is bounded.
     let mnemonic =
-        Mnemonic::from_entropy_in(language.into(), entropy).map_err(ToolkitError::Bip39)?;
+        Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
     let seed = derive_master_seed(&mnemonic, passphrase);
 
     let secp = Secp256k1::new();

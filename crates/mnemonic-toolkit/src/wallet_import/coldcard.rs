@@ -339,6 +339,7 @@ impl WalletFormatParser for ColdcardParser {
             path,
             entropy: None,
             master_xpub: None,
+            language: None,
             _entropy_pin: None,
         }];
         validate_watch_only_resolved(&cosigners)?;

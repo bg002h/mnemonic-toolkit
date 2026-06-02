@@ -1186,7 +1186,7 @@ fn compute_outputs(
                     )
                 })?;
                 Some(derive_bip32_from_entropy(
-                    &entropy, pbkdf2_passphrase, language, network, template, args.account,
+                    &entropy, pbkdf2_passphrase, language.into(), network, template, args.account,
                 )?)
             } else {
                 None
@@ -1225,7 +1225,7 @@ fn compute_outputs(
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
                         )?;
                         // BIP-32 §4 mandates compressed pubkeys for derived
                         // keys; WIF compression follows the BIP-32 contract.
@@ -1252,7 +1252,7 @@ fn compute_outputs(
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
                         )?;
                         let pk = PrivateKey {
                             compressed: true,
@@ -1297,7 +1297,7 @@ fn compute_outputs(
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let script_type = resolve_script_type(args)?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language, network, &path,
+                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
                         )?;
                         let leaf_xpub = bip32::Xpub::from_priv(&secp, &leaf_xpriv);
                         crate::address_render::render_address_from_xpub(
@@ -1449,11 +1449,20 @@ fn compute_outputs(
             // ms_codec::Payload::Entr ships a Vec<u8> the codec doesn't
             // scrub (tracked at sibling FOLLOWUPS `secret-memory-hygiene-v0_9-cycle-a`
             // ms-codec rows); the local wrap below protects the duplicate.
-            let entropy: zeroize::Zeroizing<Vec<u8>> = match payload {
-                ms_codec::Payload::Entr(bytes) => zeroize::Zeroizing::new(bytes),
+            // ms mnem Phase 3: bind Mnem payloads so --from ms1 --to phrase
+            // reconstructs the phrase in the card's wire language, not --language.
+            let (entropy, payload_lang) = match payload {
+                ms_codec::Payload::Entr(bytes) => {
+                    let l: bip39::Language = language.into();
+                    (zeroize::Zeroizing::new(bytes), l)
+                }
+                ms_codec::Payload::Mnem { entropy, language: wire_lang, .. } => {
+                    let lang = crate::language::wire_code_to_bip39(wire_lang)?;
+                    (zeroize::Zeroizing::new(entropy), lang)
+                }
                 _ => {
                     return Err(ToolkitError::BadInput(
-                        "ms1 decoded to a non-Entr payload; v0.1 ms-codec emits only Entr".into(),
+                        "ms1 decoded to an unknown payload kind".into(),
                     ))
                 }
             };
@@ -1465,7 +1474,7 @@ fn compute_outputs(
                         // SAFETY: third-party-blocked — `bip39::Mnemonic` has
                         // no Drop+Zeroize; FOLLOWUP
                         // `rust-bip39-mnemonic-zeroize-upstream`.
-                        Mnemonic::from_entropy_in(language.into(), &entropy[..])
+                        Mnemonic::from_entropy_in(payload_lang, &entropy[..])
                             .map_err(ToolkitError::Bip39)?
                             .to_string()
                     }

@@ -50,6 +50,8 @@ impl CliLanguage {
 /// The toolkit `CliLanguage` declaration order is DIFFERENT (English,
 /// SimplifiedChinese, TraditionalChinese, Czech, French, Italian, Japanese,
 /// Korean, Portuguese, Spanish), so `as u8` is WRONG — use this explicit table.
+// Used by Step 5 (emit sites); Step 4 (derive sites) uses wire_code_to_bip39.
+#[allow(dead_code)]
 pub fn cli_language_to_wire_code(l: CliLanguage) -> u8 {
     match l {
         CliLanguage::English => 0,
@@ -67,6 +69,8 @@ pub fn cli_language_to_wire_code(l: CliLanguage) -> u8 {
 
 /// Map a wire language byte back to the corresponding `CliLanguage` variant.
 /// Returns `None` for codes ≥ 10.
+// Used by Step 5 tests; direct wire_code_to_bip39 is used in the derive paths.
+#[allow(dead_code)]
 pub fn wire_code_to_cli(c: u8) -> Option<CliLanguage> {
     match c {
         0 => Some(CliLanguage::English),

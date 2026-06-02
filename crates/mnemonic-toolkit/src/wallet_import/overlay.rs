@@ -111,8 +111,10 @@ pub(crate) fn apply_seed_overlay(
             }
             let Some(src) = src_opt else { continue };
 
-            // Decode entropy + handle empty-string watch-only sentinel.
-            let entropy: Zeroizing<Vec<u8>> = match src {
+            // Decode entropy + per-card language + handle empty-string watch-only sentinel.
+            // ms mnem Phase 3: returns (entropy, bip39::Language) so each cosigner
+            // can be derived under its own wire language (mnem) or --language (entr/phrase).
+            let entropy_and_lang: (Zeroizing<Vec<u8>>, bip39::Language) = match src {
                 Source::Ms1(s) => {
                     if s.is_empty() {
                         // v0.25.1 empty-string sentinel — leave watch-only +
@@ -124,8 +126,21 @@ pub(crate) fn apply_seed_overlay(
                         );
                         continue;
                     }
+                    // ms mnem Phase 3: bind both Entr and Mnem payloads;
+                    // track per-card wire language for derivation below.
                     match ms_codec::decode(s) {
-                        Ok((_tag, ms_codec::Payload::Entr(bytes))) => Zeroizing::new(bytes),
+                        Ok((_tag, ms_codec::Payload::Entr(bytes))) => {
+                            (Zeroizing::new(bytes), language.into())
+                        }
+                        Ok((_tag, ms_codec::Payload::Mnem { language: wire_lang, entropy })) => {
+                            let lang =
+                                crate::language::wire_code_to_bip39(wire_lang).map_err(|e| {
+                                    ToolkitError::BadInput(format!(
+                                        "import-wallet: --ms1 for cosigner {i}: {e}"
+                                    ))
+                                })?;
+                            (Zeroizing::new(entropy), lang)
+                        }
                         Ok(_) => {
                             return Err(ToolkitError::BadInput(format!(
                                 "import-wallet: --ms1 for cosigner {i}: decoded payload is not entropy"
@@ -145,9 +160,10 @@ pub(crate) fn apply_seed_overlay(
                                 "import-wallet: --slot @{i}.phrase=: BIP-39 parse error: {e}"
                             ))
                         })?;
-                    Zeroizing::new(mnemonic.to_entropy())
+                    (Zeroizing::new(mnemonic.to_entropy()), language.into())
                 }
             };
+            let (entropy, card_lang) = entropy_and_lang;
 
             // Derive xpub at cosigner.path from entropy. Pipeline:
             //   entropy → mnemonic → seed (passphrase="") → master xpriv
@@ -157,8 +173,9 @@ pub(crate) fn apply_seed_overlay(
             // (per SPEC §2.1; passphrase is a sibling-cycle concern). If
             // the source wallet used a BIP-39 passphrase, the user must
             // recover the seed elsewhere — out of scope for v0.26.0.
+            // ms mnem Phase 3: use per-card language for the mnemonic reconstruction.
             let mnemonic =
-                bip39::Mnemonic::from_entropy_in(language.into(), &entropy).map_err(|e| {
+                bip39::Mnemonic::from_entropy_in(card_lang, &entropy).map_err(|e| {
                     ToolkitError::BadInput(format!(
                         "import-wallet: cosigner {i}: entropy → mnemonic: {e}"
                     ))

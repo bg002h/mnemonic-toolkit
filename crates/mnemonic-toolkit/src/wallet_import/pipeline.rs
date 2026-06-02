@@ -203,6 +203,7 @@ pub(crate) fn descriptor_concrete_to_resolved_slots(
             path,
             entropy: None,
             master_xpub: None,
+            language: None,
             _entropy_pin: None,
         });
     }

@@ -631,6 +631,18 @@ pub struct ResolvedSlot {
     /// resolution arm except `{Xpub, MasterXpub, ...}` where the user
     /// supplied the subkey. Other emitters silently ignore.
     pub master_xpub: Option<Xpub>,
+    /// ms mnem Phase 3 — per-card wire language for derivation.
+    ///
+    /// `Some(lang)` = this slot's source was a `mnem` ms1 card whose wire
+    /// language OVERRIDES the run-level `--language`. `None` = defer to the
+    /// run `--language` / English default.
+    ///
+    /// Resolution everywhere: `slot.language.unwrap_or_else(|| args.language().into())`.
+    ///
+    /// Populated ONLY at the `bundle --import-json` mnem-decode arm (bundle.rs).
+    /// All other slot sources (foreign-wallet parsers, descriptor-concrete,
+    /// hex/phrase `resolve_slots`) set `language: None`.
+    pub language: Option<bip39::Language>,
     /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
     /// buffer's pages. `Some(Rc::new(pin_pages_for(&entropy[..])))` when
     /// `entropy` is `Some`; `None` for watch-only slots. Rc preserves the
@@ -939,6 +951,7 @@ mod tests {
             path,
             entropy: None,
             master_xpub: None,
+            language: None,
             _entropy_pin: None,
         };
         // (a) normal slot — bare `m/...`, bracketed `[fp/...]`
@@ -957,6 +970,7 @@ mod tests {
         // bonus: fingerprint casing is normalized to lowercase (M-1)
         let up = ResolvedSlot {
             fingerprint: Fingerprint::from_str("ABCD1234").unwrap(),
+            language: None,
             ..mk_slot(DerivationPath::from_str("84'/0'/0'").unwrap())
         };
         assert_eq!(up.bracketed_origin(), "[abcd1234/84'/0'/0']");
@@ -1292,6 +1306,7 @@ mod tests {
                 path: path.clone(),
                 entropy: None,
                 master_xpub: None,
+                language: None,
                 _entropy_pin: None,
             });
 
@@ -1412,6 +1427,7 @@ mod tests {
                 path: path.clone(),
                 entropy: Some(zeroize::Zeroizing::new(entropy)),
                 master_xpub: None,
+                language: None,
                 _entropy_pin: None,
             });
 
@@ -1524,6 +1540,7 @@ mod tests {
                 path: path.clone(),
                 entropy: entropy_field,
                 master_xpub: None,
+                language: None,
                 _entropy_pin: entropy_pin,
             });
         }

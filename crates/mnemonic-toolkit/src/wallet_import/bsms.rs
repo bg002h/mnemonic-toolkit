@@ -258,6 +258,7 @@ impl WalletFormatParser for BsmsParser {
                 path,
                 entropy: None,
                 master_xpub: None,
+                language: None,
                 _entropy_pin: None,
             });
         }

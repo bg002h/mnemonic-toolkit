@@ -110,8 +110,8 @@ fn resolve_master_xpriv<E: Write>(
     stderr: &mut E,
 ) -> Result<Xpriv, ToolkitError> {
     let s = secret.trim();
-    let to_master = |entropy: &[u8]| -> Result<Xpriv, ToolkitError> {
-        let mnemonic = bip39::Mnemonic::from_entropy_in(bip39::Language::English, entropy)
+    let to_master = |entropy: &[u8], lang: bip39::Language| -> Result<Xpriv, ToolkitError> {
+        let mnemonic = bip39::Mnemonic::from_entropy_in(lang, entropy)
             .map_err(|e| ToolkitError::SilentPayment(format!("entropy → BIP-39 mnemonic: {e}")))?;
         let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
         Xpriv::new_master(network.network_kind(), &seed[..])
@@ -133,15 +133,22 @@ fn resolve_master_xpriv<E: Write>(
     // 2. ms1 → entropy (unambiguous bech32 `ms` HRP).
     if s.starts_with("ms1") {
         let (_tag, payload) = ms_codec::decode(s).map_err(ToolkitError::from)?;
+        // ms mnem Phase 3: per-card wire language (mnem) or English (entr/legacy).
+        // silent-payment has no --language flag; entr cards default to English.
+        let lang = crate::language::payload_bip39_language(
+            &payload,
+            crate::language::CliLanguage::English,
+        )?;
         let entropy: Zeroizing<Vec<u8>> = match payload {
             ms_codec::Payload::Entr(b) => Zeroizing::new(b),
+            ms_codec::Payload::Mnem { entropy, .. } => Zeroizing::new(entropy),
             _ => {
                 return Err(ToolkitError::SilentPayment(
-                    "ms1 decoded to a non-entropy payload".into(),
+                    "ms1 decoded to an unknown payload kind".into(),
                 ))
             }
         };
-        return to_master(&entropy);
+        return to_master(&entropy, lang);
     }
     // 3. BIP-39 phrase (whitespace-separated words; checksum-validated).
     if s.split_whitespace().count() >= 2 {
@@ -151,11 +158,11 @@ fn resolve_master_xpriv<E: Write>(
         return Xpriv::new_master(network.network_kind(), &seed[..])
             .map_err(|e| ToolkitError::SilentPayment(format!("master xpriv: {e}")));
     }
-    // 4. entropy hex (BIP-39-valid lengths only).
+    // 4. entropy hex (BIP-39-valid lengths only). No wire language — English.
     if let Ok(bytes) = hex::decode(s) {
         if matches!(bytes.len(), 16 | 20 | 24 | 28 | 32) {
             let entropy = Zeroizing::new(bytes);
-            return to_master(&entropy);
+            return to_master(&entropy, bip39::Language::English);
         }
     }
     // 5. refuse single-key / unrecognized.

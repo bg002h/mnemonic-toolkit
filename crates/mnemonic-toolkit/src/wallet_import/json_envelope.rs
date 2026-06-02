@@ -367,6 +367,7 @@ pub(crate) fn mk1_card_to_resolved_slot<E: std::io::Write>(
         path: card.origin_path.clone(),
         entropy: None,
         master_xpub: None,
+        language: None,
         _entropy_pin: None,
     })
 }

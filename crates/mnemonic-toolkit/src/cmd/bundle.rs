@@ -529,6 +529,7 @@ pub(crate) fn resolve_slots(
                 // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
                 entropy: Some(zeroize::Zeroizing::new(entropy)),
                 master_xpub: None,
+                language: None,
                 _entropy_pin: entropy_pin,
             });
         } else if subkeys.contains(&SlotSubkey::Xpub) {
@@ -598,6 +599,7 @@ pub(crate) fn resolve_slots(
                 path,
                 entropy: None,
                 master_xpub,
+                language: None,
                 _entropy_pin: None,
             });
         } else if subkeys.contains(&SlotSubkey::Entropy) {
@@ -614,19 +616,20 @@ pub(crate) fn resolve_slots(
                 ))
             })?;
             let lang = language.unwrap_or_default();
+            let lang_bip39: bip39::Language = lang.into();
             let pass = passphrase.unwrap_or("");
             let acc = match &multisig_acct_path {
                 Some(p) => crate::derive_slot::derive_bip32_from_entropy_at_path(
                     &entropy_bytes,
                     pass,
-                    lang,
+                    lang_bip39,
                     network,
                     p,
                 )?,
                 None => crate::derive_slot::derive_bip32_from_entropy(
                     &entropy_bytes,
                     pass,
-                    lang,
+                    lang_bip39,
                     network,
                     template,
                     account,
@@ -646,6 +649,7 @@ pub(crate) fn resolve_slots(
                 // v0.10.1: ResolvedSlot.entropy migrated to Option<Zeroizing<Vec<u8>>>.
                 entropy: Some(zeroize::Zeroizing::new(entropy_bytes)),
                 master_xpub: None,
+                language: None,
                 _entropy_pin: entropy_pin,
             });
         } else if subkeys.contains(&SlotSubkey::Wif) {
@@ -688,6 +692,7 @@ pub(crate) fn resolve_slots(
                 path: DerivationPath::default(),
                 entropy: None,
                 master_xpub: None,
+                language: None,
                 _entropy_pin: None,
             });
         } else if subkeys.contains(&SlotSubkey::Xprv) {
@@ -1401,6 +1406,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             path,
             entropy,
             master_xpub: None,
+            language: None,
             _entropy_pin: entropy_pin,
         });
 
@@ -1456,6 +1462,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 path: c.path.clone(),
                 entropy: c.entropy.clone(),
                 master_xpub: None,
+                language: None,
                 _entropy_pin: entropy_pin,
             }
         })
@@ -1615,8 +1622,14 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
                 "--import-json: envelope.bundle.ms1[{i}] decode failed: {e:?}"
             ))
         })?;
-        let entropy_bytes = match payload {
-            ms_codec::Payload::Entr(bytes) => Zeroizing::new(bytes),
+        // ms mnem Phase 3 (R2-I6): bind both Entr and Mnem payloads.
+        // Populate slot.language from the wire for mnem cards (emit-only path —
+        // this flow does NOT re-derive; xpub came from the envelope's mk1 chunk).
+        let (entropy_bytes, wire_lang_opt) = match payload {
+            ms_codec::Payload::Entr(bytes) => (Zeroizing::new(bytes), None),
+            ms_codec::Payload::Mnem { entropy, language: wire_lang, .. } => {
+                (Zeroizing::new(entropy), Some(wire_lang))
+            }
             _ => {
                 return Err(ToolkitError::BadInput(format!(
                     "--import-json: envelope.bundle.ms1[{i}] payload is not entropy"
@@ -1624,6 +1637,12 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
             }
         };
         resolved_slots[i].entropy = Some(entropy_bytes);
+        if let Some(code) = wire_lang_opt {
+            resolved_slots[i].language = Some(crate::language::wire_code_to_bip39(code)
+                .map_err(|e| ToolkitError::BadInput(format!(
+                    "--import-json: envelope.bundle.ms1[{i}] {e}"
+                )))?);
+        }
     }
 
     // §3.6 + Q5 — apply user seed overlay (--ms1 positional + --slot
