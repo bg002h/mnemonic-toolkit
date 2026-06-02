@@ -15,7 +15,3 @@ rust-version = "1.85"
 # `tr-sortedmulti-a-via-upstream`.
 [patch.crates-io]
 miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "95fdd1c5773bd918c574d2225787973f63e16a66" }
-# TEMP (ms mnem v0.2 cycle) — develop against the unpublished local ms-codec 0.3.0.
-# REMOVE AT SHIP: once ms-codec 0.3.0 is published to crates.io, delete this line
-# and relock so the lock records a registry+ source + checksum (plan Phase 3 Step 9).
-ms-codec = { path = "../mnemonic-secret/crates/ms-codec" }
