@@ -1,8 +1,12 @@
-//! v0.37.11 — non-English BIP-39 wordlist-language advisory on `bundle` (path A of
-//! the `mnem` footgun). ms1 carries only the entropy, not the wordlist language; a
-//! non-English seed recovered with English-defaulted software derives a different
-//! wallet. The advisory fires (stderr) once per secret-bearing bundle when
-//! `--language` is non-English. See `design/SPEC_non_english_seed_advisory.md`.
+//! v0.37.11 + ms-mnem Phase 3 Step 5+6 — non-English BIP-39 wordlist advisory on `bundle`.
+//!
+//! After Step 5, a non-English source emits a self-describing `mnem` ms1 card
+//! (language preserved on-wire), so the language-losing advisory is SUPPRESSED for
+//! non-English bundles. The advisory only fires when a secret-bearing slot emits
+//! `entr` from a non-English run context (i.e. `slot.language == Some(English)` but
+//! run_language is non-English — a rare corner case with no practical trigger today).
+//!
+//! See `design/SPEC_non_english_seed_advisory.md`.
 
 use assert_cmd::Command;
 
@@ -17,8 +21,13 @@ const FP_HEX: &str = "5436d724";
 
 const ADVISORY_NEEDLE: &str = "BIP-39 seed as an ms1 card";
 
+// VALID_MNEM_STR_LENGTHS for 16-byte entropy = 51 chars.
+const MNEM_MS1_LEN_12WORD: usize = 51;
+
 #[test]
-fn french_phrase_bundle_fires_advisory_once() {
+fn french_phrase_bundle_emits_mnem_no_advisory() {
+    // ms-mnem Phase 3 Step 5+6: a non-English phrase bundle now emits a
+    // self-describing `mnem` ms1 card → advisory SUPPRESSED (no language loss).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -28,12 +37,21 @@ fn french_phrase_bundle_fires_advisory_once() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains(ADVISORY_NEEDLE), "advisory must fire: {stderr:?}");
-    assert!(stderr.contains("french"), "names the language: {stderr:?}");
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    // Advisory must NOT fire: the emitted ms1 is a mnem card (self-describing).
+    assert!(!stderr.contains(ADVISORY_NEEDLE), "advisory must be suppressed for mnem emit: {stderr:?}");
+    // The emitted ms1 must be a mnem card (length 51 for 12-word / 16-byte entropy).
+    // In bundle text output, the ms1 value is a bare ms1... string on its own line
+    // (after the "# ms1 (entropy, BCH-checksummed)" comment).
+    let ms1_val = stdout
+        .lines()
+        .find(|l| l.starts_with("ms1") && !l.starts_with("ms1 ") && !l.contains("(entropy"))
+        .unwrap_or("")
+        .trim();
     assert_eq!(
-        stderr.matches(ADVISORY_NEEDLE).count(),
-        1,
-        "exactly once (single chokepoint): {stderr:?}"
+        ms1_val.len(), MNEM_MS1_LEN_12WORD,
+        "emitted ms1 must be mnem length {MNEM_MS1_LEN_12WORD}: got len={} val={ms1_val:?}",
+        ms1_val.len()
     );
 }
 
@@ -68,7 +86,9 @@ fn watch_only_french_bundle_no_advisory() {
 }
 
 #[test]
-fn french_bundle_json_stdout_unchanged_advisory_on_stderr() {
+fn french_bundle_json_stdout_valid_advisory_suppressed() {
+    // ms-mnem Phase 3 Step 5+6: non-English bundle with --json → mnem card emitted,
+    // advisory suppressed on stderr, stdout stays valid JSON.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -79,16 +99,23 @@ fn french_bundle_json_stdout_unchanged_advisory_on_stderr() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // Advisory is on stderr only; stdout stays valid JSON.
-    let _: serde_json::Value = serde_json::from_str(&stdout).expect("stdout valid JSON");
-    assert!(!stdout.contains(ADVISORY_NEEDLE), "advisory must NOT be on stdout");
-    assert!(stderr.contains(ADVISORY_NEEDLE), "advisory must be on stderr");
+    // Advisory is suppressed (mnem card emitted, self-describing).
+    assert!(!stderr.contains(ADVISORY_NEEDLE), "advisory must be suppressed for mnem: {stderr:?}");
+    // stdout stays valid JSON.
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("stdout valid JSON");
+    // The emitted ms1 must be a mnem card (length 51).
+    // Bundle JSON schema: top-level "ms1": ["<value>"].
+    let ms1_arr = v["ms1"].as_array().expect("top-level ms1 array");
+    let ms1_val = ms1_arr[0].as_str().unwrap_or("");
+    assert_eq!(
+        ms1_val.len(), MNEM_MS1_LEN_12WORD,
+        "emitted ms1 must be mnem length {MNEM_MS1_LEN_12WORD}: got {ms1_val:?}"
+    );
 }
 
 #[test]
-fn french_multisig_2of2_fires_advisory_once() {
-    // Two DISTINCT French seeds (avoids BIP-388 same-key collision). The emit lives
-    // in the single `emit_unified` chokepoint → fires once, not per-cosigner.
+fn french_multisig_2of2_both_mnem_no_advisory() {
+    // ms-mnem Phase 3 Step 5+6: both French cosigners emit mnem cards → advisory suppressed.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -99,9 +126,8 @@ fn french_multisig_2of2_fires_advisory_once() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr.matches(ADVISORY_NEEDLE).count(),
-        1,
-        "exactly once for 2-of-2 (not per-cosigner): {stderr:?}"
+    assert!(
+        !stderr.contains(ADVISORY_NEEDLE),
+        "advisory must be suppressed for all-mnem 2-of-2: {stderr:?}"
     );
 }

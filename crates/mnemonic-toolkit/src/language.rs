@@ -110,6 +110,27 @@ pub fn wire_code_to_bip39(c: u8) -> Result<bip39::Language, ToolkitError> {
     }
 }
 
+/// Map a `bip39::Language` to the wire language byte used in
+/// `ms_codec::Payload::Mnem { language, .. }`.
+///
+/// This is the inverse of `wire_code_to_bip39`; keyed on variant, not index.
+/// Used by emit sites (Step 5) where the source language is already a
+/// `bip39::Language` (e.g. from `slot.language`).
+pub fn bip39_to_wire_code(l: bip39::Language) -> u8 {
+    match l {
+        bip39::Language::English => 0,
+        bip39::Language::Japanese => 1,
+        bip39::Language::Korean => 2,
+        bip39::Language::Spanish => 3,
+        bip39::Language::SimplifiedChinese => 4,
+        bip39::Language::TraditionalChinese => 5,
+        bip39::Language::French => 6,
+        bip39::Language::Italian => 7,
+        bip39::Language::Czech => 8,
+        bip39::Language::Portuguese => 9,
+    }
+}
+
 /// Resolve the `bip39::Language` for a single decoded ms1 card's derivation.
 ///
 /// For a `mnem` card the wire language wins — the card itself declares the
@@ -167,6 +188,18 @@ pub(crate) fn non_english_seed_advisory(lang: CliLanguage, form: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Step 5 tests ─────────────────────────────────────────────────────────
+
+    /// bip39_to_wire_code(wire_code_to_bip39(c)) == c for all 10 codes.
+    #[test]
+    fn bip39_to_wire_code_round_trip_all_10() {
+        for c in 0u8..10 {
+            let lang = wire_code_to_bip39(c).unwrap();
+            let back = bip39_to_wire_code(lang);
+            assert_eq!(back, c, "code {c}: bip39_to_wire_code(wire_code_to_bip39({c})) = {back}");
+        }
+    }
 
     // ── Step 3 tests ─────────────────────────────────────────────────────────
 

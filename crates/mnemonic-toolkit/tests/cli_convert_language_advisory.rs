@@ -76,9 +76,11 @@ fn english_to_entropy_no_advisory() {
 }
 
 #[test]
-fn french_to_ms1_fires_advisory() {
-    // C1 (end-of-cycle R0): an ms1 card is the canonical engravable language-losing
-    // form — must advise just like raw entropy.
+fn french_to_ms1_emits_mnem_no_advisory() {
+    // ms-mnem Phase 3 Step 5+6: `convert --language french --to ms1` now emits a
+    // self-describing `mnem` ms1 card (language on-wire) → advisory SUPPRESSED.
+    // The old advisory ("language-losing entr") was correct pre-Step-5; after Step 5
+    // the footgun is resolved by design.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -87,9 +89,23 @@ fn french_to_ms1_fires_advisory() {
         ])
         .assert()
         .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains(ADVISORY_MS1), "ms1 target must advise: {stderr:?}");
-    assert!(stderr.contains("french"), "{stderr:?}");
+    // Advisory must NOT fire: the emitted ms1 is a mnem card.
+    assert!(!stderr.contains(ADVISORY_MS1), "advisory must be suppressed for mnem ms1: {stderr:?}");
+    // The emitted ms1 must be a mnem string (length 51 for 12-word / 16-byte entropy).
+    // Output format: "ms1: <value>\n" — extract the value after "ms1: ".
+    let ms1_val = stdout
+        .lines()
+        .find(|l| l.trim_start().starts_with("ms1:"))
+        .and_then(|l| l.split_once(':').map(|x| x.1))
+        .map(|s| s.trim())
+        .unwrap_or_else(|| stdout.trim());
+    assert_eq!(
+        ms1_val.len(), 51,
+        "emitted ms1 must be mnem (len=51): got len={} val={ms1_val:?}",
+        ms1_val.len()
+    );
 }
 
 #[test]

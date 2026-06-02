@@ -1014,12 +1014,22 @@ pub fn run<R: Read, W: Write, E: Write>(
             let _ = writeln!(stderr, "{msg}");
         }
     }
+    // ms mnem Phase 3 Step 6: suppress the ms1-target advisory when the emitted
+    // card is a self-describing `mnem` card (non-English source → mnem → no language
+    // loss). After Step 5, a non-English source ALWAYS emits `mnem` for the ms1
+    // target, so the advisory is suppressed when language != English.
+    // Keep the advisory for `Entropy` target (entropy output is always language-losing).
     if targets.contains(&NodeType::Ms1) {
-        if let Some(msg) = crate::language::non_english_seed_advisory(
-            args.language.unwrap_or_default(),
-            "an ms1 card",
-        ) {
-            let _ = writeln!(stderr, "{msg}");
+        let run_lang = args.language.unwrap_or_default();
+        // emits_mnem: non-English phrase/entropy → mnem card (self-describing, no loss).
+        let emits_mnem = run_lang != crate::language::CliLanguage::English;
+        if !emits_mnem {
+            if let Some(msg) = crate::language::non_english_seed_advisory(
+                run_lang,
+                "an ms1 card",
+            ) {
+                let _ = writeln!(stderr, "{msg}");
+            }
         }
     }
 
@@ -1212,11 +1222,19 @@ fn compute_outputs(
                         .master_fingerprint
                         .to_string()
                         .to_lowercase(),
-                    Ms1 => ms_codec::encode(
-                        ms_codec::Tag::ENTR,
-                        &ms_codec::Payload::Entr((*entropy).clone()),
-                    )
-                    .map_err(ToolkitError::from)?,
+                    Ms1 => {
+                        // ms mnem Phase 3 Step 5: emit mnem for non-English sources.
+                        let ms1_payload = if language == crate::language::CliLanguage::English {
+                            ms_codec::Payload::Entr((*entropy).clone())
+                        } else {
+                            ms_codec::Payload::Mnem {
+                                language: crate::language::cli_language_to_wire_code(language),
+                                entropy: (*entropy).clone(),
+                            }
+                        };
+                        ms_codec::encode(ms_codec::Tag::ENTR, &ms1_payload)
+                            .map_err(ToolkitError::from)?
+                    }
                     Wif => {
                         // SPEC-A v0.6.1: phrase/entropy → wif requires explicit
                         // --path. `needs_derive` deliberately does NOT include

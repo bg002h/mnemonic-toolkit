@@ -286,13 +286,26 @@ pub fn synthesize_descriptor(
     // SPEC §5.8 emission rule: ms1[i] is populated per-slot from
     // cosigners[i].entropy. Watch-only slots → "" sentinel. Mirrors
     // synthesize_unified:710-723 — same rule across all bundle modes.
+    // ms mnem Phase 3 Step 5: emit mnem for non-English slot sources.
+    // slot.language: Some(lang) = import-json mnem source; None = entr.
     let mut ms1: MsField = Vec::with_capacity(n);
     for c in cosigners {
         match &c.entropy {
-            Some(e) => ms1.push(
-                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((**e).clone()))
-                    .map_err(ToolkitError::from)?,
-            ),
+            Some(e) => {
+                let payload = match c.language {
+                    Some(lang) if lang != bip39::Language::English => {
+                        ms_codec::Payload::Mnem {
+                            language: crate::language::bip39_to_wire_code(lang),
+                            entropy: (**e).clone(),
+                        }
+                    }
+                    _ => ms_codec::Payload::Entr((**e).clone()),
+                };
+                ms1.push(
+                    ms_codec::encode(ms_codec::Tag::ENTR, &payload)
+                        .map_err(ToolkitError::from)?,
+                );
+            }
             None => ms1.push(String::new()),
         }
     }
@@ -439,8 +452,18 @@ pub fn synthesize_multisig_full(
     // SPEC §3 OOS-2; we clone the wrapped buffer's contents into the
     // public Vec at the call boundary so the original Zeroizing wrap
     // drops with scrubbing at function exit.
+    // ms mnem Phase 3 Step 5: emit mnem for non-English sources.
     let entropy = zeroize::Zeroizing::new(seed_mnemonic.to_entropy());
-    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((*entropy).clone()))
+    let mnemonic_lang = seed_mnemonic.language();
+    let ms1_payload = if mnemonic_lang == bip39::Language::English {
+        ms_codec::Payload::Entr((*entropy).clone())
+    } else {
+        ms_codec::Payload::Mnem {
+            language: crate::language::bip39_to_wire_code(mnemonic_lang),
+            entropy: (*entropy).clone(),
+        }
+    };
+    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms1_payload)
         .map_err(ToolkitError::from)?;
 
     // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected
@@ -706,12 +729,19 @@ impl ResolvedSlot {
 /// `BundleMode::MultisigHybrid` dispatch arms. Also handles single-sig under
 /// the unified path (N=1; SingleSigFull and SingleSigWatchOnly modes route
 /// through the same code path with N=1).
+/// ms mnem Phase 3 Step 5: `run_language` is the per-run `--language` /
+/// English default used to resolve the emit language for slots whose source
+/// is a phrase/entropy (no per-card wire language). Slots whose source was a
+/// `mnem` ms1 card carry `slot.language = Some(wire_lang)` which wins over
+/// `run_language`. English `run_language` always emits `Entr` (byte-identical
+/// to v0.38.4).
 pub fn synthesize_unified(
     slots: &[ResolvedSlot],
     template: CliTemplate,
     threshold: u8,
     network: CliNetwork,
     privacy_preserving: bool,
+    run_language: bip39::Language,
 ) -> Result<Bundle, ToolkitError> {
     let n = slots.len();
     if n == 0 || n > 16 {
@@ -785,6 +815,8 @@ pub fn synthesize_unified(
     let stubs: Vec<[u8; 4]> = vec![stub; n];
 
     // Per-slot ms1 (dense vec; "" sentinel for watch-only).
+    // ms mnem Phase 3 Step 5: per-slot emit rule.
+    // lang = slot.language.unwrap_or(run_language); English → Entr; else → Mnem.
     let mut ms1: MsField = Vec::with_capacity(n);
     for s in slots {
         match &s.entropy {
@@ -792,10 +824,21 @@ pub fn synthesize_unified(
             // inner Vec<u8> that Payload::Entr wants. Bare e.clone() would
             // return Zeroizing<Vec<u8>> (Zeroizing's own Clone), which is a
             // type mismatch.
-            Some(e) => ms1.push(
-                ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr((**e).clone()))
-                    .map_err(ToolkitError::from)?,
-            ),
+            Some(e) => {
+                let slot_lang = s.language.unwrap_or(run_language);
+                let payload = if slot_lang == bip39::Language::English {
+                    ms_codec::Payload::Entr((**e).clone())
+                } else {
+                    ms_codec::Payload::Mnem {
+                        language: crate::language::bip39_to_wire_code(slot_lang),
+                        entropy: (**e).clone(),
+                    }
+                };
+                ms1.push(
+                    ms_codec::encode(ms_codec::Tag::ENTR, &payload)
+                        .map_err(ToolkitError::from)?,
+                );
+            }
             None => ms1.push(String::new()),
         }
     }
@@ -1557,6 +1600,7 @@ mod tests {
             1,
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 1);
@@ -1574,6 +1618,7 @@ mod tests {
             1,
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 1);
@@ -1594,6 +1639,7 @@ mod tests {
             2,
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1611,6 +1657,7 @@ mod tests {
             2,
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1628,6 +1675,7 @@ mod tests {
             2,
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1646,6 +1694,7 @@ mod tests {
             3, // threshold > N
             CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
         )
         .unwrap_err();
         match err {

@@ -377,6 +377,7 @@ fn run_full<W: Write, E: Write>(
         threshold,
         args.network,
         args.privacy_preserving,
+        args.language.unwrap_or_default().into(),
     )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -466,6 +467,7 @@ fn run_watch_only<W: Write, E: Write>(
         threshold,
         args.network,
         args.privacy_preserving,
+        args.language.unwrap_or_default().into(),
     )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -569,6 +571,7 @@ fn run_multisig<W: Write, E: Write>(
         threshold,
         args.network,
         args.privacy_preserving,
+        args.language.unwrap_or_default().into(),
     )?;
     let _ = n;
 

@@ -398,6 +398,7 @@ fn bundle_run_unified<W: Write, E: Write>(
             threshold,
             args.network,
             args.privacy_preserving,
+            args.language.unwrap_or_default().into(),
         )?,
     };
 
@@ -736,14 +737,30 @@ fn emit_unified<W: Write, E: Write>(
     for (_idx, variant) in slip0132_signals.iter() {
         let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
     }
-    // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
-    // a secret-bearing ms1 carries only the entropy, NOT the wordlist language.
+    // ms mnem Phase 3 Step 6: re-keyed advisory — suppress iff EVERY secret-bearing
+    // slot emits a self-describing `mnem` card (i.e. its effective language is
+    // non-English and the card is therefore self-describing). Fire only when at
+    // least one secret-bearing slot's effective language is English AND the run
+    // context is non-English (that slot emits `entr`, which is language-losing
+    // in a non-English run context).
+    // Effective language per slot: slot.language.unwrap_or(run_language).
+    // A slot emits entr iff effective_lang == English.
+    // Advisory fires iff: run_language is non-English AND some secret slot's
+    //   effective_lang == English (→ that slot emits entr, losing the run language).
     if bundle.any_secret_bearing() {
-        if let Some(msg) = crate::language::non_english_seed_advisory(
-            args.language.unwrap_or_default(),
-            "an ms1 card",
-        ) {
-            let _ = writeln!(stderr, "{msg}");
+        let run_lang: bip39::Language = args.language.unwrap_or_default().into();
+        let any_slot_emits_entr_non_english_run = run_lang != bip39::Language::English
+            && resolved.iter().any(|s| {
+                s.entropy.is_some()
+                    && s.language.unwrap_or(run_lang) == bip39::Language::English
+            });
+        if any_slot_emits_entr_non_english_run {
+            if let Some(msg) = crate::language::non_english_seed_advisory(
+                args.language.unwrap_or_default(),
+                "an ms1 card",
+            ) {
+                let _ = writeln!(stderr, "{msg}");
+            }
         }
     }
     let n = resolved.len();
