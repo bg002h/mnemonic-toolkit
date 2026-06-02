@@ -3424,4 +3424,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Severity:** Medium — a stale prose pin silently ships a wrong-version install instruction to end users; undetected across 2 cycles.
 - **Status:** open
 - **Tier:** `ci-hardening`
+
+### `toolkit-mnem-ms1-wire-shape-downstream-consumers` — `mnem` ms1 is a new on-wire string shape; downstream consumers need ms-codec ≥0.3.0
+
+- **Surfaced:** 2026-06-02, ms `mnem` cycle Phase 3 Step 7 (R0-M3).
+- **Where:** Any consumer that receives a toolkit-emitted `bundle --json` or `export-wallet` envelope and re-decodes the `ms1[]` strings: notably `mnemonic-gui`'s bundle re-decode path. Prior consumers expected only `entr`-kind ms1 strings (lengths 48/55/61/68/75 for 16/20/24/28/32 B entropy, corresponding to ms1 codex32 lengths).
+- **What:** A toolkit-emitted `mnem` ms1 card (produced for non-English-phrase bundle slots, ms-codec 0.3.0+) carries a one-byte language prefix in the payload, yielding different wire lengths: 51/58/64/70/77 instead of 48/55/61/68/75. ms-codec < 0.3.0 (or any consumer that range-checks the string length against the `entr` table) will reject the string as `UnexpectedStringLength`. Wire-shape is **NOT** `schema_mirror`-gated (the flag-name set is unchanged; this is a runtime payload shape change). Consumers of the `--json` wire shape must self-update to ms-codec ≥0.3.0 when they encounter `mnem` ms1 strings, coordinated via the paired-PR rule.
+- **Why deferred:** Affects `mnemonic-gui` (and any third-party toolkit consumer) independently of the toolkit's implementation cycle. The fix is a ms-codec pin bump on the consumer side; the toolkit cannot gate it. Filed here to ensure the gap is tracked and the paired-PR discipline is applied when ms-codec 0.3.0 publishes to crates.io.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Companion:** `mnemonic-gui` — the primary known downstream consumer. A companion entry should be filed in `mnemonic-gui`'s FOLLOWUPS tracker (or equivalent) once ms-codec 0.3.0 is published to crates.io and the GUI pin-bump cycle begins.
 - **Companion:** none (toolkit-only; the manual lives here).
