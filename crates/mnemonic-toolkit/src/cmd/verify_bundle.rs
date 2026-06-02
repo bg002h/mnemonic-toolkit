@@ -914,7 +914,13 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     use crate::synthesize::synthesize_descriptor;
-    let expected = synthesize_descriptor(&descriptor, cosigners, args.privacy_preserving)?;
+    // run_language for verify-bundle: use --language (defaulting to English).
+    // cosigners[i].language is None in verify-bundle paths (slots come from
+    // mk1 decode + phrase input, not from an ms1 mnem payload). The unwrap_or
+    // in synthesize_descriptor correctly falls back to run_language for those
+    // slots, matching the emit semantics of the original bundle --descriptor call.
+    let run_language: bip39::Language = args.language.unwrap_or_default().into();
+    let expected = synthesize_descriptor(&descriptor, cosigners, args.privacy_preserving, run_language)?;
 
     // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
     // is_multisig := descriptor.n > 1.

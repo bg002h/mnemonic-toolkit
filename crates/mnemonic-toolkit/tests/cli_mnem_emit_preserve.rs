@@ -432,3 +432,158 @@ fn inspect_english_entr_ms1_no_language_field() {
         "English entr inspect JSON must have null/absent language\nGot: {v}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test (vi): C1 regression — descriptor-@N path must emit mnem for non-English
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Regression guard for the "third emit path" bug found at end-of-cycle review:
+// `bundle --descriptor "wpkh(@0)" --slot "@0.phrase=<ja>" --language japanese`
+// was emitting a 50-char `entr` card (language-stripped) instead of a 51-char
+// `mnem` card, because synthesize_descriptor had no run_language fallback.
+// The fix adds `run_language: bip39::Language` to synthesize_descriptor and
+// uses `c.language.unwrap_or(run_language)` — symmetric with synthesize_unified.
+
+/// C1 regression: `--descriptor "wpkh(@0)"` + `--slot @0.phrase=<ja>` + `--language japanese`
+/// MUST emit a 51-char mnem card, not a 50-char entr card.
+///
+/// The `--descriptor "wpkh(@0)"` form routes through `bundle_run_unified_descriptor`
+/// (the @N placeholder path). Pre-fix this path had `language: None` on the cosigner
+/// and `synthesize_descriptor` had no `run_language` fallback, so non-English slots
+/// silently fell through to `Payload::Entr` (language-stripped). Post-fix it falls
+/// back to `run_language` = Japanese → emits `Payload::Mnem`.
+#[test]
+fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
+    let ja_phrase = japanese_12_phrase();
+
+    // Use the bare @0 placeholder descriptor (non-canonical, no embedded xpub).
+    // bundle_run_unified_descriptor handles this path: it derives the xpub from
+    // the phrase, so the phrase is the only required slot input.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor", "wpkh(@0)",
+            "--slot", &format!("@0.phrase={ja_phrase}"),
+            "--language", "japanese",
+            "--network", "mainnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    let ms1_arr = v["ms1"].as_array().expect("ms1 array");
+    let ms1_val = ms1_arr[0].as_str().unwrap_or("");
+
+    // CRITICAL: must be mnem length (51 for 12-word / 16-byte entropy).
+    // Pre-fix this was 50 (entr). Post-fix it must be 51 (mnem).
+    assert_eq!(
+        ms1_val.len(), 51,
+        "descriptor-@N + ja phrase MUST emit mnem (51 chars), not entr (50);\n\
+         got len={} val={ms1_val:?}",
+        ms1_val.len()
+    );
+    assert!(
+        VALID_MNEM_STR_LENGTHS.contains(&ms1_val.len()),
+        "ms1 length {} is not a valid mnem length",
+        ms1_val.len()
+    );
+
+    // Decode and assert Mnem payload with wire language = japanese (1).
+    let (_tag, payload) = ms_codec::decode(ms1_val).expect("ms1 must decode");
+    match payload {
+        ms_codec::Payload::Mnem { language, .. } => {
+            assert_eq!(language, WIRE_JAPANESE, "wire language must be japanese (1)");
+        }
+        other => panic!(
+            "descriptor-@N + ja phrase: expected Mnem payload, got {other:?}\n\
+             ms1 = {ms1_val:?}"
+        ),
+    }
+}
+
+/// C1 regression round-trip: the mnem card emitted from `--descriptor "wpkh(@0)"` +
+/// `--slot @0.phrase=<ja>` + `--language japanese` round-trips back to the original
+/// Japanese phrase.
+#[test]
+fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
+    let ja_phrase = japanese_12_phrase();
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor", "wpkh(@0)",
+            "--slot", &format!("@0.phrase={ja_phrase}"),
+            "--language", "japanese",
+            "--network", "mainnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    let ms1_val = v["ms1"].as_array().unwrap()[0].as_str().unwrap();
+
+    // Convert back to phrase → must recover the original ja phrase.
+    let out2 = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["convert", "--from", &format!("ms1={ms1_val}"), "--to", "phrase"])
+        .assert()
+        .success();
+
+    let stdout2 = String::from_utf8(out2.get_output().stdout.clone()).unwrap();
+    let recovered = stdout2
+        .lines()
+        .find(|l| l.starts_with("phrase:"))
+        .and_then(|l| l.split_once(':').map(|x| x.1))
+        .map(|s| s.trim())
+        .unwrap_or(stdout2.trim());
+    assert_eq!(
+        recovered, ja_phrase,
+        "descriptor-@N mnem ms1 must round-trip back to the original Japanese phrase"
+    );
+}
+
+/// C1 regression advisory: for a non-English `--descriptor "wpkh(@0)"` bundle
+/// (which now correctly emits mnem), the §6.3 language-loss advisory MUST be
+/// suppressed (the card is self-describing — no language loss).
+#[test]
+fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
+    let ja_phrase = japanese_12_phrase();
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor", "wpkh(@0)",
+            "--slot", &format!("@0.phrase={ja_phrase}"),
+            "--language", "japanese",
+            "--network", "mainnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+
+    // The §6.3 advisory fires when a slot emits entr in a non-English run context.
+    // Post-fix: the slot emits mnem (self-describing) → advisory must be suppressed.
+    // The advisory text contains "Advisory" or "non-English" per non_english_seed_advisory().
+    assert!(
+        !stderr.contains("Advisory"),
+        "descriptor-@N ja mnem: §6.3 advisory must be suppressed (card is self-describing)\n\
+         got stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("non-English"),
+        "descriptor-@N ja mnem: no non-English advisory expected in stderr\n\
+         got stderr: {stderr:?}"
+    );
+}

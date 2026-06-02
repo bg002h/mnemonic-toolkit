@@ -1461,7 +1461,8 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         descriptor.path_decl.paths = resolved_placeholders.path_decl.paths.clone();
     }
 
-    let bundle = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving)?;
+    let run_language: bip39::Language = args.language.unwrap_or_default().into();
+    let bundle = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving, run_language)?;
 
     // Reuse emit_unified renderer (resolved must be reconstructed as
     // ResolvedSlot vec for engraving card; entropy field tracks per-slot).
@@ -1469,17 +1470,29 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // engraving-card cosigner-summary block reflects ms1 emission for every
     // phrase-bearing slot (not just @0). master_xpub: None preserves the
     // descriptor-mode invariant established above at the cosigner push.
+    // ms mnem Phase 3 C1 fix: populate language on each resolved slot so that
+    // emit_unified's advisory model (slot.language.unwrap_or(run_lang)) agrees
+    // with the actual emitted card kind — non-English descriptor-@N slots now
+    // emit mnem, so the advisory is correctly suppressed for them.
     let resolved_slots: Vec<ResolvedSlot> = cosigners
         .iter()
         .map(|c| {
             let entropy_pin = c.entropy.as_ref().map(|e| Rc::new(pin_pages_for(&e[..])));
+            // Slot language: None slots inherit run_language (same unwrap_or as
+            // synthesize_descriptor). This makes the advisory model in emit_unified
+            // agree with the actual emitted card kind.
+            let slot_language = if c.entropy.is_some() {
+                Some(c.language.unwrap_or(run_language))
+            } else {
+                None // watch-only slots have no entropy → advisory model skips them
+            };
             ResolvedSlot {
                 xpub: c.xpub,
                 fingerprint: c.fingerprint,
                 path: c.path.clone(),
                 entropy: c.entropy.clone(),
                 master_xpub: None,
-                language: None,
+                language: slot_language,
                 _entropy_pin: entropy_pin,
             }
         })
@@ -1525,7 +1538,9 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     // the mk1-sourced path in bundle_run_from_import_json.
     check_resolved_slots_distinctness(&resolved_slots)?;
 
-    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving)?;
+    // Concrete-descriptor mode is always watch-only (no phrase/entropy input);
+    // run_language is irrelevant but must be supplied — English is the safe default.
+    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving, bip39::Language::English)?;
     let n = resolved_slots.len();
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some()); // always false here
     let any_watch = resolved_slots.iter().any(|s| s.entropy.is_none());
@@ -1749,8 +1764,11 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         ))
     })?;
 
-    // Synthesize.
-    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving)?;
+    // Synthesize. run_language defaults to English; import-json slots that
+    // carry Some(wire_lang) override via unwrap_or in synthesize_descriptor,
+    // so import-json behavior is unchanged by this parameter.
+    let run_language_import: bip39::Language = args.language.unwrap_or_default().into();
+    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving, run_language_import)?;
 
     // Determine BundleMode from resolved_slots state.
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());

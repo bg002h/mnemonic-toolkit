@@ -230,6 +230,7 @@ pub fn synthesize_descriptor(
     descriptor: &Descriptor,
     cosigners: &[CosignerKeyInfo],
     privacy_preserving: bool,
+    run_language: bip39::Language,
 ) -> Result<Bundle, ToolkitError> {
     let n = descriptor.n as usize;
     if cosigners.len() != n {
@@ -287,19 +288,21 @@ pub fn synthesize_descriptor(
     // cosigners[i].entropy. Watch-only slots → "" sentinel. Mirrors
     // synthesize_unified:710-723 — same rule across all bundle modes.
     // ms mnem Phase 3 Step 5: emit mnem for non-English slot sources.
-    // slot.language: Some(lang) = import-json mnem source; None = entr.
+    // slot.language: Some(lang) = import-json mnem source (wins via unwrap_or);
+    //                None = descriptor-@N phrase/entropy → fall back to run_language.
+    // This is symmetric with synthesize_unified's `s.language.unwrap_or(run_language)`.
     let mut ms1: MsField = Vec::with_capacity(n);
     for c in cosigners {
         match &c.entropy {
             Some(e) => {
-                let payload = match c.language {
-                    Some(lang) if lang != bip39::Language::English => {
-                        ms_codec::Payload::Mnem {
-                            language: crate::language::bip39_to_wire_code(lang),
-                            entropy: (**e).clone(),
-                        }
+                let emit_lang = c.language.unwrap_or(run_language);
+                let payload = if emit_lang == bip39::Language::English {
+                    ms_codec::Payload::Entr((**e).clone())
+                } else {
+                    ms_codec::Payload::Mnem {
+                        language: crate::language::bip39_to_wire_code(emit_lang),
+                        entropy: (**e).clone(),
                     }
-                    _ => ms_codec::Payload::Entr((**e).clone()),
                 };
                 ms1.push(
                     ms_codec::encode(ms_codec::Tag::ENTR, &payload)
@@ -1375,7 +1378,7 @@ mod tests {
             1,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
         assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1390,7 +1393,7 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::SingleSig,
             1,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
         assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1404,7 +1407,7 @@ mod tests {
             2,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
         assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
         assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
@@ -1417,7 +1420,7 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
         assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
         assert_eq!(multi.len(), 2);
@@ -1432,7 +1435,7 @@ mod tests {
         );
         // descriptor has n=2 but we only pass 1 cosigner → error
         let one = vec![cosigners[0].clone()];
-        let err = synthesize_descriptor(&descriptor, &one, false).unwrap_err();
+        let err = synthesize_descriptor(&descriptor, &one, false, bip39::Language::English).unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
     }
 
@@ -1490,7 +1493,7 @@ mod tests {
             &fps,
         )
         .unwrap();
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
         assert_eq!(bundle.ms1.len(), 3, "ms1 dense vec len == n");
         assert!(bundle.ms1[0].starts_with("ms1"), "ms1[0] populated; got {:?}", bundle.ms1[0]);
         assert!(bundle.ms1[1].starts_with("ms1"), "ms1[1] populated; got {:?}", bundle.ms1[1]);
@@ -1505,7 +1508,7 @@ mod tests {
         let mut cosigners_hybrid = cosigners.clone();
         cosigners_hybrid[1].entropy = None;
         cosigners_hybrid[2].entropy = None;
-        let bundle_hybrid = synthesize_descriptor(&descriptor, &cosigners_hybrid, false).unwrap();
+        let bundle_hybrid = synthesize_descriptor(&descriptor, &cosigners_hybrid, false, bip39::Language::English).unwrap();
         assert_eq!(bundle_hybrid.ms1.len(), 3);
         assert!(bundle_hybrid.ms1[0].starts_with("ms1"));
         assert_eq!(bundle_hybrid.ms1[1], "");

@@ -1393,7 +1393,9 @@ fn emit_json_envelope<W: Write, E: Write>(
         // wallet-import formats (BSMS Round-2 + Bitcoin Core listdescriptors)
         // carry a literal descriptor, so descriptor-mode synthesis applies
         // uniformly.
-        let bundle = synthesize_descriptor(&p.descriptor, &p.cosigners, false)?;
+        // import-wallet always re-emits English entr cards (no phrase input here);
+        // run_language=English is correct and preserves pre-fix behavior.
+        let bundle = synthesize_descriptor(&p.descriptor, &p.cosigners, false, bip39::Language::English)?;
 
         // Per §3.2.1 row `template`: descriptor-mode → `None`.
         // Per §3.2.1 row `descriptor`: source from `original_descriptor`
