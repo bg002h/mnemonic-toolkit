@@ -127,10 +127,12 @@ pub struct BundleArgs {
     /// fingerprints + paths. Mutually exclusive with `--template`,
     /// `--descriptor`, `--descriptor-file`.
     ///
-    /// Seed overlay (`--ms1` / `--slot @N.phrase=`) continues to apply
-    /// to cosigners where the envelope's `ms1[N] == ""` sentinel (watch-
-    /// only). Supplying `--ms1` for a cosigner with non-empty envelope
-    /// `ms1[N]` is `BadInput` (conflict).
+    /// Seed overlay (`--slot @N.phrase=`) continues to apply to
+    /// cosigners where the envelope's `ms1[N] == ""` sentinel (watch-
+    /// only). (`--ms1` is import-wallet's input surface, not bundle's;
+    /// envelope-derived entropy arrives pre-attached as the envelope's
+    /// `ms1[N] != ""`.) Supplying `--slot @N.phrase=` for a cosigner
+    /// with non-empty envelope `ms1[N]` is `BadInput` (conflict).
     #[arg(
         long = "import-json",
         value_name = "FILE|-",
@@ -216,7 +218,7 @@ pub fn run<W: Write, E: Write>(
     // v0.27.0 — `--import-json` dispatch short-circuits before template /
     // descriptor mode pre-checks. The envelope carries everything needed
     // for a fresh `synthesize_descriptor` pass; the only relevant user
-    // flags downstream are `--ms1` / `--slot @N.phrase=` (seed overlay),
+    // flags downstream are `--slot @N.phrase=` (seed overlay),
     // `--privacy-preserving`, `--json`, `--self-check`, `--no-engraving-card`.
     // Mutex with --template / --descriptor / --descriptor-file is enforced
     // by clap (`conflicts_with_all` on the `--import-json` arg).
@@ -1573,9 +1575,11 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
 ///    into `Vec<ResolvedSlot>` per §3.6.1.
 /// 3. Decode envelope's `bundle.ms1[i] != ""` entries → attach entropy to
 ///    `resolved_slots[i]` (envelope-derived seed-bearing state).
-/// 4. Apply user seed overlay (`--ms1` / `--slot @N.phrase=`) on slots
-///    where envelope `ms1[i] == ""`; conflict-on-non-empty-envelope-ms1
-///    is `BadInput` exit 2 (per plan Q5 / §3.1.3).
+/// 4. Apply user seed overlay (`--slot @N.phrase=`) on slots where
+///    envelope `ms1[i] == ""`; conflict-on-non-empty-envelope-ms1
+///    is `BadInput` exit 1 (per plan Q5 / §3.1.3). (`--ms1` is
+///    import-wallet's input surface, not bundle's — see the asymmetry
+///    note after the overlay loop in `bundle_run_from_import_json`.)
 /// 5. Parse descriptor via `concrete_keys_to_placeholders` →
 ///    `parse_descriptor::parse_descriptor` (same path bundle_run_unified_descriptor
 ///    follows post-substitute).
@@ -1683,9 +1687,10 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         resolved_slots[i].language = Some(slot_lang);
     }
 
-    // §3.6 + Q5 — apply user seed overlay (--ms1 positional + --slot
-    // @N.phrase=). Conflict on non-empty envelope ms1[i] is BadInput.
-    // Build positional ms1 vec (Option<&str>) for indexing.
+    // §3.6 + Q5 — apply user seed overlay (--slot @N.phrase=) on
+    // watch-only cosigners. Conflict on non-empty envelope ms1[i] is
+    // BadInput (exit 1). (--ms1 is import-wallet's input surface, not
+    // bundle's — see the asymmetry note after this loop.)
     for (i, user_ms1) in args.slot.iter().filter_map(|s| {
         if s.subkey == crate::slot_input::SlotSubkey::Phrase {
             Some((s.index as usize, &s.value))
