@@ -357,31 +357,51 @@ fn run_combine<R: Read, W: Write, E: Write>(
         share_strings.push(s);
     }
 
-    // Drop empty entries (e.g. a blank stdin read), then require ≥1.
-    let shares: Vec<String> = share_strings
+    // Drop empty entries (e.g. a blank stdin read), then require ≥1. The trimmed
+    // copies are secret share material — wrap each in `Zeroizing` so the residue
+    // is wiped on drop (M1, P3-R0; the pinned `Zeroizing` originals in
+    // `share_strings` already exist, this removes the trimmed-clone residue).
+    let shares: Vec<zeroize::Zeroizing<String>> = share_strings
         .iter()
         .filter(|s| !s.trim().is_empty())
-        .map(|s| s.trim().to_string())
+        .map(|s| zeroize::Zeroizing::new(s.trim().to_string()))
         .collect();
     if shares.is_empty() {
         return Err(ToolkitError::BadInput(
             "ms-shares combine: at least one --share required".into(),
         ));
     }
+    for s in &shares {
+        let _pin = mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes());
+    }
 
     // Recombine → (Tag, Payload). Surfaces SecretShareSuppliedToCombine /
     // Codex32(ThresholdNotPassed/Mismatched*/RepeatedIndex) via friendly_ms_codec.
-    let (tag, payload) = ms_codec::combine_shares(&shares).map_err(ToolkitError::from)?;
+    // `combine_shares` takes `&[String]`; build a transient `Zeroizing` view (it
+    // clones each share internally regardless — and this view wipes on drop, so
+    // no longer-lived plaintext copy escapes).
+    let shares_view: zeroize::Zeroizing<Vec<String>> =
+        zeroize::Zeroizing::new(shares.iter().map(|s| (**s).clone()).collect());
+    let (tag, payload) = ms_codec::combine_shares(&shares_view).map_err(ToolkitError::from)?;
 
-    // Project the recovered secret per --to.
-    let (entropy, payload_lang): (zeroize::Zeroizing<Vec<u8>>, bip39::Language) = match &payload {
+    // Project the recovered secret per --to. `recovered_lang` is `Some` ONLY for
+    // a `mnem` payload — the wordlist language that rides the secret-at-S wire
+    // bytes. It is the source of truth for the I1 language-loss advisory (NOT
+    // `args.language`, which is ignored on combine of a mnem set, and irrelevant
+    // for an entr set that carries no language).
+    let (entropy, payload_lang, recovered_lang): (
+        zeroize::Zeroizing<Vec<u8>>,
+        bip39::Language,
+        Option<CliLanguage>,
+    ) = match &payload {
         ms_codec::Payload::Entr(bytes) => {
             let l: bip39::Language = args.language.into();
-            (zeroize::Zeroizing::new(bytes.clone()), l)
+            (zeroize::Zeroizing::new(bytes.clone()), l, None)
         }
         ms_codec::Payload::Mnem { entropy, language: wire_lang } => {
             let lang = crate::language::wire_code_to_bip39(*wire_lang)?;
-            (zeroize::Zeroizing::new(entropy.clone()), lang)
+            let cli = crate::language::wire_code_to_cli(*wire_lang);
+            (zeroize::Zeroizing::new(entropy.clone()), lang, cli)
         }
         _ => {
             return Err(ToolkitError::BadInput(
@@ -390,6 +410,22 @@ fn run_combine<R: Read, W: Write, E: Write>(
         }
     };
     let _pin_entropy = mnemonic_toolkit::mlock::pin_pages_for(entropy.as_slice());
+
+    // I1 (P3-R0): `--to entropy` drops the wordlist language carried by a mnem
+    // share-set — raw entropy is bytes only. Mirror `slip39.rs::run_combine`:
+    // emit the non-English seed advisory keyed off the RECOVERED payload's
+    // language. `--to phrase` re-renders in the card language and `--to ms1`
+    // re-encodes the mnem payload (payload_kind Mnem + language preserved), so
+    // neither loses the language — no advisory on those arms.
+    if matches!(args.to, MsSharesToShape::Entropy) {
+        if let Some(cli_lang) = recovered_lang {
+            if let Some(msg) =
+                crate::language::non_english_seed_advisory(cli_lang, "raw entropy")
+            {
+                let _ = writeln!(stderr, "{msg}");
+            }
+        }
+    }
 
     let output: zeroize::Zeroizing<String> = match args.to {
         MsSharesToShape::Phrase => {

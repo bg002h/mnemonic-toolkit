@@ -714,6 +714,7 @@ dependencies = [
  "bitcoin",
  "cbc",
  "clap",
+ "codex32",
  "crypto-bigint",
  "ctr",
  "flate2",

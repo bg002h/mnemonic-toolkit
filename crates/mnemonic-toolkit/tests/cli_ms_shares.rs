@@ -252,6 +252,136 @@ fn ms_shares_split_inline_from_emits_argv_advisory() {
     );
 }
 
+// ── I1: language-loss advisory on `combine --to entropy` (P3-R0) ────────────
+
+/// Helper: split a Japanese all-zero 16-byte seed into 2-of-3 mnem shares.
+fn japanese_2_of_3_shares() -> Vec<String> {
+    let ja = bip39::Mnemonic::from_entropy_in(bip39::Language::Japanese, &[0u8; 16])
+        .unwrap()
+        .to_string();
+    let from_arg = format!("phrase={ja}");
+    let (stdout, _stderr, exit) = split(&[
+        "--from", &from_arg, "--language", "japanese", "--threshold", "2", "--shares", "3",
+    ]);
+    assert_eq!(exit, 0, "split; stdout={stdout:?}");
+    parse_shares(&stdout)
+}
+
+#[test]
+fn ms_shares_combine_to_entropy_japanese_emits_language_advisory() {
+    // `--to entropy` drops the wordlist language carried by the mnem shares.
+    // Mirror slip39: emit the non-English seed advisory keyed off the RECOVERED
+    // payload's language (japanese here, NOT the --language flag default).
+    let shares = japanese_2_of_3_shares();
+    let (_recovered, stderr, exit) = combine(&[
+        "--share", &shares[0], "--share", &shares[2], "--to", "entropy",
+    ]);
+    assert_eq!(exit, 0, "combine; stderr={stderr:?}");
+    // The advisory names the language + warns about a DIFFERENT wallet.
+    assert!(
+        stderr.contains("japanese") && stderr.contains("DIFFERENT"),
+        "combine --to entropy of a JA set must emit the non-English seed advisory; \
+         got stderr={stderr:?}"
+    );
+}
+
+#[test]
+fn ms_shares_combine_to_phrase_japanese_no_language_advisory() {
+    // `--to phrase` re-renders the card language → no language is lost → no advisory.
+    let shares = japanese_2_of_3_shares();
+    let (_recovered, stderr, exit) = combine(&[
+        "--share", &shares[0], "--share", &shares[2], "--to", "phrase",
+    ]);
+    assert_eq!(exit, 0, "combine; stderr={stderr:?}");
+    assert!(
+        !stderr.contains("DIFFERENT seed"),
+        "combine --to phrase preserves the language → NO language advisory; \
+         got stderr={stderr:?}"
+    );
+}
+
+#[test]
+fn ms_shares_combine_to_ms1_japanese_no_language_advisory() {
+    // `--to ms1` re-encodes the mnem card (payload_kind Mnem + language) → the
+    // wire bytes keep the language → no advisory.
+    let shares = japanese_2_of_3_shares();
+    let (_recovered, stderr, exit) = combine(&[
+        "--share", &shares[0], "--share", &shares[2], "--to", "ms1",
+    ]);
+    assert_eq!(exit, 0, "combine; stderr={stderr:?}");
+    assert!(
+        !stderr.contains("DIFFERENT seed"),
+        "combine --to ms1 preserves the language → NO language advisory; \
+         got stderr={stderr:?}"
+    );
+}
+
+#[test]
+fn ms_shares_combine_to_entropy_english_no_language_advisory() {
+    // An English / entr share-set has no wordlist language to lose → no advisory.
+    let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
+    let (stdout, _, exit) =
+        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    assert_eq!(exit, 0);
+    let shares = parse_shares(&stdout);
+    let (_recovered, stderr, exit2) = combine(&[
+        "--share", &shares[0], "--share", &shares[1], "--to", "entropy",
+    ]);
+    assert_eq!(exit2, 0);
+    assert!(
+        !stderr.contains("DIFFERENT seed"),
+        "English/entr combine --to entropy must NOT emit a language advisory; \
+         got stderr={stderr:?}"
+    );
+}
+
+// ── I2: friendly prose for codex32 share errors (P3-R0) ─────────────────────
+
+#[test]
+fn ms_shares_combine_too_few_shares_renders_prose_not_debug() {
+    // 1 share of a 2-of-3 set → codex32 ThresholdNotPassed. Must render prose
+    // ("not enough shares: have 1, need 2"), NOT the Debug dump
+    // `ThresholdNotPassed { threshold: 2, n_shares: 1 }`.
+    let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
+    let (stdout, _, exit) =
+        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    assert_eq!(exit, 0);
+    let shares = parse_shares(&stdout);
+    let (_recovered, stderr, exit2) = combine(&["--share", &shares[0], "--to", "entropy"]);
+    assert_ne!(exit2, 0, "too-few shares must be an error; stderr={stderr:?}");
+    assert!(
+        stderr.contains("not enough shares"),
+        "too-few shares must render prose; got stderr={stderr:?}"
+    );
+    assert!(
+        !stderr.contains("ThresholdNotPassed") && !stderr.contains('{'),
+        "must NOT Debug-dump the variant; got stderr={stderr:?}"
+    );
+}
+
+#[test]
+fn ms_shares_combine_duplicate_share_renders_prose_not_debug() {
+    // The same share twice → codex32 RepeatedIndex(Fe(..)). Must render prose
+    // ("repeated"), NOT `RepeatedIndex(Fe(0))`.
+    let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
+    let (stdout, _, exit) =
+        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    assert_eq!(exit, 0);
+    let shares = parse_shares(&stdout);
+    let (_recovered, stderr, exit2) = combine(&[
+        "--share", &shares[0], "--share", &shares[0], "--to", "entropy",
+    ]);
+    assert_ne!(exit2, 0, "duplicate share must be an error; stderr={stderr:?}");
+    assert!(
+        stderr.contains("repeated"),
+        "duplicate share must render 'repeated'-class prose; got stderr={stderr:?}"
+    );
+    assert!(
+        !stderr.contains("RepeatedIndex") && !stderr.contains("Fe("),
+        "must NOT Debug-dump RepeatedIndex(Fe(..)); got stderr={stderr:?}"
+    );
+}
+
 #[test]
 fn ms_shares_split_rejects_bad_threshold() {
     // --threshold 1 is outside 2..=9 → InvalidThreshold → BadInput exit 1.

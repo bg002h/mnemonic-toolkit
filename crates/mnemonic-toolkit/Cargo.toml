@@ -18,6 +18,11 @@ path = "src/main.rs"
 
 [dependencies]
 ms-codec = "0.4.0"
+# Direct dep so `friendly_ms_codec` can render prose for the codex32 share
+# errors wrapped by `ms_codec::Error::Codex32(_)` (ThresholdNotPassed /
+# RepeatedIndex / Mismatched*). Exact-pinned to match ms-codec's transitive
+# pin (already resolved at =0.1.0 in Cargo.lock); mirrors ms-cli.
+codex32 = "=0.1.0"
 mk-codec = "0.4.0"
 md-codec = "0.35"
 aes = "0.8"

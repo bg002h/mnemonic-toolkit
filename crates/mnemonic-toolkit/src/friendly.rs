@@ -46,6 +46,33 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
     // errors during decode of toolkit-emitted strings — the encode path is
     // unreachable for variant errors since toolkit always supplies valid input).
     match e {
+        // The bread-and-butter `combine` share errors (I2, P3-R0): a too-small
+        // share set, a duplicate share index, or a heterogeneous share set.
+        // Render prose mirroring ms-cli's `codex32_friendly.rs`, NOT the Debug
+        // dump (`ThresholdNotPassed { .. }`, `RepeatedIndex(Fe(0))`). The
+        // generic `Codex32(_)` arm below stays as the fallback for the
+        // non-share codex32 errors (parse/checksum/length/case/etc).
+        ms_codec::Error::Codex32(codex32::Error::ThresholdNotPassed {
+            threshold,
+            n_shares,
+        }) => format!("ms1 not enough shares: have {}, need {}", n_shares, threshold),
+        ms_codec::Error::Codex32(codex32::Error::RepeatedIndex(fe)) => format!(
+            "ms1 share index '{}' repeated (each share in a set must have a distinct index)",
+            fe.to_char(),
+        ),
+        ms_codec::Error::Codex32(codex32::Error::MismatchedLength(a, b)) => format!(
+            "ms1 share length mismatch: {} vs {} (all shares of one secret must share length)",
+            a, b,
+        ),
+        ms_codec::Error::Codex32(codex32::Error::MismatchedHrp(a, b)) => {
+            format!("ms1 HRP mismatch among shares: {:?} vs {:?}", a, b)
+        }
+        ms_codec::Error::Codex32(codex32::Error::MismatchedThreshold(a, b)) => {
+            format!("ms1 threshold mismatch among shares: {} vs {}", a, b)
+        }
+        ms_codec::Error::Codex32(codex32::Error::MismatchedId(a, b)) => {
+            format!("ms1 id mismatch among shares: {:?} vs {:?}", a, b)
+        }
         ms_codec::Error::Codex32(c) => format!("ms1 codex32: {:?}", c),
         ms_codec::Error::WrongHrp { got } => {
             format!("ms1 wrong HRP: got {:?}, expected \"ms\"", got)
@@ -363,6 +390,71 @@ mod tests {
         let m = friendly_ms_codec(&ms_codec::Error::InvalidShareCount { k: 3, n: 2 });
         assert!(m.contains("N <= 31") || m.contains("K <= N"), "got: {m}");
         assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    // ── I2 (P3-R0): codex32 SHARE errors render prose, not a Debug dump ──────
+
+    #[test]
+    fn ms_codec_threshold_not_passed_renders_prose() {
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
+            codex32::Error::ThresholdNotPassed {
+                threshold: 2,
+                n_shares: 1,
+            },
+        ));
+        assert!(m.contains("not enough shares"), "got: {m}");
+        assert!(m.contains("have 1") && m.contains("need 2"), "got: {m}");
+        // No Debug dump: no struct braces, no variant name.
+        assert!(!m.contains('{'), "Debug-dumped braces leaked: {m}");
+        assert!(!m.contains("ThresholdNotPassed"), "variant name leaked: {m}");
+    }
+
+    #[test]
+    fn ms_codec_repeated_index_renders_prose() {
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::RepeatedIndex(
+            codex32::Fe::Q,
+        )));
+        assert!(m.contains("repeated"), "got: {m}");
+        // No `RepeatedIndex(Fe(0))` opaque dump.
+        assert!(!m.contains("Fe("), "Fe(..) leaked: {m}");
+        assert!(!m.contains("RepeatedIndex"), "variant name leaked: {m}");
+    }
+
+    #[test]
+    fn ms_codec_mismatched_set_errors_render_prose() {
+        for (e, needle) in [
+            (
+                ms_codec::Error::Codex32(codex32::Error::MismatchedLength(50, 56)),
+                "length mismatch",
+            ),
+            (
+                ms_codec::Error::Codex32(codex32::Error::MismatchedThreshold(2, 3)),
+                "threshold mismatch",
+            ),
+            (
+                ms_codec::Error::Codex32(codex32::Error::MismatchedId(
+                    "abcd".into(),
+                    "efgh".into(),
+                )),
+                "id mismatch",
+            ),
+            (
+                ms_codec::Error::Codex32(codex32::Error::MismatchedHrp("ms".into(), "mk".into())),
+                "HRP mismatch",
+            ),
+        ] {
+            let m = friendly_ms_codec(&e);
+            assert!(m.contains(needle), "expected {needle:?} in: {m}");
+            assert!(!m.contains("Mismatched"), "variant name leaked: {m}");
+        }
+    }
+
+    #[test]
+    fn ms_codec_non_share_codex32_falls_through_to_generic() {
+        // A non-share codex32 error (e.g. a bad char) still hits the generic
+        // fallback arm — the new share arms must not swallow it.
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::InvalidChar('!')));
+        assert!(m.starts_with("ms1 codex32:"), "got: {m}");
     }
 
     #[test]
