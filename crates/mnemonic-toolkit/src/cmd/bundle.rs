@@ -100,6 +100,8 @@ pub struct BundleArgs {
     ///   seedqr       48 or 96 ASCII digits encoding a BIP-39 phrase
     ///                (secret; decoded inline via seedqr::decode)
     ///   entropy      raw entropy hex (secret)
+    ///   ms1          BIP-93 codex32 secret (entropy or mnemonic;
+    ///                language-preserving) (secret)
     ///   xpub         BIP-32 extended public key
     ///   master_xpub  depth-0 master xpub (Coldcard singlesig only;
     ///                see SPEC_export_wallet §5.1)

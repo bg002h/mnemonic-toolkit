@@ -282,7 +282,7 @@ pub enum ToolkitError {
     /// Exit 2. Wired into `bundle_run` in Phase C.
     #[allow(dead_code)]
     SlotInputViolation {
-        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey".
+        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey" | "language-conflict".
         kind: &'static str,
         message: String,
     },
