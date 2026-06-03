@@ -25,6 +25,7 @@ mod silent_payment;
 mod secret_advisory;
 mod slip0132;
 mod slot_input;
+mod slot_ms1;
 mod synthesize;
 mod template;
 mod verify_message;
