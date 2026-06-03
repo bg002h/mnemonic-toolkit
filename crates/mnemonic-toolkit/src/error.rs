@@ -359,7 +359,15 @@ fn ms_codec_exit_code(e: &ms_codec::Error) -> u8 {
         | ms_codec::Error::ShareIndexNotSecret { .. }
         | ms_codec::Error::TagInvalidAlphabet { .. }
         | ms_codec::Error::UnknownTag { .. }
-        | ms_codec::Error::ReservedPrefixViolation { .. } => 2,
+        | ms_codec::Error::ReservedPrefixViolation { .. }
+        // v0.2 K-of-N (SPEC_ms_v0_2_kofn §4 R0-m3): a consume path handed a
+        // share, or the secret-at-S handed to combine, is a FORMAT VIOLATION
+        // (the string is well-formed codex32 but the wrong shape/kind for the
+        // op) → exit 2, mirroring ms-cli's `FormatViolation`. The split-side
+        // `InvalidThreshold`/`InvalidShareCount` are user-input (BadInput,
+        // exit 1) and fall through to the wildcard below — matching ms-cli.
+        | ms_codec::Error::IsShareNotSingleString { .. }
+        | ms_codec::Error::SecretShareSuppliedToCombine => 2,
         // ReservedTagNotEmittedInV01 is intercepted by From → FutureFormat.
         _ => 1,
     }
@@ -923,6 +931,29 @@ mod tests {
                 allowed: &[],
             })
             .exit_code(),
+            1,
+        );
+        // v0.2 K-of-N: a share handed to a single-string consume path, or the
+        // secret-at-S handed to combine, is a format violation (exit 2).
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::IsShareNotSingleString {
+                threshold: '2',
+                index: 'a',
+            })
+            .exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::SecretShareSuppliedToCombine).exit_code(),
+            2,
+        );
+        // Split-side bad-input variants stay exit-1 (BadInput).
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::InvalidThreshold(1)).exit_code(),
+            1,
+        );
+        assert_eq!(
+            ToolkitError::MsCodec(ms_codec::Error::InvalidShareCount { k: 3, n: 2 }).exit_code(),
             1,
         );
     }

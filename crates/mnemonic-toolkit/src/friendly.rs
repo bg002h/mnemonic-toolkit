@@ -76,6 +76,28 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
             std::str::from_utf8(tag).unwrap_or("<non-utf8>"),
             got,
         ),
+        // v0.2 K-of-N share variants (SPEC_ms_v0_2_kofn §4 R0-m3). A consume
+        // path (inspect/convert/decode) handed ONE share of a K-of-N set must
+        // point the user at `mnemonic ms-shares combine`, NOT fall through to
+        // the "unhandled" wildcard.
+        ms_codec::Error::IsShareNotSingleString { threshold, index } => format!(
+            "ms1 this is ONE of a K-of-N share set (threshold '{}', index '{}'); \
+             use `mnemonic ms-shares combine` to recombine {} shares",
+            threshold, index, threshold,
+        ),
+        ms_codec::Error::SecretShareSuppliedToCombine => {
+            "ms1 the secret share (index 's') must not be combined; supply only the \
+             distributed shares (the secret is the recovery target)"
+                .to_string()
+        }
+        ms_codec::Error::InvalidThreshold(k) => format!(
+            "ms-shares split: --threshold {} invalid; K-of-N shares require K in 2..=9",
+            k,
+        ),
+        ms_codec::Error::InvalidShareCount { k, n } => format!(
+            "ms-shares split: --shares {} invalid for --threshold {}; require K <= N <= 31",
+            n, k,
+        ),
         // ReservedTagNotEmittedInV01 routes via From in error.rs to FutureFormat; never reached here.
         _ => format!("unhandled ms_codec::Error variant: {:?}", e),
     }
@@ -310,6 +332,37 @@ mod tests {
         let m = friendly_mk_codec(&mk_codec::Error::PathTooDeep(11));
         assert!(m.contains("11"));
         assert!(m.contains("max 10"));
+    }
+
+    #[test]
+    fn ms_codec_share_points_at_ms_shares_combine() {
+        let m = friendly_ms_codec(&ms_codec::Error::IsShareNotSingleString {
+            threshold: '2',
+            index: 'a',
+        });
+        assert!(m.contains("ms-shares combine"), "got: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    #[test]
+    fn ms_codec_secret_share_to_combine_is_explicit() {
+        let m = friendly_ms_codec(&ms_codec::Error::SecretShareSuppliedToCombine);
+        assert!(m.contains("secret share"), "got: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    #[test]
+    fn ms_codec_invalid_threshold_is_explicit() {
+        let m = friendly_ms_codec(&ms_codec::Error::InvalidThreshold(1));
+        assert!(m.contains("2..=9"), "got: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    #[test]
+    fn ms_codec_invalid_share_count_is_explicit() {
+        let m = friendly_ms_codec(&ms_codec::Error::InvalidShareCount { k: 3, n: 2 });
+        assert!(m.contains("N <= 31") || m.contains("K <= N"), "got: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
     }
 
     #[test]
