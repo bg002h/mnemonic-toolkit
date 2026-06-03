@@ -46,6 +46,16 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `ms-kofn-json-wire-shape-ungated` — `mnemonic ms-shares` (+ sibling `ms split`/`combine`/`inspect`-share) `--json` wire-shapes + the `--to` value-enum are NOT schema_mirror-gated
+
+- **Surfaced:** 2026-06-03, ms K-of-N v0.2 cycle Phase 4 (Task 4.2c) — mnemonic-toolkit v0.40.0 / ms-codec 0.4.0 / ms-cli v0.7.0.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/ms_shares.rs` (`split`/`combine` `--json` emit). Sibling consumers: `mnemonic-secret/crates/ms-cli/src/cmd/{split.rs,combine.rs,inspect.rs}` (`--json` emit). GUI mirror `mnemonic-gui/src/schema/{mnemonic.rs,ms.rs}` (consumes ONLY the flag-name + per-flag `secret` projection).
+- **What:** The K-of-N surface adds `--json` output objects GUI consumers may parse: `mnemonic ms-shares split --json` → `{ "shares": [...] }`; `mnemonic ms-shares combine --json` → the recovered-secret object; and the ms-cli siblings `ms split --json` → `{ shares, k, n, id, kind, language? }`, `ms combine --json`, `ms inspect --json` of a share → `{ kind: "share", threshold, id, index }`. The `schema_mirror` gate enforces ONLY clap **flag-NAME** parity (+ the per-flag `secret` projection); it does NOT gate the runtime `--json` **wire-shape** of any of these, nor the `combine --to` value-enum dropdown contents (`phrase|entropy|ms1`). A wire-shape key change or a new `--to` value trips NO automated gate — it accumulates silently until a GUI consumer mis-parses (the lagging-indicator class documented in `CLAUDE.md`).
+- **Why deferred:** Standing posture for ALL toolkit `--json` wire-shapes (`CLAUDE.md`: "Scope of the gate — clap flag-NAME parity, NOT JSON wire-shape"; the generalization is the `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification` option (b), v0.30+, named in `CLAUDE.md`). Downstream self-updates via the **paired-PR rule**: any `--json` wire-shape / `--to` value-enum change to this K-of-N surface MUST land a same-cycle (or paired sibling) `mnemonic-gui` PR. This entry records the K-of-N un-gated consumers for a future wire-shape editor.
+- **Companion:** `bg002h/mnemonic-secret` `design/FOLLOWUPS.md` entry `ms-kofn-json-wire-shape-ungated`.
+- **Status:** `open` (standing-posture / paired-PR tracking — fires no automated gate by design).
+- **Tier:** `cross-repo`
+
 ### `manual-repair-flag-mutex-inaccuracy` — repair/inspect flag-table says `--ms1/--mk1/--md1` "mutually exclusive" but source allows combining per D35
 
 - **Surfaced:** 2026-05-24, indel-v2 (v0.37.3) end-of-cycle review (M2). PRE-EXISTING inaccuracy, not introduced this cycle. The manual's `mnemonic repair` flag table describes `--ms1`, `--mk1`, `--md1` as "mutually exclusive with" one another, but the actual CLI permits combining them (multi-group repair, one HRP per card): source doc-comments say "May be combined with … per D35" and the test `multi_group_both_emit_exit_5` proves a combined `--ms1 … --mk1 …` invocation emits both repairs at exit 5.
