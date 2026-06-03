@@ -604,3 +604,106 @@ fn verify_bundle_descriptor_mode_ms1_cosigner_verified() {
         .success()
         .stdout(predicate::str::contains("result: ok"));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 2.5 — edge tests: share rejection, mnem-English documented edge,
+// `--self-check` with a mnem ms1 slot (these mostly exercise already-built paths).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// (a) `@N.ms1=<one of a K-of-N share set>` → exit 2 + the friendly
+/// `ms-shares combine` prose (a share decodes to `IsShareNotSingleString`,
+/// mapped through `ToolkitError::from`).
+#[test]
+fn ms1_kofn_share_rejected_with_combine_prose() {
+    let entropy = [0x03u8; 16];
+    let shares = ms_codec::encode_shares(
+        ms_codec::Tag::ENTR,
+        ms_codec::Threshold::new(2).unwrap(),
+        3,
+        &ms_codec::Payload::Entr(entropy.to_vec()),
+    )
+    .expect("encode_shares");
+    let one_share = &shares[0];
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={one_share}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("ms-shares combine"));
+}
+
+/// (b) mnem-English documented edge (SPEC §3/§9): a `Mnem{language:0}` ms1
+/// resolves to `emit_language=Some(English)`, and the synth emit rule
+/// collapses English → `Entr`, so the emitted card is an `entr` card (NOT a
+/// mnem-English card). Asserted as the documented behavior, not a bug.
+#[test]
+fn ms1_mnem_english_emits_entr_card_documented_edge() {
+    let entropy = [0x09u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_ENGLISH); // Mnem{language:0}
+    // Precondition: the INPUT is a mnem-English card, not an entr card.
+    let (_t, in_payload) = ms_codec::decode(&ms1).expect("input decodes");
+    assert!(
+        matches!(in_payload, ms_codec::Payload::Mnem { language: 0, .. }),
+        "precondition: input must be a Mnem{{language:0}} card"
+    );
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
+    let card = v["ms1"][0].as_str().expect("ms1 card present");
+    let (_t, payload) = ms_codec::decode(card).expect("emitted ms1 decodes");
+    assert!(
+        matches!(payload, ms_codec::Payload::Entr(_)),
+        "mnem-English ms1 must collapse to an entr card on emit (documented edge); got {payload:?}"
+    );
+}
+
+/// (c) `--self-check` with a mnem (Japanese) ms1 slot round-trips (exit 0).
+/// `--self-check` re-parses the emitted cards and re-derives, so this exercises
+/// the whole emit + verify spine with a language-preserving mnem card.
+#[test]
+fn ms1_mnem_self_check_round_trips() {
+    let entropy = [0x01u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_JAPANESE);
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--self-check",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+}
