@@ -55,6 +55,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open`
 - **Tier:** `v0.4.4-nice-to-have`
 
+### `gui-ms1-slot-subkey-pending-pin-bump` — mnemonic-gui `Ms1` slot-editor picker + `SECRET_SLOT_SUBKEYS` snapshot are prepared but block on the GUI bumping its toolkit pin to ≥ v0.41.0
+
+- **Surfaced:** 2026-06-03, ms1-slot cycle (toolkit v0.41.0) end-of-cycle R0.
+- **Where:** `mnemonic-gui` branch `bundle-slot-ms1-gui` (local, commit `d04bad9`, NOT pushed/merged): `src/form/slot_editor.rs::SlotSubkey` (add `Ms1` picker variant + `ALL`/`as_str`/`is_secret_bearing`) + `src/secrets.rs` `v0_3_canonical_fallback::SECRET_SLOT_SUBKEYS` snapshot (`["phrase","seedqr","entropy","ms1","xprv","wif"]`).
+- **What:** The toolkit v0.41.0 cycle added the `ms1` `--slot` subkey (secret-bearing). The paired GUI update (slot-editor picker + secret-redaction snapshot) is PREPARED on the branch above but is **intentionally unmergeable in isolation**: `mnemonic-gui/src/secrets.rs` re-exports `SECRET_SLOT_SUBKEYS` as a compile-time `const` from the toolkit crate, PINNED at `mnemonic-toolkit-v0.37.3` (`mnemonic-gui/Cargo.toml:42` — 5 entries, no `ms1`), and a `const _: () = assert!(secret_slice_eq(<re-export>, <snapshot>))` guard fires (E0080) when the 6-entry snapshot diverges from the 5-entry re-export. This guard correctly PREVENTS shipping a non-redacting `Ms1` picker (picking `ms1` in the GUI without the const containing `"ms1"` would leak the secret value past `persistence.rs:91` redaction). So the picker + snapshot MUST land together with a toolkit-pin bump to ≥ v0.41.0.
+- **Why deferred:** The GUI toolkit pin is very stale (v0.37.3 vs current v0.41.0 — ~5 minor versions); bumping it pulls the full intervening surface (mnemonic addresses / silent-payment / nostr / K-of-N ms-shares / ms1-slot) and is its own GUI cycle (also needs the K-of-N `ms-shares` schema-mirror from the v0.40.0 cycle). The `schema_mirror` gate does NOT cover this (ms1 is a free-form `--slot` value, not a clap flag/value-enum), so there is no leading auto-gate — the leading discipline is this paired-PR record. When the GUI next bumps its toolkit pin, land the `bundle-slot-ms1-gui` draft (picker + snapshot) in the same PR.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+
 ### `ms-kofn-json-wire-shape-ungated` — `mnemonic ms-shares` (+ sibling `ms split`/`combine`/`inspect`-share) `--json` wire-shapes + the `--to` value-enum are NOT schema_mirror-gated
 
 - **Surfaced:** 2026-06-03, ms K-of-N v0.2 cycle Phase 4 (Task 4.2c) — mnemonic-toolkit v0.40.0 / ms-codec 0.4.0 / ms-cli v0.7.0.
