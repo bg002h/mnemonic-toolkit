@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.40.0] — 2026-06-03
+
+**SemVer-MINOR — `mnemonic ms-shares split|combine` (BIP-93 codex32 K-of-N ms1 shares). Re-pins ms-codec 0.4.0 / ms-cli v0.7.0.**
+
+- **`mnemonic ms-shares split` / `mnemonic ms-shares combine`.** Split an `ms1` secret (an `entr` or `mnem` BIP-39 entropy payload) into N codex32 K-of-N shares such that any K recombine the original secret, using codex32's native threshold(k)+index Shamir mechanism (BIP-93). `split` takes a phrase / hex / ms1 source plus `-k`/`--threshold` and `-n`/`--shares`; `combine` takes K-or-more shares and emits the recovered secret per `--to` (`phrase` / `entropy` / `ms1`). A `mnem` source preserves its BIP-39 wordlist language across the share set; an English-phrase or raw-entropy source splits as `entr`. The recovered `ms1` composes with the rest of the toolkit (`combine --to ms1` → `bundle --slot @0.ms1=…`).
+- **Share-aware inspect / decode / repair.** `mnemonic inspect` and `mnemonic convert --from ms1=…` now recognize a K-of-N share (threshold 2..9) and emit a friendly "this is a K-of-N share; use `mnemonic ms-shares combine`" message (mapped exit code) instead of an "unhandled ms_codec::Error variant" — the share routes to `IsShareNotSingleString` rather than the v0.1 single-string `ThresholdNotZero` reject.
+- **Output-class.** `ms-shares split` and `combine` are private-key-material producers (the share SET is secret-equivalent) and emit the `warning: stdout carries private key material …` advisory; entropy intermediates are zeroized.
+- **Re-pin ms-codec 0.3.0 → 0.4.0 and ms-cli v0.6.0 → v0.7.0** (the K-of-N codecs). ms-codec 0.4.0 adds `Threshold`, `encode_shares`, `combine_shares`, and threshold-routing in `decode`; ms-cli v0.7.0 adds `ms split` / `ms combine` and share-aware `ms inspect`. (Published-crate adoption + TEMP path-override removal is the ship step of this cycle.)
+- **Manual + GUI lockstep.** Documented `mnemonic ms-shares` (`41-mnemonic.md`) and `ms split` / `ms combine` / share-aware `ms inspect` (`43-ms.md`); added the flag-coverage list entries; mirrored the `ms-shares` subcommand (+ `split`/`combine` modes, flags, and the `combine --to` value-enum) into `mnemonic-gui/src/schema/`. The new `--json` wire-shapes (`ms split`/`combine`/`inspect`-share, `mnemonic ms-shares`) are NOT schema_mirror-gated (flag-name + dropdown parity only) — tracked as FOLLOWUP `ms-kofn-json-wire-shape-ungated`.
+
 ## mnemonic-toolkit [0.39.0] — 2026-06-02
 
 **SemVer-MINOR — `mnem` ms1 consume + emit (per-card wordlist language). Resolves the §6.3 non-English-seed footgun on the toolkit side.**
