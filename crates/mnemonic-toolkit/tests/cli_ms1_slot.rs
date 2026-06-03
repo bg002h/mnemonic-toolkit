@@ -361,3 +361,246 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
         ),
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 2.4 — `verify_bundle` descriptor-loop Ms1 arm + verify-bundle round-trip.
+// The round-trip is the LOAD-BEARING output-symmetry check: verify-bundle
+// compares whole emitted card strings, so feeding a bundle's own ms1 card back
+// on `@N.ms1=` verifies ONLY because the slot arm sets `ResolvedSlot.language`
+// so the re-emitted card byte-matches.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run a single-sig `bundle --template bip84 --json` and return its emitted
+/// (ms1, mk1-chunks-flattened, md1) card lists.
+fn gen_singlesig_bundle(extra_slot_args: &[&str], lang: Option<&str>) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut args: Vec<String> = vec![
+        "bundle".into(),
+        "--template".into(),
+        "bip84".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--json".into(),
+        "--no-engraving-card".into(),
+    ];
+    if let Some(l) = lang {
+        args.push("--language".into());
+        args.push(l.into());
+    }
+    for a in extra_slot_args {
+        args.push((*a).into());
+    }
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
+    extract_cards(&v)
+}
+
+/// Extract (ms1, mk1-flat, md1) from a `bundle --json` envelope. `mk1` may be a
+/// flat array of chunks (single-sig) or a nested per-cosigner array (multisig);
+/// both forms flatten to a single chunk list.
+fn extract_cards(v: &serde_json::Value) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let ms1: Vec<String> = v["ms1"]
+        .as_array()
+        .expect("ms1 array")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    let mut mk1: Vec<String> = Vec::new();
+    for el in v["mk1"].as_array().expect("mk1 array") {
+        match el {
+            serde_json::Value::String(s) => mk1.push(s.clone()),
+            serde_json::Value::Array(inner) => {
+                for chunk in inner {
+                    mk1.push(chunk.as_str().unwrap().to_string());
+                }
+            }
+            other => panic!("unexpected mk1 element shape: {other:?}"),
+        }
+    }
+    let md1: Vec<String> = v["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    (ms1, mk1, md1)
+}
+
+/// (a) verify-bundle round-trip for an ENTR (English) ms1 slot: feed the
+/// bundle's own emitted ms1 card back via `--slot @0.ms1=<card>` → VERIFIED.
+#[test]
+fn verify_bundle_round_trip_entr_ms1() {
+    let entropy = [0x05u8; 32];
+    let ms1_in = entr_ms1(&entropy);
+    let (ms1, mk1, md1) =
+        gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--template".into(),
+        "bip84".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--slot".into(),
+        // Feed the bundle's OWN emitted ms1 card back as the re-derivation slot.
+        format!("@0.ms1={}", ms1[0]),
+    ];
+    for s in &ms1 {
+        args.push("--ms1".into());
+        args.push(s.clone());
+    }
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("result: ok"));
+}
+
+/// (a) verify-bundle round-trip for a MNEM (Japanese) ms1 slot: the emitted
+/// mnem card fed back must VERIFY (output-symmetry preserves the wire language).
+#[test]
+fn verify_bundle_round_trip_mnem_japanese_ms1() {
+    let entropy = [0x01u8; 16];
+    let ms1_in = mnem_ms1(&entropy, WIRE_JAPANESE);
+    let (ms1, mk1, md1) =
+        gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
+
+    // Precondition: the emitted card is a mnem card (else the round-trip would
+    // trivially pass via entr collapse).
+    let (_t, payload) = ms_codec::decode(&ms1[0]).expect("emitted ms1 decodes");
+    assert!(
+        matches!(payload, ms_codec::Payload::Mnem { .. }),
+        "precondition: emitted card must be mnem; got {payload:?}"
+    );
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--template".into(),
+        "bip84".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--slot".into(),
+        format!("@0.ms1={}", ms1[0]),
+    ];
+    for s in &ms1 {
+        args.push("--ms1".into());
+        args.push(s.clone());
+    }
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("result: ok"));
+}
+
+/// (b) mnem ms1 + a conflicting `--language` in verify-bundle → exit 2,
+/// language-conflict (symmetry with bundle).
+#[test]
+fn verify_bundle_mnem_language_conflict_exit2() {
+    let entropy = [0x01u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_JAPANESE);
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--language",
+            "english",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--ms1",
+            "ms1-stub",
+            "--mk1",
+            "mk1-stub",
+            "--md1",
+            "md1-stub",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("language"));
+}
+
+/// (c) descriptor-mode verify-bundle with an `@0.ms1=` cosigner → VERIFIED.
+/// Round-trips through the new `verify_bundle` descriptor-loop Ms1 arm.
+#[test]
+fn verify_bundle_descriptor_mode_ms1_cosigner_verified() {
+    let entropy = [0x07u8; 32];
+    let ms1_in = entr_ms1(&entropy);
+
+    // Build a non-canonical single-`@0` descriptor bundle.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            NONCANONICAL_DESC,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1_in}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
+    let (ms1, mk1, md1) = extract_cards(&v);
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        NONCANONICAL_DESC.into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--slot".into(),
+        format!("@0.ms1={}", ms1[0]),
+    ];
+    for s in &ms1 {
+        args.push("--ms1".into());
+        args.push(s.clone());
+    }
+    for s in &mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in &md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("result: ok"));
+}
