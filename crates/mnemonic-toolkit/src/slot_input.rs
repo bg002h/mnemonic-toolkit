@@ -302,6 +302,8 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
                 | [SlotSubkey::Phrase, SlotSubkey::Fingerprint, SlotSubkey::Path]
                 | [SlotSubkey::Seedqr, SlotSubkey::Path]
                 | [SlotSubkey::Seedqr, SlotSubkey::Fingerprint, SlotSubkey::Path]
+                | [SlotSubkey::Ms1, SlotSubkey::Path]
+                | [SlotSubkey::Ms1, SlotSubkey::Fingerprint, SlotSubkey::Path]
         );
 
         if has_secret && has_watch && !exempted_v0_19_0 {
@@ -344,6 +346,7 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
         [Phrase]
             | [Seedqr]
             | [Entropy]
+            | [Ms1]
             | [Xpub]
             | [Wif]
             | [Xprv]
@@ -358,6 +361,8 @@ fn is_legal_set(set: &[SlotSubkey]) -> bool {
             | [Phrase, Fingerprint, Path]
             | [Seedqr, Path]
             | [Seedqr, Fingerprint, Path]
+            | [Ms1, Fingerprint, Path]
+            | [Ms1, Path]
     )
 }
 
@@ -874,6 +879,42 @@ mod tests {
             ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "conflict"),
             other => panic!("unexpected variant {other:?}"),
         }
+    }
+
+    // ---- v0.41.0: Ms1 legal-sets (full parity with phrase) ----
+
+    #[test]
+    fn validate_single_ms1_passes() {
+        validate_slot_set(&[slot(0, SlotSubkey::Ms1, "x")]).unwrap();
+    }
+    #[test]
+    fn validate_ms1_plus_path_passes() {
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Ms1, "x"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+    #[test]
+    fn validate_ms1_plus_fingerprint_plus_path_passes() {
+        validate_slot_set(&[
+            slot(0, SlotSubkey::Ms1, "x"),
+            slot(0, SlotSubkey::Fingerprint, "deadbeef"),
+            slot(0, SlotSubkey::Path, "48'/0'/0'/2'"),
+        ])
+        .unwrap();
+    }
+    #[test]
+    fn validate_ms1_plus_xpub_conflict() {
+        let e = validate_slot_set(&[
+            slot(0, SlotSubkey::Ms1, "x"),
+            slot(0, SlotSubkey::Xpub, "y"),
+        ])
+        .unwrap_err();
+        assert!(
+            matches!(e, ToolkitError::SlotInputViolation { kind, .. } if kind == "conflict"),
+            "expected SlotInputViolation conflict; got {e:?}"
+        );
     }
 
     #[test]
