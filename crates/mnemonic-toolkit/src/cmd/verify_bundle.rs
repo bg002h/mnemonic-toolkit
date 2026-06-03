@@ -715,9 +715,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         for (idx, slot_path) in &by_index_path {
             let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
             // v0.31.3: Seedqr materializes to a phrase at slot-emit time;
-            // route the path override through the same branch.
+            // v0.41.0: Ms1 materializes to entropy at slot-emit time. Route the
+            // path override through the same branch.
             if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
                 && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+                && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
             {
                 continue;
             }

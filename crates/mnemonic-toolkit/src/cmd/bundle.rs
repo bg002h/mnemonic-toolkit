@@ -1149,8 +1149,10 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let subkeys: std::collections::BTreeSet<crate::slot_input::SlotSubkey> =
                 slot_inputs.iter().map(|s| s.subkey).collect();
             let has_phrase = subkeys.contains(&crate::slot_input::SlotSubkey::Phrase);
+            let has_seedqr = subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr);
+            let has_ms1 = subkeys.contains(&crate::slot_input::SlotSubkey::Ms1);
             let has_path = subkeys.contains(&crate::slot_input::SlotSubkey::Path);
-            if has_phrase && has_path {
+            if (has_phrase || has_seedqr || has_ms1) && has_path {
                 return Err(ToolkitError::SlotInputViolation {
                     kind: "conflict",
                     message: format!(
@@ -1222,11 +1224,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         for (idx, slot_path) in &by_index_path {
             let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
             // Only phrase-bearing slots route through this override path
-            // (incl. v0.31.3 Seedqr materialization which decodes to phrase).
-            // Xpub-bearing slots are handled by the per-slot binding loop's
-            // existing override logic at bundle.rs:1018-1029.
+            // (incl. v0.31.3 Seedqr materialization which decodes to phrase,
+            // and v0.41.0 Ms1 which decodes to entropy). Xpub-bearing slots are
+            // handled by the per-slot binding loop's existing override logic at
+            // bundle.rs:1018-1029.
             if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
                 && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+                && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
             {
                 continue;
             }
