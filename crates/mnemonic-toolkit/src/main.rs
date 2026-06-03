@@ -117,6 +117,8 @@ enum Command {
     SilentPayment(cmd::silent_payment::SilentPaymentArgs),
     /// split a master secret into SLIP-39 K-of-N shares OR combine shares back (Trezor-compatible)
     Slip39(cmd::slip39::Slip39Args),
+    /// split a secret into BIP-93 codex32 K-of-N (ms1) shares OR combine shares back
+    MsShares(cmd::ms_shares::MsSharesArgs),
     /// emit SPEC §7 GUI-overlay flag-surface schema JSON (companion to `mnemonic-gui` v0.2)
     GuiSchema(cmd::gui_schema::GuiSchemaArgs),
     /// BCH error-correct a corrupted m-format card (ms1 / mk1 / md1)
@@ -171,6 +173,7 @@ fn main() -> ExitCode {
         Command::Nostr(args) => cmd::nostr::run(args, stdin, stdout, stderr),
         Command::SilentPayment(args) => cmd::silent_payment::run(args, stdin, stdout, stderr),
         Command::Slip39(args) => cmd::slip39::run(args, stdin, stdout, stderr),
+        Command::MsShares(args) => cmd::ms_shares::run(args, stdin, stdout, stderr),
         Command::GuiSchema(args) => {
             // Re-derive the clap `Command` tree via CommandFactory so the
             // schema reflects the canonical clap-derive surface (single

@@ -95,6 +95,8 @@ const FLAG_ROUTES: &[Route] = &[
     Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--passphrase", source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
     // -- v0.38.0 (1): mnemonic addresses --
     Route { subcommand: "addresses", flag: "--passphrase", source_file: "src/cmd/addresses.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
+    // -- ms K-of-N v0.2 (1): mnemonic ms-shares combine --share --
+    Route { subcommand: "ms-shares-combine", flag: "--share", source_file: "src/cmd/ms_shares.rs", evidence: &["--share -", "secret_in_argv_warning"] },
 ];
 
 // ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
@@ -105,6 +107,8 @@ const FROM_ROUTES: &[Route] = &[
     Route { subcommand: "final-word", flag: "--from", source_file: "src/cmd/final_word.rs", evidence: &["=-", "value == \"-\""] },
     Route { subcommand: "seed-xor-split", flag: "--from", source_file: "src/cmd/seed_xor.rs", evidence: &["=-", "value == \"-\""] },
     Route { subcommand: "slip39-split", flag: "--from", source_file: "src/cmd/slip39.rs", evidence: &["=-", "value == \"-\""] },
+    // ms K-of-N v0.2: ms-shares split --from phrase=/entropy= (=- stdin route).
+    Route { subcommand: "ms-shares-split", flag: "--from", source_file: "src/cmd/ms_shares.rs", evidence: &["=-", "value == \"-\""] },
     // seedqr-decode/-encode are flattened → src/cmd/seedqr.rs (no seedqr-decode.rs) — R2 M-1.
     Route { subcommand: "seedqr-decode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },
     Route { subcommand: "seedqr-encode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },

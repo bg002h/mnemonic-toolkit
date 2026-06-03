@@ -12,6 +12,7 @@ pub mod final_word;
 pub mod gui_schema;
 pub mod import_wallet;
 pub mod inspect;
+pub mod ms_shares;
 pub mod nostr;
 pub mod repair;
 pub mod silent_payment;
