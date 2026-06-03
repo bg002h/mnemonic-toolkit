@@ -108,4 +108,4 @@ pub const SECRET_NODE_TYPES_ARGV: &[&str] = &[
 /// `is_secret_bearing()` returns `true`. Mirrors
 /// `slot_input::SlotSubkey::is_secret_bearing` at
 /// `crates/mnemonic-toolkit/src/slot_input.rs`.
-pub const SECRET_SLOT_SUBKEYS: &[&str] = &["phrase", "seedqr", "entropy", "xprv", "wif"];
+pub const SECRET_SLOT_SUBKEYS: &[&str] = &["phrase", "seedqr", "entropy", "ms1", "xprv", "wif"];
