@@ -743,6 +743,8 @@ dependencies = [
 [[package]]
 name = "ms-codec"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6bab070cfdb19e09145a44cc131f7a4da32035a26b861b8d9aeac94eaf906b6"
 dependencies = [
  "codex32",
  "getrandom 0.3.4",
