@@ -62,18 +62,18 @@ Behavior (modeled on the **decode/payload-match** of `convert.rs:1463-1486`, NOT
 - `Payload::Mnem { language: wire, entropy }` → `let wire_lang = crate::language::wire_code_to_bip39(wire)?;` **conflict gate:** `if let Some(flag)=flag_language { if Into::<bip39::Language>::into(flag) != wire_lang { return Err(language_conflict(slot_index, wire_lang, flag)); } }` → `{ entropy: Zeroizing::new(entropy), derive_language: wire_lang, emit_language: Some(wire_lang) }`.
 - `_ =>` → `ToolkitError::BadInput("ms1 slot decoded to an unknown payload kind".into())` (mirrors `convert.rs:1483`; required by `#[non_exhaustive]`).
 
-The helper is context-free (no template/account/path). Each call site does its OWN derivation using `derive_language` (mirroring its existing Entropy arm) and sets `ResolvedSlot.language = emit_language`.
+The helper is context-free (no template/account/path). Each of the three binding-loop call sites does its OWN derivation by calling `derive_slot::derive_bip32_from_entropy[_at_path](&entropy, pass, derive_language, network, …)` — the `pub(crate)` helper the template `Entropy` arm already uses (`bundle.rs:621-637`) — then sets `ResolvedSlot.language = emit_language`. **Do NOT phrase this as "mirror the Entropy arm" (R0-I1):** `verify_bundle`'s descriptor binding loop (site 15) has NO Entropy arm to mirror — it must call the same `derive_slot` helper directly. `derive_slot::derive_bip32_from_entropy[_at_path]` confirmed signature `(entropy: &[u8], passphrase: &str, language: bip39::Language, network: CliNetwork, {template+account | path: &DerivationPath})` (`derive_slot.rs:42-71`, `pub(crate)`).
 
 ---
 
 ## §3. Language policy — wire wins, refuse on conflict (decision 3)
 
-- **entr ms1:** no language → derive with `flag_language.unwrap_or_default()` (English default) — identical to the `Entropy` arm (`bundle.rs:619-621`). `emit_language=None` → emitted card is `entr`. **Byte-identity:** `@N.ms1=<entr-ms1 of E>` ≡ `@N.entropy=<hex E>` in xpub AND emitted card, across all five lengths (design-review D/M4).
+- **entr ms1:** no language → derive with `flag_language.unwrap_or_default()` (English default) — identical to the `Entropy` arm (`bundle.rs:621-622`). `emit_language=None` → emitted card is `entr`. **Byte-identity:** `@N.ms1=<entr-ms1 of E>` ≡ `@N.entropy=<hex E>` in xpub AND emitted card, across all five lengths (design-review D/M4).
 - **mnem ms1 + `--language` absent:** derive with wire language; `emit_language=Some(wire)` → emitted card is `mnem` preserving the language.
 - **mnem ms1 + `--language` == wire:** fine (redundant); same as above.
 - **mnem ms1 + `--language` ≠ wire:** **HARD REFUSE.** Use `ToolkitError::SlotInputViolation { kind: "language-conflict", message }` → **exit 2** (design-review I5: reuses the existing FormatViolation-class variant — already exits 2 (`error.rs:519`), already carries a `kind` JSON discriminant, NO `error.rs` edit; precedent = `IsShareNotSingleString`→2, path-mismatch refusal `bundle.rs:1244`→2). Message names both languages + the slot index and tells the user to drop `--language` or set it to match. Comparison is in `bip39::Language` space (`flag.into()` vs `wire_code_to_bip39(wire)`).
 
-**Output symmetry is LOAD-BEARING, not optional (design-review C1).** verify-bundle compares the **whole emitted card string** (`verify_bundle.rs:1245` single-sig, `:1639` multisig), not entropy. So feeding the engraved card back (`--slot @N.ms1=<that card>`) verifies ONLY because the slot arm sets `ResolvedSlot.language` so the re-emitted card matches. The synth emit rule already honors it for free: `synthesize_unified` (`synthesize.rs:831-836`) and `synthesize_descriptor` (`:298-303`) both compute `slot_lang = s.language.unwrap_or(run_language); if slot_lang == English → Payload::Entr else → Payload::Mnem{ language: bip39_to_wire_code(slot_lang), … }`. `ResolvedSlot.language` is `Option<bip39::Language>` (`synthesize.rs:671`).
+**Output symmetry is LOAD-BEARING, not optional (design-review C1).** verify-bundle compares the **whole emitted card string** (`verify_bundle.rs:1245` single-sig, `:1639` multisig), not entropy. So feeding the engraved card back (`--slot @N.ms1=<that card>`) verifies ONLY because the slot arm sets `ResolvedSlot.language` so the re-emitted card matches. The synth emit rule already honors it for free: `synthesize_unified` (`synthesize.rs:831-839`) and `synthesize_descriptor` (`:299-306`) both compute `slot_lang = s.language.unwrap_or(run_language); if slot_lang == English → Payload::Entr else → Payload::Mnem{ language: bip39_to_wire_code(slot_lang), … }`. `ResolvedSlot.language` is `Option<bip39::Language>` (`synthesize.rs:671`).
 
 **Documented edge — mnem-English (design-review A):** a `Mnem { language: 0 (English) }` ms1 resolves to `emit_language=Some(English)`, and the emit rule collapses English→`Entr`, so it round-trips as an `entr` card (not byte-identical to a mnem-English INPUT card). This is acceptable and documented: English self-recovers, `entr` is the canonical English form, and the ms encoder **never emits** mnem-English (English always routes to entr — ms `mnem` cycle), so a mnem-English ms1 is only third-party-constructible. SPEC includes a test asserting this documented behavior, not a fix.
 
@@ -86,7 +86,7 @@ The helper is context-free (no template/account/path). Each call site does its O
 - `exempted_v0_19_0` matrix (`:289-295`) — add `[SlotSubkey::Ms1, SlotSubkey::Path]` and `[SlotSubkey::Ms1, SlotSubkey::Fingerprint, SlotSubkey::Path]` (else the secret+watch-only conflict refusal `:297` fires before `is_legal_set`). **(Recon missed this as a distinct site — design-review I4.)**
 
 Descriptor-mode canonical rejection + path-override (these do NOT route through `resolve_slots`):
-- canonical-mode rejection gate (`bundle.rs:1151-1153`) — widen `has_phrase && has_path` to `(has_phrase || has_seedqr || has_ms1) && has_path`. **This also fixes a latent pre-existing narrowness for Seedqr** (`[Seedqr, Path]` in canonical mode currently slips past — fix-the-class, design-review I3). Add `has_seedqr`/`has_ms1` locals. CHANGELOG must note the Seedqr behavior fix; tests cover both.
+- canonical-mode rejection gate (`bundle.rs:1151-1160`; raises `SlotInputViolation{kind:"conflict"}` → exit 2) — widen `has_phrase && has_path` to `(has_phrase || has_seedqr || has_ms1) && has_path` (add `has_seedqr`/`has_ms1` locals). **For Ms1 this is LOAD-BEARING:** without it, `[Ms1, Path]` against a canonical descriptor would pass the gate and — once the site-13 Ms1 binding arm exists — be silently accepted with the explicit `@N.path=` overriding the descriptor's encoded origin (a real mis-acceptance). **For Seedqr this is an error-class NORMALIZATION, not a new rejection (R0-I2):** `[Seedqr, Path]` is ALREADY rejected today — it passes this gate (`has_phrase=false`) but then hits the binding-loop `else→BadInput` (exit 1); the widened gate moves that rejection up to exit-2 `SlotInputViolation{kind:"conflict"}`, matching `[Phrase, Path]`. CHANGELOG + test 9 state this truthfully.
 - default-path-override loop (`bundle.rs:1222-1232`) — extend the `!Phrase && !Seedqr` continue-guard to also pass `Ms1`.
 
 ---
@@ -104,9 +104,9 @@ Verified against the branch tip:
 | 10 | **template** `resolve_slots` Ms1 arm (shared by bundle+verify) | `bundle.rs:486-657` (catch-all `:711`) | helper §2 + derive like Entropy arm + multisig_acct_path branch + `language=emit_language` |
 | 11 | descriptor canonical-mode gate | `bundle.rs:1151-1153` | §4 |
 | 12 | descriptor default-path-override | `bundle.rs:1222-1232` | §4 |
-| 13 | **`bundle_run_unified_descriptor`** Ms1 arm | `bundle.rs:1305-1430` (BadInput `:1408`, push `:1422-1430`) | helper §2; push `language: emit_language` |
+| 13 | **`bundle_run_unified_descriptor`** Ms1 arm | `bundle.rs:1305-1430` (else→BadInput `:1408`, push `:1422-1430`) | helper §2 decode; derive via `derive_slot::derive_bip32_from_entropy_at_path`; push `language: emit_language` |
 | 14 | verify-bundle default-path-override | `verify_bundle.rs:715-723` | §4 |
-| 15 | **`verify_bundle`** descriptor-loop Ms1 arm | `verify_bundle.rs:776-867` (push `:859-865`) | helper §2; push `language: emit_language` |
+| 15 | **`verify_bundle`** descriptor-loop Ms1 arm (NO Entropy arm to mirror — R0-I1) | `verify_bundle.rs:776-867` (else→`DescriptorReparseFailed` `:849`, push `:859-865`) | helper §2 decode; derive via `derive_slot::derive_bip32_from_entropy_at_path(&entropy, pass, derive_language, network, &anno_path)`; push `language: emit_language` |
 | 16 | `--slot` clap doc-comment | `bundle.rs:94-113` (verify-bundle shares BundleArgs doc) | add `ms1` line |
 
 verify-bundle template-mode `resolve_slots` calls (`:363,:453,:557`) need NO Ms1-specific edit — they inherit site 10. No new `error.rs` variant (I5 reuses `SlotInputViolation`).
@@ -120,7 +120,7 @@ verify-bundle template-mode `resolve_slots` calls (`:363,:453,:557`) need NO Ms1
 - **Paired `mnemonic-gui` PR** (`feedback_gui_schema_secret_projection_lockstep`, `feedback_manual_gui_lockstep`): `src/form/slot_editor.rs::SlotSubkey` picker option + `src/secrets.rs` `SECRET_SLOT_SUBKEYS` snapshot += `"ms1"` (drives slot-value redaction in `persistence.rs:91`). At impl, confirm whether a GUI drift test consumes the toolkit const (auto-gate) or is hand-maintained (discipline-only).
 - **Manual:** `docs/manual/src/40-cli-reference/41-mnemonic.md` — document the `ms1` slot subkey (prose; the flag-coverage lint gates long *flags*, not subkey tokens, so this is quality not hard-gate, but DO it + `make -C docs/manual audit`).
 - **No sibling-codec change** (consumes published ms-codec 0.4.0; no companion FOLLOWUP).
-- **Release-prep (per the Phase-6 checklist):** `Cargo.toml` 0.40.0→0.41.0 + both README `toolkit-version:` markers + CHANGELOG (incl. the Seedqr canonical-gate fix note) + `install.sh:32` self-pin + `Cargo.lock` relock + `readme_version_current` test.
+- **Release-prep (per the Phase-6 checklist):** `Cargo.toml` 0.40.0→0.41.0 + both README `toolkit-version:` markers + CHANGELOG (incl. the `[Seedqr, Path]` canonical-mode normalization: exit-1 BadInput → exit-2 SlotInputViolation, fix-the-class alongside the new `[Ms1, Path]` rejection) + `install.sh:32` self-pin + `Cargo.lock` relock + `readme_version_current` test.
 
 ---
 
@@ -144,7 +144,7 @@ P2 is severable from P1 only in review order, not in ship (all one MINOR). verif
 6. **share rejection** (`@N.ms1=<a K-of-N share>`) → exit 2 + the `ms-shares combine` friendly prose.
 7. **verify-bundle round-trip** — engrave bundle → feed its own ms1 card(s) back on `@N.ms1=` → VERIFIED (entr and mnem cases).
 8. **mnem-English documented edge** — `Mnem{language:0}` ms1 → emits `entr` card (asserted, not a bug).
-9. **`[Ms1, Path]` (and `[Seedqr, Path]`) in canonical descriptor mode** → rejected (the widened gate).
+9. **`[Ms1, Path]` AND `[Seedqr, Path]` in canonical descriptor mode** → exit 2 + `SlotInputViolation{kind:"conflict"}` (the widened gate). Baseline note (do NOT re-capture a drifted golden, `feedback_recapture_golden_only_when_current_correct`): pre-fix `[Seedqr, Path]` returned exit-1 `BadInput` via the binding-loop fall-through; the fix normalizes it to exit 2.
 10. **descriptor-mode multisig** — Ms1 cosigner derives the correct xpub at the family path.
 11. **`--self-check`** with a mnem Ms1 slot round-trips.
 
@@ -155,7 +155,8 @@ ms-codec has its own suite; toolkit gate per phase: `cargo test -p mnemonic-tool
 ## §9. Footguns / R0-anticipated
 
 - mnem-English → entr-output (§3 edge) — documented + tested, not fixed.
-- The Seedqr canonical-gate widening is a behavior CHANGE (a previously-accepted `[Seedqr, Path]` against a canonical descriptor now refuses) — CHANGELOG + test; R0 to confirm it's a desirable fix not a regression.
+- The Seedqr canonical-gate widening is an error-class NORMALIZATION (R0-I2), NOT a now-refuses-what-it-accepted change: `[Seedqr, Path]` against a canonical descriptor is ALREADY rejected (exit-1 `BadInput` via the binding-loop fall-through); the widened gate makes it exit-2 `SlotInputViolation{kind:"conflict"}` like `[Phrase, Path]`. For Ms1 the gate IS load-bearing (prevents silent mis-acceptance of an explicit path overriding the canonical origin). CHANGELOG + test 9 state the true baseline.
+- `verify_bundle`'s descriptor binding loop has NO Entropy arm (pre-existing; `@N.entropy=` is unsupported in verify-bundle descriptor mode, falling through to `DescriptorReparseFailed`). The Ms1 arm (site 15) derives inline via the `derive_slot` helper — it does NOT mirror a nonexistent Entropy arm. File a FOLLOWUP `verify-bundle-descriptor-entropy-slot-gap` for the pre-existing entropy-slot omission (out of scope for this cycle).
 - Helper drift: enforce the single `slot_ms1` helper is the ONLY decode+conflict site (the three binding loops call it; convert MAY be refactored onto it but that's optional/out-of-scope-flaggable).
 - `ResolvedSlot.language` is `Option<bip39::Language>` (NOT `CliLanguage`) — the helper returns `bip39::Language`.
 - Re-grep all §-cited line numbers against current source at impl time (they are `0814ab5`+branch snapshots).
@@ -164,4 +165,4 @@ ms-codec has its own suite; toolkit gate per phase: `cargo test -p mnemonic-tool
 
 ## §10. Citations (verified at write time against branch `bundle-slot-ms1-input`, base `0814ab5`)
 
-All file:line citations above were grep-verified during SPEC authoring. ms-codec 0.4.0 `Payload` read from published source (`mnemonic-secret` master `7b9d901` == crates.io 0.4.0): `payload.rs:28-57`. Synth emit rule `synthesize.rs:298-303,831-836`; `ResolvedSlot.language` `synthesize.rs:671`; verify whole-card compare `verify_bundle.rs:1245,1639`; canonical gate `bundle.rs:1151-1153`; convert language-collapse `convert.rs:1156`, ms1 arm `:1473-1483`; `SECRET_SLOT_SUBKEYS` `secret_taxonomy.rs:111`; friendly share prose `friendly.rs:110-114`; `SlotInputViolation` exit-2 `error.rs:519`.
+All file:line citations above were grep-verified during SPEC authoring. ms-codec 0.4.0 `Payload` read from published source (`mnemonic-secret` master `7b9d901` == crates.io 0.4.0): `payload.rs:28-57`. Synth emit rule `synthesize.rs:299-306,831-839`; `ResolvedSlot.language` `synthesize.rs:671`; verify whole-card compare `verify_bundle.rs:1245,1639`; canonical gate `bundle.rs:1151-1153`; convert language-collapse `convert.rs:1156`, ms1 arm `:1473-1483`; `SECRET_SLOT_SUBKEYS` `secret_taxonomy.rs:111`; friendly share prose `friendly.rs:110-114`; `SlotInputViolation` exit-2 `error.rs:519`.
