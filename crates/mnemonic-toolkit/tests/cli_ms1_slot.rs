@@ -281,3 +281,83 @@ fn ms1_mnem_language_conflict_exit2() {
         .code(2)
         .stderr(predicate::str::contains("language"));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 2.3 — `bundle_run_unified_descriptor` Ms1 arm (non-canonical /
+// explicit-origin descriptor mode). A single-`@0` non-canonical descriptor
+// routes the binding through `bundle_run_unified_descriptor`, NOT the template
+// `resolve_slots` path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A non-canonical single-`@0` descriptor (tr() with TapTree is non-canonical
+/// per md-codec's table → default-path inference → descriptor binding loop).
+const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+
+/// entr ms1 cosigner derives in descriptor mode (the bundle succeeds and emits
+/// an ms1 card for `@0`).
+#[test]
+fn ms1_entr_descriptor_mode_derives_cosigner() {
+    let entropy = [0x07u8; 32];
+    let ms1 = entr_ms1(&entropy);
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            NONCANONICAL_DESC,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
+    let card = v["ms1"][0].as_str().expect("ms1 card present");
+    // entr ms1 has no intrinsic language → re-emits an entr card.
+    let (_t, payload) = ms_codec::decode(card).expect("emitted ms1 decodes");
+    assert!(
+        matches!(payload, ms_codec::Payload::Entr(_)),
+        "entr ms1 descriptor cosigner must re-emit an entr card; got {payload:?}"
+    );
+}
+
+/// mnem-japanese ms1 cosigner in descriptor mode emits a `mnem` card (the
+/// 5-tuple `emit_lang` widening flows the wire language to the single push).
+#[test]
+fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
+    let entropy = [0x01u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_JAPANESE);
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            NONCANONICAL_DESC,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
+    let card = v["ms1"][0].as_str().expect("ms1 card present");
+    let (_t, payload) = ms_codec::decode(card).expect("emitted ms1 decodes");
+    match payload {
+        ms_codec::Payload::Mnem { language, .. } => {
+            assert_eq!(language, WIRE_JAPANESE, "descriptor mnem card must carry Japanese wire code");
+        }
+        other => panic!(
+            "mnem-japanese ms1 descriptor cosigner must re-emit a mnem card; got {other:?}"
+        ),
+    }
+}

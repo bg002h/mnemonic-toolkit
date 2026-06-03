@@ -1354,9 +1354,18 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         let anno_fp: Option<bitcoin::bip32::Fingerprint> =
             resolved_placeholders.fingerprint_annos[idx as usize];
 
-        let (xpub, fingerprint, path, ent_opt) = if subkeys
-            .contains(&crate::slot_input::SlotSubkey::Phrase)
-        {
+        // v0.41.0 — 5-tuple widening (Plan-R0-I1): the 5th element carries the
+        // per-slot emit language (Some(wire) for a mnem ms1; None for every
+        // pre-ms1 arm) so the single shared push can stamp
+        // `CosignerKeyInfo.language` — LOAD-BEARING for the verify-bundle
+        // whole-card round-trip.
+        let (xpub, fingerprint, path, ent_opt, emit_lang): (
+            BipXpub,
+            Fingerprint,
+            DerivationPath,
+            Option<Vec<u8>>,
+            Option<bip39::Language>,
+        ) = if subkeys.contains(&crate::slot_input::SlotSubkey::Phrase) {
             // SAFETY: third-party-blocked — `bip39::Mnemonic` +
             // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
             // `rust-bip39-mnemonic-zeroize-upstream`,
@@ -1393,7 +1402,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()))
+            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()), None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -1423,7 +1432,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 })?,
                 None => anno_path.clone(),
             };
-            (xpub, fp, path, None)
+            (xpub, fp, path, None, None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {
             let entropy_hex = slot_inputs
                 .iter()
@@ -1456,7 +1465,37 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
             })?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), Some((*entropy_bytes).clone()))
+            (xpub, master_fp, anno_path.clone(), Some((*entropy_bytes).clone()), None)
+        } else if subkeys.contains(&crate::slot_input::SlotSubkey::Ms1) {
+            // v0.41.0 — raw `ms1` codex32 secret cosigner. Decode + apply the
+            // wire-language policy via the shared helper, then derive the
+            // cosigner key at the descriptor-annotated `anno_path`. This loop
+            // has NO bare `pass`/`network` locals (M-A): use `args.network` and
+            // build the passphrase from `args.passphrase` like the Phrase /
+            // Entropy arms above.
+            let value = slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Ms1)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let res = crate::slot_ms1::resolve_ms1_slot(value, args.language, idx)?;
+            let passphrase: zeroize::Zeroizing<String> =
+                zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
+            let acc = crate::derive_slot::derive_bip32_from_entropy_at_path(
+                &res.entropy,
+                &passphrase,
+                res.derive_language,
+                args.network,
+                &anno_path,
+            )?;
+            let (_acc_entropy, master_fp, xpub, _xpriv, _path) = acc.into_parts();
+            (
+                xpub,
+                master_fp,
+                anno_path.clone(),
+                Some((*res.entropy).clone()),
+                res.emit_language,
+            )
         } else {
             return Err(ToolkitError::BadInput(format!(
                 "--slot @{idx} subkey set {:?} not supported in descriptor mode in v0.4.2 \
@@ -1477,7 +1516,10 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             path,
             entropy,
             master_xpub: None,
-            language: None,
+            // v0.41.0 — per-slot emit language (Some(wire) for a mnem ms1
+            // cosigner; None for every other arm). Drives the mnem-vs-entr
+            // re-emit so the verify-bundle whole-card compare round-trips.
+            language: emit_lang,
             _entropy_pin: entropy_pin,
         });
 
