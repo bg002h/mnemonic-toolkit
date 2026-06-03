@@ -27,6 +27,14 @@ pub enum SlotSubkey {
     /// v0.19.0 §6.6.b exception).
     Seedqr,
     Entropy,
+    /// v0.41.0 — raw `ms1` codex32 secret string (BIP-93). Secret-bearing;
+    /// decoded inline via `ms_codec::decode` at slot-emit time, then routed
+    /// through the existing entropy materialization path (with wire-language
+    /// authority for the `mnem` payload form). Declared AFTER `Entropy` so
+    /// derived `Ord` slots Ms1 at position 3, making `[Ms1, Path]` and
+    /// `[Ms1, Fingerprint, Path]` ascending-sorted (parallel to the existing
+    /// `[Phrase, Path]` / `[Seedqr, Path]` v0.19.0 §6.6.b exceptions).
+    Ms1,
     Xpub,
     /// SPEC_export_wallet_v0_8.md §2 + §5.1 — depth-0 master xpub for slot
     /// `@N`. Watch-only-class (BIP-32 base58, no secret material). Only
@@ -47,6 +55,7 @@ impl SlotSubkey {
             "phrase" => Self::Phrase,
             "seedqr" => Self::Seedqr,
             "entropy" => Self::Entropy,
+            "ms1" => Self::Ms1,
             "xpub" => Self::Xpub,
             "master_xpub" => Self::MasterXpub,
             "fingerprint" => Self::Fingerprint,
@@ -61,6 +70,7 @@ impl SlotSubkey {
             Self::Phrase => "phrase",
             Self::Seedqr => "seedqr",
             Self::Entropy => "entropy",
+            Self::Ms1 => "ms1",
             Self::Xpub => "xpub",
             Self::MasterXpub => "master_xpub",
             Self::Fingerprint => "fingerprint",
@@ -72,7 +82,7 @@ impl SlotSubkey {
     pub fn is_secret_bearing(self) -> bool {
         matches!(
             self,
-            Self::Phrase | Self::Seedqr | Self::Entropy | Self::Xprv | Self::Wif
+            Self::Phrase | Self::Seedqr | Self::Entropy | Self::Ms1 | Self::Xprv | Self::Wif
         )
     }
     pub fn is_watch_only(self) -> bool {
@@ -159,7 +169,7 @@ pub fn parse_slot_input(s: &str) -> Result<SlotInput, ParseError> {
     }
     let subkey = SlotSubkey::from_token(subkey_tok).ok_or_else(|| {
         ParseError(format!(
-            "unknown slot subkey {:?}; expected one of: phrase, seedqr, entropy, xpub, master_xpub, fingerprint, path, wif, xprv",
+            "unknown slot subkey {:?}; expected one of: phrase, seedqr, entropy, ms1, xpub, master_xpub, fingerprint, path, wif, xprv",
             subkey_tok
         ))
     })?;
@@ -392,6 +402,7 @@ mod tests {
         Phrase,
         Seedqr,
         Entropy,
+        Ms1,
         Xpub,
         MasterXpub,
         Fingerprint,
@@ -525,6 +536,32 @@ mod tests {
             parse_slot_input("@0.xprv=xprv-stub").unwrap(),
             slot(0, SlotSubkey::Xprv, "xprv-stub")
         );
+    }
+
+    // ---- v0.41.0: SlotSubkey::Ms1 ----
+
+    #[test]
+    fn parse_happy_ms1() {
+        assert_eq!(
+            parse_slot_input("@0.ms1=ms1abc").unwrap(),
+            slot(0, SlotSubkey::Ms1, "ms1abc")
+        );
+    }
+    #[test]
+    fn ms1_is_secret_bearing_and_stdin_sentinel() {
+        assert!(SlotSubkey::Ms1.is_secret_bearing());
+        let p = parse_slot_input("@0.ms1=-").unwrap();
+        assert!(p.is_stdin_sentinel(), "@0.ms1=- must be a stdin sentinel");
+    }
+    #[test]
+    fn ms1_token_round_trips() {
+        assert_eq!(SlotSubkey::from_token("ms1"), Some(SlotSubkey::Ms1));
+        assert_eq!(SlotSubkey::Ms1.as_str(), "ms1");
+    }
+    #[test]
+    fn unknown_subkey_error_lists_ms1() {
+        let e = parse_slot_input("@0.bogus=x").unwrap_err();
+        assert!(e.0.contains("ms1"), "expected-tokens list must include ms1");
     }
     #[test]
     fn parse_index_max_u8() {
