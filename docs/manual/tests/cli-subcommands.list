@@ -19,6 +19,8 @@ mnemonic seed-xor split
 mnemonic seed-xor combine
 mnemonic slip39 split
 mnemonic slip39 combine
+mnemonic ms-shares split
+mnemonic ms-shares combine
 mnemonic gui-schema
 mnemonic repair
 mnemonic inspect
@@ -50,6 +52,8 @@ md repair
 ms encode
 ms decode
 ms derive
+ms split
+ms combine
 ms inspect
 ms verify
 ms vectors

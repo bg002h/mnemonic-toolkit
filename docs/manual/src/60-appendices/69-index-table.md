@@ -16,7 +16,9 @@ without adding the row (or vice versa) fails the lint.
 | `BCH error correction` | [Single-sig steel-engraved backup](#single-sig-steel-engraved-backup) |
 | `BIP-32` | [Concept signposts](#concept-signposts) |
 | `BIP-39` | [Concept signposts](#concept-signposts) |
+| `BIP-93` | [mnemonic ms-shares](#mnemonic-ms-shares) |
 | `codex32` | [Concept signposts](#concept-signposts) |
+| `codex32 share` | [mnemonic ms-shares](#mnemonic-ms-shares) |
 | `cross-binding` | [Single-sig steel-engraved backup](#single-sig-steel-engraved-backup) |
 | `descriptor` | [Concept signposts](#concept-signposts) |
 | `group threshold` | [mnemonic slip39](#mnemonic-slip39) |
@@ -33,4 +35,5 @@ without adding the row (or vice versa) fails the lint.
 | `SLIP-39` | [mnemonic slip39](#mnemonic-slip39) |
 | `SLIP-39 share` | [mnemonic slip39](#mnemonic-slip39) |
 | `slot` | [Concept signposts](#concept-signposts) |
+| `threshold` | [mnemonic ms-shares](#mnemonic-ms-shares) |
 | `Trezor SLIP-0039 interop` | [mnemonic slip39](#mnemonic-slip39) |

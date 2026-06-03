@@ -8,6 +8,7 @@ The integration-layer CLI for the m-format constellation. Twenty subcommands:
 [`electrum-decrypt`](#mnemonic-electrum-decrypt),
 [`final-word`](#mnemonic-final-word), [`seed-xor`](#mnemonic-seed-xor),
 [`seedqr`](#mnemonic-seedqr), [`slip39`](#mnemonic-slip39),
+[`ms-shares`](#mnemonic-ms-shares),
 [`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment),
 [`decode-address`](#mnemonic-decode-address),
 [`verify-message`](#mnemonic-verify-message), [`repair`](#mnemonic-repair),
@@ -1692,6 +1693,145 @@ and `slip39-advanced` for multi-group splits (example 4 above).
 Consult Trezor's current docs for the exact `trezorctl
 recovery-device --backup-type` flag value, which has historically
 varied by firmware version.
+
+---
+
+## `mnemonic ms-shares` {#mnemonic-ms-shares}
+
+BIP-93\index{BIP-93} **codex32**\index{codex32} K-of-N share splitting
+of an `ms1` secret. Two sub-subcommands: `split` (a secret →
+N codex32 shares) and `combine` (≥K shares → the recovered secret).
+Like [`slip39`](#mnemonic-slip39) this is a true threshold scheme — any
+K-of-N subset of shares reconstructs — but the shares are `ms1`
+strings (the same human-typeable codex32 alphabet as a single-string
+ms1 card), produced by codex32's native `threshold(k)`+`index` Shamir
+mechanism over `GF(32)`. This is the toolkit front-end for the
+[`ms split` / `ms combine`](#ms-split) ms-cli surface; the recovered
+`ms1` (`combine --to ms1`) composes with the rest of the toolkit (feed
+it to `bundle --slot @0.ms1=…`).
+
+The `mnem`-vs-`entr` payload kind survives the split: a non-English
+`--language` source splits as a `mnem` share-set so the BIP-39 wordlist
+language is preserved on the wire; an English phrase or raw entropy
+splits as a plain `entr` share-set.
+
+### Concept signposts
+
+- **Secret** — the BIP-39 phrase or raw entropy that `split` consumes /
+  `combine` recovers (the same payload an `ms1` card carries). Sizes:
+  16/20/24/28/32 bytes (12/15/18/21/24 BIP-39 words).
+- **Share**\index{codex32 share} — a single distributed `ms1`-format
+  codex32 string emitted by `split`, carrying the threshold digit `k`,
+  a random per-split identifier, and a non-`s` share index. The whole
+  N-share SET is secret-equivalent.
+- **Threshold (`K`)**\index{threshold} — the minimum number of shares
+  that recombine (2..=9; the codex32 threshold field is a single ASCII
+  digit, so `0` is the unshared single-string sentinel and `1` is
+  invalid).
+- **Share count (`N`)** — total shares emitted (K ≤ N ≤ 31; there are
+  exactly 31 valid non-`s` codex32 share indices).
+- **Identifier** — random 4-character per-split tag shared across all
+  shares of one split; `combine` rejects a mixed-identifier set.
+- **Secret share (index `s`)** — the codex32 secret-carrying share at
+  index `s` is NEVER a valid `combine` input (it would short-circuit
+  interpolation and bypass validation); `combine` rejects it.
+
+### Synopsis
+
+```sh
+mnemonic ms-shares split   --from <phrase=…|entropy=…> --threshold K --shares N [OPTIONS]
+mnemonic ms-shares combine --share <ms1-share-or-> ... [OPTIONS]
+```
+
+### `ms-shares split` flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <phrase=…\|entropy=…>` | secret as `phrase=<value-or->` or `entropy=<hex-or->`; `=-` reads from stdin. Inline forms emit an argv-leakage advisory |
+| `--threshold <K>` | threshold K — minimum shares needed to recombine (2..=9) |
+| `--shares <N>` | total shares N to emit (K ≤ N ≤ 31) |
+| `--language <LANGUAGE>` | BIP-39 wordlist of the input phrase; ignored for `entropy=` inputs. A non-English language produces a `mnem` share-set so the wordlist survives the split |
+| `--json` | emit a JSON object on stdout (`{"shares": [...]}`) instead of the one-share-per-line text form |
+| `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure (see [`verify-bundle` auto-fire](#mnemonic-verify-bundle)) |
+| `--help` | print help |
+
+### `ms-shares combine` flags
+
+| Flag | Purpose |
+|---|---|
+| `--share <ms1-share-or->` | repeating share input; supply at least K. At most ONE may be `-` (stdin). Inline values emit a per-occurrence argv-leakage advisory |
+| `--to <phrase\|entropy\|ms1>` | output shape (default `phrase`); `phrase` emits a BIP-39 mnemonic (language per the recovered card / `--language`), `entropy` emits hex, `ms1` re-encodes a recovered single-string ms1 |
+| `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase` when the recovered secret is a plain `entr` payload (no wire language); ignored for `mnem` payloads and for `--to entropy`/`--to ms1` |
+| `--json` | emit a JSON object on stdout instead of the plain secret line |
+| `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure |
+| `--help` | print help |
+
+### Worked example — 2-of-3 split + recombine
+
+The canonical zero-entropy 24-word master `abandon × 23 + art` (matching
+the [`seed-xor`](#mnemonic-seed-xor) / [`slip39`](#mnemonic-slip39)
+precedent). Share text is shown as `<share-N>` placeholders because
+`split` is CSPRNG-driven (the random identifier and the non-defining
+share payloads are random); run the commands locally to see actual
+share text.
+
+```sh
+echo "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon art" |
+  mnemonic ms-shares split --from phrase=- --threshold 2 --shares 3
+```
+
+Stdout: 3 `ms1`-format codex32 shares, one per line, each carrying the
+threshold digit `2`, a shared random identifier, and a distinct non-`s`
+index. Reverse with any 2:
+
+```sh
+mnemonic ms-shares combine --share "<share-1>" --share "<share-2>" \
+  --to phrase --language english
+```
+
+Stdout: the original `abandon × 23 + art` 24-word phrase. (Without
+`--to phrase`, `combine` defaults to `--to phrase`; use `--to entropy`
+for 64 hex chars or `--to ms1` for a single recovered ms1 string.)
+
+> **Compose with `bundle`.** A recovered single-string ms1
+> (`combine --to ms1`) is a normal `ms1` card payload — feed it to
+> `mnemonic bundle --slot @0.ms1=<recovered-ms1>` to rebuild the rest of
+> the bundle.
+
+### Non-English (`mnem`) split
+
+A non-English source preserves its wordlist language across the share
+set:
+
+```sh
+mnemonic ms-shares split --from phrase=- --language japanese \
+  --threshold 2 --shares 3 < ja-phrase.txt
+```
+
+The shares are `mnem`-kind; `combine --to phrase` recovers the phrase in
+its wire language (Japanese) regardless of the `--language` flag, which
+is honored only for plain `entr` recoveries.
+
+### Output class
+
+Both `split` and `combine` emit private key material on stdout — the
+whole N-share SET is secret-equivalent, and the recovered secret
+obviously is — so both print the
+`warning: stdout carries private key material (can spend) …` stderr
+advisory. Entropy intermediates are held in zeroizing buffers. Engrave
+each share on its own backup medium; storing K shares together
+re-creates a single-point-of-failure.
+
+### Refusals
+
+- `--threshold` outside 2..=9, or `--shares` outside K..=31 → usage
+  error (exit 64).
+- `combine` with fewer than K shares → a codex32 "threshold not passed"
+  refusal.
+- a repeated share index, a mixed identifier/threshold/length, or the
+  secret share at index `s` → a friendly codex32 / share refusal.
 
 ---
 
