@@ -46,6 +46,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `verify-bundle-descriptor-entropy-slot-gap` — `verify_bundle` descriptor binding loop has no `@N.entropy=` arm; raw-entropy cosigners in descriptor verify-bundle mode fall to `DescriptorReparseFailed`
+
+- **Surfaced:** 2026-06-03, ms1-slot cycle (toolkit v0.41.0) SPEC-R0-I1. Out of scope for the ms1-slot cycle; pre-existing.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` descriptor binding loop (the `if subkeys.contains(Phrase) || Seedqr { … } else if Xpub { … } else if Ms1 { … } else { return DescriptorReparseFailed }` chain, ~`:788-890`).
+- **What:** The descriptor-mode binding loop in `verify_bundle` has arms for `Phrase`/`Seedqr`, `Xpub`, and (as of v0.41.0) `Ms1`, but NO `SlotSubkey::Entropy` arm. A `verify-bundle --descriptor <BIP-388 template> --slot @N.entropy=<hex>` invocation therefore falls through to the catch-all `else → DescriptorReparseFailed` (exit 2 with a "subkey set not supported in descriptor verify-bundle path" detail) rather than deriving the cosigner xpub from the raw entropy. By contrast, the `bundle` descriptor loop (`bundle_run_unified_descriptor`) DOES have an `Entropy` arm, and the `verify_bundle` TEMPLATE path resolves `@N.entropy=` via the shared `resolve_slots`. So the gap is specifically: raw-`entropy` cosigner + `verify-bundle` + `--descriptor` mode.
+- **Why deferred:** The ms1-slot cycle SPEC explicitly scoped its descriptor verify-bundle work to the new `Ms1` arm (SPEC-R0-I1: "this loop has NO Entropy arm to mirror — do NOT add one"). Adding a parallel `Entropy` arm is a separable enhancement (mirror the bundle-loop `Entropy` arm into the verify-bundle descriptor loop, deriving via `derive_slot::derive_bip32_from_entropy_at_path` at `anno_path`). No SPEC, no test coverage, and no user request yet — filed for visibility.
+- **Status:** `open`
+- **Tier:** `v0.4.4-nice-to-have`
+
 ### `ms-kofn-json-wire-shape-ungated` — `mnemonic ms-shares` (+ sibling `ms split`/`combine`/`inspect`-share) `--json` wire-shapes + the `--to` value-enum are NOT schema_mirror-gated
 
 - **Surfaced:** 2026-06-03, ms K-of-N v0.2 cycle Phase 4 (Task 4.2c) — mnemonic-toolkit v0.40.0 / ms-codec 0.4.0 / ms-cli v0.7.0.

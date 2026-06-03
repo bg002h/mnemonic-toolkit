@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.41.0] — 2026-06-03
+
+**SemVer-MINOR — `bundle` / `verify-bundle --slot @N.ms1=` (raw BIP-93 codex32 secret as a slot input). Language-preserving; refuse-on-`--language`-conflict.**
+
+- **`--slot @N.ms1=<codex32-secret>` on `bundle` and `verify-bundle`.** A raw BIP-93 codex32 secret string is now a first-class secret slot subkey (`ms1`), decoded inline and routed through the existing entropy materialization path — byte-identical to `@N.entropy=<hex>` for an `entr`-kind ms1 of the same entropy. The slot is **language-preserving**: a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the toolkit derives with that language and emits a `mnem` ms1 card that round-trips the language without re-specifying `--language` (load-bearing for `verify-bundle`, which compares whole card strings). Works in template mode (`resolve_slots`), `bundle --descriptor` mode, and `verify-bundle --descriptor` mode.
+- **Refuse-on-`--language`-conflict.** Supplying `--language` whose wordlist disagrees with a `mnem` ms1 slot's wire language is refused with `SlotInputViolation` `kind:"language-conflict"` (exit 2); omit `--language` or set it to match the wire language.
+- **K-of-N share rejection.** A codex32 K-of-N *share* (not a single-string secret) supplied as `@N.ms1=` is rejected with a friendly pointer to `mnemonic ms-shares combine` — reassemble the secret first, then slot the combined `ms1`.
+- **Fix-the-class: canonical-descriptor secret+path slots now refuse with exit-2 `SlotInputViolation`.** Widening the `bundle` canonical-descriptor gate to `phrase | seedqr | ms1` means a `[Ms1, Path]` or `[Seedqr, Path]` slot set against a canonical descriptor now refuses with exit-2 `SlotInputViolation{kind:"conflict"}` (a secret cosigner cannot also carry an explicit `@N.path=` against a canonical descriptor). This normalizes the prior `[Seedqr, Path]` behavior, which had fallen through the binding loop to an exit-1 `BadInput`.
+- **Lockstep.** Documented the `ms1` subkey in the `bundle` + `verify-bundle` `--slot` clap help and manual (`41-mnemonic.md`); added `Ms1` to `mnemonic-gui`'s `SlotSubkey` picker + the `SECRET_SLOT_SUBKEYS` secret-redaction snapshot (paired GUI PR; the compile-time drift guard goes green once the GUI bumps its toolkit pin to ≥ v0.41.0). No clap flag-NAME was added (the subkey is a free-form `--slot` value, not a clap value-enum), so no `schema_mirror` change. Files FOLLOWUP `verify-bundle-descriptor-entropy-slot-gap` (raw `@N.entropy=` cosigner in `verify-bundle --descriptor` mode still falls to `DescriptorReparseFailed`; out of scope).
+
 ## mnemonic-toolkit [0.40.0] — 2026-06-03
 
 **SemVer-MINOR — `mnemonic ms-shares split|combine` (BIP-93 codex32 K-of-N ms1 shares). Re-pins ms-codec 0.4.0 / ms-cli v0.7.0.**
