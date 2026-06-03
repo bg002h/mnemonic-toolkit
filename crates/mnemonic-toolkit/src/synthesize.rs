@@ -665,9 +665,13 @@ pub struct ResolvedSlot {
     ///
     /// Resolution everywhere: `slot.language.unwrap_or_else(|| args.language().into())`.
     ///
-    /// Populated ONLY at the `bundle --import-json` mnem-decode arm (bundle.rs).
-    /// All other slot sources (foreign-wallet parsers, descriptor-concrete,
-    /// hex/phrase `resolve_slots`) set `language: None`.
+    /// Populated at the `bundle --import-json` mnem-decode arm AND (v0.41.0)
+    /// at the three `--slot @N.ms1=` Ms1 arms (template `resolve_slots`,
+    /// `bundle_run_unified_descriptor`, `verify_bundle` descriptor loop), where
+    /// a `mnem` ms1 card's wire language flows through `slot_ms1::resolve_ms1_slot`
+    /// → `emit_language`. All other slot sources (foreign-wallet parsers,
+    /// descriptor-concrete, hex/phrase/seedqr/entr `resolve_slots`) set
+    /// `language: None`.
     pub language: Option<bip39::Language>,
     /// Cycle B Phase 3a Path B-lite — sibling pin for the `entropy` heap
     /// buffer's pages. `Some(Rc::new(pin_pages_for(&entropy[..])))` when

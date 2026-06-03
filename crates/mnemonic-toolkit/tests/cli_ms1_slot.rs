@@ -15,6 +15,47 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared fixture builders (Phase 2). `ms_codec` is a direct toolkit dependency,
+// so integration tests can construct entr/mnem ms1 cards directly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Wire code: Japanese = 1 (indexes `ms_codec::consts::MNEM_LANGUAGE_NAMES`).
+#[allow(dead_code)]
+const WIRE_JAPANESE: u8 = 1;
+/// Wire code: English = 0.
+#[allow(dead_code)]
+const WIRE_ENGLISH: u8 = 0;
+
+/// Encode raw entropy as an `entr` ms1 card (no intrinsic language).
+#[allow(dead_code)]
+fn entr_ms1(entropy: &[u8]) -> String {
+    ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy.to_vec()))
+        .expect("ms_codec::encode entr")
+}
+
+/// Encode entropy as a `mnem` ms1 card carrying `wire_lang`.
+#[allow(dead_code)]
+fn mnem_ms1(entropy: &[u8], wire_lang: u8) -> String {
+    ms_codec::encode(
+        ms_codec::Tag::ENTR,
+        &ms_codec::Payload::Mnem {
+            language: wire_lang,
+            entropy: entropy.to_vec(),
+        },
+    )
+    .expect("ms_codec::encode mnem")
+}
+
+/// The BIP-39 phrase for `entropy` under `lang` (used to cross-check that a
+/// mnem ms1 derives the same key as the equivalent `--slot @0.phrase=`).
+#[allow(dead_code)]
+fn phrase_in(entropy: &[u8], lang: bip39::Language) -> String {
+    bip39::Mnemonic::from_entropy_in(lang, entropy)
+        .expect("from_entropy_in")
+        .to_string()
+}
+
 /// Canonical 2-of-2 sorted-multisig descriptor (canonical_origin maps it, so
 /// it is NOT treated as non-canonical / explicit-origin).
 const CANONICAL_DESC: &str = "wsh(sortedmulti(2,@0,@1))";
@@ -82,4 +123,161 @@ fn seedqr_plus_path_canonical_descriptor_refused_exit2() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains(CONFLICT_MSG));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 2.2 — template `resolve_slots` Ms1 arm (single-sig bundle).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// (a) entr-ms1 byte-identity: `--slot @0.ms1=<entr-ms1 of E>` produces a
+/// stdout byte-identical to `--slot @0.entropy=<hex E>` for every valid
+/// BIP-39 entropy length {16,20,24,28,32}. (entr ms1 has no intrinsic
+/// language → derives identically to a raw-hex entropy slot, SPEC §3.)
+#[test]
+fn ms1_entr_byte_identical_to_entropy_slot_all_lengths() {
+    for len in [16usize, 20, 24, 28, 32] {
+        let entropy: Vec<u8> = (0..len).map(|i| (i as u8).wrapping_add(1)).collect();
+        let hex = hex::encode(&entropy);
+        let ms1 = entr_ms1(&entropy);
+
+        let via_entropy = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "bundle",
+                "--template",
+                "bip84",
+                "--network",
+                "mainnet",
+                "--slot",
+                &format!("@0.entropy={hex}"),
+                "--json",
+                "--no-engraving-card",
+            ])
+            .assert()
+            .success();
+        let via_ms1 = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "bundle",
+                "--template",
+                "bip84",
+                "--network",
+                "mainnet",
+                "--slot",
+                &format!("@0.ms1={ms1}"),
+                "--json",
+                "--no-engraving-card",
+            ])
+            .assert()
+            .success();
+
+        assert_eq!(
+            via_entropy.get_output().stdout,
+            via_ms1.get_output().stdout,
+            "entr-ms1 slot must produce a byte-identical bundle to the hex-entropy \
+             slot for the same entropy (len={len})"
+        );
+    }
+}
+
+/// (b) mnem-japanese ms1: derives the SAME key as the equivalent Japanese
+/// phrase under `--language japanese`, AND the emitted card is a `mnem` ms1
+/// preserving the language (NOT collapsed to entr).
+#[test]
+fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
+    let entropy = [0x01u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_JAPANESE);
+    let ja_phrase = phrase_in(&entropy, bip39::Language::Japanese);
+
+    let via_phrase = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--language",
+            "japanese",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let phrase_json: serde_json::Value =
+        serde_json::from_slice(&via_phrase.get_output().stdout).expect("phrase JSON");
+
+    let via_ms1 = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let ms1_json: serde_json::Value =
+        serde_json::from_slice(&via_ms1.get_output().stdout).expect("ms1 JSON");
+
+    // Same derived account material (mk1 xpub card(s) carry the derived key).
+    assert_eq!(
+        phrase_json["mk1"], ms1_json["mk1"],
+        "mnem-japanese ms1 must derive the same key(s) as the Japanese phrase"
+    );
+    assert_eq!(
+        phrase_json["master_fingerprint"], ms1_json["master_fingerprint"],
+        "mnem-japanese ms1 master fingerprint must match the Japanese phrase"
+    );
+
+    // The emitted ms1 card must be a `mnem` PAYLOAD form (the wire kind is in
+    // the payload prefix byte, NOT the tag — both entr and mnem cards share the
+    // `ms10entr` tag prefix), preserving the Japanese wire language. Decode
+    // structurally rather than string-matching.
+    let emitted = ms1_json["ms1"][0].as_str().expect("ms1 card present");
+    let (_tag, payload) = ms_codec::decode(emitted).expect("emitted ms1 decodes");
+    match payload {
+        ms_codec::Payload::Mnem { language, .. } => {
+            assert_eq!(language, WIRE_JAPANESE, "emitted mnem card must carry the Japanese wire code");
+        }
+        other => panic!(
+            "mnem-japanese ms1 must re-emit a mnem card (language-preserving); \
+             got payload {other:?} from card {emitted}"
+        ),
+    }
+}
+
+/// (c) mnem ms1 + a conflicting `--language english` → exit 2,
+/// `kind:"language-conflict"` (the helper's refuse-on-conflict policy,
+/// SPEC §3).
+#[test]
+fn ms1_mnem_language_conflict_exit2() {
+    let entropy = [0x01u8; 16];
+    let ms1 = mnem_ms1(&entropy, WIRE_JAPANESE);
+
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--language",
+            "english",
+            "--slot",
+            &format!("@0.ms1={ms1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("language"));
 }

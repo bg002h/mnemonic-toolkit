@@ -655,6 +655,54 @@ pub(crate) fn resolve_slots(
                 language: None,
                 _entropy_pin: entropy_pin,
             });
+        } else if subkeys.contains(&SlotSubkey::Ms1) {
+            // v0.41.0 — raw `ms1` codex32 secret. Decode + apply the
+            // wire-language policy via the shared `slot_ms1` helper, then
+            // derive through the SAME entropy spine the Entropy arm uses.
+            // `emit_language` rides onto `ResolvedSlot.language` so the
+            // re-emitted card preserves the wire language (LOAD-BEARING for
+            // the verify-bundle whole-card round-trip).
+            let value = slot_inputs
+                .iter()
+                .find(|s| s.subkey == SlotSubkey::Ms1)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            let res = crate::slot_ms1::resolve_ms1_slot(value, language, idx)?;
+            let pass = passphrase.unwrap_or("");
+            let acc = match &multisig_acct_path {
+                Some(p) => crate::derive_slot::derive_bip32_from_entropy_at_path(
+                    &res.entropy,
+                    pass,
+                    res.derive_language,
+                    network,
+                    p,
+                )?,
+                None => crate::derive_slot::derive_bip32_from_entropy(
+                    &res.entropy,
+                    pass,
+                    res.derive_language,
+                    network,
+                    template,
+                    account,
+                )?,
+            };
+            // Discard the derived-account entropy husk (the helper-supplied
+            // `res.entropy` is the canonical buffer for this slot); the Drop
+            // on `acc` scrubs it.
+            let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            // M4: bind the pin to a LOCAL before moving `res.entropy` — struct
+            // fields eval left-to-right, `entropy:` precedes `_entropy_pin:`,
+            // so an inline `pin_pages_for(&res.entropy[..])` would move-then-borrow.
+            let entropy_pin = Some(Rc::new(pin_pages_for(&res.entropy[..])));
+            out.push(ResolvedSlot {
+                xpub,
+                fingerprint,
+                path,
+                entropy: Some(res.entropy),
+                master_xpub: None,
+                language: res.emit_language,
+                _entropy_pin: entropy_pin,
+            });
         } else if subkeys.contains(&SlotSubkey::Wif) {
             // K.3 (v0.4.2) + R (v0.4.3): {wif} — degenerate single-key. Parse
             // WIF; use its public point as a depth-0 xpub with zero chain code

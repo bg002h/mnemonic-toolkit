@@ -9,11 +9,9 @@ use crate::error::ToolkitError;
 use crate::language::{wire_code_to_bip39, CliLanguage};
 use zeroize::Zeroizing;
 
-// Consumed by the three binding-loop Ms1 arms (template `resolve_slots`,
-// `bundle_run_unified_descriptor`, `verify_bundle` descriptor loop) landing in
-// the same Phase-2 cycle (Tasks 2.2-2.4). Until those arms are wired, the
-// binary crate's `-D warnings` clippy gate flags this as dead code.
-#[allow(dead_code)]
+/// Decode + language-resolution result for an `ms1` slot value. Consumed by
+/// the binding-loop Ms1 arms (template `resolve_slots`,
+/// `bundle_run_unified_descriptor`, `verify_bundle` descriptor loop).
 pub struct Ms1SlotResolution {
     pub entropy: Zeroizing<Vec<u8>>,
     /// Language to DERIVE the seed with (entropy→phrase→PBKDF2 seed).
@@ -36,9 +34,6 @@ pub struct Ms1SlotResolution {
 /// drives derivation and is preserved on the emitted card, and a disagreeing
 /// `--language` is a HARD REFUSE (`SlotInputViolation{kind:"language-conflict"}`
 /// → exit 2).
-// `#[allow(dead_code)]`: see the note on `Ms1SlotResolution` — wired by the
-// three binding-loop Ms1 arms in Tasks 2.2-2.4 of this same cycle.
-#[allow(dead_code)]
 pub fn resolve_ms1_slot(
     value: &str,
     flag_language: Option<CliLanguage>,
