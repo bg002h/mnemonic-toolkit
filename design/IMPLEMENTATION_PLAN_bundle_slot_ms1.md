@@ -113,6 +113,7 @@ fn seedqr_plus_path_canonical_descriptor_refused_exit2() {
     // the widened gate normalizes it to exit-2 SlotInputViolation. Assert exit 2 now.
 }
 ```
+  **(R0-M5)** Use a canonical `wsh(sortedmulti(2,@0,@1))` descriptor (fixtures: `tests/cli_non_canonical_descriptor.rs:121,201`) and supply a well-formed `@1` (e.g. `@1.xpub=<an xpub>`) so the command is not rejected for a missing `@1`; the canonical gate fires on `@0.ms1 + @0.path` (exit 2) BEFORE the per-cosigner binding loop, regardless of `@1`.
 
 - [ ] **Step 2: Run — verify fail/wrong-code.** `cargo test -p mnemonic-toolkit --test cli_ms1_slot 2>&1 | tail`. (Ms1+Path: today the binding-loop `else→BadInput` exit 1, NOT the gate; Seedqr+Path: exit 1 today.)
 - [ ] **Step 3: Implement.** In `cmd/bundle.rs`:
@@ -131,7 +132,7 @@ fn seedqr_plus_path_canonical_descriptor_refused_exit2() {
 ## Phase 2 — shared `slot_ms1` helper + three binding-loop Ms1 arms + language conflict
 
 **Files:**
-- Create: `crates/mnemonic-toolkit/src/slot_ms1.rs` (+ `mod slot_ms1;` in `lib.rs`/`main.rs` as the crate wires modules)
+- Create: `crates/mnemonic-toolkit/src/slot_ms1.rs` (+ **`mod slot_ms1;` in `crates/mnemonic-toolkit/src/main.rs`** alongside `mod slot_input;` at `:11` — the BINARY crate, NOT lib.rs: the helper uses `crate::error`/`crate::language` binary-internal paths and is consumed as `crate::slot_ms1::resolve_ms1_slot` from `cmd/*` — R0-I2)
 - Modify: `crates/mnemonic-toolkit/src/cmd/bundle.rs` (`resolve_slots` arm site 10; `bundle_run_unified_descriptor` arm site 13)
 - Modify: `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (descriptor-loop arm site 15)
 - Test: `crates/mnemonic-toolkit/tests/cli_ms1_slot.rs`
@@ -205,7 +206,7 @@ pub fn resolve_ms1_slot(
     }
 }
 ```
-Register the module (`mod slot_ms1;` where the crate declares modules; ms_codec error already maps via `ToolkitError::from` per `convert.rs:1464`).
+Register the module: add `mod slot_ms1;` to `crates/mnemonic-toolkit/src/main.rs` (next to `mod slot_input;`, `:11`) — the BINARY crate, NOT `lib.rs` (R0-I2; `crate::error`/`crate::language` are binary-internal paths). ms_codec error already maps via `ToolkitError::from` (`convert.rs:1464`).
 
 - [ ] **Step 4: Run — verify pass.** `cargo test -p mnemonic-toolkit --lib slot_ms1`. Expected: PASS (incl. the share→Err and conflict→Err cases).
 - [ ] **Step 5: Commit** — `feat(slot): slot_ms1::resolve_ms1_slot decode+language helper (P2.1)`.
@@ -221,10 +222,12 @@ Register the module (`mod slot_ms1;` where the crate declares modules; ms_codec 
 ```
 
 - [ ] **Step 2: Run — verify fail** (Ms1 falls to the `resolve_slots` catch-all `else→BadInput` at `:709-714`).
-- [ ] **Step 3: Implement** the Ms1 arm in `cmd/bundle.rs::resolve_slots` — insert a new `else if subkeys.contains(&SlotSubkey::Ms1) { … }` arm BEFORE the catch-all (`:709`), modeled on the `Entropy` arm (`:606-655`):
+- [ ] **Step 3: Implement** the Ms1 arm in `cmd/bundle.rs::resolve_slots` — insert a new `else if subkeys.contains(&SlotSubkey::Ms1) { … }` arm BEFORE the catch-all (`else {` at `:709`), modeled on the `Entropy` arm (`:608-657`, R0-M1):
   - find the `@N.ms1=` value; `let res = crate::slot_ms1::resolve_ms1_slot(value, language, idx)?;`
-  - derive via the SAME `multisig_acct_path` branch the Entropy arm uses, calling `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, p)` / `derive_bip32_from_entropy(&res.entropy, pass, res.derive_language, network, template, account)`.
-  - `let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();` push `ResolvedSlot { xpub, fingerprint, path, entropy: Some(res.entropy), master_xpub: None, language: res.emit_language, _entropy_pin: Some(Rc::new(pin_pages_for(&res.entropy[..]))) }`.
+  - derive via the SAME `multisig_acct_path` branch the Entropy arm uses: `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, p)` / `derive_bip32_from_entropy(&res.entropy, pass, res.derive_language, network, template, account)`.
+  - `let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();`
+  - **(R0-M4)** bind the pin to a LOCAL before moving the entropy (struct fields eval left-to-right; `entropy:` precedes `_entropy_pin:`, so an inline `pin_pages_for(&res.entropy[..])` would move-then-borrow): `let entropy_pin = Some(Rc::new(pin_pages_for(&res.entropy[..])));` then `out.push(ResolvedSlot { xpub, fingerprint, path, entropy: Some(res.entropy), master_xpub: None, language: res.emit_language, _entropy_pin: entropy_pin });`.
+  - **(R0-M2 doc)** update the `ResolvedSlot.language` doc-comment (`synthesize.rs:671`), which currently says the field is populated ONLY at the `bundle --import-json` mnem arm — this cycle adds the resolve_slots + both descriptor Ms1 sites.
 - [ ] **Step 4: Run — verify pass.** `cargo test -p mnemonic-toolkit --test cli_ms1_slot`. Expected: byte-identity (a), mnem-derivation+card (b), conflict (c) all PASS.
 - [ ] **Step 5: Commit** — `feat(bundle): resolve_slots Ms1 arm — decode+derive+emit-language (P2.2)`.
 
@@ -232,7 +235,7 @@ Register the module (`mod slot_ms1;` where the crate declares modules; ms_codec 
 
 - [ ] **Step 1: Failing test** — canonical-key descriptor with a concrete cosigner replaced by `@0` placeholder + `--slot @0.ms1=<entr-ms1>` (non-canonical/explicit-origin descriptor form) derives the cosigner xpub; mnem ms1 emits a mnem card. (Mirror an existing `bundle --descriptor` phrase test, swapping `@0.phrase=` → `@0.ms1=`.)
 - [ ] **Step 2: Run — verify fail** (descriptor loop `else→BadInput` `:1408`).
-- [ ] **Step 3: Implement** the Ms1 arm in `bundle_run_unified_descriptor`'s binding loop (`:1305-1408`), before the `else→BadInput`. Decode via `slot_ms1::resolve_ms1_slot(value, args.language, idx)?`; derive via `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, &anno_path)` (anno_path in scope `:1294-1301`); push `CosignerKeyInfo{…, language: res.emit_language}` at the cosigner push (`:1422-1430`, currently `language: None`).
+- [ ] **Step 3: Implement** the Ms1 arm in `bundle_run_unified_descriptor`'s binding loop (`:1305-1414`), before the `else→BadInput` (`else {` at `:1408`). **(R0-I1 — tuple-widening, NOT a per-arm push.)** This loop binds `let (xpub, fingerprint, path, ent_opt) = if … else …;` where each arm RETURNS a tuple (Phrase `:1344`, Xpub, Entropy `:1407`, else `:1409`) and constructs `CosignerKeyInfo` ONCE at the shared push (`:1422-1430`, `language: None` at `:1428`). To carry the per-slot language: **WIDEN the loop's tuple to a 5-tuple** `(xpub, fingerprint, path, ent_opt, emit_lang: Option<bip39::Language>)` — append `, None` to every EXISTING arm's returned tuple, and have the new Ms1 arm return `…, res.emit_language`. The Ms1 arm body: `let res = slot_ms1::resolve_ms1_slot(value, args.language, idx)?;` derive via `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, &anno_path)` (anno_path in scope `:1294-1301`) → `into_parts()` → xpub; match the existing arms' `ent_opt` convention for the 4th element. Then change the shared push to `language: emit_lang` (was `None`). (`CosignerKeyInfo = ResolvedSlot` alias, `synthesize.rs:219`.)
 - [ ] **Step 4: Run — verify pass.** `cargo test -p mnemonic-toolkit --test cli_ms1_slot`.
 - [ ] **Step 5: Commit** — `feat(bundle): descriptor-mode Ms1 arm in bundle_run_unified_descriptor (P2.3)`.
 
@@ -247,7 +250,7 @@ Register the module (`mod slot_ms1;` where the crate declares modules; ms_codec 
 ```
 
 - [ ] **Step 2: Run — verify fail** (verify_bundle descriptor loop `else→DescriptorReparseFailed` `:849`; template path already covered by site 10 but verify-bundle round-trip exercises the whole-card compare `:1245/:1639`).
-- [ ] **Step 3: Implement** the Ms1 arm in `cmd/verify_bundle.rs`'s descriptor binding loop (`:776-849`), before `else→DescriptorReparseFailed`. **(R0-I1: this loop has NO Entropy arm — do NOT mirror one.)** Decode via `slot_ms1::resolve_ms1_slot(value, args.language, idx)?`; derive the comparison xpub via `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, &anno_path)` (anno_path bound `:766-774`) → `into_parts()` → xpub; push with `language: res.emit_language` (`:859-865`, currently `language: None`).
+- [ ] **Step 3: Implement** the Ms1 arm in `cmd/verify_bundle.rs`'s descriptor binding loop (`:776-849`), before `else→DescriptorReparseFailed` (`:849`). **(SPEC-R0-I1: NO Entropy arm here — do NOT mirror one.)** **(Plan-R0-I1 — tuple-widening.)** Like the bundle loop, this binds a SINGLE shared tuple `let (xpub, fingerprint, path, ent_opt) = if … else …;` (`:776-780`, arms: Phrase||Seedqr `:781`, Xpub `:823`, else→DescriptorReparseFailed `:849`) and pushes `CosignerKeyInfo` ONCE (`:859-867`, `language: None` at `:865`). **WIDEN the tuple to a 5-tuple** carrying `emit_lang: Option<bip39::Language>` (`None` in the Phrase||Seedqr + Xpub arms; `res.emit_language` in the new Ms1 arm), then set `language: emit_lang` at the shared push. Ms1 arm body: `let res = slot_ms1::resolve_ms1_slot(value, args.language, idx)?;` derive the comparison xpub via `derive_slot::derive_bip32_from_entropy_at_path(&res.entropy, pass, res.derive_language, network, &anno_path)` (anno_path bound `:766-774`) → `into_parts()` → xpub.
 - [ ] **Step 4: Run — verify pass.** `cargo test -p mnemonic-toolkit --test cli_ms1_slot`. Expected: round-trip VERIFIED (entr + mnem), conflict exit 2, descriptor verify VERIFIED.
 - [ ] **Step 5: Commit** — `feat(verify-bundle): descriptor-loop Ms1 arm + round-trip (P2.4)`.
 
