@@ -149,6 +149,66 @@ mnemonic export-wallet \
 For the cosigner-as-internal-key variant, use `--taproot-internal-key @N`.
 See [Taproot multisig](#taproot-multisig) for the design choice.
 
+## All four single-sig types from one seed
+
+`export-wallet` is watch-only: it binds an account *xpub* (one BIP
+path), never a seed. To emit all four BIP-defined single-sig wallet
+types from one seed — BIP-44 (P2PKH), BIP-49 (P2SH-P2WPKH), BIP-84
+(P2WPKH), BIP-86 (P2TR) — compose two commands and loop: derive each
+type's *public* account xpub with `convert`, then bind it with
+`export-wallet`. The seed is consumed by `convert` to produce a public
+key and never reaches `export-wallet`, so the watch-only boundary holds.
+
+The master fingerprint identifies the master key independent of the
+derivation path, so it is the same for all four types — derive it once:
+
+```sh
+read -rs PHRASE   # read from stdin: keeps the seed off argv / out of /proc
+
+mfp=$(printf '%s' "$PHRASE" \
+  | mnemonic convert --from phrase=- --to fingerprint --template bip84 \
+  | sed 's/^fingerprint: //')
+
+for t in bip44 bip49 bip84 bip86; do
+  xpub=$(printf '%s' "$PHRASE" \
+    | mnemonic convert --from phrase=- --to xpub --template "$t" \
+    | sed 's/^xpub: //')
+  mnemonic export-wallet \
+    --template "$t" \
+    --slot "@0.xpub=$xpub" \
+    --slot "@0.fingerprint=$mfp" \
+    --format bitcoin-core \
+    --output "wallet-$t.json"
+done
+```
+
+Each `wallet-<type>.json` is a Bitcoin Core `importdescriptors` array
+with the correct origin — e.g. for BIP-84, using the all-zeros BIP-39
+test seed (master fingerprint `73c5da0a`; see
+[Test seeds and example data](#appendix-f-test-seeds-and-example-data)):
+
+```text
+wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmU.../0/*)#...
+```
+
+Use `--format bitcoin-core` for this recipe: its `importdescriptors`
+array is the one interchange shape that holds several descriptors in a
+single artifact (you can even concatenate all four into one array for a
+single import). The single-wallet file formats (`coldcard`, `electrum`,
+`green`, …) describe one wallet per file, so for those the loop writes
+four separate files, as `--output wallet-$t.json` above already does.
+
+For just the **receive/change addresses** (not an import artifact),
+`addresses` reads the seed directly — loop the four script types:
+
+```sh
+read -rs PHRASE
+for st in p2pkh p2sh-p2wpkh p2wpkh p2tr; do
+  echo "# $st"
+  printf '%s' "$PHRASE" | mnemonic addresses --from phrase=- --address-type "$st" --count 3
+done
+```
+
 ## Tips
 
 - **Range.** The `--range 0,999` default covers the first 1000
