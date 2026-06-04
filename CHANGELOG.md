@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.42.0] — 2026-06-03
+
+**SemVer-MINOR — `export-wallet --format descriptor`: bare canonical descriptor on stdout.**
+
+- **`export-wallet … --format descriptor`.** Emits exactly one line — the canonical descriptor with its BIP-380 checksum, `<descriptor>#<checksum>` — and nothing else (no JSON, no wallet-file wrapper). Works for single-sig and multisig and across every input path: `--template` + `--slot @N.xpub=` (add `--slot @N.fingerprint=<mfp>` for a real key origin, else the origin is the all-zeros `[00000000/…]` placeholder), bare-concrete `--descriptor` passthrough, and `--from-import-json` (lossless — only the BIP-380 checksum is recomputed). This completes the concrete-descriptor in/out at the toolkit layer: A1 (v0.38.1) added the **IN** door (`bundle` / `verify-bundle --descriptor` accept a bare concrete descriptor → cards); this adds the **OUT** door.
+- **Taproot via `--from-import-json` remains refused** (the import path does not surface a taproot internal-key designation); emit `tr(...)` through the direct `--descriptor 'tr(...)' --format descriptor` passthrough instead.
+- **Docs.** New `Concrete descriptor ↔ bundle round-trip` recipe in the manual (`30-workflows/37-wallet-export.md`) — md1-keyless framing, the IN/OUT loop, taproot-passthrough caveat, and the `--format descriptor` (raw, any policy) vs `--format green` (Green text, single-sig only) distinction; `descriptor` added to the `export-wallet --format` value list in `40-cli-reference/41-mnemonic.md`.
+- **Lockstep.** `descriptor` is a new `--format` value-enum entry → paired `mnemonic-gui` v0.23.0 adds it to `src/schema/mnemonic.rs` `EXPORT_FORMATS` and bumps its toolkit pin to v0.42.0 (the `schema_mirror` drift guard goes green on the GUI pin bump).
+
 ## mnemonic-toolkit [0.41.0] — 2026-06-03
 
 **SemVer-MINOR — `bundle` / `verify-bundle --slot @N.ms1=` (raw BIP-93 codex32 secret as a slot input). Language-preserving; refuse-on-`--language`-conflict.**
