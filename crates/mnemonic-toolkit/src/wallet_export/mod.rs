@@ -21,6 +21,7 @@ mod bip388;
 mod bitcoin_core;
 mod bsms;
 mod coldcard;
+mod descriptor;
 mod electrum;
 mod green;
 mod jade;
@@ -40,6 +41,7 @@ pub(crate) use bsms::BsmsEmitter;
 // minimum surface needed for `error.rs` to render the variant.
 pub(crate) use bsms::script_type_short_name;
 pub(crate) use coldcard::ColdcardEmitter;
+pub(crate) use descriptor::DescriptorEmitter;
 pub(crate) use electrum::ElectrumEmitter;
 pub(crate) use green::GreenEmitter;
 pub(crate) use jade::JadeEmitter;

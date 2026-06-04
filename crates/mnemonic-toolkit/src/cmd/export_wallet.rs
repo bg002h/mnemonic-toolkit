@@ -11,7 +11,8 @@ use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    BsmsEmitter, BsmsForm, ColdcardEmitter, ElectrumEmitter, EmitInputs, GreenEmitter,
+    BsmsEmitter, BsmsForm, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter, EmitInputs,
+    GreenEmitter,
     JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
     WalletFormatEmitter, WalletScriptType,
 };
@@ -40,6 +41,8 @@ pub enum CliExportFormat {
     Green,
     #[value(name = "bsms")]
     Bsms,
+    #[value(name = "descriptor")]
+    Descriptor,
 }
 
 /// SPEC v0.37 §2.3 — formats whose file-import surface refuses a bare
@@ -52,7 +55,7 @@ fn format_requires_template(f: CliExportFormat) -> bool {
     use CliExportFormat::*;
     match f {
         Sparrow | Coldcard | ColdcardMultisig | Jade | Electrum => true,
-        BitcoinCore | Bip388 | Bsms | Green | Specter => false,
+        BitcoinCore | Bip388 | Bsms | Green | Specter | Descriptor => false,
     }
 }
 
@@ -512,6 +515,7 @@ pub fn run<W: Write, E: Write>(
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
             CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
             CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
+            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -553,6 +557,7 @@ pub fn run<W: Write, E: Write>(
         CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
         CliExportFormat::Green => GreenEmitter::emit(&inputs),
         CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
+        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {
@@ -766,6 +771,7 @@ fn run_from_import_json<W: Write, E: Write>(
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
             CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
             CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
+            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -807,6 +813,7 @@ fn run_from_import_json<W: Write, E: Write>(
         CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
         CliExportFormat::Green => GreenEmitter::emit(&inputs),
         CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
+        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
     }?;
 
     if args.output == "-" {
@@ -840,7 +847,7 @@ mod format_requires_template_tests {
         for f in [Sparrow, Coldcard, ColdcardMultisig, Jade, Electrum] {
             assert!(format_requires_template(f), "{f:?} must require a template");
         }
-        for f in [BitcoinCore, Bip388, Bsms, Green, Specter] {
+        for f in [BitcoinCore, Bip388, Bsms, Green, Specter, Descriptor] {
             assert!(!format_requires_template(f), "{f:?} must be passthrough (template stays None)");
         }
     }
