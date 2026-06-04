@@ -209,6 +209,117 @@ for st in p2pkh p2sh-p2wpkh p2wpkh p2tr; do
 done
 ```
 
+## Concrete descriptor ↔ bundle round-trip
+
+`md1` is **keyless by design**: a wallet card carries the BIP-388 `@N`
+*template* (the script policy), not any keys. A *concrete* descriptor —
+the template with each `@N` resolved to a real `[fingerprint/path]xpub`
+key — is therefore a **bundle-level artifact**: it pairs the `md1`
+template with the `mk1` cosigner xpubs. That is why the concrete
+descriptor in/out lives at the toolkit (full-bundle) layer and is **not**
+an `md`-CLI feature.
+
+This gives a closed loop: a concrete descriptor can be turned **into**
+cards (`bundle --descriptor`, watch-only) and an existing bundle can be
+emitted **back out** as a bare concrete descriptor
+(`export-wallet … --format descriptor`).
+
+### IN — concrete descriptor → cards
+
+Feed a concrete (or `@N`-template) descriptor plus the per-placeholder
+xpubs to `bundle`; the cards are synthesised watch-only:
+
+```sh
+x0=xpub6DBjiYnc4ewKti13Q1L35bqdodw5z3VGJnf516B3icHrEGEUcCuCG5GVQDZtH8Xmsyt3Fs9YDNwLaqjUbbRidwXZ6sxufZcr4VqqzrXvicM
+x1=xpub6DVvJu3xFotP7byMCoCa9B5EmDcCo9Yznz7kuEogMemnYTMumxxCnXhk1pfJZHPuoX79HbjaeAgnUVvf4kdrsRCyCeWEaA1ScWhHa75ENr8
+
+mnemonic bundle \
+  --network mainnet \
+  --descriptor 'wsh(sortedmulti(2,@0,@1))' \
+  --slot "@0.xpub=$x0" \
+  --slot "@1.xpub=$x1"
+```
+
+This emits the steel-engravable `md1` template card plus one `mk1` card
+per cosigner (no `ms1` — descriptor mode is watch-only). See
+[From a user-supplied descriptor](#from-a-user-supplied-descriptor) for
+the full bundle layout.
+
+### OUT — bundle → bare concrete descriptor
+
+`--format descriptor` emits exactly one line — the canonical descriptor
+with its BIP-380 checksum, `<descriptor>#<checksum>` — and nothing else
+(no JSON, no wallet-file wrapper). It works for single-sig and multisig
+alike.
+
+The most direct form binds an account xpub straight to a template. Add
+`--slot @N.fingerprint=<mfp>` for a real key origin — without it the
+origin defaults to the all-zeros `[00000000/…]` placeholder (derive the
+master fingerprint once with `convert`, exactly as in the four-types
+recipe above):
+
+```sh
+read -rs PHRASE
+
+mfp=$(printf '%s' "$PHRASE" \
+  | mnemonic convert --from phrase=- --to fingerprint --template bip84 \
+  | sed 's/^fingerprint: //')
+xpub=$(printf '%s' "$PHRASE" \
+  | mnemonic convert --from phrase=- --to xpub --template bip84 \
+  | sed 's/^xpub: //')
+
+mnemonic export-wallet \
+  --template bip84 \
+  --slot "@0.xpub=$xpub" \
+  --slot "@0.fingerprint=$mfp" \
+  --format descriptor
+```
+
+For the all-zeros BIP-39 test seed (master fingerprint `73c5da0a`) this
+prints:
+
+```text
+wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmU.../<0;1>/*)#hpg6d6w2
+```
+
+To round-trip an **existing** bundle (or any imported wallet) back to a
+descriptor, pipe an `import-wallet --json` envelope through
+`--from-import-json`. The descriptor body is reproduced losslessly
+(only the checksum is recomputed):
+
+```sh
+mnemonic import-wallet --blob wallet.json --format sparrow --json \
+  | mnemonic export-wallet --from-import-json - --format descriptor
+```
+
+For the `sparrow-multisig-2of3-p2wsh-sortedmulti` example wallet this
+prints:
+
+```text
+wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya.../<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEB.../<0;1>/*,[5436d724/48'/0'/0'/2']xpub6Buxw.../<0;1>/*))#he0ej3xr
+```
+
+### Caveats
+
+- **Taproot via `--from-import-json` is refused.** The import path does
+  not surface a taproot internal-key designation (NUMS vs raw x-only),
+  so `export-wallet --from-import-json … --format descriptor` rejects
+  `tr(...)` envelopes. Emit a taproot descriptor through the direct
+  passthrough door instead — supply the concrete `tr(...)` body to
+  `--descriptor`:
+
+  ```sh
+  mnemonic export-wallet \
+    --descriptor 'tr([73c5da0a/86h/0h/0h]xpub6CatWdiZiodmU.../<0;1>/*)' \
+    --format descriptor
+  ```
+
+- **`--format descriptor` vs `--format green`.** `descriptor` emits the
+  raw canonical descriptor for **any** policy (single-sig or multisig).
+  `green` emits Blockstream Green's wallet text and is **single-sig
+  only**. Pick `descriptor` whenever you want the policy-agnostic
+  descriptor string itself.
+
 ## Tips
 
 - **Range.** The `--range 0,999` default covers the first 1000
