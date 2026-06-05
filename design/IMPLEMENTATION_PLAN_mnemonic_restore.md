@@ -23,7 +23,7 @@
   ```
   Add an arm at the same alpha position in the THREE forced-exhaustive blocks (re-grep; SPEC says ~`exit_code:471`, `kind:529`, `message:588`):
   - `exit_code`: `ToolkitError::RestoreMismatch { .. } => 4,`
-  - `kind`: `ToolkitError::RestoreMismatch { .. } => "restore-mismatch",` (mirror the neighbor arms' kind-string style — re-grep an example).
+  - `kind`: `ToolkitError::RestoreMismatch { .. } => "RestoreMismatch",` (**plan-R0 Minor-1:** neighbor arms return the **PascalCase variant name**, NOT kebab — `kind_strings_stable` test `error.rs:1182` enforces it; do NOT write `"restore-mismatch"`).
   - `message`: `ToolkitError::RestoreMismatch { reference, derived, expected, slot } => format!("restore: {reference} mismatch{} — derived {derived}, expected {expected}", slot.map(|s| format!(" at slot @{s}")).unwrap_or_default()),`
   - Do NOT add a `details()` arm (it has `_ => None`; SPEC I3 — restore uses `message()` only).
 - [ ] **Step 3 (build):** `cargo build -p mnemonic-toolkit` — compiles (all exhaustive matches satisfied).
@@ -41,7 +41,7 @@
       args: &RestoreArgs, stdin: &mut R, stdout: &mut W, stderr: &mut E, _no_auto_repair: bool,
   ) -> Result<u8, ToolkitError> { todo!() }
   ```
-  `cmd/mod.rs`: add `pub mod restore;` (slot after `repair`, before `silent_payment`; M6 — don't re-sort existing drift). `main.rs`: add `Command::Restore(cmd::restore::RestoreArgs)` to `enum Command` (feature-clustered — anywhere is fine, M-d) + dispatch arm `Command::Restore(args) => cmd::restore::run(args, &mut stdin, &mut stdout, &mut stderr, cli.no_auto_repair),` (mirror `convert`'s arm — re-grep the exact dispatch shape incl. the io args names used at `main.rs:~153`).
+  `cmd/mod.rs`: add `pub mod restore;` (slot after `repair`, before `silent_payment`; M6 — don't re-sort existing drift). `main.rs`: add `Command::Restore(cmd::restore::RestoreArgs)` to `enum Command` (feature-clustered — anywhere is fine, M-d) + dispatch arm `Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair),` (**plan-R0 Minor-2:** pass the bindings BARE — `stdin/stdout/stderr` are already `&mut io::Stdin` etc. at `main.rs:149-151`; no spurious `&mut`. Mirror `convert`'s arm at `main.rs:156`).
 - [ ] **Step 3 (gui-schema fix):** `tests/cli_gui_schema.rs` — re-grep the 28-name vec (`:~77`) + the "28" literals (`:~74`, `:~108`); add `"restore"` (alpha: after `"repair"`, before `"seed-xor-combine"`) and bump 28→29.
 - [ ] **Step 4:** Task 1.3-1.5 implement `run`; the 1.2 smoke test stays failing (todo!) until 1.4. Commit 1.1+1.2 scaffold together once it builds: `git add` the 6 files → `feat(restore): RestoreMismatch error + restore subcommand scaffold + gui-schema 28→29 (P1.1-1.2)`.
 
@@ -64,7 +64,7 @@
   // master_fingerprint identical across T (path-independent) — capture once.
   let st = convert::script_type_from_template(T).expect("single-sig template has a ScriptType");
   // first recv addr(s): for i in 0..count { child = acct.account_xpub.derive_pub(&secp, &[0,i]); render_address_from_xpub(&secp, &child, st, network) }
-  let slot = /* build single ResolvedSlot { xpub: acct.account_xpub, fingerprint: acct.master_fingerprint, path: acct.account_path, entropy:None, .. } */;
+  let slot = /* ResolvedSlot — plan-R0 Minor-3: NO Default; spell ALL 7 pub fields, mirror the watch-only ctor at wallet_import/pipeline.rs:200-208: { xpub: acct.account_xpub, fingerprint: acct.master_fingerprint, path: acct.account_path, entropy: None, master_xpub: None, language: None, _entropy_pin: None } */;
   let descriptor = wallet_export::build_descriptor_string(T, &[slot], 1, network, account, None)?;
   ```
   Use `Secp256k1::verification_only()` (watch-only; pattern `addresses.rs:232`). NEVER touch `acct.account_xpriv`. Re-grep `ResolvedSlot` field names + how secret-slot resolution builds one (`synthesize.rs:642`, `bundle.rs:~528` `into_parts`) to construct a valid watch-only slot.
@@ -92,7 +92,7 @@
 **Files:** `cmd/restore.rs`; `tests/cli_restore.rs`.
 
 ### Task 2.1 — `--format` payload
-- [ ] **Step 1 (impl):** add `--format <CliExportFormat>` (reuse the enum, `export_wallet.rs:22-46`). If `Some` and `--template` is `None` → `ModeViolation` exit 2 (SPEC I-A — one-descriptor-per-emitter). Build `EmitInputs` for the single `--template`'s descriptor and dispatch the `WalletFormatEmitter` match (mirror `export_wallet.rs:~507-561` — re-grep). Append/emit the payload after the verify-doc (or as the sole stdout when `--format` given — decide + document; recommend: payload to stdout, verify-block to stderr when `--format` set, so the payload pipes cleanly).
+- [ ] **Step 1 (impl):** add `--format <CliExportFormat>` (reuse the enum, `export_wallet.rs:22-46`). If `Some` and `--template` is `None` → `ModeViolation` exit 2 (SPEC I-A — one-descriptor-per-emitter). Build `EmitInputs` for the single `--template`'s descriptor and dispatch the `WalletFormatEmitter` match (mirror the 16-field ctor at `export_wallet.rs:483-500` + dispatch `:507-561` — re-grep. **plan-R0 Minor-4:** `EmitInputs.script_type` is `wallet_export::WalletScriptType` (`mod.rs:165`), a DIFFERENT enum from the `convert::ScriptType` used for P1 address rendering — use `wallet_export::script_type_from_template` `mod.rs:193`, not the P1 helper). Append/emit the payload after the verify-doc (or as the sole stdout when `--format` given — decide + document; recommend: payload to stdout, verify-block to stderr when `--format` set, so the payload pipes cleanly).
 - [ ] **Step 2 (test):** each format (descriptor/bitcoin-core/bip388) with `--template bip84`; `--format` + no `--template` → exit 2.
 - [ ] **Step 3 (commit):** `feat(restore): --format importable payload (requires single --template) (P2.1)`.
 
