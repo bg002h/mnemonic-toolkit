@@ -734,16 +734,24 @@ private material (`xprv` / WIF). It does NOT sign: the toolkit stops at
 key material and read-only derivation (see
 [Watch-only operation](../30-workflows/34-watch-only.md)).
 
-This cycle (v0.43.0) is **single-sig only**; a multisig template
-(`wsh-sortedmulti`, …) is refused. Multisig-cosigner restore (own seed +
-the shared md1 + other cosigners' mk1s → a concrete multisig descriptor)
-is a planned follow-on (`design/FOLLOWUPS.md` entry
-`restore-multisig-cosigner-scope`, targeted v0.44.0).
+**Two modes.** *Single-sig* (the default, `--from <seed>`) emits the
+BIP-44/49/84/86 descriptors. *Multisig-cosigner* (v0.44.0, `--md1 <card>`)
+reconstructs the concrete watch-only **multisig** descriptor from the shared
+wallet-policy `md1` card **alone** — the card already carries every cosigner's
+public key, so `--from`/`--cosigner` are *optional cross-check* inputs, not
+build inputs. Multisig mode covers `wsh` and `sh(wsh)`; a **taproot** multisig
+`md1` (`tr(sortedmulti_a, …)`) is refused (exit 2) pending FOLLOWUP
+`restore-multisig-taproot-reconstruction`, and a template-only `md1` (no
+concrete keys) is refused.
 
 ### Synopsis
 
 ```sh
+# single-sig
 mnemonic restore --from <node>=<value> [--template <TEMPLATE>] [OPTIONS]
+# multisig-cosigner (reconstruct from the shared md1; cross-check is optional)
+mnemonic restore --md1 <card> [--md1 <card> …] \
+    [--from <node>=<value>] [--cosigner @N=<mk1|xpub> …] [OPTIONS]
 ```
 
 `<node>` is one of `ms1` / `phrase` / `entropy` / `seedqr` (seed-bearing
@@ -755,7 +763,9 @@ channels that keep the seed off the argv.
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret) |
+| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore; OPTIONAL in multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) |
+| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)` only; a taproot or template-only `md1` is refused (exit 2). Watch-only (non-secret) |
+| `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
@@ -886,6 +896,54 @@ emits a single object:
 
 The seed is never echoed in any output mode (redacted by construction);
 no `xprv` / `tprv` token appears in restore's stdout or `--json`.
+
+### Multisig-cosigner restore (`--md1`)
+
+A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
+for any multisig bundle) carries **every cosigner's public key**, so the
+concrete watch-only multisig descriptor is reconstructible from the card
+alone — you do not need any seed to recover the *watch-only* wallet:
+
+```sh
+mnemonic restore --md1 md1f5przzs... --md1 md1f5przzs...   # all chunks
+```
+
+emits the concrete 2-of-3 descriptor, a first receive address, and a
+per-cosigner table, with a loud `UNVERIFIED` stderr banner (nothing was
+cross-checked):
+
+```text
+2-of-3 multisig restore
+CONFIRM: verify each cosigner fingerprint against your records before importing.
+  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6.../<0;1>/*,[b8688df1/87'/0'/0']xpub6.../<0;1>/*,[28645006/87'/0'/0']xpub6.../<0;1>/*))#y65a0dtg
+  first recv: bc1q...
+  cosigner @0: 73c5da0a [m/87'/0'/0']  from md1 (not independently verified)
+  cosigner @1: b8688df1 [m/87'/0'/0']  from md1 (not independently verified)
+  cosigner @2: 28645006 [m/87'/0'/0']  from md1 (not independently verified)
+```
+
+**Cross-checking** is optional and *per-position*. Add `--from <your seed>`
+to prove which cosigner is yours (the position is inferred by matching the
+derived key against the md1 slots), and/or `--cosigner @N=<mk1|xpub>` to
+assert another cosigner's key. Only the positions you actually supply are
+marked verified; the rest stay `from md1 (not independently verified)`, and
+the verdict is `PARTIAL` until **every** position is cross-checked:
+
+```sh
+mnemonic restore --md1 md1f5przzs... \
+    --from phrase=- --cosigner @1=mk1qp... --cosigner @2=xpub6...
+```
+
+A supplied key (own seed or `--cosigner`) that does **not** match the md1's
+slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless
+`--allow-mismatch`. Restore stays watch-only-out in multisig mode too: no
+`xprv` / WIF / seed reaches stdout, stderr, or `--json`.
+
+**Scope.** `wsh` and `sh(wsh)` multisig only. A **taproot** multisig `md1`
+(`tr(sortedmulti_a, …)`) is refused (exit 2) pending FOLLOWUP
+`restore-multisig-taproot-reconstruction`; a template-only `md1` (no
+concrete keys — never emitted by the toolkit) is refused. `--format`,
+`--template`, and `--expect-xpub` are single-sig only.
 
 ---
 
