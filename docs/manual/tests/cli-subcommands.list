@@ -13,6 +13,7 @@ mnemonic convert
 mnemonic addresses
 mnemonic export-wallet
 mnemonic import-wallet
+mnemonic restore
 mnemonic derive-child
 mnemonic final-word
 mnemonic seed-xor split

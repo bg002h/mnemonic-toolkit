@@ -722,6 +722,173 @@ See [Exporting to Bitcoin Core / BIP-388 / Sparrow / Specter](#exporting-to-bitc
 
 ---
 
+## `mnemonic restore` {#mnemonic-restore}
+
+Take **secret seed material + an optional BIP-39 passphrase** and emit
+a **watch-only "restore document"**: a verification block leading with
+the master fingerprint (the passphrase-correctness oracle) and the first
+receive address(es), followed by the concrete single-sig descriptor(s)
+for BIP-44/49/84/86. Restore is **read-only / watch-only-out** — it
+emits xpub / fingerprint / addresses / descriptor only and NEVER any
+private material (`xprv` / WIF). It does NOT sign: the toolkit stops at
+key material and read-only derivation (see
+[Watch-only operation](../30-workflows/34-watch-only.md)).
+
+This cycle (v0.43.0) is **single-sig only**; a multisig template
+(`wsh-sortedmulti`, …) is refused. Multisig-cosigner restore (own seed +
+the shared md1 + other cosigners' mk1s → a concrete multisig descriptor)
+is a planned follow-on (`design/FOLLOWUPS.md` entry
+`restore-multisig-cosigner-scope`, targeted v0.44.0).
+
+### Synopsis
+
+```sh
+mnemonic restore --from <node>=<value> [--template <TEMPLATE>] [OPTIONS]
+```
+
+`<node>` is one of `ms1` / `phrase` / `entropy` / `seedqr` (seed-bearing
+only — a non-seed node such as `xpub=` / `xprv=` / `wif=` is refused with
+exit 1). The value supports `@env:VAR` and `-` (stdin), the two secret
+channels that keep the seed off the argv.
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret) |
+| `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
+| `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
+| `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
+| `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
+| `--account <ACCOUNT>` | BIP-32 account index (default 0) |
+| `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
+| `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
+| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`); mismatch → exit 4 (unless `--allow-mismatch`) |
+| `--allow-mismatch` | emit descriptors even when a reference does not match (loud `✗ MISMATCH (overridden)` banner, exit 0) |
+| `--count <COUNT>` | number of first-receive addresses to show per wallet type (default 1) |
+| `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--template` (one-descriptor-in/one-out); `--format` with no `--template` → exit 2. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
+| `--json` | emit a single structured JSON object on stdout instead of the text document; seed material is NEVER echoed (redacted by construction). `import_payload` is present only when `--format` is also set |
+| `--output <OUTPUT>` | write the stdout content to `<FILE>` (`-`, the default, → stdout); the verification block / banners / advisory still go to stderr |
+| `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
+| `--help` | print help |
+
+### Verification policy
+
+Restore is built around the master fingerprint as the
+**passphrase-correctness oracle**:
+
+- **Reference present** (`--expect-fingerprint` / `--expect-xpub`) and
+  the derived material **matches** → emit, exit 0.
+- **Reference present and it does NOT match** → **hard error, exit 4**
+  (`RestoreMismatch`); the verification block prints derived-vs-expected
+  under a `✗ MISMATCH` banner and **no descriptors are emitted**. This is
+  the wrong-passphrase / wrong-seed guard.
+- **`--allow-mismatch`** override → emit the descriptors the supplied
+  seed+passphrase produced under a loud `✗ MISMATCH (overridden)` stderr
+  banner, exit 0.
+- **No reference at all** → emit, with a loud `UNVERIFIED` stderr banner
+  pointing at the fingerprint to verify against your own records.
+
+### Worked example
+
+Single-sig BIP-84 restore from the public zero-entropy test seed
+(`abandon` × 11 + `about`), with the fingerprint hard-gated against a
+known reference:
+
+```sh
+seed="abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon about"
+printf '%s' "$seed" |
+  mnemonic restore --from phrase=- --template bip84 \
+    --expect-fingerprint 73c5da0a
+```
+
+Stdout:
+
+```text
+master fingerprint: 73c5da0a  (passphrase: none)
+CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.
+
+bip84 (native segwit P2WPKH):
+  descriptor: wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#hpg6d6w2
+  first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+```
+
+Stderr carries the watch-only advisory (`note: stdout is watch-only —
+public keys only, cannot spend`). Piping the seed via `--from phrase=-`
+keeps it off the argv; passing `--from phrase="$seed"` inline instead
+raises a `/proc/$PID/cmdline` argv-leakage advisory on stderr.
+
+**All four wallet types** (omit `--template`):
+
+```sh
+printf '%s' "$seed" | mnemonic restore --from phrase=-
+```
+
+emits a `bip44` / `bip49` / `bip84` / `bip86` block each (same
+master fingerprint, four descriptors + first-recv addresses).
+
+**The hard-gate (exit 4) on a wrong reference:**
+
+```sh
+printf '%s' "$seed" |
+  mnemonic restore --from phrase=- --template bip84 \
+    --expect-fingerprint deadbeef ; echo "exit=$?"
+```
+
+prints `✗ MISMATCH` + `error: restore: fingerprint mismatch — derived
+73c5da0a, expected deadbeef` on stderr, **emits no descriptor**, and
+`exit=4`. Add `--allow-mismatch` to override (descriptors emitted under
+`✗ MISMATCH (overridden)`, exit 0) — only when you know the reference
+itself is wrong.
+
+**Passphrase via stdin**, seed via `@env:` (both secret channels — the
+TREZOR-passphrase wallet has a *different* fingerprint, `b4e3f5ed`):
+
+```sh
+export RSEED="$seed"
+printf 'TREZOR' |
+  mnemonic restore --from phrase=@env:RSEED --template bip84 \
+    --passphrase-stdin --expect-fingerprint b4e3f5ed
+```
+
+`--passphrase-stdin` and `--from <node>=-` cannot both read stdin in one
+invocation; use `@env:` for one of the two channels (as above) when you
+need both off the argv.
+
+**Importable payload** (`--format`) — the payload pipes from stdout, the
+verification block goes to stderr:
+
+```sh
+printf '%s' "$seed" |
+  mnemonic restore --from phrase=- --template bip84 \
+    --format descriptor --expect-fingerprint 73c5da0a
+```
+
+Stdout is the bare BIP-380 descriptor
+`wpkh([73c5da0a/84'/0'/0']xpub6CatW…/<0;1>/*)#hpg6d6w2`. With `--json`
+the payload is embedded as the `import_payload` field of the structured
+object.
+
+**Structured output** (`--json`):
+
+```sh
+printf '%s' "$seed" |
+  mnemonic restore --from phrase=- --template bip84 \
+    --expect-fingerprint 73c5da0a --json
+```
+
+emits a single object:
+
+```json
+{"master_fingerprint":"73c5da0a","network":"mainnet","passphrase_applied":false,"verification":{"status":"verified"},"wallets":[{"descriptor":"wpkh([73c5da0a/84'/0'/0']xpub6CatW…/<0;1>/*)#hpg6d6w2","first_addresses":["bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"],"wallet_type":"bip84"}]}
+```
+
+The seed is never echoed in any output mode (redacted by construction);
+no `xprv` / `tprv` token appears in restore's stdout or `--json`.
+
+---
+
 ## `mnemonic import-wallet`
 
 Import a third-party wallet blob into an m-format bundle. Parses a

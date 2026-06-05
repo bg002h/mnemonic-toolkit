@@ -21,6 +21,73 @@ flowchart TD
   G -- no --> I[Wallet bricked]
 ```
 
+## "I have my seed + passphrase — restore my wallet on a PC"
+
+The headline recovery: you hold the seed (the words, or the `ms1` card)
+and — if you used one — the BIP-39 passphrase, and you want to bring the
+wallet up watch-only on a computer. `mnemonic restore` turns that secret
+material into a watch-only restore document: the master fingerprint, the
+first receive address(es), and the concrete single-sig descriptor(s),
+ready to paste into wallet software.
+
+**Verify the master fingerprint against your records *before* funding or
+trusting any address.** The fingerprint is the cheapest
+passphrase-correctness oracle: a wrong passphrase (or a transcription
+slip in the seed) derives a *different* valid wallet, with a different
+fingerprint, silently. Hard-gate it with `--expect-fingerprint` so a
+mismatch fails loudly (exit 4) instead of handing you addresses for the
+wrong wallet:
+
+```sh
+seed="abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon about"
+printf '%s' "$seed" |
+  mnemonic restore --from phrase=- --template bip84 \
+    --expect-fingerprint 73c5da0a
+```
+
+Stdout leads with the verification line, then the descriptor + first
+address:
+
+```text
+master fingerprint: 73c5da0a  (passphrase: none)
+CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.
+
+bip84 (native segwit P2WPKH):
+  descriptor: wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#hpg6d6w2
+  first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+```
+
+If you do not know which wallet type you used, omit `--template` to emit
+all four (BIP-44/49/84/86) and match the address against your records.
+If you used a passphrase, feed it through the stdin channel (the seed
+then comes via `@env:` so neither secret touches the argv):
+
+```sh
+export RSEED="$seed"
+printf 'YOUR-PASSPHRASE' |
+  mnemonic restore --from phrase=@env:RSEED --template bip84 \
+    --passphrase-stdin --expect-fingerprint <your-fingerprint>
+```
+
+If your seed lives on an `ms1` card rather than as words, restore reads
+it directly — `--from ms1=ms10entr…` (or `--from ms1=-` to pipe it).
+Restore is **watch-only-out and never signs** — it emits public keys,
+addresses, and descriptors only, never `xprv` or WIF. To get an
+importable wallet file rather than a bare descriptor, add `--format`
+(e.g. `--format bitcoin-core` / `sparrow` / `coldcard`) with a single
+`--template`; the payload then pipes from stdout and the verification
+block goes to stderr. See [`mnemonic
+restore`](../40-cli-reference/41-mnemonic.md#mnemonic-restore) for the
+full flag reference.
+
+**Multisig note:** restore is single-sig this release. Restoring a
+multisig wallet (your own seed plus the shared md1 and the other
+cosigners' mk1s → a concrete multisig descriptor) is a planned follow-on
+addition; until then, rebuild the watch-only multisig bundle from the
+cosigner xpubs as shown under
+[md1 is lost or unreadable](#multisig-wallet-md1-is-lost-or-unreadable).
+
 ## Single-sig wallet — single card lost
 
 **Lost ms1**: re-derive from the seed phrase you remember:
