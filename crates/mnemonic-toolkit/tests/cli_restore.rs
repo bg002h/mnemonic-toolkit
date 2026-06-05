@@ -2,8 +2,9 @@
 //!
 //! Watch-only restore document: master fingerprint + CONFIRM line, then per-type
 //! concrete descriptor + first receive address(es) for bip44/49/84/86 (or a
-//! single `--template`). Tests grow across Tasks 1.2 (smoke) → 1.3-1.4 (input
-//! channels + exact derivation + watch-only-out negative) → 1.5 (verify-gate).
+//! single `--template`). Optional `--expect-fingerprint`/`--expect-xpub`
+//! reference → mismatch is exit 4 `RestoreMismatch` (no descriptors) unless
+//! `--allow-mismatch`; no reference → UNVERIFIED banner.
 //!
 //! NEVER emits private key material (watch-only-out): a negative test greps the
 //! whole output for `xprv`/`tprv` and asserts absence.
@@ -323,4 +324,152 @@ fn restore_emits_no_private_key_material() {
             assert!(!stream.contains("tprv"), "private tprv leaked:\n{stream}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 1.5 verify gate: expect-fingerprint / expect-xpub / allow-mismatch / UNVERIFIED
+// ---------------------------------------------------------------------------
+
+#[test]
+fn restore_expect_fingerprint_match_exit_0() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--expect-fingerprint",
+            FP_NO_PP,
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "match must be exit 0");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains(DESC_BIP84), "stdout:\n{stdout}");
+    // A matched reference suppresses the UNVERIFIED banner.
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(!stderr.contains("UNVERIFIED"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn restore_expect_fingerprint_mismatch_exit_4_no_descriptors() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--expect-fingerprint",
+            "deadbeef",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(4), "mismatch must be exit 4");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(!stdout.contains("wpkh("), "no descriptors on mismatch;\n{stdout}");
+}
+
+#[test]
+fn restore_mismatch_allow_override_exit_0_banner() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--expect-fingerprint",
+            "deadbeef",
+            "--allow-mismatch",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "allow-mismatch must be exit 0");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains("wpkh("), "descriptors emitted on override;\n{stdout}");
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains("MISMATCH (overridden)"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn restore_no_reference_unverified_banner() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains("UNVERIFIED"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn restore_expect_xpub_match_exit_0() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--expect-xpub",
+            ACCT_XPUB_BIP84,
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "xpub match must be exit 0");
+}
+
+#[test]
+fn restore_expect_xpub_without_template_exit_2() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--expect-xpub",
+            ACCT_XPUB_BIP84,
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(2), "expect-xpub w/o template = exit 2");
+}
+
+#[test]
+fn restore_multisig_template_rejected_exit_1() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "wsh-sortedmulti",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(1), "multisig template = exit 1");
+}
+
+#[test]
+fn restore_watch_only_advisory_present() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains("watch-only"), "advisory missing:\n{stderr}");
 }
