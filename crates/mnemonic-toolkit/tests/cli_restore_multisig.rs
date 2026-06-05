@@ -90,10 +90,10 @@ fn md1_alone_emits_descriptor_unverified() {
         .stderr(predicate::str::contains("UNVERIFIED"));
 }
 
-/// (2) `--md1 --from <cosigner-0 phrase>` → own position inferred + cross-check
-/// ok (verified, no UNVERIFIED).
+/// (2) `--md1 --from <cosigner-0 phrase>` → own position @0 inferred + labeled
+/// "your seed"; the OTHER positions are NOT labeled cross-checked (C1) → PARTIAL.
 #[test]
-fn md1_with_own_seed_verified() {
+fn md1_with_own_seed_partial_only_own_verified() {
     let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
     let mut a = restore_args(&md1);
     a.push("--from".into());
@@ -103,13 +103,18 @@ fn md1_with_own_seed_verified() {
         .args(&a)
         .assert()
         .code(0)
-        .stdout(predicate::str::contains("wsh(sortedmulti(2,"))
-        .stderr(predicate::str::contains("UNVERIFIED").not());
+        .stdout(
+            predicate::str::contains("your seed")
+                // @1 and @2 were NOT cross-checked → must NOT claim verification.
+                .and(predicate::str::contains("not independently verified")),
+        )
+        // Only 1 of 3 cosigners independently verified → PARTIAL, not "verified".
+        .stderr(predicate::str::contains("PARTIAL"));
 }
 
-/// (3) `--md1 --cosigner @1=<mk1 chunks of cosigner 1>` → cross-check ok.
+/// (3) `--md1 --cosigner @1=<mk1>` → @1 cross-checked; @0/@2 NOT (C1) → PARTIAL.
 #[test]
-fn md1_with_cosigner_mk1_verified() {
+fn md1_with_cosigner_mk1_partial() {
     let (md1, mk1_per) = bundle_multisig("wsh-sortedmulti", "mainnet");
     let mut a = restore_args(&md1);
     for chunk in &mk1_per[1] {
@@ -121,7 +126,40 @@ fn md1_with_cosigner_mk1_verified() {
         .args(&a)
         .assert()
         .code(0)
-        .stderr(predicate::str::contains("UNVERIFIED").not());
+        .stdout(
+            predicate::str::contains("cross-checked")
+                .and(predicate::str::contains("not independently verified")),
+        )
+        .stderr(predicate::str::contains("PARTIAL"));
+}
+
+/// (3b) ALL positions cross-checked (own seed @0 + mk1 @1 + mk1 @2) → fully
+/// "verified": NO "not independently verified", NO PARTIAL/UNVERIFIED banner.
+#[test]
+fn md1_all_cosigners_verified_no_partial() {
+    let (md1, mk1_per) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    a.push("--from".into());
+    a.push(format!("phrase={C0}"));
+    for chunk in &mk1_per[1] {
+        a.push("--cosigner".into());
+        a.push(format!("@1={chunk}"));
+    }
+    for chunk in &mk1_per[2] {
+        a.push("--cosigner".into());
+        a.push(format!("@2={chunk}"));
+    }
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("not independently verified").not())
+        .stderr(
+            predicate::str::contains("PARTIAL")
+                .not()
+                .and(predicate::str::contains("UNVERIFIED").not()),
+        );
 }
 
 /// (4) `--md1 --from <foreign seed>` → RestoreMismatch (exit 4).

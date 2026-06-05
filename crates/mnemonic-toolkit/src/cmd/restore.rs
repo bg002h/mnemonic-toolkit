@@ -833,9 +833,12 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     }
 
     // --- 6. Cross-check (own seed via --from; cosigners via --cosigner @N=) ---
-    let secp = Secp256k1::verification_only();
     let mut mismatch: Option<(&'static str, String, String, Option<u8>)> = None;
     let has_reference = args.from.is_some() || !args.cosigner.is_empty();
+    // Positions whose key was INDEPENDENTLY validated (own seed + each passing
+    // `--cosigner @N`). C1: ONLY these may be labeled verified — never blanket-
+    // label the positions that were not actually cross-checked.
+    let mut verified_positions: std::collections::BTreeSet<u8> = std::collections::BTreeSet::new();
 
     // 6a. own seed (--from) → infer position by 65-byte match.
     let mut own_pos: Option<u8> = None;
@@ -884,6 +887,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         };
         let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, args.language)?;
         let _pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
+        // M1: pin the passphrase too (parity with the single-sig `run` path).
+        let _pin_pp = (!passphrase.is_empty())
+            .then(|| mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()));
 
         // Derive the own key at each cosigner's origin; the 65-byte match is the
         // own position (stronger than a master-fp match, R0-r1 M3).
@@ -897,6 +903,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             )?;
             if crate::synthesize::xpub_to_65(&acct.account_xpub) == c.key65 {
                 own_pos = Some(c.idx);
+                verified_positions.insert(c.idx);
                 break;
             }
         }
@@ -962,9 +969,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 ));
                 break;
             }
+            verified_positions.insert(*n);
         }
     }
-    let _ = &secp;
 
     // --- 7. Mismatch hard-gate (exit 4) unless --allow-mismatch ---
     if let Some((reference, derived, expected, slot)) = &mismatch {
@@ -979,21 +986,33 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         }
     }
 
-    // Annotate per-cosigner notes for the document.
+    // Annotate per-cosigner notes — C1: ONLY positions in `verified_positions`
+    // (own seed + each passing `--cosigner @N`) are labeled verified; every other
+    // position is "from md1 (not independently verified)" even when SOME other
+    // position WAS cross-checked. Never present an unchecked key as verified.
     for c in cosigners.iter_mut() {
-        if Some(c.idx) == own_pos {
-            c.note = "← your seed (verified)";
-        } else if has_reference && mismatch.is_none() {
-            c.note = "cross-checked";
-        }
+        c.note = if Some(c.idx) == own_pos {
+            "← your seed (verified)"
+        } else if verified_positions.contains(&c.idx) {
+            "cross-checked"
+        } else {
+            "from md1 (not independently verified)"
+        };
     }
 
+    // Overall status: "verified" ONLY when EVERY cosigner position was validated;
+    // "partial" when some (but not all) were; else "unverified" / "overridden".
+    let all_verified = cosigners
+        .iter()
+        .all(|c| verified_positions.contains(&c.idx));
     let verification_status = if mismatch.is_some() {
         "overridden"
-    } else if has_reference {
+    } else if !has_reference {
+        "unverified"
+    } else if all_verified {
         "verified"
     } else {
-        "unverified"
+        "partial"
     };
 
     // --- 8. Compose stdout content (text | json) + route to --output ---
@@ -1075,6 +1094,23 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             stderr,
             "UNVERIFIED: no --from/--cosigner cross-check supplied; verify each cosigner \
              fingerprint above against your records before importing"
+        )
+        .map_err(ToolkitError::Io)?;
+    } else if !all_verified {
+        // C1: some cosigners were cross-checked, others were not. Name the
+        // unverified positions so the user does not over-trust the document.
+        let unverified: Vec<String> = cosigners
+            .iter()
+            .filter(|c| !verified_positions.contains(&c.idx))
+            .map(|c| format!("@{}", c.idx))
+            .collect();
+        writeln!(
+            stderr,
+            "PARTIAL: cross-checked {}/{} cosigners; positions {} were NOT independently \
+             verified — confirm their fingerprints against your records before importing",
+            verified_positions.len(),
+            cosigners.len(),
+            unverified.join(", ")
         )
         .map_err(ToolkitError::Io)?;
     }
