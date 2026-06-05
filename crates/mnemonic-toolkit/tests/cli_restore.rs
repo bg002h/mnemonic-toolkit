@@ -653,3 +653,278 @@ fn restore_format_path_emits_no_private_key_material() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 2.2 --json structured output + --output + seed redaction
+// ---------------------------------------------------------------------------
+
+#[test]
+fn restore_json_shape_single_template() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--json",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "exit 0; got {:?}", out.status.code());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).expect("--json stdout must parse as JSON");
+    assert_eq!(v["master_fingerprint"].as_str().unwrap(), FP_NO_PP);
+    assert!(!v["passphrase_applied"].as_bool().unwrap());
+    assert_eq!(v["network"].as_str().unwrap(), "mainnet");
+    assert_eq!(v["verification"]["status"].as_str().unwrap(), "unverified");
+    let wallets = v["wallets"].as_array().expect("wallets array");
+    assert_eq!(wallets.len(), 1, "single --template = 1 wallet");
+    assert_eq!(wallets[0]["wallet_type"].as_str().unwrap(), "bip84");
+    assert_eq!(wallets[0]["descriptor"].as_str().unwrap(), DESC_BIP84);
+    let addrs = wallets[0]["first_addresses"].as_array().unwrap();
+    assert_eq!(addrs[0].as_str().unwrap(), FIRST_RECV_BIP84);
+    // No `--format` → no import_payload field.
+    assert!(
+        v.get("import_payload").is_none(),
+        "import_payload absent without --format:\n{stdout}"
+    );
+}
+
+#[test]
+fn restore_json_all_four_default_lists_four_wallets() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--json",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("parse");
+    let types: Vec<&str> = v["wallets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["wallet_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(types, ["bip44", "bip49", "bip84", "bip86"], "all-4:\n{stdout}");
+}
+
+#[test]
+fn restore_json_with_format_embeds_import_payload() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--json",
+            "--format",
+            "descriptor",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("parse");
+    assert_eq!(
+        v["import_payload"].as_str().unwrap(),
+        DESC_BIP84,
+        "import_payload embeds the --format payload:\n{stdout}"
+    );
+}
+
+#[test]
+fn restore_json_verification_verified_status() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--json",
+            "--expect-fingerprint",
+            FP_NO_PP,
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("parse");
+    assert_eq!(v["verification"]["status"].as_str().unwrap(), "verified");
+}
+
+#[test]
+fn restore_json_mismatch_exits_4_not_json_success_body() {
+    // A reference mismatch surfaces via ToolkitError::message() (exit 4), NOT a
+    // json-success body with verification.status="mismatch".
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--json",
+            "--expect-fingerprint",
+            "deadbeef",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(4), "mismatch in --json must be exit 4");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        stdout.is_empty(),
+        "no json success body on mismatch:\n{stdout}"
+    );
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("restore: fingerprint mismatch"),
+        "message() error on stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn restore_json_no_seed_material_redacted_non_vacuous() {
+    // NON-VACUOUS: run with a REAL passphrase + a REAL ms1 seed. The passphrase
+    // must actually be applied (it changes the fingerprint vs the no-pp seed),
+    // yet NONE of the seed phrase / ms1 string / passphrase / xprv / tprv may
+    // appear anywhere in the --json output.
+    const PASSPHRASE: &str = "correct-horse-battery-staple-9417";
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("ms1={MS1_NO_PP}"),
+            "--passphrase",
+            PASSPHRASE,
+            "--template",
+            "bip84",
+            "--json",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "exit 0; got {:?}", out.status.code());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("parse");
+    // Proof the passphrase was applied: passphrase_applied=true AND the
+    // fingerprint is NOT the no-passphrase fingerprint (so PBKDF2 used it).
+    assert!(v["passphrase_applied"].as_bool().unwrap());
+    assert_ne!(
+        v["master_fingerprint"].as_str().unwrap(),
+        FP_NO_PP,
+        "passphrase must change the fingerprint (non-vacuous):\n{stdout}"
+    );
+    // Redaction: no secret token appears anywhere in stdout.
+    for tok in [PASSPHRASE, MS1_NO_PP, "xprv", "tprv", "abandon"] {
+        assert!(
+            !stdout.contains(tok),
+            "secret `{tok}` leaked into --json:\n{stdout}"
+        );
+    }
+}
+
+#[test]
+fn restore_output_file_writes_content_stdout_clean() {
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!("restore_out_{}.txt", std::process::id()));
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--output",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    // stdout is empty/clean — the document went to the file.
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "stdout must be clean with --output:\n{stdout}");
+    let file = std::fs::read_to_string(&path).expect("output file written");
+    assert!(file.contains("master fingerprint:"), "doc in file:\n{file}");
+    assert!(file.contains(DESC_BIP84), "descriptor in file:\n{file}");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn restore_output_file_with_json_writes_json() {
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!("restore_out_json_{}.txt", std::process::id()));
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--json",
+            "--output",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "stdout clean with --json --output:\n{stdout}");
+    let file = std::fs::read_to_string(&path).expect("output file");
+    let v: serde_json::Value =
+        serde_json::from_str(&file).expect("file content is valid JSON");
+    assert_eq!(v["master_fingerprint"].as_str().unwrap(), FP_NO_PP);
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn restore_json_and_output_paths_emit_no_private_key_material() {
+    // Watch-only-out absolute across the --json and --output paths (with pp).
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!("restore_wo_{}.txt", std::process::id()));
+    // --json path.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--passphrase",
+            "TREZOR",
+            "--json",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let json_stdout = String::from_utf8(out.stdout).unwrap();
+    // --output path (file).
+    let out2 = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--passphrase",
+            "TREZOR",
+            "--output",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out2.status.success());
+    let file = std::fs::read_to_string(&path).expect("output file");
+    std::fs::remove_file(&path).ok();
+    for stream in [&json_stdout, &file] {
+        assert!(!stream.contains("xprv"), "xprv leaked:\n{stream}");
+        assert!(!stream.contains("tprv"), "tprv leaked:\n{stream}");
+        assert!(
+            !stream.contains("account_xpriv"),
+            "account_xpriv leaked:\n{stream}"
+        );
+    }
+}
