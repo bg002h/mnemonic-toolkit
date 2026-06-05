@@ -15,6 +15,7 @@ pub mod inspect;
 pub mod ms_shares;
 pub mod nostr;
 pub mod repair;
+pub mod restore;
 pub mod silent_payment;
 pub mod seed_xor;
 pub mod seedqr;

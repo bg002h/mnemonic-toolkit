@@ -272,6 +272,16 @@ pub enum ToolkitError {
     /// repair report already wrote a clean stderr summary; appending the
     /// Display text would be confusing noise).
     RepairShortCircuit { exit_code: u8 },
+    /// `restore` reference cross-check failed: derived material ≠ supplied
+    /// `--expect-*` (or, future, cosigner slot). Exit 4 (verify/mismatch tier,
+    /// alongside `BundleMismatch`/`ImportWalletSeedMismatch`). Surfaced via
+    /// `message()` only (no `details()` JSON-error envelope — SPEC I3).
+    RestoreMismatch {
+        reference: &'static str,
+        derived: String,
+        expected: String,
+        slot: Option<u8>,
+    },
     /// v0.35.0 — `mnemonic silent-payment` BIP-352 receiver-address derivation
     /// failure: a non-seed-bearing secret (WIF/minikey), the reserved `m=0`
     /// change label, or a derivation/label-tweak error. Exit 1 (parse/usage
@@ -515,6 +525,7 @@ impl ToolkitError {
             ToolkitError::NostrKeyParse(_) => 1,
             ToolkitError::Repair(_) => 2,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
+            ToolkitError::RestoreMismatch { .. } => 4,
             ToolkitError::SilentPayment(_) => 1,
             ToolkitError::SlotInputViolation { .. } => 2,
             ToolkitError::UnknownHrp { .. } => 2,
@@ -575,6 +586,7 @@ impl ToolkitError {
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
+            ToolkitError::RestoreMismatch { .. } => "RestoreMismatch",
             ToolkitError::SilentPayment(_) => "SilentPayment",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
@@ -751,6 +763,15 @@ impl ToolkitError {
                 // already emitted its own clean stderr summary).
                 String::new()
             }
+            ToolkitError::RestoreMismatch {
+                reference,
+                derived,
+                expected,
+                slot,
+            } => format!(
+                "restore: {reference} mismatch{} — derived {derived}, expected {expected}",
+                slot.map(|s| format!(" at slot @{s}")).unwrap_or_default()
+            ),
             ToolkitError::SilentPayment(msg) => format!("silent-payment: {msg}"),
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {

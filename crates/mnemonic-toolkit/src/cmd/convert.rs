@@ -390,7 +390,7 @@ pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
 /// is absent. Single-sig templates (`bip44` / `bip49` / `bip84` / `bip86`)
 /// map cleanly; multisig templates return None (refused upstream as
 /// `refusal_address_script_type_unknown_template`).
-fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
+pub(crate) fn script_type_from_template(template: CliTemplate) -> Option<ScriptType> {
     match template {
         CliTemplate::Bip44 => Some(ScriptType::P2pkh),
         CliTemplate::Bip84 => Some(ScriptType::P2wpkh),

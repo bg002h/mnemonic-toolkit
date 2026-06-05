@@ -1,0 +1,419 @@
+//! `mnemonic restore` — watch-only single-sig restore document.
+//!
+//! Takes secret seed material (`ms1`/`phrase`/`entropy`/`seedqr`) + an optional
+//! BIP-39 passphrase and emits a watch-only "restore document" to facilitate
+//! restoring a wallet on a PC: the document leads with the master fingerprint
+//! (the passphrase-correctness oracle) + first receive address(es), then the
+//! concrete single-sig descriptor(s) for bip44/49/84/86 (or a single
+//! `--template`).
+//!
+//! Read-only public derivation: NO private keys reach stdout, NO signing
+//! (`feedback_no_signing_read_only_derivation_boundary`). Derivation uses a
+//! verification-only secp context and NEVER touches `account_xpriv`.
+//!
+//! Multisig restore is DEFERRED (SPEC §11 — `restore-multisig-cosigner-scope`).
+
+use std::io::{Read, Write};
+
+use bip39::Mnemonic;
+use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::secp256k1::Secp256k1;
+use clap::Args;
+
+use crate::address_render::render_address_from_xpub;
+use crate::cmd::convert::{
+    parse_from_input, read_stdin_passphrase, read_stdin_to_string, script_type_from_template,
+    NodeType,
+};
+use crate::derive_slot::derive_bip32_from_entropy;
+use crate::error::{BitcoinErrorKind, ToolkitError};
+use crate::language::CliLanguage;
+use crate::network::CliNetwork;
+use crate::synthesize::ResolvedSlot;
+use crate::template::CliTemplate;
+use crate::wallet_export::build_descriptor_string;
+
+/// The four single-sig templates restore emits when no `--template` is given.
+const ALL_SINGLE_SIG: [CliTemplate; 4] = [
+    CliTemplate::Bip44,
+    CliTemplate::Bip49,
+    CliTemplate::Bip84,
+    CliTemplate::Bip86,
+];
+
+/// `mnemonic restore` arguments.
+#[derive(Args, Debug)]
+pub struct RestoreArgs {
+    /// Seed source: `ms1=<v>` | `phrase=<v>` | `entropy=<hex>` | `seedqr=<digits>`.
+    /// Secret values support `@env:VAR` and `-` (stdin). Non-seed nodes
+    /// (xpub/xprv/wif/…) are refused (restore needs a master secret).
+    #[arg(long)]
+    pub from: String,
+
+    /// BIP-39 mnemonic-extension passphrase. `@env:VAR` supported; or
+    /// `--passphrase-stdin`. Empty (default) = no passphrase.
+    #[arg(long)]
+    pub passphrase: Option<String>,
+
+    /// Read the BIP-39 passphrase from stdin (conflicts with `--passphrase`).
+    #[arg(long, conflicts_with = "passphrase")]
+    pub passphrase_stdin: bool,
+
+    /// BIP-39 wordlist language for `phrase=`/`seedqr=` (default english).
+    /// A `mnem` ms1 card carries its own wire language; supplying a conflicting
+    /// `--language` is refused.
+    #[arg(long, value_enum)]
+    pub language: Option<CliLanguage>,
+
+    /// Network (default mainnet).
+    #[arg(long, value_enum)]
+    pub network: Option<CliNetwork>,
+
+    /// BIP-32 account index (default 0).
+    #[arg(long, default_value_t = 0)]
+    pub account: u32,
+
+    /// Restrict to a single single-sig wallet type. Omit = all four
+    /// (bip44/49/84/86). A multisig template is refused (restore is single-sig).
+    #[arg(long, value_enum)]
+    pub template: Option<CliTemplate>,
+
+    /// Reference master fingerprint (8 lowercase hex). Mismatch → exit 4
+    /// (unless `--allow-mismatch`).
+    #[arg(long)]
+    pub expect_fingerprint: Option<String>,
+
+    /// Reference account xpub (requires `--template`). Mismatch → exit 4
+    /// (unless `--allow-mismatch`).
+    #[arg(long)]
+    pub expect_xpub: Option<String>,
+
+    /// Emit descriptors even when a reference does not match (loud banner, exit 0).
+    #[arg(long)]
+    pub allow_mismatch: bool,
+
+    /// Number of first-receive addresses to show per wallet type (default 1).
+    #[arg(long, default_value_t = 1)]
+    pub count: u32,
+}
+
+fn bad(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::BadInput(s.into())
+}
+
+/// One derived wallet type: its template, concrete descriptor, and first
+/// receive address(es).
+struct WalletRow {
+    template: CliTemplate,
+    account_xpub: Xpub,
+    descriptor: String,
+    first_recv: Vec<String>,
+}
+
+/// Run `mnemonic restore`.
+pub fn run<R: Read, W: Write, E: Write>(
+    args: &RestoreArgs,
+    stdin: &mut R,
+    stdout: &mut W,
+    stderr: &mut E,
+    _no_auto_repair: bool,
+) -> Result<u8, ToolkitError> {
+    let from = parse_from_input(&args.from).map_err(bad)?;
+    let from_uses_stdin = from.value == "-";
+
+    // Seed-bearing nodes only — restore needs a master secret to derive from.
+    if !matches!(
+        from.node,
+        NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
+    ) {
+        return Err(bad(format!(
+            "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
+            from.node.as_str()
+        )));
+    }
+
+    // Reject a multisig --template (restore is single-sig this cycle).
+    if let Some(t) = args.template {
+        if t.is_multisig() {
+            return Err(bad(
+                "restore is single-sig only; --template ∈ {bip44,bip49,bip84,bip86}",
+            ));
+        }
+    }
+
+    // `--expect-xpub` compares the per-template account xpub, which is only
+    // unambiguous when a single `--template` is selected.
+    if args.expect_xpub.is_some() && args.template.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--expect-xpub",
+            message:
+                "--expect-xpub requires --template <bip44|bip49|bip84|bip86> (the account xpub is per-type)",
+        });
+    }
+
+    // Single-stdin-per-invocation guard (mirror convert / addresses).
+    if args.passphrase_stdin && from_uses_stdin {
+        return Err(bad(
+            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+        ));
+    }
+
+    // argv-leak advisories for inline secret-bearing values (mirror addresses scope).
+    if !from_uses_stdin && !from.value.starts_with("@env:") {
+        let node = args.from.split('=').next().unwrap_or("");
+        crate::secret_advisory::secret_in_argv_warning(
+            stderr,
+            &format!("--from {node}="),
+            &format!("--from {node}=-"),
+        );
+    }
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            crate::secret_advisory::secret_in_argv_warning(
+                stderr,
+                "--passphrase",
+                "--passphrase-stdin",
+            );
+        }
+    }
+
+    // Effective BIP-39 passphrase (stdin / @env: / inline).
+    let passphrase: String = if args.passphrase_stdin {
+        read_stdin_passphrase(stdin)?
+    } else {
+        match args.passphrase.as_deref() {
+            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+            None => String::new(),
+        }
+    };
+    let passphrase_applied = !passphrase.is_empty();
+
+    // Resolved `--from` value (stdin / @env: / literal).
+    let from_value: String = if from_uses_stdin {
+        read_stdin_to_string(stdin)?
+    } else {
+        crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
+    };
+
+    let network = args.network.unwrap_or(CliNetwork::Mainnet);
+
+    // Resolve the seed node → (entropy, derive_language). For ms1, the `mnem`
+    // wire language wins (refuse-on-`--language`-conflict, exit 2).
+    let (entropy, derive_language): (zeroize::Zeroizing<Vec<u8>>, bip39::Language) = match from.node
+    {
+        NodeType::Ms1 => {
+            let res = crate::slot_ms1::resolve_ms1_slot(&from_value, args.language, 0)?;
+            (res.entropy, res.derive_language)
+        }
+        NodeType::Phrase => {
+            let language = args.language.unwrap_or_default();
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(language.into(), &from_value)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, language.into())
+        }
+        NodeType::Seedqr => {
+            let language = args.language.unwrap_or_default();
+            let phrase = mnemonic_toolkit::seedqr::decode(&from_value)
+                .map_err(|e| crate::cmd::seedqr::map_seedqr_error(e, "restore"))?;
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(language.into(), &phrase)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, language.into())
+        }
+        NodeType::Entropy => {
+            let entropy = zeroize::Zeroizing::new(
+                hex::decode(from_value.trim())
+                    .map_err(|e| bad(format!("--from entropy= hex-decode: {e}")))?,
+            );
+            // No wordlist — language is irrelevant to derivation (english).
+            (entropy, bip39::Language::English)
+        }
+        _ => unreachable!("seed-node guard above restricts to ms1/phrase/seedqr/entropy"),
+    };
+
+    // Pin the secret buffers for the remainder of the handler scope.
+    let _pin_entropy = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
+    let _pin_pp = if passphrase.is_empty() {
+        None
+    } else {
+        Some(mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()))
+    };
+
+    let templates: &[CliTemplate] = match &args.template {
+        Some(t) => std::slice::from_ref(t),
+        None => &ALL_SINGLE_SIG,
+    };
+
+    // Derive each selected single-sig type. The master fingerprint is
+    // path-independent — identical across all four — so capture it once.
+    let secp = Secp256k1::verification_only();
+    let mut master_fingerprint: Option<Fingerprint> = None;
+    let mut rows: Vec<WalletRow> = Vec::with_capacity(templates.len());
+
+    for &template in templates {
+        let acct = derive_bip32_from_entropy(
+            &entropy,
+            &passphrase,
+            derive_language,
+            network,
+            template,
+            args.account,
+        )?;
+        master_fingerprint = Some(acct.master_fingerprint);
+
+        let script_type = script_type_from_template(template)
+            .expect("single-sig template has a ScriptType (multisig rejected above)");
+
+        // First receive address(es): m/0/i children of the account xpub, derived
+        // with a verification-only secp (watch-only by construction).
+        let mut first_recv = Vec::with_capacity(args.count as usize);
+        for i in 0..args.count {
+            let chain = ChildNumber::from_normal_idx(0).unwrap();
+            let leaf = ChildNumber::from_normal_idx(i).map_err(|_| {
+                bad(format!(
+                    "address index {i} out of BIP-32 normal range (0..2147483647)"
+                ))
+            })?;
+            let dp: DerivationPath = vec![chain, leaf].into();
+            let child = acct
+                .account_xpub
+                .derive_pub(&secp, &dp)
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+            first_recv.push(render_address_from_xpub(&secp, &child, script_type, network));
+        }
+
+        // Concrete descriptor. The watch-only ResolvedSlot mirrors the
+        // wallet_import watch-only ctor: all 7 fields spelled, no entropy.
+        let slot = ResolvedSlot {
+            xpub: acct.account_xpub,
+            fingerprint: acct.master_fingerprint,
+            path: acct.account_path.clone(),
+            entropy: None,
+            master_xpub: None,
+            language: None,
+            _entropy_pin: None,
+        };
+        let descriptor =
+            build_descriptor_string(template, &[slot], 1, network, args.account, None)?;
+
+        rows.push(WalletRow {
+            template,
+            account_xpub: acct.account_xpub,
+            descriptor,
+            first_recv,
+        });
+        // NB: `acct` (and its `account_xpriv`) is dropped here — never emitted.
+    }
+
+    let master_fingerprint = master_fingerprint.expect("at least one template derived");
+    let fp_str = master_fingerprint.to_string().to_lowercase();
+
+    // ---- Verification gate (§3.4) -------------------------------------------
+    // Compute the reference comparison (if any). `--expect-xpub` is gated to a
+    // single `--template` above, so `rows[0]` is the only row when it is set.
+    let mismatch: Option<(&'static str, String, String)> =
+        if let Some(expected) = args.expect_fingerprint.as_deref() {
+            let expected_norm = expected.trim().to_lowercase();
+            if expected_norm != fp_str {
+                Some(("fingerprint", fp_str.clone(), expected_norm))
+            } else {
+                None
+            }
+        } else if let Some(expected) = args.expect_xpub.as_deref() {
+            let derived = rows[0].account_xpub.to_string();
+            let expected = expected.trim().to_string();
+            if expected != derived {
+                Some(("xpub", derived, expected))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+    let has_reference = args.expect_fingerprint.is_some() || args.expect_xpub.is_some();
+
+    if let Some((reference, derived, expected)) = &mismatch {
+        if !args.allow_mismatch {
+            // Hard fail (exit 4) — no descriptors. The verify summary goes to
+            // stderr; the typed error carries the derived-vs-expected detail.
+            writeln!(stderr, "✗ MISMATCH").map_err(ToolkitError::Io)?;
+            writeln!(
+                stderr,
+                "master fingerprint: {fp_str}  (passphrase: {})",
+                if passphrase_applied { "applied" } else { "none" }
+            )
+            .map_err(ToolkitError::Io)?;
+            return Err(ToolkitError::RestoreMismatch {
+                reference,
+                derived: derived.clone(),
+                expected: expected.clone(),
+                slot: None,
+            });
+        }
+    }
+
+    // ---- Output document (§3.5) ---------------------------------------------
+    writeln!(
+        stdout,
+        "master fingerprint: {fp_str}  (passphrase: {})",
+        if passphrase_applied { "applied" } else { "none" }
+    )
+    .map_err(ToolkitError::Io)?;
+    writeln!(
+        stdout,
+        "CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor."
+    )
+    .map_err(ToolkitError::Io)?;
+
+    for row in &rows {
+        writeln!(stdout).map_err(ToolkitError::Io)?;
+        writeln!(stdout, "{}:", template_label(row.template)).map_err(ToolkitError::Io)?;
+        writeln!(stdout, "  descriptor: {}", row.descriptor).map_err(ToolkitError::Io)?;
+        for addr in &row.first_recv {
+            writeln!(stdout, "  first recv: {addr}").map_err(ToolkitError::Io)?;
+        }
+    }
+
+    // ---- Verification banners (stderr) --------------------------------------
+    if mismatch.is_some() {
+        // Reached only with `--allow-mismatch` (the hard-fail path returned above).
+        writeln!(
+            stderr,
+            "✗ MISMATCH (overridden): derived material does NOT match the supplied reference; \
+             descriptors above were produced by the passphrase you provided, NOT the expected wallet"
+        )
+        .map_err(ToolkitError::Io)?;
+    } else if !has_reference {
+        writeln!(
+            stderr,
+            "UNVERIFIED: no --expect-fingerprint/--expect-xpub supplied; verify the master \
+             fingerprint above ({fp_str}) against your records before importing"
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::WatchOnly,
+        stderr,
+    );
+
+    Ok(0)
+}
+
+fn template_label(t: CliTemplate) -> &'static str {
+    match t {
+        CliTemplate::Bip44 => "bip44 (legacy P2PKH)",
+        CliTemplate::Bip49 => "bip49 (nested segwit P2SH-P2WPKH)",
+        CliTemplate::Bip84 => "bip84 (native segwit P2WPKH)",
+        CliTemplate::Bip86 => "bip86 (taproot P2TR)",
+        // Multisig templates are rejected before any WalletRow is built.
+        _ => "multisig",
+    }
+}

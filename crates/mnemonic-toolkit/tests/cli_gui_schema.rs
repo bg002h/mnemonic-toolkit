@@ -71,7 +71,8 @@ fn gui_schema_lists_all_subcommands() {
     // `verify-message` (legacy + BIP-322 signature verify); total was 25.
     // v0.38.0 adds `addresses` (batch watch-only address listing); total was 26.
     // ms K-of-N v0.2 adds `ms-shares` (BIP-93 codex32 K-of-N share split/combine),
-    // flattened to `ms-shares-split` + `ms-shares-combine`; total is now 28.
+    // flattened to `ms-shares-split` + `ms-shares-combine`; total was 28.
+    // v0.43.0 adds `restore` (watch-only single-sig restore document); total is now 29.
     // gui-schema + help filtered out.
     assert_eq!(
         names,
@@ -91,6 +92,7 @@ fn gui_schema_lists_all_subcommands() {
             "ms-shares-split",
             "nostr",
             "repair",
+            "restore",
             "seed-xor-combine",
             "seed-xor-split",
             "seedqr-decode",
@@ -105,7 +107,7 @@ fn gui_schema_lists_all_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 28 user-facing subcommands must appear (nested split/combine \
+        "all 29 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

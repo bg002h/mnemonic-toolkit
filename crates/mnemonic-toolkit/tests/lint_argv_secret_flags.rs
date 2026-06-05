@@ -61,7 +61,8 @@ struct Route {
     evidence: &'static [&'static str],
 }
 
-// ── Axis 1: flag-NAME routes (25 = 9 pre-v0.13.0 + 16 backfilled v0.36.2) ──
+// ── Axis 1: flag-NAME routes (9 pre-v0.13.0 + 16 backfilled v0.36.2 + addresses
+//    v0.38.0 + ms-shares-combine + restore v0.43.0) ──
 const FLAG_ROUTES: &[Route] = &[
     // -- pre-v0.13.0 (9) --
     Route { subcommand: "bundle", flag: "--passphrase", source_file: "src/cmd/bundle.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
@@ -97,6 +98,8 @@ const FLAG_ROUTES: &[Route] = &[
     Route { subcommand: "addresses", flag: "--passphrase", source_file: "src/cmd/addresses.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
     // -- ms K-of-N v0.2 (1): mnemonic ms-shares combine --share --
     Route { subcommand: "ms-shares-combine", flag: "--share", source_file: "src/cmd/ms_shares.rs", evidence: &["--share -", "secret_in_argv_warning"] },
+    // -- v0.43.0 (1): mnemonic restore --passphrase --
+    Route { subcommand: "restore", flag: "--passphrase", source_file: "src/cmd/restore.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
 ];
 
 // ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
@@ -112,6 +115,8 @@ const FROM_ROUTES: &[Route] = &[
     // seedqr-decode/-encode are flattened → src/cmd/seedqr.rs (no seedqr-decode.rs) — R2 M-1.
     Route { subcommand: "seedqr-decode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },
     Route { subcommand: "seedqr-encode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },
+    // v0.43.0: mnemonic restore --from {ms1,phrase,entropy,seedqr}= (=- stdin route).
+    Route { subcommand: "restore", flag: "--from", source_file: "src/cmd/restore.rs", evidence: &["=-", "value == \"-\""] },
 ];
 
 // ── Axis 3: `--slot` routes (4; slot-stdin / @env: / refusal) ──

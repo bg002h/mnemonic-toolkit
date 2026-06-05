@@ -132,6 +132,8 @@ enum Command {
     XpubSearch(cmd::xpub_search::XpubSearchArgs),
     /// verify a Bitcoin message signature (legacy P2PKH signmessage + BIP-322 segwit/taproot)
     VerifyMessage(cmd::verify_message::VerifyMessageArgs),
+    /// emit a watch-only restore document (single-sig) from a seed + optional passphrase
+    Restore(cmd::restore::RestoreArgs),
 }
 
 fn main() -> ExitCode {
@@ -189,6 +191,7 @@ fn main() -> ExitCode {
         Command::XpubSearch(args) => {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
+        Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair),
     };
 
     let exit = match result {
