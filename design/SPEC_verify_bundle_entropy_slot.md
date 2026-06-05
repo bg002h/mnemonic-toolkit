@@ -30,7 +30,7 @@ This is a pure asymmetry, not a design boundary:
 
 ## 3. The change
 
-Insert a new arm into the `verify_bundle.rs` descriptor binding loop, **between** the `Xpub` arm (ends `:854`) and the `Ms1` arm (`:855` `else if`), mirroring the `bundle` loop's arm ordering (`Phrase/Seedqr → Xpub → Entropy → Ms1`). Placement mirrors the bundle loop **for consistency**; precedence is moot — `is_legal_set` (`slot_input.rs:343-359`) permits `[Entropy]` as a standalone-only set (no `[Entropy, *]` co-occurrence exists), so `subkeys.contains(&Entropy)` is never simultaneously true with the `Xpub`/`Ms1` `contains` checks. (Corrected per R0-r1 M1.)
+Insert a new arm into the `verify_bundle.rs` descriptor binding loop, **between** the `Xpub` arm (ends `:854`) and the `Ms1` arm (`:855` `else if`), mirroring the `bundle` loop's arm ordering (`Phrase/Seedqr → Xpub → Entropy → Ms1`). Placement mirrors the bundle loop **for consistency**; precedence is moot — `is_legal_set` (`slot_input.rs:343-367`) permits `[Entropy]` as a standalone-only set (no `[Entropy, *]` co-occurrence exists), so `subkeys.contains(&Entropy)` is never simultaneously true with the `Xpub`/`Ms1` `contains` checks. (Corrected per R0-r1 M1.)
 
 The arm is the existing `Ms1` arm (`:855-884`) minus the ms1-decode step — it routes through the **same shared helper** the `Ms1` arm uses, exactly as the FOLLOWUP prescribes ("derive via `derive_slot::derive_bip32_from_entropy_at_path` at `anno_path`"):
 
