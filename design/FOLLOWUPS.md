@@ -83,9 +83,30 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs` `RESTORE_FLAGS` (`:355`): add `FlagSchema` entries for `--md1` (repeating, `secret:false`) and `--cosigner` (repeating, `secret:false`), and flip the existing `--from` entry `required: true` → `required: false` (toolkit `RestoreArgs.from` is now `Option<String>` with `required_unless_present = "md1"`).
 - **What:** The v0.44.0 cycle added `--md1`/`--cosigner` to the toolkit's `restore` clap surface. The paired GUI `schema_mirror` update is **intentionally unmergeable until the GUI bumps its toolkit pin to ≥ v0.44.0**: `schema_mirror` runs `mnemonic gui-schema` against the PINNED toolkit binary, so a `RESTORE_FLAGS` that lists `--md1`/`--cosigner` against an older pinned binary (without those flags) FAILS the gate (the "schema-ahead-of-pins" class). `schema_mirror` is flag-NAME-only, so the `--from required` flip is NOT gate-caught — the GUI would mis-render `--from` as mandatory until the prose flip lands; the leading discipline is this paired-PR record. When the GUI next bumps its toolkit pin (≥ v0.44.0), land the `RESTORE_FLAGS` delta in the same PR. Mirrors the resolved precedent `gui-ms1-slot-subkey-pending-pin-bump`.
 - **Why deferred:** Cross-repo; the GUI toolkit-pin bump is its own GUI cycle (a `schema_mirror`-ahead-of-pin change cannot ship in isolation).
-- **Status:** `open`
+- **Status:** `resolved` mnemonic-gui-**v0.25.0** (`a9abac2`, tag `mnemonic-gui-v0.25.0`). `RESTORE_FLAGS` += `--md1`/`--cosigner` (both `Text`, `repeating`, `secret:false`); `--from` flipped `required:true → false`. The `required_unless_present="md1"` semantic is modeled as a GUI-authored at-least-one rule `conditional::restore` (`--from` Required while `--md1` empty) — NOT just flat-false — because the toolkit `gui-schema` `conditional_rules` projection is a hand-encoded allowlist (`gui_schema.rs:336-345`) with no `restore` arm, so restore emits `conditional_rules: []`; the rule is GUI-authored/ungated, same posture as `repair`/`inspect` (spawned FOLLOWUP `gui-schema-restore-required-unless-md1-projection`). Toolkit pin bumped v0.43.0 → v0.44.0 (`Cargo.toml` + `pinned-upstream.toml` + `Cargo.lock`, `pin_coherence` lockstep). `schema_mirror` + `conditional_visibility` + `gui_schema_conditional_drift` + full suite green (4 pinned bins). Audit trail: `mnemonic-gui/design/SPEC_gui_v0_25_0_restore_multisig_flags.md` + `design/agent-reports/gui-v0_25_0-restore-multisig-{R0,impl}-review.md` (R0 GREEN first round; impl review GREEN).
 - **Tier:** `cross-repo`
 - **Tags:** `restore` `multisig` `gui` `schema-mirror`
+- **Spawned FOLLOWUPs:** `gui-schema-restore-required-unless-md1-projection`, `gui-readme-install-pin-coherence-guard`.
+
+### `gui-schema-restore-required-unless-md1-projection` — toolkit `gui-schema` `conditional_rules` projection omits restore's `--from required_unless_present="md1"` (the GUI rule is GUI-authored/ungated)
+
+- **Surfaced:** 2026-06-05, mnemonic-gui v0.25.0 cycle (R0 + impl review).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/gui_schema.rs:336-345` (`build_subcommand_conditional_rules` — hand-encoded `match name` allowlist with arms only for bundle/verify-bundle/export-wallet/convert/derive-child/compare-cost; restore → `_ => Vec::new()`).
+- **What:** Toolkit `restore` carries `#[arg(long, required_unless_present = "md1")]` on `--from` (`cmd/restore.rs:60`), but the `gui-schema` `conditional_rules` projection has no restore arm, so it emits `conditional_rules: []` for restore. The GUI therefore cannot mirror the at-least-one constraint via the normal drift-gated mechanism (`mnemonic-gui/tests/gui_schema_conditional_drift.rs` skips empty-rule subcommands); mnemonic-gui v0.25.0 modeled it as a **GUI-authored** rule `conditional::restore` (un-gated, same posture as the GUI's `repair`/`inspect` at-least-one rules). Promote: add a `restore` arm to `build_subcommand_conditional_rules` emitting `--from required_unless_present=[--md1]`, so the GUI rule becomes drift-gated. Requires a toolkit release + a GUI pin bump to consume it (then the GUI rule is enforced by `gui_schema_conditional_drift`).
+- **Why deferred:** Out of scope for the GUI-only v0.25.0 catch-up (a toolkit `gui-schema` change cannot ship in a GUI cycle); the GUI-authored rule is correct + faithful in the meantime.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Tags:** `restore` `multisig` `gui` `gui-schema` `conditional-rules`
+
+### `gui-readme-install-pin-coherence-guard` — mnemonic-gui `README.md` install-command pins drift silently (no version-marker guard)
+
+- **Surfaced:** 2026-06-05, mnemonic-gui v0.25.0 cycle (impl review Minor).
+- **Where:** `mnemonic-gui/README.md` install-command block (the `cargo install --tag …` lines) — the self-tag + the toolkit pin had drifted to `mnemonic-gui-v0.22.0` / `mnemonic-toolkit-v0.41.0` (stale since v0.23.0) while the README claims "pinned tags match `pinned-upstream.toml`". Backfilled to v0.25.0 / v0.44.0 in the v0.25.0 cycle.
+- **What:** Unlike the toolkit repo (which has `tests/readme_version_current.rs`), mnemonic-gui has NO guard asserting the README's `--tag` lines match `pinned-upstream.toml` + the crate version, so they drift silently between releases (3 versions, here). Add a small `mnemonic-gui/tests/readme_pin_coherence.rs` (pure-logic) asserting each README `cargo install --tag <X>` line equals the corresponding `pinned-upstream.toml` tag (+ the GUI self-tag equals `Cargo.toml` version), mirroring the toolkit's `readme_version_current` + the GUI's existing `pin_coherence` guard.
+- **Why deferred:** Out of scope for the v0.25.0 schema catch-up; the instance was backfilled, the class (the guard) is the follow-on.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Tags:** `gui` `readme` `pin-coherence` `test-guard`
 
 ### `verify-bundle-descriptor-entropy-slot-gap` — `verify_bundle` descriptor binding loop has no `@N.entropy=` arm; raw-entropy cosigners in descriptor verify-bundle mode fall to `DescriptorReparseFailed`
 
