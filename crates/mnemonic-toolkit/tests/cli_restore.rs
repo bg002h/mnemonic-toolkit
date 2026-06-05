@@ -928,3 +928,136 @@ fn restore_json_and_output_paths_emit_no_private_key_material() {
         );
     }
 }
+
+// ----------------------------------------------------------------------------
+// P2 R0 I1: `restore --format <fmt>` must mirror `export-wallet --format <fmt>`
+// missing-field refusals. restore previously mirrored only the `emit()` half of
+// the format dispatch and DROPPED the `collect_missing` pre-check, so e.g.
+// `--format specter` (which has no `--wallet-name` on the restore surface —
+// restore always uses a placeholder name) emitted (exit 0) instead of refusing
+// like export-wallet (`ExportWalletMissingFields`, exit 2). Now restore runs the
+// selected emitter's `collect_missing` first and short-circuits identically.
+// ----------------------------------------------------------------------------
+
+#[test]
+fn restore_format_specter_missing_wallet_name_exit_2() {
+    // Specter `collect_missing` flags `wallet_name` (SPEC §13 R1-L1). restore has
+    // no `--wallet-name` flag (it synthesizes a placeholder), so the field is
+    // ALWAYS missing → `ExportWalletMissingFields` exit 2, NOT a (placeholder)
+    // emission at exit 0.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "specter",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "specter without wallet_name = ExportWalletMissingFields exit 2"
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "no payload on the refusal:\n{stdout}");
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    // Same missing-fields message export-wallet emits (stable substring).
+    assert!(
+        stderr.contains("requires the following missing fields") && stderr.contains("wallet_name"),
+        "missing-fields refusal on stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn restore_format_specter_matches_export_wallet_exit_code() {
+    // Lock the parity: `restore --format specter` and `export-wallet --format
+    // specter` (no `--wallet-name`, equivalent watch-only inputs) must give the
+    // SAME exit code via the SAME `ExportWalletMissingFields` short-circuit.
+    let restore_out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "specter",
+        ])
+        .output()
+        .expect("spawn");
+    let export_out = bin()
+        .args([
+            "export-wallet",
+            "--template",
+            "bip84",
+            "--format",
+            "specter",
+            "--slot",
+            &format!("@0.xpub={ACCT_XPUB_BIP84}"),
+            "--slot",
+            &format!("@0.fingerprint={FP_NO_PP}"),
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        restore_out.status.code(),
+        export_out.status.code(),
+        "restore vs export-wallet specter exit-code parity: restore={:?} export-wallet={:?}",
+        restore_out.status.code(),
+        export_out.status.code()
+    );
+    // And both are the deterministic exit-2 refusal (not, e.g., both exit 0).
+    assert_eq!(restore_out.status.code(), Some(2));
+}
+
+#[test]
+fn restore_format_jade_singlesig_refused_exit_1() {
+    // Jade's `collect_missing` is empty by design — its single-sig refusal comes
+    // from inside `emit()` as BadInput (exit 1), byte-identical to export-wallet.
+    // The I1 fix does NOT change this (collect_missing returns nothing for jade);
+    // pinned here to document that jade was already at export-wallet parity.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "jade",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "jade single-sig = BadInput exit 1 (matches export-wallet)"
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "no payload on the refusal:\n{stdout}");
+}
+
+#[test]
+fn restore_format_descriptor_unaffected_by_collect_missing() {
+    // descriptor's `collect_missing` is empty → the I1 short-circuit does not
+    // fire; restore still emits the bare concrete descriptor at exit 0.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "descriptor",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(0), "descriptor still emits at exit 0");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(stdout.trim_end(), DESC_BIP84, "stdout payload:\n{stdout}");
+}

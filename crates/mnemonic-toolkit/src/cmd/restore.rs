@@ -580,6 +580,37 @@ fn build_import_payload(
         bitcoin_core_version: 25,
         bsms_form: BsmsForm::default(),
     };
+
+    // P2 R0 I1: mirror the canonical `export-wallet` SPEC §4 missing-info
+    // channel (export_wallet.rs:506-525) — run the selected emitter's
+    // `collect_missing` FIRST and short-circuit to the same deterministic
+    // `ToolkitError::ExportWalletMissingFields` refusal before any `emit()`.
+    // restore had previously mirrored only the `emit()` half, so e.g.
+    // `--format specter` emitted a placeholder-name wallet (exit 0) where
+    // `export-wallet --format specter` (no `--wallet-name`) refuses. Do NOT
+    // invent a new error — reuse the export-wallet variant verbatim so the
+    // exit code + missing-fields message are byte-identical.
+    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
+        match format {
+            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
+            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
+            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
+            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
+            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
+            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
+            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
+            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
+            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
+        };
+    if !missing.is_empty() {
+        return Err(ToolkitError::ExportWalletMissingFields {
+            format: format_name,
+            missing,
+        });
+    }
+
     match format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
