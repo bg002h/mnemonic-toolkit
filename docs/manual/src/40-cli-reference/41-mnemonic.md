@@ -796,7 +796,7 @@ Single-sig BIP-84 restore from the public zero-entropy test seed
 known reference:
 
 ```sh
-seed="abandon abandon abandon abandon abandon abandon abandon abandon \
+seed="abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon about"
 printf '%s' "$seed" |
   mnemonic restore --from phrase=- --template bip84 \

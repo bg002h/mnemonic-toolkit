@@ -39,7 +39,7 @@ mismatch fails loudly (exit 4) instead of handing you addresses for the
 wrong wallet:
 
 ```sh
-seed="abandon abandon abandon abandon abandon abandon abandon abandon \
+seed="abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon about"
 printf '%s' "$seed" |
   mnemonic restore --from phrase=- --template bip84 \
