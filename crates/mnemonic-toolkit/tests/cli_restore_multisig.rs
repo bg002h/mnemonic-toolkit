@@ -133,6 +133,36 @@ fn md1_with_cosigner_mk1_partial() {
         .stderr(predicate::str::contains("PARTIAL"));
 }
 
+/// (3c) `--json` envelope carries the C1-correct partial status + per-position
+/// notes (the JSON path was part of the C1 attack surface).
+#[test]
+fn md1_json_partial_status_and_notes() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    a.push("--from".into());
+    a.push(format!("phrase={C0}"));
+    a.push("--json".into());
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("restore JSON");
+    assert_eq!(v["verification"]["status"], "partial", "only @0 verified → partial");
+    let cos = v["wallets"][0]["cosigner_keys"].as_array().expect("cosigner_keys");
+    // @0 is the own seed; at least one other position must be flagged unverified.
+    let own = cos.iter().find(|c| c["position"] == 0).expect("@0");
+    assert!(
+        own["note"].as_str().unwrap().contains("your seed"),
+        "@0 own-seed note"
+    );
+    assert!(
+        cos.iter()
+            .any(|c| c["note"].as_str().unwrap().contains("not independently verified")),
+        "an un-supplied position must be flagged not-independently-verified"
+    );
+}
+
 /// (3b) ALL positions cross-checked (own seed @0 + mk1 @1 + mk1 @2) → fully
 /// "verified": NO "not independently verified", NO PARTIAL/UNVERIFIED banner.
 #[test]
