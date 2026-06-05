@@ -1012,7 +1012,7 @@ fn emit_unified<W: Write, E: Write>(
 /// `sortedmulti_a`) or `thresh` is present. Returns `None` for pure
 /// single-sig descriptors. Walks `wsh(...)`, `sh(...)`, and `tr(IK, ...)`
 /// wrappings to reach the inner threshold-bearing node.
-fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<u8> {
+pub(crate) fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<u8> {
     use md_codec::tree::Body;
     match &node.body {
         Body::MultiKeys { k, .. } => Some(*k),

@@ -14,10 +14,11 @@
 //! Multisig restore is DEFERRED (SPEC §11 — `restore-multisig-cosigner-scope`).
 
 use std::io::{Read, Write};
+use std::str::FromStr;
 
 use bip39::Mnemonic;
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
-use bitcoin::secp256k1::Secp256k1;
+use bitcoin::bip32::{ChainCode, ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::secp256k1::{PublicKey, Secp256k1};
 use clap::Args;
 
 use serde_json::json;
@@ -54,8 +55,25 @@ pub struct RestoreArgs {
     /// Seed source: `ms1=<v>` | `phrase=<v>` | `entropy=<hex>` | `seedqr=<digits>`.
     /// Secret values support `@env:VAR` and `-` (stdin). Non-seed nodes
     /// (xpub/xprv/wif/…) are refused (restore needs a master secret).
+    /// REQUIRED for single-sig restore; OPTIONAL in multisig mode (`--md1`),
+    /// where it cross-checks the own cosigner position.
+    #[arg(long, required_unless_present = "md1")]
+    pub from: Option<String>,
+
+    /// Multisig-cosigner restore (v0.44.0): the shared wallet-policy `md1` card
+    /// chunk(s). Reconstructs the concrete watch-only multisig descriptor from
+    /// the md1 ALONE; `--from`/`--cosigner` are optional cross-check inputs.
+    /// wsh / sh(wsh) only — a taproot multisig md1 is refused (FOLLOWUP
+    /// `restore-multisig-taproot-reconstruction`). Repeat for chunked cards.
     #[arg(long)]
-    pub from: String,
+    pub md1: Vec<String>,
+
+    /// Cross-check assertion (multisig mode): `@N=<mk1-chunk|xpub>` — cosigner at
+    /// position `N` is this public key. Repeat the SAME `@N=` for each chunk of a
+    /// multi-chunk `mk1`. A mismatch against the md1's slot is a hard error
+    /// (exit 4) unless `--allow-mismatch`. Watch-only (non-secret).
+    #[arg(long)]
+    pub cosigner: Vec<String>,
 
     /// BIP-39 mnemonic-extension passphrase. `@env:VAR` supported; or
     /// `--passphrase-stdin`. Empty (default) = no passphrase.
@@ -151,7 +169,20 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     _no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
-    let from = parse_from_input(&args.from).map_err(bad)?;
+    // Multisig-cosigner mode (v0.44.0): `--md1` present → reconstruct the concrete
+    // watch-only multisig descriptor from the wallet-policy md1; `--from` is the
+    // optional own-position cross-check. Dispatched before the single-sig path.
+    if !args.md1.is_empty() {
+        return run_multisig(args, stdin, stdout, stderr);
+    }
+
+    // Single-sig mode: `--from` is mandatory here (clap `required_unless_present
+    // = "md1"` + the md1-empty check above guarantee `Some`).
+    let from_raw = args
+        .from
+        .as_deref()
+        .expect("--from is required in single-sig mode (required_unless_present = md1)");
+    let from = parse_from_input(from_raw).map_err(bad)?;
     let from_uses_stdin = from.value == "-";
 
     // Seed-bearing nodes only — restore needs a master secret to derive from.
@@ -206,7 +237,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // argv-leak advisories for inline secret-bearing values (mirror addresses scope).
     if !from_uses_stdin && !from.value.starts_with("@env:") {
-        let node = args.from.split('=').next().unwrap_or("");
+        let node = from_raw.split('=').next().unwrap_or("");
         crate::secret_advisory::secret_in_argv_warning(
             stderr,
             &format!("--from {node}="),
@@ -637,4 +668,464 @@ fn template_label(t: CliTemplate) -> &'static str {
         // Multisig templates are rejected before any WalletRow is built.
         _ => "multisig",
     }
+}
+
+// ============================================================================
+// Multisig-cosigner restore (v0.44.0; SPEC_restore_multisig_cosigner.md)
+// ============================================================================
+
+/// Build a `bitcoin::bip32::Xpub` from md-codec's 65-byte `[chain_code‖pubkey]`
+/// form + the `--network`-authoritative `NetworkKind` (R0-r1 I2 — the md1 is
+/// network-agnostic; md-codec's own reconstruction hardcodes `Main`). Depth-0.
+fn xpub_from_65_bytes(bytes: &[u8; 65], network: CliNetwork) -> Result<Xpub, ToolkitError> {
+    let chain_code = ChainCode::from(<[u8; 32]>::try_from(&bytes[0..32]).unwrap());
+    let public_key = PublicKey::from_slice(&bytes[32..65])
+        .map_err(|e| bad(format!("--md1 cosigner pubkey decode: {e}")))?;
+    Ok(Xpub {
+        network: network.network_kind(),
+        depth: 0,
+        parent_fingerprint: Fingerprint::default(),
+        child_number: ChildNumber::Normal { index: 0 },
+        public_key,
+        chain_code,
+    })
+}
+
+/// Convert md-codec's `OriginPath` to a `bitcoin` `DerivationPath` (inverse of
+/// `synthesize::derivation_path_to_origin_path`). Reads the per-`@N` origin (do
+/// NOT hardcode BIP-87 — sh(wsh) is `m/48'/coin'/account'/1'`).
+fn origin_path_to_derivation_path(
+    op: &md_codec::origin_path::OriginPath,
+) -> Result<DerivationPath, ToolkitError> {
+    let mut comps: Vec<ChildNumber> = Vec::with_capacity(op.components.len());
+    for c in &op.components {
+        let cn = if c.hardened {
+            ChildNumber::from_hardened_idx(c.value)
+        } else {
+            ChildNumber::from_normal_idx(c.value)
+        }
+        .map_err(|_| bad(format!("--md1 origin component {} out of BIP-32 range", c.value)))?;
+        comps.push(cn);
+    }
+    Ok(comps.into())
+}
+
+/// One reconstructed cosigner position for the restore document.
+struct CosignerInfo {
+    idx: u8,
+    fingerprint: Fingerprint,
+    origin: DerivationPath,
+    /// 65-byte canonical key form, for cross-check comparison.
+    key65: [u8; 65],
+    /// Cross-check verdict label (set during the cross-check pass).
+    note: &'static str,
+}
+
+/// `mnemonic restore --md1 …` — reconstruct the concrete watch-only multisig
+/// descriptor from a wallet-policy md1; cross-check `--from`/`--cosigner`.
+fn run_multisig<R: Read, W: Write, E: Write>(
+    args: &RestoreArgs,
+    stdin: &mut R,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    let network = args.network.unwrap_or(CliNetwork::Mainnet);
+
+    // `--format`/`--expect-xpub`/`--template` are single-sig-only here.
+    if args.format.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--format",
+            message: "--format is not supported in multisig (--md1) mode (FOLLOWUP restore-multisig-format-payloads); emit the descriptor + import it manually",
+        });
+    }
+    if args.expect_xpub.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--expect-xpub",
+            message: "--expect-xpub is single-sig only; multisig cross-check uses --from / --cosigner @N=",
+        });
+    }
+    if let Some(t) = args.template {
+        if !t.is_multisig() {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--template",
+                message: "--template (single-sig) does not apply in multisig --md1 mode; remove it",
+            });
+        }
+    }
+
+    // --- 1. Reassemble the md1 card(s) ---
+    let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
+    let d = md_codec::chunk::reassemble(&md1_refs)
+        .map_err(|e| bad(format!("--md1 decode: {e}")))?;
+
+    // --- 2. Gate: taproot refusal (before to_miniscript_descriptor, which errors
+    //        unhelpfully) + wallet-policy requirement ---
+    if d.tree.tag == md_codec::Tag::Tr {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "taproot multisig (tr(...)) md1 reconstruction is not yet supported (rust-miniscript has no SortedMultiA fragment) — FOLLOWUP restore-multisig-taproot-reconstruction",
+        });
+    }
+    if !d.is_wallet_policy() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "--md1 is template-only (no concrete cosigner keys); multisig restore needs a wallet-policy md1 (the toolkit emits these for every cosigner set)",
+        });
+    }
+
+    // --- 3. Reconstruct the miniscript descriptor (chain 0) for classification ---
+    let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(&d, 0)
+        .map_err(|e| bad(format!("--md1 → descriptor: {e}")))?;
+    let template = wallet_export::template_from_descriptor(&ms0)?;
+    let k = crate::cmd::bundle::extract_multisig_threshold(&d.tree)
+        .ok_or_else(|| bad("--md1 is not a multisig descriptor (no threshold present)"))?;
+
+    // --- 4. Build cosigner slots from the wallet-policy keys ---
+    let expanded = md_codec::canonicalize::expand_per_at_n(&d)
+        .map_err(|e| bad(format!("--md1 expand: {e}")))?;
+    let mut slots: Vec<ResolvedSlot> = Vec::with_capacity(expanded.len());
+    let mut cosigners: Vec<CosignerInfo> = Vec::with_capacity(expanded.len());
+    for e in &expanded {
+        // The `is_wallet_policy()` gate guarantees `Some`; handle `None`
+        // defensively rather than `unwrap` (R0-r2).
+        let key65 = e
+            .xpub
+            .ok_or_else(|| bad(format!("--md1 cosigner @{} has no concrete pubkey", e.idx)))?;
+        let fp_bytes = e
+            .fingerprint
+            .ok_or_else(|| bad(format!("--md1 cosigner @{} has no fingerprint", e.idx)))?;
+        let xpub = xpub_from_65_bytes(&key65, network)?;
+        let fingerprint = Fingerprint::from(fp_bytes);
+        let origin = origin_path_to_derivation_path(&e.origin_path)?;
+        slots.push(ResolvedSlot {
+            xpub,
+            fingerprint,
+            path: origin.clone(),
+            entropy: None,
+            master_xpub: None,
+            language: None,
+            _entropy_pin: None,
+        });
+        cosigners.push(CosignerInfo {
+            idx: e.idx,
+            fingerprint,
+            origin,
+            key65,
+            note: "unverified",
+        });
+    }
+
+    let descriptor =
+        build_descriptor_string(template, &slots, k, network, args.account, None)?;
+
+    // --- 5. First receive address(es) from the md1 descriptor (chain 0) ---
+    let mut first_recv = Vec::with_capacity(args.count as usize);
+    for i in 0..args.count {
+        let addr = d
+            .derive_address(0, i, network.to_bitcoin_network())
+            .map_err(|e| bad(format!("first receive address @{i}: {e}")))?;
+        first_recv.push(addr.assume_checked().to_string());
+    }
+
+    // --- 6. Cross-check (own seed via --from; cosigners via --cosigner @N=) ---
+    let secp = Secp256k1::verification_only();
+    let mut mismatch: Option<(&'static str, String, String, Option<u8>)> = None;
+    let has_reference = args.from.is_some() || !args.cosigner.is_empty();
+
+    // 6a. own seed (--from) → infer position by 65-byte match.
+    let mut own_pos: Option<u8> = None;
+    if let Some(from_raw) = args.from.as_deref() {
+        let from = parse_from_input(from_raw).map_err(bad)?;
+        let from_uses_stdin = from.value == "-";
+        if !matches!(
+            from.node,
+            NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
+        ) {
+            return Err(bad(format!(
+                "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
+                from.node.as_str()
+            )));
+        }
+        if args.passphrase_stdin && from_uses_stdin {
+            return Err(bad(
+                "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+            ));
+        }
+        if !from_uses_stdin && !from.value.starts_with("@env:") {
+            let node = from_raw.split('=').next().unwrap_or("");
+            crate::secret_advisory::secret_in_argv_warning(
+                stderr,
+                &format!("--from {node}="),
+                &format!("--from {node}=-"),
+            );
+        }
+        if let Some(pp) = args.passphrase.as_deref() {
+            if !pp.starts_with("@env:") {
+                crate::secret_advisory::secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+            }
+        }
+        let passphrase: String = if args.passphrase_stdin {
+            read_stdin_passphrase(stdin)?
+        } else {
+            match args.passphrase.as_deref() {
+                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+                None => String::new(),
+            }
+        };
+        let from_value: String = if from_uses_stdin {
+            read_stdin_to_string(stdin)?
+        } else {
+            crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
+        };
+        let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, args.language)?;
+        let _pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
+
+        // Derive the own key at each cosigner's origin; the 65-byte match is the
+        // own position (stronger than a master-fp match, R0-r1 M3).
+        for c in &cosigners {
+            let acct = crate::derive_slot::derive_bip32_from_entropy_at_path(
+                &entropy,
+                &passphrase,
+                derive_language,
+                network,
+                &c.origin,
+            )?;
+            if crate::synthesize::xpub_to_65(&acct.account_xpub) == c.key65 {
+                own_pos = Some(c.idx);
+                break;
+            }
+        }
+        if own_pos.is_none() {
+            // The supplied seed is not a cosigner of this wallet.
+            let derived_fp = {
+                // Recompute master fp once for the message (path-independent).
+                let acct = crate::derive_slot::derive_bip32_from_entropy_at_path(
+                    &entropy,
+                    &passphrase,
+                    derive_language,
+                    network,
+                    &cosigners[0].origin,
+                )?;
+                acct.master_fingerprint.to_string().to_lowercase()
+            };
+            mismatch = Some((
+                "cosigner-seed",
+                format!("seed master fp {derived_fp}"),
+                "a cosigner of this md1 wallet".to_string(),
+                None,
+            ));
+        }
+    }
+
+    // 6b. explicit cosigner assertions (--cosigner @N=mk1|xpub).
+    if mismatch.is_none() && !args.cosigner.is_empty() {
+        // Group values by position N.
+        let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> = std::collections::BTreeMap::new();
+        for spec in &args.cosigner {
+            let (lhs, rhs) = spec
+                .split_once('=')
+                .ok_or_else(|| bad(format!("--cosigner expects @N=<mk1|xpub>, got `{spec}`")))?;
+            let n: u8 = lhs
+                .trim_start_matches('@')
+                .parse()
+                .map_err(|_| bad(format!("--cosigner position `{lhs}` is not `@N`")))?;
+            by_pos.entry(n).or_default().push(rhs.to_string());
+        }
+        for (n, values) in &by_pos {
+            let c = cosigners
+                .iter()
+                .find(|c| c.idx == *n)
+                .ok_or_else(|| bad(format!("--cosigner @{n}: position out of range (wallet has {} cosigners)", cosigners.len())))?;
+            // mk1 (multi-chunk) vs a single raw xpub.
+            let supplied65: [u8; 65] = if values.iter().all(|v| v.starts_with("mk1")) {
+                let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
+                let kc = mk_codec::decode(&refs).map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
+                crate::synthesize::xpub_to_65(&kc.xpub)
+            } else if values.len() == 1 {
+                let xpub = Xpub::from_str(&values[0])
+                    .map_err(|e| bad(format!("--cosigner @{n} xpub parse: {e}")))?;
+                crate::synthesize::xpub_to_65(&xpub)
+            } else {
+                return Err(bad(format!("--cosigner @{n}: multiple values must all be mk1 chunks, or a single xpub")));
+            };
+            if supplied65 != c.key65 {
+                mismatch = Some((
+                    "cosigner-key",
+                    format!("supplied key for @{n}"),
+                    format!("md1 cosigner @{n} ({})", c.fingerprint.to_string().to_lowercase()),
+                    Some(*n),
+                ));
+                break;
+            }
+        }
+    }
+    let _ = &secp;
+
+    // --- 7. Mismatch hard-gate (exit 4) unless --allow-mismatch ---
+    if let Some((reference, derived, expected, slot)) = &mismatch {
+        if !args.allow_mismatch {
+            writeln!(stderr, "✗ MISMATCH").map_err(ToolkitError::Io)?;
+            return Err(ToolkitError::RestoreMismatch {
+                reference,
+                derived: derived.clone(),
+                expected: expected.clone(),
+                slot: *slot,
+            });
+        }
+    }
+
+    // Annotate per-cosigner notes for the document.
+    for c in cosigners.iter_mut() {
+        if Some(c.idx) == own_pos {
+            c.note = "← your seed (verified)";
+        } else if has_reference && mismatch.is_none() {
+            c.note = "cross-checked";
+        }
+    }
+
+    let verification_status = if mismatch.is_some() {
+        "overridden"
+    } else if has_reference {
+        "verified"
+    } else {
+        "unverified"
+    };
+
+    // --- 8. Compose stdout content (text | json) + route to --output ---
+    let stdout_content: String = if args.json {
+        let cos: Vec<_> = cosigners
+            .iter()
+            .map(|c| {
+                json!({
+                    "position": c.idx,
+                    "fingerprint": c.fingerprint.to_string().to_lowercase(),
+                    "origin": c.origin.to_string(),
+                    "note": c.note,
+                })
+            })
+            .collect();
+        let mut verification = json!({ "status": verification_status });
+        if let Some((reference, derived, expected, slot)) = &mismatch {
+            verification["reference"] = json!(reference);
+            verification["derived"] = json!(derived);
+            verification["expected"] = json!(expected);
+            verification["slot"] = json!(slot);
+        }
+        let envelope = json!({
+            "mode": "multisig",
+            "network": network.human_name(),
+            "threshold": k,
+            "cosigners": cosigners.len(),
+            "verification": verification,
+            "wallets": [json!({
+                "wallet_type": format!("{}-of-{} multisig", k, cosigners.len()),
+                "descriptor": descriptor,
+                "first_addresses": first_recv,
+                "cosigner_keys": cos,
+            })],
+        });
+        format!(
+            "{}\n",
+            serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
+        )
+    } else {
+        let mut s = String::new();
+        s.push_str(&format!("{}-of-{} multisig restore\n", k, cosigners.len()));
+        s.push_str(
+            "CONFIRM: verify each cosigner fingerprint against your records before importing.\n",
+        );
+        s.push_str(&format!("  descriptor: {descriptor}\n"));
+        for addr in &first_recv {
+            s.push_str(&format!("  first recv: {addr}\n"));
+        }
+        for c in &cosigners {
+            s.push_str(&format!(
+                "  cosigner @{}: {} [{}]  {}\n",
+                c.idx,
+                c.fingerprint.to_string().to_lowercase(),
+                c.origin,
+                c.note
+            ));
+        }
+        s
+    };
+
+    if args.output == "-" {
+        write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, &stdout_content)
+            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+    }
+
+    // --- 9. Verification banners (stderr) ---
+    if mismatch.is_some() {
+        writeln!(
+            stderr,
+            "✗ MISMATCH (overridden): a supplied cross-check key does NOT match the md1 wallet; \
+             the descriptor above is the md1's wallet, NOT what your --from/--cosigner asserted"
+        )
+        .map_err(ToolkitError::Io)?;
+    } else if !has_reference {
+        writeln!(
+            stderr,
+            "UNVERIFIED: no --from/--cosigner cross-check supplied; verify each cosigner \
+             fingerprint above against your records before importing"
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::WatchOnly,
+        stderr,
+    );
+
+    Ok(0)
+}
+
+/// Resolve a seed `--from` node + value to (entropy, derive-language), mirroring
+/// the single-sig `run` block (ms1 wire-language wins; entropy/seedqr/phrase).
+fn resolve_seed_entropy(
+    node: &NodeType,
+    from_value: &str,
+    language: Option<CliLanguage>,
+) -> Result<(zeroize::Zeroizing<Vec<u8>>, bip39::Language), ToolkitError> {
+    Ok(match node {
+        NodeType::Ms1 => {
+            let res = crate::slot_ms1::resolve_ms1_slot(from_value, language, 0)?;
+            (res.entropy, res.derive_language)
+        }
+        NodeType::Phrase => {
+            let lang = language.unwrap_or_default();
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(lang.into(), from_value)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, lang.into())
+        }
+        NodeType::Seedqr => {
+            let lang = language.unwrap_or_default();
+            let phrase = mnemonic_toolkit::seedqr::decode(from_value)
+                .map_err(|e| crate::cmd::seedqr::map_seedqr_error(e, "restore"))?;
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(lang.into(), &phrase)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, lang.into())
+        }
+        NodeType::Entropy => {
+            let entropy = zeroize::Zeroizing::new(
+                hex::decode(from_value.trim())
+                    .map_err(|e| bad(format!("--from entropy= hex-decode: {e}")))?,
+            );
+            (entropy, bip39::Language::English)
+        }
+        _ => unreachable!("seed-node guard restricts to ms1/phrase/seedqr/entropy"),
+    })
 }
