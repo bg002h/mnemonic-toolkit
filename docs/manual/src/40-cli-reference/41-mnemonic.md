@@ -915,11 +915,11 @@ cross-checked):
 ```text
 2-of-3 multisig restore
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6.../<0;1>/*,[b8688df1/87'/0'/0']xpub6.../<0;1>/*,[28645006/87'/0'/0']xpub6.../<0;1>/*))#y65a0dtg
+  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6.../<0;1>/*,[b8688df1/87'/0'/0']xpub6.../<0;1>/*,[28645006/87'/0'/0']xpub6.../<0;1>/*))#yjp7hj7w
   first recv: bc1q...
-  cosigner @0: 73c5da0a [m/87'/0'/0']  from md1 (not independently verified)
-  cosigner @1: b8688df1 [m/87'/0'/0']  from md1 (not independently verified)
-  cosigner @2: 28645006 [m/87'/0'/0']  from md1 (not independently verified)
+  cosigner @0: 73c5da0a [87'/0'/0']  from md1 (not independently verified)
+  cosigner @1: b8688df1 [87'/0'/0']  from md1 (not independently verified)
+  cosigner @2: 28645006 [87'/0'/0']  from md1 (not independently verified)
 ```
 
 **Cross-checking** is optional and *per-position*. Add `--from <your seed>`

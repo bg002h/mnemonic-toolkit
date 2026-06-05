@@ -81,12 +81,21 @@ block goes to stderr. See [`mnemonic
 restore`](../40-cli-reference/41-mnemonic.md#mnemonic-restore) for the
 full flag reference.
 
-**Multisig note:** restore is single-sig this release. Restoring a
-multisig wallet (your own seed plus the shared md1 and the other
-cosigners' mk1s → a concrete multisig descriptor) is a planned follow-on
-addition; until then, rebuild the watch-only multisig bundle from the
-cosigner xpubs as shown under
-[md1 is lost or unreadable](#multisig-wallet-md1-is-lost-or-unreadable).
+**Multisig recovery (v0.44.0):** restore also reconstructs a **multisig**
+wallet from its shared wallet-policy `md1` card — the card carries every
+cosigner's public key, so the concrete watch-only multisig descriptor comes
+from the card alone:
+
+```sh
+mnemonic restore --md1 <card-chunk> [--md1 <card-chunk> …]
+```
+
+Add `--from <your seed>` to prove which cosigner is yours, and/or
+`--cosigner @N=<mk1|xpub>` to cross-check another cosigner's key; only the
+positions you supply are marked verified (the verdict stays `PARTIAL`
+otherwise). `wsh` / `sh(wsh)` only — a taproot multisig `md1` is refused.
+See [Multisig-cosigner restore](../40-cli-reference/41-mnemonic.md#multisig-cosigner-restore)
+for the full reference.
 
 ## Single-sig wallet — single card lost
 
