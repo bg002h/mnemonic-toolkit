@@ -32,15 +32,15 @@
 - `--language <L>` (phrase/seedqr; default english); `--network <N>` (default mainnet); `--account <n>` (default 0).
 
 **Single-sig selection:**
-- `--template <T>` — restrict to one single-sig type; **default = all four (bip44/49/84/86)**.
+- `--template <T>` — `Option<CliTemplate>`; `None` (default) = all four single-sig types (bip44/49/84/86). **I-B fold:** a multisig template (any `CliTemplate::is_multisig()` variant, `template.rs:47`) → `ToolkitError::BadInput` (exit 1): "restore is single-sig only; --template ∈ {bip44,bip49,bip84,bip86}".
 
 **Reference / verification:**
 - `--expect-fingerprint <hex>` — 8 lowercase hex; master fingerprint MUST equal → else exit 4.
-- `--expect-xpub <xpub>` — account xpub MUST equal (requires a single `--template`) → else exit 4.
+- `--expect-xpub <xpub>` — account xpub MUST equal (requires `--template Some`) → else exit 4.
 - `--allow-mismatch` — override: proceed despite reference mismatch (loud banner, exit 0).
 
 **Output:**
-- `--format <CliExportFormat>` — importable payload via an `export-wallet` emitter (11-value enum, `export_wallet.rs:22-46`). **I1 fold: `--format` REQUIRES a single `--template`** (emitters are one-descriptor-in/one-out; refuse `--format` with the all-4 default → `BadInput`/usage, exit 2). Default (no `--format`) = descriptor inline in the verify-doc.
+- `--format <CliExportFormat>` — importable payload via an `export-wallet` emitter (11-value enum, `export_wallet.rs:22-46`). **I1/I-A fold: `--format` REQUIRES `--template Some` (one type)** — emitters are one-descriptor-in/one-out; `--format` with `--template None` (the all-4 default) → `ToolkitError::ModeViolation` **exit 2** (NOT `BadInput`/exit 1 — code pinned). Default (no `--format`) = descriptor inline in the verify-doc.
 - `--json` — structured (seed redacted). `--output <FILE>`. `--count <n>` — first-receive addresses per type (default 1).
 
 ---
@@ -48,12 +48,16 @@
 ## 3. Behavior / control flow (single-sig)
 
 ### 3.1 Input resolution
-Resolve `--from` value (`@env:`/`-`/literal) + passphrase channel under the convert mutex rules. Convert the seed node → entropy (`Mnemonic::to_entropy` for phrase/seedqr; raw for entropy; `ms_codec` decode for ms1 → entropy). `mlock::pin_pages_for` the secret buffers + passphrase (pattern `convert.rs:841-847`). `secret_in_argv_warning` if a secret was passed inline on argv (pattern `addresses.rs:126-146`).
+Resolve `--from` value (`@env:`/`-`/literal) + passphrase channel under the convert mutex rules. Convert the seed node → entropy + derive-language:
+- phrase / seedqr → `Mnemonic::to_entropy`; entropy → raw bytes; derive-language = `--language`.
+- **ms1 (I-C fold):** `slot_ms1::resolve_ms1_slot(value, flag_language=--language, idx) -> Ms1SlotResolution { entropy, derive_language, emit_language }` (`slot_ms1.rs:37`). ms1 `Mnem` payloads carry the wordlist language ON THE WIRE (drives BIP-39 PBKDF2), so a bare `ms_codec::decode` is wrong for non-English `mnem` cards. `resolve_ms1_slot` applies wire-wins / refuse-on-`--language`-conflict (`SlotInputViolation` exit 2). Use `res.derive_language` downstream. (Builds on `project_ms_mnem_v0_2_shipped` / `project_ms1_slot_v0_41_0_shipped`.)
+
+`mlock::pin_pages_for` the secret buffers + passphrase (pattern `convert.rs:841-847`). `secret_in_argv_warning` if a secret was passed inline on argv (pattern `addresses.rs:126-146`).
 
 ### 3.2 Derivation
 For each selected template T (all 4, or the single `--template`):
-1. `derive_slot::derive_bip32_from_entropy(entropy, passphrase, language, network, T, account)` → `DerivedAccount` (`derive_slot.rs:42`). Use `master_fingerprint` + `account_xpub` only — **never `account_xpriv`**.
-2. First receive address(es): derive `m/0/0..0/n-1` children of `account_xpub`; `address_render::render_address_from_xpub(secp, &child, script_type, network)` (`address_render.rs:18`). `--count` controls n.
+1. `derive_slot::derive_bip32_from_entropy(entropy, passphrase, derive_language, network, T, account)` → `DerivedAccount` (`derive_slot.rs:42`) — `derive_language` = `res.derive_language` for ms1, else `--language`. Use `master_fingerprint` + `account_xpub` only — **never `account_xpriv`**.
+2. First receive address(es): derive `m/0/0..0/n-1` children of `account_xpub`; `address_render::render_address_from_xpub(secp, &child, script_type, network)` (`address_render.rs:18`). **M-c:** there is no in-tree `CliTemplate→ScriptType` helper (only the forward `template_for(ScriptType)`, `addresses.rs:95`); restore hand-writes the 4-way inverse map (bip44→`P2pkh`, bip49→`P2shP2wpkh`, bip84→`P2wpkh`, bip86→`P2tr`). `--count` controls n.
 3. Concrete descriptor: build a single-element `ResolvedSlot { xpub: account_xpub, fingerprint: master_fingerprint, path: T's origin, .. }` (so the origin renders `[mfp/84'/0'/0']`, not `[00000000/…]` — `key_origin_str`, `pipeline.rs:33`); `wallet_export::build_descriptor_string(T, &[slot], 1, network, account, None)` (`pipeline.rs:18`) → `<descriptor>#<checksum>`.
 
 The master fingerprint is computed once (path-independent — identical across all 4 types). The reference gate (§3.4) runs on it.
@@ -80,7 +84,9 @@ The master fingerprint is computed once (path-independent — identical across a
 | Need | API | Cite |
 |---|---|---|
 | seed+passphrase → account xpub + MASTER fingerprint | `derive_slot::derive_bip32_from_entropy(entropy:&[u8], passphrase:&str, language:Bip39Language, network:CliNetwork, template:CliTemplate, account:u32) -> Result<DerivedAccount,_>` | `derive_slot.rs:42` |
-| derived bundle | `DerivedAccount { entropy:Zeroizing<Vec<u8>>, master_fingerprint:Fingerprint, account_xpub:Xpub, account_xpriv:Xpriv (DO NOT EMIT), account_path, _entropy_pin }` | `derive.rs:24-37` |
+| derived bundle | `DerivedAccount { entropy:Zeroizing<Vec<u8>>, master_fingerprint:Fingerprint, account_xpub:Xpub, account_xpriv:Xpriv (DO NOT EMIT), account_path, _entropy_pin }` | `derive.rs:23-39` |
+| ms1 → entropy + wire-language | `slot_ms1::resolve_ms1_slot(value, flag_language, idx) -> Ms1SlotResolution { entropy, derive_language, emit_language }` | `slot_ms1.rs:37` |
+| reject multisig `--template` | `CliTemplate::is_multisig() -> bool` | `template.rs:47` |
 | template+slots → concrete descriptor (`#csum`) | `wallet_export::build_descriptor_string(template, slots:&[ResolvedSlot], k:u8, network, account, Option<TaprootInternalKey>) -> Result<String,_>` | `pipeline.rs:18` |
 | `ResolvedSlot` origin → `[fp/path]` | `ResolvedSlot { xpub, fingerprint, path, .. }`; `key_origin_str` | `synthesize.rs:642`; `pipeline.rs:33` |
 | import payload | `WalletFormatEmitter`/`EmitInputs`/`CheckedDescriptor`/`DescriptorEmitter`; `CliExportFormat` (11) | `wallet_export/mod.rs:397,420,466`; `export_wallet.rs:22-46` |
@@ -96,13 +102,13 @@ Every P1 helper is `pub`/`pub(crate)` + cross-module-invoked — no refactor. (N
 ---
 
 ## 5. Error variant
-Add `ToolkitError::RestoreMismatch { reference: &'static str, derived: String, expected: String, slot: Option<u8> }` → **exit 4** (verify/mismatch tier, alongside `BundleMismatch`/`ImportWalletSeedMismatch`). `enum` is `#[non_exhaustive]` (non-breaking). **CLAUDE.md alphabetical rule:** insert after `RepairShortCircuit`, before `SilentPayment`, in the enum AND the THREE forced-exhaustive blocks: `exit_code` (`error.rs:472`, RSC@:517/SP@:518), `kind` (`:530`), `message` (`:589`). **I3:** the `details()` block (`:776`, `_=>None`) is NOT touched — restore mismatch uses `message()` only (no JSON-error envelope). `message()` is `restore:`-prefixed (no reuse of `import-wallet:`/`bundle:` strings). UNVERIFIED + usage errors reuse `BadInput`(1)/`ModeViolation`(2).
+Add `ToolkitError::RestoreMismatch { reference: &'static str, derived: String, expected: String, slot: Option<u8> }` → **exit 4** (verify/mismatch tier, alongside `BundleMismatch`/`ImportWalletSeedMismatch`). `enum` is `#[non_exhaustive]` (non-breaking). **CLAUDE.md alphabetical rule:** insert after `RepairShortCircuit`, before `SilentPayment`, in the enum AND the THREE forced-exhaustive blocks: `exit_code` (`error.rs:471`), `kind` (`:529`), `message` (`:588`) (M-a: anchors re-grep at plan-write — off-by-1 from snapshot). **I3:** the `details()` block (`:775`, `_=>None`) is NOT touched — restore mismatch uses `message()` only (no JSON-error envelope). `message()` is `restore:`-prefixed (no reuse of `import-wallet:`/`bundle:` strings). UNVERIFIED + usage errors reuse `BadInput`(1)/`ModeViolation`(2).
 
 ---
 
 ## 6. Subcommand wiring + gui-schema self-test
 - `cmd/mod.rs`: `pub mod restore;` (slot after `repair`, before `silent_payment`; the list is alpha-ish but already drifted — M6: don't re-sort).
-- `main.rs:93`: `Command::Restore(cmd::restore::RestoreArgs)`. Dispatch arm at `main.rs:153`: `Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair)` (returns `Result<u8,_>` — no `.map`).
+- `main.rs:~90` enum `Command` + `~:153` dispatch (M-d: both are feature-clustered, NOT alpha — anchors approximate, place the new variant/arm anywhere; don't re-sort the existing order). `Command::Restore(cmd::restore::RestoreArgs)`; arm `Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair)` (returns `Result<u8,_>` — no `.map`).
 - gui-schema auto-reflects (zero `gui_schema.rs` edits).
 - **TOOLKIT self-test `tests/cli_gui_schema.rs` BREAKS** — add `"restore"` to the name vec (alpha: after `repair`, before `seed-xor-combine`) and bump the "28" count at **`:74` and `:108`** (M2). Lands in P1.
 
@@ -122,8 +128,8 @@ Add `ToolkitError::RestoreMismatch { reference: &'static str, derived: String, e
 ---
 
 ## 9. Tests (per phase, TDD-first)
-- **P1:** single-sig restore from each of ms1/phrase/entropy/seedqr; fingerprint + descriptor + first addr **exact** for abandon×11+about (no-pp fp `73c5da0a` — asserted in-tree `cli_export_wallet.rs:27`; **I5: TREZOR-pp fp must be derived+confirmed by the implementer before baking — controller pre-confirmed `b4e3f5ed` at runtime, but re-derive in-test per `feedback_recapture_golden_only_when_current_correct`**); all-4 default vs `--template` single; `--expect-fingerprint` match→0 / mismatch→exit4 / mismatch+`--allow-mismatch`→0+banner; no-reference→UNVERIFIED; watch-only advisory present; **negative: NO `xprv`/`tprv` token in any output**; `@env:`+`--passphrase-stdin` channel; stdin-mutex rejection; non-seed `--from` → BadInput exit 1.
-- **P2:** each `--format` payload (with `--template`); `--format` without `--template` → refused; `--json` shape + seed-redaction negative-assert; `--output`; `--count`.
+- **P1:** single-sig restore from each of ms1/phrase/entropy/seedqr; fingerprint + descriptor + first addr **exact** for abandon×11+about (no-pp fp `73c5da0a` — asserted in-tree `cli_export_wallet.rs:27`; **I5: TREZOR-pp fp must be derived+confirmed by the implementer before baking — controller pre-confirmed `b4e3f5ed` at runtime, but re-derive in-test per `feedback_recapture_golden_only_when_current_correct`**); all-4 default vs `--template` single; `--expect-fingerprint` match→0 / mismatch→exit4 / mismatch+`--allow-mismatch`→0+banner; no-reference→UNVERIFIED; watch-only advisory present; **negative: NO `xprv`/`tprv` token in any output**; `@env:`+`--passphrase-stdin` channel; stdin-mutex rejection; non-seed `--from` → BadInput exit 1; **I-B: multisig `--template` (e.g. wsh-sortedmulti) → BadInput exit 1**; **I-C: a non-English ms1 `mnem` card derives the wire-language seed (not english) + `--language` conflicting with the wire → SlotInputViolation exit 2**.
+- **P2:** each `--format` payload (with `--template`); **I-A: `--format` + `--template None` (all-4 default) → ModeViolation exit 2**; `--json` shape + seed-redaction negative-assert; `--output`; `--count`.
 - **P3:** `make -C docs/manual audit` EXIT=0; `cli_gui_schema.rs` 29 green; GUI `schema_mirror`+`pin_coherence`+`secret_drift` green at `cargo +1.94.0`.
 - **Regression each phase:** `cargo test -p mnemonic-toolkit --no-fail-fast` 0 fail; `clippy --all-targets -D warnings`.
 
@@ -140,5 +146,6 @@ MINOR → toolkit **v0.43.0** + GUI **v0.24.0**. Phase-6 (P3): `Cargo.toml` 0.42
 
 ---
 
-## 12. R0 round-0 fold log
-RED 1C/5I → folded: **C1** descope multisig to §11 (deferred). **I1** `--format` requires single `--template`. **I2** non-seed `--from` → BadInput exit 1. **I3** mismatch via `message()` only (no `details()`/JSON-error-envelope). **I5** implementer re-derives TREZOR-pp fp in-test. **M1** SHA prose (base `6566941`). **M2** cli_gui_schema count at `:74/:108`. **M3** `extract_multisig_threshold` def `:1015`/private. **M4** `entropy: Zeroizing<Vec<u8>>`. **M5** `resolve_slots` → `Vec<(u8,&'static str)>`. **M6** `cmd/mod.rs` drift — don't re-sort. (I4 deferred with multisig.) Re-grep at plan-write time; re-dispatch R0.
+## 12. R0 fold log
+**Round 0** (RED 1C/5I) → **C1** descope multisig to §11 (deferred). **I1** `--format` requires single `--template`. **I2** non-seed `--from` → BadInput exit 1. **I3** mismatch via `message()` only. **I5** implementer re-derives TREZOR-pp fp. **M1** SHA prose. **M2** cli_gui_schema `:74/:108`. **M3** `extract_multisig_threshold` private. **M4** `entropy: Zeroizing`. **M5** `resolve_slots` `&'static str`. **M6** `cmd/mod.rs` drift. (I4 deferred with multisig.)
+**Round 1** (RED 0C/3I — 0 leakage, single-sig design proven) → **I-A** `--format` + `--template None` → `ModeViolation` **exit 2** (NOT BadInput); `--template` becomes `Option`. **I-B** multisig `--template` → `BadInput` exit 1 via `is_multisig()`. **I-C** ms1 via `slot_ms1::resolve_ms1_slot` (preserve `mnem` wire-language; use `derive_language`). **M-a** error anchors `471/529/588/775`. **M-b** `DerivedAccount` `derive.rs:23-39`. **M-c** hand-write `CliTemplate→ScriptType` inverse map. **M-d** `main.rs` enum/dispatch feature-clustered — don't re-sort. Re-grep at plan-write; re-dispatch R0 round 2.
