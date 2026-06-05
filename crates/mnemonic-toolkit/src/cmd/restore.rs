@@ -659,6 +659,102 @@ fn build_import_payload(
     }
 }
 
+/// Build the importable wallet payload for a MULTISIG `restore --md1 --format`
+/// (FOLLOWUP `restore-multisig-format-payloads`). Mirrors `export-wallet`'s
+/// multisig `EmitInputs` (`export_wallet.rs:483-496`) using the reconstructed
+/// (`template`, `slots`, `k`, `descriptor`); the dispatch below is byte-
+/// identical to `export_wallet.rs:506-560` (3rd copy — see FOLLOWUP
+/// `restore-emit-dispatch-3way-dedup`). `threshold_user_supplied: true` is
+/// LOAD-BEARING: `k` from the md1 is authoritative, and `sparrow.rs`
+/// `collect_missing` refuses a multisig template (`MissingField::Threshold`)
+/// when it is false. `taproot_internal_key: None` — taproot md1 refused
+/// upstream (`Tag::Tr` gate) before reaching here.
+#[allow(clippy::too_many_arguments)]
+fn build_multisig_import_payload(
+    format: CliExportFormat,
+    template: CliTemplate,
+    slots: &[ResolvedSlot],
+    k: u8,
+    descriptor: &str,
+    network: CliNetwork,
+    account: u32,
+) -> Result<String, ToolkitError> {
+    let script_type = wallet_export::script_type_from_template(&template);
+    let wallet_name = format!("{}-{}", template.human_name(), account);
+    let inputs = EmitInputs {
+        canonical_descriptor: CheckedDescriptor::new(descriptor)?,
+        resolved_slots: slots,
+        template: Some(template),
+        script_type,
+        network,
+        account,
+        threshold: Some(k),
+        threshold_user_supplied: true,
+        master_xpub_at_0: slots.first().and_then(|s| s.master_xpub),
+        wallet_name: &wallet_name,
+        wallet_name_is_non_default: false,
+        taproot_internal_key: None,
+        range: (0, 999),
+        timestamp: TimestampArg::Now,
+        bitcoin_core_version: 25,
+        bsms_form: BsmsForm::default(),
+    };
+
+    // collect_missing FIRST (mirror export_wallet.rs:506-525) — the same
+    // deterministic ExportWalletMissingFields refusal before any emit().
+    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
+        match format {
+            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
+            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
+            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
+            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
+            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
+            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
+            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
+            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
+            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
+            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
+            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
+        };
+    if !missing.is_empty() {
+        return Err(ToolkitError::ExportWalletMissingFields {
+            format: format_name,
+            missing,
+        });
+    }
+
+    // emit dispatch — byte-identical to export_wallet.rs:527-560, INCLUDING the
+    // coldcard-multisig six-variant CliTemplate match.
+    match format {
+        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
+        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::ColdcardMultisig => {
+            match inputs.template {
+                Some(
+                    CliTemplate::WshMulti
+                    | CliTemplate::WshSortedMulti
+                    | CliTemplate::ShWshMulti
+                    | CliTemplate::ShWshSortedMulti
+                    | CliTemplate::TrMultiA
+                    | CliTemplate::TrSortedMultiA,
+                ) => ColdcardEmitter::emit(&inputs),
+                _ => Err(ToolkitError::BadInput(
+                    "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
+                        .into(),
+                )),
+            }
+        }
+        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
+        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
+        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
+        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
+        CliExportFormat::Green => GreenEmitter::emit(&inputs),
+        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
+        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
+    }
+}
+
 fn template_label(t: CliTemplate) -> &'static str {
     match t {
         CliTemplate::Bip44 => "bip44 (legacy P2PKH)",
@@ -731,14 +827,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
 
-    // `--format`/`--expect-xpub`/`--template` are single-sig-only here.
-    if args.format.is_some() {
-        return Err(ToolkitError::ModeViolation {
-            mode: "restore",
-            flag: "--format",
-            message: "--format is not supported in multisig (--md1) mode (FOLLOWUP restore-multisig-format-payloads); emit the descriptor + import it manually",
-        });
-    }
+    // `--expect-xpub`/`--template` are single-sig-only here. `--format` IS
+    // supported in multisig mode (v0.45.0) — emitted below via
+    // `build_multisig_import_payload`.
     if args.expect_xpub.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
@@ -1015,7 +1106,24 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         "partial"
     };
 
-    // --- 8. Compose stdout content (text | json) + route to --output ---
+    // Build the importable payload when `--format` is set (v0.45.0). Computed
+    // AFTER the step-7 mismatch hard-gate, so a non-overridden MISMATCH exits 4
+    // before any payload is emitted (with `--allow-mismatch` the payload is the
+    // md1's authoritative wallet + the overridden banner, mirroring single-sig).
+    let import_payload: Option<String> = match args.format {
+        Some(f) => Some(build_multisig_import_payload(
+            f,
+            template,
+            &slots,
+            k,
+            &descriptor,
+            network,
+            args.account,
+        )?),
+        None => None,
+    };
+
+    // --- 8. Compose stdout content (payload | json | text) + route to --output ---
     let stdout_content: String = if args.json {
         let cos: Vec<_> = cosigners
             .iter()
@@ -1035,7 +1143,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             verification["expected"] = json!(expected);
             verification["slot"] = json!(slot);
         }
-        let envelope = json!({
+        let mut envelope = json!({
             "mode": "multisig",
             "network": network.human_name(),
             "threshold": k,
@@ -1048,10 +1156,17 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 "cosigner_keys": cos,
             })],
         });
+        if let Some(payload) = &import_payload {
+            envelope["import_payload"] = json!(payload);
+        }
         format!(
             "{}\n",
             serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
         )
+    } else if let Some(payload) = &import_payload {
+        // `--format` without `--json`: the payload alone is stdout so it pipes
+        // cleanly into wallet software; the verification doc goes to stderr below.
+        format!("{payload}\n")
     } else {
         let mut s = String::new();
         s.push_str(&format!("{}-of-{} multisig restore\n", k, cosigners.len()));
@@ -1079,6 +1194,33 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     } else {
         std::fs::write(&args.output, &stdout_content)
             .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+    }
+
+    // When `--format` is set (and not `--json`), the human verification doc is
+    // NOT the stdout content — surface it on stderr so the operator can confirm
+    // each cosigner fingerprint while the payload pipes onward (mirror single-sig).
+    if import_payload.is_some() && !args.json {
+        writeln!(stderr, "{}-of-{} multisig restore", k, cosigners.len()).map_err(ToolkitError::Io)?;
+        writeln!(
+            stderr,
+            "CONFIRM: verify each cosigner fingerprint against your records before importing the payload above."
+        )
+        .map_err(ToolkitError::Io)?;
+        writeln!(stderr, "  descriptor: {descriptor}").map_err(ToolkitError::Io)?;
+        for addr in &first_recv {
+            writeln!(stderr, "  first recv: {addr}").map_err(ToolkitError::Io)?;
+        }
+        for c in &cosigners {
+            writeln!(
+                stderr,
+                "  cosigner @{}: {} [{}]  {}",
+                c.idx,
+                c.fingerprint.to_string().to_lowercase(),
+                c.origin,
+                c.note
+            )
+            .map_err(ToolkitError::Io)?;
+        }
     }
 
     // --- 9. Verification banners (stderr) ---
