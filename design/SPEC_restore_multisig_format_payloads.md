@@ -21,9 +21,9 @@ No new CLI flag (reuses `--format`; `k` from the md1, not `--threshold`). Toolki
 |---|---|
 | `bitcoin-core`, `bip388`, `coldcard`, `coldcard-multisig`, `jade`, `sparrow`, `electrum`, `bsms`, `descriptor` | `specter` (`ExportWalletMissingFields`: needs `--wallet-name`), `green` (exit 1: "does not support multisig") |
 
-- **`coldcard` emits multisig text for a multisig template** (byte-identical to `coldcard-multisig`, 442b) — the *template*, not the format name, gates. So multisig restore does NOT refuse `--format coldcard` (mirrors export-wallet); the `coldcard-multisig` arm's `is_multisig()` branch handles both.
+- **`coldcard` emits multisig text for a multisig template** (byte-identical to `coldcard-multisig`, 442b) — the *template*, not the format name, gates. So multisig restore does NOT refuse `--format coldcard` (mirrors export-wallet). The `coldcard-multisig` dispatch arm (`export_wallet.rs:539-552`) is a six-variant `CliTemplate` match (`WshMulti | WshSortedMulti | ShWshMulti | ShWshSortedMulti | TrMultiA | TrSortedMultiA` → emit multisig text, else `Err(BadInput)`) — NOT an `is_multisig()` call (R0-r1 M1); behaviorally it emits for any multisig template.
 - **`collect_missing` is empty** for `bitcoin-core`/`bip388`/`coldcard`/`bsms`/`descriptor` (no `--wallet-name` needed) → restore's synthesized default name works. `specter` genuinely needs a name → refuses (restore has no `--wallet-name`; consistent with single-sig restore's specter refusal).
-- **Byte-parity vs export-wallet is NOT cleanly viable** and is NOT used as the primary check: restore's `--md1` EmitInputs are a unique provenance (template-mode + the md1's **real** master fingerprints `73c5da0a`/`b8688df1`/`28645006` + the md1's xpub serialization). `export-wallet --slot @N.xpub=` uses placeholder origin `00000000`; `export-wallet --descriptor` uses `template:None` (descriptor-mode) + supports only 4 formats. Neither reproduces restore's payload bytes. Per the advisor's prescribed fallback, the test uses **descriptor/structure-containment + multisig-fidelity assertions** instead (§6).
+- **Cross-tool byte-parity vs export-wallet is not cleanly reproducible and is unnecessary:** restore's `--md1` EmitInputs are a unique provenance (template-mode + the md1's **real** master fingerprints `73c5da0a`/`b8688df1`/`28645006` + the md1's xpub serialization). Matching it via `export-wallet --slot @N.xpub=` would require hand-supplying each cosigner's `[Xpub, Fingerprint, Path]` form (`slot_input.rs:354-359` accepts it, so it is *possible* but laborious + fragile, R0-r1 M2); `export-wallet --descriptor` uses `template:None` (descriptor-mode) + supports only 4 formats. The cycle instead uses the strictly stronger, self-contained **`--format descriptor` exact-equality against the same run's `--json` descriptor** (genuine byte-parity for that format) + **multisig-fidelity containment** for the rest (§6). No fragile cross-tool reconstruction.
 
 ## 3. EmitInputs construction (byte-identical-to-export-wallet's-multisig-fields)
 
@@ -53,7 +53,7 @@ let inputs = EmitInputs {
 };
 ```
 
-Then the dispatch (`collect_missing`-first → `emit`) is written **arm-for-arm byte-identical to `export_wallet.rs:507-560`**, INCLUDING the `coldcard-multisig` `is_multisig()` branch (`:531-553`) verbatim. (Deliberate copy — see §7 de-dup FOLLOWUP.) This is the 3rd copy of the dispatch (export_wallet, restore single-sig, restore multisig); keeping it byte-identical makes the eventual consolidation mechanical.
+Then the dispatch (`collect_missing`-first → `emit`) is written **arm-for-arm byte-identical to `export_wallet.rs:507-560`**, INCLUDING the `coldcard-multisig` arm's six-variant `CliTemplate` match (`:531-553` — emit multisig text for any of the 6 multisig templates, else `Err(BadInput)`; NOT an `is_multisig()` call) verbatim. (Deliberate copy — see §7 de-dup FOLLOWUP.) This is the 3rd copy of the dispatch (export_wallet, restore single-sig, restore multisig); keeping it byte-identical makes the eventual consolidation mechanical.
 
 ## 4. `run_multisig` integration (mirror single-sig restore's `--format` weave)
 
@@ -75,7 +75,15 @@ Replace the refusal gate (`restore.rs:735-741`) with the single-sig pattern (`re
 
 Fixture: bundle the 2-of-3 `wsh-sortedmulti` from C0/C1/C2 (reuse `cli_restore_multisig.rs` pattern) → md1; master fps `73c5da0a` / `b8688df1` / `28645006`.
 
-- **EMIT × multisig-fidelity (9 cells, the primary correctness check — catches silent single-sig-ify):** for each EMIT format, `restore --md1 --format X` exits 0 AND the payload contains the threshold `2` (in the format's representation) AND **all three** cosigner fingerprints. (A single-sig-ified payload would carry K=1 or only one cosigner.)
+- **EMIT × multisig-fidelity (9 cells, the primary correctness check — catches silent single-sig-ify):** for each EMIT format, `restore --md1 --format X` exits 0 AND the payload contains the **exact per-format threshold token** below (NOT a bare `"2"` — that is vacuous: the digit appears in xpubs/paths/dates; R0-r1 I1 / [[feedback_ci_snapshot_test_substring_vacuity]]). A K=1 / single-sig-ified payload lacks the `2`-threshold token. Tokens (empirically pinned against the v0.44.0 binary):
+
+  | threshold token | formats |
+  |---|---|
+  | `sortedmulti(2,` | `descriptor`, `bitcoin-core`, `bip388`, `sparrow`, `bsms` |
+  | `Policy: 2 of` | `coldcard`, `coldcard-multisig`, `jade` |
+  | `2of3` (`"wallet_type":"2of3"`) | `electrum` |
+
+  PLUS, for the formats that embed `[fp/…]` hex key-origins (`descriptor`, `bitcoin-core`, `bsms`), assert **all three** real md1 cosigner fingerprints `73c5da0a` / `b8688df1` / `28645006` appear (proves the RIGHT 3 cosigners + the drop-a-cosigner case; restore embeds the md1's real fps, unlike export-wallet's placeholder `00000000`). For the non-fp-embedding formats the threshold token + `--format descriptor` equality below carry the fidelity guarantee.
 - **`--format descriptor` exact-equality:** `restore --md1 --format descriptor` stdout == the `restore --md1 --json` `wallets[0].descriptor` (the bare canonical descriptor; clean strongest check).
 - **Refusal cells (2):** `--format specter` → `ExportWalletMissingFields` (exit 2); `--format green` → exit 1 "does not support multisig". (Match export-wallet.)
 - **Watch-only-out:** for `bitcoin-core` + `descriptor` + `bsms`, assert no `xprv`/`tprv`/`xprv`/WIF (`L`/`K`/`5` priv heuristics are noisy — assert NOT contains `"xprv"`/`"tprv"`) in stdout AND stderr AND `--json`.
