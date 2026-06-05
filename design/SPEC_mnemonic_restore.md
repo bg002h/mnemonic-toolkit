@@ -84,7 +84,7 @@ The master fingerprint is computed once (path-independent — identical across a
 | Need | API | Cite |
 |---|---|---|
 | seed+passphrase → account xpub + MASTER fingerprint | `derive_slot::derive_bip32_from_entropy(entropy:&[u8], passphrase:&str, language:Bip39Language, network:CliNetwork, template:CliTemplate, account:u32) -> Result<DerivedAccount,_>` | `derive_slot.rs:42` |
-| derived bundle | `DerivedAccount { entropy:Zeroizing<Vec<u8>>, master_fingerprint:Fingerprint, account_xpub:Xpub, account_xpriv:Xpriv (DO NOT EMIT), account_path, _entropy_pin }` | `derive.rs:23-39` |
+| derived bundle | `DerivedAccount { entropy:Zeroizing<Vec<u8>>, master_fingerprint:Fingerprint, account_xpub:Xpub, account_xpriv:Xpriv (DO NOT EMIT), account_path, _entropy_pin }` | `derive.rs:23-36` |
 | ms1 → entropy + wire-language | `slot_ms1::resolve_ms1_slot(value, flag_language, idx) -> Ms1SlotResolution { entropy, derive_language, emit_language }` | `slot_ms1.rs:37` |
 | reject multisig `--template` | `CliTemplate::is_multisig() -> bool` | `template.rs:47` |
 | template → ScriptType (for address render) | `convert::script_type_from_template(CliTemplate) -> Option<ScriptType>` (bump to `pub(crate)`) | `convert.rs:393` |
@@ -116,7 +116,7 @@ Add `ToolkitError::RestoreMismatch { reference: &'static str, derived: String, e
 ---
 
 ## 7. Lockstep obligations
-**GUI (`/scratch/code/shibboleth/mnemonic-gui`, paired v0.24.0):** one `SubcommandSchema` in `SUBCOMMANDS` (`src/schema/mnemonic.rs:3191`) + `const RESTORE_FLAGS`. Secret-flag projection: `flag_is_secret` (`secrets.rs:49-64`) already classifies `--passphrase`/`--passphrase-stdin` secret; `--from` is value-dependent (no new entry — restore adds no new literal secret flag name). Pins: bump Cargo `mnemonic-toolkit.tag` + `pinned-upstream.toml [mnemonic].tag` → v0.43.0 (`pin_coherence`); `schema_mirror` flag-NAME parity once SUBCOMMANDS entry added.
+**GUI (`/scratch/code/shibboleth/mnemonic-gui`, paired v0.24.0):** one `SubcommandSchema` in `SUBCOMMANDS` (`src/schema/mnemonic.rs:3191`) + `const RESTORE_FLAGS`. Secret-flag projection: `flag_is_secret` (toolkit `src/secrets.rs:149`, over `SECRET_FLAG_NAMES` `:141` — re-grep at P3 GUI-pairing per cross-repo decay) already classifies `--passphrase`/`--passphrase-stdin` secret; `--from` is value-dependent (no new entry — restore adds no new literal secret flag name). Pins: bump Cargo `mnemonic-toolkit.tag` + `pinned-upstream.toml [mnemonic].tag` → v0.43.0 (`pin_coherence`); `schema_mirror` flag-NAME parity once SUBCOMMANDS entry added.
 **Manual:** `## mnemonic restore` in `41-mnemonic.md` (Synopsis/Flags/Worked example, every flag); add `mnemonic restore` to `docs/manual/tests/cli-subcommands.list` (flag-coverage lint, `lint.sh:62-96`); restore recipe in `30-workflows/35-recovery-paths.md`.
 
 ---
