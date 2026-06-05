@@ -852,6 +852,46 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 None => anno_path.clone(),
             };
             (xpub, fp, path, None, None)
+        } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {
+            // v0.43.1 — raw-`entropy` cosigner in descriptor verify-bundle mode
+            // (FOLLOWUP `verify-bundle-descriptor-entropy-slot-gap`). Mirror of
+            // the bundle-loop Entropy arm (bundle.rs:1438): hex-decode, then
+            // derive at the descriptor-annotated `anno_path` via the shared
+            // helper. emit_lang = None — raw entropy carries no BIP-39 wire
+            // language (symmetric with the bundle Entropy arm, which returns None
+            // as its 5th element). Placement mirrors the bundle loop's
+            // Xpub→Entropy→Ms1 order; precedence is moot (`is_legal_set` forbids
+            // `[Entropy, *]` co-occurrence).
+            let entropy_hex = slot_inputs
+                .iter()
+                .find(|s| s.subkey == crate::slot_input::SlotSubkey::Entropy)
+                .map(|s| s.value.as_str())
+                .expect("contains() asserts presence");
+            // SAFETY: third-party-blocked — `bip39::Mnemonic` + `Xpriv` have no
+            // Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
+            // `rust-bitcoin-xpriv-zeroize-upstream`. The decoded entropy is held
+            // in `Zeroizing` and the returned `ent_opt` is re-pinned below.
+            let entropy_bytes = zeroize::Zeroizing::new(hex::decode(entropy_hex).map_err(|e| {
+                ToolkitError::BadInput(format!("--slot @{idx}.entropy hex-decode: {e}"))
+            })?);
+            let language = args.language.unwrap_or_default();
+            let passphrase: zeroize::Zeroizing<String> =
+                zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
+            let acc = crate::derive_slot::derive_bip32_from_entropy_at_path(
+                &entropy_bytes,
+                &passphrase,
+                language.into(),
+                args.network,
+                &anno_path,
+            )?;
+            let (_acc_entropy, master_fp, xpub, _xpriv, _path) = acc.into_parts();
+            (
+                xpub,
+                master_fp,
+                anno_path.clone(),
+                Some((*entropy_bytes).clone()),
+                None,
+            )
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Ms1) {
             // v0.41.0 — raw `ms1` codex32 secret cosigner in descriptor
             // verify-bundle mode. (SPEC-R0-I1: this loop has NO Entropy arm to
