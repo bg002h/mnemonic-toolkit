@@ -73,9 +73,20 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/restore.rs` `run_multisig` (`args.format.is_some()` → `ModeViolation` exit 2).
 - **What:** Single-sig restore's `--format` emits an importable wallet-software payload via the `export-wallet` `WalletFormatEmitter` dispatch, but REQUIRES a single `--template` — which does not fit multisig. Multisig restore currently emits only the concrete descriptor (text / `--json` / `--output`) and refuses `--format`. A follow-on could wire multisig `--format` through the multisig-capable emitters (`coldcard-multisig`, `bsms`, `bitcoin-core`, `descriptor`, …) by building a multisig `EmitInputs` from the reconstructed cosigner slots + threshold (the data is all in hand post-reconstruction: `template`, `slots`, `k`, `taproot_internal_key`). Mirror the single-sig `build_import_payload` `collect_missing`-first contract.
 - **Why deferred:** Out of v0.44.0 scope (the descriptor + cross-check is the core); additive surface with its own per-emitter multisig test matrix.
-- **Status:** `open`
+- **Status:** `resolved` mnemonic-toolkit-**v0.45.0**. `run_multisig` `--format` refusal gate removed; new `build_multisig_import_payload` builds a multisig `EmitInputs` (`threshold: Some(k)`, **`threshold_user_supplied: true`** — k from md1 is authoritative + Sparrow's `collect_missing` refuses a multisig template otherwise; `taproot_internal_key: None`; `<template>-<account>` wallet name == export-wallet's default) and runs the `collect_missing`-first → `emit` dispatch **byte-identical to `export_wallet.rs:506-560`** (incl. the coldcard-multisig 6-variant `CliTemplate` match). 9 emit (`bitcoin-core`/`bip388`/`coldcard`/`coldcard-multisig`/`jade`/`sparrow`/`electrum`/`bsms`/`descriptor`), 2 refuse (`specter` missing-wallet-name exit 2, `green` no-multisig exit 1), mirroring export-wallet exactly. Payload computed AFTER the mismatch hard-gate (exit 4 precedes any emit). Watch-only-out preserved. Test: `tests/cli_restore_multisig_format.rs` (10 cells; per-format threshold token + 3-fp containment, not byte-parity — md1 real-fp + template-mode is a provenance no export-wallet invocation reproduces). Audit trail: `design/SPEC_restore_multisig_format_payloads.md` + `design/agent-reports/restore-multisig-format-payloads-{r0-r1,r0-r2}-review.md` (R0 GREEN after one fold round).
 - **Tier:** `v0.5`
 - **Tags:** `restore` `wallet` `multisig` `export`
+- **Spawned FOLLOWUPs:** `restore-emit-dispatch-3way-dedup`.
+
+### `restore-emit-dispatch-3way-dedup` — the 11-arm `collect_missing`→`emit` `WalletFormatEmitter` dispatch now exists in 3 byte-identical copies
+
+- **Surfaced:** 2026-06-05, multisig restore `--format` cycle (toolkit v0.45.0) — R0 + advisor noted the duplication.
+- **Where:** `crates/mnemonic-toolkit/src/cmd/export_wallet.rs:506-560` (`run`), `crates/mnemonic-toolkit/src/cmd/restore.rs` single-sig `build_import_payload` (~`:587-660`), and the v0.45.0 multisig `build_multisig_import_payload` (~`:662-760`).
+- **What:** Three byte-identical copies of the `match format { … collect_missing … }` + refuse + `match format { … emit … }` dispatch (incl. the coldcard-multisig 6-variant template branch). Consolidate into one `wallet_export::emit_payload(inputs: &EmitInputs, format: CliExportFormat) -> Result<String>` (collect_missing-first → emit, with the coldcard-multisig branch) consumed by all three sites. Same species as `descriptor-origin-extraction-dedup`. The copies were kept byte-identical deliberately so the consolidation is mechanical.
+- **Why deferred:** The de-dup touches two shipped/tested paths (`export-wallet` `run` + single-sig restore) and would change single-sig restore's coldcard-multisig refusal message — refactoring unrelated to the v0.45.0 goal (the advisor explicitly recommended 3rd-copy-plus-FOLLOWUP over the refactor). Drift window is "copies are byte-identical today."
+- **Status:** `open`
+- **Tier:** `v0.5`
+- **Tags:** `restore` `export-wallet` `refactor` `dedup`
 
 ### `gui-restore-multisig-flags-pending-pin-bump` — mnemonic-gui `RESTORE_FLAGS` must add `--md1`/`--cosigner` + flip `--from required:false`, blocked on the GUI bumping its toolkit pin to ≥ v0.44.0
 

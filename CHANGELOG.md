@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.45.0] — 2026-06-05
+
+**SemVer-MINOR — `mnemonic restore --md1 --format <X>`: importable multisig wallet payloads.**
+
+- **`restore --md1 --format <X>`.** Multisig-cosigner restore (v0.44.0) emitted only the descriptor doc and refused `--format`. It now emits an importable wallet-software payload — the **same payload class** as `mnemonic export-wallet --template <multisig> --format <X>` — built from the reconstructed cosigner keys + threshold: a multisig `EmitInputs` (`threshold: Some(k)` with `threshold_user_supplied: true` since the md1's `k` is authoritative — load-bearing: the Sparrow emitter refuses a multisig template otherwise; `taproot_internal_key: None`; synthesized `<template>-<account>` wallet name) run through the shared `export-wallet` emitter dispatch. No `--template` is needed (threshold + script type come from the `md1`).
+- **Supported:** `bitcoin-core`, `bip388`, `coldcard`, `coldcard-multisig`, `jade`, `sparrow`, `electrum`, `bsms`, `descriptor` (9). **Refused** (identically to `export-wallet`): `specter` (`ExportWalletMissingFields` exit 2 — needs a wallet name restore does not take) and `green` (exit 1 — no multisig support).
+- **Output shape (mirrors single-sig restore).** Without `--json`, the payload pipes from stdout while the verification doc (descriptor + cosigner table) moves to stderr; `--output <FILE>` writes the payload to the file. With `--json`, the envelope gains an `import_payload` field. The payload is computed **after** the cross-check mismatch hard-gate, so a `✗ MISMATCH` still exits 4 (`RestoreMismatch`) before any payload is emitted unless `--allow-mismatch`.
+- **Watch-only-out preserved.** No `xprv` / WIF / seed reaches stdout, stderr, or `--json` (test-enforced).
+- **Scope / refusals (exit 2).** `wsh` / `sh(wsh)` only; a **taproot** multisig `md1` is still refused at the `Tag::Tr` gate before reconstruction (FOLLOWUP `restore-multisig-taproot-reconstruction`).
+- **No CLI-surface change** — `--format` is a pre-existing `restore` flag (a previously-refused multisig invocation now emits). No new flag/value-enum → no GUI `schema_mirror` or sibling change. Resolves `design/FOLLOWUPS.md` entry `restore-multisig-format-payloads`.
+- **Tests.** New `crates/mnemonic-toolkit/tests/cli_restore_multisig_format.rs` (10 cells: per-format threshold-token fidelity across all 9 emit formats, 3-real-fingerprint containment for the `[fp/…]`-embedding formats, `--format descriptor` exact-equality vs the `--json` descriptor, specter/green refusals, watch-only-out, `--json` `import_payload`, mismatch-precedence exit 4, `sh(wsh)`, `--output`).
+- **Code note.** `build_multisig_import_payload`'s emitter dispatch is a byte-identical 3rd copy of `export_wallet.rs`'s (also duplicated in single-sig restore); consolidation tracked as FOLLOWUP `restore-emit-dispatch-3way-dedup`.
+
 ## mnemonic-toolkit [0.44.0] — 2026-06-05
 
 **SemVer-MINOR — `mnemonic restore` multisig-cosigner: reconstruct a watch-only multisig descriptor from the shared `md1`.**

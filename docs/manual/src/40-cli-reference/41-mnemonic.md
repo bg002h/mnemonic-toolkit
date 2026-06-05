@@ -939,11 +939,30 @@ slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless
 `--allow-mismatch`. Restore stays watch-only-out in multisig mode too: no
 `xprv` / WIF / seed reaches stdout, stderr, or `--json`.
 
+**Importable wallet payloads (`--format`).** As with single-sig restore,
+`--format <X>` emits an importable wallet-software payload instead of the
+plain descriptor doc — the same payload class as `mnemonic export-wallet
+--template <multisig> --format <X>`, built from the reconstructed cosigner
+keys + threshold. The payload pipes from stdout while the verification doc
+(descriptor + cosigner table) moves to stderr:
+
+```sh
+mnemonic restore --md1 md1f5przzs... --format bitcoin-core > import.json
+```
+
+Supported: `bitcoin-core`, `bip388`, `coldcard`, `coldcard-multisig`, `jade`,
+`sparrow`, `electrum`, `bsms`, `descriptor`. `specter` is refused (it needs a
+wallet name, which multisig restore does not take) and `green` is refused (no
+multisig support) — both identically to `export-wallet`. No `--template` is
+needed (the threshold and script type come from the `md1`). A cross-check
+`✗ MISMATCH` still hard-fails (exit 4) **before** any payload is emitted unless
+`--allow-mismatch`.
+
 **Scope.** `wsh` and `sh(wsh)` multisig only. A **taproot** multisig `md1`
 (`tr(sortedmulti_a, …)`) is refused (exit 2) pending FOLLOWUP
 `restore-multisig-taproot-reconstruction`; a template-only `md1` (no
-concrete keys — never emitted by the toolkit) is refused. `--format`,
-`--template`, and `--expect-xpub` are single-sig only.
+concrete keys — never emitted by the toolkit) is refused. `--template` and
+`--expect-xpub` are single-sig only.
 
 ---
 
