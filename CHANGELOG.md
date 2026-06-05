@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.43.1] — 2026-06-04
+
+**SemVer-PATCH — `verify-bundle --descriptor` now binds a raw-`entropy` cosigner.**
+
+- **`verify-bundle --descriptor <BIP-388 @N template> --slot @N.entropy=<hex>`.** The descriptor-mode binding loop in `verify_bundle.rs` had arms for `phrase`/`seedqr`, `xpub`, and `ms1`, but **no `entropy` arm** — a raw-entropy cosigner fell through to the catch-all and errored (`DescriptorReparseFailed`, exit 4) with `--slot @N subkey set ["entropy"] not supported in descriptor verify-bundle path`. This was a pure asymmetry: the `bundle` descriptor path and the `verify-bundle` **template** path already derive a cosigner from raw entropy; only `verify-bundle` + `--descriptor` + `entropy` was unbindable. The new arm mirrors the `bundle` Entropy arm — hex-decode → derive at the descriptor-annotated path via the shared `derive_slot::derive_bip32_from_entropy_at_path` (honoring `--passphrase`/`--language`/`--network`), re-emit the cosigner card, and compare. Output is byte-identical to the `bundle` path, so a bundle built from `@N.entropy=` round-trips to `result: ok`.
+- **No CLI-surface change.** `entropy` is a pre-existing `--slot` subkey; this is a behavior-only fix (a previously-erroring invocation now succeeds). No new flag/option/value-enum → no GUI `schema_mirror` or manual-mirror change. Resolves `design/FOLLOWUPS.md` entry `verify-bundle-descriptor-entropy-slot-gap`.
+- **Tests.** New `crates/mnemonic-toolkit/tests/cli_verify_bundle_entropy_slot.rs` (5 round-trip + mismatch tests: 16/32-byte lengths, a non-`@0` slot in a 3-cosigner `wsh(andor(…))` descriptor, a `--passphrase` round-trip, and a passphrase-mismatch that proves the derived key is input-dependent and the comparison is live).
+
 ## mnemonic-toolkit [0.43.0] — 2026-06-04
 
 **SemVer-MINOR — `mnemonic restore` (single-sig): secret seed + passphrase → watch-only restore document.**
