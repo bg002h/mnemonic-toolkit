@@ -897,7 +897,7 @@ emits a single object:
 The seed is never echoed in any output mode (redacted by construction);
 no `xprv` / `tprv` token appears in restore's stdout or `--json`.
 
-### Multisig-cosigner restore (`--md1`)
+### Multisig-cosigner restore (`--md1`) {#multisig-cosigner-restore}
 
 A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
 for any multisig bundle) carries **every cosigner's public key**, so the

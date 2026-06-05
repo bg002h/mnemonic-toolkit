@@ -6,3 +6,4 @@ mnemonic-bundle
 mnemonic-export-wallet
 mnemonic-import-wallet
 mnemonic-restore
+multisig-cosigner-restore
