@@ -9,7 +9,7 @@
 
 ## 1. Problem
 
-`verify-bundle --descriptor <BIP-388 @N template> --slot @N.entropy=<hex>` currently fails. The descriptor-mode binding loop in `verify_bundle.rs` has arms for `Phrase`/`Seedqr` (`:788`), `Xpub` (`:830`), and `Ms1` (`:855`), then a catch-all `else` (`:885-891`) that returns `ToolkitError::DescriptorReparseFailed` (exit 2, detail `"--slot @{idx} subkey set {:?} not supported in descriptor verify-bundle path"`). There is **no `SlotSubkey::Entropy` arm**, so a raw-entropy cosigner falls through to the catch-all.
+`verify-bundle --descriptor <BIP-388 @N template> --slot @N.entropy=<hex>` currently fails. The descriptor-mode binding loop in `verify_bundle.rs` has arms for `Phrase`/`Seedqr` (`:788`), `Xpub` (`:830`), and `Ms1` (`:855`), then a catch-all `else` (`:885-891`) that returns `ToolkitError::DescriptorReparseFailed` (**exit 4** per `error.rs:503` — runtime-verified; the FOLLOWUP's "exit 2" is a stale citation confusing it with `DescriptorParse → 2`), detail `"--slot @{idx} subkey set {:?} not supported in descriptor verify-bundle path"`. There is **no `SlotSubkey::Entropy` arm**, so a raw-entropy cosigner falls through to the catch-all. Runtime RED baseline (unpatched, probed 2026-06-04): `bundle … --slot @0.entropy=<hex>` → exit 0 (bundles fine); `verify-bundle …` → **exit 4**, stderr `error: descriptor re-parse failed during verify-bundle: --slot @0 subkey set ["entropy"] not supported in descriptor verify-bundle path`, empty stdout.
 
 This is a pure asymmetry, not a design boundary:
 
@@ -83,7 +83,7 @@ Notes:
 
 ## 5. Test matrix (small matrix — user-selected breadth)
 
-New dedicated file `crates/mnemonic-toolkit/tests/cli_verify_bundle_entropy_slot.rs` (keeps the new construction out of `cli_ms1_slot.rs`). All tests must first go **RED for the right reason** (verify step → exit 2 `DescriptorReparseFailed`) against the unpatched binary, then GREEN after the arm lands.
+New dedicated file `crates/mnemonic-toolkit/tests/cli_verify_bundle_entropy_slot.rs` (keeps the new construction out of `cli_ms1_slot.rs`). All positive tests must first go **RED for the right reason** (verify step → **exit 4** `DescriptorReparseFailed`, stderr `…subkey set ["entropy"] not supported in descriptor verify-bundle path`; runtime-verified) against the unpatched binary, then GREEN after the arm lands.
 
 Fixtures (re-declare locally as constants):
 - `NONCANONICAL_DESC = "tr(NUMS,and_v(v:pk(@0),after(12000000)))"` (single `@0`; from `cli_ms1_slot.rs:294`).
@@ -91,12 +91,15 @@ Fixtures (re-declare locally as constants):
 
 (`CANONICAL_DESC = "wsh(sortedmulti(2,@0,@1))"` is deliberately NOT used — there is no precedent for a secret cosigner bundling on a canonical `wsh(sortedmulti)` `--descriptor` string; every such use in the suite is a refusal test. Per R0-r1 I1, the multi-`@N` cell uses the proven `ANDOR3_DESC` instead.)
 
-1. **`verify_bundle_descriptor_entropy_round_trip`** — clone of `verify_bundle_descriptor_mode_ms1_cosigner_verified` (`cli_ms1_slot.rs:554`) with `@0.entropy=<hex(32B)>` against `NONCANONICAL_DESC`: `bundle … --json` → extract cards → `verify-bundle … --slot @0.entropy=<hex> --ms1/--mk1/--md1 …` → `success` + stdout `result: ok`.
-2. **`verify_bundle_descriptor_entropy_self_check`** — `verify-bundle --descriptor NONCANONICAL_DESC --slot @0.entropy=<hex> --self-check` (regenerates internally + compares) → `success`. Mirrors the ms1 self-check test.
-3. **`verify_bundle_descriptor_entropy_len16`** and **`…_len32`** — round-trip at 16-byte and 32-byte entropy lengths (12- and 24-word equivalents) → both `result: ok`. Guards the `Mnemonic::from_entropy_in` length acceptance.
-4. **`verify_bundle_descriptor_entropy_nonzero_slot_multi_n`** — `ANDOR3_DESC` 3-cosigner with `@0.phrase=<12-word>` + **`@1.entropy=<hex>`** + `@2.phrase=<12-word>`: bundle (`--language english --account 0`) then verify-bundle → `result: ok`. Proves the new Entropy arm fires at a **non-`@0` position** in a **multi-`@N`** descriptor and composes with the Phrase/Seedqr arm handling the sibling slots. Uses the proven-bundlable `ANDOR3_DESC` (`cli_non_canonical_descriptor.rs:22`) — no canonical-`sortedmulti`-secret dependency. (Phrase on the sibling slots is used rather than `xpub` because mixed secret+`xpub` on a `--descriptor` *string* is itself unproven across the canonicity boundary — phrase keeps every slot on proven ground while still exercising the entropy arm beside a different arm.)
+Helper: a local `bundle_descriptor_cards(desc, &slot_args, lang, passphrase) -> (ms1, mk1, md1)` that runs `bundle --descriptor … --slot … [--language …] [--passphrase-env …] --json --no-engraving-card` and returns the extracted card vectors (clone of `extract_cards`, `cli_ms1_slot.rs:405`). Secret slot values pass `--slot @N.x=<value>` directly (argv); the secret-on-argv stderr warning is benign in tests.
 
-Total: 5 tests. Each is a `Command::cargo_bin("mnemonic")` integration test (BIN target, not `--lib`).
+1. **`round_trip_len32`** — `@0.entropy=<hex(32B)>` on `NONCANONICAL_DESC`: `bundle … --json` → extract cards → `verify-bundle … --slot @0.entropy=<hex> --ms1/--mk1/--md1 …` → `.code(0)` + stdout `result: ok`. (Core symmetry: the bundle Entropy arm and the new verify Entropy arm — distinct code paths — must agree.)
+2. **`round_trip_len16`** — same as #1 with `@0.entropy=<hex(16B)>` (12-word equivalent) → `result: ok`. Guards `Mnemonic::from_entropy_in` length acceptance (16 vs 32 B).
+3. **`nonzero_slot_multi_n`** — `ANDOR3_DESC` 3-cosigner with `@0.phrase=<12-word>` + **`@1.entropy=<hex(16B)>`** + `@2.phrase=<12-word>`: bundle (`--language english --account 0`) then verify-bundle → `result: ok`. Proves the new Entropy arm fires at a **non-`@0` position** in a **multi-`@N`** descriptor and composes with the Phrase arm handling the sibling slots. Uses the proven-bundlable `ANDOR3_DESC` (`cli_non_canonical_descriptor.rs:22`). (Phrase, not `xpub`, on the sibling slots — mixed secret+`xpub` on a `--descriptor` *string* is unproven across the canonicity boundary; phrase keeps every slot on proven ground while still exercising the entropy arm beside a different arm.)
+4. **`passphrase_round_trip`** — `@0.entropy=<hex(32B)>` on `NONCANONICAL_DESC` with `--passphrase` (same value) on **both** bundle and verify → `result: ok`. Exercises the new arm's `args.passphrase` handling (positive).
+5. **`passphrase_mismatch_detected`** — bundle `@0.entropy=<hex(32B)>` with `--passphrase <A>`; verify the SAME entropy slot with `--passphrase <B≠A>` + the A-cards → `.code(4)` + stdout `result: mismatch`. Proves the arm derives an **input-dependent** key and the verify comparison is **live** (not a no-op). **Replaces the originally-specified `self_check` test** (Phase-1 RED-authoring discovery): `--self-check` is a `bundle`-only flag (`bundle.rs:86`) whose `self_check_bundle` routine (`bundle.rs:2027`) re-parses the bundle internally and does **not** route through the `verify_bundle.rs` descriptor binding loop — it would not exercise the new arm at all. NB: both RED (catch-all `DescriptorReparseFailed`) and GREEN (`BundleMismatch`) are exit 4 here, so this test's GREEN assertion keys on **stdout `result: mismatch`** (only reachable post-fix), not the exit code alone.
+
+Total: 5 tests. Each is a `Command::cargo_bin("mnemonic")` integration test (BIN target, not `--lib`). Secrets passed via argv `--slot`/`--passphrase` (test-only; the stderr secret-on-argv warning is expected and ignored).
 
 ## 6. SemVer / lockstep / non-goals
 
@@ -108,7 +111,7 @@ Total: 5 tests. Each is a `Command::cargo_bin("mnemonic")` integration test (BIN
 
 ## 7. Phased plan
 
-**Phase 1 — TDD RED.** Add `cli_verify_bundle_entropy_slot.rs` with the 5 tests. Run against the unpatched binary; confirm each verify step fails with exit 2 `DescriptorReparseFailed` (RED for the right reason). Commit tests (RED documented in the commit body).
+**Phase 1 — TDD RED.** Add `cli_verify_bundle_entropy_slot.rs` with the 5 tests. Run against the unpatched binary; confirm each verify step fails with **exit 4** `DescriptorReparseFailed` (stderr `…subkey set ["entropy"] not supported…`; RED for the right reason — runtime-verified). Commit tests (RED documented in the commit body).
 
 **Phase 2 — Implement + GREEN.** Insert the arm (§3) between `:854` and `:855`. Run the new file + the full `cargo test --no-fail-fast` workspace suite (grep `feedback_shared_string_change_sweep_all_tests_full_suite_per_commit` — though no shared string changes here, the full suite is mandatory per-phase). Confirm 5/5 GREEN and zero regressions. Per-phase opus architect review → persist to `design/agent-reports/verify-bundle-entropy-slot-phase-2-rN-review.md` → fold → re-dispatch until 0C/0I.
 
