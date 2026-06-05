@@ -30,7 +30,7 @@ This is a pure asymmetry, not a design boundary:
 
 ## 3. The change
 
-Insert a new arm into the `verify_bundle.rs` descriptor binding loop, **between** the `Xpub` arm (ends `:854`) and the `Ms1` arm (`:855` `else if`), mirroring the `bundle` loop's arm ordering (`Phrase/Seedqr → Xpub → Entropy → Ms1`). Arm order is **load-bearing**, not cosmetic: it sets the precedence when a slot carries multiple value-subkeys, which is required for output-symmetry with the `bundle` path.
+Insert a new arm into the `verify_bundle.rs` descriptor binding loop, **between** the `Xpub` arm (ends `:854`) and the `Ms1` arm (`:855` `else if`), mirroring the `bundle` loop's arm ordering (`Phrase/Seedqr → Xpub → Entropy → Ms1`). Placement mirrors the bundle loop **for consistency**; precedence is moot — `is_legal_set` (`slot_input.rs:343-359`) permits `[Entropy]` as a standalone-only set (no `[Entropy, *]` co-occurrence exists), so `subkeys.contains(&Entropy)` is never simultaneously true with the `Xpub`/`Ms1` `contains` checks. (Corrected per R0-r1 M1.)
 
 The arm is the existing `Ms1` arm (`:855-884`) minus the ms1-decode step — it routes through the **same shared helper** the `Ms1` arm uses, exactly as the FOLLOWUP prescribes ("derive via `derive_slot::derive_bip32_from_entropy_at_path` at `anno_path`"):
 
@@ -85,14 +85,16 @@ Notes:
 
 New dedicated file `crates/mnemonic-toolkit/tests/cli_verify_bundle_entropy_slot.rs` (keeps the new construction out of `cli_ms1_slot.rs`). All tests must first go **RED for the right reason** (verify step → exit 2 `DescriptorReparseFailed`) against the unpatched binary, then GREEN after the arm lands.
 
-Fixtures (reuse `cli_ms1_slot.rs` constants by re-declaring locally):
-- `NONCANONICAL_DESC = "tr(NUMS,and_v(v:pk(@0),after(12000000)))"` (single `@0`).
-- `CANONICAL_DESC = "wsh(sortedmulti(2,@0,@1))"` (two cosigners `@0`,`@1`).
+Fixtures (re-declare locally as constants):
+- `NONCANONICAL_DESC = "tr(NUMS,and_v(v:pk(@0),after(12000000)))"` (single `@0`; from `cli_ms1_slot.rs:294`).
+- `ANDOR3_DESC = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))"` (3 cosigners `@0`/`@1`/`@2`; the **proven** non-canonical multi-`@N` fixture from `cli_non_canonical_descriptor.rs:22`, already shown to bundle secret slots with `.success()`).
+
+(`CANONICAL_DESC = "wsh(sortedmulti(2,@0,@1))"` is deliberately NOT used — there is no precedent for a secret cosigner bundling on a canonical `wsh(sortedmulti)` `--descriptor` string; every such use in the suite is a refusal test. Per R0-r1 I1, the multi-`@N` cell uses the proven `ANDOR3_DESC` instead.)
 
 1. **`verify_bundle_descriptor_entropy_round_trip`** — clone of `verify_bundle_descriptor_mode_ms1_cosigner_verified` (`cli_ms1_slot.rs:554`) with `@0.entropy=<hex(32B)>` against `NONCANONICAL_DESC`: `bundle … --json` → extract cards → `verify-bundle … --slot @0.entropy=<hex> --ms1/--mk1/--md1 …` → `success` + stdout `result: ok`.
 2. **`verify_bundle_descriptor_entropy_self_check`** — `verify-bundle --descriptor NONCANONICAL_DESC --slot @0.entropy=<hex> --self-check` (regenerates internally + compares) → `success`. Mirrors the ms1 self-check test.
 3. **`verify_bundle_descriptor_entropy_len16`** and **`…_len32`** — round-trip at 16-byte and 32-byte entropy lengths (12- and 24-word equivalents) → both `result: ok`. Guards the `Mnemonic::from_entropy_in` length acceptance.
-4. **`verify_bundle_descriptor_entropy_mixed_with_xpub_cosigner`** — `CANONICAL_DESC` 2-of-2 with `@0.entropy=<hex>` + `@1.xpub=<xpub>` (the `@1` xpub taken from a `bundle`/`mk` derivation): bundle then verify-bundle → `result: ok`. Proves the entropy arm composes with another cosigner type at a non-`@0` position. (If a no-explicit-path entropy+xpub mix against `CANONICAL_DESC` trips an unrelated canonicity/distinct-key guard during RED-authoring, fall back to a second `@1.entropy=<different hex>` mixed cell and note the substitution — the goal is "entropy arm at a non-`@0` slot in a multi-`@N` descriptor.")
+4. **`verify_bundle_descriptor_entropy_nonzero_slot_multi_n`** — `ANDOR3_DESC` 3-cosigner with `@0.phrase=<12-word>` + **`@1.entropy=<hex>`** + `@2.phrase=<12-word>`: bundle (`--language english --account 0`) then verify-bundle → `result: ok`. Proves the new Entropy arm fires at a **non-`@0` position** in a **multi-`@N`** descriptor and composes with the Phrase/Seedqr arm handling the sibling slots. Uses the proven-bundlable `ANDOR3_DESC` (`cli_non_canonical_descriptor.rs:22`) — no canonical-`sortedmulti`-secret dependency. (Phrase on the sibling slots is used rather than `xpub` because mixed secret+`xpub` on a `--descriptor` *string* is itself unproven across the canonicity boundary — phrase keeps every slot on proven ground while still exercising the entropy arm beside a different arm.)
 
 Total: 5 tests. Each is a `Command::cargo_bin("mnemonic")` integration test (BIN target, not `--lib`).
 
