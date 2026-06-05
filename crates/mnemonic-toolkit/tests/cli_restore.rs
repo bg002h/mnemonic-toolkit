@@ -473,3 +473,183 @@ fn restore_watch_only_advisory_present() {
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(stderr.contains("watch-only"), "advisory missing:\n{stderr}");
 }
+
+// ---------------------------------------------------------------------------
+// 2.1 --format importable payload (requires single --template)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn restore_format_descriptor_payload_to_stdout() {
+    // `--format descriptor` emits the bare concrete descriptor on stdout; the
+    // verify block (fingerprint / CONFIRM / first recv) goes to stderr so the
+    // payload pipes cleanly into wallet software.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "descriptor",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success(), "exit 0; got {:?}", out.status.code());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    // stdout is EXACTLY the descriptor payload (single trailing newline).
+    assert_eq!(stdout.trim_end(), DESC_BIP84, "stdout payload:\n{stdout}");
+    // The human verify doc is on stderr, not stdout.
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains(FP_NO_PP), "fingerprint on stderr:\n{stderr}");
+    assert!(stderr.contains("CONFIRM"), "CONFIRM on stderr:\n{stderr}");
+    assert!(stderr.contains(FIRST_RECV_BIP84), "first recv on stderr:\n{stderr}");
+    // The descriptor MUST NOT also be duplicated as a text doc on stdout.
+    assert!(
+        !stdout.contains("master fingerprint:"),
+        "verify doc must be on stderr, not stdout:\n{stdout}"
+    );
+}
+
+#[test]
+fn restore_format_bitcoin_core_payload() {
+    // bitcoin-core → an importdescriptors JSON array (receive + change descriptors).
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "bitcoin-core",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).expect("bitcoin-core payload must be a JSON array");
+    let arr = v.as_array().expect("importdescriptors array");
+    assert_eq!(arr.len(), 2, "receive + change descriptor:\n{stdout}");
+    // The receive descriptor carries the bip84 origin + xpub (single-chain `/0/*`).
+    let desc0 = arr[0]["desc"].as_str().unwrap();
+    assert!(
+        desc0.contains("[73c5da0a/84'/0'/0']") && desc0.contains(ACCT_XPUB_BIP84),
+        "receive desc:\n{desc0}"
+    );
+}
+
+#[test]
+fn restore_format_bip388_payload() {
+    // bip388 → a wallet-policy JSON object (`description_template` + `keys_info`).
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "bip388",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).expect("bip388 payload must be a JSON object");
+    assert_eq!(
+        v["description_template"].as_str().unwrap(),
+        "wpkh(@0/**)",
+        "bip388 template:\n{stdout}"
+    );
+    let keys = v["keys_info"].as_array().expect("keys_info array");
+    assert_eq!(keys.len(), 1, "single-sig has one key:\n{stdout}");
+    assert!(
+        keys[0].as_str().unwrap().contains(ACCT_XPUB_BIP84),
+        "keys_info xpub:\n{stdout}"
+    );
+}
+
+#[test]
+fn restore_format_without_template_exit_2() {
+    // `--format` requires a single `--template`; with the all-4 default → exit 2
+    // (ModeViolation, NOT BadInput exit 1).
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--format",
+            "descriptor",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "--format + all-4 default = ModeViolation exit 2"
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "no payload on the gate:\n{stdout}");
+}
+
+#[test]
+fn restore_format_mismatch_no_allow_exit_4_no_payload() {
+    // The verify gate runs BEFORE the payload: a mismatch without --allow-mismatch
+    // → exit 4 and NO payload on stdout.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "descriptor",
+            "--expect-fingerprint",
+            "deadbeef",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(4), "mismatch must be exit 4");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        stdout.is_empty(),
+        "no payload emitted on mismatch:\n{stdout}"
+    );
+}
+
+#[test]
+fn restore_format_path_emits_no_private_key_material() {
+    // Watch-only-out across the --format path (incl. a passphrase run).
+    for fmt in ["descriptor", "bitcoin-core", "bip388", "sparrow"] {
+        let out = bin()
+            .args([
+                "restore",
+                "--from",
+                &format!("phrase={TREZOR_12}"),
+                "--template",
+                "bip84",
+                "--passphrase",
+                "TREZOR",
+                "--format",
+                fmt,
+            ])
+            .output()
+            .expect("spawn");
+        assert!(out.status.success(), "{fmt} exit 0");
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        let stderr = String::from_utf8(out.stderr).unwrap();
+        for stream in [&stdout, &stderr] {
+            assert!(!stream.contains("xprv"), "{fmt}: xprv leaked:\n{stream}");
+            assert!(!stream.contains("tprv"), "{fmt}: tprv leaked:\n{stream}");
+            assert!(!stream.contains("WIF"), "{fmt}: WIF leaked:\n{stream}");
+            assert!(
+                !stream.contains("account_xpriv"),
+                "{fmt}: account_xpriv leaked:\n{stream}"
+            );
+        }
+    }
+}

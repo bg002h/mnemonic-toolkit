@@ -20,18 +20,25 @@ use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
 use bitcoin::secp256k1::Secp256k1;
 use clap::Args;
 
+use serde_json::json;
+
 use crate::address_render::render_address_from_xpub;
 use crate::cmd::convert::{
     parse_from_input, read_stdin_passphrase, read_stdin_to_string, script_type_from_template,
     NodeType,
 };
+use crate::cmd::export_wallet::CliExportFormat;
 use crate::derive_slot::derive_bip32_from_entropy;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::synthesize::ResolvedSlot;
 use crate::template::CliTemplate;
-use crate::wallet_export::build_descriptor_string;
+use crate::wallet_export::{
+    self, build_descriptor_string, Bip388Emitter, BitcoinCoreEmitter, BsmsEmitter, BsmsForm,
+    CheckedDescriptor, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter, EmitInputs,
+    GreenEmitter, JadeEmitter, SparrowEmitter, SpecterEmitter, TimestampArg, WalletFormatEmitter,
+};
 
 /// The four single-sig templates restore emits when no `--template` is given.
 const ALL_SINGLE_SIG: [CliTemplate; 4] = [
@@ -95,6 +102,29 @@ pub struct RestoreArgs {
     /// Number of first-receive addresses to show per wallet type (default 1).
     #[arg(long, default_value_t = 1)]
     pub count: u32,
+
+    /// Emit an importable wallet-software payload (an `export-wallet` emitter:
+    /// `descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, …).
+    /// REQUIRES a single `--template` (emitters are one-descriptor-in/one-out);
+    /// `--format` with no `--template` (the all-4 default) → exit 2. When set,
+    /// the importable PAYLOAD goes to stdout and the verification block
+    /// (fingerprint / CONFIRM / descriptor / first recv) goes to stderr, so the
+    /// payload pipes cleanly into wallet software. (With `--json`, the payload is
+    /// embedded as the `import_payload` field instead.)
+    #[arg(long, value_enum)]
+    pub format: Option<CliExportFormat>,
+
+    /// Emit a single structured JSON object on stdout instead of the text
+    /// document. Seed material is NEVER echoed (redacted by construction). The
+    /// `import_payload` field is present only when `--format` is also set.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Write the stdout content to `<FILE>` instead of standard output
+    /// (`-`, the default, → stdout). The verification block / banners / advisory
+    /// still go to stderr.
+    #[arg(long, default_value = "-")]
+    pub output: String,
 }
 
 fn bad(s: impl Into<String>) -> ToolkitError {
@@ -102,12 +132,15 @@ fn bad(s: impl Into<String>) -> ToolkitError {
 }
 
 /// One derived wallet type: its template, concrete descriptor, and first
-/// receive address(es).
+/// receive address(es). `slot` is the watch-only `ResolvedSlot` (entropy:
+/// None) retained so a `--format` emitter can rebuild `EmitInputs` for the
+/// single-template case.
 struct WalletRow {
     template: CliTemplate,
     account_xpub: Xpub,
     descriptor: String,
     first_recv: Vec<String>,
+    slot: ResolvedSlot,
 }
 
 /// Run `mnemonic restore`.
@@ -149,6 +182,18 @@ pub fn run<R: Read, W: Write, E: Write>(
             flag: "--expect-xpub",
             message:
                 "--expect-xpub requires --template <bip44|bip49|bip84|bip86> (the account xpub is per-type)",
+        });
+    }
+
+    // `--format` drives a single `export-wallet` emitter — one descriptor in,
+    // one payload out — so it cannot straddle the all-4 default. Require a single
+    // `--template` (SPEC I-A: ModeViolation exit 2, NOT BadInput exit 1).
+    if args.format.is_some() && args.template.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--format",
+            message:
+                "--format requires --template <bip44|bip49|bip84|bip86> (an importable payload is one descriptor — pick one type)",
         });
     }
 
@@ -300,13 +345,14 @@ pub fn run<R: Read, W: Write, E: Write>(
             _entropy_pin: None,
         };
         let descriptor =
-            build_descriptor_string(template, &[slot], 1, network, args.account, None)?;
+            build_descriptor_string(template, std::slice::from_ref(&slot), 1, network, args.account, None)?;
 
         rows.push(WalletRow {
             template,
             account_xpub: acct.account_xpub,
             descriptor,
             first_recv,
+            slot,
         });
         // NB: `acct` (and its `account_xpriv`) is dropped here — never emitted.
     }
@@ -359,26 +405,118 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
-    // ---- Output document (§3.5) ---------------------------------------------
-    writeln!(
-        stdout,
-        "master fingerprint: {fp_str}  (passphrase: {})",
-        if passphrase_applied { "applied" } else { "none" }
-    )
-    .map_err(ToolkitError::Io)?;
-    writeln!(
-        stdout,
-        "CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor."
-    )
-    .map_err(ToolkitError::Io)?;
+    // Verification status label for the `--json` envelope (§3.5).
+    let verification_status = if mismatch.is_some() {
+        // Reached only with `--allow-mismatch` (the hard-fail path returned above).
+        "overridden"
+    } else if has_reference {
+        "verified"
+    } else {
+        "unverified"
+    };
 
-    for row in &rows {
-        writeln!(stdout).map_err(ToolkitError::Io)?;
-        writeln!(stdout, "{}:", template_label(row.template)).map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  descriptor: {}", row.descriptor).map_err(ToolkitError::Io)?;
-        for addr in &row.first_recv {
-            writeln!(stdout, "  first recv: {addr}").map_err(ToolkitError::Io)?;
+    // ---- Importable payload (§3.5; Task 2.1) --------------------------------
+    // `--format` is gated to a single `--template` above, so `rows[0]` is the
+    // only row and the payload is one descriptor in / one payload out.
+    let import_payload: Option<String> = if let Some(format) = args.format {
+        Some(build_import_payload(format, &rows[0], network, args.account)?)
+    } else {
+        None
+    };
+
+    // ---- Compose the stdout content (§3.5) ----------------------------------
+    // The "stdout content" is JSON (when `--json`), or the importable payload
+    // alone (when `--format` without `--json`), or the text verification doc.
+    // It is routed to `--output <FILE>` when set, else to stdout. The
+    // verification block + banners + advisory always go to stderr.
+    let stdout_content: String = if args.json {
+        let mut verification = json!({ "status": verification_status });
+        if let Some((reference, derived, expected)) = &mismatch {
+            verification["reference"] = json!(reference);
+            verification["derived"] = json!(derived);
+            verification["expected"] = json!(expected);
         }
+        let wallets: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                json!({
+                    "wallet_type": row.template.human_name(),
+                    "descriptor": row.descriptor,
+                    "first_addresses": row.first_recv,
+                })
+            })
+            .collect();
+        // Seed material (the `--from` value, passphrase) is NEVER serialized —
+        // the envelope carries only public derivation products. `passphrase_applied`
+        // is a bool, not the passphrase itself.
+        let mut envelope = json!({
+            "master_fingerprint": fp_str,
+            "passphrase_applied": passphrase_applied,
+            "network": network.human_name(),
+            "verification": verification,
+            "wallets": wallets,
+        });
+        if let Some(payload) = &import_payload {
+            envelope["import_payload"] = json!(payload);
+        }
+        let s = serde_json::to_string(&envelope)
+            .map_err(|e| bad(format!("json serialization: {e}")))?;
+        format!("{s}\n")
+    } else if let Some(payload) = &import_payload {
+        // `--format` without `--json`: the payload alone is stdout so it pipes
+        // cleanly into wallet software; the verification doc goes to stderr.
+        format!("{payload}\n")
+    } else {
+        // Phase-1 text document.
+        let mut s = String::new();
+        s.push_str(&format!(
+            "master fingerprint: {fp_str}  (passphrase: {})\n",
+            if passphrase_applied { "applied" } else { "none" }
+        ));
+        s.push_str(
+            "CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.\n",
+        );
+        for row in &rows {
+            s.push('\n');
+            s.push_str(&format!("{}:\n", template_label(row.template)));
+            s.push_str(&format!("  descriptor: {}\n", row.descriptor));
+            for addr in &row.first_recv {
+                s.push_str(&format!("  first recv: {addr}\n"));
+            }
+        }
+        s
+    };
+
+    // When `--format` is set (and not `--json`), the human verification doc is
+    // not the stdout content — surface it on stderr so the operator can still
+    // confirm the fingerprint while the payload pipes onward.
+    if import_payload.is_some() && !args.json {
+        writeln!(
+            stderr,
+            "master fingerprint: {fp_str}  (passphrase: {})",
+            if passphrase_applied { "applied" } else { "none" }
+        )
+        .map_err(ToolkitError::Io)?;
+        writeln!(
+            stderr,
+            "CONFIRM: this fingerprint matches the wallet you are restoring before importing the payload above."
+        )
+        .map_err(ToolkitError::Io)?;
+        for row in &rows {
+            writeln!(stderr, "{}:", template_label(row.template)).map_err(ToolkitError::Io)?;
+            writeln!(stderr, "  descriptor: {}", row.descriptor).map_err(ToolkitError::Io)?;
+            for addr in &row.first_recv {
+                writeln!(stderr, "  first recv: {addr}").map_err(ToolkitError::Io)?;
+            }
+        }
+    }
+
+    // ---- Route the stdout content (stdout | --output FILE) ------------------
+    if args.output == "-" {
+        write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, &stdout_content)
+            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
     }
 
     // ---- Verification banners (stderr) --------------------------------------
@@ -405,6 +543,58 @@ pub fn run<R: Read, W: Write, E: Write>(
     );
 
     Ok(0)
+}
+
+/// Build the importable wallet-software payload for a single template via the
+/// `export-wallet` `WalletFormatEmitter` dispatch (§3.5; Task 2.1).
+///
+/// Mirrors the 16-field `EmitInputs` ctor + dispatch in `cmd::export_wallet::run`
+/// (`export_wallet.rs`). NOTE: `EmitInputs.script_type` is
+/// `wallet_export::WalletScriptType` — a DIFFERENT enum from the
+/// `convert::ScriptType` used for address rendering — so we use
+/// `wallet_export::script_type_from_template`, not the convert-side helper.
+fn build_import_payload(
+    format: CliExportFormat,
+    row: &WalletRow,
+    network: CliNetwork,
+    account: u32,
+) -> Result<String, ToolkitError> {
+    let script_type = wallet_export::script_type_from_template(&row.template);
+    let wallet_name = format!("{}-{}", row.template.human_name(), account);
+    let inputs = EmitInputs {
+        canonical_descriptor: CheckedDescriptor::new(&row.descriptor)?,
+        resolved_slots: std::slice::from_ref(&row.slot),
+        template: Some(row.template),
+        script_type,
+        network,
+        account,
+        // Single-sig: no multisig threshold.
+        threshold: None,
+        threshold_user_supplied: false,
+        master_xpub_at_0: row.slot.master_xpub,
+        wallet_name: &wallet_name,
+        wallet_name_is_non_default: false,
+        taproot_internal_key: None,
+        range: (0, 999),
+        timestamp: TimestampArg::Now,
+        bitcoin_core_version: 25,
+        bsms_form: BsmsForm::default(),
+    };
+    match format {
+        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
+        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
+        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
+        CliExportFormat::ColdcardMultisig => Err(bad(
+            "--format coldcard-multisig requires a multisig wallet; restore is single-sig — use --format coldcard",
+        )),
+        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
+        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
+        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
+        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
+        CliExportFormat::Green => GreenEmitter::emit(&inputs),
+        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
+        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
+    }
 }
 
 fn template_label(t: CliTemplate) -> &'static str {
