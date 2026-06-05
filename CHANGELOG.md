@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.44.0] — 2026-06-05
+
+**SemVer-MINOR — `mnemonic restore` multisig-cosigner: reconstruct a watch-only multisig descriptor from the shared `md1`.**
+
+- **`mnemonic restore --md1 <card> […]`.** Completes the multisig half deferred from the v0.43.0 single-sig `restore` cycle. A toolkit-emitted multisig `md1` is a **wallet-policy** card — it carries every cosigner's concrete public key — so the concrete watch-only multisig descriptor is reconstructed from the **card alone** (`md_codec::to_miniscript_descriptor` → `template_from_descriptor` → `build_descriptor_string`, emitting the canonical multipath `<0;1>/*` form + BIP-380 checksum, matching single-sig restore's output shape). Emits the descriptor + first receive address(es) + a per-cosigner table. Covers `wsh(sortedmulti|multi)` and `sh(wsh(…))`.
+- **Optional, per-position cross-check.** `--from <seed>` proves which cosigner is yours (position inferred by matching the derived key — the 65-byte `chain-code‖pubkey` form, never a normalization-sensitive `Xpub ==`); `--cosigner @N=<mk1|xpub>` asserts another cosigner's key. **Only the positions you actually supply are marked verified** — every other stays `from md1 (not independently verified)`, and the overall verdict is `PARTIAL` until all positions are cross-checked (never present an unchecked key as verified). A supplied key that does NOT match the md1 slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless `--allow-mismatch`; with no cross-check input the output carries the `UNVERIFIED` banner.
+- **Watch-only-out.** No `xprv` / WIF / seed reaches stdout, stderr, or `--json` (test-enforced) — the reconstructed cosigner xpubs and the own-seed cross-check derivation are public-only.
+- **Scope / refusals (exit 2).** A **taproot** multisig `md1` (`tr(sortedmulti_a, …)`) is refused — `md_codec::to_miniscript_descriptor` cannot reconstruct it (rust-miniscript v13 has no `SortedMultiA` fragment); deferred to FOLLOWUP `restore-multisig-taproot-reconstruction`. A template-only `md1` (no concrete keys — never emitted by the toolkit) is refused. `--format`, `--template`, and `--expect-xpub` are single-sig only.
+- **CLI.** New `--md1` (repeating; wallet-policy md1 chunks) and `--cosigner @N=<mk1|xpub>` (repeating) flags, both watch-only / non-secret. `--from` becomes optional in multisig mode (`required_unless_present = "md1"`).
+- **Docs.** New `### Multisig-cosigner restore` section in `40-cli-reference/41-mnemonic.md` (modes, flags, cross-check policy, worked examples, scope). Resolves `design/FOLLOWUPS.md` entry `restore-multisig-cosigner-scope`.
+- **Lockstep.** The paired `mnemonic-gui` `RESTORE_FLAGS` update (add `--md1`/`--cosigner`, flip `--from required:false`) is pin-blocked (the GUI schema cannot lead its toolkit binary pin) and tracked as FOLLOWUP `gui-restore-multisig-flags-pending-pin-bump`; the manual flag-coverage lint gates the toolkit side.
+
 ## mnemonic-toolkit [0.43.1] — 2026-06-04
 
 **SemVer-PATCH — `verify-bundle --descriptor` now binds a raw-`entropy` cosigner.**
