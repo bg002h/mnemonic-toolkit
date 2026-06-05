@@ -1,0 +1,258 @@
+//! v0.44.0 — `mnemonic restore` multisig-cosigner (FOLLOWUP
+//! `restore-multisig-cosigner-scope`). A wallet-policy `md1` reconstructs the
+//! concrete watch-only multisig descriptor (md1 alone); `--from`/`--cosigner`
+//! are optional cross-check inputs. Scope: wsh + sh(wsh); taproot refused.
+//! See design/SPEC_restore_multisig_cosigner.md.
+
+use assert_cmd::Command;
+use predicates::prelude::*;
+use serde_json::Value;
+
+const C0: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const C1: &str =
+    "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const C2: &str =
+    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+/// A seed that is NOT one of the three cosigners (for the mismatch cell).
+const FOREIGN: &str =
+    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+
+/// Bundle a 2-of-3 multisig and return (md1 chunks, per-cosigner mk1 chunks).
+fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<String>>) {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--template",
+            template,
+            "--threshold",
+            "2",
+            "--network",
+            network,
+            "--slot",
+            &format!("@0.phrase={C0}"),
+            "--slot",
+            &format!("@1.phrase={C1}"),
+            "--slot",
+            &format!("@2.phrase={C2}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
+    let md1: Vec<String> = v["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    // mk1 is a per-cosigner array; each element is a String (1 chunk) or Array (chunks).
+    let mk1_per: Vec<Vec<String>> = v["mk1"]
+        .as_array()
+        .expect("mk1 array")
+        .iter()
+        .map(|el| match el {
+            Value::String(s) => vec![s.clone()],
+            Value::Array(inner) => inner.iter().map(|c| c.as_str().unwrap().to_string()).collect(),
+            other => panic!("unexpected mk1 element: {other:?}"),
+        })
+        .collect();
+    (md1, mk1_per)
+}
+
+fn restore_args(md1: &[String]) -> Vec<String> {
+    let mut a = vec!["restore".to_string(), "--network".into(), "mainnet".into()];
+    for c in md1 {
+        a.push("--md1".into());
+        a.push(c.clone());
+    }
+    a
+}
+
+/// (1) `--md1` alone → concrete wsh(sortedmulti) `<0;1>/*` descriptor + checksum
+/// + a first receive address + UNVERIFIED.
+#[test]
+fn md1_alone_emits_descriptor_unverified() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .code(0)
+        .stdout(
+            predicate::str::contains("wsh(sortedmulti(2,")
+                .and(predicate::str::contains("<0;1>/*"))
+                .and(predicate::str::contains("#"))
+                .and(predicate::str::contains("bc1q")),
+        )
+        .stderr(predicate::str::contains("UNVERIFIED"));
+}
+
+/// (2) `--md1 --from <cosigner-0 phrase>` → own position inferred + cross-check
+/// ok (verified, no UNVERIFIED).
+#[test]
+fn md1_with_own_seed_verified() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    a.push("--from".into());
+    a.push(format!("phrase={C0}"));
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("wsh(sortedmulti(2,"))
+        .stderr(predicate::str::contains("UNVERIFIED").not());
+}
+
+/// (3) `--md1 --cosigner @1=<mk1 chunks of cosigner 1>` → cross-check ok.
+#[test]
+fn md1_with_cosigner_mk1_verified() {
+    let (md1, mk1_per) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    for chunk in &mk1_per[1] {
+        a.push("--cosigner".into());
+        a.push(format!("@1={chunk}"));
+    }
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0)
+        .stderr(predicate::str::contains("UNVERIFIED").not());
+}
+
+/// (4) `--md1 --from <foreign seed>` → RestoreMismatch (exit 4).
+#[test]
+fn md1_with_foreign_seed_mismatch_exit4() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    a.push("--from".into());
+    a.push(format!("phrase={FOREIGN}"));
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("MISMATCH"));
+}
+
+/// (5) `--allow-mismatch` overrides the foreign-seed mismatch → exit 0 + banner.
+#[test]
+fn md1_foreign_seed_allow_mismatch_exit0() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let mut a = restore_args(&md1);
+    a.push("--from".into());
+    a.push(format!("phrase={FOREIGN}"));
+    a.push("--allow-mismatch".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0)
+        .stderr(predicate::str::contains("MISMATCH (overridden)"));
+}
+
+/// (6) `sh-wsh-sortedmulti` 2-of-3 → `sh(wsh(sortedmulti(2,` (non-BIP-87 origin).
+#[test]
+fn sh_wsh_multisig_descriptor() {
+    let (md1, _) = bundle_multisig("sh-wsh-sortedmulti", "mainnet");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("sh(wsh(sortedmulti(2,"));
+}
+
+/// (7) `tr-sortedmulti-a` md1 → refusal (exit 2) + FOLLOWUP pointer.
+#[test]
+fn tr_multisig_refused_exit2() {
+    let (md1, _) = bundle_multisig("tr-sortedmulti-a", "mainnet");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("taproot")
+                .and(predicate::str::contains("restore-multisig-taproot-reconstruction")),
+        );
+}
+
+/// (8) watch-only-out: NO private material (xprv/WIF) in stdout or stderr.
+#[test]
+fn md1_watch_only_no_private_material() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args({
+            let mut a = restore_args(&md1);
+            a.push("--from".into());
+            a.push(format!("phrase={C0}"));
+            a
+        })
+        .assert()
+        .code(0);
+    let o = out.get_output();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    );
+    assert!(!combined.contains("xprv"), "no xprv in output");
+    assert!(!combined.contains("tprv"), "no tprv in output");
+}
+
+/// (9) `--network testnet` → testnet `tpub` cosigners (the --network-authoritative
+/// Xpub reconstruction; restore is the first expand_per_at_n reconstruction site).
+#[test]
+fn md1_testnet_emits_tpub() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "testnet");
+    let mut a = vec!["restore".to_string(), "--network".into(), "testnet".into()];
+    for c in &md1 {
+        a.push("--md1".into());
+        a.push(c.clone());
+    }
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("tpub").and(predicate::str::contains("xpub").not()));
+}
+
+/// (10) round-trip convergence: the restored descriptor is accepted by
+/// `bundle --descriptor` (proves the reconstruction is a valid concrete
+/// descriptor, incl. depth-0 cosigner xpubs).
+#[test]
+fn restored_descriptor_round_trips_through_bundle() {
+    let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args({
+            let mut a = restore_args(&md1);
+            a.push("--json".into());
+            a
+        })
+        .assert()
+        .code(0);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("restore JSON");
+    let desc = v["wallets"][0]["descriptor"].as_str().expect("descriptor");
+    // Feed the bare concrete descriptor back to bundle (A1 descriptor-form door).
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            desc,
+            "--network",
+            "mainnet",
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+}
