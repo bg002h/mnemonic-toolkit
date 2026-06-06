@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.47.0] — 2026-06-06
+
+**SemVer-MINOR — `mnemonic addresses --from electrum-phrase=`: derive an Electrum native seed's own addresses.**
+
+- **`addresses --from electrum-phrase=<seed>`.** An Electrum native seed (the 2.x `seed_version` system, not BIP-39) was previously refused by `addresses`; it now derives Electrum's **own** addresses. Derivation (validated against Electrum's own `test_wallet_vertical.py` end-to-end vectors @ commit `e1099925`): `PBKDF2-HMAC-SHA512(normalize_text(seed), "electrum"+normalize_text(passphrase), 2048)` → BIP-32 root → **standard** seed `m/<chain>/<index>` (P2PKH), **segwit** seed `m/0'/<chain>/<index>` (P2WPKH). `--chain receive/change` = chain `0`/`1`, as in Electrum.
+- **Surface.** The script type + derivation are **fixed by the Electrum seed version**, so `--address-type` must match it (`p2pkh` standard / `p2wpkh` segwit — mismatch refused), `--account` does not apply (refused if non-zero), and `--language` is ignored (the seed is stretched from the raw phrase string, not decoded via a wordlist). **2FA seeds (versions 101/102) are refused.** `--passphrase`/`--passphrase-stdin` is the Electrum seed-extension passphrase. Watch-only out (no `xprv`/`zprv` reaches stdout/`--json`; the 64-byte seed + intermediate xprivs are `Zeroizing`).
+- **Crypto note.** Electrum's `normalize_text` is implemented as a dedicated `electrum::normalize_text_electrum` matching upstream byte-for-byte: NFKD → lower → drop chars whose **canonical combining class** is non-zero (NOT the Mark general category — marks like U+034F/U+0489 have ccc=0 and are KEPT, per Python's `unicodedata.combining`) → collapse whitespace → strip CJK-internal whitespace. The `UNICODE_HORROR` passphrase vector pins this.
+- **No new clap flag/value-enum** — un-refuses an existing runtime-parsed `--from` node → no GUI `schema_mirror` change. Manual mirror: `docs/manual/src/40-cli-reference/` `addresses` chapter updated. No new error variant (reuses `BadInput`).
+- **Tests.** New `cli_addresses_electrum.rs` (3 Electrum e2e vectors incl. the unicode-passphrase normalization torture vector + `--address-type` mismatch / `--account` / 2FA refusals + watch-only + `--json` source-label). Full toolkit suite + clippy `--all-targets` + `make -C docs/manual audit` GREEN. Resolves `electrum-native-seed-address-derivation`. Audit trail: `design/SPEC_addresses_electrum_native_derivation.md` + `design/agent-reports/addresses-electrum-native-derivation-r0-round1-review.md` + `…-phase-2-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.46.3] — 2026-06-06
 
 **SemVer-PATCH — internal dedup: consolidate the import-parser origin extraction into shared `pipeline` helpers (+ import parsers now tolerate `h`-form hardened origins).**
