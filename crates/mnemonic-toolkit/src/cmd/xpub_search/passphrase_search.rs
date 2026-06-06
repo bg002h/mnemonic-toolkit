@@ -23,12 +23,22 @@ use crate::synthesize::xpub_to_65;
 
 /// Run the candidate-file scan. The `mnemonic` is already resolved once by the
 /// caller; only the per-candidate `derive_master_seed` + match re-runs.
-pub(super) fn run_candidate_scan<W: Write>(
+pub(super) fn run_candidate_scan<W: Write, E: Write>(
     args: &PassphraseOfXpubArgs,
     mnemonic: &Mnemonic,
     path: &Path,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
+    // (impl-review I1 / SPEC §2) One-line runtime sensitivity advisory — the
+    // compensating control for classifying `--passphrase-candidates-file` as a
+    // non-secret PATH flag. Non-fatal if stderr is unreachable.
+    let _ = writeln!(
+        stderr,
+        "note: {} holds candidate passphrases — treat as sensitive",
+        path.display()
+    );
+
     // Resolve target xpub + the per-passphrase candidate-path window (same as
     // the single-passphrase path).
     let (target_xpub, target_variant) = resolve_target_xpub(&args.target_xpub)?;

@@ -278,7 +278,9 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     //     single-passphrase resolve below, which BadInputs when neither
     //     `--passphrase` nor `--passphrase-stdin` is set (= candidates mode).
     if let Some(path) = &args.passphrase_candidates_file {
-        return super::passphrase_search::run_candidate_scan(args, &mnemonic, path, stdout);
+        return super::passphrase_search::run_candidate_scan(
+            args, &mnemonic, path, stdout, stderr,
+        );
     }
 
     // 2) Resolve mandatory passphrase. Clap enforces "exactly one of

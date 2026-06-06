@@ -233,3 +233,35 @@ fn candidates_default_stdout_does_not_echo_passphrase() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(!stdout.contains(SECRET), "default stdout must not echo the passphrase:\n{stdout}");
 }
+
+// ── Cell 11 — missing file → exit 1 (BadInput) ──────────────────────────────
+#[test]
+fn candidates_missing_file_exit_1() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
+            "--passphrase-candidates-file", "/no/such/candidates/file",
+            "--target-xpub", &target_bip84(),
+        ])
+        .write_stdin(PHRASE)
+        .assert()
+        .code(1);
+}
+
+// ── Cell 12 — sensitivity advisory on stderr (impl-review I1 / SPEC §2) ──────
+#[test]
+fn candidates_emits_sensitivity_advisory_on_stderr() {
+    let file = candidates_file("decoy\nsatoshi\n");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
+            "--passphrase-candidates-file", file.path().to_str().unwrap(),
+            "--target-xpub", &target_bip84(),
+        ])
+        .write_stdin(PHRASE)
+        .assert()
+        .code(0)
+        .stderr(predicate::str::contains("treat as sensitive"));
+}

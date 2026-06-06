@@ -3535,6 +3535,27 @@ target-xpub: xpub6... (normalized from zpub; variant=zpub)
 searched: 140 candidate paths
 ```
 
+**Candidate-list scan (`--passphrase-candidates-file`).** Supply a text file of
+candidate passphrases (one per line) instead of a single `--passphrase`. The
+scan stops at the first candidate that produces the target and reports the
+matching **file line** (the passphrase itself is shown only under `--json`):
+
+```sh
+printf 'hunter2\nsatoshi\ncorrect horse battery staple\n' > candidates.txt
+mnemonic xpub-search passphrase-of-xpub \
+    --phrase "$PHRASE" \
+    --passphrase-candidates-file candidates.txt \
+    --target-xpub "$ZPUB"
+```
+
+Stdout (text form, match on line 2) — plus a `note: candidates.txt holds candidate passphrases — treat as sensitive` advisory on stderr:
+
+```text
+match: candidate on line 2 derives the target xpub at m/84'/0'/0' (template=bip84, account=0)
+target-xpub: xpub6... (normalized from zpub; variant=zpub)
+searched: 140 candidate paths per passphrase
+```
+
 #### JSON output
 
 `--json` emits a versioned envelope. Schema `v1`. Same shape as `path-of-xpub` with `mode` substituted (separate `PassphraseOfXpubResult` body type keeps future divergence clean). Match shape:
@@ -3571,22 +3592,36 @@ No-match shape:
 
 `target_xpub_variant` serializes as `null` when the target was supplied in canonical xpub/tpub form (no SLIP-0132 alt-prefix swap occurred). The field is always emitted (not skipped) to keep the JSON envelope structurally stable across runs.
 
+**Candidate-list scan fields.** With `--passphrase-candidates-file`, the `match`
+body additionally carries `matched_candidate_line` (1-indexed file line) and
+`matched_passphrase` (the winning candidate — present only for the scan), and the
+`no_match` body carries `candidates_tried` (#non-blank lines tried). These fields
+use `skip_serializing_if` — they are ABSENT (not `null`) on the single-`--passphrase`
+path, so that envelope is byte-unchanged:
+
+```json
+{ "schema_version": "1", "mode": "passphrase-of-xpub", "result": "match",
+  "path": "m/84'/0'/0'", "template": "bip84", "account": 0,
+  "target_xpub_canonical": "xpub6...", "target_xpub_variant": "zpub",
+  "searched_count": 140, "matched_candidate_line": 2, "matched_passphrase": "satoshi" }
+```
+
 #### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Match found (this passphrase produces the target xpub at one of the searched paths) |
 | 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure outside the auto-fire path, ms1 decode failure with `--no-auto-repair` or on no-TTY) |
-| 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch` with `mode: "passphrase-of-xpub"`) |
+| 4 | No match — single passphrase (`XpubSearchNoMatch`), OR no candidate in `--passphrase-candidates-file` produced the target (`XpubSearchPassphraseCandidatesExhausted`, with the count of candidates tried; an all-blank/empty file gets a tailored "no candidates" note) |
 | 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated; same contract as `convert` / `inspect` / `verify-bundle`) |
-| 64 | Clap arg-parse error (including missing-mandatory-passphrase) |
+| 64 | Clap arg-parse error (missing/duplicate passphrase source — exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file`) |
 
 #### Refusals
 
 | Trigger | Refusal |
 |---|---|
-| Neither `--passphrase` nor `--passphrase-stdin` supplied | clap `the following required arguments were not provided` error (exit 64) |
-| Both `--passphrase` and `--passphrase-stdin` supplied | clap mutex error (exit 64) |
+| None of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file` supplied | clap `the following required arguments were not provided` error (exit 64) |
+| More than one of the three passphrase sources supplied | clap `passphrase_source` group mutex error (exit 64) |
 | Positional argument with no `ms1` HRP (e.g., a BIP-39 phrase typed positionally) | `BIP-39 phrase must be supplied via --phrase or --phrase-stdin (no HRP for positional autodetect)` |
 | Multiple seed-intake flags supplied | clap mutex error |
 | Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 1) |
