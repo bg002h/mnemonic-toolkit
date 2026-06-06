@@ -39,15 +39,16 @@ fn restore_conditional_rules() -> Vec<ConditionalRule> {
 }
 ```
 
-and register it in `build_subcommand_conditional_rules` (`:337-345`):
+and register it in `build_subcommand_conditional_rules` (`:337-345`). **(R0 M1)** the real last arm before `_` is `"compare-cost"` (`:343`), NOT `"derive-child"` — append `"restore"` after it:
 
 ```rust
         "derive-child" => derive_child_conditional_rules(),
+        "compare-cost" => compare_cost_conditional_rules(),
         "restore" => restore_conditional_rules(),   // NEW
         _ => Vec::new(),
 ```
 
-Placement: alongside the other builders (e.g. after `derive_child_conditional_rules`). No other emitter change.
+Placement: alongside the other builders (e.g. after `restore.rs` analog `derive_child_conditional_rules` def). Match-arm order is free; insert the `"restore" =>` arm anywhere before `_ => Vec::new()`. No other emitter change.
 
 ## 3. Why this shape matches the GUI (the consumption contract)
 
