@@ -816,83 +816,14 @@ pub fn synthesize_unified(
         },
     };
 
-    let policy_id = md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)?;
-    let mut stub = [0u8; 4];
-    stub.copy_from_slice(&policy_id.as_bytes()[..4]);
-    let stubs: Vec<[u8; 4]> = vec![stub; n];
-
-    // Per-slot ms1 (dense vec; "" sentinel for watch-only).
-    // ms mnem Phase 3 Step 5: per-slot emit rule.
-    // lang = slot.language.unwrap_or(run_language); English → Entr; else → Mnem.
-    let mut ms1: MsField = Vec::with_capacity(n);
-    for s in slots {
-        match &s.entropy {
-            // v0.10.1: e: &Zeroizing<Vec<u8>>; double-deref + clone yields the
-            // inner Vec<u8> that Payload::Entr wants. Bare e.clone() would
-            // return Zeroizing<Vec<u8>> (Zeroizing's own Clone), which is a
-            // type mismatch.
-            Some(e) => {
-                let slot_lang = s.language.unwrap_or(run_language);
-                let payload = if slot_lang == bip39::Language::English {
-                    ms_codec::Payload::Entr((**e).clone())
-                } else {
-                    ms_codec::Payload::Mnem {
-                        language: crate::language::bip39_to_wire_code(slot_lang),
-                        entropy: (**e).clone(),
-                    }
-                };
-                ms1.push(
-                    ms_codec::encode(ms_codec::Tag::ENTR, &payload)
-                        .map_err(ToolkitError::from)?,
-                );
-            }
-            None => ms1.push(String::new()),
-        }
-    }
-
-    // Per-slot mk1.
-    let mk1 = if n == 1 {
-        let s = &slots[0];
-        let card = mk_codec::KeyCard::new(
-            vec![stub],
-            if privacy_preserving {
-                None
-            } else {
-                Some(s.fingerprint)
-            },
-            mk1_origin_path(&s.xpub, &s.path),
-            s.xpub,
-        );
-        let csi = derive_mk1_chunk_set_id(&stub);
-        let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
-        MkField::Single(chunks)
-    } else {
-        let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(n);
-        for s in slots {
-            let card = mk_codec::KeyCard::new(
-                stubs.clone(),
-                if privacy_preserving {
-                    None
-                } else {
-                    Some(s.fingerprint)
-                },
-                mk1_origin_path(&s.xpub, &s.path),
-                s.xpub,
-            );
-            let fp_bytes: [u8; 4] = s.xpub.fingerprint().to_bytes();
-            let csi = derive_mk1_chunk_set_id(&fp_bytes);
-            let chunks =
-                mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
-            per_cosigner.push(chunks);
-        }
-        MkField::Multi(per_cosigner)
-    };
-
-    let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
-
-    debug_assert!(descriptor.is_wallet_policy());
-
-    Ok(Bundle { ms1, mk1, md1 })
+    // The card-emission back-half (policy_id → ms1 → mk1 → md1 → Bundle) is
+    // byte-identical to `synthesize_descriptor`, and `slots: &[ResolvedSlot]`
+    // IS `&[CosignerKeyInfo]` (`type CosignerKeyInfo = ResolvedSlot`), so
+    // delegate — FOLLOWUP `synthesize-descriptor-deduplicate-with-unified`.
+    // (`synthesize_descriptor` re-derives policy_id/stub from `descriptor` and
+    // its leading `cosigners.len() == descriptor.n` check holds since this fn
+    // built `descriptor.n = slots.len()`.)
+    synthesize_descriptor(&descriptor, slots, privacy_preserving, run_language)
 }
 
 #[cfg(test)]
