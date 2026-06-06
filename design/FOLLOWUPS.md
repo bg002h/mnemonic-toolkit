@@ -3286,7 +3286,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `cross-repo`
 - **Tags:** `gui`
-- **Companion:** `mnemonic-gui` FOLLOWUPS.md (to file); resolves alongside `export-wallet-timestamp-default-zero`.
+- **Companion:** `mnemonic-gui/FOLLOWUPS.md::gui-timestamp-default-value-drift-v0.47.3` (filed 2026-06-06 on branch `followup-timestamp-default-value-drift`, pushed — trivial merge at the next GUI pin-bump cycle); resolves alongside `export-wallet-timestamp-default-zero`.
 
 ### `cli-help-golden-broad-staleness-not-gated` — `docs/manual/transcripts/cli-help/*.txt` goldens drift silently (not CI-gated)
 - **Surfaced:** 2026-06-06, toolkit-v0.47.3 (timestamp cycle, Phase 2). Discovered while regenerating `mnemonic-export-wallet.txt` for the timestamp doc-comment change.
