@@ -551,7 +551,7 @@ fn every_rule_has_rationale_and_spec_ref() {
 /// See `design/FOLLOWUPS.md::gui-schema-arm-drop-detector` for rationale.
 #[test]
 fn dispatcher_arm_count_matches_pinned_constant() {
-    const EXPECTED_ARM_COUNT: usize = 6;
+    const EXPECTED_ARM_COUNT: usize = 7;
     let path = "src/cmd/gui_schema.rs";
     let body = std::fs::read_to_string(path).expect("read gui_schema.rs");
     let re = regex::Regex::new(r#"(?m)^\s+"[a-z-]+" => [a-z_]+_conditional_rules\(\),$"#).unwrap();

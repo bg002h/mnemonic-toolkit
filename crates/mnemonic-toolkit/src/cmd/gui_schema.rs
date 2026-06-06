@@ -341,8 +341,34 @@ fn build_subcommand_conditional_rules(name: &str) -> Vec<ConditionalRule> {
         "convert" => convert_conditional_rules(),
         "derive-child" => derive_child_conditional_rules(),
         "compare-cost" => compare_cost_conditional_rules(),
+        "restore" => restore_conditional_rules(),
         _ => Vec::new(),
     }
+}
+
+/// FOLLOWUP `gui-schema-restore-required-unless-md1-projection`: project
+/// restore's `--from required_unless_present="md1"` (cmd/restore.rs clap-derive)
+/// so mnemonic-gui's hand-authored `conditional::restore` rule (--from Required
+/// ⟺ --md1 absent) becomes drift-gated. Single-flag form of bundle's
+/// `--template` Required-unless precedent.
+fn restore_conditional_rules() -> Vec<ConditionalRule> {
+    vec![ConditionalRule {
+        rationale: "--from is required unless --md1 is supplied: single-sig \
+                    restore needs a wallet-export source, while \
+                    multisig-cosigner restore (--md1) supplies the policy and \
+                    needs no --from."
+            .to_string(),
+        spec_ref: "cmd/restore.rs clap-derive required_unless_present = \"md1\"".to_string(),
+        when: Predicate::Not {
+            predicate: Box::new(Predicate::FlagPresent {
+                flag: "--md1".to_string(),
+            }),
+        },
+        effect: Effect {
+            flag: "--from".to_string(),
+            visibility: VisibilityProjection::Required,
+        },
+    }]
 }
 
 fn compare_cost_conditional_rules() -> Vec<ConditionalRule> {
