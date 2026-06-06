@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.47.2] — 2026-06-06
+
+**SemVer-PATCH — three independent footgun/accuracy fixes: repair/inspect mutex-doc correction, `import-wallet` argv-secret advisory, honest `convert electrum→address` redirect.**
+
+- **Docs (slug 1 — `manual-repair-flag-mutex-inaccuracy`).** The manual's `repair` and `inspect` reference rows wrongly described `--ms1`/`--mk1`/`--md1` as "mutually exclusive". Ground truth: both subcommands define `ArgGroup::new("kind").args(["ms1","mk1","md1"]).required(false).multiple(true)` with **no `conflicts_with_all`** — mixed-HRP invocations (`mnemonic inspect ms1… mk1… md1…`) are valid (one HRP per card; per D35). Reworded the 4 affected rows to "may be combined with … (one HRP per card; per D35)" and rewrote the two synopses (`repair`, `inspect`) from the false brace-pipe `{--ms1 | --mk1 | --md1}` to the curated independently-optional form. No code change.
+- **Secret-hygiene (slug 2 — `import-wallet-ms1-argv-advisory-gap`).** `mnemonic import-wallet` now emits the standard `secret_in_argv_warning` stderr advisory when a secret-bearing `--ms1 <inline>` **or** `--slot @N.phrase=<inline>` value is passed on argv (skipped for the `@env:VAR` indirection and the `""` watch-only sentinel). Matches the existing `bundle`/`verify-bundle` precedent; the advisory reads the RAW args before the env-resolution rebind so an `@env:` value never trips it. Additive stderr only — no exit-code or stdout change.
+- **Honesty (slug 3 — `electrum-phrase-address-refusal-honest-wording`).** `mnemonic convert --from electrum-phrase --to address` previously fell through to the generic one-way refusal. It now returns a dedicated `ConvertRefusal` that explains Electrum uses its own PBKDF2 salt + non-BIP-44 derivation (not a `convert` edge) and **redirects to the real path**: `mnemonic addresses --from electrum-phrase=<seed> --address-type <p2pkh|p2wpkh>`. Same exit code (2); no other electrum edge changed.
+- **No CLI-surface change** — no flag/value/subcommand added → no GUI `schema_mirror`, no sibling-codec change, no new error variant. Slug 1 fires the `manual` CI workflow (manual file changed); slugs 2/3 are code+test only.
+- **Tests.** Full toolkit suite (`--no-fail-fast`, 0 failed) + clippy `--all-targets` (0) + `make -C docs/manual audit` GREEN. Resolves `manual-repair-flag-mutex-inaccuracy`, `import-wallet-ms1-argv-advisory-gap`, `electrum-phrase-address-refusal-honest-wording`. Audit trail: `design/SPEC_quick_wins_v0_47_2.md` + `design/agent-reports/quick-wins-v0_47_2-r0-round{1,2,3}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.47.1] — 2026-06-06
 
 **SemVer-PATCH — internal dedup: `synthesize_unified` delegates its card-emission to `synthesize_descriptor`.**
