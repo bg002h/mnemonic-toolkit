@@ -189,6 +189,27 @@ fn bundle_template_required_unless_uses_not_any_of_predicate() {
 }
 
 #[test]
+fn restore_from_required_unless_md1_uses_not_flag_present_predicate() {
+    // FOLLOWUP gui-schema-restore-required-unless-md1-projection: restore's
+    // `--from required_unless_present="md1"` (cmd/restore.rs:58) is projected
+    // as a conditional_rule mirroring bundle's --template Required-unless, so
+    // the GUI's hand-authored `conditional::restore` rule (--from Required ⟺
+    // --md1 absent) becomes drift-gated by mnemonic-gui's
+    // gui_schema_conditional_drift once it bumps its toolkit pin.
+    let v = run_gui_schema();
+    let rules = conditional_rules(&v, "restore");
+    assert_eq!(rules.len(), 1, "restore projects exactly one conditional rule");
+    let from_required = &rules[0];
+    assert_eq!(from_required["effect"]["flag"], "--from");
+    assert_eq!(from_required["effect"]["visibility"], "required");
+    // §6.10.2 Not predicate: {"kind":"not","predicate":{"kind":"flag_present","flag":"--md1"}}
+    assert_eq!(from_required["when"]["kind"], "not");
+    let inner = &from_required["when"]["predicate"];
+    assert_eq!(inner["kind"], "flag_present");
+    assert_eq!(inner["flag"], "--md1");
+}
+
+#[test]
 fn bundle_single_sig_dropdown_values_match_template_enum() {
     let v = run_gui_schema();
     let rules = conditional_rules(&v, "bundle");
