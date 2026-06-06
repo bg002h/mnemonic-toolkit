@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.47.3] — 2026-06-06
+
+**SemVer-PATCH — `--timestamp` defaults to `0` (rescan from genesis) consistently across every Bitcoin Core `importdescriptors` emitter.**
+
+- **Default change.** The Bitcoin Core `importdescriptors` `timestamp` rescan-anchor now defaults to `0` (rescan from genesis — so the imported wallet discovers an existing key's full transaction history), the correct default for a recovery/watch-only-import workflow. Previously `export-wallet` defaulted to `now` (watch-going-forward, skipping the historical rescan) while `nostr --import` already defaulted to `0` — an inconsistency. Now uniform across all three emitters:
+  - `export-wallet --timestamp` default `now` → `0` (`export_wallet.rs`). Explicit `--timestamp now` still works for users who want watch-forward.
+  - `restore --format <X>` (single-sig) and `restore --md1 --format <X>` (multisig) — the two hardcoded `TimestampArg::Now` sites → `Unix(0)`. `restore` has no `--timestamp` flag; `0` is the right fixed value for a recovery.
+  - `nostr --import` was already `0` (unchanged).
+- **Observable effect.** A default `export-wallet`/`restore` Bitcoin Core payload now emits `"timestamp": 0` (a JSON number) instead of `"timestamp": "now"` (a string). No flag/value/subcommand change — `--timestamp` keeps its name and free-string parser; this is a default-*value* change only, hence PATCH (pre-1.0: not breaking; explicit values unchanged).
+- **No GUI `schema_mirror` change** (the default *value* of a free-string flag is not a flag-NAME or value-enum). **Cross-repo note (NOT gated by `schema_mirror`):** the GUI's hand-maintained schema declares `export-wallet --timestamp` `default_value: Some("now")`, and its D33 default-suppression would silently drop an explicit `--timestamp now` selection once the GUI bumps its toolkit pin to ≥v0.47.3. Tracked by FOLLOWUP `gui-timestamp-default-value-drift-v0.47.3` (a two-release arc — the GUI fix lands at its next pin-bump).
+- **Tests.** Full toolkit suite (`--no-fail-fast`, 0 failed) + clippy `--all-targets` (0) + `make -C docs/manual audit` GREEN (`verify-examples` 20/20; recipe-1/recipe-5 transcripts regenerated to `timestamp: 0`). Resolves `export-wallet-timestamp-default-zero` + `timestamp-zero-default-docs-sweep`. Audit trail: `design/SPEC_timestamp_default_zero.md` + `design/agent-reports/timestamp-default-zero-r0-round{1,2}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.47.2] — 2026-06-06
 
 **SemVer-PATCH — three independent footgun/accuracy fixes: repair/inspect mutex-doc correction, `import-wallet` argv-secret advisory, honest `convert electrum→address` redirect.**

@@ -3260,10 +3260,10 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/cmd/export_wallet.rs:117` (`default_value = "now"` on `--timestamp`).
 - **What:** change export-wallet's `--timestamp` default `"now"` → `"0"`. This is a **behavior change** to the emitted `importdescriptors` recipe (default rescan-from-genesis instead of watch-going-forward) — a heavier default rescan; warrants its own SemVer call + a deliberate decision (some users prefer `now` for a fresh wallet). Pair with the docs sweep below.
 - **Why deferred:** behavior change to an existing flag's default; not bundled into the v0.34.2 additive-flag PATCH.
-- **Status:** `open`
+- **Status:** `resolved` toolkit-**v0.47.3** (quick-wins-style PATCH). The cited `export_wallet.rs:117` had drifted to `:211`; recon `cycle-prep-recon-timestamp-default-zero.md` re-grepped at SHA `afeb967`. R0 (round 1) ratified FULL scope + PATCH and surfaced a 3rd emitter the FOLLOWUP omitted — `restore.rs` hardcoded `TimestampArg::Now` at 2 sites (`build_import_payload`, `build_multisig_import_payload`). Flipped all three: `export_wallet.rs:211` `default_value "now"→"0"` + both `restore.rs` sites `TimestampArg::Now→Unix(0)`. `TimestampArg::Unix(0)` renders `"timestamp": 0` (number, genesis rescan); explicit `--timestamp now` still works on export-wallet. R0 I2 surfaced a latent GUI D33 argv-suppression drift → FOLLOWUP `gui-timestamp-default-value-drift-v0.47.3`. Audit trail: `design/SPEC_timestamp_default_zero.md` + `design/agent-reports/timestamp-default-zero-*`.
 - **Tier:** `v0.34+`
 - **Tags:** `wallet`
-- **Companion:** sibling `timestamp-zero-default-docs-sweep`.
+- **Companion:** sibling `timestamp-zero-default-docs-sweep` (resolved same cycle); GUI drift `gui-timestamp-default-value-drift-v0.47.3`.
 
 
 ### `timestamp-zero-default-docs-sweep` — update docs for the `0` default once it lands everywhere
@@ -3272,11 +3272,31 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `docs/manual/` (any chapter implying `--timestamp` defaults to `now`) + any SPEC mentioning the timestamp default.
 - **What:** once `export-wallet-timestamp-default-zero` lands, update all documentation that states/implies `--timestamp` defaults to `now` to reflect the `0` default. (v0.34.2's `nostr` manual already documents `0`.)
 - **Why deferred:** docs-only follow-on to the behavior change above.
-- **Status:** `open`
+- **Status:** `resolved` toolkit-**v0.47.3** (same cycle as the behavior change). Updated `docs/manual/src/40-cli-reference/41-mnemonic.md:707` (export-wallet `--timestamp` row → `0` (default; rescan from genesis), `now`, or unix seconds) + `docs/manual/src/30-workflows/37-wallet-export.md` (Timestamp Tips bullet now leads with the `0` default; the worked-example lead-in reworded so it no longer claims an explicit-`now` example IS the default). The `41-mnemonic.md:2301` nostr row was already `Default 0` (left untouched). cli-help golden `mnemonic-export-wallet.txt` got a targeted 2-line edit (NOT CI-gated; full regen deferred — see `cli-help-golden-broad-staleness-not-gated`). manual-gui + technical-manual examples (separate cadences) folded into the GUI FOLLOWUP / left out-of-scope per R0 M2.
 - **Tier:** `v0.34+`
 - **Tags:** none
-- **Companion:** sibling `export-wallet-timestamp-default-zero`.
+- **Companion:** sibling `export-wallet-timestamp-default-zero` (resolved same cycle).
 
+
+### `gui-timestamp-default-value-drift-v0.47.3` — GUI `default_value: Some("now")` silently suppresses an explicit `--timestamp now` after the toolkit v0.47.3 default flip
+- **Surfaced:** 2026-06-06, toolkit-v0.47.3 R0 round-1 (I2). Cross-repo (downstream consumer `mnemonic-gui`); NOT gated by `schema_mirror`.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs:1044` (`export-wallet --timestamp`, `FlagKind::Timestamp, default_value: Some("now")`) + the D33 default-suppression logic `mnemonic-gui/src/form/invocation.rs:78` (`TimestampValue::Now => default_str == "now"`). Plus the manual-gui example `docs/manual-gui/src/40-mnemonic/45-export-wallet.md:422` (`"timestamp": "now"`).
+- **What:** toolkit v0.47.3 flipped `export-wallet --timestamp` default `now → 0`. The GUI still declares `default_value: Some("now")`, so its D33 `is_at_default` treats an *explicit* `TimestampValue::Now` selection as "at default" and suppresses `--timestamp` from the generated argv → the toolkit then applies its NEW default `0` → **the user's explicit `now` choice is silently discarded**. `schema_mirror` does not catch this (it gates flag-NAMES + dropdown value-enums only, not `default_value`; `GuiSchemaFlag` deserializes `name` only — `schema_check.rs:98-104`). **Latent until the GUI bumps its toolkit pin to ≥v0.47.3** (today its pin is older, so its `"now"` matches the pinned toolkit's `"now"` default — no bug yet).
+- **Fix (at the next GUI pin-bump, an inherently two-release arc — the toolkit must ship v0.47.3 first since the GUI consumes it by git tag):** update `mnemonic-gui/src/schema/mnemonic.rs:1044` `default_value: Some("now") → Some("0")`, verify `is_at_default`/widget-init handles the new default (an explicit `Now` must now emit `--timestamp now`; the new `Unix(0)` default may always emit `--timestamp 0`, which is harmless-but-verbose — confirm acceptable), and regenerate the manual-gui example. File the companion entry in `mnemonic-gui`'s `FOLLOWUPS.md` per the cross-repo mirror convention.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Tags:** `gui`
+- **Companion:** `mnemonic-gui` FOLLOWUPS.md (to file); resolves alongside `export-wallet-timestamp-default-zero`.
+
+### `cli-help-golden-broad-staleness-not-gated` — `docs/manual/transcripts/cli-help/*.txt` goldens drift silently (not CI-gated)
+- **Surfaced:** 2026-06-06, toolkit-v0.47.3 (timestamp cycle, Phase 2). Discovered while regenerating `mnemonic-export-wallet.txt` for the timestamp doc-comment change.
+- **Where:** `docs/manual/transcripts/cli-help/*.txt` (e.g. `mnemonic-export-wallet.txt`) + the exclusion at `docs/manual/tests/verify-examples.sh:67` (`-not -path '*/cli-help/*'`).
+- **What:** the `cli-help/` `--help` snapshot goldens are **excluded from `verify-examples`**, so they drift silently as the CLI surface evolves. `mnemonic-export-wallet.txt` was found broadly stale at v0.47.3 — missing `--no-auto-repair` (v0.22.0), `--wallet-name` (v0.8), `--bsms-form`/`--from-import-json`/`--from-import-json-index` (v0.27.0), an old terse `--slot` help, and stale `--format` possible-values + `--taproot-internal-key` help. The v0.47.3 cycle made a **targeted** 2-line edit (only the `--timestamp` lines) rather than a full regen, to avoid sweeping months of unrelated v0.22–v0.27 flag drift into a timestamp PATCH.
+- **Fix:** either (a) a dedicated docs-refresh cycle that regenerates ALL `cli-help/*.txt` goldens against the current binaries (capture with a wide/no-wrap width — clap emits unwrapped at COLUMNS≥~280), or (b) un-exclude `cli-help/` from `verify-examples` and add a regenerate target so the goldens become CI-gated (leading gate, not silent decay). Prefer (b) — but it requires deterministic capture (fixed COLUMNS) so CI and local match.
+- **Why deferred:** out of scope for the timestamp PATCH; a broad multi-file golden refresh + a capture-determinism decision is its own cycle.
+- **Status:** `open`
+- **Tier:** `docs`
+- **Tags:** none
 
 ### `cargo-lock-version-bump-lockstep` — version bumps must regenerate + commit `Cargo.lock`; add a `--locked` CI guard
 
