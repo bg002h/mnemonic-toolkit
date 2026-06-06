@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.46.1] — 2026-06-05
+
+**SemVer-PATCH — internal dedup: consolidate the 4-way wallet-format emit dispatch into one `emit_payload` helper.**
+
+- **Refactor.** The `WalletFormatEmitter` dispatch (`collect_missing`-first → `ExportWalletMissingFields` refuse → 11-arm `emit`, including the 6-variant coldcard-multisig `--template` sub-match) was copy-pasted in **four** places: `export-wallet`'s `run` + `run_from_import_json`, and `restore`'s single-sig + multisig `build_*_import_payload`. (The tracking FOLLOWUP said "3-way"; recon found a 4th uncited copy in `run_from_import_json`.) These collapse into one `pub(crate) fn emit_payload(&EmitInputs, CliExportFormat) -> Result<String, _>` homed in `cmd/export_wallet.rs`; each call site keeps only its own per-site `EmitInputs` construction. Net **−124 LOC**, no behavior change for the three byte-identical copies.
+- **One user-visible wording change.** Single-sig `restore --format coldcard-multisig` (on a `bip44`/`bip49`/`bip84`/`bip86` template) now routes through the shared helper, so its refusal is the **unified** message — *"--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, …). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."* — instead of the old restore-specific *"requires a multisig wallet; restore is single-sig — use --format coldcard"*. **Exit code unchanged (1, `BadInput`).** Note: the unified message's first clause names multisig `--template` values that single-sig restore rejects upfront; its **second** clause carries the correct `--format coldcard` pointer for the restore caller.
+- **No CLI-surface change** — no flag/value-enum/subcommand added or removed → no GUI `schema_mirror`, manual mirror, or sibling-codec change; no new error variant (reuses `ExportWalletMissingFields` + `BadInput`).
+- **Tests.** New `cli_restore.rs` cell `restore_format_coldcard_multisig_single_sig_refused_exit_1` pins the unified single-sig refusal (exit 1 + `stderr.contains("requires a multisig --template")`). Full toolkit suite (877+) + clippy `--all-targets` GREEN. Resolves `design/FOLLOWUPS.md` entry `restore-emit-dispatch-3way-dedup` (corrected to 4-way). Audit trail: `design/SPEC_restore_emit_dispatch_dedup.md` + `design/agent-reports/restore-emit-dispatch-dedup-r0-round{1,2}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.46.0] — 2026-06-05
 
 **SemVer-MINOR — `xpub-search passphrase-of-xpub --passphrase-candidates-file`: scan a candidate-passphrase list against a target xpub.**
