@@ -540,6 +540,41 @@ fn restore_format_bitcoin_core_payload() {
     );
 }
 
+/// v0.47.3 (SPEC_timestamp_default_zero): `restore --format bitcoin-core`
+/// hardcodes the importdescriptors `timestamp` (restore has no `--timestamp`
+/// flag). It must emit `0` (a JSON NUMBER — genesis rescan, the correct anchor
+/// for a recovery workflow), not the string `"now"`. RED against the pre-v0.47.3
+/// `TimestampArg::Now` hardcode (`as_u64()` returns None for `"now"`).
+#[test]
+fn restore_format_bitcoin_core_default_timestamp_is_zero() {
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "bitcoin-core",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("importdescriptors array");
+    let arr = v.as_array().expect("array");
+    for (i, entry) in arr.iter().enumerate() {
+        assert_eq!(
+            entry["timestamp"].as_u64().unwrap_or_else(|| panic!(
+                "entry {i} timestamp must be the number 0, not {:?}",
+                entry["timestamp"]
+            )),
+            0,
+            "restore --format bitcoin-core must emit timestamp 0 (genesis rescan):\n{stdout}"
+        );
+    }
+}
+
 #[test]
 fn restore_format_bip388_payload() {
     // bip388 → a wallet-policy JSON object (`description_template` + `keys_info`).

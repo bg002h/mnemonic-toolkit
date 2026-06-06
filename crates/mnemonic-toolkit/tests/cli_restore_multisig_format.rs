@@ -106,6 +106,29 @@ fn emit_fp_embedding_formats_carry_all_three_fingerprints() {
     }
 }
 
+/// v0.47.3 (SPEC_timestamp_default_zero): the MULTISIG `restore --md1 --format
+/// bitcoin-core` path (the v0.45.0 `build_multisig_import_payload`, the 2nd of
+/// restore's two hardcoded `TimestampArg::Now` sites) must also emit `timestamp:
+/// 0` (genesis rescan), not `"now"`. RED against the pre-v0.47.3 hardcode
+/// (`as_u64()` returns None for the `"now"` string).
+#[test]
+fn restore_md1_format_bitcoin_core_default_timestamp_is_zero() {
+    let md1 = bundle_md1("wsh-sortedmulti", "mainnet");
+    let stdout = restore_format_stdout(&md1, "bitcoin-core");
+    let v: Value = serde_json::from_str(&stdout).expect("importdescriptors array");
+    let arr = v.as_array().expect("array");
+    for (i, entry) in arr.iter().enumerate() {
+        assert_eq!(
+            entry["timestamp"].as_u64().unwrap_or_else(|| panic!(
+                "entry {i} timestamp must be the number 0, not {:?}",
+                entry["timestamp"]
+            )),
+            0,
+            "restore --md1 --format bitcoin-core must emit timestamp 0:\n{stdout}"
+        );
+    }
+}
+
 // ─── `--format descriptor` exact-equality (genuine byte-parity) ─────────────
 
 #[test]

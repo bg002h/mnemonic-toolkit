@@ -133,6 +133,76 @@ fn cell_1_bitcoin_core_single_sig_wpkh_round_trip() {
     assert!(arr[1]["internal"].as_bool().unwrap());
 }
 
+// ── v0.47.3 `--timestamp` default `0` everywhere (SPEC_timestamp_default_zero) ──
+
+/// RED→GREEN: with NO `--timestamp` flag, `export-wallet` must emit
+/// `"timestamp": 0` (a JSON NUMBER — genesis rescan), not the string `"now"`.
+/// The number-typed read (`as_u64`) is the discriminator: it returns None for
+/// the old `"now"` string, so this cell is RED against the pre-v0.47.3 default.
+#[test]
+fn export_wallet_default_timestamp_is_zero_not_now() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_BIP84_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_BIP84_FP}"),
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let arr = value.as_array().expect("Bitcoin Core output is JSON array");
+    for (i, entry) in arr.iter().enumerate() {
+        assert_eq!(
+            entry["timestamp"].as_u64().unwrap_or_else(|| panic!(
+                "entry {i} timestamp must be the number 0, not {:?}",
+                entry["timestamp"]
+            )),
+            0,
+            "export-wallet default --timestamp must be 0 (genesis rescan):\n{stdout}"
+        );
+    }
+}
+
+/// Guard (STAYS GREEN): an EXPLICIT `--timestamp now` still emits the string
+/// `"now"`. Proves the v0.47.3 change is default-only — the flag is not removed
+/// and the watch-forward anchor remains available.
+#[test]
+fn export_wallet_explicit_timestamp_now_stays_now() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={TREZOR_BIP84_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={TREZOR_BIP84_FP}"),
+            "--timestamp",
+            "now",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let arr = value.as_array().expect("Bitcoin Core output is JSON array");
+    assert_eq!(
+        arr[0]["timestamp"].as_str().unwrap(),
+        "now",
+        "explicit --timestamp now must still emit the string \"now\":\n{stdout}"
+    );
+}
+
 /// SPEC §9 cell 2: BIP-388 wallet_policy round-trip with multisig wsh-sortedmulti.
 #[test]
 fn cell_2_bip388_wallet_policy_multisig_wsh_sortedmulti() {
