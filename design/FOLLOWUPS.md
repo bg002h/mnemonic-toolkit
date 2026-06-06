@@ -3491,7 +3491,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `build_slot_fields` duplicated in 6 import parsers (`bsms.rs:399`, `specter.rs`, `sparrow.rs`, `coldcard.rs`, `coldcard_multisig.rs`, `electrum.rs`); `extract_origin_components`/`origin_capture_regex` in 4 (`bsms.rs:362/:516`, `specter.rs:362`, `sparrow.rs:582`, `bitcoin_core.rs:413`); the new A1 recovery loop in `pipeline.rs`.
 - **What:** Consolidate all origin-extraction onto the single canonical (h-form-widened) `key_regex` + one shared `extract_origin_components`/`build_slot_fields` in `pipeline.rs`, parameterizing the per-parser error prefix. Dissolves the `import-parser-hform-origin-tolerance` follow-on automatically.
 - **Why deferred:** the per-parser error-prefix differences make it a moderate refactor; out of scope for A1's PATCH.
-- **Status:** open.
+- **Status:** `resolved` toolkit-**v0.46.3** (`ae308fd`). Extracted `pub(crate) extract_origin_components(body, format_name)` + `finalize_slot_fields(...)` into `wallet_import/pipeline.rs` (keyed on the canonical h-form-widened `key_regex`); all 6 parsers rewire to them. **Recon corrected the file set:** the real 6 `build_slot_fields` are `{bsms, bitcoin_core, sparrow, coldcard, specter, electrum}` — the FOLLOWUP wrongly listed `coldcard_multisig.rs` (has none); the real 4th `extract_origin_components`/`origin_capture_regex` site is `bitcoin_core.rs`. Three distinct `build_slot_fields` signatures preserved as thin wrappers (`(body,slot_idx)`, `(body)`, `(body,slot_idx,entry_idx)`). Net −195 LOC. Dissolves `import-parser-hform-origin-tolerance`. Audit trail: `design/SPEC_descriptor_origin_extraction_dedup.md` + `design/agent-reports/descriptor-origin-extraction-dedup-r0-round{1,2,3}-review.md` + `…-phase-2-review.md`.
 - **Tier:** `hygiene`
 
 ### `import-parser-hform-origin-tolerance` — import-wallet parsers' origin_capture_regex stays apostrophe-only
@@ -3500,7 +3500,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `wallet_import/{bsms,specter,sparrow,bitcoin_core}.rs` `origin_capture_regex`.
 - **What:** Whether the `import-wallet` per-format parsers should also accept `h`-form wallet-file descriptors (Core/Sparrow exports) is pre-existing scope; A1 did not change it. Dissolved automatically if `descriptor-origin-extraction-dedup` lands (single canonical widened regex).
 - **Why deferred:** pre-existing; orthogonal to A1's `bundle`/`verify-bundle --descriptor` surface.
-- **Status:** open.
+- **Status:** `resolved` toolkit-**v0.46.3** (`ae308fd`) — dissolved by `descriptor-origin-extraction-dedup`: all 6 import parsers now route origin extraction through the single canonical h-form-widened `key_regex` (the apostrophe-only `origin_capture_regex` copies are deleted), so `import-wallet` accepts `h`-form hardened-origin wallet-file descriptors. Pinned by new test `cli_import_wallet_bitcoin_core.rs::core_single_descriptor_hform_hardened_path_accepted`.
 - **Tier:** `hygiene`
 
 ### `stale-foreign-format-transcripts-recapture-audit` — verify-examples baselines drifted from prior-cycle fixture/behavior changes

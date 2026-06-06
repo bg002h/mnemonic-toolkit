@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.46.3] — 2026-06-06
+
+**SemVer-PATCH — internal dedup: consolidate the import-parser origin extraction into shared `pipeline` helpers (+ import parsers now tolerate `h`-form hardened origins).**
+
+- **Refactor.** Origin extraction from a concrete descriptor body (`[fp/path]xpub` → typed `(Xpub, Fingerprint, DerivationPath)`) was copy-pasted across the import parsers: `fn build_slot_fields` in 6 (`bsms`, `bitcoin_core`, `sparrow`, `coldcard`, `specter`, `electrum`), `fn extract_origin_components` + apostrophe-only `fn origin_capture_regex` in 4 (`bsms`, `bitcoin_core`, `specter`, `sparrow`), plus inline regex copies in `coldcard`/`electrum`. These collapse into two `pub(crate)` helpers in `wallet_import/pipeline.rs` — `extract_origin_components(body, format_name)` (keyed on the canonical h-form-widened `key_regex`) + `finalize_slot_fields(...)` — consumed by all 6 parsers, which keep only their thin per-parser signature + selection/out-of-range message (bitcoin_core's `entry_idx`, electrum's `…in synthesized descriptor`). Net **−195 LOC**.
+- **`h`-form hardened-origin tolerance (the one behavior delta).** Routing all parsers through `key_regex` (`…(?:/\d+(?:'|h)?)+…`) means an `import-wallet` descriptor whose origins use `h`-form hardened markers (`84h/0h/0h`, as some Bitcoin Core / Sparrow exports emit) now parses where the apostrophe-only copies refused it (`"no origin annotations in descriptor"`). This is a **superset** — every apostrophe-form input matches identically — so no existing input changes behavior. Resolves `import-parser-hform-origin-tolerance`.
+- **Convergent internal messages.** A few defensive internal error messages converge to the shared wording (the per-slot `xpub decode for slot {n}` context flattens to `xpub decode`; coldcard's `(internal bug)` empty-result folds into `no origin annotations in descriptor`). These branches are proven unreachable (the xpub was already decoded upstream by `concrete_keys_to_placeholders`); no test/manual pins them.
+- **No CLI-surface change** — no flag/value/subcommand added → no GUI `schema_mirror`, no manual CLI-reference mirror; no new error variant (reuses `ImportWalletParse`); no sibling-codec change.
+- **Tests.** New `cli_import_wallet_bitcoin_core.rs` cell `core_single_descriptor_hform_hardened_path_accepted` (an `h`-form wpkh origin imports like the apostrophe form). Full toolkit suite + clippy `--all-targets` + `make -C docs/manual verify-examples` (20 foreign-format transcripts) GREEN. Resolves `descriptor-origin-extraction-dedup` + `import-parser-hform-origin-tolerance`. Audit trail: `design/SPEC_descriptor_origin_extraction_dedup.md` + `design/agent-reports/descriptor-origin-extraction-dedup-r0-round{1,2,3}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.46.2] — 2026-06-05
 
 **SemVer-PATCH — `gui-schema`: project restore's `--from required_unless_present="md1"` conditional rule.**
