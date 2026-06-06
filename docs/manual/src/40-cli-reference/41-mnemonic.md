@@ -2741,16 +2741,16 @@ before committing to steel.
 ### Synopsis
 
 ```sh
-mnemonic repair {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1 <MD1>...]} [--json]
+mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1 <MD1>...]] [--json]
 ```
 
 ### Flags
 
 | Flag | Purpose |
 |---|---|
-| `--ms1 <MS1>` | single `ms1` chunk to repair; use `-` to read one chunk from stdin; mutually exclusive with `--mk1` / `--md1` |
-| `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--md1` |
-| `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); mutually exclusive with `--ms1` / `--mk1` |
+| `--ms1 <MS1>` | single `ms1` chunk to repair; use `-` to read one chunk from stdin; may be combined with `--mk1` / `--md1` (one HRP per card; per D35) |
+| `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); may be combined with `--ms1` / `--md1` (one HRP per card; per D35) |
+| `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); may be combined with `--ms1` / `--mk1` (one HRP per card; per D35) |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
 | `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1/md1 |
 | `--max-subst <E>` | also tolerate up to E (0–4, default 0) substitution errors alongside the indels; a recovery that used a substitution is printed as a VERIFY-ME candidate (exit 4), not a confident correction |
@@ -3013,14 +3013,14 @@ conversion. Per kind:
 ### Synopsis
 
 ```sh
-mnemonic inspect {--ms1 <MS1> | --mk1 <MK1> [--mk1 <MK1>...] | --md1 <MD1> [--md1 <MD1>...]} [--json] [--reveal-secret]
+mnemonic inspect [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1 <MD1>...]] [--json] [--reveal-secret]
 ```
 
 ### Flags
 
 | Flag | Purpose |
 |---|---|
-| `--ms1 <MS1>` | single `ms1` chunk to inspect; use `-` to read one chunk from stdin; mutually exclusive with `--mk1` / `--md1` |
+| `--ms1 <MS1>` | single `ms1` chunk to inspect; use `-` to read one chunk from stdin; may be combined with `--mk1` / `--md1` (one HRP per card; per D35) |
 | `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` for stdin |
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` for stdin |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form report |

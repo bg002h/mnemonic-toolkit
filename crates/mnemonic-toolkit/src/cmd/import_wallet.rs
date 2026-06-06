@@ -279,6 +279,21 @@ pub fn run<R: Read, W: Write, E: Write>(
     // same TTY-conditional auto-fire convention used elsewhere.
     let _ = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
+    // FOLLOWUP `import-wallet-ms1-argv-advisory-gap` — secret-in-argv advisory
+    // for inline `--ms1` AND its twin `--slot @N.phrase` (both `@env:`-only, no
+    // stdin channel). Read the RAW `args` HERE, BEFORE the `@env:`-resolving
+    // rebind below, so an `@env:VAR` value (NOT an argv leak, nor the `""`
+    // watch-only sentinel) is correctly skipped. Fire before any validation /
+    // early-return — the argv leak already happened at process exec.
+    if args.ms1.iter().any(|v| !v.is_empty() && !v.starts_with("@env:")) {
+        secret_in_argv_warning(stderr, "--ms1", "@env:VAR");
+    }
+    for s in &args.slot {
+        if s.subkey == SlotSubkey::Phrase && !s.value.is_empty() && !s.value.starts_with("@env:") {
+            secret_in_argv_warning(stderr, &format!("--slot @{}.phrase=", s.index), "@env:VAR");
+        }
+    }
+
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on secret-bearing flags.
     let env_resolved_owned;
     let args: &ImportWalletArgs = if needs_env_sentinel_resolution(args) {

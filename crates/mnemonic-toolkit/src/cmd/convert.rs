@@ -562,6 +562,17 @@ fn refusal_electrum_invalid_format() -> ToolkitError {
     )
 }
 
+/// FOLLOWUP `electrum-phrase-address-refusal-honest-wording`: `convert
+/// (electrum-phrase, address)` is not a single-format conversion (Electrum uses
+/// its own PBKDF2 salt + non-BIP-44 derivation), but as of v0.47.0 the
+/// operation IS supported by `mnemonic addresses`. Redirect there rather than
+/// emitting the generic (and inaccurate) "one-way barrier" message.
+fn refusal_electrum_phrase_to_address() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "convert does not derive addresses from an Electrum native seed (Electrum uses its own PBKDF2 salt + non-BIP-44 derivation, not a convert edge). Use `mnemonic addresses --from electrum-phrase=<seed> --address-type <p2pkh|p2wpkh>` (the script type is fixed by the Electrum seed version).".into(),
+    )
+}
+
 // SPEC v0.7 §10.a / §3.d — Address derivation refusals.
 fn refusal_address_no_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
@@ -683,6 +694,14 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
         (Phrase, ElectrumPhrase) | (ElectrumPhrase, Phrase),
     ) {
         return Some(refusal_electrum_phrase_pivot());
+    }
+
+    // electrum-phrase → address: not a convert edge, but supported by
+    // `mnemonic addresses --from electrum-phrase` (v0.47.0). Redirect there
+    // instead of the generic one-way-barrier message (FOLLOWUP
+    // `electrum-phrase-address-refusal-honest-wording`).
+    if from == ElectrumPhrase && to == Address {
+        return Some(refusal_electrum_phrase_to_address());
     }
 
     // §3.c sibling pivots between codec formats.
