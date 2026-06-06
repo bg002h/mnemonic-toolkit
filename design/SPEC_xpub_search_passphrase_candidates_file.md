@@ -9,7 +9,7 @@
 
 ## 1. Summary
 
-`xpub-search passphrase-of-xpub` verifies whether ONE passphrase produces a target xpub (re-derive master via `derive_master_seed`, then `match_xpub_against_paths` over BIP-44/49/84/86 + `--add-path`). This cycle adds **`--passphrase-candidates-file <PATH>`**: a text file with **one candidate passphrase per line**; the command loops the existing verify oracle over the candidates, **aborts on the first match**, and reports which line matched (else exits `XpubSearchNoMatch`/4). Candidates never touch argv (user requirement: "a text file to be imported, rather than a long list on command line").
+`xpub-search passphrase-of-xpub` verifies whether ONE passphrase produces a target xpub (re-derive master via `derive_master_seed`, then `match_xpub_against_paths` over BIP-44/49/84/86 + `--add-path`). This cycle adds **`--passphrase-candidates-file <PATH>`**: a text file with **one candidate passphrase per line**; the command loops the existing verify oracle over the candidates, **aborts on the first match**, and reports which line matched (else exits `XpubSearchPassphraseCandidatesExhausted`/4). Candidates never touch argv (user requirement: "a text file to be imported, rather than a long list on command line").
 
 **Scope (user-set 2026-06-05):** candidate **FILE** only. NO stdin candidate variant (dropped — also avoids `--phrase-stdin` double-stdin contention). NO generated/mutated wordlists (mode c stays btcrecover's job — the top-level after_help continues to point there for keyspace *generation*).
 
@@ -30,7 +30,7 @@ pub passphrase_candidates_file: Option<PathBuf>,
 
 **(R0-r1 I3) Secret classification = `secret: false` (it holds a PATH, not a secret value).** Mirror the established convention for path flags: `--decrypt-password-file` (`mnemonic-gui schema mnemonic.rs:2133-2134` "holds a PATH (non-secret)") and `--secret-file` (`:3042` "a plain path"). Concretely: do NOT extend `secrets.rs::flag_is_secret`; the GUI mirror entry (§6) is `FlagKind::Path { stdio_sentinel: false }, secret: false`; and **NO `lint_argv_secret_flags.rs` Route is added** (the secret never enters argv — the file IS the channel — so there's no `*-stdin`/`=-`/`@env:` evidence anchor a Route would require; a `secret: true` classification would FAIL the `flag_axis_set_equals_gui_schema` closure with nothing to anchor). The file's sensitivity is conveyed in the help text + a one-line runtime stderr advisory ("note: <path> holds candidate passphrases — treat as sensitive"), NOT via the secret-flag taxonomy.
 
-**Mutex (exactly-one passphrase source).** Today `--passphrase` / `--passphrase-stdin` are a mandatory one-of (pairwise `conflicts_with` + `required_unless_present`, `:78-92`). Replace with a clap **`ArgGroup`** `passphrase_source` (`required = true`, `multiple = false`) over `{passphrase, passphrase_stdin, passphrase_candidates_file}` (or extend the pairwise form to `conflicts_with_all` + `required_unless_present_any` across all three — R0 picks the lower-drift option). **No stdin contention:** `--passphrase-candidates-file` reads a FILE, so the seed may still arrive via `--phrase-stdin`/`--ms1-stdin` (unlike a hypothetical candidate-stdin).
+**Mutex (exactly-one passphrase source). (R0-r2 M-2 — decided: use a clap `ArgGroup`.)** Today `--passphrase` / `--passphrase-stdin` are a mandatory one-of (pairwise `conflicts_with` + `required_unless_present`, `:78-92`). **Replace** that pairwise pair with a clap **`ArgGroup`** `passphrase_source` (`required = true`, `multiple = false`) over `{passphrase, passphrase_stdin, passphrase_candidates_file}`, and **REMOVE** the now-redundant per-field `conflicts_with`/`required_unless_present` on `--passphrase`/`--passphrase-stdin` (`:80-81`, `:89-90`) to avoid double-validation. **No stdin contention:** `--passphrase-candidates-file` reads a FILE, so the seed may still arrive via `--phrase-stdin`/`--ms1-stdin` (unlike a hypothetical candidate-stdin). Mutex/required violations are clap errors → **exit 64** (`main.rs:147`).
 
 ## 3. Scan engine — new `cmd/xpub_search/passphrase_search.rs`
 
@@ -61,7 +61,7 @@ The matching passphrase is already in the user's file; echoing it to stdout/scro
 ```
 ✓ match: candidate on line 42 derives <xpub> at m/84'/0'/0' (bip84)
 ```
-`PassphraseOfXpubResult::Match` (`:172`) gains two **optional** fields (None in single-`--passphrase` mode; Some in scan mode):
+**(R0-r2 M-1)** All new optional result fields carry `#[serde(skip_serializing_if = "Option::is_none")]` so the single-`--passphrase` envelope is byte-unchanged (no `…: null` keys leak onto the existing path). `PassphraseOfXpubResult::Match` (`:172`) gains two **optional** fields (None in single-`--passphrase` mode; Some in scan mode):
 - `matched_candidate_line: Option<usize>` (1-indexed file line).
 - `matched_passphrase: Option<String>` — included in **`--json` only** (machine consumption; the operator explicitly opted into structured output). NOT in the default text form.
 
@@ -85,7 +85,7 @@ The flat "`mnemonic` cannot brute-force" now has a bounded exception. Refine all
 
 Fixture: a seed (`abandon…about`) with a KNOWN passphrase `P` producing a target xpub `X` at bip84 (capture `X` at test time via `mnemonic xpub-search passphrase-of-xpub --passphrase P --target-xpub <self>` or `convert`).
 - **hit:** candidate file with `P` among decoys → exit 0, text reports the correct 1-indexed line; `--json` `result:"match"` + `matched_candidate_line` + `matched_passphrase == P`.
-- **miss:** file without `P` → exit 4 `XpubSearchNoMatch`, `candidates_tried == #non-blank lines`.
+- **miss:** file without `P` → exit 4 `XpubSearchPassphraseCandidatesExhausted`, `candidates_tried == #non-blank lines` (the `--json` no-match envelope carries `candidates_tried`).
 - **abort-on-first:** `P` appears twice; reports the FIRST line; `candidates_tried` ≤ that line's index.
 - **blank-line skip:** blanks between candidates don't count toward `candidates_tried`; the line number still maps to the file (not the candidate ordinal).
 - **exact-bytes:** a candidate with a trailing space (`"pw "`) is tested literally (no trim) — a file line `pw ` matches a passphrase `pw ` and NOT `pw`.
