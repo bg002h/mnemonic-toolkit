@@ -2,7 +2,7 @@
 
 **Status:** R0 gate (pre-implementation). MUST converge to 0 Critical / 0 Important before any code.
 **Resolves:** FOLLOWUP `xpub-search-passphrase-bruteforce` (candidate-FILE scope only).
-**Source SHA:** branch `xpub-search-passphrase-candidates-file` off master `86a59bb`.
+**Source SHA:** branch `xpub-search-passphrase-candidates-file` off master `45e83fe` (citations verified live through R0-r3).
 **SemVer:** MINOR — additive capability (candidate-list scan) + a refinement of the top-level passphrase-recovery boundary messaging; a `Match` wire-shape addition.
 
 ---
@@ -43,14 +43,16 @@ for (line_no_1based, line) in file.lines().enumerate():
     strip trailing '\r'? (BufRead::lines already drops '\n'; strip a trailing '\r' for CRLF)
     if line.is_empty(): continue            // blank-line skip
     candidates_tried += 1
-    let seed = derive_master_seed(&mnemonic, &line)   // language already resolved once
+    let candidate: Zeroizing<String> = Zeroizing::new(line)   // (I-r3) owned secret
+    let seed = derive_master_seed(&mnemonic, &candidate)       // seed is Zeroizing<[u8;64]>
     if let Some(hit) = match_xpub_against_paths(seed, &paths, &target65):
         return Match { …hit…, matched_candidate_line: line_no_1based }   // ABORT on first
 return Exhausted { candidates_tried }
 ```
 
 - The `mnemonic` is parsed ONCE (from `--phrase`/`--ms1`/positional via `resolve_seed`); per candidate, `derive_master_seed(mnemonic, passphrase)` (PBKDF2) + `Xpriv::new_master` + a full `match_xpub_against_paths` walk re-run.
-- **(R0-r1 I2) Do NOT overload `XpubSearchNoMatch`.** Its `Display` (`error.rs:785`) is hardcoded *"…paths searched={searched}; widen the range with --max-account / --number-of-accounts…"* — wrong for a candidate scan (and "paths searched=0; widen --max-account" is nonsense for an empty file). Add a **NEW** variant `ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried: usize }` (alphabetical placement per CLAUDE.md; `exit_code` → **4** like `XpubSearchNoMatch`; `kind` arm added), `Display` = *"no candidate in --passphrase-candidates-file produced the target xpub (N candidate(s) tried); verify the seed and --target-xpub, or add more candidates."* The empty-file case (`candidates_tried == 0`) gets a tailored note ("--passphrase-candidates-file had no candidates (all lines blank)"). Non-`--json` exhaustion → this error (stderr + exit 4). `--json` exhaustion → emit a `NoMatch` envelope carrying `candidates_tried` (mirror the existing run()'s `--json` no-match emission path; R0-r2 verifies whether existing no-match prints the envelope THEN errors, and match that).
+- **(R0-r3 I-r3) Memory hygiene.** Each candidate line is an OWNED secret → wrap in `Zeroizing<String>` before `derive_master_seed`, mirroring the single-passphrase path (`passphrase_of_xpub.rs:260`); it scrubs on drop each iteration. The derived seed is already `Zeroizing<[u8;64]>` (`derive_slot.rs:31`). **Add a `ZEROIZE_ROWS` entry** to `tests/lint_zeroize_discipline.rs` for the new `passphrase_search.rs` candidate-line site (evidence anchor `Zeroizing::new(...)`), per the lint's documented "add a row AND wrap" process (`:46-47`) — turning the convention into an enforced gate over the new code. (mlock-pinning per candidate is optional churn; the `Zeroizing` wrap is the load-bearing invariant.)
+- **(R0-r1 I2) Do NOT overload `XpubSearchNoMatch`.** Its `Display` (`error.rs:785`) is hardcoded *"…paths searched={searched}; widen the range with --max-account / --number-of-accounts…"* — wrong for a candidate scan (and "paths searched=0; widen --max-account" is nonsense for an empty file). Add a **NEW** variant `ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried: usize }` (alphabetical placement per CLAUDE.md; `exit_code` → **4** like `XpubSearchNoMatch`; `kind` arm added), `Display` = *"no candidate in --passphrase-candidates-file produced the target xpub (N candidate(s) tried); verify the seed and --target-xpub, or add more candidates."* The empty-file case (`candidates_tried == 0`) gets a tailored note ("--passphrase-candidates-file had no candidates (all lines blank)"). Non-`--json` exhaustion → this error (stderr + exit 4). `--json` exhaustion → emit a `NoMatch` envelope carrying `candidates_tried` then exit 4 — mirroring the existing run() `--json` no-match path, which prints the `NoMatch` envelope FIRST and THEN returns the error (`passphrase_of_xpub.rs:365-384`).
 - **`STDERR_ADVISORY` (`:234`) emits ONCE**, not per candidate.
 - **Perf (R0-r1 M2):** per-candidate cost is PBKDF2-2048 (dominant) + master-key + `searched_count` child derivations (default 80 = 4 templates × 20 accounts, more with `--add-path`). Whole-file runtime scales `candidates × searched_count`, so a wide `--number-of-accounts` multiplies it — note in `--help`/manual. Stream the file; omit progress reporting for v1 (finite user-supplied list; no rate-limit needed).
 - File-open failure → IO/`BadInput` error; empty file → the `Exhausted{candidates_tried:0}` variant above (exit 4).
@@ -63,7 +65,7 @@ The matching passphrase is already in the user's file; echoing it to stdout/scro
 ```
 **(R0-r2 M-1)** All new optional result fields carry `#[serde(skip_serializing_if = "Option::is_none")]` so the single-`--passphrase` envelope is byte-unchanged (no `…: null` keys leak onto the existing path). `PassphraseOfXpubResult::Match` (`:172`) gains two **optional** fields (None in single-`--passphrase` mode; Some in scan mode):
 - `matched_candidate_line: Option<usize>` (1-indexed file line).
-- `matched_passphrase: Option<String>` — included in **`--json` only** (machine consumption; the operator explicitly opted into structured output). NOT in the default text form.
+- `matched_passphrase: Option<String>` — included in **`--json` only** (machine consumption; the operator explicitly opted into structured output). NOT in the default text form. **(R0-r3 I-r3)** held as `Zeroizing<String>` in-memory from the winning candidate until serialized (it is bound for `--json` stdout by opt-in, so this is partial — the load-bearing wrap is the per-candidate line above).
 
 This is a **`--json` wire-shape change** (added optional fields) — NOT gated by GUI `schema_mirror` (flag-NAME gate only; per `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification`); GUI/consumers self-update. **(R0-r1 I2)** The scan's `NoMatch` JSON envelope ADDS `candidates_tried: Option<usize>` (= #non-blank lines tried) and keeps `searched_count` = the per-passphrase path-search count (UNCHANGED meaning — paths-per-candidate; clearly distinct from `candidates_tried`, avoiding the `searched`-over-report bug class of sibling slug `xpub-search-address-of-xpub-searched-count-semantic`). The **stderr/exit** path for scan exhaustion uses the NEW `XpubSearchPassphraseCandidatesExhausted{candidates_tried}` variant (§3) — NOT `XpubSearchNoMatch` (whose hardcoded "paths searched=…; widen --max-account" Display is wrong for a candidate scan).
 
