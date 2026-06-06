@@ -17,7 +17,7 @@ Origin extraction from a concrete descriptor body (`[fp/path]xpub` → typed `(X
 - `fn origin_capture_regex` (apostrophe-only `(?:/\d+'?)+`) in **4** — `bsms.rs:514`, `bitcoin_core.rs:557`, `specter.rs:355`, `sparrow.rs:565` — PLUS inline apostrophe-only copies in `coldcard.rs:507` + `electrum.rs:918`.
 - Canonical `pipeline::key_regex` (`h`-form-widened `(?:/\d+(?:'|h)?)+`) at `pipeline.rs:37`.
 
-The inner logic is byte-identical modulo (i)+(ii): captures (1=fp-hex, 2=path, 3=xpub) → 4-byte fp parse → `DerivationPath::from_str("m"+path)` → `slip0132::normalize_xpub_prefix` → `Xpub::from_str`.
+The inner logic is byte-identical modulo (i) error-message prefix, (ii) regex, **(iii) per-slot/entry context carried in the xpub-decode + out-of-range messages** (see §4): captures (1=fp-hex, 2=path, 3=xpub) → 4-byte fp parse → `DerivationPath::from_str("m"+path)` → `slip0132::normalize_xpub_prefix` → `Xpub::from_str`.
 
 ## 2. Shape — extract the shared INNER helpers (NOT one uniform `build_slot_fields`)
 
@@ -54,12 +54,18 @@ pub(crate) fn finalize_slot_fields(
 
 Each parser's `build_slot_fields` keeps its thin per-parser signature + selection logic, but its body collapses to: `extract_origin_components(body, "<fmt>")` → select (`.nth(slot_idx)` / `[0]` / `entry_idx` logic) → `finalize_slot_fields(...)`. The 6 inline regex/fp/path/xpub blocks (~30 lines each) are deleted; the 4 `extract_origin_components` + 4 `origin_capture_regex` + 2 inline regexes go.
 
+**(R0 M3) The per-parser SELECTION (out-of-range) message STAYS in the wrapper** — it lives in the `.nth(slot_idx).ok_or_else(...)` step the wrapper keeps, so its `entry_idx`/`slot_idx` context is retained for free (bitcoin_core's `descriptors[{entry_idx}]: slot index {slot_idx} out of range`; bsms/sparrow/specter `slot index {slot_idx} out of range`; electrum's `…in synthesized descriptor`). ONLY `finalize_slot_fields`'s xpub-decode message converges (§4). Do NOT flatten the wrapper's out-of-range message.
+
 ## 3. The `h`-form widening (resolves `import-parser-hform-origin-tolerance`)
 
 Routing all parsers through `key_regex()` (`(?:/\d+(?:'|h)?)+`) means a Core/Sparrow wallet-file descriptor using `h`-form hardened markers (`84h/0h/0h`) now parses where the apostrophe-only copies refused it. This is a **superset** — every apostrophe-form input still matches identically — so no existing behavior changes; it only ADDS `h`-form acceptance. This is the intended resolution of `import-parser-hform-origin-tolerance` (dissolved, not separately fixed). Document in the CHANGELOG.
 
 ## 4. Convergent error-message strings (decision: accept)
-A few per-parser internal messages converge to the unified wording: coldcard's `"no origin annotation in synthesized descriptor (internal bug)"` and electrum's `"slot index N out of range in synthesized descriptor"` become the shared `"no origin annotations in descriptor"` / generic out-of-range. **No test pins these** (grep of `tests/` for `"internal bug)"` / `"synthesized descriptor"` / `"no origin annotation"` returns only an unrelated comment). These are internal "can't happen on a self-synthesized descriptor" guards, so the reword is invisible in practice. Accept + note in CHANGELOG. (R0 to confirm no test/manual pins them + that the per-parser slot-selection error messages a USER can hit are preserved where they carry distinct user-facing meaning.)
+The ONLY messages that converge are those produced INSIDE `finalize_slot_fields` (the xpub-decode branch) — the per-parser SELECTION (out-of-range) messages stay in the wrappers (§2, R0 M3). Convergences:
+- **xpub-decode (R0 M1):** the per-slot/entry context in `bitcoin_core.rs:463` (`descriptors[{entry_idx}]: xpub decode for slot {slot_idx}: {e}`), `electrum.rs:949` / `sparrow.rs:631` / `specter.rs:410` (`xpub decode for slot {slot_idx}: {e}`) flattens to the shared `"import-wallet: {fmt}: parse error: xpub decode: {e}"`.
+- coldcard's `"no origin annotation in synthesized descriptor (internal bug)"` (single-key `captures()` path) folds into the shared empty-result `"no origin annotations in descriptor"`.
+
+**(R0 M2) Why the convergence is invisible — proven can't-happen guard.** Every parser calls `pipeline::concrete_keys_to_placeholders` BEFORE `build_slot_fields` (bitcoin_core:267, bsms:222, sparrow:406, specter:224, coldcard:313, electrum:373); that fn (pipeline.rs:116-121) already decodes each `[fp/path]xpub` via the same `key_regex` → `normalize_xpub_prefix` → `Xpub::from_str`, erroring on a bad xpub. So by the time `build_slot_fields` re-lexes the SAME key the decode provably already succeeded (encoded by `debug_assert_eq!` at bitcoin_core:293 / pipeline:199). The `xpub decode for slot` branch is the same defensive "(internal bug)" class — the per-slot context is never user-observable. **No test pins these** (grep of `tests/` + `docs/manual/` for `"internal bug)"` / `"synthesized descriptor"` / `"no origin annotation"` / `"xpub decode for slot"` returns only an unrelated comment at `cli_xpub_search_account_of_descriptor.rs:328`). Accept + note in CHANGELOG. (R0 confirmed.)
 
 ## 5. Tests
 - **Green-stays-green:** the existing `import-wallet` per-format suites + the foreign-format transcript suite (`make -C docs/manual verify-examples`) cover every parser's origin extraction end-to-end — a behavior-preserving refactor. Run the full workspace suite + `make audit`.
