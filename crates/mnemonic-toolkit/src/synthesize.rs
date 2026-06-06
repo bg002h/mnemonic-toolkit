@@ -1597,6 +1597,84 @@ mod tests {
         out
     }
 
+    /// Distinct-cosigner slot from a specific phrase (distinct entropy →
+    /// distinct fingerprint/xpub → distinct mk1 csi). Path `48'/0'/<idx>'/2'`.
+    fn distinct_slot(phrase: &str, idx: usize) -> ResolvedSlot {
+        let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, phrase).unwrap();
+        let entropy = mnemonic.to_entropy();
+        let seed = mnemonic.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        let master_fp = master.fingerprint(&secp);
+        let path = DerivationPath::from_str(&format!("48'/0'/{idx}'/2'")).unwrap();
+        let xpriv = master.derive_priv(&secp, &path).unwrap();
+        let xpub = Xpub::from_priv(&secp, &xpriv);
+        ResolvedSlot {
+            xpub,
+            fingerprint: master_fp,
+            path,
+            entropy: Some(zeroize::Zeroizing::new(entropy)),
+            master_xpub: None,
+            language: None,
+            _entropy_pin: None,
+        }
+    }
+
+    #[test]
+    fn synthesize_unified_multisig_distinct_cosigners_byte_exact() {
+        // R0 I1 characterization guard for the dedup `synthesize_unified` →
+        // `synthesize_descriptor` delegation (FOLLOWUP
+        // `synthesize-descriptor-deduplicate-with-unified`). Pins the n>1
+        // `MkField::Multi` branch's full Bundle byte-shape with TWO DISTINCT
+        // cosigners (distinct fingerprints → distinct per-cosigner mk1 csi →
+        // mk1[0] != mk1[1]). FROZEN literals captured from the pre-delegation
+        // binary (R0 M2: NOT an assert_eq!(unified, descriptor) compare, which
+        // is vacuous once both are the same fn). Any csi / per-cosigner
+        // ordering / stub / ms1 / md1 drift in the delegated path goes RED.
+        let slots = vec![distinct_slot(TREZOR_12_ZERO, 0), distinct_slot(BIP39_TEST_2, 1)];
+        let bundle = synthesize_unified(
+            &slots,
+            CliTemplate::WshSortedMulti,
+            2,
+            CliNetwork::Mainnet,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap();
+        assert_eq!(
+            bundle.ms1,
+            vec![
+                "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f".to_string(),
+                "ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6".to_string(),
+            ]
+        );
+        let mk = bundle.mk1.as_multi().expect("n>1 → Multi");
+        assert_eq!(
+            mk[0],
+            vec![
+                "mk1qp40rrpqqspvna5yxhyldpp4w0za5zs9qjyty8su72t3dwaqcl9pvz58pmltjs9tjrg0g2z0agd4urfpzanhaq3lcdlz6k2d0t5nlmjlz5nk".to_string(),
+                "mk1qp40rrpp2a3syx3m7halwd7s7d5e8l2xm3y3xzfmadfj6e20ur0anz7jwkzae8efp77w50czqmsz2vygrt0d".to_string(),
+            ]
+        );
+        assert_eq!(
+            mk[1],
+            vec![
+                "mk1qpv4y3zqqspvna5yxhyldpp4hp5gmu07qjcgpqyqpzqgpqyqpzqcpqyqpzpgpqyqpqzg3vs7247wz22l0uwvjq67znc3g6ft568c7qntztrm".to_string(),
+                "mk1qpv4y3zp76lp8zltaht9xxts9tayzjzukf59mpctwngtxq6svts2qqk8su3z373k0ng4vra90z9r27f7v8wwelf50wn4cxamejwcxm5tdw87".to_string(),
+                "mk1qpv4y3zzc70s4f2z8jmqljlfwsfdspdv8".to_string(),
+            ]
+        );
+        assert_eq!(
+            bundle.md1,
+            vec![
+                "md1ftp2nps9q2tvyyy5jmpprj5qqcy8ppgtcgu79mg9dcdzxlz9wpyhwsv0jskp2rsal4egz4eqzcngzrpfdv2w5".to_string(),
+                "md1ftp2npsf5859p875x67p5s3wem7sgluxl3d2a3syx3m7halwd7s7d5e8l2xm3y3xzfmadfjcygdcxfdspxgm5".to_string(),
+                "md1ftp2npsje20ur0anz7jwkzae8ef47lcueyp4u983znmtuyuta0kav5cewq405s2gtjexshvq3jnnf2ver22va".to_string(),
+                "md1ftp2npslpd6dpvcr2p3wpgqzc7rjy286xe7dz4s054ug5dte8esaem8ax3a6whx8nu9qqqlxqwxzd0ld3k".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn synthesize_unified_single_sig_full_ms1_one_non_empty() {
         // SingleSigFull (n=1, secret-bearing): ms1 = ["ms1..."] length-1.
