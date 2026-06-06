@@ -7,7 +7,7 @@
 use std::io::{Read, Write};
 use std::str::FromStr;
 
-use bitcoin::bip32::{ChildNumber, DerivationPath, Xpub};
+use bitcoin::bip32::{ChildNumber, DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
 use bip39::Mnemonic;
 use clap::Args;
@@ -221,9 +221,59 @@ pub fn run<R: Read, W: Write, E: Write>(
             )?;
             (acct.account_xpub, network, Some(args.account))
         }
+        NodeType::ElectrumPhrase => {
+            // Electrum native-seed derivation (NOT BIP-39/BIP-44): PBKDF2 →
+            // BIP-32 master; standard → m/{0,1}/i p2pkh, segwit → m/0'/{0,1}/i
+            // p2wpkh. The script type + derivation are fixed by the seed
+            // version, so --address-type must match it and --account is N/A.
+            if args.account != 0 {
+                return Err(bad(
+                    "--account does not apply to --from electrum-phrase= (Electrum native derivation has no BIP-44 account level)",
+                ));
+            }
+            let network = args.network.unwrap_or(CliNetwork::Mainnet);
+            let version = crate::electrum::validate_seed_version(&from_value).map_err(|_| {
+                bad("--from electrum-phrase= is not a valid Electrum native seed (unknown word or unrecognized seed version)")
+            })?;
+            if version.is_2fa() {
+                return Err(bad(format!(
+                    "--from electrum-phrase= 2FA seeds (version {}) are not supported (Electrum 2FA requires a second factor)",
+                    version.label()
+                )));
+            }
+            let (required_type, version_name) = match version {
+                crate::electrum::SeedVersion::Standard => (ScriptType::P2pkh, "standard"),
+                crate::electrum::SeedVersion::Segwit => (ScriptType::P2wpkh, "segwit"),
+                _ => unreachable!("2FA refused above"),
+            };
+            if args.address_type != required_type {
+                return Err(bad(format!(
+                    "Electrum {version_name} seeds derive {} addresses; --address-type {} conflicts (Electrum's script type is fixed by the seed version)",
+                    required_type.as_str(),
+                    args.address_type.as_str()
+                )));
+            }
+            // PBKDF2 → master → (m/0' for segwit). xpriv scrubbed on drop.
+            let seed64 = crate::electrum::electrum_seed_to_bip32_seed(&from_value, &passphrase);
+            let secp_sign = Secp256k1::new();
+            let master = Xpriv::new_master(network.network_kind(), seed64.as_slice())
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+            let node = match version {
+                crate::electrum::SeedVersion::Segwit => {
+                    let path: DerivationPath =
+                        vec![ChildNumber::from_hardened_idx(0).expect("0' is a valid hardened index")]
+                            .into();
+                    master
+                        .derive_priv(&secp_sign, &path)
+                        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
+                }
+                _ => master,
+            };
+            (Xpub::from_priv(&secp_sign, &node), network, None)
+        }
         other => {
             return Err(bad(format!(
-                "--from {other:?} is not supported by `addresses` (use xpub/phrase/entropy/seedqr)"
+                "--from {other:?} is not supported by `addresses` (use xpub/phrase/entropy/seedqr/electrum-phrase)"
             )));
         }
     };

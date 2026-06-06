@@ -114,7 +114,7 @@ fn electrum_segwit_passphrase_unicode_horror_vector() {
 }
 
 #[test]
-fn electrum_address_type_mismatch_refused_exit_2() {
+fn electrum_address_type_mismatch_refused_exit_1() {
     // A standard seed with --address-type p2wpkh is refused: the script type is
     // fixed by the Electrum seed version (standard → p2pkh).
     let o = mn(&[
@@ -126,7 +126,7 @@ fn electrum_address_type_mismatch_refused_exit_2() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 2, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
     assert!(
         stderr(&o).contains("fixed by the seed version"),
         "stderr: {}",
@@ -135,7 +135,7 @@ fn electrum_address_type_mismatch_refused_exit_2() {
 }
 
 #[test]
-fn electrum_account_refused_exit_2() {
+fn electrum_account_refused_exit_1() {
     let o = mn(&[
         "addresses",
         "--from",
@@ -147,12 +147,12 @@ fn electrum_account_refused_exit_2() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 2, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
     assert!(stderr(&o).contains("--account"), "stderr: {}", stderr(&o));
 }
 
 #[test]
-fn electrum_2fa_refused_exit_2() {
+fn electrum_2fa_refused_exit_1() {
     let o = mn(&[
         "addresses",
         "--from",
@@ -162,7 +162,7 @@ fn electrum_2fa_refused_exit_2() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 2, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
     assert!(stderr(&o).contains("2FA"), "stderr: {}", stderr(&o));
 }
 

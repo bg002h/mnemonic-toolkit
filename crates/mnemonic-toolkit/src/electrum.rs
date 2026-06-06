@@ -11,6 +11,12 @@
 
 use crate::wordlists::{normalize_electrum, ElectrumWordlist};
 use bitcoin::hashes::{sha512, Hash, HashEngine, Hmac, HmacEngine};
+use hmac::Hmac as Pbkdf2Hmac;
+use pbkdf2::pbkdf2;
+use sha2::Sha512;
+use unicode_normalization::char::canonical_combining_class;
+use unicode_normalization::UnicodeNormalization;
+use zeroize::Zeroizing;
 
 /// SPEC v0.8 §14 — encode iteration bound. Electrum's `make_seed` increments
 /// the entropy integer until `validate_seed_version` matches the requested
@@ -54,6 +60,50 @@ pub(crate) enum ElectrumError {
     InvalidVersion,
     /// SPEC v0.8 §14 — encode iteration bound exceeded.
     EncodeIterationBoundExceeded,
+}
+
+/// Electrum's `mnemonic.py::normalize_text` EXACTLY (e1099925:80-91), used for
+/// the PBKDF2 seed + passphrase: NFKD → lower → drop chars with non-zero
+/// canonical combining class → collapse whitespace → strip CJK-internal
+/// whitespace.
+///
+/// Two subtleties that the `UNICODE_HORROR` test vector pins (and that
+/// `normalize_electrum` gets wrong for arbitrary input — it is fine for valid
+/// wordlist words, so this is a SEPARATE function, NOT a reuse):
+/// 1. Order is lower-BEFORE-strip (vs `normalize_electrum`'s strip-before-lower).
+/// 2. Electrum's `unicodedata.combining(c) != 0` is the **canonical combining
+///    class**, NOT the Mark general category: marks like U+034F (CGJ) and
+///    U+0489 have ccc=0, so Python KEEPS them — `is_combining_mark` (category
+///    Mark) would wrongly strip them. We use `canonical_combining_class(c) != 0`
+///    to match Python byte-for-byte.
+fn normalize_text_electrum(s: &str) -> String {
+    let nfkd: String = s.nfkd().collect();
+    let lowered: String = nfkd.chars().flat_map(|c| c.to_lowercase()).collect();
+    let stripped: String = lowered
+        .chars()
+        .filter(|c| canonical_combining_class(*c) == 0)
+        .collect();
+    let collapsed = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
+    strip_cjk_internal_whitespace(&collapsed)
+}
+
+/// Electrum native-seed → BIP-32 seed bytes (`mnemonic.py::mnemonic_to_seed`
+/// @ e1099925): `PBKDF2-HMAC-SHA512(normalize_text(phrase), b"electrum" +
+/// normalize_text(passphrase), 2048)` → 64 bytes. `normalize_phrase_for_hmac`
+/// IS Electrum's `normalize_text` (NFKD → strip-combining → lower → collapse
+/// whitespace → strip CJK-internal whitespace; the SAME normalization applies
+/// to both seed and passphrase). Returned `Zeroizing` — the 64-byte seed is
+/// master-secret-equivalent. FOLLOWUP `electrum-native-seed-address-derivation`.
+pub(crate) fn electrum_seed_to_bip32_seed(phrase: &str, passphrase: &str) -> Zeroizing<[u8; 64]> {
+    let norm_phrase = normalize_text_electrum(phrase);
+    let norm_pp = normalize_text_electrum(passphrase);
+    let mut salt = Vec::with_capacity(b"electrum".len() + norm_pp.len());
+    salt.extend_from_slice(b"electrum");
+    salt.extend_from_slice(norm_pp.as_bytes());
+    let mut out = Zeroizing::new([0u8; 64]);
+    pbkdf2::<Pbkdf2Hmac<Sha512>>(norm_phrase.as_bytes(), &salt, 2048, out.as_mut_slice())
+        .expect("pbkdf2 fill must succeed (dkLen 64 + 2048 iters in supported range)");
+    out
 }
 
 /// HMAC-SHA512(key=`"Seed version"`, msg=phrase) hex-prefix dispatch
