@@ -28,9 +28,13 @@ Add to `PassphraseOfXpubArgs`:
 pub passphrase_candidates_file: Option<PathBuf>,
 ```
 
+**(R0-r1 I3) Secret classification = `secret: false` (it holds a PATH, not a secret value).** Mirror the established convention for path flags: `--decrypt-password-file` (`mnemonic-gui schema mnemonic.rs:2133-2134` "holds a PATH (non-secret)") and `--secret-file` (`:3042` "a plain path"). Concretely: do NOT extend `secrets.rs::flag_is_secret`; the GUI mirror entry (§6) is `FlagKind::Path { stdio_sentinel: false }, secret: false`; and **NO `lint_argv_secret_flags.rs` Route is added** (the secret never enters argv — the file IS the channel — so there's no `*-stdin`/`=-`/`@env:` evidence anchor a Route would require; a `secret: true` classification would FAIL the `flag_axis_set_equals_gui_schema` closure with nothing to anchor). The file's sensitivity is conveyed in the help text + a one-line runtime stderr advisory ("note: <path> holds candidate passphrases — treat as sensitive"), NOT via the secret-flag taxonomy.
+
 **Mutex (exactly-one passphrase source).** Today `--passphrase` / `--passphrase-stdin` are a mandatory one-of (pairwise `conflicts_with` + `required_unless_present`, `:78-92`). Replace with a clap **`ArgGroup`** `passphrase_source` (`required = true`, `multiple = false`) over `{passphrase, passphrase_stdin, passphrase_candidates_file}` (or extend the pairwise form to `conflicts_with_all` + `required_unless_present_any` across all three — R0 picks the lower-drift option). **No stdin contention:** `--passphrase-candidates-file` reads a FILE, so the seed may still arrive via `--phrase-stdin`/`--ms1-stdin` (unlike a hypothetical candidate-stdin).
 
 ## 3. Scan engine — new `cmd/xpub_search/passphrase_search.rs`
+
+**(R0-r1 I1) Dispatch FIRST, before the existing single-passphrase resolve.** `passphrase_of_xpub.rs::run` resolves the passphrase inline at `:260-289` and falls into an `else` → `BadInput("requires --passphrase or --passphrase-stdin")` at `:282-289` when neither `--passphrase` nor `--passphrase-stdin` is set — which is EXACTLY candidates-file mode. So `run` must branch at the top of its handler: **`if args.passphrase_candidates_file.is_some() { return run_candidate_scan(...) }`** — routing to the scan engine and SKIPPING the inline resolve+derive+match (`:260-318`) entirely (the scan owns its own per-candidate derive/match loop). Update the now-stale `:283-285` "unreachable" comment (the 3-way group means the `else` is reachable only as a clap-guaranteed-impossible defensive arm).
 
 Mirrors the existing `*_search.rs` primitives (`path_search.rs` etc.). Streams the file line-by-line (no full-file buffering):
 
@@ -42,13 +46,14 @@ for (line_no_1based, line) in file.lines().enumerate():
     let seed = derive_master_seed(&mnemonic, &line)   // language already resolved once
     if let Some(hit) = match_xpub_against_paths(seed, &paths, &target65):
         return Match { …hit…, matched_candidate_line: line_no_1based }   // ABORT on first
-return NoMatch { candidates_tried }
+return Exhausted { candidates_tried }
 ```
 
-- The `mnemonic` is parsed ONCE (from `--phrase`/`--ms1`/positional via `resolve_seed`); only `derive_master_seed(mnemonic, passphrase)` (PBKDF2) re-runs per candidate.
+- The `mnemonic` is parsed ONCE (from `--phrase`/`--ms1`/positional via `resolve_seed`); per candidate, `derive_master_seed(mnemonic, passphrase)` (PBKDF2) + `Xpriv::new_master` + a full `match_xpub_against_paths` walk re-run.
+- **(R0-r1 I2) Do NOT overload `XpubSearchNoMatch`.** Its `Display` (`error.rs:785`) is hardcoded *"…paths searched={searched}; widen the range with --max-account / --number-of-accounts…"* — wrong for a candidate scan (and "paths searched=0; widen --max-account" is nonsense for an empty file). Add a **NEW** variant `ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried: usize }` (alphabetical placement per CLAUDE.md; `exit_code` → **4** like `XpubSearchNoMatch`; `kind` arm added), `Display` = *"no candidate in --passphrase-candidates-file produced the target xpub (N candidate(s) tried); verify the seed and --target-xpub, or add more candidates."* The empty-file case (`candidates_tried == 0`) gets a tailored note ("--passphrase-candidates-file had no candidates (all lines blank)"). Non-`--json` exhaustion → this error (stderr + exit 4). `--json` exhaustion → emit a `NoMatch` envelope carrying `candidates_tried` (mirror the existing run()'s `--json` no-match emission path; R0-r2 verifies whether existing no-match prints the envelope THEN errors, and match that).
 - **`STDERR_ADVISORY` (`:234`) emits ONCE**, not per candidate.
-- **`derive_master_seed` is the per-candidate cost (PBKDF2-2048).** A large file is slow but bounded; stream + (optional) a periodic stderr progress line every N candidates (R0: include or omit — keep simple, omit for v1 unless trivial). No rate-limit needed (finite user-supplied list, not a generator).
-- File-open failure → `BadInput`/IO error (exit per `error.rs`); empty file (0 candidates) → `XpubSearchNoMatch{searched:0}` (exit 4) with a stderr note "no candidates in file".
+- **Perf (R0-r1 M2):** per-candidate cost is PBKDF2-2048 (dominant) + master-key + `searched_count` child derivations (default 80 = 4 templates × 20 accounts, more with `--add-path`). Whole-file runtime scales `candidates × searched_count`, so a wide `--number-of-accounts` multiplies it — note in `--help`/manual. Stream the file; omit progress reporting for v1 (finite user-supplied list; no rate-limit needed).
+- File-open failure → IO/`BadInput` error; empty file → the `Exhausted{candidates_tried:0}` variant above (exit 4).
 
 ## 4. Output — report WHICH line matched (don't echo the secret to stdout by default)
 
@@ -60,18 +65,18 @@ The matching passphrase is already in the user's file; echoing it to stdout/scro
 - `matched_candidate_line: Option<usize>` (1-indexed file line).
 - `matched_passphrase: Option<String>` — included in **`--json` only** (machine consumption; the operator explicitly opted into structured output). NOT in the default text form.
 
-This is a **`--json` wire-shape change** (added optional fields) — NOT gated by GUI `schema_mirror` (flag-NAME gate only; per `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification`); GUI/consumers self-update. NoMatch keeps `searched_count`; ADD `candidates_tried: Option<usize>` for the scan (define `searched_count` = per-passphrase path-search count UNCHANGED; `candidates_tried` = #non-blank lines tried — avoids the `searched`-over-report bug class of sibling slug `xpub-search-address-of-xpub-searched-count-semantic`). The `XpubSearchNoMatch{mode,searched}` error: for the scan, `searched` = `candidates_tried`.
+This is a **`--json` wire-shape change** (added optional fields) — NOT gated by GUI `schema_mirror` (flag-NAME gate only; per `schema-mirror-flag-name-vs-wire-shape-conceptual-clarification`); GUI/consumers self-update. **(R0-r1 I2)** The scan's `NoMatch` JSON envelope ADDS `candidates_tried: Option<usize>` (= #non-blank lines tried) and keeps `searched_count` = the per-passphrase path-search count (UNCHANGED meaning — paths-per-candidate; clearly distinct from `candidates_tried`, avoiding the `searched`-over-report bug class of sibling slug `xpub-search-address-of-xpub-searched-count-semantic`). The **stderr/exit** path for scan exhaustion uses the NEW `XpubSearchPassphraseCandidatesExhausted{candidates_tried}` variant (§3) — NOT `XpubSearchNoMatch` (whose hardcoded "paths searched=…; widen --max-account" Display is wrong for a candidate scan).
 
 ## 5. Boundary refinement (after_help + manual + guard) — the btcrecover lockstep
 
 The flat "`mnemonic` cannot brute-force" now has a bounded exception. Refine all three coupled sites, **keeping** the btcrecover pointer + URL + `2026-05-25` currency stamp (the `cli_help_fixtures.rs:34-38` guard asserts only those three substrings — stays green):
-- `main.rs:51` `PASSPHRASE_RECOVERY_HELP`: add a sentence — *"If you have a LIST of likely passphrases, `mnemonic xpub-search passphrase-of-xpub --passphrase-candidates-file <file> --target-xpub <known-xpub>` tests each against a value you know. To GENERATE/mutate a keyspace (wordlists, masks, typo models), use btcrecover:"* then the existing pointer.
+- `main.rs:51` `PASSPHRASE_RECOVERY_HELP` const (decl `:51`; the "cannot brute-force" text is `:54`, body `:51-62`, M3): add a sentence — *"If you have a LIST of likely passphrases, `mnemonic xpub-search passphrase-of-xpub --passphrase-candidates-file <file> --target-xpub <known-xpub>` tests each against a value you know. To GENERATE/mutate a keyspace (wordlists, masks, typo models), use btcrecover:"* then the existing pointer.
 - `docs/manual/src/40-cli-reference/41-mnemonic.md:23` mirror — same refinement.
 - `cli_help_fixtures.rs` — no change needed (asserts btcrecover/URL/date, all retained); add a NEW assertion that `--help` for `passphrase-of-xpub` lists `--passphrase-candidates-file` if a per-subcommand help fixture exists (else covered by schema_mirror/flag-coverage).
 
 ## 6. Lockstep / FOLLOWUPs
 
-- **GUI `schema_mirror`:** `xpub-search-passphrase-of-xpub` IS GUI-schema'd (`mnemonic-gui/src/schema/mnemonic.rs:2214`). The new `--passphrase-candidates-file` flag trips the flag-NAME gate → pin-blocked (GUI can't lead its toolkit pin). Add the flag this cycle + **file FOLLOWUP `gui-xpub-search-passphrase-candidates-file-flag-pending-pin-bump`** (mirrors `gui-restore-multisig-flags-pending-pin-bump`). Confirm at R0 via `gui-schema` diff (only this one flag should appear).
+- **GUI `schema_mirror`:** `xpub-search-passphrase-of-xpub` IS GUI-schema'd (`mnemonic-gui/src/schema/mnemonic.rs:2214`). The new `--passphrase-candidates-file` flag trips the flag-NAME gate → pin-blocked (GUI can't lead its toolkit pin). Add the flag this cycle + **file FOLLOWUP `gui-xpub-search-passphrase-candidates-file-flag-pending-pin-bump`** (mirrors `gui-restore-multisig-flags-pending-pin-bump`). The eventual GUI mirror entry is **`FlagKind::Path { stdio_sentinel: false }, secret: false`** (per I3, copy the `--decrypt-password-file` entry shape at `mnemonic.rs:2148-2156`). Confirm at R0 via `gui-schema` diff (only this one flag should appear; `secret:false`).
 - **Manual:** `41-mnemonic.md` passphrase-of-xpub section — new flag row + a candidate-file worked example + the §5 boundary refinement. Run **`make audit`** (anchor-check + verify-examples + flag-coverage), not just `make lint`. The flag-coverage lint REQUIRES the manual to list `--passphrase-candidates-file` (mirror the clap surface).
 - **`--json` wire-shape:** ungated (note for GUI consumers; no schema_mirror change).
 - **Mode (c) generated wordlists:** add a one-line `external`/btcrecover note on the slug at resolution (NOT a new FOLLOWUP — btcrecover owns keyspace generation).
@@ -84,10 +89,10 @@ Fixture: a seed (`abandon…about`) with a KNOWN passphrase `P` producing a targ
 - **abort-on-first:** `P` appears twice; reports the FIRST line; `candidates_tried` ≤ that line's index.
 - **blank-line skip:** blanks between candidates don't count toward `candidates_tried`; the line number still maps to the file (not the candidate ordinal).
 - **exact-bytes:** a candidate with a trailing space (`"pw "`) is tested literally (no trim) — a file line `pw ` matches a passphrase `pw ` and NOT `pw`.
-- **mutex:** `--passphrase X --passphrase-candidates-file f` → clap error (exit 2); none of the 3 sources → clap "required" error.
+- **mutex:** `--passphrase X --passphrase-candidates-file f` → clap error **exit 64** (M1 — `main.rs:147` overrides clap 2→64; existing tests pin `code(64)` at `cli_xpub_search_passphrase_of_xpub.rs:105,129`); none of the 3 sources → clap "required" error (exit 64).
 - **seed-via-stdin coexist:** `--phrase-stdin` (seed) + `--passphrase-candidates-file` (candidates) works (no stdin contention).
 - **empty/missing file:** missing → IO error; empty → exit 4 + "no candidates" note.
-- **secret hygiene:** the default (non-`--json`) stdout does NOT contain `P` (only the line number); the advisory notes the file is sensitive.
+- **secret hygiene:** the **default (non-`--json`)** stdout does NOT contain `P` (only the line number) — this cell must NOT also pass `--json` (where `P` legitimately appears by opt-in); a separate `--json` cell asserts `matched_passphrase == P`. The runtime advisory notes the file is sensitive.
 - Full workspace `cargo test --no-fail-fast` + clippy GREEN per phase.
 
 ## 8. Phased plan
