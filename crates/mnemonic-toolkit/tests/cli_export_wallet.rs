@@ -123,7 +123,8 @@ fn cell_1_bitcoin_core_single_sig_wpkh_round_trip() {
     assert!(arr[0]["active"].as_bool().unwrap());
     assert_eq!(arr[0]["range"][0].as_u64().unwrap(), 0);
     assert_eq!(arr[0]["range"][1].as_u64().unwrap(), 999);
-    assert_eq!(arr[0]["timestamp"].as_str().unwrap(), "now");
+    // v0.47.3: default --timestamp is now `0` (genesis rescan), a JSON number.
+    assert_eq!(arr[0]["timestamp"].as_u64().unwrap(), 0);
 
     // Change entry.
     assert_eq!(

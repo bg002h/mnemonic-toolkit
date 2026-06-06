@@ -112,15 +112,16 @@ fn export_wallet_network_carries_default_value_mainnet_as_string() {
 }
 
 #[test]
-fn export_wallet_timestamp_carries_default_value_now_as_string() {
-    // `export-wallet --timestamp` defaults to "now" (parsed at runtime
-    // into the current Unix epoch via parse_timestamp). The emitter
-    // preserves the source string so GUIs can show "now" as the
-    // placeholder text and only diverge when the user opts in.
+fn export_wallet_timestamp_carries_default_value_zero_as_string() {
+    // v0.47.3: `export-wallet --timestamp` defaults to "0" (rescan from genesis;
+    // SPEC_timestamp_default_zero). The emitter preserves the clap `default_value`
+    // source string verbatim, so the schema shows the STRING "0" (not the number
+    // 0) — `--timestamp` is a free-string/`parse_timestamp` flag (kind `text`),
+    // not a numeric value_parser. GUIs read this as the placeholder default.
     let v = run_gui_schema();
     let xw = find_sub(&v, "export-wallet");
     let ts = find_flag(xw, "--timestamp");
-    assert_eq!(ts["default_value"], "now");
+    assert_eq!(ts["default_value"], "0");
     assert!(ts["default_value"].is_string());
 }
 

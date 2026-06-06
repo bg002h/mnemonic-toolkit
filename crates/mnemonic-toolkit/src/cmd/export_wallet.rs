@@ -207,8 +207,9 @@ pub struct ExportWalletArgs {
     #[arg(long, default_value = "0,999", value_parser = parse_range)]
     pub range: (u32, u32),
 
-    /// Bitcoin Core `timestamp` field. `now` (default) or unix seconds.
-    #[arg(long, default_value = "now", value_parser = parse_timestamp)]
+    /// Bitcoin Core `timestamp` field. `0` (default; rescan from genesis to
+    /// discover an existing key's funds), `now`, or unix seconds.
+    #[arg(long, default_value = "0", value_parser = parse_timestamp)]
     pub timestamp: TimestampArgValue,
 
     /// Bitcoin Core target version. 24 or 25 (default 25).

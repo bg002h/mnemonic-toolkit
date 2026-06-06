@@ -605,7 +605,10 @@ fn build_import_payload(
         wallet_name_is_non_default: false,
         taproot_internal_key: None,
         range: (0, 999),
-        timestamp: TimestampArg::Now,
+        // v0.47.3: genesis rescan (`0`) — the correct anchor for a recovery
+        // workflow; matches export-wallet's default. restore has no --timestamp
+        // flag. SPEC_timestamp_default_zero.
+        timestamp: TimestampArg::Unix(0),
         bitcoin_core_version: 25,
         bsms_form: BsmsForm::default(),
     };
@@ -658,7 +661,10 @@ fn build_multisig_import_payload(
         wallet_name_is_non_default: false,
         taproot_internal_key: None,
         range: (0, 999),
-        timestamp: TimestampArg::Now,
+        // v0.47.3: genesis rescan (`0`) — the correct anchor for a recovery
+        // workflow; matches export-wallet's default. restore has no --timestamp
+        // flag. SPEC_timestamp_default_zero.
+        timestamp: TimestampArg::Unix(0),
         bitcoin_core_version: 25,
         bsms_form: BsmsForm::default(),
     };

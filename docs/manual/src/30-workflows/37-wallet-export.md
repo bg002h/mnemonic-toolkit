@@ -326,10 +326,13 @@ wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya.../<0;1>/*,[28645006/48'/0'/0
   addresses. Increase if you've used more (e.g., a heavily-used
   exchange wallet). Bitcoin Core re-scans the chain for the
   imported range; large ranges cost time, not safety.
-- **Timestamp.** `--timestamp now` skips re-scan (assumes the wallet
-  has no historical transactions before "now"). Use a unix-seconds
-  value to re-scan from a specific epoch — e.g. `--timestamp 1700000000`
-  for late 2023.
+- **Timestamp.** The default is `--timestamp 0` (rescan from genesis),
+  so Bitcoin Core discovers an existing key's full transaction history —
+  the right choice when importing a wallet you may already have used.
+  Pass `--timestamp now` to skip the re-scan (assumes the wallet has no
+  historical transactions before "now"), or a unix-seconds value to
+  re-scan from a specific epoch — e.g. `--timestamp 1700000000` for late
+  2023. (The example above passes `now` explicitly to show the flag.)
 - **Output redirect.** Use `--output file.json` (or `> file.json`)
   to keep the JSON out of your shell history and ready for
   piped import.

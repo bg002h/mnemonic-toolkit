@@ -7,7 +7,7 @@
       0,
       999
     ],
-    "timestamp": "now"
+    "timestamp": 0
   },
   {
     "active": true,
@@ -17,6 +17,6 @@
       0,
       999
     ],
-    "timestamp": "now"
+    "timestamp": 0
   }
 ]
