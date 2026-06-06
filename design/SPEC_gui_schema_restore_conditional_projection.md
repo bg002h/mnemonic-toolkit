@@ -60,11 +60,12 @@ i.e. `--from` Required ⟺ `--md1` absent — **exactly** `Not(FlagPresent "--md
 ## 4. Not gated / no version bump (verified at recon)
 - **NOT `schema_mirror`:** that gate is flag-NAME parity only; `conditional_rules` is a separate wire-shape gated by the GUI's `gui_schema_conditional_drift`. No toolkit schema_mirror change.
 - **NO schema-version bump:** `tests/cli_gui_schema_conditional_rules.rs:54` pins `version == 5`; version bumps track STRUCTURAL changes (new Flag fields / Visibility variants / predicate kinds). Populating restore's existing `conditional_rules` array with existing `Not`/`FlagPresent`/`Required` grammar is not structural → stays **v5**. `every_subcommand_has_conditional_rules_array` (`:71`) still holds (restore's array goes `[] → [1 rule]`, still an array).
+- **(R0 I1) BUT the dispatcher arm-count guard DOES move.** `tests/cli_gui_schema_conditional_rules.rs:532` `dispatcher_arm_count_matches_pinned_constant` pins `const EXPECTED_ARM_COUNT: usize = 6` and counts `"<sub>" => <fn>_conditional_rules(),` arms by regex. The new `"restore" =>` arm takes the count `6 → 7`, so **Phase 2 MUST bump `EXPECTED_ARM_COUNT` `6 → 7` at `:533` in the same commit** (this guard exists precisely to force a conscious bump on a new dispatcher arm). This is NOT a "green-stays-green" change.
 - **No new error variant, no manual mirror, no sibling-codec change.**
 
 ## 5. Tests
 - **Phase-1 RED:** add a toolkit cell to `tests/cli_gui_schema_conditional_rules.rs` mirroring `bundle_template_required_unless_uses_not_any_of_predicate` (`:167`): run `gui-schema`, pull restore's `conditional_rules`, assert **exactly 1 rule** with `when.kind=="not"`, inner `when.predicate.kind=="flag_present"` + `flag=="--md1"`, and `effect.flag=="--from"` + `effect.visibility=="required"`. RED against the current binary (restore emits `[]` → `conditional_rules` empty → assertion fails), GREEN after §2.
-- **Green-stays-green:** `every_subcommand_has_conditional_rules_array`, `schema_version_pinned_at_current_cycle` (still v5), and all existing per-subcommand rule cells are unaffected (restore was the only `_`-arm subcommand being touched).
+- **Mostly green-stays-green, with ONE required guard bump (R0 I1):** `every_subcommand_has_conditional_rules_array`, `schema_version_pinned_at_current_cycle` (still v5), and all existing per-subcommand rule cells are unaffected. The ONE test that MUST be updated is `dispatcher_arm_count_matches_pinned_constant` (`:532`) — bump `EXPECTED_ARM_COUNT` `6 → 7` (`:533`) in the Phase-2 commit (a new dispatcher arm by design trips this guard).
 - Full workspace `cargo test --no-fail-fast` + clippy `--all-targets` GREEN.
 
 ## 6. Lockstep / scope
@@ -73,7 +74,7 @@ i.e. `--from` Required ⟺ `--md1` absent — **exactly** `Not(FlagPresent "--md
 
 ## 7. Phased plan
 - **Phase 1 (RED):** the restore-projection predicate-shape cell (asserts 1 rule, `not`/`flag_present`/`--md1` → `--from`/`required`). Verify RED-for-the-right-reason (current binary: restore `conditional_rules` empty).
-- **Phase 2 (GREEN):** §2 `restore_conditional_rules()` + the `build_subcommand_conditional_rules` arm. Workspace test + clippy GREEN. Per-phase opus review → persist.
+- **Phase 2 (GREEN):** §2 `restore_conditional_rules()` + the `build_subcommand_conditional_rules` arm **+ bump `EXPECTED_ARM_COUNT` `6 → 7` at `cli_gui_schema_conditional_rules.rs:533` (R0 I1, same commit)**. Workspace test + clippy GREEN. Per-phase opus review → persist.
 - **Phase 3 (release):** CHANGELOG `[0.46.2]`; version v0.46.1 → **v0.46.2** (Cargo.toml/lock + 2 READMEs + install.sh self-pin); annotate FOLLOWUP (toolkit half shipped, GUI half pending). Per-phase review.
 - **Phase 4 (ship):** clean tree → ff-merge → tag `mnemonic-toolkit-v0.46.2` → push → watch CI (rust, install/sibling-pin-check).
 
