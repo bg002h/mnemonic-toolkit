@@ -554,13 +554,13 @@ fn decode_emits_seed_version_info_line_segwit() {
 // v0.36.0 — refusal lock-test (spot-check finding)
 // ============================================================================
 //
-// `electrum-phrase` is entropy-extraction-ONLY: the toolkit deliberately does
-// NOT derive addresses from an Electrum native seed (Electrum uses a different
-// PBKDF2 salt + non-BIP-44 paths than BIP-39, so a BIP-39/BIP-44-style
-// derivation would silently produce WRONG addresses). The valid-edge guard
-// refuses `(electrum-phrase, address)`. This pins that honest refusal so a
-// future edge-table change can't accidentally enable a wrong derivation.
-// (See design/IMPLEMENTATION_PLAN_v0_36_0_verify_decode_address.md Phase 2.)
+// `convert` is not the edge for Electrum-native-seed addresses: Electrum uses
+// its own PBKDF2 salt + non-BIP-44 derivation, so it is NOT a single-format
+// `convert` conversion. As of v0.47.0 the operation IS supported by a different
+// command — `mnemonic addresses --from electrum-phrase=<seed>` (Electrum-
+// vector-tested in `cli_addresses_electrum.rs`). So `convert (electrum-phrase,
+// address)` is refused with a REDIRECT to that command (not the generic
+// one-way-barrier message). This pins the redirect.
 #[test]
 fn electrum_phrase_to_address_is_refused() {
     let out = Command::cargo_bin("mnemonic")
@@ -578,5 +578,9 @@ fn electrum_phrase_to_address_is_refused() {
     assert!(
         stderr.to_lowercase().contains("electrum-phrase"),
         "refusal stderr must name the electrum-phrase edge; got: {stderr:?}",
+    );
+    assert!(
+        stderr.contains("addresses --from electrum-phrase"),
+        "refusal must REDIRECT to `mnemonic addresses --from electrum-phrase`; got: {stderr:?}",
     );
 }

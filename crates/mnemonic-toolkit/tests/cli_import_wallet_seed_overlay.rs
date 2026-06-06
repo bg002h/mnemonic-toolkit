@@ -507,3 +507,71 @@ fn seed_overlay_ms1_decode_error_rejected_with_pointer_text() {
         "expected ms_codec decode-failure diagnostic; got: {stderr}"
     );
 }
+
+// ============================================================================
+// FOLLOWUP `import-wallet-ms1-argv-advisory-gap` — secret-in-argv advisory for
+// inline `--ms1` AND its twin `--slot @N.phrase` (per-leak-site, actual index).
+// ============================================================================
+
+#[test]
+fn ms1_inline_value_fires_argv_advisory() {
+    let blob = flagship_1of1_blob();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1", TREZOR_24_MS1, "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("secret material on argv (--ms1)"),
+        "inline --ms1 must fire the argv-leak advisory; got: {stderr:?}"
+    );
+}
+
+#[test]
+fn ms1_env_sentinel_no_argv_advisory() {
+    // `@env:VAR` is NOT an argv leak — the advisory must NOT fire (and the
+    // @env:-skip must read the RAW pre-rebind value, not the resolved secret).
+    let blob = flagship_1of1_blob();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1",
+            "@env:MNEMONIC_TEST_MS1_ENV", "--json",
+        ])
+        .env("MNEMONIC_TEST_MS1_ENV", TREZOR_24_MS1)
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("secret material on argv (--ms1)"),
+        "an @env: --ms1 must NOT fire the argv advisory; got: {stderr:?}"
+    );
+}
+
+#[test]
+fn slot_phrase_inline_fires_argv_advisory_with_actual_index() {
+    // `--slot @0.phrase=<inline>` is the same @env:-only argv-secret surface;
+    // advisory fires per-leak-site with the ACTUAL index. It fires at top-of-run
+    // BEFORE validation, so this asserts only the advisory (exit not asserted).
+    let blob = flagship_1of1_blob();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", "-", "--format", "bsms",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("secret material on argv (--slot @0.phrase=)"),
+        "inline --slot @0.phrase must fire the argv advisory with the actual index; got: {stderr:?}"
+    );
+}
