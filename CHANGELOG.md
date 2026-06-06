@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.47.1] — 2026-06-06
+
+**SemVer-PATCH — internal dedup: `synthesize_unified` delegates its card-emission to `synthesize_descriptor`.**
+
+- **Refactor.** `synthesize_unified` (template/multisig bundle path) and `synthesize_descriptor` (descriptor-mode path) shared a byte-identical back-half: from a `Descriptor` + cosigner list, compute the policy-id stub, emit per-slot `ms1` (Entr/Mnem by wire language), per-cosigner `mk1` (`Single`/`Multi`), and `md1`. Since `type CosignerKeyInfo = ResolvedSlot`, `synthesize_unified`'s `slots: &[ResolvedSlot]` IS `synthesize_descriptor`'s `cosigners: &[CosignerKeyInfo]` — so `synthesize_unified` now keeps only its front-half (validation + descriptor construction) and **delegates** the emission via `synthesize_descriptor(&descriptor, slots, …)`. Net **−69 LOC** in `synthesize.rs`; no user-visible behavior change.
+- **Behavior-preserving (guarded).** A new byte-exact characterization cell `synthesize_unified_multisig_distinct_cosigners_byte_exact` (2-of-2 `wsh-sortedmulti`, two distinct cosigners → distinct per-cosigner `mk1` csi) was captured from the pre-refactor binary and pins the n>1 `Multi` branch's full Bundle byte-shape (the path that previously had no byte-exact golden — the multisig self-check golden was dropped in v0.4.2). It + the frozen 16-cell single-sig golden + `make verify-examples` (20 transcripts) all stay GREEN through the delegation.
+- **No CLI-surface change** — no flag/value/subcommand → no GUI `schema_mirror`, no manual mirror, no sibling-codec change; no new error variant. The ~9 `synthesize_*` call sites are signature-stable.
+- **Tests.** Full toolkit suite + clippy `--all-targets` + `make -C docs/manual verify-examples` GREEN. Resolves `synthesize-descriptor-deduplicate-with-unified`. Audit trail: `design/SPEC_synthesize_descriptor_dedup.md` + `design/agent-reports/synthesize-descriptor-dedup-r0-round{1,2}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.47.0] — 2026-06-06
 
 **SemVer-MINOR — `mnemonic addresses --from electrum-phrase=`: derive an Electrum native seed's own addresses.**
