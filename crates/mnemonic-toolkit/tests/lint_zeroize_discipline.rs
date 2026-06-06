@@ -236,6 +236,12 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/slip39.rs",
         evidence: &["zeroize::Zeroizing::new"],
     },
+    // ---- cmd/xpub_search/passphrase_search.rs (v0.46.0 candidate scan) ----
+    ZeroizeRow {
+        label: "passphrase-candidates-file scan wraps each candidate line in Zeroizing<String>",
+        source_file: "src/cmd/xpub_search/passphrase_search.rs",
+        evidence: &["Zeroizing::new(raw)"],
+    },
 ];
 
 fn crate_root() -> &'static Path {

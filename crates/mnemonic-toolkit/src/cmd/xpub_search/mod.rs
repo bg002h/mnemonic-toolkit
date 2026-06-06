@@ -35,6 +35,7 @@ pub mod address_search;
 pub mod candidate_paths;
 pub mod descriptor_intake;
 pub mod passphrase_of_xpub;
+pub mod passphrase_search;
 pub mod path_of_xpub;
 pub mod path_search;
 pub mod seed_intake;

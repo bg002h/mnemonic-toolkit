@@ -39,6 +39,12 @@ use serde::Serialize;
 use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
+// Exactly-one passphrase source (R0-r2 M-2): replaces the prior pairwise
+// `conflicts_with`/`required_unless_present` on `--passphrase`/`--passphrase-stdin`.
+#[command(group(clap::ArgGroup::new("passphrase_source")
+    .required(true)
+    .multiple(false)
+    .args(["passphrase", "passphrase_stdin", "passphrase_candidates_file"])))]
 pub struct PassphraseOfXpubArgs {
     /// Master BIP-39 phrase (inline). Emits an argv-leakage advisory; prefer
     /// --phrase-stdin for sensitive input.
@@ -72,24 +78,26 @@ pub struct PassphraseOfXpubArgs {
     )]
     pub ms1_stdin: bool,
 
-    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory.
-    /// **Mandatory** in passphrase-of-xpub (one of --passphrase /
-    /// --passphrase-stdin must be supplied; see plan §6.1).
-    #[arg(
-        long,
-        conflicts_with = "passphrase_stdin",
-        required_unless_present = "passphrase_stdin",
-    )]
+    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory. One of the
+    /// `passphrase_source` group (exactly one required; see the struct group).
+    #[arg(long)]
     pub passphrase: Option<String>,
 
     /// Read BIP-39 passphrase from stdin (NULL-byte-preserving; single
-    /// trailing newline stripped). **Mandatory** in passphrase-of-xpub.
-    #[arg(
-        long,
-        conflicts_with = "passphrase",
-        required_unless_present = "passphrase",
-    )]
+    /// trailing newline stripped). One of the `passphrase_source` group.
+    #[arg(long)]
     pub passphrase_stdin: bool,
+
+    /// File of candidate BIP-39 passphrases, ONE per line (no argv exposure).
+    /// Each non-blank line is a literal candidate (the trailing newline — and a
+    /// CR before it — is stripped; NO other whitespace trimming, since a
+    /// passphrase is an exact byte string). Blank lines are skipped. Derives
+    /// the master seed per candidate and stops at the first that produces
+    /// --target-xpub, reporting the matching FILE LINE. The file is SENSITIVE
+    /// (holds secret candidates); it is a PATH (non-secret) by classification.
+    /// One of the `passphrase_source` group.
+    #[arg(long, value_name = "PATH")]
+    pub passphrase_candidates_file: Option<std::path::PathBuf>,
 
     /// Target xpub. Accepts any SLIP-0132 prefix (xpub/tpub/ypub/Ypub/zpub/
     /// Zpub/upub/Upub/vpub/Vpub) or an mk1 bech32 card carrying an xpub.
@@ -185,6 +193,14 @@ pub enum PassphraseOfXpubResult {
         target_xpub_variant: Option<&'static str>,
         /// Count of candidates exhausted (paths × templates × add-paths).
         searched_count: usize,
+        /// `--passphrase-candidates-file` scan: 1-indexed FILE line of the
+        /// matching candidate. Absent in single-`--passphrase` mode.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        matched_candidate_line: Option<usize>,
+        /// `--passphrase-candidates-file` scan: the matching passphrase
+        /// (machine-consumption; absent in single-`--passphrase` mode).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        matched_passphrase: Option<String>,
     },
     /// No match: envelope-scope fields preserved; search fields absent.
     NoMatch {
@@ -194,6 +210,10 @@ pub enum PassphraseOfXpubResult {
         target_xpub_variant: Option<&'static str>,
         /// Count of candidates exhausted.
         searched_count: usize,
+        /// `--passphrase-candidates-file` scan: #non-blank candidate lines
+        /// tried. Absent in single-`--passphrase` mode.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        candidates_tried: Option<usize>,
     },
 }
 
@@ -213,6 +233,8 @@ pub(super) fn build_passphrase_match(
         target_xpub_canonical,
         target_xpub_variant,
         searched_count,
+        matched_candidate_line: None,
+        matched_passphrase: None,
     }
 }
 
@@ -226,6 +248,7 @@ pub(super) fn build_passphrase_no_match(
         target_xpub_canonical,
         target_xpub_variant,
         searched_count,
+        candidates_tried: None,
     }
 }
 
@@ -250,6 +273,13 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
 
     // 1) Resolve seed (mutex + parse + ms1 auto-fire short-circuit).
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;
+
+    // 1b) (R0-r1 I1) `--passphrase-candidates-file` scan dispatch — BEFORE the
+    //     single-passphrase resolve below, which BadInputs when neither
+    //     `--passphrase` nor `--passphrase-stdin` is set (= candidates mode).
+    if let Some(path) = &args.passphrase_candidates_file {
+        return super::passphrase_search::run_candidate_scan(args, &mnemonic, path, stdout);
+    }
 
     // 2) Resolve mandatory passphrase. Clap enforces "exactly one of
     //    --passphrase / --passphrase-stdin"; we still defensively handle the

@@ -329,6 +329,13 @@ pub enum ToolkitError {
         mode: &'static str,
         searched: usize,
     },
+    /// `xpub-search passphrase-of-xpub --passphrase-candidates-file`: no
+    /// candidate passphrase in the file produced the target xpub. Distinct
+    /// from `XpubSearchNoMatch` so the message advises "add more candidates",
+    /// not "widen --max-account". `candidates_tried` = #non-blank lines tried.
+    XpubSearchPassphraseCandidatesExhausted {
+        candidates_tried: usize,
+    },
 }
 
 /// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
@@ -531,6 +538,7 @@ impl ToolkitError {
             ToolkitError::UnknownHrp { .. } => 2,
             ToolkitError::VerifyMessage(_) => 1,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 4,
         }
     }
 
@@ -592,6 +600,9 @@ impl ToolkitError {
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::VerifyMessage(_) => "VerifyMessage",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => {
+                "XpubSearchPassphraseCandidatesExhausted"
+            }
         }
     }
 
@@ -787,6 +798,19 @@ impl ToolkitError {
                  widen the range with --max-account / --number-of-accounts, or supply \
                  additional templates via --add-path"
             ),
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried } => {
+                if *candidates_tried == 0 {
+                    "no candidates in --passphrase-candidates-file (all lines blank); \
+                     supply one passphrase candidate per line"
+                        .to_string()
+                } else {
+                    format!(
+                        "no candidate in --passphrase-candidates-file produced the target \
+                         xpub ({candidates_tried} candidate(s) tried); verify the seed and \
+                         --target-xpub, or add more candidates"
+                    )
+                }
+            }
         }
     }
 
