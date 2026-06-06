@@ -353,11 +353,14 @@ fn resolve_indices(count: Option<u32>, range: Option<&str>) -> Result<Vec<u32>, 
 }
 
 fn source_label(node: NodeType) -> &'static str {
+    // The `addresses`-supported sources (every other NodeType is refused before
+    // `emit_json` is reached, so the `_` arm is defensive/unreachable).
     match node {
         NodeType::Xpub => "xpub",
         NodeType::Phrase => "phrase",
         NodeType::Entropy => "entropy",
         NodeType::Seedqr => "seedqr",
+        NodeType::ElectrumPhrase => "electrum-phrase",
         _ => "unknown",
     }
 }

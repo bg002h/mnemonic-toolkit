@@ -183,4 +183,12 @@ fn electrum_watch_only_no_xpriv() {
         !all.contains("xprv") && !all.contains("zprv") && !all.contains("tprv"),
         "no private key material may leak:\n{all}"
     );
+    // Wire-shape: the `--json` envelope must label the source correctly (NOT
+    // the `"unknown"` fall-through). Impl-review I1.
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("--json is valid JSON");
+    assert_eq!(
+        v["source"], "electrum-phrase",
+        "json source field:\n{}",
+        stdout(&o)
+    );
 }
