@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.46.2] — 2026-06-05
+
+**SemVer-PATCH — `gui-schema`: project restore's `--from required_unless_present="md1"` conditional rule.**
+
+- **`gui-schema` `conditional_rules` for `restore`.** `restore`'s `--from` is `required_unless_present = "md1"` (single-sig restore needs a seed source; multisig-cosigner restore via `--md1` makes it optional), but the `gui-schema` `conditional_rules` projection had no `restore` arm → emitted `conditional_rules: []`. The downstream GUI (`mnemonic-gui`) therefore modeled the at-least-one constraint as a **hand-authored, ungated** rule. This release adds a `restore_conditional_rules()` builder emitting one rule — `when: not(flag_present "--md1") → effect: {flag: "--from", visibility: required}` — mirroring `bundle`'s existing `--template` Required-unless precedent. Now `mnemonic gui-schema` projects it, so the GUI's `conditional::restore` becomes **drift-gatable** by `mnemonic-gui`'s `gui_schema_conditional_drift` on its next toolkit-pin bump.
+- **No CLI-surface change.** `conditional_rules` is gated by the GUI's drift test, NOT `schema_mirror` (flag-NAME parity only). No clap flag/value/subcommand change → no `schema_mirror`, no manual mirror, no sibling-codec change. No `gui-schema` JSON **version** bump (the rule reuses the existing `not`/`flag_present`/`required` grammar — stays v5).
+- **Cross-repo follow-on.** This is the **toolkit half** of FOLLOWUP `gui-schema-restore-required-unless-md1-projection`. The GUI consumption half (bump pin → the drift gate enforces the rule + add `("restore", 1)` to `SUBCOMMAND_FLOORS`) is a downstream `mnemonic-gui` cycle; the FOLLOWUP stays open until that GUI tag exists.
+- **Tests.** New `cli_gui_schema_conditional_rules.rs` cell `restore_from_required_unless_md1_uses_not_flag_present_predicate` (exactly 1 rule; `not`/`flag_present`/`--md1` → `--from`/`required`). `dispatcher_arm_count_matches_pinned_constant` bumped `6 → 7` (a new dispatcher arm by design trips that guard). Full toolkit suite + clippy `--all-targets` GREEN. Audit trail: `design/SPEC_gui_schema_restore_conditional_projection.md` + `design/agent-reports/gui-schema-restore-conditional-projection-r0-round{1,2}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.46.1] — 2026-06-05
 
 **SemVer-PATCH — internal dedup: consolidate the 4-way wallet-format emit dispatch into one `emit_payload` helper.**
