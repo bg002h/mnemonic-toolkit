@@ -22,8 +22,14 @@
 # Each .cmd runs in a fresh `mktemp -d` cwd so recipe side-effects
 # (intermediate `> envelope.json`, etc.) don't leak across transcripts.
 #
-# The cli-help/ subdir is excluded — it holds `--help` text snapshots,
-# not transcripts (§2.1 C2 fold).
+# The cli-help/ snapshot dir was REMOVED (FOLLOWUP
+# `cli-help-golden-broad-staleness-not-gated`) — those were stale,
+# unrendered v0.8.0-era `--help` captures; live `--help` is authoritative
+# and flag-NAME parity is gated by the flag-coverage lint. The
+# `-not -path '*/cli-help/*'` predicate below is kept as a guard: if a
+# `cli-help/` dir is ever re-introduced with `.cmd` files but not wired as
+# a real `.cmd`→`.out` transcript pair, this keeps the runner from
+# mis-discovering them.
 #
 # Called from the Makefile as `make verify-examples`. v0.1 of the manual
 # may have zero transcripts; the script must therefore exit 0 cleanly when
@@ -62,8 +68,9 @@ if [ ! -d "$TRANSCRIPTS" ]; then
   exit 0
 fi
 
-# Recursive .cmd discovery; exclude cli-help/ subdir (--help snapshots,
-# not transcripts).
+# Recursive .cmd discovery. The `-not -path '*/cli-help/*'` predicate is a
+# re-introduction guard — the cli-help/ snapshot dir was removed (see the
+# header comment + FOLLOWUP `cli-help-golden-broad-staleness-not-gated`).
 mapfile -t cmd_files < <(find "$TRANSCRIPTS" -type f -name '*.cmd' -not -path '*/cli-help/*' | sort)
 
 fail=0

@@ -110,8 +110,9 @@ on its own is necessary but not sufficient.
 
 1. **Re-read the chapter.** Most failures trace to a small flag-set
    discrepancy between the example and the actual command.
-2. **Run `--help` directly.** The cli-help snapshots in the manual
-   match toolkit v0.8.0; later versions may have added flags.
+2. **Run `--help` directly.** Each CLI's `--help` (`mnemonic` /
+   `md` / `ms` / `mk`, and any subcommand) is authoritative for the
+   installed version.
 3. **Run `verify-bundle` on the engraved cards.** It is the single
    most useful diagnostic — the BCH error-position diagnostic
    names the failing card and the character offset.
