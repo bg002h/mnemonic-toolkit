@@ -3339,7 +3339,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 ### `gui-decode-address-verify-message-schema-mirror` — GUI SubcommandSchemas for the two v0.36.0 subcommands
 - **Where:** `mnemonic-gui/src/schema/mnemonic.rs`.
 - **What:** v0.36.0 adds `decode-address` + `verify-message` (net-new clap surface). The GUI schema mirror must add both `SubcommandSchema`s (no secret flags → no secret-projection delta) + bump the toolkit pin. Shipped in lockstep as `mnemonic-gui` MINOR (Phase 5). Companion record; closed when the paired GUI release ships.
-- **Status:** `open`
+- **Status:** `resolved` mnemonic-gui-**v0.21.0** (`2a2111d`, 2026-05-23 "schema-mirror lockstep for toolkit decode-address + verify-message"). The GUI schema (`mnemonic-gui/src/schema/mnemonic.rs`) carries both `SubcommandSchema`s — `decode-address` (`DECODE_ADDRESS_FLAGS` + positionals) + `verify-message` (`VERIFY_MESSAGE_FLAGS` + the `--format` value-enum). The paired GUI release shipped at the time; this toolkit-side companion entry was simply never flipped (the forgot-to-flip-Status class). Confirmed at 2026-06-06 cycle-prep recon (GUI `4b83a9f`, pin v0.46.2 ≫ v0.36.0).
 - **Tier:** `v0.36+`
 - **Tags:** none
 
