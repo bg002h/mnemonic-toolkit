@@ -575,3 +575,28 @@ fn slot_phrase_inline_fires_argv_advisory_with_actual_index() {
         "inline --slot @0.phrase must fire the argv advisory with the actual index; got: {stderr:?}"
     );
 }
+
+#[test]
+fn slot_phrase_env_sentinel_no_argv_advisory() {
+    // `--slot @0.phrase=@env:VAR` is NOT an argv leak — the advisory must NOT
+    // fire (the @env:-skip reads the RAW pre-rebind slot value). Asserts only
+    // the advisory absence (derivation may mismatch the blob; not asserted).
+    let blob = flagship_1of1_blob();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", "-", "--format", "bsms",
+            "--slot", "@0.phrase=@env:MNEMONIC_TEST_SLOT_PHRASE", "--json",
+        ])
+        .env(
+            "MNEMONIC_TEST_SLOT_PHRASE",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .write_stdin(blob)
+        .assert();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("secret material on argv (--slot @0.phrase="),
+        "an @env: --slot @0.phrase must NOT fire the argv advisory; got: {stderr:?}"
+    );
+}
