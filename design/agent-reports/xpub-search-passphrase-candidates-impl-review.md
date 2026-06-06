@@ -35,4 +35,5 @@
 - **I1 — FOLDED:** `run_candidate_scan` now takes `stderr: &mut E` and emits `note: {path} holds candidate passphrases — treat as sensitive` before the read loop (call site threads `stderr`). Runtime-verified: advisory on stderr, exit 0. New test Cell 12 locks it (`stderr contains "treat as sensitive"`).
 - **M4 — FOLDED:** new Cell 11 (missing file → exit 1).
 - **M1/M2/M3 — FOLDED:** manual gains the candidate-scan JSON sample, a candidate-file worked example, and the exit-codes (candidate-exhaustion exit 4) + refusals (3-way group) table updates. `make audit` GREEN.
-- Affected tests (candidate 12, cli_help 4, passphrase-of-xpub 10, zeroize 2) + make audit GREEN. Full suite re-run + a confirmation re-dispatch follow.
+- Affected tests (candidate 12, cli_help 4, passphrase-of-xpub 10, zeroize 2) + make audit + full toolkit suite + clippy GREEN.
+- **Confirmation re-review (opus, fold `f6d38ef`): 0 Critical / 0 Important — GREEN.** I1 fold verified byte-exact to SPEC §2:31 (advisory first statement, stderr-only, path-only — no passphrase leak); no drift to match/miss/exit paths or Cells 1-10; M1/M2/M3 manual folds accurate; whole-cycle coherent. One pre-existing non-blocking Minor (exit-1 table row omits "file not found", which Cell 11 now pins). **Cleared for the v0.46.0 tag.**
