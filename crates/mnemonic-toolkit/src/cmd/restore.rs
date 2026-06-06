@@ -624,7 +624,7 @@ fn build_import_payload(
 
 /// Build the importable wallet payload for a MULTISIG `restore --md1 --format`
 /// (FOLLOWUP `restore-multisig-format-payloads`). Mirrors `export-wallet`'s
-/// multisig `EmitInputs` (`export_wallet.rs:483-496`) using the reconstructed
+/// `EmitInputs` (`export_wallet.rs:560-577`) using the reconstructed
 /// (`template`, `slots`, `k`, `descriptor`); the dispatch goes through the
 /// shared `emit_payload` helper (FOLLOWUP `restore-emit-dispatch-3way-dedup`,
 /// the former 4-way dedup). `threshold_user_supplied: true` is LOAD-BEARING:
