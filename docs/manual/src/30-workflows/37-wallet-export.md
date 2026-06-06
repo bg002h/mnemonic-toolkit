@@ -24,8 +24,9 @@ flowchart LR
 
 ## Bitcoin Core (default format)
 
-Bitcoin Core's `importdescriptors` RPC accepts a JSON array; the
-toolkit's default output matches:
+Bitcoin Core's `importdescriptors` RPC accepts a JSON array; export-wallet
+emits exactly that shape (the example below passes `--timestamp now`
+explicitly; the default is `0` — see the Timestamp note under Tips):
 
 ```sh
 mnemonic export-wallet \
