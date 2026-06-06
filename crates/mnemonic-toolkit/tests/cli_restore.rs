@@ -596,6 +596,45 @@ fn restore_format_without_template_exit_2() {
 }
 
 #[test]
+fn restore_format_coldcard_multisig_single_sig_refused_exit_1() {
+    // `--format coldcard-multisig` on a single-sig `--template` is refused. After
+    // the 4-way emit-dispatch dedup (FOLLOWUP `restore-emit-dispatch-3way-dedup`),
+    // single-sig restore routes through the shared `emit_payload` helper, so the
+    // refusal is the UNIFIED 6-variant coldcard-multisig message
+    // ("requires a multisig --template (wsh-sortedmulti, …)"), not the old
+    // restore-specific "requires a multisig wallet; restore is single-sig" string.
+    //
+    // NOTE: exit is 1 (BadInput) BOTH before and after the dedup — the message
+    // substring, NOT the exit code, is the discriminator. So this cell is RED
+    // against the pre-dedup binary purely on the `requires a multisig --template`
+    // assertion.
+    let out = bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--format",
+            "coldcard-multisig",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "coldcard-multisig on a single-sig template = BadInput exit 1"
+    );
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("requires a multisig --template"),
+        "unified coldcard-multisig refusal on stderr:\n{stderr}"
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.is_empty(), "no payload on a refusal:\n{stdout}");
+}
+
+#[test]
 fn restore_format_mismatch_no_allow_exit_4_no_payload() {
     // The verify gate runs BEFORE the payload: a mismatch without --allow-mismatch
     // → exit 4 and NO payload on stdout.
