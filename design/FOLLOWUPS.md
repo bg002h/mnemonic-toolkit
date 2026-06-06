@@ -319,8 +319,19 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/xpub_search/passphrase_of_xpub.rs` + new `passphrase_search.rs` for the iterator/streaming.
 - **What:** Three modes to consider: (a) `--passphrases-file <path>` newline-delimited candidates; (b) `--passphrases-stdin` streamed candidates; (c) generated wordlists (e.g. EFF Long, common passphrases). Per-candidate stderr-advisory budget; rate-limit / progress reporting; deterministic iteration order; abort-on-first-match. Engineering surface includes resource-bounding (memory + time) and a clear "give-up" exit code.
 - **Why deferred:** scope discipline at C4; the single-passphrase verification covers the common-case forensic question ("does X passphrase produce this xpub?"). Brute-force needs a careful UX + rate-limit story to avoid foot-guns.
-- **Status:** open
+- **Status:** `resolved` mnemonic-toolkit-**v0.46.0** — mode **(a) file only** (`--passphrase-candidates-file <PATH>`, one candidate per line, no argv). New `passphrase_search.rs` dispatches BEFORE the inline single-passphrase resolve, streams the file (each candidate `Zeroizing<String>`), loops `derive_master_seed`→`match_xpub_against_paths`, aborts on first match. Reports the matching FILE LINE to stdout (passphrase only in `--json`); exit 4 `XpubSearchPassphraseCandidatesExhausted` with `candidates_tried` on miss. 3-way passphrase-source `ArgGroup`. **Modes (b) stdin-candidates and (c) generated wordlists were INTENTIONALLY NOT BUILT** (user decision 2026-06-05): (b) dropped to avoid `--passphrase-candidates-stdin`-vs-`--phrase-stdin` contention; (c) is keyspace GENERATION = btcrecover's job (the `--help` footer was refined to keep pointing there for generation while owning candidate-list verification). The `--rate-limit`/`--progress` surface is unneeded for a finite user-supplied list. Audit trail: `design/SPEC_xpub_search_passphrase_candidates_file.md` + `design/agent-reports/xpub-search-passphrase-candidates-r0-r{1,2,3,4}-review.md` (R0 GREEN after 4 rounds).
 - **Tier:** `v0.27`
+- **Spawned FOLLOWUPs:** `gui-xpub-search-passphrase-candidates-file-flag-pending-pin-bump`.
+
+### `gui-xpub-search-passphrase-candidates-file-flag-pending-pin-bump` — mnemonic-gui `XPUB_SEARCH_PASSPHRASE_OF_XPUB_FLAGS` must add `--passphrase-candidates-file`, blocked on the GUI bumping its toolkit pin to ≥ v0.46.0
+
+- **Surfaced:** 2026-06-05, candidate-file passphrase-scan cycle (toolkit v0.46.0) — the paired GUI schema-mirror half.
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` `XPUB_SEARCH_PASSPHRASE_OF_XPUB_FLAGS` (`~:2681`): add a `FlagSchema` for `--passphrase-candidates-file` (`FlagKind::Path { stdio_sentinel: false }`, `secret: false` — a PATH, not a secret value; copy the `--decrypt-password-file` entry shape).
+- **What:** v0.46.0 added `--passphrase-candidates-file` to the toolkit's `passphrase-of-xpub` clap surface. The paired GUI `schema_mirror` update is unmergeable until the GUI bumps its toolkit pin to ≥ v0.46.0 (`schema_mirror` runs `gui-schema` against the PINNED binary; listing the flag against an older pinned binary FAILS the "schema-ahead-of-pins" gate). When the GUI next bumps its toolkit pin, land the `XPUB_SEARCH_PASSPHRASE_OF_XPUB_FLAGS` delta in the same PR. Mirrors the resolved precedents `gui-restore-multisig-flags-pending-pin-bump` / `gui-ms1-slot-subkey-pending-pin-bump`.
+- **Why deferred:** Cross-repo; the GUI toolkit-pin bump is its own GUI cycle (a `schema_mirror`-ahead-of-pin change cannot ship in isolation).
+- **Status:** `open`
+- **Tier:** `cross-repo`
+- **Tags:** `xpub-search` `passphrase` `gui` `schema-mirror`
 
 ### `xpub-search-manual-gui-chapters` — `mnemonic-gui` user manual chapters for the 4 new `xpub-search` modes
 

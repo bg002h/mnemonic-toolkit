@@ -20,11 +20,15 @@ reference tracks the current release.
 
 > **Recovering a forgotten BIP-39 passphrase.** If you have your seed
 > words (entropy) but not the BIP-39 passphrase (the optional "25th
-> word"), `mnemonic` cannot brute-force it. A BIP-39 passphrase has no
-> internal verifier — every candidate yields a valid-looking wallet — so
-> correctness is only definable against a value you already know (an
-> address, xpub, or master-fingerprint), which is outside this tool's
-> scope. An external open-source tool does exactly this:
+> word"): a BIP-39 passphrase has no internal verifier — every candidate
+> yields a valid-looking wallet — so correctness is only definable against
+> a value you already know (an address, xpub, or master-fingerprint). If
+> you have a **list of likely passphrases**, `mnemonic xpub-search
+> passphrase-of-xpub --passphrase-candidates-file <file> --target-xpub <a
+> known xpub>` (see [that mode](#mnemonic-xpub-search-passphrase-of-xpub))
+> tests each candidate against that known value. To **generate or mutate a
+> keyspace** (wordlists, masks, typo models), `mnemonic` does not — an
+> external open-source tool does:
 > [**btcrecover**](https://github.com/3rdIteration/btcrecover) (maintained
 > fork; [original](https://github.com/gurnec/btcrecover)) searches
 > passphrase candidates and confirms each by deriving an address / xpub /
@@ -3457,14 +3461,16 @@ P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
 
 Given a seed (BIP-39 phrase OR ms1 card) **plus a specific passphrase** + a target xpub (or mk1 card carrying an xpub), verify that this passphrase produces the xpub under the seed at one of the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range. Same candidate-set + first-match-wins primitive as `path-of-xpub`; the semantic difference is that this mode answers **"does THIS passphrase produce the xpub?"** rather than **"what path produced this xpub?"**.
 
-The passphrase group is **mandatory**: exactly one of `--passphrase` / `--passphrase-stdin` must be supplied. Omitting both is a clap arg-parse error (exit 64). MVP scope is single-passphrase verification only; file-based / streamed / generated candidate sets are deferred to v0.27+ via FOLLOWUP `xpub-search-passphrase-bruteforce`.
+The passphrase source is **mandatory**: exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file` must be supplied. Omitting all three is a clap arg-parse error (exit 64).
+
+**Candidate-list scan (`--passphrase-candidates-file`, v0.46.0).** Instead of one passphrase, supply a text file with **one candidate passphrase per line** (no argv exposure). The command derives the master seed per candidate and stops at the **first** that produces `--target-xpub`, reporting the matching **file line number** to stdout (the matching passphrase appears only under `--json`). Blank lines are skipped; each non-blank line is a literal candidate (only the trailing newline/CR is stripped — no other trimming, since a passphrase is an exact byte string). No match ⇒ exit 4 with the count of candidates tried. This is bounded **verification of a list you supply** — for keyspace *generation* (wordlists, masks, typo models) use [`btcrecover`](https://github.com/3rdIteration/btcrecover) (see the passphrase-recovery note at the top of this chapter). The candidate file is sensitive (holds secret candidates); it is classified as a path (non-secret) flag.
 
 #### Synopsis
 
 ```sh
 mnemonic xpub-search passphrase-of-xpub \
     {--phrase <BIP39> | --phrase-stdin | --ms1 <MS1> | --ms1-stdin | <positional MS1>} \
-    {--passphrase <P> | --passphrase-stdin} \
+    {--passphrase <P> | --passphrase-stdin | --passphrase-candidates-file <PATH>} \
     --target-xpub <XPUB-OR-MK1> \
     [--language <LANG>] [--network <NET>] \
     [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
@@ -3481,8 +3487,9 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
 | `--ms1-stdin` | read ms1 card from stdin (single chunk) |
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
-| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory. **Mandatory** (mutex with `--passphrase-stdin`) |
-| `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). **Mandatory** (mutex with `--passphrase`) |
+| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory. One of the mandatory passphrase-source group |
+| `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). One of the mandatory passphrase-source group |
+| `--passphrase-candidates-file <PATH>` | scan a text file of candidate passphrases (one per line, no argv exposure); first match wins, reports the file line (passphrase only in `--json`); exit 4 if none match. One of the mandatory passphrase-source group |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
 | `--language <LANGUAGE>` | BIP-39 wordlist (default `english`) |
 | `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |

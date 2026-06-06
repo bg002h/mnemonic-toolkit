@@ -51,11 +51,14 @@ use std::process::ExitCode;
 const PASSPHRASE_RECOVERY_HELP: &str = "\
 RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
   If you have your seed words (entropy) but not the BIP-39 passphrase
-  (the optional \"25th word\"), `mnemonic` cannot brute-force it. An
-  external open-source tool can: btcrecover searches passphrase
-  candidates and confirms each by deriving an address / xpub /
-  master-fingerprint at common default paths and matching a value you
-  already know.
+  (the optional \"25th word\"): if you have a LIST of likely passphrases,
+  `mnemonic xpub-search passphrase-of-xpub --passphrase-candidates-file
+  <file> --target-xpub <a known xpub>` tests each candidate against a
+  value you already know. To GENERATE or mutate a keyspace (wordlists,
+  masks, typo models), `mnemonic` does not — an external open-source tool
+  does: btcrecover searches passphrase candidates and confirms each by
+  deriving an address / xpub / master-fingerprint at common default paths
+  and matching a value you already know.
     btcrecover (maintained):  https://github.com/3rdIteration/btcrecover
     original:                 https://github.com/gurnec/btcrecover
   Pointer current as of 2026-05-25. Run untrusted recovery tools

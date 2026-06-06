@@ -52,6 +52,7 @@
     "HMAC",
     "keypairs",
     "keypath",
+    "keyspace",
     "importdescriptors",
     "lockstep",
     "memorised",
