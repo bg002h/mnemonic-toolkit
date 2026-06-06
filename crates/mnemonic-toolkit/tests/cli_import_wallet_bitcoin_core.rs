@@ -151,6 +151,29 @@ fn core_single_descriptor_wpkh_happy_path() {
 }
 
 // ============================================================================
+// descriptor-origin-extraction-dedup — h-form hardened origin accepted
+// ============================================================================
+
+#[test]
+fn core_single_descriptor_hform_hardened_path_accepted() {
+    // FOLLOWUP descriptor-origin-extraction-dedup + import-parser-hform-origin-
+    // tolerance: an `h`-form hardened origin (`84h/0h/0h`, as some Core/Sparrow
+    // exports emit) must parse identically to the apostrophe form. Before the
+    // dedup the bitcoin-core parser's apostrophe-only `origin_capture_regex`
+    // refused it ("no origin annotations in descriptor") even though the upstream
+    // placeholder-build + descriptor-parse already accept h-form; routing
+    // `build_slot_fields` through the canonical h-form-widened `key_regex` fixes
+    // it. RED against the pre-dedup binary, GREEN after.
+    let desc = format!("wpkh([{MAINNET_FP_A}/84h/0h/0h]{MAINNET_XPUB_A}/<0;1>/*)");
+    let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
+    let out = run_core_stdin(&blob).success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
+    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
+}
+
+// ============================================================================
 // §3.3 — core_multi_descriptor_emit_all
 // ============================================================================
 
