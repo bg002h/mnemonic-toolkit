@@ -36,9 +36,7 @@ use crate::network::CliNetwork;
 use crate::synthesize::ResolvedSlot;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
-    self, build_descriptor_string, Bip388Emitter, BitcoinCoreEmitter, BsmsEmitter, BsmsForm,
-    CheckedDescriptor, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter, EmitInputs,
-    GreenEmitter, JadeEmitter, SparrowEmitter, SpecterEmitter, TimestampArg, WalletFormatEmitter,
+    self, build_descriptor_string, BsmsForm, CheckedDescriptor, EmitInputs, TimestampArg,
 };
 
 /// The four single-sig templates restore emits when no `--template` is given.
@@ -612,63 +610,28 @@ fn build_import_payload(
         bsms_form: BsmsForm::default(),
     };
 
-    // P2 R0 I1: mirror the canonical `export-wallet` SPEC §4 missing-info
-    // channel (export_wallet.rs:506-525) — run the selected emitter's
-    // `collect_missing` FIRST and short-circuit to the same deterministic
-    // `ToolkitError::ExportWalletMissingFields` refusal before any `emit()`.
-    // restore had previously mirrored only the `emit()` half, so e.g.
-    // `--format specter` emitted a placeholder-name wallet (exit 0) where
-    // `export-wallet --format specter` (no `--wallet-name`) refuses. Do NOT
-    // invent a new error — reuse the export-wallet variant verbatim so the
-    // exit code + missing-fields message are byte-identical.
-    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
-        match format {
-            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
-            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
-            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
-            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
-            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
-            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
-            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
-            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
-            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
-            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
-            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
-        };
-    if !missing.is_empty() {
-        return Err(ToolkitError::ExportWalletMissingFields {
-            format: format_name,
-            missing,
-        });
-    }
-
-    match format {
-        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
-        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
-        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
-        CliExportFormat::ColdcardMultisig => Err(bad(
-            "--format coldcard-multisig requires a multisig wallet; restore is single-sig — use --format coldcard",
-        )),
-        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
-        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
-        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
-        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
-        CliExportFormat::Green => GreenEmitter::emit(&inputs),
-        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
-        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
-    }
+    // Shared 4-way dispatch (collect_missing-first → emit) via the canonical
+    // `emit_payload` helper (FOLLOWUP `restore-emit-dispatch-3way-dedup`; recon
+    // corrected "3-way" → "4-way"). This reuses the export-wallet missing-info
+    // channel verbatim (so e.g. `--format specter` refuses identically) AND
+    // unifies the single-sig `coldcard-multisig` refusal: it now routes through
+    // the helper's 6-variant template `_ =>` arm ("requires a multisig
+    // --template …") instead of the old restore-specific "requires a multisig
+    // wallet" string — exit 1 (BadInput) either way (the upfront single-sig
+    // gate at the top of `run` already rejects multisig `--template`).
+    crate::cmd::export_wallet::emit_payload(&inputs, format)
 }
 
 /// Build the importable wallet payload for a MULTISIG `restore --md1 --format`
 /// (FOLLOWUP `restore-multisig-format-payloads`). Mirrors `export-wallet`'s
 /// multisig `EmitInputs` (`export_wallet.rs:483-496`) using the reconstructed
-/// (`template`, `slots`, `k`, `descriptor`); the dispatch below is byte-
-/// identical to `export_wallet.rs:506-560` (3rd copy — see FOLLOWUP
-/// `restore-emit-dispatch-3way-dedup`). `threshold_user_supplied: true` is
-/// LOAD-BEARING: `k` from the md1 is authoritative, and `sparrow.rs`
-/// `collect_missing` refuses a multisig template (`MissingField::Threshold`)
-/// when it is false. `taproot_internal_key: None` — taproot md1 refused
-/// upstream (`Tag::Tr` gate) before reaching here.
+/// (`template`, `slots`, `k`, `descriptor`); the dispatch goes through the
+/// shared `emit_payload` helper (FOLLOWUP `restore-emit-dispatch-3way-dedup`,
+/// the former 4-way dedup). `threshold_user_supplied: true` is LOAD-BEARING:
+/// `k` from the md1 is authoritative, and `sparrow.rs` `collect_missing`
+/// refuses a multisig template (`MissingField::Threshold`) when it is false.
+/// `taproot_internal_key: None` — taproot md1 refused upstream (`Tag::Tr`
+/// gate) before reaching here.
 #[allow(clippy::too_many_arguments)]
 fn build_multisig_import_payload(
     format: CliExportFormat,
@@ -700,59 +663,10 @@ fn build_multisig_import_payload(
         bsms_form: BsmsForm::default(),
     };
 
-    // collect_missing FIRST (mirror export_wallet.rs:506-525) — the same
-    // deterministic ExportWalletMissingFields refusal before any emit().
-    let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
-        match format {
-            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(&inputs), "bitcoin-core"),
-            CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(&inputs), "bip388"),
-            CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(&inputs), "coldcard"),
-            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(&inputs), "coldcard-multisig"),
-            CliExportFormat::Jade => (JadeEmitter::collect_missing(&inputs), "jade"),
-            CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(&inputs), "sparrow"),
-            CliExportFormat::Specter => (SpecterEmitter::collect_missing(&inputs), "specter"),
-            CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(&inputs), "electrum"),
-            CliExportFormat::Green => (GreenEmitter::collect_missing(&inputs), "green"),
-            CliExportFormat::Bsms => (BsmsEmitter::collect_missing(&inputs), "bsms"),
-            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(&inputs), "descriptor"),
-        };
-    if !missing.is_empty() {
-        return Err(ToolkitError::ExportWalletMissingFields {
-            format: format_name,
-            missing,
-        });
-    }
-
-    // emit dispatch — byte-identical to export_wallet.rs:527-560, INCLUDING the
-    // coldcard-multisig six-variant CliTemplate match.
-    match format {
-        CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(&inputs),
-        CliExportFormat::Bip388 => Bip388Emitter::emit(&inputs),
-        CliExportFormat::Coldcard => ColdcardEmitter::emit(&inputs),
-        CliExportFormat::ColdcardMultisig => {
-            match inputs.template {
-                Some(
-                    CliTemplate::WshMulti
-                    | CliTemplate::WshSortedMulti
-                    | CliTemplate::ShWshMulti
-                    | CliTemplate::ShWshSortedMulti
-                    | CliTemplate::TrMultiA
-                    | CliTemplate::TrSortedMultiA,
-                ) => ColdcardEmitter::emit(&inputs),
-                _ => Err(ToolkitError::BadInput(
-                    "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
-                        .into(),
-                )),
-            }
-        }
-        CliExportFormat::Jade => JadeEmitter::emit(&inputs),
-        CliExportFormat::Sparrow => SparrowEmitter::emit(&inputs),
-        CliExportFormat::Specter => SpecterEmitter::emit(&inputs),
-        CliExportFormat::Electrum => ElectrumEmitter::emit(&inputs),
-        CliExportFormat::Green => GreenEmitter::emit(&inputs),
-        CliExportFormat::Bsms => BsmsEmitter::emit(&inputs),
-        CliExportFormat::Descriptor => DescriptorEmitter::emit(&inputs),
-    }
+    // Shared 4-way dispatch (collect_missing-first → emit) via the canonical
+    // `emit_payload` helper — byte-identical to the former inline copy,
+    // INCLUDING the coldcard-multisig six-variant CliTemplate match.
+    crate::cmd::export_wallet::emit_payload(&inputs, format)
 }
 
 fn template_label(t: CliTemplate) -> &'static str {
