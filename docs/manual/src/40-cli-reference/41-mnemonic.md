@@ -2536,22 +2536,24 @@ mnemonic addresses --from <SOURCE> --address-type <T> [--account <N>] \
                    [--network <NET>] [--passphrase <V> | --passphrase-stdin] [--language <L>] [--json]
 ```
 
-`--from` accepts an account `xpub=` (derived directly) or a seed source (`phrase=` / `entropy=` / `seedqr=`). For a seed source, `--address-type` selects the BIP-44/49/84/86 account path (`p2pkh`→44', `p2sh-p2wpkh`→49', `p2wpkh`→84', `p2tr`→86') at `m/<purpose>'/<coin>'/<account>'`, and the addresses are `m/<chain>/<index>` under it. For an `xpub=` source the xpub *is* the account key, so `--account` / `--passphrase` do not apply (supplying them is an error). Secret values support `@env:VAR` and `-` (stdin).
+`--from` accepts an account `xpub=` (derived directly) or a seed source (`phrase=` / `entropy=` / `seedqr=` / `electrum-phrase=`). For a BIP-39 seed source, `--address-type` selects the BIP-44/49/84/86 account path (`p2pkh`→44', `p2sh-p2wpkh`→49', `p2wpkh`→84', `p2tr`→86') at `m/<purpose>'/<coin>'/<account>'`, and the addresses are `m/<chain>/<index>` under it. For an `xpub=` source the xpub *is* the account key, so `--account` / `--passphrase` do not apply (supplying them is an error). Secret values support `@env:VAR` and `-` (stdin).
+
+`electrum-phrase=` (v0.47.0+) derives Electrum's **own** native-seed addresses (NOT BIP-39/BIP-44): `PBKDF2-HMAC-SHA512(seed, "electrum"+passphrase, 2048)` → BIP-32 root → for a **standard** seed `m/<chain>/<index>` (P2PKH), for a **segwit** seed `m/0'/<chain>/<index>` (P2WPKH). The script type and derivation are **fixed by the Electrum seed version**, so `--address-type` must match it (`p2pkh` for standard, `p2wpkh` for segwit — a mismatch is refused), `--account` does not apply (refused if non-zero), and `--language` is ignored (the seed is stretched from the raw phrase string, not decoded via a wordlist). 2FA seeds (versions 101/102) are refused. `--passphrase` is the Electrum seed-extension passphrase. The `<chain>` is `0` (receive) / `1` (change) per `--chain`, as in Electrum.
 
 ### Flags
 
 | Flag | Purpose |
 |---|---|
-| `--from <SOURCE>` | `xpub=<v>` \| `phrase=<v>` \| `entropy=<hex>` \| `seedqr=<digits>`; `@env:VAR` / `-` (stdin) for secret values |
-| `--address-type <T>` | `p2pkh` \| `p2sh-p2wpkh` \| `p2wpkh` \| `p2tr` (required; selects the account path for seed sources and the render type) |
-| `--account <N>` | account index for seed sources (default 0; not applicable to `xpub=`) |
+| `--from <SOURCE>` | `xpub=<v>` \| `phrase=<v>` \| `entropy=<hex>` \| `seedqr=<digits>` \| `electrum-phrase=<v>`; `@env:VAR` / `-` (stdin) for secret values |
+| `--address-type <T>` | `p2pkh` \| `p2sh-p2wpkh` \| `p2wpkh` \| `p2tr` (required; selects the account path for BIP-39 seed sources and the render type. For `electrum-phrase=` it must match the seed version: `p2pkh` standard / `p2wpkh` segwit) |
+| `--account <N>` | account index for BIP-39 seed sources (default 0; not applicable to `xpub=` or `electrum-phrase=`) |
 | `--count <N>` | number of addresses per chain, from index 0 (default 10); conflicts with `--range` |
 | `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
 | `--chain <receive\|change\|both>` | which chain(s) to list (default `receive`) |
 | `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes (xpub source) or mainnet (seed source); must agree with an xpub's network kind |
 | `--passphrase <V>` | BIP-39 passphrase (seed sources); `@env:VAR` supported |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`) |
-| `--language <L>` | BIP-39 wordlist language for `phrase=`/`seedqr=` (default `english`) |
+| `--language <L>` | BIP-39 wordlist language for `phrase=`/`seedqr=` (default `english`); ignored for `electrum-phrase=` (the Electrum seed is stretched from the raw phrase string, not decoded via a wordlist) |
 | `--json` | emit a JSON envelope instead of the text rows |
 | `--help` | print help |
 
