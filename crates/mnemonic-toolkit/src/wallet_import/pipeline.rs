@@ -42,6 +42,68 @@ fn key_regex() -> &'static Regex {
     })
 }
 
+/// Lift every `[fp/path]xpub` origin tuple from a concrete descriptor body via
+/// the canonical (h-form-widened) `key_regex`, in declaration order. Shared by
+/// all `wallet_import` parsers (FOLLOWUP `descriptor-origin-extraction-dedup`),
+/// replacing the former per-parser `extract_origin_components` + apostrophe-only
+/// `origin_capture_regex` copies — so every parser now tolerates `h`-form
+/// hardened origins (resolves `import-parser-hform-origin-tolerance`).
+/// `format_name` is the per-parser error prefix. Empty result → error.
+pub(crate) fn extract_origin_components(
+    body: &str,
+    format_name: &str,
+) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
+    let mut out = Vec::new();
+    for cap in key_regex().captures_iter(body) {
+        let fp_hex = cap.get(1).expect("group 1").as_str();
+        let path_raw_inner = cap.get(2).expect("group 2").as_str();
+        let xpub_str = cap.get(3).expect("group 3").as_str();
+
+        let mut fp_bytes = [0u8; 4];
+        for i in 0..4 {
+            fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: {format_name}: parse error: fingerprint hex: {e}"
+                ))
+            })?;
+        }
+        let fp = Fingerprint::from(fp_bytes);
+        let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!(
+                "import-wallet: {format_name}: parse error: derivation-path parse: {e}"
+            ))
+        })?;
+        out.push((fp, path, xpub_str.to_string()));
+    }
+    if out.is_empty() {
+        return Err(ToolkitError::ImportWalletParse(format!(
+            "import-wallet: {format_name}: parse error: no origin annotations in descriptor"
+        )));
+    }
+    Ok(out)
+}
+
+/// Finalize one extracted origin tuple → typed slot fields: SLIP-0132-neutralize
+/// the xpub prefix, then decode to a typed `Xpub`. Shared finalize half of the
+/// former per-parser `build_slot_fields` (FOLLOWUP
+/// `descriptor-origin-extraction-dedup`). The decode is a defensive guard — the
+/// same key was already decoded by `concrete_keys_to_placeholders` upstream — so
+/// the generic (slot-context-free) error message is invisible in practice.
+pub(crate) fn finalize_slot_fields(
+    fp: Fingerprint,
+    path: DerivationPath,
+    xpub_str: &str,
+    format_name: &str,
+) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
+    let (neutral, _variant) = normalize_xpub_prefix(xpub_str)?;
+    let xpub = Xpub::from_str(&neutral).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: {format_name}: parse error: xpub decode: {e}"
+        ))
+    })?;
+    Ok((xpub, fp, path))
+}
+
 /// Cheap `@\d`-presence probe (the toolkit's `@N` placeholder form). NEW.
 fn at_n_probe() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();

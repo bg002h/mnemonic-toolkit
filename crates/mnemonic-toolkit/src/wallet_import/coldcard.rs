@@ -60,7 +60,6 @@ use crate::synthesize::{xpub_to_65, ResolvedSlot};
 use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
 use serde_json::Value;
 use std::io::Write;
-use std::str::FromStr;
 
 /// SPEC §11.3 — Coldcard single-sig wallet.json parser.
 pub(crate) struct ColdcardParser;
@@ -501,45 +500,13 @@ fn infer_bip_from_xpub_prefix(
 fn build_slot_fields(
     descriptor_body: &str,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    use regex::Regex;
-    use std::sync::OnceLock;
-    static R: OnceLock<Regex> = OnceLock::new();
-    let re = R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
-            .expect("origin_capture_regex is a fixed string literal")
-    });
-    let cap = re.captures(descriptor_body).ok_or_else(|| {
-        ToolkitError::ImportWalletParse(
-            "import-wallet: coldcard: parse error: no origin annotation in synthesized descriptor (internal bug)"
-                .to_string(),
-        )
-    })?;
-    let fp_hex = cap.get(1).expect("group 1").as_str();
-    let path_raw_inner = cap.get(2).expect("group 2").as_str();
-    let xpub_str = cap.get(3).expect("group 3").as_str();
-
-    let mut fp_bytes = [0u8; 4];
-    for i in 0..4 {
-        fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: coldcard: parse error: fingerprint hex: {e}"
-            ))
-        })?;
-    }
-    let fp = Fingerprint::from(fp_bytes);
-    let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: coldcard: parse error: derivation-path parse: {e}"
-        ))
-    })?;
-
-    let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
-    let xpub = Xpub::from_str(&neutral).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: coldcard: parse error: xpub decode: {e}"
-        ))
-    })?;
-    Ok((xpub, fp, path))
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "coldcard")?;
+    let (fp, path, xpub_str) = origins
+        .into_iter()
+        .next()
+        .expect("extract_origin_components guarantees non-empty");
+    crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "coldcard")
 }
 
 /// Recompute the BIP-380 checksum for the descriptor body. Mirrors

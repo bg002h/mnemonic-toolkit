@@ -72,7 +72,6 @@ use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
 use regex::Regex;
 use serde_json::Value;
 use std::io::Write;
-use std::str::FromStr;
 use std::sync::OnceLock;
 
 pub(crate) struct SparrowParser;
@@ -424,7 +423,8 @@ impl WalletFormatParser for SparrowParser {
         })?;
 
         // Step 8: build ResolvedSlot vec.
-        let origins = extract_origin_components(&substituted)?;
+        let origins =
+            crate::wallet_import::pipeline::extract_origin_components(&substituted, "sparrow")?;
         let network = network_from_origins(&origins)?;
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
         for (i, _) in parsed_keys.iter().enumerate() {
@@ -560,16 +560,6 @@ fn parse_keystore(i: usize, ks: &Value) -> Result<KeystoreParts, ToolkitError> {
     })
 }
 
-/// Origin-capture regex (matches `pipeline::key_regex` to a first
-/// approximation; used by the per-format build_slot_fields helper).
-fn origin_capture_regex() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
-            .expect("origin_capture_regex is a fixed string literal")
-    })
-}
-
 /// `@N` leftover-detection regex. Used as a sanity guard after the per-
 /// keystore substitution pass — any leftover `@N` means the script template
 /// referred to an index outside `keystores.len()`.
@@ -580,58 +570,18 @@ fn leftover_placeholder_regex() -> &'static Regex {
     })
 }
 
-fn extract_origin_components(
-    descriptor_body: &str,
-) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
-    let re = origin_capture_regex();
-    let mut out = Vec::new();
-    for cap in re.captures_iter(descriptor_body) {
-        let fp_hex = cap.get(1).expect("group 1").as_str();
-        let path_raw_inner = cap.get(2).expect("group 2").as_str();
-        let xpub_str = cap.get(3).expect("group 3").as_str();
-
-        let mut fp_bytes = [0u8; 4];
-        for i in 0..4 {
-            fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
-                ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: sparrow: parse error: fingerprint hex: {e}"
-                ))
-            })?;
-        }
-        let fp = Fingerprint::from(fp_bytes);
-        let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: sparrow: parse error: derivation-path parse: {e}"
-            ))
-        })?;
-        out.push((fp, path, xpub_str.to_string()));
-    }
-    if out.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: sparrow: parse error: no origin annotations in descriptor"
-                .to_string(),
-        ));
-    }
-    Ok(out)
-}
-
 fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    let origins = extract_origin_components(descriptor_body)?;
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "sparrow")?;
     let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: sparrow: parse error: slot index {slot_idx} out of range"
         ))
     })?;
-    let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(&xpub_str)?;
-    let xpub = Xpub::from_str(&neutral).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: sparrow: parse error: xpub decode for slot {slot_idx}: {e}"
-        ))
-    })?;
-    Ok((xpub, fp, path))
+    crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "sparrow")
 }
 
 fn network_from_origins(

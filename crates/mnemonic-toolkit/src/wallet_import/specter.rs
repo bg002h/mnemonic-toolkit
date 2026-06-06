@@ -46,7 +46,6 @@ use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
 use regex::Regex;
 use serde_json::Value;
 use std::io::Write;
-use std::str::FromStr;
 use std::sync::OnceLock;
 
 /// SPEC §11.2 — Specter-DIY wallet-import parser.
@@ -242,7 +241,8 @@ impl WalletFormatParser for SpecterParser {
         })?;
 
         // Step 4: build ResolvedSlot vec from origins.
-        let origins = extract_origin_components(&descriptor_str)?;
+        let origins =
+            crate::wallet_import::pipeline::extract_origin_components(&descriptor_str, "specter")?;
         let network = network_from_origins(&origins)?;
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
         for (i, _) in parsed_keys.iter().enumerate() {
@@ -350,67 +350,18 @@ fn parse_device(i: usize, d: &Value) -> Result<SpecterDeviceMarker, ToolkitError
     )))
 }
 
-/// Origin-capture regex mirroring `wallet_import/sparrow.rs:520`. Matches
-/// `[8-hex-fp/derivation]xpub-or-tpub-or-{x,t,y,z,u,v,Y,Z,U,V}pub` shapes.
-fn origin_capture_regex() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
-            .expect("origin_capture_regex is a fixed string literal")
-    })
-}
-
-fn extract_origin_components(
-    descriptor_body: &str,
-) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
-    let re = origin_capture_regex();
-    let mut out = Vec::new();
-    for cap in re.captures_iter(descriptor_body) {
-        let fp_hex = cap.get(1).expect("group 1").as_str();
-        let path_raw_inner = cap.get(2).expect("group 2").as_str();
-        let xpub_str = cap.get(3).expect("group 3").as_str();
-
-        let mut fp_bytes = [0u8; 4];
-        for i in 0..4 {
-            fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
-                ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: specter: parse error: fingerprint hex: {e}"
-                ))
-            })?;
-        }
-        let fp = Fingerprint::from(fp_bytes);
-        let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: specter: parse error: derivation-path parse: {e}"
-            ))
-        })?;
-        out.push((fp, path, xpub_str.to_string()));
-    }
-    if out.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: specter: parse error: no origin annotations in descriptor".to_string(),
-        ));
-    }
-    Ok(out)
-}
-
 fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    let origins = extract_origin_components(descriptor_body)?;
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "specter")?;
     let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: specter: parse error: slot index {slot_idx} out of range"
         ))
     })?;
-    let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(&xpub_str)?;
-    let xpub = Xpub::from_str(&neutral).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: specter: parse error: xpub decode for slot {slot_idx}: {e}"
-        ))
-    })?;
-    Ok((xpub, fp, path))
+    crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "specter")
 }
 
 fn network_from_origins(

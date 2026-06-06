@@ -913,43 +913,14 @@ fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    use regex::Regex;
-    use std::sync::OnceLock;
-    static R: OnceLock<Regex> = OnceLock::new();
-    let re = R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
-            .expect("origin_capture_regex is a fixed string literal")
-    });
-    let cap = re.captures_iter(descriptor_body).nth(slot_idx).ok_or_else(|| {
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "electrum")?;
+    let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: electrum: parse error: slot index {slot_idx} out of range in synthesized descriptor"
         ))
     })?;
-    let fp_hex = cap.get(1).expect("group 1").as_str();
-    let path_raw_inner = cap.get(2).expect("group 2").as_str();
-    let xpub_str = cap.get(3).expect("group 3").as_str();
-
-    let mut fp_bytes = [0u8; 4];
-    for i in 0..4 {
-        fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: electrum: parse error: fingerprint hex: {e}"
-            ))
-        })?;
-    }
-    let fp = Fingerprint::from(fp_bytes);
-    let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: electrum: parse error: derivation-path parse: {e}"
-        ))
-    })?;
-    let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
-    let xpub = Xpub::from_str(&neutral).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: electrum: parse error: xpub decode for slot {slot_idx}: {e}"
-        ))
-    })?;
-    Ok((xpub, fp, path))
+    crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "electrum")
 }
 
 /// Recompute the BIP-380 checksum for the descriptor body. Mirrors

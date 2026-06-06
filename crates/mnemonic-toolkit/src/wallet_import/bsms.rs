@@ -242,7 +242,10 @@ impl WalletFormatParser for BsmsParser {
         // SPEC §4.2 step 8: network detection via BIP-48 coin-type
         // (hardened component index 1) on the FIRST cosigner. Cosigner-to-
         // cosigner heterogeneity → ImportWalletParse.
-        let origins = extract_origin_components(descriptor_body_no_csum)?;
+        let origins = crate::wallet_import::pipeline::extract_origin_components(
+            descriptor_body_no_csum,
+            "bsms",
+        )?;
         let network = network_from_origins(&origins)?;
 
         // SPEC §4.2 step 9: build ResolvedSlot vec per cosigner; entropy=None.
@@ -358,42 +361,6 @@ fn strip_trailing_empty<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
     v
 }
 
-/// Per-cosigner origin tuple lifted out of the descriptor body via the
-/// shared `key_regex` pattern. Returned in declaration order.
-fn extract_origin_components(
-    descriptor_body: &str,
-) -> Result<Vec<(Fingerprint, DerivationPath, String)>, ToolkitError> {
-    let re = origin_capture_regex();
-    let mut out = Vec::new();
-    for cap in re.captures_iter(descriptor_body) {
-        let fp_hex = cap.get(1).expect("group 1").as_str();
-        let path_raw_inner = cap.get(2).expect("group 2").as_str();
-        let xpub_str = cap.get(3).expect("group 3").as_str();
-
-        let mut fp_bytes = [0u8; 4];
-        for i in 0..4 {
-            fp_bytes[i] = u8::from_str_radix(&fp_hex[i * 2..i * 2 + 2], 16).map_err(|e| {
-                ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: bsms: parse error: fingerprint hex: {e}"
-                ))
-            })?;
-        }
-        let fp = Fingerprint::from(fp_bytes);
-        let path = DerivationPath::from_str(&format!("m{path_raw_inner}")).map_err(|e| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: bsms: parse error: derivation-path parse: {e}"
-            ))
-        })?;
-        out.push((fp, path, xpub_str.to_string()));
-    }
-    if out.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: bsms: parse error: no origin annotations in descriptor".to_string(),
-        ));
-    }
-    Ok(out)
-}
-
 /// Build per-slot ResolvedSlot fields by re-running the origin lex (the
 /// concrete-keys adapter consumes the xpub bytes only; this helper extracts
 /// the typed Xpub + Fingerprint + DerivationPath for the ResolvedSlot vec).
@@ -401,19 +368,14 @@ fn build_slot_fields(
     descriptor_body: &str,
     slot_idx: usize,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    let origins = extract_origin_components(descriptor_body)?;
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "bsms")?;
     let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bsms: parse error: slot index {slot_idx} out of range"
         ))
     })?;
-    let (neutral, _variant) = crate::slip0132::normalize_xpub_prefix(&xpub_str)?;
-    let xpub = Xpub::from_str(&neutral).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bsms: parse error: xpub decode for slot {slot_idx}: {e}"
-        ))
-    })?;
-    Ok((xpub, fp, path))
+    crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "bsms")
 }
 
 /// SPEC §4.2 step 8 network detection. Inspects the BIP-48 coin-type child
@@ -506,16 +468,6 @@ pub(super) fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, Too
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bsms: parse error: thresh/multi argument `{arg}` exceeds u8 range (>255 cosigners not supported): {e}"
         ))
-    })
-}
-
-/// Shared origin-capture regex. Mirrors `pipeline::key_regex` but with
-/// the same capture-group indices so caller code can index uniformly.
-fn origin_capture_regex() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| {
-        Regex::new(r"\[([0-9a-fA-F]{8})((?:/\d+'?)+)\]([xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+)")
-            .expect("origin_capture_regex is a fixed string literal")
     })
 }
 
