@@ -354,9 +354,9 @@ fn build_subcommand_conditional_rules(name: &str) -> Vec<ConditionalRule> {
 fn restore_conditional_rules() -> Vec<ConditionalRule> {
     vec![ConditionalRule {
         rationale: "--from is required unless --md1 is supplied: single-sig \
-                    restore needs a wallet-export source, while \
-                    multisig-cosigner restore (--md1) supplies the policy and \
-                    needs no --from."
+                    restore needs a seed source (ms1/phrase/entropy/seedqr), \
+                    while multisig-cosigner restore (--md1) supplies the policy \
+                    and makes --from optional."
             .to_string(),
         spec_ref: "cmd/restore.rs clap-derive required_unless_present = \"md1\"".to_string(),
         when: Predicate::Not {
