@@ -130,7 +130,7 @@ All modules in `main.rs` are declared with bare `mod NAME;` (i.e., **private** a
   - `pub path_family: &'static str` — `"bip48"|"bip87"`.
   - `pub cosigners: Vec<CosignerEntry>`
 - `pub struct BundleJson` (`#[derive(Serialize)]`, `src/format.rs:120`) — Bundle JSON output schema:
-  - `pub schema_version: &'static str` — value at HEAD is `"4"` (per `synthesize.rs:1296`, `cmd/bundle.rs:572`; the doc-comment at `src/format.rs:114` still says `"v0.2: schema_version "2"";` — stale).
+  - `pub schema_version: &'static str` — value at HEAD is `"4"` (per `synthesize.rs:1732`, `cmd/bundle.rs:906`, and 5 further sites in `cmd/import_wallet.rs`, `cmd/verify_bundle.rs` (×2), `wallet_import/json_envelope.rs` (×2) — 7 sites total; the doc-comment at `src/format.rs:114` still says `"v0.2: schema_version "2"";` — stale).
   - `pub mode: &'static str` — `"full"|"watch-only"`.
   - `pub network: &'static str`
   - `pub template: Option<&'static str>`
@@ -145,7 +145,7 @@ All modules in `main.rs` are declared with bare `mod NAME;` (i.e., **private** a
   - `pub multisig: Option<MultisigInfo>`
   - `pub privacy_preserving: bool`
 - `pub struct VerifyBundleJson` (`#[derive(Serialize)]`, `src/format.rs:149`):
-  - `pub schema_version: &'static str` — value `"4"` (`cmd/verify_bundle.rs:182, 498`).
+  - `pub schema_version: &'static str` — value `"4"` (`cmd/verify_bundle.rs:329, 1017`).
   - `pub result: &'static str` — `"ok"|"mismatch"`.
   - `pub checks: Vec<VerifyCheck>`
 - `pub struct VerifyCheck` (`#[derive(Serialize, Clone)]`, `src/format.rs:166`) — SPEC §5.7:
@@ -254,30 +254,29 @@ All modules in `main.rs` are declared with bare `mod NAME;` (i.e., **private** a
 
 #### Functions
 
-- `pub fn xpub_to_65(xpub: &Xpub) -> [u8; 65]` — SPEC §4.6.1 chain_code||pubkey form (`:69`).
-- `pub fn build_descriptor(template, network, xpub, fingerprint, account) -> Descriptor` (`#[allow(dead_code)]`, `:80`).
-- `pub fn synthesize_full(entropy, fingerprint, xpub, template, network, account) -> Result<Bundle, ToolkitError>` (`#[allow(dead_code)]`, `:113`).
-- `pub fn synthesize_watch_only(fingerprint, xpub, template, network, account) -> Result<Bundle, ToolkitError>` (`#[allow(dead_code)]`, `:152`).
-- `pub fn synthesize_descriptor(descriptor, cosigners, entropy, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:196`).
-- `pub fn synthesize_multisig_full(seed_mnemonic, passphrase, network, template, threshold, cosigner_count, account, path_family, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:288`).
-- `pub fn synthesize_multisig_watch_only(cosigners, network, template, threshold, account, path_family, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:413`).
-- `pub fn synthesize_unified(slots, template, threshold, network, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:593`) — current dispatch entrypoint for unified slot pipeline.
+- `pub fn xpub_to_65(xpub: &Xpub) -> [u8; 65]` — SPEC §4.6.1 chain_code||pubkey form (`:98`).
+- `pub fn build_descriptor(template, network, xpub, fingerprint, account) -> Descriptor` (`#[allow(dead_code)]`, `:109`).
+- `pub fn synthesize_full(entropy, fingerprint, xpub, template, network, account) -> Result<Bundle, ToolkitError>` (`#[allow(dead_code)]`, `:142`).
+- `pub fn synthesize_watch_only(fingerprint, xpub, template, network, account) -> Result<Bundle, ToolkitError>` (`#[allow(dead_code)]`, `:181`).
+- `pub fn synthesize_descriptor(descriptor, cosigners, privacy_preserving, run_language) -> Result<Bundle, ToolkitError>` (`:229`).
+- `pub fn synthesize_multisig_full(seed_mnemonic, passphrase, network, template, threshold, cosigner_count, account, path_family, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:344`).
+- `pub fn synthesize_multisig_watch_only(cosigners, network, template, threshold, account, path_family, privacy_preserving) -> Result<Bundle, ToolkitError>` (`:489`).
+- `pub fn synthesize_unified(slots, template, threshold, network, privacy_preserving, run_language) -> Result<Bundle, ToolkitError>` (`:745`) — current dispatch entrypoint for unified slot pipeline.
 
 #### Types
 
-- `pub struct Bundle` (`src/synthesize.rs:20`):
+- `pub struct Bundle` (`src/synthesize.rs:22`):
   - `pub ms1: MsField` — SPEC §5.8 dense layout.
   - `pub mk1: MkField`
   - `pub md1: Vec<String>`
-  - method: `pub fn any_secret_bearing(&self) -> bool` (`:33`).
-- `pub struct ResolvedSlot` (`src/synthesize.rs:569`):
+  - method: `pub fn any_secret_bearing(&self) -> bool` (`:35`).
+- `pub struct ResolvedSlot` (`src/synthesize.rs:642`):
   - `pub xpub: Xpub`
   - `pub fingerprint: Fingerprint`
   - `pub path: DerivationPath` — typed; SPEC §4.11.b uses this for distinctness equality with `h ↔ '` folding.
-  - `pub path_raw: String` — preserved user-supplied raw path.
-  - `pub entropy: Option<Vec<u8>>` — None = watch-only slot.
-  - method: `pub fn is_secret_bearing(&self) -> bool` (`:579`).
-- `pub type CosignerKeyInfo = ResolvedSlot` (`#[allow(dead_code)]`, `:190`) — legacy alias.
+  - `pub entropy: Option<zeroize::Zeroizing<Vec<u8>>>` — None = watch-only slot.
+  - method: `pub fn is_secret_bearing(&self) -> bool` (`:690`).
+- `pub type CosignerKeyInfo = ResolvedSlot` (`#[allow(dead_code)]`, `:219`) — legacy alias.
 
 ### `mnemonic_toolkit::parse_descriptor` (`src/parse_descriptor.rs`)
 
@@ -291,7 +290,7 @@ All modules in `main.rs` are declared with bare `mod NAME;` (i.e., **private** a
 - `pub fn determine_mode(d: &MdDescriptor) -> DescriptorMode` (`#[allow(dead_code)]`, `:757`).
 - `pub fn synthetic_xpub_for(i: u8, ctx: ScriptCtx) -> String` (`:769`) — deterministic synthetic xpub for `@i`; seed prefix `b"toolkit-v0.3"`.
 - `pub fn bind_descriptor_keys(resolved, network, phrase, passphrase, language, xpub_arg, master_fp_arg, cosigner_specs) -> Result<DescriptorBinding, ToolkitError>` (`:815`).
-- `pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), ToolkitError>` (`:1104`) — SPEC §4.11.b typed-DerivationPath distinctness.
+- `pub fn check_key_vector_distinctness(binding: &DescriptorBinding) -> Result<(), ToolkitError>` (`:1208`) — SPEC §4.11.b typed-DerivationPath distinctness.
 
 #### Types
 
@@ -424,8 +423,8 @@ These are the entrypoints `main.rs` calls; their public fields are clap argument
 
 | Type | Path | Top-level fields | Serde derives | Notes |
 |---|---|---|---|---|
-| `BundleJson` | `format::BundleJson` | `schema_version, mode, network, template, descriptor, account, origin_path, origin_paths, master_fingerprint, ms1, mk1, md1, multisig, privacy_preserving` | `Serialize` | SPEC §5.3. Schema 4 layout. `schema_version` is `&'static str` and is set to `"4"` at every construction site (`cmd/bundle.rs:572`, `synthesize.rs:1296`). Field order is part of the schema. |
-| `VerifyBundleJson` | `format::VerifyBundleJson` | `schema_version, result, checks` | `Serialize` | SPEC §5.4. `schema_version = "4"` at construction (`cmd/verify_bundle.rs:182,498`). `result ∈ {"ok","mismatch"}`. |
+| `BundleJson` | `format::BundleJson` | `schema_version, mode, network, template, descriptor, account, origin_path, origin_paths, master_fingerprint, ms1, mk1, md1, multisig, privacy_preserving` | `Serialize` | SPEC §5.3. Schema 4 layout. `schema_version` is `&'static str` and is set to `"4"` at every construction site — 7 total: `synthesize.rs:1732`, `cmd/bundle.rs:906`, `cmd/import_wallet.rs:1499`, `cmd/verify_bundle.rs:329`, `cmd/verify_bundle.rs:1017`, `wallet_import/json_envelope.rs:595`, `wallet_import/json_envelope.rs:761`. Field order is part of the schema. |
+| `VerifyBundleJson` | `format::VerifyBundleJson` | `schema_version, result, checks` | `Serialize` | SPEC §5.4. `schema_version = "4"` at construction (`cmd/verify_bundle.rs:329,1017`). `result ∈ {"ok","mismatch"}`. |
 | `VerifyCheck` | `format::VerifyCheck` | `name, passed, detail, expected, actual, diff_byte_offset, decode_error` | `Serialize, Clone` | SPEC §5.7. Optional forensic fields use `#[serde(skip_serializing_if = "Option::is_none")]`. |
 | `MultisigInfo` | `format::MultisigInfo` | `template, threshold, cosigner_count, path_family, cosigners` | `Serialize` | Embedded in `BundleJson.multisig`. |
 | `CosignerEntry` | `format::CosignerEntry` | `index, master_fingerprint, origin_path, xpub` | `Serialize, Clone` | Per-cosigner entry in `MultisigInfo.cosigners`. |
@@ -466,8 +465,8 @@ No `#[cfg(feature = ...)]` gates exist in the crate. The crate has no feature fl
 - **CLI surface is OUT OF SCOPE for Part V.** Items under `src/cmd/*.rs` (BundleArgs, VerifyBundleArgs, ConvertArgs, ExportWalletArgs, DeriveChildArgs and their `run` functions, plus `cmd::bundle::mode_text` constants, `cmd::verify_bundle::SuppliedCards`/`emit_verify_checks`, `cmd::convert::NodeType`/`FromInput`/`ScriptType`/`parse_*`) are clap-derived CLI dispatch — they belong to the end-user manual, not Part V.
 - **`schema_version` confirmed at `"4"` at HEAD.** Every construction site of `BundleJson`/`VerifyBundleJson` literal-encodes `schema_version: "4"`. The `format::BundleJson` doc-comment at `src/format.rs:114` still reads `"v0.2: schema_version "2""` — this is a stale doc-comment (v0.3 Phase 3.1's documented gap **persists at HEAD**). Phase 4.4 should document the current value `"4"` and not echo the stale module-level comment.
 - **`md1_xpub_match` exists only inside `cmd::verify_bundle` private helpers.** No `pub` API surface emits a check named `md1_xpub_match` — that name appears only as a `VerifyCheck.name` string literal at `src/cmd/verify_bundle.rs:1214,1224,1242,1267,1321,1331,1349,1374,1438,1595`. Coverage of the v0.3 Phase 3.5 multisig-vs-single-sig path-disclosure gap is therefore a property of the CLI-surface implementation, not the library API — Phase 4.4 should either skip the topic or document it via the JSON envelope's `VerifyCheck` type (mention that `name == "md1_xpub_match"` checks fall under SPEC §5.7).
-- **v0.3 Phase 3.2 doc-comment lag at bundle.rs:259-260 PERSISTS at HEAD.** The comment on `cmd::bundle::check_resolved_slots_distinctness` (a `pub(crate)` helper, out of Part V scope) still claims "raw-string equality per SPEC §4.11.b" while the function actually compares `slots[i].xpub.to_string() == slots[j].xpub.to_string() && slots[i].path_raw == slots[j].path_raw`. The companion `error.rs:68-71` doc on `Bip388Distinctness` calls the equality "`(xpub, derivation_path_string)` raw-string equality per §4.11.b normalization domain" — also stale at HEAD. The **sole `pub` function** enforcing BIP-388 distinct-key semantics is `parse_descriptor::check_key_vector_distinctness` at `parse_descriptor.rs:1104`, which compares **typed** `DerivationPath` equality (`cs[i].path == cs[j].path` at `parse_descriptor.rs:1108`, which folds `h ↔ '`). The `cmd::bundle`-internal mirror `check_resolved_slots_distinctness` (pub-crate; **out of Part V scope** — the CLI layer) uses raw-string equality and has the doc-comment lag documented at `error.rs:68-71`. The doc-comments **drift across both layers** and should be reconciled in Part V's narrative — Phase 4.4 must document the typed-`DerivationPath ==` semantics of the `pub` `check_key_vector_distinctness` accurately and may flag the CLI-layer heterogeneity as an out-of-scope cross-reference. (Verified: `src/synthesize.rs` contains no function named `check_key_vector_distinctness` — the only `pub` `check_*` function on the BIP-388 path lives in `parse_descriptor`.)
-- **`DerivationPath` surface.** Public `pub` API exposes `bitcoin::bip32::DerivationPath` in: `derive::DerivedAccount.account_path`, `template::CliTemplate::derivation_path`, `parse::CosignerSpec.path`, `parse::MultisigPathFamily::default_origin_path` (returns `String`, not typed — flag this asymmetry), `synthesize::ResolvedSlot.path`, `parse_descriptor::PlaceholderOccurrence.origin_path_anno`. The BIP-388 distinct-key enforcement on the `pub` surface uses **typed** `DerivationPath == DerivationPath` (folds `h ↔ '`) per `check_key_vector_distinctness` at `parse_descriptor.rs:1108`.
+- **Both BIP-388 distinctness layers now use TYPED `DerivationPath` equality at HEAD — no bifurcation.** The CLI-layer mirror `cmd::bundle::check_resolved_slots_distinctness` (a `pub(crate)` helper, out of Part V scope) compares `slots[i].xpub.to_string() == slots[j].xpub.to_string() && slots[i].path == slots[j].path` — the **typed** `DerivationPath` (`bundle.rs:429`), and its source doc-comment (`bundle.rs:423-429`) has already been updated to the typed framing (v0.5 §4.11.b deliberate reversal; the former raw-string `path_raw` field was deleted in v0.37.9). The **sole `pub` function** enforcing BIP-388 distinct-key semantics is `parse_descriptor::check_key_vector_distinctness` at `parse_descriptor.rs:1208`, which compares **typed** `DerivationPath` equality (`cs[i].path == cs[j].path` at `parse_descriptor.rs:1212`, which folds `h ↔ '`). Both layers therefore agree: `48h/..` and `48'/..` collide at synthesis AND verify. The **only remaining source-comment lag** is `error.rs:13-16` — the `Bip388Distinctness` doc still says "`(xpub, derivation_path_string)` raw-string equality," which now mis-describes the typed behavior. Phase 4.4 must document the typed-`DerivationPath ==` semantics accurately and may flag the lone `error.rs` doc-comment lag as a known drift item. (Verified: `src/synthesize.rs` contains no function named `check_key_vector_distinctness` — the only `pub` `check_*` function on the BIP-388 path lives in `parse_descriptor`.)
+- **`DerivationPath` surface.** Public `pub` API exposes `bitcoin::bip32::DerivationPath` in: `derive::DerivedAccount.account_path`, `template::CliTemplate::derivation_path`, `parse::CosignerSpec.path`, `parse::MultisigPathFamily::default_origin_path` (returns `String`, not typed — flag this asymmetry), `synthesize::ResolvedSlot.path`, `parse_descriptor::PlaceholderOccurrence.origin_path_anno`. The BIP-388 distinct-key enforcement on the `pub` surface uses **typed** `DerivationPath == DerivationPath` (folds `h ↔ '`) per `check_key_vector_distinctness` at `parse_descriptor.rs:1212`.
 - **Optional fields in JSON envelopes use `#[serde(skip_serializing_if = "Option::is_none")]` only on `VerifyCheck` forensic fields** (`expected`, `actual`, `diff_byte_offset`, `decode_error`). Other `Option<T>` fields on `BundleJson` (e.g., `template`, `descriptor`, `origin_path`, `origin_paths`, `master_fingerprint`, `multisig`) serialize as `null` when None — JSON readers must tolerate explicit nulls. Verify this in the chapter draft against actual `bundle --json` output before claiming behavior.
 - **MSRV 1.85 is high.** Most Bitcoin Rust libraries target older MSRV; downstream consumers depending on this MSRV should be flagged.
 - **`#[non_exhaustive] ToolkitError`** — external callers (when a library facade ships) must handle `_ => …` arms; chapter should call out the forward-compatibility implication.

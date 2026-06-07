@@ -2,7 +2,7 @@
 
 Bundle integrity rests on five invariants that police whether a set of recovered cards is *the same bundle* or fragments from different wallets pretending to be one. This chapter walks each invariant against its HEAD implementation: the shared-`chunk_set_id` prefix, the multiset `md1_xpub_match` rule, the four-case ms1 short-circuit table, the mk1 cosigner-mapping diagnostic, and BIP-388 distinct-key enforcement.
 
-All five fire during `mnemonic verify-bundle`; only the BIP-388 rule additionally fires at bundle creation time (`mnemonic bundle`). The verify-bundle dispatch entry is `cmd::verify_bundle::run` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98`; the multisig per-cosigner emission core is `emit_multisig_checks` at `:838-1277`; the BIP-388 distinctness checks live at `mnemonic-toolkit/crates/mnemonic-toolkit/src/parse_descriptor.rs:1104-1117` (typed) and `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:261-275` (raw-string template path). Subsequent references to these four files within this chapter use bare filenames.
+All five fire during `mnemonic verify-bundle`; only the BIP-388 rule additionally fires at bundle creation time (`mnemonic bundle`). The verify-bundle dispatch entry is `cmd::verify_bundle::run` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143`; the multisig per-cosigner emission core is `emit_multisig_checks` at `:838-1277`; the BIP-388 distinctness checks live at `mnemonic-toolkit/crates/mnemonic-toolkit/src/parse_descriptor.rs:1208-1212` (descriptor layer) and `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:423-429` (template-mode CLI layer) — both now typed `DerivationPath` equality. Subsequent references to these four files within this chapter use bare filenames.
 
 ## Invariant 1 — Shared `chunk_set_id` prefix
 
@@ -11,7 +11,7 @@ All five fire during `mnemonic verify-bundle`; only the BIP-388 rule additionall
 | Card | Bits | Hex chars | Source | Code site |
 |---|---|---|---|---|
 | md1 | 16 | 4 | `policy_id[0..2]` | `bundle.rs:707` |
-| ms1, mk1 | 20 | 5 | `derive_mk1_chunk_set_id(policy_id[0..4])` packed as `((b0 << 12) \| (b1 << 4) \| (b2 >> 4))` | `synthesize.rs:42-44` formats via `bundle.rs:724` |
+| ms1, mk1 | 20 | 5 | `derive_mk1_chunk_set_id(policy_id[0..4])` packed as `((b0 << 12) \| (b1 << 4) \| (b2 >> 4))` | `synthesize.rs:44` formats via `bundle.rs:724` |
 
 The 4-byte stub passed into `derive_mk1_chunk_set_id` is the first 4 bytes of the SHA-256-truncated `policy_id` (§II.1). Both formats agree on their leading 16 bits because md1 takes exactly those 16 bits and the mk1/ms1 20-bit packing places `policy_id[0]` in bits 19..12 and `policy_id[1]` in bits 11..4. The fifth hex char of the mk1/ms1 identifier is the upper nibble of `policy_id[2]`; md1 does not encode that nibble in its on-card identifier.
 
@@ -37,7 +37,7 @@ let pubkeys_match = exp_sorted == act_sorted;
 
 - **Set equality, not order equality.** A `wsh(multi(2,@0,@1,@2))` template with cosigners written in slot-index order vs. xpub-sort order would otherwise produce two distinct bundles with the same wallet semantics. Sort-then-compare neutralizes that.
 - **Multiplicity matters.** A degenerate `wsh(multi(K,@0,@0))` (same key twice) would compare equal to `wsh(multi(K,@0,@1))` under plain set semantics. The sorted-Vec equality preserves multiplicity: two copies of pubkey *X* in `exp_pubs` require two copies in `act_pubs`. SPEC v0.5 §5.7 line 138 makes this normative.
-- **65-byte form, not 33-byte form.** The pubkeys-TLV stores the md1 65-byte form (`chain_code || compressed_pubkey`, `synthesize.rs:69-74`). Two xpubs with the same compressed pubkey but different chain codes are *distinct* under this comparison — which is the correct behavior, since a BIP-32 derivation step depends on the chain code as well as the parent pubkey.
+- **65-byte form, not 33-byte form.** The pubkeys-TLV stores the md1 65-byte form (`chain_code || compressed_pubkey`, `synthesize.rs:98-103`). Two xpubs with the same compressed pubkey but different chain codes are *distinct* under this comparison — which is the correct behavior, since a BIP-32 derivation step depends on the chain code as well as the parent pubkey.
 
 The check fails with `passed: false` and populated forensic fields (`expected` and `actual` set to comma-joined hex; `diff_byte_offset` set to first-differ index). The `detail` text reads `"md1 pubkeys differ from expected set"`.
 
@@ -98,7 +98,7 @@ The three dependent checks (`mk1_xpub_match[i]` / `mk1_fingerprint_match[i]` / `
 
 \index{hardened apostrophe folding}\index{h-notation}The **normalization domain** (SPEC v0.5 §4.11.b) is **typed `DerivationPath` equality** via `bitcoin::bip32::DerivationPath`'s parse-then-compare. The typed form folds `h`-notation into `'`-notation, so `48h/0h/0h/2h` and `48'/0'/0'/2'` compare EQUAL and produce a collision. This is the **v0.4→v0.5 deliberate reversal**: v0.4 used raw-string equality, v0.5 reversed to typed equality because the SPEC reasoned that `h` and `'` are syntactic sugar for the same hardened-bit encoding and bundles distinguished only by that notation are de-facto identical.
 
-The typed check is `check_key_vector_distinctness` at `parse_descriptor.rs:1104-1117`:
+The typed check is `check_key_vector_distinctness` at `parse_descriptor.rs:1208-1212`:
 
 ```rust
 for i in 0..cs.len() {
@@ -112,11 +112,11 @@ for i in 0..cs.len() {
 
 `cs[i].path: DerivationPath` compares via the typed `PartialEq` derived for `DerivationPath`, which is what folds `h` ↔ `'`.
 
-### A bifurcation: template-mode bundle synthesis uses raw-string equality
+### Both layers are typed: no bifurcation
 
-\index{bifurcation (BIP-388 enforcement)}Template-mode bundle synthesis (where the user supplies `--template <name>` + per-slot subkeys) goes through `check_resolved_slots_distinctness` at `bundle.rs:261-275`, which compares **`(xpub.to_string(), path_raw)`** — the user-supplied raw path string, not the parsed `DerivationPath`. The doc-comment at `bundle.rs:259-260` was written under v0.4 SPEC (raw-string) and has not been resynced to v0.5's typed-equality reversal.
+\index{bifurcation (BIP-388 enforcement)}Template-mode bundle synthesis (where the user supplies `--template <name>` + per-slot subkeys) goes through `check_resolved_slots_distinctness` at `bundle.rs:429`, which compares **`slots[i].xpub.to_string() == slots[j].xpub.to_string() && slots[i].path == slots[j].path`** — the **typed** `DerivationPath`, exactly like the descriptor-layer `check_key_vector_distinctness` (`parse_descriptor.rs:1208`). `h`/`'`-notation folds in **both** layers, so `48h/0h/0h/2h` and `48'/0'/0'/2'` (with the same xpub) collide at synthesis **and** at verify-bundle. There is no raw-string-vs-typed asymmetry.
 
-Practical consequence: under template-mode synthesis, two slots with `path_raw = "48h/0h/0h/2h"` and `path_raw = "48'/0'/0'/2'"` (and the same xpub) would *not* collide at synthesis (raw strings differ) but *would* collide at any subsequent verify-bundle (typed equality folds). For **phrase / entropy** slots this is unreachable: `path` and `path_raw` are computed from `--template` + `--account` + family by `template.rs`, so `path_raw` always comes out as the canonical `'`-notation string. For **xpub** slots, however, the bifurcation is live: template-mode accepts user-supplied `--slot @N.path=...` per `bundle.rs:355-363`, which preserves the raw user string into `path_raw`. A user who supplied the same xpub with `h`-notation in one slot and `'`-notation in another would create a bundle whose `check_resolved_slots_distinctness` does not fire (raw strings differ) but whose `verify-bundle` does (typed equality folds). That edge case is the live scope of the bifurcation. Descriptor-mode bundle synthesis (where the user supplies `--descriptor`) calls the typed-equality check (`bundle.rs:982`), so the asymmetry is confined to template-mode xpub-slot paths.
+This convergence is the result of the v0.37.9 path unification (`SPEC_path_raw_bracketed_bare_unification.md` A2): the former `ResolvedSlot.path_raw` raw-string field was **deleted**, leaving the typed `path` (plus the `origin_path_bare()` / `bracketed_origin()` accessors) as the only path representation. The `bundle.rs:423-428` doc-comment was updated to the typed framing (v0.5 §4.11.b deliberate reversal) at the same time. The **only residual lag** is a stale SOURCE doc-comment at `error.rs:13-16` — the `Bip388Distinctness` variant doc still says "`(xpub, derivation_path_string)` raw-string equality," which now mis-describes the typed behavior. That doc-comment is the lone artifact of the old raw-string era; the runtime behavior at both layers is typed.
 
 ### Error surfacing
 
@@ -126,7 +126,7 @@ Verify-bundle collision (exit 4): byte-exact stderr `error: bundle violates BIP-
 
 ## Worked example — a colliding bundle
 
-The simplest BIP-388 collision: a 2-of-2 multisig where both slots are the same wallet, supplied as two `@N.phrase=...` slots with identical phrases. Both resolve to the same `(xpub, path_raw)` pair, the distinctness check fires, and synthesis aborts before any cards are emitted.
+The simplest BIP-388 collision: a 2-of-2 multisig where both slots are the same wallet, supplied as two `@N.phrase=...` slots with identical phrases. Both resolve to the same `(xpub, path)` pair, the distinctness check fires, and synthesis aborts before any cards are emitted.
 
 The full invocation, stderr, and exit code are captured at `transcripts/mnemonic-bundle-bip388-collision.cmd` / `.out`. Re-running via `tests/verify-examples.sh` produces the byte-exact one-line error and exit 2.
 
@@ -142,11 +142,11 @@ The diagnostic identifies the two colliding slot indices (`@0` and `@1`); for an
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:831-836` — `MappingFailure` enum.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:895-947` — two-pass mapping algorithm enforcing precedence.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:1194-1232` — multiset `md1_xpub_match` (sort-then-compare).
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/parse_descriptor.rs:1104-1117` — typed `check_key_vector_distinctness`.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:261-275` — raw-string `check_resolved_slots_distinctness` (template-mode path; v0.4 doc-comment stale relative to v0.5 SPEC).
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/parse_descriptor.rs:1208-1212` — typed `check_key_vector_distinctness`.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:423-443` — typed-`DerivationPath` `check_resolved_slots_distinctness`; doc-comment updated (v0.5 §4.11.b).
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:707` — md1 4-hex `chunk_set_id` format string.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/bundle.rs:724` — mk1/ms1 5-hex `chunk_set_id` format string.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:42-44` — `derive_mk1_chunk_set_id` packing.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs:68-76` — `Bip388Distinctness` / `Bip388VerifyDistinctness` variants and exit-code mapping. The variant doc-comment at `error.rs:69-71` shares the same v0.4-era "raw-string equality" framing as `bundle.rs:259-260`; both lag the v0.5 SPEC reversal and resync at next release.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:44` — `derive_mk1_chunk_set_id` packing.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs:13-21` — `Bip388Distinctness` / `Bip388VerifyDistinctness` variants (exit-code mapping at `error.rs:492-493`). The `Bip388Distinctness` variant doc-comment at `error.rs:13-16` still carries the v0.4-era "`(xpub, derivation_path_string)` raw-string equality" framing — the **lone** residual lag relative to the v0.5 typed-equality reversal (the `bundle.rs` doc-comment was already resynced); it resyncs at next release.
 - BIP-388 §"Specification" — wallet-policy template + distinct key-information vector requirement.
 - Toolkit SPEC v0.5 §4.11.b — typed `DerivationPath` equality (the deliberate v0.4 → v0.5 reversal). §5.7 — multiset `md1_xpub_match` + four-case ms1 table + mk1 cosigner-mapping diagnostic. §6.6 row 13 — `Bip388Distinctness` exit-2 row.

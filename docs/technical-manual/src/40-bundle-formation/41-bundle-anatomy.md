@@ -2,7 +2,7 @@
 
 A **bundle**\index{bundle} is the toolkit's unit of engraving. It binds three sibling card formats — md1, mk1, ms1 — together as one wallet's permanent backup. This chapter walks the three-card layout, the five bundle modes, the JSON envelope shape, and the engraving-card layout. Anti-collision invariants that police bundle integrity are §IV.2; the future K-of-N share layer is §IV.3.
 
-The synthesis entry point is `synthesize_unified` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:593`; the verification entry point is `cmd::verify_bundle::run` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98`. The unified bundle envelope dispatch and pre-check ladder live at `mnemonic-toolkit/crates/mnemonic-toolkit/src/bundle_unified.rs:14-112`. Output formatting (multi-section stdout, JSON envelope, engraving card) lives at `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs`; slot-input parsing at `mnemonic-toolkit/crates/mnemonic-toolkit/src/slot_input.rs`. Subsequent references to these five files within this chapter use bare filenames.
+The synthesis entry point is `synthesize_unified` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:745`; the verification entry point is `cmd::verify_bundle::run` at `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143`. The unified bundle envelope dispatch and pre-check ladder live at `mnemonic-toolkit/crates/mnemonic-toolkit/src/bundle_unified.rs:14-112`. Output formatting (multi-section stdout, JSON envelope, engraving card) lives at `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs`; slot-input parsing at `mnemonic-toolkit/crates/mnemonic-toolkit/src/slot_input.rs`. Subsequent references to these five files within this chapter use bare filenames.
 
 ## The three-card layout
 
@@ -16,7 +16,7 @@ A bundle carries **three orthogonal pieces of state** across three card formats:
 
 The three formats are deliberately separable. **md1 alone** describes the wallet (template + placeholders) and is sufficient for address derivation once xpubs are supplied. **mk1 alone** carries one cosigner's public-key material without revealing what wallet it joins. **ms1 alone** carries one secret without revealing what wallet it backs. A reader who recovers any one card learns strictly less than they would from any two; the cards' geographic-separation safety model is built on that.
 
-\index{bundle envelope}The bundle envelope at toolkit v0.5+ is **emergent**, not a separate format: the envelope *is* the set `{md1, mk1[0..N], ms1[0..N]}` plus the rules that bind them. The `Bundle` Rust struct at `synthesize.rs:20-28` is the in-memory shape; the JSON envelope (next section) is the serialized shape; the engraving card (later) is the human-readable index card.
+\index{bundle envelope}The bundle envelope at toolkit v0.5+ is **emergent**, not a separate format: the envelope *is* the set `{md1, mk1[0..N], ms1[0..N]}` plus the rules that bind them. The `Bundle` Rust struct at `synthesize.rs:22-30` is the in-memory shape; the JSON envelope (next section) is the serialized shape; the engraving card (later) is the human-readable index card.
 
 ### What lives where in a single bundle
 
@@ -84,7 +84,7 @@ flowchart TD
   classDef e fill:#e9d5ff,stroke:#6b21a8,stroke-width:2px,color:#000
 ```
 
-The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry per slot, carrying `xpub`, `fingerprint`, `path`, `path_raw` (the user-supplied raw path string preserved for SPEC §4.11.b raw-equality), and optional `entropy`; `synthesize.rs:568-582`) and emits a `Bundle { ms1, mk1, md1 }`. The five bundle modes converge on the same synthesis core; mode-specific logic is confined to slot resolution (extracting an xpub from a phrase, or accepting an xpub verbatim) and to the dense `ms1` field's `""` empty-string sentinels for watch-only positions (`format.rs:42-54`).
+The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry per slot, carrying `xpub`, `fingerprint`, typed `path`, and optional `entropy`; `synthesize.rs:642-686`) and emits a `Bundle { ms1, mk1, md1 }`. The five bundle modes converge on the same synthesis core; mode-specific logic is confined to slot resolution (extracting an xpub from a phrase, or accepting an xpub verbatim) and to the dense `ms1` field's `""` empty-string sentinels for watch-only positions (`format.rs:42-54`).
 
 ## The bundle JSON envelope
 
@@ -92,8 +92,8 @@ The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry
 
 | Field | Type | Notes |
 |---|---|---|
-| `schema_version` | `&'static str` | `"4"` at v0.5+; bumped on schema breaks (see `bundle.rs:572`) |
-| `mode` | `&'static str` | `"full"` or `"watch-only"` (derived from `Bundle::any_secret_bearing`, `synthesize.rs:33-35`) |
+| `schema_version` | `&'static str` | `"4"` at v0.5+; bumped on schema breaks (see `bundle.rs:906`) |
+| `mode` | `&'static str` | `"full"` or `"watch-only"` (derived from `Bundle::any_secret_bearing`, `synthesize.rs:35`) |
 | `network` | `&'static str` | `"mainnet"`/`"testnet"`/`"signet"`/`"regtest"`/`"testnet4"` |
 | `template` | `Option<&'static str>` | `Some(name)` in template mode; `None` in descriptor mode (v0.3+) |
 | `descriptor` | `Option<String>` | User-supplied descriptor verbatim; mutually exclusive with `template` |
@@ -135,13 +135,13 @@ Anatomy of a multisig card (sections in the order they emit):
 
 The single-sig card collapses the cosigners block to up to four lines (`ms1`, `mk1`, `fingerprint`, `origin path`; `format.rs:310-324`). The `fingerprint` line is suppressed under `--privacy-preserving` and the `origin path` line is suppressed when the slot carries no path; both fields are guarded by `if let Some(...)` at `format.rs:318-323`. A taproot-multisig template (`tr-multi-a` / `tr-sortedmulti-a`) appends a hardware-wallet caveat block (`format.rs:367-373`) flagging that signing-side support is nascent at v0.4.
 
-The `chunk_set_id`\index{chunk\_set\_id} short-hashes printed inline are the **bundle-level binding key**. The md1 identifier is the first 2 bytes of the wallet `policy_id` rendered as 4 hex chars (`bundle.rs:707`); the ms1/mk1 identifier is the 20-bit value `derive_mk1_chunk_set_id` packs from the first 4 bytes of the same `policy_id` (`synthesize.rs:42-44`), rendered as 5 hex chars. Both derive from the *same* policy_id, so the leading 16 bits agree across all three cards in one bundle — that shared prefix is the visible cross-card binding. A separate helper `chunk_set_id_extract` (`format.rs:379-395`) recovers an mk1 chunked-string's `chunk_set_id` from the wire string itself; verify-bundle uses that to group cosigner cards in multisig. Their cross-format meaning is the subject of §IV.2.
+The `chunk_set_id`\index{chunk\_set\_id} short-hashes printed inline are the **bundle-level binding key**. The md1 identifier is the first 2 bytes of the wallet `policy_id` rendered as 4 hex chars (`bundle.rs:707`); the ms1/mk1 identifier is the 20-bit value `derive_mk1_chunk_set_id` packs from the first 4 bytes of the same `policy_id` (`synthesize.rs:44`), rendered as 5 hex chars. Both derive from the *same* policy_id, so the leading 16 bits agree across all three cards in one bundle — that shared prefix is the visible cross-card binding. A separate helper `chunk_set_id_extract` (`format.rs:379-395`) recovers an mk1 chunked-string's `chunk_set_id` from the wire string itself; verify-bundle uses that to group cosigner cards in multisig. Their cross-format meaning is the subject of §IV.2.
 
 \index{descriptor truncation}Descriptor mode (toolkit v0.3+) prints the descriptor inline if it is ≤80 chars (`format.rs:260` `DESCRIPTOR_MAX_INLINE = 80`); longer descriptors render as `<first 60 chars>... [md1: <chunk_set_id>] (<len> chars total)` and rely on the md1 card itself for the full descriptor body.
 
 ## Bundle verification pipeline
 
-\index{verify-bundle}`verify-bundle` is the inverse direction: given a bundle (supplied via `--ms1`/`--mk1`/`--md1` flags OR `--bundle-json`) and the original input (`--slot @N.<subkey>=<value>` for full mode; `--xpub @N=...` for watch-only), it re-derives each card from the inputs, compares against the supplied cards, and emits a structured check log. The entry point at `verify_bundle.rs:98-201` dispatches on bundle mode, then per-card checks emit `VerifyCheck` rows (`format.rs:165-183`):
+\index{verify-bundle}`verify-bundle` is the inverse direction: given a bundle (supplied via `--ms1`/`--mk1`/`--md1` flags OR `--bundle-json`) and the original input (`--slot @N.<subkey>=<value>` for full mode; `--xpub @N=...` for watch-only), it re-derives each card from the inputs, compares against the supplied cards, and emits a structured check log. The entry point at `verify_bundle.rs:143-201` dispatches on bundle mode, then per-card checks emit `VerifyCheck` rows (`format.rs:165-183`):
 
 ```mermaid
 flowchart TD
@@ -182,7 +182,7 @@ flowchart TD
 
 Hybrid multisig (some slots secret-bearing, others watch-only) uses a **skip sentinel**: ms1 checks for watch-only slots emit `passed: true, decode_error: Some("skipped: <reason>")` so the JSON output remains structurally regular regardless of the per-slot mix.
 
-The verify-bundle JSON schema (`VerifyBundleJson` at `format.rs:148-153`) uses `schema_version: "4"` (`verify_bundle.rs:182`); the two schemas (BundleJson and VerifyBundleJson) currently share the value but evolve independently and may diverge on future breaking changes.
+The verify-bundle JSON schema (`VerifyBundleJson` at `format.rs:148-153`) uses `schema_version: "4"` (`verify_bundle.rs:329`); the two schemas (BundleJson and VerifyBundleJson) currently share the value but evolve independently and may diverge on future breaking changes.
 
 ## Worked example
 
@@ -197,8 +197,8 @@ A reader who later wants to confirm a recovered set of cards belongs together re
 
 ## Source pointers
 
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:20-28` — the `Bundle` in-memory struct.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:593-725` — `synthesize_unified` synthesis core.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:22-30` — the `Bundle` in-memory struct.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/synthesize.rs:745-827` — `synthesize_unified` synthesis core.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/bundle_unified.rs:14-26` — the `BundleMode` enum.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/bundle_unified.rs:34-112` — mode detection + pre-checks.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:42-54` — `MsField` dense-layout contract.
@@ -206,7 +206,7 @@ A reader who later wants to confirm a recovered set of cards belongs together re
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:103-145` — `MultisigInfo` + `BundleJson` schema.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:148-205` — `VerifyBundleJson` + `VerifyCheck` schema.
 - `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:259-376` — `engraving_card_unified` card layout.
-- `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98-201` — `verify-bundle` dispatch.
+- `mnemonic-toolkit/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143-201` — `verify-bundle` dispatch.
 - BIP-388 §"Specification" — wallet-policy framing (md1's basis).
 - BIP-389\index{BIP-389} §"Specification" — multipath alt syntax.
 - Toolkit SPEC §4.4 (ms1) / §4.5 (mk1) / §4.6 (md1) / §4.7 (cross-binding invariants) / §5.1 (multi-section stdout) / §5.2 (engraving card stderr) / §5.3 (bundle JSON schema) / §5.5 (engraving card layout) / §5.7 (verify-bundle checks) / §5.8 (schema-4 ms1 dense field).

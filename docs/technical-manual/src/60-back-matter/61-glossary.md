@@ -50,7 +50,7 @@ The BIP-388 §"Specification" requirement that a wallet policy's key-information
 
 ## bundle
 
-The toolkit's unit of engraving. Binds three sibling card formats — md1 (wallet policy), mk1 (per-cosigner xpub), ms1 (secret material) — together as one wallet's permanent backup. Synthesized by `synthesize_unified` (`crates/mnemonic-toolkit/src/synthesize.rs:593`); verified by `cmd::verify_bundle::run` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98`). Defined §IV.1.
+The toolkit's unit of engraving. Binds three sibling card formats — md1 (wallet policy), mk1 (per-cosigner xpub), ms1 (secret material) — together as one wallet's permanent backup. Synthesized by `synthesize_unified` (`crates/mnemonic-toolkit/src/synthesize.rs:745`); verified by `cmd::verify_bundle::run` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143`). Defined §IV.1.
 
 ## bundle envelope
 
@@ -402,7 +402,7 @@ The four ms-codec invariants locked at v0.1 to ensure v0.2 K-of-N share encoding
 
 ## verify-bundle
 
-The toolkit subcommand that re-derives each card from the user's slot inputs, compares against supplied `--ms1` / `--mk1` / `--md1` (or `--bundle-json`), and emits per-check `VerifyCheck` rows. Entry `cmd::verify_bundle::run` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:98-201`. Defined §IV.1.
+The toolkit subcommand that re-derives each card from the user's slot inputs, compares against supplied `--ms1` / `--mk1` / `--md1` (or `--bundle-json`), and emits per-check `VerifyCheck` rows. Entry `cmd::verify_bundle::run` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143-201`. Defined §IV.1.
 
 ## VerifyCheck
 
