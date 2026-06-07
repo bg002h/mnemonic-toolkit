@@ -411,7 +411,8 @@ fn bundle_run_unified<W: Write, E: Write>(
     emit_unified(args, &bundle, &resolved, mode, &slip0132_signals, stdout, stderr)?;
 
     if args.self_check {
-        self_check_bundle(&bundle, args)?;
+        let entropy_bearing: Vec<bool> = resolved.iter().map(|r| r.entropy.is_some()).collect();
+        self_check_bundle(&bundle, args, &entropy_bearing)?;
     }
     Ok(())
 }
@@ -1612,7 +1613,9 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     )?;
 
     if args.self_check {
-        self_check_bundle(&bundle, args)?;
+        let entropy_bearing: Vec<bool> =
+            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
+        self_check_bundle(&bundle, args, &entropy_bearing)?;
     }
 
     Ok(())
@@ -1655,7 +1658,9 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     emit_unified(args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
-        self_check_bundle(&bundle, args)?;
+        let entropy_bearing: Vec<bool> =
+            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
+        self_check_bundle(&bundle, args, &entropy_bearing)?;
     }
 
     Ok(())
@@ -1907,7 +1912,9 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     emit_unified(&emit_args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
-        self_check_bundle(&bundle, args)?;
+        let entropy_bearing: Vec<bool> =
+            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
+        self_check_bundle(&bundle, args, &entropy_bearing)?;
     }
 
     Ok(())
@@ -2024,7 +2031,13 @@ pub fn origin_to_derivation_path(
     })
 }
 
-pub fn self_check_bundle(bundle: &Bundle, args: &BundleArgs) -> Result<(), ToolkitError> {
+pub fn self_check_bundle(
+    bundle: &Bundle,
+    args: &BundleArgs,
+    entropy_bearing: &[bool],
+) -> Result<(), ToolkitError> {
+    // Phase 1 (RED): ms1 validation not yet implemented — see Phase 2.
+    let _ = entropy_bearing;
     // md1 decode.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
     let desc =
@@ -2201,4 +2214,97 @@ fn apply_stdin_substitutions(
         crate::slot_input::apply_slot_stdin(&mut owned.slot, stdin)?;
     }
     Ok(owned)
+}
+
+#[cfg(test)]
+mod self_check_ms1_tests {
+    use super::*;
+
+    // All-zero-entropy 24-word vector (mirrors synthesize.rs tests).
+    const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    fn minimal_bundle_args() -> BundleArgs {
+        BundleArgs {
+            network: CliNetwork::Mainnet,
+            template: None,
+            descriptor: None,
+            descriptor_file: None,
+            language: None,
+            passphrase: None,
+            passphrase_stdin: false,
+            account: 0,
+            json: false,
+            no_engraving_card: true,
+            multisig_path_family: None,
+            privacy_preserving: false,
+            self_check: false,
+            threshold: None,
+            slot: vec![],
+            import_json: None,
+            import_json_index: None,
+        }
+    }
+
+    /// A real 2-of-3 self-multisig bundle (md1/mk1/ms1 all valid + decodable).
+    fn multisig_bundle() -> Bundle {
+        let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        crate::synthesize::synthesize_multisig_full(
+            &m,
+            "",
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            3,
+            0,
+            MultisigPathFamily::Bip87,
+            false,
+        )
+        .unwrap()
+    }
+
+    /// RED→GREEN: self-check must DETECT a regressed ms1 emission (the @0-only
+    /// reversion: ms1[0] populated, ms1[1+] wrongly cleared). RED against the
+    /// pre-fix self_check_bundle (which ignores ms1 → returns Ok).
+    #[test]
+    fn self_check_detects_at0_only_ms1_regression() {
+        let args = minimal_bundle_args();
+        let entropy_bearing = vec![true, true, true]; // 3 phrase-bearing cosigners
+
+        // Sanity: a correct full-mode multisig bundle self-checks Ok.
+        let good = multisig_bundle();
+        assert_eq!(good.ms1.len(), 3);
+        assert!(
+            good.ms1.iter().all(|s| !s.is_empty()),
+            "fixture must emit a non-empty ms1 per cosigner"
+        );
+        assert!(
+            self_check_bundle(&good, &args, &entropy_bearing).is_ok(),
+            "a correct full-mode multisig must pass self-check"
+        );
+
+        // Regress: clear ms1[1] (the @0-only emission reversion).
+        let mut bad = multisig_bundle();
+        bad.ms1[1] = String::new();
+        let r = self_check_bundle(&bad, &args, &entropy_bearing);
+        assert!(
+            r.is_err(),
+            "self-check MUST detect the @0-only ms1 regression (ms1[1] cleared); got {r:?}"
+        );
+    }
+
+    /// GREEN guard: a watch-only shape (all-empty ms1, no entropy-bearing slots)
+    /// must PASS self-check (the check must not be over-eager).
+    #[test]
+    fn self_check_passes_watch_only_all_empty_ms1() {
+        let args = minimal_bundle_args();
+        let mut b = multisig_bundle();
+        for s in b.ms1.iter_mut() {
+            *s = String::new();
+        }
+        let entropy_bearing = vec![false, false, false];
+        assert!(
+            self_check_bundle(&b, &args, &entropy_bearing).is_ok(),
+            "all-empty ms1 with no entropy-bearing slots (watch-only) must pass self-check"
+        );
+    }
 }
