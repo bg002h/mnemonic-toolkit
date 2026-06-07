@@ -730,3 +730,49 @@ fn bundle_import_json_engraving_card_origin_is_bare() {
         "engraving card must NOT show the bracketed fingerprint-duplicated origin; got stderr:\n{stderr}"
     );
 }
+
+// ============================================================================
+// G-A (FOLLOWUP self-check-ms1-iteration, R0 C1a) — a SEEDED import-json
+// envelope (ms1[0] != "" from import-wallet --ms1, NO --slot arg) must PASS
+// `bundle --import-json --self-check`. The corrected self-check oracle keys off
+// resolved_slots[i].entropy (set from the envelope at synthesis) so the
+// populated ms1[0] round-trips; the pre-fix `args.slot` oracle (empty here)
+// would have false-rejected this valid bundle.
+// ============================================================================
+#[test]
+fn bundle_import_json_seeded_ms1_self_check_passes() {
+    const MS1_TEST_1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+    let body = "wsh(sortedmulti(2,\
+[73c5da0a/87'/0'/0']xpub6DBjiYnc4ewKti13Q1L35bqdodw5z3VGJnf516B3icHrEGEUcCuCG5GVQDZtH8Xmsyt3Fs9YDNwLaqjUbbRidwXZ6sxufZcr4VqqzrXvicM/<0;1>/*,\
+[b8688df1/87'/0'/0']xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qpatZjUuPGTyxf5TYU1vA34YFE9FHB4TvfYmokYLVsyEFZFt9/<0;1>/*,\
+[28645006/87'/0'/0']xpub6DB7HNqw6CZojxN85NuFTPWZhi2FagSnexPS1rv3nYQhngkmdHgb7iebYvTFmFKKDA3ozf5yezDsCH6cXAw3WZijviSZtZC2hjHn2uazz4z/<0;1>/*))";
+    let blob = bsms_2line_from_body(body);
+    let import_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1", MS1_TEST_1, "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let envelope_json = String::from_utf8(import_out.get_output().stdout.clone()).unwrap();
+
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("seeded-env.json");
+    std::fs::write(&p, &envelope_json).unwrap();
+
+    // bundle --import-json <seeded> --self-check → must succeed (exit 0).
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            p.to_str().unwrap(),
+            "--self-check",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+}
