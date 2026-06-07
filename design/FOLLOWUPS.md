@@ -2300,7 +2300,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/error.rs:13-16` — the `Bip388Distinctness` variant doc-comment reads "`(xpub, derivation_path_string)` raw-string equality per §4.11.b". Both distinctness layers (`cmd::bundle::check_resolved_slots_distinctness:429`, `parse_descriptor::check_key_vector_distinctness:1208`) use TYPED `DerivationPath` equality since v0.37.9/v0.5 (`SPEC_path_raw_bracketed_bare_unification.md` A2). The `bundle.rs:423-428` comment was already resynced to "typed"; `error.rs:13-16` is the lone source-comment lag.
 - **What:** reword the `error.rs` comment to "typed `DerivationPath` equality (`h`/`'` folds)". Code-comment-only.
 - **Why deferred:** out of scope for the docs cycle (a source `.rs` comment fix); trivial.
-- **Status:** `open`
+- **Status:** `resolved` (code-hygiene cycle, 2026-06-07; no-bump — binary byte-identical). `error.rs:13-16` reworded to `(xpub.to_string(), path)` typed-`DerivationPath` equality, mirroring the `bundle.rs:423-428` twin. Audit trail: `design/SPEC_code_hygiene_error_comment_cosigner_allow.md` + `…-r0-round1-review.md`.
 - **Tier:** `v0.22+`
 - **Companion:** none.
 
@@ -2309,7 +2309,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:218` (`#[allow(dead_code)]` above `synthesize_descriptor` at `:229`). Since v0.47.1, `synthesize_unified` (`:745`) DELEGATES to `synthesize_descriptor` (`:826`), so it is no longer dead — the `#[allow]` now suppresses a lint that would not fire.
 - **What:** remove the `#[allow(dead_code)]` at `synthesize.rs:218` and confirm the build is clean (no dead_code warning). Code-only.
 - **Why deferred:** out of scope for the docs cycle; trivial code hygiene.
-- **Status:** `open`
+- **Status:** `resolved` (code-hygiene cycle, 2026-06-07; no-bump). **As-filed citation was STRUCTURALLY-WRONG** (cycle-prep caught it): the `:218` `#[allow(dead_code)]` is on `pub type CosignerKeyInfo = ResolvedSlot` (`:219`), NOT `synthesize_descriptor` (`:229`, which has no allow — correct, it's live). Removed the **CosignerKeyInfo** `:218` allow (genuinely vestigial — `CosignerKeyInfo` is used in 4 production modules incl. `synthesize.rs:231`); `clippy --all-targets` warning-clean confirms. No doc falsehood was shipped by cycle 2 (the chapter correctly calls `synthesize_descriptor` "live"). Audit trail: `design/SPEC_code_hygiene_error_comment_cosigner_allow.md` + `…-r0-round1-review.md`.
 - **Tier:** `v0.22+`
 - **Companion:** none.
 

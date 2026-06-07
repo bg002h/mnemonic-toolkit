@@ -12,8 +12,8 @@ pub enum ToolkitError {
     Bip39(bip39::Error),
     /// SPEC §4.11.b BIP-388 distinct-key violation at bundle creation. Exit 2.
     /// `i` and `j` are the colliding slot indices (i < j) under
-    /// `(xpub, derivation_path_string)` raw-string equality per §4.11.b
-    /// normalization domain.
+    /// `(xpub.to_string(), path)` typed-`DerivationPath` equality per §4.11.b
+    /// (`h`/`'`-notation folds; mirrors the `cmd::bundle` twin comment).
     Bip388Distinctness { i: u8, j: u8 },
     /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
     /// Re-emitted from `check_key_vector_distinctness` post-binding under

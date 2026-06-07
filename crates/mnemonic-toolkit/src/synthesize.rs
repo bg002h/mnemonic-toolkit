@@ -215,7 +215,6 @@ pub fn synthesize_watch_only(
 // Legacy descriptor-mode bindings (bind_descriptor_keys) populate
 // `entropy: Some(...)` for slot @0 if --phrase supplied; `entropy: None` for
 // all @1+ slots (cosigner triples are watch-only by definition).
-#[allow(dead_code)]
 pub type CosignerKeyInfo = ResolvedSlot;
 
 /// Produce a `Bundle` from a pre-parsed `md_codec::Descriptor` + per-`@N`
