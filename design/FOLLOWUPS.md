@@ -2279,8 +2279,38 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `docs/technical-manual/transcripts/api-harvest-mnemonic-toolkit.md:261` documents the v0.20.x signature `synthesize_descriptor(descriptor, cosigners, entropy, privacy_preserving)`. Post-v0.21.0 the function is `synthesize_descriptor(descriptor, cosigners, privacy_preserving)` (3-arg).
 - **What:** The technical manual's API harvest table is generated from a stale snapshot of the public surface. After v0.21.0 drops `entropy: Option<&[u8]>` from `synthesize_descriptor`, the doc line drifts. Closing this FOLLOWUP requires either (a) regenerating the API harvest at the next technical-manual cycle (which already has its own update cadence per the project's `docs/manual/` vs `docs/technical-manual/` distinction), or (b) adding a CI lint that grep-asserts each documented signature exists verbatim in the live source.
 - **Why deferred:** `docs/technical-manual/` is a distinct surface from `docs/manual/` per CLAUDE.md. The v0.21.0 cycle's mirror invariant covers `docs/manual/` only. Technical-manual updates ride a separate cadence and shouldn't block toolkit releases.
+- **Status:** `resolved` (technical-manual synthesize/distinctness drift audit, 2026-06-06/07; docs-only, no version bump/tag). **The "fix one signature" was the tip of a broad drift.** Cycle-prep + R0 (3 rounds) + the impl-review found: the FOLLOWUP's "3-arg" target was ITSELF stale (current `synthesize_descriptor` is **4-arg** `(descriptor, cosigners, privacy_preserving, run_language)` — `run_language` added v0.47.1); ~20 stale `synthesize.rs`/`verify_bundle.rs`/`parse_descriptor.rs` line refs across the api-harvest transcript + 4 RENDERED chapters; the **deleted `path_raw` field** (v0.37.9) documented as active; and a **WRONG BIP-388 distinctness narrative** (`42-anti-collision-invariants.md`) claiming raw-string-vs-typed bifurcation — both layers (`bundle.rs:429`, `parse_descriptor.rs:1208`) are TYPED `.path` since v0.37.9/v0.5; `error.rs:13-16` is the lone residual source-comment lag. User chose FULL audit → fixed all of it + the 7-site `schema_version` list + `VerifyBundleJson` `:182/:498→:329/:1017`. Audit trail: `design/SPEC_api_harvest_drift_fix.md` + `design/agent-reports/api-harvest-drift-fix-*`. Residuals (different symbol classes) → `technical-manual-residual-line-ref-drift`.
+- **Tier:** `v0.22+-doc-hygiene`
+- **Companion:** none.
+
+### `technical-manual-residual-line-ref-drift` — `docs/technical-manual/` has broad symbol→line-number drift beyond the synthesize/distinctness scope
+- **Surfaced:** 2026-06-07, api-harvest drift-audit cycle (impl-review M1 + deferred items). The synthesize-drift audit surfaced that the technical manual is broadly line-ref-stale across MANY symbol classes, not just synthesize.
+- **Where (the three deferred residual classes):**
+  - **Mermaid diagram node** `src/40-bundle-formation/41-bundle-anatomy.md:55` (`synthesize_unified<br/>(synthesize.rs:593)` → should be `:745`) — left at `:593` because editing it rehashes the cached figure and `make figures-cache` regen needs `chromium` (absent locally); regenerate the figure cache + update the node together.
+  - **`chunk_set_id` format-string refs** `bundle.rs:707` (md1 4-hex) + `bundle.rs:724` (mk1/ms1 5-hex) — cited at `42-anti-collision-invariants.md:13,14,147,148`, `41-bundle-anatomy.md:138,193`, `61-glossary.md:89`. The impl flagged `:707` no longer exists and `:724`→~`:1078`; audit the current md1 4-hex + mk1/ms1 5-hex `chunk_set_id` format sites.
+  - **`verify_bundle.rs` internal-helper refs** at `42-anti-collision-invariants.md:24,71,91,141-144`: `verify_bundle.rs:831-836` (`MappingFailure`, actually `:1527`), `:838-1277` (`emit_multisig_checks`, actually `:1533-2025`), `:895-947`, `:1194-1232` — all drifted.
+- **What:** a dedicated technical-manual line-ref refresh pass. Best fix: a CI-gated (or `make lint`-gated) **regeneration/assert mechanism** — the existing `api-surface-coverage.sh` is advisory-only and checks symbol NAMES, not line numbers, so line-ref drift is silent. (The technical-manual has NO CI workflow at all — that's the root enabler.)
+- **Why deferred:** different symbol classes from the synthesize/distinctness audit; the figure-cache regen needs `chromium`/docker; an enumerate-all line-ref audit + a gating mechanism is its own cycle.
 - **Status:** `open`
 - **Tier:** `v0.22+-doc-hygiene`
+- **Companion:** none.
+
+### `error-rs-bip388-distinctness-stale-raw-string-comment` — `error.rs` `Bip388Distinctness` doc-comment says "raw-string" but the behavior is typed
+- **Surfaced:** 2026-06-07, api-harvest drift-audit cycle (R0 I2 / behavior audit).
+- **Where:** `crates/mnemonic-toolkit/src/error.rs:13-16` — the `Bip388Distinctness` variant doc-comment reads "`(xpub, derivation_path_string)` raw-string equality per §4.11.b". Both distinctness layers (`cmd::bundle::check_resolved_slots_distinctness:429`, `parse_descriptor::check_key_vector_distinctness:1208`) use TYPED `DerivationPath` equality since v0.37.9/v0.5 (`SPEC_path_raw_bracketed_bare_unification.md` A2). The `bundle.rs:423-428` comment was already resynced to "typed"; `error.rs:13-16` is the lone source-comment lag.
+- **What:** reword the `error.rs` comment to "typed `DerivationPath` equality (`h`/`'` folds)". Code-comment-only.
+- **Why deferred:** out of scope for the docs cycle (a source `.rs` comment fix); trivial.
+- **Status:** `open`
+- **Tier:** `v0.22+`
+- **Companion:** none.
+
+### `synthesize-descriptor-vestigial-dead-code-allow` — `#[allow(dead_code)]` on `synthesize_descriptor` is vestigial since v0.47.1
+- **Surfaced:** 2026-06-07, api-harvest drift-audit cycle (R0 I2).
+- **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:218` (`#[allow(dead_code)]` above `synthesize_descriptor` at `:229`). Since v0.47.1, `synthesize_unified` (`:745`) DELEGATES to `synthesize_descriptor` (`:826`), so it is no longer dead — the `#[allow]` now suppresses a lint that would not fire.
+- **What:** remove the `#[allow(dead_code)]` at `synthesize.rs:218` and confirm the build is clean (no dead_code warning). Code-only.
+- **Why deferred:** out of scope for the docs cycle; trivial code hygiene.
+- **Status:** `open`
+- **Tier:** `v0.22+`
 - **Companion:** none.
 
 ### `verify-bundle-xpub-parent-fingerprint-derivation` — extend xpub-vs-md1 parent_fingerprint check to depth ≥ 2
