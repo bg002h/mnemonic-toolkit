@@ -10,7 +10,7 @@ A BIP-388 wallet-policy placeholder for cosigner `N` (0-indexed). `@0` is the fi
 
 ## address derivation
 
-The end-to-end transformation that turns an md1 template plus its key information into a network-specific bitcoin address. Entry point: `Descriptor::derive_address(chain, index, network)` at `crates/md-codec/src/derive.rs:92-132`. Three tiers — template, derivation, script + address — discussed §III.1.
+The end-to-end transformation that turns an md1 template plus its key information into a network-specific bitcoin address. Entry point: `Descriptor::derive_address(chain, index, network)` at `crates/md-codec/src/derive.rs::Descriptor::derive_address`. Three tiers — template, derivation, script + address — discussed §III.1.
 
 ## base58check
 
@@ -50,19 +50,19 @@ The BIP-388 §"Specification" requirement that a wallet policy's key-information
 
 ## bundle
 
-The toolkit's unit of engraving. Binds three sibling card formats — md1 (wallet policy), mk1 (per-cosigner xpub), ms1 (secret material) — together as one wallet's permanent backup. Synthesized by `synthesize_unified` (`crates/mnemonic-toolkit/src/synthesize.rs:745`); verified by `cmd::verify_bundle::run` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143`). Defined §IV.1.
+The toolkit's unit of engraving. Binds three sibling card formats — md1 (wallet policy), mk1 (per-cosigner xpub), ms1 (secret material) — together as one wallet's permanent backup. Synthesized by `synthesize_unified` (`crates/mnemonic-toolkit/src/synthesize.rs::synthesize_unified`); verified by `cmd::verify_bundle::run` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run`). Defined §IV.1.
 
 ## bundle envelope
 
-The toolkit-emergent set `{md1, mk1[0..N], ms1[0..N]}` plus the binding rules (`chunk_set_id` cross-prefix agreement, BIP-388 distinctness, multiset `md1_xpub_match`). Not a separate wire format; serialized to JSON via `BundleJson` (`crates/mnemonic-toolkit/src/format.rs:119-145`) with `schema_version = "4"`. Defined §IV.1.
+The toolkit-emergent set `{md1, mk1[0..N], ms1[0..N]}` plus the binding rules (`chunk_set_id` cross-prefix agreement, BIP-388 distinctness, multiset `md1_xpub_match`). Not a separate wire format; serialized to JSON via `BundleJson` (`crates/mnemonic-toolkit/src/format.rs::BundleJson`) with `schema_version = "4"`. Defined §IV.1.
 
 ## BundleJson
 
-The serde-derived top-level struct (`crates/mnemonic-toolkit/src/format.rs:120-145`) emitted on stdout by `mnemonic bundle`. Carries `schema_version`, `mode`, `network`, `template`/`descriptor`, `account`, origin path(s), master fingerprint, the three card-set fields (`ms1`, `mk1`, `md1`), `multisig` metadata, and `privacy_preserving`. Defined §V.4.5.1.
+The serde-derived top-level struct (`crates/mnemonic-toolkit/src/format.rs::BundleJson`) emitted on stdout by `mnemonic bundle`. Carries `schema_version`, `mode`, `network`, `template`/`descriptor`, `account`, origin path(s), master fingerprint, the three card-set fields (`ms1`, `mk1`, `md1`), `multisig` metadata, and `privacy_preserving`. Defined §V.4.5.1.
 
 ## BundleMode
 
-Five-variant enum classifying a bundle by slot composition: `SingleSigFull` / `SingleSigWatchOnly` / `MultisigMultiSource` / `MultisigWatchOnly` / `MultisigHybrid`. Auto-detected from `--slot` inputs by `detect_bundle_mode` (`crates/mnemonic-toolkit/src/bundle_unified.rs:34-63`). Defined §IV.1.
+Five-variant enum classifying a bundle by slot composition: `SingleSigFull` / `SingleSigWatchOnly` / `MultisigMultiSource` / `MultisigWatchOnly` / `MultisigHybrid`. Auto-detected from `--slot` inputs by `detect_bundle_mode` (`crates/mnemonic-toolkit/src/bundle_unified.rs::detect_bundle_mode`). Defined §IV.1.
 
 ## chain
 
@@ -70,7 +70,7 @@ The multipath alternative selector argument to `Descriptor::derive_address`. For
 
 ## canonical_origin
 
-`md-codec`'s wrapper-shape → canonical BIP-32 origin-path lookup at `canonical_origin.rs:45`. Returns `Some(OriginPath)` for the five canonical wrappers (`pkh@N`, `wpkh@N`, `tr@N` keypath, `wsh(multi|sortedmulti)`, `sh(wsh(multi|sortedmulti))`) and `None` for all other shapes (which then require explicit `@N` overrides via `validate_explicit_origin_required`). Defined §V.1.3.2.
+`md-codec`'s wrapper-shape → canonical BIP-32 origin-path lookup at `canonical_origin.rs::canonical_origin`. Returns `Some(OriginPath)` for the five canonical wrappers (`pkh@N`, `wpkh@N`, `tr@N` keypath, `wsh(multi|sortedmulti)`, `sh(wsh(multi|sortedmulti))`) and `None` for all other shapes (which then require explicit `@N` overrides via `validate_explicit_origin_required`). Defined §V.1.3.2.
 
 ## CKDpub
 
@@ -86,7 +86,7 @@ BIP-32's "public parent key → public child key" function: given an xpub (chain
 
 ## chunk_set_id binding (bundle)
 
-The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `bundle.rs:707`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `bundle.rs:724`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
+The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
 
 ## codex32
 
@@ -102,15 +102,15 @@ The `--format coldcard` selector for `mnemonic export-wallet`. Singlesig templat
 
 ## compute_wallet_policy_id
 
-`md-codec` identity function at `identity.rs:172` that computes a `WalletPolicyId` from a `Descriptor`. Self-canonicalises and self-runs `expand_per_at_n`; renders SHA-256 over canonical template ‖ per-`@N` records (truncated to 16 bytes). Sibling functions `compute_md1_encoding_id` (`identity.rs:39`) and `compute_wallet_descriptor_template_id` (`identity.rs:71`) compute the encoding-id and γ-flavor template-id. Defined §V.1.3.11.
+`md-codec` identity function at `identity.rs::compute_wallet_policy_id` that computes a `WalletPolicyId` from a `Descriptor`. Self-canonicalises and self-runs `expand_per_at_n`; renders SHA-256 over canonical template ‖ per-`@N` records (truncated to 16 bytes). Sibling functions `compute_md1_encoding_id` (`identity.rs::compute_md1_encoding_id`) and `compute_wallet_descriptor_template_id` (`identity.rs::compute_wallet_descriptor_template_id`) compute the encoding-id and γ-flavor template-id. Defined §V.1.3.11.
 
 ## CosignerEntry
 
-The per-cosigner row struct in `BundleJson.multisig.cosigners` (`crates/mnemonic-toolkit/src/format.rs:94-100`). Carries `index`, `master_fingerprint`, `origin_path`, `xpub`. Defined §V.4.5.5.
+The per-cosigner row struct in `BundleJson.multisig.cosigners` (`crates/mnemonic-toolkit/src/format.rs::CosignerEntry`). Carries `index`, `master_fingerprint`, `origin_path`, `xpub`. Defined §V.4.5.5.
 
 ## cosigner-mapping diagnostic
 
-The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`verify_bundle.rs:831-836`, two-pass at `:895-947`). Defined §IV.2.
+The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`verify_bundle.rs::MappingFailure`, two-pass at `::emit_multisig_checks`). Defined §IV.2.
 
 ## cross_chunk_hash
 
@@ -122,11 +122,11 @@ A `DescriptorPublicKey` after multipath alt selection and wildcard `/*` resoluti
 
 ## derive (Cargo feature)
 
-`md-codec`'s sole feature flag (`crates/md-codec/Cargo.toml:21-23`, default enabled). Gates `pub mod to_miniscript` and `Descriptor::derive_address`. `pub mod derive` exists unconditionally; the body wraps every item in `#[cfg(feature = "derive")]` — so with the feature off, `md_codec::derive` is an empty-public-API module while `md_codec::to_miniscript` does not exist. Defined §V.1.2.
+`md-codec`'s sole feature flag (`crates/md-codec/Cargo.toml`, default enabled). Gates `pub mod to_miniscript` and `Descriptor::derive_address`. `pub mod derive` exists unconditionally; the body wraps every item in `#[cfg(feature = "derive")]` — so with the feature off, `md_codec::derive` is an empty-public-API module while `md_codec::to_miniscript` does not exist. Defined §V.1.2.
 
 ## DescriptorPublicKey
 
-rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `to_miniscript.rs:84-89` builds `DescriptorPublicKey::XPub { origin, xkey, derivation_path, wildcard: Unhardened }` for each `@N`; the NUMS-internal-key path builds `DescriptorPublicKey::Single { origin: None, key: SinglePubKey::XOnly(H) }`. Discussed §III.1, §III.2.
+rust-miniscript's key type used by `miniscript::Descriptor`. The converter at `to_miniscript.rs::build_descriptor_public_key` builds `DescriptorPublicKey::XPub { origin, xkey, derivation_path, wildcard: Unhardened }` for each `@N`; the NUMS-internal-key path builds `DescriptorPublicKey::Single { origin: None, key: SinglePubKey::XOnly(H) }`. Discussed §III.1, §III.2.
 
 ## divergent_paths
 
@@ -138,19 +138,19 @@ The `--format electrum` selector for `mnemonic export-wallet`, emitting an Elect
 
 ## ELECTRUM_SEED_VERSION_PIN
 
-The `pub const u32 = 17` at `wallet_export/electrum.rs:37` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.5.9.7.
+The `pub const u32 = 17` at `wallet_export/electrum.rs::ELECTRUM_SEED_VERSION_PIN` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.5.9.7.
 
 ## EmitInputs
 
-The single struct (`crates/mnemonic-toolkit/src/wallet_export/mod.rs:327-369`, `pub(crate)`) threaded through every `WalletFormatEmitter::emit` call. Carries the canonical descriptor (with `#checksum`), resolved slots, template (or `None` for descriptor-passthrough), `WalletScriptType`, network, account, threshold (and a `threshold_user_supplied` flag), `master_xpub_at_0`, wallet name (and a `wallet_name_was_user_supplied` flag), taproot internal-key designation, range, timestamp, and Bitcoin Core target version. Constructed in `cmd::export_wallet::run` after watch-only validation. Defined §V.4.5.9.
+The single struct (`crates/mnemonic-toolkit/src/wallet_export/mod.rs::EmitInputs`, `pub(crate)`) threaded through every `WalletFormatEmitter::emit` call. Carries the canonical descriptor (with `#checksum`), resolved slots, template (or `None` for descriptor-passthrough), `WalletScriptType`, network, account, threshold (and a `threshold_user_supplied` flag), `master_xpub_at_0`, wallet name (and a `wallet_name_was_user_supplied` flag), taproot internal-key designation, range, timestamp, and Bitcoin Core target version. Constructed in `cmd::export_wallet::run` after watch-only validation. Defined §V.4.5.9.
 
 ## engraving card
 
-A stderr-only emission from `mnemonic bundle` carrying a fixed-shape per-card identifier index (`# ms1: ...`, `# mk1: ...`, `# md1: ...`) plus template/threshold/cosigners metadata. Produced by `engraving_card_unified` (`crates/mnemonic-toolkit/src/format.rs:259-376`) from a `BundleInputForCard`. Not machine-readable; designed for physical alignment when stamping plates. Defined §IV.1.
+A stderr-only emission from `mnemonic bundle` carrying a fixed-shape per-card identifier index (`# ms1: ...`, `# mk1: ...`, `# md1: ...`) plus template/threshold/cosigners metadata. Produced by `engraving_card_unified` (`crates/mnemonic-toolkit/src/format.rs::engraving_card_unified`) from a `BundleInputForCard`. Not machine-readable; designed for physical alignment when stamping plates. Defined §IV.1.
 
 ## expand_per_at_n
 
-`md-codec`'s per-`@N` resolution helper at `canonicalize.rs:420`. Overlays per-`@N` TLV overrides on descriptor-level baselines to produce a `Vec<ExpandedKey>` (one per placeholder, each carrying `idx`, `origin_path`, `use_site_path`, optional `fingerprint`, optional `xpub`). Precondition: caller has canonicalised indices (or the descriptor came from a decoder, which is canonical by construction). Defined §V.1.3.3.
+`md-codec`'s per-`@N` resolution helper at `canonicalize.rs::expand_per_at_n`. Overlays per-`@N` TLV overrides on descriptor-level baselines to produce a `Vec<ExpandedKey>` (one per placeholder, each carrying `idx`, `origin_path`, `use_site_path`, optional `fingerprint`, optional `xpub`). Precondition: caller has canonicalised indices (or the descriptor came from a decoder, which is canonical by construction). Defined §V.1.3.3.
 
 ## forked-BCH boundary
 
@@ -170,11 +170,11 @@ The BIP-173 HRP-expansion convention used by all three formats: each HRP charact
 
 ## H-point (NUMS)
 
-The BIP-341 nothing-up-my-sleeve internal-key x-only coordinate `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0` — the SHA-256 of an agreed-upon generator point's compressed encoding, with no known discrete log. Used as the taproot internal key when the wallet has no key-path-spend mode. Pinned at `to_miniscript.rs:34-35`. Discussed §III.2.
+The BIP-341 nothing-up-my-sleeve internal-key x-only coordinate `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0` — the SHA-256 of an agreed-upon generator point's compressed encoding, with no known discrete log. Used as the taproot internal key when the wallet has no key-path-spend mode. Pinned at `to_miniscript.rs::NUMS_H_POINT_X_ONLY_HEX`. Discussed §III.2.
 
 ## git-tag pin
 
-The dependency-pinning pattern used by `mnemonic-toolkit` at `crates/mnemonic-toolkit/Cargo.toml:20-22`: each sibling codec is pinned to an exact git tag (`ms-codec-v0.1.0`, `mk-codec-v0.2.1`, `md-codec-v0.16.1`) against its source repo, not to a crates.io version. Pre-crates.io-publish state; downstream consumers wanting a stable contract today target the CLI binary + JSON envelopes instead. Defined §V.4.8.
+The dependency-pinning pattern used by `mnemonic-toolkit` at `crates/mnemonic-toolkit/Cargo.toml`: each sibling codec is pinned to an exact git tag (`ms-codec-v0.1.0`, `mk-codec-v0.2.1`, `md-codec-v0.16.1`) against its source repo, not to a crates.io version. Pre-crates.io-publish state; downstream consumers wanting a stable contract today target the CLI binary + JSON envelopes instead. Defined §V.4.8.
 
 ## is_nums
 
@@ -190,7 +190,7 @@ The serde-serialised top-level stdout output of `mnemonic bundle` (`BundleJson`,
 
 ## KeyCard
 
-`mk-codec`'s top-level decoded-card struct at `key_card.rs:24` (`#[non_exhaustive] #[derive(Debug, Clone, PartialEq, Eq)]`). Carries `policy_id_stubs: Vec<[u8; 4]>`, `origin_fingerprint: Option<Fingerprint>`, `origin_path: DerivationPath`, `xpub: Xpub`. `KeyCard::new` is intentionally permissive — field-level invariants are enforced at encode time, not construction. Defined §V.2.3.3.
+`mk-codec`'s top-level decoded-card struct at `key_card.rs::KeyCard` (`#[non_exhaustive] #[derive(Debug, Clone, PartialEq, Eq)]`). Carries `policy_id_stubs: Vec<[u8; 4]>`, `origin_fingerprint: Option<Fingerprint>`, `origin_path: DerivationPath`, `xpub: Xpub`. `KeyCard::new` is intentionally permissive — field-level invariants are enforced at encode time, not construction. Defined §V.2.3.3.
 
 ## kiw
 
@@ -214,7 +214,7 @@ The descriptor card. Encodes a BIP-388-style wallet policy. HRP `md`. Library cr
 
 ## md1_xpub_match
 
-The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity, so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))` (multisig path; single-sig uses `.first()` comparison in `emit_md1_checks` at `verify_bundle.rs:1280-1355` with detail `"65-byte xpub matches expected"`). Multisig implementation at `verify_bundle.rs:1194-1232`. Defined §IV.2.
+The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity, so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))` (multisig path; single-sig uses `.first()` comparison in `emit_md1_checks` at `verify_bundle.rs::emit_md1_checks` with detail `"65-byte xpub matches expected"`). Multisig implementation at `verify_bundle.rs::emit_multisig_checks`. Defined §IV.2.
 
 ## Md1EncodingId
 
@@ -226,7 +226,7 @@ A subset of Bitcoin Script with type-checking and analysis properties (BIP-379).
 
 ## MissingField
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:224-232` enumerating the seven SPEC §4 missing-info classes per-format emitters can surface via `WalletFormatEmitter::collect_missing`. Per-slot variants (`MasterFingerprint { slot }`, `DerivationPath { slot }`, `Xpub { slot }`) and globals (`ScriptType`, `Threshold`, `WalletName`, `IncompatibleFormatForTemplate`); deterministic sort key sorts globals first by enum discriminant 4 → 7, then per-slot grouped by discriminant 1 / 2 / 3 and ordered by slot index. Bullet construction is sole-sited at `build_missing_fields_refusal` (`wallet_export/mod.rs:279`). Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::MissingField` enumerating the seven SPEC §4 missing-info classes per-format emitters can surface via `WalletFormatEmitter::collect_missing`. Per-slot variants (`MasterFingerprint { slot }`, `DerivationPath { slot }`, `Xpub { slot }`) and globals (`ScriptType`, `Threshold`, `WalletName`, `IncompatibleFormatForTemplate`); deterministic sort key sorts globals first by enum discriminant 4 → 7, then per-slot grouped by discriminant 1 / 2 / 3 and ordered by slot index. Bullet construction is sole-sited at `build_missing_fields_refusal` (`wallet_export/mod.rs::build_missing_fields_refusal`). Defined §V.4.5.9.
 
 ## mk1
 
@@ -242,7 +242,7 @@ BIP-389's `<alt_0;alt_1;...;alt_n>` syntax for a use-site path. md1 encodes the 
 
 ## MultisigInfo
 
-The multisig-metadata struct in `BundleJson.multisig` (`crates/mnemonic-toolkit/src/format.rs:104-111`). Carries `template`, `threshold`, `cosigner_count`, `path_family` (`"bip48"` or `"bip87"`), and the per-cosigner `Vec<CosignerEntry>`. `None` for single-sig bundles (serialised as JSON `null`). Defined §V.4.5.4.
+The multisig-metadata struct in `BundleJson.multisig` (`crates/mnemonic-toolkit/src/format.rs::MultisigInfo`). Carries `template`, `threshold`, `cosigner_count`, `path_family` (`"bip48"` or `"bip87"`), and the per-cosigner `Vec<CosignerEntry>`. `None` for single-sig bundles (serialised as JSON `null`). Defined §V.4.5.4.
 
 ## multiset
 
@@ -274,15 +274,15 @@ Password-Based Key Derivation Function 2 (HMAC-SHA512 in the BIP-39 application)
 
 ## PathDecl
 
-The md1 wire-format data structure for the inline origin-path declaration: `{ n: u8 (1..=32), paths: PathDeclPaths }`. The `paths` arm is `Shared(OriginPath)` (single path applies to all `@N`) or `Divergent(Vec<OriginPath>)` (one path per `@N`). Header bit 4 selects the arm. Defined `origin_path.rs:82-96`.
+The md1 wire-format data structure for the inline origin-path declaration: `{ n: u8 (1..=32), paths: PathDeclPaths }`. The `paths` arm is `Shared(OriginPath)` (single path applies to all `@N`) or `Divergent(Vec<OriginPath>)` (one path per `@N`). Header bit 4 selects the arm. Defined `origin_path.rs::PathDecl`.
 
 ## PathDeclPaths
 
-The two-arm enum nested inside `PathDecl.paths` (`md-codec` `origin_path.rs:90-96`). `Shared(OriginPath)` carries one path that applies to every `@N`; `Divergent(Vec<OriginPath>)` carries one path per `@N`. Header bit 4 (`divergent_paths`) selects which arm is on the wire. Defined §V.1.3.12.
+The two-arm enum nested inside `PathDecl.paths` (`md-codec` `origin_path.rs::PathDeclPaths`). `Shared(OriginPath)` carries one path that applies to every `@N`; `Divergent(Vec<OriginPath>)` carries one path per `@N`. Header bit 4 (`divergent_paths`) selects which arm is on the wire. Defined §V.1.3.12.
 
 ## Payload (ms-codec)
 
-`ms-codec`'s payload enum at `payload.rs:19` (`#[derive(Debug, Clone, PartialEq, Eq)] #[non_exhaustive]`). The single v0.1 variant is `Entr(Vec<u8>)` carrying BIP-39 entropy bytes; future v0.2+ variants (Mnem, Seed, Xprv) are foreseen. Sibling `PayloadKind` discriminates without payload. Methods: `validate`, `kind`, `as_bytes`. Defined §V.3.3.6.
+`ms-codec`'s payload enum at `payload.rs::Payload` (`#[derive(Debug, Clone, PartialEq, Eq)] #[non_exhaustive]`). The single v0.1 variant is `Entr(Vec<u8>)` carrying BIP-39 entropy bytes; future v0.2+ variants (Mnem, Seed, Xprv) are foreseen. Sibling `PayloadKind` discriminates without payload. Methods: `validate`, `kind`, `as_bytes`. Defined §V.3.3.6.
 
 ## placeholder
 
@@ -290,7 +290,7 @@ The `@N` token in a BIP-388 wallet-policy template that stands in for a concrete
 
 ## Phrase
 
-`md-codec`'s 12-word BIP-39 phrase wrapper at `phrase.rs:7-10` (`pub struct Phrase(pub [String; 12])`). Produced from a 128-bit id via `Phrase::from_id_bytes` (effectively infallible on 128-bit entropy; the `Result` shape is API-uniform); `Display` joins the 12 words with single spaces. Defined §V.1.3.13.
+`md-codec`'s 12-word BIP-39 phrase wrapper at `phrase.rs::Phrase` (`pub struct Phrase(pub [String; 12])`). Produced from a 128-bit id via `Phrase::from_id_bytes` (effectively infallible on 128-bit entropy; the `Result` shape is API-uniform); `Display` joins the 12 words with single spaces. Defined §V.1.3.13.
 
 ## policy_id_stub
 
@@ -310,7 +310,7 @@ md1's TLV `0x02`: an optional, inline carrier for the cosigner xpub bytes (32-by
 
 ## reconstruct_xpub
 
-`mk-codec`'s 73-byte-compact-form → full `bitcoin::bip32::Xpub` reconstructor at `bytecode/xpub_compact.rs:85`. Recovers `depth` from `len(origin_path)` and `child_number` from the path's last component. **Panics** on empty `origin_path` — external callers using `XpubCompact` directly (outside `decode`) must pre-check non-emptiness. Defined §V.2.3.9.
+`mk-codec`'s 73-byte-compact-form → full `bitcoin::bip32::Xpub` reconstructor at `bytecode/xpub_compact.rs::reconstruct_xpub`. Recovers `depth` from `len(origin_path)` and `child_number` from the path's last component. **Panics** on empty `origin_path` — external callers using `XpubCompact` directly (outside `decode`) must pre-check non-emptiness. Defined §V.2.3.9.
 
 ## RESERVED_TAG_TABLE
 
@@ -326,7 +326,7 @@ The format-specific GF(32) constant the BCH polymod output is compared against. 
 
 ## schema_version
 
-The `&'static str` field on `BundleJson` / `VerifyBundleJson` (`crates/mnemonic-toolkit/src/format.rs:120, 149`) carrying the JSON-envelope schema generation. Literal `"4"` at every construction site at HEAD v0.8.0. Exists precisely so external consumers can pin against a stable contract independent of the crate version. The `format.rs:114` module-level doc-comment ("v0.2: schema_version 2") is stale and persists at HEAD. Defined §V.4.5.
+The `&'static str` field on `BundleJson` / `VerifyBundleJson` (`crates/mnemonic-toolkit/src/format.rs::BundleJson, format.rs::VerifyBundleJson`) carrying the JSON-envelope schema generation. Literal `"4"` at every construction site at HEAD v0.8.0. Exists precisely so external consumers can pin against a stable contract independent of the crate version. The `format.rs` module-level doc-comment ("v0.2: schema_version 2") is stale and persists at HEAD. Defined §V.4.5.
 
 ## script context (rust-miniscript)
 
@@ -334,7 +334,7 @@ rust-miniscript's type-class abstraction over the three valid contexts a miniscr
 
 ## secret-bearing slot
 
-A bundle slot whose subkey set contains any of `phrase` / `entropy` / `xprv` / `wif` — the four secret-material subkey types. Discriminator: `SlotSubkey::is_secret_bearing` at `crates/mnemonic-toolkit/src/slot_input.rs:47-49`. Bundle synthesis emits a non-empty `ms1` card for each secret-bearing slot. Defined §IV.1.
+A bundle slot whose subkey set contains any of `phrase` / `entropy` / `xprv` / `wif` — the four secret-material subkey types. Discriminator: `SlotSubkey::is_secret_bearing` at `crates/mnemonic-toolkit/src/slot_input.rs::SlotSubkey::is_secret_bearing`. Bundle synthesis emits a non-empty `ms1` card for each secret-bearing slot. Defined §IV.1.
 
 ## share-set grouping
 
@@ -358,7 +358,7 @@ ms1's `Tag` constant exposing the `entr` (BIP-39 entropy) type tag (`Tag(*b"entr
 
 ## Tag (md-codec)
 
-`md-codec`'s 36-variant operator-tag enum (`tag.rs:14-89`). Occupies the 6-bit primary space `0x00..=0x23`; primary `0x24..=0x3E` are reserved; primary `0x3F` is the extension prefix with its 4-bit subspace `0x00..=0x0F` fully reserved. Reading reserved/extension tags yields `Error::TagOutOfRange { primary }`. The authoritative tag-code table is reproduced in §II.1 §"Tag table (v0.30)". Defined §V.1.3.14.
+`md-codec`'s 36-variant operator-tag enum (`descriptor-mnemonic/crates/md-codec/src/tag.rs::Tag`). Occupies the 6-bit primary space `0x00..=0x23`; primary `0x24..=0x3E` are reserved; primary `0x3F` is the extension prefix with its 4-bit subspace `0x00..=0x0F` fully reserved. Reading reserved/extension tags yields `Error::TagOutOfRange { primary }`. The authoritative tag-code table is reproduced in §II.1 §"Tag table (v0.30)". Defined §V.1.3.14.
 
 ## TapTree
 
@@ -370,7 +370,7 @@ A miniscript fragment embedded as a leaf in a TapTree. Type-checked under the `T
 
 ## TaprootInternalKey
 
-`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs:68` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.5.9.
+`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs::TaprootInternalKey` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.5.9.
 
 ## template (md1)
 
@@ -382,15 +382,15 @@ The bit-aligned trailing region of md1's bytecode carrying optional metadata blo
 
 ## TimestampArg
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:121-125` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`cmd/export_wallet.rs:87`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TimestampArg` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`cmd/export_wallet.rs::ExportWalletArgs::timestamp`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
 
 ## to_miniscript_descriptor
 
-`md-codec`'s feature-gated AST → rust-miniscript converter at `to_miniscript.rs:54`. Builds a `miniscript::Descriptor<DescriptorPublicKey>` for the given `chain` (multipath alt). Trailing `/*` wildcard is left for the caller's `at_derivation_index(index)` to resolve. v0.32 replaced the v0.14-era 5-shape allow-list with this general AST-driven converter, covering every BIP-388-parseable shape. Defined §V.1.3.16.
+`md-codec`'s feature-gated AST → rust-miniscript converter at `to_miniscript.rs::to_miniscript_descriptor`. Builds a `miniscript::Descriptor<DescriptorPublicKey>` for the given `chain` (multipath alt). Trailing `/*` wildcard is left for the caller's `at_derivation_index(index)` to resolve. v0.32 replaced the v0.14-era 5-shape allow-list with this general AST-driven converter, covering every BIP-388-parseable shape. Defined §V.1.3.16.
 
 ## ToolkitError
 
-`mnemonic-toolkit`'s central error enum at `error.rs:10` (`#[non_exhaustive]`; 26 variants at HEAD v0.8.0). Carries `kind()` (stable JSON discriminant), `exit_code()` (SPEC §6.1 mapping), `message()` (friendly), and `details()` (JSON forensic detail). Sibling-codec errors lift in via dedicated `From` impls that selectively fold version-future variants into `FutureFormat` (exit 3). Defined §V.4.4.
+`mnemonic-toolkit`'s central error enum at `mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs::ToolkitError` (`#[non_exhaustive]`; 26 variants at HEAD v0.8.0). Carries `kind()` (stable JSON discriminant), `exit_code()` (SPEC §6.1 mapping), `message()` (friendly), and `details()` (JSON forensic detail). Sibling-codec errors lift in via dedicated `From` impls that selectively fold version-future variants into `FutureFormat` (exit 3). Defined §V.4.4.
 
 ## use-site path
 
@@ -398,15 +398,15 @@ The BIP-389 multipath + BIP-32 wildcard segment applied at the descriptor placeh
 
 ## v0.1 → v0.2-shares migration contract
 
-The four ms-codec invariants locked at v0.1 to ensure v0.2 K-of-N share encoding can ship additively without re-engraving v0.1 cards: (1) reserved-prefix byte `0x00` → type discriminator in v0.2, (2) prefix-byte gating of BIP-93 `id`-based share grouping, (3) v0.2 encoder anti-collision against v0.1's `RESERVED_TAG_TABLE`, (4) API back-compat — `encode_shares(tag, Threshold::ZERO, &[p])` wire-bit-identical to v0.1 `encode(tag, &p)`. Authority: `mnemonic-secret/design/SPEC_ms_v0_1.md:212-226`. Discussed §IV.3.
+The four ms-codec invariants locked at v0.1 to ensure v0.2 K-of-N share encoding can ship additively without re-engraving v0.1 cards: (1) reserved-prefix byte `0x00` → type discriminator in v0.2, (2) prefix-byte gating of BIP-93 `id`-based share grouping, (3) v0.2 encoder anti-collision against v0.1's `RESERVED_TAG_TABLE`, (4) API back-compat — `encode_shares(tag, Threshold::ZERO, &[p])` wire-bit-identical to v0.1 `encode(tag, &p)`. Authority: `mnemonic-secret/design/SPEC_ms_v0_1.md::§5. v0.1 → v0.2 Migration Contract`. Discussed §IV.3.
 
 ## verify-bundle
 
-The toolkit subcommand that re-derives each card from the user's slot inputs, compares against supplied `--ms1` / `--mk1` / `--md1` (or `--bundle-json`), and emits per-check `VerifyCheck` rows. Entry `cmd::verify_bundle::run` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs:143-201`. Defined §IV.1.
+The toolkit subcommand that re-derives each card from the user's slot inputs, compares against supplied `--ms1` / `--mk1` / `--md1` (or `--bundle-json`), and emits per-check `VerifyCheck` rows. Entry `cmd::verify_bundle::run` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run`. Defined §IV.1.
 
 ## VerifyCheck
 
-The per-check row struct in verify-bundle's output (`crates/mnemonic-toolkit/src/format.rs:165-183`). Carries `name`, `passed: bool`, `detail`, and conditional forensic fields (`expected`, `actual`, `diff_byte_offset`, `decode_error`) populated only on failure. Defined §IV.1.
+The per-check row struct in verify-bundle's output (`crates/mnemonic-toolkit/src/format.rs::VerifyCheck`). Carries `name`, `passed: bool`, `detail`, and conditional forensic fields (`expected`, `actual`, `diff_byte_offset`, `decode_error`) populated only on failure. Defined §IV.1.
 
 ## walker normalisation
 
@@ -418,11 +418,11 @@ The `mnemonic export-wallet` subcommand and its underlying `wallet_export` orche
 
 ## WalletFormatEmitter
 
-The `pub(crate) trait` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:316-320` every `--format` emitter implements. Three methods: `collect_missing(&EmitInputs) -> Vec<MissingField>` (SPEC §4 deterministic-refusal predicate), `emit(&EmitInputs) -> Result<String, ToolkitError>` (byte-exact output string), `extension() -> &'static str` (file-extension hint for `--output`). Eight impls ship at HEAD: `BitcoinCoreEmitter`, `Bip388Emitter`, `ColdcardEmitter`, `JadeEmitter`, `SparrowEmitter`, `SpecterEmitter`, `ElectrumEmitter`, `GreenEmitter`. `cmd::export_wallet::run` dispatches over `CliExportFormat` to the eight impls. Defined §V.4.5.9.
+The `pub(crate) trait` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::WalletFormatEmitter` every `--format` emitter implements. Three methods: `collect_missing(&EmitInputs) -> Vec<MissingField>` (SPEC §4 deterministic-refusal predicate), `emit(&EmitInputs) -> Result<String, ToolkitError>` (byte-exact output string), `extension() -> &'static str` (file-extension hint for `--output`). Eight impls ship at HEAD: `BitcoinCoreEmitter`, `Bip388Emitter`, `ColdcardEmitter`, `JadeEmitter`, `SparrowEmitter`, `SpecterEmitter`, `ElectrumEmitter`, `GreenEmitter`. `cmd::export_wallet::run` dispatches over `CliExportFormat` to the eight impls. Defined §V.4.5.9.
 
 ## WalletPolicyId
 
-`md-codec`'s 128-bit canonical wallet-policy identifier (`identity.rs:114-115`). Computed via `compute_wallet_policy_id`; can be rendered as a 12-word BIP-39 `Phrase` via `WalletPolicyId::to_phrase`. Distinct from `Md1EncodingId` (hashes canonical bytecode) and `WalletDescriptorTemplateId` (hashes template content only, γ-flavor). Defined §V.1.3.11.
+`md-codec`'s 128-bit canonical wallet-policy identifier (`identity.rs::WalletPolicyId`). Computed via `compute_wallet_policy_id`; can be rendered as a 12-word BIP-39 `Phrase` via `WalletPolicyId::to_phrase`. Distinct from `Md1EncodingId` (hashes canonical bytecode) and `WalletDescriptorTemplateId` (hashes template content only, γ-flavor). Defined §V.1.3.11.
 
 ## Wallet Instance ID
 
@@ -430,11 +430,11 @@ The `pub(crate) trait` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:316-
 
 ## WalletScriptType
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs:143-152` enumerating the eight script-type classifications wallet-export emitters dispatch on: `P2pkh` / `P2shP2wpkh` / `P2wpkh` / `P2tr` (singlesig) and `P2shMulti` / `P2shP2wshMulti` / `P2wshMulti` / `P2trMulti` (multisig). Derived from `CliTemplate` via `script_type_from_template` (`wallet_export/mod.rs:156`) on the template path, or from the parsed `miniscript::Descriptor` via `script_type_from_descriptor` (`wallet_export/mod.rs:176`) on the descriptor-passthrough path. Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::WalletScriptType` enumerating the eight script-type classifications wallet-export emitters dispatch on: `P2pkh` / `P2shP2wpkh` / `P2wpkh` / `P2tr` (singlesig) and `P2shMulti` / `P2shP2wshMulti` / `P2wshMulti` / `P2trMulti` (multisig). Derived from `CliTemplate` via `script_type_from_template` (`wallet_export/mod.rs::script_type_from_template`) on the template path, or from the parsed `miniscript::Descriptor` via `script_type_from_descriptor` (`wallet_export/mod.rs::script_type_from_descriptor`) on the descriptor-passthrough path. Defined §V.4.5.9.
 
 ## watch-only slot
 
-A bundle slot whose subkey set contains only `xpub` / `fingerprint` / `path` — no secret material. Discriminator: `SlotSubkey::is_watch_only` at `crates/mnemonic-toolkit/src/slot_input.rs:50-52`. Bundle synthesis emits the `""` empty-string sentinel into `ms1[i]` for each watch-only slot per the SPEC §5.8 dense-MsField layout. Defined §IV.1.
+A bundle slot whose subkey set contains only `xpub` / `fingerprint` / `path` — no secret material. Discriminator: `SlotSubkey::is_watch_only` at `crates/mnemonic-toolkit/src/slot_input.rs::SlotSubkey::is_watch_only`. Bundle synthesis emits the `""` empty-string sentinel into `ms1[i]` for each watch-only slot per the SPEC §5.8 dense-MsField layout. Defined §IV.1.
 
 ## wildcard (BIP-389)
 
@@ -446,8 +446,8 @@ The bit-level serialisation of a backup card. md1's current wire format is v0.30
 
 ## XpubCompact
 
-`mk-codec`'s 73-byte compact-xpub form at `bytecode/xpub_compact.rs:32`. Fields: `version: [u8; 4]`, `parent_fingerprint: [u8; 4]`, `chain_code: [u8; 32]`, `public_key: [u8; 33]` — depth and child_number stripped because they are reconstructable from the path. Constructed via `XpubCompact::from_xpub`; reversed via `reconstruct_xpub` (caller must guarantee non-empty origin path or `reconstruct_xpub` panics). Defined §V.2.3.9.
+`mk-codec`'s 73-byte compact-xpub form at `bytecode/xpub_compact.rs::XpubCompact`. Fields: `version: [u8; 4]`, `parent_fingerprint: [u8; 4]`, `chain_code: [u8; 32]`, `public_key: [u8; 33]` — depth and child_number stripped because they are reconstructable from the path. Constructed via `XpubCompact::from_xpub`; reversed via `reconstruct_xpub` (caller must guarantee non-empty origin path or `reconstruct_xpub` panics). Defined §V.2.3.9.
 
 ## XpubNotInPolicy
 
-The third cosigner-mapping failure mode in verify-bundle: a supplied `--mk1` group decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. The wrong-key attack indicator (or evidence that a user supplied an mk1 card from a different wallet). Defined `verify_bundle.rs:835`; emission at `:1128-1131`; precedence rank highest among the three modes. Defined §IV.2.
+The third cosigner-mapping failure mode in verify-bundle: a supplied `--mk1` group decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. The wrong-key attack indicator (or evidence that a user supplied an mk1 card from a different wallet). Defined `verify_bundle.rs::MappingFailure::XpubNotInPolicy`; emission at `::emit_multisig_checks`; precedence rank highest among the three modes. Defined §IV.2.

@@ -2,7 +2,7 @@
 
 md1 stores a **template**, not an address. This chapter explains the three tiers that turn that template into a usable bitcoin address: the wallet-policy template, the per-key derivation, and the rust-miniscript address rendering. Shape coverage (every BIP-388-parseable shape that survives the round-trip) is the subject of §III.2; network and SLIP-0132 prefix interactions are §III.3.
 
-The reference implementation entry point is `Descriptor::derive_address` at `descriptor-mnemonic/crates/md-codec/src/derive.rs:92-132`; the AST-to-rust-miniscript converter is `to_miniscript_descriptor` at `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs:54-64`. Both are gated behind the `derive` Cargo feature (default-on; pure-codec consumers can opt out via `default-features = false`).
+The reference implementation entry point is `Descriptor::derive_address` at `descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address`; the AST-to-rust-miniscript converter is `to_miniscript_descriptor` at `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs::to_miniscript_descriptor`. Both are gated behind the `derive` Cargo feature (default-on; pure-codec consumers can opt out via `default-features = false`).
 
 ## The three-tier model
 
@@ -40,7 +40,7 @@ flowchart LR
 
 The split between Tier 1 (on-card template) and Tier 2 (separately-supplied xpubs) is the BIP-388 wallet-policy framing. BIP-388 §"Specification" separates the *template* (a descriptor expression using `@i` placeholders and a key-information vector) from the *key information* (the concrete xpubs, fingerprints, and origin paths that fill those placeholders). md1's wire format carries the template by default and admits the key information either inline (TLV `0x02` `Pubkeys`\index{Pubkeys TLV}; TLV `0x01` `Fingerprints`\index{Fingerprints TLV}) or as derivation context supplied at address-derivation time.
 
-The engraving use case typically engraves the template on md1 alone and the xpubs on mk1 sibling cards. The self-custody short-circuit (single-sig wpkh/tr with an inline xpub) keeps everything on one md1 card. Either way, `Descriptor::derive_address` requires every `@N` to resolve to an xpub at call time: a missing `@N` surfaces as `Error::MissingPubkey { idx }`\index{Error::MissingPubkey} (generated at `to_miniscript.rs:73`).
+The engraving use case typically engraves the template on md1 alone and the xpubs on mk1 sibling cards. The self-custody short-circuit (single-sig wpkh/tr with an inline xpub) keeps everything on one md1 card. Either way, `Descriptor::derive_address` requires every `@N` to resolve to an xpub at call time: a missing `@N` surfaces as `Error::MissingPubkey { idx }`\index{Error::MissingPubkey} (generated at `to_miniscript.rs::build_descriptor_public_key`).
 
 ## Origin path vs. use-site path
 
@@ -51,7 +51,7 @@ md1 carries **two** path concepts. Both look like `m/...`-style BIP-32 paths but
 | **Origin path**\index{origin path} | Master seed → xpub | Prefix metadata for each `@N` | Inline path-decl block (header bit 4 selects Shared vs. Divergent); sparse overrides via TLV `0x03` | **No** — origin is metadata for signing (PSBT key-source) |
 | **Use-site path**\index{use-site path} | xpub → wildcard leaf (multipath alt + `/*`) | Suffix applied at the placeholder | Inline use-site-path block; per-`@N` sparse overrides via TLV `0x00` | **Yes** — selected by `chain` + `index` |
 
-The doc-comment at `derive.rs:14-19` makes the asymmetry explicit:
+The doc-comment at `derive.rs` makes the asymmetry explicit:
 
 > Origin path is not consulted. Origin is the path *to* the xpub from the master seed; address derivation starts at the xpub.
 
@@ -79,20 +79,20 @@ flowchart TB
 
 The Shared form is dominant: single-signer wallets (BIP-44\index{BIP-44}/49\index{BIP-49}/84\index{BIP-84}/86\index{BIP-86}) trivially share a path with themselves (`n = 1`), and conventional multisig wallets where every cosigner uses the BIP-48\index{BIP-48} account path `m/48'/0'/0'/2'` collapse to one shared path. The Divergent form is reserved for the legitimate case where cosigners chose different account paths.
 
-Path-modification overrides (TLV `0x03` `OriginPathOverrides`\index{OriginPathOverrides TLV}, sparse) are an orthogonal mechanism for replacing a single `@N`'s origin path after the inline path-decl block is written. The data structures are `PathDecl` + `PathDeclPaths::{Shared, Divergent}` at `descriptor-mnemonic/crates/md-codec/src/origin_path.rs:82-96`; the read/write code at `:110-146` and the wire layout at `:1-12`.
+Path-modification overrides (TLV `0x03` `OriginPathOverrides`\index{OriginPathOverrides TLV}, sparse) are an orthogonal mechanism for replacing a single `@N`'s origin path after the inline path-decl block is written. The data structures are `PathDecl` + `PathDeclPaths::{Shared, Divergent}` at `descriptor-mnemonic/crates/md-codec/src/origin_path.rs::PathDecl`; the read/write code at `PathDecl::write` and the wire layout at `origin_path.rs`.
 
 (Pre-v0.11 wire formats had an in-bytecode `Tag::OriginPaths = 0x36` for dictionary-style path lookups; that tag was retired with the v0.11 wire-format cleanup and **does not** exist in v0.30. See §II.1 §"History note: retired wire-layer dictionaries".)
 
 ## Pre-flight validation
 
-`Descriptor::derive_address` (`derive.rs:92-132`) rejects four impossible-by-construction inputs before invoking the converter:
+`Descriptor::derive_address` (`descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address`) rejects four impossible-by-construction inputs before invoking the converter:
 
 - **Hardened wildcard.** `use_site_path.wildcard_hardened = 1` would require hardened public derivation from an xpub — forbidden by BIP-32. Returns `Error::HardenedPublicDerivation`\index{Error::HardenedPublicDerivation}.
 - **Chain index out of range (multipath case).** When the use-site has a multipath group, `chain` must select an existing alternative; for `<0;1>/*`, `chain ∈ {0, 1}`. Out-of-range returns `Error::ChainIndexOutOfRange { chain, alt_count }`\index{Error::ChainIndexOutOfRange}.
 - **Hardened multipath alternative.** The selected `alts[chain]` cannot be hardened. Returns `Error::HardenedPublicDerivation`.
-- **No-multipath chain ≠ 0.** When the use-site has no multipath group (bare `/*`), only `chain = 0` is valid; any other value returns `Error::ChainIndexOutOfRange { chain, alt_count: 0 }` (`derive.rs:113-118`).
+- **No-multipath chain ≠ 0.** When the use-site has no multipath group (bare `/*`), only `chain = 0` is valid; any other value returns `Error::ChainIndexOutOfRange { chain, alt_count: 0 }` (`descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address`).
 
-After these pre-flights the descriptor is handed to `to_miniscript_descriptor`, then to rust-miniscript's `at_derivation_index(index).address(network)`. Any failure downstream (type-check, context error, unsupported fragment, network mismatch) is wrapped as `Error::AddressDerivationFailed { detail }`\index{Error::AddressDerivationFailed} (`to_miniscript.rs:474-476`). The exhaustive shape catalogue is §III.2; the network-by-network surface is §III.3.
+After these pre-flights the descriptor is handed to `to_miniscript_descriptor`, then to rust-miniscript's `at_derivation_index(index).address(network)`. Any failure downstream (type-check, context error, unsupported fragment, network mismatch) is wrapped as `Error::AddressDerivationFailed { detail }`\index{Error::AddressDerivationFailed} (`to_miniscript.rs::failed`). The exhaustive shape catalogue is §III.2; the network-by-network surface is §III.3.
 
 ## Worked example — BIP-84 single-sig
 
@@ -120,12 +120,12 @@ The end-to-end invocation against the `md` CLI is captured at `transcripts/md1-a
 
 ## Source pointers
 
-- `descriptor-mnemonic/crates/md-codec/src/derive.rs:92-132` — `Descriptor::derive_address` entry point.
-- `descriptor-mnemonic/crates/md-codec/src/derive.rs:14-19` — origin-path-not-consulted invariant.
-- `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs:54-64` — `to_miniscript_descriptor`.
-- `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs:130-168` — top-level AST dispatch (`node_to_descriptor`).
-- `descriptor-mnemonic/crates/md-codec/src/origin_path.rs:82-146` — `PathDecl` / `PathDeclPaths` data structures and read/write.
-- `descriptor-mnemonic/crates/md-codec/src/use_site_path.rs:47-96` — `UseSitePath` data structure and encoder.
+- `descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address` — `Descriptor::derive_address` entry point.
+- `descriptor-mnemonic/crates/md-codec/src/derive.rs` — origin-path-not-consulted invariant.
+- `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs::to_miniscript_descriptor` — `to_miniscript_descriptor`.
+- `descriptor-mnemonic/crates/md-codec/src/to_miniscript.rs::node_to_descriptor` — top-level AST dispatch (`node_to_descriptor`).
+- `descriptor-mnemonic/crates/md-codec/src/origin_path.rs::PathDecl` — `PathDecl` / `PathDeclPaths` data structures and read/write.
+- `descriptor-mnemonic/crates/md-codec/src/use_site_path.rs::UseSitePath` — `UseSitePath` data structure and encoder.
 - BIP-388 §"Specification" — the wallet-policy framing (template + key information separation).
 - BIP-389\index{BIP-389} §"Specification" — multipath alt syntax.
 - BIP-380\index{BIP-380} — output script descriptors.

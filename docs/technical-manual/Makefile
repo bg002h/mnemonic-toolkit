@@ -10,7 +10,7 @@
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
-#   make lint          — markdownlint + cspell + lychee + api-surface-coverage (hint, warning-only) + glossary-coverage + index bidirectional
+#   make lint          — markdownlint + cspell + lychee + api-surface-coverage (hint, warning-only) + glossary-coverage + index bidirectional + symbol-ref-check (source citations are `file.rs::symbol`)
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
 #

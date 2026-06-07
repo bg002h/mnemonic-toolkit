@@ -29,7 +29,7 @@ The HRP is the literal two bytes `mk` (the BCH check is over `hrp_expand("mk") |
 
 ### NUMS-derived target constants
 
-mk1 reuses BIP 93's generator polynomials verbatim (per `design/DECISIONS.md` D-10) but ships its own per-format target residue constants for cross-format domain separation (BIP draft §"Why new target constants?"; `crates/mk-codec/src/consts.rs:18,21`):
+mk1 reuses BIP 93's generator polynomials verbatim (per `design/DECISIONS.md` D-10) but ships its own per-format target residue constants for cross-format domain separation (BIP draft §"Why new target constants?"; `crates/mk-codec/src/consts.rs::MK_REGULAR_CONST,::MK_LONG_CONST`):
 
 ```text
 domain_string    = b"shibbolethnumskey"   (17 bytes ASCII)
@@ -60,12 +60,12 @@ mk1's string-layer header lives at the 5-bit symbol layer (closure Q-5; `crates/
 - `version`: 5-bit format version. `0` in v0.1; decoders MUST reject unknown values with `Error::UnsupportedVersion`\index{Error::UnsupportedVersion}.
 - `type`: 5-bit chunk-type byte. `0x00` = `SingleString`, `0x01` = `Chunked`. Reserved range `0x02..=0x1F` MUST be rejected with `Error::UnsupportedCardType`\index{Error::UnsupportedCardType} (the 5-bit field has no spillover space).
 - `chunk_set_id`\index{chunk\_set\_id (mk1)}: 20-bit per-encoding tag, packed into four 5-bit symbols big-endian — bits 19..15 in symbol 2, 14..10 in symbol 3, 9..5 in symbol 4, 4..0 in symbol 5. Opaque; mismatch across chunks is rejected at reassembly with `Error::ChunkSetIdMismatch`. Encoders MAY draw it from the system CSPRNG (mk-codec's default — `crates/mk-codec/src/string_layer/pipeline.rs::fresh_chunk_set_id`) or derive it deterministically from the leading 20 bits of `policy_id_stub[0]` (BIP draft §"String-layer header"); both choices are interop-equivalent.
-- `total_chunks`: 5-bit field carrying `count − 1`. Semantic range `1..=32`; wire range `0..=31`. Decoders MUST add 1 after reading (`crates/mk-codec/src/string_layer/header.rs:146`).
+- `total_chunks`: 5-bit field carrying `count − 1`. Semantic range `1..=32`; wire range `0..=31`. Decoders MUST add 1 after reading (`crates/mk-codec/src/string_layer/header.rs::StringLayerHeader::from_5bit_symbols`).
 - `chunk_index`: 5-bit zero-based index. `chunk_index >= total_chunks` is rejected as `Error::ChunkedHeaderMalformed`\index{Error::ChunkedHeaderMalformed}.
 
 ### Length envelope
 
-Capacity numbers (`crates/mk-codec/src/consts.rs:30,33,36,39,42,45`):
+Capacity numbers (`crates/mk-codec/src/consts.rs::SINGLE_STRING_REGULAR_BYTES,::SINGLE_STRING_LONG_BYTES,::CHUNKED_FRAGMENT_REGULAR_BYTES,::CHUNKED_FRAGMENT_LONG_BYTES,::MAX_CHUNKS,::CROSS_CHUNK_HASH_BYTES`):
 
 ```text
 single-string regular code:    48 bytes payload   (SINGLE_STRING_REGULAR_BYTES)
@@ -212,7 +212,7 @@ The component cap is 10 (closure Q-3). Real BIP-style derivations top out at 6 (
 
 The 4-byte BIP 32 master fingerprint\index{BIP 32 master fingerprint}, verbatim from BIP 380 origin notation `[fp/...]`. **Present only if bytecode-header bit 2 is set**; otherwise omitted entirely from the payload (closure Q-8). The privacy-preserving mode (bit 2 = 0; no fingerprint on wire) lets cosigners who don't need master-seed identification on the card omit those 4 bytes from the engraving.
 
-The fingerprint-flag↔presence consistency is an **encoder-side invariant**: a decoder follows the flag verbatim (`crates/mk-codec/src/bytecode/decode.rs:35`). A hand-crafted bytecode that violates the invariant decodes to a wrong-but-internally-consistent `KeyCard`; detection happens at the Wallet Instance ID check.
+The fingerprint-flag↔presence consistency is an **encoder-side invariant**: a decoder follows the flag verbatim (`crates/mk-codec/src/bytecode/decode.rs::decode_bytecode`). A hand-crafted bytecode that violates the invariant decodes to a wrong-but-internally-consistent `KeyCard`; detection happens at the Wallet Instance ID check.
 
 ### Xpub compact-73\index{compact-73}
 

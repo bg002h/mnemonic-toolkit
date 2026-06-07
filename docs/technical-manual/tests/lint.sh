@@ -14,6 +14,8 @@
 #   4. api-surface-coverage (hint helper; warning-only; Part V Rust API mirror)
 #   5. glossary-coverage (every defined term has a glossary entry)
 #   6. index bidirectional (\index{X} markers ↔ 62-index-table.md entries)
+#   7. symbol-ref-check (BLOCKING; source citations are `file.rs::symbol`, no
+#      line numbers — see AUTHORING "Source citations")
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR       — absolute path to src/
@@ -44,7 +46,7 @@ warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
 # 1. markdownlint
-step "1/6 markdownlint"
+step "1/7 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
 else
@@ -52,7 +54,7 @@ else
 fi
 
 # 2. cspell
-step "2/6 cspell"
+step "2/7 cspell"
 if command -v cspell >/dev/null; then
   cspell --no-progress "$SRC_DIR/**/*.md" || err "cspell reported issues"
 else
@@ -60,7 +62,7 @@ else
 fi
 
 # 3. lychee
-step "3/6 lychee"
+step "3/7 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
 else
@@ -68,7 +70,7 @@ else
 fi
 
 # 4. api-surface-coverage (Part V Rust API mirror hint)
-step "4/6 api-surface-coverage"
+step "4/7 api-surface-coverage"
 HELPER="$TESTS_DIR/api-surface-coverage.sh"
 if [ -x "$HELPER" ]; then
   bash "$HELPER" \
@@ -83,7 +85,7 @@ else
 fi
 
 # 5. glossary-coverage
-step "5/6 glossary-coverage"
+step "5/7 glossary-coverage"
 GLOSSARY="$SRC_DIR/60-back-matter/61-glossary.md"
 if [ -f "$GLOSSARY" ]; then
   # Technical-manual seed terms. Expand by curating per-cut; the user-
@@ -98,7 +100,7 @@ else
 fi
 
 # 6. index bidirectional
-step "6/6 index bidirectional"
+step "6/7 index bidirectional"
 INDEX_TABLE="$SRC_DIR/60-back-matter/62-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 62-index-table.md, and vice
@@ -123,6 +125,18 @@ if [ -f "$INDEX_TABLE" ]; then
   done <<<"$tbl_terms"
 else
   warn "$INDEX_TABLE missing; skipping index bidirectional check"
+fi
+
+# 7. symbol-ref-check (BLOCKING) — source citations are `file.rs::symbol`
+step "7/7 symbol-ref-check"
+SYMREF="$TESTS_DIR/symbol-ref-check.py"
+if [ -f "$SYMREF" ]; then
+  python3 "$SYMREF" SRC_DIR="$SRC_DIR" \
+    MD_BIN="${MD_BIN:-}" MK_BIN="${MK_BIN:-}" MS_BIN="${MS_BIN:-}" \
+    MNEMONIC_BIN="${MNEMONIC_BIN:-}" \
+    || err "symbol-ref-check reported source-citation drift"
+else
+  warn "$SYMREF not present; skipping symbol-ref-check"
 fi
 
 if [ "$fail" -ne 0 ]; then

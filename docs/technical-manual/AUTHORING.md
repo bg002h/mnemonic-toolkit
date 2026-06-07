@@ -170,6 +170,43 @@ flowchart LR
   and `57-coredesc-vs-bip388.md`) have a documented density-watch
   in Phase 6 — flag your reviewer if you spill past 4 pages.
 
+## Source citations
+
+Cite a source location by **symbol**, never by line number — line numbers
+drift silently and are ungateable. The form is a single backtick token:
+
+```
+`<path>.rs::<anchor>`
+```
+
+`<path>` is the source file (bare `synthesize.rs`, a subpath `cmd/bundle.rs`,
+or a repo-qualified `descriptor-mnemonic/crates/md-codec/src/derive.rs`).
+`<anchor>` names the most-specific item at the location, by nesting context:
+
+| location | anchor | example |
+|---|---|---|
+| top-level `fn`/`struct`/`enum`/`trait`/`type`/`const`/`static`/`mod`/`macro_rules!` | the item name | `` `synthesize.rs::synthesize_descriptor` `` |
+| method inside `impl T` | `T::method` (bare method names collapse) | `` `tlv.rs::TlvSection::write` `` |
+| fn inside `#[cfg(test)] mod tests` | `tests::fn_name` | `` `json_envelope.rs::tests::bundle_json_view_round_trips_every_field_of_bundle_json` `` |
+| `pub use` re-export block / module header / a line whose *text* is the point | bare `` `<path>.rs` `` (no `::`) | `` `mk-codec/src/lib.rs` `` |
+
+The `symbol-ref-check` lint asserts every `::`-segment exists in the resolved
+file (whole-word). It resolves `<path>` against the sibling codec source trees.
+
+**Colliding basenames.** 22 basenames exist in more than one codec/toolkit
+crate (`derive.rs`, `error.rs`, `lib.rs`, …). In a chapter that is *about* one
+crate the bare basename is fine (ch52 `bch.rs` → mk-codec). But in a mixed /
+catch-all chapter (Foundations, Address-derivation, Glossary) a bare colliding
+basename is ambiguous — write a **repo-qualified path** (e.g.
+`descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address`).
+The lint fails an unqualified colliding basename in those chapters.
+
+**No bare line numbers.** Neither `file.rs:42` nor a bare backtick `` `:42` ``
+continuation may appear; the lint bans both. The sole escape hatch — for a
+genuine quoted rustc panic/backtrace that legitimately prints `file.rs:N` — is
+an explicit `<!-- lint-allow-lineref -->` HTML comment on the same or the
+preceding line.
+
 ## Lint pre-commit
 
 Before committing chapter changes, run:
@@ -178,9 +215,13 @@ Before committing chapter changes, run:
 make lint
 ```
 
-Six checks: markdownlint-cli2, cspell, lychee `--offline`,
+Seven checks: markdownlint-cli2, cspell, lychee `--offline`,
 api-surface-coverage (hint, warning-only), glossary-coverage,
-index bidirectional. The full
-toolchain may not be installed locally; missing tools are warned
-and skipped, but **CI runs all six** and a missing tool is not an
-excuse on a PR.
+index bidirectional, and symbol-ref-check (BLOCKING; see "Source
+citations" above). The full toolchain may not be installed locally;
+missing tools are warned and skipped. **The technical manual has no
+CI workflow** — `make lint` is the gate, so run it before committing
+(and the markdown/PDF builds via `make md` / `make pdf-docker`).
+symbol-ref-check needs the sibling codec source trees checked out
+(it resolves `file.rs::symbol` against them); where a sibling is
+absent it skips those refs with a warning rather than failing.

@@ -74,7 +74,7 @@ ms1 v0.1 fixes every BIP-93 codex32 field to a specific value (SPEC §2.5):
 | payload | `0x00` reserved-prefix byte ‖ entropy (16/20/24/28/32 B) | chars 9..(len−13) |
 | checksum | BCH(short) — 13 codex32 chars | chars (len−13).. |
 
-The `threshold = 0` + `share-index = 's'` choice is the BIP-93 "Unshared Secret"\index{Unshared Secret form} form (BIP-93 §"Unshared Secret"). v0.1 decoders reject `threshold ≠ '0'` with `Error::ThresholdNotZero`\index{Error::ThresholdNotZero} and `share-index ≠ 's'` with `Error::ShareIndexNotSecret`\index{Error::ShareIndexNotSecret} (`crates/ms-codec/src/envelope.rs:100,105`). The latter is also enforced upstream by `rust-codex32 v0.1.0`'s parse, but `ms-codec` re-checks for defense-in-depth and to surface a domain-typed error to its callers.
+The `threshold = 0` + `share-index = 's'` choice is the BIP-93 "Unshared Secret"\index{Unshared Secret form} form (BIP-93 §"Unshared Secret"). v0.1 decoders reject `threshold ≠ '0'` with `Error::ThresholdNotZero`\index{Error::ThresholdNotZero} and `share-index ≠ 's'` with `Error::ShareIndexNotSecret`\index{Error::ShareIndexNotSecret} (`crates/ms-codec/src/envelope.rs::discriminate`). The latter is also enforced upstream by `rust-codex32 v0.1.0`'s parse, but `ms-codec` re-checks for defense-in-depth and to surface a domain-typed error to its callers.
 
 ### NUMS-derived target constants
 
@@ -94,9 +94,9 @@ v0.1 ms1 strings ride only BIP-93's **short code** bracket. The total string len
 | 21 | 28 | 232 | 47 | 3 | 69 |
 | 24 | 32 | 264 | 53 | 1 | 75 |
 
-Formula: total = `3 (HRP+sep) + 1 (threshold) + 4 (id) + 1 (share-index) + N (payload) + 13 (cksum) = 22 + N`. The payload symbol count is `⌈(entropy_bytes + 1) × 8 / 5⌉`. The bijection is sanity-tested in `crates/ms-codec/src/consts.rs:50-62`.
+Formula: total = `3 (HRP+sep) + 1 (threshold) + 4 (id) + 1 (share-index) + N (payload) + 13 (cksum) = 22 + N`. The payload symbol count is `⌈(entropy_bytes + 1) × 8 / 5⌉`. The bijection is sanity-tested in `crates/ms-codec/src/consts.rs::tests::valid_str_lengths_match_entr_lengths_via_bijection`.
 
-v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength`\index{Error::UnexpectedStringLength} (`crates/ms-codec/src/decode.rs:21`). This single rule rejects, in particular, every BIP-93 long-code string (total 99–111 chars for HRP=ms — data-part length 96..=108 plus 3 chars of HRP+separator) without needing a separate "long codex32" rejection path.
+v0.1 decoders MUST reject any total length outside `{50, 56, 62, 69, 75}` with `Error::UnexpectedStringLength`\index{Error::UnexpectedStringLength} (`crates/ms-codec/src/decode.rs::decode`). This single rule rejects, in particular, every BIP-93 long-code string (total 99–111 chars for HRP=ms — data-part length 96..=108 plus 3 chars of HRP+separator) without needing a separate "long codex32" rejection path.
 
 ### Pad bits in the final payload symbol
 
@@ -117,7 +117,7 @@ The payload (the bytes returned by `Parts::data()` after BIP-93 codex32 parsing)
 
 ### The `0x00` reserved-prefix byte
 
-Every v0.1 ms1 payload begins with a single byte of value `0x00`\index{reserved-prefix byte (ms1)}. In v0.1 this byte is reserved (decoder MUST reject any non-zero value with `Error::ReservedPrefixViolation`\index{Error::ReservedPrefixViolation}; `crates/ms-codec/src/envelope.rs:125-129`). In v0.2 it is **promoted to a type discriminator**, which makes the v0.2 share-encoding migration non-breaking for v0.1 strings — a v0.2 decoder seeing prefix `0x00` falls back to v0.1's "type tag is in BIP-93 `id` field" interpretation. See "v0.1 → v0.2 migration contract" below.
+Every v0.1 ms1 payload begins with a single byte of value `0x00`\index{reserved-prefix byte (ms1)}. In v0.1 this byte is reserved (decoder MUST reject any non-zero value with `Error::ReservedPrefixViolation`\index{Error::ReservedPrefixViolation}; `crates/ms-codec/src/envelope.rs::dispatch_payload`). In v0.2 it is **promoted to a type discriminator**, which makes the v0.2 share-encoding migration non-breaking for v0.1 strings — a v0.2 decoder seeing prefix `0x00` falls back to v0.1's "type tag is in BIP-93 `id` field" interpretation. See "v0.1 → v0.2 migration contract" below.
 
 The reservation is unique to ms1 among the four m-format formats. md1 / mk1 use their own bytecode-header bytes for version + flag bits; ms1 has no bytecode header (BIP-93's `id` field carries the type tag and BIP-93 guarantees the parsing structure). The single reserved byte is the entire forward-compatibility budget for v0.1.
 
@@ -135,7 +135,7 @@ v0.1 deliberately does **not** expose `pub const SEED` or `pub const XPRV` const
 
 ### `RESERVED_TAG_TABLE`
 
-The full 5-entry table is curated to ms1's actual purpose (secret material, not metadata or certificates). The table grows by SemVer-minor only (SPEC §3.3; `crates/ms-codec/src/consts.rs:36,39`):
+The full 5-entry table is curated to ms1's actual purpose (secret material, not metadata or certificates). The table grows by SemVer-minor only (SPEC §3.3; `crates/ms-codec/src/consts.rs::RESERVED_ID_BLOCKLIST`):
 
 | Tag | Meaning | v0.1 emit | v0.1 accept |
 |---|---|---|---|
@@ -145,7 +145,7 @@ The full 5-entry table is curated to ms1's actual purpose (secret material, not 
 | `mnem` | reserved for future "entropy + wordlist-language hint" payload | no | reject (`Error::ReservedTagNotEmittedInV01`) |
 | `prvk` | reserved for future raw secp256k1 32-B private key | no | reject (`Error::ReservedTagNotEmittedInV01`) |
 
-Tags structurally valid (alphabet-conforming) but not in the table cause `Error::UnknownTag` (`crates/ms-codec/src/decode.rs:50-53`). The reservation policy applies at **both** sides: SPEC §3.5.1 mandates that the encoder also rejects reserved-not-emitted tags with the same `Error::ReservedTagNotEmittedInV01` variant, preventing an asymmetry where a v0.1 ms-codec could emit a string the v0.1 ms-codec itself cannot decode.
+Tags structurally valid (alphabet-conforming) but not in the table cause `Error::UnknownTag` (`crates/ms-codec/src/decode.rs::decode`). The reservation policy applies at **both** sides: SPEC §3.5.1 mandates that the encoder also rejects reserved-not-emitted tags with the same `Error::ReservedTagNotEmittedInV01` variant, preventing an asymmetry where a v0.1 ms-codec could emit a string the v0.1 ms-codec itself cannot decode.
 
 ### `Payload::Entr`\index{Payload::Entr} and entropy-length validation
 
@@ -156,7 +156,7 @@ pub enum Payload {
 }
 ```
 
-Encoder MUST reject `Payload::Entr(data)` with `data.len() ∉ {16, 20, 24, 28, 32}` (`Error::PayloadLengthMismatch`\index{Error::PayloadLengthMismatch} `{ tag: Tag::ENTR, expected: <set>, got }`; `crates/ms-codec/src/payload.rs`). Decoder applies the same check after extracting the payload bytes following the prefix byte (`decode.rs:47`). The set `{16, 20, 24, 28, 32}` corresponds bijectively to BIP-39 word counts `{12, 15, 18, 21, 24}`. **ms-codec does not separately carry the word count on the wire**; the byte length is the unambiguous discriminator.
+Encoder MUST reject `Payload::Entr(data)` with `data.len() ∉ {16, 20, 24, 28, 32}` (`Error::PayloadLengthMismatch`\index{Error::PayloadLengthMismatch} `{ tag: Tag::ENTR, expected: <set>, got }`; `crates/ms-codec/src/payload.rs`). Decoder applies the same check after extracting the payload bytes following the prefix byte (`decode.rs::decode`). The set `{16, 20, 24, 28, 32}` corresponds bijectively to BIP-39 word counts `{12, 15, 18, 21, 24}`. **ms-codec does not separately carry the word count on the wire**; the byte length is the unambiguous discriminator.
 
 The `#[non_exhaustive]` attribute is permanent from v0.1.0 onward; future variants (e.g., `Mnem`, `Seed`, `Xprv` once their framing is settled) are semver-minor additions. Removing `#[non_exhaustive]` would be semver-major and is not contemplated (SPEC §10.3).
 

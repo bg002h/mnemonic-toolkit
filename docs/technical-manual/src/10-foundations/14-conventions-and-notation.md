@@ -61,7 +61,7 @@ References to external documents use these conventions:
 - **Per-version SPECs:** `md-codec SPEC v0.30 §1.4` (= repo's `design/SPEC_v0_30_wire_format.md` section 1.4).
 - **Rust crate items:** `md_codec::Error::WireVersionMismatch` (= fully-qualified Rust path); `md-codec` (= crate name only).
 - **Git artifacts:** `commit 0c43ca2` (short SHA); `tag md-codec-v0.32.0`.
-- **File paths in any repo:** unqualified path is relative to the repo root, e.g., `crates/md-codec/src/tree.rs:122` (with line number).
+- **Source-code citations:** an unqualified path is relative to the repo root and is anchored to a **symbol**, never a line number (line numbers drift; the `make lint` symbol-ref check enforces this), e.g., `crates/md-codec/src/tlv.rs::TlvSection::write`. Methods use `Type::method`.
 - **Cross-repo file paths:** prefixed with the repo slug, e.g., `bg002h/descriptor-mnemonic/bip/bip-mnemonic-descriptor.mediawiki`.
 
 ## Notational shorthands
