@@ -145,6 +145,17 @@ def resolve(pathpart, chapter):
         # share many helper names but are not the ambiguity this rule targets)
         if not auth and len(repos_with) >= 2:
             return (None, "collision")
+        # A non-authoritative chapter has no chapter-level repo to encode
+        # "toolkit intent", so a bare/subpath ref that resolves ONLY to a
+        # toolkit file is rename-UNSAFE in bare CI: after a rename it would
+        # `skip:absent-sibling` (silently not failed) instead of FAILing.
+        # Require full `crates/mnemonic-toolkit/src/...` qualification (which
+        # routes through the crates/ early-branch → FAIL on rename). Fires in
+        # BOTH local and bare CI (toolkit present in both). Codec refs have
+        # toolkit absent from repos_with → unaffected; authoritative chapters
+        # have `auth` set → excluded. See design/SPEC_technical_manual_g2_bare_ci_fix.md.
+        if not auth and repos_with == ["toolkit"]:
+            return (None, "unqualified-toolkit")
     hit = shallowest(suffix_matches(pathpart))
     if hit:
         return (hit[1], "ok")
@@ -212,6 +223,13 @@ for dp, _, fns in os.walk(SRC_DIR):
                 if status == "collision":
                     err("%s:%d `%s::%s` — ambiguous colliding basename; qualify the path "
                         "(e.g. add crates/<codec>/src/...)" % (rel, i, pathpart, anchor))
+                    continue
+                if status == "unqualified-toolkit":
+                    err("%s:%d `%s::%s` — non-authoritative chapter cites a toolkit "
+                        "file by bare/subpath; fully qualify as "
+                        "crates/mnemonic-toolkit/src/... (only that form is "
+                        "rename-safe in bare CI; AUTHORING Source citations)"
+                        % (rel, i, pathpart, anchor))
                     continue
                 if ap is None:
                     err("%s:%d `%s::%s` — cannot resolve source file (%s)"

@@ -191,7 +191,8 @@ or a repo-qualified `descriptor-mnemonic/crates/md-codec/src/derive.rs`).
 | `pub use` re-export block / module header / a line whose *text* is the point | bare `` `<path>.rs` `` (no `::`) | `` `mk-codec/src/lib.rs` `` |
 
 The `symbol-ref-check` lint asserts every `::`-segment exists in the resolved
-file (whole-word). It resolves `<path>` against the sibling codec source trees.
+file (whole-word). It resolves `<path>` against the toolkit repo + the sibling
+codec source trees.
 
 **Colliding basenames.** 22 basenames exist in more than one codec/toolkit
 crate (`derive.rs`, `error.rs`, `lib.rs`, …). In a chapter that is *about* one
@@ -200,6 +201,20 @@ catch-all chapter (Foundations, Address-derivation, Glossary) a bare colliding
 basename is ambiguous — write a **repo-qualified path** (e.g.
 `descriptor-mnemonic/crates/md-codec/src/derive.rs::Descriptor::derive_address`).
 The lint fails an unqualified colliding basename in those chapters.
+
+**Toolkit refs in catch-all chapters must be fully qualified.** In a
+non-authoritative (catch-all: Foundations, Address-derivation, Glossary)
+chapter, **any** ref that resolves to a *toolkit* file — colliding or not, bare
+basename **or** subpath (`cmd/bundle.rs`) — must be written as a full
+`crates/mnemonic-toolkit/src/...` path. Only that form is rename-safe: the
+single-repo CI (toolkit-only checkout) can FAIL-on-rename a toolkit ref only
+when it is `crates/`-qualified; a bare/subpath toolkit ref resolves today but
+would silently *skip* after a rename in bare CI (the codec siblings are
+absent, so the gate cannot tell a renamed-toolkit file from an absent-codec
+file). The lint FAILs an unqualified toolkit ref in catch-all chapters
+(`unqualified-toolkit`). (Authoritative codec/toolkit chapters — ch21/22/23,
+41/42/54 — may keep bare/subpath: the chapter prefix encodes the repo, so
+those refs FAIL-on-rename, not skip.)
 
 **No bare line numbers.** Neither `file.rs:42` nor a bare backtick `` `:42` ``
 continuation may appear; the lint bans both. The sole escape hatch — for a
@@ -219,9 +234,14 @@ Seven checks: markdownlint-cli2, cspell, lychee `--offline`,
 api-surface-coverage (hint, warning-only), glossary-coverage,
 index bidirectional, and symbol-ref-check (BLOCKING; see "Source
 citations" above). The full toolchain may not be installed locally;
-missing tools are warned and skipped. **The technical manual has no
-CI workflow** — `make lint` is the gate, so run it before committing
-(and the markdown/PDF builds via `make md` / `make pdf-docker`).
-symbol-ref-check needs the sibling codec source trees checked out
-(it resolves `file.rs::symbol` against them); where a sibling is
-absent it skips those refs with a warning rather than failing.
+missing tools are warned and skipped. A **lint-only CI workflow**
+(`.github/workflows/technical-manual.yml`) runs `make lint` on
+push/PR under `docs/technical-manual/**` + the mermaid cache tool +
+`crates/mnemonic-toolkit/{src,tests}/**`; it runs bare-CI
+(toolkit-only checkout), enforcing G1 on every chapter and **toolkit**-G2.
+**`make lint` with all sibling codec repos present remains the FULL
+gate** — only it enforces **codec**-G2 (symbol-ref-check resolves
+`file.rs::symbol` against the sibling codec source trees; where a
+sibling is absent it skips those refs with a warning rather than
+failing). So run `make lint` locally before committing (and the
+markdown/PDF builds via `make md` / `make pdf-docker`).

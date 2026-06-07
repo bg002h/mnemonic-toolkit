@@ -86,7 +86,7 @@ BIP-32's "public parent key → public child key" function: given an xpub (chain
 
 ## chunk_set_id binding (bundle)
 
-The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
+The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
 
 ## codex32
 
@@ -110,7 +110,7 @@ The per-cosigner row struct in `BundleJson.multisig.cosigners` (`crates/mnemonic
 
 ## cosigner-mapping diagnostic
 
-The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`verify_bundle.rs::MappingFailure`, two-pass at `::emit_multisig_checks`). Defined §IV.2.
+The three-mode failure-classification used by `verify-bundle` to attribute an unmappable `--mk1` group: `NotSupplied` (no card for the slot), `DecodeFailed(msg)` (group exists but `mk_codec::decode` rejects it), `XpubNotInPolicy` (decoded successfully but xpub absent from the descriptor's pubkeys-TLV — wrong-key-attack indicator). Precedence: `XpubNotInPolicy > DecodeFailed > NotSupplied` (`crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::MappingFailure`, two-pass at `::emit_multisig_checks`). Defined §IV.2.
 
 ## cross_chunk_hash
 
@@ -138,7 +138,7 @@ The `--format electrum` selector for `mnemonic export-wallet`, emitting an Elect
 
 ## ELECTRUM_SEED_VERSION_PIN
 
-The `pub const u32 = 17` at `wallet_export/electrum.rs::ELECTRUM_SEED_VERSION_PIN` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.5.9.7.
+The `pub const u32 = 17` at `crates/mnemonic-toolkit/src/wallet_export/electrum.rs::ELECTRUM_SEED_VERSION_PIN` pinning the `seed_version` field emitted into every Electrum wallet-export file. Empirically validated 2026-05-12 against Electrum 4.5.5 (loader walks the `_convert_version_<N>` migration chain forward to `FINAL_SEED_VERSION` on first save). Defined §V.4.5.9.7.
 
 ## EmitInputs
 
@@ -214,7 +214,7 @@ The descriptor card. Encodes a BIP-388-style wallet policy. HRP `md`. Library cr
 
 ## md1_xpub_match
 
-The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity, so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))` (multisig path; single-sig uses `.first()` comparison in `emit_md1_checks` at `verify_bundle.rs::emit_md1_checks` with detail `"65-byte xpub matches expected"`). Multisig implementation at `verify_bundle.rs::emit_multisig_checks`. Defined §IV.2.
+The `verify-bundle` check that the multiset of supplied-md1 `Tag::Pubkeys = 0x02` TLV values equals the multiset of expected-md1 pubkeys. Sort-then-compare on `Vec<[u8; 65]>` preserves multiplicity, so `wsh(multi(K,@0,@0))` doesn't compare equal to `wsh(multi(K,@0,@1))` (multisig path; single-sig uses `.first()` comparison in `emit_md1_checks` at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_md1_checks` with detail `"65-byte xpub matches expected"`). Multisig implementation at `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::emit_multisig_checks`. Defined §IV.2.
 
 ## Md1EncodingId
 
@@ -226,7 +226,7 @@ A subset of Bitcoin Script with type-checking and analysis properties (BIP-379).
 
 ## MissingField
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::MissingField` enumerating the seven SPEC §4 missing-info classes per-format emitters can surface via `WalletFormatEmitter::collect_missing`. Per-slot variants (`MasterFingerprint { slot }`, `DerivationPath { slot }`, `Xpub { slot }`) and globals (`ScriptType`, `Threshold`, `WalletName`, `IncompatibleFormatForTemplate`); deterministic sort key sorts globals first by enum discriminant 4 → 7, then per-slot grouped by discriminant 1 / 2 / 3 and ordered by slot index. Bullet construction is sole-sited at `build_missing_fields_refusal` (`wallet_export/mod.rs::build_missing_fields_refusal`). Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::MissingField` enumerating the seven SPEC §4 missing-info classes per-format emitters can surface via `WalletFormatEmitter::collect_missing`. Per-slot variants (`MasterFingerprint { slot }`, `DerivationPath { slot }`, `Xpub { slot }`) and globals (`ScriptType`, `Threshold`, `WalletName`, `IncompatibleFormatForTemplate`); deterministic sort key sorts globals first by enum discriminant 4 → 7, then per-slot grouped by discriminant 1 / 2 / 3 and ordered by slot index. Bullet construction is sole-sited at `build_missing_fields_refusal` (`crates/mnemonic-toolkit/src/wallet_export/mod.rs::build_missing_fields_refusal`). Defined §V.4.5.9.
 
 ## mk1
 
@@ -370,7 +370,7 @@ A miniscript fragment embedded as a leaf in a TapTree. Type-checked under the `T
 
 ## TaprootInternalKey
 
-`mnemonic-toolkit`'s `pub enum` at `wallet_export/mod.rs::TaprootInternalKey` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.5.9.
+`mnemonic-toolkit`'s `pub enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TaprootInternalKey` discriminating the taproot internal-key designation supplied to `export-wallet` for `tr-*` templates: `Nums` (BIP-341 NUMS H-point) or a placeholder key. Used by every taproot-capable vendor emitter. Defined §V.4.5.9.
 
 ## template (md1)
 
@@ -382,7 +382,7 @@ The bit-aligned trailing region of md1's bytecode carrying optional metadata blo
 
 ## TimestampArg
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TimestampArg` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`cmd/export_wallet.rs::ExportWalletArgs::timestamp`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TimestampArg` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`crates/mnemonic-toolkit/src/cmd/export_wallet.rs::ExportWalletArgs::timestamp`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
 
 ## to_miniscript_descriptor
 
@@ -430,7 +430,7 @@ The `pub(crate) trait` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::Wal
 
 ## WalletScriptType
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::WalletScriptType` enumerating the eight script-type classifications wallet-export emitters dispatch on: `P2pkh` / `P2shP2wpkh` / `P2wpkh` / `P2tr` (singlesig) and `P2shMulti` / `P2shP2wshMulti` / `P2wshMulti` / `P2trMulti` (multisig). Derived from `CliTemplate` via `script_type_from_template` (`wallet_export/mod.rs::script_type_from_template`) on the template path, or from the parsed `miniscript::Descriptor` via `script_type_from_descriptor` (`wallet_export/mod.rs::script_type_from_descriptor`) on the descriptor-passthrough path. Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::WalletScriptType` enumerating the eight script-type classifications wallet-export emitters dispatch on: `P2pkh` / `P2shP2wpkh` / `P2wpkh` / `P2tr` (singlesig) and `P2shMulti` / `P2shP2wshMulti` / `P2wshMulti` / `P2trMulti` (multisig). Derived from `CliTemplate` via `script_type_from_template` (`crates/mnemonic-toolkit/src/wallet_export/mod.rs::script_type_from_template`) on the template path, or from the parsed `miniscript::Descriptor` via `script_type_from_descriptor` (`crates/mnemonic-toolkit/src/wallet_export/mod.rs::script_type_from_descriptor`) on the descriptor-passthrough path. Defined §V.4.5.9.
 
 ## watch-only slot
 
@@ -450,4 +450,4 @@ The bit-level serialisation of a backup card. md1's current wire format is v0.30
 
 ## XpubNotInPolicy
 
-The third cosigner-mapping failure mode in verify-bundle: a supplied `--mk1` group decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. The wrong-key attack indicator (or evidence that a user supplied an mk1 card from a different wallet). Defined `verify_bundle.rs::MappingFailure::XpubNotInPolicy`; emission at `::emit_multisig_checks`; precedence rank highest among the three modes. Defined §IV.2.
+The third cosigner-mapping failure mode in verify-bundle: a supplied `--mk1` group decoded cleanly but its xpub is absent from the descriptor's `tlv.pubkeys` set. The wrong-key attack indicator (or evidence that a user supplied an mk1 card from a different wallet). Defined `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::MappingFailure::XpubNotInPolicy`; emission at `::emit_multisig_checks`; precedence rank highest among the three modes. Defined §IV.2.

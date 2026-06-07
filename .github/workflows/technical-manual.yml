@@ -6,11 +6,13 @@ name: technical-manual
 # figures-cache-verify is render-free). symbol-ref-check enforces G1 (line-ref
 # ban) on all chapters + G2 (symbol existence) for refs resolvable in the
 # present (toolkit) repo; G2 for any ref whose file is unresolvable here —
-# codec files in absent siblings, AND renamed toolkit files cited by bare
-# basename from non-authoritative chapters — skips gracefully in bare CI
-# (enforced by local `make lint`; see FOLLOWUP
-# technical-manual-g2-uncovered-in-bare-ci). No tag trigger (the technical
-# manual ships no release asset; manual.yml owns the manual-v* PDF release).
+# codec files in absent siblings — skip gracefully in bare CI (codec-G2 is
+# enforced only by local `make lint` with all siblings present). Toolkit-G2 is
+# airtight here: the trigger also fires on crates/mnemonic-toolkit/{src,tests}
+# so a toolkit-symbol rename re-runs symbol-ref-check, and a non-authoritative
+# chapter must fully-qualify toolkit refs (the `unqualified-toolkit` gate) so
+# they FAIL-on-rename rather than skip. No tag trigger (the technical manual
+# ships no release asset; manual.yml owns the manual-v* PDF release).
 
 on:
   push:
@@ -19,11 +21,19 @@ on:
       - 'docs/technical-manual/**'
       - 'docs/tools/render-mermaid-cache.py'
       - '.github/workflows/technical-manual.yml'
+      # Toolkit source: a rename of a cited symbol breaks a `file.rs::symbol`
+      # citation; fire so symbol-ref-check re-runs (toolkit-G2 in bare CI).
+      - 'crates/mnemonic-toolkit/src/**'
+      - 'crates/mnemonic-toolkit/tests/**'
   pull_request:
     paths:
       - 'docs/technical-manual/**'
       - 'docs/tools/render-mermaid-cache.py'
       - '.github/workflows/technical-manual.yml'
+      # Toolkit source: a rename of a cited symbol breaks a `file.rs::symbol`
+      # citation; fire so symbol-ref-check re-runs (toolkit-G2 in bare CI).
+      - 'crates/mnemonic-toolkit/src/**'
+      - 'crates/mnemonic-toolkit/tests/**'
 
 jobs:
   lint:
