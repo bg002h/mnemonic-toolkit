@@ -411,8 +411,11 @@ fn bundle_run_unified<W: Write, E: Write>(
     emit_unified(args, &bundle, &resolved, mode, &slip0132_signals, stdout, stderr)?;
 
     if args.self_check {
-        let entropy_bearing: Vec<bool> = resolved.iter().map(|r| r.entropy.is_some()).collect();
-        self_check_bundle(&bundle, args, &entropy_bearing)?;
+        let expected_entropy: Vec<Option<&[u8]>> = resolved
+            .iter()
+            .map(|r| r.entropy.as_deref().map(|v| v.as_slice()))
+            .collect();
+        self_check_bundle(&bundle, args, &expected_entropy)?;
     }
     Ok(())
 }
@@ -1613,9 +1616,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     )?;
 
     if args.self_check {
-        let entropy_bearing: Vec<bool> =
-            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
-        self_check_bundle(&bundle, args, &entropy_bearing)?;
+        let expected_entropy: Vec<Option<&[u8]>> = resolved_slots
+            .iter()
+            .map(|r| r.entropy.as_deref().map(|v| v.as_slice()))
+            .collect();
+        self_check_bundle(&bundle, args, &expected_entropy)?;
     }
 
     Ok(())
@@ -1658,9 +1663,11 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     emit_unified(args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
-        let entropy_bearing: Vec<bool> =
-            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
-        self_check_bundle(&bundle, args, &entropy_bearing)?;
+        let expected_entropy: Vec<Option<&[u8]>> = resolved_slots
+            .iter()
+            .map(|r| r.entropy.as_deref().map(|v| v.as_slice()))
+            .collect();
+        self_check_bundle(&bundle, args, &expected_entropy)?;
     }
 
     Ok(())
@@ -1912,9 +1919,11 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     emit_unified(&emit_args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
 
     if args.self_check {
-        let entropy_bearing: Vec<bool> =
-            resolved_slots.iter().map(|r| r.entropy.is_some()).collect();
-        self_check_bundle(&bundle, args, &entropy_bearing)?;
+        let expected_entropy: Vec<Option<&[u8]>> = resolved_slots
+            .iter()
+            .map(|r| r.entropy.as_deref().map(|v| v.as_slice()))
+            .collect();
+        self_check_bundle(&bundle, args, &expected_entropy)?;
     }
 
     Ok(())
@@ -2034,10 +2043,8 @@ pub fn origin_to_derivation_path(
 pub fn self_check_bundle(
     bundle: &Bundle,
     args: &BundleArgs,
-    entropy_bearing: &[bool],
+    expected_entropy: &[Option<&[u8]>],
 ) -> Result<(), ToolkitError> {
-    // Phase 1 (RED): ms1 validation not yet implemented — see Phase 2.
-    let _ = entropy_bearing;
     // md1 decode.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
     let desc =
@@ -2113,6 +2120,59 @@ pub fn self_check_bundle(
             }
         }
     }
+
+    // ms1 per-slot validation (FOLLOWUP self-check-ms1-iteration). The oracle
+    // is `expected_entropy[i] = resolved_slots[i].entropy` (the EXACT predicate
+    // that drove emission at synthesize.rs::synthesize_descriptor) — NOT
+    // `args.slot`, which records what the user supplied (import-json envelopes
+    // and wif slots would false-trip). For each slot: (a) emptiness parity —
+    // `ms1[i]` non-empty iff the slot is entropy-bearing (catches the @0-only
+    // emission reversion); (b) for entropy-bearing slots, the emitted ms1 must
+    // decode AND round-trip to the slot's source entropy.
+    if expected_entropy.len() != bundle.ms1.len() {
+        return Err(ToolkitError::BundleMismatch {
+            card: "self-check[ms1_length_mismatch]".into(),
+            message: format!(
+                "expected_entropy len {} != ms1 len {}",
+                expected_entropy.len(),
+                bundle.ms1.len()
+            ),
+        });
+    }
+    for (i, ms) in bundle.ms1.iter().enumerate() {
+        let expected = expected_entropy[i];
+        if ms.is_empty() != expected.is_none() {
+            return Err(ToolkitError::BundleMismatch {
+                card: format!("self-check[ms1_parity[{i}]]"),
+                message: format!(
+                    "ms1[{i}] is {} but slot {i} is {}",
+                    if ms.is_empty() { "empty" } else { "populated" },
+                    if expected.is_none() {
+                        "watch-only (no source entropy)"
+                    } else {
+                        "entropy-bearing"
+                    }
+                ),
+            });
+        }
+        let Some(expected_bytes) = expected else {
+            continue; // watch-only "" sentinel — correct, nothing to decode.
+        };
+        let (_tag, payload) =
+            ms_codec::decode(ms).map_err(|e| ToolkitError::BundleMismatch {
+                card: format!("self-check[ms1_decode[{i}]]"),
+                message: format!("{e:?}"),
+            })?;
+        if payload.as_bytes() != expected_bytes {
+            return Err(ToolkitError::BundleMismatch {
+                card: format!("self-check[ms1_entropy[{i}]]"),
+                message: format!(
+                    "ms1[{i}] decodes to entropy that does not match the slot's source entropy"
+                ),
+            });
+        }
+    }
+
     Ok(())
 }
 
@@ -2265,10 +2325,18 @@ mod self_check_ms1_tests {
     /// RED→GREEN: self-check must DETECT a regressed ms1 emission (the @0-only
     /// reversion: ms1[0] populated, ms1[1+] wrongly cleared). RED against the
     /// pre-fix self_check_bundle (which ignores ms1 → returns Ok).
+    /// The 3 cosigners' source entropy (self-multisig → all the TREZOR_24 seed).
+    fn expected_entropy_bytes() -> Vec<u8> {
+        bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24)
+            .unwrap()
+            .to_entropy()
+    }
+
     #[test]
     fn self_check_detects_at0_only_ms1_regression() {
         let args = minimal_bundle_args();
-        let entropy_bearing = vec![true, true, true]; // 3 phrase-bearing cosigners
+        let e = expected_entropy_bytes();
+        let expected: Vec<Option<&[u8]>> = vec![Some(&e[..]), Some(&e[..]), Some(&e[..])];
 
         // Sanity: a correct full-mode multisig bundle self-checks Ok.
         let good = multisig_bundle();
@@ -2278,14 +2346,14 @@ mod self_check_ms1_tests {
             "fixture must emit a non-empty ms1 per cosigner"
         );
         assert!(
-            self_check_bundle(&good, &args, &entropy_bearing).is_ok(),
+            self_check_bundle(&good, &args, &expected).is_ok(),
             "a correct full-mode multisig must pass self-check"
         );
 
         // Regress: clear ms1[1] (the @0-only emission reversion).
         let mut bad = multisig_bundle();
         bad.ms1[1] = String::new();
-        let r = self_check_bundle(&bad, &args, &entropy_bearing);
+        let r = self_check_bundle(&bad, &args, &expected);
         assert!(
             r.is_err(),
             "self-check MUST detect the @0-only ms1 regression (ms1[1] cleared); got {r:?}"
@@ -2301,10 +2369,27 @@ mod self_check_ms1_tests {
         for s in b.ms1.iter_mut() {
             *s = String::new();
         }
-        let entropy_bearing = vec![false, false, false];
+        let expected: Vec<Option<&[u8]>> = vec![None, None, None];
         assert!(
-            self_check_bundle(&b, &args, &entropy_bearing).is_ok(),
+            self_check_bundle(&b, &args, &expected).is_ok(),
             "all-empty ms1 with no entropy-bearing slots (watch-only) must pass self-check"
+        );
+    }
+
+    /// GREEN guard: the entropy round-trip catches a WRONG-entropy ms1 (an ms1
+    /// that decodes to a different secret than the slot's source entropy).
+    #[test]
+    fn self_check_detects_wrong_entropy_ms1() {
+        let args = minimal_bundle_args();
+        let bundle = multisig_bundle();
+        // Claim a DIFFERENT expected entropy than what the ms1 actually encodes.
+        let wrong = [0xABu8; 32];
+        let expected: Vec<Option<&[u8]>> =
+            vec![Some(&wrong[..]), Some(&wrong[..]), Some(&wrong[..])];
+        let r = self_check_bundle(&bundle, &args, &expected);
+        assert!(
+            r.is_err(),
+            "self-check MUST detect ms1 that round-trips to the wrong entropy; got {r:?}"
         );
     }
 }
