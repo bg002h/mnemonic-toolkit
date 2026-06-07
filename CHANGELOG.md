@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.47.4] — 2026-06-06
+
+**SemVer-PATCH — `bundle --self-check` now validates the per-slot `ms1` emission (was `md1` + `mk1` only).**
+
+- **Closed self-check gap.** `bundle --self-check` re-parses a freshly-emitted bundle to confirm internal consistency. It validated `md1` (wallet-policy reassemble) + `mk1` (per-cosigner decode + policy-id-stub linkage) but **never inspected `ms1`** — so a silent regression in the per-slot `ms1` emission rule (most dangerously the **@0-only reversion**: `ms1[0]` populated, `ms1[1+]` wrongly `""` for a full-mode multisig) passed `--self-check` undetected. `self_check_bundle` now also validates `ms1`: for each slot, (a) **emptiness parity** — `ms1[i]` is non-empty iff the slot is entropy-bearing (catches the @0-only reversion and watch-only false-populate); (b) for entropy-bearing slots, the emitted `ms1` must **decode** (`ms_codec::decode`) AND **round-trip** to the slot's source entropy.
+- **Correctness detail.** The entropy-bearing oracle is `resolved_slots[i].entropy.is_some()` — the exact predicate that drives emission — **not** the supplied `--slot` subkey. This matters: an `import-wallet --ms1` envelope replayed via `bundle --import-json` carries a populated `ms1` with no `--slot` arg, and a `--slot @N.wif=` slot is secret-bearing yet emits an empty `ms1` (ms-codec ENTR needs BIP-39 entropy, not raw WIF bytes); both shapes self-check correctly under the source-entropy oracle. The entropy round-trip is free (the source entropy is already materialized during synthesis — no secret is re-read).
+- **No CLI-surface change** — `--self-check` is unchanged; this strengthens what it validates internally (`self_check_bundle` gains an internal `entropy_bearing` parameter, threaded from all four call sites). No GUI `schema_mirror`, no manual mirror, no sibling-codec change. Regression guards: `self_check_detects_at0_only_ms1_regression`, `self_check_detects_wrong_entropy_ms1`, `self_check_passes_watch_only_all_empty_ms1` (bundle.rs), `bundle_wif_slot_self_check_passes`, `bundle_import_json_seeded_ms1_self_check_passes`.
+- **Tests.** Full toolkit suite (`--no-fail-fast`, 0 failed; all pre-existing `--self-check` tests pass unchanged) + clippy `--all-targets` (0). Resolves `self-check-ms1-iteration-audit`. Audit trail: `design/SPEC_self_check_ms1_iteration.md` + `design/agent-reports/self-check-ms1-iteration-r0-round{1,2}-review.md` + `…-phase-2-review.md`.
+
 ## mnemonic-toolkit [0.47.3] — 2026-06-06
 
 **SemVer-PATCH — `--timestamp` defaults to `0` (rescan from genesis) consistently across every Bitcoin Core `importdescriptors` emitter.**
