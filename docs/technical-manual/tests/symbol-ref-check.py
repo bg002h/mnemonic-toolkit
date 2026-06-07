@@ -68,6 +68,9 @@ for repo, root in REPO_ROOTS.items():
                     rel = os.path.relpath(ap, root).replace(os.sep, "/")
                     INDEX.append((repo, ap, rel))
 
+# Repos with no source tree in this checkout (bare CI checks out toolkit only).
+ABSENT = [r for r in REPO_ROOTS if r not in PRESENT_REPOS]
+
 # Chapters authoritatively ABOUT one repo: chapter default is trusted.
 def authoritative_repo(base):
     for pre, repo in (("21-", "md"), ("22-", "mk"), ("23-", "ms"),
@@ -148,6 +151,15 @@ def resolve(pathpart, chapter):
     allhits = suffix_matches(pathpart)
     if len(allhits) > 1:
         return (None, "ambiguous")
+    # Non-authoritative catch-all chapter: a bare basename may belong to any
+    # repo. With siblings absent (bare CI) we cannot disprove that it lives in
+    # an absent sibling, so skip rather than false-fail. Local runs (all repos
+    # present, ABSENT empty) still fail on a genuinely-missing symbol — so this
+    # never weakens the gate where it can resolve. (Restricted to non-auth +
+    # unqualified: authoritative chapters and crates/-qualified refs stay
+    # strict; see SPEC §Item-2a + design/agent-reports/...-r0-round1-review.md.)
+    if not auth and not qualified and ABSENT:
+        return (None, "skip:absent-sibling")
     return (None, "unresolved")
 
 # -------- scan --------
@@ -221,10 +233,10 @@ for dp, _, fns in os.walk(SRC_DIR):
                         err("%s:%d `%s::%s` — segment `%s` not found in %s"
                             % (rel, i, pathpart, anchor, seg, os.path.relpath(ap, WS)))
 
-absent = [r for r in REPO_ROOTS if r not in PRESENT_REPOS]
-if absent:
-    warn("sibling source absent (%s); %d codec-chapter refs skipped (not failed)"
-         % (",".join(absent), g2_skipped))
+if ABSENT:
+    warn("sibling source absent (%s); %d sibling-repo refs skipped "
+         "(codec G2 not enforced in bare CI; run `make lint` locally with all "
+         "sibling repos present for full G2)" % (",".join(ABSENT), g2_skipped))
 
 if fail:
     sys.stderr.write("[symbol-ref-check] FAILED\n")

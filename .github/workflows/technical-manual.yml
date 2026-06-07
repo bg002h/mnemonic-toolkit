@@ -1,0 +1,76 @@
+name: technical-manual
+
+# Lint-only CI for the m-format TECHNICAL manual. Single-repo (toolkit) by
+# design — `make lint` is binary-independent (markdownlint/cspell/lychee scan
+# source text; api-surface-coverage is warning-only and reads lib.rs/format.rs;
+# figures-cache-verify is render-free). symbol-ref-check enforces G1 (line-ref
+# ban) on all chapters + G2 (symbol existence) for refs resolvable in the
+# present (toolkit) repo; G2 for any ref whose file is unresolvable here —
+# codec files in absent siblings, AND renamed toolkit files cited by bare
+# basename from non-authoritative chapters — skips gracefully in bare CI
+# (enforced by local `make lint`; see FOLLOWUP
+# technical-manual-g2-uncovered-in-bare-ci). No tag trigger (the technical
+# manual ships no release asset; manual.yml owns the manual-v* PDF release).
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/technical-manual/**'
+      - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/technical-manual.yml'
+  pull_request:
+    paths:
+      - 'docs/technical-manual/**'
+      - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/technical-manual.yml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # Default checkout (NO `path:`): GitHub nests the repo at
+        # $GITHUB_WORKSPACE = .../work/<repo>/<repo>, so symbol-ref-check's
+        # WS-derivation (4 dirs up from src/) lands on .../work/<repo>, and
+        # REPO_ROOTS[toolkit] = WS/mnemonic-toolkit/crates/mnemonic-toolkit
+        # resolves to the checkout. A `path:` override would break this.
+        uses: actions/checkout@v4
+
+      - name: Install make
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm lint tools
+        run: |
+          npm install -g \
+            markdownlint-cli2@^0.13 \
+            cspell@^8
+
+      - name: Install lychee
+        run: |
+          LARCH=x86_64-unknown-linux-gnu
+          curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-${LARCH}.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee"
+          sudo chmod +x /usr/local/bin/lychee
+
+      - name: Lint technical manual
+        working-directory: docs/technical-manual
+        # *_BIN=true: the `make lint` path never INVOKES a binary —
+        # api-surface-coverage reads lib.rs/format.rs source directly and
+        # ignores these vars, symbol-ref-check ignores them. `=true` is
+        # belt-and-suspenders against the Makefile's default `cargo run ...`
+        # so no accidental compile can be triggered. A non-zero `make lint`
+        # fails the job.
+        run: |
+          make lint \
+            MNEMONIC_BIN=true \
+            MD_BIN=true \
+            MS_BIN=true \
+            MK_BIN=true
