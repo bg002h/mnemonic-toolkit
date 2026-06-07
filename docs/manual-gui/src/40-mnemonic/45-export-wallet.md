@@ -27,7 +27,7 @@ whatever shape your spending wallet imports.
 - [`--format`](#mnemonic-export-wallet-format) — output format (default `bitcoin-core`)
 - [`--output`](#mnemonic-export-wallet-output) — output path (`-` = stdout, default)
 - [`--range`](#mnemonic-export-wallet-range) — Bitcoin Core `range` field (default `0,999`)
-- [`--timestamp`](#mnemonic-export-wallet-timestamp) — Bitcoin Core `timestamp` field (default `now`)
+- [`--timestamp`](#mnemonic-export-wallet-timestamp) — Bitcoin Core `timestamp` field (default `0`; rescan from genesis)
 - [`--bitcoin-core-version`](#mnemonic-export-wallet-bitcoin-core-version) — `24` or `25` (default `25`)
 - [`--taproot-internal-key`](#mnemonic-export-wallet-taproot-internal-key) — `nums` or `@N` for tr-multi-a / tr-sortedmulti-a
 - [`--wallet-name`](#mnemonic-export-wallet-wallet-name) — wallet label (required for `sparrow` / `specter` / `electrum` / `green`)
@@ -339,11 +339,13 @@ must be <= end` (per `cmd/export_wallet.rs::parse_range`).
 
 ## `--timestamp` {#mnemonic-export-wallet-timestamp}
 
-Bitcoin Core `timestamp` field. Two valid forms: `now` (the
-default; emits the literal string `"now"` in the JSON, which
-Core interprets at import time as the current block timestamp)
-or a non-negative integer Unix-seconds value. Used only for
-`--format bitcoin-core`.
+Bitcoin Core `timestamp` field. The default is `0` (rescan from
+genesis, so an existing wallet's full transaction history is
+discovered). Other forms: `now` (emits the literal string
+`"now"`, which Core interprets at import time as the current
+block timestamp — watch going forward, skipping the historical
+rescan) or a non-negative integer Unix-seconds value. Used only
+for `--format bitcoin-core`.
 
 The GUI renders this as a Timestamp widget. Refusal: `--timestamp
 unix seconds must be >= 0` (per `cmd/export_wallet.rs`).
@@ -419,7 +421,7 @@ Wallet label. Optional for most formats (defaults to
        "active": true,
        "internal": false,
        "range": [0, 999],
-       "timestamp": "now",
+       "timestamp": 0,
        "next_index": 0
      }
    ]
