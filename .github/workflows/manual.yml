@@ -27,7 +27,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -49,7 +49,7 @@ jobs:
             make
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -117,7 +117,7 @@ jobs:
         run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
 
       - name: Upload PDF as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: m-format-manual-pdf
           path: docs/manual/build/m-format-manual.pdf

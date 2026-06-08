@@ -36,7 +36,7 @@ jobs:
     name: sibling pins match install.sh
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Verify sibling-CLI pins match scripts/install.sh
         run: |
