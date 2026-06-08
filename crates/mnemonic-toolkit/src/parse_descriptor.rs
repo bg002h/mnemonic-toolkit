@@ -2140,8 +2140,12 @@ mod tests {
             .collect::<Vec<_>>()
             .join("/");
         let fp_hex = hex_fp(&master_fp.to_bytes());
+        // v0.48.0 (`toolkit-trmultia-nums-internal-key`): template-mode now emits
+        // the BIP-388 NUMS internal key, so the equivalent descriptor uses
+        // `tr(NUMS, sortedmulti_a(...))` (was `tr(@0, sortedmulti_a(@0,...))` —
+        // cosigner @0 doubling as the internal key, the pre-v0.48.0 shape).
         let descriptor = format!(
-            "tr(@0[{fp_hex}/{path_anno}]/<0;1>/*,\
+            "tr(NUMS,\
              sortedmulti_a(2,@0[{fp_hex}/{path_anno}]/<0;1>/*,\
              @1[{fp_hex}/{path_anno}]/<0;1>/*))"
         );

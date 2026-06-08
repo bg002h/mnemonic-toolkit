@@ -200,13 +200,17 @@ impl CliTemplate {
                 Node {
                     tag: Tag::Tr,
                     body: Body::Tr {
-                        // v0.30+ NUMS-vs-real-key flag. Toolkit's TrMultiA /
-                        // TrSortedMultiA templates currently use key_index: 0
-                        // (first real key in the table) as the internal key.
-                        // FOLLOWUP `toolkit-trmultia-nums-internal-key` filed
-                        // to revisit whether BIP-388 script-path-only wallets
-                        // SHOULD emit is_nums: true here.
-                        is_nums: false,
+                        // BIP-388 script-path-only multisig: the taproot
+                        // key-path internal key is the provably-unspendable
+                        // BIP-341 NUMS H-point (`is_nums: true`), so spends can
+                        // only go through the `multi_a`/`sortedmulti_a` script
+                        // leaf. `key_index` is ignored by md-codec when
+                        // `is_nums: true` (md-codec validate.rs gates the
+                        // key_index range check on `!is_nums`); kept at 0.
+                        // (v0.48.0 — FOLLOWUP `toolkit-trmultia-nums-internal-key`
+                        // resolved; before v0.48.0 this emitted is_nums:false /
+                        // cosigner @0 as the internal key, a non-standard shape.)
+                        is_nums: true,
                         key_index: 0,
                         tree: Some(Box::new(Node {
                             tag: inner_tag,
@@ -443,7 +447,7 @@ mod tests {
         else {
             panic!("tr body must be Tr");
         };
-        assert!(!is_nums, "TrMultiA wrapper currently uses key_index=0 (real key), not NUMS sentinel");
+        assert!(is_nums, "TrMultiA wrapper emits the NUMS internal key (BIP-388 script-path-only); key_index ignored");
         assert_eq!(key_index, 0);
         let leaf = tree.as_deref().expect("tr-multi-a must have tree");
         assert!(matches!(leaf.tag, Tag::MultiA));
@@ -526,5 +530,97 @@ mod tests {
             recovered.is_wallet_policy(),
             "tr-sortedmulti-a 2-of-2 round-trip must be wallet-policy"
         );
+
+        // v0.48.0 (`toolkit-trmultia-nums-internal-key`): the NUMS internal-key
+        // flag must SURVIVE the md1 wire round-trip (encode→split→reassemble).
+        let Body::Tr { is_nums, .. } = recovered.tree.body else {
+            panic!("recovered tr body must be Tr");
+        };
+        assert!(
+            is_nums,
+            "the wire round-trip must preserve the BIP-388 NUMS internal key (is_nums:true)"
+        );
+
+        // Pin the upstream limit (NOT regressed by this fix): tr-sortedmulti-a
+        // still cannot render to a descriptor — rust-miniscript v13 has no
+        // `Terminal::SortedMultiA` fragment (md-codec to_miniscript.rs). This is
+        // independent of `is_nums` (the leaf, not the internal key, is the wall).
+        assert!(
+            md_codec::to_miniscript::to_miniscript_descriptor(&recovered, 0).is_err(),
+            "tr-sortedmulti-a must still fail to_miniscript (rust-miniscript v13 SortedMultiA gap)"
+        );
+    }
+
+    /// v0.48.0 (`toolkit-trmultia-nums-internal-key`) — the GATING wire pin:
+    /// a tr-multi-a bundle's md1 round-trips AND renders `tr(NUMS, multi_a(…))`
+    /// with the BIP-341 NUMS H-point as the internal key (NOT cosigner @0).
+    /// Mirrors the empirical before/after in SPEC_trmultia_nums_internal_key.md.
+    #[test]
+    fn tr_multi_a_2_of_2_renders_nums_internal_key() {
+        use md_codec::origin_path::{PathDecl, PathDeclPaths};
+        use md_codec::use_site_path::UseSitePath;
+        use md_codec::{Descriptor, TlvSection};
+
+        // Same canonical 65-byte synthetic xpub filler as the round-trip test.
+        let mut xpub_bytes = [0u8; 65];
+        xpub_bytes[0..32].copy_from_slice(&[0x42; 32]);
+        xpub_bytes[32] = 0x02;
+        xpub_bytes[33..].copy_from_slice(&[
+            0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE, 0x87,
+            0x0B, 0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81, 0x5B,
+            0x16, 0xF8, 0x17, 0x98,
+        ]);
+
+        let tree = CliTemplate::TrMultiA.wrapper_node(2, 2);
+        // Source-level: the wrapper emits the NUMS internal key.
+        let Body::Tr { is_nums, .. } = tree.body else {
+            panic!("tr-multi-a body must be Tr");
+        };
+        assert!(is_nums, "tr-multi-a wrapper_node must emit is_nums:true");
+
+        let path = OriginPath {
+            components: vec![
+                PathComponent { hardened: true, value: 48 },
+                PathComponent { hardened: true, value: 0 },
+                PathComponent { hardened: true, value: 0 },
+                PathComponent { hardened: true, value: 2 },
+            ],
+        };
+        let descriptor = Descriptor {
+            n: 2,
+            path_decl: PathDecl { n: 2, paths: PathDeclPaths::Shared(path) },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: CliTemplate::TrMultiA.wrapper_node(2, 2),
+            tlv: TlvSection {
+                use_site_path_overrides: None,
+                fingerprints: Some(vec![
+                    (0, [0xAA, 0xBB, 0xCC, 0xDD]),
+                    (1, [0x11, 0x22, 0x33, 0x44]),
+                ]),
+                pubkeys: Some(vec![(0, xpub_bytes), (1, xpub_bytes)]),
+                origin_path_overrides: None,
+                unknown: Vec::new(),
+            },
+        };
+
+        // Wire round-trip preserves NUMS.
+        let strings = md_codec::chunk::split(&descriptor).expect("split tr-multi-a");
+        let strs: Vec<&str> = strings.iter().map(|s| s.as_str()).collect();
+        let recovered = md_codec::chunk::reassemble(&strs).expect("reassemble tr-multi-a");
+        let Body::Tr { is_nums, .. } = recovered.tree.body else {
+            panic!("recovered tr body must be Tr");
+        };
+        assert!(is_nums, "wire round-trip must preserve is_nums:true");
+
+        // Rendering pin: tr-multi-a renders `tr(NUMS, multi_a(…))` — the internal
+        // key is the BIP-341 NUMS H-point, NOT cosigner @0.
+        let desc = md_codec::to_miniscript::to_miniscript_descriptor(&recovered, 0)
+            .expect("tr-multi-a must render (MultiA is supported)");
+        let s = desc.to_string();
+        assert!(
+            s.contains("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0"),
+            "internal key must be the NUMS H-point; got: {s}"
+        );
+        assert!(s.contains("multi_a("), "leaf must be multi_a; got: {s}");
     }
 }
