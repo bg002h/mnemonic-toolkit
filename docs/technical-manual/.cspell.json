@@ -23,6 +23,7 @@
     "auditable",
     "BCH",
     "BLOCKLIST",
+    "rescan",
     "andor",
     "thiserror",
     "usize",

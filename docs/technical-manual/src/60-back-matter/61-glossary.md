@@ -382,7 +382,7 @@ The bit-aligned trailing region of md1's bytecode carrying optional metadata blo
 
 ## TimestampArg
 
-The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TimestampArg` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`crates/mnemonic-toolkit/src/cmd/export_wallet.rs::ExportWalletArgs::timestamp`, default `now`). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
+The `pub(crate) enum` at `crates/mnemonic-toolkit/src/wallet_export/mod.rs::TimestampArg` for the Bitcoin Core `timestamp` argument: `Now` (renders to JSON `"now"`) or `Unix(i64)` (renders to a JSON integer). Selected via the `--timestamp <now|unix>` flag (`crates/mnemonic-toolkit/src/cmd/export_wallet.rs::ExportWalletArgs::timestamp`, default `0` — rescan from genesis; `now` and unix seconds also accepted). Consumed by `--format bitcoin-core`; ignored by every other format. Defined §V.4.5.9.
 
 ## to_miniscript_descriptor
 
