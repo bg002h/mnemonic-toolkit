@@ -34,7 +34,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # FOLLOWUP cargo-lock-version-bump-lockstep: fail CI when Cargo.lock is
       # stale relative to Cargo.toml (e.g. a version bump that forgot to
@@ -113,7 +113,7 @@ jobs:
     name: "test (release, ubuntu-latest, mlock einval)"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Show ulimit -l (diagnostic)
         run: ulimit -l || true
       - name: G2.3-release einval soft-fail
@@ -127,7 +127,7 @@ jobs:
     name: miri (mlock unsafe)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install nightly + miri component
         uses: dtolnay/rust-toolchain@nightly
@@ -144,7 +144,7 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
@@ -169,7 +169,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install-rust pinned toolchain
         # Use the toolkit's pinned `rust-toolchain.toml` channel (1.85.0)
         # so the cross-platform check matches the version used by the
@@ -209,11 +209,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout own (mnemonic-toolkit)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: mnemonic-toolkit
       - name: Checkout sibling (mnemonic-secret)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bg002h/mnemonic-secret
           ref: master
