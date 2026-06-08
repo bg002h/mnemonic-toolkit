@@ -1023,9 +1023,9 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 - **Surfaced:** Phase 3 review r1 (L-2) + Phase 5 review r1 (L-2).
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::emit` + `crates/mnemonic-toolkit/src/format.rs::chunk_mk1`.
-- **What:** `chunk_mk1` is a reserved alias for `chunk_5char`, retained against the future mk-codec grouping helper (see `mk-codec-chunked-visual-grouping-helper`). `bundle.rs::emit` calls `chunk_5char` directly, leaving `chunk_mk1` flagged as dead code. Switch the call site to `chunk_mk1` so the swap point is single-edit.
+- **What:** `chunk_mk1` is a reserved alias for `chunk_5char`, retained against the future mk-codec grouping helper (see `mk-codec-chunked-visual-grouping-helper`). The bundle mk1 emit calls `chunk_5char` directly, leaving `chunk_mk1` flagged as dead code. Switch the call site to `chunk_mk1` so the swap point is single-edit. **(Citation correction, cycle-prep 2026-06-08: the enclosing fn is `bundle.rs::emit_unified` (`:778`), NOT `bundle.rs::emit` — the as-filed `emit` never existed at this surface.)**
 - **Why deferred:** functionally identical; one-line cleanup.
-- **Status:** `open`
+- **Status:** `resolved` (Cycle B test-hygiene, 2026-06-08; no version bump/tag — binary byte-identical). Switched **both** mk1 sites in `bundle.rs::emit_unified` (`MkField::Single` + `MkField::Multi`) `chunk_5char`→`chunk_mk1`; removed the now-vestigial `#[allow(dead_code)]` on `format.rs::chunk_mk1` + reworded its doc comment. `chunk_mk1` body unchanged (`{ chunk_5char(s) }`) → output byte-identical; build warning-clean confirms the alias is now live. Audit trail: `design/SPEC_friendly_tests_and_chunk_mk1.md` + `design/agent-reports/friendly-tests-chunk-mk1-r0-round{1,2,3}-review.md`.
 - **Tier:** `v0.1-nice-to-have`
 
 ### `watch-only-stderr-warning-suborder` — depth advisory ordering vs account-index hazard unspecified
@@ -1140,6 +1140,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/friendly.rs::tests`.
 - **What:** Unit tests cover `friendly_bip39::UnknownWord`, `friendly_ms_codec::WrongHrp`, `friendly_mk_codec::PathTooDeep`. Untested at unit level: 4 of 5 `friendly_bip39`, all 3 `friendly_bitcoin`, 8 of 9 `friendly_ms_codec`, 21 of 22 `friendly_mk_codec`, all 41 `friendly_md_codec`. Integration tests likely exercise some paths end-to-end but unit isolation is thin.
 - **Why deferred:** v0.2 will add new error paths through these mappers; expand the tests in lockstep with v0.2 Phase E.
+- **Status:** `resolved` (Cycle B test-hygiene, 2026-06-08; test-only, no version bump/tag). Re-counted at `8665d91`: the as-filed "3 of ~70" had drifted (12 tests covered ~15 of ~94 arms). Added 5 table-driven `#[test]`s (existing 12 untouched) covering: **all 44 `friendly_md_codec` arms** (the biggest gap, 0 prior), all 20 untested `friendly_mk_codec` arms, the 7 untested `friendly_ms_codec` structural arms, 3 `friendly_bip39` arms, all 3 `friendly_bitcoin` arms — each asserting codec-tag-present + distinctive needle + no-raw-Debug-variant-leak; `!contains("unhandled")` asserted only for the 2 wildcard mappers (`ms_codec`/`mk_codec`). **17 tests pass.** Dropped `bip39::Error::AmbiguousLanguages` (private field, not constructible). Also corrected the stale `friendly.rs:4-6` module-doc (wrongly listed bip39 + bitcoin as wildcard-bearing). Audit trail: `design/SPEC_friendly_tests_and_chunk_mk1.md` + `design/agent-reports/friendly-tests-chunk-mk1-r0-round{1,2,3}-review.md`.
 - **Status:** `open`
 - **Tier:** `v0.2-nice-to-have`
 

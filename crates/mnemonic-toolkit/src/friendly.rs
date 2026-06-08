@@ -1,9 +1,12 @@
 //! Five friendly mappers: bip39, bitcoin, ms_codec, mk_codec, md_codec.
 //!
 //! Realizes SPEC §6.4.0 routing principle + §6.4.1-§6.4.5 per-source
-//! tables. All `#[non_exhaustive]` enums (bip39::Error,
-//! bitcoin::bip32::Error, ms_codec::Error, mk_codec::Error) have a
-//! wildcard `_` arm; md_codec::Error is closed and matched exhaustively.
+//! tables. Only the `ms_codec::Error` and `mk_codec::Error` mappers carry a
+//! wildcard `_` arm (both wrap `#[non_exhaustive]` enums). The other three are
+//! exhaustive: `md_codec::Error` and `bip39::Error` are matched arm-by-arm
+//! (both closed enums), and `friendly_bitcoin` matches the toolkit-local closed
+//! `BitcoinErrorKind` — the `#[non_exhaustive]` `bitcoin::bip32::Error` is only
+//! Display-forwarded inside the `Bip32(b)` arm, so that mapper has no wildcard.
 
 use crate::error::BitcoinErrorKind;
 
@@ -468,5 +471,534 @@ mod tests {
         });
         assert!(m.contains("depth mismatch"), "got: {m}");
         assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    // ── Table-driven per-mapper coverage (`friendly-mapper-unit-test-gaps`) ──
+    //
+    // Each table row is `(error, needle, variant_name)`. For every row we assert
+    // the rendered string (a) carries the codec tag + the distinctive `needle`,
+    // and (b) does NOT leak the raw Debug variant name (`variant_name`) — the
+    // friendly message must be prose, not a `{:?}` dump. The variant name is
+    // pinned per-row (not via a generic PascalCase scan) on purpose: some
+    // friendly messages legitimately embed a CamelCase token — e.g.
+    // `WireVersionMismatch` renders "(route via FutureFormat)" — which a generic
+    // scan would false-trip on.
+    //
+    // The `!contains("unhandled")` guard is load-bearing ONLY for the two
+    // wildcard mappers — `friendly_ms_codec` (`:`-arm) and `friendly_mk_codec`
+    // — where a future `#[non_exhaustive]` variant silently falls to the bare
+    // `_ => "unhandled … {:?}"` arm; that fallthrough is the real regression
+    // these tests catch (and the wildcard itself stays untested-by-construction,
+    // since it can only fire on a not-yet-existing variant). For the three
+    // closed mappers (`friendly_md_codec`, `friendly_bip39`, `friendly_bitcoin`)
+    // there is no `_` arm: a new variant breaks compilation, not a test, so the
+    // `!contains("unhandled")` check is vacuous there and the substantive
+    // assertions are the needle + no-Debug-leak (message-quality) checks.
+
+    #[test]
+    fn md_codec_all_arms_render_prose() {
+        use md_codec::Error as E;
+        use md_codec::Tag;
+        use md_codec::error::ContextKind;
+        let rows: [(E, &str, &str); 44] = [
+            (
+                E::BitStreamTruncated {
+                    requested: 8,
+                    available: 3,
+                },
+                "bitstream truncated",
+                "BitStreamTruncated",
+            ),
+            (
+                E::MalformedHeader {
+                    detail: "bad".into(),
+                },
+                "malformed header",
+                "MalformedHeader",
+            ),
+            (
+                E::WireVersionMismatch { got: 9 },
+                "wire-version mismatch",
+                "WireVersionMismatch",
+            ),
+            (
+                E::PathDepthExceeded { got: 20, max: 15 },
+                "path depth",
+                "PathDepthExceeded",
+            ),
+            (
+                E::KeyCountOutOfRange { n: 40 },
+                "key count",
+                "KeyCountOutOfRange",
+            ),
+            (
+                E::DivergentPathCountMismatch { n: 2, got: 3 },
+                "divergent path count",
+                "DivergentPathCountMismatch",
+            ),
+            (
+                E::AltCountOutOfRange { got: 10 },
+                "alt-count",
+                "AltCountOutOfRange",
+            ),
+            (
+                E::TagOutOfRange { primary: 0x3f },
+                "tag value",
+                "TagOutOfRange",
+            ),
+            (
+                E::ThresholdOutOfRange { k: 40 },
+                "threshold",
+                "ThresholdOutOfRange",
+            ),
+            (
+                E::ChildCountOutOfRange { count: 40 },
+                "child count",
+                "ChildCountOutOfRange",
+            ),
+            (
+                E::KGreaterThanN { k: 3, n: 2 },
+                "exceeds child count",
+                "KGreaterThanN",
+            ),
+            (
+                E::TlvOrderingViolation {
+                    prev: 0x10,
+                    current: 0x05,
+                },
+                "TLV ordering",
+                "TlvOrderingViolation",
+            ),
+            (
+                E::PlaceholderIndexOutOfRange { idx: 5, n: 3 },
+                "placeholder index",
+                "PlaceholderIndexOutOfRange",
+            ),
+            (
+                E::OverrideOrderViolation {
+                    prev: 2,
+                    current: 1,
+                },
+                "override ordering",
+                "OverrideOrderViolation",
+            ),
+            (
+                E::EmptyTlvEntry { tag: 0x07 },
+                "empty TLV entry",
+                "EmptyTlvEntry",
+            ),
+            (
+                E::TlvLengthExceedsRemaining {
+                    length: 100,
+                    remaining: 8,
+                },
+                "TLV length",
+                "TlvLengthExceedsRemaining",
+            ),
+            (
+                E::PlaceholderNotReferenced { idx: 1, n: 3 },
+                "not referenced",
+                "PlaceholderNotReferenced",
+            ),
+            (
+                E::PlaceholderFirstOccurrenceOutOfOrder {
+                    expected_first: 0,
+                    got_first: 1,
+                },
+                "first-occurrence",
+                "PlaceholderFirstOccurrenceOutOfOrder",
+            ),
+            (
+                E::MultipathAltCountMismatch {
+                    expected: 2,
+                    got: 3,
+                },
+                "multipath alt-count mismatch",
+                "MultipathAltCountMismatch",
+            ),
+            (
+                E::ForbiddenTapTreeLeaf { tag: 0x09 },
+                "forbidden tap-script-tree leaf",
+                "ForbiddenTapTreeLeaf",
+            ),
+            (
+                E::ChunkCountOutOfRange { count: 200 },
+                "chunk count",
+                "ChunkCountOutOfRange",
+            ),
+            (
+                E::ChunkIndexOutOfRange { index: 5, count: 3 },
+                "chunk index",
+                "ChunkIndexOutOfRange",
+            ),
+            (
+                E::ChunkSetIdOutOfRange { id: 0x1fffff },
+                "chunk-set-id",
+                "ChunkSetIdOutOfRange",
+            ),
+            (
+                E::ChunkHeaderChunkedFlagMissing,
+                "chunked-flag missing",
+                "ChunkHeaderChunkedFlagMissing",
+            ),
+            (
+                E::ChunkCountExceedsMax { needed: 70 },
+                "exceeds max 64",
+                "ChunkCountExceedsMax",
+            ),
+            (
+                E::Codex32DecodeError("oops".into()),
+                "codex32 decode",
+                "Codex32DecodeError",
+            ),
+            (
+                E::Codex32EncodeError("oops".into()),
+                "codex32 encode",
+                "Codex32EncodeError",
+            ),
+            (E::ChunkSetEmpty, "chunk set empty", "ChunkSetEmpty"),
+            (
+                E::ChunkSetInconsistent,
+                "disagree",
+                "ChunkSetInconsistent",
+            ),
+            (
+                E::ChunkSetIncomplete {
+                    got: 1,
+                    expected: 2,
+                },
+                "chunk set incomplete",
+                "ChunkSetIncomplete",
+            ),
+            (
+                E::ChunkIndexGap {
+                    expected: 1,
+                    got: 2,
+                },
+                "chunk index gap",
+                "ChunkIndexGap",
+            ),
+            (
+                E::ChunkSetIdMismatch {
+                    expected: 0x10,
+                    derived: 0x20,
+                },
+                "chunk-set-id mismatch",
+                "ChunkSetIdMismatch",
+            ),
+            (
+                E::VarintOverflow { value: 999 },
+                "varint overflow",
+                "VarintOverflow",
+            ),
+            (
+                E::MissingExplicitOrigin { idx: 2 },
+                "missing explicit origin",
+                "MissingExplicitOrigin",
+            ),
+            (
+                E::InvalidPresenceByte { reserved_bits: 0x04 },
+                "presence byte",
+                "InvalidPresenceByte",
+            ),
+            (
+                E::InvalidXpubBytes { idx: 1 },
+                "invalid xpub bytes",
+                "InvalidXpubBytes",
+            ),
+            (
+                E::MissingPubkey { idx: 1 },
+                "missing pubkey",
+                "MissingPubkey",
+            ),
+            (
+                E::ChainIndexOutOfRange {
+                    chain: 5,
+                    alt_count: 2,
+                },
+                "chain index",
+                "ChainIndexOutOfRange",
+            ),
+            (
+                E::HardenedPublicDerivation,
+                "hardened public-key derivation",
+                "HardenedPublicDerivation",
+            ),
+            (
+                E::AddressDerivationFailed {
+                    detail: "boom".into(),
+                },
+                "address derivation failed",
+                "AddressDerivationFailed",
+            ),
+            (
+                E::NUMSSentinelConflict,
+                "NUMS sentinel conflict",
+                "NUMSSentinelConflict",
+            ),
+            (
+                E::OperatorContextViolation {
+                    tag: Tag::Multi,
+                    context: ContextKind::MultiBody,
+                },
+                "not allowed in context",
+                "OperatorContextViolation",
+            ),
+            (
+                E::DecodeRecursionDepthExceeded { depth: 9, max: 8 },
+                "recursion depth",
+                "DecodeRecursionDepthExceeded",
+            ),
+            (
+                E::TooManyErrors {
+                    chunk_index: 0,
+                    bound: 8,
+                },
+                "uncorrectable",
+                "TooManyErrors",
+            ),
+        ];
+        for (e, needle, variant) in rows {
+            let m = friendly_md_codec(&e);
+            assert!(m.contains("md1"), "missing md1 tag for {variant}: {m}");
+            assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
+            assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
+            // No `!contains("unhandled")` here: this is a CLOSED mapper (no `_`
+            // arm), so that guard is vacuous and is deliberately confined to the
+            // two wildcard mappers (SPEC §Item-2 M5 — do not cargo-cult it).
+        }
+    }
+
+    #[test]
+    fn mk_codec_remaining_arms_render_prose() {
+        use mk_codec::Error as E;
+        // PathTooDeep + XpubOriginPathMismatch are covered above; the rest here.
+        let rows: [(E, &str, &str); 19] = [
+            (E::InvalidHrp("xx".into()), "wrong HRP", "InvalidHrp"),
+            (E::MixedCase, "mixed case", "MixedCase"),
+            (
+                E::InvalidStringLength(94),
+                "data-part length",
+                "InvalidStringLength",
+            ),
+            (
+                E::InvalidChar {
+                    ch: '!',
+                    position: 3,
+                },
+                "invalid character",
+                "InvalidChar",
+            ),
+            (
+                E::BchUncorrectable("3 errors".into()),
+                "BCH uncorrectable",
+                "BchUncorrectable",
+            ),
+            (
+                E::UnsupportedCardType(0x05),
+                "unsupported card type",
+                "UnsupportedCardType",
+            ),
+            (
+                E::MalformedPayloadPadding,
+                "malformed payload padding",
+                "MalformedPayloadPadding",
+            ),
+            (
+                E::ChunkSetIdMismatch,
+                "chunk_set_id mismatch",
+                "ChunkSetIdMismatch",
+            ),
+            (
+                E::ChunkedHeaderMalformed("bad".into()),
+                "chunked-header malformed",
+                "ChunkedHeaderMalformed",
+            ),
+            (
+                E::MixedHeaderTypes,
+                "mixed string-layer header types",
+                "MixedHeaderTypes",
+            ),
+            (
+                E::CrossChunkHashMismatch,
+                "cross-chunk integrity hash mismatch",
+                "CrossChunkHashMismatch",
+            ),
+            (
+                E::ReservedBitsSet,
+                "reserved bits set",
+                "ReservedBitsSet",
+            ),
+            (
+                E::InvalidPolicyIdStubCount,
+                "policy_id_stub_count",
+                "InvalidPolicyIdStubCount",
+            ),
+            (
+                E::InvalidPathIndicator(0x16),
+                "invalid path indicator",
+                "InvalidPathIndicator",
+            ),
+            (
+                E::InvalidPathComponent("bad".into()),
+                "invalid path component",
+                "InvalidPathComponent",
+            ),
+            (
+                E::InvalidXpubVersion(0xdead_beef),
+                "invalid xpub version",
+                "InvalidXpubVersion",
+            ),
+            (
+                E::InvalidXpubPublicKey("bad point".into()),
+                "invalid xpub public key",
+                "InvalidXpubPublicKey",
+            ),
+            (E::UnexpectedEnd, "unexpected end", "UnexpectedEnd"),
+            (E::TrailingBytes, "trailing bytes", "TrailingBytes"),
+        ];
+        for (e, needle, variant) in rows {
+            let m = friendly_mk_codec(&e);
+            assert!(m.contains("mk1"), "missing mk1 tag for {variant}: {m}");
+            assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
+            assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
+            // Load-bearing here: friendly_mk_codec has a bare `_` wildcard.
+            assert!(!m.contains("unhandled"), "for {variant}: {m}");
+        }
+        // CardPayloadTooLarge: struct fields, tested separately so the table
+        // row tuple stays simple.
+        let m = friendly_mk_codec(&E::CardPayloadTooLarge {
+            bytecode_len: 2000,
+            max_supported: 1692,
+        });
+        assert!(m.contains("mk1"), "got: {m}");
+        assert!(m.contains("card payload too large"), "got: {m}");
+        assert!(!m.contains("CardPayloadTooLarge"), "variant name leaked: {m}");
+        assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    #[test]
+    fn ms_codec_structural_arms_render_prose() {
+        use ms_codec::Error as E;
+        // The Codex32 share arms + WrongHrp + IsShareNotSingleString +
+        // SecretShareSuppliedToCombine + InvalidThreshold/ShareCount are covered
+        // above; these are the remaining structural decode arms.
+        let rows: [(E, &str, &str); 7] = [
+            (
+                E::ThresholdNotZero { got: b'2' },
+                "threshold not 0",
+                "ThresholdNotZero",
+            ),
+            (
+                E::ShareIndexNotSecret { got: 'a' },
+                "share-index not 's'",
+                "ShareIndexNotSecret",
+            ),
+            (
+                E::TagInvalidAlphabet {
+                    got: [b'!', b'!', b'!', b'!'],
+                },
+                "codex32 alphabet",
+                "TagInvalidAlphabet",
+            ),
+            (
+                E::UnknownTag {
+                    got: [b'x', b'y', b'z', b'w'],
+                },
+                "unknown tag",
+                "UnknownTag",
+            ),
+            (
+                E::ReservedPrefixViolation { got: 0x01 },
+                "reserved-prefix byte",
+                "ReservedPrefixViolation",
+            ),
+            (
+                E::UnexpectedStringLength {
+                    got: 51,
+                    allowed: &[50, 56, 62, 69, 75],
+                },
+                "string length",
+                "UnexpectedStringLength",
+            ),
+            (
+                E::PayloadLengthMismatch {
+                    tag: [b'm', b's', b'e', b'c'],
+                    expected: &[16, 20, 24, 28, 32],
+                    got: 17,
+                },
+                "payload length",
+                "PayloadLengthMismatch",
+            ),
+        ];
+        for (e, needle, variant) in rows {
+            let m = friendly_ms_codec(&e);
+            assert!(m.contains("ms1"), "missing ms1 tag for {variant}: {m}");
+            assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
+            assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
+            // Load-bearing here: friendly_ms_codec has a bare `_` wildcard.
+            assert!(!m.contains("unhandled"), "for {variant}: {m}");
+        }
+    }
+
+    #[test]
+    fn bip39_constructible_arms_render_prose() {
+        // AmbiguousLanguages is intentionally excluded: its payload
+        // `[bool; MAX_NB_LANGUAGES]` is a tuple-struct field with no public
+        // constructor, so it is not buildable from the test crate.
+        let rows: [(bip39::Error, &str, &str); 3] = [
+            (
+                bip39::Error::BadEntropyBitCount(100),
+                "entropy bit count",
+                "BadEntropyBitCount",
+            ),
+            (
+                bip39::Error::BadWordCount(13),
+                "word count",
+                "BadWordCount",
+            ),
+            (
+                bip39::Error::InvalidChecksum,
+                "checksum failure",
+                "InvalidChecksum",
+            ),
+        ];
+        for (e, needle, variant) in rows {
+            let m = friendly_bip39(&e);
+            assert!(m.contains("BIP-39"), "missing BIP-39 tag for {variant}: {m}");
+            assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
+            assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
+        }
+    }
+
+    #[test]
+    fn bitcoin_all_arms_render_prose() {
+        use crate::error::BitcoinErrorKind as B;
+        // friendly_bitcoin has no uniform codec tag across arms: only the Bip32
+        // arm carries "BIP-32"; XpubParse/FingerprintParse carry the flag name.
+        // The tag is folded into the per-row needle accordingly.
+        let rows: [(B, &str, &str); 3] = [
+            (
+                // A UNIT bip32 variant — avoids wrapper variants with payloads.
+                B::Bip32(bitcoin::bip32::Error::CannotDeriveFromHardenedKey),
+                "BIP-32",
+                "Bip32",
+            ),
+            (
+                B::XpubParse("bad base58".into()),
+                "--xpub",
+                "XpubParse",
+            ),
+            (
+                B::FingerprintParse("bad hex".into()),
+                "--master-fingerprint",
+                "FingerprintParse",
+            ),
+        ];
+        for (e, needle, variant) in rows {
+            let m = friendly_bitcoin(&e);
+            assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
+            assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
+        }
     }
 }

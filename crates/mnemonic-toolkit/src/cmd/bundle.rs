@@ -4,7 +4,9 @@
 //! stdout), §5.2 (engraving card stderr), §5.3 (JSON schema).
 
 use crate::error::ToolkitError;
-use crate::format::{chunk_5char, chunk_md1, BundleJson, CosignerEntry, MkField, MultisigInfo};
+use crate::format::{
+    chunk_5char, chunk_md1, chunk_mk1, BundleJson, CosignerEntry, MkField, MultisigInfo,
+};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
@@ -959,7 +961,7 @@ fn emit_unified<W: Write, E: Write>(
                 }
                 writeln!(stdout).ok();
                 for s in mk1 {
-                    writeln!(stdout, "{}", chunk_5char(s)).ok();
+                    writeln!(stdout, "{}", chunk_mk1(s)).ok();
                 }
                 writeln!(stdout).ok();
             }
@@ -971,7 +973,7 @@ fn emit_unified<W: Write, E: Write>(
                     }
                     writeln!(stdout).ok();
                     for s in chunks {
-                        writeln!(stdout, "{}", chunk_5char(s)).ok();
+                        writeln!(stdout, "{}", chunk_mk1(s)).ok();
                     }
                     writeln!(stdout).ok();
                 }
