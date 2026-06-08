@@ -146,6 +146,66 @@ pub(crate) fn classify_descriptor_form(input: &str) -> Result<DescriptorForm, To
     }
 }
 
+/// Strict BIP-388 wallet-policy schema — the exact inverse-side mirror of the
+/// emitter at `wallet_export::pipeline::descriptor_to_bip388_wallet_policy`.
+/// `deny_unknown_fields`. (Moved here from `cmd/xpub_search/descriptor_intake.rs`
+/// so the policy→descriptor expansion is single-sourced and reusable by the
+/// `export-wallet`/`bundle` `--descriptor` consumers.)
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BipPolicyJson {
+    // Deserialized-but-unread: the `_name` underscore silences `dead_code`; the
+    // `#[serde(rename = "name")]` is LOAD-BEARING — without it, `deny_unknown_fields`
+    // would reject the real `"name"` JSON key and demand a `"_name"` key, breaking
+    // every real policy.
+    #[serde(rename = "name")]
+    _name: String,
+    description_template: String,
+    keys_info: Vec<String>,
+}
+
+/// True iff `s` (trimmed) begins with `{` — the BIP-388 wallet-policy-JSON sniff.
+/// MUST be checked BEFORE `is_at_n_form` / `classify_descriptor_form`: a raw
+/// policy JSON matches the `@\d` probe (its `description_template`) AND the
+/// `key_regex` probe (its `keys_info`), so an unguarded policy would trip the
+/// mixed-form / @N-refusal paths.
+pub(crate) fn is_bip388_policy_shape(s: &str) -> bool {
+    s.trim_start().starts_with('{')
+}
+
+/// Expand a BIP-388 wallet-policy JSON `{name, description_template, keys_info}`
+/// into a concrete multipath descriptor STRING by substituting each `@N/**` →
+/// `keys_info[N] + "/<0;1>/*"`. Pure string-in/string-out (no network/account/
+/// stderr). The exact inverse of the emitter's `@N/**` substitution.
+///
+/// Replaces longest-N-first by **digit-count** (`@10` before `@1`) to mirror the
+/// emitter inverse — over-defensive here since `/**` is part of every replaced
+/// token (so `@1` can never be a substring of `@10/**`), but kept faithful to
+/// the original `descriptor_intake` logic. After substitution, any residual
+/// `@N` means the template referenced an index ≥ `keys_info.len()` → refuse
+/// (rather than feed a half-substituted string to the downstream parser).
+pub(crate) fn expand_bip388_policy(json: &str) -> Result<String, ToolkitError> {
+    let parsed: BipPolicyJson = serde_json::from_str(json).map_err(|e| {
+        ToolkitError::BadInput(format!(
+            "--descriptor BIP-388 JSON parse failed: {e}; expected fields {{name, description_template, keys_info}}"
+        ))
+    })?;
+    let mut template = parsed.description_template.clone();
+    let mut indices: Vec<usize> = (0..parsed.keys_info.len()).collect();
+    indices.sort_by_key(|n| std::cmp::Reverse(n.to_string().len()));
+    for n in indices {
+        let placeholder = format!("@{n}/**");
+        let key = format!("{}/<0;1>/*", parsed.keys_info[n]);
+        template = template.replace(&placeholder, &key);
+    }
+    if is_at_n_form(&template) {
+        return Err(ToolkitError::DescriptorParse(
+            "BIP-388 policy template references @N beyond keys_info[..]".into(),
+        ));
+    }
+    Ok(template)
+}
+
 /// Convert a descriptor body bearing concrete `[fp/path]xpub` keys into the
 /// placeholder form `[fp/path]@N` + accompanying `(ParsedKey,
 /// ParsedFingerprint)` pairs for `parse_descriptor::parse_descriptor`.
@@ -361,5 +421,67 @@ mod tests {
     fn concrete_helper_error_drops_bsms_prefix() {
         let err = descriptor_concrete_to_resolved_slots("wsh(thresh(2,older(144),older(288)))").unwrap_err();
         assert!(!err.message().contains("bsms"), "leaked converter prefix: {}", err.message());
+    }
+
+    // ---- BIP-388 wallet-policy → concrete-descriptor expansion (Cycle D) ----
+
+    #[test]
+    fn is_bip388_policy_shape_detects_leading_brace() {
+        assert!(is_bip388_policy_shape("{\"name\":\"x\"}"));
+        assert!(is_bip388_policy_shape("  \n  {\"name\":\"x\"}")); // leading whitespace
+        assert!(!is_bip388_policy_shape("wsh(multi(2,@0/**,@1/**))"));
+        assert!(!is_bip388_policy_shape("md1qpwmxpzqqsrd"));
+    }
+
+    #[test]
+    fn expand_bip388_policy_substitutes_each_at_n() {
+        // First-pins the substitution output (the pre-existing descriptor_intake
+        // cells are detect_shape-only; R0-r1 I-2).
+        let json = r#"{"name":"vault","description_template":"wsh(sortedmulti(2,@0/**,@1/**))","keys_info":["[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC","[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3"]}"#;
+        let out = expand_bip388_policy(json).unwrap();
+        assert_eq!(
+            out,
+            "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))"
+        );
+        assert!(!is_at_n_form(&out), "no residual @N placeholder");
+    }
+
+    #[test]
+    fn expand_bip388_policy_deny_unknown_fields() {
+        let json = r#"{"name":"x","description_template":"wsh(@0/**)","keys_info":["[704c7836/84'/0'/0']tpub"],"extra":1}"#;
+        let err = expand_bip388_policy(json).unwrap_err();
+        assert!(matches!(err, ToolkitError::BadInput(_)), "{}", err.message());
+    }
+
+    #[test]
+    fn expand_bip388_policy_longest_n_first_no_clobber() {
+        // 11 keys: @10 must map to keys_info[10], unaffected by the @1 pass.
+        let placeholders: Vec<String> = (0..11).map(|i| format!("@{i}/**")).collect();
+        let keys: Vec<String> = (0..11).map(|i| format!("\"k{i}\"")).collect();
+        let json = format!(
+            r#"{{"name":"x","description_template":"wsh(multi(6,{}))","keys_info":[{}]}}"#,
+            placeholders.join(","),
+            keys.join(",")
+        );
+        let out = expand_bip388_policy(&json).unwrap();
+        assert!(out.contains("k10/<0;1>/*"), "{out}");
+        assert!(out.contains("k1/<0;1>/*"), "{out}");
+        assert!(!is_at_n_form(&out), "residual @N: {out}");
+    }
+
+    #[test]
+    fn expand_bip388_policy_at_n_beyond_keys_info_refused() {
+        // Template references @1 but only one key supplied → residual @1 → refuse
+        // (the improved, earlier error vs a downstream miniscript parse failure).
+        let json = r#"{"name":"x","description_template":"wsh(multi(2,@0/**,@1/**))","keys_info":["[704c7836/84'/0'/0']tpub"]}"#;
+        let err = expand_bip388_policy(json).unwrap_err();
+        assert!(matches!(err, ToolkitError::DescriptorParse(_)));
+        assert!(err.message().contains("@N beyond keys_info"), "{}", err.message());
+    }
+
+    #[test]
+    fn expand_bip388_policy_malformed_json_bad_input() {
+        let err = expand_bip388_policy("not json").unwrap_err();
+        assert!(matches!(err, ToolkitError::BadInput(_)));
     }
 }

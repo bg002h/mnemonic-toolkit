@@ -24,7 +24,6 @@
 use crate::error::ToolkitError;
 use bitcoin::bip32::{DerivationPath, Fingerprint};
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
-use serde::Deserialize;
 use std::str::FromStr;
 
 /// Canonical-form payload describing one cosigner position. Both funnels
@@ -76,17 +75,6 @@ pub struct DescriptorIntake {
     /// envelope extension.
     #[allow(dead_code)]
     pub defaulted_indices: Vec<u8>,
-}
-
-/// BIP-388 wallet-policy schema (mirrors `wallet_export/pipeline.rs:200-204`'s
-/// emitter — strict struct with `deny_unknown_fields` per plan §4.2 R8 fold).
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BipPolicyJson {
-    #[serde(rename = "name")]
-    _name: String,
-    description_template: String,
-    keys_info: Vec<String>,
 }
 
 /// NUMS H-point x-only key (mirrors `parse_descriptor::NUMS_H_POINT_X_ONLY_HEX`).
@@ -193,29 +181,17 @@ fn contains_at_n_placeholder(value: &str) -> bool {
     false
 }
 
-/// Parse a BIP-388 wallet-policy JSON. Reconstruct the canonical descriptor
-/// string by replacing each `@N/**` placeholder with `keys_info[N] + "/<0;1>/*"`
-/// (R2 I-R2-2 lock — exact inverse of `wallet_export/pipeline.rs:192-198`).
+/// Parse a BIP-388 wallet-policy JSON by delegating to the shared expander
+/// `wallet_import::pipeline::expand_bip388_policy` (the single-sourced exact
+/// inverse of the emitter), then parsing the reconstructed concrete descriptor
+/// via the literal-xpub funnel.
 fn parse_bip388_json(
     payload: &str,
     network: crate::network::CliNetwork,
     account: u32,
     stderr: &mut impl std::io::Write,
 ) -> Result<DescriptorIntake, ToolkitError> {
-    let parsed: BipPolicyJson = serde_json::from_str(payload).map_err(|e| {
-        ToolkitError::BadInput(format!(
-            "--descriptor BIP-388 JSON parse failed: {e}; expected fields {{name, description_template, keys_info}}"
-        ))
-    })?;
-    let mut template = parsed.description_template.clone();
-    // Replace longest @N first to avoid prefix collisions when N >= 10.
-    let mut indices: Vec<usize> = (0..parsed.keys_info.len()).collect();
-    indices.sort_by_key(|n| std::cmp::Reverse(n.to_string().len()));
-    for n in indices {
-        let placeholder = format!("@{n}/**");
-        let key = format!("{}/<0;1>/*", parsed.keys_info[n]);
-        template = template.replace(&placeholder, &key);
-    }
+    let template = crate::wallet_import::pipeline::expand_bip388_policy(payload)?;
     let mut intake = parse_literal_xpub(&template, network, account, stderr)?;
     intake.shape = DescriptorShape::Bip388Json;
     Ok(intake)

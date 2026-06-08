@@ -32,6 +32,10 @@ pub struct BundleArgs {
 
     /// User-supplied BIP-388 descriptor (v0.3 §2.1.10). Mutually-required-one-of
     /// with --template / --descriptor-file. XOR with --descriptor-file (clap conflicts).
+    /// (v0.49.0) Also accepts a BIP-388 wallet-policy JSON `{name,
+    /// description_template, keys_info}` (auto-detected by a leading `{`),
+    /// expanded to the concrete descriptor — the inverse of `export-wallet
+    /// --format bip388`; origin-annotated `keys_info` required.
     #[arg(long, conflicts_with = "descriptor_file")]
     pub descriptor: Option<String>,
 
@@ -299,6 +303,17 @@ pub fn run<W: Write, E: Write>(
                 .trim_end()
                 .to_string(),
             _ => unreachable!("DESCRIPTOR_AND_DESCRIPTOR_FILE guard above rules out both"),
+        };
+        // BIP-388 wallet-policy JSON intake: expand to a concrete descriptor
+        // BEFORE classify (a raw policy JSON trips classify's (true,true)
+        // mixed-form error — its description_template matches the @N probe AND
+        // its keys_info matches the key_regex). Expanded body → Concrete → the
+        // watch-only path (a policy carries no secrets). Requires origin-
+        // annotated keys_info (the slot-resolver needs [fp/path]xpub).
+        let body = if crate::wallet_import::pipeline::is_bip388_policy_shape(&body) {
+            crate::wallet_import::pipeline::expand_bip388_policy(&body)?
+        } else {
+            body
         };
         use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
         if classify_descriptor_form(&body)? == DescriptorForm::Concrete {

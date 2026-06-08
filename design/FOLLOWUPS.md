@@ -3715,6 +3715,24 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - (b) **Surface the resolved descriptor from `xpub-search`** — add the expanded concrete descriptor to the `--json` envelope (and/or a `--resolve-only`/echo mode) so the existing path yields the string.
   - (c) A dedicated standalone `policy expand` / `convert`-style subcommand (descriptor template + key list → concrete descriptor).
 - **Why deferred:** Capability/UX question raised in-session, not a correctness bug. The crypto/expansion machinery is present; remaining work is exposure + tests + lockstep (GUI `schema_mirror` on any new flag/subcommand-name; manual mirror under `docs/manual/src/40-cli-reference/`). Sizing depends on the chosen option (b ≈ smallest; a ≈ medium; c ≈ new subcommand).
-- **Status:** open
+- **Status:** `resolved` toolkit-**v0.49.0**. Shipped **option (a)** (architect-decided `(a) >> (c) > (b)`): `export-wallet`/`bundle --descriptor` auto-detect a leading-`{` BIP-388 wallet-policy JSON and expand it via a NEW shared `wallet_import::pipeline::expand_bip388_policy` + `is_bip388_policy_shape` (the substitution extracted out of `cmd/xpub_search/descriptor_intake.rs::parse_bip388_json`, which now delegates — single-sourcing the inverse-of-emitter lockstep). The pre-check runs BEFORE `is_at_n_form`/`classify_descriptor_form` (a raw policy trips both probes). No new flag → **no GUI `schema_mirror` / manual-flag-coverage delta** (manual prose + clap-help expanded in lockstep). (b) dropped (seed-gated); (c) subsumed — `export-wallet --descriptor <policy> --format descriptor` IS the pure policy→concrete-descriptor transform. Round-trip is byte-stable for `description_template`+`keys_info` (lossy on `name`, pre-existing). Audit trail: `design/SPEC_bip388_policy_descriptor_expansion.md` + `design/agent-reports/bip388-policy-descriptor-expansion-{r0-round1,r0-round2,phase2-impl}-review.md` (R0 GREEN after 1 fold round; impl review GREEN). Fast-follows filed: `--wallet-name` honoring + clearer md1-on-`--descriptor` error (see below).
 - **Tier:** `v0.48+-feature`
 - **Companion:** GUI `schema_mirror` + `docs/manual` mirror lockstep IF option (a)'s new flag or option (c)'s new subcommand is chosen (no lockstep for option (b) if it only adds a JSON field). Related (inverse, resolved): `export-wallet-descriptor-bip388-interop` (concrete → policy).
+
+### `bip388-policy-roundtrip-wallet-name-not-honored` — `name` field is dropped on policy round-trip
+
+- **Surfaced:** 2026-06-08, `bip388-wallet-policy-to-descriptor-expansion-not-surfaced` (v0.49.0) ship — out-of-scope fast-follow.
+- **Where:** expander `wallet_import/pipeline.rs::expand_bip388_policy` (`BipPolicyJson._name` deserialized-but-unread) + emitter `wallet_export/pipeline.rs::descriptor_to_bip388_wallet_policy` (hardcodes `"name": "imported-descriptor"`).
+- **What:** `policy → concrete → --format bip388` is byte-stable for `description_template` + `keys_info` but NOT for `name` — the expander discards the input name and the emitter always writes `"imported-descriptor"`. A user-edited policy name does not survive a round-trip (pre-existing emitter property, surfaced by the new inverse). Fix: thread the policy `name` through (or add `export-wallet --wallet-name`), so a round-trip preserves it.
+- **Status:** open
+- **Tier:** `v0.48+-feature`
+- **Companion:** none (toolkit-local).
+
+### `export-wallet-bundle-descriptor-md1-clearer-error` — md1 on `--descriptor` gives an opaque miniscript parse error
+
+- **Surfaced:** 2026-06-08, `bip388-wallet-policy-to-descriptor-expansion-not-surfaced` (v0.49.0) ship — out-of-scope fast-follow.
+- **Where:** `cmd/export_wallet.rs` / `cmd/bundle.rs` `--descriptor` intake (post the v0.49.0 `is_bip388_policy_shape` pre-check). The md1 HRP funnel is xpub-search-only; on export-wallet/bundle an md1 card passed to `--descriptor` falls through to `MsDescriptor::from_str` and fails with an opaque miniscript message.
+- **What:** Unlike xpub-search (which auto-detects md1 cards via `descriptor_intake::detect_shape`), export-wallet/bundle `--descriptor` neither expands an md1 card nor emits a clear "md1 cards are not accepted here; use …" pointer. A clearer typed refusal (or md1 acceptance via the same shared-helper pattern) would improve UX. Low priority.
+- **Status:** open
+- **Tier:** `v0.48+-feature`
+- **Companion:** none (toolkit-local).

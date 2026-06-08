@@ -56,7 +56,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 |---|---|
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest |
 | `--template <TEMPLATE>` | bip44 / bip49 / bip84 / bip86 / wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti / tr-multi-a / tr-sortedmulti-a |
-| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); both apostrophe and `h`-form hardened paths are accepted; mutually exclusive with `--template` and `--descriptor-file` |
+| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); **(v0.49.0) or a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`, origin-annotated `keys_info` required), expanded to the concrete descriptor — the inverse of `export-wallet --format bip388`; both apostrophe and `h`-form hardened paths are accepted; mutually exclusive with `--template` and `--descriptor-file` |
 | `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from a single-line UTF-8 file; mutually exclusive with `--descriptor` |
 | `--language <LANGUAGE>` | BIP-39 wordlist for the input phrase |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase |
@@ -694,7 +694,7 @@ mnemonic export-wallet [OPTIONS]
 | Flag | Purpose |
 |---|---|
 | `--template <TEMPLATE>` | as for `bundle` |
-| `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json` |
+| `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); **(v0.49.0) also a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor — the inverse of `--format bip388`; a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json` |
 | `--threshold <THRESHOLD>` | multisig threshold |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 |
 | `--network <NETWORK>` | default mainnet |

@@ -143,6 +143,9 @@ pub struct ExportWalletArgs {
     pub template: Option<CliTemplate>,
 
     /// User-supplied BIP-388 descriptor. Mutually exclusive with --template.
+    /// (v0.49.0) Also accepts a BIP-388 wallet-policy JSON `{name,
+    /// description_template, keys_info}` (auto-detected by a leading `{`),
+    /// expanded to the concrete descriptor — the inverse of `--format bip388`.
     #[arg(long)]
     pub descriptor: Option<String>,
 
@@ -407,6 +410,18 @@ pub fn run<W: Write, E: Write>(
         None;
 
     let canonical = if let Some(desc) = &args.descriptor {
+        // BIP-388 wallet-policy JSON intake: expand to a concrete descriptor,
+        // then fall into the existing concrete passthrough. MUST precede
+        // is_at_n_form — a raw policy JSON matches the @N probe (its
+        // description_template) AND the key_regex probe (its keys_info), so
+        // unguarded it would trip the refusal below.
+        let desc_owned;
+        let desc = if crate::wallet_import::pipeline::is_bip388_policy_shape(desc) {
+            desc_owned = crate::wallet_import::pipeline::expand_bip388_policy(desc)?;
+            &desc_owned
+        } else {
+            desc
+        };
         // @N-probe ONLY (NOT classify_descriptor_form — its rule 4 would reject
         // origin-less concrete that passthrough accepts). SPEC §3.4.
         if crate::wallet_import::pipeline::is_at_n_form(desc) {
