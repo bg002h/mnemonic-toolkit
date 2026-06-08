@@ -6,6 +6,17 @@ The manual is a separate artifact from the CLI manual under
 (`manual-gui-v*` vs `manual-v*`) and track independent version
 numbers.
 
+## [1.0.2] - 2026-06-07
+
+**Patch — prose sync with toolkit v0.47.3** (GUI pin unchanged at
+`mnemonic-gui-v0.3.0`).
+
+- `45-export-wallet.md`: `--timestamp` default reworded `now` → `0`
+  (rescan from genesis), matching the toolkit v0.47.3 default flip
+  (summary + prose + JSON example).
+- `.cspell.json`: added `rescan`.
+- Routine doc re-capture (output-class advisory wording).
+
 ## [1.0.1] - 2026-05-15
 
 **Patch — post-ship cosmetic fixes.** Surfaced by a fresh local
