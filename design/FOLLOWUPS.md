@@ -3736,3 +3736,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** open
 - **Tier:** `v0.48+-feature`
 - **Companion:** none (toolkit-local).
+
+### `descriptor-builder-engine` — guided builder to CREATE custom miniscript vault descriptors (construction, not ingest)
+
+- **Surfaced:** 2026-06-08, brainstorm session (grew from a user "wizard to create custom miniscript descriptors" request). Full design: `design/BRAINSTORM_descriptor_builder.md` (converged via 4 opus-architect consults + 1 advisor pass).
+- **Where (engine, new):** new `crates/mnemonic-toolkit/src/descriptor_builder/` module + a new top-level subcommand (name TBD: `build-descriptor`/`descriptor`/`policy`). Reuses `cost/enumerate.rs` (`plan()` satisfiability + timelock/hashlock walks + the combinatorial-cap envelope), `cost/translate.rs` (dual-context `from_str` typecheck), `wallet_export/pipeline.rs::{build_descriptor_string, descriptor_to_bip388_wallet_policy}` (emit + round-trip), and miniscript `sanity_check()` (free funds-footgun rejection). Output round-trips through the v0.49.0 `--descriptor` BIP-388 intake (`wallet_import::pipeline::expand_bip388_policy`).
+- **What:** A general **structured policy-tree builder** (fragment-level IR serialized as a versioned JSON node-tree `--spec`, with 5 curated archetypes — simple-timelocked-inheritance, decaying-multisig, kofn-recovery, degrading-threshold, + hashlock paths — as **presets** over the same IR), gated on a funds-safety validation pass (typecheck → `sanity_check()` → `plan()` satisfiability → build-time complexity-envelope cap) and emitting a reviewable bundle (descriptor + BIP-388 JSON + compare-cost preview + node-addressed diagnostics). This is the CONSTRUCTION side; the resolved `miniscript-beyond-bip388` (v0.19.0) is the orthogonal INGEST side (the wizard's out-of-envelope escape hatch). The eventual GUI wizard in `mnemonic-gui` consumes the engine.
+- **Phasing:** Release A `v0.50.0` (engine core + `--spec-schema` + R0 archetype fixtures — the two keystones); Release B `v0.51.0` (5 archetype presets + flag shorthand). IR = fragment-level (Option F), `wsh` v1 (tr via the wrapper seam later), rust-miniscript `compiler` feature stays OFF. See the brainstorm doc §5/§7 for the roadmap + the 5 SPEC risks.
+- **Status:** open — brainstorm-converged; next = cycle-prep → `SPEC_descriptor_builder_engine.md` (Release A) → mandatory R0 gate.
+- **Tier:** `v0.50-feature`
+- **Companion:** `mnemonic-gui` — a later cross-repo cycle builds the GUI wizard (archetype forms first; recursive node-tree builder deferred) consuming the toolkit `--spec-schema`. File a GUI companion when that cycle begins.
