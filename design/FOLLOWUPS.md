@@ -2349,8 +2349,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - **setup-node v6** — auto-caching limited to npm; benign (no `package.json` here).
   - Also: **evaluate SHA-pinning vs the current floating-major style** (supply-chain hardening; the repo currently floats all majors).
   - ~~add self-trigger `.github/workflows/<self>.yml` paths to `manual`/`quickstart`~~ — **EXTRACTED + SHIPPED separately** (2026-06-07, CI self-trigger cycle; `design/SPEC_ci_manual_quickstart_self_trigger.md`) since it is safe, independent, and NOT gated on v5-stability. `manual`/`quickstart` now self-fire on workflow-file edits (parity with technical-manual/rust/manual-gui).
-- **Precondition:** do this ONLY after the `@v5` bump is confirmed stable in the wild (a clean `manual-gui-v*` / `manual-v*` / `mnemonic-toolkit-v*` release run on v5).
-- **Status:** `open`
+- **Precondition:** do this ONLY after the `@v5` bump is confirmed stable in the wild (a clean release-tag run on v5). **✅ SUBSTANTIALLY MET (2026-06-07):** `quickstart-v0.1.8` (validated `checkout@v5` + `setup-node@v5` + `upload-artifact@v5` on the standard release path) and `manual-gui-v1.0.2` (validated `checkout@v5` + **`download-artifact@v5` ×2 by-name** + `upload-artifact@v5` + the gh-pages `git push` publish) both released GREEN on v5 — incl. the highest-risk `download-artifact@v5` + gh-pages-push paths. The `manual-v*` release path is action-identical to quickstart's (no download-artifact) → already covered. **Only residual:** `install-pin-check`'s `checkout@v5` (fires on `mnemonic-toolkit-v*` only — benign; validates on the next toolkit release). So v5 is confirmed stable for the risky surface; Cycle B may proceed when desired.
+- **Status:** `open` (precondition now substantially met — ready to schedule)
 - **Tier:** `v0.22+-doc-hygiene`
 - **Companion:** none.
 
