@@ -11,6 +11,7 @@ on:
     paths:
       - 'docs/quickstart/**'
       - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/quickstart.yml'
     tags:
       - 'quickstart-v*'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - 'docs/manual/.markdownlint-cli2.jsonc'
       - 'docs/manual/pandoc/filters/**'
       - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/quickstart.yml'
 
 jobs:
   build:
