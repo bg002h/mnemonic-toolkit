@@ -901,6 +901,39 @@ example — combine 2 of 3 shares back to master</a></li>
 <li><a href="#refusals-9" id="toc-refusals-9">Refusals</a></li>
 <li><a href="#advisories-9" id="toc-advisories-9">Advisories</a></li>
 </ul></li>
+<li><a href="#mnemonic-import-wallet" id="toc-mnemonic-import-wallet"><code>mnemonic import-wallet</code></a>
+<ul>
+<li><a href="#mnemonic-import-wallet-outline" id="toc-mnemonic-import-wallet-outline">Outline</a></li>
+<li><a href="#mnemonic-import-wallet-blob" id="toc-mnemonic-import-wallet-blob"><code>--blob</code></a></li>
+<li><a href="#mnemonic-import-wallet-format" id="toc-mnemonic-import-wallet-format"><code>--format</code></a>
+<ul>
+<li><a href="#mnemonic-import-wallet-format-outline" id="toc-mnemonic-import-wallet-format-outline">Outline</a></li>
+<li><a href="#mnemonic-import-wallet-format-bsms" id="toc-mnemonic-import-wallet-format-bsms"><code>bsms</code></a></li>
+<li><a href="#mnemonic-import-wallet-format-bitcoin-core" id="toc-mnemonic-import-wallet-format-bitcoin-core"><code>bitcoin-core</code></a></li>
+</ul></li>
+<li><a href="#mnemonic-import-wallet-select-descriptor" id="toc-mnemonic-import-wallet-select-descriptor"><code>--select-descriptor</code></a>
+<ul>
+<li><a href="#mnemonic-import-wallet-select-descriptor-outline" id="toc-mnemonic-import-wallet-select-descriptor-outline">Outline</a></li>
+<li><a href="#mnemonic-import-wallet-select-descriptor-all" id="toc-mnemonic-import-wallet-select-descriptor-all"><code>all</code></a></li>
+<li><a href="#mnemonic-import-wallet-select-descriptor-active-receive" id="toc-mnemonic-import-wallet-select-descriptor-active-receive"><code>active-receive</code></a></li>
+<li><a href="#mnemonic-import-wallet-select-descriptor-active-change" id="toc-mnemonic-import-wallet-select-descriptor-active-change"><code>active-change</code></a></li>
+</ul></li>
+<li><a href="#mnemonic-import-wallet-ms1" id="toc-mnemonic-import-wallet-ms1"><code>--ms1</code></a>
+<ul>
+<li><a href="#mnemonic-import-wallet-env-var-channel" id="toc-mnemonic-import-wallet-env-var-channel">Env-var seed
+channel</a></li>
+</ul></li>
+<li><a href="#mnemonic-import-wallet-slot" id="toc-mnemonic-import-wallet-slot"><code>--slot</code></a></li>
+<li><a href="#mnemonic-import-wallet-json" id="toc-mnemonic-import-wallet-json"><code>--json</code></a></li>
+<li><a href="#mnemonic-import-wallet-no-auto-repair" id="toc-mnemonic-import-wallet-no-auto-repair"><code>--no-auto-repair</code></a></li>
+<li><a href="#mnemonic-import-wallet-walkthrough-bsms" id="toc-mnemonic-import-wallet-walkthrough-bsms">Worked example — BSMS
+Round-2 decay-32768 import</a></li>
+<li><a href="#mnemonic-import-wallet-walkthrough-core" id="toc-mnemonic-import-wallet-walkthrough-core">Worked example —
+Bitcoin Core listdescriptors active-receive</a></li>
+<li><a href="#refusals-advisories" id="toc-refusals-advisories">Refusals
++ advisories</a></li>
+<li><a href="#see-also" id="toc-see-also">See also</a></li>
+</ul></li>
 <li><a href="#md-per-tab-reference" id="toc-md-per-tab-reference"><code>md</code> — per-tab reference</a>
 <ul>
 <li><a href="#subcommand-index-1" id="toc-subcommand-index-1">Subcommand
@@ -4506,8 +4539,8 @@ output path (<code>-</code> = stdout, default)</li>
 <li><a href="#mnemonic-export-wallet-range"><code>--range</code></a> —
 Bitcoin Core <code>range</code> field (default <code>0,999</code>)</li>
 <li><a href="#mnemonic-export-wallet-timestamp"><code>--timestamp</code></a> —
-Bitcoin Core <code>timestamp</code> field (default
-<code>now</code>)</li>
+Bitcoin Core <code>timestamp</code> field (default <code>0</code>;
+rescan from genesis)</li>
 <li><a href="#mnemonic-export-wallet-bitcoin-core-version"><code>--bitcoin-core-version</code></a>
 — <code>24</code> or <code>25</code> (default <code>25</code>)</li>
 <li><a href="#mnemonic-export-wallet-taproot-internal-key"><code>--taproot-internal-key</code></a>
@@ -4732,11 +4765,13 @@ parsing for the <code>start,end</code> shape). Refusal:
 <code>--range start must be &lt;= end</code> (per
 <code>cmd/export_wallet.rs::parse_range</code>).</p>
 <h2 id="mnemonic-export-wallet-timestamp"><code>--timestamp</code></h2>
-<p>Bitcoin Core <code>timestamp</code> field. Two valid forms:
-<code>now</code> (the default; emits the literal string
-<code>&quot;now&quot;</code> in the JSON, which Core interprets at import time as
-the current block timestamp) or a non-negative integer Unix-seconds
-value. Used only for <code>--format bitcoin-core</code>.</p>
+<p>Bitcoin Core <code>timestamp</code> field. The default is
+<code>0</code> (rescan from genesis, so an existing wallet’s full
+transaction history is discovered). Other forms: <code>now</code> (emits
+the literal string <code>&quot;now&quot;</code>, which Core interprets at import
+time as the current block timestamp — watch going forward, skipping the
+historical rescan) or a non-negative integer Unix-seconds value. Used
+only for <code>--format bitcoin-core</code>.</p>
 <p>The GUI renders this as a Timestamp widget. Refusal:
 <code>--timestamp unix seconds must be &gt;= 0</code> (per
 <code>cmd/export_wallet.rs</code>).</p>
@@ -4798,7 +4833,7 @@ JSON on stdout:</p>
 <span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;active&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
 <span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;internal&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
 <span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;range&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="dv">0</span><span class="ot">,</span> <span class="dv">999</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;timestamp&quot;</span><span class="fu">:</span> <span class="st">&quot;now&quot;</span><span class="fu">,</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;timestamp&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span></span>
 <span id="cb40-8"><a href="#cb40-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;next_index&quot;</span><span class="fu">:</span> <span class="dv">0</span></span>
 <span id="cb40-9"><a href="#cb40-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
 <span id="cb40-10"><a href="#cb40-10" aria-hidden="true" tabindex="-1"></a><span class="ot">]</span></span></code></pre></div>
@@ -6329,12 +6364,262 @@ iteration-exponents)</td>
 <td><code>warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure</code></td>
 </tr>
 <tr class="odd">
-<td>Stdout is a TTY AND reconstruction succeeded</td>
-<td>byte-exact per <code>cmd/slip39.rs:595-598</code>:
-<code>warning: reconstructed secret material on stdout — verify the recovered wallet&#39;s expected derived address before trusting</code></td>
+<td>Reconstruction succeeded (always, unconditional)</td>
+<td><code>warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. &#39;&gt; file.txt&#39; or &#39;\| age -e ...&#39;)</code>
+followed by
+<code>note: verify the recovered wallet&#39;s expected derived address before trusting</code></td>
 </tr>
 </tbody>
 </table>
+<h1 id="mnemonic-import-wallet"><code>mnemonic import-wallet</code></h1>
+<p>Import a third-party watch-only wallet blob — BSMS Round-2 (BIP-129)
+or Bitcoin Core <code>listdescriptors</code> JSON — into an m-format
+bundle. The companion to <a href="#mnemonic-export-wallet"><code>mnemonic export-wallet</code></a>:
+where export TRANSLATES the bundle’s public material into a foreign
+format, import INGESTS that foreign format and reconstructs the
+equivalent bundle. The round-trip discipline gates byte-exact vs
+semantic-only equivalence (see the CLI manual chapter on <a href="#foreign-wallet-formats">foreign wallet formats</a> for the format
+taxonomy).</p>
+<p>v0.26.0 ships two source formats — <code>bsms</code> and
+<code>bitcoin-core</code>. Both are watch-only by construction; the
+resulting bundle’s cosigners carry no secret material unless the user
+re-attaches a seed via the <code>--ms1</code> /
+<code>--slot @N.phrase=</code> overlay flags. Bitcoin Core blobs that
+carry <code>xprv</code> extended private keys are refused with a stderr
+pointer.</p>
+<h2 id="mnemonic-import-wallet-outline">Outline</h2>
+<ul>
+<li><a href="#mnemonic-import-wallet-blob"><code>--blob</code></a> —
+path to the third-party wallet blob (required; <code>-</code> reads
+stdin)</li>
+<li><a href="#mnemonic-import-wallet-format"><code>--format</code></a> —
+format override (<code>bsms</code> / <code>bitcoin-core</code>);
+auto-detected via sniff if absent</li>
+<li><a href="#mnemonic-import-wallet-select-descriptor"><code>--select-descriptor</code></a>
+— multi-descriptor selector for Bitcoin Core blobs</li>
+<li><a href="#mnemonic-import-wallet-ms1"><code>--ms1</code></a> —
+repeating seed-overlay flag (positional cosigner-index)</li>
+<li><a href="#mnemonic-import-wallet-slot"><code>--slot</code></a> —
+per-slot seed-overlay flag (<code>@N.phrase=&lt;value&gt;</code> form
+only)</li>
+<li><a href="#mnemonic-import-wallet-json"><code>--json</code></a> —
+emit JSON envelope on stdout instead of engraving cards</li>
+<li><a href="#mnemonic-import-wallet-no-auto-repair"><code>--no-auto-repair</code></a>
+— global flag; skip auto-fire repair on decode failures</li>
+</ul>
+<h2 id="mnemonic-import-wallet-blob"><code>--blob</code></h2>
+<p>The path to the third-party wallet blob. Required. Two value
+shapes:</p>
+<ul>
+<li>A filesystem path — the GUI renders this as a FilePath widget with a
+file-picker button. The picker filters to extensions <code>.json</code>
+/ <code>.txt</code> / <code>.bsms</code> by default; “All Files” toggles
+the filter off.</li>
+<li>The literal <code>-</code> — reads the blob from the spawned
+subprocess’s stdin. The schema sets <code>stdio_sentinel: true</code>
+for this flag.</li>
+</ul>
+<p>The blob’s content is NOT secret-class on its own — both source
+formats are watch-only. The GUI does not redact
+<code>--blob &lt;path&gt;</code> in the run-confirm modal.</p>
+<h2 id="mnemonic-import-wallet-format"><code>--format</code></h2>
+<p>The source format. Optional. Without <code>--format</code>, the
+toolkit auto-detects via sniff (SPEC §6): BSMS blobs begin with the
+literal prefix <code>BSMS 1.0\n</code>; Bitcoin Core blobs are JSON
+objects with a <code>descriptors: [...]</code> array.</p>
+<h3 id="mnemonic-import-wallet-format-outline">Outline</h3>
+<ul>
+<li><a href="#mnemonic-import-wallet-format-bsms"><code>bsms</code></a></li>
+<li><a href="#mnemonic-import-wallet-format-bitcoin-core"><code>bitcoin-core</code></a></li>
+</ul>
+<h3 id="mnemonic-import-wallet-format-bsms"><code>bsms</code></h3>
+<p>BSMS Round-2 per BIP-129. Two accepted wire shapes: a lenient 2-line
+excerpt (<code>BSMS 1.0\n&lt;descriptor&gt;#&lt;checksum&gt;</code>) and
+the full 6-line shape (additionally carrying token, derivation_path,
+first_address, signature). The 2-line shape emits a stderr WARNING about
+reduced form. See <a href="#bsms-round-2">BSMS Round-2</a> in the CLI
+manual for full normative grammar.</p>
+<h3 id="mnemonic-import-wallet-format-bitcoin-core"><code>bitcoin-core</code></h3>
+<p>Bitcoin Core’s <code>listdescriptors</code> RPC output: a JSON
+envelope of the shape
+<code>{&quot;wallet_name&quot;: ..., &quot;descriptors&quot;: [...]}</code>. v0.26.0 accepts
+both the canonical wrapper shape and the bare-array shape some older
+Core clients emit. Refuses <code>xprv</code>-bearing descriptors
+(<code>listdescriptors true</code> output) with a stderr pointer; re-run
+<code>bitcoin-cli listdescriptors</code> without the <code>true</code>
+argument to get xpub-only output. See <a href="#bitcoin-core-listdescriptors">Bitcoin Core listdescriptors</a> in
+the CLI manual.</p>
+<h2 id="mnemonic-import-wallet-select-descriptor"><code>--select-descriptor</code></h2>
+<p>Multi-descriptor selector. Applies to Bitcoin Core blobs only; BSMS
+blobs coerce non-default values to <code>all</code> with a stderr
+NOTICE.</p>
+<h3 id="mnemonic-import-wallet-select-descriptor-outline">Outline</h3>
+<ul>
+<li><a href="#mnemonic-import-wallet-select-descriptor-all"><code>all</code></a>
+(default)</li>
+<li><code>&lt;N&gt;</code> (integer index)</li>
+<li><a href="#mnemonic-import-wallet-select-descriptor-active-receive"><code>active-receive</code></a></li>
+<li><a href="#mnemonic-import-wallet-select-descriptor-active-change"><code>active-change</code></a></li>
+</ul>
+<h3 id="mnemonic-import-wallet-select-descriptor-all"><code>all</code></h3>
+<p>Emit one bundle per descriptor entry in the input. Bundles are
+separated by a literal <code>\n;\n</code> line in the engraving-card
+output; the <code>--json</code> envelope is an array.</p>
+<h3 id="mnemonic-import-wallet-select-descriptor-active-receive"><code>active-receive</code></h3>
+<p>Filter to entries with <code>active: true, internal: false</code>
+(Core’s external chain). Multiple matches emit multiple bundles; zero
+matches yields exit 1.</p>
+<h3 id="mnemonic-import-wallet-select-descriptor-active-change"><code>active-change</code></h3>
+<p>Filter to entries with <code>active: true, internal: true</code>
+(Core’s internal / change chain). Same multi/zero handling.</p>
+<p>The GUI renders this flag as a free-form text input pre-filled with
+<code>all</code>; the user types one of the named tags
+(<code>all</code>, <code>active-receive</code>,
+<code>active-change</code>) or an integer N. CLI-side validation rejects
+invalid values with a clear error in the output pane.</p>
+<h2 id="mnemonic-import-wallet-ms1"><code>--ms1</code></h2>
+<p>Seed overlay (SPEC §8.3). Repeatable flag; positional cosigner-index
+— the i-th <code>--ms1</code> applies to cosigner i. The toolkit derives
+the xpub from the supplied entropy at the cosigner’s blob-declared
+origin path and asserts equality against the blob’s xpub; mismatch
+yields exit 4. Three value shapes are accepted: an inline
+<code>ms1xxx...</code> string (canonical <code>ms1</code> HRP form), the
+<code>@env:&lt;VAR&gt;</code> sentinel (resolved at clap-parse time via
+<code>std::env::var(VAR)</code>; whole-value only; missing → exit 1
+<code>EnvVarMissing</code>), and the empty-string sentinel
+<code>&quot;&quot;</code> (preserves v0.25.1 watch-only semantics; stderr NOTICE;
+cosigner stays watch-only).</p>
+<p>The GUI renders this as a Text widget with
+<code>repeatable: true</code> and <code>secret: true</code>. The
+<code>secret: true</code> flag triggers the paste-warn modal at paste
+time and opens the run-confirm modal before subprocess spawn. In v0.11.0
+the run-confirm modal renders the assembled argv verbatim per
+<code>[[feedback-run-confirm-modal-renders-argv-verbatim]]</code>; see
+the <a href="#mnemonic-import-wallet-env-var-channel">Env-var seed
+channel</a> section below for the workaround until FOLLOWUP
+<code>gui-import-wallet-env-var-secret-channel</code> ships in
+v0.12.0+.</p>
+<h3 id="mnemonic-import-wallet-env-var-channel">Env-var seed
+channel</h3>
+<p>The v0.11.0 GUI emits user-typed values verbatim on argv; the
+toolkit-side resolves <code>@env:VAR</code> if the user types the
+sentinel explicitly. To avoid argv-leak in the v0.11.0 GUI, type
+<code>@env:MY_VAR</code> directly into the <code>--ms1</code> row with
+<code>MY_VAR</code> exported in the calling shell before launching the
+GUI; the toolkit resolves the sentinel at clap-parse time and the secret
+never appears on argv or in the run-confirm modal. Auto-rewriting of
+literal seeds to per-cosigner <code>@env:MNEMONIC_MS1_&lt;i&gt;</code>
+sentinels is FOLLOWUP
+<code>gui-import-wallet-env-var-secret-channel</code> (v0.12.0+).</p>
+<h2 id="mnemonic-import-wallet-slot"><code>--slot</code></h2>
+<p>Per-slot seed overlay via
+<code>--slot @&lt;N&gt;.phrase=&lt;BIP-39 phrase&gt;</code>. Equivalent
+to <code>--ms1</code>: the phrase is converted to entropy and the
+derived xpub at the cosigner’s origin path is compared against the
+blob’s xpub. Mutually exclusive with <code>--ms1[N]</code> for the same
+N. Accepts the <code>@env:VAR</code> sentinel for the phrase value.</p>
+<p>In v0.26.0 only the <code>phrase</code> subkey is accepted on
+<code>import-wallet</code>; other subkeys (<code>entropy</code>,
+<code>xpub</code>, etc.) are rejected. The GUI’s slot editor renders all
+subkeys; the <strong>toolkit</strong> (not the GUI) rejects
+non-<code>phrase</code> subkeys at parse time and the error appears in
+the output pane.</p>
+<h2 id="mnemonic-import-wallet-json"><code>--json</code></h2>
+<p>Emit a JSON envelope array on stdout (SPEC §7.4) instead of the
+human-readable engraving-card summary. One envelope per emitted bundle.
+Each envelope carries <code>bundle</code> (parse-side summary),
+<code>source_format</code>, <code>roundtrip</code>
+(<code>byte_exact</code> / <code>semantic_match</code> /
+<code>diff</code> / <code>status</code>), <code>bsms_audit?</code> (BSMS
+only), and <code>source_metadata?</code> (Bitcoin Core only).</p>
+<p>Under <code>--json</code>, the round-trip diff lives in the
+envelope’s <code>roundtrip.diff</code> field only — stderr is silent for
+the diff. Default mode renders the diff to stderr.</p>
+<p>The GUI renders this as a Boolean toggle. The output panel
+auto-formats the JSON when this toggle is set.</p>
+<h2 id="mnemonic-import-wallet-no-auto-repair"><code>--no-auto-repair</code></h2>
+<p>Global flag. Skips auto-fire repair on decode failures and preserves
+the pre-v0.22 exit policy. The same flag is honored by
+<code>convert</code>, <code>inspect</code>, and (v0.22.1+)
+<code>verify-bundle</code>. For <code>import-wallet</code>, auto-fire
+applies to BCH-correctable <code>mk1</code> chunks embedded in the
+descriptor’s key sources.</p>
+<h2 id="mnemonic-import-wallet-walkthrough-bsms">Worked example — BSMS
+Round-2 decay-32768 import</h2>
+<ol type="1">
+<li><strong>mnemonic</strong> tab; pick <strong>Import Wallet
+(watch-only)</strong> from the subcommand combobox.</li>
+<li>Click the <strong><code>--blob</code></strong> file-picker; navigate
+to the blob (e.g., <code>/tmp/decay-32768.bsms</code>); confirm.</li>
+<li>Leave <code>--format</code> unset (sniff will auto-detect BSMS from
+the <code>BSMS 1.0\n</code> prefix).</li>
+<li>Leave <code>--select-descriptor</code> at default <code>all</code>
+(BSMS coerces to <code>all</code> anyway with a stderr NOTICE).</li>
+<li>Optional: to re-attach the cosigner <span class="citation" data-cites="0">@0</span> seed, add a <code>--ms1</code> row with the
+cosigner’s <code>ms1xxx...</code> value, OR add a
+<code>--slot    @0.phrase=&lt;words&gt;</code> row with the BIP-39
+phrase. To keep the seed off argv in v0.11.0, type
+<code>@env:MY_MS1_0</code> instead and export
+<code>MY_MS1_0=&lt;ms1-value&gt;</code> in the calling shell.</li>
+<li>Leave <code>--json</code> unset for engraving-card stdout
+(recommended for visual inspection); toggle on for machine-readable
+output.</li>
+<li>Click <strong>Run</strong>.
+<ul>
+<li>If a <code>--ms1</code> or secret-bearing <code>--slot</code> row is
+filled, the run-confirm modal opens and renders the argv verbatim (per
+<code>[[feedback-run-confirm-modal-renders-argv-verbatim]]</code>). To
+prevent the seed appearing in the modal AND in <code>ps</code> output,
+type <code>@env:MY_MS1_0</code> rather than the literal seed (with
+<code>MY_MS1_0</code> exported in the shell that launched the GUI).
+Confirm.</li>
+<li>Output panel renders the synthesized engraving cards (stdout) and
+the BSMS 2-line WARNING (stderr).</li>
+</ul></li>
+</ol>
+<p>Screenshot: TODO post-v0.11.0-GUI tag.</p>
+<h2 id="mnemonic-import-wallet-walkthrough-core">Worked example —
+Bitcoin Core listdescriptors active-receive</h2>
+<p>Generate the blob
+(<code>bitcoin-cli listdescriptors &gt; /tmp/core-export.json</code> —
+<em>do not</em> pass <code>true</code>; toolkit refuses
+<code>xprv</code> descriptors), pick it via the file-picker, set
+<code>--select-descriptor</code> to <code>active-receive</code> to
+filter to the external chain, toggle <code>--json</code> on, click
+<strong>Run</strong> (no run-confirm modal — no secret-bearing flag).
+The output panel renders a JSON envelope array with one entry per
+matched descriptor; each carries <code>bundle</code>,
+<code>source_format: &quot;bitcoin-core&quot;</code>,
+<code>source_metadata: {wallet_name, active, internal, range}</code>,
+and
+<code>roundtrip: {byte_exact, semantic_match, diff, status: &quot;ok&quot;}</code>.</p>
+<p>Screenshot: TODO post-v0.11.0-GUI tag.</p>
+<h2 id="refusals-advisories">Refusals + advisories</h2>
+<p>The full refusal + advisory matrix lives in the CLI manual at <a href="#mnemonic-import-wallet"><code>mnemonic import-wallet</code>
+refusals</a>. Key GUI-relevant behaviors: inline
+<code>--ms1 ms1xxx...</code> values appear in argv unless the user types
+the <code>@env:VAR</code> sentinel explicitly (see <a href="#mnemonic-import-wallet-env-var-channel">§9.3</a>). The v0.11.0
+GUI emits typed values verbatim; auto-rewriting of literal seeds to
+per-cosigner <code>@env:MNEMONIC_MS1_&lt;i&gt;</code> sentinels is
+FOLLOWUP <code>gui-import-wallet-env-var-secret-channel</code>
+(v0.12.0+). Bitcoin Core round-trip DROPS the <code>timestamp</code> /
+<code>next</code> / <code>next_index</code> wallet-state fields with a
+stderr NOTICE. BSMS round-trip DROPS the audit envelope; the
+<code>--json</code> envelope preserves these verbatim in
+<code>bsms_audit</code> for external re-attachment.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="#mnemonic-import-wallet"><code>mnemonic import-wallet</code> (CLI
+manual)</a> — flag-by-flag reference + worked examples on the CLI
+side.</li>
+<li><a href="#foreign-wallet-formats">Foreign wallet formats (CLI
+manual)</a> — normative grammar for BSMS Round-2 and Bitcoin Core
+<code>listdescriptors</code>, plus the round-trip discipline + the
+not-yet-supported coverage matrix.</li>
+<li><a href="#mnemonic-export-wallet"><code>mnemonic export-wallet</code></a> —
+the watch-only emit side (BSMS emitter is FOLLOWUP for v0.27+; Bitcoin
+Core emit ships v0.13.0+).</li>
+</ul>
 <h1 id="md-per-tab-reference"><code>md</code> — per-tab reference</h1>
 <p>The <code>md</code> tab covers the descriptor-mnemonic CLI
 (<code>md-cli</code>), eight subcommands that operate on
@@ -10037,8 +10322,8 @@ hygiene</a></td>
 </tbody>
 </table>
 <h1 id="build-banner">Build banner</h1>
-<p>Built from commit <code>d43db81</code> on
-<code>2026-05-16T00:24:46Z</code>.</p>
+<p>Built from commit <code>bae6477</code> on
+<code>2026-06-08T05:19:20Z</code>.</p>
 <p><em>This page is included in the PDF render only.</em></p>
 </body>
 </html>
