@@ -126,7 +126,7 @@ The node-tree JSON *is* the engine's wire contract → it must be **born version
 ---
 
 ## 8. Scope boundaries (explicitly deferred)
-- General `Concrete::Policy` compiler + **policy-expression-string** input (phase 2; shares the IR via the string boundary).
+- General `Concrete::Policy` compiler + **policy-expression-string** input (phase 2; shares the IR via the string boundary). **The optimizing compiler is NOT built/enabled in the toolkit — it already lives in `md` (`md compile` / `md encode --from-policy`, `cli-compiler` feature; md-codec's lib-level version was deliberately stripped at v0.12.0).** The deferred general/optimize path **points at `md`** as the out-of-envelope optimizer (alongside the `--descriptor` raw-paste door); if seamless in-toolkit UX is ever wanted, the toolkit shells out to the pinned `md`, never enabling its own `compiler`. See `FOLLOWUPS::miniscript-compiler-optimize-policy`.
 - `tr(…)` taptree output (wrapper-strategy seam; partly upstream-blocked for general multi-leaf).
 - The **GUI wizard** (separate cross-repo cycle): archetype forms, then the recursive node-tree builder.
 - Past-envelope / arbitrary-complexity policies (stay on `--descriptor`).
