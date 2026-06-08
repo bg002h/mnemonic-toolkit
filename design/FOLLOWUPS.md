@@ -2347,7 +2347,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
   - **checkout v6** — **breaking: persisted git credentials move to `$RUNNER_TEMP`** (needs runner ≥ v2.329.0). `manual-gui` release does a raw gh-pages `git push` on persisted creds — verify the push still authenticates under v6.
   - **upload-artifact v7** — opt-in `archive` param + ESM module; benign for current `name:`/`path:` usage.
   - **setup-node v6** — auto-caching limited to npm; benign (no `package.json` here).
-  - Also: **evaluate SHA-pinning vs the current floating-major style** (supply-chain hardening; the repo currently floats all majors) and optionally add self-trigger `.github/workflows/<self>.yml` paths to `manual`/`quickstart` so future workflow edits self-validate on PR.
+  - Also: **evaluate SHA-pinning vs the current floating-major style** (supply-chain hardening; the repo currently floats all majors).
+  - ~~add self-trigger `.github/workflows/<self>.yml` paths to `manual`/`quickstart`~~ — **EXTRACTED + SHIPPED separately** (2026-06-07, CI self-trigger cycle; `design/SPEC_ci_manual_quickstart_self_trigger.md`) since it is safe, independent, and NOT gated on v5-stability. `manual`/`quickstart` now self-fire on workflow-file edits (parity with technical-manual/rust/manual-gui).
 - **Precondition:** do this ONLY after the `@v5` bump is confirmed stable in the wild (a clean `manual-gui-v*` / `manual-v*` / `mnemonic-toolkit-v*` release run on v5).
 - **Status:** `open`
 - **Tier:** `v0.22+-doc-hygiene`

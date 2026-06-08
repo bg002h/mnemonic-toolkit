@@ -11,12 +11,14 @@ on:
     paths:
       - 'docs/manual/**'
       - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/manual.yml'
     tags:
       - 'manual-v*'
   pull_request:
     paths:
       - 'docs/manual/**'
       - 'docs/tools/render-mermaid-cache.py'
+      - '.github/workflows/manual.yml'
 
 jobs:
   build:
