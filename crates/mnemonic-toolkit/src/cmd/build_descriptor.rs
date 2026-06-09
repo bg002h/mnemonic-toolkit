@@ -359,7 +359,7 @@ fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
 
 #[cfg(test)]
 mod tests {
-    use clap::{Args as ClapArgs, CommandFactory, ValueEnum};
+    use clap::{CommandFactory, ValueEnum};
 
     use super::*;
     use crate::descriptor_builder::archetype::ARCHETYPE_REGISTRY;
@@ -392,7 +392,6 @@ mod tests {
             .get_arguments()
             .filter_map(|a| a.get_long().map(|l| format!("--{l}")))
             .collect();
-        let _ = BuildDescriptorArgs::augment_args(clap::Command::new("x")); // same derive surface
         for def in ARCHETYPE_REGISTRY {
             for spec in def.params {
                 assert!(

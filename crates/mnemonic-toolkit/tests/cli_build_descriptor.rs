@@ -454,23 +454,35 @@ fn preset_key_order_is_preserved_and_load_bearing() {
     assert_ne!(got, a.descriptor, "swapped key order must change the multi descriptor");
 }
 
-/// Preset golden non-vacuity (presets SPEC §7): mutating one param breaks the
-/// byte-exact golden.
+/// Preset golden non-vacuity, PER ARCHETYPE (presets SPEC §7; Phase-1 review
+/// I1): mutating one numeric param breaks the byte-exact golden. This is the
+/// only layer that catches a lower fn hardcoding a fixture value instead of
+/// reading the param (layers 1+2 feed fixture values, so a hardcode is
+/// invisible to them).
 #[test]
 fn preset_negative_discrimination_mutated_param_breaks_golden() {
-    let a = &ARCHETYPES[3]; // tiered-recovery
-    let mutated: &[&str] = &[
-        "--archetype", "tiered-recovery",
-        "--key", K1, "--key", K2, "--threshold", "2", "--older", "4033",
-        "--recovery-key", K3, "--recovery-key", K4, "--recovery-key", K5,
-        "--recovery-threshold", "2",
+    let mutations: &[(&str, &str, &str)] = &[
+        ("simple-timelocked-inheritance", "--older", "65534"),
+        ("decaying-multisig", "--after", "500001"),
+        ("kofn-recovery", "--threshold", "3"),
+        ("tiered-recovery", "--older", "4033"),
+        ("hashlock-gated", "--older", "145"),
     ];
-    let out = bin()
-        .args(["build-descriptor"])
-        .args(mutated)
-        .args(["--format", "descriptor"])
-        .assert()
-        .success();
-    let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_ne!(got, a.descriptor, "mutated --older must change the descriptor");
+    for (name, flag, mutated_value) in mutations {
+        let a = ARCHETYPES.iter().find(|a| a.name == *name).unwrap();
+        let mut argv: Vec<&str> = a.preset_args.to_vec();
+        let i = argv
+            .iter()
+            .position(|s| s == flag)
+            .unwrap_or_else(|| panic!("{name}: {flag} not in preset_args"));
+        argv[i + 1] = mutated_value;
+        let out = bin()
+            .args(["build-descriptor"])
+            .args(&argv)
+            .args(["--format", "descriptor"])
+            .assert()
+            .success();
+        let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        assert_ne!(got, a.descriptor, "{name}: mutated {flag} must change the descriptor");
+    }
 }

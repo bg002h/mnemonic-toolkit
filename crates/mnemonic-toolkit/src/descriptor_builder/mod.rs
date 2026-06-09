@@ -4,11 +4,11 @@
 //! descriptor + BIP-388 wallet-policy + cost preview + node-addressed
 //! diagnostics. NOT a compiler (`miniscript/compiler` stays OFF).
 //!
-//! Phase 1 (this commit): the IR ([`ir`]) + render + the versioned
-//! `--spec-schema` grammar ([`schema`]). The validation gate (Phase 2) and the
-//! `build-descriptor` clap surface + emit (Phase 3) wire on top. Until Phase 3
-//! wires it into the binary the engine items are unused by `main` — see the
-//! crate-internal `#![allow(dead_code)]` note in `main.rs`'s module decl.
+//! Release A shipped the IR ([`ir`]), the versioned `--spec-schema` grammar
+//! ([`schema`]), the validation gate ([`gate`]), and the `build-descriptor`
+//! clap surface + emit (v0.50.0). Release B adds the archetype preset
+//! producers ([`archetype`]) over the frozen IR (presets SPEC
+//! `design/SPEC_descriptor_builder_presets.md`).
 
 pub mod archetype;
 pub mod gate;
