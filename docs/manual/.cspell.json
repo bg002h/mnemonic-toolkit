@@ -90,6 +90,8 @@
     "SLIP",
     "sortedmulti",
     "andor",
+    "sigless",
+    "timelock",
     "specialities",
     "standardisation",
     "standardises",
