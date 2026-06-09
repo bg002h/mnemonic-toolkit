@@ -9,10 +9,6 @@ mod decode_address;
 mod derive;
 mod derive_address;
 mod derive_slot;
-// Phase 1 substrate: IR + render + --spec-schema. Items are unused by `main`
-// until the Phase-3 `build-descriptor` subcommand wires them in; the scoped
-// allow is removed in Phase 3 (warning-clean build is the gate).
-#[allow(dead_code)]
 mod descriptor_builder;
 mod electrum;
 mod env_sentinel;
@@ -142,6 +138,8 @@ enum Command {
     VerifyMessage(cmd::verify_message::VerifyMessageArgs),
     /// emit a watch-only restore document (single-sig) from a seed + optional passphrase
     Restore(cmd::restore::RestoreArgs),
+    /// build a validated wsh(...) descriptor + BIP-388 policy from a JSON policy-tree spec
+    BuildDescriptor(cmd::build_descriptor::BuildDescriptorArgs),
 }
 
 fn main() -> ExitCode {
@@ -200,6 +198,7 @@ fn main() -> ExitCode {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
         Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::BuildDescriptor(args) => cmd::build_descriptor::run(args, stdin, stdout, stderr),
     };
 
     let exit = match result {

@@ -3874,3 +3874,111 @@ in plaintext output) carry advisory text. Known entries:
 | `--miniscript` AND `--descriptor` both supplied | `64` (clap mutex) |
 | `--feerate` out of `[0.0, 10000.0]` or non-numeric | `64` |
 | `--max-conditions 0` | `64` |
+
+## `mnemonic build-descriptor` (v0.50.0) {#mnemonic-build-descriptor}
+
+Build a **validated `wsh(...)` descriptor** + its **BIP-388 wallet-policy**
+from a **versioned JSON policy-tree spec**. The spec is a fragment-level
+miniscript tree (keys, multisig, timelocks, hashlocks, combinators); the
+engine renders it to a concrete multipath descriptor and runs it through a
+**fail-closed validation gate** before emitting anything. Like `restore`
+/ `export-wallet`, build-descriptor is **watch-only-out** — it takes
+cosigner **xpub**s and NEVER accepts secret material (an extended private
+key `xprv` / WIF in a key node is refused, exit 2, without ever echoing the
+key). It does not sign.
+
+The engine is a deterministic renderer + validator, **not** a policy
+compiler — you author the exact fragment tree (wrappers explicit), and a
+mis-typed or unsafe tree is rejected with a node-addressed diagnostic.
+
+### Synopsis
+
+```sh
+mnemonic build-descriptor --spec <FILE|-> [--network <NET>] [--format <FMT>] [--json]
+mnemonic build-descriptor --spec-schema      # dump the node-tree grammar and exit
+```
+
+### The spec (`--spec`)
+
+A versioned JSON document `{"schema_version": 1, "wrapper": "wsh", "root": <node>}`
+(`deny_unknown_fields` — typo'd fields are rejected). Each `<node>` is an
+**externally-tagged** object (exactly one key). The fragment set (run
+`mnemonic build-descriptor --spec-schema` for the machine-readable grammar):
+
+| Node | miniscript | Notes |
+|---|---|---|
+| `{"pk": "<key>"}` / `{"pkh": "<key>"}` | `pk` / `pkh` | `<key>` = a concrete `[fp/path]xpub`; the engine appends the `/<0;1>/*` multipath suffix |
+| `{"multi": {"k": K, "keys": [..]}}` / `{"sortedmulti": …}` | `multi` / `sortedmulti` | `1 ≤ k ≤ n` |
+| `{"older": N}` / `{"after": N}` | `older` / `after` | relative / absolute timelock |
+| `{"sha256": "<hex>"}` (+ `hash256`/`hash160`/`ripemd160`) | hashlocks | 64-hex (sha256/hash256) or 40-hex (hash160/ripemd160) |
+| `{"and_v": [A,B]}` / `{"or_d": …}` / `{"or_i": …}` / `{"or_b": …}` | binary combinators | exactly 2 children |
+| `{"andor": [A,B,C]}` | `andor` | exactly 3 children |
+| `{"thresh": {"k": K, "subs": [..]}}` | `thresh` | k-of-n over sub-policies |
+| `{"wrap": {"w": "<wrappers>", "sub": <node>}}` | `<w>:<frag>` | explicit miniscript wrapper(s) (`v`,`s`,`a`,…) on a child |
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
+| `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
+| `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
+| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2 |
+| `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs |
+| `--no-auto-repair` | (global) no-op for this subcommand (there is no card decode to repair); accepted for global-flag uniformity |
+| `--help` | print help |
+
+### The validation gate
+
+Emit is gated, in order; the first failure short-circuits to a
+**node-addressed** diagnostic (`node_path` = a path like
+`root.or_d[1].and_v[0]`) and exit 2:
+
+1. **schema field-validate** — `1 ≤ k ≤ n`; hashlock hex length/validity;
+   `older` `1 ≤ N < 2³¹`, `after` `N ≥ 1`; **watch-only screen** (an `xprv`
+   / extended-private key is refused here, never echoed).
+2. **type-check** — the rendered `wsh(M)` must parse (a missing `v:`
+   wrapper → a `type_error` diagnostic at the offending subtree).
+3. **`sanity_check`** — the BIP-built-in funds-footgun rules:
+   `sigless_branch` (an anyone-can-spend path), `malleable`,
+   `resource_limit`, `repeated_keys`, and `mixed_timelock` (an unspendable
+   mixed height/time path — the "wrong timelock loses money" guard). Each
+   is localized to the offending subtree.
+4. **build-time complexity cap** — refuse a tree whose
+   `2^(keys+hashes) × timelock-states` exceeds the always-previewable
+   envelope (so the cost preview always renders); past the envelope, use a
+   raw `--descriptor` with `compare-cost` / `export-wallet` instead.
+
+### Worked example
+
+A 2-of-3 multisig that degrades to a single recovery key after ~1 year
+(`52560` blocks):
+
+```sh
+cat > policy.json <<'JSON'
+{
+  "schema_version": 1, "wrapper": "wsh",
+  "root": { "or_d": [
+    { "multi": { "k": 2, "keys": [
+      "[11111111/48h/0h/0h/2h]xpubA…", "[22222222/48h/0h/0h/2h]xpubB…",
+      "[33333333/48h/0h/0h/2h]xpubC…" ] } },
+    { "and_v": [
+      { "wrap": { "w": "v", "sub": { "pk": "[44444444/48h/0h/0h/2h]xpubD…" } } },
+      { "older": 52560 } ] }
+  ] }
+}
+JSON
+mnemonic build-descriptor --spec policy.json --format descriptor
+# → wsh(or_d(multi(2,…/<0;1>/*,…),and_v(v:pk(…),older(52560))))#<checksum>
+```
+
+The emitted descriptor round-trips: `export-wallet --descriptor <D> --format
+bip388` reproduces `build-descriptor --format bip388`.
+
+### Exit codes
+
+| Condition | Exit |
+|---|---|
+| success | `0` |
+| spec parse / IO error (bad JSON, unknown field, unsupported `schema_version`) | `2` |
+| validation-gate failure (field / type / sanity / over-envelope / secret-key) | `2` |

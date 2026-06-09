@@ -264,28 +264,6 @@ impl PolicyNode {
         }
     }
 
-    /// Direct child nodes (for the Phase-2 per-subtree localization walk). Leaf
-    /// nodes (keys / timelocks / hashlocks) have none.
-    pub fn children(&self) -> Vec<&PolicyNode> {
-        match self {
-            PolicyNode::Pk(_)
-            | PolicyNode::Pkh(_)
-            | PolicyNode::Multi(_)
-            | PolicyNode::Sortedmulti(_)
-            | PolicyNode::Older(_)
-            | PolicyNode::After(_)
-            | PolicyNode::Sha256(_)
-            | PolicyNode::Hash256(_)
-            | PolicyNode::Hash160(_)
-            | PolicyNode::Ripemd160(_) => Vec::new(),
-            PolicyNode::AndV(s) | PolicyNode::OrD(s) | PolicyNode::OrI(s) | PolicyNode::OrB(s) => {
-                vec![&s[0], &s[1]]
-            }
-            PolicyNode::Andor(s) => vec![&s[0], &s[1], &s[2]],
-            PolicyNode::Thresh(t) => t.subs.iter().collect(),
-            PolicyNode::Wrap(w) => vec![&w.sub],
-        }
-    }
 }
 
 #[cfg(test)]

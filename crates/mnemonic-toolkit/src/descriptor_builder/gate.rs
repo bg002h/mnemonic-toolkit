@@ -34,10 +34,9 @@ pub const DEFAULT_PREVIEW_CAP: usize = 4096;
 
 /// The validated output of the gate — what Phase-3 emit consumes.
 pub struct ValidatedPolicy {
-    /// Parsed `wsh(M)` (multipath). Canonicalize via `.to_string()` at emit.
+    /// Parsed `wsh(M)` (multipath). Canonicalize (+ BIP-380 checksum) via
+    /// `.to_string()` at emit.
     pub descriptor: MsDescriptor<DescriptorPublicKey>,
-    /// The pre-canonicalization render string.
-    pub rendered: String,
 }
 
 /// A node-addressed structured diagnostic. `node_path` is a dotted/bracketed
@@ -70,6 +69,9 @@ pub enum DiagnosticKind {
     MixedTimelock,
     /// Step 4 — exceeds the always-previewable complexity envelope.
     OverEnvelope,
+    /// Step 1 — a key node carries an extended PRIVATE key; build-descriptor is
+    /// watch-only-out. Refused with a controlled message (never echoing the key).
+    SecretKey,
 }
 
 impl DiagnosticKind {
@@ -83,6 +85,7 @@ impl DiagnosticKind {
             DiagnosticKind::RepeatedKeys => "repeated_keys",
             DiagnosticKind::MixedTimelock => "mixed_timelock",
             DiagnosticKind::OverEnvelope => "over_envelope",
+            DiagnosticKind::SecretKey => "secret_key",
         }
     }
 }
@@ -130,7 +133,7 @@ pub fn validate_with_cap(doc: &SpecDoc, cap: usize) -> Result<ValidatedPolicy, V
         return Err(vec![diag]);
     }
 
-    Ok(ValidatedPolicy { descriptor, rendered })
+    Ok(ValidatedPolicy { descriptor })
 }
 
 // ======================================================================
@@ -139,8 +142,14 @@ pub fn validate_with_cap(doc: &SpecDoc, cap: usize) -> Result<ValidatedPolicy, V
 
 fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
     match node {
+        PolicyNode::Pk(k) | PolicyNode::Pkh(k) => {
+            check_secret_key(k, path, node.kind(), out);
+        }
         PolicyNode::Multi(m) | PolicyNode::Sortedmulti(m) => {
             check_threshold(m.k, m.keys.len(), path, node.kind(), out);
+            for (i, key) in m.keys.iter().enumerate() {
+                check_secret_key(key, &format!("{path}.{}.keys[{i}]", node.kind()), node.kind(), out);
+            }
         }
         PolicyNode::Thresh(t) => {
             check_threshold(t.k, t.subs.len(), path, "thresh", out);
@@ -164,12 +173,39 @@ fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
                 out.push(field_diag(path, "after(N) requires N ≥ 1; got 0".to_string()));
             }
         }
-        PolicyNode::Pk(_) | PolicyNode::Pkh(_) => {}
-        // recurse below
-        _ => {}
+        // Wrap / combinators have no own field constraints; recurse below.
+        PolicyNode::AndV(_)
+        | PolicyNode::OrD(_)
+        | PolicyNode::OrI(_)
+        | PolicyNode::OrB(_)
+        | PolicyNode::Andor(_)
+        | PolicyNode::Wrap(_) => {}
     }
     for (cpath, child) in child_paths(node, path) {
         validate_fields(child, &cpath, out);
+    }
+}
+
+/// Watch-only-out screen (SPEC §0): refuse a key node carrying an extended
+/// PRIVATE key. Strips an optional `[origin]` prefix, then checks for an
+/// extended-private prefix — `xprv`/`tprv`/`yprv`/`zprv`/`uprv`/`vprv` (+ capital
+/// variants), all of which have `prv` at byte offset 1..4 (`xpub`/`tpub` have
+/// `pub`). The diagnostic NEVER echoes the key (no leak surface), and fires at
+/// step 1 — independent of the step-2 `from_str` error text. WIF / raw-hex
+/// secrets are not prefix-detectable here; they are refused by the step-2
+/// `from_str` type-check (which does not echo the key either — pinned by the
+/// `cli_build_descriptor` no-leak test).
+fn check_secret_key(key: &str, path: &str, kind: &str, out: &mut Vec<Diagnostic>) {
+    let key_part = key.rsplit(']').next().unwrap_or(key);
+    let is_xprv = key_part.is_char_boundary(4) && key_part.as_bytes().get(1..4) == Some(b"prv");
+    if is_xprv {
+        out.push(Diagnostic {
+            node_path: path.to_string(),
+            kind: DiagnosticKind::SecretKey,
+            message: format!(
+                "{kind} key is an extended PRIVATE key — build-descriptor is watch-only; supply an xpub cosigner key (no secret material)"
+            ),
+        });
     }
 }
 
@@ -681,6 +717,55 @@ mod tests {
             ),
             "enumerate must trip ConditionsTooMany at 31 → enumerate raw == 32 == gate raw"
         );
+    }
+
+    /// Phase-2 review M2 (carry-forward): the cap's key dedup is by full
+    /// `DescriptorPublicKey` (origin-bearing), so the SAME xpub under two
+    /// DIFFERENT origins counts as 2 distinct keys — matching enumerate. (At the
+    /// abstract-key level they are distinct, so sanity_check does not flag
+    /// RepeatedPubkeys.) `multi(2, xpubA@o1, xpubA@o2)` → 2 keys, raw = 2^2 = 4.
+    #[test]
+    fn cap_counts_same_xpub_two_origins_as_distinct() {
+        use crate::cost::{self, CompareCostArgs, InputForm};
+        use crate::error::ToolkitError;
+
+        let json = format!(
+            r#"{{"multi":{{"k":2,"keys":["[11111111/0h]{A}","[22222222/0h]{A}"]}}}}"#
+        );
+        let parsed = SpecDoc::parse(&doc(&json)).unwrap();
+
+        // raw == 4 (2 distinct origin-keys), not 2 (xpub-deduped).
+        assert!(validate_with_cap(&parsed, 4).is_ok(), "2 distinct origin-keys ⇒ raw 4");
+        assert_eq!(
+            validate_with_cap(&parsed, 3).err().unwrap()[0].kind,
+            DiagnosticKind::OverEnvelope,
+            "cap 3 < raw 4 ⇒ refused (proves 2 keys counted, not 1)"
+        );
+
+        // Enumerate agrees: single-path projection, raw == 4.
+        let single = validate_with_cap(&parsed, 4)
+            .unwrap()
+            .descriptor
+            .into_single_descriptors()
+            .unwrap()[0]
+            .to_string();
+        let run = |max: usize| -> Result<(), ToolkitError> {
+            let mut sink = Vec::new();
+            cost::run_compare_cost(
+                &CompareCostArgs {
+                    input: InputForm::Descriptor(single.clone()),
+                    feerate_sat_per_vb: 1.0,
+                    max_conditions: max,
+                    json: false,
+                },
+                &mut sink,
+            )
+        };
+        assert!(run(4).is_ok());
+        assert!(matches!(
+            run(3),
+            Err(ToolkitError::CompareCost(cost::CompareCostError::ConditionsTooMany { .. }))
+        ));
     }
 
     /// Phase-2 review I1 regression: hashes are counted as LEAVES, not distinct

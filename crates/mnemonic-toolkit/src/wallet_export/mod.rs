@@ -30,6 +30,7 @@ mod sparrow;
 mod specter;
 
 pub(crate) use bip388::Bip388Emitter;
+pub(crate) use pipeline::descriptor_to_bip388_wallet_policy;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use bitcoin_core::import_array_single;
 pub use bsms::BsmsForm;

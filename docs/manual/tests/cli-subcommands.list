@@ -37,6 +37,7 @@ mnemonic xpub-search path-of-xpub
 mnemonic xpub-search account-of-descriptor
 mnemonic xpub-search address-of-xpub
 mnemonic xpub-search passphrase-of-xpub
+mnemonic build-descriptor
 
 # md
 md encode

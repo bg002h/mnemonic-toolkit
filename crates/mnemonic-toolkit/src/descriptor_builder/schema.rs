@@ -7,7 +7,7 @@
 
 use serde_json::{json, Value};
 
-use super::ir::{MULTIPATH_SUFFIX, SUPPORTED_SCHEMA_VERSION};
+use super::ir::{MULTIPATH_SUFFIX, NODE_KINDS, SUPPORTED_SCHEMA_VERSION};
 
 /// The grammar's own version. Bump when the node set / field shapes change.
 pub const SPEC_SCHEMA_VERSION: u32 = 1;
@@ -62,6 +62,7 @@ pub fn spec_schema_json() -> Value {
         "wrapper": { "values": ["wsh"] },
         "multipath_suffix": MULTIPATH_SUFFIX,
         "node_tagging": "externally-tagged (exactly one key per node); unknown fields rejected",
+        "node_kinds": NODE_KINDS,
         "nodes": nodes,
     })
 }
@@ -73,7 +74,6 @@ pub fn spec_schema_string() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::ir::NODE_KINDS;
     use super::*;
 
     #[test]

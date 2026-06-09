@@ -64,6 +64,9 @@ pub enum ToolkitError {
     BsmsTaprootRefused {
         script_type: crate::wallet_export::WalletScriptType,
     },
+    /// `build-descriptor` spec parse / input error (bad JSON, unknown field,
+    /// unsupported schema_version, stdin/file read failure). Exit 2.
+    BuildDescriptorSpec(String),
     /// SPEC §6.1 exit-4 verify-bundle mismatch variant. `card` identifies the
     /// mismatching card (e.g., "mk1", "md1", or "mk1[N]" for multisig cosigner N).
     #[allow(dead_code)]
@@ -497,6 +500,7 @@ impl ToolkitError {
             ToolkitError::BsmsSignatureMismatch { .. } => 2,
             ToolkitError::BsmsTaprootImportRefused => 2,
             ToolkitError::BsmsTaprootRefused { .. } => 2,
+            ToolkitError::BuildDescriptorSpec(_) => 2,
             ToolkitError::BundleMismatch { .. } => 4,
             ToolkitError::CompareCost(e) => e.exit_code(),
             ToolkitError::ConvertRefusal(_) => 2,
@@ -557,6 +561,7 @@ impl ToolkitError {
             ToolkitError::BsmsSignatureMismatch { .. } => "BsmsSignatureMismatch",
             ToolkitError::BsmsTaprootImportRefused => "BsmsTaprootImportRefused",
             ToolkitError::BsmsTaprootRefused { .. } => "BsmsTaprootRefused",
+            ToolkitError::BuildDescriptorSpec(_) => "BuildDescriptorSpec",
             ToolkitError::BundleMismatch { .. } => "BundleMismatch",
             ToolkitError::CompareCost(_) => "CompareCost",
             ToolkitError::ConvertRefusal(_) => "ConvertRefusal",
@@ -658,6 +663,7 @@ impl ToolkitError {
                  (Sparrow JSON, taproot-capable) for taproot watch-only setup.",
                 crate::wallet_export::script_type_short_name(script_type)
             ),
+            ToolkitError::BuildDescriptorSpec(m) => m.clone(),
             ToolkitError::BundleMismatch { card, message } => {
                 format!("bundle mismatch on {}: {}; if the engraved bundle was produced at a non-zero BIP-32 account, pass --account <N> to match (default 0)",
                     card, message)

@@ -72,12 +72,15 @@ fn gui_schema_lists_all_subcommands() {
     // v0.38.0 adds `addresses` (batch watch-only address listing); total was 26.
     // ms K-of-N v0.2 adds `ms-shares` (BIP-93 codex32 K-of-N share split/combine),
     // flattened to `ms-shares-split` + `ms-shares-combine`; total was 28.
-    // v0.43.0 adds `restore` (watch-only single-sig restore document); total is now 29.
+    // v0.43.0 adds `restore` (watch-only single-sig restore document); total was 29.
+    // v0.50.0 adds `build-descriptor` (JSON policy-tree → validated wsh(...)
+    // descriptor + BIP-388 policy); total is now 30.
     // gui-schema + help filtered out.
     assert_eq!(
         names,
         vec![
             "addresses",
+            "build-descriptor",
             "bundle",
             "compare-cost",
             "convert",
@@ -107,7 +110,7 @@ fn gui_schema_lists_all_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 29 user-facing subcommands must appear (nested split/combine \
+        "all 30 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }
