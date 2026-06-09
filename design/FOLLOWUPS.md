@@ -3763,6 +3763,14 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.52+-feature`.
 - **Companion:** none.
 
+### `changelog-md-release-ritual-lapsed-since-v0-47-4` — root `CHANGELOG.md` stopped being updated per-release after v0.47.4
+
+- **Surfaced:** 2026-06-09, descriptor-builder v0.50.0 ship (advisor pre-tag check). Root `CHANGELOG.md` (linked from both READMEs as "the full release history") has its latest entry at `## mnemonic-toolkit [0.47.4] — 2026-06-06`; the three subsequent releases — v0.48.0, v0.49.0, v0.49.1 — and now v0.50.0 left it untouched (verified: `git log -- CHANGELOG.md` last touch = `cacd4a8` v0.47.4; `git show <tag> --stat` for v0.49.1/v0.49.0 omit it). The per-release CHANGELOG update was part of the ritual through v0.47.4 and then silently lapsed. v0.50.0 is consistent with the last-3-releases precedent (NOT touched) rather than introducing a lone `[0.50.0]` section into a 4-version gap.
+- **Where:** `CHANGELOG.md` (root). Decide: (a) resurrect the discipline + backfill `[0.48.0]`/`[0.49.0]`/`[0.49.1]`/`[0.50.0]` (reconstruct from the tag annotations + release commits) and re-add it to the release-gate checklist; or (b) deprecate it (drop the per-release update from the ritual) and de-link it from the READMEs / point readers at `git tag -n` + the manual. Pick one — the current state (linked-but-4-versions-stale) is the worst of both.
+- **Status:** open — docs-hygiene; not a code change; own small cycle (user decides resurrect-vs-deprecate).
+- **Tier:** `docs-hygiene`.
+- **Companion:** none.
+
 ### `miniscript-compiler-optimize-policy` — surface `md`'s existing policy compiler for the optimize-and-engrave workflow (NOT a toolkit-local compiler)
 
 - **Surfaced:** 2026-06-08, descriptor-builder brainstorm (`design/BRAINSTORM_descriptor_builder.md` §8). **RE-SCOPED 2026-06-08** on newly-surfaced evidence (see "Direction change" below): from "enable the compiler in the toolkit" → "surface `md`'s already-shipped compiler; the constellation's policy-compiler home is `md-cli`."
