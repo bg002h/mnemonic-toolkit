@@ -743,10 +743,10 @@ BIP-44/49/84/86 descriptors. *Multisig-cosigner* (v0.44.0, `--md1 <card>`)
 reconstructs the concrete watch-only **multisig** descriptor from the shared
 wallet-policy `md1` card **alone** — the card already carries every cosigner's
 public key, so `--from`/`--cosigner` are *optional cross-check* inputs, not
-build inputs. Multisig mode covers `wsh` and `sh(wsh)`; a **taproot** multisig
-`md1` (`tr(sortedmulti_a, …)`) is refused (exit 2) pending FOLLOWUP
-`restore-multisig-taproot-reconstruction`, and a template-only `md1` (no
-concrete keys) is refused.
+build inputs. Multisig mode covers `wsh`, `sh(wsh)`, and **NUMS taproot**
+multisig (`tr-multi-a` / `tr-sortedmulti-a`); a **non-NUMS**
+(cosigner-internal) taproot `md1` is refused (exit 2), as is a template-only
+`md1` (no concrete keys).
 
 ### Synopsis
 
@@ -962,11 +962,11 @@ needed (the threshold and script type come from the `md1`). A cross-check
 `✗ MISMATCH` still hard-fails (exit 4) **before** any payload is emitted unless
 `--allow-mismatch`.
 
-**Scope.** `wsh` and `sh(wsh)` multisig only. A **taproot** multisig `md1`
-(`tr(sortedmulti_a, …)`) is refused (exit 2) pending FOLLOWUP
-`restore-multisig-taproot-reconstruction`; a template-only `md1` (no
-concrete keys — never emitted by the toolkit) is refused. `--template` and
-`--expect-xpub` are single-sig only.
+**Scope.** `wsh`, `sh(wsh)`, and **NUMS taproot** (`tr-multi-a` /
+`tr-sortedmulti-a`) multisig. A **non-NUMS** (cosigner-internal) taproot
+`md1` is refused (exit 2); a template-only `md1` (no concrete keys — never
+emitted by the toolkit) is refused. `--template` and `--expect-xpub` are
+single-sig only.
 
 ---
 
