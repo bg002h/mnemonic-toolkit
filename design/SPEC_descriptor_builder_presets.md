@@ -1,6 +1,6 @@
 # SPEC — descriptor-builder archetype presets (Release B, `v0.51.0`)
 
-**Status:** draft for R0 review
+**Status:** SHIPPED v0.51.0 (2026-06-09, tag `mnemonic-toolkit-v0.51.0`; R0 GREEN r2, Phase 1 GREEN r2, Phase 2 GREEN r1 — see fold log)
 **Source grounding verified at:** toolkit `origin/master` = `e6e4a06` (2026-06-09)
 **Parent artifacts:** `design/BRAINSTORM_descriptor_builder.md` (§4 Release B, §5 roadmap, §7 risks), `design/SPEC_descriptor_builder_engine.md` (Release A, shipped v0.50.0), `design/FOLLOWUPS.md::descriptor-builder-engine` (Tier `v0.51-feature`), recon `cycle-prep-recon-descriptor-builder-engine-release-b.md`, architect direction-consult (this session — ranked CLI shape (iv) hybrid first).
 
