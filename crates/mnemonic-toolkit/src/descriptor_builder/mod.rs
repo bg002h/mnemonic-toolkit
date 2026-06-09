@@ -10,6 +10,7 @@
 //! wires it into the binary the engine items are unused by `main` — see the
 //! crate-internal `#![allow(dead_code)]` note in `main.rs`'s module decl.
 
+pub mod archetype;
 pub mod gate;
 pub mod ir;
 pub mod schema;

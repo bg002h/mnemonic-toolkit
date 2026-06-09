@@ -52,6 +52,13 @@ pub struct Diagnostic {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticKind {
+    /// Step 0 — a preset parameter error from the producer layer
+    /// (`descriptor_builder::archetype::validate_params`): inapplicable flag,
+    /// missing/under-count param, or a decay-ordering violation. `node_path`
+    /// is the sentinel `"params"`; the offending flag(s) are named in
+    /// `message`. (Placed first: this enum orders by gate step, and producer
+    /// checks run before step 1 — presets SPEC §3.3.)
+    Param,
     /// Step 1 — bad threshold / hex / timelock field.
     SchemaField,
     /// Step 2 — miniscript type error (e.g. missing `v:` wrapper).
@@ -77,6 +84,7 @@ pub enum DiagnosticKind {
 impl DiagnosticKind {
     pub fn as_str(self) -> &'static str {
         match self {
+            DiagnosticKind::Param => "param",
             DiagnosticKind::SchemaField => "schema_field",
             DiagnosticKind::TypeError => "type_error",
             DiagnosticKind::SiglessBranch => "sigless_branch",
