@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "wrapper": "wsh",
+  "root": {
+    "or_d": [
+      { "pk": "[11111111/48h/0h/0h/2h]xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13" },
+      { "and_v": [
+        { "wrap": { "w": "v", "sub": { "pkh": "[22222222/48h/0h/0h/2h]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8" } } },
+        { "older": 65535 }
+      ]}
+    ]
+  }
+}

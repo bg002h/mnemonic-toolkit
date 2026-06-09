@@ -9,6 +9,11 @@ mod decode_address;
 mod derive;
 mod derive_address;
 mod derive_slot;
+// Phase 1 substrate: IR + render + --spec-schema. Items are unused by `main`
+// until the Phase-3 `build-descriptor` subcommand wires them in; the scoped
+// allow is removed in Phase 3 (warning-clean build is the gate).
+#[allow(dead_code)]
+mod descriptor_builder;
 mod electrum;
 mod env_sentinel;
 mod error;

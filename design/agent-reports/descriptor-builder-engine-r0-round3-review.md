@@ -1,0 +1,52 @@
+<!-- VERBATIM opus-architect R0 review, round 3, descriptor-builder engine (Release A, v0.50.0). Persisted per CLAUDE.md convention (architect had no Write tool; captured from its returned message). SPEC @ post §1-encoding + F1/F2/F3 fold; source SHA b596d3f, miniscript 95fdd1c. Verdict: RED 0C/1I/2m. -->
+
+The test name `grammar_covers_exactly_the_enum_node_kinds` is misleading — it says "the_enum" but compares `NODE_GRAMMAR` (hand-list) to `NODE_KINDS` (hand-list), never iterating `PolicyNode` variants. Confirmed.
+
+---
+
+# R0 REVIEW (round 3) — descriptor-builder engine (Release A, v0.50.0) — **RED**
+
+**Verdict: RED. 0 Critical / 1 Important / 2 Minor.** One Important finding blocks GREEN: a doc-comment in `ir.rs` asserts a sync-guard test (`node_kinds_cover_enum`) that does not exist, leaving the enum→schema freeze unguarded in the exact direction risk #2 says Release A must gate. The fix is one test (or a comment correction) — no redesign. CHANGE SET A (encoding) and CHANGE SET B (F1/F2/F3) are otherwise **sound and verified against live source** (`b596d3f`, miniscript `95fdd1c`).
+
+Verification basis: SPEC + both Phase-1 files read in full; F1 confirmed by source-trace (not just the empirical table); serde single-key behavior confirmed at serde_json source level; ~10 citations spot-checked, all accurate.
+
+## CRITICAL
+None.
+
+## IMPORTANT
+
+### I1 — `ir.rs:29` cites a sync-guard test (`node_kinds_cover_enum`) that does not exist; the enum→`NODE_KINDS`/schema freeze is unguarded (risk #2)
+`ir.rs:29`: *"Kept in sync with the enum by the `PolicyNode::kind` match + the `node_kinds_cover_enum` test."* Grep confirms **no such test exists anywhere** in the repo (`crates/.../ir.rs` has zero `#[cfg(test)]` module; the only descriptor_builder tests are the two in `schema.rs`). The comment is objectively false.
+
+Why this is Important, not cosmetic:
+- The one existing guard, `schema.rs:79` `grammar_covers_exactly_the_enum_node_kinds`, despite "the_enum" in its name, compares two **hand-maintained** lists — `NODE_GRAMMAR` (schema.rs) vs `NODE_KINDS` (ir.rs) — and never iterates `PolicyNode` variants.
+- Adding a future variant force-updates `kind()` (exhaustive `match` → compile error) but does NOT force-update `NODE_KINDS` or `NODE_GRAMMAR`. Both hand-lists can drift from the enum *together* and the test still passes → a node that deserializes/renders fine but is silently absent from `--spec-schema`.
+- This is precisely risk #2's invariant ("the node-tree schema is a NEW versioned contract — freeze + gate it in Release A"). The enum→schema direction is currently ungated, and a comment falsely asserts it is gated.
+- For the v1 set it is harmless today (17 variants == 17 `NODE_KINDS` == 17 grammar rows, hand-verified). The severity is from the false-green discipline (CLAUDE.md anti-false-green) + a GREEN verdict explicitly clearing the two Phase-1 files for continued implementation.
+
+**Fix (one finding, trivial):** add a `#[cfg(test)]` test in `ir.rs` that exercises the enum→`NODE_KINDS` direction — e.g. assert each constructed `PolicyNode` variant's `kind()` is a member of `NODE_KINDS` and that the variant count equals `NODE_KINDS.len()` (a match-driven count that breaks when a variant is added) — so a future variant cannot silently miss `NODE_KINDS`/grammar. At minimum, correct the `ir.rs:29` comment to name only the guards that exist. (Also fold the arity-rejection cell, Minor M1, in the same Phase-1 pass.)
+
+## MINOR (do not block; fold in the Phase-1 reviewer-loop)
+
+- **M1 — §7 IR test plan omits two freeze-critical cells: wrong-arity rejection and the enum-coverage guard.** §7 lists "`deny_unknown_fields`; version mismatch refused" but NOT (a) wrong-arity rejection for the fixed-array combinators (`{"and_v":[A]}` / `{"and_v":[A,B,C]}` / `{"andor":[A,B]}` must be rejected) nor (b) the I1 enum-coverage guard. Both are Phase-1 freeze obligations. Arity rejection is sound-by-construction (serde's `[T; N]` deserializer errors on wrong length — matches the SPEC §1 "fixed 2-arity arrays — serde enforces" claim), but should be an explicit RED-first cell, not left implicit. Add both to §7.
+- **M2 — residual ±1–2 line citations (carried from round-2 M2, still harmless).** SPEC §3 step 5 cites `enumerate.rs:115-120` for the cap; the live `checked_pow` guard is `:113-115` and the `raw > hard_cap` refusal is `:119-120`. `derive_at_index` "errors on multipath" cites `mod.rs:705` (the doc-comment condition line; the fn signature is `:706`). Within bounds; tighten on the next grep-verify pass.
+
+## What passes
+
+**CHANGE SET A — the externally-tagged + wrap-node encoding is SOUND.**
+- **(a) Typo'd-field rejection holds on EVERY variant, including leaf newtypes.** Confirmed at the serde_json source level: `deserialize_enum` reads the single variant key+value, then (de.rs ~:1888-1895) requires the next char to be `}`; a second key (`{"pk":"x","bogus":1}`) leaves a `,` → `ErrorCode::ExpectedSomeValue` (hard parse error). This fires for unit/newtype/struct variants alike, OUTSIDE the payload deserialization — so leaf newtypes like `Pk(String)`/`Older(u32)` reject the 2-key object via the externally-tagged **single-key rule**, while struct-payload interiors (`MultiSpec`/`ThreshSpec`/`WrapSpec`) reject typo'd inner fields via `deny_unknown_fields` (`ir.rs:121/131/141`). The `ir.rs:9-15` doc-comment states BOTH mechanisms correctly ("exactly one key" + "deny_unknown_fields on every struct payload") — accurate decomposition, no gap.
+- **(b) `render()` is correct for every node kind** (`ir.rs:228-260`): multipath `/<0;1>/*` suffix applied to keys only (`with_multipath`, `render_keys`); wrapper emitted as verbatim prefix `{}:{}` (`:258`); combinator arity/syntax correct (`and_v(A,B)`, `andor(A,B,C)`, `thresh(K,subs…)`). Renders all 5 final archetype shapes, incl. `s:pk(D)`, `v:older(N)`, `or_i(sortedmulti(...), and_v(v:older, thresh(...)))`.
+- **(c) Fixed-arity arrays reject wrong-arity input** by construction: `Box<[PolicyNode;2]>` / `[;3]` (`ir.rs:104-112`) deserialize via serde's fixed-array impl, which errors on length mismatch. (Sound-by-standard-serde; M1 asks for an explicit cell.)
+- **(d) No expressiveness gap.** The wrap-node `{"wrap":{"w":..,"sub":..}}` is strictly more general than the brainstorm's adjacent-`w` field — any `<w>:<frag>` is expressible on ANY node (incl. combinators), and it mirrors miniscript's own `v:X`-is-a-node structure. All 5 final archetypes + the `or_b` aux render-cell are expressible. The serde rationale in §1 is correct (`deny_unknown_fields` is incompatible with `flatten`/internally+adjacently-tagged enums).
+
+**CHANGE SET B — F1/F2/F3 corrections are CONFIRMED and coherent.**
+- **F1 confirmed by source-trace (not just the empirical table).** `Descriptor::from_str` (`descriptor/mod.rs:1138-1151`) calls `from_tree` (type-check only) and then runs `sanity_check()`/`ext_check(sane())` **only inside `if let Descriptor::Tr`** (`:1141-1149`) — gated by a FIXME preserving "weird/broken behavior from 12.x." For a **wsh** descriptor it returns `Ok` immediately after `from_tree`. `Wsh::from_tree` (`segwitv0.rs:189-198`) = `Miniscript::from_tree` + `Segwitv0::top_level_checks`, **no sanity_check, no ext_check**. So wsh `from_str` is type-check-only and lenient on the footguns — exactly F1. The §3 two-gate split (step 2 = type-check via `Descriptor::from_str`; step 3 = explicit `sanity_check()`, never `from_str`-OK) is therefore the correct and necessary design, not an over-cautious one. **If F1 were wrong it would be Critical; it is right.**
+- **§3.4 localization survives the encoding change.** `from_str_ext` (`mod.rs:842-852`) runs `ext_check` then enforces `Base::B` → `Error::NonTopLevel` at `:848-849`, NOT relaxed by `insane()` (`:63-72`, all 5 toggles true, `raw_pkh:false`). So a type error fails even insane-parse (step-2 localization) while footguns parse (step-3 predicate re-check). The `children()` walk (`ir.rs:264-283`) correctly enumerates the deepest-first subtrees for the new encoding — `Wrap` yields `[&w.sub]`, combinators yield their array/`subs` elements, leaves yield `[]`. Matches §3.4. The C2 keystone (`TimelockInfo` bottom-up locality + monotone `|=`, `extra_props.rs:42-86`) re-confirmed live.
+- **§3-step-3 / C3 reasoning is now correct and internally consistent.** Cutting `--allow` blocks only the *same-key* degrading threshold (`RepeatedPubkeys`, F2), which miniscript correctly deems unsafe; escape hatch = raw `--descriptor`. The archetype swap to `tiered-recovery` (distinct-key `or_i(sortedmulti,…thresh)`) is fully propagated — `grep degrading` finds only 3 hits (SPEC :59, :93, :144), all intentional "replaced-by / cut-blocks-this" references; no stale live archetype reference in §6/§9/§10.
+- **F2 corrects a wrong supporting claim in the round-2 GREEN — and the round-2 architecture verdict still stands.** Round-2's C3 paragraph literally asserted "all 5 archetypes sane-parse → cut blocks nothing." That **supporting empirical claim was false**: the original archetype-4 (`degrading-threshold`, same-key) trips `RepeatedPubkeys` and WOULD have been blocked. F2/F3 correctly restate it as "all 5 **final** (distinct-key) archetypes pass explicit `sanity_check()`; cut blocks only the insane same-key shape, correctly." The round-2 *architecture* conclusion (two-gate design, per-subtree localization, `--allow` cut) is unaffected; only this one empirical sub-claim needed correction, and it has been, coherently, in §6 + §3-step-3 + the fold log.
+
+**Citations spot-checked (all accurate at `b596d3f`/`95fdd1c`):** `analyzable.rs` `sanity_check:225-239`, predicates `:187-208`, `AnalysisError`/typo `BranchExceedResouceLimits:139`, `ContainsRawPkh:145`, `insane():63-72`; `descriptor/mod.rs` wsh-gated sanity `:1141-1149`, `into_single_descriptors:946`, `derive_at_index:706`; `segwitv0.rs:189-198`; `miniscript/mod.rs` `from_str_ext`/`NonTopLevel:842-852`; `extra_props.rs:42-86`; toolkit `pipeline.rs:28-30`, `strip.rs:26-28`, `enumerate.rs:113-120`.
+
+---
+
+**Not cleared.** Resolve I1 (write the enum-coverage guard test in `ir.rs`, or correct the false `ir.rs:29` comment), fold M1 (add wrong-arity + enum-coverage cells to §7) and optionally M2 (tighten the ±1-2 citations) in the same Phase-1 reviewer-loop pass, then re-dispatch for round 4. Per CLAUDE.md, no further implementation proceeds past this Important finding until 0C/0I.
