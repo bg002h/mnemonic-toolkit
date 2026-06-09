@@ -768,7 +768,7 @@ channels that keep the seed off the argv.
 | Flag | Purpose |
 |---|---|
 | `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore; OPTIONAL in multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) |
-| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)` only; a taproot or template-only `md1` is refused (exit 2). Watch-only (non-secret) |
+| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)` and taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`); a non-NUMS (cosigner-internal) taproot or a template-only `md1` is refused (exit 2). Watch-only (non-secret) |
 | `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |

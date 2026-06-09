@@ -264,3 +264,18 @@ fn format_output_file_routes_payload() {
     let written = std::fs::read_to_string(&path).unwrap();
     assert!(written.contains("sortedmulti(2,"), "file missing descriptor payload");
 }
+
+/// (v2) taproot NUMS multisig `--format` thread-through: a `tr-sortedmulti-a`
+/// md1 → `--format descriptor` emits the NUMS `tr(...,sortedmulti_a(2,...))`
+/// (proves `build_multisig_import_payload` threads `Some(Nums)` — without it the
+/// payload descriptor would carry a wrong/absent internal key).
+#[test]
+fn taproot_format_descriptor_carries_nums_sortedmulti_a() {
+    const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+    let md1 = bundle_md1("tr-sortedmulti-a", "mainnet");
+    let out = restore_format_stdout(&md1, "descriptor");
+    assert!(
+        out.contains(&format!("tr({NUMS_HEX},sortedmulti_a(2,")),
+        "taproot --format descriptor must carry the NUMS internal key: {out}"
+    );
+}

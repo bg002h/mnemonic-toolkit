@@ -1,7 +1,9 @@
 //! v0.44.0 — `mnemonic restore` multisig-cosigner (FOLLOWUP
 //! `restore-multisig-cosigner-scope`). A wallet-policy `md1` reconstructs the
 //! concrete watch-only multisig descriptor (md1 alone); `--from`/`--cosigner`
-//! are optional cross-check inputs. Scope: wsh + sh(wsh); taproot refused.
+//! are optional cross-check inputs. Scope: wsh + sh(wsh); taproot NUMS
+//! multisig (tr-multi-a / tr-sortedmulti-a) reconstructed since v2 (the
+//! address path routes around md-codec — `restore-multisig-taproot-reconstruction`).
 //! See design/SPEC_restore_multisig_cosigner.md.
 
 use assert_cmd::Command;
@@ -235,19 +237,56 @@ fn sh_wsh_multisig_descriptor() {
         .stdout(predicate::str::contains("sh(wsh(sortedmulti(2,"));
 }
 
-/// (7) `tr-sortedmulti-a` md1 → refusal (exit 2) + FOLLOWUP pointer.
+/// NUMS H-point x-only hex (BIP-341) — the taproot internal key bundle emits
+/// (v0.48.0) and restore reconstructs.
+const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+/// (7a) `tr-sortedmulti-a` md1 → `tr(NUMS, sortedmulti_a(2,…))` + `bc1p` first
+/// address (v2 — supersedes the v0.44.0 refusal). LOAD-BEARING: the address is
+/// derived from the reconstructed descriptor STRING, routing around md-codec's
+/// `to_miniscript` (which errors on `SortedMultiA`) — `d.derive_address` would
+/// hard-fail here (R0 v2 C1).
 #[test]
-fn tr_multisig_refused_exit2() {
+fn tr_sortedmulti_a_reconstructs_nums_descriptor_and_bc1p() {
     let (md1, _) = bundle_multisig("tr-sortedmulti-a", "mainnet");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
         .assert()
-        .code(2)
-        .stderr(
-            predicate::str::contains("taproot")
-                .and(predicate::str::contains("restore-multisig-taproot-reconstruction")),
-        );
+        .code(0)
+        .stdout(
+            predicate::str::contains(format!("tr({NUMS_HEX},sortedmulti_a(2,"))
+                .and(predicate::str::contains("<0;1>/*"))
+                .and(predicate::str::contains("#"))
+                // Golden first receive address (C0/C1/C2 fixtures, mainnet) —
+                // pins the exact bc1p, catching any wrong key / cosigner order /
+                // internal-key regression. Captured from a verified-correct run
+                // (the construction is the proven wsh build path + NUMS).
+                .and(predicate::str::contains(
+                    "bc1p550zvnachy40z6hh8llka93mkm0c3635samp264ck6rfd0dcdc8s00n8c8",
+                )),
+        )
+        .stderr(predicate::str::contains("UNVERIFIED"));
+}
+
+/// (7b) `tr-multi-a` md1 → `tr(NUMS, multi_a(2,…))` + `bc1p`.
+#[test]
+fn tr_multi_a_reconstructs_nums_descriptor_and_bc1p() {
+    let (md1, _) = bundle_multisig("tr-multi-a", "mainnet");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .code(0)
+        .stdout(
+            predicate::str::contains(format!("tr({NUMS_HEX},multi_a(2,"))
+                // Golden first receive address (order-significant multi_a) —
+                // pins cosigner order + key + NUMS.
+                .and(predicate::str::contains(
+                    "bc1p6fy2e76ele2vwrhdpsu6l9cu3ayc9h6me6wgkeu78qkc5r6rpzas8e5cak",
+                )),
+        )
+        .stderr(predicate::str::contains("UNVERIFIED"));
 }
 
 /// (8) watch-only-out: NO private material (xprv/WIF) in stdout or stderr.

@@ -36,8 +36,10 @@ use crate::network::CliNetwork;
 use crate::synthesize::ResolvedSlot;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
-    self, build_descriptor_string, BsmsForm, CheckedDescriptor, EmitInputs, TimestampArg,
+    self, build_descriptor_string, BsmsForm, CheckedDescriptor, EmitInputs, TaprootInternalKey,
+    TimestampArg,
 };
+use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 
 /// The four single-sig templates restore emits when no `--template` is given.
 const ALL_SINGLE_SIG: [CliTemplate; 4] = [
@@ -61,8 +63,8 @@ pub struct RestoreArgs {
     /// Multisig-cosigner restore (v0.44.0): the shared wallet-policy `md1` card
     /// chunk(s). Reconstructs the concrete watch-only multisig descriptor from
     /// the md1 ALONE; `--from`/`--cosigner` are optional cross-check inputs.
-    /// wsh / sh(wsh) only — a taproot multisig md1 is refused (FOLLOWUP
-    /// `restore-multisig-taproot-reconstruction`). Repeat for chunked cards.
+    /// wsh / sh(wsh) and taproot NUMS multisig (tr-multi-a / tr-sortedmulti-a);
+    /// a non-NUMS (cosigner-internal) taproot md1 is refused. Repeat for chunked cards.
     #[arg(long)]
     pub md1: Vec<String>,
 
@@ -633,8 +635,50 @@ fn build_import_payload(
 /// the former 4-way dedup). `threshold_user_supplied: true` is LOAD-BEARING:
 /// `k` from the md1 is authoritative, and `sparrow.rs` `collect_missing`
 /// refuses a multisig template (`MissingField::Threshold`) when it is false.
-/// `taproot_internal_key: None` — taproot md1 refused upstream (`Tag::Tr`
-/// gate) before reaching here.
+/// Read the `(CliTemplate, TaprootInternalKey)` for a taproot multisig
+/// wallet-policy md1 directly off the decoded tree — routing around md-codec's
+/// `to_miniscript` (which errors on `SortedMultiA`). v2 supports only
+/// `is_nums:true` (the NUMS internal key bundle emits since v0.48.0);
+/// `is_nums:false` (genuine cosigner-internal — reconstructable but needs a
+/// leaf-membership analysis) is deferred (FOLLOWUP
+/// `restore-multisig-taproot-reconstruction`).
+fn taproot_template_and_internal_key(
+    tree: &md_codec::tree::Node,
+) -> Result<(CliTemplate, TaprootInternalKey), ToolkitError> {
+    use md_codec::tree::Body;
+    let inner = match &tree.body {
+        Body::Tr { is_nums: true, tree: Some(inner), .. } => inner,
+        Body::Tr { is_nums: false, .. } => {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--md1",
+                message: "taproot multisig md1 with a non-NUMS (cosigner) internal key is not supported by restore yet — re-engrave from seed with mnemonic >= v0.48.0 to get a NUMS tr md1 (FOLLOWUP restore-multisig-taproot-reconstruction)",
+            });
+        }
+        Body::Tr { tree: None, .. } => {
+            return Err(bad(
+                "--md1 taproot tree has no script leaf (keypath-only tr is single-sig, not multisig)",
+            ));
+        }
+        _ => return Err(bad("--md1: internal error — taproot handler on a non-Tr tree")),
+    };
+    let template = match inner.tag {
+        md_codec::Tag::MultiA => CliTemplate::TrMultiA,
+        md_codec::Tag::SortedMultiA => CliTemplate::TrSortedMultiA,
+        _ => {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--md1",
+                message: "taproot md1 leaf is not a recognized multisig (multi_a / sortedmulti_a)",
+            })
+        }
+    };
+    Ok((template, TaprootInternalKey::Nums))
+}
+
+/// `taproot_internal_key` is `Some(Nums)` for a taproot multisig md1 (threaded
+/// from the §3 classification), `None` for wsh/sh-wsh — so the `--format`
+/// payload's emitted descriptor carries the correct internal key. (R0 v2 I2.)
 #[allow(clippy::too_many_arguments)]
 fn build_multisig_import_payload(
     format: CliExportFormat,
@@ -644,6 +688,7 @@ fn build_multisig_import_payload(
     descriptor: &str,
     network: CliNetwork,
     account: u32,
+    taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<String, ToolkitError> {
     let script_type = wallet_export::script_type_from_template(&template);
     let wallet_name = format!("{}-{}", template.human_name(), account);
@@ -659,7 +704,7 @@ fn build_multisig_import_payload(
         master_xpub_at_0: slots.first().and_then(|s| s.master_xpub),
         wallet_name: &wallet_name,
         wallet_name_is_non_default: false,
-        taproot_internal_key: None,
+        taproot_internal_key,
         range: (0, 999),
         // v0.47.3: genesis rescan (`0`) — the correct anchor for a recovery
         // workflow; matches export-wallet's default. restore has no --timestamp
@@ -772,15 +817,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let d = md_codec::chunk::reassemble(&md1_refs)
         .map_err(|e| bad(format!("--md1 decode: {e}")))?;
 
-    // --- 2. Gate: taproot refusal (before to_miniscript_descriptor, which errors
-    //        unhelpfully) + wallet-policy requirement ---
-    if d.tree.tag == md_codec::Tag::Tr {
-        return Err(ToolkitError::ModeViolation {
-            mode: "restore",
-            flag: "--md1",
-            message: "taproot multisig (tr(...)) md1 reconstruction is not yet supported (rust-miniscript has no SortedMultiA fragment) — FOLLOWUP restore-multisig-taproot-reconstruction",
-        });
-    }
+    // --- 2. Gate: wallet-policy requirement (taproot multisig handled in §3) ---
     if !d.is_wallet_policy() {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
@@ -789,10 +826,20 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         });
     }
 
-    // --- 3. Reconstruct the miniscript descriptor (chain 0) for classification ---
-    let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(&d, 0)
-        .map_err(|e| bad(format!("--md1 → descriptor: {e}")))?;
-    let template = wallet_export::template_from_descriptor(&ms0)?;
+    // --- 3. Classify: template + (taproot) NUMS internal key. ---
+    // Taproot md1 (`Tag::Tr`) routes AROUND md-codec's `to_miniscript` (which
+    // errors on `SortedMultiA`): read template + NUMS internal key off the tree
+    // directly, then build/derive via the toolkit's own miniscript (rev 95fdd1c
+    // HAS `Terminal::SortedMultiA`). wsh/sh-wsh keep `to_miniscript_descriptor`.
+    let is_taproot = d.tree.tag == md_codec::Tag::Tr;
+    let (template, tap_internal_key): (CliTemplate, Option<TaprootInternalKey>) = if is_taproot {
+        let (tmpl, ik) = taproot_template_and_internal_key(&d.tree)?;
+        (tmpl, Some(ik))
+    } else {
+        let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(&d, 0)
+            .map_err(|e| bad(format!("--md1 → descriptor: {e}")))?;
+        (wallet_export::template_from_descriptor(&ms0)?, None)
+    };
     let k = crate::cmd::bundle::extract_multisig_threshold(&d.tree)
         .ok_or_else(|| bad("--md1 is not a multisig descriptor (no threshold present)"))?;
 
@@ -832,16 +879,32 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     }
 
     let descriptor =
-        build_descriptor_string(template, &slots, k, network, args.account, None)?;
+        build_descriptor_string(template, &slots, k, network, args.account, tap_internal_key)?;
 
-    // --- 5. First receive address(es) from the md1 descriptor (chain 0) ---
-    let mut first_recv = Vec::with_capacity(args.count as usize);
-    for i in 0..args.count {
-        let addr = d
-            .derive_address(0, i, network.to_bitcoin_network())
-            .map_err(|e| bad(format!("first receive address @{i}: {e}")))?;
-        first_recv.push(addr.assume_checked().to_string());
-    }
+    // --- 5. First receive address(es), chain 0. ---
+    // Taproot derives from the reconstructed descriptor STRING via the toolkit's
+    // miniscript: `d.derive_address` re-enters md-codec's `to_miniscript`, which
+    // ERRORS on `SortedMultiA` (`md-codec to_miniscript.rs`) — so it would
+    // hard-fail for tr-sortedmulti-a after the descriptor was built. wsh/sh-wsh
+    // keep the md-codec tree path. (R0 v2 C1.)
+    let first_recv: Vec<String> = if is_taproot {
+        let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
+            .map_err(|e| bad(format!("--md1 taproot descriptor parse: {e}")))?;
+        crate::derive_address::derive_receive_addresses(
+            &parsed,
+            args.count,
+            network.to_bitcoin_network(),
+        )?
+    } else {
+        let mut v = Vec::with_capacity(args.count as usize);
+        for i in 0..args.count {
+            let addr = d
+                .derive_address(0, i, network.to_bitcoin_network())
+                .map_err(|e| bad(format!("first receive address @{i}: {e}")))?;
+            v.push(addr.assume_checked().to_string());
+        }
+        v
+    };
 
     // --- 6. Cross-check (own seed via --from; cosigners via --cosigner @N=) ---
     let mut mismatch: Option<(&'static str, String, String, Option<u8>)> = None;
@@ -1039,6 +1102,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             &descriptor,
             network,
             args.account,
+            tap_internal_key,
         )?),
         None => None,
     };

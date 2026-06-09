@@ -93,7 +93,8 @@ mnemonic restore --md1 <card-chunk> [--md1 <card-chunk> …]
 Add `--from <your seed>` to prove which cosigner is yours, and/or
 `--cosigner @N=<mk1|xpub>` to cross-check another cosigner's key; only the
 positions you supply are marked verified (the verdict stays `PARTIAL`
-otherwise). `wsh` / `sh(wsh)` only — a taproot multisig `md1` is refused.
+otherwise). `wsh` / `sh(wsh)` and taproot NUMS multisig (`tr-multi-a` /
+`tr-sortedmulti-a`) reconstruct; a non-NUMS cosigner-internal taproot `md1` is refused.
 See [Multisig-cosigner restore](../40-cli-reference/41-mnemonic.md#multisig-cosigner-restore)
 for the full reference.
 

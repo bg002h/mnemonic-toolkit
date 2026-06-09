@@ -69,6 +69,54 @@ pub(crate) fn derive_first_address(
     Ok(address.to_string())
 }
 
+/// Derive the first `count` receive addresses (`/0/i`, i in `0..count`) from a
+/// watch-only descriptor via miniscript directly. Splits multipath once, then
+/// derives the receive branch at each index. Unlike `derive_first_address` this
+/// is **taproot-safe**: it renders `bc1p` for `tr(...)` multipath descriptors
+/// (miniscript handles `sortedmulti_a`), so it is the address path the taproot
+/// multisig restore uses to route AROUND md-codec's `to_miniscript` (which
+/// errors on `SortedMultiA`). Used by `restore --md1` for `Tag::Tr` md1s.
+pub(crate) fn derive_receive_addresses(
+    descriptor: &Descriptor<DescriptorPublicKey>,
+    count: u32,
+    network: bitcoin::Network,
+) -> Result<Vec<String>, ToolkitError> {
+    let receive = if descriptor.is_multipath() {
+        let mut parts = descriptor.clone().into_single_descriptors().map_err(|e| {
+            ToolkitError::DescriptorParse(format!("receive-address: multipath split failed: {e}"))
+        })?;
+        if parts.is_empty() {
+            return Err(ToolkitError::DescriptorParse(
+                "receive-address: multipath split produced no branches".into(),
+            ));
+        }
+        parts.remove(0)
+    } else {
+        descriptor.clone()
+    };
+    let mut out = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let definite: Descriptor<DefiniteDescriptorKey> = if receive.has_wildcard() {
+            receive.derive_at_index(i).map_err(|e| {
+                ToolkitError::DescriptorParse(format!(
+                    "receive-address: derive_at_index({i}) failed: {e}"
+                ))
+            })?
+        } else {
+            Descriptor::<DefiniteDescriptorKey>::try_from(receive.clone()).map_err(|e| {
+                ToolkitError::DescriptorParse(format!(
+                    "receive-address: definite-key conversion failed: {e}"
+                ))
+            })?
+        };
+        let address = definite.address(network).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("receive-address @{i}: render failed: {e}"))
+        })?;
+        out.push(address.to_string());
+    }
+    Ok(out)
+}
+
 // Unit-test coverage lives at the integration layer because the helper
 // requires real (valid-checksum) test xpubs. See
 // `tests/cli_export_wallet_bsms.rs::bsms_4line_first_address_byte_exact_against_descriptor_derivation`
