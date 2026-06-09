@@ -43,8 +43,7 @@ pub enum ParamKind {
 
 impl ParamKind {
     /// Stable snake_case wire string for the `--spec-schema` `archetypes`
-    /// section (presets SPEC §5; Phase 2 wires it — remove the allow then).
-    #[allow(dead_code)]
+    /// section (presets SPEC §5).
     pub fn as_str(self) -> &'static str {
         match self {
             ParamKind::Key => "key",
@@ -67,9 +66,6 @@ pub struct ParamSpec {
     /// 1 for scalars; ≥2 where a quorum needs it. Only meaningful when
     /// `repeatable`.
     pub min_count: usize,
-    /// Consumed by the Phase-2 `--spec-schema` archetypes section (remove
-    /// the allow when it wires in).
-    #[allow(dead_code)]
     pub kind: ParamKind,
 }
 
@@ -78,18 +74,13 @@ pub struct ParamSpec {
 pub struct ArchetypeDef {
     /// == the `CliArchetype` kebab name (drift self-test in `cmd`).
     pub id: &'static str,
-    /// One-line human description (Phase-2 `--spec-schema` archetypes
-    /// section; remove the allow when it wires in).
-    #[allow(dead_code)]
+    /// One-line human description (`--spec-schema` archetypes section).
     pub summary: &'static str,
     pub params: &'static [ParamSpec],
     /// Kind-aware provenance for gate-diagnostic annotation (presets SPEC
     /// §3.3, Phase 2): (node_path prefix, kind override, flag). Resolution =
     /// longest prefix; at equal prefix a `Some(kind)`-matching entry beats a
-    /// `None` (catch-all) entry. Consumed by the Phase-2 annotation pass
-    /// (remove the allow when it wires in); integrity-pinned by a Phase-1
-    /// unit test meanwhile.
-    #[allow(dead_code)]
+    /// `None` (catch-all) entry. Consumed by [`resolve_flag`].
     pub provenance: &'static [(&'static str, Option<DiagnosticKind>, &'static str)],
     /// Lower validated params to the IR. Infallible BY CONVENTION: callers
     /// run [`validate_params`] first; unwraps inside are `expect`-annotated
@@ -252,10 +243,7 @@ pub fn validate_params(
     // Applicability: supplied but not declared for this archetype.
     for &(flag, count) in supplied {
         if count > 0 && !def.params.iter().any(|s| s.flag == flag) {
-            diags.push(param_diag(format!(
-                "{flag} is not a parameter of {}",
-                def.id
-            )));
+            diags.push(param_diag(flag, format!("{flag} is not a parameter of {}", def.id)));
         }
     }
 
@@ -268,21 +256,24 @@ pub fn validate_params(
             .expect("every ParamSpec.flag is one of the 9 ArchetypeParams fields");
         if count == 0 {
             if spec.required {
-                diags.push(param_diag(format!(
-                    "{} requires {} (missing)",
-                    def.id, spec.flag
-                )));
+                diags.push(param_diag(
+                    spec.flag,
+                    format!("{} requires {} (missing)", def.id, spec.flag),
+                ));
             }
         } else if !spec.repeatable && count > 1 {
-            diags.push(param_diag(format!(
-                "{} takes exactly one {} (got {count})",
-                def.id, spec.flag
-            )));
+            diags.push(param_diag(
+                spec.flag,
+                format!("{} takes exactly one {} (got {count})", def.id, spec.flag),
+            ));
         } else if spec.repeatable && count < spec.min_count {
-            diags.push(param_diag(format!(
-                "{} requires at least {} {} values (got {count})",
-                def.id, spec.min_count, spec.flag
-            )));
+            diags.push(param_diag(
+                spec.flag,
+                format!(
+                    "{} requires at least {} {} values (got {count})",
+                    def.id, spec.min_count, spec.flag
+                ),
+            ));
         }
     }
 
@@ -293,10 +284,13 @@ pub fn validate_params(
     if def.id == "decaying-multisig" {
         if let (Some(older), Some(recovery_older)) = (params.older, params.recovery_older) {
             if recovery_older <= older {
-                diags.push(param_diag(format!(
-                    "decaying-multisig requires --recovery-older ({recovery_older}) > \
-                     --older ({older}): tiers must unlock progressively later"
-                )));
+                diags.push(param_diag(
+                    RECOVERY_OLDER,
+                    format!(
+                        "decaying-multisig requires --recovery-older ({recovery_older}) > \
+                         --older ({older}): tiers must unlock progressively later"
+                    ),
+                ));
             }
         }
     }
@@ -304,8 +298,38 @@ pub fn validate_params(
     if diags.is_empty() { Ok(()) } else { Err(diags) }
 }
 
-fn param_diag(message: String) -> Diagnostic {
-    Diagnostic { node_path: "params".to_string(), kind: DiagnosticKind::Param, message }
+fn param_diag(flag: &str, message: String) -> Diagnostic {
+    Diagnostic {
+        node_path: "params".to_string(),
+        kind: DiagnosticKind::Param,
+        message,
+        flag: Some(flag.to_string()),
+    }
+}
+
+/// Resolve a gate diagnostic's `(node_path, kind)` to the clap flag it traces
+/// back to, via the archetype's provenance table (presets SPEC §3.3).
+/// Resolution = longest matching prefix (on a path-segment boundary); at equal
+/// prefix length a kind-specific entry (`Some(kind)` == the diagnostic's kind)
+/// beats the catch-all (`None`). Entries with a NON-matching `Some(kind)` are
+/// ignored. No match ⇒ `None` ⇒ the `flag` key stays absent (contractual —
+/// e.g. a cross-branch duplicate key localized to a combinator node).
+pub fn resolve_flag(
+    def: &ArchetypeDef,
+    node_path: &str,
+    kind: DiagnosticKind,
+) -> Option<&'static str> {
+    def.provenance
+        .iter()
+        .filter(|(prefix, k, _)| {
+            let boundary_ok = node_path == *prefix
+                || node_path
+                    .strip_prefix(prefix)
+                    .is_some_and(|rest| rest.starts_with('.') || rest.starts_with('['));
+            boundary_ok && k.map_or(true, |k| k == kind)
+        })
+        .max_by_key(|(prefix, k, _)| (prefix.len(), k.is_some()))
+        .map(|&(_, _, flag)| flag)
 }
 
 // ======================================================================
@@ -618,9 +642,47 @@ mod tests {
         assert!(diags[0].message.contains("at least 2 --key"));
     }
 
+    /// Kind-aware provenance resolution (presets SPEC §3.3): longest prefix
+    /// on a segment boundary; kind-specific beats catch-all at equal prefix;
+    /// non-matching `Some(kind)` entries are ignored; no match ⇒ `None`.
+    #[test]
+    fn resolve_flag_kind_aware_longest_prefix() {
+        let def = registry_get("kofn-recovery");
+        // SchemaField at the quorum node → the kind-override entry.
+        assert_eq!(
+            resolve_flag(def, "root.or_d[0]", DiagnosticKind::SchemaField),
+            Some("--threshold")
+        );
+        // Any other kind at the same path → the catch-all.
+        assert_eq!(
+            resolve_flag(def, "root.or_d[0]", DiagnosticKind::RepeatedKeys),
+            Some("--key")
+        );
+        // keys[i] path resolves via PREFIX semantics (P1-r1 M2).
+        assert_eq!(
+            resolve_flag(def, "root.or_d[0].multi.keys[1]", DiagnosticKind::SecretKey),
+            Some("--key")
+        );
+        // Longest prefix wins: the recovery and_v arm, deeper path.
+        assert_eq!(
+            resolve_flag(def, "root.or_d[1].and_v[0].wrap.sub", DiagnosticKind::SecretKey),
+            Some("--recovery-key")
+        );
+        // No entry matches root (cross-branch dup) → None.
+        assert_eq!(resolve_flag(def, "root", DiagnosticKind::RepeatedKeys), None);
+        // Decaying intra-andor[2] cross-tier dup matches no entry (P1-r1 M3).
+        let decaying = registry_get("decaying-multisig");
+        assert_eq!(
+            resolve_flag(decaying, "root.andor[2]", DiagnosticKind::RepeatedKeys),
+            None
+        );
+    }
+
     #[test]
     fn validate_params_non_repeatable_repeated() {
         // Vec-typed flag on an exactly-one archetype (SPEC §7, R0-r1 M2).
+        // (Scalar Option<_> flags repeated are rejected by clap itself as a
+        // usage error and never reach validate_params — R0-r1 M2 / P1-r1 M4.)
         let def = registry_get("simple-timelocked-inheritance");
         let mut params = fixture_params("simple-timelocked-inheritance");
         params.keys = keys(&[K1, K3]);

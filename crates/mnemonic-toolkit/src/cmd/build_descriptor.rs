@@ -95,6 +95,13 @@ pub struct BuildDescriptorArgs {
     /// SHA-256 digest (64 hex chars) for `hashlock-gated`.
     #[arg(long, requires = "archetype")]
     pub hash: Option<String>,
+
+    /// Print the lowered + gate-validated node-tree spec JSON instead of
+    /// building (review it, edit it, feed it back via `--spec`). `--network`
+    /// is accepted and ignored. The gate still runs: an invalid preset emits
+    /// diagnostics, never a spec.
+    #[arg(long, requires = "archetype", conflicts_with_all = ["format", "json"])]
+    pub emit_spec: bool,
 }
 
 /// The 5 curated archetype presets (alphabetical — matches
@@ -175,11 +182,29 @@ pub fn run<R: Read, W: Write, E: Write>(
         };
         let validated = match gate::validate(&doc) {
             Ok(vp) => vp,
-            Err(diags) => {
+            Err(mut diags) => {
+                // Annotate gate diagnostics with param provenance (presets
+                // SPEC §3.3) — the user authored flags, not a node tree.
+                for d in &mut diags {
+                    d.flag = archetype::resolve_flag(def, &d.node_path, d.kind)
+                        .map(|f| f.to_string());
+                }
                 emit_diagnostics(&diags, args.json, stdout, stderr)?;
                 return Ok(2);
             }
         };
+        if args.emit_spec {
+            // The gate has passed — the spec is safe to hand back for review.
+            writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string_pretty(&doc).map_err(|e| {
+                    ToolkitError::BuildDescriptorSpec(format!("spec serialize: {e}"))
+                })?
+            )
+            .map_err(ToolkitError::Io)?;
+            return Ok(0);
+        }
         emit(&validated, args, stdout)?;
         return Ok(0);
     }
@@ -245,8 +270,16 @@ fn emit_diagnostics<W: Write, E: Write>(
         writeln!(stderr, "build-descriptor: refused — {} diagnostic(s):", diags.len())
             .map_err(ToolkitError::Io)?;
         for d in diags {
-            writeln!(stderr, "  [{}] {}: {}", d.kind.as_str(), d.node_path, d.message)
-                .map_err(ToolkitError::Io)?;
+            let provenance =
+                d.flag.as_deref().map(|f| format!(" (from {f})")).unwrap_or_default();
+            writeln!(
+                stderr,
+                "  [{}] {}: {}{provenance}",
+                d.kind.as_str(),
+                d.node_path,
+                d.message
+            )
+            .map_err(ToolkitError::Io)?;
         }
     }
     Ok(())

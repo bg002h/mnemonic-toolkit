@@ -3875,7 +3875,7 @@ in plaintext output) carry advisory text. Known entries:
 | `--feerate` out of `[0.0, 10000.0]` or non-numeric | `64` |
 | `--max-conditions 0` | `64` |
 
-## `mnemonic build-descriptor` (v0.50.0) {#mnemonic-build-descriptor}
+## `mnemonic build-descriptor` (v0.50.0; archetype presets v0.51.0) {#mnemonic-build-descriptor}
 
 Build a **validated `wsh(...)` descriptor** + its **BIP-388 wallet-policy**
 from a **versioned JSON policy-tree spec**. The spec is a fragment-level
@@ -3895,6 +3895,8 @@ mis-typed or unsafe tree is rejected with a node-addressed diagnostic.
 
 ```sh
 mnemonic build-descriptor --spec <FILE|-> [--network <NET>] [--format <FMT>] [--json]
+mnemonic build-descriptor --archetype <NAME> <PARAMS…> [--format <FMT>] [--json]
+mnemonic build-descriptor --archetype <NAME> <PARAMS…> --emit-spec   # print the lowered spec JSON
 mnemonic build-descriptor --spec-schema      # dump the node-tree grammar and exit
 ```
 
@@ -3916,6 +3918,51 @@ A versioned JSON document `{"schema_version": 1, "wrapper": "wsh", "root": <node
 | `{"thresh": {"k": K, "subs": [..]}}` | `thresh` | k-of-n over sub-policies |
 | `{"wrap": {"w": "<wrappers>", "sub": <node>}}` | `<w>:<frag>` | explicit miniscript wrapper(s) (`v`,`s`,`a`,…) on a child |
 
+### Archetype presets (`--archetype`, v0.51.0)
+
+Five curated vault shapes over the same engine — no JSON authoring. Each
+preset lowers your flag parameters into the canonical policy tree below and
+runs the full validation gate; the result is byte-identical to authoring the
+equivalent `--spec` by hand.
+
+| Archetype | Shape | Parameters |
+|---|---|---|
+| `simple-timelocked-inheritance` | `or_d(pk(P), and_v(v:pkh(H), older(N)))` — owner spends anytime; heir after `N` blocks | `--key` ×1, `--recovery-key` ×1, `--older` |
+| `kofn-recovery` | `or_d(multi(k,K…), and_v(v:pk(R), older(N)))` — k-of-n multisig; single recovery key after `N` blocks | `--key` ×n (≥2), `--threshold`, `--recovery-key` ×1, `--older` |
+| `decaying-multisig` | `andor(multi(k1,T1…), older(N1), andor(multi(k2,T2…), older(N2), and_v(v:pk(F), after(T))))` — quorum decays through a recovery quorum to a final key | `--key` ×n (≥2), `--threshold`, `--older`, `--recovery-key` ×n (≥2), `--recovery-threshold`, `--recovery-older` (> `--older`), `--final-key` ×1, `--after` |
+| `tiered-recovery` | `or_i(sortedmulti(k1,P…), and_v(v:older(N), thresh(k2, pk, s:pk…)))` — primary sorted multisig OR a timelocked recovery threshold of distinct keys | `--key` ×n (≥2), `--threshold`, `--older`, `--recovery-key` ×n (≥2), `--recovery-threshold` |
+| `hashlock-gated` | `andor(pk(A), sha256(H), and_v(v:pk(B), older(N)))` — primary key + SHA-256 preimage; recovery key after `N` blocks | `--key` ×1, `--hash`, `--recovery-key` ×1, `--older` |
+
+Notes:
+
+- **Key order is significant** — argv order maps into the quorum untouched.
+- `--older` means "the timelock gating the recovery path" everywhere except
+  `decaying-multisig`, where it is the **tier-1** timelock (the table above
+  is the disambiguator).
+- A parameter that does not belong to the chosen archetype, a missing
+  required parameter, too few keys, or `--recovery-older` ≤ `--older` is
+  refused with a `param`-kind diagnostic naming the flag (exit 2). Everything
+  else — k > n, duplicate keys, bad hex, timelock bounds, an `xprv` — flows
+  to the SAME validation gate as `--spec` and is refused there; in preset
+  mode those node-addressed diagnostics also name the responsible flag
+  (`(from --key)` in the human output, `flag` in `--json`).
+- A deliberately unusual variant (inverted decay ordering, same-key
+  degradation, …) is out of preset scope — author it as a `--spec` tree, or
+  take the raw `--descriptor` door on `export-wallet` / `bundle`.
+
+```sh
+# 2-of-3 multisig, single recovery key after ~1 year — no JSON authoring:
+mnemonic build-descriptor --archetype kofn-recovery \
+  --key "[11111111/48h/0h/0h/2h]xpubA…" --key "[22222222/48h/0h/0h/2h]xpubB…" \
+  --key "[33333333/48h/0h/0h/2h]xpubC…" --threshold 2 \
+  --recovery-key "[44444444/48h/0h/0h/2h]xpubD…" --older 52560 \
+  --format descriptor
+
+# Review the generated tree first, then build from it:
+mnemonic build-descriptor --archetype kofn-recovery … --emit-spec > policy.json
+mnemonic build-descriptor --spec policy.json --format descriptor
+```
+
 ### Flags
 
 | Flag | Purpose |
@@ -3923,8 +3970,19 @@ A versioned JSON document `{"schema_version": 1, "wrapper": "wsh", "root": <node
 | `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
-| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2 |
-| `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs |
+| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
+| `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
+| `--archetype <ARCHETYPE>` | build from a curated preset instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate |
+| `--key <KEY>` | primary-path cosigner key (`[fp/path]xpub…`); repeat per cosigner. **Argv order is preserved into the quorum** (even `sortedmulti`'s descriptor string keeps authored order; sorting is script-time) |
+| `--threshold <THRESHOLD>` | primary quorum k |
+| `--recovery-key <RECOVERY_KEY>` | recovery-path cosigner key; repeat per cosigner (argv order preserved) |
+| `--recovery-threshold <RECOVERY_THRESHOLD>` | recovery quorum k |
+| `--final-key <FINAL_KEY>` | last-resort key (`decaying-multisig` tier 3) |
+| `--older <OLDER>` | relative timelock (blocks) gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
+| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock; must be **greater than** `--older` (tiers must unlock progressively later) |
+| `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
+| `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
+| `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |
 | `--no-auto-repair` | (global) no-op for this subcommand (there is no card decode to repair); accepted for global-flag uniformity |
 | `--help` | print help |
 

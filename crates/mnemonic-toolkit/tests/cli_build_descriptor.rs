@@ -486,3 +486,292 @@ fn preset_negative_discrimination_mutated_param_breaks_golden() {
         assert_ne!(got, a.descriptor, "{name}: mutated {flag} must change the descriptor");
     }
 }
+
+// ======================================================================
+// Phase 2 (presets SPEC §3.3, §4, §5, §7): --emit-spec, kind-aware
+// diagnostic provenance (`flag`), spec-mode byte-stability, --spec-schema
+// archetypes section, success-path composition cells.
+// ======================================================================
+
+/// Layer 3 (presets SPEC §4/§7): the emitted spec VALUE-equals the fixture
+/// JSON (pretty-printing non-contractual), and piping it back through
+/// `--spec -` reproduces the descriptor golden byte-exactly.
+#[test]
+fn emit_spec_value_equals_fixture_and_round_trips() {
+    for a in ARCHETYPES {
+        let out = bin()
+            .args(["build-descriptor"])
+            .args(a.preset_args)
+            .args(["--emit-spec"])
+            .assert()
+            .success();
+        let emitted = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        let got: Value = serde_json::from_str(&emitted).unwrap();
+        let want: Value = serde_json::from_str(a.spec).unwrap();
+        assert_eq!(got, want, "{}: emitted spec != fixture (value equality)", a.name);
+
+        let out = bin()
+            .args(["build-descriptor", "--spec", "-", "--format", "descriptor"])
+            .write_stdin(emitted)
+            .assert()
+            .success();
+        let desc = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        assert_eq!(desc, a.descriptor, "{}: emit-spec round-trip descriptor", a.name);
+    }
+}
+
+/// `--emit-spec` conflicts with `--format` and `--json` at the clap level
+/// (presets SPEC §1/§4).
+#[test]
+fn emit_spec_conflicts_with_format_and_json() {
+    for tail in [&["--format", "descriptor"][..], &["--json"][..]] {
+        bin()
+            .args(["build-descriptor"])
+            .args(ARCHETYPES[2].preset_args)
+            .args(["--emit-spec"])
+            .args(tail)
+            .assert()
+            .failure()
+            .stderr(predicates::str::contains("cannot be used with"));
+    }
+}
+
+/// `--emit-spec` runs the FULL gate before printing (presets SPEC §4):
+/// presets never emit any artifact the gate refuses.
+#[test]
+fn emit_spec_runs_the_gate_before_printing() {
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K2, "--threshold", "5",
+            "--recovery-key", K4, "--older", "52560", "--emit-spec",
+        ])
+        .assert()
+        .code(2);
+    assert!(out.get_output().stdout.is_empty(), "no spec emitted on a gate failure");
+}
+
+/// Gate flow-through provenance (presets SPEC §3.3/§7): the kind-aware
+/// resolver disambiguates two flags landing on the SAME quorum node path,
+/// and `keys[i]` paths resolve via prefix semantics (P1-r1 M2).
+#[test]
+fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
+    // k>n → SchemaField at the quorum node → --threshold (kind-override entry).
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K2, "--threshold", "5",
+            "--recovery-key", K4, "--older", "52560", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "schema_field");
+    assert_eq!(d["node_path"], "root.or_d[0]");
+    assert_eq!(d["flag"], "--threshold");
+
+    // dup key in the SAME quorum → RepeatedKeys at the quorum node → --key
+    // (catch-all entry at the same prefix).
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K1, "--threshold", "2",
+            "--recovery-key", K4, "--older", "52560", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "repeated_keys");
+    assert_eq!(d["node_path"], "root.or_d[0]");
+    assert_eq!(d["flag"], "--key");
+
+    // bad --hash hex → SchemaField at the sha256 node → --hash.
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "hashlock-gated",
+            "--key", K1, "--hash", "zz26a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084db",
+            "--recovery-key", K2, "--older", "144", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "schema_field");
+    assert_eq!(d["node_path"], "root.andor[1]");
+    assert_eq!(d["flag"], "--hash");
+
+    // xprv via --key → SecretKey at the keys[i] path → --key via PREFIX
+    // semantics (P1-r1 M2: pins prefix, not exact-match, resolution).
+    const XPRV: &str = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", XPRV, "--key", K2, "--threshold", "2",
+            "--recovery-key", K4, "--older", "52560", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "secret_key");
+    assert_eq!(d["node_path"], "root.or_d[0].multi.keys[0]");
+    assert_eq!(d["flag"], "--key");
+}
+
+/// The contractual `flag`-ABSENT cases (presets SPEC §3.3/§7 + P1-r1 M3):
+/// a diagnostic whose localized path matches no provenance entry carries NO
+/// `flag` key (not `null`).
+#[test]
+fn cross_branch_duplicates_carry_no_flag() {
+    // Cross-branch dup (--key X --recovery-key X) localizes to root.
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "simple-timelocked-inheritance",
+            "--key", K1, "--recovery-key", K1, "--older", "65535", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "repeated_keys");
+    assert_eq!(d["node_path"], "root");
+    assert!(d.get("flag").is_none(), "flag key must be ABSENT, got {d}");
+
+    // Decaying intra-andor[2] cross-tier dup (--recovery-key X --final-key X)
+    // localizes to root.andor[2] — matches no provenance prefix (P1-r1 M3).
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "decaying-multisig",
+            "--key", K1, "--key", K2, "--threshold", "2", "--older", "1000",
+            "--recovery-key", K3, "--recovery-key", K4,
+            "--recovery-threshold", "2", "--recovery-older", "2000",
+            "--final-key", K3, "--after", "500000", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "repeated_keys");
+    assert_eq!(d["node_path"], "root.andor[2]");
+    assert!(d.get("flag").is_none(), "flag key must be ABSENT, got {d}");
+}
+
+/// Producer diagnostics carry the structured flag too (presets SPEC §3.3),
+/// and the human rendering appends the provenance suffix.
+#[test]
+fn producer_diagnostics_carry_flag_and_human_suffix() {
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K2, "--threshold", "2",
+            "--recovery-key", K4, "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "param");
+    assert_eq!(d["node_path"], "params");
+    assert_eq!(d["flag"], "--older");
+
+    // Human mode: gate diagnostic gets " (from --key)".
+    bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K1, "--threshold", "2",
+            "--recovery-key", K4, "--older", "52560",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("(from --key)"));
+}
+
+/// Spec-mode `--json` byte-stability (presets SPEC §7 self-test (c), R0-r1
+/// M5): a literal golden pinned from the PRE-Phase-2 binary; the `flag` key
+/// must never appear in spec mode. serde_json::Value keys serialize
+/// alphabetically (kind, message, node_path).
+#[test]
+fn spec_mode_json_diagnostics_byte_stable_no_flag_key() {
+    let spec = r#"{"schema_version":1,"wrapper":"wsh","root":{"multi":{"k":5,"keys":["xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13"]}}}"#;
+    let golden = "{\n  \"diagnostics\": [\n    {\n      \"kind\": \"schema_field\",\n      \"message\": \"multi threshold k=5 must satisfy 1 \u{2264} k \u{2264} 1\",\n      \"node_path\": \"root\"\n    }\n  ]\n}\n";
+    let out = bin()
+        .args(["build-descriptor", "--json"])
+        .write_stdin(spec)
+        .assert()
+        .code(2);
+    let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert_eq!(got, golden, "spec-mode --json diagnostics must stay byte-identical");
+}
+
+/// Success-path composition under preset mode (P1-r1 M5): `--json` envelope
+/// and `--network` human view.
+#[test]
+fn preset_success_json_and_network_compose() {
+    let a = &ARCHETYPES[2]; // kofn-recovery
+    let out = bin()
+        .args(["build-descriptor"])
+        .args(a.preset_args)
+        .args(["--json"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["descriptor"], a.descriptor.trim_end());
+    assert!(v["bip388"].is_object());
+    assert!(v["cost"].is_object());
+    assert_eq!(v["diagnostics"], serde_json::json!([]));
+
+    let out = bin()
+        .args(["build-descriptor"])
+        .args(a.preset_args)
+        .args(["--network", "testnet"])
+        .assert()
+        .success();
+    let human = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(human.contains("tb1q"), "testnet first receive address expected:\n{human}");
+}
+
+/// `--spec-schema` carries the archetypes section (presets SPEC §5):
+/// registry-generated, 5 entries, with the pinned wire keys
+/// (flag/kind/required/repeatable/min).
+#[test]
+fn spec_schema_carries_archetypes_section() {
+    let out = bin()
+        .args(["build-descriptor", "--spec-schema"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let archetypes = v["archetypes"].as_array().expect("archetypes array");
+    let ids: Vec<&str> = archetypes.iter().map(|a| a["id"].as_str().unwrap()).collect();
+    assert_eq!(
+        ids,
+        [
+            "decaying-multisig",
+            "hashlock-gated",
+            "kofn-recovery",
+            "simple-timelocked-inheritance",
+            "tiered-recovery"
+        ]
+    );
+    for a in archetypes {
+        assert!(a["summary"].as_str().is_some_and(|s| !s.is_empty()));
+        for p in a["params"].as_array().unwrap() {
+            assert!(p["flag"].as_str().unwrap().starts_with("--"));
+            assert!(p["kind"].is_string());
+            assert!(p["required"].is_boolean());
+            assert!(p["repeatable"].is_boolean());
+            assert!(p["min"].is_u64());
+        }
+    }
+    // Spot-pin one entry: kofn-recovery's --key is repeatable min 2, kind key.
+    let kofn = archetypes.iter().find(|a| a["id"] == "kofn-recovery").unwrap();
+    let key = kofn["params"].as_array().unwrap().iter().find(|p| p["flag"] == "--key").unwrap();
+    assert_eq!(key["kind"], "key");
+    assert_eq!(key["repeatable"], true);
+    assert_eq!(key["min"], 2);
+    assert_eq!(key["required"], true);
+    // The Release-A keys are still present (additive extension).
+    assert_eq!(v["spec_schema_version"], 1);
+    assert!(v["node_kinds"].is_array());
+}

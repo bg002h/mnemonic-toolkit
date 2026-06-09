@@ -7,6 +7,7 @@
 
 use serde_json::{json, Value};
 
+use super::archetype::ARCHETYPE_REGISTRY;
 use super::ir::{MULTIPATH_SUFFIX, NODE_KINDS, SUPPORTED_SCHEMA_VERSION};
 
 /// The grammar's own version. Bump when the node set / field shapes change.
@@ -55,6 +56,29 @@ pub fn spec_schema_json() -> Value {
             })
         })
         .collect();
+    // Release-B archetype field-specs (presets SPEC §5) — generated FROM the
+    // registry (no hand-maintained copy). Additive sibling key: the node
+    // grammar is untouched, so SPEC_SCHEMA_VERSION stays 1. Wire projection:
+    // `min_count` → `min`; `ParamKind` → snake_case `as_str`.
+    let archetypes: Vec<Value> = ARCHETYPE_REGISTRY
+        .iter()
+        .map(|d| {
+            let params: Vec<Value> = d
+                .params
+                .iter()
+                .map(|p| {
+                    json!({
+                        "flag": p.flag,
+                        "kind": p.kind.as_str(),
+                        "required": p.required,
+                        "repeatable": p.repeatable,
+                        "min": p.min_count,
+                    })
+                })
+                .collect();
+            json!({ "id": d.id, "summary": d.summary, "params": params })
+        })
+        .collect();
     json!({
         "spec_schema_version": SPEC_SCHEMA_VERSION,
         "supported_doc_schema_version": SUPPORTED_SCHEMA_VERSION,
@@ -64,6 +88,7 @@ pub fn spec_schema_json() -> Value {
         "node_tagging": "externally-tagged (exactly one key per node); unknown fields rejected",
         "node_kinds": NODE_KINDS,
         "nodes": nodes,
+        "archetypes": archetypes,
     })
 }
 
@@ -102,5 +127,32 @@ mod tests {
         // round-trips as JSON
         let s = spec_schema_string();
         let _: Value = serde_json::from_str(&s).expect("schema string is valid JSON");
+    }
+
+    /// Drift self-test (a) extended to the schema (presets SPEC §7/§9): the
+    /// `archetypes` section ids == the registry ids, one entry per archetype,
+    /// every param projected with the pinned wire keys.
+    #[test]
+    fn schema_archetypes_match_registry() {
+        let v = spec_schema_json();
+        let schema_ids: Vec<&str> = v["archetypes"]
+            .as_array()
+            .expect("archetypes array")
+            .iter()
+            .map(|a| a["id"].as_str().unwrap())
+            .collect();
+        let registry_ids: Vec<&str> = ARCHETYPE_REGISTRY.iter().map(|d| d.id).collect();
+        assert_eq!(schema_ids, registry_ids);
+        for (a, def) in v["archetypes"].as_array().unwrap().iter().zip(ARCHETYPE_REGISTRY) {
+            let params = a["params"].as_array().unwrap();
+            assert_eq!(params.len(), def.params.len(), "{}", def.id);
+            for (p, spec) in params.iter().zip(def.params) {
+                assert_eq!(p["flag"], spec.flag);
+                assert_eq!(p["kind"], spec.kind.as_str());
+                assert_eq!(p["required"], spec.required);
+                assert_eq!(p["repeatable"], spec.repeatable);
+                assert_eq!(p["min"], spec.min_count);
+            }
+        }
     }
 }

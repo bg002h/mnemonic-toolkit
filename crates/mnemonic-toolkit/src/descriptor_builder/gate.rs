@@ -46,6 +46,12 @@ pub struct Diagnostic {
     pub node_path: String,
     pub kind: DiagnosticKind,
     pub message: String,
+    /// Preset-mode param provenance (presets SPEC §3.3): the clap flag this
+    /// diagnostic traces back to, resolved from the archetype's provenance
+    /// table. `None` in spec mode — and skipped on the wire, so spec-mode
+    /// `--json` output is byte-identical to pre-Release-B.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flag: Option<String>,
 }
 
 /// The kind of gate failure. `as_str` is the stable `--json` discriminant.
@@ -213,6 +219,7 @@ fn check_secret_key(key: &str, path: &str, kind: &str, out: &mut Vec<Diagnostic>
             message: format!(
                 "{kind} key is an extended PRIVATE key — build-descriptor is watch-only; supply an xpub cosigner key (no secret material)"
             ),
+            flag: None,
         });
     }
 }
@@ -281,6 +288,7 @@ fn localize_sanity(doc: &SpecDoc, rule: AnalysisError) -> Diagnostic {
         node_path: path,
         kind,
         message: sanity_message(kind),
+        flag: None,
     }
 }
 
@@ -315,6 +323,7 @@ fn localize_type_error(doc: &SpecDoc, top_err: &str) -> Diagnostic {
         node_path: path,
         kind: DiagnosticKind::TypeError,
         message: format!("miniscript type/parse error: {top_err}"),
+        flag: None,
     }
 }
 
@@ -412,6 +421,7 @@ fn check_cap(
             message: format!(
                 "policy exceeds the always-previewable envelope (2^({n_keys} keys + {n_hashes} hashes) × {n_tl_states} timelock-states > cap {cap}); use the raw `--descriptor` path for arbitrarily complex policies"
             ),
+            flag: None,
         })
     } else {
         None
@@ -518,6 +528,7 @@ fn field_diag(path: &str, message: String) -> Diagnostic {
         node_path: path.to_string(),
         kind: DiagnosticKind::SchemaField,
         message,
+        flag: None,
     }
 }
 
@@ -526,6 +537,7 @@ fn root_diag(kind: DiagnosticKind, message: String) -> Diagnostic {
         node_path: "root".to_string(),
         kind,
         message,
+        flag: None,
     }
 }
 
