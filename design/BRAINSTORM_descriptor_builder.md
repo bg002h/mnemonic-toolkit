@@ -102,6 +102,7 @@ The node-tree JSON *is* the engine's wire contract → it must be **born version
 | **A** | `v0.50.0` MINOR | **large / highest-risk** | IR + versioned node-tree (de)serialize; validation gate (typecheck + sanity_check + plan + build-time cap); IR→wsh emit; BIP-388 round-trip; compare-cost preview; per-node diagnostics; **`--spec-schema` + drift gate**. Independently shippable (power-user JSON + the round-trip; it's the structured-composition capability the GUI needs). |
 | **B** | `v0.51.0` MINOR | **small / low-risk** | 5 archetype presets + flag shorthand (2 flat) + canonical goldens. Schema-additive. |
 | **GUI** | (mnemonic-gui cycle) | — | archetype param-forms first (close to today's slot-grid infra); the **recursive node-tree builder is the dominant GUI cost center → deferred**; past-envelope → `--descriptor` escape hatch. |
+| | | | **SHIPPED in full:** archetype forms = `mnemonic-gui-v0.31.0` (2026-06-09); the recursive node-tree builder = `mnemonic-gui-v0.32.0` (2026-06-10). The wizard stack is complete. |
 
 **Eliminated alternatives:** full-v1-one-cycle (too large an R0 surface vs the repo's focused-MINOR norm); engine-only-defer-presets (the 5 archetypes are the IR's acceptance test — don't defer indefinitely); phase-within-one-tag (only real contender; its edge is neutralized by the R0-fixtures keystone).
 
