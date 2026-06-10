@@ -1,0 +1,60 @@
+# R0 review — SPEC_descriptor_builder_allow — round 1
+**Verdict: YELLOW**
+
+The core mechanism survives adversarial verification: the `ext_check` swap is real, the baseline-equivalence claim holds for the builder's input space, the variant↔`ExtParams`↔`DiagnosticKind` table is exact, the short-circuit-order analysis is correct, and the repeated-keys flagship cell was confirmed live (key-blind malleability analysis does NOT trip first — Probe A). But the SPEC never traced what happens AFTER the gate passes on an allowed-insane tree, and the emit path is fatally intolerant of exactly the trees `--allow` admits: the cost preview hard-errors on all three constructible insane variants (Probes D/F/G), which breaks the promised `--json`/human-view exit-0 behavior of §3/§5. One test cell is mis-constructed (Probe B) and one is unimplementable under the live clap edges. All fixable with contained SPEC additions; r2 required.
+
+## Critical
+
+**C1 — The cost preview is fatal on every allowed-insane emit; §3/§5's `--json` and human-view promises are unimplementable as specified.**
+`emit()` unconditionally embeds the cost preview in the `--json` success envelope (`crates/mnemonic-toolkit/src/cmd/build_descriptor.rs:298-304` via `cost_preview_value`, `:377-391`, error-propagating `?`), and `emit_human` runs `run_compare_cost` fatally (`build_descriptor.rs:352-361`, `?`). The cost pipeline's wsh-vs-tr comparison re-parses the miniscript into Tap context with a **sane-only** `Miniscript::from_str` (`crates/mnemonic-toolkit/src/cost/strip.rs:65-70` → `CompareCostError::ContextIncompat`), which re-runs the very sanity rules `--allow` just waived. Verified live on all three §5-constructible variants:
+- sigless: `compare-cost --descriptor 'wsh(or_d(pk(...),after(100)))'` → exit 3, "cannot wrap as Tap: All spend paths must require a signature" (Probe D);
+- repeated-keys: "…Miniscript contains repeated pubkeys or pubkeyhashes" (Probe F);
+- mixed-timelock: "…Contains a combination of heightlock and timelock" (Probe G).
+
+So §5's flagship cell ("sigless + `--allow sigless-branch` → exit 0, `--json` carries `allowed_rules_fired`") would pass the gate and then die in `emit()` with a `ToolkitError` (non-zero, non-2 exit; no envelope). Same for the preset-composition cell (default human view) and every allow-success cell not using `--format descriptor|bip388`. (`--format` modes are safe: no cost run, and bip388 conversion is lenient — Probes E/H. The human-view address line is already best-effort, `build_descriptor.rs:343` `if let Ok`.)
+**Required:** §3 must pin a cost-preview posture for runs with `allowed_fired` non-empty. Recommended: best-effort — `--json` emits `"cost": null` (or omits the key) plus the stderr banner noting the preview is unavailable; human view prints a one-line "cost preview unavailable for a sanity-overridden descriptor" instead of erroring. Do NOT relax `compare-cost`'s own strictness (separate stable subcommand; its refusal is arguably correct — a malleable/sigless tree voids the weight guarantees the comparison is quoting). Add test cells pinning the chosen posture per output mode.
+
+## Important
+
+**I1 — §5 mixed-timelock construction is wrong as written: it refuses with `sigless_branch`, not `mixed_timelock`.**
+`and_v(v:older(100), older(4194304))` contains no key, and `ext_check` checks `top_unsafe` first (`analyzable.rs:243`) before `timelock_mixing` (`:251`). Verified live: exit 2, kind `sigless_branch` at `root.and_v[0].wrap.sub` (Probe B) — so `--allow mixed-timelock` alone still refuses and the cell can never go green. Correct construction, verified live (Probe C; only `mixed_timelock` fires, at `root.and_v[1]`): **`and_v(v:pk(K1), and_v(v:older(100), older(4194304)))`**. The SPEC's supporting claims are otherwise right: 4194304 = 2^22 is bit-22 (time-based — `relative_locktime.rs:64-67` over `Sequence::is_time_locked`), accepted by `RelLockTime::from_consensus` (non-zero, bit-31 clear — `relative_locktime.rs:70-78`), inside the step-1 `older` bound (`gate.rs:177-183`), and the height+time AND-combination sets `contains_unspendable_path` (`extra_props.rs:72-75`, `:494-496`).
+
+**I2 — §5 `--emit-spec` cell is unimplementable as worded: `--emit-spec` cannot be combined with `--spec`.**
+The live clap surface has `emit_spec` with `requires = "archetype"` and `conflicts_with_all = ["format", "json"]` (`build_descriptor.rs:103-104`), and `--archetype` `conflicts_with = "spec"` (`:56`). "`--spec`-equivalent insane input + `--allow … --emit-spec`" is therefore a clap error today. The cell must be a **preset** invocation whose lowered tree is insane — e.g. kofn-recovery + duplicate `--key` (which trips `repeated_keys` at `root.or_d[0]`, pinned by `cli_build_descriptor.rs:420-434`) + `--allow repeated-keys --emit-spec` → spec printed + banner; replay via `--spec -` without `--allow` → exit 2. Reword §5 (or, if the SPEC intends to relax `emit_spec`'s edges, it must say so explicitly — §1 currently only promises no NEW edges on `--allow`).
+
+## Minor
+
+**M1 — §0 supersession note misattributes and misquotes the superseded line.** The "deliberately-insane … raw `--descriptor` door" sentence lives in the ENGINE SPEC (`design/SPEC_descriptor_builder_engine.md:59`, §3 step-3; echoed at `:95`/`:146`), not the presets SPEC §0 (grep: no such line there; presets §0 Non-goals only defers `--allow`). And the engine line names ONLY the raw `--descriptor` door — the quoted "takes `--spec` or the raw `--descriptor` door" is wrong on substance, since `--spec` runs the same gate (that's the entire reason `--allow` exists). Fix the citation and the quote.
+
+**M2 — `raw_pkh` vacuousness: right conclusion, slightly wrong reason.** At `95fdd1c` the STRING parser CAN construct `Terminal::RawPkH` — via the `expr_raw_pkh` / `c:expr_raw_pkh` fragment (`mod.rs:919-921`; round-trip test at `mod.rs:1729`; `display.rs:246-248`) — so "`contains_raw_pkh` only arises parsing FROM SCRIPT (`analyzable.rs:40-41`)" overstates the doc comment. The load-bearing fact is one level up: the IR has no raw-pkh node and `render()` can never emit the `expr_raw_pkh` fragment (already documented at `gate.rs:277-284`). Baseline equivalence stands — `ext_check(&ExtParams::new())` is `sanity_check()`'s five arms in the same order (`analyzable.rs:225-239` vs `:242-258`) plus a `raw_pkh` arm vacuous for IR-rendered input — but §0 should cite the IR render surface, not the analyzable.rs comment.
+
+**M3 — §2 should pin predicate polarity explicitly.** Three predicates are safety-positive (fired iff **negated**: `!requires_sig`, `!is_non_malleable`, `!within_resource_limits`) and two are violation-positive (`has_repeated_keys`, `has_mixed_timelocks`). The shipped `localize_sanity` dispatch (`gate.rs:261-273`) is the exact in-repo polarity template — cite it in §2 so an implementer can't invert one arm. (Evaluating the predicates post-`ext_check` is sound: all five read pre-computed type/ext data or pure walks — `analyzable.rs:187-209`, `:195` `Ctx::check_local_validity` — no consumed state, no panic path.)
+
+**M4 — `--json` mode gets no stderr banner.** §3 lists the banner for "human view, `--format`, `--emit-spec`" and gives `--json` only the envelope key. Never-silent argues for the stderr banner in ALL modes — stderr is free in `--json` mode (diagnostics go to stdout, `build_descriptor.rs:259-268`), a human running `--json` in a terminal currently sees nothing loud, and the GUI discards stderr anyway. Recommend: banner unconditionally on fired.
+
+**M5 — allowed repeated-keys emit produces a bip388 with duplicate `keys_info` entries.** Probe H: the dup key appears as both `@0` and `@2` (no dedup). Conversion succeeds, but hardware-signer wallet-policy registration behavior on duplicate keys is unpinned. Worth one manual sentence under the §4 "Reviewed sanity opt-out" subsection (and arguably a test pin of the shape).
+
+**M6 — Lockstep housekeeping.** Both FOLLOWUP entries exist (`design/FOLLOWUPS.md:3759`; `mnemonic-gui/FOLLOWUPS.md:10`) so §6's "EXTEND in BOTH repos" is consistent; while extending, also fix the toolkit entry's stale "(to be filed in the GUI repo)" companion line (`design/FOLLOWUPS.md:3766`). §6's CHANGELOG/ritual claims check out: `design/RELEASE_CHECKLIST.md:13-22` item 1 is the CHANGELOG section, `changelog-check.yml` landed at `adab5ac`, and no toolkit tag has shipped since — v0.52.0 is indeed its first live exercise. Note the `--allow` GUI add is a **repeating Dropdown** — a FlagKind combination the GUI schema doesn't have yet (current repeats are Text); the A1 extension text should name that explicitly.
+
+## Citation audit
+
+Verified accurate (file:line at `adab5ac` / miniscript `95fdd1c`):
+- `gate.rs:36` `ValidatedPolicy`; `:110` `validate`; `:115` `validate_with_cap`; `:132-135` `from_str_ext(&ExtParams::insane())`; `:141` `sanity_check()` swap site; `:257` `localize_sanity`; `:60-105` `DiagnosticKind` + `as_str` (all 5 step-3 kebab/snake names match §1's table exactly).
+- `build_descriptor.rs:57` archetype, `:104` emit_spec, `:147` run, `:154` `--spec-schema` short-circuit, `:183`/`:216` the two `gate::validate` call sites (the ONLY callers of `validate` outside gate tests — no third caller to break), `:253` `emit_diagnostics`, `:288` emit, `:299` success envelope.
+- `analyzable.rs:28-42` `ExtParams` (6 fields incl. `raw_pkh`), `:46` `new()`, `:225-239` `sanity_check`, `:242-258` `ext_check` + its order, predicates `:187/:190/:195/:198/:201`; `Cargo.lock:675` pins git rev `95fdd1c5…`.
+- §5 sigless cell == the existing test exactly: `cli_build_descriptor.rs:166-178` `sigless_branch_fails_json_diagnostics_exit_2`, `or_d(pk(K1), after(100))`, exit 2, kind `sigless_branch`.
+- §1 hint-suffix safety: the only byte-exact `--json` golden is step-1 `schema_field` (`cli_build_descriptor.rs:696-706`); no test anywhere pins a step-3 message string (grep over `crates/` for all five `sanity_message` texts: only `gate.rs` itself); the human preset test asserts `contains("(from --key)")` which survives a message suffix. Hint claim holds.
+- §3 envelope safety: success-envelope tests assert field presence/values, not exact key sets (`cli_build_descriptor.rs:140-151`, `:711-724`) — conditional insertion of `allowed_rules_fired` is doubly safe; no-violations+`--allow`+`--json` stays byte-identical (note to stderr only).
+- §2 still-refuses semantics ("allow `malleable`, sigless tree → `sigless_branch`"): correct per `ext_check` order (`top_unsafe` first, `analyzable.rs:243`).
+
+Inaccurate / imprecise: the §0 presets-SPEC attribution (M1) and the `analyzable.rs:40-41`-grounded vacuousness rationale (M2).
+
+## Empirical probes run
+
+All against the live v0.51.0 binary (`target/debug/mnemonic`, source == origin/master `adab5ac`):
+- **A** — §5 repeated-keys spec tree `or_d(multi(2,K1,K2), and_v(v:multi(1,K1,K2), older(1000)))` → exit 2, sole kind `repeated_keys` at `root` ⇒ the construction's ONLY firing rule is the one being allowed (malleability is structural/key-blind and does not trip). Cell valid.
+- **B** — §5 mixed-timelock tree as written → exit 2, kind `sigless_branch` (NOT `mixed_timelock`) ⇒ cell broken (I1).
+- **C** — keyed variant `and_v(v:pk(K1), and_v(v:older(100), older(4194304)))` → exit 2, sole kind `mixed_timelock` at `root.and_v[1]` ⇒ proposed replacement verified, incl. 4194304 parsing as a time-based relative lock.
+- **D/F/G** — `compare-cost --descriptor` on single-path sigless / repeated-keys / mixed-timelock descriptors → all refuse at the Tap wrap (`strip.rs:65`), sigless probed to exit 3 ⇒ C1.
+- **E** — `export-wallet --descriptor <sigless multipath> --format bip388` → exit 0, clean policy ⇒ §0's lenient-raw-door claim and the `--format bip388` emit path confirmed safe.
+- **H** — bip388 on the repeated-keys descriptor → exit 0 but duplicate `keys_info` entries (`@0`/`@2` same xpub) ⇒ M5.
