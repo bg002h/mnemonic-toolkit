@@ -443,13 +443,23 @@ fn localize(
                 None
             }
         }
-        // INVARIANT (M3): this runs only after step 2 type-checked the WHOLE
-        // tree, so a subtree's only possible `from_str_ext(insane)` failure is
-        // `NonTopLevel` (a non-B subtree, e.g. an explicit `v:` child) — not a
-        // real parse/type error. A non-B subtree is not standalone-testable →
-        // defer to the nearest B-typed ancestor. (If step 2 were ever relaxed,
-        // this collapse would need to re-narrow to `Error::NonTopLevel`.)
-        Err(_) => None,
+        // INVARIANT (M3, enforced since audit M2): this runs only after step 2
+        // type-checked the WHOLE tree, so a subtree's only possible
+        // `from_str_ext(insane)` failure is `NonTopLevel` (a non-B subtree,
+        // e.g. an explicit `v:` child) — not a real parse/type error. A non-B
+        // subtree is not standalone-testable → defer to the nearest B-typed
+        // ancestor. Any OTHER variant means the invariant broke (step 2 was
+        // relaxed): debug/test builds fail loudly via the debug_assert; release
+        // stays fail-closed (None → caller's root fallback, behavior unchanged).
+        Err(miniscript::Error::NonTopLevel(_)) => None,
+        Err(e) => {
+            debug_assert!(
+                false,
+                "localize: unexpected from_str_ext(insane) failure at {path} on a \
+                 step-2-typechecked subtree (variant: {e:?})"
+            );
+            None
+        }
     }
 }
 
@@ -722,6 +732,36 @@ mod tests {
             "hint: {}",
             diags[0].message
         );
+    }
+
+    // ---- localize() error-collapse narrowing (audit M2) -------------------
+
+    /// Pins `localize`'s SANCTIONED error arm: a non-B subtree (here a root
+    /// `v:` wrap) fails `from_str_ext(insane)` with `Error::NonTopLevel` and
+    /// must defer to None — NOT trip the `debug_assert!` arm (this cell would
+    /// panic in debug builds if the narrowing ever misrouted NonTopLevel).
+    /// The debug_assert arm for any OTHER variant is deliberately unreachable
+    /// today — step 2 type-checks the whole tree before any `localize` call —
+    /// so no cell contorts to force it; its value is loud invariant
+    /// enforcement the moment step 2 is ever relaxed.
+    #[test]
+    fn localize_non_top_level_subtree_defers_to_none() {
+        let json = doc(&format!(r#"{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}}"#));
+        let parsed = SpecDoc::parse(&json).unwrap();
+        // Fixture sanity: the root's standalone render IS NonTopLevel.
+        assert!(
+            matches!(
+                Miniscript::<DescriptorPublicKey, Segwitv0>::from_str_ext(
+                    &parsed.root.render(),
+                    &ExtParams::insane(),
+                ),
+                Err(miniscript::Error::NonTopLevel(_))
+            ),
+            "fixture must render a non-B (NonTopLevel) subtree"
+        );
+        // Defect never holds for the B-typed child → the root's NonTopLevel
+        // arm is what produces the final None.
+        assert_eq!(localize(&parsed.root, "root", &|_| false), None);
     }
 
     // ---- the 5 archetypes all pass the gate (GREEN) ----------------------

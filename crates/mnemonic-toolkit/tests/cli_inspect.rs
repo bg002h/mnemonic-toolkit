@@ -189,3 +189,105 @@ fn inspect_json_envelope_schema_version_v_0_27_0() {
     assert_eq!(v["schema_version"], "1", "md1 envelope schema_version");
     assert_eq!(v["kind"], "md1");
 }
+
+// ============================================================================
+// Audit M3 — inline-ms1 secret-in-argv advisory (inspect intake)
+// ============================================================================
+//
+// `resolve_groups` (src/repair.rs) fires `secret_in_argv_warning` per
+// occurrence on the RAW pre-expansion values: unconditionally for every
+// non-`-` `--ms1` flag value, and for each positional that HRP-classifies
+// as ms1. mk1/md1 values (public material) and stdin-expanded chunks
+// never fire.
+
+const ARGV_ADVISORY_PREFIX: &str = "warning: secret material on argv";
+
+/// RED (M3): `inspect --ms1 <inline>` puts a secret on argv — the advisory
+/// must fire, naming the flag and the `--ms1 -` stdin alternative.
+#[test]
+fn inspect_inline_ms1_fires_secret_in_argv_advisory() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["inspect", "--ms1", VALID_MS1])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on argv (--ms1)"),
+        "inline --ms1 must fire the argv advisory; stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("pipe via --ms1 -"),
+        "advisory must point at the --ms1 - stdin alternative; stderr: {stderr:?}"
+    );
+}
+
+/// RED (M3, per-occurrence): `--ms1 <inline>` PLUS a positional ms1 in one
+/// invocation → TWO advisories, one per occurrence with distinct labels.
+/// (`--ms1` is single-occurrence clap-side, so the second inline source
+/// must be a positional.)
+#[test]
+fn inspect_mixed_inline_flag_and_positional_ms1_fire_per_occurrence() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["inspect", "--ms1", VALID_MS1, VALID_MS1])
+        .assert()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert_eq!(
+        stderr.matches("warning: secret material on argv (--ms1)").count(),
+        1,
+        "flag occurrence fires exactly once; stderr: {stderr:?}"
+    );
+    assert_eq!(
+        stderr.matches("warning: secret material on argv (positional ms1)").count(),
+        1,
+        "positional occurrence fires exactly once; stderr: {stderr:?}"
+    );
+}
+
+/// Guard (M3): `--ms1 -` (stdin route — the advisory's own recommendation)
+/// must NOT fire, and the stdin-expanded chunk must not retro-fire either.
+#[test]
+fn inspect_ms1_stdin_dash_does_not_fire_argv_advisory() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["inspect", "--ms1", "-"])
+        .write_stdin(format!("{VALID_MS1}\n"))
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        !stderr.contains(ARGV_ADVISORY_PREFIX),
+        "--ms1 - (stdin) must not fire the argv advisory; stderr: {stderr:?}"
+    );
+}
+
+/// Guard (M3): positional mk1/md1-only intake (public material) never fires.
+#[test]
+fn inspect_positional_mk1_md1_only_does_not_fire_argv_advisory() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "inspect",
+            VALID_MK1_CHUNK0,
+            VALID_MK1_CHUNK1,
+            VALID_MD1_CHUNK0,
+            VALID_MD1_CHUNK1,
+            VALID_MD1_CHUNK2,
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        !stderr.contains(ARGV_ADVISORY_PREFIX),
+        "mk1/md1 positionals are public material — no argv advisory; stderr: {stderr:?}"
+    );
+}

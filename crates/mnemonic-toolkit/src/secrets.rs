@@ -3,10 +3,14 @@
 //!
 //! Source-of-truth for the `secret: bool` field in the gui-schema v5 envelope
 //! emitted by `cmd::gui_schema` (v0.24.x Tranche B.1, plan §2.B.1 + D32 + C3-fold).
-//! The GUI consumes this list via the gui-schema JSON and mirrors a parallel
-//! enumeration in `mnemonic-gui/src/secrets.rs` for the v0.5..v0.9 hand-coded
-//! fallback (used when the upstream binary's schema lacks v5 fields). A
-//! GUI-side drift gate asserts the two lists agree token-for-token.
+//! The GUI consumes this predicate via the gui-schema JSON's per-flag
+//! `secret` bit: its hand schema mirrors the bit per `(subcommand, flag)`
+//! and the GUI-side drift gate (`schema_mirror_secret_drift`) asserts
+//! set-equality of the `secret: true` pairs against this binary's live
+//! `gui-schema` output. (v0.53.2 doc fix: an earlier claim here that the
+//! GUI mirrors a "token-for-token parallel enumeration" was stale —
+//! `mnemonic-gui/src/secrets.rs::SECRET_FLAG_NAMES` is a 3-token v0.1
+//! legacy fallback, not the mirror.)
 //!
 //! ## Semantics
 //!

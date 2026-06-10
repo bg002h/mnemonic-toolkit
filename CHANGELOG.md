@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.2] — 2026-06-10
+
+**SemVer-PATCH — audit minors M1+M2+M3+M13: self-check binds mk1 xpubs slot-exactly, inspect/repair warn on inline ms1 argv, `localize` enforces its invariant, 25 stale goldens deleted.**
+
+### Fixed
+
+- **`bundle --self-check` now binds every decoded mk1 card's xpub to the descriptor SLOT-EXACTLY** (audit M1): `desc.tlv.pubkeys` must contain `(slot, xpub_to_65(card_xpub))` in both the Single and Multi branches — previously a wrong-xpub mk1 card (or two cosigner cards swapped between slots, which also passes the stub-equality check) sailed through self-check while `verify-bundle` would have caught it. Slot-exact is sound because pubkeys and cards are emitted from the same slots vector in the same order at every call site. 3 new synthesize-then-mutate cells (single / multi / cross-slot swap; the multisig fixture deliberately uses distinct per-slot seeds — a self-multisig fixture would make swaps undetectable by construction).
+- **`inspect` and `repair` fire the secret-argv advisory for inline ms1** (audit M3): the shared intake (`resolve_groups`) warns per-occurrence on raw pre-stdin-expansion argv values — unconditionally for a non-`-` `--ms1` value (so an indel-corrupted prefix under `repair --max-indel` still warns) and HRP-probe-gated for positionals (`positional ms1`); recommended alternative `--ms1 -` in both. `--ms1 -` itself and mk1/md1 values never warn. Manual: advisory rows added to both command sections.
+- **`build-descriptor`'s `localize()` enforces its NonTopLevel invariant** (audit M2): the per-subtree error collapse is narrowed to the invariant-sanctioned `NonTopLevel → None`; any other variant now `debug_assert!`s (naming it) before returning `None` — release behavior is byte-identical (the caller already root-falls-back); a future relaxation of the step-2 type-check trips dev/test builds immediately instead of silently mis-pointing diagnostics.
+- **Deleted the 25 orphaned `tests/vectors/v0_2` multisig goldens** (audit M13; resolves `orphaned-v0_2-md1-vectors-no-harness`): no test read them, and the v0.48.0 NUMS + v0.53.0 csi wire changes left them stale — a harness wired today would fail against them or pin outdated bytes. The single read golden (bip84) stays; `cli_self_check.rs`'s module doc corrected (it named a now-deleted fixture).
+
+No CLI flag/surface change (no GUI `schema_mirror` or manual flag-coverage impact); no card-byte change. Resolves audit-2026-06-10 index lines `self-check-no-mk1-xpub-binding`, `inspect-repair-no-argv-advisory`, `localize-broad-error-collapse`, `orphaned-v0_2-multisig-goldens`, `self-check-header-claims-unread-vector` [obs]. Plan + reviews: `design/PLAN_minors_m1_m2_m3_m13.md`, `design/agent-reports/minors-m1-m2-m3-m13-*.md`.
+
 ## mnemonic-toolkit [0.53.1] — 2026-06-10
 
 **SemVer-PATCH — `--phrase`/`--phrase-stdin`/`--ms1-stdin` are now secret-classified, and the secret-flag completeness gate is no longer circular (audit I3).**

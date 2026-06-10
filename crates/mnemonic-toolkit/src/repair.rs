@@ -259,10 +259,11 @@ pub(crate) fn expand_dashes(input: &[String], stdin_chunks: &[String]) -> Vec<St
 /// Unknown-HRP positional values return `ToolkitError::UnknownHrp`.
 ///
 /// Storage merge order: flag-form first, then positional (per plan).
-pub(crate) fn resolve_groups<R: Read>(
+pub(crate) fn resolve_groups<R: Read, E: Write>(
     args: &impl CardArgs,
     subcmd_name: &'static str,
     stdin: &mut R,
+    stderr: &mut E,
     relax_hrp_for_indel: bool,
 ) -> Result<Vec<(CardKind, Vec<String>)>, ToolkitError> {
     // D34/I5 — strict per-flag HRP validation. `--ms1 mk1xxx` rejects with
@@ -290,6 +291,26 @@ pub(crate) fn resolve_groups<R: Read>(
         }
         for v in args.md1() {
             validate_flag_hrp("--md1", "md", v)?;
+        }
+    }
+
+    // Audit M3 — secret-in-argv advisory for inline ms1, fired per-occurrence
+    // on the RAW pre-expansion values (post-expansion, stdin chunks would be
+    // indistinguishable from inline → would false-fire on `--ms1 -`). The
+    // `--ms1` flag fires unconditionally for any non-`-` value: the flag
+    // declares the kind even when an indel-corrupted prefix (`--ms1 s10…`
+    // under `--max-indel ≥ 1`) defeats HRP classification. Positionals fire
+    // only when they HRP-classify as ms1 (mixed mk1/md1/ms1 intake; mk1/md1
+    // are public material). `alternative` is `--ms1 -` for both: a positional
+    // cannot be `-` (no HRP), so the stdin route is the flag form.
+    if let Some(v) = args.ms1() {
+        if v != "-" {
+            crate::secret_advisory::secret_in_argv_warning(stderr, "--ms1", "--ms1 -");
+        }
+    }
+    for s in args.extra_strings() {
+        if matches!(classify_hrp_prefix(s), Ok(CardKind::Ms1)) {
+            crate::secret_advisory::secret_in_argv_warning(stderr, "positional ms1", "--ms1 -");
         }
     }
 

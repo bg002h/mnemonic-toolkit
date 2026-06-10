@@ -89,8 +89,8 @@ const FLAG_ROUTES: &[Route] = &[
     Route { subcommand: "import-wallet", flag: "--ms1", source_file: "src/cmd/import_wallet.rs", evidence: &["@env:", "resolve_env_sentinels", "resolve_env_var_sentinel", "needs_env_sentinel_resolution"] },
     Route { subcommand: "verify-bundle", flag: "--ms1", source_file: "src/cmd/verify_bundle.rs", evidence: &["@env:", "resolve_env_sentinels", "resolve_env_var_sentinel"] },
     // inspect/repair --ms1: `-` sentinel handled in the SHARED src/repair.rs — R0 I-2.
-    Route { subcommand: "inspect", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes"] },
-    Route { subcommand: "repair", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes"] },
+    Route { subcommand: "inspect", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes", "secret_in_argv_warning"] },
+    Route { subcommand: "repair", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes", "secret_in_argv_warning"] },
     Route { subcommand: "seedqr-decode", flag: "--digits", source_file: "src/cmd/seedqr.rs", evidence: &["read_stdin_to_string", "== \"-\"", "--digits -"] },
     // xpub-search ×3: --ms1 anchor in the SHARED seed_intake.rs; --passphrase per-mode file.
     Route { subcommand: "xpub-search-path-of-xpub", flag: "--ms1", source_file: "src/cmd/xpub_search/seed_intake.rs", evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"] },

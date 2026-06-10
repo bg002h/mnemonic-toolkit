@@ -1,8 +1,11 @@
 //! `--self-check` happy-path test (Phase E.2).
 //!
 //! Self-check on a freshly-emitted bundle MUST succeed; a failure indicates a
-//! synthesis/verify inconsistency. Fixtures live at
-//! `tests/vectors/v0_2/{bip84,wsh-sortedmulti}-mainnet-0-false-true.txt`.
+//! synthesis/verify inconsistency. Fixture: the single read golden
+//! `tests/vectors/v0_2/bip84-mainnet-0-false-true.txt` (v0.53.2: the 25
+//! orphaned multisig v0_2 goldens were DELETED — no test read them and the
+//! v0.48.0 NUMS + v0.53.0 csi changes staled their wire bytes; see FOLLOWUPS
+//! `orphaned-v0_2-md1-vectors-no-harness`).
 
 use assert_cmd::Command;
 

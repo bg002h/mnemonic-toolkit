@@ -2860,6 +2860,7 @@ consumed natively per the unchanged Mk1 branch).
 |---|---|
 | Corrected `ms1` emitted to stdout | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` |
 | Repair fired and emitted ≥ 1 correction | `repair: applied K correction(s) across J chunk(s)` |
+| Inline `--ms1 <value>` or an `ms1`-classified positional on argv (v0.53.2) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`; fires for `--ms1` even under `--max-indel` relaxation, where the corrupted value no longer HRP-classifies) |
 
 ### Recovering an incorrect-length card (`--max-indel`) {#mnemonic-repair-max-indel}
 
@@ -3107,6 +3108,7 @@ the full per-error taxonomy.
 | Trigger | Stderr advisory |
 |---|---|
 | Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: stdout carries private key material (can spend) — redirect or encrypt ...` |
+| Inline `--ms1 <value>` or an `ms1`-classified positional on argv (v0.53.2) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`) |
 
 ## `mnemonic xpub-search` (v0.26.0) {#mnemonic-xpub-search}
 

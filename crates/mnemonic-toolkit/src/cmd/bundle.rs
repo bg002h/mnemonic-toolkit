@@ -2085,6 +2085,21 @@ pub fn self_check_bundle(
         })?;
     let expected_stub: [u8; 4] = pid.as_bytes()[..4].try_into().unwrap();
 
+    // Audit M1 — slot-exact mk1-xpub ↔ descriptor binding (defense-in-depth).
+    // Every call site reaches here via synthesize_descriptor/synthesize_unified,
+    // which build tlv.pubkeys AND the per-cosigner cards from the SAME slots
+    // vector in the same order — so card @i must carry EXACTLY the descriptor's
+    // @i pubkey. Order-agnostic membership would miss a cross-slot card swap
+    // (it passes membership + the stub-equality check below). `pubkeys: None`
+    // is defensively a failure (no emission site produces it).
+    let Some(pubkeys) = desc.tlv.pubkeys.as_deref() else {
+        return Err(ToolkitError::BundleMismatch {
+            card: "self-check[mk1_xpub_binding]".into(),
+            message: "descriptor tlv.pubkeys is absent — cannot bind mk1 xpubs to the policy"
+                .into(),
+        });
+    };
+
     match &bundle.mk1 {
         MkField::Single(mk1) => {
             let mk1_strs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
@@ -2092,6 +2107,7 @@ pub fn self_check_bundle(
                 card: "self-check[mk1_decode]".into(),
                 message: format!("{:?}", e),
             })?;
+            check_mk1_xpub_binding(pubkeys, 0, &card, "self-check[mk1_xpub_binding]".into())?;
             if !card.policy_id_stubs.iter().any(|s| *s == expected_stub) {
                 return Err(ToolkitError::BundleMismatch {
                     card: "self-check[stub_linkage]".into(),
@@ -2122,6 +2138,10 @@ pub fn self_check_bundle(
                     message: format!("{:?}", e),
                 })?;
                 decoded_cards.push(card);
+            }
+            // Audit M1 — slot-exact binding per cosigner card (see above).
+            for (i, c) in decoded_cards.iter().enumerate() {
+                check_mk1_xpub_binding(pubkeys, i, c, format!("self-check[mk1_xpub_binding[{i}]]"))?;
             }
             let first_stubs = &decoded_cards[0].policy_id_stubs;
             for (i, c) in decoded_cards.iter().enumerate().skip(1) {
@@ -2193,6 +2213,30 @@ pub fn self_check_bundle(
         }
     }
 
+    Ok(())
+}
+
+/// Audit M1 — assert the decoded mk1 card at `slot` carries EXACTLY the
+/// descriptor's `@slot` pubkey (65-byte chain_code‖compressed-pubkey form,
+/// the same comparison verify_bundle's cosigner mapping uses). The failure
+/// message names the slot + a truncated xpub (public material).
+fn check_mk1_xpub_binding(
+    pubkeys: &[(u8, [u8; 65])],
+    slot: usize,
+    card: &mk_codec::KeyCard,
+    card_label: String,
+) -> Result<(), ToolkitError> {
+    let want = crate::synthesize::xpub_to_65(&card.xpub);
+    if !pubkeys.iter().any(|(s, b)| *s as usize == slot && *b == want) {
+        let xpub_str = card.xpub.to_string();
+        let trunc = &xpub_str[..xpub_str.len().min(12)];
+        return Err(ToolkitError::BundleMismatch {
+            card: card_label,
+            message: format!(
+                "mk1 card @{slot} carries xpub {trunc}… which is not the descriptor's @{slot} pubkey"
+            ),
+        });
+    }
     Ok(())
 }
 
@@ -2410,6 +2454,211 @@ mod self_check_ms1_tests {
         assert!(
             r.is_err(),
             "self-check MUST detect ms1 that round-trips to the wrong entropy; got {r:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod self_check_mk1_xpub_binding_tests {
+    //! Audit M1 — `self_check_bundle` must bind each decoded mk1 card's xpub
+    //! to the descriptor's `tlv.pubkeys` SLOT-EXACTLY (card @i ↔ pair
+    //! `(i, xpub_to_65)`). v0.47.4 pattern: synthesize-then-mutate (re-encode
+    //! an mk1 with a DIFFERENT xpub but the same chunk_set_id so the mutation
+    //! is isolated to the xpub bytes). Greens: the existing happy-path / wif
+    //! cells in `tests/cli_self_check.rs` discriminate against over-eagerness.
+
+    use super::*;
+    use crate::parse::CosignerSpec;
+    use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+    use bitcoin::secp256k1::Secp256k1;
+
+    const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+    const BIP39_TEST_2: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
+    fn minimal_bundle_args() -> BundleArgs {
+        BundleArgs {
+            network: CliNetwork::Mainnet,
+            template: None,
+            descriptor: None,
+            descriptor_file: None,
+            language: None,
+            passphrase: None,
+            passphrase_stdin: false,
+            account: 0,
+            json: false,
+            no_engraving_card: true,
+            multisig_path_family: None,
+            privacy_preserving: false,
+            self_check: false,
+            threshold: None,
+            slot: vec![],
+            import_json: None,
+            import_json_index: None,
+        }
+    }
+
+    /// Single-sig full-mode bundle + its source entropy.
+    fn single_bundle() -> (Bundle, Vec<u8>) {
+        let acc = crate::derive::derive_full(
+            TREZOR_24,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip84,
+            0,
+        )
+        .unwrap();
+        let (entropy, fp, xpub, _xpriv, _path) = acc.into_parts();
+        let bundle = crate::synthesize::synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap();
+        (bundle, entropy)
+    }
+
+    /// A 2-of-2 multisig with DISTINCT per-slot xpubs. NB: NOT
+    /// `synthesize_multisig_full` — that is self-multisig (all N xpubs
+    /// byte-identical), which would make a cross-slot card swap undetectable
+    /// by construction. Watch-only (ms1 = ["", ""]) keeps the fixture small.
+    fn distinct_xpub_multisig_bundle() -> Bundle {
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();
+        let cosigner = |phrase: &str| {
+            let m = bip39::Mnemonic::parse_in(bip39::Language::English, phrase).unwrap();
+            let master =
+                Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &m.to_seed("")).unwrap();
+            CosignerSpec {
+                xpub: Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap()),
+                master_fingerprint: master.fingerprint(&secp),
+                path: Some(path.clone()),
+            }
+        };
+        crate::synthesize::synthesize_multisig_watch_only(
+            &[cosigner(TREZOR_24), cosigner(BIP39_TEST_2)],
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            2,
+            0,
+            MultisigPathFamily::default(),
+            false,
+        )
+        .unwrap()
+    }
+
+    /// Re-encode the mk1 card-set `chunks` with its xpub swapped for a
+    /// FOREIGN one (derived from an unrelated seed at the card's own
+    /// origin_path, so depth/child_number stay consistent with the
+    /// origin-path round-trip invariant) keeping the SAME chunk_set_id
+    /// (`derive_mk1_chunk_set_id_for_slot(stub, slot)` — what synthesis
+    /// used), so the mutation is isolated to the xpub bytes.
+    fn reencode_with_foreign_xpub(chunks: &[String], slot: u32) -> Vec<String> {
+        let strs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+        let card = mk_codec::decode(&strs).unwrap();
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(bitcoin::NetworkKind::Main, &[7u8; 32]).unwrap();
+        let foreign = Xpub::from_priv(&secp, &master.derive_priv(&secp, &card.origin_path).unwrap());
+        assert_ne!(
+            crate::synthesize::xpub_to_65(&foreign),
+            crate::synthesize::xpub_to_65(&card.xpub),
+            "fixture bug: foreign xpub must differ from the card's"
+        );
+        let csi =
+            crate::synthesize::derive_mk1_chunk_set_id_for_slot(&card.policy_id_stubs[0], slot);
+        let mutated = mk_codec::KeyCard::new(
+            card.policy_id_stubs.clone(),
+            card.origin_fingerprint,
+            card.origin_path.clone(),
+            foreign,
+        );
+        mk_codec::encode_with_chunk_set_id(&mutated, csi).unwrap()
+    }
+
+    /// Assert the self-check failure is the xpub-binding one (right-reason
+    /// guard: a decode or stub failure would carry a different card label).
+    fn assert_binding_failure(r: Result<(), ToolkitError>, expect_label: &str) {
+        match r {
+            Err(ToolkitError::BundleMismatch { ref card, .. }) if card.contains("mk1_xpub_binding") => {
+                assert!(
+                    card.contains(expect_label),
+                    "binding failure must name the slot: card={card}, want {expect_label}"
+                );
+            }
+            other => panic!(
+                "self-check MUST fail with the mk1_xpub_binding mismatch ({expect_label}); got {other:?}"
+            ),
+        }
+    }
+
+    /// RED (M1, Single branch): an mk1 re-encoded with a different xpub but
+    /// the same chunk_set_id passes md1/stub/fingerprint checks today — the
+    /// xpub↔descriptor binding must catch it.
+    #[test]
+    fn self_check_detects_single_mk1_xpub_descriptor_mismatch() {
+        let args = minimal_bundle_args();
+        let (good, entropy) = single_bundle();
+        let expected: Vec<Option<&[u8]>> = vec![Some(&entropy[..])];
+        assert!(
+            self_check_bundle(&good, &args, &expected).is_ok(),
+            "fixture must pass self-check unmutated"
+        );
+
+        let mut bad = good;
+        let MkField::Single(ref chunks) = bad.mk1 else {
+            panic!("single-sig fixture must emit MkField::Single");
+        };
+        bad.mk1 = MkField::Single(reencode_with_foreign_xpub(chunks, 0));
+        assert_binding_failure(
+            self_check_bundle(&bad, &args, &expected),
+            "mk1_xpub_binding",
+        );
+    }
+
+    /// RED (M1, Multi branch): same mutation on one cosigner card of a
+    /// distinct-xpub multisig.
+    #[test]
+    fn self_check_detects_multi_mk1_xpub_descriptor_mismatch() {
+        let args = minimal_bundle_args();
+        let good = distinct_xpub_multisig_bundle();
+        let expected: Vec<Option<&[u8]>> = vec![None, None];
+        assert!(
+            self_check_bundle(&good, &args, &expected).is_ok(),
+            "fixture must pass self-check unmutated"
+        );
+
+        let mut bad = good;
+        let MkField::Multi(ref mut per_cosigner) = bad.mk1 else {
+            panic!("multisig fixture must emit MkField::Multi");
+        };
+        per_cosigner[1] = reencode_with_foreign_xpub(&per_cosigner[1], 1);
+        assert_binding_failure(
+            self_check_bundle(&bad, &args, &expected),
+            "mk1_xpub_binding[1]",
+        );
+    }
+
+    /// RED (M1, slot-exactness): swapping two cosigner card-sets keeps every
+    /// xpub a MEMBER of tlv.pubkeys and every stubs-list equal — only a
+    /// slot-exact pairing detects it. This is the case slot-exactness exists
+    /// for; order-agnostic membership would pass.
+    #[test]
+    fn self_check_detects_multi_cross_slot_card_swap() {
+        let args = minimal_bundle_args();
+        let expected: Vec<Option<&[u8]>> = vec![None, None];
+
+        let mut bad = distinct_xpub_multisig_bundle();
+        let MkField::Multi(ref mut per_cosigner) = bad.mk1 else {
+            panic!("multisig fixture must emit MkField::Multi");
+        };
+        per_cosigner.swap(0, 1);
+        assert_binding_failure(
+            self_check_bundle(&bad, &args, &expected),
+            "mk1_xpub_binding[0]",
         );
     }
 }

@@ -102,7 +102,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
     // `inspect` has no indel mode; always keep the strict typed-flag HRP gate.
-    let groups = repair::resolve_groups(args, "inspect", stdin, false)?;
+    let groups = repair::resolve_groups(args, "inspect", stdin, stderr, false)?;
     let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
 
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic

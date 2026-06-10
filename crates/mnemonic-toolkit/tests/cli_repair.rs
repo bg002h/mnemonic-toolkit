@@ -316,3 +316,76 @@ fn cell_b7_2_error_mapping_fidelity_ms1_too_many_errors_observable_exit_2() {
         .stderr(predicate::str::contains("singleton bound = 8"))
         .stderr(predicate::str::contains("post-correction decode failed").not());
 }
+
+// ============================================================================
+// Audit M3 — inline-ms1 secret-in-argv advisory (repair intake)
+// ============================================================================
+//
+// Same `resolve_groups` advisory surface as `cli_inspect.rs`'s M3 cells:
+// per-occurrence on RAW pre-expansion values; flag values fire
+// unconditionally for any non-`-` `--ms1` (the flag declares the kind even
+// when an indel-corrupted prefix defeats HRP classification); stdin chunks
+// never fire.
+
+const ARGV_ADVISORY_PREFIX: &str = "warning: secret material on argv";
+
+/// RED (M3): `repair --ms1 <inline>` puts a secret on argv — advisory fires.
+#[test]
+fn repair_inline_ms1_fires_secret_in_argv_advisory() {
+    let bad = flip_at(VALID_MS1, 17);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", &bad])
+        .assert()
+        .code(5)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on argv (--ms1)"),
+        "inline --ms1 must fire the argv advisory; stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("pipe via --ms1 -"),
+        "advisory must point at the --ms1 - stdin alternative; stderr: {stderr:?}"
+    );
+}
+
+/// RED (M3, indel relaxation): with `--max-indel 1` a corrupted-PREFIX value
+/// (`s10…` = `ms1…` minus the leading 'm') won't HRP-classify — but the
+/// typed flag declares it IS an ms1 secret, so the advisory still fires.
+#[test]
+fn repair_indel_relaxed_corrupted_prefix_ms1_still_fires_argv_advisory() {
+    let corrupted = &VALID_MS1[1..]; // "s10entr…" — dropped leading 'm'
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--max-indel", "1", "--ms1", corrupted])
+        .assert()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        stderr.contains("warning: secret material on argv (--ms1)"),
+        "indel-corrupted inline --ms1 is still a secret on argv; stderr: {stderr:?}"
+    );
+}
+
+/// Guard (M3): stdin-expanded chunks (`--ms1 -`) must NOT fire — the raw
+/// pre-expansion value is `-`, and post-expansion chunks are not argv.
+#[test]
+fn repair_ms1_stdin_dash_does_not_fire_argv_advisory() {
+    let bad = flip_at(VALID_MS1, 17);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", "-"])
+        .write_stdin(format!("{bad}\n"))
+        .assert()
+        .code(5)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        !stderr.contains(ARGV_ADVISORY_PREFIX),
+        "--ms1 - (stdin) must not fire the argv advisory; stderr: {stderr:?}"
+    );
+}

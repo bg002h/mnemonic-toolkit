@@ -108,7 +108,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // a prefix-region indel (`--ms1 s10…` = `ms1…` minus 'm') reaches
     // `repair_card` and engages the indel trigger via `RepairError::HrpMismatch`
     // (§1.7). At `--max-indel 0` the gate stays strict — today's behavior.
-    let groups = repair::resolve_groups(args, "repair", stdin, args.max_indel >= 1)?;
+    let groups = repair::resolve_groups(args, "repair", stdin, stderr, args.max_indel >= 1)?;
 
     let mut total_repairs = 0usize;
     let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
