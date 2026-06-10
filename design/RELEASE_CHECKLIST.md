@@ -1,14 +1,24 @@
 # Release checklist (m-format constellation)
 
-Manual cross-repo discipline that the automated `install-pin-check.yml`
-CI gate can't reach. Run through this BEFORE pushing the release tag
-for any constellation repo.
+Manual cross-repo discipline (plus the toolkit per-release ritual,
+below) that the automated CI gates can't fully reach. Run through this
+BEFORE pushing the release tag for any constellation repo.
 
 The CI gate at `.github/workflows/install-pin-check.yml` handles the
 **toolkit self-pin** automatically (tag-event check: fails the tag
 push if `scripts/install.sh` lags). This checklist covers the
 **cross-repo pins** that no single repo's CI can verify without
 network calls into sibling repos.
+
+## Toolkit per-release ritual (every `mnemonic-toolkit-v*` tag)
+
+1. **CHANGELOG.md** — add the `## mnemonic-toolkit [X.Y.Z] — <date>` section
+   in the release commit (CI-gated: `changelog-check.yml` fails the tag push
+   without it; lapsed silently for v0.48.0–v0.51.0 — don't trust habit).
+2. Version bump sites in ONE commit: `Cargo.toml` + `Cargo.lock` + both
+   README `<!-- toolkit-version -->` markers + `scripts/install.sh` self-pin
+   (CI-gated: `install-pin-check.yml`).
+3. Full suite AFTER the bump; push; ALL master CI green; THEN tag.
 
 ## install.sh component table (`scripts/install.sh:29-49`)
 

@@ -6,6 +6,56 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.51.0] — 2026-06-09
+
+**SemVer-MINOR — descriptor-builder archetype presets (Release B): `mnemonic build-descriptor --archetype` builds 5 curated vault shapes without hand-authoring JSON.**
+
+> The five sections from [0.48.0] through [0.51.0] were backfilled on 2026-06-09 (the per-release CHANGELOG ritual silently lapsed after [0.47.4]; resolved by FOLLOWUP `changelog-md-release-ritual-lapsed-since-v0-47-4` — these entries are sourced from the tag annotations, release commits, and the resolved `design/FOLLOWUPS.md` entries; a tag-time CI guard `changelog-check.yml` now prevents recurrence).
+
+- **5 archetype presets** over the frozen v0.50.0 `PolicyNode` IR: `--archetype {decaying-multisig, hashlock-gated, kofn-recovery, simple-timelocked-inheritance, tiered-recovery}` + a generic parameter vocabulary (`--key`, `--threshold`, `--recovery-key`, `--recovery-threshold`, `--final-key`, `--older`, `--recovery-older`, `--after`, `--hash` — all `requires = archetype`) + `--emit-spec` (print the lowered, gate-validated node-tree spec JSON for review; feed it back via `--spec`). Every preset flows through the SAME validation gate as `--spec`; the producer layer checks only applicability/arity/decay-ordering.
+- **Kind-aware diagnostic flag provenance.** In preset mode, gate diagnostics carry the responsible CLI flag (`flag` field in `--json`, `(from --key)` suffix in human output); producer param errors use the new `param` diagnostic kind with the `node_path: "params"` sentinel. Spec-mode `--json` output is byte-identical (the `flag` field is skip-serialized when absent; pinned by a literal golden).
+- **`--spec-schema` gains an `archetypes` section** — per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry (the contract a GUI archetype-forms wizard consumes). Both schema versions stay 1 (additive).
+- **Producers are byte-pinned to the Release-A fixture canon**: IR AST equality vs the fixture JSON, preset CLI goldens vs the same `.descriptor`/`.bip388` files, and per-archetype mutated-param non-vacuity cells.
+- **GUI lockstep:** 11 new clap flag names await the GUI pin bump — FOLLOWUP `gui-build-descriptor-presets-pending-pin-bump` (filed in both repos).
+- **Tests.** Full toolkit suite + clippy `--all-targets` (0) + full manual lint (incl. cspell) green pre-push. Resolves the Release-B scope of `descriptor-builder-engine`. Audit trail: `design/SPEC_descriptor_builder_presets.md` + `design/agent-reports/descriptor-builder-presets-{r0-r1,r0-r2,phase-1-r1,phase-1-r2,phase-2-r1}-review.md`.
+
+## mnemonic-toolkit [0.50.0] — 2026-06-09
+
+**SemVer-MINOR — descriptor-builder engine (Release A): new top-level `mnemonic build-descriptor` turns a versioned JSON policy-tree spec into a validated `wsh(M)` descriptor.**
+
+- **New subcommand `build-descriptor`** (`--spec <FILE|->`): a versioned JSON `PolicyNode` fragment-tree IR (`schema_version: 1`, externally-tagged nodes, `deny_unknown_fields`), rendered to `wsh(M)` and run through a **4-step funds-safety validation gate** — schema field-validate → type-check → `sanity_check` (the funds-footgun rules: sigless branch / malleable / resource limits / repeated keys / mixed timelocks) → build-time complexity cap (the always-previewable envelope).
+- **Emits a reviewable bundle**: canonical descriptor (+ BIP-380 checksum), BIP-388 wallet-policy JSON, embedded compare-cost preview, and **node-addressed diagnostics** (`node_path` into the authored tree) on refusal (exit 2). `--format {descriptor,bip388}` bare artifacts; `--json` structured envelope.
+- **`--spec-schema`** dumps the machine-readable node-tree grammar (the versioned contract GUI/preset producers consume).
+- **Watch-only-out**: a secret key (xprv/WIF) in any node is refused without ever echoing it.
+- **The 5 archetype shapes ship as hand-authored acceptance fixtures** (the Release-B presets' canon), incl. `tiered-recovery` replacing the brainstorm's same-key `degrading-threshold` (which trips `RepeatedPubkeys` by design).
+- **Tests.** Full toolkit suite + clippy (0); golden-pinned descriptor + bip388 per fixture; bip388 round-trips through `export-wallet --descriptor`. Resolves the Release-A scope of `descriptor-builder-engine`. Audit trail: `design/SPEC_descriptor_builder_engine.md` (R0 7 rounds) + `design/agent-reports/descriptor-builder-*`.
+
+## mnemonic-toolkit [0.49.1] — 2026-06-09
+
+**SemVer-PATCH — `restore --md1` reconstructs taproot NUMS multisig descriptors (`tr-multi-a` + `tr-sortedmulti-a`), closing a refusal open since v0.44.0.**
+
+- **Taproot multisig restore.** `mnemonic restore --md1` now reconstructs watch-only restore documents for `tr-multi-a` and `tr-sortedmulti-a` policies (BIP-341 NUMS internal key + multisig leaf) instead of refusing. Golden receive-address tests pin the reconstruction.
+- **Routes around md-codec** for both the descriptor build and address derivation (md-codec's pinned rust-miniscript lacks `Terminal::SortedMultiA`; the toolkit's own pinned miniscript rev has it) — new address derivation on the descriptor STRING rather than re-entering md-codec.
+- **Tests.** Full suite + clippy (0); reconstruction goldens replace the former refusal cells. Resolves `restore-multisig-taproot-reconstruction`. Audit trail: `design/SPEC_restore_multisig_taproot.md` (v2) + `design/agent-reports/restore-multisig-taproot-*`.
+
+## mnemonic-toolkit [0.49.0] — 2026-06-08
+
+**SemVer-MINOR — `export-wallet --descriptor` / `bundle --descriptor` accept a full BIP-388 wallet-policy JSON (auto-detected, expanded to a concrete descriptor).**
+
+- **BIP-388 policy intake.** A leading-`{` value on `--descriptor` is auto-detected as a BIP-388 wallet policy (`description_template` + `keys_info`) and expanded to the concrete descriptor via the shared `wallet_import::pipeline::expand_bip388_policy` (extracted from the xpub-search intake, which now delegates).
+- **Closes the round-trip with `--format bip388`**: byte-stable for `description_template` + `keys_info` (`name` is lossy — the emitter hardcodes its own label; tracked by the open FOLLOWUP `bip388-policy-roundtrip-wallet-name-not-honored`).
+- **Ordering invariant**: the policy-shape probe runs FIRST at both intake sites (a raw policy would otherwise trip the `@N`/key-regex probes).
+- **Tests.** 14 new (6 unit + 8 integration); full suite + clippy (0). Resolves `bip388-wallet-policy-to-descriptor-expansion-not-surfaced`. Audit trail: `design/SPEC_bip388_policy_descriptor_expansion.md` + `design/agent-reports/bip388-policy-descriptor-expansion-*`.
+
+## mnemonic-toolkit [0.48.0] — 2026-06-08
+
+**SemVer-MINOR (wire-content change) — bundled taproot-multisig `md1` emits the BIP-341 NUMS internal key (`is_nums: true`) instead of cosigner `@0`.**
+
+- **NUMS internal key.** The bundled `tr-multi-a` template's taproot internal key flips from cosigner `@0` to the BIP-341 NUMS H-point (`50929b74…803ac0`), removing the unintended `@0` key-path spend; the multisig leaf is unchanged.
+- **Whole-bundle wire change**: the policy-id stub seeds BOTH cards, so `md1` AND `mk1` both shift for affected bundles (hence MINOR, not PATCH). The shipped manual already documented NUMS — the code was non-conformant with its own docs.
+- **Scope honesty**: this changes the EMIT side only; taproot-multisig `restore` remained refused until [0.49.1].
+- **Tests.** Characterization test pins the NUMS emission (8 stale orphaned golden vectors deleted); full suite + clippy (0). Resolves `toolkit-trmultia-nums-internal-key`. Audit trail: `design/SPEC_trmultia_nums_internal_key.md` + `design/agent-reports/trmultia-nums-r0-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.47.4] — 2026-06-06
 
 **SemVer-PATCH — `bundle --self-check` now validates the per-slot `ms1` emission (was `md1` + `mk1` only).**

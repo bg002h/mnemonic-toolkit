@@ -1,0 +1,61 @@
+# R0 review — PLAN_changelog_ritual_resurrect — round 1
+
+**Verdict: YELLOW** (0 Critical / 2 Important / 6 Minor — fold the two Importants and this converges GREEN next round; the core design — backfill + sibling guard + checklist section — is sound and empirically grounded)
+
+## Critical
+
+None.
+
+## Important
+
+**I1 — [0.49.0] table row: "byte-perfect round-trip with `--format bip388`" contradicts its own cited source.**
+`design/FOLLOWUPS.md:3718` (the row's cited primary source) says: "Round-trip is byte-stable for `description_template`+`keys_info` (**lossy on `name`**, pre-existing)" — and the very next entry (`bip388-policy-roundtrip-wallet-name-not-honored`, `FOLLOWUPS.md:3722-3727`, still **open**) exists precisely because the round-trip is NOT byte-perfect: the expander discards the policy `name` and the emitter hardcodes `"imported-descriptor"`. "Byte-perfect" in the plan table WILL be transcribed into the backfilled `[0.49.0]` section and would assert in the permanent release history the exact claim an open FOLLOWUP refutes. Correct the row to: "byte-stable round-trip for `description_template` + `keys_info` (`name` lossy — see `bip388-policy-roundtrip-wallet-name-not-honored`)". This is the recon's predicted "wording overstatement" failure class (`cycle-prep-recon-changelog-md-release-ritual.md:45`), caught exactly where it predicted.
+
+**I2 — §4 ride-along is under-scoped by a factor of 4: the plan fixes 1 of 4 stale README sites and under-reports the staleness.**
+Empirical state at `2228ad3`:
+- `crates/mnemonic-toolkit/README.md:10` — "Status: **v0.43.x** — twenty-three" (the plan's sole target) — confirmed stale.
+- `README.md:14` (root) — the **same** "Status: **v0.43.x** — twenty-three `mnemonic` subcommands" sentence (longer variant), two lines above the `README.md:16` link site the plan itself cites in §0. Equally actively-false.
+- `README.md:44` — "**Twenty-one** `mnemonic` subcommands, grouped below" — a *third, different* wrong count, and the grouped inventory (`README.md:48-54`) omits **three** subcommands: `ms-shares`, `restore`, `build-descriptor`.
+- `crates/mnemonic-toolkit/README.md:32` — "Twenty-one `mnemonic` subcommands — `bundle` / … / `gui-schema`" — same 21-item list, same three omissions.
+
+Verified ground truth: `target/debug/mnemonic --help` (binary `mnemonic 0.51.0`) lists **24** subcommands excluding `help`. The plan's claim "the count is wrong (24 now: `build-descriptor` landed since)" is correct for site :10 but the plan presents the problem as one sentence with one wrong count; it is four sites with two distinct wrong counts plus incomplete inventories. **R0 ruling on "bless or cut":** as written, neither — fixing only `crates/…/README.md:10` leaves an identical falsehood at `README.md:14` and two wrong "Twenty-one" inventories. Pick one explicitly: (a) **cut** §4 from this cycle and file a FOLLOWUP (`readme-subcommand-inventory-stale-4-sites`) — cleanest, keeps this cycle's diff exactly CHANGELOG+workflow+checklist+FOLLOWUP; or (b) **expand** §4 to all four sites (drop the hardcoded counts at :14/:10, fix or de-count the two "Twenty-one" inventories, add the 3 missing subcommands). The plan's staleness-proofing instinct (drop the version+count from prose) is right; I mildly prefer (a) for scope discipline since the inventory fix is real prose work, but (b) is acceptable in a docs cycle. Either way the plan text must reflect the true 4-site extent.
+
+## Minor
+
+**M1 — [0.48.0] row cites "tag @ `223b538`" but the tag points elsewhere.** `git rev-list -1 mnemonic-toolkit-v0.48.0` = `dcbd14c` ("chore(install): bump self-pin v0.47.4 -> v0.48.0"); the tag object is `0b4dc47`. `223b538` is the release *feature* commit ("feat(template)!: emit NUMS internal key for bundled tr-multisig (v0.48.0)") — a fine source, but the label "tag @" is wrong (v0.48.0 predates the one-commit-bump practice; it was 3 commits: 223b538 → ab644a1 → dcbd14c). Relabel as "release commit `223b538` + tag annotation". Note the tag one-liner says "**BIP-388** NUMS" while the plan says "**BIP-341** NUMS" — the plan's attribution is the more precise one and is sourced from `FOLLOWUPS.md:77` ("BIP-341 NUMS H-point `50929b74…`"), so keep BIP-341; no change needed there.
+
+**M2 — workflow comment's not-gated namespace list omits `ultraquickstart-v*`.** Actual tag namespaces at `2228ad3`: `manual` (5), `manual-gui` (3), `mnemonic-toolkit` (130), `quickstart` (2), `tech-manual` (6), `ultraquickstart` (1 — `ultraquickstart-v0.1.3`). The §2 comment lists four of the five non-toolkit namespaces. Completeness-of-comment only — no collision risk exists (no non-toolkit tag can match `mnemonic-toolkit-v*`).
+
+**M3 — `grep -qF` is unanchored.** Verified safe today (probes below: matches `[0.47.4]`, rejects `0.52.0`, and the closing `]` in the pattern makes it prefix-collision-proof — `VERSION=0.4` does NOT match `[0.47.4]`). Residual exposure: a future CHANGELOG *bullet* quoting a literal `## mnemonic-toolkit [X.Y.Z]` header for the tagged version would false-positive. The recon's anchored form `grep -q "^## mnemonic-toolkit \[$VERSION\]"` trades that for unescaped-dot laxity (practically nil). Either is acceptable; if you want both properties: `grep -q "^## mnemonic-toolkit \[${VERSION}\]" ` with the brackets escaped is one `sed`-free line. Note-only.
+
+**M4 — [0.49.1] "golden bc1p receive addresses": "bc1p" is not literally in either cited source.** The tag one-liner is "taproot NUMS multisig restore (tr-multi-a + tr-sortedmulti-a)"; `FOLLOWUPS.md:67` says "Golden-address tests". bc1p is a correct inference (taproot = bech32m), but under the plan's own rule (a) ("facts ONLY from the cited sources"), either add `design/SPEC_restore_multisig_taproot.md` v2 to the row's sources or soften to "golden receive-address tests".
+
+**M5 — §3 placement is right but the checklist preamble will be left self-contradicting.** `design/RELEASE_CHECKLIST.md:3-11` frames the whole file as "cross-repo pins that no single repo's CI can verify". Inserting a toolkit per-release ritual section (CI-gated items!) before the component table is the right location, but add a one-line preamble touch-up (e.g. "…cross-repo pins **plus the toolkit per-release ritual**"). Also: §3 item 2's "ONE commit" codification is confirmed current practice (the v0.51.0 release commit `c1b1375` body literally says "Bump sites (one commit): Cargo.toml, Cargo.lock, both README toolkit-version markers, scripts/install.sh self-pin") though v0.48.0 predates it — the "(already-practiced)" parenthetical is accurate for the current era. No duplication with CLAUDE.md (no version-bump/changelog ritual text there) or with the existing checklist body.
+
+**M6 — §6: extend the must-PASS rehearsal to all 5 backfilled versions** (a trivial loop), and pin the grep-count expectation: current `grep -c '^## mnemonic-toolkit \[' CHANGELOG.md` = **119**, so post-backfill must be exactly **124**. Otherwise §6 is sufficient: the v0.52.0 must-FAIL rehearsal is a sound discriminator (verified — see probes), rule (a) is adequate (session memory files are rightly excluded as non-citable; every needed fact is in the tags/FOLLOWUPS/SPECs), and "no cross-check against memory files" is correct.
+
+## Backfill-table fact audit (per row: OK / corrected)
+
+| Row | Date | SemVer level | Summary | Sources |
+|---|---|---|---|---|
+| `[0.51.0]` | **OK** (tag commit `c1b1375`, 2026-06-09) | **OK** MINOR (`0.50.0`→`0.51.0` via `git show <tag>:crates/mnemonic-toolkit/Cargo.toml`) | **OK** — "5 presets + 9 param flags + `--emit-spec`" matches the tag body verbatim; 9 flags enumerated at `FOLLOWUPS.md:3746` and cross-confirmed by `:3761` ("11 clap flags = `--archetype` + 9 value params + `--emit-spec`"); kind-aware `flag` provenance + `--spec-schema` `archetypes` section both in tag body | **OK** (`c1b1375` is both tag commit and release commit) |
+| `[0.50.0]` | **OK** (`ecba644`, 2026-06-09) | **OK** MINOR (`0.49.1`→`0.50.0`) | **OK** — IR → 4-step gate → descriptor+BIP-388+cost preview+node-addressed diagnostics+`--spec-schema`; watch-only-out: matches the tag body near-verbatim; "4-step" is what BOTH ship-time sources say (tag body + `FOLLOWUPS.md:3746` Phase-2 line), so it survives rule (a) despite the cut-step SPEC deviation noted in the same entry | **OK** |
+| `[0.49.1]` | **OK** (`b596d3f`, 2026-06-09) | **OK** PATCH (`0.49.0`→`0.49.1`; `FOLLOWUPS.md:67` says PATCH) | **OK except** "bc1p" (M4 — not literally in the cited sources; add the SPEC cite or soften). "Routes around md-codec's SortedMultiA gap" matches `FOLLOWUPS.md:67` exactly | **OK** |
+| `[0.49.0]` | **OK** (`fa72455`, 2026-06-08) | **OK** MINOR (`0.48.0`→`0.49.0`) | **CORRECTED** — "byte-perfect round-trip" → "byte-stable for `description_template`+`keys_info` (`name` lossy)" per `FOLLOWUPS.md:3718` + the open `:3722` fast-follow (I1). Auto-detect + expand-to-concrete phrasing is accurate | **OK** |
+| `[0.48.0]` | **OK** (2026-06-08 — both the feature commit `223b538` 03:50 and tag commit `dcbd14c` 04:09) | **OK** MINOR wire change (`0.47.4`→`0.48.0`; `FOLLOWUPS.md:77` "MINOR **wire-content change**") | **OK** — `is_nums:true`, BIP-341 NUMS (per `FOLLOWUPS.md:77`; the tag one-liner's "BIP-388" is the looser attribution), "whole-bundle md1+mk1 shift" = `:77` "the stub seeding BOTH md1 AND mk1, so both cards shift" | **CORRECTED** — "tag @ `223b538`" mislabeled; tag → `dcbd14c`, `223b538` is the release commit (M1) |
+
+All five SemVer levels confirmed against `git show <tag>:crates/mnemonic-toolkit/Cargo.toml | grep version`: `0.47.4 → 0.48.0 → 0.49.0 → 0.49.1 → 0.50.0 → 0.51.0`.
+
+## Empirical probes run
+
+1. **Versions per tag:** `git show mnemonic-toolkit-v0.{47.4,48.0,49.0,49.1,50.0,51.0}:crates/mnemonic-toolkit/Cargo.toml` → `0.47.4 / 0.48.0 / 0.49.0 / 0.49.1 / 0.50.0 / 0.51.0`.
+2. **Tag commit dates:** v0.48.0 `dcbd14c` Jun 8 04:09; v0.49.0 `fa72455` Jun 8 07:53; v0.49.1 `b596d3f` Jun 9 02:47; v0.50.0 `ecba644` Jun 9 06:57; v0.51.0 `c1b1375` Jun 9 15:56 (all -0700) — plan dates all correct.
+3. **Tag annotations:** `git tag -n99` for all 5 — bodies quoted above match the plan rows (v0.50.0/v0.51.0 multi-line; v0.48.0/v0.49.0/v0.49.1 one-liners).
+4. **Guard grep rehearsal against the real file:** `VERSION=0.47.4; grep -qF "## mnemonic-toolkit [$VERSION]" CHANGELOG.md` → MATCH; `VERSION=0.52.0` → no match (sound discriminator); `VERSION=0.4` → no match (closing-bracket prefix safety).
+5. **actionlint:** present at `/usr/bin/actionlint`; the plan's §2 YAML piped via stdin → **exit 0, no findings**.
+6. **Checkout major:** all 15 `actions/checkout@` sites across 7 existing workflows are `@v5` — plan's `@v5` claim correct. Trigger block is byte-identical in shape to `install-pin-check.yml:27-30`.
+7. **Tag-namespace collision:** namespaces = `manual`(5), `manual-gui`(3), `mnemonic-toolkit`(130), `quickstart`(2), `tech-manual`(6), `ultraquickstart`(1) — nothing non-toolkit can match `mnemonic-toolkit-v*`; comment omits `ultraquickstart-v*` (M2).
+8. **CHANGELOG structure:** `[0.47.4]` is at `CHANGELOG.md:9`, immediately after the 7-line preamble — the 5 new sections insert between line 8 and line 9. `tech-manual` sections DO exist inline (`CHANGELOG.md:1650, 1696, 1771, 1831, 1878, 1916`) but the newest is 2026-05-12 — far below the head; **no interleaving complication**. Current `grep -c '^## mnemonic-toolkit \['` = **119** → expect **124**.
+9. **Subcommand count:** `target/debug/mnemonic --version` = 0.51.0; `--help` lists 24 subcommands excluding `help` (incl. `build-descriptor`, `restore`, `ms-shares`) — plan's "24" correct; READMEs claim "twenty-three" (`README.md:14`, `crates/…/README.md:10`) and "Twenty-one" (`README.md:44`, `crates/…/README.md:32`), the latter inventories missing `ms-shares`/`restore`/`build-descriptor` (I2).
+10. **§0 claims:** 4 CHANGELOG link sites confirmed (`README.md:16`, `:61`; `crates/…/README.md:10`, `:207`); `RELEASE_CHECKLIST.md` mentions "changelog" zero times (read in full); `install-pin-check.yml:15` header "silently lagged 4 releases" matches the plan's analogy; GUI no-action claim consistent with `FOLLOWUPS.md:3755` (GUI CHANGELOG current through v0.29.0).
+11. **Source SHA:** local `master` == `origin/master` == `2228ad31160e` — matches the plan's grounding line.

@@ -1,0 +1,40 @@
+name: changelog-check
+
+# Fires on every `mnemonic-toolkit-v*` tag push. Asserts CHANGELOG.md has a
+# section for the tagged version. Catches the drift mode where a release is
+# tagged without the per-release CHANGELOG entry (the ritual silently lapsed
+# for 5 releases, v0.48.0-v0.51.0, after v0.47.4 — filed 2026-06-09;
+# both READMEs link CHANGELOG.md as "the full release history").
+#
+# Recovery if this fails: add the `## mnemonic-toolkit [X.Y.Z] — <date>`
+# section to CHANGELOG.md, commit, force-push the tag to the new commit
+# (or delete + re-create the tag and re-push).
+#
+# Scope: toolkit release tags only. Doc-manual tag namespaces
+# (manual-v*/manual-gui-v*/quickstart-v*/tech-manual-v*/ultraquickstart-v*)
+# are not gated.
+
+on:
+  push:
+    tags:
+      - 'mnemonic-toolkit-v*'
+
+jobs:
+  changelog-has-section:
+    name: CHANGELOG.md has a section for this tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify CHANGELOG section exists for tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          VERSION="${TAG#mnemonic-toolkit-v}"
+          echo "tag: $TAG (version $VERSION)"
+          if ! grep -q "^## mnemonic-toolkit \[$VERSION\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## mnemonic-toolkit [$VERSION]' section"
+            echo "::error::Add the per-release section, commit, and force-push the tag."
+            exit 1
+          fi
+          echo "OK CHANGELOG.md has a [$VERSION] section"
