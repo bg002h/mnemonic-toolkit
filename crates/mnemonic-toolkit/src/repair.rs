@@ -100,15 +100,19 @@ impl CardKind {
 /// `repair::run` / `inspect::run` / `verify_bundle::run` to merge
 /// positional arguments into the existing typed-flag storage.
 ///
-/// The prefix-match is case-sensitive on the codec convention (lowercase
-/// per BIP-93). Inputs that pass this check still feed through the
-/// per-codec parser and may surface richer errors downstream.
+/// v0.53.3 (audit M11): the prefix PROBE is case-insensitive — BIP-173's
+/// uppercase QR alphanumeric mode means valid all-uppercase cards exist in
+/// the wild. Only a lowercased COPY is probed for routing; the ORIGINAL
+/// string flows to the per-codec parser, which remains the authority on
+/// case (lowercase stays canonical for emission per BIP-93; mixed-case
+/// rejection stays codec-side — never normalize-at-intake).
 pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
-    if s.starts_with("ms1") {
+    let probe = s.to_lowercase();
+    if probe.starts_with("ms1") {
         Ok(CardKind::Ms1)
-    } else if s.starts_with("mk1") {
+    } else if probe.starts_with("mk1") {
         Ok(CardKind::Mk1)
-    } else if s.starts_with("md1") {
+    } else if probe.starts_with("md1") {
         Ok(CardKind::Md1)
     } else {
         Err(ToolkitError::UnknownHrp {
@@ -118,10 +122,15 @@ pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
     }
 }
 
-/// v0.24.0 §2.C.1 (D34/I5 fold) — strict per-flag HRP validation. Used by
+/// v0.24.0 §2.C.1 (D34/I5 fold) — per-flag HRP validation. Used by
 /// `repair::run` / `inspect::run` / `verify_bundle::run` to reject a typed
 /// `--ms1` / `--mk1` / `--md1` flag whose value's HRP prefix does not match
-/// the flag's expected codec.
+/// the flag's expected codec. v0.53.3 (audit M11): the prefix comparison is
+/// case-insensitive — the codecs are the authority on case, so a
+/// consistent-case `--mk1 MK1…` passes here and is accepted-or-rejected by
+/// the codec per its own wire rules (the v0.24.0 I5 case-mismatch rejection
+/// is relaxed; rejecting only at the flag gate left the surface inconsistent
+/// with positional intake and with `restore --md1` / `convert`).
 ///
 /// `flag` is the user-facing flag name (e.g. `"--ms1"`), `canonical` is the
 /// lowercase canonical HRP (`"ms"` / `"mk"` / `"md"`), and `value` is the
@@ -140,14 +149,13 @@ pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
 ///     `verify-bundle-empty-ms1-watch-only-sentinel-or-explicit-flag` for
 ///     the v0.26+ design discussion that selected this path.
 ///
-/// Three cases for non-sentinel values:
-///   1. `value.starts_with(canonical)` → `Ok(())`.
-///   2. Case-mismatch (`value.to_lowercase().starts_with(canonical)` but the
-///      raw value does not) → returns `HrpMismatch` with a `got` field that
-///      explicitly cites the case-mismatch condition so the user does not see
-///      a confusing "expected 'ms' got 'ms'" message (I5 architect-review fold).
-///   3. True HRP mismatch (e.g. `--ms1 mk1xxx`) → returns `HrpMismatch` with
-///      `got` set to the lowercased prefix before the `1` separator.
+/// Two cases for non-sentinel values:
+///   1. `value.to_lowercase().starts_with(canonical)` → `Ok(())` (any
+///      consistent OR mixed case passes the flag gate; the codec decides).
+///   2. True HRP mismatch (e.g. `--ms1 mk1xxx` or `--ms1 MK1xxx`) → returns
+///      `HrpMismatch` with `got` set to the LOWERCASED prefix before the `1`
+///      separator, so a case-shifted wrong-HRP value still reads
+///      "expected 'ms', got 'mk'".
 pub(crate) fn validate_flag_hrp(
     flag: &'static str,
     canonical: &'static str,
@@ -166,27 +174,17 @@ pub(crate) fn validate_flag_hrp(
     if value.is_empty() {
         return Ok(());
     }
-    // Match against the canonical `<hrp>1` prefix (e.g. "ms1") to preserve
-    // strict-canonical semantics. Lowercase per BIP-93.
+    // Match against the canonical `<hrp>1` prefix (e.g. "ms1") on a
+    // lowercased COPY — case-insensitive probe per v0.53.3 (audit M11); the
+    // ORIGINAL value flows to the codec, which owns case acceptance.
     let canonical_full = format!("{canonical}1");
-    if value.starts_with(&canonical_full) {
+    if value.to_lowercase().starts_with(&canonical_full) {
         return Ok(());
     }
-    // Case-mismatch detection BEFORE the lowercase-prefix path, so the user
-    // sees a distinct message rather than the confusing "expected 'ms' got 'ms'"
-    // shape that the v0.24.0 §2.C.1 first cut produced (I5 fold).
-    if value.to_lowercase().starts_with(&canonical_full) {
-        let raw_prefix: String = value.chars().take(canonical_full.len()).collect();
-        return Err(ToolkitError::HrpMismatch {
-            flag,
-            expected: canonical,
-            got: format!(
-                "{raw_prefix} (HRP case mismatch — lowercase canonical per BIP-93)"
-            ),
-        });
-    }
-    // True HRP mismatch — extract the prefix up to (but excluding) the first
-    // `1` separator from the lowercased value for a clean error message.
+    // True HRP mismatch — extract the prefix up to (but excluding) the LAST
+    // `1` separator (BIP-173: the data charset excludes `1`, so the last `1`
+    // is the separator) from the lowercased value for a clean error message
+    // (lowercasing keeps `--ms1 MK1xxx` reading "expected 'ms', got 'mk'").
     let lower = value.to_lowercase();
     let got_hrp = lower
         .rfind('1')

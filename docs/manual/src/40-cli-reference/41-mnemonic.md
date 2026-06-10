@@ -3110,6 +3110,11 @@ the full per-error taxonomy.
 | Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: stdout carries private key material (can spend) — redirect or encrypt ...` |
 | Inline `--ms1 <value>` or an `ms1`-classified positional on argv (v0.53.2) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`) |
 
+Card intake is case-tolerant (v0.53.3): all-uppercase cards — the BIP-173 QR
+alphanumeric form — are routed to the right codec (`mk1`/`md1` decode
+end-to-end; the codecs remain the authority on case — `mk1`/`ms1` reject
+mixed-case input, `md1` is lenient).
+
 ## `mnemonic xpub-search` (v0.26.0) {#mnemonic-xpub-search}
 
 Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — given a seed (or xpub), find which derivation produces a target xpub / descriptor / address / passphrase. v0.26.0 ships four modes:

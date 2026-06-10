@@ -150,9 +150,10 @@ pub fn detect_shape(value: &str) -> Result<DescriptorShape, ToolkitError> {
         return Ok(DescriptorShape::Bip388Json);
     }
     // 2) md1 HRP: all whitespace-separated tokens start with `md1`. Single
-    //    token is the inline single-chunk case.
+    //    token is the inline single-chunk case. Case-insensitive PROBE
+    //    (v0.53.3 audit M11); originals pass to md-codec, the case authority.
     let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-    if !tokens.is_empty() && tokens.iter().all(|t| t.starts_with("md1")) {
+    if !tokens.is_empty() && tokens.iter().all(|t| t.to_lowercase().starts_with("md1")) {
         return Ok(DescriptorShape::Md1);
     }
     // 3) toolkit `@N`-placeholder: contains `@<digit>+`. Refuse (synthetic

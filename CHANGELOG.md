@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.3] — 2026-06-10
+
+**SemVer-PATCH — HRP probes are case-insensitive (audit M11): valid all-uppercase cards route to the right codec instead of a misattributed error; codecs stay the authority on case.**
+
+### Fixed
+
+- **All seven card-type probe sites lowercase before the HRP check and pass the ORIGINAL string to the codec** (`classify_hrp_prefix` — which also fixes the inspect/repair/verify-bundle positionals, the v0.53.2 positional secret-argv advisory, and seed intake transitively — plus `restore --cosigner`, `xpub-search --target-xpub`/`--descriptor`/address-of-xpub, and `silent-payment`'s secret-kind dispatch). Uppercase mk1 and md1 cards now work END-TO-END (mk-codec/md-codec self-normalize; BIP-173 uppercase is what QR alphanumeric mode produces, so engraved/QR'd cards legitimately come back uppercase). Never normalize-at-intake: mixed-case still reaches the codecs' own deliberate rejections (mk `MixedCase`, codex32 `InvalidCase`; md-codec accepts mixed — characterization-tested, its leniency, not ours).
+- **The typed-flag case-mismatch rejection is RELAXED** (the v0.24.0 I5 "lowercase canonical" gate): `--mk1 MK1…` is now accepted (the codecs are the case authority); a true HRP mismatch (`--ms1 MK1…`) still rejects with the expected/got message. The surface was already inconsistent — `restore --md1` and `convert` accepted uppercase all along.
+- **Uppercase ms1 is now correctly ATTRIBUTED but still cannot decode:** the audit's "codecs decode all-uppercase" claim is FALSE for ms-codec 0.4.0 (its envelope layer compares the raw HRP/share-index case-sensitively past codex32) — recon overturned it against the pinned source. Companion filed both repos (`ms1-envelope-uppercase-bip173`); the toolkit pin bump flips the leg when ms-codec ships it. Until then an uppercase ms1 gets the honest `ms1 wrong HRP: got "MS", expected "ms"` (and the secret-argv advisory now FIRES for uppercase positional ms1 — previously the case-sensitive probe skipped it).
+- **Secret-echo rider:** `UnknownHrp`'s error display no longer echoes the full unrecognized positional — truncated to 12 chars + `…` (previously an uppercase ms1 positional put the FULL master secret on stderr via this path).
+
+16 new/inverted test cells (red-first). No CLI flag/surface change (no GUI schema_mirror or manual flag-coverage impact). Resolves audit-2026-06-10 `hrp-classifier-rejects-valid-uppercase-cards` (M11). Plan + 4 R0 rounds + impl review: `design/PLAN_hrp_case_insensitive_probes.md`, `design/agent-reports/hrp-case-insensitive-*.md`; recon `cycle-prep-recon-hrp-case-insensitive.md`.
+
 ## mnemonic-toolkit [0.53.2] — 2026-06-10
 
 **SemVer-PATCH — audit minors M1+M2+M3+M13: self-check binds mk1 xpubs slot-exactly, inspect/repair warn on inline ms1 argv, `localize` enforces its invariant, 25 stale goldens deleted.**

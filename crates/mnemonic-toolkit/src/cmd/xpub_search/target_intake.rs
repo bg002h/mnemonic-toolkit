@@ -21,7 +21,9 @@ use std::str::FromStr;
 /// alt-prefixed and normalized to xpub/tpub; `None` for already-canonical
 /// xpub/tpub input AND for mk1 cards (those carry xpubs directly).
 pub fn resolve_target_xpub(value: &str) -> Result<(Xpub, Option<&'static str>), ToolkitError> {
-    if value.starts_with("mk1") {
+    // Case-insensitive PROBE (v0.53.3 audit M11); the original tokens pass
+    // to mk-codec, the case authority (it lowercase-normalizes; rejects mixed).
+    if value.to_lowercase().starts_with("mk1") {
         // mk1 card route: tokenize whitespace (mk1 cards may have multiple
         // chunks separated by spaces) and decode via mk_codec.
         let tokens: Vec<&str> = value.split_whitespace().collect();

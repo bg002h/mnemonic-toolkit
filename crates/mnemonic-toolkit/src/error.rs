@@ -792,8 +792,17 @@ impl ToolkitError {
             ToolkitError::SilentPayment(msg) => format!("silent-payment: {msg}"),
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {
+                // v0.53.3 (audit M11 rider): truncate the echo to the FIRST
+                // 12 chars + `…` (only when longer) — a near-miss secret-ish
+                // positional must never appear in full on stderr.
+                let shown = if got.chars().count() > 12 {
+                    let head: String = got.chars().take(12).collect();
+                    format!("{head}…")
+                } else {
+                    got.clone()
+                };
                 format!(
-                    "positional argument '{got}' does not begin with a recognized \
+                    "positional argument '{shown}' does not begin with a recognized \
                      HRP prefix (expected one of: {})",
                     expected_one_of.join(", ")
                 )

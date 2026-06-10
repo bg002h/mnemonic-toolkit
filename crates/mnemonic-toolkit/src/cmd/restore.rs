@@ -1022,8 +1022,10 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 .iter()
                 .find(|c| c.idx == *n)
                 .ok_or_else(|| bad(format!("--cosigner @{n}: position out of range (wallet has {} cosigners)", cosigners.len())))?;
-            // mk1 (multi-chunk) vs a single raw xpub.
-            let supplied65: [u8; 65] = if values.iter().all(|v| v.starts_with("mk1")) {
+            // mk1 (multi-chunk) vs a single raw xpub. Case-insensitive PROBE
+            // (v0.53.3 audit M11); originals pass to mk-codec, the case
+            // authority (it lowercase-normalizes; rejects mixed).
+            let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1")) {
                 let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
                 let kc = mk_codec::decode(&refs).map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
                 crate::synthesize::xpub_to_65(&kc.xpub)

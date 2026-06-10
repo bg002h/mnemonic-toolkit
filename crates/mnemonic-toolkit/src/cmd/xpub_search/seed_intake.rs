@@ -202,11 +202,14 @@ fn normalize_phrase(s: &str) -> String {
 }
 
 fn classify_hrp_str(s: &str) -> &'static str {
-    if s.starts_with("ms1") {
+    // Display-only classifier; case-insensitive probe (v0.53.3 audit M11)
+    // so an uppercase card names its HRP instead of "<unknown>".
+    let probe = s.to_lowercase();
+    if probe.starts_with("ms1") {
         "ms"
-    } else if s.starts_with("mk1") {
+    } else if probe.starts_with("mk1") {
         "mk"
-    } else if s.starts_with("md1") {
+    } else if probe.starts_with("md1") {
         "md"
     } else {
         "<unknown>"

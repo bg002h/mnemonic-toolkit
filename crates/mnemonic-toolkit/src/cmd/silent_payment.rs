@@ -130,8 +130,12 @@ fn resolve_master_xpriv<E: Write>(
         }
         return Ok(xpriv);
     }
-    // 2. ms1 → entropy (unambiguous bech32 `ms` HRP).
-    if s.starts_with("ms1") {
+    // 2. ms1 → entropy (unambiguous bech32 `ms` HRP). Case-insensitive
+    // PROBE (v0.53.3 audit M11); the original passes to ms-codec, the case
+    // authority (its envelope layer rejects uppercase until the
+    // `ms1-envelope-uppercase-bip173` companion ships — the error is then
+    // correctly ms-codec-attributed instead of the generic refusal).
+    if s.to_lowercase().starts_with("ms1") {
         let (_tag, payload) = ms_codec::decode(s).map_err(ToolkitError::from)?;
         // ms mnem Phase 3: per-card wire language (mnem) or English (entr/legacy).
         // silent-payment has no --language flag; entr cards default to English.

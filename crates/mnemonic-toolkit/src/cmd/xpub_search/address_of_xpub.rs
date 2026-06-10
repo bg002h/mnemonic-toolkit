@@ -175,9 +175,10 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
     //    address materialization). This short-circuit is the LOAD-BEARING
     //    refusal point; the pointer to `account-of-descriptor` here is the
     //    user's path forward.
-    if !xpub_value.starts_with("mk1") {
-        // The multisig prefixes start with a capital letter (uppercase ASCII).
-        // bech32 mk1 cards start with "mk1" so this short-circuit is safe.
+    if !xpub_value.to_lowercase().starts_with("mk1") {
+        // Case-insensitive mk1 PROBE (v0.53.3 audit M11). The multisig
+        // SLIP-0132 prefixes (`Ypub`/`Zpub`/`Upub`/`Vpub` + testnet) never
+        // case-insensitively start with "mk1", so the short-circuit is safe.
         if let Some(variant) = detect_multisig_prefix(&xpub_value) {
             return Err(refuse_multisig_prefix(variant));
         }

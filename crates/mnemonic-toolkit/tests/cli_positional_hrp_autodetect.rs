@@ -393,36 +393,42 @@ fn verify_bundle_flag_value_mismatched_hrp_rejects_d34() {
         .stderr(predicate::str::contains("got 'mk'"));
 }
 
-/// I5 architect-review fold: a case-mismatched value to a typed flag — e.g.
-/// `--ms1 MS1XXX` — must NOT produce the literally-confusing message
-/// `expected 'ms' got 'ms'` that the v0.24.0 §2.C.1 first cut emitted
-/// (`got_hrp` was lowercased before being formatted, collapsing the
-/// case-mismatch into a same-string compare). The fix detects the
-/// case-mismatch branch explicitly and emits a distinguishable message
-/// citing "HRP case mismatch — lowercase canonical per BIP-93".
+/// v0.53.3 (audit M11) INVERSION of the v0.24.0 I5 pin: `validate_flag_hrp`'s
+/// deliberate case-mismatch rejection is RELAXED — the codecs are the
+/// authority on case (BIP-173 uppercase-QR cards exist in the wild), so a
+/// consistent-case `--ms1 MS1XXX` is no longer rejected at flag-validation
+/// time. The 6-char fixture instead dies in the repair path's own
+/// `parse_chunk` pre-gate (which lowercases + length-gates, so it NEVER
+/// reaches ms-codec) with the parse-step marker. The historical I5 concern
+/// ("expected 'ms' got 'ms'") stays moot: no case-mismatch message exists
+/// anymore, and the true-HRP-mismatch path still compares lowercased
+/// prefixes (see `repair_flag_value_mismatched_hrp_rejects_d34`).
 #[test]
-fn validate_flag_hrp_case_mismatch_distinguishable() {
+fn validate_flag_hrp_case_mismatch_relaxed_reaches_parse_step() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["repair", "--ms1", "MS1XXX"])
         .assert()
         .code(2);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    // The pre-fix bug would have emitted exactly this confusing literal.
+    // The relaxation's negative marker: no case-mismatch rejection fires.
     assert!(
-        !stderr.contains("got 'ms'") || stderr.contains("case mismatch"),
-        "case-mismatch error must be distinguishable from a same-HRP got-substring; \
+        !stderr.contains("case mismatch"),
+        "the I5 case-mismatch rejection was relaxed (codecs own case); \
          got stderr: {stderr}"
     );
-    // The fix's positive marker: the error cites the case-mismatch condition.
+    // The positive marker: the value passed flag validation and failed in
+    // the toolkit's own parse_chunk pre-gate (6 chars never reach ms-codec).
     assert!(
-        stderr.contains("case mismatch"),
-        "expected stderr to cite HRP case-mismatch, got: {stderr}"
+        stderr.contains("parse failed before correction could run"),
+        "expected the parse-step marker, got: {stderr}"
     );
-    // Flag name still attributed.
+    // The M3 secret-in-argv advisory for the inline --ms1 value fires
+    // independently of the error (asserted separately — pre-relaxation a
+    // bare `contains("--ms1")` would have passed VACUOUSLY via this line).
     assert!(
-        stderr.contains("--ms1"),
-        "expected --ms1 in stderr, got: {stderr}"
+        stderr.contains("warning: secret material on argv (--ms1)"),
+        "expected the --ms1 argv-leak advisory, got: {stderr}"
     );
 }
 
