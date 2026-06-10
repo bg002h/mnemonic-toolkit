@@ -37,6 +37,18 @@ Single source of truth for items that surfaced during a review or implementation
 - **Status:** open (backlog index; individual items dispositioned in the report).
 - **Tier:** audit-backlog.
 - **Cross-repo note (2026-06-10):** audit I1 (`stub-formula-divergence`) + I2 (`from-md1-test-tautology`) RESOLVED in **mnemonic-key (mk-cli v0.8.0)**. The divergence was on the **mk** side: `mk --from-md1` computed the `policy_id_stub` from the md1 bytecode hash; the toolkit's `synthesize.rs` (6 sites) already used `compute_wallet_policy_id(...).as_bytes()[..4]` (WalletPolicyId, encoding-stable) and was **confirmed correct — no toolkit change**. mk-cli + the mk SPEC/BIP were aligned to the toolkit's formula. See `mnemonic-key/design/PLAN_stub_formula_walletpolicyid.md`.
+- **Cross-repo note (2026-06-10):** audit I9 (`combine-no-length-validation-panic`) RESOLVED in **mnemonic-secret (ms-codec v0.4.1)** — `dispatch_payload`'s Entr arm now `validate()`s, so a non-standard-length share set returns `Err(PayloadLengthMismatch)` instead of panicking. The toolkit's `mnemonic ms-shares combine` (`cmd/ms_shares.rs:385`) delegates to the same `ms_codec::combine_shares` → inherits the fix once its `ms-codec` pin bumps 0.4.0 → 0.4.1 (tracked: `toolkit-ms-codec-pin-bump-0-4-1-combine-fix` below). No toolkit code change.
+
+### `toolkit-ms-codec-pin-bump-0-4-1-combine-fix` — bump ms-codec pin 0.4.0 → 0.4.1 to inherit the combine panic fix (companion)
+
+- **Surfaced:** 2026-06-10, audit I9 ship (ms-codec v0.4.1). **Companion:** `mnemonic-secret/design/FOLLOWUPS.md::combine-no-length-validation-panic` (resolved there).
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml:20` `ms-codec = "0.4.0"`.
+- **What:** ms-codec v0.4.1 fixes the `ms combine` panic on a valid-checksum non-standard-length Entr share set (the Entr arm of `dispatch_payload` now validates length). The toolkit's `mnemonic ms-shares combine` calls the same `ms_codec::combine_shares` and currently carries the same latent panic. Bump the pin `0.4.0 → 0.4.1` to inherit the fix.
+- **Why deferred:** ms-codec 0.4.1 is tagged but not yet published to crates.io (the toolkit consumes ms-codec from the registry); the pin bump can't resolve until publish. Bundle with the next toolkit release that re-pins siblings. Toolkit `mnemonic ms-shares combine` Phrase arm uses `.map_err(ToolkitError::Bip39)?` (not `.expect`), so the toolkit surfaces a mapped error rather than aborting — but it still wrongly accepts a non-standard-length recovery pre-bump; the bump makes it reject cleanly at the codec boundary.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+
+### `<short-id>` — <one-line title>
 
 ### `<short-id>` — <one-line title>
 
