@@ -45,11 +45,11 @@ Single source of truth for items that surfaced during a review or implementation
 - **Companion:** `gui-secret-mirror-phrase-ms1-stdin` (below) — GUI mirrors flip at next pin bump (toolkit-side half of audit I4).
 - **Tier:** resolved.
 
-### `gui-secret-mirror-phrase-ms1-stdin` — GUI must mirror the 3 newly-secret flags at its next toolkit pin bump (companion)
+### `gui-secret-mirror-phrase-ms1-stdin` — GUI must mirror the 3 newly-secret flags at its next toolkit pin bump (companion, RESOLVED)
 
-- **Surfaced:** 2026-06-10, v0.53.1 (audit I3 fix). **Companion:** `mnemonic-gui/FOLLOWUPS.md::xpub-search-inline-phrase-not-secret-classified` (:73) + `::ms-repair-ms1-not-secret-classified` (:81) — `Companion:` lines added there; do NOT file a third GUI entry.
-- **What:** toolkit v0.53.1 classifies `--phrase`, `--phrase-stdin`, `--ms1-stdin` as `secret:true`. The GUI must (1) add the 3 tokens to its `src/secrets.rs` mirror (token-for-token drift gate will RED at the next pin bump otherwise — by design, lagging) and (2) flip **9 hand-coded `secret:` sites** in `src/schema/mnemonic.rs` (3 flags × 3 xpub-search subcommands: `--phrase` :2280/:2442/:2712, `--phrase-stdin` :2291/:2453/:2723, `--ms1-stdin` :2312/:2474/:2744 at GUI master 036776b). Restores masked widget + run-confirm + paste-warn for the master phrase (audit I4's `schema/mnemonic.rs` half; the `schema/ms.rs:321` half mirrors the **ms-cli** surface and is NOT addressed by this toolkit change).
-- **Status:** `open`
+- **Surfaced:** 2026-06-10, v0.53.1 (audit I3 fix). **Companion:** `mnemonic-gui/FOLLOWUPS.md::xpub-search-inline-phrase-not-secret-classified` (:73) + `::ms-repair-ms1-not-secret-classified` (:82).
+- **What:** toolkit v0.53.1 classifies `--phrase`, `--phrase-stdin`, `--ms1-stdin` as `secret:true`; the GUI's hand schema must follow at its pin bump. CORRECTION (GUI v0.33.0 recon): this entry's original "(1) add the 3 tokens to the GUI `src/secrets.rs` token-for-token mirror" was **structurally wrong** — the GUI secret-drift gate compares `FlagSchema.secret` per `(subcommand, flag)` against the pinned binary's gui-schema (`mnemonic-gui/tests/schema_mirror_secret_drift.rs:105-112`); the GUI's `SECRET_FLAG_NAMES` is a 3-token v0.1 legacy fallback needing NO additions. The stale "token-for-token parallel enumeration" claim originates in THIS repo's `crates/mnemonic-toolkit/src/secrets.rs` module doc (:5-10) — **residual errand: reword that doc-comment at the next toolkit touch** (no release for a comment).
+- **Status:** **resolved** — GUI v0.33.0 (2026-06-10): pin bump v0.52.0 → v0.53.1 + the 9 `FlagSchema.secret` flips; `ms.rs:321` ALSO flipped there as a recorded deliberate GUI-side override (audit I4 closed in full). See `mnemonic-gui/design/SPEC_gui_v0_33_0_secret_flips_pin_bump.md`.
 - **Tier:** `cross-repo`
 
 ### `mk1-csi-multisig-same-xpub-collision` (I10) + `n1-vs-nge2-csi-derivation-inconsistency` — multisig mk1 csi is slot-unique + display-reproducible (RESOLVED v0.53.0)
