@@ -1,8 +1,9 @@
 # `mnemonic` reference
 
-The integration-layer CLI for the m-format constellation. Twenty subcommands:
+The integration-layer CLI for the m-format constellation. The subcommands:
 [`bundle`](#mnemonic-bundle), [`verify-bundle`](#mnemonic-verify-bundle),
 [`convert`](#mnemonic-convert), [`export-wallet`](#mnemonic-export-wallet),
+[`restore`](#mnemonic-restore),
 [`import-wallet`](#mnemonic-import-wallet),
 [`derive-child`](#mnemonic-derive-child),
 [`electrum-decrypt`](#mnemonic-electrum-decrypt),
@@ -10,10 +11,12 @@ The integration-layer CLI for the m-format constellation. Twenty subcommands:
 [`seedqr`](#mnemonic-seedqr), [`slip39`](#mnemonic-slip39),
 [`ms-shares`](#mnemonic-ms-shares),
 [`nostr`](#mnemonic-nostr), [`silent-payment`](#mnemonic-silent-payment),
+[`addresses`](#mnemonic-addresses),
 [`decode-address`](#mnemonic-decode-address),
 [`verify-message`](#mnemonic-verify-message), [`repair`](#mnemonic-repair),
 [`inspect`](#mnemonic-inspect), [`compare-cost`](#mnemonic-compare-cost),
-[`xpub-search`](#mnemonic-xpub-search), and
+[`xpub-search`](#mnemonic-xpub-search),
+[`build-descriptor`](#mnemonic-build-descriptor), and
 [`gui-schema`](#mnemonic-gui-schema) (introspection only, no user-facing
 semantics). Run any with `--help` for the authoritative flag set; this
 reference tracks the current release.

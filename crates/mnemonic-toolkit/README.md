@@ -7,7 +7,7 @@ Top-level integration CLI for the **m-format constellation** of Bitcoin self-cus
 Installs as binary `mnemonic`.
 
 <!-- toolkit-version: 0.52.0 -->
-Status: **v0.43.x** — twenty-three `mnemonic` subcommands spanning 3-card bundle synthesis + verification, seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius / Electrum), batch watch-only address listing, cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), watch-only single-sig restore documents (seed + passphrase → fingerprint-gated descriptors), backup splitting (seed-XOR, SLIP-39, BIP-93 codex32 K-of-N shares, SeedQR), BIP-85 derivation, BIP-352 silent-payment addresses, nostr key wrapping, legacy + BIP-322 message verification, address decoding, and BCH repair / inspection. Mainnet / testnet / signet / regtest. See **[CHANGELOG.md](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md)** for the release history.
+The `mnemonic` subcommands span 3-card bundle synthesis + verification, seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius / Electrum), batch watch-only address listing, cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), guided descriptor construction (build-descriptor: policy-tree/archetype presets → gated wsh descriptors), watch-only restore documents (single-sig from a seed + passphrase, fingerprint-gated; multisig from the shared md1 card alone, incl. taproot NUMS), backup splitting (seed-XOR, SLIP-39, BIP-93 codex32 K-of-N shares via ms-shares, SeedQR), BIP-85 derivation, BIP-352 silent-payment addresses, nostr key wrapping, legacy + BIP-322 message verification, address decoding, and BCH repair / inspection. Mainnet / testnet / signet / regtest. See **[CHANGELOG.md](https://github.com/bg002h/mnemonic-toolkit/blob/master/CHANGELOG.md)** for the release history.
 
 | Card | Format | What's on it |
 |---|---|---|
@@ -29,7 +29,7 @@ Or pin a specific release tag directly: `cargo install --locked --git https://gi
 
 ## Subcommands & reference
 
-Twenty-one `mnemonic` subcommands — `bundle` / `verify-bundle`, `convert` / `addresses` / `derive-child`, `import-wallet` / `export-wallet` / `decode-address`, `seed-xor` / `slip39` / `seedqr`, `nostr` / `silent-payment` / `verify-message` / `final-word`, `electrum-decrypt` / `repair` / `inspect` / `compare-cost` / `xpub-search`, and `gui-schema`. Run any with `--help`.
+The `mnemonic` subcommands — `bundle` / `verify-bundle`, `convert` / `addresses` / `derive-child`, `import-wallet` / `export-wallet` / `restore` / `decode-address`, `seed-xor` / `slip39` / `ms-shares` / `seedqr`, `nostr` / `silent-payment` / `verify-message` / `final-word`, `electrum-decrypt` / `repair` / `inspect` / `compare-cost` / `xpub-search`, `build-descriptor`, and `gui-schema`. Run any with `--help`.
 
 The **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/docs/manual)** is the authoritative, always-current CLI reference (lint-gated against the live `--help` surface), with worked examples and round-trip recipes for every subcommand and foreign-wallet format. The repo-root [`README`](https://github.com/bg002h/mnemonic-toolkit/blob/master/README.md) has the grouped subcommand inventory.
 
