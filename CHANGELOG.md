@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.52.0] — 2026-06-09
+
+**SemVer-MINOR — `build-descriptor --allow <rule>`: a per-variant, reviewed opt-out of the funds-safety sanity gate (never silent).**
+
+- **`--allow {malleable, mixed-timelock, repeated-keys, resource-limit, sigless-branch}`** (repeatable; kebab names align 1:1 with the diagnostic kinds, so a refusal teaches the exact token: `…; rerun with --allow mixed-timelock after review`). miniscript's 6th opt-out, `raw_pkh`, is not exposed (unreachable from the builder's node grammar). Mechanism: the gate's `sanity_check()` becomes `ext_check(&ExtParams)` — behavior-identical with no `--allow`.
+- **Never silent.** Every rule that actually FIRES is named in an unmissable stderr warning (all output modes, `--json` included); a requested-but-unused allowance gets a `did not fire` note; the `--json` success envelope gains `allowed_rules_fired` (only when non-empty — default output byte-unchanged).
+- **Cost preview deterministically skipped on a sanity-overridden emit** (`--json` `"cost": null`; human view prints `cost preview unavailable for a sanity-overridden descriptor`) — its taproot comparison would re-run the waived rules. `compare-cost` itself stays strict.
+- **Composes with `--spec` AND `--archetype`** (the same-key "degrading threshold" the presets deliberately refuse is now buildable after review: `--allow repeated-keys`). `--emit-spec` records NO allowance — replaying an emitted spec without `--allow` correctly refuses.
+- **Tests.** 12 new integration cells + 5 gate unit cells + a CliAllow/DiagnosticKind drift self-test; full suite + clippy (0); full manual lint green. Resolves `descriptor-builder-allow-extparams-reviewed-optout`. Audit trail: `design/SPEC_descriptor_builder_allow.md` + `design/agent-reports/descriptor-builder-allow-{r0-r1,r0-r2,impl-r1}-review.md`.
+
 ## mnemonic-toolkit [0.51.0] — 2026-06-09
 
 **SemVer-MINOR — descriptor-builder archetype presets (Release B): `mnemonic build-descriptor --archetype` builds 5 curated vault shapes without hand-authoring JSON.**
