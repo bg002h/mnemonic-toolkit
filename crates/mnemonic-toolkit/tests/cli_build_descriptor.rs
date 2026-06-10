@@ -775,3 +775,216 @@ fn spec_schema_carries_archetypes_section() {
     assert_eq!(v["spec_schema_version"], 1);
     assert!(v["node_kinds"].is_array());
 }
+
+// ======================================================================
+// v0.52.0 --allow (reviewed sanity opt-out) — allow SPEC §1-§5.
+// ======================================================================
+
+const SIGLESS_SPEC: &str = r#"{"schema_version":1,"wrapper":"wsh","root":{"or_d":[{"pk":"xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13"},{"after":100}]}}"#;
+
+fn repeated_keys_spec() -> String {
+    format!(
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"or_d":[{{"multi":{{"k":2,"keys":["{K1}","{K2}"]}}}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"multi":{{"k":1,"keys":["{K1}","{K2}"]}}}}}}}},{{"older":1000}}]}}]}}}}"#
+    )
+}
+
+fn mixed_timelock_spec() -> String {
+    format!(
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{K1}"}}}}}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"older":100}}}}}},{{"older":4194304}}]}}]}}}}"#
+    )
+}
+
+/// Allow-success, --json mode (allow SPEC §3/§5 + R0-r1 C1 cost posture):
+/// exit 0, `cost` is NULL (deterministic skip — the Tap re-parse would
+/// re-run the waived rule), `allowed_rules_fired` present, banner on stderr.
+#[test]
+fn allow_sigless_json_success_cost_null_banner() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "sigless-branch", "--json"])
+        .write_stdin(SIGLESS_SPEC)
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert!(v["descriptor"].as_str().unwrap().starts_with("wsh("));
+    assert!(v["cost"].is_null(), "cost must be null on an allowed-insane emit");
+    assert_eq!(v["allowed_rules_fired"], serde_json::json!(["sigless_branch"]));
+    assert_eq!(v["diagnostics"], serde_json::json!([]));
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("sigless-branch"), "banner names the fired rule: {stderr}");
+    assert!(stderr.to_uppercase().contains("OVERRIDDEN"), "banner is unmissable: {stderr}");
+}
+
+/// Allow-success, human view: the cost block's position carries the
+/// unavailable line on STDOUT (R0-r2 M-r2-2); banner on stderr; exit 0.
+#[test]
+fn allow_sigless_human_cost_unavailable_line() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "sigless-branch"])
+        .write_stdin(SIGLESS_SPEC)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("cost preview unavailable for a sanity-overridden descriptor"),
+        "human cost line: {stdout}"
+    );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("sigless-branch"));
+}
+
+/// Allow-success, --format descriptor: bare artifact, banner still on stderr.
+#[test]
+fn allow_sigless_format_descriptor_bare() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "sigless-branch", "--format", "descriptor"])
+        .write_stdin(SIGLESS_SPEC)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.starts_with("wsh(or_d(pk("), "bare descriptor: {stdout}");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("sigless-branch"));
+}
+
+/// The flagship resurrection (allow SPEC §0): same-key degrading threshold
+/// via --spec + --allow repeated-keys.
+#[test]
+fn allow_repeated_keys_degrading_threshold() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "repeated-keys", "--format", "descriptor"])
+        .write_stdin(repeated_keys_spec())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.starts_with("wsh(or_d(multi(2,"));
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("repeated-keys"));
+}
+
+/// Mixed-timelock (KEYED tree — R0-r1 I1: a keyless one refuses
+/// sigless_branch first).
+#[test]
+fn allow_mixed_timelock_keyed_tree() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "mixed-timelock", "--format", "descriptor"])
+        .write_stdin(mixed_timelock_spec())
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("mixed-timelock"));
+}
+
+/// Short-circuit semantics (allow SPEC §2): allowing one rule does not
+/// waive another — sigless tree + --allow malleable still refuses
+/// sigless_branch, now with the rerun hint.
+#[test]
+fn allow_wrong_rule_still_refuses_with_hint() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "malleable", "--json"])
+        .write_stdin(SIGLESS_SPEC)
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["diagnostics"][0]["kind"], "sigless_branch");
+    assert!(
+        v["diagnostics"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("rerun with --allow sigless-branch after review"),
+        "refusal hint present"
+    );
+}
+
+/// Requested-but-unused (allow SPEC §3): sane preset + --allow → exit 0,
+/// stderr note, NO allowed_rules_fired key, cost runs normally.
+#[test]
+fn allow_requested_but_unused_notes_and_normal_envelope() {
+    let a = &ARCHETYPES[2]; // kofn-recovery (sane)
+    let out = bin()
+        .args(["build-descriptor"])
+        .args(a.preset_args)
+        .args(["--allow", "repeated-keys", "--json"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert!(v.get("allowed_rules_fired").is_none(), "no fired key when nothing fired");
+    assert!(v["cost"].is_object(), "cost runs normally when nothing fired");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("did not fire"), "unused-allowance note: {stderr}");
+}
+
+/// Preset composition (allow SPEC §0): kofn + duplicate --key +
+/// --allow repeated-keys → success.
+#[test]
+fn allow_composes_with_preset_mode() {
+    bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K1, "--threshold", "2",
+            "--recovery-key", K4, "--older", "52560",
+            "--allow", "repeated-keys", "--format", "descriptor",
+        ])
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("repeated-keys"));
+}
+
+/// --emit-spec interaction (allow SPEC §3/§5, R0-r1 I2): the emitted spec
+/// records NO allowance — replay without --allow refuses.
+#[test]
+fn emit_spec_records_no_allowance() {
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K1, "--threshold", "2",
+            "--recovery-key", K4, "--older", "52560",
+            "--allow", "repeated-keys", "--emit-spec",
+        ])
+        .assert()
+        .success();
+    let emitted = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(!emitted.contains("allow"), "spec document must not record allowances");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("repeated-keys"), "banner on the emit-spec run itself");
+
+    let out = bin()
+        .args(["build-descriptor", "--spec", "-", "--json"])
+        .write_stdin(emitted)
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["diagnostics"][0]["kind"], "repeated_keys");
+}
+
+/// bip388 shape on an allowed repeated-keys emit (R0-r1 M5): duplicate
+/// keys_info entries, no dedup — pinned.
+#[test]
+fn allow_repeated_keys_bip388_duplicate_keys_info() {
+    let out = bin()
+        .args(["build-descriptor", "--allow", "repeated-keys", "--format", "bip388"])
+        .write_stdin(repeated_keys_spec())
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let keys = v["keys_info"].as_array().unwrap();
+    assert_eq!(keys.len(), 4, "duplicate keys appear twice (no dedup): {keys:?}");
+}
+
+/// Duplicate --allow tokens are idempotent (allow SPEC §1).
+#[test]
+fn allow_duplicate_tokens_idempotent() {
+    let out = bin()
+        .args([
+            "build-descriptor",
+            "--allow", "sigless-branch", "--allow", "sigless-branch",
+            "--format", "descriptor",
+        ])
+        .write_stdin(SIGLESS_SPEC)
+        .assert()
+        .success();
+    let v_count = String::from_utf8(out.get_output().stderr.clone())
+        .unwrap()
+        .matches("sigless-branch")
+        .count();
+    assert_eq!(v_count, 1, "banner names the rule once");
+}

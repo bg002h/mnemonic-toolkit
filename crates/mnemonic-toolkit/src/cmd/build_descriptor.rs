@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 use crate::cost::{self, CompareCostArgs, InputForm};
 use crate::descriptor_builder::archetype::{self, ArchetypeParams};
-use crate::descriptor_builder::gate::{self, Diagnostic, ValidatedPolicy};
+use crate::descriptor_builder::gate::{self, AllowSet, Diagnostic, DiagnosticKind, ValidatedPolicy};
 use crate::descriptor_builder::ir::{SpecDoc, WrapperKind, SUPPORTED_SCHEMA_VERSION};
 use crate::descriptor_builder::schema;
 use crate::derive_address::derive_receive_addresses;
@@ -102,6 +102,109 @@ pub struct BuildDescriptorArgs {
     /// diagnostics, never a spec.
     #[arg(long, requires = "archetype", conflicts_with_all = ["format", "json"])]
     pub emit_spec: bool,
+
+    /// Reviewed opt-out of ONE funds-safety sanity rule per occurrence
+    /// (repeatable). The emit is never silent: every rule that actually
+    /// fires is named in an unmissable warning (and `allowed_rules_fired`
+    /// in `--json`); the cost preview is unavailable on a sanity-overridden
+    /// descriptor. The emitted spec/document records NO allowance.
+    #[arg(long, value_enum)]
+    pub allow: Vec<CliAllow>,
+}
+
+/// The 5 allowable sanity rules (allow SPEC §1) — kebab values aligned 1:1
+/// with the step-3 `DiagnosticKind::as_str` names (drift self-test below).
+/// miniscript's 6th `ExtParams` field, `raw_pkh`, is deliberately not
+/// exposed (unreachable from IR-rendered miniscript).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum CliAllow {
+    /// A malleable satisfaction.
+    Malleable,
+    /// An unspendable mixed height/time timelock path.
+    MixedTimelock,
+    /// A key used more than once.
+    RepeatedKeys,
+    /// Exceeds script resource limits.
+    ResourceLimit,
+    /// An anyone-can-spend path.
+    SiglessBranch,
+}
+
+impl CliAllow {
+    fn kind(self) -> DiagnosticKind {
+        match self {
+            CliAllow::Malleable => DiagnosticKind::Malleable,
+            CliAllow::MixedTimelock => DiagnosticKind::MixedTimelock,
+            CliAllow::RepeatedKeys => DiagnosticKind::RepeatedKeys,
+            CliAllow::ResourceLimit => DiagnosticKind::ResourceLimit,
+            CliAllow::SiglessBranch => DiagnosticKind::SiglessBranch,
+        }
+    }
+
+    fn kebab(self) -> &'static str {
+        match self {
+            CliAllow::Malleable => "malleable",
+            CliAllow::MixedTimelock => "mixed-timelock",
+            CliAllow::RepeatedKeys => "repeated-keys",
+            CliAllow::ResourceLimit => "resource-limit",
+            CliAllow::SiglessBranch => "sigless-branch",
+        }
+    }
+}
+
+fn allow_set(requested: &[CliAllow]) -> AllowSet {
+    let mut set = AllowSet::default();
+    for a in requested {
+        match a {
+            CliAllow::Malleable => set.malleable = true,
+            CliAllow::MixedTimelock => set.mixed_timelock = true,
+            CliAllow::RepeatedKeys => set.repeated_keys = true,
+            CliAllow::ResourceLimit => set.resource_limit = true,
+            CliAllow::SiglessBranch => set.sigless_branch = true,
+        }
+    }
+    set
+}
+
+/// The never-silent surface (allow SPEC §3): an unmissable stderr warning
+/// for every allowed rule that FIRED (all output modes, `--json` included),
+/// plus a note for each requested allowance that did not fire.
+fn emit_allow_notes<E: Write>(
+    requested: &[CliAllow],
+    fired: &[DiagnosticKind],
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    if !fired.is_empty() {
+        let names: Vec<String> =
+            fired.iter().map(|k| k.as_str().replace('_', "-")).collect();
+        writeln!(
+            stderr,
+            "WARNING: sanity rules OVERRIDDEN by --allow and FIRED: {}. This \
+             descriptor failed miniscript's funds-safety analysis; you have \
+             accepted that risk after review.",
+            names.join(", ")
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+    let mut seen: Vec<DiagnosticKind> = Vec::new();
+    for a in requested {
+        let kind = a.kind();
+        if seen.contains(&kind) {
+            continue;
+        }
+        seen.push(kind);
+        if !fired.contains(&kind) {
+            writeln!(
+                stderr,
+                "note: --allow {} was requested but did not fire (the policy \
+                 passes that rule without it)",
+                a.kebab()
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+    }
+    Ok(())
 }
 
 /// The 5 curated archetype presets (alphabetical — matches
@@ -180,19 +283,21 @@ pub fn run<R: Read, W: Write, E: Write>(
             wrapper: WrapperKind::Wsh,
             root: (def.lower)(&params),
         };
-        let validated = match gate::validate(&doc) {
-            Ok(vp) => vp,
-            Err(mut diags) => {
-                // Annotate gate diagnostics with param provenance (presets
-                // SPEC §3.3) — the user authored flags, not a node tree.
-                for d in &mut diags {
-                    d.flag = archetype::resolve_flag(def, &d.node_path, d.kind)
-                        .map(|f| f.to_string());
+        let validated =
+            match gate::validate_with_allow(&doc, gate::DEFAULT_PREVIEW_CAP, &allow_set(&args.allow)) {
+                Ok(vp) => vp,
+                Err(mut diags) => {
+                    // Annotate gate diagnostics with param provenance (presets
+                    // SPEC §3.3) — the user authored flags, not a node tree.
+                    for d in &mut diags {
+                        d.flag = archetype::resolve_flag(def, &d.node_path, d.kind)
+                            .map(|f| f.to_string());
+                    }
+                    emit_diagnostics(&diags, args.json, stdout, stderr)?;
+                    return Ok(2);
                 }
-                emit_diagnostics(&diags, args.json, stdout, stderr)?;
-                return Ok(2);
-            }
-        };
+            };
+        emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
         if args.emit_spec {
             // The gate has passed — the spec is safe to hand back for review.
             writeln!(
@@ -213,14 +318,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     let doc = SpecDoc::parse(&spec_text)
         .map_err(|e| ToolkitError::BuildDescriptorSpec(e.to_string()))?;
 
-    let validated = match gate::validate(&doc) {
-        Ok(vp) => vp,
-        Err(diags) => {
-            emit_diagnostics(&diags, args.json, stdout, stderr)?;
-            return Ok(2);
-        }
-    };
+    let validated =
+        match gate::validate_with_allow(&doc, gate::DEFAULT_PREVIEW_CAP, &allow_set(&args.allow)) {
+            Ok(vp) => vp,
+            Err(diags) => {
+                emit_diagnostics(&diags, args.json, stdout, stderr)?;
+                return Ok(2);
+            }
+        };
 
+    emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
     emit(&validated, args, stdout)?;
     Ok(0)
 }
@@ -295,13 +402,26 @@ fn emit<W: Write>(
     let bip388 = descriptor_to_bip388_wallet_policy(&canonical)?;
 
     if args.json {
-        let cost = cost_preview_value(vp)?;
-        let env = json!({
+        // Cost posture on an allowed-insane emit (allow SPEC §3, R0-r1 C1):
+        // deterministic skip — the cost pipeline's Tap re-parse re-runs the
+        // very sanity rules --allow just waived and would hard-error.
+        let cost = if vp.allowed_fired.is_empty() {
+            cost_preview_value(vp)?
+        } else {
+            Value::Null
+        };
+        let mut env = json!({
             "descriptor": canonical,
             "bip388": bip388,
             "cost": cost,
             "diagnostics": [],
         });
+        if !vp.allowed_fired.is_empty() {
+            let fired: Vec<&str> = vp.allowed_fired.iter().map(|k| k.as_str()).collect();
+            env.as_object_mut()
+                .expect("envelope is an object")
+                .insert("allowed_rules_fired".to_string(), json!(fired));
+        }
         writeln!(
             stdout,
             "{}",
@@ -347,6 +467,13 @@ fn emit_human<W: Write>(
         }
     }
 
+    if !vp.allowed_fired.is_empty() {
+        // Allow SPEC §3 (R0-r1 C1): deterministic skip, stdout, in the cost
+        // block's position.
+        writeln!(stdout, "cost preview unavailable for a sanity-overridden descriptor")
+            .map_err(ToolkitError::Io)?;
+        return Ok(());
+    }
     writeln!(stdout, "cost preview (wsh vs tr, per spending condition):")
         .map_err(ToolkitError::Io)?;
     let single = single_path_descriptor(vp)?;
@@ -408,6 +535,18 @@ mod tests {
         for v in CliArchetype::value_variants() {
             let pv = v.to_possible_value().expect("no skipped variants");
             assert_eq!(pv.get_name(), v.id());
+        }
+    }
+
+    /// Drift self-test (allow SPEC §5): `CliAllow` kebab values == the
+    /// corresponding `DiagnosticKind::as_str` with `_`→`-` (pins the
+    /// self-teaching alignment between refusal hints and --allow tokens).
+    #[test]
+    fn cli_allow_names_align_with_diagnostic_kinds() {
+        for a in CliAllow::value_variants() {
+            let pv = a.to_possible_value().expect("no skipped variants");
+            assert_eq!(pv.get_name(), a.kebab());
+            assert_eq!(a.kebab(), a.kind().as_str().replace('_', "-"));
         }
     }
 

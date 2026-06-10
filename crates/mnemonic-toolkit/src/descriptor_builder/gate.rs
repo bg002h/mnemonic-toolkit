@@ -37,6 +37,36 @@ pub struct ValidatedPolicy {
     /// Parsed `wsh(M)` (multipath). Canonicalize (+ BIP-380 checksum) via
     /// `.to_string()` at emit.
     pub descriptor: MsDescriptor<DescriptorPublicKey>,
+    /// Sanity rules that were `--allow`ed AND actually fired (allow SPEC §2).
+    /// Empty when no allowance was requested or none was needed. Reuses the
+    /// step-3 [`DiagnosticKind`]s 1:1; populated in `ext_check`'s check order.
+    pub allowed_fired: Vec<DiagnosticKind>,
+}
+
+/// The reviewed sanity opt-outs (allow SPEC §1-§2) — gate-local so gate.rs
+/// does not depend on the clap enum. Maps onto miniscript's `ExtParams`;
+/// `raw_pkh` is deliberately not exposed (unreachable from IR-rendered
+/// miniscript — the IR has no raw-pkh node and `render()` cannot emit the
+/// `expr_raw_pkh` fragment).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AllowSet {
+    pub sigless_branch: bool,
+    pub malleable: bool,
+    pub resource_limit: bool,
+    pub repeated_keys: bool,
+    pub mixed_timelock: bool,
+}
+
+impl AllowSet {
+    fn to_ext_params(self) -> ExtParams {
+        let mut p = ExtParams::new();
+        p.top_unsafe = self.sigless_branch;
+        p.malleability = self.malleable;
+        p.resource_limitations = self.resource_limit;
+        p.repeated_pk = self.repeated_keys;
+        p.timelock_mixing = self.mixed_timelock;
+        p
+    }
 }
 
 /// A node-addressed structured diagnostic. `node_path` is a dotted/bracketed
@@ -107,12 +137,28 @@ impl DiagnosticKind {
 /// Run the 4-step gate. `Ok` ⇒ the policy is emit-safe; `Err` ⇒ one or more
 /// node-addressed diagnostics (step 1 returns ALL field errors; steps 2–4
 /// short-circuit on first failure).
+/// (cmd routes through [`validate_with_allow`]; this no-allowance form is the
+/// stable gate API, delegation-pinned by the gate unit tests.)
+#[allow(dead_code)]
 pub fn validate(doc: &SpecDoc) -> Result<ValidatedPolicy, Vec<Diagnostic>> {
     validate_with_cap(doc, DEFAULT_PREVIEW_CAP)
 }
 
 /// `validate` with an explicit cap (for tests / a future `--max-conditions`).
+#[allow(dead_code)]
 pub fn validate_with_cap(doc: &SpecDoc, cap: usize) -> Result<ValidatedPolicy, Vec<Diagnostic>> {
+    validate_with_allow(doc, cap, &AllowSet::default())
+}
+
+/// `validate` with reviewed sanity opt-outs (allow SPEC §2). With the default
+/// (empty) [`AllowSet`] this is behavior-identical to [`validate_with_cap`]:
+/// `ext_check(&ExtParams::new())` is `sanity_check()`'s five arms in the same
+/// order plus a `raw_pkh` arm vacuous for IR-rendered input.
+pub fn validate_with_allow(
+    doc: &SpecDoc,
+    cap: usize,
+    allow: &AllowSet,
+) -> Result<ValidatedPolicy, Vec<Diagnostic>> {
     // ---- Step 1: schema field-validation (collect ALL) -------------------
     let mut field_diags = Vec::new();
     validate_fields(&doc.root, "root", &mut field_diags);
@@ -138,8 +184,29 @@ pub fn validate_with_cap(doc: &SpecDoc, cap: usize) -> Result<ValidatedPolicy, V
         // insane parse must succeed. Defensive: never panic in a funds tool.
         Err(e) => return Err(vec![root_diag(DiagnosticKind::TypeError, format!("inner parse: {e}"))]),
     };
-    if let Err(rule) = inner_ms.sanity_check() {
+    if let Err(rule) = inner_ms.ext_check(&allow.to_ext_params()) {
         return Err(vec![localize_sanity(doc, rule)]);
+    }
+
+    // Fired-vs-requested (allow SPEC §2): for each REQUESTED allowance,
+    // evaluate the per-rule predicate. Polarity pinned: three safety-positive
+    // (fired iff NEGATED), two violation-positive — mirrors localize_sanity's
+    // dispatch. Order = ext_check's check order.
+    let mut allowed_fired = Vec::new();
+    if allow.sigless_branch && !inner_ms.requires_sig() {
+        allowed_fired.push(DiagnosticKind::SiglessBranch);
+    }
+    if allow.malleable && !inner_ms.is_non_malleable() {
+        allowed_fired.push(DiagnosticKind::Malleable);
+    }
+    if allow.resource_limit && !inner_ms.within_resource_limits() {
+        allowed_fired.push(DiagnosticKind::ResourceLimit);
+    }
+    if allow.repeated_keys && inner_ms.has_repeated_keys() {
+        allowed_fired.push(DiagnosticKind::RepeatedKeys);
+    }
+    if allow.mixed_timelock && inner_ms.has_mixed_timelocks() {
+        allowed_fired.push(DiagnosticKind::MixedTimelock);
     }
 
     // ---- Step 4: build-time complexity cap -------------------------------
@@ -147,7 +214,7 @@ pub fn validate_with_cap(doc: &SpecDoc, cap: usize) -> Result<ValidatedPolicy, V
         return Err(vec![diag]);
     }
 
-    Ok(ValidatedPolicy { descriptor })
+    Ok(ValidatedPolicy { descriptor, allowed_fired })
 }
 
 // ======================================================================
@@ -287,7 +354,13 @@ fn localize_sanity(doc: &SpecDoc, rule: AnalysisError) -> Diagnostic {
     Diagnostic {
         node_path: path,
         kind,
-        message: sanity_message(kind),
+        // Refusal-message affordance (allow SPEC §1): name the exact --allow
+        // token. Only step-3 kinds reach this fn, all of them allowable.
+        message: format!(
+            "{}; rerun with --allow {} after review",
+            sanity_message(kind),
+            kind.as_str().replace('_', "-")
+        ),
         flag: None,
     }
 }
@@ -562,6 +635,84 @@ mod tests {
 
     fn doc(root_json: &str) -> String {
         format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{root_json}}}"#)
+    }
+
+    // ---- --allow / AllowSet (allow SPEC §2) ------------------------------
+
+    fn sigless_doc() -> String {
+        doc(&format!(r#"{{"or_d":[{{"pk":"{A}"}},{{"after":100}}]}}"#))
+    }
+
+    /// AllowSet → ExtParams mapping, one cell per variant (allow SPEC §5).
+    #[test]
+    fn allow_set_maps_each_variant_to_its_ext_params_field() {
+        type FieldProbe = fn(&miniscript::miniscript::analyzable::ExtParams) -> bool;
+        let cases: [(AllowSet, FieldProbe); 5] = [
+            (AllowSet { sigless_branch: true, ..Default::default() }, |p| p.top_unsafe),
+            (AllowSet { malleable: true, ..Default::default() }, |p| p.malleability),
+            (AllowSet { resource_limit: true, ..Default::default() }, |p| p.resource_limitations),
+            (AllowSet { repeated_keys: true, ..Default::default() }, |p| p.repeated_pk),
+            (AllowSet { mixed_timelock: true, ..Default::default() }, |p| p.timelock_mixing),
+        ];
+        for (set, field) in cases {
+            let params = set.to_ext_params();
+            assert!(field(&params), "{set:?} must set its field");
+            // raw_pkh is never exposed (allow SPEC §1).
+            assert!(!params.raw_pkh, "{set:?} must not enable raw_pkh");
+        }
+        let none = AllowSet::default().to_ext_params();
+        assert!(
+            !none.top_unsafe && !none.malleability && !none.resource_limitations
+                && !none.repeated_pk && !none.timelock_mixing && !none.raw_pkh,
+            "empty AllowSet == ExtParams::new() baseline"
+        );
+    }
+
+    /// Delegation: validate / validate_with_cap behave identically to the
+    /// empty-AllowSet path (sigless refuses through every entry point).
+    #[test]
+    fn allow_default_baseline_identical_through_all_entry_points() {
+        let json = sigless_doc();
+        let parsed = SpecDoc::parse(&json).unwrap();
+        for result in [
+            validate(&parsed),
+            validate_with_cap(&parsed, DEFAULT_PREVIEW_CAP),
+            validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &AllowSet::default()),
+        ] {
+            let diags = result.err().expect("sigless refuses");
+            assert_eq!(diags[0].kind, DiagnosticKind::SiglessBranch);
+        }
+    }
+
+    /// Fired detection (allow SPEC §2 polarity): an allowed rule that fires
+    /// lands in allowed_fired; a sane tree under the same allowance fires
+    /// nothing.
+    #[test]
+    fn allow_fired_detection_populates_allowed_fired() {
+        let parsed = SpecDoc::parse(&sigless_doc()).unwrap();
+        let allow = AllowSet { sigless_branch: true, ..Default::default() };
+        let vp = validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &allow)
+            .expect("allowed sigless passes");
+        assert_eq!(vp.allowed_fired, vec![DiagnosticKind::SiglessBranch]);
+
+        let sane = doc(&format!(
+            r#"{{"or_d":[{{"pk":"{A}"}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{B}"}}}}}},{{"older":100}}]}}]}}"#
+        ));
+        let parsed = SpecDoc::parse(&sane).unwrap();
+        let vp = validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &allow)
+            .expect("sane tree passes");
+        assert!(vp.allowed_fired.is_empty(), "nothing fired on a sane tree");
+    }
+
+    /// The refusal hint names the exact --allow token (allow SPEC §1).
+    #[test]
+    fn sanity_refusal_carries_rerun_hint() {
+        let diags = errs(&sigless_doc());
+        assert!(
+            diags[0].message.contains("rerun with --allow sigless-branch after review"),
+            "hint: {}",
+            diags[0].message
+        );
     }
 
     // ---- the 5 archetypes all pass the gate (GREEN) ----------------------

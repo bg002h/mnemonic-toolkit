@@ -3875,7 +3875,7 @@ in plaintext output) carry advisory text. Known entries:
 | `--feerate` out of `[0.0, 10000.0]` or non-numeric | `64` |
 | `--max-conditions 0` | `64` |
 
-## `mnemonic build-descriptor` (v0.50.0; archetype presets v0.51.0) {#mnemonic-build-descriptor}
+## `mnemonic build-descriptor` (v0.50.0; archetype presets v0.51.0; `--allow` v0.52.0) {#mnemonic-build-descriptor}
 
 Build a **validated `wsh(...)` descriptor** + its **BIP-388 wallet-policy**
 from a **versioned JSON policy-tree spec**. The spec is a fragment-level
@@ -3894,8 +3894,8 @@ mis-typed or unsafe tree is rejected with a node-addressed diagnostic.
 ### Synopsis
 
 ```sh
-mnemonic build-descriptor --spec <FILE|-> [--network <NET>] [--format <FMT>] [--json]
-mnemonic build-descriptor --archetype <NAME> <PARAMS…> [--format <FMT>] [--json]
+mnemonic build-descriptor --spec <FILE|-> [--allow <RULE>]… [--network <NET>] [--format <FMT>] [--json]
+mnemonic build-descriptor --archetype <NAME> <PARAMS…> [--allow <RULE>]… [--format <FMT>] [--json]
 mnemonic build-descriptor --archetype <NAME> <PARAMS…> --emit-spec   # print the lowered spec JSON
 mnemonic build-descriptor --spec-schema      # dump the node-tree grammar and exit
 ```
@@ -3983,6 +3983,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
 | `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
 | `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |
+| `--allow <ALLOW>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch`. Never silent — see "Reviewed sanity opt-out" below |
 | `--no-auto-repair` | (global) no-op for this subcommand (there is no card decode to repair); accepted for global-flag uniformity |
 | `--help` | print help |
 
@@ -4006,6 +4007,41 @@ Emit is gated, in order; the first failure short-circuits to a
    `2^(keys+hashes) × timelock-states` exceeds the always-previewable
    envelope (so the cost preview always renders); past the envelope, use a
    raw `--descriptor` with `compare-cost` / `export-wallet` instead.
+
+### Reviewed sanity opt-out (`--allow`, v0.52.0)
+
+Each `--allow <RULE>` waives exactly one step-3 sanity rule for THIS
+invocation — a deliberate, reviewed act, never silent:
+
+- Every rule that **actually fired** is named in an unmissable stderr
+  warning (all output modes, `--json` included), and `--json` adds
+  `"allowed_rules_fired": ["repeated_keys", …]` to the success envelope.
+- An allowance that was requested but **did not fire** gets a
+  `note: … did not fire` nudge (drop the stale flag).
+- A refusal for an allowable rule names the exact token:
+  `…; rerun with --allow mixed-timelock after review`.
+- Allowing one rule never waives another: the gate refuses on the next
+  failing rule.
+- **The cost preview is unavailable on a sanity-overridden descriptor**
+  (its taproot comparison would re-run the waived rules): the human view
+  prints `cost preview unavailable for a sanity-overridden descriptor`,
+  and `--json` emits `"cost": null`.
+- `--emit-spec` records NO allowance in the spec document — replaying an
+  emitted spec without `--allow` correctly refuses. The banner still
+  prints on the emitting run.
+- An allowed `repeated-keys` policy emits duplicate `keys_info` entries
+  in its BIP-388 output (no dedup); hardware-signer registration
+  behavior on duplicate keys is signer-defined.
+- miniscript's 6th opt-out, `raw_pkh`, is not exposed — it is
+  unreachable from this builder's node grammar.
+
+Example — the same-key "degrading threshold" the presets deliberately
+refuse (`RepeatedPubkeys`), built anyway after review:
+
+```sh
+mnemonic build-descriptor --spec degrading.json --allow repeated-keys --format descriptor
+# stderr: WARNING: sanity rules OVERRIDDEN by --allow and FIRED: repeated-keys. …
+```
 
 ### Worked example
 
