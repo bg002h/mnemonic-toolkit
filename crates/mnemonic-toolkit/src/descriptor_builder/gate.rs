@@ -638,6 +638,15 @@ mod tests {
     }
 
     // ---- --allow / AllowSet (allow SPEC §2) ------------------------------
+    //
+    // Coverage note (allow SPEC §5 best-effort posture, impl-r1 M2): fired
+    // detection is exercised end-to-end for sigless-branch (unit + CLI),
+    // repeated-keys and mixed-timelock (CLI banners). `malleable` and
+    // `resource-limit` have no minimal in-envelope construction worth
+    // authoring (see the constructibility rationale further down in this
+    // module's M1 comment block); their coverage is the per-variant
+    // AllowSet→ExtParams mapping cell below — the mapping is what needs
+    // pinning, the ext_check mechanism is uniform across the five.
 
     fn sigless_doc() -> String {
         doc(&format!(r#"{{"or_d":[{{"pk":"{A}"}},{{"after":100}}]}}"#))

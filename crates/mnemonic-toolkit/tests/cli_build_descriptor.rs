@@ -954,6 +954,13 @@ fn emit_spec_records_no_allowance() {
         .code(2);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["diagnostics"][0]["kind"], "repeated_keys");
+    assert!(
+        v["diagnostics"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("rerun with --allow repeated-keys after review"),
+        "refusal hint on the replay (impl-r1 M1)"
+    );
 }
 
 /// bip388 shape on an allowed repeated-keys emit (R0-r1 M5): duplicate
