@@ -83,6 +83,68 @@ fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
         .success();
 }
 
+/// Cell 1b — audit I10 regression: a 2-of-2 reusing ONE xpub at two DIFFERENT
+/// origin paths. Same xpub → same fingerprint → (pre-fix) identical csi → both
+/// cosigners' mk1 chunks merge into one verify-bundle reassembly group → decode
+/// fails → spurious `result: mismatch` (mk1_decode[0] DecodeFailed, [1]
+/// NotSupplied) even though both cards are individually valid. Post-fix the
+/// slot-XOR csi is distinct per cosigner → both map → `result: ok`.
+/// (Same-xpub-different-path is inherently a watch-only config; the BIP-388
+/// distinctness gate admits it since the paths differ.)
+#[test]
+fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
+    const X: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
+    let common = |cmd: &str| -> Vec<String> {
+        vec![
+            cmd.into(),
+            "--network".into(),
+            "mainnet".into(),
+            "--descriptor".into(),
+            "wsh(sortedmulti(2,@0,@1))".into(),
+            "--slot".into(),
+            format!("@0.xpub={X}"),
+            "--slot".into(),
+            "@0.fingerprint=5436d724".into(),
+            "--slot".into(),
+            "@0.path=m/48'/0'/0'/2'".into(),
+            "--slot".into(),
+            format!("@1.xpub={X}"),
+            "--slot".into(),
+            "@1.fingerprint=5436d724".into(),
+            "--slot".into(),
+            "@1.path=m/48'/0'/1'/2'".into(),
+        ]
+    };
+
+    let mut emit = common("bundle");
+    emit.push("--json".into());
+    let out = Command::cargo_bin("mnemonic").unwrap().args(&emit).assert().success();
+    let bundle_json = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+
+    let tmpdir = tempfile::tempdir().unwrap();
+    let path = tmpdir.path().join("bundle.json");
+    std::fs::File::create(&path).unwrap().write_all(bundle_json.as_bytes()).unwrap();
+
+    let mut verify = common("verify-bundle");
+    verify.push("--bundle-json".into());
+    verify.push(path.to_str().unwrap().into());
+    let v = Command::cargo_bin("mnemonic").unwrap().args(&verify).assert().success();
+    let vo = v.get_output();
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&vo.stdout),
+        String::from_utf8_lossy(&vo.stderr)
+    );
+    assert!(
+        report.contains("result: ok"),
+        "I10: same-xpub-two-paths 2-of-2 must verify ok, got:\n{report}"
+    );
+    assert!(
+        report.contains("mk1_decode[0]: ok") && report.contains("mk1_decode[1]: ok"),
+        "I10: both cosigner mk1 must decode (distinct csi groups), got:\n{report}"
+    );
+}
+
 /// Cell 2 — same 2-of-2 bundle but verify via flat `--mk1` argv repetition
 /// (`--mk1 c0 --mk1 c1 --mk1 c2 --mk1 c3`). Confirms the alternative intake
 /// path works once csi is unique per cosigner.

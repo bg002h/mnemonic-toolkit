@@ -388,10 +388,12 @@ Things to notice in the envelope:
 
 - **`mk1`** is a `Vec<Vec<String>>` — outer per cosigner, inner per
   bech32-chunk. The two-chunk shape per cosigner is the canonical
-  mk1 chunking for the wrapped key card. v0.20.0's F1 fix gave each
-  cosigner's chunk-set its own `chunk_set_id` (xpub-fingerprint-
-  derived) so the verify-bundle intake can correctly group chunks
-  back per cosigner before mk-codec decode.
+  mk1 chunking for the wrapped key card. Each cosigner's chunk-set gets
+  its own `chunk_set_id` — the policy stub XORed with the cosigner slot
+  index — so the verify-bundle intake can correctly group chunks back
+  per cosigner before mk-codec decode. (This superseded v0.20.0's
+  xpub-fingerprint-derived scheme, which collided for two cosigners
+  reusing one xpub at different paths.)
 - **`md1`** is a 7-chunk wallet-policy descriptor card, shared across
   all three cosigners (the descriptor body is the same — only the
   cosigner xpubs and origins differ).

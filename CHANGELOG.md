@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.0] — 2026-06-10
+
+**SemVer-MINOR — multisig mk1 `chunk_set_id` is now slot-unique (audit I10) + the engraving display matches it (n1-vs-nge2).**
+
+### Fixed
+
+- Multisig mk1 `chunk_set_id` (csi) was derived per cosigner from the xpub fingerprint. Two cosigners reusing **one xpub at different origin paths** (admitted by the BIP-388 distinctness gate — it rejects only when both xpub AND path match) shared a fingerprint → shared csi → `verify-bundle` merged their chunks into one reassembly group → `ChunkedHeaderMalformed` → spurious `result: mismatch` on two individually-valid cards. The csi is now `derive_mk1_chunk_set_id(policy_stub) ^ slot_index` — distinct per cosigner (XOR is injective) and immune to fingerprint collision. Cosigner count is ≤16, so the slot index only XORs into the low nibble (5th hex char): the **leading 16 bits — the bundle-binding prefix shared with md1 — are preserved**, so cosigner cards still bind to one bundle while grouping correctly. Single-sig (n=1) csi is `^0` ⇒ **byte-identical** to before (no wire change). The csi is never recomputed at verify time, so previously-emitted cards keep verifying.
+- The engraving-card display showed the policy-stub-derived id for every slot, which did not match the per-cosigner csi actually emitted for multisig. The display (both `mk1_card_id` and `ms1_card_id`) now uses the same slot-aware derivation, so the id stamped on each cosigner's plate matches its real csi (resolves `n1-vs-nge2-csi-derivation-inconsistency`).
+
+**Wire change:** emitted multisig mk1 bytes change (the csi); single-sig bundles are unchanged. No CLI flag/surface change. The `bundle --json` mk1 values change (same JSON shape). Resolves audit-2026-06-10 items `mk1-chunk-set-id-fingerprint-grouping-assumes-distinct-fps` (I10) + `n1-vs-nge2-csi-derivation-inconsistency`. (`anti-collision-16bit-invariant-false` — md1↔mk1 cross-card agreement — remains open.)
+
 ## mnemonic-toolkit [0.52.0] — 2026-06-09
 
 **SemVer-MINOR — `build-descriptor --allow <rule>`: a per-variant, reviewed opt-out of the funds-safety sanity gate (never silent).**

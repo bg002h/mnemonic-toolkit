@@ -1054,7 +1054,7 @@ fn build_unified_card(
 ) -> String {
     use crate::format::{engraving_card_unified, BundleInputForCard, SlotCardBlock,
         TemplateOrDescriptor};
-    use crate::synthesize::derive_mk1_chunk_set_id;
+    use crate::synthesize::derive_mk1_chunk_set_id_for_slot;
 
     let n = resolved.len() as u8;
     let template_str: &'static str =
@@ -1084,29 +1084,32 @@ fn build_unified_card(
         .iter()
         .enumerate()
         .map(|(i, s)| {
-            // Both ms1 and mk1 share the policy_id_stub-derived chunk_set_id
-            // (per Phase I.1 spec note in the impl plan).
-            let stub_csi_4hex = match md_codec::chunk::reassemble(&md1_strs)
+            // ms1 and mk1 for slot i share the SLOT-aware chunk_set_id
+            // (audit I10 / n1-vs-nge2): base = policy-stub-derived, XOR slot i.
+            // The leading 16 bits (first 4 hex) are shared across all slots
+            // (bundle-binding prefix); only the 5th hex char varies by slot —
+            // matching what synthesize actually emits per cosigner.
+            let slot_csi_5hex = match md_codec::chunk::reassemble(&md1_strs)
                 .ok()
                 .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok())
             {
                 Some(pid) => {
                     let stub = &pid.as_bytes()[..4];
-                    format!("{:05x}", derive_mk1_chunk_set_id(&[
-                        stub[0], stub[1], stub[2], stub[3]
-                    ]))
+                    format!("{:05x}", derive_mk1_chunk_set_id_for_slot(
+                        &[stub[0], stub[1], stub[2], stub[3]], i as u32
+                    ))
                 }
                 None => "?????".to_string(),
             };
             let ms1_card_id = if bundle.ms1.get(i).map(|s| !s.is_empty()).unwrap_or(false) {
-                Some(stub_csi_4hex.clone())
+                Some(slot_csi_5hex.clone())
             } else {
                 None
             };
             SlotCardBlock {
                 index: i as u8,
                 ms1_card_id,
-                mk1_card_id: stub_csi_4hex,
+                mk1_card_id: slot_csi_5hex,
                 fingerprint: if args.privacy_preserving {
                     None
                 } else {

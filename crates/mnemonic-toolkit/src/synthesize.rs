@@ -45,6 +45,23 @@ pub(crate) fn derive_mk1_chunk_set_id(stub: &[u8; 4]) -> u32 {
     ((stub[0] as u32) << 12) | ((stub[1] as u32) << 4) | ((stub[2] as u32) >> 4)
 }
 
+/// Slot-unique mk1 `chunk_set_id`: the policy-stub-derived base XORed with the
+/// cosigner slot index. `verify-bundle` groups supplied mk1 chunks by csi to
+/// reassemble each cosigner's card, so the csi MUST be distinct per cosigner —
+/// otherwise two cosigners with the same xpub (hence same fingerprint, the old
+/// per-fingerprint derivation) collide into one group and decode fails (audit
+/// I10). XOR is injective in `slot` ⇒ pairwise-distinct csi for distinct slots.
+///
+/// The slot index (≤ 15; cosigner count is capped at 16) only touches the low
+/// nibble (bits 3..0 = the 5th hex char), so the **leading 16 bits**
+/// (= `policy_id[0..2]`, the bundle-binding prefix shared with md1) are
+/// preserved across all cosigners. For n=1 (slot 0) this is byte-identical to
+/// `derive_mk1_chunk_set_id`. Unifies the single-sig and multisig derivations
+/// (resolves the prior n=1-stub vs n≥2-fingerprint inconsistency).
+pub(crate) fn derive_mk1_chunk_set_id_for_slot(stub: &[u8; 4], slot: u32) -> u32 {
+    derive_mk1_chunk_set_id(stub) ^ slot
+}
+
 /// Convert a `bitcoin::bip32::DerivationPath` to md-codec's `OriginPath`.
 /// Used by multisig synthesis where per-cosigner paths come from cosigner
 /// specs (watch-only) or path-family-derived strings (full mode).
@@ -163,7 +180,7 @@ pub fn synthesize_full(
     let path = template.derivation_path(network, account);
     let card =
         mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
-    let csi = derive_mk1_chunk_set_id(&stub);
+    let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
     debug_assert!(descriptor.is_wallet_policy());
@@ -195,7 +212,7 @@ pub fn synthesize_watch_only(
     let path = template.derivation_path(network, account);
     let card =
         mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
-    let csi = derive_mk1_chunk_set_id(&stub);
+    let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
     debug_assert!(descriptor.is_wallet_policy());
@@ -257,13 +274,13 @@ pub fn synthesize_descriptor(
             mk1_origin_path(&c.xpub, &c.path),
             c.xpub,
         );
-        let csi = derive_mk1_chunk_set_id(&stub);
+        let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         MkField::Single(chunks)
     } else {
         let stubs: Vec<[u8; 4]> = vec![stub; n];
         let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(n);
-        for c in cosigners {
+        for (i, c) in cosigners.iter().enumerate() {
             let card = mk_codec::KeyCard::new(
                 stubs.clone(),
                 if privacy_preserving {
@@ -274,8 +291,10 @@ pub fn synthesize_descriptor(
                 mk1_origin_path(&c.xpub, &c.path),
                 c.xpub,
             );
-            let fp_bytes: [u8; 4] = c.xpub.fingerprint().to_bytes();
-            let csi = derive_mk1_chunk_set_id(&fp_bytes);
+            // Slot-unique csi (audit I10): per-fingerprint derivation collided
+            // for same-xpub-different-path cosigners. stub^slot is distinct per
+            // slot and preserves the leading-16-bit bundle-binding prefix.
+            let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
             let chunks =
                 mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
             per_cosigner.push(chunks);
@@ -426,7 +445,7 @@ pub fn synthesize_multisig_full(
 
     // 6+7. Build N KeyCards + emit per-cosigner mk1.
     let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(cosigner_count);
-    for _ in 0..cosigner_count {
+    for i in 0..cosigner_count {
         let card = mk_codec::KeyCard::new(
             stubs.clone(),
             if privacy_preserving {
@@ -439,8 +458,9 @@ pub fn synthesize_multisig_full(
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        let fp_bytes: [u8; 4] = xpub.fingerprint().to_bytes();
-        let csi = derive_mk1_chunk_set_id(&fp_bytes);
+        // Slot-unique csi (audit I10) — self-multisig here means all xpubs are
+        // identical, so the old per-fingerprint scheme collided ALL cosigners.
+        let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
     }
@@ -611,8 +631,9 @@ pub fn synthesize_multisig_watch_only(
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        let fp_bytes: [u8; 4] = c.xpub.fingerprint().to_bytes();
-        let csi = derive_mk1_chunk_set_id(&fp_bytes);
+        // Slot-unique csi (audit I10): distinct per slot; immune to same-xpub
+        // fingerprint collision; preserves the leading-16-bit binding prefix.
+        let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
     }
@@ -1050,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    fn multisig_full_self_multisig_emits_n_card_sets_all_byte_identical() {
+    fn multisig_full_self_multisig_emits_distinct_slot_unique_csi_cards() {
         use bip39::Mnemonic;
         let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
         let bundle = synthesize_multisig_full(
@@ -1067,13 +1088,17 @@ mod tests {
         .unwrap();
         let multi = bundle.mk1.as_multi().expect("multisig must emit Multi");
         assert_eq!(multi.len(), 3, "3 cosigners → 3 card-sets");
-        // Self-multisig: all N cards byte-identical (same xpub, same path, same csi).
+        // Audit I10: self-multisig means all xpubs are identical, so the OLD
+        // per-fingerprint csi made all N card-sets byte-IDENTICAL — the exact
+        // collision that broke verify-bundle reassembly. Post-fix each cosigner
+        // gets a distinct slot-XOR csi, so the card-sets are pairwise DISTINCT.
         for i in 1..3 {
-            assert_eq!(
+            assert_ne!(
                 multi[0], multi[i],
-                "self-multisig cards should be byte-identical"
+                "post-I10 self-multisig card-sets must be DISTINCT (slot-unique csi)"
             );
         }
+        assert_ne!(multi[1], multi[2], "slots 1 and 2 must also differ");
         // Cross-binding round-trip via decode.
         let card_strs: Vec<&str> = multi[0].iter().map(|s| s.as_str()).collect();
         let decoded = mk_codec::decode(&card_strs).unwrap();
@@ -1579,19 +1604,24 @@ mod tests {
             ]
         );
         let mk = bundle.mk1.as_multi().expect("n>1 → Multi");
+        // Audit I10: per-cosigner csi is now slot-XOR of the shared policy stub
+        // (was per-fingerprint). mk[0] and mk[1] share their leading bytes
+        // (same policy stub → same leading-16-bit binding prefix) and differ in
+        // the csi low nibble (slot 0 vs 1) — visible as the shared `mk1qpe8m`
+        // prefix below. Frozen literals re-captured post-fix.
         assert_eq!(
             mk[0],
             vec![
-                "mk1qp40rrpqqspvna5yxhyldpp4w0za5zs9qjyty8su72t3dwaqcl9pvz58pmltjs9tjrg0g2z0agd4urfpzanhaq3lcdlz6k2d0t5nlmjlz5nk".to_string(),
-                "mk1qp40rrpp2a3syx3m7halwd7s7d5e8l2xm3y3xzfmadfj6e20ur0anz7jwkzae8efp77w50czqmsz2vygrt0d".to_string(),
+                "mk1qpe8mgpqqspvna5yxhyldpp4w0za5zs9qjyty8su72t3dwaqcl9pvz58pmltjs9tjrg0g2z0agd4urfpzanhaq3lcdlz6ta8cw4mf7d96gts".to_string(),
+                "mk1qpe8mgpp2a3syx3m7halwd7s7d5e8l2xm3y3xzfmadfj6e20ur0anz7jwkzae8efp77w50cle83tzpcagl78".to_string(),
             ]
         );
         assert_eq!(
             mk[1],
             vec![
-                "mk1qpv4y3zqqspvna5yxhyldpp4hp5gmu07qjcgpqyqpzqgpqyqpzqcpqyqpzpgpqyqpqzg3vs7247wz22l0uwvjq67znc3g6ft568c7qntztrm".to_string(),
-                "mk1qpv4y3zp76lp8zltaht9xxts9tayzjzukf59mpctwngtxq6svts2qqk8su3z373k0ng4vra90z9r27f7v8wwelf50wn4cxamejwcxm5tdw87".to_string(),
-                "mk1qpv4y3zzc70s4f2z8jmqljlfwsfdspdv8".to_string(),
+                "mk1qpe8mfzqqspvna5yxhyldpp4hp5gmu07qjcgpqyqpzqgpqyqpzqcpqyqpzpgpqyqpqzg3vs7247wz22l0uwvjq67znc3gr3exu5ux50m0ewe".to_string(),
+                "mk1qpe8mfzp76lp8zltaht9xxts9tayzjzukf59mpctwngtxq6svts2qqk8su3z373k0ng4vra90z9r27f7v8wwelf50wn4cl9ft5au70gmqu2u".to_string(),
+                "mk1qpe8mfzzc70s4f2z8jmqnewmltc0ta50n".to_string(),
             ]
         );
         assert_eq!(
