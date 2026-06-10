@@ -278,18 +278,18 @@ fn non_secret_flags_omit_secret_field() {
     );
 }
 
-// ── §7 v5 secret-flag full enumeration ──────────────────────────────────────
+// ── §7 v5 secret-flag emitter-plumbing consistency ──────────────────────────
 
 #[test]
-fn secret_flag_enumeration_matches_authoritative_predicate() {
-    // Spot-check that every flag name in the toolkit's
-    // `secrets::flag_is_secret` enumeration that appears in the
-    // emitted schema actually carries `secret: true`. Iterates every
-    // flag in every subcommand and asserts wire-shape consistency
-    // with the predicate. This is the toolkit-internal half of the
-    // drift gate; the GUI-side mirror lives at
-    // `mnemonic-gui/src/secrets.rs` (Tranche B.3 wires up the
-    // cross-repo drift cell).
+fn secret_bit_plumbing_matches_predicate() {
+    // PLUMBING check only: asserts the emitter plumbs
+    // `secrets::flag_is_secret` into every flag's `secret` bit (would
+    // catch `emit_flag` dropping or inverting the bit). It is NOT a
+    // completeness gate — both sides of the equality derive from the
+    // same predicate, so an allowlist omission passes here by
+    // construction. Completeness is gated by the §7b cells below
+    // (audit I3 / `vacuous-secret-flag-gate`). The GUI-side mirror
+    // lives at `mnemonic-gui/src/secrets.rs`.
     let v = run_gui_schema();
     for sub in v["subcommands"].as_array().unwrap() {
         for flag in sub["flags"].as_array().unwrap() {
@@ -304,6 +304,183 @@ fn secret_flag_enumeration_matches_authoritative_predicate() {
             );
         }
     }
+}
+
+// ── §7b v0.53.1 NON-CIRCULAR secret-flag completeness gate (audit I3) ───────
+//
+// The §7 plumbing cell above cannot catch an omission from the
+// `secrets::flag_is_secret` allowlist (both sides derive from it). The three
+// cells below are the real completeness gate: they judge the LIVE gui-schema
+// surface against TEST-LOCAL knowledge only — a vocabulary net, a structural
+// consistency rule, and a frozen literal — and never call `flag_is_secret`.
+// Resolves `vacuous-secret-flag-gate` (+ the design-accepted boundary recorded
+// in `lint_argv_secret_flags.rs`); plan: `design/PLAN_secret_flag_gate_non_circular.md`.
+
+/// Secret-vocabulary needles for Cell 1. Substring match on the flag name.
+/// `phrase` subsumes `passphrase`; `priv` is currently speculative vocabulary
+/// (nothing in the included kinds matches it today — `--privacy-preserving`
+/// is boolean-excluded) but guards future `--privkey`-style names; `key` is
+/// deliberately absent (`--pubkey` noise).
+const SECRET_NAME_NEEDLES: &[&str] = &[
+    "phrase", "secret", "password", "share", "seed", "mnemonic", "wif", "xprv", "entropy",
+    "digits", "ms1", "priv",
+];
+
+/// Cell-1 escape hatch: `(subcommand, flag)` pairs that match the net but are
+/// audited non-secret. EMPTY today. Every future entry MUST carry a rationale
+/// comment explaining why the value is not sensitive material.
+const EXEMPT: &[(&str, &str)] = &[];
+
+/// Kinds excluded from the Cell-1 net BY KIND, not by name:
+/// `path` = a filesystem reference to the secret, not the secret value;
+/// `number` = counts (`--shares`); `boolean` = toggles, which are covered
+/// structurally by Cell 2 (the `*-stdin` consistency rule) instead — a
+/// blanket boolean exclusion would be wrong for stdin toggles, which ARE
+/// secret-classified by convention when their base flag is.
+fn cell1_kind_excluded(kind: &str) -> bool {
+    matches!(kind, "path" | "number" | "boolean")
+}
+
+/// Cell 1 — heuristic name-net: every value-bearing flag (kind not in
+/// {path, number, boolean}) whose name matches the secret vocabulary must
+/// carry `secret: true` (unless EXEMPT). Catches a future secret flag added
+/// with a name inside the vocabulary but outside the allowlist.
+#[test]
+fn heuristic_secret_name_net() {
+    let v = run_gui_schema();
+    let mut violations = Vec::new();
+    for sub in v["subcommands"].as_array().unwrap() {
+        let sub_name = sub["name"].as_str().unwrap();
+        for flag in sub["flags"].as_array().unwrap() {
+            let name = flag["name"].as_str().unwrap();
+            let kind = flag["kind"].as_str().unwrap();
+            if cell1_kind_excluded(kind) {
+                continue;
+            }
+            let lower = name.to_lowercase();
+            if !SECRET_NAME_NEEDLES.iter().any(|n| lower.contains(n)) {
+                continue;
+            }
+            if EXEMPT.contains(&(sub_name, name)) {
+                continue;
+            }
+            let secret = flag.get("secret").and_then(Value::as_bool).unwrap_or(false);
+            if !secret {
+                violations.push(format!("({sub_name}, {name}, kind={kind})"));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "heuristic-positive value flags emitted secret:false — either classify \
+         them in `secrets::flag_is_secret` or add an EXEMPT entry with a \
+         rationale: {violations:?}"
+    );
+}
+
+/// Cell 2 — stdin-toggle consistency: every boolean `--X-stdin` toggle's
+/// `secret` bit must equal its base flag `--X`'s bit in the SAME subcommand,
+/// and the base flag must exist. Convention: selecting a `*-stdin` toggle of
+/// a secret flag implies the user is about to stream secret material, so the
+/// toggle is secret-classified iff the base flag is (see `src/secrets.rs`
+/// membership rationale). Non-secret pairs (`--message-stdin`/`--message`,
+/// `--xpub-stdin`/`--xpub`) are in this cell's domain by design: false==false
+/// passes. A future orphan toggle (no same-subcommand base) fails loudly and
+/// must be triaged explicitly.
+#[test]
+fn stdin_toggle_secrecy_matches_base_flag() {
+    let v = run_gui_schema();
+    let mut violations = Vec::new();
+    let mut toggle_names = std::collections::BTreeSet::new();
+    for sub in v["subcommands"].as_array().unwrap() {
+        let sub_name = sub["name"].as_str().unwrap();
+        let flags = sub["flags"].as_array().unwrap();
+        for flag in flags {
+            let name = flag["name"].as_str().unwrap();
+            let Some(base_name) = name.strip_suffix("-stdin") else {
+                continue;
+            };
+            if flag["kind"] != "boolean" {
+                continue;
+            }
+            toggle_names.insert(name.to_owned());
+            let toggle_secret = flag.get("secret").and_then(Value::as_bool).unwrap_or(false);
+            let Some(base) = flags.iter().find(|f| f["name"] == base_name) else {
+                violations.push(format!(
+                    "({sub_name}, {name}, base={base_name}): orphan stdin toggle — \
+                     no base flag in the same subcommand"
+                ));
+                continue;
+            };
+            let base_secret = base.get("secret").and_then(Value::as_bool).unwrap_or(false);
+            if toggle_secret != base_secret {
+                violations.push(format!(
+                    "({sub_name}, {name}, base={base_name}): toggle secret={toggle_secret} \
+                     but base secret={base_secret}"
+                ));
+            }
+        }
+    }
+    // Domain non-vacuity: 8 DISTINCT toggle names (25 instances) at v0.53.1.
+    // A collapse means the stdin-toggle suffix convention changed under us.
+    assert!(
+        toggle_names.len() >= 8,
+        "expected at least 8 distinct `--X-stdin` boolean toggle names in the \
+         live schema; saw {}: {toggle_names:?} — did the stdin-toggle naming \
+         convention change?",
+        toggle_names.len()
+    );
+    assert!(
+        violations.is_empty(),
+        "stdin toggles whose secret bit disagrees with their base flag: {violations:?}"
+    );
+}
+
+/// Cell 3 — frozen literal: the distinct set of flag names carrying
+/// `secret: true` anywhere in the live schema must SET-EQUAL this
+/// test-local literal. NON-CIRCULAR belt-and-braces over Cells 1-2: any
+/// predicate change (addition OR removal) forces a conscious edit here.
+/// Mirrors token-for-token the list the GUI maintains in
+/// `mnemonic-gui/src/secrets.rs`.
+#[test]
+fn secret_flag_name_set_matches_frozen_literal() {
+    const FROZEN_SECRET_FLAG_NAMES: &[&str] = &[
+        "--bip38-passphrase",
+        "--bip38-passphrase-stdin",
+        "--decrypt-password",
+        "--decrypt-password-stdin",
+        "--digits",
+        "--ms1",
+        "--ms1-stdin",
+        "--passphrase",
+        "--passphrase-stdin",
+        "--phrase",
+        "--phrase-stdin",
+        "--secret",
+        "--secret-stdin",
+        "--share",
+    ];
+    let v = run_gui_schema();
+    let mut live: Vec<&str> = Vec::new();
+    for sub in v["subcommands"].as_array().unwrap() {
+        for flag in sub["flags"].as_array().unwrap() {
+            if flag.get("secret").and_then(Value::as_bool).unwrap_or(false) {
+                let name = flag["name"].as_str().unwrap();
+                if !live.contains(&name) {
+                    live.push(name);
+                }
+            }
+        }
+    }
+    live.sort_unstable();
+    let mut frozen: Vec<&str> = FROZEN_SECRET_FLAG_NAMES.to_vec();
+    frozen.sort_unstable();
+    assert_eq!(
+        live, frozen,
+        "distinct secret:true flag names in the live schema diverged from the \
+         frozen literal — update BOTH `secrets::flag_is_secret` and this list \
+         consciously (and stage the GUI mirror companion)"
+    );
 }
 
 // ── §7 v5 global-vs-local flag-id disjointness invariant (v0.25.0 Phase 3) ──

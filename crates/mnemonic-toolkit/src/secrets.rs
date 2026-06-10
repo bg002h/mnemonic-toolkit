@@ -28,6 +28,13 @@
 //!   user is about to stream secret material via stdin.
 //! - `--ms1` — single-slot BIP-39 entropy chunk. Distinguished from `--mk1`
 //!   (xpub) and `--md1` (descriptor), which are non-secret by design.
+//!   `--ms1-stdin` — its stdin sentinel toggle (same rationale as
+//!   `--passphrase-stdin` above; v0.53.1 audit-I3 fix — was a gap vs the
+//!   established toggle convention).
+//! - `--phrase` / `--phrase-stdin` — raw BIP-39 master phrase supplied
+//!   inline to the three `xpub-search` modes, plus its stdin sentinel
+//!   toggle (v0.53.1 audit-I3 fix; the runtime already treated the value
+//!   as secret-equivalent via the `@env:` sentinel + stdin route).
 //! - `--share` — SLIP-39 / seed-XOR share. Share material is secret-class
 //!   under both schemes' security models (any share's compromise reduces
 //!   the K threshold).
@@ -57,6 +64,9 @@ pub fn flag_is_secret(flag_name: &str) -> bool {
             | "--decrypt-password-stdin"
             | "--digits"
             | "--ms1"
+            | "--ms1-stdin"
+            | "--phrase"
+            | "--phrase-stdin"
             | "--secret"
             | "--secret-stdin"
             | "--share"
@@ -78,6 +88,9 @@ mod tests {
             "--decrypt-password-stdin",
             "--digits",
             "--ms1",
+            "--ms1-stdin",
+            "--phrase",
+            "--phrase-stdin",
             "--share",
         ] {
             assert!(flag_is_secret(name), "{name} must classify as secret");

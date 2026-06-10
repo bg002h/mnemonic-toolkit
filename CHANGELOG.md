@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.1] — 2026-06-10
+
+**SemVer-PATCH — `--phrase`/`--phrase-stdin`/`--ms1-stdin` are now secret-classified, and the secret-flag completeness gate is no longer circular (audit I3).**
+
+### Fixed
+
+- `xpub-search {path-of-xpub, passphrase-of-xpub, account-of-descriptor} --phrase` — a **raw BIP-39 master phrase** supplied inline — emitted `secret: false` in the `gui-schema` envelope, so GUI consumers rendered it cleartext with no paste-warn / run-confirm / exit-zeroize. It is now `secret: true`, along with its `--phrase-stdin` toggle and the previously-missed `--ms1-stdin` toggle (the `*-stdin`-sentinel-of-a-secret-flag convention). No card bytes, no flag names, and no runtime behavior change — the only wire delta is the `gui-schema` JSON `secret` metadata for these three names (same shape). The GUI mirrors flip at its next pin bump (companion staged on the open `mnemonic-gui` FOLLOWUPS entries; this is the toolkit-side half of audit I4).
+- The test presented as the secret-flag drift gate (`secret_flag_enumeration_matches_authoritative_predicate`) compared the schema's `secret` bit against the same `secrets::flag_is_secret` predicate the emitter derives it from — a tautology that could never catch an allowlist omission (audit I3, `vacuous-secret-flag-gate`). It is kept (renamed `secret_bit_plumbing_matches_predicate`) as the emitter-plumbing check it always was, and three **non-circular** §7b gate cells now judge the live schema against test-local knowledge only: a secret-vocabulary name-net over value-bearing flags (with an audited-`EXEMPT` escape hatch, empty today), a structural `--X-stdin`-toggle-secrecy-equals-base-flag rule, and a frozen 14-name literal that set-equals the live `secret:true` surface. Written TDD-first: all three were red on exactly the three names above before the classification fix.
+- `lint_argv_secret_flags` axis-1 (transitive on the same predicate) gains the three `xpub-search --phrase` routes with **discriminating** evidence needles (`pub phrase_stdin` / `fn phrase_stdin` — bare `phrase_stdin` is a suffix of the files' existing `passphrase_stdin` anchors and would prove nothing), and its module-doc boundary statement is rewritten: the predicate's completeness is now gated; the honestly-stated residual is novel-vocabulary names outside the net.
+
+Resolves audit-2026-06-10 items `vacuous-secret-flag-gate` (I3) + `flag-is-secret-completeness-unguarded-by-design`. Plan + R0 reviews: `design/PLAN_secret_flag_gate_non_circular.md`, `design/agent-reports/secret-flag-gate-plan-r0-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.53.0] — 2026-06-10
 
 **SemVer-MINOR — multisig mk1 `chunk_set_id` is now slot-unique (audit I10) + the engraving display matches it (n1-vs-nge2).**

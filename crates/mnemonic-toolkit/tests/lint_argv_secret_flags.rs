@@ -27,13 +27,18 @@
 //!     subcommand accepts — so no per-node enumeration is needed, R0 I1).
 //!  3. `--slot` axis — subcommands declaring `--slot`.
 //!
-//! Boundary (v0.36.2 end-of-cycle M1): axis-1 completeness is TRANSITIVE on
-//! `secrets::flag_is_secret` (gui-schema's `secret` bit = `flag_is_secret(name)`).
-//! A future secret VALUE flag added with a name absent from `flag_is_secret` AND
-//! not routed via `--from`/`--slot` would escape this closure — but it would also
-//! escape the runtime advisory / zeroize / GUI-mask (a far more visible defect),
-//! so `flag_is_secret` is the authoritative source this gate is anchored to, by
-//! design. There is no separate gate over `flag_is_secret` completeness itself.
+//! Boundary (v0.36.2 end-of-cycle M1; NARROWED v0.53.1 audit-I3): axis-1
+//! completeness is TRANSITIVE on `secrets::flag_is_secret` (gui-schema's
+//! `secret` bit = `flag_is_secret(name)`). Since v0.53.1, `flag_is_secret`'s
+//! own completeness IS gated — the §7b cells in
+//! `cli_gui_schema_v5_extensions.rs` (heuristic name-net + stdin-toggle
+//! consistency + frozen 14-name literal) judge the live schema against
+//! test-local knowledge, never the predicate itself. Residual boundary,
+//! stated honestly: a future secret VALUE flag whose name uses NOVEL
+//! vocabulary outside the §7b name-net AND is not routed via `--from`/
+//! `--slot` still escapes both closures (it would also escape the runtime
+//! advisory / zeroize / GUI-mask — a far more visible defect). The net
+//! narrows the hole; it does not eliminate it.
 //!
 //! `source_file` is EXPLICIT per route (R2 M-1): gui-schema FLATTENS nested
 //! subcommands (`xpub-search-path-of-xpub`, `seedqr-decode`) and some stdin
@@ -62,7 +67,7 @@ struct Route {
 }
 
 // ── Axis 1: flag-NAME routes (9 pre-v0.13.0 + 16 backfilled v0.36.2 + addresses
-//    v0.38.0 + ms-shares-combine + restore v0.43.0) ──
+//    v0.38.0 + ms-shares-combine + restore v0.43.0 + xpub-search --phrase ×3 v0.53.1) ──
 const FLAG_ROUTES: &[Route] = &[
     // -- pre-v0.13.0 (9) --
     Route { subcommand: "bundle", flag: "--passphrase", source_file: "src/cmd/bundle.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
@@ -100,6 +105,14 @@ const FLAG_ROUTES: &[Route] = &[
     Route { subcommand: "ms-shares-combine", flag: "--share", source_file: "src/cmd/ms_shares.rs", evidence: &["--share -", "secret_in_argv_warning"] },
     // -- v0.43.0 (1): mnemonic restore --passphrase --
     Route { subcommand: "restore", flag: "--passphrase", source_file: "src/cmd/restore.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
+    // -- v0.53.1 audit-I3 (3): xpub-search ×3 --phrase (newly secret-classified).
+    //    Needles MUST be discriminating: bare "phrase_stdin"/"phrase-stdin" are
+    //    suffixes of "passphrase_stdin"/"passphrase-stdin", which these files
+    //    already contain for their --passphrase routes — `pub `/`fn `-prefixed
+    //    forms vanish iff the --phrase-stdin wiring is deleted (R0-r1 I-3).
+    Route { subcommand: "xpub-search-path-of-xpub", flag: "--phrase", source_file: "src/cmd/xpub_search/path_of_xpub.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
+    Route { subcommand: "xpub-search-account-of-descriptor", flag: "--phrase", source_file: "src/cmd/xpub_search/account_of_descriptor.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
+    Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--phrase", source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
 ];
 
 // ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
