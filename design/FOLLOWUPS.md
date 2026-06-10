@@ -36,6 +36,7 @@ Single source of truth for items that surfaced during a review or implementation
   - **[obs]** `two-miniscripts-patch-load-bearing-stale-error` — Toolkit patches miniscript to git rev 95fdd1c (has Terminal::SortedMultiA) for its entire dep graph, so md-codec is recompiled against the patched miniscript inside the toolkit binary; md-codec's to_m (`toolkit Cargo.toml:9-16 ([patch.crates-io] miniscript git rev 95fdd1c); descriptor-mnemonic crates/md-codec/src/to_miniscript.rs:406-408 (SortedMultiA refusal message)`)
 - **Status:** open (backlog index; individual items dispositioned in the report).
 - **Tier:** audit-backlog.
+- **Cross-repo note (2026-06-10):** audit I1 (`stub-formula-divergence`) + I2 (`from-md1-test-tautology`) RESOLVED in **mnemonic-key (mk-cli v0.8.0)**. The divergence was on the **mk** side: `mk --from-md1` computed the `policy_id_stub` from the md1 bytecode hash; the toolkit's `synthesize.rs` (6 sites) already used `compute_wallet_policy_id(...).as_bytes()[..4]` (WalletPolicyId, encoding-stable) and was **confirmed correct — no toolkit change**. mk-cli + the mk SPEC/BIP were aligned to the toolkit's formula. See `mnemonic-key/design/PLAN_stub_formula_walletpolicyid.md`.
 
 ### `<short-id>` — <one-line title>
 
