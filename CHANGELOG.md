@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.54.0] — 2026-06-11
+
+**SemVer-MINOR — `restore --md1` reconstructs GENERAL wallet-policy descriptors faithfully (funds-safety: was silently collapsing them to plain multisig).**
+
+### Fixed
+
+- **C1 (funds-safety).** `restore --md1` SILENTLY reconstructed a *different* wallet for general `wsh`/`sh(wsh())` policies whose keys sit inside `multi()`/`sortedmulti()`: a `wsh(and_v(v:multi(2,…),older(4032)))` md1 restored as a plain `wsh(multi(2,…))` — the `older` timelock GONE — at exit 0, with a false "verified" banner and a wrong importable payload. Root cause: restore computed the faithful descriptor (`to_miniscript_descriptor`) then DISCARDED it via a top-level-wrapper-only template classifier (`Wsh(_) => WshMulti`) and rebuilt a plain `multi(k, all-keys)`. The general arm now KEEPS the faithful descriptor (with a `translate_pk` pass for canonical multipath + `--network`-correct keys), preserving the full policy tree (timelocks, hashlocks, andor, decay vaults). Addresses derive from the emitted descriptor (self-consistent). Discrimination is structural on the md1 tree (`plain_template_from_tree`), so plain `multi`/`sortedmulti` and taproot reconstruct **byte-for-byte unchanged** (all 13+12 existing goldens green).
+- General policies are labeled `wallet_type: "miniscript-policy"` (header "miniscript policy restore (N cosigner[s])"); the top-level `--json` `threshold` is `null` (a general policy has no single k-of-n threshold). Descriptor-driven `--format`s (`bitcoin-core`/`descriptor`/`bsms`) emit the faithful descriptor (`bip388` too for a multipath `/<0;1>/*` card; it refuses a wildcard-only one); template-requiring k-of-n formats (`coldcard`/`jade`/`electrum`/`sparrow`/`green`/`specter`) refuse loudly.
+- A card that cannot be reconstructed faithfully — per-cosigner use-site path overrides (cosigners not sharing one multipath suffix) or a hardened wildcard (`/*h`) — is REFUSED loudly (the md-codec reconstruction renders one shared, unhardened use-site for all keys, which would silently misrepresent the wallet). The engraved card remains a faithful backup. Tracked: `restore-md1-per-key-use-site-and-hardened-wildcard`.
+- **Scope boundary:** `pk(@N)`/`pkh(@N)` key-leaf policies (toolkit-authored wire carries a `Check(Check(PkH))` double-wrap) currently hit a CLEAR loud refusal naming the md-codec follow-up (`to-miniscript-check-pkh-double-wrap`) — no longer a silent collapse or the cryptic k-gate. They reconstruct through the same general arm once that md-codec fix ships (PART 2). Multi-keyed general policies reconstruct **now**.
+- Tests: new `tests/cli_restore_multisig_general.rs` (and_v+older RED-proven; decay vault; sha256 hashlock; `--format descriptor` faithful; `--format coldcard` refuses; pkh-leaf clean refusal; wildcard-only `multipath==None` path). md1 fixed-point oracle (re-bundling the reconstruction reproduces the card) since byte-equality with `export-wallet --descriptor` is impossible (md1 keys are depth-0).
+
+### Notes
+
+No CLI flag/subcommand/value change → no `schema_mirror`. The `restore --json` envelope gains `wallet_type: "miniscript-policy"` + `threshold: null` for general policies (wire-shape change, no drift gate → GUI paired-PR + manual restore-chapter update). SPEC + R0 ×3 GREEN: `design/SPEC_faithful_general_policy_restore.md`, `design/agent-reports/faithful-general-policy-restore-r0-round{1,2,3}-review.md`. Companion fixes filed: PART 2 (md-codec `Check` double-wrap, `to-miniscript-check-pkh-double-wrap`), C2 (`export-wallet --from-import-json` same collapse).
+
 ## mnemonic-toolkit [0.53.9] — 2026-06-11
 
 **SemVer-PATCH — `build-descriptor` rejects BIP-68 `older()` timelocks that consensus would silently weaken or zero (funds-safety).**

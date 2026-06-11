@@ -948,6 +948,22 @@ slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless
 `--allow-mismatch`. Restore stays watch-only-out in multisig mode too: no
 `xprv` / WIF / seed reaches stdout, stderr, or `--json`.
 
+**General wallet policies (v0.54.0).** Beyond plain `multi`/`sortedmulti`,
+an `md1` for a *general* policy — timelocks (`older`/`after`), hashlocks
+(`sha256`/`hash256`/`ripemd160`/`hash160`), `andor`/`and_v`/`or_*`/`thresh`,
+or a decaying-quorum vault — reconstructs **faithfully**, preserving the full
+policy (it is no longer collapsed to plain multisig). These are labeled
+`miniscript policy restore (N cosigners)` (and `--json` `wallet_type:
+"miniscript-policy"` with a null top-level `threshold`, since a general policy
+has no single k-of-n threshold). Descriptor-driven `--format`s
+(`bitcoin-core` / `descriptor` / `bsms`) emit the faithful descriptor
+(`bip388` too for a multipath `/<0;1>/*` card; it refuses a wildcard-only
+one); template-requiring k-of-n formats refuse. (A policy whose keys appear as
+bare `pk(@N)`/`pkh(@N)` *outside* a `multi()` is refused with a clear message
+pending a sibling md-codec rendering fix; likewise a card with per-cosigner
+use-site overrides or a hardened wildcard `/*h` is refused rather than
+mis-rendered. The engraved card remains a faithful backup either way.)
+
 **Importable wallet payloads (`--format`).** As with single-sig restore,
 `--format <X>` emits an importable wallet-software payload instead of the
 plain descriptor doc — the same payload class as `mnemonic export-wallet

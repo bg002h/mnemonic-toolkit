@@ -35,6 +35,43 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix:** serialize the cell / use a unique temp path / wait-for-non-empty before parse, so a green push can't intermittently red on macos.
 - **Tier:** test-flakiness (CI hygiene).
 
+### `restore-md1-general-policy-silent-collapse` (C1) — ✓ RESOLVED (v0.54.0, 2026-06-11)
+
+- **Surfaced:** 2026-06-11, the 3-agent backup→restore fragment review (`design/agent-reports/fragment-backup-restore-review-2026-06-11.md`). CRITICAL funds-safety: `restore --md1` SILENTLY reconstructed a *different* wallet for general `wsh`/`sh(wsh)` policies whose keys sit inside `multi()` — `wsh(and_v(v:multi(2,…),older(4032)))` → `wsh(multi(2,…))`, the timelock GONE, exit 0, false "verified" banner, wrong importable payload.
+- **Resolution:** the general arm now keeps the faithful `to_miniscript_descriptor` output (via a `translate_pk` multipath/network pass) instead of collapsing it; structural `plain_template_from_tree` discriminator preserves the plain/taproot paths byte-for-byte (13+12 goldens green). `wallet_type: "miniscript-policy"`, null top-level `threshold`. SPEC `design/SPEC_faithful_general_policy_restore.md`; R0 ×3 GREEN (`faithful-general-policy-restore-r0-round{1,2,3}-review.md`). Tests `tests/cli_restore_multisig_general.rs` (RED-proven). `cmd/restore.rs::{faithful_multisig_descriptor, plain_template_from_tree, ReconstructTranslator}`.
+
+### `restore-md1-per-key-use-site-and-hardened-wildcard` — restore refuses two use-site shapes it can't yet render faithfully
+
+- **Surfaced:** 2026-06-11, v0.54.0 impl-review (I1/I2). md-codec's reconstruction renders ONE baseline use-site (the same multipath + an UNHARDENED wildcard) for every key, so two constructible md1 shapes would reconstruct a DIFFERENT wallet SILENTLY: (1) per-cosigner use-site overrides (`d.tlv.use_site_path_overrides`, e.g. `wsh(multi(2,@0/<0;1>/*,@1/*))`); (2) a hardened wildcard (`d.use_site_path.wildcard_hardened`, `/*h`). v0.54.0 REFUSES both loudly (the engraved card stays a faithful backup) rather than mis-render.
+- **Where:** `cmd/restore.rs::run_multisig` (the use-site fidelity guard, after the `is_wallet_policy` gate). Root limitation: md-codec `to_miniscript.rs` (one use-site for all keys + hardcoded `Wildcard::Unhardened`).
+- **Fix:** faithful reconstruction = thread per-key derivation paths (md-codec must expose per-`@N` use-site) + honor `wildcard_hardened` (and gate hardened-wildcard watch-only address derivation). Likely a paired md-codec enhancement.
+- **Tier:** deferred (refused loudly today — no silent infidelity; exotic card shapes).
+
+### `to-miniscript-check-pkh-double-wrap` — md-codec renders `Check(PkH)`/`Check(PkK)` as a double-Check → restore type-error (PART 2)
+
+- **Surfaced:** 2026-06-11, the C1 deep-recon. md-codec's `to_miniscript.rs` `Tag::PkK`/`PkH` arms re-apply `Check` to an already-type-K bare key AND the `Tag::Check` arm wraps another → `Check(Check(PkH))` = `c:` over type-B → "c:pkh cannot wrap a fragment of type B". Blocks faithful restore of `pk(@N)`/`pkh(@N)`-keyed policies (the toolkit walker emits `Tag::Check(Tag::PkH)` in non-tap context; md-cli fixed this in its v0.30 Q12 redesign but the toolkit walker was ported 5 days before the freeze and never normalized).
+- **Where:** descriptor-mnemonic `crates/md-codec/src/to_miniscript.rs::node_to_miniscript` (`Tag::Check`/`PkK`/`PkH` arms ~:290-307). Companion: `mnemonic-toolkit` `cmd/restore.rs::faithful_multisig_descriptor` (surfaces the clear refusal naming this slug).
+- **Fix:** A1 — `Tag::Check` over a bare `PkK/PkH` returns the child directly (Check-idempotence, mirrors md-cli `format/text.rs:363-385`); A2 — thread `want_k` to render bare keys at type-K positions (closes `Check(or_i(pk_k,pk_k))` too, ~25 LOC). Both strictly error→success. md-codec PATCH `0.35.1` (renderer-tolerance) + md-cli exact-pin lockstep + toolkit `cargo update -p md-codec`. **Companion entry to file in descriptor-mnemonic.** PART 2 of the long-term restore fix.
+- **Tier:** next-cycle (cross-repo; crates.io publish).
+
+### `export-wallet-from-import-json-template-collapse` (C2) — same silent collapse on a second door
+
+- **Surfaced:** 2026-06-11, the backup→restore review. `export-wallet --from-import-json … --format <template-requiring>` collapses a general descriptor via the same `template_from_descriptor` `Wsh(_) => WshMulti` (`export_wallet.rs` `--from-import-json` path) → wrong/partial payload for a general-policy import.
+- **Fix:** apply the faithful/structural-gate approach (mirror the restore C1 fix) at the `--from-import-json` template re-emit site.
+- **Tier:** next-cycle (same class as C1; separate surface).
+
+### `bundle-engraves-unrestorable-pk-keyed-cards` — bundle accepts pk-keyed policies restore can't yet reconstruct, no warning
+
+- **Surfaced:** 2026-06-11, the C1 recon. `bundle --descriptor` happily emits + self-checks an md1 for a `pk(@N)`/`pkh(@N)`-keyed policy that `restore --md1` then refuses (pending `to-miniscript-check-pkh-double-wrap`). The card is a faithful backup but not yet mechanically restorable.
+- **Fix:** a bundle-time advisory (non-blocking) when the descriptor contains a bare-key-check fragment, pointing at the md-codec follow-up; dissolves once PART 2 ships.
+- **Tier:** deferred (advisory UX).
+
+### `restore-general-policy-json-wallet-type-gui-pin` — GUI paired-PR for the `restore --json` wire-shape change
+
+- **Surfaced:** 2026-06-11, v0.54.0 (C1 fix). The `restore --json` envelope now emits `wallet_type: "miniscript-policy"` + null top-level `threshold` for general policies (no clap flag change → no `schema_mirror`/`gui-schema` gate). A `--json`-consuming GUI must self-update.
+- **Fix:** GUI paired-PR enumerating EVERY changed/retained envelope field (`wallet_type`, top-level `threshold` nullable, header text); manual restore chapter already updated in-repo.
+- **Tier:** lockstep (paired-PR rule; no drift gate).
+
 ### `bip388-template-path-wallet-name` — `--format bip388` on the `--template` path ignores `--wallet-name`
 
 - **Surfaced:** 2026-06-11, v0.53.8 (`bip388-policy-name-lossy-roundtrip` cycle, R0-r1 I1 carve-out).

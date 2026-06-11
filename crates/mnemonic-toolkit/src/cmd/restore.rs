@@ -39,7 +39,7 @@ use crate::wallet_export::{
     self, build_descriptor_string, BsmsForm, CheckedDescriptor, EmitInputs, TaprootInternalKey,
     TimestampArg,
 };
-use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+use miniscript::{translate_hash_clone, Descriptor as MsDescriptor, DescriptorPublicKey};
 
 /// The four single-sig templates restore emits when no `--template` is given.
 const ALL_SINGLE_SIG: [CliTemplate; 4] = [
@@ -682,25 +682,45 @@ fn taproot_template_and_internal_key(
 #[allow(clippy::too_many_arguments)]
 fn build_multisig_import_payload(
     format: CliExportFormat,
-    template: CliTemplate,
+    template: Option<CliTemplate>,
     slots: &[ResolvedSlot],
-    k: u8,
+    k: Option<u8>,
     descriptor: &str,
     network: CliNetwork,
     account: u32,
     taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<String, ToolkitError> {
-    let script_type = wallet_export::script_type_from_template(&template);
-    let wallet_name = format!("{}-{}", template.human_name(), account);
+    // General arm (`template == None`): descriptor-mode `EmitInputs` mirroring
+    // `export-wallet --descriptor` — `script_type_from_descriptor` + the
+    // `"imported-descriptor"` default name. Descriptor-driven formats
+    // (bitcoin-core/descriptor/bsms) emit FAITHFULLY; `bip388` emits faithfully
+    // for a multipath (`/<0;1>/*`) card and refuses a wildcard-only one (BIP-388
+    // wallet policies require the multipath suffix). Template-requiring k-of-n
+    // formats (coldcard/jade/electrum/sparrow/green/specter) refuse via their
+    // existing `template`/`is_multisig` branches.
+    let (script_type, wallet_name) = match template {
+        Some(t) => (
+            wallet_export::script_type_from_template(&t),
+            format!("{}-{}", t.human_name(), account),
+        ),
+        None => {
+            let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(descriptor)
+                .map_err(|e| bad(format!("--md1 reconstructed descriptor parse: {e}")))?;
+            (
+                wallet_export::script_type_from_descriptor(&parsed)?,
+                "imported-descriptor".to_string(),
+            )
+        }
+    };
     let inputs = EmitInputs {
         canonical_descriptor: CheckedDescriptor::new(descriptor)?,
         resolved_slots: slots,
-        template: Some(template),
+        template,
         script_type,
         network,
         account,
-        threshold: Some(k),
-        threshold_user_supplied: true,
+        threshold: k,
+        threshold_user_supplied: k.is_some(),
         master_xpub_at_0: slots.first().and_then(|s| s.master_xpub),
         wallet_name: &wallet_name,
         wallet_name_is_non_default: false,
@@ -771,6 +791,159 @@ fn origin_path_to_derivation_path(
     Ok(comps.into())
 }
 
+/// Translator that fixes the 3 caveats of md-codec's `to_miniscript_descriptor`
+/// output so it round-trips faithfully: it renders single-path, depth-0,
+/// `Main`-network keys. This promotes each `XPub` to a canonical multipath
+/// (`<0;1>/*`) `MultiXPub` with the `--network`-correct kind — or, for a
+/// wildcard-only md1 (no multipath group), passes the `XPub` through
+/// network-corrected only (R0-r1 I3: do NOT fabricate `<0;1>`).
+struct ReconstructTranslator {
+    network: CliNetwork,
+    multipath: Option<Vec<md_codec::use_site_path::Alternative>>,
+}
+
+impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
+    type TargetPk = DescriptorPublicKey;
+    type Error = ToolkitError;
+
+    fn pk(&mut self, pk: &DescriptorPublicKey) -> Result<DescriptorPublicKey, ToolkitError> {
+        use miniscript::descriptor::{DerivPaths, DescriptorMultiXKey, DescriptorXKey};
+        // The non-taproot wallet-policy keys are ALWAYS `XPub` (md-codec
+        // `build_descriptor_public_key`); be total (R0-r1 M6) — never panic.
+        let xk = match pk {
+            DescriptorPublicKey::XPub(x) => x,
+            _ => {
+                return Err(bad(
+                    "--md1 reconstruction: unexpected non-XPub key in wallet policy",
+                ))
+            }
+        };
+        let mut xkey: Xpub = xk.xkey;
+        xkey.network = self.network.network_kind();
+        match &self.multipath {
+            Some(alts) => {
+                let mut paths: Vec<DerivationPath> = Vec::with_capacity(alts.len());
+                for a in alts {
+                    let cn = if a.hardened {
+                        ChildNumber::from_hardened_idx(a.value)
+                    } else {
+                        ChildNumber::from_normal_idx(a.value)
+                    }
+                    .map_err(|_| {
+                        bad(format!("--md1 multipath component {} out of range", a.value))
+                    })?;
+                    paths.push(DerivationPath::from(vec![cn]));
+                }
+                let derivation_paths =
+                    DerivPaths::new(paths).ok_or_else(|| bad("--md1 multipath group is empty"))?;
+                Ok(DescriptorPublicKey::MultiXPub(DescriptorMultiXKey {
+                    origin: xk.origin.clone(),
+                    xkey,
+                    derivation_paths,
+                    wildcard: xk.wildcard,
+                }))
+            }
+            None => Ok(DescriptorPublicKey::XPub(DescriptorXKey {
+                origin: xk.origin.clone(),
+                xkey,
+                derivation_path: xk.derivation_path.clone(),
+                wildcard: xk.wildcard,
+            })),
+        }
+    }
+
+    translate_hash_clone!(DescriptorPublicKey);
+}
+
+/// Reconstruct the faithful concrete watch-only descriptor STRING from a general
+/// (non-plain-template) wallet-policy md1, PRESERVING the full policy tree
+/// (timelocks/hashlocks/andor/decay/…). This is the C1 fix: md-codec's
+/// `to_miniscript_descriptor` already renders the faithful descriptor — keep it
+/// (with the network/multipath `translate_pk` pass) instead of discarding it into
+/// a plain-multi template. Errors (the `pk(@N)`/`pkh(@N)` double-Check shape,
+/// PART 2) surface a CLEAR refusal naming the md-codec follow-up — never silent.
+fn faithful_multisig_descriptor(
+    d: &md_codec::Descriptor,
+    network: CliNetwork,
+) -> Result<String, ToolkitError> {
+    let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(d, 0).map_err(|e| {
+        // A `cannot wrap a fragment of type B` error is the known `pk(@N)`/
+        // `pkh(@N)` double-Check shape (PART 2); other errors are unrelated, so
+        // attribute the slug conditionally rather than blaming it for everything.
+        let hint = if e.to_string().contains("cannot wrap") {
+            " — this md1 encodes a key-check fragment the current md-codec cannot yet render \
+             back (tracked as `to-miniscript-check-pkh-double-wrap`)"
+        } else {
+            ""
+        };
+        bad(format!(
+            "--md1 → descriptor: {e}{hint}. The engraved card remains a faithful backup."
+        ))
+    })?;
+    let mut t = ReconstructTranslator {
+        network,
+        multipath: d.use_site_path.multipath.clone(),
+    };
+    let translated = ms0.translate_pk(&mut t).map_err(|e| match e {
+        miniscript::TranslateErr::TranslatorErr(te) => te,
+        miniscript::TranslateErr::OuterError(oe) => {
+            bad(format!("--md1 reconstruction: {oe}"))
+        }
+    })?;
+    Ok(translated.to_string())
+}
+
+/// Return `Some(template)` ONLY for a strictly-plain `wsh/sh-wsh(multi|sortedmulti)`
+/// md1 with IDENTITY key indices and the standard `<0;1>` use-site — the shape the
+/// existing `build_descriptor_string` path reconstructs byte-for-byte. Everything
+/// else (general policy, duplicate/non-identity indices, non-standard/`None`
+/// use-site) returns `None` → the faithful arm. Deliberately does NOT use
+/// `template_from_descriptor` (its `Wsh(_) => WshMulti` collapse IS the C1 bug).
+fn plain_template_from_tree(
+    node: &md_codec::tree::Node,
+    use_site: &md_codec::use_site_path::UseSitePath,
+) -> Option<CliTemplate> {
+    use md_codec::tree::Body;
+    use md_codec::Tag;
+
+    // Standard `<0;1>/*` use-site only; anything else (incl. `None`) → faithful.
+    if *use_site != md_codec::use_site_path::UseSitePath::standard_multipath() {
+        return None;
+    }
+    // A plain multi/sortedmulti leaf with identity indices. `Some(true)` =
+    // sortedmulti, `Some(false)` = multi, `None` = not-plain (→ faithful arm,
+    // incl. duplicate/non-identity indices `build_descriptor_string` would drop).
+    fn plain_leaf(n: &md_codec::tree::Node) -> Option<bool> {
+        match (&n.tag, &n.body) {
+            (Tag::Multi | Tag::SortedMulti, Body::MultiKeys { indices, .. }) => {
+                let identity = indices.iter().enumerate().all(|(i, &ix)| ix as usize == i);
+                identity.then_some(matches!(n.tag, Tag::SortedMulti))
+            }
+            _ => None,
+        }
+    }
+    match (&node.tag, &node.body) {
+        (Tag::Wsh, Body::Children(c)) if c.len() == 1 => plain_leaf(&c[0]).map(|sorted| {
+            if sorted {
+                CliTemplate::WshSortedMulti
+            } else {
+                CliTemplate::WshMulti
+            }
+        }),
+        (Tag::Sh, Body::Children(c)) if c.len() == 1 => match (&c[0].tag, &c[0].body) {
+            (Tag::Wsh, Body::Children(gc)) if gc.len() == 1 => plain_leaf(&gc[0]).map(|sorted| {
+                if sorted {
+                    CliTemplate::ShWshSortedMulti
+                } else {
+                    CliTemplate::ShWshMulti
+                }
+            }),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// One reconstructed cosigner position for the restore document.
 struct CosignerInfo {
     idx: u8,
@@ -826,22 +999,54 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         });
     }
 
+    // Use-site fidelity guard (impl-review I1/I2): md-codec's reconstruction
+    // renders ONE baseline use-site (the same multipath + an UNHARDENED wildcard)
+    // for every key. Two constructible card shapes would therefore reconstruct a
+    // DIFFERENT wallet than the card encodes, SILENTLY — the exact funds-safety
+    // class this fix exists to close. Refuse loudly rather than mis-render; the
+    // engraved card remains a faithful backup. (Both arms — plain and faithful —
+    // share the md-codec limitation, so the guard precedes classify.)
+    if d.tlv.use_site_path_overrides.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "this md1 carries per-cosigner use-site path overrides (the cosigners do not share one multipath/derivation suffix); faithful reconstruction is not yet supported, and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
+        });
+    }
+    if d.use_site_path.wildcard_hardened {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "this md1 uses a hardened wildcard (`/*h`) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened `/*`. Faithful reconstruction is not yet supported. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
+        });
+    }
+
     // --- 3. Classify: template + (taproot) NUMS internal key. ---
     // Taproot md1 (`Tag::Tr`) routes AROUND md-codec's `to_miniscript` (which
     // errors on `SortedMultiA`): read template + NUMS internal key off the tree
     // directly, then build/derive via the toolkit's own miniscript (rev 95fdd1c
     // HAS `Terminal::SortedMultiA`). wsh/sh-wsh keep `to_miniscript_descriptor`.
+    // `template_opt = Some(_)` ONLY for a strictly-plain `wsh/sh-wsh(multi|
+    // sortedmulti)` (or taproot multi_a/sortedmulti_a) md1 → the existing
+    // byte-for-byte `build_descriptor_string` path. `None` = a GENERAL policy
+    // (timelocks/hashlocks/andor/decay/…) → `faithful_multisig_descriptor`,
+    // which keeps the full tree instead of silently collapsing it to plain
+    // multisig (the C1 funds-safety fix). Discrimination is STRUCTURAL on the
+    // md1 tree, NOT `template_from_descriptor` (its `Wsh(_) => WshMulti` arm IS
+    // the collapse bug).
     let is_taproot = d.tree.tag == md_codec::Tag::Tr;
-    let (template, tap_internal_key): (CliTemplate, Option<TaprootInternalKey>) = if is_taproot {
-        let (tmpl, ik) = taproot_template_and_internal_key(&d.tree)?;
-        (tmpl, Some(ik))
-    } else {
-        let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(&d, 0)
-            .map_err(|e| bad(format!("--md1 → descriptor: {e}")))?;
-        (wallet_export::template_from_descriptor(&ms0)?, None)
-    };
-    let k = crate::cmd::bundle::extract_multisig_threshold(&d.tree)
-        .ok_or_else(|| bad("--md1 is not a multisig descriptor (no threshold present)"))?;
+    let (template_opt, tap_internal_key): (Option<CliTemplate>, Option<TaprootInternalKey>) =
+        if is_taproot {
+            let (tmpl, ik) = taproot_template_and_internal_key(&d.tree)?;
+            (Some(tmpl), Some(ik))
+        } else {
+            (plain_template_from_tree(&d.tree, &d.use_site_path), None)
+        };
+    // The "is multisig" hard-gate applies ONLY to the plain arm (a plain
+    // multi/sortedmulti tree always carries a threshold). The general arm does
+    // NOT require `k` — it routes to `faithful_multisig_descriptor` regardless
+    // (R0-r1 I1: the cryptic k-gate must not pre-empt the clear general refusal).
+    let k_opt: Option<u8> = crate::cmd::bundle::extract_multisig_threshold(&d.tree);
 
     // --- 4. Build cosigner slots from the wallet-policy keys ---
     let expanded = md_codec::canonicalize::expand_per_at_n(&d)
@@ -878,18 +1083,31 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         });
     }
 
-    let descriptor =
-        build_descriptor_string(template, &slots, k, network, args.account, tap_internal_key)?;
+    // Plain arm: existing `build_descriptor_string` (byte-for-byte unchanged —
+    // `tap_internal_key` is `Some(ik)` for taproot, `None` for non-taproot,
+    // exactly as before). General arm: the faithful reconstruction.
+    let descriptor = match template_opt {
+        Some(template) => build_descriptor_string(
+            template,
+            &slots,
+            k_opt.expect("plain/taproot template arm always carries a threshold"),
+            network,
+            args.account,
+            tap_internal_key,
+        )?,
+        None => faithful_multisig_descriptor(&d, network)?,
+    };
 
     // --- 5. First receive address(es), chain 0. ---
-    // Taproot derives from the reconstructed descriptor STRING via the toolkit's
-    // miniscript: `d.derive_address` re-enters md-codec's `to_miniscript`, which
-    // ERRORS on `SortedMultiA` (`md-codec to_miniscript.rs`) — so it would
-    // hard-fail for tr-sortedmulti-a after the descriptor was built. wsh/sh-wsh
-    // keep the md-codec tree path. (R0 v2 C1.)
-    let first_recv: Vec<String> = if is_taproot {
+    // Taproot AND the general arm derive from the reconstructed descriptor STRING
+    // via the toolkit's miniscript (self-consistency: print and address agree).
+    // The plain wsh/sh-wsh arm keeps the md-codec tree path. `d.derive_address`
+    // re-enters md-codec's `to_miniscript` which errors on `SortedMultiA`, so the
+    // string path is mandatory for taproot; for the general arm it guarantees the
+    // address matches the FAITHFUL descriptor we print (R0 v2 C1 / crux 4).
+    let first_recv: Vec<String> = if is_taproot || template_opt.is_none() {
         let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
-            .map_err(|e| bad(format!("--md1 taproot descriptor parse: {e}")))?;
+            .map_err(|e| bad(format!("--md1 descriptor parse: {e}")))?;
         crate::derive_address::derive_receive_addresses(
             &parsed,
             args.count,
@@ -1098,15 +1316,37 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let import_payload: Option<String> = match args.format {
         Some(f) => Some(build_multisig_import_payload(
             f,
-            template,
+            template_opt,
             &slots,
-            k,
+            k_opt,
             &descriptor,
             network,
             args.account,
             tap_internal_key,
         )?),
         None => None,
+    };
+
+    // Labels (R0-r1 I4): a general policy is NOT "k-of-n multisig" (and for a
+    // decay vault `extract_multisig_threshold` returns only the FIRST k, so the
+    // top-level threshold is misleading). All four label sites switch on the arm.
+    let n_cosigners = cosigners.len();
+    // Top-level `threshold` is the WALLET's k-of-n threshold — meaningful only
+    // for a plain multisig. A general policy has no single threshold (a decay
+    // vault has several; `k_opt` would report only the first), so it is null.
+    let threshold_field: Option<u8> = if template_opt.is_some() { k_opt } else { None };
+    let (header_label, wallet_type_label): (String, String) = match (template_opt, k_opt) {
+        (Some(_), Some(k)) => (
+            format!("{k}-of-{n_cosigners} multisig restore"),
+            format!("{k}-of-{n_cosigners} multisig"),
+        ),
+        _ => {
+            let noun = if n_cosigners == 1 { "cosigner" } else { "cosigners" };
+            (
+                format!("miniscript policy restore ({n_cosigners} {noun})"),
+                "miniscript-policy".to_string(),
+            )
+        }
     };
 
     // --- 8. Compose stdout content (payload | json | text) + route to --output ---
@@ -1132,11 +1372,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         let mut envelope = json!({
             "mode": "multisig",
             "network": network.human_name(),
-            "threshold": k,
+            "threshold": threshold_field,
             "cosigners": cosigners.len(),
             "verification": verification,
             "wallets": [json!({
-                "wallet_type": format!("{}-of-{} multisig", k, cosigners.len()),
+                "wallet_type": wallet_type_label,
                 "descriptor": descriptor,
                 "first_addresses": first_recv,
                 "cosigner_keys": cos,
@@ -1155,7 +1395,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         format!("{payload}\n")
     } else {
         let mut s = String::new();
-        s.push_str(&format!("{}-of-{} multisig restore\n", k, cosigners.len()));
+        s.push_str(&format!("{header_label}\n"));
         s.push_str(
             "CONFIRM: verify each cosigner fingerprint against your records before importing.\n",
         );
@@ -1186,7 +1426,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // NOT the stdout content — surface it on stderr so the operator can confirm
     // each cosigner fingerprint while the payload pipes onward (mirror single-sig).
     if import_payload.is_some() && !args.json {
-        writeln!(stderr, "{}-of-{} multisig restore", k, cosigners.len()).map_err(ToolkitError::Io)?;
+        writeln!(stderr, "{header_label}").map_err(ToolkitError::Io)?;
         writeln!(
             stderr,
             "CONFIRM: verify each cosigner fingerprint against your records before importing the payload above."
