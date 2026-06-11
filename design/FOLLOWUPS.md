@@ -35,6 +35,13 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix:** serialize the cell / use a unique temp path / wait-for-non-empty before parse, so a green push can't intermittently red on macos.
 - **Tier:** test-flakiness (CI hygiene).
 
+### `bundle-accepts-sortedmulti-in-combinator-restore-cannot` — round-trip asymmetry found by the Cycle-A property test
+
+- **Surfaced:** 2026-06-11, stress Cycle A (`tests/prop_backup_restore_roundtrip.rs`, found on the FIRST proptest run). `build-descriptor`, `bundle --descriptor`, and `export-wallet --descriptor` all ACCEPT a descriptor with `sortedmulti` inside a combinator (e.g. `wsh(or_d(sortedmulti(2,A,B),and_v(v:pk(C),older(144))))` — rust-miniscript parses it, checksum `#qy7ka0ay`), but `restore --md1` REFUSES to reconstruct it: "`Tag::SortedMulti` must be the sole child of wsh/sh; cannot appear as a miniscript leaf." `sortedmulti` is a BIP-380 DESCRIPTOR-level wrapper (not a miniscript Terminal), and the md1 wire (md-codec) only represents it as the sole wsh/sh child.
+- **What:** a user can bundle + engrave a card the toolkit cannot mechanically restore. NOT silent funds-loss (restore refuses LOUDLY, and the engraved md1 is a faithful backup), but a backup→restore gap (cf. the pk-keyed flagship before PART 2).
+- **Fix (design call):** either (a) REJECT `sortedmulti`-in-combinator at `build-descriptor`/`bundle` creation time (so an unrestorable card can't be engraved — preferred; the standard position is sole-child anyway), or (b) extend md-codec to encode `sortedmulti` as a non-sole-child (harder; cross-repo). `sortedmulti` as the sole wsh/sh child is unaffected (reconstructs fine).
+- **Tier:** deferred (loud-refuse, not funds-loss; needs a creation-time-reject-vs-wire-extend design decision).
+
 ### `restore-md1-general-policy-silent-collapse` (C1) — ✓ RESOLVED (v0.54.0, 2026-06-11)
 
 - **Surfaced:** 2026-06-11, the 3-agent backup→restore fragment review (`design/agent-reports/fragment-backup-restore-review-2026-06-11.md`). CRITICAL funds-safety: `restore --md1` SILENTLY reconstructed a *different* wallet for general `wsh`/`sh(wsh)` policies whose keys sit inside `multi()` — `wsh(and_v(v:multi(2,…),older(4032)))` → `wsh(multi(2,…))`, the timelock GONE, exit 0, false "verified" banner, wrong importable payload.

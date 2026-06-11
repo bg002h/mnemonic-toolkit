@@ -1,0 +1,45 @@
+# SPEC — Stress Cycle A: backup→restore round-trip property test (+ rust-miniscript differential)
+
+**Cycle:** toolkit **NO-BUMP** (test + dev-dep only) · **Source SHA:** `3f4c66f` · **Motivation:** the v0.54.x restore campaign found a CRITICAL silent-collapse bug (C1) + an `older()`-mask bug + fragment under-testing — all by hand. This makes the backup→restore fidelity invariant **executable, randomized, and shrinking**, so the harness finds the next one. Combines stress #1 (round-trip property test) + #3 (rust-miniscript differential — the address oracle).
+
+## The invariant under test
+For a valid, reconstructable wallet policy `P`: `restore(bundle(P))` reproduces `P` faithfully — the spending policy is preserved (no fragment dropped, no timelock masked, no `multi`↔`sortedmulti` swap), and the derived addresses are correct.
+
+## Generator — TYPED-TEMPLATE PRIMARY (R0-r1 I1; a mis-typed random grammar goes vacuous)
+A B/V/K-typed random grammar still rejects ≫5% because **sanity ≠ typing**: a timelock/hashlock alternative without a key on every spending path is a `SiglessBranch` reject (`gate.rs:372-374`; the gate's own fixture is `or_d(pk,after(100))`), height+time mixing is `HeightTimelockCombination` (`:382-384`), `or_d`/`or_b`/`thresh` need the d/u/n malleability lattice (`Malleable` `:375`), and `@N` sampling-with-replacement collides (`RepeatedPubkeys` `:379-381` + bundle distinctness `:1665`). So generate from a **typed-template library** that is sane BY CONSTRUCTION:
+- A small set of proven-sane composition schemas (the 5 archetypes + recovery/branch/hashlock holes) that **structurally guarantee a key on every spending path** and **one relative-timelock class + one absolute-timelock class per tree**. Each schema is parameterized by random: `k`/`n`, timelock VALUES, hash digests, `multi`-vs-`sortedmulti`, which hash variant, fragment choice at each hole, nesting depth (≤ 4), and `wsh` vs `sh(wsh)` wrapper.
+- **Fresh-key allocator (no replacement):** a per-case budget consumes distinct `@N` from an **origin-annotated** pool — `[NNNNNNNN/48h/0h/0h/2h]xpub…` (R0-r1 C1: `wallet_import/pipeline.rs:141-145` rejects origin-LESS concrete keys, so a gate-passing spec is NOT automatically bundle-passing — origins are mandatory). Bound `multi`/`sortedmulti` `n ≤ 20` (Segwitv0 CHECKMULTISIG cap — R0-r2 M2). This also bounds tree size under the previewability cap (`gate.rs:33`).
+- **Valid value domains:** `older(n)` ∈ `1..=65535` blocks **per tree pick ONE class** OR `0x400001..=0x40FFFF` (512s-units) — keep BOTH classes across the corpus (R0-r1 M4: a 16-bit reconstruction-side truncation is only reachable if 512s-unit values are generated); `after(n)` ∈ `1..=0x7FFFFFFF` (one class/tree, avoid the 500M height/time mix); digests = random 32-byte (sha256/hash256) / 20-byte (ripemd160/hash160) hex; `1 ≤ k ≤ n`.
+- **Reconstructable scope only:** standard `<0;1>` use-site (build-descriptor always renders this), unhardened wildcard, no per-key overrides — those are the SEPARATE negative property below.
+- **Mechanical anti-vacuity (R0-r1 I1):** `ProptestConfig { max_global_rejects: cases/20, .. }` (a degraded generator fails loudly, not silently) **+ a fragment-coverage accumulator** over the ACCEPTED corpus: assert ≥N accepted cases each contain `older` / `after` / a hash class / `multi` / `sortedmulti` / `thresh` / an `or_*` / `andor` (else a generator narrowed to pass the reject-guard silently collapses coverage — the per-fixture-Expect-table lesson).
+
+## Pipeline — CONCRETE watch-only (R0-r1 C1; the build→bundle seam, fixed)
+build-descriptor emits a CONCRETE-keyed descriptor (`@N` can't survive gate step-2 `from_str`); a concrete descriptor routes bundle to the watch-only path (slots ignored), and `--slot @N` hard-errors without placeholders — so the keys must be REAL origin-annotated xpubs and **no `--slot` is used**:
+1. `build-descriptor --spec - --format descriptor` (spec on stdin) → if the gate REJECTS, count it against `max_global_rejects` and `prop_assume!`-skip; else get `desc`.
+2. `bundle --descriptor <desc>` (NO slots — concrete watch-only path, `bundle.rs:1652`) → `md1` chunks.
+3. `restore --md1 <chunks> --json` → reconstructed `desc'` + reported `first_addresses`.
+4. **Failure policy (R0-r1 C1, load-bearing):** once step-1 ACCEPTS, ANY step-2/3 failure (bundle error, restore error/refusal) is a **PROPERTY FAILURE**, never a `prop_assume!` skip — the reject guard covers ONLY step-1.
+
+## Oracles (all three load-bearing)
+- **Oracle 1 — STRUCTURAL AST preservation (R0-r1 I2; not substring — `"multi(2,"` ⊂ `"sortedmulti(2,"`):** parse `desc` and `desc'` with `miniscript::Descriptor::from_str` (linked via the patched pin in `tests/`) and compare ASTs **modulo key identity** (erase keys to their origin-fingerprint slot; KEEP every `k`, timelock value, digest, fragment kind, arity, and order). Catches drop/mask/swap (incl. `multi`↔`sortedmulti`, `sha256`↔`hash256`, branch reorder). (Semantically-identical rewrites like a sortedmulti key permutation are accepted — not funds bugs.)
+- **Oracle 2 — md1 fixed-point:** `bundle --descriptor <desc'>` reproduces the same `md1` chunk set (retained — the only oracle catching `multi`→`sortedmulti` when index-0 keys are coincidentally sorted).
+- **Oracle 3 — address differential (#3, from the ORIGINAL `desc`):** derive INDEPENDENTLY from the ORIGINAL built `desc` (the source of truth — NOT `desc'`, which is what restore itself derived from, R0-r1 C2) via `miniscript::Descriptor::from_str(desc).into_single_descriptors() → at_derivation_index(i) → address`. **(R0-r2 M1: restore reports chain-0 receive addresses only.)** So: chain-0 index 0 AND ≥1 (run `restore … --count 2`) compare against restore's reported `first_addresses`; chain-1 (change) is asserted via the `desc`-vs-`desc'` differential (derive both from each descriptor, assert equal) — the "change-half multipath corruption" self-test cell guards this. Depth-0 keys don't break it (address depends only on chain_code+pubkey+suffix).
+
+## proptest config / determinism
+- `proptest` dev-dep. Cases bounded — **default 64** (R0-r2 M3; CLI spawn per case is the cost — keep it CI-affordable, env-var override for local deep runs). Shrinking ON (a failure yields a MINIMAL policy — the killer feature vs hand-written cells). Check in the `proptest-regressions/` seed file so a found counterexample is permanently pinned as a regression.
+- Deterministic: fixed slot seeds; proptest's own RNG is seeded/reproducible.
+
+## Tests / deliverable
+New `tests/prop_backup_restore_roundtrip.rs`:
+- **The positive property** — generator + the 3 oracles + the failure policy, over the reconstructable set.
+- **The negative property (R0-r1 M3)** — per-key-override / hardened-wildcard policies ALWAYS produce a loud refusal, never a silent wrong reconstruction. These MUST be built as `@N` descriptor strings through the `--slot` pipeline (`bundle` accepts, `restore` refuses — v0.54.2 tests (11)/(12)); they CANNOT come from build-descriptor (uniform `/<0;1>/*`). General-taproot: assert the loud refusal at restore's taproot arm (`restore.rs:645-660`).
+- **Permanent oracle self-test cells (R0-r1 I3)** — `#[test]`s feeding each oracle a hand-built known-bad pair (older dropped; `multi`→`sortedmulti`; `sha256`→`hash256`; swapped or-branches; change-half multipath corruption) and asserting the oracle REJECTS. (So an oracle weakened by a later refactor is caught — the harness keeps proving it tests something.)
+- **A `#[test]` smoke** running a handful of hand-picked policies through the pipeline (fast signal even when the proptest case count is env-gated low).
+- **Bring-up proof (one-time, persist transcript in the cycle report):** temporarily revert the v0.54.0 faithful-arm routing (`restore.rs::run_multisig` `None ⇒ faithful_multisig_descriptor`) and confirm the positive property FAILS + shrinks to a minimal timelock policy — proving the harness catches the very class it exists for.
+- **CI posture (R0-r1 M2):** proptest draws fresh cases per run; a NEW counterexample reds an unrelated PR (the harness working — file the bug + the `proptest-regressions/` seed). Fix the seed in CI for determinism; let local/nightly roam. Per-case `TempDir` (never a shared path — cell-27 precedent); spec via `--spec -` stdin; default 64 cases + env override for deep runs.
+
+## Ritual
+NO version bump / CHANGELOG (test + dev-dep only). FOLLOWUPS: note the harness; file any NEW bug it finds as its own entry (do NOT fold a discovered funds-safety bug into this test cycle — surface + triage). Mandatory R0 gate to 0C/0I (a property test with a mis-typed generator or a weak oracle gives FALSE confidence — R0 must verify generator validity-rate + oracle strength). Persist reviews to `design/agent-reports/`. Stage paths explicitly.
+
+## Non-goals
+The md-codec proptest expansion (Cycle B); fuzzing malformed input (Cycle C); cross-tool differential (Cycle D); Bitcoin Core differential (Cycle E). Generating policies OUTSIDE the reconstructable set as positive cases (they belong to the negative property).
