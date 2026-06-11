@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.9] — 2026-06-11
+
+**SemVer-PATCH — `build-descriptor` rejects BIP-68 `older()` timelocks that consensus would silently weaken or zero (funds-safety).**
+
+### Fixed
+
+- **`gate-after-older-upper-bound-deferred-to-step2`.** `build-descriptor`'s step-1 field gate accepted `older(N)` values that BIP-68 consensus silently masks to a weakened or zero relative timelock, building a checksummed, engraving-ready descriptor with no warning. BIP-68 uses only the low 16 bits as the value and bit 22 (`0x400000`) as the 512-second-unit flag; consensus masks the CSV operand to `0x0040FFFF`, so bits 16–21/23–30 are dropped and a zero 16-bit value is a no-op lock. So `older(105120)` ("2-year vault" in blocks) silently became ~275 days, `older(65536)` became **0 — spendable immediately**, and `older(0x400000)` became a zero-delay time lock. The gate now rejects any `older(N)` with a bit outside the value/type-flag field **or** a zero 16-bit value (`(n & !0x0040FFFF) != 0 || (n & 0xFFFF) == 0`), with a node-localized diagnostic stating the consensus-effective value — or, for a bit-31 (disable-flag) input, that consensus would treat it as a no-op (not a masked value). Valid block (`1..=65535`) and 512-second-unit (`0x400001..=0x40FFFF`) encodings are unaffected; all archetype presets and existing fixtures use safe values. `after(N)` additionally gets a step-1 upper-bound check (`> 0x7FFFFFFF`) for a node-localized field diagnostic — behavior-equivalent (step-2 `from_str` already rejected it).
+- Tests: `descriptor_builder/gate.rs` (`rejects_masked_older_timelocks` incl. the bit-31 no-op-wording branch; `accepts_valid_older_block_and_time`; `rejects_after_above_max`; all RED-proven) + CLI cells in `tests/cli_build_descriptor.rs` (`--spec` masked `older(65536)` exit-2 with `effective value`; preset `--archetype kofn-recovery --older 105120` exit-2 with `--older` provenance). The pre-existing `mixed_timelock_spec()` fixture used `older(0x400000)` (a no-op the gate now correctly rejects); swapped to `older(0x400001)`, a valid 512-second time lock that preserves its height/time mix.
+- **Carved out to FOLLOWUPs:** `archetype-older-blocks-flag-accepts-time-units` (the preset `--older` flag is documented "blocks" but still accepts the narrow valid 512-second-unit window — near-nil exposure; the `validate_params` "does-not-duplicate-gate-rules" boundary makes the bound a separate design call) and `intake-surfaces-accept-masked-older-no-advisory` (import/round-trip surfaces still accept masked `older()` from already-deployed wallets, as they must — future non-blocking advisory).
+
+### Notes
+
+No CLI flag/help/subcommand change and the `--spec` JSON grammar (`"older"`/`"after"` = `uint`) is unchanged → no `schema_mirror` / GUI / sibling-codec lockstep. Manual prose accuracy: the `older()` domain line in `docs/manual/src/40-cli-reference/41-mnemonic.md` was corrected from `1 ≤ N < 2³¹` to the masked domain. Discovered via deep recon of three deferred footguns (the other two — `addresses-env-sentinel-overapplied`, `two-miniscripts-patch-load-bearing-stale-error` — were verified WONTFIX). SPEC + R0 ×3 GREEN: `design/SPEC_older_timelock_mask_gate.md`, `design/agent-reports/older-timelock-mask-gate-r0-round{1,2,3}-review.md`.
+
 ## mnemonic-toolkit [0.53.8] — 2026-06-11
 
 **SemVer-PATCH — `export-wallet --format bip388` preserves the wallet-policy `name` across a round-trip.**

@@ -620,6 +620,53 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     assert_eq!(d["flag"], "--key");
 }
 
+/// Funds-safety (older() BIP-68 mask gate): a recovery branch carrying an
+/// older() value that consensus would silently weaken/zero is refused (exit 2)
+/// on the REAL binary with a node-localized schema_field diagnostic — not just
+/// the unit gate. older(65536) masks to 0 → the recovery branch would be
+/// spendable immediately. Mirrors the deep-recon empirical repro.
+#[test]
+fn masked_older_timelock_refused_exit_2() {
+    const A: &str = "xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13";
+    const B: &str = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+    let spec = format!(
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"or_d":[{{"pk":"{A}"}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{B}"}}}}}},{{"older":65536}}]}}]}}}}"#
+    );
+    bin()
+        .args(["build-descriptor", "--network", "mainnet"])
+        .write_stdin(spec)
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("schema_field"))
+        .stderr(predicates::str::contains("older"))
+        .stderr(predicates::str::contains("effective value"));
+}
+
+/// Funds-safety on the PRESET path (the deep-recon "2-year vault" headline):
+/// `--archetype kofn-recovery --older 105120` — 2 years in blocks overflows the
+/// 16-bit BIP-68 value field, so consensus would silently mask it to ~275 days —
+/// is refused (exit 2) with a schema_field diagnostic carrying `--older`
+/// provenance (attribution attaches via the node-path provenance table).
+#[test]
+fn preset_masked_older_refused_with_older_provenance() {
+    let out = bin()
+        .args([
+            "build-descriptor", "--archetype", "kofn-recovery",
+            "--key", K1, "--key", K2, "--key", K3, "--threshold", "2",
+            "--recovery-key", K4, "--older", "105120", "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["kind"], "schema_field");
+    assert_eq!(d["flag"], "--older");
+    assert!(
+        d["message"].as_str().unwrap().contains("older"),
+        "diagnostic must name the older() field: {d}"
+    );
+}
+
 /// The contractual `flag`-ABSENT cases (presets SPEC §3.3/§7 + P1-r1 M3):
 /// a diagnostic whose localized path matches no provenance entry carries NO
 /// `flag` key (not `null`).
@@ -789,8 +836,13 @@ fn repeated_keys_spec() -> String {
 }
 
 fn mixed_timelock_spec() -> String {
+    // older(100) is height-based; older(4194305) = 0x400001 is a VALID
+    // time-based (512-second-unit) relative timelock — mixing the two in one
+    // branch is what the --allow mixed-timelock path exercises. (Was 0x400000
+    // = bit-22 with a zero 16-bit value, a no-op the older() mask gate now
+    // correctly rejects at step 1; 0x400001 carries a non-zero value.)
     format!(
-        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{K1}"}}}}}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"older":100}}}}}},{{"older":4194304}}]}}]}}}}"#
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{K1}"}}}}}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"older":100}}}}}},{{"older":4194305}}]}}]}}}}"#
     )
 }
 

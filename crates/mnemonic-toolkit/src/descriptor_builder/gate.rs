@@ -242,16 +242,60 @@ fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
             check_hashlock(h, 40, path, node.kind(), out);
         }
         PolicyNode::Older(n) => {
-            if *n == 0 || *n >= (1u32 << 31) {
+            // BIP-68 relative timelock: only the low 16 bits are the value and
+            // bit 22 (0x400000) selects 512-second units; consensus masks the
+            // operand to 0x0040FFFF, so any other bit (incl. the bit-31 disable
+            // flag) is silently dropped and a zero 16-bit value is a no-op lock.
+            // Reject the lot — on an engraving surface a silently-weakened
+            // timelock is a funds-safety bug, not a parse curiosity.
+            if (*n & !0x0040_FFFFu32) != 0 || (*n & 0x0000_FFFFu32) == 0 {
+                // The consequence clause MUST branch on the bit-31 disable flag:
+                // a CSV operand with bit 31 set is a no-op (no timelock at all),
+                // NOT a masked value — claiming "effective value of N" there would
+                // be consensus-FALSE.
+                let consequence = if *n & 0x8000_0000 != 0 {
+                    "the bit-31 disable flag is set, so consensus would treat this \
+                     CHECKSEQUENCEVERIFY as a no-op — no relative timelock at all"
+                        .to_string()
+                } else {
+                    let unit = if *n & 0x0040_0000 != 0 {
+                        " (512-second units)"
+                    } else {
+                        " blocks"
+                    };
+                    format!(
+                        "consensus would silently mask this to an effective value of {}{}, \
+                         weakening or nullifying the timelock",
+                        *n & 0x0000_FFFF,
+                        unit
+                    )
+                };
                 out.push(field_diag(
                     path,
-                    format!("older(N) requires 1 ≤ N < 2^31 (bit-31 CSV disable-flag must be clear); got {n}"),
+                    format!(
+                        "older(N) encodes a BIP-68 relative timelock: only the low 16 bits are \
+                         the value, and bit 22 (0x400000) selects 512-second units. All other \
+                         bits — including the bit-31 disable flag — must be clear, and the 16-bit \
+                         value must be non-zero. got {n} (0x{n:08x}); {consequence}. Use 1..=65535 \
+                         (blocks) or 0x400000|(1..=65535) (512-second units)."
+                    ),
                 ));
             }
         }
         PolicyNode::After(n) => {
             if *n == 0 {
                 out.push(field_diag(path, "after(N) requires N ≥ 1; got 0".to_string()));
+            } else if *n > 0x7FFF_FFFF {
+                // BIP-65 absolute locktimes are bounded [1, 0x7fffffff]. Step-2
+                // from_str already rejects this; surfacing it here gives a
+                // node-localized field diagnostic (parity with older()).
+                out.push(field_diag(
+                    path,
+                    format!(
+                        "after(N) encodes a BIP-65 absolute locktime; valid range is \
+                         1..=0x7fffffff (2147483647). got {n} (0x{n:08x})"
+                    ),
+                ));
             }
         }
         // Wrap / combinators have no own field constraints; recurse below.
@@ -805,6 +849,101 @@ mod tests {
         let after0 = doc(&format!(r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"after":0}}]}}"#));
         assert!(errs(&older0).iter().any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("older")));
         assert!(errs(&after0).iter().any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("after")));
+    }
+
+    // ---- step 1: older() BIP-68 mask gate (funds-safety) -----------------
+    // A single timelock per tree (M2): a height + a time older() in one tree
+    // would trip step-3 HeightTimelockCombination and contaminate the assertion.
+    // `gate(...)` (not `errs`, which panics on success) so accept cells and the
+    // pre-fix RED state are clean assertions, not panics.
+    fn older_tree(n: u32) -> String {
+        doc(&format!(
+            r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"older":{n}}}]}}"#
+        ))
+    }
+    fn after_tree(n: u32) -> String {
+        doc(&format!(
+            r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"after":{n}}}]}}"#
+        ))
+    }
+    /// Step-1 field diagnostics for `tree` (empty when the gate passes step 1
+    /// or succeeds entirely) — never panics, unlike `errs`.
+    fn field_diags(tree: &str) -> Vec<Diagnostic> {
+        match gate(tree) {
+            Ok(_) => Vec::new(),
+            Err(ds) => ds
+                .into_iter()
+                .filter(|d| d.kind == DiagnosticKind::SchemaField)
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn rejects_masked_older_timelocks() {
+        // Garbage outside the BIP-68 value(16) + type-flag(bit-22) field, or a
+        // zero 16-bit value, would be silently masked by consensus to a weakened
+        // or zero relative timelock. All must be rejected at step 1.
+        // RED-proof asymmetry (M-A): 65536/105120/0x400000 produce NO field diag
+        // pre-fix (RED = diag-absence); 0x80000090 is already rejected pre-fix by
+        // the n>=2^31 check (RED = wording mismatch only).
+        for n in [65536u32, 105120, 0x0040_0000, 0x8000_0090] {
+            let fd = field_diags(&older_tree(n));
+            assert!(
+                fd.iter().any(|x| x.message.contains("older")),
+                "older({n}) must be rejected at step 1: {fd:?}"
+            );
+        }
+        // The bit-31-CLEAR masked case carries the "effective value" wording.
+        let masked = field_diags(&older_tree(65536));
+        assert!(
+            masked.iter().any(|x| x.message.contains("effective value")),
+            "older(65536) message must state the consensus-effective value: {masked:?}"
+        );
+        // The bit-31-SET case is a CSV no-op — must NOT claim a masked value.
+        let nop = field_diags(&older_tree(0x8000_0090));
+        assert!(
+            nop.iter()
+                .any(|x| x.message.contains("no-op") && x.message.contains("disable flag")),
+            "older(0x80000090) message must state the bit-31 disable-flag no-op: {nop:?}"
+        );
+        assert!(
+            !nop.iter().any(|x| x.message.contains("effective value")),
+            "older(0x80000090) must NOT claim an effective masked value (it is a no-op)"
+        );
+    }
+
+    #[test]
+    fn accepts_valid_older_block_and_time() {
+        // Each in its own single-timelock tree (M2). Block values 1..=65535 and
+        // 512-second-unit values 0x400001..=0x40FFFF are valid BIP-68 encodings.
+        for n in [1u32, 65535, 52560, 0x0040_0001, 0x0040_FFFF] {
+            assert!(
+                field_diags(&older_tree(n)).is_empty(),
+                "older({n}) is a valid BIP-68 timelock and must not raise a field diag"
+            );
+        }
+        // At least one builds end-to-end (exit-0 path intact).
+        assert!(gate(&older_tree(52560)).is_ok());
+    }
+
+    #[test]
+    fn rejects_after_above_max() {
+        // BIP-65 absolute locktimes are bounded [1, 0x7fffffff]; step 2 already
+        // rejects > max, but step 1 now gives a node-localized field diag.
+        for n in [0x8000_0000u32, 0xFFFF_FFFF] {
+            let fd = field_diags(&after_tree(n));
+            assert!(
+                fd.iter().any(|x| x.message.contains("after")),
+                "after({n}) must be rejected at step 1 (SchemaField, not step-2): {fd:?}"
+            );
+        }
+        // Valid absolute locktimes pass step 1 (own trees).
+        for n in [1u32, 500_000_000, 0x7FFF_FFFF] {
+            assert!(
+                field_diags(&after_tree(n)).is_empty(),
+                "after({n}) is a valid absolute locktime and must not raise a field diag"
+            );
+        }
     }
 
     #[test]

@@ -4006,7 +4006,12 @@ Emit is gated, in order; the first failure short-circuits to a
 `root.or_d[1].and_v[0]`) and exit 2:
 
 1. **schema field-validate** — `1 ≤ k ≤ n`; hashlock hex length/validity;
-   `older` `1 ≤ N < 2³¹`, `after` `N ≥ 1`; **watch-only screen** (an `xprv`
+   `older` must be a valid BIP-68 relative timelock — only the low 16 bits
+   carry the value and bit 22 (`0x400000`) selects 512-second units, so the
+   accepted domain is `1..=65535` (blocks) or `0x400000|(1..=65535)` (512-second
+   units); any other bit set (incl. the bit-31 disable flag) or a zero 16-bit
+   value is rejected, because consensus would silently mask it to a weakened or
+   no-op timelock. `after` `1 ≤ N ≤ 0x7fffffff`. **watch-only screen** (an `xprv`
    / extended-private key is refused here, never echoed).
 2. **type-check** — the rendered `wsh(M)` must parse (a missing `v:`
    wrapper → a `type_error` diagnostic at the offending subtree).
