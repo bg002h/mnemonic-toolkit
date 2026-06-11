@@ -409,10 +409,19 @@ fn synth_corrupted_bundle_json(corrupt_pos: usize) -> String {
     serde_json::to_string(&v).unwrap()
 }
 
+// Per-call unique temp path: every test in this binary runs as a thread in ONE
+// process, so a process-id-only name made all 5 callers share one path → a
+// torn-content race (a sibling test reading a mid-write/empty file → "EOF while
+// parsing a value at line 1 column 0"; flaked the macos job, cell-27-...-flaky-
+// on-macos). The atomic counter makes each call's path distinct.
 fn write_temp_json(body: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
-        "mnemonic_v0_22_1_bundle_{}.json",
-        std::process::id()
+        "mnemonic_v0_22_1_bundle_{}_{}.json",
+        std::process::id(),
+        // Relaxed: we need distinct values, not cross-thread ordering.
+        TMP_SEQ.fetch_add(1, Ordering::Relaxed),
     ));
     std::fs::write(&path, body).unwrap();
     path

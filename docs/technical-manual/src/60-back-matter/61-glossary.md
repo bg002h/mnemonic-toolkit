@@ -54,7 +54,7 @@ The toolkit's unit of engraving. Binds three sibling card formats — md1 (walle
 
 ## bundle envelope
 
-The toolkit-emergent set `{md1, mk1[0..N], ms1[0..N]}` plus the binding rules (`chunk_set_id` cross-prefix agreement, BIP-388 distinctness, multiset `md1_xpub_match`). Not a separate wire format; serialized to JSON via `BundleJson` (`crates/mnemonic-toolkit/src/format.rs::BundleJson`) with `schema_version = "4"`. Defined §IV.1.
+The toolkit-emergent set `{md1, mk1[0..N], ms1[0..N]}` plus the binding rules (engraved-`chunk_set_id` cross-prefix agreement, BIP-388 distinctness, multiset `md1_xpub_match`). Not a separate wire format; serialized to JSON via `BundleJson` (`crates/mnemonic-toolkit/src/format.rs::BundleJson`) with `schema_version = "4"`. Defined §IV.1.
 
 ## BundleJson
 
@@ -86,7 +86,7 @@ BIP-32's "public parent key → public child key" function: given an xpub (chain
 
 ## chunk_set_id binding (bundle)
 
-The cross-card bundle-level binding role of `chunk_set_id`: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. Discussed §IV.2.
+The cross-card bundle-level binding role of the **engraved** `chunk_set_id` identifiers: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. NB this is the engraved display identifier, distinct from the md1 *wire* `chunk_set_id` (the `Md1EncodingId`-derived chunk-grouping value below). Discussed §IV.2.
 
 ## codex32
 
