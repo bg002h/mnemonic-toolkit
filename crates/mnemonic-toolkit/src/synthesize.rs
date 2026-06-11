@@ -992,6 +992,18 @@ mod tests {
         assert!(bundle.any_secret_bearing());
         let ms1 = &bundle.ms1[0];
         assert!(ms1.starts_with("ms1"));
+        // ms1 must round-trip to the INPUT entropy — correctness, not just the
+        // "starts_with ms1" smoke (a syntactically-valid but wrong card would
+        // pass the presence check). mk1→xpub + md1→policy correctness are
+        // covered by `cross_binding_holds_round_trip`. The English `fixture_full`
+        // entropy emits a `Payload::Entr` card.
+        let (_, payload) = ms_codec::decode(ms1).unwrap();
+        match payload {
+            ms_codec::Payload::Entr(b) => {
+                assert_eq!(b, entropy, "ms1 must decode back to the input entropy")
+            }
+            other => panic!("expected an Entr ms1 payload (English fixture), got {other:?}"),
+        }
         let mk1 = bundle.mk1.as_single().unwrap();
         assert!(!mk1.is_empty());
         assert!(mk1.iter().all(|s| s.starts_with("mk1")));

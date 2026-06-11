@@ -212,11 +212,30 @@ jobs:
         uses: actions/checkout@v5
         with:
           path: mnemonic-toolkit
+      # g6-sibling-master-not-pin: pin the sibling checkout to the canonical
+      # ms-cli tag (scripts/install.sh, the sibling-pin-check source of truth)
+      # instead of `master`, so the byte-equality runs against the version the
+      # constellation actually targets. Extraction mirrors sibling-pin-check.yml's
+      # parser; fail-loud on empty (else an empty `ref:` would silently default
+      # to the default branch = the bug this fixes).
+      - name: Resolve pinned ms-cli tag from install.sh
+        id: pin
+        working-directory: mnemonic-toolkit
+        run: |
+          tag=$(grep -oE 'echo "[a-z-]+\|https://[^"]+\|[^"|]+\|[^"|]*\|[^"]*"' scripts/install.sh \
+            | sed -e 's/^echo "//' -e 's/"$//' \
+            | awk -F'|' '$1=="ms-cli"{print $3; exit}')
+          if [ -z "$tag" ]; then
+            echo "::error::g6: could not resolve the ms-cli pin from scripts/install.sh"
+            exit 1
+          fi
+          echo "Resolved ms-cli pin: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Checkout sibling (mnemonic-secret)
         uses: actions/checkout@v5
         with:
           repository: bg002h/mnemonic-secret
-          ref: master
+          ref: ${{ steps.pin.outputs.tag }}
           path: mnemonic-secret
       - name: cargo test --test mlock_g6_invariant
         env:
