@@ -86,7 +86,7 @@ Single source of truth for items that surfaced during a review or implementation
 
 - **Surfaced:** 2026-06-10, v0.53.3 R0-r1 M1. **Where:** `crates/mnemonic-toolkit/src/friendly.rs:79` (`ms_codec::Error::Codex32(c) => format!("ms1 codex32: {:?}", c)`).
 - **What:** codex32 0.1.0 constructs `Error::InvalidChecksum { string }` with the FULL input; the friendly catch-all Debug-prints it — an uncorrectable lowercase ms1 (known HRP, bad checksum, piped/no-auto-repair path) echoes the full near-secret on stderr. The v0.53.3 `UnknownHrp` truncation rider does NOT cover this path (known-HRP). Fix shape: a one-arm `InvalidChecksum` redaction in the friendly mapper (truncate/omit the string), or upstream-codex32 observation.
-- **Status:** `open`
+- **Status:** **resolved** `mnemonic-toolkit-v0.53.4` (2026-06-10) — explicit `InvalidChecksum` arm in `friendly_ms_codec` withholds the embedded input (checksum kind + char-count only; full withholding, NOT a head-truncation — ms1 chars 9+ are payload). Variant sweep confirmed it's the sole catch-all-reachable codex32 variant carrying a String. Red-first: integration cell `cli_invalidchecksum_redaction.rs` (full input on stderr today, via `--no-auto-repair convert --from ms1=<corrupt>`) + a unit redaction-pin. Plan + 2 R0 rounds: `design/PLAN_friendly_invalidchecksum_redaction.md`, `design/agent-reports/friendly-invalidchecksum-*.md`.
 - **Tier:** `leak-hardening`
 
 ### `toolkit-ms-codec-pin-bump-0-4-1-combine-fix` — bump ms-codec pin 0.4.0 → 0.4.1 to inherit the combine panic fix (companion)

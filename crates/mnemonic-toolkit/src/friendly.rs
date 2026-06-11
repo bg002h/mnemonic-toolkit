@@ -76,6 +76,18 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         ms_codec::Error::Codex32(codex32::Error::MismatchedId(a, b)) => {
             format!("ms1 id mismatch among shares: {:?} vs {:?}", a, b)
         }
+        // Leak-hardening (v0.53.4): InvalidChecksum embeds the FULL input
+        // `string` — Debug-printing it via the catch-all below would echo the
+        // near-secret on stderr. Withhold it FULLY (not a head-truncation like
+        // UnknownHrp's: ms1 chars 9+ are payload, so any head-echo leaks
+        // payload); the checksum kind + length stay (lets the user spot a
+        // wrong-length card). FOLLOWUP `friendly-ms1-invalidchecksum-echoes-full-input`.
+        ms_codec::Error::Codex32(codex32::Error::InvalidChecksum { checksum, string }) => {
+            format!(
+                "ms1 codex32: invalid {checksum} checksum ({} chars; input withheld)",
+                string.chars().count()
+            )
+        }
         ms_codec::Error::Codex32(c) => format!("ms1 codex32: {:?}", c),
         ms_codec::Error::WrongHrp { got } => {
             format!("ms1 wrong HRP: got {:?}, expected \"ms\"", got)
@@ -393,6 +405,38 @@ mod tests {
         let m = friendly_ms_codec(&ms_codec::Error::InvalidShareCount { k: 3, n: 2 });
         assert!(m.contains("N <= 31") || m.contains("K <= N"), "got: {m}");
         assert!(!m.contains("unhandled"), "got: {m}");
+    }
+
+    // ── v0.53.4: InvalidChecksum withholds the embedded full input ──────────
+
+    #[test]
+    fn ms_codec_invalid_checksum_withholds_input_string() {
+        let secret = "ms10entrspqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
+            codex32::Error::InvalidChecksum {
+                checksum: "short",
+                string: secret.to_string(),
+            },
+        ));
+        // The redaction pin: the embedded input must NOT appear in the message.
+        assert!(
+            !m.contains(secret),
+            "InvalidChecksum input string leaked: {m}"
+        );
+        assert!(
+            !m.contains(&secret[9..30]),
+            "a payload slice of the input leaked: {m}"
+        );
+        assert!(!m.contains("InvalidChecksum"), "variant name leaked: {m}");
+        assert!(
+            m.contains("invalid short checksum") && m.contains("withheld"),
+            "expected the checksum-kind + withheld prose: {m}"
+        );
+        // length stays (actionable, non-secret).
+        assert!(
+            m.contains(&format!("{} chars", secret.chars().count())),
+            "expected the char count: {m}"
+        );
     }
 
     // ── I2 (P3-R0): codex32 SHARE errors render prose, not a Debug dump ──────

@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.4] — 2026-06-10
+
+**SemVer-PATCH — the friendly error mapper no longer echoes a corrupt ms1's full input on stderr (leak-hardening).**
+
+### Fixed
+
+- A bad-checksum lowercase ms1 (uncorrectable, or on the `--no-auto-repair`/piped path) rendered through the friendly mapper's `codex32::Error` catch-all, whose `{:?}` Debug-print of `InvalidChecksum { string }` dumped the FULL near-secret on stderr. An explicit arm now withholds it: `ms1 codex32: invalid <short|long> checksum (<N> chars; input withheld)` — the checksum kind + length stay (so a wrong-length card is spottable) but the bytes never appear. Withholding is FULL, not the v0.53.3 `UnknownHrp` head-truncation (ms1 chars 9+ are payload, so any head-echo would leak payload). Variant sweep confirmed `InvalidChecksum` is the only catch-all-reachable codex32 variant carrying the input.
+
+Resolves `friendly-ms1-invalidchecksum-echoes-full-input` (spawned by v0.53.3). 1 integration cell (red-first — full input on stderr today) + 1 unit redaction-pin cell. No CLI/schema/manual-flag impact.
+
 ## mnemonic-toolkit [0.53.3] — 2026-06-10
 
 **SemVer-PATCH — HRP probes are case-insensitive (audit M11): valid all-uppercase cards route to the right codec instead of a misattributed error; codecs stay the authority on case.**
