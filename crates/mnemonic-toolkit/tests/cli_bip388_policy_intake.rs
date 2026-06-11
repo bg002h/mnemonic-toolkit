@@ -30,9 +30,14 @@ fn run_ok(args: &[&str]) -> String {
     String::from_utf8(out.get_output().stdout.clone()).unwrap()
 }
 
-/// Load-bearing round-trip: policy → `--format descriptor` → concrete, then
-/// concrete → `--format bip388` reproduces the original `description_template`
-/// + `keys_info` byte-for-byte (modulo the dropped `name`, per SPEC §3).
+/// Load-bearing round-trip: policy to `--format descriptor` to concrete, then
+/// concrete to `--format bip388` reproduces the original `description_template`
+/// plus `keys_info` byte-for-byte. NOTE: the `name` is lost in THIS TWO-STEP
+/// path because the intermediate `--format descriptor` step yields a concrete
+/// descriptor with no policy-name metadata to lift. The ONE-STEP path
+/// (`--descriptor <policy> --format bip388`) PRESERVES the name as of v0.53.8
+/// (`bip388-policy-name-lossy-roundtrip`) — see
+/// `export_wallet_bip388_one_step_preserves_policy_name`.
 #[test]
 fn export_wallet_descriptor_bip388_policy_roundtrips() {
     let policy = policy_2of2();
@@ -59,6 +64,52 @@ fn export_wallet_descriptor_bip388_policy_roundtrips() {
         format!("[704c7836/48'/0'/0'/2']{A}"),
         format!("[97139860/48'/0'/0'/2']{B}"),
     ]);
+}
+
+// ── v0.53.8: `bip388-policy-name-lossy-roundtrip` ────────────────────────────
+
+/// T1 — the DIRECT one-step round-trip PRESERVES the policy `name`
+/// (`--descriptor <policy "test-vault"> --format bip388` → `"name":"test-vault"`).
+/// RED before the fix: the emit hardcoded `"imported-descriptor"`.
+#[test]
+fn export_wallet_bip388_one_step_preserves_policy_name() {
+    let out = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "bip388"]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["name"].as_str().unwrap(), "test-vault", "policy name must round-trip: {out}");
+}
+
+/// T2-companion — an UNNAMED descriptor (concrete, not a policy) still emits the
+/// `"imported-descriptor"` default (no-regression).
+#[test]
+fn export_wallet_bip388_unnamed_descriptor_uses_default_name() {
+    // Expand the policy to a concrete descriptor first (loses policy context),
+    // then emit bip388 → default name.
+    let concrete = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "descriptor"]);
+    let concrete_line = concrete.lines().next().unwrap();
+    let out = run_ok(&["export-wallet", "--descriptor", concrete_line, "--format", "bip388"]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["name"].as_str().unwrap(), "imported-descriptor");
+}
+
+/// T3 — `--wallet-name` OVERRIDES the policy name (precedence flag > policy-name).
+#[test]
+fn export_wallet_bip388_wallet_name_overrides_policy_name() {
+    let out = run_ok(&[
+        "export-wallet", "--descriptor", &policy_2of2(),
+        "--wallet-name", "Override", "--format", "bip388",
+    ]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["name"].as_str().unwrap(), "Override");
+}
+
+/// T5 — Specter unblock: a NAMED policy `--format specter` now SUCCEEDS and uses
+/// the lifted name as the wallet `label`. Pre-fix it exited 2 (MissingField::
+/// WalletName, since the default "imported-descriptor" is non-default-rejected).
+#[test]
+fn export_wallet_bip388_named_policy_unblocks_specter() {
+    let out = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "specter"]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["label"].as_str().unwrap(), "test-vault", "Specter label must be the lifted policy name: {out}");
 }
 
 /// Policy → `--format bitcoin-core` emits a 2-entry (receive+change) watch-only

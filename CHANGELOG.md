@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.8] — 2026-06-11
+
+**SemVer-PATCH — `export-wallet --format bip388` preserves the wallet-policy `name` across a round-trip.**
+
+### Fixed
+
+- **`bip388-policy-name-lossy-roundtrip`.** `export-wallet --descriptor <bip388-policy-json> --format bip388` lost the policy `name`: the expand step dropped it and the emit hardcoded `"imported-descriptor"`. The policy `name` is now lifted (new `wallet_import::pipeline::bip388_policy_name`) into the existing `EmitInputs.wallet_name` channel — whose `--descriptor`-path default is ALREADY `"imported-descriptor"`, so unnamed inputs are unchanged — and the emit reads it. A named policy now round-trips its name; precedence is `--wallet-name` flag > policy name > `"imported-descriptor"`. The lift is GENERAL (consistent with the import-json `resolved_wallet_name` precedent), so a named policy also unblocks `--format specter` (which previously refused the silent default name): the policy name becomes the Specter `label`. `build-descriptor --emit-spec bip388` is unchanged (passes the `DEFAULT_BIP388_POLICY_NAME` default).
+- Tests (`tests/cli_bip388_policy_intake.rs` + `wallet_import/pipeline.rs`): T1 (one-step round-trip preserves `"test-vault"`; RED-proven), T2 (unnamed → default), T3 (`--wallet-name` overrides), T4 (extractor unit: name / `None`-on-malformed), T5 (Specter unblock; RED-proven). The two-step `--format descriptor → bip388` path still legitimately drops the name (intermediate concrete step has no policy metadata) — comment corrected.
+- **Carved out (separate gap, FOLLOWUP `bip388-template-path-wallet-name`):** `--format bip388` on the `--template` path still emits `template.human_name()` and ignores `--wallet-name` — NOT touched by this fix.
+
+### Notes
+
+No CLI flag/help/subcommand change; the `--format bip388` JSON `name` field already exists (no wire-schema add/remove) → no `schema_mirror` / manual / GUI / sibling-codec lockstep. SPEC + R0 ×2 GREEN: `design/SPEC_bip388_policy_name_roundtrip.md`, `design/agent-reports/bip388-policy-name-roundtrip-r0-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.53.7] — 2026-06-11
 
 **SemVer-PATCH — `silent-payment` auto-detects the BIP-39 phrase language (no longer English-only).**

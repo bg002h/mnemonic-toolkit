@@ -206,6 +206,23 @@ pub(crate) fn expand_bip388_policy(json: &str) -> Result<String, ToolkitError> {
     Ok(template)
 }
 
+/// Extract the BIP-388 wallet-policy `name` from a policy JSON, for the
+/// `--format bip388` round-trip name-preservation (`bip388-policy-name-lossy-
+/// roundtrip`). Returns `None` for a missing/empty name OR malformed JSON —
+/// **by contract, this NEVER errors**: the caller (`export-wallet`'s
+/// `--descriptor` path) calls `expand_bip388_policy` immediately after, which
+/// surfaces the real parse error. So do not error-check this result.
+pub(crate) fn bip388_policy_name(json: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct NameOnly {
+        name: String,
+    }
+    serde_json::from_str::<NameOnly>(json)
+        .ok()
+        .map(|n| n.name)
+        .filter(|n| !n.is_empty())
+}
+
 /// Convert a descriptor body bearing concrete `[fp/path]xpub` keys into the
 /// placeholder form `[fp/path]@N` + accompanying `(ParsedKey,
 /// ParsedFingerprint)` pairs for `parse_descriptor::parse_descriptor`.
@@ -347,6 +364,25 @@ fn parse_fp_hex(s: &str) -> Result<[u8; 4], String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T4 (`bip388-policy-name-lossy-roundtrip`) — the name extractor returns
+    /// the policy name, and `None` (NOT an error) for empty-name / malformed.
+    #[test]
+    fn bip388_policy_name_extracts_or_none() {
+        assert_eq!(
+            bip388_policy_name(r#"{"name":"test-vault","description_template":"wpkh(@0/**)","keys_info":["x"]}"#),
+            Some("test-vault".to_string())
+        );
+        // empty name → None
+        assert_eq!(
+            bip388_policy_name(r#"{"name":"","description_template":"wpkh(@0/**)","keys_info":["x"]}"#),
+            None
+        );
+        // missing name field → None
+        assert_eq!(bip388_policy_name(r#"{"description_template":"wpkh(@0/**)"}"#), None);
+        // malformed JSON → None (never errors; expand surfaces the real error)
+        assert_eq!(bip388_policy_name("not json {{{"), None);
+    }
 
     #[test]
     fn two_keys_preserve_declaration_order() {

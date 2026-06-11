@@ -43,8 +43,11 @@ impl WalletFormatEmitter for Bip388Emitter {
                 inputs.taproot_internal_key,
             )?
         } else {
-            // Descriptor passthrough.
-            descriptor_to_bip388_wallet_policy(&inputs.canonical_descriptor)?
+            // Descriptor passthrough. v0.53.8 (`bip388-policy-name-lossy-
+            // roundtrip`): the policy `name` rides `inputs.wallet_name` (lifted
+            // from the source `--descriptor` policy JSON; default
+            // "imported-descriptor"), so a named policy round-trips.
+            descriptor_to_bip388_wallet_policy(&inputs.canonical_descriptor, inputs.wallet_name)?
         };
         serde_json::to_string_pretty(&value)
             .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))

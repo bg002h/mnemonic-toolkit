@@ -399,7 +399,11 @@ fn emit<W: Write>(
 ) -> Result<(), ToolkitError> {
     // Canonical descriptor (with BIP-380 checksum) via the round-trip idiom.
     let canonical = vp.descriptor.to_string();
-    let bip388 = descriptor_to_bip388_wallet_policy(&canonical)?;
+    // build-descriptor has no wallet-name context → the unchanged default name.
+    let bip388 = descriptor_to_bip388_wallet_policy(
+        &canonical,
+        crate::wallet_export::DEFAULT_BIP388_POLICY_NAME,
+    )?;
 
     if args.json {
         // Cost posture on an allowed-insane emit (allow SPEC §3, R0-r1 C1):

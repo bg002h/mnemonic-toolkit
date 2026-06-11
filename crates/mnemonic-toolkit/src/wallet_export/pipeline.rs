@@ -163,8 +163,15 @@ fn build_tr_multi_a_descriptor(
 /// placeholders. Requires the descriptor to use the multipath form
 /// `<0;1>/*` for each key (BIP-388's intended receive/change shape); other
 /// derivation suffixes are refused.
+/// The BIP-388 wallet-policy `name` used when no name is carried — the value
+/// `export-wallet --descriptor` emitted unconditionally before
+/// `bip388-policy-name-lossy-roundtrip` (v0.53.8). Also the `build-descriptor`
+/// `--emit-spec bip388` default.
+pub(crate) const DEFAULT_BIP388_POLICY_NAME: &str = "imported-descriptor";
+
 pub(crate) fn descriptor_to_bip388_wallet_policy(
     canonical_descriptor: &str,
+    name: &str,
 ) -> Result<Value, ToolkitError> {
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(canonical_descriptor)
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
@@ -204,7 +211,7 @@ pub(crate) fn descriptor_to_bip388_wallet_policy(
     }
 
     Ok(json!({
-        "name": "imported-descriptor",
+        "name": name,
         "description_template": template,
         "keys_info": keys_info,
     }))

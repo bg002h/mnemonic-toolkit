@@ -409,6 +409,12 @@ pub fn run<W: Write, E: Write>(
     let mut resolved_template: Option<(Vec<crate::synthesize::ResolvedSlot>, CliTemplate, u8)> =
         None;
 
+    // v0.53.8 (`bip388-policy-name-lossy-roundtrip`): when `--descriptor` is a
+    // BIP-388 policy JSON, lift its `name` so a `--format bip388` round-trip
+    // (and any other format) preserves it. Declared None UNCONDITIONALLY so the
+    // `||` in `wallet_name_is_non_default` below is safe on the --template path.
+    let mut bip388_policy_name: Option<String> = None;
+
     let canonical = if let Some(desc) = &args.descriptor {
         // BIP-388 wallet-policy JSON intake: expand to a concrete descriptor,
         // then fall into the existing concrete passthrough. MUST precede
@@ -417,6 +423,7 @@ pub fn run<W: Write, E: Write>(
         // unguarded it would trip the refusal below.
         let desc_owned;
         let desc = if crate::wallet_import::pipeline::is_bip388_policy_shape(desc) {
+            bip388_policy_name = crate::wallet_import::pipeline::bip388_policy_name(desc);
             desc_owned = crate::wallet_import::pipeline::expand_bip388_policy(desc)?;
             &desc_owned
         } else {
@@ -563,7 +570,13 @@ pub fn run<W: Write, E: Write>(
         Some(name) => name.clone(),
         None => match template_opt {
             Some(t) => format!("{}-{}", t.human_name(), args.account),
-            None => "imported-descriptor".to_string(),
+            // v0.53.8: a BIP-388 policy's `name` (lifted above) overrides the
+            // "imported-descriptor" default; bip388 ⇒ --descriptor ⇒ template_opt
+            // is None, so it lands in this leaf. Precedence: --wallet-name flag >
+            // policy name > default.
+            None => bip388_policy_name
+                .clone()
+                .unwrap_or_else(|| "imported-descriptor".to_string()),
         },
     };
 
@@ -583,7 +596,10 @@ pub fn run<W: Write, E: Write>(
         threshold: threshold_opt,
         threshold_user_supplied: args.threshold.is_some(),
         wallet_name: &wallet_name_resolved,
-        wallet_name_is_non_default: args.wallet_name.is_some(),
+        // v0.53.8: a lifted BIP-388 policy name counts as non-default (mirrors
+        // the import-json `lifted_wallet_name` path) so Specter accepts a named
+        // policy instead of refusing the silent "imported-descriptor" default.
+        wallet_name_is_non_default: args.wallet_name.is_some() || bip388_policy_name.is_some(),
         taproot_internal_key: args.taproot_internal_key,
         range: args.range,
         timestamp: args.timestamp.0,
