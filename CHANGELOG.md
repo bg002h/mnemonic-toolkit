@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.54.2] — 2026-06-11
+
+**SemVer-PATCH — `export-wallet --from-import-json` refuses general policies for template-requiring formats instead of silently collapsing them (funds-safety C2).**
+
+### Fixed
+
+- **`export-wallet-from-import-json-template-collapse` (C2).** `export-wallet --from-import-json <env> --format <sparrow|coldcard|coldcard-multisig|jade|electrum>` for a GENERAL-policy descriptor (timelocks/hashlocks/andor/decay) silently collapsed it to plain multisig — the same top-level-wrapper-only `template_from_descriptor` (`Wsh(_) => WshMulti`) collapse fixed on the restore path in v0.54.0, on the export `--from-import-json` door. A template-requiring (k-of-n multisig) format genuinely cannot represent a general miniscript policy, so the export now REFUSES loudly (new `descriptor_is_general_policy` structural gate) instead of emitting a wrong/partial payload. Descriptor-passthrough formats (`bitcoin-core`/`descriptor`/`bip388`/`bsms`/`green`/`specter`) emit the faithful descriptor unchanged; **singlesig** (`pkh`/`wpkh`/`sh(wpkh)`) and **plain multisig** still map to their template and export as before (the gate refuses ONLY general policies — R0-caught regression guard).
+- Tests: `wallet_export::descriptor_is_general_policy` unit cells (general vs plain-multisig vs singlesig) + `tests/cli_export_wallet_from_import_json.rs` (general→template-format refusal RED-proven; general→passthrough faithful keeps `older(1000)`; singlesig→template-format unchanged).
+
+### Notes
+
+No CLI flag/subcommand/value change → no `schema_mirror`/GUI/manual/sibling lockstep (a new refusal on an existing flag combination). SPEC + R0 ×2 GREEN: `design/SPEC_c2_from_import_json_general_policy_gate.md`, `design/agent-reports/c2-from-import-json-gate-r0-round{1,2}-review.md`. Completes the general-policy collapse cleanup begun with the restore C1 fix (v0.54.0/v0.54.1).
+
 ## mnemonic-toolkit [0.54.1] — 2026-06-11
 
 **SemVer-PATCH — `restore --md1` now reconstructs `pk(@N)`/`pkh(@N)`-keyed wallet policies (md-codec 0.35.1 pin bump; PART 2 of the restore C1 fix).**

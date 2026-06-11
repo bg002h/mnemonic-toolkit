@@ -54,7 +54,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix:** A1 — `Tag::Check` over a bare `PkK/PkH` returns the child directly (Check-idempotence, mirrors md-cli `format/text.rs:363-385`); A2 — thread `want_k` to render bare keys at type-K positions (closes `Check(or_i(pk_k,pk_k))` too, ~25 LOC). Both strictly error→success. md-codec PATCH `0.35.1` (renderer-tolerance) + md-cli exact-pin lockstep + toolkit `cargo update -p md-codec`. **Companion entry to file in descriptor-mnemonic.** PART 2 of the long-term restore fix.
 - **Tier:** next-cycle (cross-repo; crates.io publish).
 
-### `export-wallet-from-import-json-template-collapse` (C2) — same silent collapse on a second door
+### `export-wallet-from-import-json-template-collapse` (C2) — ✓ RESOLVED (v0.54.2, 2026-06-11) — was: same silent collapse on a second door
 
 - **Surfaced:** 2026-06-11, the backup→restore review. `export-wallet --from-import-json … --format <template-requiring>` collapses a general descriptor via the same `template_from_descriptor` `Wsh(_) => WshMulti` (`export_wallet.rs` `--from-import-json` path) → wrong/partial payload for a general-policy import.
 - **Fix:** apply the faithful/structural-gate approach (mirror the restore C1 fix) at the `--from-import-json` template re-emit site.

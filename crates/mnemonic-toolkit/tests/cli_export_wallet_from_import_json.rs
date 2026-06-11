@@ -1319,3 +1319,80 @@ fn p_slug4_taproot_envelope_refused_on_from_import_json() {
         }
     }
 }
+
+// ============================================================================
+// C2 — `--from-import-json` refuses a GENERAL policy for template-requiring
+// formats (instead of silently collapsing it to plain multisig), while
+// descriptor-passthrough formats emit faithfully and singlesig/plain-multisig
+// are unchanged. SPEC design/SPEC_c2_from_import_json_general_policy_gate.md.
+// ============================================================================
+
+/// Import a bitcoin-core descriptor blob → envelope JSON (the C2 source path).
+fn import_envelope_from_descriptor(desc: &str) -> String {
+    let blob = format!(
+        r#"{{"wallet_name":"vault","descriptors":[{{"desc":"{desc}","active":true,"internal":false,"timestamp":0}}]}}"#
+    );
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    String::from_utf8(out.get_output().stdout.clone()).unwrap()
+}
+
+const GENERAL_POLICY_DESC: &str = "wsh(and_v(v:multi(2,[b8688df1/48h/0h/0h/2h]xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[5436d724/48h/0h/0h/2h]xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx/<0;1>/*),older(1000)))";
+const WPKH_DESC: &str = "wpkh([b8688df1/84h/0h/0h]xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/<0;1>/*)";
+
+fn export_from_envelope(envelope: &str, format: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["export-wallet", "--from-import-json", "-", "--format", format])
+        .write_stdin(envelope.to_string())
+        .assert()
+}
+
+/// A general policy + each template-requiring format → loud refusal (NOT a
+/// silently-collapsed plain-multi payload). RED pre-fix.
+#[test]
+fn from_import_json_general_policy_refuses_template_formats() {
+    let env = import_envelope_from_descriptor(GENERAL_POLICY_DESC);
+    for fmt in ["sparrow", "coldcard", "coldcard-multisig", "jade", "electrum"] {
+        let out = export_from_envelope(&env, fmt).failure().get_output().clone();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("cannot represent a general wallet policy"),
+            "[{fmt}] must refuse the general policy; got: {stderr}"
+        );
+        // It must NOT have emitted a collapsed plain-multi payload.
+        assert!(
+            !String::from_utf8_lossy(&out.stdout).contains("multi("),
+            "[{fmt}] must not emit a collapsed payload"
+        );
+    }
+}
+
+/// A general policy + descriptor-passthrough formats → FAITHFUL (the timelock
+/// survives); the gate must not touch them.
+#[test]
+fn from_import_json_general_policy_passthrough_is_faithful() {
+    let env = import_envelope_from_descriptor(GENERAL_POLICY_DESC);
+    for fmt in ["descriptor", "bitcoin-core", "bip388"] {
+        let out = export_from_envelope(&env, fmt).success().get_output().clone();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("older(1000)"),
+            "[{fmt}] passthrough must keep older(1000); got: {stdout}"
+        );
+    }
+}
+
+/// C-1 regression guard: a SINGLESIG envelope still exports to template-requiring
+/// formats (the gate must only refuse GENERAL policies, not singlesig).
+#[test]
+fn from_import_json_singlesig_template_formats_unchanged() {
+    let env = import_envelope_from_descriptor(WPKH_DESC);
+    for fmt in ["sparrow", "coldcard", "electrum"] {
+        export_from_envelope(&env, fmt).success();
+    }
+}

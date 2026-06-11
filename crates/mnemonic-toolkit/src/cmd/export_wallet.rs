@@ -775,6 +775,26 @@ fn run_from_import_json<W: Write, E: Write>(
     // template.is_some()). Taproot is already refused above (§2.4), so the
     // derivation never sees Tr.
     let derived_template: Option<CliTemplate> = if format_requires_template(args.format) {
+        // C2: a template-requiring format (k-of-n multisig) cannot represent a
+        // GENERAL miniscript policy (timelocks/hashlocks/andor/decay) — refuse
+        // loudly rather than silently collapse it to plain multi via
+        // `template_from_descriptor`'s `Wsh(_) => WshMulti` arm (the restore-C1
+        // collapse class). Singlesig + plain multisig are NOT general → fall
+        // through unchanged. Passthrough formats keep `None` (emit faithfully).
+        if crate::wallet_export::descriptor_is_general_policy(&parsed_ms) {
+            use clap::ValueEnum;
+            let format_name = args
+                .format
+                .to_possible_value()
+                .map(|v| v.get_name().to_string())
+                .unwrap_or_default();
+            return Err(ToolkitError::BadInput(format!(
+                "--from-import-json: --format {format_name} cannot represent a general wallet \
+                 policy (timelocks/hashlocks/non-multisig miniscript); it is a plain k-of-n \
+                 multisig format. Use --format descriptor / bitcoin-core / bip388 for faithful \
+                 descriptor passthrough."
+            )));
+        }
         Some(crate::wallet_export::template_from_descriptor(&parsed_ms)?)
     } else {
         None

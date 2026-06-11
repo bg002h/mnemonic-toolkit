@@ -294,6 +294,41 @@ pub(crate) fn template_from_descriptor(
     }
 }
 
+/// C2 — `true` iff `d` is a GENERAL miniscript policy under a script-hash family
+/// (`wsh`/`sh(wsh)`/`sh(<ms>)`) whose root is NOT a plain `multi`/`sortedmulti`.
+/// Singlesig (`pkh`/`wpkh`/`sh(wpkh)`) and plain multisig return `false` (they
+/// map to a real template). Used to refuse a general policy for template-
+/// requiring export formats instead of silently collapsing it to plain multi
+/// (the same `Wsh(_) => WshMulti` collapse fixed on the restore path in v0.54.0).
+/// (`Tr` is refused upstream on the `--from-import-json` path before this is
+/// reached, so it is not enumerated here.)
+pub(crate) fn descriptor_is_general_policy(d: &MsDescriptor<DescriptorPublicKey>) -> bool {
+    use miniscript::descriptor::ShInner;
+    use miniscript::Descriptor::*;
+    // No `WshInner` enum at the pinned miniscript rev (#915 removed it); a plain
+    // `multi`/`sortedmulti` is a `Terminal::Multi`/`SortedMulti` at the inner
+    // miniscript root. Generic over `Ctx` (wsh inner = Segwitv0, sh(ms) = Legacy).
+    fn root_is_plain_multi<Ctx: miniscript::ScriptContext>(
+        ms: &miniscript::Miniscript<DescriptorPublicKey, Ctx>,
+    ) -> bool {
+        matches!(
+            ms.node,
+            miniscript::Terminal::Multi(_) | miniscript::Terminal::SortedMulti(_)
+        )
+    }
+    match d {
+        Wsh(w) => !root_is_plain_multi(w.as_inner()),
+        Sh(s) => match s.as_inner() {
+            ShInner::Wsh(w) => !root_is_plain_multi(w.as_inner()),
+            ShInner::Ms(ms) => !root_is_plain_multi(ms),
+            ShInner::Wpkh(_) => false,
+        },
+        // Pkh / Wpkh (singlesig) → not a general policy; Bare / Tr handled
+        // elsewhere (Tr refused upstream).
+        _ => false,
+    }
+}
+
 /// SPEC v0.8 §4 — missing-info refusal field enumeration. Per the SPEC:
 /// per-slot fields are discriminants 1-3 (`MasterFingerprint`, `DerivationPath`,
 /// `Xpub`); globals are 4-7 (`ScriptType`, `Threshold`, `WalletName`,
@@ -648,5 +683,42 @@ mod template_from_descriptor_tests {
         // The unsorted sibling routes through the same ShInner::Ms arm.
         let d = format!("sh(multi(2,{X1},{X2}))");
         assert!(t(&d).is_err(), "legacy bare P2SH multi has no template");
+    }
+
+    // C2 — descriptor_is_general_policy: TRUE only for a script-hash family with
+    // a non-plain-multi root; FALSE for singlesig + plain multisig.
+    fn is_general(desc: &str) -> bool {
+        let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+        descriptor_is_general_policy(&d)
+    }
+    #[test]
+    fn general_policy_detector_true_for_general_shapes() {
+        assert!(is_general(&format!("wsh(and_v(v:multi(2,{X1},{X2}),older(1000)))")));
+        assert!(is_general(&format!(
+            "wsh(or_d(multi(2,{X1},{X2}),and_v(v:pk({X1}),older(144))))"
+        )));
+        assert!(is_general(&format!("sh(wsh(and_v(v:multi(2,{X1},{X2}),older(50))))")));
+        let h = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
+        assert!(is_general(&format!("wsh(and_v(v:multi(2,{X1},{X2}),sha256({h})))")));
+    }
+    #[test]
+    fn general_policy_detector_false_for_plain_multisig() {
+        assert!(!is_general(&format!("wsh(multi(2,{X1},{X2}))")));
+        assert!(!is_general(&format!("wsh(sortedmulti(2,{X1},{X2}))")));
+        assert!(!is_general(&format!("sh(wsh(multi(2,{X1},{X2})))")));
+        assert!(!is_general(&format!("sh(wsh(sortedmulti(2,{X1},{X2})))")));
+        // Legacy bare sh(multi) is plain multisig (NOT general) — falls through
+        // to template_from_descriptor's own specific refusal (R0-r1 M-3).
+        assert!(!is_general(&format!("sh(multi(2,{X1},{X2}))")));
+    }
+    #[test]
+    fn general_policy_detector_false_for_singlesig() {
+        assert!(!is_general(WPKH), "wpkh is singlesig, not a general policy");
+        assert!(!is_general(
+            "pkh([b8688df1/44'/0'/0']xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/0/*)"
+        ));
+        assert!(!is_general(
+            "sh(wpkh([b8688df1/49'/0'/0']xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj/0/*))"
+        ));
     }
 }
