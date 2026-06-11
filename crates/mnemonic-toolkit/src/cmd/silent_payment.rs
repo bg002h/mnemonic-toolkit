@@ -7,6 +7,7 @@
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::secret_advisory::secret_in_argv_warning;
+use crate::secret_string::SecretString;
 use bitcoin::bip32::Xpriv;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -94,8 +95,10 @@ struct SilentPaymentJson {
     spend_pubkey: String,
     scan_path: String,
     spend_path: String,
-    scan_priv: String,  // online / hot
-    spend_priv: String, // COLD — full spending authority
+    // v0.53.x: derived private keys → SecretString (zeroize on drop;
+    // serializes byte-identically to the prior String).
+    scan_priv: SecretString,  // online / hot
+    spend_priv: SecretString, // COLD — full spending authority
 }
 
 /// Resolve a seed-bearing secret string → master `Xpriv`. Value-sniff order:
@@ -257,8 +260,8 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     let scan_path = format!("m/352'/{coin}'/{}'/1'/0", args.account);
     let spend_path = format!("m/352'/{coin}'/{}'/0'/0", args.account);
-    let scan_priv = hex::encode(b_scan.secret_bytes());
-    let spend_priv = hex::encode(b_spend.secret_bytes());
+    let scan_priv = SecretString::new(hex::encode(b_scan.secret_bytes()));
+    let spend_priv = SecretString::new(hex::encode(b_spend.secret_bytes()));
 
     if args.json {
         let envelope = SilentPaymentJson {

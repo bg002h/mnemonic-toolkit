@@ -242,6 +242,31 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/xpub_search/passphrase_search.rs",
         evidence: &["Zeroizing::new(raw)"],
     },
+    // ---- silent_payment.rs / nostr.rs (derived priv-key strings → SecretString) ----
+    // v0.53.x (`silentpayment-nostr-priv-not-zeroizing`): the hex/WIF of derived
+    // private keys is carried into `--json` / text output via SecretString
+    // (Zeroizing<String> inner; serialize-transparent), so the heap copies
+    // scrub on drop.
+    ZeroizeRow {
+        label: "silent-payment scan_priv hex wraps in SecretString",
+        source_file: "src/cmd/silent_payment.rs",
+        evidence: &["SecretString::new(hex::encode(b_scan.secret_bytes()))"],
+    },
+    ZeroizeRow {
+        label: "silent-payment spend_priv hex wraps in SecretString",
+        source_file: "src/cmd/silent_payment.rs",
+        evidence: &["SecretString::new(hex::encode(b_spend.secret_bytes()))"],
+    },
+    ZeroizeRow {
+        label: "nostr WIF wraps in SecretString from creation",
+        source_file: "src/cmd/nostr.rs",
+        evidence: &["SecretString::new(crate::nostr::wif_for"],
+    },
+    ZeroizeRow {
+        label: "nostr electrum import string (embeds WIF) wraps in SecretString",
+        source_file: "src/cmd/nostr.rs",
+        evidence: &["SecretString::new(format!(\"{p}{wif}\"))"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -259,8 +284,9 @@ fn canonical_zeroize_list_has_expected_row_count() {
     // authoritative check.
     let n = ZEROIZE_ROWS.len();
     assert!(
-        (18..=35).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected 18..=35 (plan §Phase 2 minus deferred field-type row, minus R1 I-4 fold consolidations). \
+        (18..=42).contains(&n),
+        "ZEROIZE_ROWS row count = {n}; expected 18..=42 (range upper bound widened in the \
+         silentpayment-nostr-priv-not-zeroizing cycle: +4 SecretString rows). \
          Survey §1 toolkit table is the canonical reference."
     );
 }

@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.6] — 2026-06-11
+
+**SemVer-PATCH — two audit-backlog hardening fixes: gate the import-json `schema_version`, and zeroize derived private-key strings in `silent-payment` / `nostr`.**
+
+### Changed
+
+- **`import-json` schema-version gate** (`import-json-schema-version-unchecked`). The import-json envelope carried `schema_version` (outer `"1"`, inner bundle `"4"`) into deserialized `String` fields that NO consumer read — so a future incompatible envelope would be silently mis-parsed (serde drops unknown fields). `parse_import_json_envelopes` (the shared chokepoint for both `export-wallet --from-import-json` and `bundle --import-json`) now validates the SELECTED envelope's outer + inner `schema_version` strict-equal against the supported `"1"`/`"4"`, rejecting anything else with `BadInput` ("unsupported import-json … schema_version …; upgrade the toolkit") — fail-closed, zero regression for valid current envelopes.
+- **Zeroize derived private-key strings** (`silentpayment-nostr-priv-not-zeroizing`). `silent-payment`'s `scan_priv`/`spend_priv` (hex of the derived scan/spend secret bytes) and `nostr`'s `wif` (full spending key) — which propagate into the `--json` envelope, the `electrum` import string (`{prefix}{wif}`), and the text output — were plain `String`s that lingered un-scrubbed in the heap after the command returned. They now use a new serialize-transparent `SecretString(Zeroizing<String>)` (`crate::secret_string`) that zeroizes every copy on drop. The `--json` wire-shape + text output are BYTE-IDENTICAL (Serialize = `serialize_str`; Display/Deref transparent); a length-only `Debug` prevents accidental log/panic leaks. Best-effort caveat: the emitted bytes (stdout/pipe) and the secp256k1 source keys are out of scope. Added 4 `lint_zeroize_discipline` rows + widened the row-count range. NOT yet covered (filed FOLLOWUPs do not exist for these — they are inherent): the secret is intentionally on stdout.
+
+### Notes
+
+No CLI flag/help/subcommand/wire change → no `schema_mirror` / manual / GUI / sibling-codec lockstep. SPEC + R0 ×2 GREEN: `design/SPEC_import_json_schema_gate_and_secret_zeroize.md`, `design/agent-reports/import-json-gate-and-zeroize-r0-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.53.5] — 2026-06-10
 
 **SemVer-PATCH — bump ms-codec 0.4.0 → 0.4.2: all-uppercase ms1 cards now decode end-to-end (completes audit M11), and `ms-shares combine` inherits a secret-leak guard fix.**

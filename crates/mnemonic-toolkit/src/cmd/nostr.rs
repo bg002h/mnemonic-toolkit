@@ -6,6 +6,7 @@ use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::secret_advisory::{secret_in_argv_warning, emit_output_class_advisory, OutputClass};
+use crate::secret_string::SecretString;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -115,8 +116,10 @@ struct OutputRow {
     script_type: String,
     descriptor: String,
     address: String,
+    // v0.53.x: the electrum import string embeds the WIF (`{prefix}{wif}`) →
+    // secret; SecretString zeroizes on drop, serializes byte-identically.
     #[serde(skip_serializing_if = "Option::is_none")]
-    electrum: Option<String>,
+    electrum: Option<SecretString>,
 }
 
 /// Top-level JSON envelope for `--json`.
@@ -124,8 +127,9 @@ struct OutputRow {
 struct NostrJson {
     kind: &'static str, // "public" | "secret"
     x_only: String,
+    // v0.53.x: WIF = full private key → SecretString (zeroize on drop).
     #[serde(skip_serializing_if = "Option::is_none")]
-    wif: Option<String>,
+    wif: Option<SecretString>,
     outputs: Vec<OutputRow>,
     #[serde(skip_serializing_if = "Option::is_none")]
     import: Option<serde_json::Value>,
@@ -209,7 +213,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(stderr, "notice: nostr: secret normalized to even-y (BIP-340) for address consistency").map_err(ToolkitError::Io)?;
         }
         let (xonly, _) = norm.x_only_public_key(&secp);
-        let wif = crate::nostr::wif_for(&norm, args.network);
+        // v0.53.x: WIF held in a zeroize-on-drop SecretString from creation;
+        // every downstream copy (electrum, the json field) is also SecretString.
+        let wif = SecretString::new(crate::nostr::wif_for(&norm, args.network));
 
         // Build rows once; used by both render paths.
         let mut rows: Vec<OutputRow> = Vec::with_capacity(types.len());
@@ -218,7 +224,8 @@ pub fn run<R: Read, W: Write, E: Write>(
                 script_type: st.as_str().to_owned(),
                 descriptor: crate::nostr::descriptor_for(xonly, *st)?,
                 address: crate::nostr::address_for(&secp, xonly, *st, args.network).to_string(),
-                electrum: crate::nostr::electrum_prefix(*st).map(|p| format!("{p}{wif}")),
+                electrum: crate::nostr::electrum_prefix(*st)
+                    .map(|p| SecretString::new(format!("{p}{wif}"))),
             });
         }
 

@@ -24,6 +24,7 @@ mod parse_descriptor;
 mod repair;
 mod silent_payment;
 mod secret_advisory;
+mod secret_string;
 mod slip0132;
 mod slot_input;
 mod slot_ms1;

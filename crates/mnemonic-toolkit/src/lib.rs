@@ -89,6 +89,9 @@ pub mod process_hardening;
 /// `mnemonic-gui/src/secrets.rs` for v0.5..v0.9 hand-coded-schema fallback;
 /// GUI-side drift gate asserts the two lists agree.
 pub mod secrets;
+/// Serialize-transparent, zeroize-on-drop secret string for derived
+/// private-key material emitted via `--json` / text (silent-payment, nostr).
+pub mod secret_string;
 pub mod seed_xor;
 pub mod seedqr;
 pub mod slip39;

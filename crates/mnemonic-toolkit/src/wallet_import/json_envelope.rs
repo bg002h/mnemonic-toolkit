@@ -266,7 +266,7 @@ pub(crate) fn parse_import_json_envelopes(
             "{flag_label}: envelope array is empty"
         )));
     }
-    match index {
+    let selected = match index {
         Some(n) => {
             if n >= envelopes.len() {
                 return Err(ToolkitError::BadInput(format!(
@@ -274,7 +274,7 @@ pub(crate) fn parse_import_json_envelopes(
                     envelopes.len()
                 )));
             }
-            Ok(envelopes.into_iter().nth(n).unwrap())
+            envelopes.into_iter().nth(n).unwrap()
         }
         None => {
             if envelopes.len() > 1 {
@@ -284,9 +284,47 @@ pub(crate) fn parse_import_json_envelopes(
                     envelopes.len()
                 )));
             }
-            Ok(envelopes.into_iter().next().unwrap())
+            envelopes.into_iter().next().unwrap()
         }
+    };
+    // Gate the SELECTED envelope's schema versions — fail closed on an
+    // unrecognized/future version rather than silently mis-parsing (serde
+    // drops unknown fields). Only the chosen entry is consumed, so only it is
+    // validated.
+    validate_schema_versions(&selected, flag_label)?;
+    Ok(selected)
+}
+
+/// The import-json envelope schema versions this toolkit understands. These
+/// mirror the EMIT side — outer `"1"` (`cmd::import_wallet::emit_json_envelope`)
+/// and inner bundle `"4"` (`format.rs::BundleJson::schema_version`); an
+/// emit-side bump must update these in lockstep.
+const SUPPORTED_ENVELOPE_SCHEMA: &str = "1";
+const SUPPORTED_BUNDLE_SCHEMA: &str = "4";
+
+/// Reject an import-json envelope whose schema_version (outer or inner bundle)
+/// is not exactly what this toolkit supports. Strict-equal / fail-closed: a
+/// future version with changed semantics must NOT be silently parsed by an
+/// older binary.
+fn validate_schema_versions(
+    env: &ImportJsonEnvelope,
+    flag_label: &str,
+) -> Result<(), ToolkitError> {
+    if env.schema_version != SUPPORTED_ENVELOPE_SCHEMA {
+        return Err(ToolkitError::BadInput(format!(
+            "{flag_label}: unsupported import-json envelope schema_version {:?} \
+             (this toolkit supports {SUPPORTED_ENVELOPE_SCHEMA:?}); upgrade the toolkit",
+            env.schema_version
+        )));
     }
+    if env.bundle.schema_version != SUPPORTED_BUNDLE_SCHEMA {
+        return Err(ToolkitError::BadInput(format!(
+            "{flag_label}: unsupported import-json bundle schema_version {:?} \
+             (this toolkit supports {SUPPORTED_BUNDLE_SCHEMA:?}); upgrade the toolkit",
+            env.bundle.schema_version
+        )));
+    }
+    Ok(())
 }
 
 /// SPEC §3.6.1 — decode every mk1 chunk-vector in the envelope's
@@ -578,6 +616,65 @@ mod tests {
         ]"#;
         let err = parse_import_json_envelopes(raw, None, "--import-json").unwrap_err();
         assert!(format!("{err:?}").contains("envelope array has 2 entries"));
+    }
+
+    // ── schema-version gate (`import-json-schema-version-unchecked`) ──────────
+
+    /// A single-entry valid `"1"`/`"4"` envelope parses Ok (no-regression).
+    /// RED-equivalent baseline for the two reject cells below.
+    #[test]
+    fn parse_import_json_accepts_supported_schema_versions() {
+        let raw = r#"[
+            {"schema_version":"1","source_format":"bitcoin-core","bundle":{
+                "schema_version":"4","mode":"watch-only","network":"mainnet",
+                "template":null,"descriptor":"wpkh(@0)","account":0,
+                "origin_path":"m","origin_paths":null,"master_fingerprint":null,
+                "ms1":[""],"mk1":["a"],"md1":["m1"],"multisig":null,
+                "privacy_preserving":false}}
+        ]"#;
+        let env = parse_import_json_envelopes(raw, None, "--import-json")
+            .expect("valid 1/4 envelope must parse");
+        assert_eq!(env.schema_version, "1");
+        assert_eq!(env.bundle.schema_version, "4");
+    }
+
+    /// An unsupported OUTER envelope schema_version is rejected (not silently
+    /// mis-parsed). Without the gate this parses Ok → the test catches it.
+    #[test]
+    fn parse_import_json_rejects_unsupported_envelope_schema_version() {
+        let raw = r#"[
+            {"schema_version":"2","source_format":"bitcoin-core","bundle":{
+                "schema_version":"4","mode":"watch-only","network":"mainnet",
+                "template":null,"descriptor":"wpkh(@0)","account":0,
+                "origin_path":"m","origin_paths":null,"master_fingerprint":null,
+                "ms1":[""],"mk1":["a"],"md1":["m1"],"multisig":null,
+                "privacy_preserving":false}}
+        ]"#;
+        let err = parse_import_json_envelopes(raw, None, "--import-json").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("unsupported import-json envelope schema_version") && msg.contains("\"2\""),
+            "expected an envelope-version rejection naming \"2\"; got {msg}"
+        );
+    }
+
+    /// An unsupported INNER bundle schema_version is rejected.
+    #[test]
+    fn parse_import_json_rejects_unsupported_bundle_schema_version() {
+        let raw = r#"[
+            {"schema_version":"1","source_format":"bitcoin-core","bundle":{
+                "schema_version":"5","mode":"watch-only","network":"mainnet",
+                "template":null,"descriptor":"wpkh(@0)","account":0,
+                "origin_path":"m","origin_paths":null,"master_fingerprint":null,
+                "ms1":[""],"mk1":["a"],"md1":["m1"],"multisig":null,
+                "privacy_preserving":false}}
+        ]"#;
+        let err = parse_import_json_envelopes(raw, None, "--import-json").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("unsupported import-json bundle schema_version") && msg.contains("\"5\""),
+            "expected a bundle-version rejection naming \"5\"; got {msg}"
+        );
     }
 
     /// v0.27.0 Phase 6.5 PR-review I8: drift regression — serialize a fully
