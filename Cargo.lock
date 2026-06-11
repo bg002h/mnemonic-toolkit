@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.53.4"
+version = "0.53.5"
 dependencies = [
  "aes",
  "assert_cmd",
@@ -742,9 +742,9 @@ dependencies = [
 
 [[package]]
 name = "ms-codec"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6bab070cfdb19e09145a44cc131f7a4da32035a26b861b8d9aeac94eaf906b6"
+checksum = "b1f32ad3d7bc77ca480d5b42e679b58dbac039706841b7b513f86a7d7771a15e"
 dependencies = [
  "codex32",
  "getrandom 0.3.4",

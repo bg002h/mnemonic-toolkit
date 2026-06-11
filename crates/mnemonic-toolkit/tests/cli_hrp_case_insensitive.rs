@@ -1,20 +1,28 @@
-//! v0.53.3 (audit M11) — case-insensitive HRP PROBES across the toolkit's
-//! card-intake surface. BIP-173 uppercase-QR cards exist in the wild; the
-//! toolkit's prefix probes lowercase a COPY for routing only and pass the
-//! ORIGINAL string to the sibling codecs, which remain the authority on
-//! case (mk-codec rejects mixed; ms-codec 0.4.0's envelope layer rejects
-//! uppercase past codex32 — companion `ms1-envelope-uppercase-bip173`).
+//! v0.53.3 (audit M11) + v0.53.5 (ms-codec pin 0.4.0 → 0.4.2) —
+//! case-insensitive HRP PROBES across the toolkit's card-intake surface.
+//! BIP-173 uppercase-QR cards exist in the wild; the toolkit's prefix probes
+//! lowercase a COPY for routing only and pass the ORIGINAL string to the
+//! sibling codecs, which remain the authority on case (mk-codec rejects
+//! mixed; md-codec is lenient). As of ms-codec 0.4.2 the ms-codec envelope
+//! layer ALSO accepts a consistent-uppercase card (BIP-173 conformance —
+//! companion `ms1-envelope-uppercase-bip173` shipped), so uppercase ms1 now
+//! decodes end-to-end identically to its lowercase twin; only MIXED case is
+//! rejected (codex32 `InvalidCase`).
 //!
-//! Per `design/PLAN_hrp_case_insensitive_probes.md` (contract = the ratified
-//! recon `cycle-prep-recon-hrp-case-insensitive.md` §Recommended scope):
+//! Per `design/PLAN_hrp_case_insensitive_probes.md` +
+//! `design/PLAN_ms_codec_pin_bump_0_4_2.md`:
 //!   - uppercase MK1 end-to-end: inspect + restore --cosigner + --target-xpub
 //!   - uppercase MD1 end-to-end: inspect + xpub-search --descriptor
-//!   - uppercase MS1 positional: M3 advisory FIRES + ms-codec-attributed
-//!     error (WrongHrp "MS") with NO full-string echo
-//!   - verify-bundle uppercase positionals round-trip
+//!   - uppercase MS1 positional: M3 advisory FIRES + ms-codec DECODES the
+//!     card (exit 0, kind: ms1) with NO full-string echo as an error
+//!   - verify-bundle uppercase positionals round-trip (uppercase ms1 now
+//!     `ms1_decode: ok`)
 //!   - decision-2 RIDER: UnknownHrp Display truncates `got` to its first 12
 //!     chars + `…` so a near-miss secret-ish positional never echoes in full
-//!   - silent-payment --secret <UPPER ms1> → ms-codec-attributed error
+//!   - silent-payment --secret <UPPER ms1> → derives the SAME address as the
+//!     lowercase twin (correctness pin)
+//!   - ms-shares combine --share <UPPER secret-at-S> → REFUSED (the 0.4.2
+//!     combine secret-guard the toolkit inherits; no secret bytes leak)
 //!   - mixed-case ms1/mk1 → clean codec-attributed errors; md1 mixed-case
 //!     ACCEPTED (characterization of md-codec BIP-173 leniency — not a fix)
 //!   - typed flags accept consistent-case values post-relaxation (the
@@ -289,43 +297,48 @@ fn xpub_search_descriptor_uppercase_md1_routes_md1_shape() {
 }
 
 // ============================================================================
-// uppercase MS1 — routes correctly; ms-codec is the (case-sensitive) authority
+// uppercase MS1 — decodes end-to-end (ms-codec 0.4.2 accepts uppercase)
 // ============================================================================
 
 /// Uppercase MS1 positional through inspect: the M3 secret-in-argv advisory
-/// FIRES (the probe is no longer case-gated), the error is ms-codec-
-/// attributed (`WrongHrp { got: "MS" }` via the friendly mapper — uppercase
-/// ms1 cannot decode until the ms-codec envelope companion ships), and the
-/// FULL secret string is NEVER echoed to stderr (pre-fix, `UnknownHrp`
-/// echoed it verbatim).
+/// FIRES (the probe is no longer case-gated), AND ms-codec 0.4.2 decodes the
+/// uppercase card to a valid inspect report (exit 0, `kind: ms1` / `tag:
+/// entr`). The raw card is NEVER echoed as an error — the report shows
+/// decoded fields, not the input dump (pre-fix, `UnknownHrp` echoed it
+/// verbatim).
 #[test]
-fn inspect_positional_uppercase_ms1_advisory_fires_ms_codec_attributed_no_echo() {
+fn inspect_positional_uppercase_ms1_advisory_fires_decodes_no_echo() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["inspect", &upper])
         .assert()
-        .code(2);
+        .code(0);
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("warning: secret material on argv (positional ms1)"),
         "M3 positional-ms1 advisory must fire for an uppercase card; got stderr: {stderr}"
     );
     assert!(
-        stderr.contains(r#"ms1 wrong HRP: got "MS", expected "ms""#),
-        "error must be ms-codec-attributed (WrongHrp); got stderr: {stderr}"
+        stdout.contains("kind: ms1") && stdout.contains("tag: entr"),
+        "uppercase ms1 must decode to a valid inspect report (kind: ms1 / tag: entr); \
+         got stdout: {stdout}"
     );
     assert!(
-        !stderr.contains(&upper),
-        "the full secret string must never be echoed to stderr; got stderr: {stderr}"
+        !stderr.contains(&upper) && !stdout.contains(&upper),
+        "the raw card must never be echoed back (report shows decoded fields, \
+         not the input dump); got stdout: {stdout} / stderr: {stderr}"
     );
 }
 
 /// Uppercase MS1 positional through verify-bundle rides the same shared
-/// classifier: no `UnknownHrp` full-string echo; the failure is ms-codec-
-/// attributed.
+/// classifier: it HRP-classifies (no `UnknownHrp` full-string echo) and, as
+/// of ms-codec 0.4.2, DECODES — the row reads `ms1_decode: ok`. The exit-4
+/// mismatch comes entirely from the absent mk1/md1 cards in this fixture, NOT
+/// from any ms1 error.
 #[test]
-fn verify_bundle_positional_uppercase_ms1_no_echo_ms_codec_attributed() {
+fn verify_bundle_positional_uppercase_ms1_decodes_ok() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -341,7 +354,13 @@ fn verify_bundle_positional_uppercase_ms1_no_echo_ms_codec_attributed() {
         ])
         .assert()
         .failure();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    // uppercase ms1 now decodes (the mismatch is from absent mk1/md1):
+    assert!(
+        stdout.contains("ms1_decode: ok"),
+        "uppercase ms1 must decode (`ms1_decode: ok`); got stdout: {stdout}"
+    );
     assert!(
         !stderr.contains("does not begin with a recognized HRP prefix"),
         "uppercase ms1 must HRP-classify (not UnknownHrp); got stderr: {stderr}"
@@ -353,43 +372,100 @@ fn verify_bundle_positional_uppercase_ms1_no_echo_ms_codec_attributed() {
 }
 
 /// `--ms1 <UPPER full-length>` typed flag: post-relaxation the value passes
-/// `validate_flag_hrp` and the repair path's own `parse_chunk` pre-gate
-/// (which lowercases), then reaches ms-codec — which rejects the uppercase
-/// envelope HRP. Pins the REPAIR-path translation marker
-/// (`RepairError::HrpMismatch` from `MsErr::WrongHrp`).
+/// `validate_flag_hrp` and reaches ms-codec — which, as of 0.4.2, accepts the
+/// consistent-uppercase envelope. A valid card needs no correction, so
+/// `repair` passes it through unchanged (exit 0, card on stdout in its input
+/// case); the `--ms1` secret-argv advisory still fires on stderr. (The old
+/// `RepairError::HrpMismatch` marker — "repair: chunk 0 HRP mismatch —
+/// expected 'ms', found 'MS'" — is gone: there is no mismatch to repair.)
 #[test]
-fn repair_ms1_flag_uppercase_reaches_ms_codec_repair_marker() {
-    let upper = VALID_MS1.to_uppercase();
-    Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args(["repair", "--ms1", &upper])
-        .assert()
-        .code(2)
-        .stderr(predicate::str::contains(
-            "repair: chunk 0 HRP mismatch — expected 'ms', found 'MS'",
-        ));
-}
-
-/// `silent-payment --secret <UPPER full ms1>`: the secret-kind dispatch
-/// probe is case-insensitive, so the ms-codec-attributed error replaces the
-/// pre-fix generic "expected a seed-bearing secret" refusal.
-#[test]
-fn silent_payment_uppercase_ms1_ms_codec_attributed() {
+fn repair_ms1_flag_uppercase_passes_through() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["silent-payment", "--secret", &upper])
+        .args(["repair", "--ms1", &upper])
         .assert()
-        .failure();
+        .code(0);
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains(r#"ms1 wrong HRP: got "MS", expected "ms""#),
-        "error must be ms-codec-attributed; got stderr: {stderr}"
+        stdout.contains(&upper),
+        "a valid uppercase card passes through repair unchanged; got stdout: {stdout}"
     );
     assert!(
-        !stderr.contains("seed-bearing"),
-        "the generic refusal must be replaced by the ms-codec-attributed error; \
-         got stderr: {stderr}"
+        stderr.contains("warning: secret material on argv (--ms1)"),
+        "the --ms1 secret-argv advisory must fire; got stderr: {stderr}"
+    );
+}
+
+/// `silent-payment --secret <UPPER full ms1>`: the secret-kind dispatch
+/// probe is case-insensitive, and ms-codec 0.4.2 decodes the uppercase card,
+/// so the command derives a silent-payment address. THE CORRECTNESS PIN: the
+/// uppercase and lowercase twins MUST derive the SAME `sp1q…` address (a
+/// BIP-173 case-equivalent card is the same wallet). Captures the lowercase
+/// output in the same cell and diffs.
+#[test]
+fn silent_payment_uppercase_ms1_matches_lowercase() {
+    let upper = VALID_MS1.to_uppercase();
+
+    let extract_sp = |secret: &str| -> String {
+        let assert = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["silent-payment", "--secret", secret])
+            .assert()
+            .code(0);
+        let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+        stdout
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("address:"))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| panic!("no address line in silent-payment output: {stdout}"))
+    };
+
+    let addr_upper = extract_sp(&upper);
+    let addr_lower = extract_sp(VALID_MS1);
+    assert!(
+        addr_upper.starts_with("sp1q"),
+        "uppercase ms1 must derive a silent-payment address; got: {addr_upper}"
+    );
+    assert_eq!(
+        addr_upper, addr_lower,
+        "uppercase and lowercase ms1 twins must derive the SAME sp1q… address"
+    );
+}
+
+/// SECURITY (the 0.4.2 combine secret-guard the toolkit inherits): the
+/// toolkit's `ms-shares combine` delegates to `ms_codec::combine_shares`, so
+/// PRE-bump `combine --share <secret-at-S>` would have LEAKED the secret —
+/// the raw `b's'` index guard missed the uppercase `b'S'`, so an UPPER
+/// secret-at-S card short-circuited interpolation and returned its own bytes.
+/// `VALID_MS1` uppercased IS a secret-at-S card (single-string ms1 =
+/// threshold-0 / index-`s`). As of ms-codec 0.4.2 the consumer-side refusal
+/// is shipped: exit 2 + the `SecretShareSuppliedToCombine` prose + NO secret
+/// bytes on stdout. This is the toolkit-side proof of a shipped security fix.
+#[test]
+fn ms_shares_combine_uppercase_secret_at_s_refused_no_leak() {
+    let upper = VALID_MS1.to_uppercase();
+    let assert = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["ms-shares", "combine", "--share", &upper, "--to", "entropy"])
+        .assert()
+        .code(2);
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("the secret share (index 's') must not be combined"),
+        "the secret-share-into-combine refusal must fire; got stderr: {stderr}"
+    );
+    // No secret bytes leak: the all-zero TREZOR entropy is 32 hex zeros; the
+    // raw card itself must also never appear on stdout.
+    assert!(
+        stdout.trim().is_empty(),
+        "no secret bytes (entropy hex) may reach stdout on refusal; got stdout: {stdout}"
+    );
+    assert!(
+        !stdout.contains(&upper) && !stdout.contains("00000000000000000000000000000000"),
+        "neither the raw card nor the recovered entropy may leak; got stdout: {stdout}"
     );
 }
 

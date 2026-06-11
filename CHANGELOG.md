@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.5] — 2026-06-10
+
+**SemVer-PATCH — bump ms-codec 0.4.0 → 0.4.2: all-uppercase ms1 cards now decode end-to-end (completes audit M11), and `ms-shares combine` inherits a secret-leak guard fix.**
+
+### Changed
+
+- **ms-codec pin 0.4.0 → 0.4.2** (now published to crates.io). v0.53.3 made the toolkit's HRP *probes* case-insensitive (uppercase mk1/md1 worked; uppercase ms1 routed but the codec still rejected it). With 0.4.2 the ms-codec envelope canonicalizes case, so **uppercase ms1 now decodes end-to-end** — `inspect`, `repair`, and `silent-payment` on an all-uppercase ms1 card now produce the same result as the lowercase twin (verified byte-identical). Closes the ms1 leg of `hrp-classifier-rejects-valid-uppercase-cards` (audit M11).
+- **SECURITY (inherited):** `mnemonic ms-shares combine` delegates to ms-codec's `combine_shares`, which in 0.4.2 fixed a guard bypass — a uniform-uppercase secret-at-`S` card previously slipped past `SecretShareSuppliedToCombine` (a raw `b's'` comparison missed `b'S'`) and the interpolation short-circuit would have RETURNED the secret. `mnemonic ms-shares combine --share <uppercase secret-at-S>` now refuses cleanly (exit 2), pinned by a red-first toolkit cell. (Also inherits 0.4.1's combine non-standard-length validation.)
+
+The 4 staged uppercase-ms1 characterization cells (which asserted the old `WrongHrp` attribution) are inverted to assert decode-success; mixed-case ms1 still rejects. No CLI flag/surface change. Plan + 2 R0 rounds + impl review: `design/PLAN_ms_codec_pin_bump_0_4_2.md`, `design/agent-reports/ms-codec-pin-bump-*.md`.
+
 ## mnemonic-toolkit [0.53.4] — 2026-06-10
 
 **SemVer-PATCH — the friendly error mapper no longer echoes a corrupt ms1's full input on stderr (leak-hardening).**
