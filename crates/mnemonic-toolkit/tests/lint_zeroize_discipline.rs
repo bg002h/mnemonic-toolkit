@@ -267,6 +267,94 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/nostr.rs",
         evidence: &["SecretString::new(format!(\"{p}{wif}\"))"],
     },
+    // ---- hand-frozen-lint-canons-no-completeness (2026-06-11 audit): the 14
+    // previously-untracked CANONICAL owned-secret files, promoted to rows so
+    // the new source→declared scan can require coverage. ----
+    ZeroizeRow {
+        label: "addresses seed arm wraps the master-secret entropy in Zeroizing<Vec<u8>>",
+        source_file: "src/cmd/addresses.rs",
+        evidence: &["zeroize::Zeroizing<Vec<u8>>", "Zeroizing::new"],
+    },
+    ZeroizeRow {
+        label: "electrum-decrypt resolves the decrypt-password into Zeroizing<String>",
+        source_file: "src/cmd/electrum_decrypt.rs",
+        evidence: &["zeroize::Zeroizing<String>", "Zeroizing::new"],
+    },
+    ZeroizeRow {
+        label: "import-wallet read_blob holds the (plaintext seed/xprv-bearing) wallet blob in Zeroizing<Vec<u8>>",
+        source_file: "src/cmd/import_wallet.rs",
+        evidence: &["Zeroizing<Vec<u8>>", "Zeroizing::new(fs::read"],
+    },
+    ZeroizeRow {
+        label: "import-wallet decrypt-password + decrypted BSMS records wrap in Zeroizing<String>",
+        source_file: "src/cmd/import_wallet.rs",
+        evidence: &["Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "ms-shares parse_secret_to_entropy returns the pre-split secret as Zeroizing<Vec<u8>>",
+        source_file: "src/cmd/ms_shares.rs",
+        evidence: &["zeroize::Zeroizing::new(m.to_entropy())"],
+    },
+    ZeroizeRow {
+        label: "ms-shares combine recovers entropy + renders output in Zeroizing",
+        source_file: "src/cmd/ms_shares.rs",
+        evidence: &["zeroize::Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "restore owns the seed entropy as Zeroizing<Vec<u8>> (run + resolve_seed_entropy)",
+        source_file: "src/cmd/restore.rs",
+        evidence: &["zeroize::Zeroizing<Vec<u8>>"],
+    },
+    ZeroizeRow {
+        label: "seedqr owns the digits + phrase secrets in Zeroizing<String>",
+        source_file: "src/cmd/seedqr.rs",
+        evidence: &["zeroize::Zeroizing<String>", "Zeroizing::new"],
+    },
+    ZeroizeRow {
+        label: "verify-bundle Phrase arm wraps passphrase + entropy in Zeroizing",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["zeroize::Zeroizing::new(mnemonic.to_entropy())"],
+    },
+    ZeroizeRow {
+        label: "verify-bundle Entropy arm wraps hex-decoded entropy in Zeroizing",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["zeroize::Zeroizing::new(hex::decode"],
+    },
+    ZeroizeRow {
+        label: "account-of-descriptor wraps the BIP-39 passphrase in Zeroizing<String>",
+        source_file: "src/cmd/xpub_search/account_of_descriptor.rs",
+        evidence: &["zeroize::Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "passphrase-of-xpub wraps the mandatory BIP-39 passphrase in Zeroizing<String>",
+        source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs",
+        evidence: &["zeroize::Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "path-of-xpub wraps the BIP-39 passphrase in Zeroizing<String>",
+        source_file: "src/cmd/xpub_search/path_of_xpub.rs",
+        evidence: &["zeroize::Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "xpub-search seed_intake owns the phrase/ms1 source + decoded entropy in Zeroizing",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["Phrase(Zeroizing<String>)", "Zeroizing<Vec<u8>>"],
+    },
+    ZeroizeRow {
+        label: "seed_xor LIBRARY split/combine own shares + recovered master as Zeroizing<Vec<u8>>",
+        source_file: "src/seed_xor.rs",
+        evidence: &["zeroize::Zeroizing<Vec<u8>>"],
+    },
+    ZeroizeRow {
+        label: "slot_ms1 Ms1SlotResolution.entropy field is Zeroizing<Vec<u8>>",
+        source_file: "src/slot_ms1.rs",
+        evidence: &["Zeroizing<Vec<u8>>", "Zeroizing::new"],
+    },
+    ZeroizeRow {
+        label: "import-wallet overlay decodes cosigner ms1/phrase into Zeroizing<Vec<u8>> entropy",
+        source_file: "src/wallet_import/overlay.rs",
+        evidence: &["Zeroizing<Vec<u8>>", "Zeroizing::new"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -284,9 +372,10 @@ fn canonical_zeroize_list_has_expected_row_count() {
     // authoritative check.
     let n = ZEROIZE_ROWS.len();
     assert!(
-        (18..=42).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected 18..=42 (range upper bound widened in the \
-         silentpayment-nostr-priv-not-zeroizing cycle: +4 SecretString rows). \
+        (18..=60).contains(&n),
+        "ZEROIZE_ROWS row count = {n}; expected 18..=60 (range upper bound widened in the \
+         zeroize-lint source→declared completeness cycle: +16 promoted canonical rows from \
+         the 19-file zeroize audit, 36 + 16 = 52). \
          Survey §1 toolkit table is the canonical reference."
     );
 }
@@ -316,5 +405,154 @@ fn every_canonical_zeroize_row_has_evidence_anchor() {
         "zeroize-discipline lint: {} row(s) missing Zeroizing evidence:\n{}",
         missing.len(),
         missing.join("\n"),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// source→declared completeness scan (resolves
+// `hand-frozen-lint-canons-no-completeness`).
+//
+// The `every_canonical_zeroize_row_has_evidence_anchor` test above proves
+// the DECLARED direction: every row points at real wrapped source. The scan
+// below proves the SOURCE direction: every src file that owns a secret is
+// EITHER a canonical row OR an explicitly-audited exemption. Together they
+// close the loop — a NEW secret-bearing file added later FAILS the scan
+// until it gets a row or a deliberate allowlist decision.
+// ---------------------------------------------------------------------------
+
+/// Owned-secret allocation patterns. A src file matching ANY of these is
+/// "secret-bearing" and MUST be a `ZEROIZE_ROWS.source_file` or in
+/// `NON_ROW_SECRET_FILES`. Mirrors the live grep used to build the partition.
+const SECRET_PATTERNS: &[&str] = &[
+    "Zeroizing::new(",
+    "SecretString::new(",
+    ": Zeroizing<",
+    ": SecretString",
+];
+
+/// Files that USE Zeroizing/SecretString but are NOT canonical owned-secret
+/// rows (audited 2026-06-11; the 19-file zeroize audit). Each line: why it's
+/// exempt. Kept SMALL and per-entry-audited — verify_bundle/ms_shares are
+/// PROMOTED to rows, not allowlisted.
+const NON_ROW_SECRET_FILES: &[&str] = &[
+    "src/bsms_crypto.rs", // CRYPTO-INTERNAL: PBKDF2 AES key + AES-CTR plaintext buffer (consumer owns the plaintext)
+    "src/electrum_crypto.rs", // CRYPTO-INTERNAL: ECIES/CBC primitive (AES key, scalar, ECDH shared secret, key block)
+    "src/slip39/feistel.rs", // CRYPTO-INTERNAL: SLIP-0039 Feistel L/R halves + round key (consumer slip39/mod.rs owns output)
+    "src/nostr.rs", // PASS-THROUGH: decode_nostr_key hands the decoded INPUT upstream; cmd/nostr.rs owns the derived secret
+    "src/secret_string.rs", // PRIMITIVE: the SecretString newtype DEFINITION, not an allocation site
+];
+
+/// Persistent glob-cardinality floor. The partition is exactly 35
+/// secret-bearing src files @ 438de94 (30 ROWS-source ∪ 5 allowlist). The
+/// floor fires only on the loss-of-coverage direction (count DROPS) — a
+/// broken glob/path-prefix change that enumerates nothing would otherwise
+/// make the scan vacuously pass. Deleting a secret-bearing file is a
+/// conscious security-adjacent choice, so requiring a deliberate floor edit
+/// is the correct friction. Mirrors the `ZEROIZE_ROWS.len()` count guard.
+const SECRET_FILE_FLOOR: usize = 35;
+
+/// Recursively collect every `*.rs` under `dir`, returning crate-root-relative
+/// forward-slash paths (matching `ZEROIZE_ROWS.source_file` form).
+fn collect_rs_files(dir: &Path, root: &Path, out: &mut Vec<String>) {
+    let entries =
+        fs::read_dir(dir).unwrap_or_else(|e| panic!("failed to read dir {}: {e}", dir.display()));
+    for entry in entries {
+        let entry = entry.expect("dir entry");
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rs_files(&path, root, out);
+        } else if path.extension().and_then(|x| x.to_str()) == Some("rs") {
+            let rel = path
+                .strip_prefix(root)
+                .expect("path under root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push(rel);
+        }
+    }
+}
+
+fn file_is_secret_bearing(path: &Path) -> bool {
+    let source = fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+    SECRET_PATTERNS.iter().any(|p| source.contains(p))
+}
+
+#[test]
+fn every_secret_bearing_src_file_is_declared_or_allowlisted() {
+    let root = crate_root();
+    let mut all_rs = Vec::new();
+    collect_rs_files(&root.join("src"), root, &mut all_rs);
+
+    let declared: std::collections::HashSet<&str> =
+        ZEROIZE_ROWS.iter().map(|r| r.source_file).collect();
+    let allowlisted: std::collections::HashSet<&str> =
+        NON_ROW_SECRET_FILES.iter().copied().collect();
+
+    let mut secret_files: Vec<String> = Vec::new();
+    let mut undeclared: Vec<String> = Vec::new();
+    for rel in &all_rs {
+        if !file_is_secret_bearing(&root.join(rel)) {
+            continue;
+        }
+        secret_files.push(rel.clone());
+        if !declared.contains(rel.as_str()) && !allowlisted.contains(rel.as_str()) {
+            undeclared.push(rel.clone());
+        }
+    }
+
+    assert!(
+        undeclared.is_empty(),
+        "zeroize-completeness lint: {} secret-bearing src file(s) are neither a \
+         ZEROIZE_ROWS.source_file nor in NON_ROW_SECRET_FILES — add a canonical row \
+         (preferred) or an audited allowlist entry:\n  {}",
+        undeclared.len(),
+        undeclared.join("\n  "),
+    );
+
+    // Persistent glob-cardinality floor: a broken walk that enumerates
+    // nothing would pass `undeclared.is_empty()` vacuously. This catches it.
+    assert!(
+        secret_files.len() >= SECRET_FILE_FLOOR,
+        "zeroize-completeness lint: glob found only {} secret-bearing file(s), \
+         expected >= {} (the partition floor @ 438de94). A drop means a \
+         secret-bearing file was deleted (update the floor deliberately) OR the \
+         glob/path-prefix broke (fix it).",
+        secret_files.len(),
+        SECRET_FILE_FLOOR,
+    );
+}
+
+#[test]
+fn non_row_secret_allowlist_is_non_empty_and_each_entry_still_bears_a_secret() {
+    // Deliberate source-level tripwire: emptying the const flips this to a
+    // hard FAIL, forcing a conscious decision rather than a silent dissolve of
+    // the audited exemptions. `const_is_empty` allowed because the constness is
+    // exactly what makes this a compile-aware guard.
+    #[allow(clippy::const_is_empty)]
+    {
+        assert!(
+            !NON_ROW_SECRET_FILES.is_empty(),
+            "NON_ROW_SECRET_FILES must not be empty — the audited crypto-internal / \
+             pass-through / primitive exemptions belong here"
+        );
+    }
+    let root = crate_root();
+    let mut stale: Vec<&str> = Vec::new();
+    for entry in NON_ROW_SECRET_FILES {
+        let path = root.join(entry);
+        assert!(
+            path.exists(),
+            "NON_ROW_SECRET_FILES entry {entry} does not exist — remove the stale entry"
+        );
+        if !file_is_secret_bearing(&path) {
+            stale.push(entry);
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "NON_ROW_SECRET_FILES entries no longer contain a secret pattern (remove \
+         the stale allowlist entry):\n  {}",
+        stale.join("\n  "),
     );
 }
