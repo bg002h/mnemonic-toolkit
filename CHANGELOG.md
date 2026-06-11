@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.54.1] — 2026-06-11
+
+**SemVer-PATCH — `restore --md1` now reconstructs `pk(@N)`/`pkh(@N)`-keyed wallet policies (md-codec 0.35.1 pin bump; PART 2 of the restore C1 fix).**
+
+### Fixed
+
+- **`to-miniscript-check-pkh-double-wrap` (PART 2).** v0.54.0 reconstructed multi-keyed general policies faithfully but LOUD-REFUSED policies whose keys appear as bare `pk(@N)`/`pkh(@N)` outside a `multi()` (e.g. the v0.19.0 flagship `wsh(andor(pkh(@0),after(N),or_i(and_v(v:pkh(@1),older(M)),and_v(v:pkh(@2),older(K)))))`) — md-codec's `to_miniscript` rendered a `Check(Check(PkH))` double-wrap that errored "cannot wrap a fragment of type B". md-codec **0.35.1** fixes the renderer (Check-idempotence collapse); this release bumps the pin (`Cargo.lock`: md-codec 0.35.0 → 0.35.1) so those policies reconstruct through the SAME v0.54.0 general arm — **zero toolkit code change**, just the dep update + tests. Every key-check fragment + all timelocks survive (verified end-to-end on the flagship).
+- Tests (`tests/cli_restore_multisig_general.rs`): `flagship_pk_keyed_vault_reconstructs` (the v0.19.0 flagship) + `general_pkh_leaf_reconstructs_after_md_codec_fix` (flipped from the v0.54.0 refusal cell). md1 fixed-point oracle on both.
+
+### Notes
+
+No toolkit source/CLI/wire change — a dependency-version bump (md-codec 0.35.0 → 0.35.1, published to crates.io 2026-06-11) + test cells. No `schema_mirror`/GUI/manual delta beyond v0.54.0's. Companion: `descriptor-mnemonic` md-codec 0.35.1 (`design/SPEC_to_miniscript_check_pkh_double_wrap.md`, R0 GREEN). Completes the long-term restore C1 fix (PART 1 = v0.54.0 general arm; PART 2 = this). Remaining: C2 (`export-wallet --from-import-json` same collapse).
+
 ## mnemonic-toolkit [0.54.0] — 2026-06-11
 
 **SemVer-MINOR — `restore --md1` reconstructs GENERAL wallet-policy descriptors faithfully (funds-safety: was silently collapsing them to plain multisig).**

@@ -166,21 +166,43 @@ fn general_format_coldcard_refuses() {
     Command::cargo_bin("mnemonic").unwrap().args(&a).assert().failure();
 }
 
-/// (5) the blocked pk-keyed shape (a `pkh(@N)` leaf — reaches the general arm
-/// because a `multi` is also present) → a CLEAR loud refusal naming the
-/// md-codec follow-up slug, NOT a silent collapse and NOT the cryptic k-gate.
+/// (5) pk-keyed shape: a `pkh(@N)` leaf reconstructs faithfully (md-codec
+/// 0.35.1 fixed the `Check` double-wrap that previously made this a loud
+/// refusal — PART 2 / `to-miniscript-check-pkh-double-wrap`). Both `pkh`
+/// positions + the timelock survive.
 #[test]
-fn general_pkh_leaf_refuses_clearly_pending_md_codec() {
+fn general_pkh_leaf_reconstructs_after_md_codec_fix() {
     let md1 = bundle_general("wsh(or_d(multi(2,@0,@1),and_v(v:pkh(@2),older(144))))");
-    Command::cargo_bin("mnemonic")
-        .unwrap()
-        .args(restore_md1_args(&md1))
-        .assert()
-        .failure()
-        .stderr(
-            predicate::str::contains("to-miniscript-check-pkh-double-wrap")
-                .and(predicate::str::contains("faithful backup")),
-        );
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    assert!(desc.contains("or_d(multi(2,"), "outer multi kept: {desc}");
+    assert!(desc.contains("pkh("), "pkh leaf kept (not collapsed): {desc}");
+    assert!(desc.contains("older(144)"), "timelock kept: {desc}");
+    assert_md1_fixed_point(&md1, desc);
+}
+
+/// (5b) the v0.19.0 FLAGSHIP — `wsh(andor(pkh(@0),after(N),or_i(and_v(v:pkh(@1),
+/// older(M)),and_v(v:pkh(@2),older(K)))))` — keys are bare `pkh(@N)` leaves
+/// (NOT inside a multi). Loud-refused at toolkit v0.54.0; reconstructs after the
+/// md-codec 0.35.1 pin bump, through the SAME general arm with zero toolkit code
+/// change. Every key-check fragment + all three timelocks survive.
+#[test]
+fn flagship_pk_keyed_vault_reconstructs() {
+    let md1 = bundle_general(
+        "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))",
+    );
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    for frag in [
+        "andor(pkh(",
+        "after(12000000)",
+        "or_i(and_v(v:pkh(",
+        "older(4032)",
+        "older(32768)",
+    ] {
+        assert!(desc.contains(frag), "flagship must keep {frag}: {desc}");
+    }
+    assert_md1_fixed_point(&md1, desc);
 }
 
 /// (6) wildcard-only keys (R0-r1 I3, `multipath == None`): a `--descriptor`

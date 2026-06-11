@@ -47,7 +47,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix:** faithful reconstruction = thread per-key derivation paths (md-codec must expose per-`@N` use-site) + honor `wildcard_hardened` (and gate hardened-wildcard watch-only address derivation). Likely a paired md-codec enhancement.
 - **Tier:** deferred (refused loudly today — no silent infidelity; exotic card shapes).
 
-### `to-miniscript-check-pkh-double-wrap` — md-codec renders `Check(PkH)`/`Check(PkK)` as a double-Check → restore type-error (PART 2)
+### `to-miniscript-check-pkh-double-wrap` — ✓ RESOLVED (md-codec 0.35.1 + toolkit v0.54.1, 2026-06-11) — was: md-codec double-Check → restore type-error (PART 2)
 
 - **Surfaced:** 2026-06-11, the C1 deep-recon. md-codec's `to_miniscript.rs` `Tag::PkK`/`PkH` arms re-apply `Check` to an already-type-K bare key AND the `Tag::Check` arm wraps another → `Check(Check(PkH))` = `c:` over type-B → "c:pkh cannot wrap a fragment of type B". Blocks faithful restore of `pk(@N)`/`pkh(@N)`-keyed policies (the toolkit walker emits `Tag::Check(Tag::PkH)` in non-tap context; md-cli fixed this in its v0.30 Q12 redesign but the toolkit walker was ported 5 days before the freeze and never normalized).
 - **Where:** descriptor-mnemonic `crates/md-codec/src/to_miniscript.rs::node_to_miniscript` (`Tag::Check`/`PkK`/`PkH` arms ~:290-307). Companion: `mnemonic-toolkit` `cmd/restore.rs::faithful_multisig_descriptor` (surfaces the clear refusal naming this slug).
