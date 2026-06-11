@@ -158,8 +158,18 @@ fn resolve_master_xpriv<E: Write>(
         return to_master(&entropy, lang);
     }
     // 3. BIP-39 phrase (whitespace-separated words; checksum-validated).
+    //    v0.53.x (`silentpayment-phrase-english-only`): English-FIRST, then
+    //    auto-detect. parse_in(English) preserves the exact prior behavior for
+    //    English phrases (incl. any word-ambiguous across wordlists); only
+    //    English-FAILURES fall through to `parse(s)` (NFKD-normalize +
+    //    language_of auto-detect over the `all-languages` set), so non-English
+    //    phrases (Japanese/Spanish/…) now derive correctly instead of being
+    //    wrongly refused. Both parse()/parse_in() NFKD-normalize. A genuinely
+    //    ambiguous non-English phrase surfaces `AmbiguousLanguages` (no
+    //    --language flag to disambiguate → a clear refusal is correct).
     if s.split_whitespace().count() >= 2 {
         let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, s)
+            .or_else(|_| bip39::Mnemonic::parse(s))
             .map_err(|e| ToolkitError::SilentPayment(format!("BIP-39 phrase: {e}")))?;
         let seed = crate::derive_slot::derive_master_seed(&mnemonic, passphrase);
         return Xpriv::new_master(network.network_kind(), &seed[..])
@@ -302,4 +312,62 @@ pub fn run<R: Read, W: Write, E: Write>(
         stderr,
     );
     Ok(0)
+}
+
+#[cfg(test)]
+mod phrase_language_tests {
+    //! `silentpayment-phrase-english-only` — `resolve_master_xpriv` now
+    //! auto-detects the BIP-39 phrase language (English-first, then `parse`).
+    use super::resolve_master_xpriv;
+    use crate::network::CliNetwork;
+
+    // The all-zeros-entropy 12-word phrase in each wordlist (constructed via
+    // the crate so no hardcoded wordlist is trusted).
+    fn phrase(lang: bip39::Language) -> String {
+        bip39::Mnemonic::from_entropy_in(lang, &[0u8; 16])
+            .unwrap()
+            .to_string()
+    }
+
+    /// T1 — a NON-English (Japanese) phrase now resolves (the fix).
+    /// RED before the fix: the bare `parse_in(English, jp)` Errs on Japanese
+    /// words, so this returned `Err`.
+    #[test]
+    fn non_english_phrase_resolves() {
+        let jp = phrase(bip39::Language::Japanese);
+        let r = resolve_master_xpriv(&jp, "", CliNetwork::Mainnet, &mut std::io::sink());
+        assert!(r.is_ok(), "a valid Japanese BIP-39 phrase must resolve; got {r:?}");
+    }
+
+    /// T2 — the seed derives from the phrase WORDS, not from re-encoding
+    /// entropy to English: the Japanese and English phrases for the SAME
+    /// entropy produce DISTINCT master xprivs.
+    #[test]
+    fn language_changes_the_derived_xpriv() {
+        let jp = resolve_master_xpriv(
+            &phrase(bip39::Language::Japanese), "", CliNetwork::Mainnet, &mut std::io::sink(),
+        ).unwrap();
+        let en = resolve_master_xpriv(
+            &phrase(bip39::Language::English), "", CliNetwork::Mainnet, &mut std::io::sink(),
+        ).unwrap();
+        assert_ne!(
+            jp.to_string(), en.to_string(),
+            "same-entropy Japanese vs English phrases must derive DIFFERENT seeds (words-based)"
+        );
+    }
+
+    /// T3 — English no-regression, pinned to an EXTERNAL oracle (non-circular):
+    /// the famous all-zeros English phrase "abandon … about" + empty
+    /// passphrase has a widely-published BIP-32 mainnet root xprv.
+    #[test]
+    fn english_phrase_matches_external_bip39_vector() {
+        let en = phrase(bip39::Language::English);
+        assert!(en.starts_with("abandon abandon"), "sanity: {en}");
+        let xprv = resolve_master_xpriv(&en, "", CliNetwork::Mainnet, &mut std::io::sink()).unwrap();
+        assert_eq!(
+            xprv.to_string(),
+            "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu",
+            "English-first must preserve the canonical BIP-39 derivation"
+        );
+    }
 }

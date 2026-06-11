@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.53.7] — 2026-06-11
+
+**SemVer-PATCH — `silent-payment` auto-detects the BIP-39 phrase language (no longer English-only).**
+
+### Fixed
+
+- **`silentpayment-phrase-english-only`.** `silent-payment`'s seed resolver parsed a raw BIP-39 phrase as **English only** (`resolve_master_xpriv`), so a valid non-English phrase (Japanese, Spanish, French, …) was wrongly refused — even though the crate ships all wordlists. The raw-phrase branch is now **English-first, then auto-detect** (`parse_in(English).or_else(|_| parse(s))`): English phrases parse exactly as before (preserving behavior, incl. any word-ambiguous-across-wordlists case), and only English *failures* fall through to `bip39::Mnemonic::parse` (NFKD-normalize + `language_of` over the `all-languages` set). The seed derives from the actual phrase WORDS, so this is funds-relevant — a Japanese phrase now derives its own seed rather than being rejected. A genuinely ambiguous non-English phrase surfaces `AmbiguousLanguages` (there is no `--language` flag, so a clear refusal is correct). The ms1 branch already resolved per-card language; the entropy-hex branch correctly stays English (raw entropy has no wire language).
+- Tests: `cmd/silent_payment.rs` phrase-language module — T1 (Japanese phrase resolves; RED-proven via the English-only path), T2 (same-entropy Japanese vs English derive DISTINCT xprivs — words-based), T3 (English no-regression pinned to the **published BIP-39 "abandon … about" root xprv** — a non-circular external oracle). The Japanese external-seed-vector cross-check (T4) is deferred to FOLLOWUP `silentpayment-japanese-bip39-seed-vector-cross-check`.
+
+### Notes
+
+No CLI flag/help/subcommand/wire change → no `schema_mirror` / manual / GUI / sibling-codec lockstep. SPEC + R0 ×2 GREEN: `design/SPEC_silentpayment_phrase_language_autodetect.md`, `design/agent-reports/silentpayment-phrase-autodetect-r0-round{1,2}-review.md`.
+
 ## mnemonic-toolkit [0.53.6] — 2026-06-11
 
 **SemVer-PATCH — two audit-backlog hardening fixes: gate the import-json `schema_version`, and zeroize derived private-key strings in `silent-payment` / `nostr`.**
