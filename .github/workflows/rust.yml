@@ -36,6 +36,17 @@ jobs:
   # rustfmt today, so a developer's bare `cargo fmt` does not re-drift it —
   # verified at the v0.55.x fmt chore; if a future rustfmt diverges, this gate
   # catches it.) Source was reformatted to 1.95.0 in the same chore.
+  #
+  # EXEMPTION — `crates/mnemonic-toolkit/src/mlock.rs` is the ONE file excluded
+  # from this gate. It is a cross-repo byte-synced file governed by the `g6`
+  # invariant (see the "g6 invariant" job below): it must stay byte-equal
+  # (modulo comments) to `crates/ms-cli/src/mlock.rs` in mnemonic-secret, and g6
+  # pins the FROZEN `ms-cli-v0.7.0` tag (via scripts/install.sh), whose copy is
+  # NOT 1.95.0-formatted. So mlock.rs's format is pinned to that tag, NOT to
+  # this formatter — a bare `cargo fmt --all` would re-wrap it and break g6.
+  # The exemption is durably recorded in design/FOLLOWUPS.md (mlock-rs-fmt-exempt).
+  # When the ms-cli pin is next bumped to a 1.95.0-formatted tag, reformat
+  # mlock.rs in BOTH repos in lockstep and drop this exemption.
   fmt:
     name: fmt (pinned 1.95.0)
     runs-on: ubuntu-latest
@@ -46,8 +57,23 @@ jobs:
         with:
           toolchain: 1.95.0
           components: rustfmt
-      - name: Rustfmt (pinned 1.95.0, overriding rust-toolchain.toml)
-        run: cargo +1.95.0 fmt --all -- --check
+      - name: Rustfmt (pinned 1.95.0, overriding rust-toolchain.toml; mlock.rs exempt)
+        # `cargo fmt --all -- --check` over the whole workspace (handles each
+        # crate's edition automatically), then tolerate diffs ONLY in mlock.rs
+        # (the g6-pinned cross-repo file — see the exemption note above). rustfmt
+        # 1.95.0 emits one `Diff in <path>:<line>:` header per file needing
+        # formatting; we fail iff any NON-mlock.rs file appears.
+        run: |
+          out=$(cargo +1.95.0 fmt --all -- --check 2>&1) || true
+          bad=$(printf '%s\n' "$out" | grep -oE '^Diff in [^:]+' \
+            | sed 's/^Diff in //' | grep -v '/mlock\.rs$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::rustfmt 1.95.0 — these non-exempt files need formatting:"
+            printf '%s\n' "$bad"
+            printf '%s\n' "$out"
+            exit 1
+          fi
+          echo "rustfmt 1.95.0 clean (mlock.rs exempt by the g6 cross-repo invariant)"
 
   test:
     name: test (${{ matrix.os }})

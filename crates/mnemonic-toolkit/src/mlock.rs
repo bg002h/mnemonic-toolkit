@@ -164,8 +164,7 @@ impl MlockState {
 
     fn record_failure(&self, errno: i32, bytes: usize) {
         self.failure_count.fetch_add(1, Ordering::Relaxed);
-        self.total_bytes_unlocked
-            .fetch_add(bytes, Ordering::Relaxed);
+        self.total_bytes_unlocked.fetch_add(bytes, Ordering::Relaxed);
         let _ = self.first_errno.set(errno);
     }
 }
@@ -371,10 +370,7 @@ mod tests {
         let page = 4096;
         let (start, count) = round_to_pages(0x1000, 2 * page + 1, page);
         assert_eq!(start, 0x1000);
-        assert_eq!(
-            count, 3,
-            "2*page+1 spans 3 pages when starting page-aligned"
-        );
+        assert_eq!(count, 3, "2*page+1 spans 3 pages when starting page-aligned");
     }
 
     #[test]
