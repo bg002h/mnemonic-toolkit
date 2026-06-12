@@ -1,64 +1,36 @@
-# CONTINUITY — resume point (2026-06-12)
+# CONTINUITY — miniscript-coverage-audit program (2026-06-12)
 
-## LATEST: toolkit v0.55.0 — Check-PkK non-tap canonical WIRE fix SHIPPED + CI green
-- @ master + tag `mnemonic-toolkit-v0.55.0` (MINOR, wire-content change). The walker now emits bare `Tag::PkK/PkH` in wsh/sh (dropped the `tap_context` gate + removed the dead param), conforming to descriptor-mnemonic SPEC v0.30 §5.1 + matching md-cli. The Cycle-D divergence CLOSED. 8 wsh/sh-bare-key shapes change; common shapes (wpkh/multi/tr) unaffected. Restore reads BOTH old Check(PkK) + new bare-PkK md1 via md-codec idempotence (no card-reading regression).
-- **Wire-change test coverage (user mandate "make sure tests cover it"), 4 legs:** (1) NEW always-on in-suite golden `tests/cli_check_pkk_canonical_golden.rs` (post-fix policy/template ids, in-crate decode, RED pre-fix→GREEN post-fix); (2) toolkit round-trip wsh(pk)/wsh(pkh); (3) Cycle-D differential 4 entries Diverge→Match + anti-vacuity guards restructured (≥1 Match + zero Both/ToolError — the all-Match cross-tool regression gate); (4) 4 AST tests inverted. Goldens cross-confirmed byte-identical vs md-cli; Cycle-E proved bitcoind derives them. R0 ×2 GREEN + impl-review. CI all green. FOLLOWUP resolved both repos.
-- **QUEUED (offered, awaiting go): toolkit rustfmt-clean chore.** Source isn't rustfmt-clean + no fmt gate (a `cargo fmt` churns ~223 files — the v0.54.3 incident). Plan = the mnemonic-key `4811ca1` precedent: pin rustfmt, reformat ONCE as a single isolated commit on a quiet tree, add a dedicated fmt CI gate. Do AFTER in-flight work. Recommended YES; awaiting user go-ahead.
+Rolling resume doc. Memory index: `project_miniscript_coverage_audit_program.md` (+ `project_g6_fmt_exemption_and_asymmetric_pin.md`).
 
-## EARLIER: 2 security fixes PUBLISHED + propagated (ms-codec 0.4.3 + 0.4.4; toolkit v0.54.3 + v0.54.4)
-- **ms-codec 0.4.3** (char-boundary panic) PUBLISHED + tag `ms-codec-v0.4.3` @ `4d96c05`; **toolkit v0.54.3** pin bump + tag, CI green.
-- **ms-codec 0.4.4** (SECURITY — Error Display/Debug no longer echo secret input: Codex32 structural-only variant match + WrongHrp.got capped 4 chars at construction + hand Debug; fuzz exclusion DELETED → ms1_no_secret_leak now scans every variant) PUBLISHED + tag `ms-codec-v0.4.4` @ `b7e97ba`, R0×2 + impl-review GREEN, CI green. **toolkit v0.54.4** pin bump 0.4.3→0.4.4 + 1 regression cell + tag `mnemonic-toolkit-v0.54.4`, CI green. Resolves `ms-codec-error-display-echoes-input` (+ toolkit companion).
-- **Cycle D (cross-tool differential) SHIPPED** @ toolkit `2193774` + descriptor-mnemonic companion — `tests/cli_cross_tool_differential.rs` (#[ignore]-gated, 8-entry corpus, 4 Match/4 Diverge) + `cross-tool-differential.yml` CI job (installs tag-pinned md, runs the differential); CI GREEN (first live run). SURFACED + regression-gated the known walker divergence: toolkit keeps Check(PkK) in wsh/sh (non-conformant to descriptor-mnemonic SPEC §5.1) → different wallet_policy_id than md-cli for wsh(pk). FOLLOWUP `toolkit-check-pkk-non-tap-non-canonical` (both repos); FIX = toolkit drops the tap_context gate, R0-gated separate cycle. R0 ×2 + self-review GREEN.
-- **NOTE: a 223-file `cargo fmt` churn** appeared in the toolkit tree (from an earlier `cargo fmt -p mnemonic-toolkit` during v0.54.3 — only repair.rs was reverted then); the Cycle-D implementer restored all 223 to committed state. The toolkit source is NOT rustfmt-clean under the available rustfmt + has no fmt CI gate → NEVER run `cargo fmt` on the toolkit (stage explicitly, hand-format new code).
-- **Batch (user: "publish and bump then do D and E. And all the also fileds"):** DONE = publish+bump + ms-codec-error-display-echoes-input + Cycle D. REMAINING = Cycle E (bitcoind differential CI), toolkit-descriptor-fuzz-target (cfg(fuzzing) lib.rs mount, own mini-R0), fuzz-nightly-quarterly-bump (not due ~2026-09, note-only).
-- **Publish flow reminder:** `cargo publish -p <crate> --allow-dirty` (untracked recon files at root are the only "dirty"); tag `<crate>-vX.Y.Z` at the release commit; then toolkit pin bump = the 8-site lockstep (Cargo.toml version+pin, Cargo.lock, README.md + crate README markers, install.sh, CHANGELOG) + a regression cell.
+## Program: a constellation-wide miniscript-wallet coverage audit → R0-gated cycles
+Triggered by user questions ("how many tests of custom miniscript wallets / what types unsupported / ASCII vs UTF"). Gap analysis → cycle-prep recon (`cycle-prep-recon-*.md`, untracked scratch in toolkit root) → R0-gated cycles (Fable agents; plan + reviews persisted to `design/agent-reports/`).
 
----
+## SHIPPED (all CI green) — DO NOT redo
+- **Hygiene pass** — both repos, 6 FOLLOWUPs filed/flipped.
+- **C1** md-codec NO-BUMP `96aaab3` — 7 render goldens (or_b/or_c/and_b/d:/j:/n:/True/False) + T_TARGET_TAGS 23→30.
+- **C2** toolkit NO-BUMP `2f03eb0` — cross-tool md-cli differential corpus 8→17 rows.
+- **C3** toolkit NO-BUMP `6c27585` — `tests/cli_restore_taproot_refusal.rs` pins 3 taproot restore-refusal contracts.
+- **C4** md-codec `a3abdc8` + toolkit `f0587ab`, both NO-BUMP — md-codec goldens (multi 17-20/after/hash256/ripemd160/hash160) + toolkit verify-bundle hashlock + BIP-388 refusal.
+- **C5** toolkit NO-BUMP `1971ffa` — sortedmulti-in-combinator refusal contract + FOLLOWUP root-cause fix.
+- **C6** md-codec **0.35.3 PUBLISHED** `7dd2ff0` (tag md-codec-v0.35.3) + toolkit tail `77a361b` — reject mixed-case md1 per BIP-173. (Earlier same session: md-codec **0.35.2 PUBLISHED** = k>n encoder gate.)
+- **C7** toolkit **v0.55.1** tagged `3ec2119` — general-tr faithful restore (details below).
 
+Current origins: mnemonic-toolkit `3ec2119` (master, v0.55.1, tag mnemonic-toolkit-v0.55.1); descriptor-mnemonic `eb9f368` (main, md-codec 0.35.3).
 
-Everything below is SHIPPED and CI-green. Both repos clean, branches in sync. Safe to clear context.
-Memory auto-loads the detail: `project_stress_testing_program.md`, `project_faithful_general_policy_restore_v0_54_0.md` (+ MEMORY.md index). Fable 5 for all agent/R0 dispatches; trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+## Cycle 7 — SHIPPED 2026-06-12 (CI status: see latest runs)
+**GAP-1 T3-partial: faithful `restore --md1` of single-leaf + depth-1 two-leaf `tr(NUMS,<general miniscript>)`.** Toolkit **v0.55.1** tagged (`mnemonic-toolkit-v0.55.1`), git-tag-only, no md-codec change.
 
-## What shipped this session (newest → oldest)
-**Restore campaign — the general-policy-collapse fix, all 3 surfaces (R0-gated, funds-safety):**
-- `mnemonic-toolkit-v0.54.0` @ 2a764e0 — C1: `restore --md1` reconstructs general wallet policies faithfully (was silently collapsing → plain multisig, dropping timelocks). R0 ×3 + impl-review.
-- `md-codec 0.35.1` PUBLISHED to crates.io (descriptor-mnemonic @ 762a4f8/69b7a74) — Check double-wrap fix (PART 2).
-- `mnemonic-toolkit-v0.54.1` @ 9533fba — pin bump → pk(@N)/pkh(@N) flagship reconstructs (zero toolkit code change).
-- `mnemonic-toolkit-v0.54.2` @ 3f4c66f — C2: `export-wallet --from-import-json` refuses general policies for template formats (same collapse, 2nd door).
+- Commits: `21f947e` (plan + R0 r1 RED 0C/1I/5m + R0 r2 **GREEN** 0C/0I/4m), `111e8ae` (impl, TDD red→green, test file renamed `tests/cli_restore_taproot.rs`, 11 cells), `3ec2119` (release ritual: 6 version sites + manual surgery + FOLLOWUPs + impl review **GREEN** 0C/0I/4m persisted). Sibling: descriptor-mnemonic `eb9f368` (display-asymmetry FOLLOWUP sharpened, left-branch-specific + lift note).
+- Shipped design: 3-way `classify_taproot_restore` (Template | GeneralFaithful | refuse), strict-NUMS `Single` pass-through, structural depth≥2 + sortedmulti_a-under-TapTree refusals (ModeViolation exit 2, slug-citing), §5 Display-fidelity parse→print guard, `--format green` P2tr explicit refusal (exit 1). Goldens cross-verified vs a Bitcoin Core v25 oracle (impl review).
+- NEW FOLLOWUP filed: `export-wallet-green-tr-policy-singlesig-emission` (impl m1 — export-wallet still emits a "singlesig" green payload for a tr policy; restore-side fixed).
+- T3 remainder (all FOLLOWUP-tracked, blocked or fixture-only): depth≥2 (upstream #953), sortedmulti_a-in-tree (md-codec), keypath-only `tree:None` wire fixture, `:689` wording nit, is_nums:false.
 
-**Earlier:** `mnemonic-toolkit-v0.53.9` @ 5d599f7 (BIP-68 `older()` mask funds-safety); zeroize-lint completeness @ a7c1920.
+## Conventions (load-bearing)
+- **NEVER `cargo fmt --all` in the toolkit** — it reformats mlock.rs, breaking the g6 cross-repo byte-sync (the toolkit fmt gate excludes mlock.rs; format ONLY the touched file via `rustfmt +1.95.0 --edition 2021 <file>`). descriptor-mnemonic is repo-wide fmt-clean → `cargo fmt --all` is fine there.
+- **Bash cwd persists within one call** — use `git -C <repo>` for cross-repo ops (a bare `cd` persists and bites the next command).
+- **md-codec crates.io publishes are user-authorized** (AskUserQuestion; user said "Full release" twice). The toolkit is git-tag-only.
+- R0/architect/impl-review agents = Fable (commit trailer `Co-Authored-By: Claude Fable 5`). Empirically-verified test-only cycles may use a self-review for the impl phase.
+- Cycle-prep recon docs are untracked scratch (toolkit root); plan-docs + agent-reports ARE committed.
 
-**Stress-testing program (6 cycles, 2 done):**
-- **Cycle A SHIPPED** @ 9d3da6c (NO-BUMP) — backup→restore property test (`tests/prop_backup_restore_roundtrip.rs`). proptest typed-template generator + 3 oracles (structural AST / md1 fixed-point / rust-miniscript address differential). R0 ×2. Found a real bug run #1 (sortedmulti-in-combinator engrave-but-can't-restore → FOLLOWUP `bundle-accepts-sortedmulti-in-combinator-restore-cannot`).
-- **Cycle B SHIPPED** @ descriptor-mnemonic `3ec324c` (NO-BUMP, test-only; toolkit companion @ e33c147), CI green both repos — md-codec proptest expansion: W tier (full wire domain × nesting × TLV randomization → P1/P2/P4/P5) + T tier (typed correct-by-construction grammar w/ TLV xpubs → NEW P6 to_miniscript/reparse/derive leg, P7 clean-refuse, P8 encoder-side). R0 ×4 + impl review ×2 (all persisted to descriptor-mnemonic `design/agent-reports/cycle-b-proptest-expansion-*`). FOUND run #1: **upstream rust-miniscript 13.0.0 depth-2 taptree Display/parse asymmetry** (FOLLOWUP `upstream-miniscript-taptree-depth2-display-asymmetry`, md-codec repo; flip cell + T-gen depth≤1 constraint; toolkit pins rev 95fdd1c — exposure unverified, check before mirroring). Also filed `encode-accepts-k-greater-than-n` (both repos; encoder accepts k>n that decode rejects).
-
-## Cycle C COMPLETE — cargo-fuzz malformed-input (R0 ×3 GREEN; 3 phases shipped, CI green, each impl-reviewed GREEN)
-- **Phase 1 md-codec** @ descriptor-mnemonic `e0d0b12` (4 targets). **Phase 2 ms-codec** @ mnemonic-secret `493c5de` (3 targets incl. ms1_no_secret_leak). **Phase 3 mk-codec** @ mnemonic-key `21786dc` (2 targets). Per-repo `fuzz/` workspaces, NO-BUMP. Brainstorm + reviews: `design/BRAINSTORM_stress_cycle_c_fuzzing.md` + each repo's `design/agent-reports/cycle-c-fuzzing-*`.
-- **FOUND run #1 (ms phase) → FIXED: `ms_codec::decode_with_correction` PANIC on a single 0xaa byte** (char-boundary slice at decode.rs:151). **Fixed @ ms-codec 0.4.3 (mnemonic-secret `4d96c05`, CI green):** slice at `rfind('1')` (ASCII boundary) + whole-string got when no separator. TDD + mini-R0 GREEN. ms1_decode RE-ENABLED in smoke. ms-cli pin →=0.4.3. **PENDING USER AUTH: crates.io publish of ms-codec 0.4.3 + toolkit pin bump** (so `mnemonic`/`ms repair` get the fix; in-repo fix complete).
-- **Open FOLLOWUPs from this cycle:** `ms-codec-error-display-echoes-input` (ms Error Display leaks secret share via codex32 InvalidChecksum{string}+WrongHrp{got}; toolkit already withholds via v0.53.4 friendly-mapper — its own cycle); `toolkit-descriptor-fuzz-target` (descoped; needs cfg(fuzzing) lib.rs mount + own mini-R0); `fuzz-nightly-quarterly-bump` (constellation-wide, ~2026-09).
-- **CI GOTCHA (carry forward to any fuzz work):** each `fuzz-smoke.yml` MUST pin `--target x86_64-unknown-linux-gnu` + `targets:` in dtolnay step (cargo-fuzz defaults to musl host on the runner → ASan fails on static libc).
-
-## 6-CYCLE STRESS PROGRAM COMPLETE (A/B/C/D/E all shipped + CI green)
-- **Cycle D** SHIPPED @ toolkit `2193774` — cross-tool differential, surfaced the toolkit Check(PkK)-non-tap divergence (FOLLOWUP `toolkit-check-pkk-non-tap-non-canonical`, both repos; fix = toolkit drops the gate, separate cycle).
-- **Cycle E** SHIPPED @ descriptor-mnemonic `122ad7e` — Bitcoin Core address differential. md-codec == Core v27.0 BYTE-FOR-BYTE (100 checks, 0 divergences). External oracle for the funds path.
-
-## BATCH COMPLETE — "publish and bump then do D and E. And all the also fileds" ALL DONE
-- **toolkit-descriptor-fuzz-target** ✓ SHIPPED @ toolkit `8eb0f85` — `parse_descriptor` cargo-fuzz target via a `#[cfg(fuzzing)]` lib.rs mount (compiles ONLY under cargo-fuzz `--cfg fuzzing`; ABSENT in shipped builds; only normal-build change = the `[lints.rust]` check-cfg line). Closure = 19 modules (NOT the 35 feared; cmd/ excluded), `extern crate self as mnemonic_toolkit` for the shared mlock self-name paths. 4th fuzz dir. mini-R0 GREEN (reviewer built+fuzzed). 540k runs clean. CI green (fuzz-smoke + rust/clippy-D-warnings both pass). NO-BUMP.
-- **fuzz-nightly-quarterly-bump** — recurring maintenance, NOT due until ~2026-09; updated the FOLLOWUP scope to cover all 4 fuzz dirs (now uniform on nightly-2026-04-27). No action now.
-
-## CONSTELLATION STATE (2026-06-12)
-6-cycle stress program COMPLETE + all also-fileds done. Published this session: ms-codec 0.4.3 (char-boundary panic) + 0.4.4 (Error-display secret leak), toolkit v0.54.3 + v0.54.4 (pin bumps). 4 fuzz dirs (md/ms/mk codec + toolkit descriptor). Open FOLLOWUPs (filed, R0-gated separate cycles): `toolkit-check-pkk-non-tap-non-canonical` (Cycle-D find; fix = toolkit drops the tap_context gate), `encode-accepts-k-greater-than-n` (md-codec encoder), `bundle-accepts-sortedmulti-in-combinator-restore-cannot` (Cycle-A), upstream miniscript taptree-depth2 Display (fixed on master, unreleased), `fuzz-nightly-quarterly-bump` (~2026-09).
-
-## Open backlog (all filed in design/FOLLOWUPS.md, none funds-critical)
-- `bundle-accepts-sortedmulti-in-combinator-restore-cannot` (Cycle-A find).
-- Cost-layer `compare-cost` hash-position scan bugs (I-1/I-2 from the fragment review).
-- hash256/ripemd160/hash160 test backfill; md-codec A2 (shape-C `Check(or_i(pk_k,pk_k))` rendering).
-- GUI paired-PR for the `restore --json` `wallet_type`/nullable-`threshold` wire-shape change.
-- `archetype-older-blocks-flag-accepts-time-units`, `intake-surfaces-accept-masked-older-no-advisory`, `addresses-restore-passphrase-not-zeroizing`.
-
-## To resume
-Start a fresh session in this repo (memory auto-loads) and say:
-
-    Read CONTINUITY.md and project_stress_testing_program.md, then start stress Cycle C (R0-gated).
-
-(Or substitute any other cycle / backlog item.) Standing rules: mandatory R0 architect gate to 0C/0I before implementing; Fable for agent dispatches; stage paths explicitly; grep-verify citations at write time.
+## Deferred / open (not this program unless asked)
+GAP-1 T2 (md-codec sortedmulti_a per-index lowering, user-authorized publish); GAP-4b/c (STRESS-A tr leg; bitcoind oracles); `bundle-unrestorable-shape-advisory` umbrella (C5 deferred); fuzz-nightly-quarterly-bump (~2026-09). All FOLLOWUP-tracked.
