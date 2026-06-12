@@ -37,9 +37,12 @@ Memory auto-loads the detail: `project_stress_testing_program.md`, `project_fait
 - **Cycle D** SHIPPED @ toolkit `2193774` — cross-tool differential, surfaced the toolkit Check(PkK)-non-tap divergence (FOLLOWUP `toolkit-check-pkk-non-tap-non-canonical`, both repos; fix = toolkit drops the gate, separate cycle).
 - **Cycle E** SHIPPED @ descriptor-mnemonic `122ad7e` — Bitcoin Core address differential. md-codec == Core v27.0 BYTE-FOR-BYTE (100 checks, 0 divergences). External oracle for the funds path.
 
-## REMAINING also-fileds (user batch)
-- **toolkit-descriptor-fuzz-target** — the descoped toolkit `parse_descriptor` fuzz target; needs a `#[cfg(fuzzing)]` lib.rs mount of the ~35-module bin closure + check-cfg lint + miniscript-patch replication in the fuzz workspace + own mini-R0. Invasive (touches lib.rs, cfg-gated). NEXT.
-- **fuzz-nightly-quarterly-bump** — recurring maintenance, NOT due until ~2026-09; note-only (no action now).
+## BATCH COMPLETE — "publish and bump then do D and E. And all the also fileds" ALL DONE
+- **toolkit-descriptor-fuzz-target** ✓ SHIPPED @ toolkit `8eb0f85` — `parse_descriptor` cargo-fuzz target via a `#[cfg(fuzzing)]` lib.rs mount (compiles ONLY under cargo-fuzz `--cfg fuzzing`; ABSENT in shipped builds; only normal-build change = the `[lints.rust]` check-cfg line). Closure = 19 modules (NOT the 35 feared; cmd/ excluded), `extern crate self as mnemonic_toolkit` for the shared mlock self-name paths. 4th fuzz dir. mini-R0 GREEN (reviewer built+fuzzed). 540k runs clean. CI green (fuzz-smoke + rust/clippy-D-warnings both pass). NO-BUMP.
+- **fuzz-nightly-quarterly-bump** — recurring maintenance, NOT due until ~2026-09; updated the FOLLOWUP scope to cover all 4 fuzz dirs (now uniform on nightly-2026-04-27). No action now.
+
+## CONSTELLATION STATE (2026-06-12)
+6-cycle stress program COMPLETE + all also-fileds done. Published this session: ms-codec 0.4.3 (char-boundary panic) + 0.4.4 (Error-display secret leak), toolkit v0.54.3 + v0.54.4 (pin bumps). 4 fuzz dirs (md/ms/mk codec + toolkit descriptor). Open FOLLOWUPs (filed, R0-gated separate cycles): `toolkit-check-pkk-non-tap-non-canonical` (Cycle-D find; fix = toolkit drops the tap_context gate), `encode-accepts-k-greater-than-n` (md-codec encoder), `bundle-accepts-sortedmulti-in-combinator-restore-cannot` (Cycle-A), upstream miniscript taptree-depth2 Display (fixed on master, unreleased), `fuzz-nightly-quarterly-bump` (~2026-09).
 
 ## Open backlog (all filed in design/FOLLOWUPS.md, none funds-critical)
 - `bundle-accepts-sortedmulti-in-combinator-restore-cannot` (Cycle-A find).
