@@ -1,0 +1,55 @@
+name: cross-tool-differential
+
+# Stress Cycle D — cross-tool md1 DIFFERENTIAL harness.
+#
+# Builds the toolkit `mnemonic` binary, installs the tag-pinned `md` (md-cli),
+# and runs the `#[ignore]`-gated `cli_cross_tool_differential` integration
+# test with MNEMONIC_BIN + MD_BIN set. The test runs both walkers on a curated
+# descriptor corpus and compares their wallet_policy_id / template_id, pinning
+# the known wsh(pk)-shape divergence (toolkit keeps Check(PkK) in non-tap;
+# FOLLOWUP toolkit-check-pkk-non-tap-non-canonical) as Diverge and the rest as
+# Match. A walker change that flips a verdict (a new divergence, or the
+# canonicity fix landing) re-fires this gate.
+#
+# Security note: uses only GitHub-provided trusted context; no interpolation
+# of untrusted user input (issue/PR titles, commit messages, etc.).
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'crates/mnemonic-toolkit/src/parse_descriptor.rs'
+      - 'crates/mnemonic-toolkit/tests/cli_cross_tool_differential.rs'
+      - '.github/workflows/cross-tool-differential.yml'
+  pull_request:
+    paths:
+      - 'crates/mnemonic-toolkit/src/parse_descriptor.rs'
+      - 'crates/mnemonic-toolkit/tests/cli_cross_tool_differential.rs'
+      - '.github/workflows/cross-tool-differential.yml'
+  workflow_dispatch:
+
+jobs:
+  differential:
+    name: cross-tool md1 differential (toolkit vs md-cli)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install md-cli (tag-pinned)
+        # Mirrors manual.yml's md-cli install. PIN THE TAG: the differential
+        # gate compares the toolkit walker against THIS md-cli's walker, so a
+        # future md-cli tag must not silently move the comparison baseline.
+        # `--features cli-compiler` matches scripts/install.sh:35's pin. The
+        # md-codec 0.35.0→0.35.1 skew is wire-neutral (the only delta is
+        # to_miniscript.rs, a render-direction tolerance), so it does not
+        # confound the walker-divergence signal.
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.6.2 md-cli --features cli-compiler
+
+      - name: Build mnemonic binary (debug)
+        run: cargo build --bin mnemonic
+
+      - name: Run cross-tool differential (#[ignore]-gated)
+        env:
+          MNEMONIC_BIN: ${{ github.workspace }}/target/debug/mnemonic
+          MD_BIN: md
+        run: cargo test -p mnemonic-toolkit --test cli_cross_tool_differential -- --ignored --nocapture
