@@ -4009,8 +4009,8 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 
 - **Surfaced:** 2026-06-11, stress Cycle C R0 (fuzzing brainstorm, `design/agent-reports/cycle-c-fuzzing-r0-round1-review.md` [C1]).
 - **What (primary is ms-codec):** `ms_codec::Error::Codex32` Display Debug-wraps codex32's `InvalidChecksum{string}` (the full input share) and `WrongHrp{got}` echoes the observed HRP — a checksum/HRP failure on a secret ms1 share leaks the secret into the error string. The toolkit ALREADY withholds this at its boundary: the v0.53.4 friendly-mapper withholds corrupt ms1 input (`[[project_toolkit_v0_53_6_schema_gate_secret_string]]` lineage / `project_overnight_v0_36_0_v0_53_3` — "friendly mapper withholds corrupt ms1 input"). So the toolkit is NOT exposed today; this companion exists for cross-repo lockstep + to record that when ms-codec withholds at its own layer, the toolkit's friendly-mapper wrapper becomes belt-and-braces rather than the sole guard.
-- **Status:** `open` (tracks the ms-codec-side fix).
-- **Tier:** `next-cycle` / secret-hygiene.
+- **Status:** **resolved** 2026-06-12 — ms-codec **0.4.4** closes the leak at the source (Codex32 arm = structural-only variant match; `WrongHrp.got` capped to 4 chars at construction; hand-rolled `Debug` replaces the leaky derive); PUBLISHED to crates.io. Toolkit pin bumped 0.4.3→0.4.4 at **v0.54.4** — the toolkit's `friendly_ms_codec` + any `{:?}` of `ToolkitError` now inherit the protection (defense-in-depth on top of the v0.53.4 withholding, which made the toolkit not-exposed already). 1 regression cell (`repair.rs::repair_via_ms_codec_wrong_hrp_found_is_bounded`).
+- **Tier:** secret-hygiene.
 - **Companion:** `mnemonic-secret` `design/FOLLOWUPS.md::ms-codec-error-display-echoes-input` (primary).
 
 ### `toolkit-descriptor-fuzz-target` — add a `parse_descriptor` cargo-fuzz target (descoped from stress Cycle C)

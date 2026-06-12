@@ -2399,4 +2399,25 @@ mod tests {
             }
         }
     }
+
+    /// Regression (ms-codec 0.4.4 pin bump): the `found` HRP that
+    /// `repair_via_ms_codec` surfaces from a long no-`'1'` chunk is BOUNDED
+    /// (ms-codec caps `WrongHrp.got` to 4 chars at construction so the error
+    /// can't echo a long secret prefix into logs/output). A pre-0.4.4 codec
+    /// echoed the whole input here. The toolkit inherits the cap for free.
+    #[test]
+    fn repair_via_ms_codec_wrong_hrp_found_is_bounded() {
+        // 8 codex32-alphabet chars, no `'1'` → ms-codec WrongHrp{got: "qpzr"}.
+        let chunk = "qpzrqpzr";
+        match repair_via_ms_codec(chunk, 0) {
+            Err(RepairError::HrpMismatch { found, .. }) => {
+                assert!(
+                    found.chars().count() <= 4,
+                    "found must be ≤4 chars (secret-leak bound), got {found:?}"
+                );
+                assert_ne!(found, chunk, "found must not echo the full input");
+            }
+            other => panic!("expected HrpMismatch, got {other:?}"),
+        }
+    }
 }

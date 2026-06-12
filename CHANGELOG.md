@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.54.4] — 2026-06-12
+
+**SemVer-PATCH (SECURITY) — error rendering no longer echoes secret ms1 input (ms-codec 0.4.4 pin bump).**
+
+ms1 is secret-bearing. Before ms-codec 0.4.4, `ms_codec::Error`'s `Display`/`Debug` embedded the raw input — `Codex32(InvalidChecksum{string})` carried the full secret on a checksum failure, and `WrongHrp{got}` could echo a long secret prefix. The toolkit inherited this: any `{:?}` of a `ToolkitError` wrapping `MsCodec(_)` (panics, `expect`, logs) and the `friendly_ms_codec` mapper transitively rendered it. ms-codec 0.4.4 closes the leak at the source — the `Codex32` arm is a structural-only variant match, `WrongHrp.got` is capped to 4 chars at construction, and a hand-rolled `Debug` replaces the leaky derive — so the toolkit inherits the protection with no code change. The `repair.rs` wrapper's surfaced `HrpMismatch.found` is now bounded for free.
+
+Dependency-version bump only (Cargo.lock + pin `0.4.3` → `0.4.4`); no toolkit source-logic / CLI / wire change beyond the pin. 1 regression cell (`repair.rs::repair_via_ms_codec_wrong_hrp_found_is_bounded`). Resolves the toolkit companion of `ms-codec-error-display-echoes-input`.
+
 ## mnemonic-toolkit [0.54.3] — 2026-06-12
 
 **SemVer-PATCH — `mnemonic repair` no longer panics on a non-ASCII chunk with no `'1'` separator (ms-codec 0.4.3 pin bump).**
