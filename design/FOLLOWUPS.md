@@ -86,7 +86,8 @@ Single source of truth for items that surfaced during a review or implementation
 
 - **Surfaced:** 2026-06-11, the C1 recon. `bundle --descriptor` happily emits + self-checks an md1 for a `pk(@N)`/`pkh(@N)`-keyed policy that `restore --md1` then refuses (pending `to-miniscript-check-pkh-double-wrap`). The card is a faithful backup but not yet mechanically restorable.
 - **Fix:** a bundle-time advisory (non-blocking) when the descriptor contains a bare-key-check fragment, pointing at the md-codec follow-up; dissolves once PART 2 ships.
-- **Tier:** deferred (advisory UX).
+- **Status:** the pk-keyed concern is **RESOLVED** 2026-06-12 — PART 2 shipped (`to-miniscript-check-pkh-double-wrap` closed via md-codec 0.35.1 + toolkit v0.54.1); `bundle`→`restore` of a `pk(@N)`/`pkh(@N)`-keyed policy now round-trips exit-0 with the correct descriptor (verified at `ca7d7bc`). The non-blocking bundle-time **advisory idea survives but re-targets the REMAINING unrestorable shapes** — sortedmulti-in-combinator (`bundle-accepts-sortedmulti-in-combinator-restore-cannot`), per-key use-site overrides + hardened wildcard (`restore-md1-per-key-use-site-and-hardened-wildcard`). RE-SCOPED into the `bundle-unrestorable-shape-advisory` umbrella implemented by the GAP-3 cycle (m-format miniscript-coverage audit, 2026-06-12); this entry is the historical pk-keyed record.
+- **Tier:** resolved (pk-keyed) + advisory re-scoped to the GAP-3 cycle (was: deferred advisory UX).
 
 ### `restore-general-policy-json-wallet-type-gui-pin` — GUI paired-PR for the `restore --json` wire-shape change
 
@@ -4057,3 +4058,42 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open` (intentional standing exemption; closes on the next ms-cli pin bump).
 - **Tier:** `ci-hygiene`.
 - **Companion:** none (toolkit-local CI policy; the sibling mnemonic-secret has no fmt job, so its `mlock.rs` carries no matching exemption — it is simply kept unformatted to stay g6-synced).
+
+### `upstream-miniscript-taptree-depth2-display-asymmetry` — toolkit companion: the pinned miniscript rev shares the depth-2 taptree Display bug
+
+- **Surfaced:** 2026-06-12, m-format miniscript-coverage audit (GAP 1 sub-2) cycle-prep (`cycle-prep-recon-taproot-coverage-gaps.md`). Companion to descriptor-mnemonic `design/FOLLOWUPS.md::upstream-miniscript-taptree-depth2-display-asymmetry` (primary).
+- **What (primary is md-codec):** rust-miniscript ≤13.1.0 mis-formats a depth-2+ (≥3-leaf) taptree — `fmt_helper` writes the inter-leaf comma before emitting close-braces, so `[(2,a),(2,b),(1,c)]` Displays as `{{a,b,c}}`, which fails to reparse. Fixed on miniscript master (PR #953, merged 2026-05-25) but UNRELEASED (13.1.0 latest, still buggy).
+- **Toolkit exposure — VERIFIED bug-sharing, but LATENT:** the toolkit's pinned miniscript git rev `95fdd1c` (`Cargo.toml` `[patch.crates-io]`) is a merge of PR #932 dated 2026-05-02 — PREDATES #953 — and a code-trace of `95fdd1c:src/descriptor/tr/taptree.rs:87-114` confirms the same comma-before-close-brace bug. NOT live today: `restore --md1`'s taproot classifier refuses anything non-`multi_a`/`sortedmulti_a` BEFORE any Display (`src/cmd/restore.rs:685-689`, `:710`), and the only `miniscript::Descriptor → .to_string()` reconstruction path (`faithful_multisig_descriptor`, `restore.rs:938`) is non-taproot-only. So no current toolkit path Displays a ≥3-leaf taptree. ANY future general-tr / multi-leaf reconstruction (`restore-general-and-multi-leaf-taproot-roundtrip` T3) that re-stringifies a depth-2+ tree through the patched miniscript inherits the malformed output → MUST carry a loud depth≥2 refusal carve-out until upstream releases #953.
+- **Status:** `open` (latent; blocked on the first miniscript release > 13.1.0 containing #953).
+- **Tier:** `upstream`.
+- **Companion:** `descriptor-mnemonic` `design/FOLLOWUPS.md::upstream-miniscript-taptree-depth2-display-asymmetry` (primary; the same bump dissolves both, plus `md-codec-sortedmulti-a-to-miniscript-rendering-gap` option (a) and this repo's `[patch.crates-io]`).
+
+### `restore-general-and-multi-leaf-taproot-roundtrip` — bundle emits general/multi-leaf tr md1 cards that restore cannot reconstruct
+
+- **Surfaced:** 2026-06-12, m-format miniscript-coverage audit (GAP 1 sub-3/sub-4) cycle-prep (`cycle-prep-recon-taproot-coverage-gaps.md`).
+- **What:** `bundle --descriptor` emits an md1 for general taproot leaf policies (`tr(NUMS, <miniscript leaf>)`) and multi-leaf/depth-N taptrees (`src/parse_descriptor.rs:2634-2699` `walk_tap_tree_{2,3,4}_leaf_*` accept them), but `restore --md1` reconstructs ONLY `multi_a`/`sortedmulti_a` tap leaves — every other `Tag::Tr` md1 hits the classifier refusal (`src/cmd/restore.rs:710` "not a recognized multisig"; non-NUMS `is_nums:false` refused at `:685-689`). v0.54.0's faithful general-policy arm is non-taproot-only. So these are engrave-but-can't-mechanically-restore — the card is wire-faithful (md-codec round-trips it byte-exact) but `restore` refuses.
+- **Scope split:** **(a)** the refusal CONTRACT — pinning the 3 untested refusal arms + a multi-leaf wire/verify/address round-trip — is cheap NO-BUMP (the GAP-1 **T1** cycle). **(b)** FAITHFUL reconstruction of general single-leaf + depth-1 two-leaf tr is a real feature (**T3**): route them to the faithful arm with a LOUD depth≥2 (≥3-leaf) carve-out citing `upstream-miniscript-taptree-depth2-display-asymmetry` (the pinned rev mis-Displays ≥3-leaf trees). `sortedmulti_a`-inside-a-general-tree stays refused (md-codec converter gap, `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
+- **Note:** the v0.19.0 umbrella `miniscript-beyond-bip388` (resolved `087d0e4`) named multi-leaf tr in-scope but shipped the INGEST side only — no open slug tracked the round-trip gap; this is it.
+- **Status:** `open` (T1 contract = do-now; T3 reconstruction = deferred feature, partly blocked on the depth-2 upstream fix).
+- **Tier:** `feature` / `next-cycle`.
+- **Companion:** `descriptor-mnemonic` (the converter renders general tr leaves fine via the NUMS const; the blocker is the toolkit reconstruction route + the upstream Display bug for ≥3-leaf).
+
+### `verify-bundle-bip388-policy-intake` — verify-bundle has no BIP-388 wallet-policy intake (asymmetry vs bundle/export-wallet)
+
+- **Surfaced:** 2026-06-12, m-format miniscript-coverage audit (GAP 5 item 4) cycle-prep (`cycle-prep-recon-minor-coverage-gaps.md`).
+- **What:** `bundle` and `export-wallet --descriptor` auto-detect a leading-`{` BIP-388 wallet-policy JSON and expand it (`is_bip388_policy_shape` → `expand_bip388_policy`), but `verify-bundle` has no such probe — it accepts only a concrete descriptor. So a user who can `bundle` from a wallet-policy JSON cannot `verify-bundle` against the same JSON. Intake asymmetry, not a funds bug.
+- **Fix:** add the `is_bip388_policy_shape` probe + `expand_bip388_policy` call to verify-bundle's descriptor intake (the expander is already shared toolkit-side — `wallet_import::pipeline::expand_bip388_policy`), mirroring the bundle/export-wallet sites. The GAP-5b cycle pins the current refusal as a contract cell first; this slug tracks the feature.
+- **Note:** the separately-cited `verify-bundle-descriptor-entropy-slot-gap` is RESOLVED (v0.43.1) — unrelated; do not conflate.
+- **Status:** `open`
+- **Tier:** `feature` / `next-cycle`.
+- **Companion:** none (toolkit-local; shared expander already exists).
+
+### `toolkit-bitcoind-end-to-end-oracle` — no toolkit-level differential against Bitcoin Core (end-to-end engrave→restore→address)
+
+- **Surfaced:** 2026-06-12, m-format miniscript-coverage audit (GAP 4 sub-c) cycle-prep (`cycle-prep-recon-differential-harness-breadth.md`).
+- **What:** the toolkit has NO bitcoind oracle (grep confirms only an error-message string + a static fixture comment). md-codec has one (`tests/bitcoind_differential.rs`) but it tests the CODEC, not the toolkit's end-to-end `bundle`→`restore`→`first_addresses` against Core's `deriveaddresses`/`getdescriptorinfo`. A toolkit oracle validates a surface no external oracle covers.
+- **Fix:** an `#[ignore]`+env-gated toolkit differential (mirror md-codec's offline `-chain=main` v27 harness): per shape, `bundle --descriptor` → `restore --md1` → compare `first_addresses` against Core's deriveaddresses on the same descriptor. Run it AFTER the cross-tool corpus widening (GAP 4a) so its deterministic shape set is the widened one.
+- **Why deferred:** most infra for the least divergence-finding power (the cross-tool md-cli differential GAP-4a + STRESS-A's rust-miniscript O3 already cross-check addresses); do it last in the GAP-4 sequence.
+- **Status:** `open`
+- **Tier:** `test-hardening` / `next-cycle`.
+- **Companion:** `descriptor-mnemonic` `design/FOLLOWUPS.md::bitcoind-differential-corpus-breadth` (the codec-side Core oracle; this is the toolkit-side end-to-end one).
