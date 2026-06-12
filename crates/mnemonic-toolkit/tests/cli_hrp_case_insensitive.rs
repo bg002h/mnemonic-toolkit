@@ -574,12 +574,13 @@ fn inspect_mixed_case_mk1_codec_attributed() {
         .stderr(predicate::str::contains("mk1 mixed case in input string"));
 }
 
-/// Mixed-case md1 is ACCEPTED — characterization of md-codec's BIP-173
-/// leniency (per-char lowercase, no mixed-case rejection). Codec-side
-/// observation (`md-codec-accepts-mixed-case-bip173-leniency`), NOT a
-/// toolkit bug; do not "fix" toolkit-side.
+/// Mixed-case md1 is now REJECTED per BIP-173 — md-codec 0.35.3 closed the
+/// leniency (`md-codec-accepts-mixed-case-bip173-leniency` RESOLVED). The
+/// toolkit inherits the codec reject (no toolkit code change); all-upper (QR
+/// form) + all-lower still decode. This cell was the characterization that
+/// asserted ACCEPT; inverted on the 0.35.3 pin bump as its doc-comment foretold.
 #[test]
-fn inspect_mixed_case_md1_accepted_characterization() {
+fn inspect_mixed_case_md1_rejected() {
     let mixed0 = format!("Md{}", &VALID_MD1_CHUNK0[2..]);
     let mixed1 = format!("Md{}", &VALID_MD1_CHUNK1[2..]);
     let mixed2 = format!("Md{}", &VALID_MD1_CHUNK2[2..]);
@@ -587,8 +588,8 @@ fn inspect_mixed_case_md1_accepted_characterization() {
         .unwrap()
         .args(["inspect", &mixed0, &mixed1, &mixed2])
         .assert()
-        .code(0)
-        .stdout(predicate::str::contains("kind: md1"));
+        .failure()
+        .stderr(predicate::str::contains("mixes upper and lower case"));
 }
 
 // ============================================================================
