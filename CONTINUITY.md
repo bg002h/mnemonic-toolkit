@@ -33,9 +33,13 @@ Memory auto-loads the detail: `project_stress_testing_program.md`, `project_fait
 - **Open FOLLOWUPs from this cycle:** `ms-codec-error-display-echoes-input` (ms Error Display leaks secret share via codex32 InvalidChecksum{string}+WrongHrp{got}; toolkit already withholds via v0.53.4 friendly-mapper — its own cycle); `toolkit-descriptor-fuzz-target` (descoped; needs cfg(fuzzing) lib.rs mount + own mini-R0); `fuzz-nightly-quarterly-bump` (constellation-wide, ~2026-09).
 - **CI GOTCHA (carry forward to any fuzz work):** each `fuzz-smoke.yml` MUST pin `--target x86_64-unknown-linux-gnu` + `targets:` in dtolnay step (cargo-fuzz defaults to musl host on the runner → ASan fails on static libc).
 
-## NEXT — stress Cycles D–E (each its own R0-gated cycle)
-1. **Cycle D** — cross-tool differential: toolkit `md` vs `md-cli` `md` on the same descriptor → identical md1 / `wallet_policy_id`. Surfaces the KNOWN divergence (toolkit's `tap_context` gate in `parse_descriptor.rs` disagrees with md-cli's unconditional-collapse on wsh-miniscript bare-key shapes).
-2. **Cycle E** — Bitcoin Core differential CI job (pinned `bitcoind`: `deriveaddresses`/`getdescriptorinfo`). Heaviest infra.
+## 6-CYCLE STRESS PROGRAM COMPLETE (A/B/C/D/E all shipped + CI green)
+- **Cycle D** SHIPPED @ toolkit `2193774` — cross-tool differential, surfaced the toolkit Check(PkK)-non-tap divergence (FOLLOWUP `toolkit-check-pkk-non-tap-non-canonical`, both repos; fix = toolkit drops the gate, separate cycle).
+- **Cycle E** SHIPPED @ descriptor-mnemonic `122ad7e` — Bitcoin Core address differential. md-codec == Core v27.0 BYTE-FOR-BYTE (100 checks, 0 divergences). External oracle for the funds path.
+
+## REMAINING also-fileds (user batch)
+- **toolkit-descriptor-fuzz-target** — the descoped toolkit `parse_descriptor` fuzz target; needs a `#[cfg(fuzzing)]` lib.rs mount of the ~35-module bin closure + check-cfg lint + miniscript-patch replication in the fuzz workspace + own mini-R0. Invasive (touches lib.rs, cfg-gated). NEXT.
+- **fuzz-nightly-quarterly-bump** — recurring maintenance, NOT due until ~2026-09; note-only (no action now).
 
 ## Open backlog (all filed in design/FOLLOWUPS.md, none funds-critical)
 - `bundle-accepts-sortedmulti-in-combinator-restore-cannot` (Cycle-A find).
