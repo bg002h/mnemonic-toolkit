@@ -336,6 +336,103 @@ fn corpus() -> Vec<Entry> {
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
+        // ── GAP-4a widen: the divergence-prone fragment families that the
+        // 8-row corpus omitted — sortedmulti (sole + nested sh(wsh)), thresh+s:,
+        // both timelock classes, or_i, a hashlock, and_b+a:, t:or_c. ALL run
+        // through both built binaries (probe) → Match on (policy_id,
+        // template_id). md-cli enforces xpub-depth == path-depth (4), so n≥3
+        // multisig is deferred (needs a 3rd depth-4 const); taproot multisig is
+        // deferred to a tr-specific cycle (NUMS internal-key spelling parity).
+        Entry {
+            label: "wsh-sortedmulti-2of2",
+            toolkit_descriptor: format!(
+                "wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{shared4}{XPUB4_1}/<0;1>/*))"
+            ),
+            md_template: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "sh-wsh-sortedmulti",
+            toolkit_descriptor: format!(
+                "sh(wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{shared4}{XPUB4_1}/<0;1>/*)))"
+            ),
+            md_template: "sh(wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*)))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-thresh-2of2",
+            toolkit_descriptor: format!(
+                "wsh(thresh(2,pk({shared4}{XPUB4_0}/<0;1>/*),s:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+            ),
+            md_template: "wsh(thresh(2,pk(@0/<0;1>/*),s:pk(@1/<0;1>/*)))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-and_v-older",
+            toolkit_descriptor: format!("wsh(and_v(v:pk({shared4}{XPUB4_0}/<0;1>/*),older(144)))"),
+            md_template: "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+            md_keys: vec![key("@0", XPUB4_0)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-and_v-after",
+            toolkit_descriptor: format!(
+                "wsh(and_v(v:pk({shared4}{XPUB4_0}/<0;1>/*),after(800000)))"
+            ),
+            md_template: "wsh(and_v(v:pk(@0/<0;1>/*),after(800000)))",
+            md_keys: vec![key("@0", XPUB4_0)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-or_i",
+            toolkit_descriptor: format!(
+                "wsh(or_i(pk({shared4}{XPUB4_0}/<0;1>/*),pk({shared4}{XPUB4_1}/<0;1>/*)))"
+            ),
+            md_template: "wsh(or_i(pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-and_b",
+            toolkit_descriptor: format!(
+                "wsh(and_b(pk({shared4}{XPUB4_0}/<0;1>/*),a:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+            ),
+            md_template: "wsh(and_b(pk(@0/<0;1>/*),a:pk(@1/<0;1>/*)))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            label: "wsh-t-or_c",
+            toolkit_descriptor: format!(
+                "wsh(t:or_c(pk({shared4}{XPUB4_0}/<0;1>/*),v:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+            ),
+            md_template: "wsh(t:or_c(pk(@0/<0;1>/*),v:pk(@1/<0;1>/*)))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
+        Entry {
+            // hashlock: a literal 32-byte sha256 hash, carried opaquely by both
+            // tools (the differential pins walker parity, not the preimage).
+            label: "wsh-andor-hashlock",
+            toolkit_descriptor: format!(
+                "wsh(andor(pk({shared4}{XPUB4_0}/<0;1>/*),older(144),and_v(v:pk({shared4}{XPUB4_1}/<0;1>/*),sha256(0000000000000000000000000000000000000000000000000000000000000001))))"
+            ),
+            md_template: "wsh(andor(pk(@0/<0;1>/*),older(144),and_v(v:pk(@1/<0;1>/*),sha256(0000000000000000000000000000000000000000000000000000000000000001))))",
+            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_path: "m/48'/0'/0'/2'",
+            expect: Verdict::Match,
+        },
     ]
 }
 
@@ -355,6 +452,14 @@ fn cross_tool_md1_differential() {
     };
 
     let entries = corpus();
+
+    // Pin the corpus size so an accidentally deleted row is LOUD (n_match>=1
+    // would silently tolerate it). Update both numbers when adding/removing a row.
+    assert_eq!(
+        entries.len(),
+        17,
+        "corpus size changed (expected 17) — update this assert when adding/removing a row"
+    );
 
     // Anti-vacuity: the corpus MUST declare at least one Match. Since the
     // v0.55.0 canonicity fix landed there is no longer any known toolkit-vs-md
