@@ -17,6 +17,7 @@
 
 use assert_cmd::Command;
 use miniscript::{Descriptor, DescriptorPublicKey};
+use predicates::prelude::*;
 use proptest::prelude::*;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -88,12 +89,16 @@ fn key_leaf(rng: &mut Rng, a: &mut Alloc) -> Value {
         pkh(a)
     }
 }
-/// `allow_sorted`: `sortedmulti` is a DESCRIPTOR-level wrapper (md-codec's
-/// `Tag::SortedMulti` must be the sole wsh/sh child), so it is only
-/// reconstructable at the TOP level — inside a combinator we emit plain `multi`.
+/// `allow_sorted`: `sortedmulti` nested in a combinator is only RECONSTRUCTABLE
+/// at the TOP level, so inside a combinator we emit plain `multi`. The limit is
+/// RENDERER-level, NOT wire-level: the md1 wire round-trips a nested
+/// `Tag::SortedMulti` byte-exact (md-codec's P7 proves it), but md-codec's
+/// renderer pins crates.io miniscript 13.0.0 (no `Terminal::SortedMulti`) while
+/// the toolkit pins git 95fdd1c (which has it) — the two-miniscripts split.
 /// (The asymmetry where build/bundle accept sortedmulti-in-combinator but
 /// restore refuses it is filed as FOLLOWUP `bundle-accepts-sortedmulti-in-
-/// combinator-restore-cannot`, found by this harness.)
+/// combinator-restore-cannot`, found by this harness; pinned by the
+/// `sortedmulti_in_combinator_bundles_but_restore_refuses_loudly` cell above.)
 fn multi(rng: &mut Rng, a: &mut Alloc, max_n: usize, allow_sorted: bool) -> (Value, &'static str) {
     let avail = a.remaining().min(max_n).max(1);
     let n = rng.range(1, avail as u64) as usize;
@@ -585,4 +590,54 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
         // MUST fail loudly — never exit-0 with a silent (wrong) reconstruction.
         bin().args(&a).assert().failure();
     }
+}
+
+/// GAP-3 contract — `sortedmulti` inside a combinator engraves a FAITHFUL card
+/// (bundle exit 0; the md1 wire round-trips byte-exact — md-codec's P7 proves
+/// it) but `restore --md1` refuses LOUDLY with the sole-child message, never a
+/// silent wrong reconstruction. Pinned with the STDERR SUBSTRING (not just
+/// `.failure()`) because the chosen shape reuses @1: when the deferred faithful
+/// nested-sortedmulti reconstruction lands (FOLLOWUP
+/// `bundle-accepts-sortedmulti-in-combinator-restore-cannot`), a `.failure()`
+/// could stay green for the WRONG reason (repeated-pubkey sanity) — the
+/// substring forces this cell red at that transition for a conscious re-pin.
+/// The refusal is the RENDERER (md-codec pins crates.io miniscript 13.0.0,
+/// which lacks `Terminal::SortedMulti`; the toolkit pins git 95fdd1c, which has
+/// it), NOT a wire limitation.
+#[test]
+fn sortedmulti_in_combinator_bundles_but_restore_refuses_loudly() {
+    const C0: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    let out = bin()
+        .args([
+            "bundle",
+            "--descriptor",
+            "wsh(or_d(pk(@1),sortedmulti(2,@0,@1)))",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={C0}"),
+            "--slot",
+            &format!("@1.phrase={C1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let md1: Vec<String> = v["md1"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    let mut a = vec!["restore".to_string(), "--network".into(), "mainnet".into()];
+    for c in &md1 {
+        a.push("--md1".into());
+        a.push(c.clone());
+    }
+    bin().args(&a).assert().failure().stderr(
+        predicate::str::contains("sole child").and(predicate::str::contains("faithful backup")),
+    );
 }
