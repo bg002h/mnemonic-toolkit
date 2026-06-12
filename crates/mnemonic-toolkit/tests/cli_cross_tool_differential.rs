@@ -12,17 +12,19 @@
 //! their `wallet_policy_id` + `wallet_descriptor_template_id` (decoded from
 //! each tool's md1 via `md inspect --json`). Each corpus entry declares its
 //! EXPECTED verdict; the test fails if the ACTUAL verdict differs — a
-//! known-Diverge starting to Match means the canonicity fix landed (update
-//! the table); a known-Match diverging is a regression.
+//! known-Match diverging is a regression in either walker.
 //!
-//! It pins the ONE known divergence: the toolkit keeps `Tag::Check(PkK/PkH)`
-//! in wsh/sh (gated on `tap_context` at parse_descriptor.rs:601-602, the
-//! deliberate test `walk_check_kept_in_non_tap_context`:2551), whereas
-//! descriptor-mnemonic SPEC v0.30 §5.1 mandates BARE `PkK`/`PkH` regardless
-//! of context. md-cli is conformant; the toolkit is the deviant. See FOLLOWUP
-//! `toolkit-check-pkk-non-tap-non-canonical` (both repos). Both md1 forms
-//! DECODE to the same descriptor — this is a WIRE-canonicity divergence, an
-//! interop hazard, not funds-loss.
+//! HISTORY: this harness was BORN pinning ONE known divergence — the toolkit
+//! kept `Tag::Check(PkK/PkH)` in wsh/sh (gated on `tap_context`, the deliberate
+//! test then named `walk_check_kept_in_non_tap_context`), whereas
+//! descriptor-mnemonic SPEC v0.30 §5.1 mandates BARE `PkK`/`PkH` regardless of
+//! context. v0.55.0 dropped that gate (the walker now collapses
+//! Check(PkK|PkH)→bare unconditionally, matching md-cli; the renamed unit test
+//! is `walk_check_collapsed_in_non_tap`), resolving FOLLOWUP
+//! `toolkit-check-pkk-non-tap-non-canonical`. The 4 formerly-Diverge entries
+//! (wsh-pk/wsh-pkh/wsh-and_v/wsh-or_d) now Match. With no remaining known
+//! divergence, this harness is now a cross-tool MATCH regression gate: it
+//! catches a FUTURE re-divergence in either walker.
 //!
 //! Design + 2 R0 rounds (GREEN 0C/0I):
 //!   design/BRAINSTORM_stress_cycle_d_cross_tool_differential.md
@@ -294,20 +296,21 @@ fn corpus() -> Vec<Entry> {
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
-        // ── Expect::Diverge — the known finding ──────────────────────────
-        // Each contains a Check(PkK|PkH) the toolkit KEEPS in non-tap
-        // (parse_descriptor.rs:602 `if tap_context` gate + the deliberate test
-        // `walk_check_kept_in_non_tap_context`:2551), while md-cli emits bare
-        // per descriptor-mnemonic SPEC v0.30 §5.1. FOLLOWUP:
-        // toolkit-check-pkk-non-tap-non-canonical. WIRE-canonicity, not
-        // funds-loss (both md1s decode to the same descriptor).
+        // ── Formerly Expect::Diverge, now Match (v0.55.0) ────────────────
+        // Each contains a Check(PkK|PkH). Pre-v0.55.0 the toolkit KEPT it in
+        // non-tap context (a `tap_context` gate), diverging from md-cli's bare
+        // PkK/PkH per descriptor-mnemonic SPEC v0.30 §5.1. v0.55.0 dropped the
+        // gate (the walker collapses unconditionally; unit test
+        // `walk_check_collapsed_in_non_tap`), so these now Match. FOLLOWUP
+        // `toolkit-check-pkk-non-tap-non-canonical` is resolved. They stay in
+        // the corpus as Match controls + a re-divergence regression gate.
         Entry {
             label: "wsh-pk",
             toolkit_descriptor: format!("wsh(pk({shared4}{XPUB4_0}/<0;1>/*))"),
             md_template: "wsh(pk(@0/<0;1>/*))",
             md_keys: vec![key("@0", XPUB4_0)],
             md_path: "m/48'/0'/0'/2'",
-            expect: Verdict::Diverge,
+            expect: Verdict::Match,
         },
         Entry {
             label: "wsh-pkh",
@@ -315,7 +318,7 @@ fn corpus() -> Vec<Entry> {
             md_template: "wsh(pkh(@0/<0;1>/*))",
             md_keys: vec![key("@0", XPUB4_0)],
             md_path: "m/48'/0'/0'/2'",
-            expect: Verdict::Diverge,
+            expect: Verdict::Match,
         },
         Entry {
             label: "wsh-and_v",
@@ -325,7 +328,7 @@ fn corpus() -> Vec<Entry> {
             md_template: "wsh(and_v(v:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
             md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
             md_path: "m/48'/0'/0'/2'",
-            expect: Verdict::Diverge,
+            expect: Verdict::Match,
         },
         Entry {
             label: "wsh-or_d",
@@ -335,7 +338,7 @@ fn corpus() -> Vec<Entry> {
             md_template: "wsh(or_d(pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
             md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
             md_path: "m/48'/0'/0'/2'",
-            expect: Verdict::Diverge,
+            expect: Verdict::Match,
         },
     ]
 }
@@ -357,28 +360,30 @@ fn cross_tool_md1_differential() {
 
     let entries = corpus();
 
-    // Anti-vacuity: the corpus MUST declare at least one Match and one Diverge
-    // (else the test could pass while exercising only one verdict path).
+    // Anti-vacuity: the corpus MUST declare at least one Match. Since the
+    // v0.55.0 canonicity fix landed there is no longer any known toolkit-vs-md
+    // divergence, so this is a cross-tool MATCH regression gate, not a Diverge
+    // pin — drop the hard ≥1-Diverge requirement (it would now panic). The real
+    // residual vacuity risk (both tools erroring → a FALSE Match never happens,
+    // but a tool silently failing would hide a regression) is checked below via
+    // the per-run n_both_error/n_tool_error counters.
     let n_match = entries
         .iter()
         .filter(|e| e.expect == Verdict::Match)
         .count();
-    let n_diverge = entries
-        .iter()
-        .filter(|e| e.expect == Verdict::Diverge)
-        .count();
     assert!(
-        n_match >= 1 && n_diverge >= 1,
-        "corpus must be non-vacuous: at least one Match and one Diverge \
-         (got {n_match} Match, {n_diverge} Diverge)"
+        n_match >= 1,
+        "corpus must be non-vacuous: at least one Match (got {n_match} Match)"
     );
 
     let mut failures = Vec::new();
     // Track which verdict arms the run actually EXERCISED (not just declared) —
     // proves the harness ran both tools through to comparable ids on at least
-    // one Match and one Diverge entry.
+    // one Match entry, and that NO entry silently errored (both-error /
+    // one-tool-error → would mask a regression as a non-comparison).
     let mut saw_match = false;
-    let mut saw_diverge = false;
+    let mut n_both_error = 0usize;
+    let mut n_tool_error = 0usize;
 
     for e in &entries {
         let tk = toolkit_ids(&mnemonic, &md, &e.toolkit_descriptor);
@@ -387,8 +392,9 @@ fn cross_tool_md1_differential() {
 
         match &actual {
             Verdict::Match => saw_match = true,
-            Verdict::Diverge => saw_diverge = true,
-            _ => {}
+            Verdict::BothError => n_both_error += 1,
+            Verdict::ToolError(_) => n_tool_error += 1,
+            Verdict::Diverge => {}
         }
 
         if actual != e.expect {
@@ -406,22 +412,28 @@ fn cross_tool_md1_differential() {
 
     assert!(
         failures.is_empty(),
-        "cross-tool differential verdict mismatches:\n{}\n\nA known-Diverge \
-         starting to Match means the canonicity fix landed → flip its expect \
-         to Match (see FOLLOWUP toolkit-check-pkk-non-tap-non-canonical). A \
-         known-Match diverging is a REGRESSION in either walker. Unexpected \
+        "cross-tool differential verdict mismatches:\n{}\n\nA known-Match \
+         diverging is a REGRESSION in either walker (a re-divergence — e.g. the \
+         Check(PkK)-in-non-tap canonicity gate reintroduced; see FOLLOWUP \
+         toolkit-check-pkk-non-tap-non-canonical, resolved v0.55.0). Unexpected \
          BothError/ToolError is an invocation/corpus bug.",
         failures.join("\n")
     );
 
-    // Non-vacuity, exercised: the run actually reached a real Match AND a real
-    // Diverge verdict (both tools produced inspectable ids on each).
+    // Non-vacuity, exercised: the run actually reached a real Match verdict
+    // (both tools produced inspectable ids and they agreed) on ≥1 entry, AND no
+    // entry silently errored. The both-error/one-tool-error check is the real
+    // vacuity guard now that there is no Diverge pin: a tool failing to emit
+    // inspectable ids would otherwise hide a walker regression behind a
+    // non-comparison.
     assert!(
         saw_match,
         "harness vacuity: no entry actually produced a Match verdict"
     );
     assert!(
-        saw_diverge,
-        "harness vacuity: no entry actually produced a Diverge verdict"
+        n_both_error == 0 && n_tool_error == 0,
+        "harness vacuity: {n_both_error} BothError + {n_tool_error} ToolError \
+         entries — a tool failed to emit inspectable ids, masking any \
+         walker disagreement on those entries (invocation/corpus bug)"
     );
 }

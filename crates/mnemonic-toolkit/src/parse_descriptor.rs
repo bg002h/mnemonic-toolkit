@@ -429,7 +429,7 @@ fn walk_wsh(
     // Post-#915: Wsh::as_inner() returns &Miniscript directly; SortedMulti
     // surfaces as Terminal::SortedMulti inside the inner Ms (handled by
     // walk_miniscript_node). The pre-#915 WshInner enum is gone.
-    let inner = walk_miniscript_node(w.as_inner(), km, /*tap=*/ false)?;
+    let inner = walk_miniscript_node(w.as_inner(), km)?;
     Ok(wrap_children(Tag::Wsh, inner))
 }
 
@@ -441,11 +441,7 @@ fn walk_sh(
     let inner = match s.as_inner() {
         ShInner::Wsh(w) => Node {
             tag: Tag::Wsh,
-            body: Body::Children(vec![walk_miniscript_node(
-                w.as_inner(),
-                km,
-                /*tap=*/ false,
-            )?]),
+            body: Body::Children(vec![walk_miniscript_node(w.as_inner(), km)?]),
         },
         ShInner::Wpkh(wp) => Node {
             tag: Tag::Wpkh,
@@ -453,7 +449,7 @@ fn walk_sh(
                 index: lookup_key(&wp.as_inner().to_string(), km)?,
             },
         },
-        ShInner::Ms(ms) => walk_miniscript_node(ms, km, /*tap=*/ false)?,
+        ShInner::Ms(ms) => walk_miniscript_node(ms, km)?,
         // Post-#915: ShInner::SortedMulti variant removed; handled via
         // Terminal::SortedMulti inside ShInner::Ms's inner Miniscript.
     };
@@ -516,11 +512,11 @@ fn walk_tap_tree(
                 "single-leaf tap_tree leaf at depth {d} (expected 0)"
             )));
         }
-        return walk_miniscript_node(ms, km, /*tap=*/ true);
+        return walk_miniscript_node(ms, km);
     }
     let mut stack: Vec<(u8, Node)> = Vec::with_capacity(leaves.len());
     for (depth, ms) in leaves {
-        let leaf_node = walk_miniscript_node(ms, km, /*tap=*/ true)?;
+        let leaf_node = walk_miniscript_node(ms, km)?;
         stack.push((depth, leaf_node));
         while stack.len() >= 2 {
             let (top_d, _) = stack[stack.len() - 1];
@@ -555,7 +551,6 @@ fn walk_tap_tree(
 fn walk_miniscript_node<C: miniscript::ScriptContext>(
     ms: &miniscript::Miniscript<DescriptorPublicKey, C>,
     km: &BTreeMap<String, u8>,
-    tap_context: bool,
 ) -> Result<Node, ToolkitError> {
     use miniscript::miniscript::decode::Terminal;
     match &ms.node {
@@ -598,28 +593,34 @@ fn walk_miniscript_node<C: miniscript::ScriptContext>(
             &thresh.data().iter().collect::<Vec<_>>(),
             km,
         ),
+        // v0.55.0: collapse `Check(PkK|PkH) → bare PkK|PkH` UNCONDITIONALLY
+        // (was gated on `tap_context`, keeping Tag::Check(PkK) in wsh/sh — a
+        // non-canonical wire form). descriptor-mnemonic SPEC v0.30 §5.1
+        // mandates bare PkK/PkH "regardless of context; Tag::Check is never
+        // emitted wrapping a key leaf on the wire", and md-cli (template.rs:607)
+        // collapses unconditionally. Resolves FOLLOWUP
+        // `toolkit-check-pkk-non-tap-non-canonical`. The fall-through Tag::Check
+        // emit is PRESERVED for Check-over-non-key.
         Terminal::Check(inner) => {
-            if tap_context {
-                if let Terminal::PkK(k) = &inner.node {
-                    return Ok(Node {
-                        tag: Tag::PkK,
-                        body: Body::KeyArg {
-                            index: lookup_key(&k.to_string(), km)?,
-                        },
-                    });
-                }
-                if let Terminal::PkH(k) = &inner.node {
-                    return Ok(Node {
-                        tag: Tag::PkH,
-                        body: Body::KeyArg {
-                            index: lookup_key(&k.to_string(), km)?,
-                        },
-                    });
-                }
+            if let Terminal::PkK(k) = &inner.node {
+                return Ok(Node {
+                    tag: Tag::PkK,
+                    body: Body::KeyArg {
+                        index: lookup_key(&k.to_string(), km)?,
+                    },
+                });
+            }
+            if let Terminal::PkH(k) = &inner.node {
+                return Ok(Node {
+                    tag: Tag::PkH,
+                    body: Body::KeyArg {
+                        index: lookup_key(&k.to_string(), km)?,
+                    },
+                });
             }
             Ok(Node {
                 tag: Tag::Check,
-                body: Body::Children(vec![walk_miniscript_node(inner, km, tap_context)?]),
+                body: Body::Children(vec![walk_miniscript_node(inner, km)?]),
             })
         }
         // v0.3-NEW Layer 2 arms (SPEC §4.9.a) ────────────────────────
@@ -659,23 +660,23 @@ fn walk_miniscript_node<C: miniscript::ScriptContext>(
             tag: Tag::False,
             body: Body::Empty,
         }),
-        Terminal::Verify(i) => walk_one_child(Tag::Verify, i, km, tap_context),
-        Terminal::Swap(i) => walk_one_child(Tag::Swap, i, km, tap_context),
-        Terminal::Alt(i) => walk_one_child(Tag::Alt, i, km, tap_context),
-        Terminal::DupIf(i) => walk_one_child(Tag::DupIf, i, km, tap_context),
-        Terminal::NonZero(i) => walk_one_child(Tag::NonZero, i, km, tap_context),
-        Terminal::ZeroNotEqual(i) => walk_one_child(Tag::ZeroNotEqual, i, km, tap_context),
-        Terminal::AndV(a, b) => walk_two_children(Tag::AndV, a, b, km, tap_context),
-        Terminal::AndB(a, b) => walk_two_children(Tag::AndB, a, b, km, tap_context),
-        Terminal::OrB(a, b) => walk_two_children(Tag::OrB, a, b, km, tap_context),
-        Terminal::OrC(a, b) => walk_two_children(Tag::OrC, a, b, km, tap_context),
-        Terminal::OrD(a, b) => walk_two_children(Tag::OrD, a, b, km, tap_context),
-        Terminal::OrI(a, b) => walk_two_children(Tag::OrI, a, b, km, tap_context),
+        Terminal::Verify(i) => walk_one_child(Tag::Verify, i, km),
+        Terminal::Swap(i) => walk_one_child(Tag::Swap, i, km),
+        Terminal::Alt(i) => walk_one_child(Tag::Alt, i, km),
+        Terminal::DupIf(i) => walk_one_child(Tag::DupIf, i, km),
+        Terminal::NonZero(i) => walk_one_child(Tag::NonZero, i, km),
+        Terminal::ZeroNotEqual(i) => walk_one_child(Tag::ZeroNotEqual, i, km),
+        Terminal::AndV(a, b) => walk_two_children(Tag::AndV, a, b, km),
+        Terminal::AndB(a, b) => walk_two_children(Tag::AndB, a, b, km),
+        Terminal::OrB(a, b) => walk_two_children(Tag::OrB, a, b, km),
+        Terminal::OrC(a, b) => walk_two_children(Tag::OrC, a, b, km),
+        Terminal::OrD(a, b) => walk_two_children(Tag::OrD, a, b, km),
+        Terminal::OrI(a, b) => walk_two_children(Tag::OrI, a, b, km),
         Terminal::AndOr(a, b, c) => {
             let kids = vec![
-                walk_miniscript_node(a, km, tap_context)?,
-                walk_miniscript_node(b, km, tap_context)?,
-                walk_miniscript_node(c, km, tap_context)?,
+                walk_miniscript_node(a, km)?,
+                walk_miniscript_node(b, km)?,
+                walk_miniscript_node(c, km)?,
             ];
             Ok(Node {
                 tag: Tag::AndOr,
@@ -686,7 +687,7 @@ fn walk_miniscript_node<C: miniscript::ScriptContext>(
             let children: Vec<Node> = thresh
                 .data()
                 .iter()
-                .map(|sub| walk_miniscript_node(sub, km, tap_context))
+                .map(|sub| walk_miniscript_node(sub, km))
                 .collect::<Result<_, _>>()?;
             Ok(Node {
                 tag: Tag::Thresh,
@@ -703,11 +704,10 @@ fn walk_one_child<C: miniscript::ScriptContext>(
     tag: Tag,
     inner: &miniscript::Miniscript<DescriptorPublicKey, C>,
     km: &BTreeMap<String, u8>,
-    tap: bool,
 ) -> Result<Node, ToolkitError> {
     Ok(Node {
         tag,
-        body: Body::Children(vec![walk_miniscript_node(inner, km, tap)?]),
+        body: Body::Children(vec![walk_miniscript_node(inner, km)?]),
     })
 }
 
@@ -716,13 +716,12 @@ fn walk_two_children<C: miniscript::ScriptContext>(
     a: &miniscript::Miniscript<DescriptorPublicKey, C>,
     b: &miniscript::Miniscript<DescriptorPublicKey, C>,
     km: &BTreeMap<String, u8>,
-    tap: bool,
 ) -> Result<Node, ToolkitError> {
     Ok(Node {
         tag,
         body: Body::Children(vec![
-            walk_miniscript_node(a, km, tap)?,
-            walk_miniscript_node(b, km, tap)?,
+            walk_miniscript_node(a, km)?,
+            walk_miniscript_node(b, km)?,
         ]),
     })
 }
@@ -1456,13 +1455,14 @@ mod tests {
 
     #[test]
     fn walk_wsh_pk_root() {
-        // `pk(K)` desugars to `c:pk_k(K)` in non-tap context → Wsh wrapping Check wrapping PkK.
+        // `pk(K)` desugars to `c:pk_k(K)`, but v0.55.0 collapses Check(PkK)→bare
+        // PkK unconditionally (SPEC v0.30 §5.1) → Wsh wraps a bare PkK leaf.
         let root = parse_and_walk("wsh(pk(@0/<0;1>/*))", ScriptCtx::MultiSig);
         assert_eq!(root.tag, Tag::Wsh);
         let Body::Children(children) = &root.body else {
             panic!("expected Wsh+Children");
         };
-        assert_eq!(children[0].tag, Tag::Check);
+        assert_eq!(children[0].tag, Tag::PkK);
     }
 
     #[test]
@@ -1519,12 +1519,13 @@ mod tests {
     #[test]
     fn walk_sh_ms_pk_root() {
         // sh wrapping bare miniscript (not via wsh) — tests the ShInner::Ms branch.
+        // v0.55.0: Check(PkK)→bare PkK collapses in sh context too.
         let root = parse_and_walk("sh(pk(@0/<0;1>/*))", ScriptCtx::SingleSig);
         assert_eq!(root.tag, Tag::Sh);
         let Body::Children(children) = &root.body else {
             panic!("expected Sh+Children");
         };
-        assert_eq!(children[0].tag, Tag::Check);
+        assert_eq!(children[0].tag, Tag::PkK);
     }
 
     #[test]
@@ -2548,26 +2549,24 @@ mod tests {
     }
 
     #[test]
-    fn walk_check_kept_in_non_tap_context() {
-        // Verify wsh(pk(@0)) emits Wsh→Check→PkK (NOT collapsed in non-tap).
+    fn walk_check_collapsed_in_non_tap() {
+        // v0.55.0: wsh(pk(@0)) emits Wsh→bare PkK (Check(PkK) collapses in
+        // non-tap context, matching md-cli + SPEC v0.30 §5.1; previously the
+        // walker kept Wsh→Check→PkK here — `walk_check_kept_in_non_tap_context`).
         let root = parse_and_walk("wsh(pk(@0/<0;1>/*))", ScriptCtx::MultiSig);
         let Body::Children(wsh_kids) = &root.body else {
             panic!("expected Wsh+Children");
         };
-        assert_eq!(wsh_kids[0].tag, Tag::Check);
-        let Body::Children(check_kids) = &wsh_kids[0].body else {
-            panic!("expected Check+Children");
-        };
-        assert_eq!(check_kids[0].tag, Tag::PkK);
+        assert_eq!(wsh_kids[0].tag, Tag::PkK);
     }
 
     #[test]
     fn walk_pk_h_via_wsh_andor() {
         // PkH appears as a Layer 2 fragment via `pkh()` inside miniscript,
-        // which desugars to c:pk_h(K). Use `and_v(v:pkh(@0), older(144))`-style
-        // composition to hit it; rust-miniscript will route to Terminal::PkH.
-        // Note: A.6 lands the and_v/older arms so this exact shape errors here;
-        // simpler form: wsh(c:pk_h(@0)) — typecheck-permitting.
+        // which desugars to c:pk_h(K). Use the explicit `wsh(c:pk_h(@0))` form
+        // to hit Terminal::Check(PkH). v0.55.0: Check(PkH)→bare PkH collapses
+        // unconditionally, so wsh wraps a bare PkH leaf DIRECTLY (one less
+        // nesting level than the pre-fix Wsh→Check→PkH).
         let result = substitute_synthetic("wsh(c:pk_h(@0/<0;1>/*))", ScriptCtx::MultiSig);
         let (s, km) = result.unwrap();
         let d = MsDescriptor::<DescriptorPublicKey>::from_str(&s)
@@ -2576,11 +2575,7 @@ mod tests {
         let Body::Children(wsh_kids) = &root.body else {
             panic!("expected Wsh+Children");
         };
-        assert_eq!(wsh_kids[0].tag, Tag::Check);
-        let Body::Children(check_kids) = &wsh_kids[0].body else {
-            panic!("expected Check+Children");
-        };
-        assert_eq!(check_kids[0].tag, Tag::PkH);
+        assert_eq!(wsh_kids[0].tag, Tag::PkH);
     }
 
     #[test]
