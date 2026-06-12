@@ -4097,3 +4097,13 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `test-hardening` / `next-cycle`.
 - **Companion:** `descriptor-mnemonic` `design/FOLLOWUPS.md::bitcoind-differential-corpus-breadth` (the codec-side Core oracle; this is the toolkit-side end-to-end one).
+
+### `toolkit-arm-dup-if-ignored-stub` — parse_descriptor `arm_dup_if` is an ignored empty stub with a disproven reason
+
+- **Surfaced:** 2026-06-12, m-format miniscript-coverage audit (GAP 2) cycle-prep §6 + R0-M2 (`cycle-prep-recon-seven-fragment-render-tests.md`; `descriptor-mnemonic/design/agent-reports/seven-render-goldens-plan-r0-round{1,2}-review.md`).
+- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs::arm_dup_if` — a bin-crate `#[cfg(test)]` test (runs under `cargo test --bin mnemonic`, NOT `--lib`), `#[ignore = "DupIf descriptor-unreachable in rust-miniscript v13 — every d: example in ms_tests.rs is invalid_ms"]`, with a COMMENT-ONLY body ("Walker arm exists for completeness; counted as 1 stub").
+- **What:** the ignore reason is DISPROVEN — `wsh(or_i(pk(X),dv:older(144)))` parses via `Descriptor::from_str` on the pinned miniscript 13.0.0 (verified twice: GAP-2 recon experiment + the R0). So `arm_dup_if` IS reachable. Fix: de-ignore AND WRITE the body (de-ignoring alone = vacuous pass since the body is empty), mirroring `arm_non_zero`: build `wsh(or_i(pk(@0/<0;1>/*),dv:older(144)))`, walk it, assert a `Tag::DupIf` node appears. This is the toolkit PARSE-direction (descriptor → Node) companion to the md-codec post-0.35.2 GAP-2 render-direction cell `self_test_wsh_or_i_dupif_v_older`.
+- **Why deferred:** split from the md-codec-local GAP-2 cycle (single-repo discipline); the 1-test toolkit edit rides separately.
+- **Status:** `open`
+- **Tier:** `test-hygiene`.
+- **Companion:** `descriptor-mnemonic` md-codec post-0.35.2 NO-BUMP GAP-2 cycle (render-direction shipped; this is the parse-direction de-stub).
