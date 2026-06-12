@@ -657,24 +657,39 @@ fn build_import_payload(
     crate::cmd::export_wallet::emit_payload(&inputs, format)
 }
 
-/// Build the importable wallet payload for a MULTISIG `restore --md1 --format`
-/// (FOLLOWUP `restore-multisig-format-payloads`). Mirrors `export-wallet`'s
-/// `EmitInputs` (`export_wallet.rs:560-577`) using the reconstructed
-/// (`template`, `slots`, `k`, `descriptor`); the dispatch goes through the
-/// shared `emit_payload` helper (FOLLOWUP `restore-emit-dispatch-3way-dedup`,
-/// the former 4-way dedup). `threshold_user_supplied: true` is LOAD-BEARING:
-/// `k` from the md1 is authoritative, and `sparrow.rs` `collect_missing`
-/// refuses a multisig template (`MissingField::Threshold`) when it is false.
-/// Read the `(CliTemplate, TaprootInternalKey)` for a taproot multisig
-/// wallet-policy md1 directly off the decoded tree — routing around md-codec's
-/// `to_miniscript` (which errors on `SortedMultiA`). v2 supports only
-/// `is_nums:true` (the NUMS internal key bundle emits since v0.48.0);
-/// `is_nums:false` (genuine cosigner-internal — reconstructable but needs a
-/// leaf-membership analysis) is deferred (FOLLOWUP
+/// §3 outcome for a `Tag::Tr` wallet-policy md1: which reconstruction arm.
+enum TaprootRestore {
+    /// Single-leaf NUMS `multi_a`/`sortedmulti_a` — the byte-identical
+    /// template path (`build_descriptor_string`).
+    Template(CliTemplate),
+    /// General single-leaf or depth-1 two-leaf `tr(NUMS,…)` policy — the
+    /// faithful arm (`faithful_multisig_descriptor`), v0.55.1 (T3-partial of
+    /// FOLLOWUP `restore-general-and-multi-leaf-taproot-roundtrip`).
+    GeneralFaithful,
+}
+
+/// Classify a taproot wallet-policy md1 tree for restore. The single-leaf
+/// `multi_a`/`sortedmulti_a` Template path stays byte-identical (routing
+/// around md-codec's `to_miniscript`, which errors on a root `SortedMultiA`);
+/// the GeneralFaithful arm re-enters `to_miniscript` via
+/// `faithful_multisig_descriptor`, so its blockers are pre-gated here.
+/// Supports only `is_nums:true` (the NUMS internal key bundle emits since
+/// v0.48.0); `is_nums:false` (genuine cosigner-internal — reconstructable but
+/// needs a leaf-membership analysis) is deferred (FOLLOWUP
 /// `restore-multisig-taproot-reconstruction`).
-fn taproot_template_and_internal_key(
-    tree: &md_codec::tree::Node,
-) -> Result<(CliTemplate, TaprootInternalKey), ToolkitError> {
+///
+/// The GeneralFaithful arm is gated CONSERVATIVELY + STRUCTURALLY (never on
+/// Display behavior):
+/// - depth ≥2 (any `TapTree` child of a `TapTree`) refuses — the pinned
+///   miniscript 95fdd1c mis-Displays a LEFT-child `TapTree` (`{{a,b,c}}`),
+///   and a right-spine shape that happens to Display fine must not create a
+///   Display-luck accepted set (FOLLOWUP
+///   `upstream-miniscript-taptree-depth2-display-asymmetry`; lift the gate
+///   when the miniscript #953 fix releases);
+/// - `sortedmulti_a` anywhere under a `TapTree` refuses — md-codec's
+///   `to_miniscript` cannot render it as a non-root tap leaf (FOLLOWUP
+///   `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
+fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestore, ToolkitError> {
     use md_codec::tree::Body;
     let inner = match &tree.body {
         Body::Tr {
@@ -700,20 +715,84 @@ fn taproot_template_and_internal_key(
             ))
         }
     };
-    let template = match inner.tag {
-        md_codec::Tag::MultiA => CliTemplate::TrMultiA,
-        md_codec::Tag::SortedMultiA => CliTemplate::TrSortedMultiA,
+    match inner.tag {
+        md_codec::Tag::MultiA => Ok(TaprootRestore::Template(CliTemplate::TrMultiA)),
+        md_codec::Tag::SortedMultiA => Ok(TaprootRestore::Template(CliTemplate::TrSortedMultiA)),
+        _ => {
+            if subtree_contains_sortedmulti_a(inner) {
+                return Err(ToolkitError::ModeViolation {
+                    mode: "restore",
+                    flag: "--md1",
+                    message: "taproot md1 carries sortedmulti_a under a tap-script tree — md-codec cannot yet render it back as a non-root tap leaf (FOLLOWUP md-codec-sortedmulti-a-to-miniscript-rendering-gap); the engraved card remains a faithful backup",
+                });
+            }
+            ensure_taptree_depth_le_one(inner)?;
+            Ok(TaprootRestore::GeneralFaithful)
+        }
+    }
+}
+
+/// `true` iff `Tag::SortedMultiA` occurs anywhere in the subtree (the §3
+/// pre-gate for the GeneralFaithful arm — a clear refusal instead of
+/// md-codec's converter-internal "must be a tap-leaf root child" error).
+/// A single-leaf root `SortedMultiA` never reaches this (Template arm first).
+fn subtree_contains_sortedmulti_a(n: &md_codec::tree::Node) -> bool {
+    use md_codec::tree::Body;
+    if n.tag == md_codec::Tag::SortedMultiA {
+        return true;
+    }
+    match &n.body {
+        Body::Children(c) => c.iter().any(subtree_contains_sortedmulti_a),
+        Body::Variable { children, .. } => children.iter().any(subtree_contains_sortedmulti_a),
+        Body::Tr { tree, .. } => tree.as_deref().is_some_and(subtree_contains_sortedmulti_a),
+        _ => false,
+    }
+}
+
+/// Refuse a tap-script tree of depth ≥2 — STRUCTURAL on the md1 Node tree
+/// (never on Display behavior; see `classify_taproot_restore`). md-codec
+/// taptrees are strictly binary, so "no `TapTree` child of a `TapTree`" ⟺
+/// depth ≤1 ⟺ ≤2 leaves. Spine-only walk: a `TapTree` under a non-TapTree
+/// leaf is not constructible (md-codec decode errors first).
+fn ensure_taptree_depth_le_one(inner: &md_codec::tree::Node) -> Result<(), ToolkitError> {
+    use md_codec::tree::Body;
+    if inner.tag != md_codec::Tag::TapTree {
+        // A single general leaf — no tree nesting possible.
+        return Ok(());
+    }
+    // md-codec decode guarantees a TapTree body is EXACTLY 2 children
+    // (tree.rs `read_node` Tag::TapTree arm), so the ≠2 refusal below is
+    // defensive-only — but a malformed tree must REFUSE, never be silently
+    // treated as a leaf (unlike the test-only `count_tap_leaves` pattern).
+    let children = match &inner.body {
+        Body::Children(c) if c.len() == 2 => c,
         _ => {
             return Err(ToolkitError::ModeViolation {
                 mode: "restore",
                 flag: "--md1",
-                message: "taproot md1 leaf is not a recognized multisig (multi_a / sortedmulti_a)",
+                message: "taproot md1 tap-script tree node is malformed (a TapTree must carry exactly 2 children); refusing to reconstruct",
             })
         }
     };
-    Ok((template, TaprootInternalKey::Nums))
+    if children.iter().any(|c| c.tag == md_codec::Tag::TapTree) {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "taproot tree depth ≥2 (≥3 leaves) is not yet restorable — the pinned miniscript mis-prints nested taptrees (FOLLOWUP upstream-miniscript-taptree-depth2-display-asymmetry); the engraved card remains a faithful backup",
+        });
+    }
+    Ok(())
 }
 
+/// Build the importable wallet payload for a MULTISIG `restore --md1 --format`
+/// (FOLLOWUP `restore-multisig-format-payloads`). Mirrors `export-wallet`'s
+/// `EmitInputs` (`export_wallet.rs:560-577`) using the reconstructed
+/// (`template`, `slots`, `k`, `descriptor`); the dispatch goes through the
+/// shared `emit_payload` helper (FOLLOWUP `restore-emit-dispatch-3way-dedup`,
+/// the former 4-way dedup). `threshold_user_supplied: true` is LOAD-BEARING:
+/// `k` from the md1 is authoritative, and `sparrow.rs` `collect_missing`
+/// refuses a multisig template (`MissingField::Threshold`) when it is false.
+///
 /// `taproot_internal_key` is `Some(Nums)` for a taproot multisig md1 (threaded
 /// from the §3 classification), `None` for wsh/sh-wsh — so the `--format`
 /// payload's emitted descriptor carries the correct internal key. (R0 v2 I2.)
@@ -733,9 +812,18 @@ fn build_multisig_import_payload(
     // `"imported-descriptor"` default name. Descriptor-driven formats
     // (bitcoin-core/descriptor/bsms) emit FAITHFULLY; `bip388` emits faithfully
     // for a multipath (`/<0;1>/*`) card and refuses a wildcard-only one (BIP-388
-    // wallet policies require the multipath suffix). Template-requiring k-of-n
-    // formats (coldcard/jade/electrum/sparrow/green/specter) refuse via their
-    // existing `template`/`is_multisig` branches.
+    // wallet policies require the multipath suffix) — and refuses a general-tr
+    // card too (the NUMS internal key is a bare x-only `Single` with no
+    // multipath suffix). Template-requiring k-of-n formats
+    // (coldcard/jade/electrum/sparrow/specter) refuse via their existing
+    // `template`/`is_multisig` branches. `green` needs the EXPLICIT refusal
+    // below for the general-tr arm (R0 I1, v0.55.1):
+    // `script_type_from_descriptor` classifies a general tr without a
+    // `multi_a(` substring as `P2tr` — taproot SINGLESIG — so green's
+    // `is_multisig` gate would otherwise EMIT a "singlesig" payload for a
+    // tap-script-tree policy. (The wsh-general arm classifies `P2wshMulti`
+    // and the multi_a-bearing tr arm `P2trMulti` — both already refused by
+    // green's own gate.)
     let (script_type, wallet_name) = match template {
         Some(t) => (
             wallet_export::script_type_from_template(&t),
@@ -744,10 +832,15 @@ fn build_multisig_import_payload(
         None => {
             let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(descriptor)
                 .map_err(|e| bad(format!("--md1 reconstructed descriptor parse: {e}")))?;
-            (
-                wallet_export::script_type_from_descriptor(&parsed)?,
-                "imported-descriptor".to_string(),
-            )
+            let script_type = wallet_export::script_type_from_descriptor(&parsed)?;
+            if format == CliExportFormat::Green
+                && script_type == wallet_export::WalletScriptType::P2tr
+            {
+                return Err(ToolkitError::BadInput(
+                    "--format green cannot emit a taproot policy descriptor — Green's file-import surface is singlesig-only, and this md1 restores a tap-script-tree policy. Use --format bitcoin-core or --format descriptor for a watch-only import.".into(),
+                ));
+            }
+            (script_type, "imported-descriptor".to_string())
         }
     };
     let inputs = EmitInputs {
@@ -845,13 +938,37 @@ struct ReconstructTranslator {
     multipath: Option<Vec<md_codec::use_site_path::Alternative>>,
 }
 
+/// The BIP-341 NUMS H-point as an `XOnlyPublicKey` (parsed from the shared
+/// `cost::NUMS_XONLY_HEX` const; infallible on the known-good literal).
+fn nums_xonly() -> bitcoin::secp256k1::XOnlyPublicKey {
+    bitcoin::secp256k1::XOnlyPublicKey::from_str(crate::cost::NUMS_XONLY_HEX)
+        .expect("the NUMS H-point hex literal is a valid x-only point")
+}
+
 impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
     type TargetPk = DescriptorPublicKey;
     type Error = ToolkitError;
 
     fn pk(&mut self, pk: &DescriptorPublicKey) -> Result<DescriptorPublicKey, ToolkitError> {
-        use miniscript::descriptor::{DerivPaths, DescriptorMultiXKey, DescriptorXKey};
-        // The non-taproot wallet-policy keys are ALWAYS `XPub` (md-codec
+        use miniscript::descriptor::{
+            DerivPaths, DescriptorMultiXKey, DescriptorXKey, SinglePubKey,
+        };
+        // A `Single` key appears in exactly one card rendering: the BIP-341
+        // NUMS H-point internal key of a `tr(NUMS,…)` policy (md-codec
+        // `build_nums_internal_key` is the only `Single` producer; every
+        // policy key is an `XPub`). Pass it through UNCHANGED iff it IS the
+        // H-point — x-only equality, never string matching — and never
+        // promote it to multipath/network. Any other `Single` cannot come
+        // from a toolkit wallet-policy card → refuse (strict-NUMS, v0.55.1).
+        if let DescriptorPublicKey::Single(s) = pk {
+            if matches!(&s.key, SinglePubKey::XOnly(x) if *x == nums_xonly()) {
+                return Ok(pk.clone());
+            }
+            return Err(bad(
+                "--md1 reconstruction: unexpected non-NUMS single key in wallet policy",
+            ));
+        }
+        // The remaining wallet-policy keys are ALWAYS `XPub` (md-codec
         // `build_descriptor_public_key`); be total (R0-r1 M6) — never panic.
         let xk = match pk {
             DescriptorPublicKey::XPub(x) => x,
@@ -1066,12 +1183,17 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     }
 
     // --- 3. Classify: template + (taproot) NUMS internal key. ---
-    // Taproot md1 (`Tag::Tr`) routes AROUND md-codec's `to_miniscript` (which
-    // errors on `SortedMultiA`): read template + NUMS internal key off the tree
-    // directly, then build/derive via the toolkit's own miniscript (rev 95fdd1c
-    // HAS `Terminal::SortedMultiA`). wsh/sh-wsh keep `to_miniscript_descriptor`.
-    // `template_opt = Some(_)` ONLY for a strictly-plain `wsh/sh-wsh(multi|
-    // sortedmulti)` (or taproot multi_a/sortedmulti_a) md1 → the existing
+    // Taproot md1 (`Tag::Tr`): `classify_taproot_restore` 3-ways the tree —
+    // single-leaf `multi_a`/`sortedmulti_a` → the byte-identical Template path
+    // (routing AROUND md-codec's `to_miniscript`, which errors on a root
+    // `SortedMultiA`; the toolkit's own miniscript rev 95fdd1c HAS
+    // `Terminal::SortedMultiA`); general single-leaf / depth-1 two-leaf
+    // `tr(NUMS,…)` → GeneralFaithful (`template_opt = None`, falls through the
+    // SAME general-policy machinery as wsh below, v0.55.1); depth ≥2 /
+    // `sortedmulti_a`-under-TapTree / non-NUMS → loud structural refusals.
+    // wsh/sh-wsh keep `to_miniscript_descriptor`. `template_opt = Some(_)`
+    // ONLY for a strictly-plain `wsh/sh-wsh(multi|sortedmulti)` (or
+    // single-leaf taproot multi_a/sortedmulti_a) md1 → the existing
     // byte-for-byte `build_descriptor_string` path. `None` = a GENERAL policy
     // (timelocks/hashlocks/andor/decay/…) → `faithful_multisig_descriptor`,
     // which keeps the full tree instead of silently collapsing it to plain
@@ -1081,8 +1203,10 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let is_taproot = d.tree.tag == md_codec::Tag::Tr;
     let (template_opt, tap_internal_key): (Option<CliTemplate>, Option<TaprootInternalKey>) =
         if is_taproot {
-            let (tmpl, ik) = taproot_template_and_internal_key(&d.tree)?;
-            (Some(tmpl), Some(ik))
+            match classify_taproot_restore(&d.tree)? {
+                TaprootRestore::Template(t) => (Some(t), Some(TaprootInternalKey::Nums)),
+                TaprootRestore::GeneralFaithful => (None, Some(TaprootInternalKey::Nums)),
+            }
         } else {
             (plain_template_from_tree(&d.tree, &d.use_site_path), None)
         };
@@ -1152,6 +1276,19 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let first_recv: Vec<String> = if is_taproot || template_opt.is_none() {
         let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
             .map_err(|e| bad(format!("--md1 descriptor parse: {e}")))?;
+        // Display-fidelity guard (v0.55.1, R0 Q4): the reconstructed
+        // descriptor must survive its own parse→print round-trip — the only
+        // guard against a PARSEABLE-but-wrong Display infidelity in the
+        // pinned miniscript (the known depth-2 taptree bug is structurally
+        // pre-gated in §3; this catches any future parseable variant). The
+        // template-tr arm cannot false-refuse here: `build_descriptor_string`
+        // output is already `to_string()` of a parsed descriptor
+        // (Display-stable by construction), as is the faithful arm's.
+        if parsed.to_string() != descriptor {
+            return Err(bad(
+                "--md1 internal error: the reconstructed descriptor does not survive a parse→print round-trip (miniscript Display infidelity); refusing rather than print a possibly-unfaithful descriptor. The engraved card remains a faithful backup.",
+            ));
+        }
         crate::derive_address::derive_receive_addresses(
             &parsed,
             args.count,
