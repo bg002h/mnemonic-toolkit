@@ -2381,4 +2381,22 @@ mod tests {
             Some(MD1_C1)
         );
     }
+
+    /// Regression (ms-codec 0.4.3 pin bump): a non-ASCII chunk with no `'1'`
+    /// separator routed through the ms repair wrapper must return a clean
+    /// `HrpMismatch`, not panic. Pre-0.4.3 `ms_codec::decode_with_correction`
+    /// sliced `lower[..len-1]` on a no-separator string, landing inside a
+    /// multi-byte char (e.g. the trailing `é`) → char-boundary panic. Found by
+    /// stress-Cycle-C fuzzing; the toolkit inherited it here (repair.rs).
+    #[test]
+    fn repair_via_ms_codec_no_separator_multibyte_is_clean_error() {
+        for chunk in ["café", "ñ", "\u{1F600}", "mség"] {
+            match repair_via_ms_codec(chunk, 0) {
+                Err(RepairError::HrpMismatch { chunk_index, .. }) => {
+                    assert_eq!(chunk_index, 0);
+                }
+                other => panic!("expected clean HrpMismatch for {chunk:?}, got {other:?}"),
+            }
+        }
+    }
 }

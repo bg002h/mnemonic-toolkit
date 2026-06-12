@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.54.3] — 2026-06-12
+
+**SemVer-PATCH — `mnemonic repair` no longer panics on a non-ASCII chunk with no `'1'` separator (ms-codec 0.4.3 pin bump).**
+
+The auto-repair path (`repair.rs::repair_via_ms_codec`) calls `ms_codec::decode_with_correction`, which before 0.4.3 sliced `lower[..len-1]` when reporting the observed HRP of a non-`ms1` string. With no `'1'` separator, `len-1` can land inside a multi-byte char (e.g. a trailing `é`) → char-boundary panic — so `mnemonic repair café` (and the indel-repair oracle) aborted instead of returning a clean error. ms-codec 0.4.3 slices at `rfind('1')` (`'1'` is ASCII, always a char boundary) and uses the whole string as the observed HRP when there is no separator; the toolkit's wrapper maps it to a clean `HrpMismatch`. Found by stress-Cycle-C fuzzing (mnemonic-secret `fuzz/`); resolves the ms-codec FOLLOWUP `decode-with-correction-panics-on-non-char-boundary-hrp-slice`.
+
+Dependency-version bump only (Cargo.lock ms-codec 0.4.2 → 0.4.3, Cargo.toml pin `0.4.2` → `0.4.3`); no toolkit source-logic / CLI / wire change beyond the pin. 1 regression cell (`repair.rs::repair_via_ms_codec_no_separator_multibyte_is_clean_error`).
+
 ## mnemonic-toolkit [0.54.2] — 2026-06-11
 
 **SemVer-PATCH — `export-wallet --from-import-json` refuses general policies for template-requiring formats instead of silently collapsing them (funds-safety C2).**
