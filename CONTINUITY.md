@@ -1,9 +1,10 @@
 # CONTINUITY — resume point (2026-06-12)
 
-## LATEST: ms-codec 0.4.3 PUBLISHED + toolkit v0.54.3 SHIPPED (char-boundary panic fix propagated)
-- **ms-codec 0.4.3 PUBLISHED to crates.io** (user-authorized) + tag `ms-codec-v0.4.3` @ mnemonic-secret `4d96c05`. Fixes the Cycle-C `decode_with_correction` char-boundary panic.
-- **toolkit v0.54.3** @ master (pin bump ms-codec 0.4.2→0.4.3 + 1 regression cell in repair.rs) + tag `mnemonic-toolkit-v0.54.3`; rust/changelog-check/install-pin-check/sibling-pin-check all GREEN. `mnemonic repair café` no longer panics.
-- **In-progress batch (user: "publish and bump then do D and E. And all the also fileds"):** DONE = publish+bump. REMAINING = ms-codec-error-display-echoes-input (secret leak in ms Error Display; R0-gated, will need its own publish+bump), toolkit-descriptor-fuzz-target (cfg(fuzzing) lib.rs mount), Cycle D (cross-tool md vs md-cli differential), Cycle E (bitcoind differential CI), fuzz-nightly-quarterly-bump (not due ~2026-09, note-only).
+## LATEST: 2 security fixes PUBLISHED + propagated (ms-codec 0.4.3 + 0.4.4; toolkit v0.54.3 + v0.54.4)
+- **ms-codec 0.4.3** (char-boundary panic) PUBLISHED + tag `ms-codec-v0.4.3` @ `4d96c05`; **toolkit v0.54.3** pin bump + tag, CI green.
+- **ms-codec 0.4.4** (SECURITY — Error Display/Debug no longer echo secret input: Codex32 structural-only variant match + WrongHrp.got capped 4 chars at construction + hand Debug; fuzz exclusion DELETED → ms1_no_secret_leak now scans every variant) PUBLISHED + tag `ms-codec-v0.4.4` @ `b7e97ba`, R0×2 + impl-review GREEN, CI green. **toolkit v0.54.4** pin bump 0.4.3→0.4.4 + 1 regression cell + tag `mnemonic-toolkit-v0.54.4`, CI green. Resolves `ms-codec-error-display-echoes-input` (+ toolkit companion).
+- **Batch (user: "publish and bump then do D and E. And all the also fileds"):** DONE = publish+bump + ms-codec-error-display-echoes-input. REMAINING = toolkit-descriptor-fuzz-target (cfg(fuzzing) lib.rs mount, own mini-R0), Cycle D (cross-tool md vs md-cli differential), Cycle E (bitcoind differential CI), fuzz-nightly-quarterly-bump (not due ~2026-09, note-only).
+- **Publish flow reminder:** `cargo publish -p <crate> --allow-dirty` (untracked recon files at root are the only "dirty"); tag `<crate>-vX.Y.Z` at the release commit; then toolkit pin bump = the 8-site lockstep (Cargo.toml version+pin, Cargo.lock, README.md + crate README markers, install.sh, CHANGELOG) + a regression cell.
 
 ---
 
