@@ -9,7 +9,8 @@
 use assert_cmd::Command;
 
 const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
-const TREZOR_24_2: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const TREZOR_24_2: &str =
+    "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
 const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
 const PATH_FAMILY_WITHOUT_MULTISIG: &str =
@@ -37,7 +38,7 @@ fn threshold_without_multisig_template_rejected() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(&(        format!("error: {}\n", THRESHOLD_WITHOUT_MULTISIG))),
+        stderr.ends_with(&(format!("error: {}\n", THRESHOLD_WITHOUT_MULTISIG))),
         "{}; got {:?}",
         "stderr must be the byte-exact retained-guard text",
         stderr,
@@ -87,7 +88,7 @@ fn path_family_without_multisig_template_rejected() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(&(        format!("error: {}\n", PATH_FAMILY_WITHOUT_MULTISIG))),
+        stderr.ends_with(&(format!("error: {}\n", PATH_FAMILY_WITHOUT_MULTISIG))),
         "{}; got {:?}",
         "stderr must be the byte-exact retained-guard text",
         stderr,
@@ -139,7 +140,7 @@ fn descriptor_and_template_rejected() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(&(        format!("error: {}\n", DESCRIPTOR_AND_TEMPLATE))),
+        stderr.ends_with(&(format!("error: {}\n", DESCRIPTOR_AND_TEMPLATE))),
         "{}; got {:?}",
         "stderr must be the byte-exact retained-guard text",
         stderr,

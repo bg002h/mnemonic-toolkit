@@ -235,9 +235,7 @@ impl ImportProvenance {
     /// `cmd::import_wallet::emit_json_envelope` (P6C wiring). Mirrors
     /// `coldcard_source_metadata` / `sparrow_source_metadata` /
     /// `specter_source_metadata`.
-    pub(crate) fn electrum_source_metadata(
-        &self,
-    ) -> Option<&electrum::ElectrumSourceMetadata> {
+    pub(crate) fn electrum_source_metadata(&self) -> Option<&electrum::ElectrumSourceMetadata> {
         match self {
             Self::BitcoinCore(_) => None,
             Self::BsmsSixLine(_) => None,
@@ -539,22 +537,40 @@ mod provenance_tests {
     #[test]
     fn provenance_bitcoin_core_variant_yields_none_bsms_audit_and_some_source_metadata() {
         let p = ImportProvenance::BitcoinCore(sample_core_metadata());
-        assert!(p.bsms_audit().is_none(), "BitcoinCore variant does not expose bsms_audit");
-        assert!(p.source_metadata().is_some(), "BitcoinCore variant exposes source_metadata");
+        assert!(
+            p.bsms_audit().is_none(),
+            "BitcoinCore variant does not expose bsms_audit"
+        );
+        assert!(
+            p.source_metadata().is_some(),
+            "BitcoinCore variant exposes source_metadata"
+        );
     }
 
     #[test]
     fn provenance_bsms_no_audit_variant_yields_none_bsms_audit() {
         let p = ImportProvenance::BsmsTwoLine;
-        assert!(p.bsms_audit().is_none(), "BsmsTwoLine variant yields no bsms_audit (2-line shape)");
-        assert!(p.source_metadata().is_none(), "BsmsTwoLine variant does not expose source_metadata");
+        assert!(
+            p.bsms_audit().is_none(),
+            "BsmsTwoLine variant yields no bsms_audit (2-line shape)"
+        );
+        assert!(
+            p.source_metadata().is_none(),
+            "BsmsTwoLine variant does not expose source_metadata"
+        );
     }
 
     #[test]
     fn provenance_bsms_variant_yields_some_bsms_audit_and_none_source_metadata() {
         let p = ImportProvenance::BsmsSixLine(sample_bsms_audit());
-        assert!(p.bsms_audit().is_some(), "BsmsSixLine variant exposes bsms_audit");
-        assert!(p.source_metadata().is_none(), "BsmsSixLine variant does not expose source_metadata");
+        assert!(
+            p.bsms_audit().is_some(),
+            "BsmsSixLine variant exposes bsms_audit"
+        );
+        assert!(
+            p.source_metadata().is_none(),
+            "BsmsSixLine variant does not expose source_metadata"
+        );
     }
 
     /// P0B.2 regression guard: behavior on the existing 2 variants is
@@ -573,14 +589,20 @@ mod provenance_tests {
         );
 
         let bsms_some = ImportProvenance::BsmsSixLine(sample_bsms_audit());
-        assert!(bsms_some.bsms_audit().is_some(), "BsmsSixLine → bsms_audit Some");
+        assert!(
+            bsms_some.bsms_audit().is_some(),
+            "BsmsSixLine → bsms_audit Some"
+        );
         assert!(
             bsms_some.source_metadata().is_none(),
             "BsmsSixLine → source_metadata None"
         );
 
         let bsms_none = ImportProvenance::BsmsTwoLine;
-        assert!(bsms_none.bsms_audit().is_none(), "BsmsTwoLine → bsms_audit None");
+        assert!(
+            bsms_none.bsms_audit().is_none(),
+            "BsmsTwoLine → bsms_audit None"
+        );
         assert!(
             bsms_none.source_metadata().is_none(),
             "BsmsTwoLine → source_metadata None"

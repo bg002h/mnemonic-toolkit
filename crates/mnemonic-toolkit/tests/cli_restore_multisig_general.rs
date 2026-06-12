@@ -42,7 +42,11 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
     }
     args.push("--json".into());
     args.push("--no-engraving-card".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
     v["md1"]
         .as_array()
@@ -68,7 +72,11 @@ fn restore_md1_args_net(md1: &[String], network: &str) -> Vec<String> {
 fn restore_json(md1: &[String]) -> Value {
     let mut a = restore_md1_args(md1);
     a.push("--json".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success();
     serde_json::from_slice(&out.get_output().stdout).expect("restore JSON")
 }
 
@@ -94,7 +102,10 @@ fn assert_md1_fixed_point(original_md1: &[String], reconstructed_descriptor: &st
         .iter()
         .map(|x| x.as_str().unwrap().to_string())
         .collect();
-    assert_eq!(rebundled, original_md1, "md1 fixed-point: re-bundle must reproduce the card");
+    assert_eq!(
+        rebundled, original_md1,
+        "md1 fixed-point: re-bundle must reproduce the card"
+    );
 }
 
 /// (1) and_v + older: the timelock is PRESERVED (pre-fix it collapsed to plain
@@ -106,11 +117,24 @@ fn general_and_v_older_reconstructs_faithfully() {
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();
-    assert!(desc.contains("and_v(v:multi(2,"), "must keep the and_v(v:multi): {desc}");
-    assert!(desc.contains("older(4032)"), "must keep older(4032): {desc}");
-    assert!(!desc.starts_with("wsh(multi("), "must NOT collapse to plain multi: {desc}");
+    assert!(
+        desc.contains("and_v(v:multi(2,"),
+        "must keep the and_v(v:multi): {desc}"
+    );
+    assert!(
+        desc.contains("older(4032)"),
+        "must keep older(4032): {desc}"
+    );
+    assert!(
+        !desc.starts_with("wsh(multi("),
+        "must NOT collapse to plain multi: {desc}"
+    );
     assert_eq!(w["wallet_type"], "miniscript-policy");
-    assert_eq!(v["threshold"], Value::Null, "general policy has no single threshold");
+    assert_eq!(
+        v["threshold"],
+        Value::Null,
+        "general policy has no single threshold"
+    );
     assert!(!w["first_addresses"].as_array().unwrap().is_empty());
     assert_md1_fixed_point(&md1, desc);
 }
@@ -122,10 +146,20 @@ fn general_decay_vault_reconstructs_faithfully() {
     let md1 = bundle_general("wsh(or_d(multi(2,@0,@1),and_v(v:multi(1,@2),older(1000))))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.contains("or_d(multi(2,"), "outer 2-of-2 multi kept: {desc}");
-    assert!(desc.contains("multi(1,"), "recovery 1-of-1 multi kept: {desc}");
+    assert!(
+        desc.contains("or_d(multi(2,"),
+        "outer 2-of-2 multi kept: {desc}"
+    );
+    assert!(
+        desc.contains("multi(1,"),
+        "recovery 1-of-1 multi kept: {desc}"
+    );
     assert!(desc.contains("older(1000)"), "decay timelock kept: {desc}");
-    assert_eq!(v["threshold"], Value::Null, "decay vault has no single threshold");
+    assert_eq!(
+        v["threshold"],
+        Value::Null,
+        "decay vault has no single threshold"
+    );
     assert_md1_fixed_point(&md1, desc);
 }
 
@@ -136,7 +170,10 @@ fn general_sha256_hashlock_reconstructs_faithfully() {
     let md1 = bundle_general(&format!("wsh(and_v(v:multi(2,@0,@1),sha256({h})))"));
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.contains(&format!("sha256({h})")), "sha256 digest kept verbatim: {desc}");
+    assert!(
+        desc.contains(&format!("sha256({h})")),
+        "sha256 digest kept verbatim: {desc}"
+    );
     assert_md1_fixed_point(&md1, desc);
 }
 
@@ -163,7 +200,11 @@ fn general_format_coldcard_refuses() {
     let mut a = restore_md1_args(&md1);
     a.push("--format".into());
     a.push("coldcard".into());
-    Command::cargo_bin("mnemonic").unwrap().args(&a).assert().failure();
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .failure();
 }
 
 /// (5) pk-keyed shape: a `pkh(@N)` leaf reconstructs faithfully (md-codec
@@ -176,7 +217,10 @@ fn general_pkh_leaf_reconstructs_after_md_codec_fix() {
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(desc.contains("or_d(multi(2,"), "outer multi kept: {desc}");
-    assert!(desc.contains("pkh("), "pkh leaf kept (not collapsed): {desc}");
+    assert!(
+        desc.contains("pkh("),
+        "pkh leaf kept (not collapsed): {desc}"
+    );
     assert!(desc.contains("older(144)"), "timelock kept: {desc}");
     assert_md1_fixed_point(&md1, desc);
 }
@@ -216,9 +260,18 @@ fn general_wildcard_only_multipath_none_reconstructs_without_fabricating_multipa
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();
-    assert!(desc.contains("/*)"), "wildcard-only keys kept as /*: {desc}");
-    assert!(!desc.contains("<0;1>"), "must NOT fabricate a <0;1> multipath: {desc}");
-    assert!(!w["first_addresses"].as_array().unwrap().is_empty(), "addresses derive");
+    assert!(
+        desc.contains("/*)"),
+        "wildcard-only keys kept as /*: {desc}"
+    );
+    assert!(
+        !desc.contains("<0;1>"),
+        "must NOT fabricate a <0;1> multipath: {desc}"
+    );
+    assert!(
+        !w["first_addresses"].as_array().unwrap().is_empty(),
+        "addresses derive"
+    );
     assert_md1_fixed_point(&md1, desc);
 }
 
@@ -229,7 +282,10 @@ fn general_multipath_0_1_reconstructs_with_multixpub_arm() {
     let md1 = bundle_general("wsh(and_v(v:multi(2,@0/<0;1>/*,@1/<0;1>/*),older(50)))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.contains("<0;1>/*"), "MultiXPub <0;1> multipath kept: {desc}");
+    assert!(
+        desc.contains("<0;1>/*"),
+        "MultiXPub <0;1> multipath kept: {desc}"
+    );
     assert!(desc.contains("older(50)"), "timelock kept: {desc}");
     assert_md1_fixed_point(&md1, desc);
 }
@@ -242,10 +298,17 @@ fn general_testnet_network_corrected() {
     let md1 = bundle_general_net("wsh(and_v(v:multi(2,@0,@1),older(50)))", "testnet");
     let mut a = restore_md1_args_net(&md1, "testnet");
     a.push("--json".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     let w = &v["wallets"][0];
-    assert!(w["descriptor"].as_str().unwrap().contains("tpub"), "testnet → tpub keys");
+    assert!(
+        w["descriptor"].as_str().unwrap().contains("tpub"),
+        "testnet → tpub keys"
+    );
     assert!(
         w["first_addresses"][0].as_str().unwrap().starts_with("tb1"),
         "testnet → tb1 address"
@@ -269,7 +332,10 @@ fn general_legacy_sh_multi_reconstructs() {
     let md1 = bundle_general("sh(multi(2,@0,@1))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.starts_with("sh(multi(2,"), "legacy sh(multi) kept: {desc}");
+    assert!(
+        desc.starts_with("sh(multi(2,"),
+        "legacy sh(multi) kept: {desc}"
+    );
     assert_md1_fixed_point(&md1, desc);
 }
 
@@ -285,8 +351,9 @@ fn per_key_use_site_override_refused() {
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("per-cosigner use-site")
-                .and(predicate::str::contains("restore-md1-per-key-use-site-and-hardened-wildcard")),
+            predicate::str::contains("per-cosigner use-site").and(predicate::str::contains(
+                "restore-md1-per-key-use-site-and-hardened-wildcard",
+            )),
         );
 }
 

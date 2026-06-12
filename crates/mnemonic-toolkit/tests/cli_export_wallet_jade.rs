@@ -17,14 +17,11 @@ const COSIGNER_B_FP: &str = "28645006";
 const COSIGNER_C_XPUB: &str = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
 const COSIGNER_C_FP: &str = TREZOR_24_MASTER_FP;
 
-const FIXTURE_JADE_MULTISIG_2OF3_WSH: &str =
-    "tests/export_wallet/jade_multisig_2of3_wsh.txt";
+const FIXTURE_JADE_MULTISIG_2OF3_WSH: &str = "tests/export_wallet/jade_multisig_2of3_wsh.txt";
 const FIXTURE_COLDCARD_MULTISIG_2OF3_WSH: &str =
     "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
-const FIXTURE_JADE_REFUSAL_SINGLESIG: &str =
-    "tests/export_wallet/jade_refusal_singlesig.stderr";
-const FIXTURE_JADE_REFUSAL_TR_MULTI_A: &str =
-    "tests/export_wallet/jade_refusal_tr_multi_a.stderr";
+const FIXTURE_JADE_REFUSAL_SINGLESIG: &str = "tests/export_wallet/jade_refusal_singlesig.stderr";
+const FIXTURE_JADE_REFUSAL_TR_MULTI_A: &str = "tests/export_wallet/jade_refusal_tr_multi_a.stderr";
 
 fn run_jade_multisig() -> String {
     let out = Command::cargo_bin("mnemonic")
@@ -171,8 +168,8 @@ fn cell_4_jade_singlesig_refuses_byte_exact() {
     // fold I-4: assertion is now against a pinned `.stderr` fixture (same
     // shape as the other refusal fixtures) — the earlier inline literal +
     // `.trim_end()` would silently pass on doubled trailing newlines.
-    let expected =
-        std::fs::read_to_string(FIXTURE_JADE_REFUSAL_SINGLESIG).expect(FIXTURE_JADE_REFUSAL_SINGLESIG);
+    let expected = std::fs::read_to_string(FIXTURE_JADE_REFUSAL_SINGLESIG)
+        .expect(FIXTURE_JADE_REFUSAL_SINGLESIG);
     assert_eq!(
         stderr, expected,
         "Jade singlesig refusal must match SPEC §6 pinned fixture byte-exact (single `error:` prefix).\n--- got ---\n{stderr}\n--- expected ---\n{expected}"

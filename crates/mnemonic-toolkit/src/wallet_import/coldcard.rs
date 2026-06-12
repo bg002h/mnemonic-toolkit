@@ -127,8 +127,7 @@ pub(crate) struct ColdcardSourceMetadata {
 /// and drives a stderr NOTICE per SPEC §2.4. Mirrors
 /// `SPECTER_PRESERVED_TOP_LEVEL_KEYS`.
 pub(crate) const COLDCARD_PRESERVED_TOP_LEVEL_KEYS: &[&str] = &[
-    "chain", "xfp", "xpub", "account", "bip44", "bip49", "bip84", "bip86",
-    "bip48_1", "bip48_2",
+    "chain", "xfp", "xpub", "account", "bip44", "bip49", "bip84", "bip86", "bip48_1", "bip48_2",
 ];
 
 impl WalletFormatParser for ColdcardParser {
@@ -208,15 +207,12 @@ impl WalletFormatParser for ColdcardParser {
         })?;
 
         // Step 2: chain → network.
-        let chain_str = obj
-            .get("chain")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ToolkitError::ImportWalletParse(
-                    "import-wallet: coldcard: parse error: missing or non-string top-level `chain`"
-                        .to_string(),
-                )
-            })?;
+        let chain_str = obj.get("chain").and_then(|v| v.as_str()).ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: coldcard: parse error: missing or non-string top-level `chain`"
+                    .to_string(),
+            )
+        })?;
         let chain = match chain_str {
             "BTC" => ColdcardChain::Btc,
             "XTN" => ColdcardChain::Xtn,
@@ -229,15 +225,12 @@ impl WalletFormatParser for ColdcardParser {
         let network = chain.to_network();
 
         // Step 3: decode xfp.
-        let xfp_str = obj
-            .get("xfp")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ToolkitError::ImportWalletParse(
-                    "import-wallet: coldcard: parse error: missing or non-string top-level `xfp`"
-                        .to_string(),
-                )
-            })?;
+        let xfp_str = obj.get("xfp").and_then(|v| v.as_str()).ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "import-wallet: coldcard: parse error: missing or non-string top-level `xfp`"
+                    .to_string(),
+            )
+        })?;
         let xfp = parse_xfp_hex(xfp_str)?;
 
         // Step 4: optional account (default 0).
@@ -293,13 +286,8 @@ impl WalletFormatParser for ColdcardParser {
             })?;
 
         // Build bracketed descriptor: `<wrapper>([xfp/deriv_no_m]xpub/<0;1>/*)`.
-        let xfp_hex_lower = format!(
-            "{:02x}{:02x}{:02x}{:02x}",
-            xfp[0], xfp[1], xfp[2], xfp[3]
-        );
-        let bracketed = format!(
-            "[{xfp_hex_lower}/{deriv_no_m}]{neutral_xpub_str}/<0;1>/*"
-        );
+        let xfp_hex_lower = format!("{:02x}{:02x}{:02x}{:02x}", xfp[0], xfp[1], xfp[2], xfp[3]);
+        let bracketed = format!("[{xfp_hex_lower}/{deriv_no_m}]{neutral_xpub_str}/<0;1>/*");
         let wrapped = match bip_derivation {
             ColdcardBip::Bip44 => format!("pkh({bracketed})"),
             ColdcardBip::Bip49 => format!("sh(wpkh({bracketed}))"),
@@ -545,7 +533,6 @@ fn trim_leading_ws(blob: &[u8]) -> &[u8] {
     &blob[i..]
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -733,7 +720,8 @@ mod tests {
     fn sniff_false_on_bitcoin_core_listdescriptors() {
         // Bitcoin Core `listdescriptors` lacks `chain` and `xfp` keys; the
         // sniff must reject.
-        let blob = br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub.../<0;1>/*)#abcdefgh"}]}"#;
+        let blob =
+            br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub.../<0;1>/*)#abcdefgh"}]}"#;
         assert!(!ColdcardParser::sniff(blob));
     }
 
@@ -954,9 +942,7 @@ mod tests {
     #[test]
     fn parse_legacy_top_level_xpub_only_infers_bip44_from_xpub_prefix() {
         // Mk1/Mk2 firmware: only `xpub` at top level (no bipNN sub-objects).
-        let blob = format!(
-            r#"{{"chain":"BTC","xfp":"B8688DF1","xpub":"{XPUB_84}"}}"#,
-        );
+        let blob = format!(r#"{{"chain":"BTC","xfp":"B8688DF1","xpub":"{XPUB_84}"}}"#,);
         let parsed = parse(blob.as_bytes()).unwrap();
         assert_eq!(parsed.len(), 1);
         match &parsed[0].provenance {

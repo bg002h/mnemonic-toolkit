@@ -215,7 +215,8 @@ pub fn encrypt_field(plaintext: &str, password: &[u8], iv: &[u8; 16]) -> String 
 
 /// secp256k1 group order `n`, zero-LEFT-padded to 64 bytes for `U512`
 /// reduction (128 hex chars: 64 zeros || 64 chars of n).
-const SECP256K1_ORDER_U512_BE_HEX: &str = "0000000000000000000000000000000000000000000000000000000000000000\
+const SECP256K1_ORDER_U512_BE_HEX: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000\
      FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
 
 /// Library-local error for the ECIES BIE1 storage-decrypt path. Distinct from
@@ -334,8 +335,8 @@ pub fn ecies_decrypt_message(
         _ => return Err(EciesDecryptError::InvalidMagic(magic)),
     }
 
-    let ephemeral_pubkey =
-        PublicKey::from_slice(&raw[4..37]).map_err(|_| EciesDecryptError::InvalidEphemeralPubkey)?;
+    let ephemeral_pubkey = PublicKey::from_slice(&raw[4..37])
+        .map_err(|_| EciesDecryptError::InvalidEphemeralPubkey)?;
     let ciphertext = &raw[37..raw.len() - 32];
     let mac = &raw[raw.len() - 32..];
 
@@ -361,7 +362,8 @@ pub fn ecies_decrypt_message(
     // ciphertext) BEFORE decrypting, to avoid a PKCS7 padding oracle.
     let mut h = <HmacSha256 as Mac>::new_from_slice(key_m).expect("HMAC accepts any key length");
     h.update(&raw[..raw.len() - 32]);
-    h.verify_slice(mac).map_err(|_| EciesDecryptError::HmacMismatch)?;
+    h.verify_slice(mac)
+        .map_err(|_| EciesDecryptError::HmacMismatch)?;
 
     if ciphertext.is_empty() || ciphertext.len() % 16 != 0 {
         return Err(EciesDecryptError::AesDecryptFailure);
@@ -826,7 +828,7 @@ mod tests {
         let recip_pk = PublicKey::from_secret_key(&secp, &recip_sk);
         let eph_sk = SecretKey::from_slice(ephemeral_sk_bytes).unwrap();
         let eph_pk = PublicKey::from_secret_key(&secp, &eph_sk).serialize(); // 33B
-        // ECDH symmetry: recip_pk * eph_scalar == eph_pk * recip_scalar.
+                                                                             // ECDH symmetry: recip_pk * eph_scalar == eph_pk * recip_scalar.
         let eph_scalar = Scalar::from_be_bytes(*ephemeral_sk_bytes).unwrap();
         let ecdh = recip_pk.mul_tweak(&secp, &eph_scalar).unwrap().serialize();
         let mut key = [0u8; 64];

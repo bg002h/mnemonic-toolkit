@@ -82,8 +82,7 @@ fn assert_bip39_quad(
     );
 
     // (3) Lib seed pin under TREZOR passphrase (PBKDF2-HMAC-SHA512 path).
-    let mnemonic =
-        Mnemonic::parse_in(bip39::Language::English, phrase).expect("phrase parses");
+    let mnemonic = Mnemonic::parse_in(bip39::Language::English, phrase).expect("phrase parses");
     let seed = mnemonic.to_seed(TREZOR_PASSPHRASE);
     assert_eq!(hex::encode(seed), seed_hex, "seed mismatch ({label})");
 
@@ -103,9 +102,7 @@ fn assert_bip39_quad(
 #[test]
 fn bip39_trezor_english_corpus_full() {
     let parsed: Value = serde_json::from_str(CORPUS_JSON).expect("corpus JSON parses");
-    let rows = parsed["english"]
-        .as_array()
-        .expect("english array present");
+    let rows = parsed["english"].as_array().expect("english array present");
     assert_eq!(rows.len(), 24, "expected 24 english Trezor vectors");
     for (i, row) in rows.iter().enumerate() {
         let arr = row.as_array().expect("row is a 4-tuple");

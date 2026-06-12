@@ -132,7 +132,13 @@ pub(crate) fn apply_seed_overlay(
                         Ok((_tag, ms_codec::Payload::Entr(bytes))) => {
                             (Zeroizing::new(bytes), language.into())
                         }
-                        Ok((_tag, ms_codec::Payload::Mnem { language: wire_lang, entropy })) => {
+                        Ok((
+                            _tag,
+                            ms_codec::Payload::Mnem {
+                                language: wire_lang,
+                                entropy,
+                            },
+                        )) => {
                             let lang =
                                 crate::language::wire_code_to_bip39(wire_lang).map_err(|e| {
                                     ToolkitError::BadInput(format!(
@@ -174,12 +180,11 @@ pub(crate) fn apply_seed_overlay(
             // the source wallet used a BIP-39 passphrase, the user must
             // recover the seed elsewhere — out of scope for v0.26.0.
             // ms mnem Phase 3: use per-card language for the mnemonic reconstruction.
-            let mnemonic =
-                bip39::Mnemonic::from_entropy_in(card_lang, &entropy).map_err(|e| {
-                    ToolkitError::BadInput(format!(
-                        "import-wallet: cosigner {i}: entropy → mnemonic: {e}"
-                    ))
-                })?;
+            let mnemonic = bip39::Mnemonic::from_entropy_in(card_lang, &entropy).map_err(|e| {
+                ToolkitError::BadInput(format!(
+                    "import-wallet: cosigner {i}: entropy → mnemonic: {e}"
+                ))
+            })?;
             let seed = mnemonic.to_seed("");
             let master = Xpriv::new_master(bundle.network, &seed[..])
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;

@@ -461,7 +461,10 @@ fn seed_overlay_slot_phrase_mismatch_exit_4() {
         .assert()
         .failure();
     let code = assertion.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 4, "phrase mismatch must exit 4 (sibling to BundleMismatch)");
+    assert_eq!(
+        code, 4,
+        "phrase mismatch must exit 4 (sibling to BundleMismatch)"
+    );
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.to_lowercase().contains("mismatch") || stderr.to_lowercase().contains("xpub"),
@@ -519,7 +522,14 @@ fn ms1_inline_value_fires_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1", TREZOR_24_MS1, "--json",
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            TREZOR_24_MS1,
+            "--json",
         ])
         .write_stdin(blob)
         .assert()
@@ -539,8 +549,14 @@ fn ms1_env_sentinel_no_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1",
-            "@env:MNEMONIC_TEST_MS1_ENV", "--json",
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            "@env:MNEMONIC_TEST_MS1_ENV",
+            "--json",
         ])
         .env("MNEMONIC_TEST_MS1_ENV", TREZOR_24_MS1)
         .write_stdin(blob)

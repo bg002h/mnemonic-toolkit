@@ -251,8 +251,7 @@ fn encode_json_mode_12_word() {
 // ──────────────────────────────────────────────────────────────────────
 
 const COMPACT_HEX_12: &str = "00000000000000000000000000000000";
-const COMPACT_HEX_24: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+const COMPACT_HEX_24: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 #[test]
 fn encode_compact_12_word_cli() {
@@ -431,7 +430,8 @@ fn encode_accepts_15_word_count() {
 fn encode_accepts_18_word_count() {
     // 24 bytes of zeros → "abandon ×17 + agent". BIP-39 index 39.
     let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent";
-    let expected_digits = "000000000000000000000000000000000000000000000000000000000000000000000039";
+    let expected_digits =
+        "000000000000000000000000000000000000000000000000000000000000000000000039";
     mnemonic()
         .args(["seedqr", "encode", "--from"])
         .arg(format!("phrase={phrase}"))
@@ -444,7 +444,8 @@ fn encode_accepts_18_word_count() {
 fn encode_accepts_21_word_count() {
     // 28 bytes of zeros → "abandon ×20 + admit". BIP-39 index 29.
     let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit";
-    let expected_digits = "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
+    let expected_digits =
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
     mnemonic()
         .args(["seedqr", "encode", "--from"])
         .arg(format!("phrase={phrase}"))

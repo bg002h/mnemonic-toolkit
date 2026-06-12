@@ -102,11 +102,7 @@ pub(crate) fn sniff_format(blob: &[u8]) -> SniffOutcome {
         (specter, SniffOutcome::Specter),
     ];
 
-    let matched: Vec<SniffOutcome> = votes
-        .iter()
-        .filter(|(b, _)| *b)
-        .map(|(_, v)| *v)
-        .collect();
+    let matched: Vec<SniffOutcome> = votes.iter().filter(|(b, _)| *b).map(|(_, v)| *v).collect();
     match matched.len() {
         0 => SniffOutcome::NoMatch,
         1 => matched[0],
@@ -235,11 +231,8 @@ mod tests {
                 (bools[6], SniffOutcome::Sparrow),
                 (bools[7], SniffOutcome::Specter),
             ];
-            let matched: Vec<SniffOutcome> = votes
-                .iter()
-                .filter(|(b, _)| *b)
-                .map(|(_, v)| *v)
-                .collect();
+            let matched: Vec<SniffOutcome> =
+                votes.iter().filter(|(b, _)| *b).map(|(_, v)| *v).collect();
             match matched.len() {
                 0 => SniffOutcome::NoMatch,
                 1 => matched[0],

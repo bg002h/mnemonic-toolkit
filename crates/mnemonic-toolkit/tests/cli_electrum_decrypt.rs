@@ -25,7 +25,13 @@ fn temp_with(contents: &str) -> tempfile::NamedTempFile {
 #[test]
 fn decrypt_inline_password_happy_path() {
     let assertion = mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password", TV_PASSWORD])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            TV_CIPHERTEXT,
+            "--decrypt-password",
+            TV_PASSWORD,
+        ])
         .assert()
         .success()
         .stdout(format!("{TV_PLAINTEXT}\n"));
@@ -40,7 +46,12 @@ fn decrypt_inline_password_happy_path() {
 #[test]
 fn decrypt_password_stdin_happy_path() {
     let assertion = mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password-stdin"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            TV_CIPHERTEXT,
+            "--decrypt-password-stdin",
+        ])
         .write_stdin(TV_PASSWORD)
         .assert()
         .success()
@@ -56,7 +67,12 @@ fn decrypt_password_stdin_happy_path() {
 fn decrypt_password_file_happy_path() {
     let pw = temp_with(TV_PASSWORD);
     mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password-file"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            TV_CIPHERTEXT,
+            "--decrypt-password-file",
+        ])
         .arg(pw.path())
         .assert()
         .success()
@@ -66,7 +82,13 @@ fn decrypt_password_file_happy_path() {
 #[test]
 fn decrypt_wrong_password_refused() {
     let assertion = mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password", "wrong-password"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            TV_CIPHERTEXT,
+            "--decrypt-password",
+            "wrong-password",
+        ])
         .assert()
         .failure()
         .code(1);
@@ -80,7 +102,13 @@ fn decrypt_wrong_password_refused() {
 #[test]
 fn decrypt_bad_base64_refused() {
     let assertion = mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", "not-valid-base64!!!", "--decrypt-password", TV_PASSWORD])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            "not-valid-base64!!!",
+            "--decrypt-password",
+            TV_PASSWORD,
+        ])
         .assert()
         .failure()
         .code(1);
@@ -125,7 +153,12 @@ fn decrypt_two_password_forms_conflict() {
 #[test]
 fn decrypt_ciphertext_stdin_and_password_stdin_refused() {
     let assertion = mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", "-", "--decrypt-password-stdin"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            "-",
+            "--decrypt-password-stdin",
+        ])
         .write_stdin(TV_PASSWORD)
         .assert()
         .failure()
@@ -141,7 +174,12 @@ fn decrypt_ciphertext_stdin_and_password_stdin_refused() {
 fn ciphertext_stdin_happy_path() {
     let pw = temp_with(TV_PASSWORD);
     mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", "-", "--decrypt-password-file"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            "-",
+            "--decrypt-password-file",
+        ])
         .arg(pw.path())
         .write_stdin(TV_CIPHERTEXT)
         .assert()
@@ -153,7 +191,14 @@ fn ciphertext_stdin_happy_path() {
 fn decrypt_json_envelope() {
     let tmp = tempfile::NamedTempFile::new().unwrap();
     mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password", TV_PASSWORD, "--json-out"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            TV_CIPHERTEXT,
+            "--decrypt-password",
+            TV_PASSWORD,
+            "--json-out",
+        ])
         .arg(tmp.path())
         .assert()
         .success();
@@ -162,7 +207,10 @@ fn decrypt_json_envelope() {
     assert_eq!(json["schema_version"], "1");
     assert_eq!(json["operation"], "electrum-decrypt");
     assert_eq!(json["plaintext"], TV_PLAINTEXT);
-    assert!(json.get("password").is_none(), "envelope must NOT echo the password");
+    assert!(
+        json.get("password").is_none(),
+        "envelope must NOT echo the password"
+    );
     assert!(json.get("decrypt_password").is_none());
 }
 
@@ -172,7 +220,8 @@ fn decrypt_realistic_seed_fixture() {
     // plaintext via the library `encrypt_field` (deterministic test IV),
     // then decrypt it through the CLI and assert round-trip.
     use mnemonic_toolkit::electrum_crypto::encrypt_field;
-    let seed = "wild father tree among universe such mobile favorite target dynamic credit identify";
+    let seed =
+        "wild father tree among universe such mobile favorite target dynamic credit identify";
     let password = b"correct horse battery staple";
     let iv: [u8; 16] = [
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -181,7 +230,12 @@ fn decrypt_realistic_seed_fixture() {
     let ciphertext = encrypt_field(seed, password, &iv);
     let pw = temp_with("correct horse battery staple");
     mnemonic()
-        .args(["electrum-decrypt", "--ciphertext", &ciphertext, "--decrypt-password-file"])
+        .args([
+            "electrum-decrypt",
+            "--ciphertext",
+            &ciphertext,
+            "--decrypt-password-file",
+        ])
         .arg(pw.path())
         .assert()
         .success()
@@ -199,7 +253,14 @@ fn json_out_world_readable_advisory() {
         std::fs::write(&path, b"{}").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         let assertion = mnemonic()
-            .args(["electrum-decrypt", "--ciphertext", TV_CIPHERTEXT, "--decrypt-password", TV_PASSWORD, "--json-out"])
+            .args([
+                "electrum-decrypt",
+                "--ciphertext",
+                TV_CIPHERTEXT,
+                "--decrypt-password",
+                TV_PASSWORD,
+                "--json-out",
+            ])
             .arg(&path)
             .assert()
             .success();

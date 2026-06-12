@@ -30,11 +30,11 @@ mod sparrow;
 mod specter;
 
 pub(crate) use bip388::Bip388Emitter;
-pub(crate) use pipeline::{descriptor_to_bip388_wallet_policy, DEFAULT_BIP388_POLICY_NAME};
-pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use bitcoin_core::import_array_single;
-pub use bsms::BsmsForm;
+pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use bsms::BsmsEmitter;
+pub use bsms::BsmsForm;
+pub(crate) use pipeline::{descriptor_to_bip388_wallet_policy, DEFAULT_BIP388_POLICY_NAME};
 // v0.28.0 P8B (plan-doc §S.8) — re-export the per-script-type discriminator
 // helper for use by `ToolkitError::BsmsTaprootRefused`'s message rendering
 // at `error.rs::message`. Keeping the helper next to `bsms.rs::emit` (the
@@ -131,9 +131,7 @@ pub(crate) fn validate_watch_only(slots: &[SlotInput]) -> Result<(), ToolkitErro
 /// only be supplied at single-sig N=1 in the slot grammar but populate
 /// `ResolvedSlot.entropy` with the wif marker; the pre-resolve check catches
 /// them, this post-resolve check is the SPEC-stated invariant.
-pub(crate) fn validate_watch_only_resolved(
-    resolved: &[ResolvedSlot],
-) -> Result<(), ToolkitError> {
+pub(crate) fn validate_watch_only_resolved(resolved: &[ResolvedSlot]) -> Result<(), ToolkitError> {
     if resolved.iter().any(|r| r.entropy.is_some()) {
         return Err(ToolkitError::ExportWalletSecretInput);
     }
@@ -198,9 +196,7 @@ pub(crate) fn script_type_from_template(t: &CliTemplate) -> WalletScriptType {
         CliTemplate::Bip84 => WalletScriptType::P2wpkh,
         CliTemplate::Bip86 => WalletScriptType::P2tr,
         CliTemplate::WshMulti | CliTemplate::WshSortedMulti => WalletScriptType::P2wshMulti,
-        CliTemplate::ShWshMulti | CliTemplate::ShWshSortedMulti => {
-            WalletScriptType::P2shP2wshMulti
-        }
+        CliTemplate::ShWshMulti | CliTemplate::ShWshSortedMulti => WalletScriptType::P2shP2wshMulti,
         CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => WalletScriptType::P2trMulti,
     }
 }
@@ -660,7 +656,10 @@ mod template_from_descriptor_tests {
     #[test]
     fn shwsh_sortedmulti_to_sh_wsh_sortedmulti() {
         let d = format!("sh(wsh(sortedmulti(2,{X1},{X2})))");
-        assert_eq!(t(&d).unwrap(), crate::template::CliTemplate::ShWshSortedMulti);
+        assert_eq!(
+            t(&d).unwrap(),
+            crate::template::CliTemplate::ShWshSortedMulti
+        );
     }
     #[test]
     fn shwsh_multi_to_sh_wsh_multi() {
@@ -676,7 +675,10 @@ mod template_from_descriptor_tests {
     #[test]
     fn sh_bare_sortedmulti_errs() {
         let d = format!("sh(sortedmulti(2,{X1},{X2}))");
-        assert!(t(&d).is_err(), "legacy bare P2SH sortedmulti has no template");
+        assert!(
+            t(&d).is_err(),
+            "legacy bare P2SH sortedmulti has no template"
+        );
     }
     #[test]
     fn sh_bare_multi_errs() {
@@ -693,13 +695,19 @@ mod template_from_descriptor_tests {
     }
     #[test]
     fn general_policy_detector_true_for_general_shapes() {
-        assert!(is_general(&format!("wsh(and_v(v:multi(2,{X1},{X2}),older(1000)))")));
+        assert!(is_general(&format!(
+            "wsh(and_v(v:multi(2,{X1},{X2}),older(1000)))"
+        )));
         assert!(is_general(&format!(
             "wsh(or_d(multi(2,{X1},{X2}),and_v(v:pk({X1}),older(144))))"
         )));
-        assert!(is_general(&format!("sh(wsh(and_v(v:multi(2,{X1},{X2}),older(50))))")));
+        assert!(is_general(&format!(
+            "sh(wsh(and_v(v:multi(2,{X1},{X2}),older(50))))"
+        )));
         let h = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
-        assert!(is_general(&format!("wsh(and_v(v:multi(2,{X1},{X2}),sha256({h})))")));
+        assert!(is_general(&format!(
+            "wsh(and_v(v:multi(2,{X1},{X2}),sha256({h})))"
+        )));
     }
     #[test]
     fn general_policy_detector_false_for_plain_multisig() {

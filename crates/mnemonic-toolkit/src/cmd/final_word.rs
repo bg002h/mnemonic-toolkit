@@ -14,9 +14,7 @@ use crate::error::ToolkitError;
 use crate::language::CliLanguage;
 use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
 use clap::Args;
-use mnemonic_toolkit::final_word::{
-    final_word_candidates, FinalWordError, FinalWordLanguage,
-};
+use mnemonic_toolkit::final_word::{final_word_candidates, FinalWordError, FinalWordLanguage};
 use std::io::{Read, Write};
 
 #[derive(Args, Debug)]
@@ -77,8 +75,8 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     let language = map_language(args.language);
 
-    let candidates = final_word_candidates(partial.as_str(), language)
-        .map_err(map_final_word_error)?;
+    let candidates =
+        final_word_candidates(partial.as_str(), language).map_err(map_final_word_error)?;
 
     // Plain stdout: one candidate per line, sorted (library guarantees sort).
     for word in &candidates {

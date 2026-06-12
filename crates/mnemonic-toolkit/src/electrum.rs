@@ -337,10 +337,19 @@ mod tests {
 
     #[test]
     fn validate_all_four_versions() {
-        assert_eq!(validate_seed_version(STANDARD).unwrap(), SeedVersion::Standard);
+        assert_eq!(
+            validate_seed_version(STANDARD).unwrap(),
+            SeedVersion::Standard
+        );
         assert_eq!(validate_seed_version(SEGWIT).unwrap(), SeedVersion::Segwit);
-        assert_eq!(validate_seed_version(STANDARD_2FA).unwrap(), SeedVersion::Standard2FA);
-        assert_eq!(validate_seed_version(SEGWIT_2FA).unwrap(), SeedVersion::Segwit2FA);
+        assert_eq!(
+            validate_seed_version(STANDARD_2FA).unwrap(),
+            SeedVersion::Standard2FA
+        );
+        assert_eq!(
+            validate_seed_version(SEGWIT_2FA).unwrap(),
+            SeedVersion::Segwit2FA
+        );
     }
 
     #[test]
@@ -364,16 +373,16 @@ mod tests {
     #[test]
     fn round_trip_standard() {
         let bytes = phrase_to_entropy(STANDARD, ElectrumWordlist::English).unwrap();
-        let phrase = entropy_to_phrase(&bytes, SeedVersion::Standard, ElectrumWordlist::English)
-            .unwrap();
+        let phrase =
+            entropy_to_phrase(&bytes, SeedVersion::Standard, ElectrumWordlist::English).unwrap();
         assert_eq!(phrase, STANDARD);
     }
 
     #[test]
     fn round_trip_segwit() {
         let bytes = phrase_to_entropy(SEGWIT, ElectrumWordlist::English).unwrap();
-        let phrase = entropy_to_phrase(&bytes, SeedVersion::Segwit, ElectrumWordlist::English)
-            .unwrap();
+        let phrase =
+            entropy_to_phrase(&bytes, SeedVersion::Segwit, ElectrumWordlist::English).unwrap();
         assert_eq!(phrase, SEGWIT);
     }
 
@@ -382,8 +391,7 @@ mod tests {
         let p =
             entropy_to_phrase(&[0x01], SeedVersion::Standard, ElectrumWordlist::English).unwrap();
         assert_eq!(validate_seed_version(&p).unwrap(), SeedVersion::Standard);
-        let p =
-            entropy_to_phrase(&[0x01], SeedVersion::Segwit, ElectrumWordlist::English).unwrap();
+        let p = entropy_to_phrase(&[0x01], SeedVersion::Segwit, ElectrumWordlist::English).unwrap();
         assert_eq!(validate_seed_version(&p).unwrap(), SeedVersion::Segwit);
     }
 
@@ -452,14 +460,17 @@ mod tests {
         // Portuguese is base-1626 (not 2048). Pick a small entropy and verify
         // the round-trip exercises the non-2048 base path correctly.
         let bytes = vec![0x01u8, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
-        let phrase = entropy_to_phrase(&bytes, SeedVersion::Standard, ElectrumWordlist::Portuguese)
-            .unwrap();
+        let phrase =
+            entropy_to_phrase(&bytes, SeedVersion::Standard, ElectrumWordlist::Portuguese).unwrap();
         let re_bytes = phrase_to_entropy(&phrase, ElectrumWordlist::Portuguese).unwrap();
         // Increment search may change the leading bytes; round-trip recovers
         // the encoded entropy (post-increment), not the input.
-        let re_phrase =
-            entropy_to_phrase(&re_bytes, SeedVersion::Standard, ElectrumWordlist::Portuguese)
-                .unwrap();
+        let re_phrase = entropy_to_phrase(
+            &re_bytes,
+            SeedVersion::Standard,
+            ElectrumWordlist::Portuguese,
+        )
+        .unwrap();
         assert_eq!(re_phrase, phrase);
     }
 

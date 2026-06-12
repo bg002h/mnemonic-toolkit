@@ -172,8 +172,7 @@ where
                     // ms mnem Phase 3: use per-card wire language (mnem cards) or
                     // CLI --language (entr/legacy cards).
                     let lang = crate::language::payload_bip39_language(&payload, args.language())?;
-                    Mnemonic::from_entropy_in(lang, &entropy[..])
-                        .map_err(ToolkitError::Bip39)
+                    Mnemonic::from_entropy_in(lang, &entropy[..]).map_err(ToolkitError::Bip39)
                 }
                 Err(decode_err) => {
                     // Auto-fire BCH repair on decode failure (TTY-gated).

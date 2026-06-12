@@ -91,13 +91,33 @@ fn happy_path_emits_no_forensic_fields() {
     assert_eq!(v["result"], "ok");
     let checks = v["checks"].as_array().unwrap();
     for c in checks {
-        assert!(c["passed"].as_bool().unwrap(), "happy path: {} must pass", c["name"]);
+        assert!(
+            c["passed"].as_bool().unwrap(),
+            "happy path: {} must pass",
+            c["name"]
+        );
         // Forensic fields are skip_serializing_if Option::is_none — absent on
         // pass means the JSON object has no expected/actual/diff/decode_error keys.
-        assert!(c.get("expected").is_none(), "{}: expected absent on pass", c["name"]);
-        assert!(c.get("actual").is_none(), "{}: actual absent on pass", c["name"]);
-        assert!(c.get("diff_byte_offset").is_none(), "{}: diff absent on pass", c["name"]);
-        assert!(c.get("decode_error").is_none(), "{}: decode_error absent on pass", c["name"]);
+        assert!(
+            c.get("expected").is_none(),
+            "{}: expected absent on pass",
+            c["name"]
+        );
+        assert!(
+            c.get("actual").is_none(),
+            "{}: actual absent on pass",
+            c["name"]
+        );
+        assert!(
+            c.get("diff_byte_offset").is_none(),
+            "{}: diff absent on pass",
+            c["name"]
+        );
+        assert!(
+            c.get("decode_error").is_none(),
+            "{}: decode_error absent on pass",
+            c["name"]
+        );
     }
 }
 
@@ -116,7 +136,10 @@ fn tampered_ms1_populates_forensic_fields() {
         .iter()
         .find(|c| c["name"] == "ms1_decode")
         .expect("ms1_decode emitted");
-    assert!(!decode["passed"].as_bool().unwrap(), "ms1_decode should fail on garbage payload");
+    assert!(
+        !decode["passed"].as_bool().unwrap(),
+        "ms1_decode should fail on garbage payload"
+    );
     assert!(
         decode.get("decode_error").is_some(),
         "decode_error populated on decode failure: {decode:?}"
@@ -148,7 +171,10 @@ fn watch_only_short_circuit_emits_decode_error() {
         .iter()
         .find(|c| c["name"] == "ms1_decode")
         .expect("ms1_decode emitted");
-    assert!(ms1_decode["passed"].as_bool().unwrap(), "ms1_decode passes vacuously in watch-only");
+    assert!(
+        ms1_decode["passed"].as_bool().unwrap(),
+        "ms1_decode passes vacuously in watch-only"
+    );
     assert_eq!(
         ms1_decode["decode_error"].as_str().unwrap(),
         "skipped: watch-only slot",

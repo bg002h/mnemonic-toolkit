@@ -41,12 +41,7 @@ fn combine(args: &[&str]) -> (String, String, i32) {
 fn refusal_split_wrong_word_count() {
     // 2 words doesn't parse as BIP-39 — fails Mnemonic::parse_in before reaching word-count check
     // (which is post-parse). Either way, exit is non-zero.
-    let (_, stderr, exit) = split(&[
-        "--from",
-        "phrase=abandon abandon",
-        "--shares",
-        "2",
-    ]);
+    let (_, stderr, exit) = split(&["--from", "phrase=abandon abandon", "--shares", "2"]);
     assert_ne!(exit, 0);
     // bip39 error mapping fires (friendly_bip39 or default Display).
     assert!(
@@ -70,15 +65,17 @@ fn refusal_split_shares_less_than_2() {
 fn refusal_combine_cardinality_mismatch() {
     let from_arg = format!("phrase={ABANDON_12}");
     let (out, _, _) = split(&[
-        "--from", &from_arg, "--shares", "3", "--deterministic-from-master",
+        "--from",
+        &from_arg,
+        "--shares",
+        "3",
+        "--deterministic-from-master",
     ]);
     let shares: Vec<&str> = out.lines().collect();
     let s0 = format!("phrase={}", shares[0]);
     let s1 = format!("phrase={}", shares[1]);
     // Supply only 2 shares but assert 3
-    let (_, stderr, exit) = combine(&[
-        "--share", &s0, "--share", &s1, "--shares", "3",
-    ]);
+    let (_, stderr, exit) = combine(&["--share", &s0, "--share", &s1, "--shares", "3"]);
     assert_ne!(exit, 0);
     assert!(
         stderr.contains("requires exactly 3 --share arguments")
@@ -93,9 +90,7 @@ fn refusal_combine_mixed_word_counts() {
     let twenty_four = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
     let s12 = format!("phrase={twelve}");
     let s24 = format!("phrase={twenty_four}");
-    let (_, stderr, exit) = combine(&[
-        "--share", &s12, "--share", &s24, "--shares", "2",
-    ]);
+    let (_, stderr, exit) = combine(&["--share", &s12, "--share", &s24, "--shares", "2"]);
     assert_ne!(exit, 0);
     assert!(
         stderr.contains("same word count") || stderr.contains("mix of"),
@@ -110,9 +105,7 @@ fn refusal_combine_invalid_bip39_checksum() {
     let bad = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
     let good = format!("phrase={ABANDON_12}");
     let s_bad = format!("phrase={bad}");
-    let (_, stderr, exit) = combine(&[
-        "--share", &good, "--share", &s_bad, "--shares", "2",
-    ]);
+    let (_, stderr, exit) = combine(&["--share", &good, "--share", &s_bad, "--shares", "2"]);
     assert_ne!(exit, 0);
     assert!(
         stderr.contains("invalid BIP-39 checksum") || stderr.to_lowercase().contains("checksum"),
@@ -125,9 +118,7 @@ fn refusal_combine_unknown_word() {
     let bad = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon xyzzy";
     let s_good = format!("phrase={ABANDON_12}");
     let s_bad = format!("phrase={bad}");
-    let (_, stderr, exit) = combine(&[
-        "--share", &s_good, "--share", &s_bad, "--shares", "2",
-    ]);
+    let (_, stderr, exit) = combine(&["--share", &s_good, "--share", &s_bad, "--shares", "2"]);
     assert_ne!(exit, 0);
     assert!(
         stderr.to_lowercase().contains("unknown") || stderr.contains("not in"),
@@ -149,7 +140,12 @@ fn refusal_split_non_phrase_node() {
 #[test]
 fn refusal_combine_non_phrase_node() {
     let (_, stderr, exit) = combine(&[
-        "--share", "xprv=xprvsomething", "--share", "xprv=xprvsomethingelse", "--shares", "2",
+        "--share",
+        "xprv=xprvsomething",
+        "--share",
+        "xprv=xprvsomethingelse",
+        "--shares",
+        "2",
     ]);
     assert_ne!(exit, 0);
     assert!(

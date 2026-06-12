@@ -270,7 +270,10 @@ pub fn engraving_card_unified(input: &BundleInputForCard) -> String {
             if d.len() <= DESCRIPTOR_MAX_INLINE {
                 d.clone()
             } else {
-                format!("descriptor[{}..]", &d[..DESCRIPTOR_TRUNC_PREFIX.min(d.len())])
+                format!(
+                    "descriptor[{}..]",
+                    &d[..DESCRIPTOR_TRUNC_PREFIX.min(d.len())]
+                )
             }
         }
     };
@@ -375,7 +378,6 @@ pub fn engraving_card_unified(input: &BundleInputForCard) -> String {
 
     s
 }
-
 
 /// Extract a chunk_set_id from an mk1 chunked-header string per SPEC §2.2.1
 /// step 1. Returns `None` for SingleString-headered strings or decode failures.
@@ -499,8 +501,12 @@ mod tests {
         assert!(card.contains("# Threshold: 2 of 3\n"));
         assert!(card.contains("# Cosigners:\n"));
         assert!(card.contains("#   @0: ms1:abcde,mk1:abcde (aaaaaaaa @ m/48'/0'/0'/2')\n"));
-        assert!(card.contains("#   @1: (no ms1; watch-only),mk1:abcde (bbbbbbbb @ m/48'/0'/0'/2')\n"));
-        assert!(card.contains("#   @2: (no ms1; watch-only),mk1:abcde (cccccccc @ m/48'/0'/0'/2')\n"));
+        assert!(
+            card.contains("#   @1: (no ms1; watch-only),mk1:abcde (bbbbbbbb @ m/48'/0'/0'/2')\n")
+        );
+        assert!(
+            card.contains("#   @2: (no ms1; watch-only),mk1:abcde (cccccccc @ m/48'/0'/0'/2')\n")
+        );
         assert!(card.contains("# Recovery: any 2 of 3 signing keys + md1 (template card).\n"));
     }
 
@@ -527,7 +533,8 @@ mod tests {
 
     #[test]
     fn unified_card_descriptor_truncation_at_80_chars() {
-        let long_d = "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*,@3/<0;1>/*,@4/<0;1>/*,@5/<0;1>/*))";
+        let long_d =
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*,@3/<0;1>/*,@4/<0;1>/*,@5/<0;1>/*))";
         assert!(long_d.len() > 80);
         let input = BundleInputForCard {
             network: "mainnet",

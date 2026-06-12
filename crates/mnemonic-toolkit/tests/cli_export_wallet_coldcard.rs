@@ -33,18 +33,12 @@ const TREZOR_24_BIP44_MAINNET_XPUB: &str = "xpub6CDwootAjK1YycduSmTrAAXjfW9A8bPh
 
 /// Path to the byte-exact fixture (relative to the integration-test binary's
 /// runtime working directory, which is the crate root).
-const FIXTURE_BIP84_MAINNET: &str =
-    "tests/export_wallet/coldcard_generic_bip84_mainnet.json";
-const FIXTURE_BIP49_TESTNET: &str =
-    "tests/export_wallet/coldcard_generic_bip49_testnet.json";
-const FIXTURE_BIP44_MAINNET: &str =
-    "tests/export_wallet/coldcard_generic_bip44_mainnet.json";
-const FIXTURE_MULTISIG_2OF3_WSH: &str =
-    "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
-const FIXTURE_REFUSAL_BIP86: &str =
-    "tests/export_wallet/coldcard_refusal_bip86.stderr";
-const FIXTURE_REFUSAL_TR_MULTI_A: &str =
-    "tests/export_wallet/coldcard_refusal_tr_multi_a.stderr";
+const FIXTURE_BIP84_MAINNET: &str = "tests/export_wallet/coldcard_generic_bip84_mainnet.json";
+const FIXTURE_BIP49_TESTNET: &str = "tests/export_wallet/coldcard_generic_bip49_testnet.json";
+const FIXTURE_BIP44_MAINNET: &str = "tests/export_wallet/coldcard_generic_bip44_mainnet.json";
+const FIXTURE_MULTISIG_2OF3_WSH: &str = "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
+const FIXTURE_REFUSAL_BIP86: &str = "tests/export_wallet/coldcard_refusal_bip86.stderr";
+const FIXTURE_REFUSAL_TR_MULTI_A: &str = "tests/export_wallet/coldcard_refusal_tr_multi_a.stderr";
 const FIXTURE_BIP84_WITH_MASTER_XPUB: &str =
     "tests/export_wallet/coldcard_generic_bip84_mainnet_with_master_xpub.json";
 
@@ -242,7 +236,8 @@ fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let expected = std::fs::read_to_string(FIXTURE_MULTISIG_2OF3_WSH).expect(FIXTURE_MULTISIG_2OF3_WSH);
+    let expected =
+        std::fs::read_to_string(FIXTURE_MULTISIG_2OF3_WSH).expect(FIXTURE_MULTISIG_2OF3_WSH);
     assert_eq!(
         stdout, expected,
         "Coldcard 2-of-3 wsh-sortedmulti multisig text must match fixture byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
@@ -277,8 +272,8 @@ fn cell_8_coldcard_master_xpub_plumbing_byte_exact() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let expected =
-        std::fs::read_to_string(FIXTURE_BIP84_WITH_MASTER_XPUB).expect(FIXTURE_BIP84_WITH_MASTER_XPUB);
+    let expected = std::fs::read_to_string(FIXTURE_BIP84_WITH_MASTER_XPUB)
+        .expect(FIXTURE_BIP84_WITH_MASTER_XPUB);
     assert_eq!(
         stdout, expected,
         "Coldcard BIP-84 with master_xpub supplied must emit top-level xpub field byte-exact.\n--- got ---\n{stdout}\n--- expected ---\n{expected}"
@@ -548,9 +543,12 @@ fn export_wallet_coldcard_multisig_format_refuses_no_template() {
         .unwrap()
         .args([
             "export-wallet",
-            "--format", "coldcard-multisig",
-            "--network", "mainnet",
-            "--account", "0",
+            "--format",
+            "coldcard-multisig",
+            "--network",
+            "mainnet",
+            "--account",
+            "0",
         ])
         .output()
         .expect("mnemonic spawn");

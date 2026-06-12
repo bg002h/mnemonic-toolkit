@@ -141,9 +141,7 @@ pub fn slip39_split<R: CryptoRng + RngCore>(
     }
 
     // ----- Identifier -----
-    let identifier = identifier
-        .unwrap_or_else(|| (rng.next_u32() as u16) & 0x7FFF)
-        & 0x7FFF;
+    let identifier = identifier.unwrap_or_else(|| (rng.next_u32() as u16) & 0x7FFF) & 0x7FFF;
 
     // ----- EMS via Feistel encrypt -----
     let ems = feistel::encrypt(
@@ -353,8 +351,14 @@ fn split_secret(
     secret: &[u8],
     rng: &mut (impl CryptoRng + RngCore),
 ) -> Vec<(u8, Zeroizing<Vec<u8>>)> {
-    debug_assert!(threshold >= 1 && threshold <= share_count, "split_secret invariant");
-    debug_assert!(VALID_SECRET_LENGTHS.contains(&secret.len()), "secret length must be valid");
+    debug_assert!(
+        threshold >= 1 && threshold <= share_count,
+        "split_secret invariant"
+    );
+    debug_assert!(
+        VALID_SECRET_LENGTHS.contains(&secret.len()),
+        "secret length must be valid"
+    );
 
     if threshold == 1 {
         // Trivial replication. NO digest path; no RNG draws.
@@ -378,8 +382,8 @@ fn split_secret(
     // R = random_len random bytes; digest = HMAC-SHA256(R, secret)[..4].
     let mut r = Zeroizing::new(vec![0u8; random_len]);
     rng.fill_bytes(&mut r);
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&r)
-        .expect("HMAC-SHA-256 accepts any key length");
+    let mut mac =
+        <Hmac<Sha256> as Mac>::new_from_slice(&r).expect("HMAC-SHA-256 accepts any key length");
     mac.update(secret);
     let digest_full = mac.finalize().into_bytes();
 
@@ -399,8 +403,10 @@ fn split_secret(
     // already-generated random share; for i >= T-2 interpolate over
     // base_shares at x = i.
     let mut out: Vec<(u8, Zeroizing<Vec<u8>>)> = Vec::with_capacity(share_count as usize);
-    let base_pts: Vec<(u8, &[u8])> =
-        base_shares.iter().map(|(x, v)| (*x, v.as_slice())).collect();
+    let base_pts: Vec<(u8, &[u8])> = base_shares
+        .iter()
+        .map(|(x, v)| (*x, v.as_slice()))
+        .collect();
     for i in 0..share_count {
         if i < threshold - 2 {
             out.push(random_shares[i as usize].clone());
@@ -425,14 +431,16 @@ fn recover_secret(
     threshold: u8,
     shares: &[(u8, Zeroizing<Vec<u8>>)],
 ) -> Result<Zeroizing<Vec<u8>>, Slip39Error> {
-    debug_assert!(!shares.is_empty(), "recover_secret invariant: non-empty shares");
+    debug_assert!(
+        !shares.is_empty(),
+        "recover_secret invariant: non-empty shares"
+    );
 
     if threshold == 1 {
         return Ok(shares[0].1.clone());
     }
 
-    let pts: Vec<(u8, &[u8])> =
-        shares.iter().map(|(x, v)| (*x, v.as_slice())).collect();
+    let pts: Vec<(u8, &[u8])> = shares.iter().map(|(x, v)| (*x, v.as_slice())).collect();
     let secret = Zeroizing::new(lagrange::interpolate_secret_at(&pts, SECRET_INDEX));
     let digest_payload = Zeroizing::new(lagrange::interpolate_secret_at(&pts, DIGEST_INDEX));
 
@@ -513,8 +521,11 @@ mod tests {
         //     that the secret IS embedded at x = 255 in the underlying
         //     polynomial (which is the only way the SLIP-39 combine
         //     path can recover it).
-        let pts_for_secret: Vec<(u8, &[u8])> =
-            shares.iter().take(2).map(|(x, v)| (*x, v.as_slice())).collect();
+        let pts_for_secret: Vec<(u8, &[u8])> = shares
+            .iter()
+            .take(2)
+            .map(|(x, v)| (*x, v.as_slice()))
+            .collect();
         let recovered_secret = interpolate_secret_at(&pts_for_secret, 255);
         assert_eq!(
             recovered_secret.as_slice(),
@@ -573,17 +584,7 @@ mod tests {
             /* member_index */ 0,
             /* member_threshold */ 1,
         );
-        let share_1 = Share::from_parts(
-            vec![0u8; 19],
-            0x1234,
-            false,
-            0,
-            0,
-            1,
-            1,
-            1,
-            1,
-        );
+        let share_1 = Share::from_parts(vec![0u8; 19], 0x1234, false, 0, 0, 1, 1, 1, 1);
         let err = slip39_combine(&[share_0, share_1], b"").unwrap_err();
         assert_eq!(
             err,

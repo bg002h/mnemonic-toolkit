@@ -124,7 +124,13 @@ fn cell_4_green_descriptor_mode_multisig_refuses() {
     // Step 2: export-wallet --format green --from-import-json - (stdin = envelope JSON).
     let export_out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["export-wallet", "--format", "green", "--from-import-json", "-"])
+        .args([
+            "export-wallet",
+            "--format",
+            "green",
+            "--from-import-json",
+            "-",
+        ])
         .write_stdin(import_out.stdout)
         .output()
         .expect("mnemonic export-wallet spawn");

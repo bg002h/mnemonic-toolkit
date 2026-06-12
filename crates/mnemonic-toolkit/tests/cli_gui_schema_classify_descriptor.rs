@@ -93,11 +93,7 @@ fn non_canonical_wsh_andor_returns_non_canonical() {
 fn non_canonical_tr_with_taptree_returns_non_canonical() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args([
-            "gui-schema",
-            "--classify-descriptor",
-            "tr(NUMS,pk(@0))",
-        ])
+        .args(["gui-schema", "--classify-descriptor", "tr(NUMS,pk(@0))"])
         .assert()
         .success()
         .stdout("non-canonical\n");

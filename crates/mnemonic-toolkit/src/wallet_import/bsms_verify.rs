@@ -47,13 +47,13 @@ pub(crate) fn verify_round1_signature(
     })?;
 
     let secp = Secp256k1::verification_only();
-    let recovered = sig.recover_pubkey(&secp, digest).map_err(|e| {
-        ToolkitError::BsmsSignatureMismatch {
-            record_index,
-            signer_pubkey: pubkey_hex(record),
-            reason: format!("ECDSA recovery failed: {}", e),
-        }
-    })?;
+    let recovered =
+        sig.recover_pubkey(&secp, digest)
+            .map_err(|e| ToolkitError::BsmsSignatureMismatch {
+                record_index,
+                signer_pubkey: pubkey_hex(record),
+                reason: format!("ECDSA recovery failed: {}", e),
+            })?;
 
     let declared = signer_pubkey(record);
     if recovered.inner != declared {

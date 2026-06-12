@@ -22,9 +22,9 @@ mod nostr;
 mod parse;
 mod parse_descriptor;
 mod repair;
-mod silent_payment;
 mod secret_advisory;
 mod secret_string;
+mod silent_payment;
 mod slip0132;
 mod slot_input;
 mod slot_ms1;
@@ -161,22 +161,22 @@ fn main() -> ExitCode {
 
     let result: Result<u8, ToolkitError> = match &cli.command {
         Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
-        Command::VerifyBundle(args) => cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair),
-        Command::Convert(args) => cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::VerifyBundle(args) => {
+            cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
+        Command::Convert(args) => {
+            cmd::convert::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
         Command::Addresses(args) => cmd::addresses::run(args, stdin, stdout, stderr),
         Command::DecodeAddress(args) => cmd::decode_address::run(args, stdin, stdout, stderr),
-        Command::ExportWallet(args) => {
-            cmd::export_wallet::run(args, stdout, stderr).map(|_| 0)
-        }
+        Command::ExportWallet(args) => cmd::export_wallet::run(args, stdout, stderr).map(|_| 0),
         Command::ImportWallet(args) => {
             cmd::import_wallet::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
         Command::DeriveChild(args) => {
             cmd::derive_child::run(args, stdin, stdout, stderr).map(|_| 0)
         }
-        Command::ElectrumDecrypt(args) => {
-            cmd::electrum_decrypt::run(args, stdin, stdout, stderr)
-        }
+        Command::ElectrumDecrypt(args) => cmd::electrum_decrypt::run(args, stdin, stdout, stderr),
         Command::FinalWord(args) => cmd::final_word::run(args, stdin, stdout, stderr),
         Command::SeedXor(args) => cmd::seed_xor::run(args, stdin, stdout, stderr),
         Command::Seedqr(args) => cmd::seedqr::run(args, stdin, stdout, stderr),
@@ -192,13 +192,17 @@ fn main() -> ExitCode {
             cmd::gui_schema::run(args, &root, stdout).map(|_| 0)
         }
         Command::Repair(args) => cmd::repair::run(args, stdin, stdout, stderr),
-        Command::Inspect(args) => cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::Inspect(args) => {
+            cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
         Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout).map(|_| 0),
         Command::VerifyMessage(args) => cmd::verify_message::run(args, stdin, stdout, stderr),
         Command::XpubSearch(args) => {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
-        Command::Restore(args) => cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair),
+        Command::Restore(args) => {
+            cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair)
+        }
         Command::BuildDescriptor(args) => cmd::build_descriptor::run(args, stdin, stdout, stderr),
     };
 

@@ -235,10 +235,7 @@ fn ms1_flag_carries_secret_true_in_repair_and_inspect() {
     for subname in &["repair", "inspect"] {
         let sub = find_sub(&v, subname);
         let ms1 = find_flag(sub, "--ms1");
-        assert_eq!(
-            ms1["secret"], true,
-            "{subname} --ms1 must be marked secret"
-        );
+        assert_eq!(ms1["secret"], true, "{subname} --ms1 must be marked secret");
     }
 }
 
@@ -294,11 +291,13 @@ fn secret_bit_plumbing_matches_predicate() {
     for sub in v["subcommands"].as_array().unwrap() {
         for flag in sub["flags"].as_array().unwrap() {
             let name = flag["name"].as_str().unwrap();
-            let emitted_secret = flag.get("secret").and_then(|v| v.as_bool()).unwrap_or(false);
+            let emitted_secret = flag
+                .get("secret")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let expected_secret = mnemonic_toolkit::secrets::flag_is_secret(name);
             assert_eq!(
-                emitted_secret,
-                expected_secret,
+                emitted_secret, expected_secret,
                 "subcommand `{}` flag `{}`: emitted secret={} but predicate says {}",
                 sub["name"], name, emitted_secret, expected_secret
             );
@@ -507,10 +506,8 @@ fn global_local_id_disjointness_invariant_holds_in_current_schema() {
     // `debug_assert!` panic path.
     let v = run_gui_schema();
     for sub in v["subcommands"].as_array().unwrap() {
-        let mut globals: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
-        let mut locals: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut globals: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut locals: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for flag in sub["flags"].as_array().unwrap() {
             let name = flag["name"].as_str().unwrap().to_string();
             let is_global = flag

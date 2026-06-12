@@ -76,8 +76,12 @@ mod tests {
         struct Plain {
             wif: Option<String>,
         }
-        let s = Secret { wif: Some(SecretString::new("Kx...wif".to_string())) };
-        let p = Plain { wif: Some("Kx...wif".to_string()) };
+        let s = Secret {
+            wif: Some(SecretString::new("Kx...wif".to_string())),
+        };
+        let p = Plain {
+            wif: Some("Kx...wif".to_string()),
+        };
         assert_eq!(
             serde_json::to_string(&s).unwrap(),
             serde_json::to_string(&p).unwrap(),
@@ -98,7 +102,13 @@ mod tests {
     fn debug_redacts_the_secret() {
         let s = SecretString::new("supersecretwif".to_string());
         let dbg = format!("{s:?}");
-        assert!(!dbg.contains("supersecretwif"), "Debug leaked the secret: {dbg}");
-        assert!(dbg.contains("redacted"), "Debug should mark redaction: {dbg}");
+        assert!(
+            !dbg.contains("supersecretwif"),
+            "Debug leaked the secret: {dbg}"
+        );
+        assert!(
+            dbg.contains("redacted"),
+            "Debug should mark redaction: {dbg}"
+        );
     }
 }

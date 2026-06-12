@@ -24,10 +24,7 @@ fn phrase_to_entropy_24word() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("entropy: {TREZOR_24_ZERO_ENTROPY_HEX}\n")
-    );
+    assert_eq!(stdout, format!("entropy: {TREZOR_24_ZERO_ENTROPY_HEX}\n"));
 }
 
 #[test]
@@ -299,7 +296,8 @@ fn entropy_to_wif_bip84_leaf_mainnet() {
 // 6 missing direct edges per the v0.6.0 post-release coverage audit.
 // ============================================================================
 
-const TREZOR_24_ZERO_ENTROPY_HEX_64: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const TREZOR_24_ZERO_ENTROPY_HEX_64: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
 const TREZOR_24_BIP84_MAINNET_XPRV: &str = "xprv9xoJSXoA4FrCpc2ufjps9Bwd7MHDCSLTbQxzdtDtxPv1Tx7KhF8riMNbQx1PqgUaTf2VjXLVBbw1WqZbeTRdmF4Di8o3Xz7t9LRizh5WxEP";
 const TREZOR_24_MASTER_FINGERPRINT: &str = "5436d724";
 const TREZOR_24_ZERO_MS1_24WORD: &str =
@@ -388,7 +386,10 @@ fn entropy_to_fingerprint_bip84_mainnet() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(stdout, format!("fingerprint: {TREZOR_24_MASTER_FINGERPRINT}\n"));
+    assert_eq!(
+        stdout,
+        format!("fingerprint: {TREZOR_24_MASTER_FINGERPRINT}\n")
+    );
 }
 
 #[test]
@@ -429,7 +430,10 @@ fn xprv_to_fingerprint_account_xpriv() {
         .trim()
         .trim_start_matches("fingerprint: ")
         .to_string();
-    assert_eq!(fp, xpub_fp, "xprv→fingerprint must equal xpub→fingerprint for the same account-level key");
+    assert_eq!(
+        fp, xpub_fp,
+        "xprv→fingerprint must equal xpub→fingerprint for the same account-level key"
+    );
 }
 
 #[test]
@@ -453,7 +457,10 @@ fn wif_to_fingerprint_co_tested_with_wif_to_xpub() {
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2);
     assert!(lines[0].starts_with("xpub: xpub661"));
-    assert_eq!(lines[1], format!("fingerprint: {SAMPLE_WIF_SENTINEL_FINGERPRINT}"));
+    assert_eq!(
+        lines[1],
+        format!("fingerprint: {SAMPLE_WIF_SENTINEL_FINGERPRINT}")
+    );
 }
 
 /// SPEC-A §8 invariant — `--passphrase` is meaningful for phrase/entropy → wif

@@ -1,9 +1,9 @@
 //! SPEC §6 + v0.8 §7 — BIP-388 `wallet_policy` JSON emitter.
 
-use super::pipeline::{descriptor_to_bip388_wallet_policy, key_origin_str, template_origin_path_no_m};
-use super::{
-    EmitInputs, MissingField, TaprootInternalKey, WalletFormatEmitter, NUMS_XONLY_HEX,
+use super::pipeline::{
+    descriptor_to_bip388_wallet_policy, key_origin_str, template_origin_path_no_m,
 };
+use super::{EmitInputs, MissingField, TaprootInternalKey, WalletFormatEmitter, NUMS_XONLY_HEX};
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::synthesize::ResolvedSlot;
@@ -124,9 +124,7 @@ pub(crate) fn format_bip388_wallet_policy(
                         .map(|s| s.as_str())
                         .collect::<Vec<_>>()
                         .join(",");
-                    format!(
-                        "tr(@{idx}/**,{leaf_op}({k},{leaf_str}))",
-                    )
+                    format!("tr(@{idx}/**,{leaf_op}({k},{leaf_str}))",)
                 }
             }
         }

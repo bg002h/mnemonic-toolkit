@@ -645,7 +645,14 @@ fn bitcoin_core_active_absent_defaults_false() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
         .write_stdin(blob)
         .assert()
         .success();
@@ -655,11 +662,13 @@ fn bitcoin_core_active_absent_defaults_false() {
     assert_eq!(arr.len(), 1, "expected one entry; got: {stdout}");
     let meta = &arr[0]["source_metadata"];
     assert_eq!(
-        meta["active"], serde_json::Value::Bool(false),
+        meta["active"],
+        serde_json::Value::Bool(false),
         "absent `active` must default to false; envelope: {stdout}"
     );
     assert_eq!(
-        meta["internal"], serde_json::Value::Bool(false),
+        meta["internal"],
+        serde_json::Value::Bool(false),
         "absent `internal` must default to false; envelope: {stdout}"
     );
 }
@@ -686,7 +695,9 @@ fn bitcoin_core_thresh_overflow_errors_clearly() {
     // accept either diagnostic as proof that the silent `threshold: null`
     // path is closed.
     assert!(
-        stderr.contains("exceeds u8 range") || stderr.contains("256") || stderr.to_lowercase().contains("threshold"),
+        stderr.contains("exceeds u8 range")
+            || stderr.contains("256")
+            || stderr.to_lowercase().contains("threshold"),
         "expected u8-overflow or 256-cosigner diagnostic; got: {stderr}"
     );
 }
@@ -830,7 +841,13 @@ fn core_fixture_file_wsh_sortedmulti_3of5_parses() {
     assert!(stdout.contains("threshold=3"), "stdout: {stdout}");
     assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
     // All 5 fingerprints surface in stdout.
-    for fp in [MAINNET_FP_A, MAINNET_FP_B, MAINNET_FP_C, "deadbeef", "cafebabe"] {
+    for fp in [
+        MAINNET_FP_A,
+        MAINNET_FP_B,
+        MAINNET_FP_C,
+        "deadbeef",
+        "cafebabe",
+    ] {
         assert!(stdout.contains(fp), "fp {fp} missing from stdout: {stdout}");
     }
 }

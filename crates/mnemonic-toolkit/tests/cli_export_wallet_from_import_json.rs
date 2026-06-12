@@ -49,7 +49,9 @@ fn export_wallet_from_import_json_to_bitcoin_core_emits_valid_listdescriptors() 
     let out = run_export_from_import_json(&p, "bitcoin-core");
     // Output is a JSON array with two entries (receive + change).
     let val: serde_json::Value = serde_json::from_str(&out).unwrap();
-    let arr = val.as_array().expect("bitcoin-core emit must be JSON array");
+    let arr = val
+        .as_array()
+        .expect("bitcoin-core emit must be JSON array");
     assert_eq!(arr.len(), 2, "expected receive + change entries");
     for entry in arr {
         assert!(
@@ -203,11 +205,16 @@ fn export_wallet_from_import_json_with_account_errors() {
 // ============================================================================
 
 fn multi_entry_envelope_json() -> String {
-    let one_entry: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap())
-            .unwrap();
+    let one_entry: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap(),
+    )
+    .unwrap();
     let entry = &one_entry.as_array().unwrap()[0];
-    serde_json::to_string(&serde_json::Value::Array(vec![entry.clone(), entry.clone()])).unwrap()
+    serde_json::to_string(&serde_json::Value::Array(vec![
+        entry.clone(),
+        entry.clone(),
+    ]))
+    .unwrap()
 }
 
 #[test]
@@ -548,8 +555,12 @@ fn run_export_from_import_envelope_named(
     let import = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "import-wallet", "--blob", source_fixture.to_str().unwrap(),
-            "--format", source_format, "--json",
+            "import-wallet",
+            "--blob",
+            source_fixture.to_str().unwrap(),
+            "--format",
+            source_format,
+            "--json",
         ])
         .output()
         .expect("import-wallet failed to spawn");
@@ -557,8 +568,13 @@ fn run_export_from_import_envelope_named(
     let export = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "export-wallet", "--from-import-json", "-",
-            "--format", dest_format, "--wallet-name", wallet_name,
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            dest_format,
+            "--wallet-name",
+            wallet_name,
         ])
         .write_stdin(envelope_json.clone())
         .output()
@@ -592,12 +608,21 @@ fn p11d_template_autoderive_success_cells() {
         let fixture = fixture_path(happy_path_fixture(src));
         let res = run_export_from_import_envelope_named(&fixture, src, dest, "roundtrip-test");
         if res.exit_code != 0 {
-            failures.push(format!("[{src} → {dest}] expected success, exit={}; stderr={}", res.exit_code, res.stderr));
+            failures.push(format!(
+                "[{src} → {dest}] expected success, exit={}; stderr={}",
+                res.exit_code, res.stderr
+            ));
         } else if !res.stdout.contains(needle) {
-            failures.push(format!("[{src} → {dest}] stdout missing expected `{needle}`; got: {}", res.stdout));
+            failures.push(format!(
+                "[{src} → {dest}] stdout missing expected `{needle}`; got: {}",
+                res.stdout
+            ));
         }
     }
-    assert!(failures.is_empty(), "P11D success-cell failures: {failures:#?}");
+    assert!(
+        failures.is_empty(),
+        "P11D success-cell failures: {failures:#?}"
+    );
 }
 
 /// v0.37.0 regression guard — the descriptor-passthrough/template-agnostic
@@ -610,8 +635,15 @@ fn p11e_passthrough_formats_unaffected_by_autoderive() {
     let fixture = fixture_path(happy_path_fixture("bitcoin-core"));
     for dest in ["bitcoin-core", "bip388", "bsms"] {
         let res = run_export_from_import_envelope(&fixture, "bitcoin-core", dest);
-        assert_eq!(res.exit_code, 0, "[bitcoin-core → {dest}] passthrough must still succeed; stderr={}", res.stderr);
-        assert!(!res.stdout.is_empty(), "[bitcoin-core → {dest}] non-empty output expected");
+        assert_eq!(
+            res.exit_code, 0,
+            "[bitcoin-core → {dest}] passthrough must still succeed; stderr={}",
+            res.stderr
+        );
+        assert!(
+            !res.stdout.is_empty(),
+            "[bitcoin-core → {dest}] non-empty output expected"
+        );
     }
 }
 
@@ -677,8 +709,13 @@ const DESCRIPTOR_CAPABLE_DESTS: &[&str] = &["bitcoin-core", "bip388", "bsms"];
 /// behavior is pinned by the dedicated `p11c_green_descriptor_passthrough_*`
 /// cells below; the gap is logged at
 /// `design/v0_28_0-cycle-followups.md#green-emitter-multisig-refusal-template-only`.
-const TEMPLATE_ONLY_DESTS: &[&str] =
-    &["coldcard", "coldcard-multisig", "electrum", "jade", "sparrow"];
+const TEMPLATE_ONLY_DESTS: &[&str] = &[
+    "coldcard",
+    "coldcard-multisig",
+    "electrum",
+    "jade",
+    "sparrow",
+];
 
 // ============================================================================
 // P11A — Helper structured-output cells. Verify the helper's
@@ -690,9 +727,19 @@ const TEMPLATE_ONLY_DESTS: &[&str] =
 fn p11a_helper_returns_zero_exit_on_happy_path_descriptor_capable_dest() {
     let p = fixture_path(happy_path_fixture("bsms"));
     let res = run_export_from_import_envelope(&p, "bsms", "bitcoin-core");
-    assert_eq!(res.exit_code, 0, "expected success exit; stderr={}", res.stderr);
-    assert!(!res.stdout.is_empty(), "stdout must carry the bitcoin-core wallet config");
-    assert!(!res.envelope_json.is_empty(), "envelope_json must be populated on success");
+    assert_eq!(
+        res.exit_code, 0,
+        "expected success exit; stderr={}",
+        res.stderr
+    );
+    assert!(
+        !res.stdout.is_empty(),
+        "stdout must carry the bitcoin-core wallet config"
+    );
+    assert!(
+        !res.envelope_json.is_empty(),
+        "envelope_json must be populated on success"
+    );
 }
 
 #[test]
@@ -702,9 +749,15 @@ fn p11a_helper_returns_nonzero_exit_on_template_only_dest_refusal() {
     // coldcard-multisig (multisig-only file-import surface).
     let p = fixture_path(happy_path_fixture("bitcoin-core"));
     let res = run_export_from_import_envelope(&p, "bitcoin-core", "coldcard-multisig");
-    assert_ne!(res.exit_code, 0, "expected refusal exit on template-only dest");
+    assert_ne!(
+        res.exit_code, 0,
+        "expected refusal exit on template-only dest"
+    );
     assert!(res.stdout.is_empty(), "no stdout on refusal");
-    assert!(!res.stderr.is_empty(), "refusal must surface a stderr message");
+    assert!(
+        !res.stderr.is_empty(),
+        "refusal must surface a stderr message"
+    );
     // Envelope JSON should still be populated — import-wallet succeeded.
     assert!(
         !res.envelope_json.is_empty(),
@@ -718,9 +771,16 @@ fn p11a_helper_envelope_json_parses_as_array() {
     let res = run_export_from_import_envelope(&p, "bsms", "bitcoin-core");
     let parsed: serde_json::Value =
         serde_json::from_str(&res.envelope_json).expect("envelope must be valid JSON");
-    assert!(parsed.is_array(), "envelope must be a JSON array per SPEC §3.2");
+    assert!(
+        parsed.is_array(),
+        "envelope must be a JSON array per SPEC §3.2"
+    );
     let arr = parsed.as_array().unwrap();
-    assert_eq!(arr.len(), 1, "single-entry envelope expected for one-fixture import");
+    assert_eq!(
+        arr.len(),
+        1,
+        "single-entry envelope expected for one-fixture import"
+    );
 }
 
 #[test]
@@ -762,9 +822,18 @@ fn p11a_helper_propagates_import_wallet_failure() {
     std::fs::write(&bogus, "this is not a BSMS Round-2 envelope\n").unwrap();
     let res = run_export_from_import_envelope(&bogus, "bsms", "bitcoin-core");
     assert_ne!(res.exit_code, 0);
-    assert!(res.envelope_json.is_empty(), "import-side failure ⇒ no envelope");
-    assert!(res.stdout.is_empty(), "import-side failure ⇒ no export stdout");
-    assert!(!res.stderr.is_empty(), "import-side failure must carry stderr");
+    assert!(
+        res.envelope_json.is_empty(),
+        "import-side failure ⇒ no envelope"
+    );
+    assert!(
+        res.stdout.is_empty(),
+        "import-side failure ⇒ no export stdout"
+    );
+    assert!(
+        !res.stderr.is_empty(),
+        "import-side failure must carry stderr"
+    );
 }
 
 // ============================================================================
@@ -794,10 +863,7 @@ fn extract_xpubs(s: &str) -> Vec<String> {
                 let candidate = &s[abs..abs + 111];
                 // Base58 alphabet — reject anything containing
                 // separators or other non-alphanum chars.
-                if candidate
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric())
-                {
+                if candidate.chars().all(|c| c.is_ascii_alphanumeric()) {
                     out.push(candidate.to_string());
                 }
             }
@@ -825,8 +891,7 @@ fn p11b_happy_path_matrix_all_sources_all_descriptor_capable_dests() {
             ));
             continue;
         }
-        let envelope: serde_json::Value =
-            serde_json::from_str(&probe.envelope_json).unwrap();
+        let envelope: serde_json::Value = serde_json::from_str(&probe.envelope_json).unwrap();
         let src_desc = envelope[0]["bundle"]["descriptor"]
             .as_str()
             .expect("bundle.descriptor must be present")
@@ -858,9 +923,7 @@ fn p11b_happy_path_matrix_all_sources_all_descriptor_capable_dests() {
             let dest_xpubs = extract_xpubs(&res.stdout);
             for x in &src_xpubs {
                 if !dest_xpubs.contains(x) {
-                    failures.push(format!(
-                        "[{src} → {dest}] missing xpub {x} in dest stdout"
-                    ));
+                    failures.push(format!("[{src} → {dest}] missing xpub {x} in dest stdout"));
                 }
             }
         }
@@ -955,8 +1018,7 @@ fn p11c_template_only_dest_matrix_post_autoderive() {
         for dest in TEMPLATE_ONLY_DESTS {
             cell_count += 1;
             // Singlesig → {coldcard-multisig, jade} refuses (multisig-only).
-            let expected_refuse =
-                is_singlesig && (*dest == "coldcard-multisig" || *dest == "jade");
+            let expected_refuse = is_singlesig && (*dest == "coldcard-multisig" || *dest == "jade");
             let res = run_export_from_import_envelope(&fixture, src, dest);
             if expected_refuse {
                 if res.exit_code == 0 {
@@ -964,7 +1026,10 @@ fn p11c_template_only_dest_matrix_post_autoderive() {
                         "[{src} → {dest}] expected refusal but exit=0; stdout={}",
                         res.stdout
                     ));
-                } else if !REFUSAL_STDERR_PATTERNS.iter().any(|p| res.stderr.contains(p)) {
+                } else if !REFUSAL_STDERR_PATTERNS
+                    .iter()
+                    .any(|p| res.stderr.contains(p))
+                {
                     failures.push(format!(
                         "[{src} → {dest}] refusal stderr unmatched; got: {}",
                         res.stderr
@@ -1006,9 +1071,7 @@ fn p11c_green_descriptor_passthrough_singlesig_passes_multisig_refused() {
     // Per `happy_path_fixture`: bitcoin-core / coldcard / electrum are
     // singlesig (bip84) — see module-level `SINGLESIG_SOURCES`; bsms /
     // coldcard-multisig / jade / sparrow / specter are multisig.
-    const MULTISIG_SOURCES: &[&str] = &[
-        "bsms", "coldcard-multisig", "jade", "sparrow", "specter",
-    ];
+    const MULTISIG_SOURCES: &[&str] = &["bsms", "coldcard-multisig", "jade", "sparrow", "specter"];
     let mut failures: Vec<String> = Vec::new();
     for src in SINGLESIG_SOURCES {
         let fixture = fixture_path(happy_path_fixture(src));
@@ -1097,7 +1160,10 @@ fn p11d_semantic_match_true_for_canonicalize_capable_sources() {
             ));
         }
     }
-    assert!(failures.is_empty(), "P11D semantic_match failures: {failures:#?}");
+    assert!(
+        failures.is_empty(),
+        "P11D semantic_match failures: {failures:#?}"
+    );
 }
 
 #[test]
@@ -1183,7 +1249,11 @@ fn f9_from_import_json_bsms_l2_carries_bip380_checksum() {
     let bsms_out = String::from_utf8(export_out.get_output().stdout.clone()).unwrap();
 
     let lines: Vec<&str> = bsms_out.lines().collect();
-    assert_eq!(lines.len(), 4, "4-line BSMS Round-2 default shape; got {bsms_out:?}");
+    assert_eq!(
+        lines.len(),
+        4,
+        "4-line BSMS Round-2 default shape; got {bsms_out:?}"
+    );
     assert_eq!(lines[0], "BSMS 1.0");
     assert_descriptor_has_checksum(lines[1], "BSMS L2 descriptor");
 }
@@ -1334,7 +1404,14 @@ fn import_envelope_from_descriptor(desc: &str) -> String {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "bitcoin-core", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
         .write_stdin(blob)
         .assert()
         .success();
@@ -1347,7 +1424,13 @@ const WPKH_DESC: &str = "wpkh([b8688df1/84h/0h/0h]xpub6BosfCnifzxcFwrSzQiqu2DBVT
 fn export_from_envelope(envelope: &str, format: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["export-wallet", "--from-import-json", "-", "--format", format])
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            format,
+        ])
         .write_stdin(envelope.to_string())
         .assert()
 }
@@ -1357,8 +1440,17 @@ fn export_from_envelope(envelope: &str, format: &str) -> assert_cmd::assert::Ass
 #[test]
 fn from_import_json_general_policy_refuses_template_formats() {
     let env = import_envelope_from_descriptor(GENERAL_POLICY_DESC);
-    for fmt in ["sparrow", "coldcard", "coldcard-multisig", "jade", "electrum"] {
-        let out = export_from_envelope(&env, fmt).failure().get_output().clone();
+    for fmt in [
+        "sparrow",
+        "coldcard",
+        "coldcard-multisig",
+        "jade",
+        "electrum",
+    ] {
+        let out = export_from_envelope(&env, fmt)
+            .failure()
+            .get_output()
+            .clone();
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             stderr.contains("cannot represent a general wallet policy"),
@@ -1378,7 +1470,10 @@ fn from_import_json_general_policy_refuses_template_formats() {
 fn from_import_json_general_policy_passthrough_is_faithful() {
     let env = import_envelope_from_descriptor(GENERAL_POLICY_DESC);
     for fmt in ["descriptor", "bitcoin-core", "bip388"] {
-        let out = export_from_envelope(&env, fmt).success().get_output().clone();
+        let out = export_from_envelope(&env, fmt)
+            .success()
+            .get_output()
+            .clone();
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(
             stdout.contains("older(1000)"),

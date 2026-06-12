@@ -17,9 +17,7 @@
 //!     (`phrase` default | `entropy` | `ms1`). For `mnem` payloads the phrase
 //!     is rendered in the card's wire language.
 
-use crate::cmd::convert::{
-    parse_from_input, read_stdin_to_string, FromInput, NodeType,
-};
+use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
 use crate::secret_advisory::{emit_output_class_advisory, secret_in_argv_warning, OutputClass};
@@ -262,9 +260,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     // secret (language survives the split); English / entropy-source produce a
     // plain `entr`. `entropy=` inputs ignore --language (the bytes carry no
     // wordlist), matching the toolkit's encode/convert path.
-    let payload = if args.from.node == NodeType::Phrase
-        && args.language != CliLanguage::English
-    {
+    let payload = if args.from.node == NodeType::Phrase && args.language != CliLanguage::English {
         ms_codec::Payload::Mnem {
             language: crate::language::cli_language_to_wire_code(args.language),
             entropy: (*entropy).clone(),
@@ -398,7 +394,10 @@ fn run_combine<R: Read, W: Write, E: Write>(
             let l: bip39::Language = args.language.into();
             (zeroize::Zeroizing::new(bytes.clone()), l, None)
         }
-        ms_codec::Payload::Mnem { entropy, language: wire_lang } => {
+        ms_codec::Payload::Mnem {
+            entropy,
+            language: wire_lang,
+        } => {
             let lang = crate::language::wire_code_to_bip39(*wire_lang)?;
             let cli = crate::language::wire_code_to_cli(*wire_lang);
             (zeroize::Zeroizing::new(entropy.clone()), lang, cli)
@@ -419,9 +418,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // neither loses the language — no advisory on those arms.
     if matches!(args.to, MsSharesToShape::Entropy) {
         if let Some(cli_lang) = recovered_lang {
-            if let Some(msg) =
-                crate::language::non_english_seed_advisory(cli_lang, "raw entropy")
-            {
+            if let Some(msg) = crate::language::non_english_seed_advisory(cli_lang, "raw entropy") {
                 let _ = writeln!(stderr, "{msg}");
             }
         }
@@ -440,9 +437,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
             // Re-encode the recovered secret as a v0.1 single-string ms1
             // (threshold 0). The payload kind (entr/mnem) + wire language are
             // preserved through `encode`.
-            zeroize::Zeroizing::new(
-                ms_codec::encode(tag, &payload).map_err(ToolkitError::from)?,
-            )
+            zeroize::Zeroizing::new(ms_codec::encode(tag, &payload).map_err(ToolkitError::from)?)
         }
     };
     let _pin_out = mnemonic_toolkit::mlock::pin_pages_for(output.as_bytes());

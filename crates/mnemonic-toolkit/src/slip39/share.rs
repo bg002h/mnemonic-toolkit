@@ -238,8 +238,7 @@ pub fn parse_slip39_share(s: &str) -> Result<Share, Slip39Error> {
     }
 
     // Decode share_params (2 words).
-    let share_params_int =
-        (u32::from(indices[2]) << 10) | u32::from(indices[3]);
+    let share_params_int = (u32::from(indices[2]) << 10) | u32::from(indices[3]);
     let member_threshold = ((share_params_int & 0xF) as u8) + 1;
     let member_index = ((share_params_int >> 4) & 0xF) as u8;
     let group_count = (((share_params_int >> 8) & 0xF) as u8) + 1;
@@ -311,8 +310,7 @@ pub fn render_slip39_share(s: &Share) -> String {
     let value_words = encode_value(&s.value, padding_bits, value_word_count);
 
     // Concatenate id_exp || share_params || value.
-    let mut data: Vec<u16> =
-        Vec::with_capacity(PREFIX_WORDS + value_word_count + CHECKSUM_WORDS);
+    let mut data: Vec<u16> = Vec::with_capacity(PREFIX_WORDS + value_word_count + CHECKSUM_WORDS);
     data.extend_from_slice(&id_exp_words);
     data.extend_from_slice(&share_params_words);
     data.extend_from_slice(&value_words);
@@ -342,10 +340,7 @@ fn decode_value(
     padding_bits: usize,
     value_byte_count: usize,
 ) -> Option<Vec<u8>> {
-    debug_assert_eq!(
-        value_words.len() * 10,
-        padding_bits + value_byte_count * 8
-    );
+    debug_assert_eq!(value_words.len() * 10, padding_bits + value_byte_count * 8);
 
     let get_bit = |i: usize| -> u8 {
         let word = value_words[i / 10] & 0x3FF;

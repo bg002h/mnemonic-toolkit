@@ -393,8 +393,9 @@ fn compare_cost_conditional_rules() -> Vec<ConditionalRule> {
             },
         },
         ConditionalRule {
-            rationale: "--miniscript and --descriptor are mutually exclusive (symmetric direction)."
-                .to_string(),
+            rationale:
+                "--miniscript and --descriptor are mutually exclusive (symmetric direction)."
+                    .to_string(),
             spec_ref: "SPEC §6 compare-cost; cmd/compare_cost.rs clap-derive conflicts_with"
                 .to_string(),
             when: Predicate::FlagPresent {
@@ -440,8 +441,7 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
         // --descriptor ↔ --descriptor-file mutex (existing GUI encoding;
         // cmd/bundle.rs::mode_text::DESCRIPTOR_AND_DESCRIPTOR_FILE).
         ConditionalRule {
-            rationale: "--descriptor and --descriptor-file are mutually exclusive."
-                .to_string(),
+            rationale: "--descriptor and --descriptor-file are mutually exclusive.".to_string(),
             spec_ref: "SPEC §6.6 row 2 sibling; bundle.rs::mode_text::\
                        DESCRIPTOR_AND_DESCRIPTOR_FILE"
                 .to_string(),
@@ -502,8 +502,7 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
             rationale: "--template is incompatible with --descriptor; descriptor \
                         passthrough mode supplies its own wallet structure."
                 .to_string(),
-            spec_ref: "SPEC §6.6 row 2; bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE"
-                .to_string(),
+            spec_ref: "SPEC §6.6 row 2; bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE".to_string(),
             when: Predicate::FlagPresent {
                 flag: "--descriptor".to_string(),
             },
@@ -655,8 +654,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --descriptor ↔ --descriptor-file mutex (existing).
         ConditionalRule {
-            rationale: "--descriptor and --descriptor-file are mutually exclusive."
-                .to_string(),
+            rationale: "--descriptor and --descriptor-file are mutually exclusive.".to_string(),
             spec_ref: "cmd/verify_bundle.rs clap-derive conflicts_with".to_string(),
             when: Predicate::FlagPresent {
                 flag: "--descriptor".to_string(),
@@ -697,8 +695,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
             },
         },
         ConditionalRule {
-            rationale: "--bundle-json is mutually exclusive with --mk1."
-                .to_string(),
+            rationale: "--bundle-json is mutually exclusive with --mk1.".to_string(),
             spec_ref: "SPEC §6.7 v0.4.3 amendment; cmd/verify_bundle.rs:67 \
                        conflicts_with_all"
                 .to_string(),
@@ -711,8 +708,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
             },
         },
         ConditionalRule {
-            rationale: "--bundle-json is mutually exclusive with --md1."
-                .to_string(),
+            rationale: "--bundle-json is mutually exclusive with --md1.".to_string(),
             spec_ref: "SPEC §6.7 v0.4.3 amendment; cmd/verify_bundle.rs:67 \
                        conflicts_with_all"
                 .to_string(),
@@ -726,8 +722,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --passphrase ↔ --passphrase-stdin mutex (existing).
         ConditionalRule {
-            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
-                .to_string(),
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive.".to_string(),
             spec_ref: "cmd/verify_bundle.rs:51 clap-derive conflicts_with".to_string(),
             when: Predicate::FlagPresent {
                 flag: "--passphrase".to_string(),
@@ -752,8 +747,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --threshold disabled when template is single-sig (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--threshold is meaningful only with a multisig --template."
-                .to_string(),
+            rationale: "--threshold is meaningful only with a multisig --template.".to_string(),
             spec_ref: "SPEC §6.6 row T1 (mirror for verify-bundle)".to_string(),
             when: Predicate::DropdownValueIn {
                 flag: "--template".to_string(),
@@ -766,8 +760,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --template disabled when --descriptor present (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--template is incompatible with --descriptor."
-                .to_string(),
+            rationale: "--template is incompatible with --descriptor.".to_string(),
             spec_ref: "SPEC §6.6 row 2 (mirror); cmd/verify_bundle.rs \
                        conflicts_with"
                 .to_string(),
@@ -849,8 +842,7 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --threshold disabled when template is single-sig (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--threshold is meaningful only with a multisig --template."
-                .to_string(),
+            rationale: "--threshold is meaningful only with a multisig --template.".to_string(),
             spec_ref: "SPEC §6.6 row T1 (mirror for export-wallet)".to_string(),
             when: Predicate::DropdownValueIn {
                 flag: "--template".to_string(),
@@ -883,8 +875,7 @@ fn convert_conditional_rules() -> Vec<ConditionalRule> {
     vec![
         // --passphrase ↔ --passphrase-stdin mutex (existing).
         ConditionalRule {
-            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
-                .to_string(),
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive.".to_string(),
             spec_ref: "cmd/convert.rs clap-derive conflicts_with".to_string(),
             when: Predicate::FlagPresent {
                 flag: "--passphrase".to_string(),
@@ -941,8 +932,7 @@ fn derive_child_conditional_rules() -> Vec<ConditionalRule> {
     vec![
         // --passphrase ↔ --passphrase-stdin mutex (existing).
         ConditionalRule {
-            rationale: "--passphrase and --passphrase-stdin are mutually exclusive."
-                .to_string(),
+            rationale: "--passphrase and --passphrase-stdin are mutually exclusive.".to_string(),
             spec_ref: "cmd/derive_child.rs clap-derive conflicts_with".to_string(),
             when: Predicate::FlagPresent {
                 flag: "--passphrase".to_string(),
@@ -967,8 +957,7 @@ fn derive_child_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --dice-sides required when --application == "dice" (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--dice-sides is required when --application is set to dice."
-                .to_string(),
+            rationale: "--dice-sides is required when --application is set to dice.".to_string(),
             spec_ref: "cmd/derive_child.rs clap-derive required_if_eq".to_string(),
             when: Predicate::DropdownValueIn {
                 flag: "--application".to_string(),
@@ -1379,11 +1368,9 @@ mod tests {
         // would require leaking emitter internals; calling the `pub(crate)`
         // helper directly is the cleaner pattern (architect-review-approved
         // alternative path per the Phase 3 kickoff).
-        let mut global_ids: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut global_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         global_ids.insert("my_test_flag".to_string());
-        let mut local_ids: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut local_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         local_ids.insert("my_test_flag".to_string());
         assert_global_local_id_disjointness(&global_ids, &local_ids, "synthetic-subcmd");
     }

@@ -212,9 +212,9 @@ where
             let inner: Vec<String> = arr
                 .iter()
                 .map(|v| {
-                    v.as_str().map(String::from).ok_or_else(|| {
-                        D::Error::custom("mk1 flat-form must contain only strings")
-                    })
+                    v.as_str()
+                        .map(String::from)
+                        .ok_or_else(|| D::Error::custom("mk1 flat-form must contain only strings"))
                 })
                 .collect::<Result<_, _>>()?;
             Ok(vec![inner])
@@ -258,9 +258,8 @@ pub(crate) fn parse_import_json_envelopes(
     index: Option<usize>,
     flag_label: &str,
 ) -> Result<ImportJsonEnvelope, ToolkitError> {
-    let envelopes: Vec<ImportJsonEnvelope> = serde_json::from_str(raw).map_err(|e| {
-        ToolkitError::BadInput(format!("{flag_label}: envelope JSON parse: {e}"))
-    })?;
+    let envelopes: Vec<ImportJsonEnvelope> = serde_json::from_str(raw)
+        .map_err(|e| ToolkitError::BadInput(format!("{flag_label}: envelope JSON parse: {e}")))?;
     if envelopes.is_empty() {
         return Err(ToolkitError::BadInput(format!(
             "{flag_label}: envelope array is empty"
@@ -461,14 +460,11 @@ pub(crate) fn read_import_json_arg<R: std::io::Read + ?Sized>(
 ) -> Result<String, ToolkitError> {
     if value == "-" {
         let mut buf = String::new();
-        stdin
-            .read_to_string(&mut buf)
-            .map_err(ToolkitError::Io)?;
+        stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
         return Ok(buf);
     }
-    std::fs::read_to_string(value).map_err(|e| {
-        ToolkitError::BadInput(format!("{flag_label}: read {value}: {e}"))
-    })
+    std::fs::read_to_string(value)
+        .map_err(|e| ToolkitError::BadInput(format!("{flag_label}: read {value}: {e}")))
 }
 
 /// Parse the envelope's `descriptor` field, stripping the BIP-380
@@ -503,9 +499,8 @@ pub(crate) fn derivation_path_from_envelope(
     s: &str,
     flag_label: &str,
 ) -> Result<DerivationPath, ToolkitError> {
-    DerivationPath::from_str(s).map_err(|e| {
-        ToolkitError::BadInput(format!("{flag_label}: origin_path parse {s:?}: {e}"))
-    })
+    DerivationPath::from_str(s)
+        .map_err(|e| ToolkitError::BadInput(format!("{flag_label}: origin_path parse {s:?}: {e}")))
 }
 
 #[cfg(test)]
@@ -566,10 +561,19 @@ mod tests {
     /// `cli_network_from_str` covers all 4 variants + rejects unknowns.
     #[test]
     fn cli_network_from_str_covers_all_four_and_rejects_unknown() {
-        assert_eq!(cli_network_from_str("mainnet").unwrap(), CliNetwork::Mainnet);
-        assert_eq!(cli_network_from_str("testnet").unwrap(), CliNetwork::Testnet);
+        assert_eq!(
+            cli_network_from_str("mainnet").unwrap(),
+            CliNetwork::Mainnet
+        );
+        assert_eq!(
+            cli_network_from_str("testnet").unwrap(),
+            CliNetwork::Testnet
+        );
         assert_eq!(cli_network_from_str("signet").unwrap(), CliNetwork::Signet);
-        assert_eq!(cli_network_from_str("regtest").unwrap(), CliNetwork::Regtest);
+        assert_eq!(
+            cli_network_from_str("regtest").unwrap(),
+            CliNetwork::Regtest
+        );
         assert!(cli_network_from_str("bogus").is_err());
         assert!(cli_network_from_str("unknown").is_err());
     }
@@ -653,7 +657,8 @@ mod tests {
         let err = parse_import_json_envelopes(raw, None, "--import-json").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("unsupported import-json envelope schema_version") && msg.contains("\"2\""),
+            msg.contains("unsupported import-json envelope schema_version")
+                && msg.contains("\"2\""),
             "expected an envelope-version rejection naming \"2\"; got {msg}"
         );
     }
@@ -696,7 +701,10 @@ mod tests {
             descriptor: Some("wsh(sortedmulti(2,@0,@1))#csum".to_string()),
             account: 7,
             origin_path: Some("m/48'/0'/7'/2'".to_string()),
-            origin_paths: Some(vec!["m/48'/0'/0'/2'".to_string(), "m/48'/0'/1'/2'".to_string()]),
+            origin_paths: Some(vec![
+                "m/48'/0'/0'/2'".to_string(),
+                "m/48'/0'/1'/2'".to_string(),
+            ]),
             master_fingerprint: Some("deadbeef".to_string()),
             ms1: vec!["ms1abc".to_string(), "".to_string()],
             mk1: MkField::Multi(vec![
@@ -757,7 +765,10 @@ mod tests {
         assert_eq!(m.path_family, "bip48");
         assert_eq!(m.cosigners.len(), 2);
         assert_eq!(m.cosigners[0].index, 0);
-        assert_eq!(m.cosigners[0].master_fingerprint.as_deref(), Some("11111111"));
+        assert_eq!(
+            m.cosigners[0].master_fingerprint.as_deref(),
+            Some("11111111")
+        );
         assert_eq!(m.cosigners[0].origin_path, "m/48'/0'/0'/2'");
         assert_eq!(m.cosigners[0].xpub, "xpub6A");
         assert_eq!(m.cosigners[1].index, 1);
@@ -937,10 +948,7 @@ mod tests {
             },
             "jade_specific_fields": []
         }));
-        assert_eq!(
-            env.resolved_wallet_name(),
-            Some("TestMs2of3".to_string())
-        );
+        assert_eq!(env.resolved_wallet_name(), Some("TestMs2of3".to_string()));
     }
 
     /// Unit cell 5/7 — electrum projection lifts the top-level
@@ -990,10 +998,7 @@ mod tests {
             "xfp_header_disagreed": false,
             "dropped_fields": []
         }));
-        assert_eq!(
-            env.resolved_wallet_name(),
-            Some("TestMs2of3".to_string())
-        );
+        assert_eq!(env.resolved_wallet_name(), Some("TestMs2of3".to_string()));
     }
 
     /// Sub-cell — `walk_str` returns None when an intermediate key is

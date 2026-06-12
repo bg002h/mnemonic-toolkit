@@ -7,14 +7,14 @@
 use std::io::{Read, Write};
 use std::str::FromStr;
 
+use bip39::Mnemonic;
 use bitcoin::bip32::{ChildNumber, DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
-use bip39::Mnemonic;
 use clap::Args;
 use serde_json::json;
 
 use crate::address_render::{network_from_xpub, render_address_from_xpub};
-use crate::cmd::convert::{NodeType, ScriptType, parse_from_input, parse_script_type_arg};
+use crate::cmd::convert::{parse_from_input, parse_script_type_arg, NodeType, ScriptType};
 use crate::cmd::convert::{read_stdin_passphrase, read_stdin_to_string};
 use crate::derive_slot::derive_bip32_from_entropy;
 use crate::error::{BitcoinErrorKind, ToolkitError};
@@ -261,8 +261,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             let node = match version {
                 crate::electrum::SeedVersion::Segwit => {
                     let path: DerivationPath =
-                        vec![ChildNumber::from_hardened_idx(0).expect("0' is a valid hardened index")]
-                            .into();
+                        vec![ChildNumber::from_hardened_idx(0)
+                            .expect("0' is a valid hardened index")]
+                        .into();
                     master
                         .derive_priv(&secp_sign, &path)
                         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
@@ -286,9 +287,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     for &chain in args.chain.chains() {
         for &index in &indices {
             let leaf = ChildNumber::from_normal_idx(index).map_err(|_| {
-                bad(format!("index {index} out of BIP-32 normal range (0..2147483647)"))
+                bad(format!(
+                    "index {index} out of BIP-32 normal range (0..2147483647)"
+                ))
             })?;
-            let dp: DerivationPath = vec![ChildNumber::from_normal_idx(chain).unwrap(), leaf].into();
+            let dp: DerivationPath =
+                vec![ChildNumber::from_normal_idx(chain).unwrap(), leaf].into();
             let child = account_xpub
                 .derive_pub(&secp, &dp)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
@@ -301,7 +305,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     if args.json {
-        emit_json(stdout, from.node, args.address_type, network, account_field, &rows)?;
+        emit_json(
+            stdout,
+            from.node,
+            args.address_type,
+            network,
+            account_field,
+            &rows,
+        )?;
     } else {
         emit_text(stdout, args.chain, &rows)?;
     }
@@ -405,8 +416,8 @@ fn emit_json<W: Write>(
     if let Some(acct) = account {
         envelope["account"] = json!(acct);
     }
-    let s = serde_json::to_string(&envelope)
-        .map_err(|e| bad(format!("json serialization: {e}")))?;
+    let s =
+        serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?;
     writeln!(stdout, "{s}").map_err(ToolkitError::Io)?;
     Ok(())
 }

@@ -129,9 +129,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 }
 
-fn resolve_split_env_sentinels(
-    args: &SeedXorSplitArgs,
-) -> Result<SeedXorSplitArgs, ToolkitError> {
+fn resolve_split_env_sentinels(args: &SeedXorSplitArgs) -> Result<SeedXorSplitArgs, ToolkitError> {
     use crate::env_sentinel::resolve_env_var_sentinel;
     let mut owned = args.clone();
     // `--from phrase=` is the only accepted shape (refusal below at row 8);
@@ -178,8 +176,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     let _pin_master = mnemonic_toolkit::mlock::pin_pages_for(master_phrase.as_bytes());
 
     let lang: bip39::Language = args.language.into();
-    let mnemonic = Mnemonic::parse_in(lang, master_phrase.as_str())
-        .map_err(ToolkitError::Bip39)?;
+    let mnemonic = Mnemonic::parse_in(lang, master_phrase.as_str()).map_err(ToolkitError::Bip39)?;
 
     let word_count = mnemonic.word_count();
     if !matches!(word_count, 12 | 15 | 18 | 21 | 24) {
@@ -188,17 +185,14 @@ fn run_split<R: Read, W: Write, E: Write>(
         )));
     }
 
-    let entropy: zeroize::Zeroizing<Vec<u8>> =
-        zeroize::Zeroizing::new(mnemonic.to_entropy());
+    let entropy: zeroize::Zeroizing<Vec<u8>> = zeroize::Zeroizing::new(mnemonic.to_entropy());
     let _pin_entropy = mnemonic_toolkit::mlock::pin_pages_for(entropy.as_slice());
 
     let shares_bytes = if args.deterministic_from_master {
-        seed_xor_split_deterministic(entropy.as_slice(), args.shares)
-            .map_err(map_seed_xor_error)?
+        seed_xor_split_deterministic(entropy.as_slice(), args.shares).map_err(map_seed_xor_error)?
     } else {
         let mut rng = rand_core::OsRng;
-        seed_xor_split(entropy.as_slice(), args.shares, &mut rng)
-            .map_err(map_seed_xor_error)?
+        seed_xor_split(entropy.as_slice(), args.shares, &mut rng).map_err(map_seed_xor_error)?
     };
 
     // Per-share BIP-39 checksum recompute via Mnemonic::from_entropy_in.
@@ -335,7 +329,10 @@ fn run_combine<R: Read, W: Write, E: Write>(
     let lengths: Vec<usize> = share_entropies.iter().map(|e| e.len()).collect();
     let first_len = lengths[0];
     if lengths.iter().any(|&l| l != first_len) {
-        let word_counts: Vec<usize> = lengths.iter().map(|&l| entropy_bytes_to_word_count(l)).collect();
+        let word_counts: Vec<usize> = lengths
+            .iter()
+            .map(|&l| entropy_bytes_to_word_count(l))
+            .collect();
         return Err(ToolkitError::BadInput(format!(
             "seed-xor combine: all shares must be the same word count; got mix of {word_counts:?}",
         )));
@@ -393,7 +390,10 @@ fn entropy_bytes_to_word_count(len: usize) -> usize {
 
 fn map_seed_xor_error(e: SeedXorError) -> ToolkitError {
     match e {
-        SeedXorError::BadEntropyLength { got, expected_one_of } => ToolkitError::BadInput(format!(
+        SeedXorError::BadEntropyLength {
+            got,
+            expected_one_of,
+        } => ToolkitError::BadInput(format!(
             "seed-xor: entropy length {got} bytes invalid; expected one of {expected_one_of:?}",
         )),
         SeedXorError::TooFewShares { got, min } => ToolkitError::BadInput(format!(
@@ -477,4 +477,3 @@ fn write_combine_json<E: Write>(
     warn_if_world_readable(path, stderr);
     Ok(())
 }
-

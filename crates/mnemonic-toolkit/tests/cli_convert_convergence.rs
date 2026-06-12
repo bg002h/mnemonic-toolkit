@@ -42,7 +42,9 @@ fn convert_value(args: &[&str]) -> String {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     line[colon + 2..].to_string()
 }
 
@@ -56,7 +58,10 @@ fn convert_lines(args: &[&str]) -> std::collections::BTreeMap<String, String> {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     stdout
         .lines()
-        .filter_map(|l| l.find(": ").map(|c| (l[..c].to_string(), l[c + 2..].to_string())))
+        .filter_map(|l| {
+            l.find(": ")
+                .map(|c| (l[..c].to_string(), l[c + 2..].to_string()))
+        })
         .collect()
 }
 
@@ -66,12 +71,41 @@ fn convert_lines(args: &[&str]) -> std::collections::BTreeMap<String, String> {
 // ===========================================================================
 #[test]
 fn c1a_master_fp_template_account_invariant() {
-    let r1 = convert_value(&["convert", "--from", &format!("phrase={TREZOR_24}"), "--to", "fingerprint", "--template", "bip84"]);
-    let r2 = convert_value(&["convert", "--from", &format!("phrase={TREZOR_24}"), "--to", "fingerprint", "--template", "bip44", "--account", "5"]);
-    let r3 = convert_value(&["convert", "--from", &format!("entropy={ENT64}"), "--to", "fingerprint", "--template", "bip86"]);
+    let r1 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_24}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ]);
+    let r2 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_24}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip44",
+        "--account",
+        "5",
+    ]);
+    let r3 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("entropy={ENT64}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip86",
+    ]);
     assert_eq!(r1, MASTER_FP, "C1a: master fp");
     assert_eq!(r1, r2, "C1a: master fp invariant across template/account");
-    assert_eq!(r1, r3, "C1a: master fp invariant across source representation");
+    assert_eq!(
+        r1, r3,
+        "C1a: master fp invariant across source representation"
+    );
 }
 
 // ===========================================================================
@@ -80,13 +114,48 @@ fn c1a_master_fp_template_account_invariant() {
 // ===========================================================================
 #[test]
 fn c2_phrase_xpub_vs_phrase_xprv_xpub() {
-    let x1 = convert_value(&["convert", "--from", &format!("phrase={TREZOR_24}"), "--to", "xpub", "--template", "bip84", "--network", "mainnet"]);
-    let xprv = convert_value(&["convert", "--from", &format!("phrase={TREZOR_24}"), "--to", "xprv", "--template", "bip84", "--network", "mainnet"]);
+    let x1 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_24}"),
+        "--to",
+        "xpub",
+        "--template",
+        "bip84",
+        "--network",
+        "mainnet",
+    ]);
+    let xprv = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_24}"),
+        "--to",
+        "xprv",
+        "--template",
+        "bip84",
+        "--network",
+        "mainnet",
+    ]);
     // Compound: xprv→xpub AND xprv→fingerprint (account-node fp) in one call.
-    let m = convert_lines(&["convert", "--from", &format!("xprv={xprv}"), "--to", "xpub,fingerprint"]);
-    assert_eq!(x1, BIP84_MAINNET_XPUB, "C2: phrase→xpub == pinned bip84 acct xpub");
-    assert_eq!(m["xpub"], x1, "C2: phrase→xprv→xpub == phrase→xpub (account key preserved through neuter)");
-    assert_eq!(m["fingerprint"], ACCT_NODE_FP, "C2: account-node fp via xprv→fingerprint");
+    let m = convert_lines(&[
+        "convert",
+        "--from",
+        &format!("xprv={xprv}"),
+        "--to",
+        "xpub,fingerprint",
+    ]);
+    assert_eq!(
+        x1, BIP84_MAINNET_XPUB,
+        "C2: phrase→xpub == pinned bip84 acct xpub"
+    );
+    assert_eq!(
+        m["xpub"], x1,
+        "C2: phrase→xprv→xpub == phrase→xpub (account key preserved through neuter)"
+    );
+    assert_eq!(
+        m["fingerprint"], ACCT_NODE_FP,
+        "C2: account-node fp via xprv→fingerprint"
+    );
 }
 
 // ===========================================================================
@@ -95,11 +164,49 @@ fn c2_phrase_xpub_vs_phrase_xprv_xpub() {
 // ===========================================================================
 #[test]
 fn c3_four_encodings_same_master_fp() {
-    let fp = convert_value(&["convert", "--from", &format!("phrase={TREZOR_24}"), "--to", "fingerprint", "--template", "bip84"]);
-    let fe = convert_value(&["convert", "--from", &format!("entropy={ENT64}"), "--to", "fingerprint", "--template", "bip84"]);
-    let fs = convert_value(&["convert", "--from", &format!("seedqr={DIGITS_24}"), "--to", "fingerprint", "--template", "bip84"]);
-    let e = convert_value(&["convert", "--from", &format!("ms1={MS1_24}"), "--to", "entropy"]);
-    let fm = convert_value(&["convert", "--from", &format!("entropy={e}"), "--to", "fingerprint", "--template", "bip84"]);
+    let fp = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_24}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ]);
+    let fe = convert_value(&[
+        "convert",
+        "--from",
+        &format!("entropy={ENT64}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ]);
+    let fs = convert_value(&[
+        "convert",
+        "--from",
+        &format!("seedqr={DIGITS_24}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ]);
+    let e = convert_value(&[
+        "convert",
+        "--from",
+        &format!("ms1={MS1_24}"),
+        "--to",
+        "entropy",
+    ]);
+    let fm = convert_value(&[
+        "convert",
+        "--from",
+        &format!("entropy={e}"),
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ]);
     assert_eq!(e, ENT64, "C3: ms1→entropy == ENT64");
     assert_eq!(fp, MASTER_FP, "C3: phrase→fp");
     assert_eq!(fp, fe, "C3: entropy encoding converges");
@@ -116,24 +223,79 @@ fn c3_four_encodings_same_master_fp() {
 fn c4_slip0132_variant_octet_round_trip() {
     // (seed, --xpub-prefix value, --network, emitted-prefix, round-trip neutral)
     let cells: &[(&str, &str, &str, &str, &str)] = &[
-        (BIP84_MAINNET_XPUB, "ypub", "mainnet", "ypub", BIP84_MAINNET_XPUB),
-        (BIP84_MAINNET_XPUB, "Ypub", "mainnet", "Ypub", BIP84_MAINNET_XPUB),
-        (BIP84_MAINNET_XPUB, "Zpub", "mainnet", "Zpub", BIP84_MAINNET_XPUB),
-        (BIP84_TESTNET_TPUB, "ypub", "testnet", "upub", BIP84_TESTNET_TPUB),
-        (BIP84_TESTNET_TPUB, "Ypub", "testnet", "Upub", BIP84_TESTNET_TPUB),
-        (BIP84_TESTNET_TPUB, "zpub", "testnet", "vpub", BIP84_TESTNET_TPUB),
-        (BIP84_TESTNET_TPUB, "Zpub", "testnet", "Vpub", BIP84_TESTNET_TPUB),
+        (
+            BIP84_MAINNET_XPUB,
+            "ypub",
+            "mainnet",
+            "ypub",
+            BIP84_MAINNET_XPUB,
+        ),
+        (
+            BIP84_MAINNET_XPUB,
+            "Ypub",
+            "mainnet",
+            "Ypub",
+            BIP84_MAINNET_XPUB,
+        ),
+        (
+            BIP84_MAINNET_XPUB,
+            "Zpub",
+            "mainnet",
+            "Zpub",
+            BIP84_MAINNET_XPUB,
+        ),
+        (
+            BIP84_TESTNET_TPUB,
+            "ypub",
+            "testnet",
+            "upub",
+            BIP84_TESTNET_TPUB,
+        ),
+        (
+            BIP84_TESTNET_TPUB,
+            "Ypub",
+            "testnet",
+            "Upub",
+            BIP84_TESTNET_TPUB,
+        ),
+        (
+            BIP84_TESTNET_TPUB,
+            "zpub",
+            "testnet",
+            "vpub",
+            BIP84_TESTNET_TPUB,
+        ),
+        (
+            BIP84_TESTNET_TPUB,
+            "Zpub",
+            "testnet",
+            "Vpub",
+            BIP84_TESTNET_TPUB,
+        ),
     ];
     for (seed, prefix, network, want_prefix, want_neutral) in cells {
         let variant = convert_value(&[
-            "convert", "--from", &format!("xpub={seed}"), "--to", "xpub",
-            "--xpub-prefix", prefix, "--network", network,
+            "convert",
+            "--from",
+            &format!("xpub={seed}"),
+            "--to",
+            "xpub",
+            "--xpub-prefix",
+            prefix,
+            "--network",
+            network,
         ]);
         assert!(
             variant.starts_with(want_prefix),
             "C4 ({prefix},{network}): emitted {variant} should start with {want_prefix}"
         );
-        let back = convert_value(&["convert", "--from", &format!("xpub={variant}"), "--to", "xpub"]);
+        let back = convert_value(&[
+            "convert",
+            "--from",
+            &format!("xpub={variant}"),
+            "--to",
+            "xpub",
+        ]);
         assert_eq!(
             &back, want_neutral,
             "C4 ({prefix},{network}): variant must normalize back to the network-neutral key"
@@ -149,19 +311,43 @@ fn c4_slip0132_variant_octet_round_trip() {
 fn c6_phrase_bip38_composite_eq_explicit_wif() {
     let path = "m/84'/0'/0'/0/0";
     let b1 = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "bip38",
-        "--network", "mainnet", "--path", path, "--bip38-passphrase", "correct horse",
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "bip38",
+        "--network",
+        "mainnet",
+        "--path",
+        path,
+        "--bip38-passphrase",
+        "correct horse",
     ]);
     let w = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "wif",
-        "--network", "mainnet", "--path", path,
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "wif",
+        "--network",
+        "mainnet",
+        "--path",
+        path,
     ]);
     let b2 = convert_value(&[
-        "convert", "--from", &format!("wif={w}"), "--to", "bip38",
-        "--bip38-passphrase", "correct horse",
+        "convert",
+        "--from",
+        &format!("wif={w}"),
+        "--to",
+        "bip38",
+        "--bip38-passphrase",
+        "correct horse",
     ]);
     assert!(b1.starts_with("6P"), "C6: bip38 ciphertext is 6P…");
-    assert_eq!(b1, b2, "C6: phrase→bip38 == phrase→wif→bip38 (byte-identical ciphertext)");
+    assert_eq!(
+        b1, b2,
+        "C6: phrase→bip38 == phrase→wif→bip38 (byte-identical ciphertext)"
+    );
 }
 
 // ===========================================================================
@@ -173,16 +359,39 @@ fn c6_phrase_bip38_composite_eq_explicit_wif() {
 #[test]
 fn c7_phrase_address_eq_phrase_xpub_address_p2wpkh() {
     let a1 = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "address",
-        "--network", "mainnet", "--path", "m/84'/0'/0'/0/0", "--script-type", "p2wpkh",
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "address",
+        "--network",
+        "mainnet",
+        "--path",
+        "m/84'/0'/0'/0/0",
+        "--script-type",
+        "p2wpkh",
     ]);
     let xa = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "xpub",
-        "--template", "bip84", "--network", "mainnet",
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "xpub",
+        "--template",
+        "bip84",
+        "--network",
+        "mainnet",
     ]);
     let a2 = convert_value(&[
-        "convert", "--from", &format!("xpub={xa}"), "--to", "address",
-        "--path", "m/0/0", "--script-type", "p2wpkh",
+        "convert",
+        "--from",
+        &format!("xpub={xa}"),
+        "--to",
+        "address",
+        "--path",
+        "m/0/0",
+        "--script-type",
+        "p2wpkh",
     ]);
     assert_eq!(a1, BIP84_RECEIVE_0, "C7 p2wpkh: phrase→address");
     assert_eq!(a1, a2, "C7 p2wpkh: phrase→address == phrase→xpub→address");
@@ -191,16 +400,39 @@ fn c7_phrase_address_eq_phrase_xpub_address_p2wpkh() {
 #[test]
 fn c7_phrase_address_eq_phrase_xpub_address_p2tr() {
     let a1 = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "address",
-        "--network", "mainnet", "--path", "m/86'/0'/0'/0/0", "--script-type", "p2tr",
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "address",
+        "--network",
+        "mainnet",
+        "--path",
+        "m/86'/0'/0'/0/0",
+        "--script-type",
+        "p2tr",
     ]);
     let xa = convert_value(&[
-        "convert", "--from", &format!("phrase={TREZOR_12}"), "--to", "xpub",
-        "--template", "bip86", "--network", "mainnet",
+        "convert",
+        "--from",
+        &format!("phrase={TREZOR_12}"),
+        "--to",
+        "xpub",
+        "--template",
+        "bip86",
+        "--network",
+        "mainnet",
     ]);
     let a2 = convert_value(&[
-        "convert", "--from", &format!("xpub={xa}"), "--to", "address",
-        "--path", "m/0/0", "--script-type", "p2tr",
+        "convert",
+        "--from",
+        &format!("xpub={xa}"),
+        "--to",
+        "address",
+        "--path",
+        "m/0/0",
+        "--script-type",
+        "p2tr",
     ]);
     assert_eq!(a1, BIP86_RECEIVE_0, "C7 p2tr: phrase→address");
     assert_eq!(a1, a2, "C7 p2tr: phrase→address == phrase→xpub→address");

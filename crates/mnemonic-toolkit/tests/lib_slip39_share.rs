@@ -71,9 +71,7 @@
 //!   - `tests/fixtures/slip39_vectors.json` vectors #1, #2, #3, #42.
 
 use mnemonic_toolkit::slip39::wordlist;
-use mnemonic_toolkit::slip39::{
-    parse_slip39_share, render_slip39_share, Slip39Error,
-};
+use mnemonic_toolkit::slip39::{parse_slip39_share, render_slip39_share, Slip39Error};
 
 // ============================================================================
 // Spec-anchor mnemonics — copied byte-for-byte from
@@ -95,7 +93,10 @@ const VECTOR_42_EXTENDABLE: &str = "testify swimming academic academic column lo
 #[test]
 fn parse_vector_1_decodes_one_of_one_metadata() {
     let s = parse_slip39_share(VECTOR_1).expect("vector #1 must parse");
-    assert!(!s.extendable, "vector #1 is non-extendable (cs=b\"shamir\")");
+    assert!(
+        !s.extendable,
+        "vector #1 is non-extendable (cs=b\"shamir\")"
+    );
     assert_eq!(s.iteration_exponent, 0);
     assert_eq!(s.group_threshold, 1);
     assert_eq!(s.group_count, 1);
@@ -142,7 +143,10 @@ fn parse_vector_42_decodes_extendable_bit() {
     let expected_iter_exp = (id_exp_int & 0xF) as u8;
     let expected_identifier = (id_exp_int >> 5) as u16;
     let s = parse_slip39_share(VECTOR_42_EXTENDABLE).expect("vector #42 must parse");
-    assert!(s.extendable, "vector #42 is extendable (cs=b\"shamir_extendable\")");
+    assert!(
+        s.extendable,
+        "vector #42 is extendable (cs=b\"shamir_extendable\")"
+    );
     assert_eq!(s.iteration_exponent, expected_iter_exp);
     assert_eq!(s.identifier, expected_identifier);
     assert_eq!(s.group_threshold, 1);
@@ -222,9 +226,15 @@ fn parse_unknown_word_reports_position() {
     let mut words: Vec<&str> = VECTOR_1.split_whitespace().collect();
     words[5] = "notawordatall";
     let tampered = words.join(" ");
-    let err = parse_slip39_share(&tampered)
-        .expect_err("tampered share with unknown word must refuse");
-    assert_eq!(err, Slip39Error::UnknownWord { share_idx: 0, word_idx: 5 });
+    let err =
+        parse_slip39_share(&tampered).expect_err("tampered share with unknown word must refuse");
+    assert_eq!(
+        err,
+        Slip39Error::UnknownWord {
+            share_idx: 0,
+            word_idx: 5
+        }
+    );
 }
 
 // ============================================================================

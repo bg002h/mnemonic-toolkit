@@ -200,13 +200,7 @@ fn refusal_entropy_to_wif_missing_path() {
 fn refusal_fingerprint_as_source() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args([
-            "convert",
-            "--from",
-            "fingerprint=5436d724",
-            "--to",
-            "xpub",
-        ])
+        .args(["convert", "--from", "fingerprint=5436d724", "--to", "xpub"])
         .assert()
         .failure();
     // fingerprint is side-input-only; pre-empted before edge-classification by

@@ -22,7 +22,8 @@ use predicates::prelude::*;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const MK1_C0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const MK1_C1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const MK1_C1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 
 /// Remove the data-part char at data-index `i` (full-string index `3 + i`,
 /// after the 3-char `xx1` prefix), simulating a dropped (too-short) char.
@@ -48,7 +49,10 @@ fn flip_data(s: &str, i: usize) -> String {
     let mut out: Vec<u8> = s.bytes().collect();
     let full_idx = 3 + i;
     let c = out[full_idx];
-    let pos = BECH32_CHARSET.iter().position(|&b| b == c).expect("char in bech32 alphabet");
+    let pos = BECH32_CHARSET
+        .iter()
+        .position(|&b| b == c)
+        .expect("char in bech32 alphabet");
     out[full_idx] = BECH32_CHARSET[(pos + 1) % BECH32_CHARSET.len()];
     String::from_utf8(out).unwrap()
 }
@@ -91,7 +95,7 @@ fn ms1_too_short_recovers_exit_5() {
 /// `ms_codec::encode`. Companion to `cli_repair.rs::cell_12b` (substitution path).
 #[test]
 fn ms1_max_indel_recovers_all_entropy_lengths() {
-    use ms_codec::{Payload, Tag, encode};
+    use ms_codec::{encode, Payload, Tag};
     for len in [20usize, 24, 28, 32] {
         let entropy: Vec<u8> = (0..len as u8).collect();
         let valid = encode(Tag::ENTR, &Payload::Entr(entropy)).expect("encode ms1");
@@ -122,7 +126,15 @@ fn ms1_prefix_dropped_m_recovers_exit_5() {
 fn mk1_multichunk_one_corrupted_recovers_exit_5() {
     let bad_c1 = ins_data(MK1_C1, 12, 'q');
     cmd()
-        .args(["repair", "--mk1", MK1_C0, "--mk1", &bad_c1, "--max-indel", "1"])
+        .args([
+            "repair",
+            "--mk1",
+            MK1_C0,
+            "--mk1",
+            &bad_c1,
+            "--max-indel",
+            "1",
+        ])
         .assert()
         .code(5)
         .stdout(predicate::str::contains(MK1_C1));
@@ -190,7 +202,17 @@ fn md1_multichunk_one_corrupted_recovers_exit_5() {
     const MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
     let bad_c1 = ins_data(MD1_C1, 12, 'q'); // one inserted data char
     cmd()
-        .args(["repair", "--md1", MD1_C0, "--md1", &bad_c1, "--md1", MD1_C2, "--max-indel", "1"])
+        .args([
+            "repair",
+            "--md1",
+            MD1_C0,
+            "--md1",
+            &bad_c1,
+            "--md1",
+            MD1_C2,
+            "--max-indel",
+            "1",
+        ])
         .assert()
         .code(5)
         .stdout(predicate::str::contains(MD1_C1));
@@ -221,8 +243,7 @@ fn json_unique_envelope_shape() {
 /// advisory emission (mirrors cli_bundle_slip0132_info.rs convention).
 #[test]
 fn ms1_indel_recovery_fires_secret_advisory() {
-    const ADVISORY: &str =
-        "warning: stdout carries private key material (can spend)";
+    const ADVISORY: &str = "warning: stdout carries private key material (can spend)";
     let bad = ins_data(VALID_MS1, 10, 'q');
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"])
@@ -276,7 +297,15 @@ fn ms1_indel_plus_subst_exit_4_with_verify_warning() {
     // Step 2: flip data index 5 in the already-dropped string → substitution
     let bad = flip_data(&dropped, 5);
     cmd()
-        .args(["repair", "--ms1", &bad, "--max-indel", "1", "--max-subst", "1"])
+        .args([
+            "repair",
+            "--ms1",
+            &bad,
+            "--max-indel",
+            "1",
+            "--max-subst",
+            "1",
+        ])
         .assert()
         .code(4)
         .stderr(predicate::str::contains("verify it controls your funds"));
@@ -308,7 +337,15 @@ fn ms1_max_subst_0_regression_pure_indel_exit_5() {
 #[test]
 fn max_subst_5_rejected_by_clap() {
     cmd()
-        .args(["repair", "--ms1", VALID_MS1, "--max-indel", "1", "--max-subst", "5"])
+        .args([
+            "repair",
+            "--ms1",
+            VALID_MS1,
+            "--max-indel",
+            "1",
+            "--max-subst",
+            "5",
+        ])
         .assert()
         .failure();
 }
@@ -320,7 +357,16 @@ fn ms1_indel_plus_subst_json_confident_false() {
     let dropped = drop_data(VALID_MS1, 1);
     let bad = flip_data(&dropped, 5);
     let out = cmd()
-        .args(["repair", "--ms1", &bad, "--max-indel", "1", "--max-subst", "1", "--json"])
+        .args([
+            "repair",
+            "--ms1",
+            &bad,
+            "--max-indel",
+            "1",
+            "--max-subst",
+            "1",
+            "--json",
+        ])
         .assert()
         .code(4)
         .get_output()
@@ -328,8 +374,14 @@ fn ms1_indel_plus_subst_json_confident_false() {
         .clone();
     let s = String::from_utf8(out).unwrap();
     let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
-    assert_eq!(v["confident"], false, "confident should be false for subst-bearing recovery");
-    assert_eq!(v["candidates"][0]["subst_count"], 1, "subst_count should be 1");
+    assert_eq!(
+        v["confident"], false,
+        "confident should be false for subst-bearing recovery"
+    );
+    assert_eq!(
+        v["candidates"][0]["subst_count"], 1,
+        "subst_count should be 1"
+    );
 }
 
 // ============================================================================
@@ -399,13 +451,21 @@ fn ms1_all_three_cross_region_plus_substitution_exit_4() {
     // Step 1: substitute data[4]='r' → 'p'.
     let mut chars: Vec<char> = VALID_MS1.chars().collect();
     chars[3 + 4] = 'p'; // 'r' → 'p'
-    // Step 2: drop data[1]='e'.
+                        // Step 2: drop data[1]='e'.
     let mut s: String = chars.into_iter().collect();
     s.remove(3 + 1);
     // Step 3: strip leading 'm'.
     let bad = s.strip_prefix('m').unwrap().to_string();
     cmd()
-        .args(["repair", "--ms1", &bad, "--max-indel", "2", "--max-subst", "1"])
+        .args([
+            "repair",
+            "--ms1",
+            &bad,
+            "--max-indel",
+            "2",
+            "--max-subst",
+            "1",
+        ])
         .assert()
         .code(4)
         .stdout(predicate::str::contains(VALID_MS1))

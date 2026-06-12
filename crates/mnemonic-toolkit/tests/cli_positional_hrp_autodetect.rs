@@ -20,10 +20,14 @@ use predicates::prelude::*;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_CHUNK0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_CHUNK1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
-const VALID_MD1_CHUNK0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
-const VALID_MD1_CHUNK1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
-const VALID_MD1_CHUNK2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+const VALID_MK1_CHUNK1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MD1_CHUNK0: &str =
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const VALID_MD1_CHUNK1: &str =
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const VALID_MD1_CHUNK2: &str =
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
 
 /// Helper: deterministically flip the bech32 character at `pos` (within
 /// the data-part) to the next char in the bech32 alphabet (cyclic).
@@ -196,12 +200,7 @@ fn inspect_positional_single_mk1_routes_correctly() {
 fn inspect_positional_mixed_hrp_d35_allows() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args([
-            "inspect",
-            VALID_MS1,
-            VALID_MK1_CHUNK0,
-            VALID_MK1_CHUNK1,
-        ])
+        .args(["inspect", VALID_MS1, VALID_MK1_CHUNK0, VALID_MK1_CHUNK1])
         .assert()
         .code(0)
         .stdout(predicate::str::contains("kind: ms1"))
@@ -213,7 +212,13 @@ fn inspect_positional_mixed_hrp_d35_allows() {
 fn inspect_mixed_positional_and_flag_combined_routing() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["inspect", "--ms1", VALID_MS1, VALID_MK1_CHUNK0, VALID_MK1_CHUNK1])
+        .args([
+            "inspect",
+            "--ms1",
+            VALID_MS1,
+            VALID_MK1_CHUNK0,
+            VALID_MK1_CHUNK1,
+        ])
         .assert()
         .code(0)
         .stdout(predicate::str::contains("kind: ms1"))
@@ -299,7 +304,10 @@ fn verify_bundle_positional_watch_only_round_trip() {
         .filter(|l| l.starts_with("md1") && !l.contains(' ') && !l.contains('-'))
         .map(String::from)
         .collect();
-    assert!(!mk1.is_empty() && !md1.is_empty(), "fixture must yield mk1+md1");
+    assert!(
+        !mk1.is_empty() && !md1.is_empty(),
+        "fixture must yield mk1+md1"
+    );
 
     // Derive the watch-only @0.xpub + @0.fingerprint slots from mk1.
     let mk_refs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
@@ -362,7 +370,10 @@ fn verify_bundle_flag_value_mismatched_hrp_rejects_d34() {
         .filter(|l| l.starts_with("md1") && !l.contains(' ') && !l.contains('-'))
         .map(String::from)
         .collect();
-    assert!(!mk1.is_empty() && !md1.is_empty(), "fixture must yield mk1+md1");
+    assert!(
+        !mk1.is_empty() && !md1.is_empty(),
+        "fixture must yield mk1+md1"
+    );
 
     let mut argv: Vec<String> = vec![
         "verify-bundle".into(),

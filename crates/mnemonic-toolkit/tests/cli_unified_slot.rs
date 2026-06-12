@@ -66,7 +66,8 @@ fn unified_slot_missing_template_or_descriptor_rejected() {
 
 // ---- v0.4.2 Phase K — additional slot subkey shapes ----
 
-const TREZOR_24_ENTROPY_HEX: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const TREZOR_24_ENTROPY_HEX: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
 // well-known compressed-pubkey WIF (Bitcoin Core test vector).
 const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
 
@@ -394,8 +395,7 @@ fn unified_slot_descriptor_phrase_fingerprint_mismatch_rejected() {
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("derives master fingerprint")
-            && stderr.contains("annotation specifies"),
+        stderr.contains("derives master fingerprint") && stderr.contains("annotation specifies"),
         "fingerprint mismatch must be reported; got: {stderr}"
     );
 }

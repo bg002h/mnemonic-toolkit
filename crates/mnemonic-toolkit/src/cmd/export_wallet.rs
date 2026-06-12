@@ -12,8 +12,7 @@ use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
     validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
     BsmsEmitter, BsmsForm, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter, EmitInputs,
-    GreenEmitter,
-    JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
+    GreenEmitter, JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
     WalletFormatEmitter, WalletScriptType,
 };
 use clap::{Args, ValueEnum};
@@ -81,17 +80,24 @@ pub(crate) fn emit_payload(
     // (which routes through `build_missing_fields_refusal`).
     let (missing, format_name): (Vec<crate::wallet_export::MissingField>, &'static str) =
         match format {
-            CliExportFormat::BitcoinCore => (BitcoinCoreEmitter::collect_missing(inputs), "bitcoin-core"),
+            CliExportFormat::BitcoinCore => {
+                (BitcoinCoreEmitter::collect_missing(inputs), "bitcoin-core")
+            }
             CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(inputs), "bip388"),
             CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(inputs), "coldcard"),
-            CliExportFormat::ColdcardMultisig => (ColdcardEmitter::collect_missing(inputs), "coldcard-multisig"),
+            CliExportFormat::ColdcardMultisig => (
+                ColdcardEmitter::collect_missing(inputs),
+                "coldcard-multisig",
+            ),
             CliExportFormat::Jade => (JadeEmitter::collect_missing(inputs), "jade"),
             CliExportFormat::Sparrow => (SparrowEmitter::collect_missing(inputs), "sparrow"),
             CliExportFormat::Specter => (SpecterEmitter::collect_missing(inputs), "specter"),
             CliExportFormat::Electrum => (ElectrumEmitter::collect_missing(inputs), "electrum"),
             CliExportFormat::Green => (GreenEmitter::collect_missing(inputs), "green"),
             CliExportFormat::Bsms => (BsmsEmitter::collect_missing(inputs), "bsms"),
-            CliExportFormat::Descriptor => (DescriptorEmitter::collect_missing(inputs), "descriptor"),
+            CliExportFormat::Descriptor => {
+                (DescriptorEmitter::collect_missing(inputs), "descriptor")
+            }
         };
     if !missing.is_empty() {
         return Err(ToolkitError::ExportWalletMissingFields {
@@ -275,7 +281,7 @@ pub struct ExportWalletArgs {
     #[arg(
         long = "from-import-json-index",
         value_name = "N",
-        requires = "from_import_json",
+        requires = "from_import_json"
     )]
     pub from_import_json_index: Option<usize>,
 }
@@ -286,9 +292,9 @@ fn parse_taproot_internal_key_arg(s: &str) -> Result<TaprootInternalKey, String>
         return Ok(TaprootInternalKey::Nums);
     }
     if let Some(n) = s.strip_prefix('@') {
-        let idx: u8 = n.parse().map_err(|e| {
-            format!("--taproot-internal-key {s:?}: cosigner index must be u8: {e}")
-        })?;
+        let idx: u8 = n
+            .parse()
+            .map_err(|e| format!("--taproot-internal-key {s:?}: cosigner index must be u8: {e}"))?;
         return Ok(TaprootInternalKey::Cosigner(idx));
     }
     Err(format!(
@@ -365,8 +371,10 @@ pub fn run<W: Write, E: Write>(
     // construction. v0.7 refused these templates outright; v0.8 supports them
     // with the internal-key designation.
     if let Some(template) = args.template {
-        if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA)
-            && args.taproot_internal_key.is_none()
+        if matches!(
+            template,
+            CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
+        ) && args.taproot_internal_key.is_none()
         {
             return Err(ToolkitError::BadInput(format!(
                 "--template {} requires --taproot-internal-key (use 'nums' for an unspendable BIP-341 NUMS point, or '@N' to designate cosigner N as the key-path internal key)",
@@ -386,7 +394,8 @@ pub fn run<W: Write, E: Write>(
         )
     {
         return Err(ToolkitError::BadInput(
-            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a".into(),
+            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"
+                .into(),
         ));
     }
 
@@ -440,8 +449,9 @@ pub fn run<W: Write, E: Write>(
         // Descriptor passthrough: parse + canonicalize via miniscript.
         use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
         use std::str::FromStr;
-        let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc)
-            .map_err(|e| ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}")))?;
+        let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
+        })?;
         d.to_string()
     } else {
         let template = args.template.expect("checked above");
@@ -503,12 +513,13 @@ pub fn run<W: Write, E: Write>(
             };
             return Err(ToolkitError::BadInput(msg));
         }
-        if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA)
-            && matches!(
-                args.taproot_internal_key,
-                Some(TaprootInternalKey::Cosigner(_))
-            )
-        {
+        if matches!(
+            template,
+            CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
+        ) && matches!(
+            args.taproot_internal_key,
+            Some(TaprootInternalKey::Cosigner(_))
+        ) {
             // Validate cosigner index range.
             if let Some(TaprootInternalKey::Cosigner(idx)) = args.taproot_internal_key {
                 if idx >= n {
@@ -666,27 +677,19 @@ fn run_from_import_json<W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
         buf
     } else {
-        std::fs::read_to_string(value).map_err(|e| {
-            ToolkitError::BadInput(format!("--from-import-json: read {value}: {e}"))
-        })?
+        std::fs::read_to_string(value)
+            .map_err(|e| ToolkitError::BadInput(format!("--from-import-json: read {value}: {e}")))?
     };
-    let envelope = parse_import_json_envelopes(
-        &raw,
-        args.from_import_json_index,
-        "--from-import-json",
-    )?;
+    let envelope =
+        parse_import_json_envelopes(&raw, args.from_import_json_index, "--from-import-json")?;
 
-    let descriptor_with_csum = envelope
-        .bundle
-        .descriptor
-        .as_deref()
-        .ok_or_else(|| {
-            ToolkitError::BadInput(
-                "--from-import-json: envelope.bundle.descriptor is null; v0.27.0 \
+    let descriptor_with_csum = envelope.bundle.descriptor.as_deref().ok_or_else(|| {
+        ToolkitError::BadInput(
+            "--from-import-json: envelope.bundle.descriptor is null; v0.27.0 \
                  wallet-import path always emits the descriptor string verbatim"
-                    .to_string(),
-            )
-        })?;
+                .to_string(),
+        )
+    })?;
     // Validate the user-supplied BIP-380 checksum up-front; failure is
     // `BadInput` (Phase 5 R0 I1 fold) rather than silently passing through
     // to a downstream miniscript parse error. The body-only string drives
@@ -725,7 +728,10 @@ fn run_from_import_json<W: Write, E: Write>(
     // script_type (not string-sniff). Fix-β (envelope-field addition for
     // v0.29+) tracked at FOLLOWUP `wallet-import-taproot-internal-key`
     // (resolved v0.28.7 via Fix-α).
-    if matches!(script_type, WalletScriptType::P2tr | WalletScriptType::P2trMulti) {
+    if matches!(
+        script_type,
+        WalletScriptType::P2tr | WalletScriptType::P2trMulti
+    ) {
         return Err(ToolkitError::BadInput(
             "--from-import-json: taproot descriptors are not yet supported on \
              the export-from-envelope path. The wallet_import path doesn't \
@@ -862,7 +868,10 @@ mod format_requires_template_tests {
             assert!(format_requires_template(f), "{f:?} must require a template");
         }
         for f in [BitcoinCore, Bip388, Bsms, Green, Specter, Descriptor] {
-            assert!(!format_requires_template(f), "{f:?} must be passthrough (template stays None)");
+            assert!(
+                !format_requires_template(f),
+                "{f:?} must be passthrough (template stays None)"
+            );
         }
     }
 }

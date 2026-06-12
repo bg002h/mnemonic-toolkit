@@ -56,8 +56,7 @@ pub(crate) fn derive_entropy(
 }
 
 fn hardened(n: u32) -> Result<ChildNumber, ToolkitError> {
-    ChildNumber::from_hardened_idx(n)
-        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))
+    ChildNumber::from_hardened_idx(n).map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))
 }
 
 // ============================================================================
@@ -284,8 +283,7 @@ pub(crate) fn format_dice_rolls(
 /// `length ≤ 86` range when input is 64 bytes (output is 88 chars including
 /// 2 trailing `=`; `length` cap of 86 excludes both pads).
 fn base64_standard(input: &[u8]) -> String {
-    const ALPHA: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
     let mut i = 0;
     while i + 3 <= input.len() {
@@ -325,15 +323,18 @@ fn base64_standard(input: &[u8]) -> String {
 /// the output. For BIP-85 PWD BASE85 the input is always 64 bytes (a clean
 /// multiple of 4) so no trailing-padding logic is needed.
 fn base85_btc(input: &[u8]) -> String {
-    const ALPHA: &[u8; 85] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+    const ALPHA: &[u8; 85] =
+        b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
     debug_assert!(
         input.len() % 4 == 0,
         "base85_btc: caller must pass 4-byte-aligned input (BIP-85 always 64 bytes)",
     );
     let mut out = String::with_capacity(input.len() / 4 * 5);
     for chunk in input.chunks_exact(4) {
-        let mut n: u32 =
-            ((chunk[0] as u32) << 24) | ((chunk[1] as u32) << 16) | ((chunk[2] as u32) << 8) | (chunk[3] as u32);
+        let mut n: u32 = ((chunk[0] as u32) << 24)
+            | ((chunk[1] as u32) << 16)
+            | ((chunk[2] as u32) << 8)
+            | (chunk[3] as u32);
         let mut group = [0u8; 5];
         for slot in group.iter_mut().rev() {
             *slot = ALPHA[(n % 85) as usize];
@@ -449,7 +450,9 @@ mod tests {
     #[test]
     fn dice_sides_too_small_refused() {
         let r = format_dice_rolls(&master(), 1, 5, 0);
-        assert!(matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2")));
+        assert!(
+            matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2"))
+        );
     }
 
     /// Cycle B Phase 1 lock — `derive_entropy` returns

@@ -56,16 +56,30 @@ mod tests {
         let secp = Secp256k1::verification_only();
         let xpub = Xpub::from_str(ACCT_84).unwrap();
         let child = xpub
-            .derive_pub(&secp, &bitcoin::bip32::DerivationPath::from_str("m/0/0").unwrap())
+            .derive_pub(
+                &secp,
+                &bitcoin::bip32::DerivationPath::from_str("m/0/0").unwrap(),
+            )
             .unwrap();
-        assert!(render_address_from_xpub(&secp, &child, ScriptType::P2wpkh, CliNetwork::Mainnet)
-            .starts_with("bc1q"));
-        assert!(render_address_from_xpub(&secp, &child, ScriptType::P2tr, CliNetwork::Mainnet)
-            .starts_with("bc1p"));
-        assert!(render_address_from_xpub(&secp, &child, ScriptType::P2pkh, CliNetwork::Mainnet)
-            .starts_with('1'));
-        assert!(render_address_from_xpub(&secp, &child, ScriptType::P2shP2wpkh, CliNetwork::Mainnet)
-            .starts_with('3'));
+        assert!(
+            render_address_from_xpub(&secp, &child, ScriptType::P2wpkh, CliNetwork::Mainnet)
+                .starts_with("bc1q")
+        );
+        assert!(
+            render_address_from_xpub(&secp, &child, ScriptType::P2tr, CliNetwork::Mainnet)
+                .starts_with("bc1p")
+        );
+        assert!(
+            render_address_from_xpub(&secp, &child, ScriptType::P2pkh, CliNetwork::Mainnet)
+                .starts_with('1')
+        );
+        assert!(render_address_from_xpub(
+            &secp,
+            &child,
+            ScriptType::P2shP2wpkh,
+            CliNetwork::Mainnet
+        )
+        .starts_with('3'));
         assert_eq!(network_from_xpub(&xpub), CliNetwork::Mainnet);
     }
 }

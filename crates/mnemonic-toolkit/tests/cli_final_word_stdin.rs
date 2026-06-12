@@ -10,8 +10,7 @@ use assert_cmd::Command;
 const ABANDON_11_PARTIAL: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
 
-const BEEF_11_PARTIAL: &str =
-    "beef beef beef beef beef beef beef beef beef beef beef";
+const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef beef";
 
 #[test]
 fn stdin_route_abandon_11_emits_128_sorted_lines() {
@@ -28,7 +27,11 @@ fn stdin_route_abandon_11_emits_128_sorted_lines() {
     assert!(out.status.success(), "stdin route should succeed");
     let stdout = String::from_utf8(out.stdout).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 128, "abandon×11 via stdin must emit 128 candidates");
+    assert_eq!(
+        lines.len(),
+        128,
+        "abandon×11 via stdin must emit 128 candidates"
+    );
     let mut sorted = lines.clone();
     sorted.sort();
     assert_eq!(lines, sorted, "stdout must be lexicographically sorted");
@@ -53,7 +56,11 @@ fn stdin_route_beef_11_emits_128_sorted_lines() {
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 128, "beef×11 via stdin must emit 128 candidates");
+    assert_eq!(
+        lines.len(),
+        128,
+        "beef×11 via stdin must emit 128 candidates"
+    );
 }
 
 #[test]
@@ -103,7 +110,10 @@ fn stdin_route_with_trailing_newline_in_input() {
         .write_stdin(with_nl)
         .output()
         .unwrap();
-    assert!(out.status.success(), "trailing newline in stdin must not break parse");
+    assert!(
+        out.status.success(),
+        "trailing newline in stdin must not break parse"
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stdout.lines().count(), 128);
 }
@@ -122,7 +132,10 @@ fn stdin_route_with_extra_whitespace() {
         .write_stdin(messy)
         .output()
         .unwrap();
-    assert!(out.status.success(), "messy whitespace must not break parse");
+    assert!(
+        out.status.success(),
+        "messy whitespace must not break parse"
+    );
     assert_eq!(String::from_utf8(out.stdout).unwrap().lines().count(), 128);
 }
 

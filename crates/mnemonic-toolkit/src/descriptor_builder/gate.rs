@@ -182,7 +182,12 @@ pub fn validate_with_allow(
         Ok(ms) => ms,
         // Step 2 passed ⇒ inner is a type-correct B-typed miniscript, so the
         // insane parse must succeed. Defensive: never panic in a funds tool.
-        Err(e) => return Err(vec![root_diag(DiagnosticKind::TypeError, format!("inner parse: {e}"))]),
+        Err(e) => {
+            return Err(vec![root_diag(
+                DiagnosticKind::TypeError,
+                format!("inner parse: {e}"),
+            )])
+        }
     };
     if let Err(rule) = inner_ms.ext_check(&allow.to_ext_params()) {
         return Err(vec![localize_sanity(doc, rule)]);
@@ -214,7 +219,10 @@ pub fn validate_with_allow(
         return Err(vec![diag]);
     }
 
-    Ok(ValidatedPolicy { descriptor, allowed_fired })
+    Ok(ValidatedPolicy {
+        descriptor,
+        allowed_fired,
+    })
 }
 
 // ======================================================================
@@ -229,7 +237,12 @@ fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
         PolicyNode::Multi(m) | PolicyNode::Sortedmulti(m) => {
             check_threshold(m.k, m.keys.len(), path, node.kind(), out);
             for (i, key) in m.keys.iter().enumerate() {
-                check_secret_key(key, &format!("{path}.{}.keys[{i}]", node.kind()), node.kind(), out);
+                check_secret_key(
+                    key,
+                    &format!("{path}.{}.keys[{i}]", node.kind()),
+                    node.kind(),
+                    out,
+                );
             }
         }
         PolicyNode::Thresh(t) => {
@@ -284,7 +297,10 @@ fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
         }
         PolicyNode::After(n) => {
             if *n == 0 {
-                out.push(field_diag(path, "after(N) requires N ≥ 1; got 0".to_string()));
+                out.push(field_diag(
+                    path,
+                    "after(N) requires N ≥ 1; got 0".to_string(),
+                ));
             } else if *n > 0x7FFF_FFFF {
                 // BIP-65 absolute locktimes are bounded [1, 0x7fffffff]. Step-2
                 // from_str already rejects this; surfacing it here gives a
@@ -352,7 +368,11 @@ fn check_hashlock(hex: &str, want_len: usize, path: &str, kind: &str, out: &mut 
     if !ok_len || !ok_hex {
         out.push(field_diag(
             path,
-            format!("{kind} expects a {want_len}-char hex digest; got {:?} (len {})", hex, hex.len()),
+            format!(
+                "{kind} expects a {want_len}-char hex digest; got {:?} (len {})",
+                hex,
+                hex.len()
+            ),
         ));
     }
 }
@@ -367,34 +387,32 @@ type SanityPredicate = fn(&Miniscript<DescriptorPublicKey, Segwitv0>) -> bool;
 
 fn localize_sanity(doc: &SpecDoc, rule: AnalysisError) -> Diagnostic {
     // Map the first-failing sanity rule to its localizing predicate + kind.
-    let (kind, predicate): (DiagnosticKind, SanityPredicate) =
-        match rule {
-            AnalysisError::SiglessBranch => {
-                (DiagnosticKind::SiglessBranch, |ms| !ms.requires_sig())
-            }
-            AnalysisError::Malleable => (DiagnosticKind::Malleable, |ms| !ms.is_non_malleable()),
-            AnalysisError::BranchExceedResouceLimits => {
-                (DiagnosticKind::ResourceLimit, |ms| !ms.within_resource_limits())
-            }
-            AnalysisError::RepeatedPubkeys => {
-                (DiagnosticKind::RepeatedKeys, |ms| ms.has_repeated_keys())
-            }
-            AnalysisError::HeightTimelockCombination => {
-                (DiagnosticKind::MixedTimelock, |ms| ms.has_mixed_timelocks())
-            }
-            // The IR has no raw-pkh-without-key node, so ContainsRawPkh is
-            // unreachable for builder-emitted trees. We still handle it (fail
-            // closed) rather than panic. NB: this match is exhaustive over
-            // miniscript's AnalysisError — a future variant breaks compilation
-            // here, which is the intended forcing function.
-            AnalysisError::ContainsRawPkh => {
-                return root_diag(
-                    DiagnosticKind::TypeError,
-                    "unexpected raw-pkh fragment (unreachable for the builder IR)".to_string(),
-                )
-            }
-        };
-    let path = localize(&doc.root, "root", &|ms| predicate(ms)).unwrap_or_else(|| "root".to_string());
+    let (kind, predicate): (DiagnosticKind, SanityPredicate) = match rule {
+        AnalysisError::SiglessBranch => (DiagnosticKind::SiglessBranch, |ms| !ms.requires_sig()),
+        AnalysisError::Malleable => (DiagnosticKind::Malleable, |ms| !ms.is_non_malleable()),
+        AnalysisError::BranchExceedResouceLimits => (DiagnosticKind::ResourceLimit, |ms| {
+            !ms.within_resource_limits()
+        }),
+        AnalysisError::RepeatedPubkeys => {
+            (DiagnosticKind::RepeatedKeys, |ms| ms.has_repeated_keys())
+        }
+        AnalysisError::HeightTimelockCombination => {
+            (DiagnosticKind::MixedTimelock, |ms| ms.has_mixed_timelocks())
+        }
+        // The IR has no raw-pkh-without-key node, so ContainsRawPkh is
+        // unreachable for builder-emitted trees. We still handle it (fail
+        // closed) rather than panic. NB: this match is exhaustive over
+        // miniscript's AnalysisError — a future variant breaks compilation
+        // here, which is the intended forcing function.
+        AnalysisError::ContainsRawPkh => {
+            return root_diag(
+                DiagnosticKind::TypeError,
+                "unexpected raw-pkh fragment (unreachable for the builder IR)".to_string(),
+            )
+        }
+    };
+    let path =
+        localize(&doc.root, "root", &|ms| predicate(ms)).unwrap_or_else(|| "root".to_string());
     Diagnostic {
         node_path: path,
         kind,
@@ -414,17 +432,14 @@ fn sanity_message(kind: DiagnosticKind) -> String {
         DiagnosticKind::SiglessBranch => {
             "this subtree can be spent without any signature (anyone-can-spend path)".to_string()
         }
-        DiagnosticKind::Malleable => {
-            "this subtree has a malleable satisfaction".to_string()
-        }
-        DiagnosticKind::ResourceLimit => {
-            "this subtree exceeds script resource limits".to_string()
-        }
+        DiagnosticKind::Malleable => "this subtree has a malleable satisfaction".to_string(),
+        DiagnosticKind::ResourceLimit => "this subtree exceeds script resource limits".to_string(),
         DiagnosticKind::RepeatedKeys => {
             "this subtree reuses a public key (RepeatedPubkeys)".to_string()
         }
         DiagnosticKind::MixedTimelock => {
-            "this subtree combines incompatible height/time timelocks → an unspendable path".to_string()
+            "this subtree combines incompatible height/time timelocks → an unspendable path"
+                .to_string()
         }
         _ => "sanity_check failure".to_string(),
     }
@@ -452,7 +467,10 @@ fn localize_parse_failure(node: &PolicyNode, path: &str) -> Option<String> {
             return Some(p);
         }
     }
-    match Miniscript::<DescriptorPublicKey, Segwitv0>::from_str_ext(&node.render(), &ExtParams::insane()) {
+    match Miniscript::<DescriptorPublicKey, Segwitv0>::from_str_ext(
+        &node.render(),
+        &ExtParams::insane(),
+    ) {
         Ok(_) => None,
         // Non-B subtree (e.g. an explicit `v:` child) — not standalone-testable;
         // defer to the nearest B-typed ancestor (B-type restriction, §3.4).
@@ -479,7 +497,10 @@ fn localize(
             return Some(p);
         }
     }
-    match Miniscript::<DescriptorPublicKey, Segwitv0>::from_str_ext(&node.render(), &ExtParams::insane()) {
+    match Miniscript::<DescriptorPublicKey, Segwitv0>::from_str_ext(
+        &node.render(),
+        &ExtParams::insane(),
+    ) {
         Ok(ms) => {
             if defect(&ms) {
                 Some(path.to_string())
@@ -616,10 +637,7 @@ fn hash_and_timelock_counts(ms: &Miniscript<DescriptorPublicKey, Segwitv0>) -> (
 /// `PolicyNode::children()`, but yields the JSON path segment per child).
 fn child_paths<'a>(node: &'a PolicyNode, path: &str) -> Vec<(String, &'a PolicyNode)> {
     match node {
-        PolicyNode::AndV(s)
-        | PolicyNode::OrD(s)
-        | PolicyNode::OrI(s)
-        | PolicyNode::OrB(s) => {
+        PolicyNode::AndV(s) | PolicyNode::OrD(s) | PolicyNode::OrI(s) | PolicyNode::OrB(s) => {
             let kind = node.kind();
             vec![
                 (format!("{path}.{kind}[0]"), &s[0]),
@@ -711,11 +729,41 @@ mod tests {
     fn allow_set_maps_each_variant_to_its_ext_params_field() {
         type FieldProbe = fn(&miniscript::miniscript::analyzable::ExtParams) -> bool;
         let cases: [(AllowSet, FieldProbe); 5] = [
-            (AllowSet { sigless_branch: true, ..Default::default() }, |p| p.top_unsafe),
-            (AllowSet { malleable: true, ..Default::default() }, |p| p.malleability),
-            (AllowSet { resource_limit: true, ..Default::default() }, |p| p.resource_limitations),
-            (AllowSet { repeated_keys: true, ..Default::default() }, |p| p.repeated_pk),
-            (AllowSet { mixed_timelock: true, ..Default::default() }, |p| p.timelock_mixing),
+            (
+                AllowSet {
+                    sigless_branch: true,
+                    ..Default::default()
+                },
+                |p| p.top_unsafe,
+            ),
+            (
+                AllowSet {
+                    malleable: true,
+                    ..Default::default()
+                },
+                |p| p.malleability,
+            ),
+            (
+                AllowSet {
+                    resource_limit: true,
+                    ..Default::default()
+                },
+                |p| p.resource_limitations,
+            ),
+            (
+                AllowSet {
+                    repeated_keys: true,
+                    ..Default::default()
+                },
+                |p| p.repeated_pk,
+            ),
+            (
+                AllowSet {
+                    mixed_timelock: true,
+                    ..Default::default()
+                },
+                |p| p.timelock_mixing,
+            ),
         ];
         for (set, field) in cases {
             let params = set.to_ext_params();
@@ -725,8 +773,12 @@ mod tests {
         }
         let none = AllowSet::default().to_ext_params();
         assert!(
-            !none.top_unsafe && !none.malleability && !none.resource_limitations
-                && !none.repeated_pk && !none.timelock_mixing && !none.raw_pkh,
+            !none.top_unsafe
+                && !none.malleability
+                && !none.resource_limitations
+                && !none.repeated_pk
+                && !none.timelock_mixing
+                && !none.raw_pkh,
             "empty AllowSet == ExtParams::new() baseline"
         );
     }
@@ -753,7 +805,10 @@ mod tests {
     #[test]
     fn allow_fired_detection_populates_allowed_fired() {
         let parsed = SpecDoc::parse(&sigless_doc()).unwrap();
-        let allow = AllowSet { sigless_branch: true, ..Default::default() };
+        let allow = AllowSet {
+            sigless_branch: true,
+            ..Default::default()
+        };
         let vp = validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &allow)
             .expect("allowed sigless passes");
         assert_eq!(vp.allowed_fired, vec![DiagnosticKind::SiglessBranch]);
@@ -762,8 +817,8 @@ mod tests {
             r#"{{"or_d":[{{"pk":"{A}"}},{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{B}"}}}}}},{{"older":100}}]}}]}}"#
         ));
         let parsed = SpecDoc::parse(&sane).unwrap();
-        let vp = validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &allow)
-            .expect("sane tree passes");
+        let vp =
+            validate_with_allow(&parsed, DEFAULT_PREVIEW_CAP, &allow).expect("sane tree passes");
         assert!(vp.allowed_fired.is_empty(), "nothing fired on a sane tree");
     }
 
@@ -772,7 +827,9 @@ mod tests {
     fn sanity_refusal_carries_rerun_hint() {
         let diags = errs(&sigless_doc());
         assert!(
-            diags[0].message.contains("rerun with --allow sigless-branch after review"),
+            diags[0]
+                .message
+                .contains("rerun with --allow sigless-branch after review"),
             "hint: {}",
             diags[0].message
         );
@@ -813,7 +870,9 @@ mod tests {
     #[test]
     fn archetypes_pass_the_gate() {
         for f in [
-            include_str!("../../tests/fixtures/descriptor_builder/simple-timelocked-inheritance.json"),
+            include_str!(
+                "../../tests/fixtures/descriptor_builder/simple-timelocked-inheritance.json"
+            ),
             include_str!("../../tests/fixtures/descriptor_builder/decaying-multisig.json"),
             include_str!("../../tests/fixtures/descriptor_builder/kofn-recovery.json"),
             include_str!("../../tests/fixtures/descriptor_builder/tiered-recovery.json"),
@@ -838,17 +897,29 @@ mod tests {
     #[test]
     fn rejects_bad_hashlock_hex() {
         // 63-char (too short) + a non-hex char
-        let d = doc(r#"{"andor":[{"pk":"X"},{"sha256":"zz6a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084db"},{"older":5}]}"#);
+        let d = doc(
+            r#"{"andor":[{"pk":"X"},{"sha256":"zz6a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084db"},{"older":5}]}"#,
+        );
         let e = errs(&d);
-        assert!(e.iter().any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("sha256")));
+        assert!(e
+            .iter()
+            .any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("sha256")));
     }
 
     #[test]
     fn rejects_zero_timelock() {
-        let older0 = doc(&format!(r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"older":0}}]}}"#));
-        let after0 = doc(&format!(r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"after":0}}]}}"#));
-        assert!(errs(&older0).iter().any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("older")));
-        assert!(errs(&after0).iter().any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("after")));
+        let older0 = doc(&format!(
+            r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"older":0}}]}}"#
+        ));
+        let after0 = doc(&format!(
+            r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"pk":"{A}"}}}}}},{{"after":0}}]}}"#
+        ));
+        assert!(errs(&older0)
+            .iter()
+            .any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("older")));
+        assert!(errs(&after0)
+            .iter()
+            .any(|x| x.kind == DiagnosticKind::SchemaField && x.message.contains("after")));
     }
 
     // ---- step 1: older() BIP-68 mask gate (funds-safety) -----------------
@@ -964,7 +1035,9 @@ mod tests {
     #[test]
     fn type_error_missing_v_wrapper_localizes_to_and_v() {
         // and_v(pk, older) — left must be V; pk is B → type error at the and_v.
-        let d = doc(&format!(r#"{{"or_d":[{{"pk":"{A}"}},{{"and_v":[{{"pk":"{B}"}},{{"older":5}}]}}]}}"#));
+        let d = doc(&format!(
+            r#"{{"or_d":[{{"pk":"{A}"}},{{"and_v":[{{"pk":"{B}"}},{{"older":5}}]}}]}}"#
+        ));
         let e = errs(&d);
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].kind, DiagnosticKind::TypeError);
@@ -988,12 +1061,15 @@ mod tests {
     fn repeated_key_passes_step2_but_step3_rejects() {
         // or_b(pk(A), s:pk(A)) — same key twice. from_str (step 2) is LENIENT
         // (F1); only sanity_check (step 3) rejects → kind is RepeatedKeys.
-        let inner = format!(r#"{{"or_b":[{{"pk":"{A}"}},{{"wrap":{{"w":"s","sub":{{"pk":"{A}"}}}}}}]}}"#);
+        let inner =
+            format!(r#"{{"or_b":[{{"pk":"{A}"}},{{"wrap":{{"w":"s","sub":{{"pk":"{A}"}}}}}}]}}"#);
         let d = doc(&inner);
         // step 2 passes:
         let rendered = SpecDoc::parse(&d).unwrap().render_descriptor();
-        assert!(MsDescriptor::<DescriptorPublicKey>::from_str(&rendered).is_ok(),
-            "from_str must be lenient on repeated keys (F1)");
+        assert!(
+            MsDescriptor::<DescriptorPublicKey>::from_str(&rendered).is_ok(),
+            "from_str must be lenient on repeated keys (F1)"
+        );
         // step 3 rejects:
         let e = errs(&d);
         assert_eq!(e.len(), 1);
@@ -1019,10 +1095,14 @@ mod tests {
     #[test]
     fn over_envelope_refused_at_small_cap() {
         // multi(2,A,B,C) — 3 keys, no hashes/timelocks → raw = 2^3 × 1 = 8.
-        let d = doc(&format!(r#"{{"multi":{{"k":2,"keys":["{A}","{B}","{C}"]}}}}"#));
+        let d = doc(&format!(
+            r#"{{"multi":{{"k":2,"keys":["{A}","{B}","{C}"]}}}}"#
+        ));
         // cap 4 < 8 → refused
         let doc_parsed = SpecDoc::parse(&d).unwrap();
-        let e = validate_with_cap(&doc_parsed, 4).err().expect("over envelope");
+        let e = validate_with_cap(&doc_parsed, 4)
+            .err()
+            .expect("over envelope");
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].kind, DiagnosticKind::OverEnvelope);
         // cap 8 == raw → passes
@@ -1048,8 +1128,13 @@ mod tests {
         let parsed = SpecDoc::parse(&d).unwrap();
 
         // Gate side: raw == 32.
-        assert!(validate_with_cap(&parsed, 32).is_ok(), "gate raw must be ≤ 32");
-        let over = validate_with_cap(&parsed, 31).err().expect("gate refuses at 31");
+        assert!(
+            validate_with_cap(&parsed, 32).is_ok(),
+            "gate raw must be ≤ 32"
+        );
+        let over = validate_with_cap(&parsed, 31)
+            .err()
+            .expect("gate refuses at 31");
         assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope);
 
         // Enumerate side: single-path projection (multipath errors in cost).
@@ -1072,7 +1157,9 @@ mod tests {
         assert!(
             matches!(
                 run(31),
-                Err(ToolkitError::CompareCost(cost::CompareCostError::ConditionsTooMany { .. }))
+                Err(ToolkitError::CompareCost(
+                    cost::CompareCostError::ConditionsTooMany { .. }
+                ))
             ),
             "enumerate must trip ConditionsTooMany at 31 → enumerate raw == 32 == gate raw"
         );
@@ -1088,13 +1175,15 @@ mod tests {
         use crate::cost::{self, CompareCostArgs, InputForm};
         use crate::error::ToolkitError;
 
-        let json = format!(
-            r#"{{"multi":{{"k":2,"keys":["[11111111/0h]{A}","[22222222/0h]{A}"]}}}}"#
-        );
+        let json =
+            format!(r#"{{"multi":{{"k":2,"keys":["[11111111/0h]{A}","[22222222/0h]{A}"]}}}}"#);
         let parsed = SpecDoc::parse(&doc(&json)).unwrap();
 
         // raw == 4 (2 distinct origin-keys), not 2 (xpub-deduped).
-        assert!(validate_with_cap(&parsed, 4).is_ok(), "2 distinct origin-keys ⇒ raw 4");
+        assert!(
+            validate_with_cap(&parsed, 4).is_ok(),
+            "2 distinct origin-keys ⇒ raw 4"
+        );
         assert_eq!(
             validate_with_cap(&parsed, 3).err().unwrap()[0].kind,
             DiagnosticKind::OverEnvelope,
@@ -1123,7 +1212,9 @@ mod tests {
         assert!(run(4).is_ok());
         assert!(matches!(
             run(3),
-            Err(ToolkitError::CompareCost(cost::CompareCostError::ConditionsTooMany { .. }))
+            Err(ToolkitError::CompareCost(
+                cost::CompareCostError::ConditionsTooMany { .. }
+            ))
         ));
     }
 
@@ -1146,11 +1237,18 @@ mod tests {
         let parsed = SpecDoc::parse(&d).unwrap();
 
         // Gate side: raw == 8 (would be 4 under the buggy dedup).
-        assert!(validate_with_cap(&parsed, 8).is_ok(), "gate raw must be ≤ 8");
-        let over = validate_with_cap(&parsed, 7).err().expect("gate refuses at 7");
+        assert!(
+            validate_with_cap(&parsed, 8).is_ok(),
+            "gate raw must be ≤ 8"
+        );
+        let over = validate_with_cap(&parsed, 7)
+            .err()
+            .expect("gate refuses at 7");
         assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope);
         // Crucially, the buggy dedup would have PASSED at cap 4:
-        let over4 = validate_with_cap(&parsed, 4).err().expect("gate must refuse at 4 (leaf count)");
+        let over4 = validate_with_cap(&parsed, 4)
+            .err()
+            .expect("gate must refuse at 4 (leaf count)");
         assert_eq!(over4[0].kind, DiagnosticKind::OverEnvelope);
 
         // Enumerate side: single-path projection, raw == 8.
@@ -1176,7 +1274,9 @@ mod tests {
         assert!(
             matches!(
                 run(7),
-                Err(ToolkitError::CompareCost(cost::CompareCostError::ConditionsTooMany { .. }))
+                Err(ToolkitError::CompareCost(
+                    cost::CompareCostError::ConditionsTooMany { .. }
+                ))
             ),
             "enumerate raw == 8 == gate raw (hash leaves counted, not deduped)"
         );
@@ -1199,9 +1299,15 @@ mod tests {
         let cases = [
             (AnalysisError::SiglessBranch, DiagnosticKind::SiglessBranch),
             (AnalysisError::Malleable, DiagnosticKind::Malleable),
-            (AnalysisError::BranchExceedResouceLimits, DiagnosticKind::ResourceLimit),
+            (
+                AnalysisError::BranchExceedResouceLimits,
+                DiagnosticKind::ResourceLimit,
+            ),
             (AnalysisError::RepeatedPubkeys, DiagnosticKind::RepeatedKeys),
-            (AnalysisError::HeightTimelockCombination, DiagnosticKind::MixedTimelock),
+            (
+                AnalysisError::HeightTimelockCombination,
+                DiagnosticKind::MixedTimelock,
+            ),
         ];
         for (rule, want_kind) in cases {
             let label = format!("{rule:?}");

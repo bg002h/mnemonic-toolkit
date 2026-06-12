@@ -107,12 +107,21 @@ fn feistel_run(
     reverse: bool,
 ) -> zeroize::Zeroizing<Vec<u8>> {
     let n = input.len();
-    assert!(n >= 16 && n % 2 == 0 && n <= 32, "feistel: invalid secret length {n}");
-    assert!(iteration_exponent <= 15, "feistel: iteration_exponent out of range");
+    assert!(
+        n >= 16 && n % 2 == 0 && n <= 32,
+        "feistel: invalid secret length {n}"
+    );
+    assert!(
+        iteration_exponent <= 15,
+        "feistel: iteration_exponent out of range"
+    );
 
     let half = n / 2;
     let iters_per_round = (BASE_ITERATION_COUNT << iteration_exponent) / (ROUND_COUNT as u32);
-    assert!(iters_per_round > 0, "feistel: iters_per_round computed as 0");
+    assert!(
+        iters_per_round > 0,
+        "feistel: iters_per_round computed as 0"
+    );
 
     let mut l = zeroize::Zeroizing::new(input[..half].to_vec());
     let mut r = zeroize::Zeroizing::new(input[half..].to_vec());

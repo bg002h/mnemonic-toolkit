@@ -50,13 +50,22 @@ fn refusal_twelve_words_target_thirteen_not_valid() {
     let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
     let (_, stderr, exit) = invoke(&["--from", &format!("phrase={twelve}")]);
     assert_ne!(exit, 0, "12-word partial (targets N=13) must refuse");
-    assert!(stderr.contains("12") || stderr.contains("words"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("12") || stderr.contains("words"),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]
 fn refusal_unknown_word_in_partial() {
-    let partial = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon xyzzy";
-    let (_, stderr, exit) = invoke(&["--from", &format!("phrase={partial}"), "--language", "english"]);
+    let partial =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon xyzzy";
+    let (_, stderr, exit) = invoke(&[
+        "--from",
+        &format!("phrase={partial}"),
+        "--language",
+        "english",
+    ]);
     assert_ne!(exit, 0, "partial with unknown word must refuse");
     assert!(
         stderr.to_lowercase().contains("unknown") || stderr.to_lowercase().contains("not in"),
@@ -86,7 +95,13 @@ fn refusal_from_missing_entirely() {
 #[test]
 fn refusal_language_unknown_value() {
     // Unknown language value (not in CliLanguage variants) → clap parse error.
-    let abandon = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
-    let (_, _stderr, exit) = invoke(&["--from", &format!("phrase={abandon}"), "--language", "klingon"]);
+    let abandon =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
+    let (_, _stderr, exit) = invoke(&[
+        "--from",
+        &format!("phrase={abandon}"),
+        "--language",
+        "klingon",
+    ]);
     assert_ne!(exit, 0, "unknown --language value must refuse");
 }

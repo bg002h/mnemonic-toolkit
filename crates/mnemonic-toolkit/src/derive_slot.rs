@@ -73,8 +73,7 @@ pub(crate) fn derive_bip32_from_entropy_at_path(
     // have no Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
     // `rust-bitcoin-xpriv-zeroize-upstream`. Per-function lifetime is bounded
     // and the seed buffer is `Zeroizing<[u8; 64]>` via `derive_master_seed`.
-    let mnemonic =
-        Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
+    let mnemonic = Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
     let seed = derive_master_seed(&mnemonic, passphrase);
 
     let secp = Secp256k1::new();
@@ -134,8 +133,7 @@ pub(crate) fn derive_bip32_at_path(
     // SAFETY: third-party-blocked — `bip39::Mnemonic` + `bitcoin::bip32::Xpriv`
     // have no Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
     // `rust-bitcoin-xpriv-zeroize-upstream`. Per-function lifetime is bounded.
-    let mnemonic =
-        Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
+    let mnemonic = Mnemonic::from_entropy_in(language, entropy).map_err(ToolkitError::Bip39)?;
     let seed = derive_master_seed(&mnemonic, passphrase);
 
     let secp = Secp256k1::new();

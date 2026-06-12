@@ -23,7 +23,13 @@ const FIX_MALFORMED: &str = "tests/fixtures/wallet_import/coldcard-ms-malformed-
 fn run_explicit(path: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", path, "--format", "coldcard-multisig"])
+        .args([
+            "import-wallet",
+            "--blob",
+            path,
+            "--format",
+            "coldcard-multisig",
+        ])
         .assert()
 }
 
@@ -60,11 +66,26 @@ fn coldcard_ms_2of3_with_xfp_happy_path() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].cosigners=3"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].network=mainnet"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].threshold=2"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].bsms_audit=none"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].entropy=none"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("bundles[0].cosigners=3"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].network=mainnet"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].threshold=2"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].bsms_audit=none"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].entropy=none"),
+        "stdout: {stdout}"
+    );
     // Coldcard-multisig provenance is neither bsms nor bitcoin-core; the
     // `source_metadata` accessor returns None per ImportProvenance enum semantics.
     assert!(

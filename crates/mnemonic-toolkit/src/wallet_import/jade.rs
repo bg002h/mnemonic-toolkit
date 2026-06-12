@@ -42,7 +42,9 @@
 //! SeedQR variant when the FOLLOWUP lands).
 
 use super::{
-    coldcard_multisig::{parse_text as parse_coldcard_multisig_text, ColdcardMultisigSourceMetadata},
+    coldcard_multisig::{
+        parse_text as parse_coldcard_multisig_text, ColdcardMultisigSourceMetadata,
+    },
     ImportProvenance, ParsedImport, WalletFormatParser,
 };
 use crate::error::ToolkitError;
@@ -369,7 +371,9 @@ B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ
             .expect_err("singlesig-shaped fixture must refuse");
         let err_str = err.to_string();
         assert!(
-            err_str.contains("coldcard-multisig") || err_str.contains("Policy") || err_str.contains("Format"),
+            err_str.contains("coldcard-multisig")
+                || err_str.contains("Policy")
+                || err_str.contains("Format"),
             "delegated parser error must surface; got: {err_str}"
         );
     }
@@ -378,10 +382,13 @@ B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ
     fn fixture_jade_malformed_json_refused() {
         let blob = read_fixture("jade-malformed-json.json");
         // Sniff returns false (not valid JSON).
-        assert!(!JadeParser::sniff(&blob), "malformed JSON must sniff-negative");
+        assert!(
+            !JadeParser::sniff(&blob),
+            "malformed JSON must sniff-negative"
+        );
         let mut stderr: Vec<u8> = Vec::new();
-        let err = JadeParser::parse(&blob, &mut stderr)
-            .expect_err("malformed-JSON fixture must refuse");
+        let err =
+            JadeParser::parse(&blob, &mut stderr).expect_err("malformed-JSON fixture must refuse");
         let err_str = err.to_string();
         assert!(
             err_str.contains("jade") && err_str.contains("not valid JSON"),

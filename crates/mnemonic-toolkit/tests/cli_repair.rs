@@ -20,7 +20,8 @@ use predicates::prelude::*;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_LONG_CHUNK0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_REG_CHUNK1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MK1_REG_CHUNK1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 
 /// Helper: deterministically flip the bech32 character at `pos` (within
 /// the data-part, i.e. after the `1` separator) to the next char in the
@@ -120,7 +121,7 @@ fn cell_12_unrepairable_exits_2_with_too_many_errors_stderr() {
 /// stays valid across any future ms1 wire tweak.
 #[test]
 fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
-    use ms_codec::{Payload, Tag, encode};
+    use ms_codec::{encode, Payload, Tag};
     for len in [20usize, 24, 28, 32] {
         let entropy: Vec<u8> = (0..len as u8).collect();
         let valid = encode(Tag::ENTR, &Payload::Entr(entropy)).expect("encode ms1");

@@ -216,7 +216,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         secret_in_argv_warning(stderr, "--secret", "--secret-stdin");
         Zeroizing::new(s.clone())
     } else if let Some(path) = &args.secret_file {
-        Zeroizing::new(std::fs::read_to_string(path).map_err(ToolkitError::Io)?.trim().to_string())
+        Zeroizing::new(
+            std::fs::read_to_string(path)
+                .map_err(ToolkitError::Io)?
+                .trim()
+                .to_string(),
+        )
     } else if args.secret_stdin {
         let mut buf = String::new();
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
@@ -243,7 +248,8 @@ pub fn run<R: Read, W: Write, E: Write>(
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let master = resolve_master_xpriv(&secret, &passphrase, args.network, stderr)?;
     let coin = args.network.coin_type();
-    let (b_scan, b_spend) = crate::silent_payment::derive_scan_spend(&secp, &master, coin, args.account)?;
+    let (b_scan, b_spend) =
+        crate::silent_payment::derive_scan_spend(&secp, &master, coin, args.account)?;
     let b_scan_pub = b_scan.public_key(&secp);
     let b_spend_pub = b_spend.public_key(&secp);
     let hrp = crate::silent_payment::sp_hrp(args.network.to_bitcoin_network());
@@ -252,7 +258,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut labeled: Vec<LabeledAddr> = Vec::with_capacity(args.label.len());
     for &m in &args.label {
         let b_m = crate::silent_payment::labeled_spend_key(&secp, &b_scan, b_spend_pub, m)?;
-        labeled.push(LabeledAddr { m, address: crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &b_m) });
+        labeled.push(LabeledAddr {
+            m,
+            address: crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &b_m),
+        });
     }
 
     // BIP-352 m=0 CHANGE address (opt-in; additive). Internal change-detection
@@ -261,7 +270,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         "BIP-352 m=0 change label — internal change detection only; never publish as a receiving address";
     let change_address: Option<String> = if args.change_address {
         let b_m0 = crate::silent_payment::labeled_spend_key(&secp, &b_scan, b_spend_pub, 0)?;
-        Some(crate::silent_payment::encode_sp_address(hrp, &b_scan_pub, &b_m0))
+        Some(crate::silent_payment::encode_sp_address(
+            hrp,
+            &b_scan_pub,
+            &b_m0,
+        ))
     } else {
         None
     };
@@ -292,7 +305,13 @@ pub fn run<R: Read, W: Write, E: Write>(
             .map_err(|e| ToolkitError::SilentPayment(format!("json serialize: {e}")))?;
         writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
-        writeln!(stdout, "silent-payment ({}, account {})", args.network.human_name(), args.account).map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "silent-payment ({}, account {})",
+            args.network.human_name(),
+            args.account
+        )
+        .map_err(ToolkitError::Io)?;
         writeln!(stdout, "  address:      {base}").map_err(ToolkitError::Io)?;
         for l in &labeled {
             writeln!(stdout, "  label {:<7} {}", l.m, l.address).map_err(ToolkitError::Io)?;
@@ -300,12 +319,27 @@ pub fn run<R: Read, W: Write, E: Write>(
         if let Some(ch) = &change_address {
             writeln!(stdout, "  change_addr:  {ch}   (BIP-352 m=0 CHANGE — internal change detection ONLY; never hand out as a receiving address)").map_err(ToolkitError::Io)?;
         }
-        writeln!(stdout, "  scan_pubkey:  {}", hex::encode(b_scan_pub.serialize())).map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  spend_pubkey: {}", hex::encode(b_spend_pub.serialize())).map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "  scan_pubkey:  {}",
+            hex::encode(b_scan_pub.serialize())
+        )
+        .map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "  spend_pubkey: {}",
+            hex::encode(b_spend_pub.serialize())
+        )
+        .map_err(ToolkitError::Io)?;
         writeln!(stdout, "  scan_path:    {scan_path}").map_err(ToolkitError::Io)?;
         writeln!(stdout, "  spend_path:   {spend_path}").map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  scan_priv:    {scan_priv}   (online / hot key)").map_err(ToolkitError::Io)?;
-        writeln!(stdout, "  spend_priv:   {spend_priv}   (COLD — full spending authority)").map_err(ToolkitError::Io)?;
+        writeln!(stdout, "  scan_priv:    {scan_priv}   (online / hot key)")
+            .map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "  spend_priv:   {spend_priv}   (COLD — full spending authority)"
+        )
+        .map_err(ToolkitError::Io)?;
     }
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::PrivateKeyMaterial,
@@ -336,7 +370,10 @@ mod phrase_language_tests {
     fn non_english_phrase_resolves() {
         let jp = phrase(bip39::Language::Japanese);
         let r = resolve_master_xpriv(&jp, "", CliNetwork::Mainnet, &mut std::io::sink());
-        assert!(r.is_ok(), "a valid Japanese BIP-39 phrase must resolve; got {r:?}");
+        assert!(
+            r.is_ok(),
+            "a valid Japanese BIP-39 phrase must resolve; got {r:?}"
+        );
     }
 
     /// T2 — the seed derives from the phrase WORDS, not from re-encoding
@@ -345,13 +382,22 @@ mod phrase_language_tests {
     #[test]
     fn language_changes_the_derived_xpriv() {
         let jp = resolve_master_xpriv(
-            &phrase(bip39::Language::Japanese), "", CliNetwork::Mainnet, &mut std::io::sink(),
-        ).unwrap();
+            &phrase(bip39::Language::Japanese),
+            "",
+            CliNetwork::Mainnet,
+            &mut std::io::sink(),
+        )
+        .unwrap();
         let en = resolve_master_xpriv(
-            &phrase(bip39::Language::English), "", CliNetwork::Mainnet, &mut std::io::sink(),
-        ).unwrap();
+            &phrase(bip39::Language::English),
+            "",
+            CliNetwork::Mainnet,
+            &mut std::io::sink(),
+        )
+        .unwrap();
         assert_ne!(
-            jp.to_string(), en.to_string(),
+            jp.to_string(),
+            en.to_string(),
             "same-entropy Japanese vs English phrases must derive DIFFERENT seeds (words-based)"
         );
     }
@@ -363,7 +409,8 @@ mod phrase_language_tests {
     fn english_phrase_matches_external_bip39_vector() {
         let en = phrase(bip39::Language::English);
         assert!(en.starts_with("abandon abandon"), "sanity: {en}");
-        let xprv = resolve_master_xpriv(&en, "", CliNetwork::Mainnet, &mut std::io::sink()).unwrap();
+        let xprv =
+            resolve_master_xpriv(&en, "", CliNetwork::Mainnet, &mut std::io::sink()).unwrap();
         assert_eq!(
             xprv.to_string(),
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu",

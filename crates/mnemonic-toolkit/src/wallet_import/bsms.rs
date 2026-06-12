@@ -558,8 +558,14 @@ mod tests {
         let p = &parsed[0];
         let audit = p.bsms_audit().expect("4-line populates audit (SPEC §10.3)");
         // SPEC §10.3 empty-string sentinels for token + signature.
-        assert_eq!(audit.token, "", "4-line token must be empty-string sentinel");
-        assert_eq!(audit.signature, "", "4-line signature must be empty-string sentinel");
+        assert_eq!(
+            audit.token, "",
+            "4-line token must be empty-string sentinel"
+        );
+        assert_eq!(
+            audit.signature, "",
+            "4-line signature must be empty-string sentinel"
+        );
         // SPEC §10.3 populated fields: first_address + derivation_path
         // (the path-restrictions string in 4-line semantics).
         assert_eq!(
@@ -599,8 +605,9 @@ mod tests {
             "bc1qwrongwrongwrongwrongwrongwrongwrongwrongwrongwronguakw50",
         );
         let mut stderr = Vec::new();
-        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr)
-            .expect("4-line parse succeeds even with first-address mismatch (SPEC §10.2 informational)");
+        let parsed = BsmsParser::parse(blob.as_bytes(), &mut stderr).expect(
+            "4-line parse succeeds even with first-address mismatch (SPEC §10.2 informational)",
+        );
         assert_eq!(parsed.len(), 1);
         let stderr_str = String::from_utf8_lossy(&stderr);
         assert!(

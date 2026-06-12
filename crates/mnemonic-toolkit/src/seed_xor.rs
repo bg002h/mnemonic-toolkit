@@ -45,7 +45,10 @@ pub enum SeedXorError {
 impl std::fmt::Display for SeedXorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SeedXorError::BadEntropyLength { got, expected_one_of } => write!(
+            SeedXorError::BadEntropyLength {
+                got,
+                expected_one_of,
+            } => write!(
                 f,
                 "seed-xor: entropy length {} bytes invalid; expected one of {:?}",
                 got, expected_one_of,
@@ -155,9 +158,7 @@ pub fn seed_xor_split_deterministic(
 /// - [`SeedXorError::MismatchedShareLengths`] if shares have differing lengths.
 /// - [`SeedXorError::BadEntropyLength`] if the (uniform) share length is not in
 ///   `VALID_ENTROPY_LENGTHS`.
-pub fn seed_xor_combine(
-    shares: &[&[u8]],
-) -> Result<zeroize::Zeroizing<Vec<u8>>, SeedXorError> {
+pub fn seed_xor_combine(shares: &[&[u8]]) -> Result<zeroize::Zeroizing<Vec<u8>>, SeedXorError> {
     validate_share_count(shares.len())?;
 
     let lengths: Vec<usize> = shares.iter().map(|s| s.len()).collect();
@@ -191,6 +192,9 @@ fn validate_share_count(got: usize) -> Result<(), SeedXorError> {
     if got >= MIN_SHARES {
         Ok(())
     } else {
-        Err(SeedXorError::TooFewShares { got, min: MIN_SHARES })
+        Err(SeedXorError::TooFewShares {
+            got,
+            min: MIN_SHARES,
+        })
     }
 }

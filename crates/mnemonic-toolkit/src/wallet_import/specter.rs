@@ -197,12 +197,15 @@ impl WalletFormatParser for SpecterParser {
                 )
             })?
             .to_string();
-        let devices_arr = obj.get("devices").and_then(|v| v.as_array()).ok_or_else(|| {
-            ToolkitError::ImportWalletParse(
-                "import-wallet: specter: parse error: missing or non-array top-level `devices`"
-                    .to_string(),
-            )
-        })?;
+        let devices_arr = obj
+            .get("devices")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                ToolkitError::ImportWalletParse(
+                    "import-wallet: specter: parse error: missing or non-array top-level `devices`"
+                        .to_string(),
+                )
+            })?;
 
         // Step 3a: validate BIP-380 checksum on the ORIGINAL descriptor body
         // (concrete `[fp/path]xpub` keys present), mirroring the BSMS pattern
@@ -452,7 +455,8 @@ fn recompute_descriptor_checksum(body: &str) -> Result<String, ToolkitError> {
 /// to keep `bitcoin_core.rs::trim_leading_ws` `pub(super)`-free.
 fn trim_leading_ws(blob: &[u8]) -> &[u8] {
     let mut i = 0;
-    while i < blob.len() && (blob[i] == b' ' || blob[i] == b'\t' || blob[i] == b'\n' || blob[i] == b'\r')
+    while i < blob.len()
+        && (blob[i] == b' ' || blob[i] == b'\t' || blob[i] == b'\n' || blob[i] == b'\r')
     {
         i += 1;
     }
@@ -567,7 +571,8 @@ mod tests {
 
     #[test]
     fn sniff_false_on_missing_label() {
-        let blob = br#"{"blockheight":800000,"descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh","devices":[]}"#;
+        let blob =
+            br#"{"blockheight":800000,"descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh","devices":[]}"#;
         assert!(!SpecterParser::sniff(blob));
     }
 
@@ -579,7 +584,8 @@ mod tests {
 
     #[test]
     fn sniff_false_on_missing_devices() {
-        let blob = br#"{"label":"x","blockheight":800000,"descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh"}"#;
+        let blob =
+            br#"{"label":"x","blockheight":800000,"descriptor":"wpkh(xpub.../<0;1>/*)#abcdefgh"}"#;
         assert!(!SpecterParser::sniff(blob));
     }
 
@@ -618,7 +624,8 @@ mod tests {
         // Bitcoin Core `listdescriptors` envelope: wallet_name + descriptors[].
         // Lacks blockheight / descriptor (top-level) / devices — multiple
         // sniff markers absent.
-        let blob = br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub.../<0;1>/*)#abcdefgh"}]}"#;
+        let blob =
+            br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub.../<0;1>/*)#abcdefgh"}]}"#;
         assert!(!SpecterParser::sniff(blob));
     }
 
@@ -762,7 +769,10 @@ mod tests {
         if let ImportProvenance::Specter(meta) = &parsed[0].provenance {
             assert_eq!(meta.devices.len(), 1);
             assert_eq!(meta.devices[0].device_type, "unknown");
-            assert_eq!(meta.devices[0].label, "", "string-form devices normalize to empty label");
+            assert_eq!(
+                meta.devices[0].label, "",
+                "string-form devices normalize to empty label"
+            );
         }
     }
 

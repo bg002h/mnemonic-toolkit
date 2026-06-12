@@ -75,8 +75,8 @@ fn ids_from_md1(md1: &[String]) -> (String, String) {
     let refs: Vec<&str> = md1.iter().map(String::as_str).collect();
     let desc = md_codec::chunk::reassemble(&refs).expect("md1 reassembles to a Descriptor");
     let policy = md_codec::compute_wallet_policy_id(&desc).expect("wallet_policy_id");
-    let template =
-        md_codec::compute_wallet_descriptor_template_id(&desc).expect("wallet_descriptor_template_id");
+    let template = md_codec::compute_wallet_descriptor_template_id(&desc)
+        .expect("wallet_descriptor_template_id");
     (
         hex::encode(policy.as_bytes()),
         hex::encode(template.as_bytes()),

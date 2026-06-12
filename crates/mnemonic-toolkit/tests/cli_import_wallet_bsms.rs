@@ -144,8 +144,7 @@ fn bsms_6_line_happy_path() {
     // the v0.27.0 happy-path invariant.
     use miniscript::{Descriptor, DescriptorPublicKey};
     use std::str::FromStr;
-    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc)
-        .expect("descriptor parses");
+    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc).expect("descriptor parses");
     let receive = parsed
         .into_single_descriptors()
         .expect("multipath split")
@@ -517,7 +516,10 @@ fn bsms_thresh_overflow_errors_clearly() {
     let assertion = run_import_stdin(blob).failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("exceeds u8 range") || stderr.contains("256") || stderr.to_lowercase().contains("threshold") || stderr.to_lowercase().contains("checksum"),
+        stderr.contains("exceeds u8 range")
+            || stderr.contains("256")
+            || stderr.to_lowercase().contains("threshold")
+            || stderr.to_lowercase().contains("checksum"),
         "expected u8-overflow / 256-cosigner / checksum-rejection diagnostic; got: {stderr}"
     );
 }
@@ -704,8 +706,7 @@ fn bsms_6line_still_accepted_with_deprecation_notice() {
     // Use the real /0/0 first-address so the cross-validation does not fire.
     use miniscript::{Descriptor, DescriptorPublicKey};
     use std::str::FromStr;
-    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc)
-        .expect("descriptor parses");
+    let parsed = Descriptor::<DescriptorPublicKey>::from_str(&desc).expect("descriptor parses");
     let receive = parsed
         .into_single_descriptors()
         .expect("multipath split")
@@ -754,10 +755,7 @@ fn bsms_4line_via_bundle_roundtrip_json() {
     let p = fixture_path("bsms-4line-sortedmulti-2of3.txt");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args([
-            "import-wallet",
-            "--blob",
-        ])
+        .args(["import-wallet", "--blob"])
         .arg(&p)
         .args(["--format", "bsms", "--json"])
         .assert()
@@ -777,7 +775,7 @@ fn bsms_4line_via_bundle_roundtrip_json() {
         matches!(status, Some("ok") | Some("blocked_no_emitter")),
         "expected ok or blocked_no_emitter roundtrip status (canonicalize accepted 4-line); got: {status:?}\nentry: {entry}"
     );
-// v0.28.0 Phase P9A — BSMS fixture-corpus expansion (3 fixtures)
+    // v0.28.0 Phase P9A — BSMS fixture-corpus expansion (3 fixtures)
 }
 
 //
@@ -878,7 +876,13 @@ fn bsms_2line_sortedmulti_3of5_fixture_parses() {
     assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
     assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
     // All 5 cosigner fingerprints byte-exact in the summary.
-    for fp in [MAINNET_FP_A, MAINNET_FP_B, MAINNET_FP_C, "16a93ed0", "99887766"] {
+    for fp in [
+        MAINNET_FP_A,
+        MAINNET_FP_B,
+        MAINNET_FP_C,
+        "16a93ed0",
+        "99887766",
+    ] {
         assert!(
             stdout.contains(fp),
             "expected fingerprint {fp} in summary; stdout: {stdout}"
@@ -1097,9 +1101,7 @@ mod shared {
     /// dispatch returns `ImportWalletAmbiguousFormat` instead (no
     /// bsms-specific template in stderr).
     pub(super) fn bsms_sniff_via_dispatch(blob: &[u8]) -> bool {
-        let mut cmd = std::process::Command::new(
-            assert_cmd::cargo::cargo_bin("mnemonic"),
-        );
+        let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("mnemonic"));
         cmd.args(["import-wallet", "--blob", "-"]);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -1115,4 +1117,3 @@ mod shared {
         stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2, 4, or 6 lines")
     }
 }
-

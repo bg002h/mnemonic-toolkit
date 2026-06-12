@@ -20,8 +20,13 @@ fn french_to_entropy_fires_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
-            "--to", "entropy",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12}"),
+            "--language",
+            "french",
+            "--to",
+            "entropy",
         ])
         .assert()
         .success();
@@ -36,13 +41,26 @@ fn french_multi_target_with_entropy_fires_once() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
-            "--to", "xprv,entropy", "--template", "bip84", "--network", "mainnet",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12}"),
+            "--language",
+            "french",
+            "--to",
+            "xprv,entropy",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr.matches(ADVISORY_NEEDLE).count(), 1, "exactly once: {stderr:?}");
+    assert_eq!(
+        stderr.matches(ADVISORY_NEEDLE).count(),
+        1,
+        "exactly once: {stderr:?}"
+    );
 }
 
 #[test]
@@ -51,13 +69,25 @@ fn french_to_xprv_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
-            "--to", "xprv", "--template", "bip84", "--network", "mainnet",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12}"),
+            "--language",
+            "french",
+            "--to",
+            "xprv",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(!stderr.contains(ADVISORY_NEEDLE), "key target must NOT fire: {stderr:?}");
+    assert!(
+        !stderr.contains(ADVISORY_NEEDLE),
+        "key target must NOT fire: {stderr:?}"
+    );
 }
 
 #[test]
@@ -66,13 +96,21 @@ fn english_to_entropy_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={english_12}"), "--language", "english",
-            "--to", "entropy",
+            "convert",
+            "--from",
+            &format!("phrase={english_12}"),
+            "--language",
+            "english",
+            "--to",
+            "entropy",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(!stderr.contains(ADVISORY_NEEDLE), "English must NOT fire: {stderr:?}");
+    assert!(
+        !stderr.contains(ADVISORY_NEEDLE),
+        "English must NOT fire: {stderr:?}"
+    );
 }
 
 #[test]
@@ -84,15 +122,23 @@ fn french_to_ms1_emits_mnem_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
-            "--to", "ms1",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12}"),
+            "--language",
+            "french",
+            "--to",
+            "ms1",
         ])
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // Advisory must NOT fire: the emitted ms1 is a mnem card.
-    assert!(!stderr.contains(ADVISORY_MS1), "advisory must be suppressed for mnem ms1: {stderr:?}");
+    assert!(
+        !stderr.contains(ADVISORY_MS1),
+        "advisory must be suppressed for mnem ms1: {stderr:?}"
+    );
     // The emitted ms1 must be a mnem string (length 51 for 12-word / 16-byte entropy).
     // Output format: "ms1: <value>\n" — extract the value after "ms1: ".
     let ms1_val = stdout
@@ -102,7 +148,8 @@ fn french_to_ms1_emits_mnem_no_advisory() {
         .map(|s| s.trim())
         .unwrap_or_else(|| stdout.trim());
     assert_eq!(
-        ms1_val.len(), 51,
+        ms1_val.len(),
+        51,
         "emitted ms1 must be mnem (len=51): got len={} val={ms1_val:?}",
         ms1_val.len()
     );
@@ -114,13 +161,21 @@ fn english_to_ms1_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={english_12}"), "--language", "english",
-            "--to", "ms1",
+            "convert",
+            "--from",
+            &format!("phrase={english_12}"),
+            "--language",
+            "english",
+            "--to",
+            "ms1",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(!stderr.contains(ADVISORY_MS1), "English ms1 must NOT fire: {stderr:?}");
+    assert!(
+        !stderr.contains(ADVISORY_MS1),
+        "English ms1 must NOT fire: {stderr:?}"
+    );
 }
 
 #[test]
@@ -131,16 +186,30 @@ fn entropy_to_french_phrase_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", "entropy=00000000000000000000000000000000", "--language",
-            "french", "--to", "phrase",
+            "convert",
+            "--from",
+            "entropy=00000000000000000000000000000000",
+            "--language",
+            "french",
+            "--to",
+            "phrase",
         ])
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stdout.contains("abaisser"), "emits the French mnemonic: {stdout:?}");
-    assert!(!stderr.contains(ADVISORY_NEEDLE), "phrase target must NOT fire: {stderr:?}");
-    assert!(!stderr.contains(ADVISORY_MS1), "phrase target must NOT fire: {stderr:?}");
+    assert!(
+        stdout.contains("abaisser"),
+        "emits the French mnemonic: {stdout:?}"
+    );
+    assert!(
+        !stderr.contains(ADVISORY_NEEDLE),
+        "phrase target must NOT fire: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains(ADVISORY_MS1),
+        "phrase target must NOT fire: {stderr:?}"
+    );
 }
 
 #[test]
@@ -150,13 +219,21 @@ fn malformed_french_phrase_errors_without_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12_BAD_CKSUM}"), "--language", "french",
-            "--to", "entropy",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12_BAD_CKSUM}"),
+            "--language",
+            "french",
+            "--to",
+            "entropy",
         ])
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(!stderr.contains(ADVISORY_NEEDLE), "must NOT advise-then-error: {stderr:?}");
+    assert!(
+        !stderr.contains(ADVISORY_NEEDLE),
+        "must NOT advise-then-error: {stderr:?}"
+    );
 }
 
 #[test]
@@ -165,8 +242,13 @@ fn to_seedqr_still_rejected_at_parse() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={FRENCH_12}"), "--language", "french",
-            "--to", "seedqr",
+            "convert",
+            "--from",
+            &format!("phrase={FRENCH_12}"),
+            "--language",
+            "french",
+            "--to",
+            "seedqr",
         ])
         .assert()
         .failure();

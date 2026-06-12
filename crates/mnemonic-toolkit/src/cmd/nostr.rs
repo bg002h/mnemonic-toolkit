@@ -5,7 +5,7 @@
 use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
-use crate::secret_advisory::{secret_in_argv_warning, emit_output_class_advisory, OutputClass};
+use crate::secret_advisory::{emit_output_class_advisory, secret_in_argv_warning, OutputClass};
 use crate::secret_string::SecretString;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -34,7 +34,10 @@ fn parse_import_mode(s: &str) -> Result<ImportMode, String> {
 fn build_import_recipe(args: &NostrArgs, rows: &[OutputRow]) -> Option<serde_json::Value> {
     if args.import == Some(ImportMode::ReadOnly) {
         let descs: Vec<String> = rows.iter().map(|r| r.descriptor.clone()).collect();
-        Some(crate::wallet_export::import_array_single(&descs, args.timestamp.0))
+        Some(crate::wallet_export::import_array_single(
+            &descs,
+            args.timestamp.0,
+        ))
     } else {
         None
     }
@@ -145,7 +148,12 @@ pub fn run<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let types: Vec<ScriptType> = if args.all_script_types {
-        vec![ScriptType::P2tr, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2pkh]
+        vec![
+            ScriptType::P2tr,
+            ScriptType::P2wpkh,
+            ScriptType::P2shP2wpkh,
+            ScriptType::P2pkh,
+        ]
     } else {
         vec![args.script_type.unwrap_or(ScriptType::P2tr)]
     };
@@ -196,7 +204,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         secret_in_argv_warning(stderr, "--secret", "--secret-stdin");
         Some(zeroize::Zeroizing::new(s.clone()))
     } else if let Some(path) = &args.secret_file {
-        Some(zeroize::Zeroizing::new(std::fs::read_to_string(path).map_err(ToolkitError::Io)?.trim().to_string()))
+        Some(zeroize::Zeroizing::new(
+            std::fs::read_to_string(path)
+                .map_err(ToolkitError::Io)?
+                .trim()
+                .to_string(),
+        ))
     } else if args.secret_stdin {
         let mut buf = String::new();
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
@@ -210,7 +223,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         let raw = crate::nostr::decode_nsec(&sec)?;
         let (norm, negated) = crate::nostr::normalize_to_even_y(&secp, raw);
         if negated {
-            writeln!(stderr, "notice: nostr: secret normalized to even-y (BIP-340) for address consistency").map_err(ToolkitError::Io)?;
+            writeln!(
+                stderr,
+                "notice: nostr: secret normalized to even-y (BIP-340) for address consistency"
+            )
+            .map_err(ToolkitError::Io)?;
         }
         let (xonly, _) = norm.x_only_public_key(&secp);
         // v0.53.x: WIF held in a zeroize-on-drop SecretString from creation;

@@ -84,10 +84,7 @@ pub fn render_table<W: Write>(
     writeln!(out)?;
 
     // Compute columns.
-    let table_rows: Vec<RowJson> = rows
-        .iter()
-        .map(|r| build_row_json(r, feerate))
-        .collect();
+    let table_rows: Vec<RowJson> = rows.iter().map(|r| build_row_json(r, feerate)).collect();
 
     // Column widths.
     let label_w = std::cmp::max(

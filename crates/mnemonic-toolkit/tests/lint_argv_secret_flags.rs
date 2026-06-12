@@ -70,76 +70,332 @@ struct Route {
 //    v0.38.0 + ms-shares-combine + restore v0.43.0 + xpub-search --phrase ×3 v0.53.1) ──
 const FLAG_ROUTES: &[Route] = &[
     // -- pre-v0.13.0 (9) --
-    Route { subcommand: "bundle", flag: "--passphrase", source_file: "src/cmd/bundle.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "verify-bundle", flag: "--passphrase", source_file: "src/cmd/verify_bundle.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "convert", flag: "--passphrase", source_file: "src/cmd/convert.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "convert", flag: "--bip38-passphrase", source_file: "src/cmd/convert.rs", evidence: &["bip38_passphrase_stdin", "bip38-passphrase-stdin"] },
-    Route { subcommand: "derive-child", flag: "--passphrase", source_file: "src/cmd/derive_child.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "slip39-split", flag: "--passphrase", source_file: "src/cmd/slip39.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "slip39-combine", flag: "--passphrase", source_file: "src/cmd/slip39.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "slip39-combine", flag: "--share", source_file: "src/cmd/slip39.rs", evidence: &["--share -", "secret_in_argv_warning"] },
-    Route { subcommand: "seed-xor-combine", flag: "--share", source_file: "src/cmd/seed_xor.rs", evidence: &["--share phrase=", "secret_in_argv_warning"] },
+    Route {
+        subcommand: "bundle",
+        flag: "--passphrase",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "verify-bundle",
+        flag: "--passphrase",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "convert",
+        flag: "--passphrase",
+        source_file: "src/cmd/convert.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "convert",
+        flag: "--bip38-passphrase",
+        source_file: "src/cmd/convert.rs",
+        evidence: &["bip38_passphrase_stdin", "bip38-passphrase-stdin"],
+    },
+    Route {
+        subcommand: "derive-child",
+        flag: "--passphrase",
+        source_file: "src/cmd/derive_child.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "slip39-split",
+        flag: "--passphrase",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "slip39-combine",
+        flag: "--passphrase",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "slip39-combine",
+        flag: "--share",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["--share -", "secret_in_argv_warning"],
+    },
+    Route {
+        subcommand: "seed-xor-combine",
+        flag: "--share",
+        source_file: "src/cmd/seed_xor.rs",
+        evidence: &["--share phrase=", "secret_in_argv_warning"],
+    },
     // -- v0.36.2 backfill (16) --
-    Route { subcommand: "nostr", flag: "--secret", source_file: "src/cmd/nostr.rs", evidence: &["secret_stdin", "secret-stdin"] },
-    Route { subcommand: "silent-payment", flag: "--secret", source_file: "src/cmd/silent_payment.rs", evidence: &["secret_stdin", "secret-stdin"] },
-    Route { subcommand: "silent-payment", flag: "--passphrase", source_file: "src/cmd/silent_payment.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
-    Route { subcommand: "electrum-decrypt", flag: "--decrypt-password", source_file: "src/cmd/electrum_decrypt.rs", evidence: &["decrypt_password_stdin", "decrypt-password-stdin"] },
-    Route { subcommand: "import-wallet", flag: "--decrypt-password", source_file: "src/cmd/import_wallet.rs", evidence: &["decrypt_password_stdin", "decrypt-password-stdin"] },
+    Route {
+        subcommand: "nostr",
+        flag: "--secret",
+        source_file: "src/cmd/nostr.rs",
+        evidence: &["secret_stdin", "secret-stdin"],
+    },
+    Route {
+        subcommand: "silent-payment",
+        flag: "--secret",
+        source_file: "src/cmd/silent_payment.rs",
+        evidence: &["secret_stdin", "secret-stdin"],
+    },
+    Route {
+        subcommand: "silent-payment",
+        flag: "--passphrase",
+        source_file: "src/cmd/silent_payment.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
+    Route {
+        subcommand: "electrum-decrypt",
+        flag: "--decrypt-password",
+        source_file: "src/cmd/electrum_decrypt.rs",
+        evidence: &["decrypt_password_stdin", "decrypt-password-stdin"],
+    },
+    Route {
+        subcommand: "import-wallet",
+        flag: "--decrypt-password",
+        source_file: "src/cmd/import_wallet.rs",
+        evidence: &["decrypt_password_stdin", "decrypt-password-stdin"],
+    },
     // import-wallet/verify-bundle --ms1: @env:-only (no *-stdin/-) — R0 I3.
-    Route { subcommand: "import-wallet", flag: "--ms1", source_file: "src/cmd/import_wallet.rs", evidence: &["@env:", "resolve_env_sentinels", "resolve_env_var_sentinel", "needs_env_sentinel_resolution"] },
-    Route { subcommand: "verify-bundle", flag: "--ms1", source_file: "src/cmd/verify_bundle.rs", evidence: &["@env:", "resolve_env_sentinels", "resolve_env_var_sentinel"] },
+    Route {
+        subcommand: "import-wallet",
+        flag: "--ms1",
+        source_file: "src/cmd/import_wallet.rs",
+        evidence: &[
+            "@env:",
+            "resolve_env_sentinels",
+            "resolve_env_var_sentinel",
+            "needs_env_sentinel_resolution",
+        ],
+    },
+    Route {
+        subcommand: "verify-bundle",
+        flag: "--ms1",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["@env:", "resolve_env_sentinels", "resolve_env_var_sentinel"],
+    },
     // inspect/repair --ms1: `-` sentinel handled in the SHARED src/repair.rs — R0 I-2.
-    Route { subcommand: "inspect", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes", "secret_in_argv_warning"] },
-    Route { subcommand: "repair", flag: "--ms1", source_file: "src/repair.rs", evidence: &["value == \"-\"", "resolve_groups", "expand_dashes", "secret_in_argv_warning"] },
-    Route { subcommand: "seedqr-decode", flag: "--digits", source_file: "src/cmd/seedqr.rs", evidence: &["read_stdin_to_string", "== \"-\"", "--digits -"] },
+    Route {
+        subcommand: "inspect",
+        flag: "--ms1",
+        source_file: "src/repair.rs",
+        evidence: &[
+            "value == \"-\"",
+            "resolve_groups",
+            "expand_dashes",
+            "secret_in_argv_warning",
+        ],
+    },
+    Route {
+        subcommand: "repair",
+        flag: "--ms1",
+        source_file: "src/repair.rs",
+        evidence: &[
+            "value == \"-\"",
+            "resolve_groups",
+            "expand_dashes",
+            "secret_in_argv_warning",
+        ],
+    },
+    Route {
+        subcommand: "seedqr-decode",
+        flag: "--digits",
+        source_file: "src/cmd/seedqr.rs",
+        evidence: &["read_stdin_to_string", "== \"-\"", "--digits -"],
+    },
     // xpub-search ×3: --ms1 anchor in the SHARED seed_intake.rs; --passphrase per-mode file.
-    Route { subcommand: "xpub-search-path-of-xpub", flag: "--ms1", source_file: "src/cmd/xpub_search/seed_intake.rs", evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"] },
-    Route { subcommand: "xpub-search-account-of-descriptor", flag: "--ms1", source_file: "src/cmd/xpub_search/seed_intake.rs", evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"] },
-    Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--ms1", source_file: "src/cmd/xpub_search/seed_intake.rs", evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"] },
-    Route { subcommand: "xpub-search-path-of-xpub", flag: "--passphrase", source_file: "src/cmd/xpub_search/path_of_xpub.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
-    Route { subcommand: "xpub-search-account-of-descriptor", flag: "--passphrase", source_file: "src/cmd/xpub_search/account_of_descriptor.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
-    Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--passphrase", source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
+    Route {
+        subcommand: "xpub-search-path-of-xpub",
+        flag: "--ms1",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"],
+    },
+    Route {
+        subcommand: "xpub-search-account-of-descriptor",
+        flag: "--ms1",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"],
+    },
+    Route {
+        subcommand: "xpub-search-passphrase-of-xpub",
+        flag: "--ms1",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"],
+    },
+    Route {
+        subcommand: "xpub-search-path-of-xpub",
+        flag: "--passphrase",
+        source_file: "src/cmd/xpub_search/path_of_xpub.rs",
+        evidence: &[
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "secret_in_argv_warning",
+        ],
+    },
+    Route {
+        subcommand: "xpub-search-account-of-descriptor",
+        flag: "--passphrase",
+        source_file: "src/cmd/xpub_search/account_of_descriptor.rs",
+        evidence: &[
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "secret_in_argv_warning",
+        ],
+    },
+    Route {
+        subcommand: "xpub-search-passphrase-of-xpub",
+        flag: "--passphrase",
+        source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs",
+        evidence: &[
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "secret_in_argv_warning",
+        ],
+    },
     // -- v0.38.0 (1): mnemonic addresses --
-    Route { subcommand: "addresses", flag: "--passphrase", source_file: "src/cmd/addresses.rs", evidence: &["passphrase-stdin", "passphrase_stdin", "secret_in_argv_warning"] },
+    Route {
+        subcommand: "addresses",
+        flag: "--passphrase",
+        source_file: "src/cmd/addresses.rs",
+        evidence: &[
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "secret_in_argv_warning",
+        ],
+    },
     // -- ms K-of-N v0.2 (1): mnemonic ms-shares combine --share --
-    Route { subcommand: "ms-shares-combine", flag: "--share", source_file: "src/cmd/ms_shares.rs", evidence: &["--share -", "secret_in_argv_warning"] },
+    Route {
+        subcommand: "ms-shares-combine",
+        flag: "--share",
+        source_file: "src/cmd/ms_shares.rs",
+        evidence: &["--share -", "secret_in_argv_warning"],
+    },
     // -- v0.43.0 (1): mnemonic restore --passphrase --
-    Route { subcommand: "restore", flag: "--passphrase", source_file: "src/cmd/restore.rs", evidence: &["passphrase_stdin", "passphrase-stdin"] },
+    Route {
+        subcommand: "restore",
+        flag: "--passphrase",
+        source_file: "src/cmd/restore.rs",
+        evidence: &["passphrase_stdin", "passphrase-stdin"],
+    },
     // -- v0.53.1 audit-I3 (3): xpub-search ×3 --phrase (newly secret-classified).
     //    Needles MUST be discriminating: bare "phrase_stdin"/"phrase-stdin" are
     //    suffixes of "passphrase_stdin"/"passphrase-stdin", which these files
     //    already contain for their --passphrase routes — `pub `/`fn `-prefixed
     //    forms vanish iff the --phrase-stdin wiring is deleted (R0-r1 I-3).
-    Route { subcommand: "xpub-search-path-of-xpub", flag: "--phrase", source_file: "src/cmd/xpub_search/path_of_xpub.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
-    Route { subcommand: "xpub-search-account-of-descriptor", flag: "--phrase", source_file: "src/cmd/xpub_search/account_of_descriptor.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
-    Route { subcommand: "xpub-search-passphrase-of-xpub", flag: "--phrase", source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs", evidence: &["pub phrase_stdin", "fn phrase_stdin"] },
+    Route {
+        subcommand: "xpub-search-path-of-xpub",
+        flag: "--phrase",
+        source_file: "src/cmd/xpub_search/path_of_xpub.rs",
+        evidence: &["pub phrase_stdin", "fn phrase_stdin"],
+    },
+    Route {
+        subcommand: "xpub-search-account-of-descriptor",
+        flag: "--phrase",
+        source_file: "src/cmd/xpub_search/account_of_descriptor.rs",
+        evidence: &["pub phrase_stdin", "fn phrase_stdin"],
+    },
+    Route {
+        subcommand: "xpub-search-passphrase-of-xpub",
+        flag: "--phrase",
+        source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs",
+        evidence: &["pub phrase_stdin", "fn phrase_stdin"],
+    },
 ];
 
 // ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
 const FROM_ROUTES: &[Route] = &[
-    Route { subcommand: "addresses", flag: "--from", source_file: "src/cmd/addresses.rs", evidence: &["=-", "value == \"-\""] },
-    Route { subcommand: "convert", flag: "--from", source_file: "src/cmd/convert.rs", evidence: &["=-", "value == \"-\""] },
-    Route { subcommand: "derive-child", flag: "--from", source_file: "src/cmd/derive_child.rs", evidence: &["=-", "value == \"-\""] },
-    Route { subcommand: "final-word", flag: "--from", source_file: "src/cmd/final_word.rs", evidence: &["=-", "value == \"-\""] },
-    Route { subcommand: "seed-xor-split", flag: "--from", source_file: "src/cmd/seed_xor.rs", evidence: &["=-", "value == \"-\""] },
-    Route { subcommand: "slip39-split", flag: "--from", source_file: "src/cmd/slip39.rs", evidence: &["=-", "value == \"-\""] },
+    Route {
+        subcommand: "addresses",
+        flag: "--from",
+        source_file: "src/cmd/addresses.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
+    Route {
+        subcommand: "convert",
+        flag: "--from",
+        source_file: "src/cmd/convert.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
+    Route {
+        subcommand: "derive-child",
+        flag: "--from",
+        source_file: "src/cmd/derive_child.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
+    Route {
+        subcommand: "final-word",
+        flag: "--from",
+        source_file: "src/cmd/final_word.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
+    Route {
+        subcommand: "seed-xor-split",
+        flag: "--from",
+        source_file: "src/cmd/seed_xor.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
+    Route {
+        subcommand: "slip39-split",
+        flag: "--from",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
     // ms K-of-N v0.2: ms-shares split --from phrase=/entropy= (=- stdin route).
-    Route { subcommand: "ms-shares-split", flag: "--from", source_file: "src/cmd/ms_shares.rs", evidence: &["=-", "value == \"-\""] },
+    Route {
+        subcommand: "ms-shares-split",
+        flag: "--from",
+        source_file: "src/cmd/ms_shares.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
     // seedqr-decode/-encode are flattened → src/cmd/seedqr.rs (no seedqr-decode.rs) — R2 M-1.
-    Route { subcommand: "seedqr-decode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },
-    Route { subcommand: "seedqr-encode", flag: "--from", source_file: "src/cmd/seedqr.rs", evidence: &["=-", "== \"-\""] },
+    Route {
+        subcommand: "seedqr-decode",
+        flag: "--from",
+        source_file: "src/cmd/seedqr.rs",
+        evidence: &["=-", "== \"-\""],
+    },
+    Route {
+        subcommand: "seedqr-encode",
+        flag: "--from",
+        source_file: "src/cmd/seedqr.rs",
+        evidence: &["=-", "== \"-\""],
+    },
     // v0.43.0: mnemonic restore --from {ms1,phrase,entropy,seedqr}= (=- stdin route).
-    Route { subcommand: "restore", flag: "--from", source_file: "src/cmd/restore.rs", evidence: &["=-", "value == \"-\""] },
+    Route {
+        subcommand: "restore",
+        flag: "--from",
+        source_file: "src/cmd/restore.rs",
+        evidence: &["=-", "value == \"-\""],
+    },
 ];
 
 // ── Axis 3: `--slot` routes (4; slot-stdin / @env: / refusal) ──
 const SLOT_ROUTES: &[Route] = &[
-    Route { subcommand: "bundle", flag: "--slot", source_file: "src/cmd/bundle.rs", evidence: &["slot_stdin", "slot-stdin", "apply_slot_stdin"] },
-    Route { subcommand: "verify-bundle", flag: "--slot", source_file: "src/cmd/verify_bundle.rs", evidence: &["slot_stdin", "slot-stdin", "apply_slot_stdin"] },
+    Route {
+        subcommand: "bundle",
+        flag: "--slot",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["slot_stdin", "slot-stdin", "apply_slot_stdin"],
+    },
+    Route {
+        subcommand: "verify-bundle",
+        flag: "--slot",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["slot_stdin", "slot-stdin", "apply_slot_stdin"],
+    },
     // import-wallet --slot @N.phrase= is @env:-only (R1 I-A).
-    Route { subcommand: "import-wallet", flag: "--slot", source_file: "src/cmd/import_wallet.rs", evidence: &["@env:", "resolve_env_var_sentinel", "resolve_env_sentinels"] },
+    Route {
+        subcommand: "import-wallet",
+        flag: "--slot",
+        source_file: "src/cmd/import_wallet.rs",
+        evidence: &["@env:", "resolve_env_var_sentinel", "resolve_env_sentinels"],
+    },
     // export-wallet REFUSES secret subkeys — the refusal IS the anchor (R1 M-A: runtime token).
-    Route { subcommand: "export-wallet", flag: "--slot", source_file: "src/cmd/export_wallet.rs", evidence: &["validate_watch_only", "watch-only by"] },
+    Route {
+        subcommand: "export-wallet",
+        flag: "--slot",
+        source_file: "src/cmd/export_wallet.rs",
+        evidence: &["validate_watch_only", "watch-only by"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -148,14 +404,17 @@ fn crate_root() -> &'static Path {
 
 /// `serde_json::Value` of `mnemonic gui-schema`.
 fn gui_schema() -> serde_json::Value {
-    let bin = std::env::var("MNEMONIC_BIN").unwrap_or_else(|_| {
-        env!("CARGO_BIN_EXE_mnemonic").to_string()
-    });
+    let bin = std::env::var("MNEMONIC_BIN")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_mnemonic").to_string());
     let out = Command::new(&bin)
         .arg("gui-schema")
         .output()
         .unwrap_or_else(|e| panic!("failed to run `{bin} gui-schema`: {e}"));
-    assert!(out.status.success(), "gui-schema must exit 0; got {:?}", out.status);
+    assert!(
+        out.status.success(),
+        "gui-schema must exit 0; got {:?}",
+        out.status
+    );
     serde_json::from_slice(&out.stdout).expect("gui-schema stdout must be JSON")
 }
 
@@ -214,7 +473,10 @@ fn flag_axis_set_equals_gui_schema() {
 #[test]
 fn from_axis_set_equals_gui_schema() {
     let live = live_subcommands_with_flag(&gui_schema(), "--from");
-    let declared: BTreeSet<String> = FROM_ROUTES.iter().map(|r| r.subcommand.to_string()).collect();
+    let declared: BTreeSet<String> = FROM_ROUTES
+        .iter()
+        .map(|r| r.subcommand.to_string())
+        .collect();
     assert_eq!(
         live, declared,
         "`--from` subcommand drift (axis 2): live gui-schema --from-bearing set != declared \
@@ -226,7 +488,10 @@ fn from_axis_set_equals_gui_schema() {
 #[test]
 fn slot_axis_set_equals_gui_schema() {
     let live = live_subcommands_with_flag(&gui_schema(), "--slot");
-    let declared: BTreeSet<String> = SLOT_ROUTES.iter().map(|r| r.subcommand.to_string()).collect();
+    let declared: BTreeSet<String> = SLOT_ROUTES
+        .iter()
+        .map(|r| r.subcommand.to_string())
+        .collect();
     assert_eq!(
         live, declared,
         "`--slot` subcommand drift (axis 3): live gui-schema --slot-bearing set != declared \

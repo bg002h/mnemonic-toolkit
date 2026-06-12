@@ -25,7 +25,10 @@ fn inline_secret_emits_argv_leakage_advisory() {
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))
         .output()
         .unwrap();
-    assert!(out.status.success(), "happy path with inline secret still succeeds");
+    assert!(
+        out.status.success(),
+        "happy path with inline secret still succeeds"
+    );
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
         stderr.contains("warning: secret material on argv (--from phrase=)"),

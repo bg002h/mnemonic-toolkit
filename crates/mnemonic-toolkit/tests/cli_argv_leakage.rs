@@ -145,7 +145,10 @@ fn bundle_wif_mk1_round_trips_via_inspect() {
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
-    assert!(!mk1.is_empty(), "bundle must emit an mk1 card for the WIF slot");
+    assert!(
+        !mk1.is_empty(),
+        "bundle must emit an mk1 card for the WIF slot"
+    );
     let mut args: Vec<String> = vec!["inspect".into()];
     for c in &mk1 {
         args.push("--mk1".into());
@@ -361,6 +364,8 @@ fn convert_bip38_passphrase_stdin_null_byte_succeeds() {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     assert_eq!(&line[colon + 2..], BIP38_NULL_EXPECTED);
 }

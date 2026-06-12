@@ -10,21 +10,34 @@ const FIXTURE_BASE: &str = "tests/fixtures/wallet_import";
 fn run_import(fixture: &str, network: Option<&str>) -> std::process::Output {
     let path = std::path::PathBuf::from(FIXTURE_BASE).join(fixture);
     let p = path.to_str().unwrap().to_string();
-    let mut args: Vec<String> =
-        ["import-wallet", "--format", "bitcoin-core", "--blob", &p, "--json"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+    let mut args: Vec<String> = [
+        "import-wallet",
+        "--format",
+        "bitcoin-core",
+        "--blob",
+        &p,
+        "--json",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     if let Some(n) = network {
         args.push("--network".to_string());
         args.push(n.to_string());
     }
-    Command::cargo_bin("mnemonic").unwrap().args(&args).output().expect("spawn")
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn")
 }
 
 fn bundle_network(out: &std::process::Output) -> String {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
-    v[0]["bundle"]["network"].as_str().expect("network field").to_string()
+    v[0]["bundle"]["network"]
+        .as_str()
+        .expect("network field")
+        .to_string()
 }
 
 #[test]

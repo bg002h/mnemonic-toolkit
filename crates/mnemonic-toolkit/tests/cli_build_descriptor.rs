@@ -10,7 +10,10 @@ fn bin() -> Command {
     Command::cargo_bin("mnemonic").expect("binary built")
 }
 
-const FIX: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/descriptor_builder");
+const FIX: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/descriptor_builder"
+);
 
 struct Archetype {
     name: &'static str,
@@ -34,13 +37,19 @@ const ARCHETYPES: &[Archetype] = &[
     Archetype {
         name: "simple-timelocked-inheritance",
         spec: include_str!("fixtures/descriptor_builder/simple-timelocked-inheritance.json"),
-        descriptor: include_str!("fixtures/descriptor_builder/simple-timelocked-inheritance.descriptor"),
+        descriptor: include_str!(
+            "fixtures/descriptor_builder/simple-timelocked-inheritance.descriptor"
+        ),
         bip388: include_str!("fixtures/descriptor_builder/simple-timelocked-inheritance.bip388"),
         preset_args: &[
-            "--archetype", "simple-timelocked-inheritance",
-            "--key", K1,
-            "--recovery-key", K2,
-            "--older", "65535",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            K1,
+            "--recovery-key",
+            K2,
+            "--older",
+            "65535",
         ],
     },
     Archetype {
@@ -49,11 +58,28 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/decaying-multisig.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/decaying-multisig.bip388"),
         preset_args: &[
-            "--archetype", "decaying-multisig",
-            "--key", K1, "--key", K2, "--threshold", "2", "--older", "1000",
-            "--recovery-key", K3, "--recovery-key", K4,
-            "--recovery-threshold", "2", "--recovery-older", "2000",
-            "--final-key", K5, "--after", "500000",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "500000",
         ],
     },
     Archetype {
@@ -62,9 +88,20 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/kofn-recovery.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/kofn-recovery.bip388"),
         preset_args: &[
-            "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--key", K3, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--key",
+            K3,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
         ],
     },
     Archetype {
@@ -73,10 +110,24 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/tiered-recovery.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/tiered-recovery.bip388"),
         preset_args: &[
-            "--archetype", "tiered-recovery",
-            "--key", K1, "--key", K2, "--threshold", "2", "--older", "4032",
-            "--recovery-key", K3, "--recovery-key", K4, "--recovery-key", K5,
-            "--recovery-threshold", "2",
+            "--archetype",
+            "tiered-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "4032",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-key",
+            K5,
+            "--recovery-threshold",
+            "2",
         ],
     },
     Archetype {
@@ -85,9 +136,16 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/hashlock-gated.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/hashlock-gated.bip388"),
         preset_args: &[
-            "--archetype", "hashlock-gated",
-            "--key", K1, "--hash", HASH_HEX,
-            "--recovery-key", K2, "--older", "144",
+            "--archetype",
+            "hashlock-gated",
+            "--key",
+            K1,
+            "--hash",
+            HASH_HEX,
+            "--recovery-key",
+            K2,
+            "--older",
+            "144",
         ],
     },
 ];
@@ -100,11 +158,23 @@ fn spec_path(name: &str) -> String {
 fn archetype_descriptor_goldens() {
     for a in ARCHETYPES {
         let out = bin()
-            .args(["build-descriptor", "--spec", &spec_path(a.name), "--network", "mainnet", "--format", "descriptor"])
+            .args([
+                "build-descriptor",
+                "--spec",
+                &spec_path(a.name),
+                "--network",
+                "mainnet",
+                "--format",
+                "descriptor",
+            ])
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert_eq!(got, a.descriptor, "descriptor golden mismatch for {}", a.name);
+        assert_eq!(
+            got, a.descriptor,
+            "descriptor golden mismatch for {}",
+            a.name
+        );
     }
 }
 
@@ -112,7 +182,15 @@ fn archetype_descriptor_goldens() {
 fn archetype_bip388_goldens() {
     for a in ARCHETYPES {
         let out = bin()
-            .args(["build-descriptor", "--spec", &spec_path(a.name), "--network", "mainnet", "--format", "bip388"])
+            .args([
+                "build-descriptor",
+                "--spec",
+                &spec_path(a.name),
+                "--network",
+                "mainnet",
+                "--format",
+                "bip388",
+            ])
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -128,7 +206,13 @@ fn bip388_round_trips_through_export_wallet_descriptor() {
     for a in ARCHETYPES {
         let descriptor = a.descriptor.trim_end();
         let out = bin()
-            .args(["export-wallet", "--descriptor", descriptor, "--format", "bip388"])
+            .args([
+                "export-wallet",
+                "--descriptor",
+                descriptor,
+                "--format",
+                "bip388",
+            ])
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -140,7 +224,14 @@ fn bip388_round_trips_through_export_wallet_descriptor() {
 fn json_envelope_has_descriptor_bip388_cost_and_empty_diagnostics() {
     let a = &ARCHETYPES[2]; // kofn-recovery
     let out = bin()
-        .args(["build-descriptor", "--spec", &spec_path(a.name), "--network", "mainnet", "--json"])
+        .args([
+            "build-descriptor",
+            "--spec",
+            &spec_path(a.name),
+            "--network",
+            "mainnet",
+            "--json",
+        ])
         .assert()
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
@@ -158,7 +249,11 @@ fn spec_schema_dumps_versioned_grammar() {
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["spec_schema_version"], 1);
-    assert!(v["node_kinds"].as_array().unwrap().iter().any(|k| k == "andor"));
+    assert!(v["node_kinds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|k| k == "andor"));
     assert_eq!(v["multipath_suffix"], "/<0;1>/*");
 }
 
@@ -238,9 +333,15 @@ fn secret_keys_refused_without_leaking() {
             .code(2);
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
         let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert!(!stderr.contains(secret), "{label}: secret leaked to stderr: {stderr}");
+        assert!(
+            !stderr.contains(secret),
+            "{label}: secret leaked to stderr: {stderr}"
+        );
         assert!(!stdout.contains(secret), "{label}: secret leaked to stdout");
-        assert!(stdout.is_empty(), "{label}: no descriptor emitted for a secret key");
+        assert!(
+            stdout.is_empty(),
+            "{label}: no descriptor emitted for a secret key"
+        );
 
         // --json → diagnostics on stdout, exit 2, no secret substring
         let out = bin()
@@ -249,10 +350,19 @@ fn secret_keys_refused_without_leaking() {
             .assert()
             .code(2);
         let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert!(!stdout.contains(secret), "{label}: secret leaked to --json: {stdout}");
+        assert!(
+            !stdout.contains(secret),
+            "{label}: secret leaked to --json: {stdout}"
+        );
         let v: Value = serde_json::from_str(&stdout).unwrap();
-        assert!(!v["diagnostics"].as_array().unwrap().is_empty(), "{label}: diagnostics present");
-        assert!(v["descriptor"].is_null(), "{label}: no descriptor in failure envelope");
+        assert!(
+            !v["diagnostics"].as_array().unwrap().is_empty(),
+            "{label}: diagnostics present"
+        );
+        assert!(
+            v["descriptor"].is_null(),
+            "{label}: no descriptor in failure envelope"
+        );
     }
 }
 
@@ -262,12 +372,23 @@ fn negative_discrimination_mutated_threshold_breaks_golden() {
     // golden no longer matches (the golden is non-vacuous).
     let mutated = ARCHETYPES[2].spec.replacen("\"k\": 2", "\"k\": 1", 1);
     let out = bin()
-        .args(["build-descriptor", "--network", "mainnet", "--format", "descriptor", "--spec", "-"])
+        .args([
+            "build-descriptor",
+            "--network",
+            "mainnet",
+            "--format",
+            "descriptor",
+            "--spec",
+            "-",
+        ])
         .write_stdin(mutated)
         .assert()
         .success();
     let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_ne!(got, ARCHETYPES[2].descriptor, "mutated threshold must change the descriptor");
+    assert_ne!(
+        got, ARCHETYPES[2].descriptor,
+        "mutated threshold must change the descriptor"
+    );
 }
 
 // ======================================================================
@@ -286,7 +407,11 @@ fn preset_descriptor_goldens() {
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert_eq!(got, a.descriptor, "preset descriptor golden mismatch for {}", a.name);
+        assert_eq!(
+            got, a.descriptor,
+            "preset descriptor golden mismatch for {}",
+            a.name
+        );
     }
 }
 
@@ -300,7 +425,11 @@ fn preset_bip388_goldens() {
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert_eq!(got, a.bip388, "preset bip388 golden mismatch for {}", a.name);
+        assert_eq!(
+            got, a.bip388,
+            "preset bip388 golden mismatch for {}",
+            a.name
+        );
     }
 }
 
@@ -319,14 +448,23 @@ fn preset_ignores_piped_stdin() {
         .assert()
         .success();
     let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(got, a.descriptor, "piped stdin must be ignored in preset mode");
+    assert_eq!(
+        got, a.descriptor,
+        "piped stdin must be ignored in preset mode"
+    );
 }
 
 /// `--archetype` conflicts with `--spec` at the clap level (presets SPEC §1).
 #[test]
 fn preset_conflicts_with_spec() {
     bin()
-        .args(["build-descriptor", "--archetype", "kofn-recovery", "--spec", "x.json"])
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--spec",
+            "x.json",
+        ])
         .assert()
         .failure()
         .stderr(predicates::str::contains("cannot be used with"));
@@ -348,8 +486,16 @@ fn param_flag_without_archetype_is_clap_error() {
 fn preset_missing_required_param_exit_2() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "2", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -360,7 +506,11 @@ fn preset_missing_required_param_exit_2() {
         assert_eq!(d["kind"], "param");
         assert_eq!(d["node_path"], "params");
     }
-    let all = diags.iter().map(|d| d["message"].as_str().unwrap()).collect::<Vec<_>>().join("\n");
+    let all = diags
+        .iter()
+        .map(|d| d["message"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(all.contains("--recovery-key") && all.contains("--older"));
 }
 
@@ -368,26 +518,57 @@ fn preset_missing_required_param_exit_2() {
 fn preset_inapplicable_param_exit_2() {
     bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560",
-            "--hash", HASH_HEX,
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--hash",
+            HASH_HEX,
         ])
         .assert()
         .code(2)
         .stderr(predicates::str::contains("param"))
-        .stderr(predicates::str::contains("--hash is not a parameter of kofn-recovery"));
+        .stderr(predicates::str::contains(
+            "--hash is not a parameter of kofn-recovery",
+        ));
 }
 
 #[test]
 fn preset_decay_ordering_violation_exit_2() {
     bin()
         .args([
-            "build-descriptor", "--archetype", "decaying-multisig",
-            "--key", K1, "--key", K2, "--threshold", "2", "--older", "2000",
-            "--recovery-key", K3, "--recovery-key", K4,
-            "--recovery-threshold", "2", "--recovery-older", "2000",
-            "--final-key", K5, "--after", "500000",
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "2000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "500000",
         ])
         .assert()
         .code(2)
@@ -403,9 +584,20 @@ fn preset_decay_ordering_violation_exit_2() {
 fn preset_k_gt_n_flows_to_gate_schema_field() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "5",
-            "--recovery-key", K4, "--older", "52560", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "5",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -420,9 +612,20 @@ fn preset_k_gt_n_flows_to_gate_schema_field() {
 fn preset_duplicate_key_flows_to_gate_repeated_keys() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K1, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K1,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -440,9 +643,20 @@ fn preset_duplicate_key_flows_to_gate_repeated_keys() {
 fn preset_key_order_is_preserved_and_load_bearing() {
     let a = &ARCHETYPES[2]; // kofn-recovery (multi)
     let swapped: &[&str] = &[
-        "--archetype", "kofn-recovery",
-        "--key", K2, "--key", K1, "--key", K3, "--threshold", "2",
-        "--recovery-key", K4, "--older", "52560",
+        "--archetype",
+        "kofn-recovery",
+        "--key",
+        K2,
+        "--key",
+        K1,
+        "--key",
+        K3,
+        "--threshold",
+        "2",
+        "--recovery-key",
+        K4,
+        "--older",
+        "52560",
     ];
     let out = bin()
         .args(["build-descriptor"])
@@ -451,7 +665,10 @@ fn preset_key_order_is_preserved_and_load_bearing() {
         .assert()
         .success();
     let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_ne!(got, a.descriptor, "swapped key order must change the multi descriptor");
+    assert_ne!(
+        got, a.descriptor,
+        "swapped key order must change the multi descriptor"
+    );
 }
 
 /// Preset golden non-vacuity, PER ARCHETYPE (presets SPEC §7; Phase-1 review
@@ -483,7 +700,10 @@ fn preset_negative_discrimination_mutated_param_breaks_golden() {
             .assert()
             .success();
         let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert_ne!(got, a.descriptor, "{name}: mutated {flag} must change the descriptor");
+        assert_ne!(
+            got, a.descriptor,
+            "{name}: mutated {flag} must change the descriptor"
+        );
     }
 }
 
@@ -508,7 +728,11 @@ fn emit_spec_value_equals_fixture_and_round_trips() {
         let emitted = String::from_utf8(out.get_output().stdout.clone()).unwrap();
         let got: Value = serde_json::from_str(&emitted).unwrap();
         let want: Value = serde_json::from_str(a.spec).unwrap();
-        assert_eq!(got, want, "{}: emitted spec != fixture (value equality)", a.name);
+        assert_eq!(
+            got, want,
+            "{}: emitted spec != fixture (value equality)",
+            a.name
+        );
 
         let out = bin()
             .args(["build-descriptor", "--spec", "-", "--format", "descriptor"])
@@ -516,7 +740,11 @@ fn emit_spec_value_equals_fixture_and_round_trips() {
             .assert()
             .success();
         let desc = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-        assert_eq!(desc, a.descriptor, "{}: emit-spec round-trip descriptor", a.name);
+        assert_eq!(
+            desc, a.descriptor,
+            "{}: emit-spec round-trip descriptor",
+            a.name
+        );
     }
 }
 
@@ -542,13 +770,27 @@ fn emit_spec_conflicts_with_format_and_json() {
 fn emit_spec_runs_the_gate_before_printing() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "5",
-            "--recovery-key", K4, "--older", "52560", "--emit-spec",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "5",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--emit-spec",
         ])
         .assert()
         .code(2);
-    assert!(out.get_output().stdout.is_empty(), "no spec emitted on a gate failure");
+    assert!(
+        out.get_output().stdout.is_empty(),
+        "no spec emitted on a gate failure"
+    );
 }
 
 /// Gate flow-through provenance (presets SPEC §3.3/§7): the kind-aware
@@ -559,9 +801,20 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     // k>n → SchemaField at the quorum node → --threshold (kind-override entry).
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "5",
-            "--recovery-key", K4, "--older", "52560", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "5",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -575,9 +828,20 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     // (catch-all entry at the same prefix).
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K1, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K1,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -590,9 +854,18 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     // bad --hash hex → SchemaField at the sha256 node → --hash.
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "hashlock-gated",
-            "--key", K1, "--hash", "zz26a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084db",
-            "--recovery-key", K2, "--older", "144", "--json",
+            "build-descriptor",
+            "--archetype",
+            "hashlock-gated",
+            "--key",
+            K1,
+            "--hash",
+            "zz26a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084db",
+            "--recovery-key",
+            K2,
+            "--older",
+            "144",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -607,9 +880,20 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     const XPRV: &str = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", XPRV, "--key", K2, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            XPRV,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -651,9 +935,22 @@ fn masked_older_timelock_refused_exit_2() {
 fn preset_masked_older_refused_with_older_provenance() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--key", K3, "--threshold", "2",
-            "--recovery-key", K4, "--older", "105120", "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--key",
+            K3,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "105120",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -675,8 +972,16 @@ fn cross_branch_duplicates_carry_no_flag() {
     // Cross-branch dup (--key X --recovery-key X) localizes to root.
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "simple-timelocked-inheritance",
-            "--key", K1, "--recovery-key", K1, "--older", "65535", "--json",
+            "build-descriptor",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            K1,
+            "--recovery-key",
+            K1,
+            "--older",
+            "65535",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -690,11 +995,30 @@ fn cross_branch_duplicates_carry_no_flag() {
     // localizes to root.andor[2] — matches no provenance prefix (P1-r1 M3).
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "decaying-multisig",
-            "--key", K1, "--key", K2, "--threshold", "2", "--older", "1000",
-            "--recovery-key", K3, "--recovery-key", K4,
-            "--recovery-threshold", "2", "--recovery-older", "2000",
-            "--final-key", K3, "--after", "500000", "--json",
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K3,
+            "--after",
+            "500000",
+            "--json",
         ])
         .assert()
         .code(2);
@@ -711,9 +1035,18 @@ fn cross_branch_duplicates_carry_no_flag() {
 fn producer_diagnostics_carry_flag_and_human_suffix() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K2, "--threshold", "2",
-            "--recovery-key", K4, "--json",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--json",
         ])
         .assert()
         .code(2);
@@ -726,9 +1059,19 @@ fn producer_diagnostics_carry_flag_and_human_suffix() {
     // Human mode: gate diagnostic gets " (from --key)".
     bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K1, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K1,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
         ])
         .assert()
         .code(2)
@@ -749,7 +1092,10 @@ fn spec_mode_json_diagnostics_byte_stable_no_flag_key() {
         .assert()
         .code(2);
     let got = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(got, golden, "spec-mode --json diagnostics must stay byte-identical");
+    assert_eq!(
+        got, golden,
+        "spec-mode --json diagnostics must stay byte-identical"
+    );
 }
 
 /// Success-path composition under preset mode (P1-r1 M5): `--json` envelope
@@ -776,7 +1122,10 @@ fn preset_success_json_and_network_compose() {
         .assert()
         .success();
     let human = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(human.contains("tb1q"), "testnet first receive address expected:\n{human}");
+    assert!(
+        human.contains("tb1q"),
+        "testnet first receive address expected:\n{human}"
+    );
 }
 
 /// `--spec-schema` carries the archetypes section (presets SPEC §5):
@@ -790,7 +1139,10 @@ fn spec_schema_carries_archetypes_section() {
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     let archetypes = v["archetypes"].as_array().expect("archetypes array");
-    let ids: Vec<&str> = archetypes.iter().map(|a| a["id"].as_str().unwrap()).collect();
+    let ids: Vec<&str> = archetypes
+        .iter()
+        .map(|a| a["id"].as_str().unwrap())
+        .collect();
     assert_eq!(
         ids,
         [
@@ -812,8 +1164,16 @@ fn spec_schema_carries_archetypes_section() {
         }
     }
     // Spot-pin one entry: kofn-recovery's --key is repeatable min 2, kind key.
-    let kofn = archetypes.iter().find(|a| a["id"] == "kofn-recovery").unwrap();
-    let key = kofn["params"].as_array().unwrap().iter().find(|p| p["flag"] == "--key").unwrap();
+    let kofn = archetypes
+        .iter()
+        .find(|a| a["id"] == "kofn-recovery")
+        .unwrap();
+    let key = kofn["params"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["flag"] == "--key")
+        .unwrap();
     assert_eq!(key["kind"], "key");
     assert_eq!(key["repeatable"], true);
     assert_eq!(key["min"], 2);
@@ -858,12 +1218,24 @@ fn allow_sigless_json_success_cost_null_banner() {
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert!(v["descriptor"].as_str().unwrap().starts_with("wsh("));
-    assert!(v["cost"].is_null(), "cost must be null on an allowed-insane emit");
-    assert_eq!(v["allowed_rules_fired"], serde_json::json!(["sigless_branch"]));
+    assert!(
+        v["cost"].is_null(),
+        "cost must be null on an allowed-insane emit"
+    );
+    assert_eq!(
+        v["allowed_rules_fired"],
+        serde_json::json!(["sigless_branch"])
+    );
     assert_eq!(v["diagnostics"], serde_json::json!([]));
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains("sigless-branch"), "banner names the fired rule: {stderr}");
-    assert!(stderr.to_uppercase().contains("OVERRIDDEN"), "banner is unmissable: {stderr}");
+    assert!(
+        stderr.contains("sigless-branch"),
+        "banner names the fired rule: {stderr}"
+    );
+    assert!(
+        stderr.to_uppercase().contains("OVERRIDDEN"),
+        "banner is unmissable: {stderr}"
+    );
 }
 
 /// Allow-success, human view: the cost block's position carries the
@@ -888,12 +1260,21 @@ fn allow_sigless_human_cost_unavailable_line() {
 #[test]
 fn allow_sigless_format_descriptor_bare() {
     let out = bin()
-        .args(["build-descriptor", "--allow", "sigless-branch", "--format", "descriptor"])
+        .args([
+            "build-descriptor",
+            "--allow",
+            "sigless-branch",
+            "--format",
+            "descriptor",
+        ])
         .write_stdin(SIGLESS_SPEC)
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(stdout.starts_with("wsh(or_d(pk("), "bare descriptor: {stdout}");
+    assert!(
+        stdout.starts_with("wsh(or_d(pk("),
+        "bare descriptor: {stdout}"
+    );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stderr.contains("sigless-branch"));
 }
@@ -903,7 +1284,13 @@ fn allow_sigless_format_descriptor_bare() {
 #[test]
 fn allow_repeated_keys_degrading_threshold() {
     let out = bin()
-        .args(["build-descriptor", "--allow", "repeated-keys", "--format", "descriptor"])
+        .args([
+            "build-descriptor",
+            "--allow",
+            "repeated-keys",
+            "--format",
+            "descriptor",
+        ])
         .write_stdin(repeated_keys_spec())
         .assert()
         .success();
@@ -918,7 +1305,13 @@ fn allow_repeated_keys_degrading_threshold() {
 #[test]
 fn allow_mixed_timelock_keyed_tree() {
     let out = bin()
-        .args(["build-descriptor", "--allow", "mixed-timelock", "--format", "descriptor"])
+        .args([
+            "build-descriptor",
+            "--allow",
+            "mixed-timelock",
+            "--format",
+            "descriptor",
+        ])
         .write_stdin(mixed_timelock_spec())
         .assert()
         .success();
@@ -959,10 +1352,19 @@ fn allow_requested_but_unused_notes_and_normal_envelope() {
         .assert()
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
-    assert!(v.get("allowed_rules_fired").is_none(), "no fired key when nothing fired");
-    assert!(v["cost"].is_object(), "cost runs normally when nothing fired");
+    assert!(
+        v.get("allowed_rules_fired").is_none(),
+        "no fired key when nothing fired"
+    );
+    assert!(
+        v["cost"].is_object(),
+        "cost runs normally when nothing fired"
+    );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains("did not fire"), "unused-allowance note: {stderr}");
+    assert!(
+        stderr.contains("did not fire"),
+        "unused-allowance note: {stderr}"
+    );
 }
 
 /// Preset composition (allow SPEC §0): kofn + duplicate --key +
@@ -971,10 +1373,23 @@ fn allow_requested_but_unused_notes_and_normal_envelope() {
 fn allow_composes_with_preset_mode() {
     bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K1, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560",
-            "--allow", "repeated-keys", "--format", "descriptor",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K1,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--allow",
+            "repeated-keys",
+            "--format",
+            "descriptor",
         ])
         .assert()
         .success()
@@ -987,17 +1402,35 @@ fn allow_composes_with_preset_mode() {
 fn emit_spec_records_no_allowance() {
     let out = bin()
         .args([
-            "build-descriptor", "--archetype", "kofn-recovery",
-            "--key", K1, "--key", K1, "--threshold", "2",
-            "--recovery-key", K4, "--older", "52560",
-            "--allow", "repeated-keys", "--emit-spec",
+            "build-descriptor",
+            "--archetype",
+            "kofn-recovery",
+            "--key",
+            K1,
+            "--key",
+            K1,
+            "--threshold",
+            "2",
+            "--recovery-key",
+            K4,
+            "--older",
+            "52560",
+            "--allow",
+            "repeated-keys",
+            "--emit-spec",
         ])
         .assert()
         .success();
     let emitted = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(!emitted.contains("allow"), "spec document must not record allowances");
+    assert!(
+        !emitted.contains("allow"),
+        "spec document must not record allowances"
+    );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains("repeated-keys"), "banner on the emit-spec run itself");
+    assert!(
+        stderr.contains("repeated-keys"),
+        "banner on the emit-spec run itself"
+    );
 
     let out = bin()
         .args(["build-descriptor", "--spec", "-", "--json"])
@@ -1020,13 +1453,23 @@ fn emit_spec_records_no_allowance() {
 #[test]
 fn allow_repeated_keys_bip388_duplicate_keys_info() {
     let out = bin()
-        .args(["build-descriptor", "--allow", "repeated-keys", "--format", "bip388"])
+        .args([
+            "build-descriptor",
+            "--allow",
+            "repeated-keys",
+            "--format",
+            "bip388",
+        ])
         .write_stdin(repeated_keys_spec())
         .assert()
         .success();
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     let keys = v["keys_info"].as_array().unwrap();
-    assert_eq!(keys.len(), 4, "duplicate keys appear twice (no dedup): {keys:?}");
+    assert_eq!(
+        keys.len(),
+        4,
+        "duplicate keys appear twice (no dedup): {keys:?}"
+    );
 }
 
 /// Duplicate --allow tokens are idempotent (allow SPEC §1).
@@ -1035,8 +1478,12 @@ fn allow_duplicate_tokens_idempotent() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--allow", "sigless-branch", "--allow", "sigless-branch",
-            "--format", "descriptor",
+            "--allow",
+            "sigless-branch",
+            "--allow",
+            "sigless-branch",
+            "--format",
+            "descriptor",
         ])
         .write_stdin(SIGLESS_SPEC)
         .assert()

@@ -33,9 +33,7 @@ pub(crate) fn derive_first_address(
     // [receive, change]. We render from receive (index 0).
     let single = if descriptor.is_multipath() {
         let mut parts = descriptor.clone().into_single_descriptors().map_err(|e| {
-            ToolkitError::DescriptorParse(format!(
-                "first-address: multipath split failed: {e}"
-            ))
+            ToolkitError::DescriptorParse(format!("first-address: multipath split failed: {e}"))
         })?;
         if parts.is_empty() {
             return Err(ToolkitError::DescriptorParse(
@@ -49,9 +47,7 @@ pub(crate) fn derive_first_address(
 
     let definite: Descriptor<DefiniteDescriptorKey> = if single.has_wildcard() {
         single.derive_at_index(0).map_err(|e| {
-            ToolkitError::DescriptorParse(format!(
-                "first-address: derive_at_index(0) failed: {e}"
-            ))
+            ToolkitError::DescriptorParse(format!("first-address: derive_at_index(0) failed: {e}"))
         })?
     } else {
         // Non-wildcard branch (e.g., user supplied a concrete `/0/0`
@@ -63,9 +59,9 @@ pub(crate) fn derive_first_address(
         })?
     };
 
-    let address = definite.address(network).map_err(|e| {
-        ToolkitError::DescriptorParse(format!("first-address: render failed: {e}"))
-    })?;
+    let address = definite
+        .address(network)
+        .map_err(|e| ToolkitError::DescriptorParse(format!("first-address: render failed: {e}")))?;
     Ok(address.to_string())
 }
 

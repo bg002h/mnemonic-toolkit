@@ -155,11 +155,7 @@ pub struct BundleArgs {
     /// SPEC §3.6 leaves single-entry usage unrestricted; passing an
     /// index for a single-entry envelope just requires `0`. Out-of-
     /// range → exit 2.
-    #[arg(
-        long = "import-json-index",
-        value_name = "N",
-        requires = "import_json",
-    )]
+    #[arg(long = "import-json-index", value_name = "N", requires = "import_json")]
     pub import_json_index: Option<usize>,
 }
 
@@ -299,7 +295,9 @@ pub fn run<W: Write, E: Write>(
         let body = match (&args.descriptor, &args.descriptor_file) {
             (Some(s), None) => s.clone(),
             (None, Some(p)) => std::fs::read_to_string(p)
-                .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display())))?
+                .map_err(|e| {
+                    ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+                })?
                 .trim_end()
                 .to_string(),
             _ => unreachable!("DESCRIPTOR_AND_DESCRIPTOR_FILE guard above rules out both"),
@@ -359,9 +357,8 @@ fn bundle_run_unified<W: Write, E: Write>(
 
     // SPEC §6.6 row 9, 9.5, 10, 11.
     let template_str = args.template.map(|t| t.human_name());
-    let multisig_template = template_str.filter(|_| {
-        args.template.map(|t| t.is_multisig()).unwrap_or(false)
-    });
+    let multisig_template =
+        template_str.filter(|_| args.template.map(|t| t.is_multisig()).unwrap_or(false));
     pre_check_threshold(args.threshold, n, multisig_template)?;
     if let Some(t) = args.template {
         pre_check_template_n(t.human_name(), t.is_multisig(), n)?;
@@ -425,7 +422,15 @@ fn bundle_run_unified<W: Write, E: Write>(
 
     // Emit (reuse legacy text/JSON renderer; engraving card omitted for now;
     // unified card lands in Phase I).
-    emit_unified(args, &bundle, &resolved, mode, &slip0132_signals, stdout, stderr)?;
+    emit_unified(
+        args,
+        &bundle,
+        &resolved,
+        mode,
+        &slip0132_signals,
+        stdout,
+        stderr,
+    )?;
 
     if args.self_check {
         let expected_entropy: Vec<Option<&[u8]>> = resolved
@@ -537,9 +542,7 @@ pub(crate) fn resolve_slots(
             let pass = passphrase.unwrap_or("");
             let acc = match &multisig_acct_path {
                 Some(p) => crate::derive::derive_full_at_path(phrase, pass, lang, network, p)?,
-                None => {
-                    crate::derive::derive_full(phrase, pass, lang, network, template, account)?
-                }
+                None => crate::derive::derive_full(phrase, pass, lang, network, template, account)?,
             };
             // v0.10.1: DerivedAccount.entropy is Zeroizing<Vec<u8>>; the
             // hand-rolled impl Drop is gone. `into_parts` remains the
@@ -569,9 +572,8 @@ pub(crate) fn resolve_slots(
             if let Some(v) = input_variant {
                 slip0132_signals.push((idx, v));
             }
-            let xpub = bitcoin::bip32::Xpub::from_str(&xpub_str).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let xpub = bitcoin::bip32::Xpub::from_str(&xpub_str)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let fp_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Fingerprint)
@@ -582,10 +584,7 @@ pub(crate) fn resolve_slots(
                 })?,
                 None => Fingerprint::default(),
             };
-            let path = match slot_inputs
-                .iter()
-                .find(|s| s.subkey == SlotSubkey::Path)
-            {
+            let path = match slot_inputs.iter().find(|s| s.subkey == SlotSubkey::Path) {
                 Some(p) => DerivationPath::from_str(&p.value).map_err(|e| {
                     ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
                 })?,
@@ -610,8 +609,7 @@ pub(crate) fn resolve_slots(
                 .find(|s| s.subkey == SlotSubkey::MasterXpub)
             {
                 Some(m) => {
-                    let (mx_str, _variant) =
-                        crate::slip0132::normalize_xpub_prefix(&m.value)?;
+                    let (mx_str, _variant) = crate::slip0132::normalize_xpub_prefix(&m.value)?;
                     let mx = bitcoin::bip32::Xpub::from_str(&mx_str).map_err(|e| {
                         ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
                     })?;
@@ -637,9 +635,7 @@ pub(crate) fn resolve_slots(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             let entropy_bytes = hex::decode(entropy_hex).map_err(|e| {
-                ToolkitError::BadInput(format!(
-                    "--slot @{idx}.entropy hex-decode: {e}"
-                ))
+                ToolkitError::BadInput(format!("--slot @{idx}.entropy hex-decode: {e}"))
             })?;
             let lang = language.unwrap_or_default();
             let lang_bip39: bip39::Language = lang.into();
@@ -741,9 +737,8 @@ pub(crate) fn resolve_slots(
                 .find(|s| s.subkey == SlotSubkey::Wif)
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
-            let priv_key = bitcoin::PrivateKey::from_wif(wif_str).map_err(|e| {
-                ToolkitError::BadInput(format!("--slot @{idx}.wif parse: {e}"))
-            })?;
+            let priv_key = bitcoin::PrivateKey::from_wif(wif_str)
+                .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.wif parse: {e}")))?;
             let pubkey = priv_key.public_key(&secp);
             // Build a depth-0 xpub from the WIF's pubkey + zero chain code.
             // The KeyCard accepts this via the standard mk-codec encoder; the
@@ -808,7 +803,11 @@ fn emit_unified<W: Write, E: Write>(
     // bundle_run_unified_descriptor) so no re-sort needed here. Emitted
     // unconditionally of --json (stderr advisories follow §5.5.a).
     for (_idx, variant) in slip0132_signals.iter() {
-        let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
+        let _ = writeln!(
+            stderr,
+            "{}",
+            crate::slip0132::render_slip0132_info_line(variant)
+        );
     }
     // ms mnem Phase 3 Step 6: re-keyed advisory — suppress iff EVERY secret-bearing
     // slot emits a self-describing `mnem` card (i.e. its effective language is
@@ -824,8 +823,7 @@ fn emit_unified<W: Write, E: Write>(
         let run_lang: bip39::Language = args.language.unwrap_or_default().into();
         let any_slot_emits_entr_non_english_run = run_lang != bip39::Language::English
             && resolved.iter().any(|s| {
-                s.entropy.is_some()
-                    && s.language.unwrap_or(run_lang) == bip39::Language::English
+                s.entropy.is_some() && s.language.unwrap_or(run_lang) == bip39::Language::English
             });
         if any_slot_emits_entr_non_english_run {
             if let Some(msg) = crate::language::non_english_seed_advisory(
@@ -837,7 +835,11 @@ fn emit_unified<W: Write, E: Write>(
         }
     }
     let n = resolved.len();
-    let mode_str = if bundle.any_secret_bearing() { "full" } else { "watch-only" };
+    let mode_str = if bundle.any_secret_bearing() {
+        "full"
+    } else {
+        "watch-only"
+    };
     // v0.4.2 Phase M reconciliation: legacy emit_*/descriptor_mode_emit
     // emitted origin_path with "m/" prefix (md-codec OriginPath rendering).
     // Unified path uses bitcoin DerivationPath::to_string() which omits the
@@ -868,7 +870,11 @@ fn emit_unified<W: Write, E: Write>(
     if args.json {
         let template = args.template.map(|t| t.human_name());
         let (multisig_info, origin_path, origin_paths) = if n == 1 {
-            (None, origin_path_for_json(&resolved[0].origin_path_bare()), None)
+            (
+                None,
+                origin_path_for_json(&resolved[0].origin_path_bare()),
+                None,
+            )
         } else {
             let cosigners: Vec<CosignerEntry> = resolved
                 .iter()
@@ -923,7 +929,11 @@ fn emit_unified<W: Write, E: Write>(
             schema_version: "4",
             mode: mode_str,
             network: args.network.human_name(),
-            template: if descriptor_field.is_some() { None } else { template },
+            template: if descriptor_field.is_some() {
+                None
+            } else {
+                template
+            },
             descriptor: descriptor_field,
             account: args.account,
             origin_path,
@@ -1039,7 +1049,9 @@ pub(crate) fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<
         Body::MultiKeys { k, .. } => Some(*k),
         Body::Variable { k, .. } => Some(*k),
         Body::Children(children) => children.iter().find_map(extract_multisig_threshold),
-        Body::Tr { tree: Some(inner), .. } => extract_multisig_threshold(inner),
+        Body::Tr {
+            tree: Some(inner), ..
+        } => extract_multisig_threshold(inner),
         _ => None,
     }
 }
@@ -1047,18 +1059,17 @@ pub(crate) fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<
 /// v0.4.1 Phase I helper: assemble `BundleInputForCard` from the unified
 /// dispatch's `ResolvedSlot` vec + `Bundle` + args, then render via
 /// `engraving_card_unified`.
-fn build_unified_card(
-    args: &BundleArgs,
-    bundle: &Bundle,
-    resolved: &[ResolvedSlot],
-) -> String {
-    use crate::format::{engraving_card_unified, BundleInputForCard, SlotCardBlock,
-        TemplateOrDescriptor};
+fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSlot]) -> String {
+    use crate::format::{
+        engraving_card_unified, BundleInputForCard, SlotCardBlock, TemplateOrDescriptor,
+    };
     use crate::synthesize::derive_mk1_chunk_set_id_for_slot;
 
     let n = resolved.len() as u8;
-    let template_str: &'static str =
-        args.template.map(|t| t.human_name()).unwrap_or("descriptor");
+    let template_str: &'static str = args
+        .template
+        .map(|t| t.human_name())
+        .unwrap_or("descriptor");
 
     // Compute md1 chunk_set_id from the descriptor's policy_id (re-extracted
     // from the encoded md1 strings to avoid threading the policy_id through
@@ -1095,9 +1106,13 @@ fn build_unified_card(
             {
                 Some(pid) => {
                     let stub = &pid.as_bytes()[..4];
-                    format!("{:05x}", derive_mk1_chunk_set_id_for_slot(
-                        &[stub[0], stub[1], stub[2], stub[3]], i as u32
-                    ))
+                    format!(
+                        "{:05x}",
+                        derive_mk1_chunk_set_id_for_slot(
+                            &[stub[0], stub[1], stub[2], stub[3]],
+                            i as u32
+                        )
+                    )
                 }
                 None => "?????".to_string(),
             };
@@ -1132,7 +1147,11 @@ fn build_unified_card(
             .or(if n > 1 { Some(n) } else { None }),
         n,
         language: args.language.map(|l| l.human_name()),
-        passphrase_used: args.passphrase.as_ref().map(|p| !p.is_empty()).unwrap_or(false),
+        passphrase_used: args
+            .passphrase
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false),
         privacy_preserving: args.privacy_preserving,
         per_slot,
         md1_chunk_set_id,
@@ -1171,10 +1190,9 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
         (None, Some(p)) => std::fs::read_to_string(p)
-            .map_err(|e| ToolkitError::DescriptorParse(format!(
-                "--descriptor-file {}: {e}",
-                p.display()
-            )))?
+            .map_err(|e| {
+                ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+            })?
             .trim_end()
             .to_string(),
         _ => unreachable!("clap conflicts_with rules out both / pre-checks rule out neither"),
@@ -1184,10 +1202,20 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let mut resolved_placeholders = resolve_placeholders(&occs)?;
     let n = resolved_placeholders.n as usize;
 
-    if slots.iter().map(|s| s.index as usize + 1).max().unwrap_or(0) != n {
+    if slots
+        .iter()
+        .map(|s| s.index as usize + 1)
+        .max()
+        .unwrap_or(0)
+        != n
+    {
         return Err(ToolkitError::DescriptorParse(format!(
             "descriptor has n={n} placeholders but --slot vec covers {} slots",
-            slots.iter().map(|s| s.index as usize + 1).max().unwrap_or(0)
+            slots
+                .iter()
+                .map(|s| s.index as usize + 1)
+                .max()
+                .unwrap_or(0)
         )));
     }
 
@@ -1247,33 +1275,32 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let mut defaulted_indices: Vec<u8> = Vec::new();
     if is_non_canonical {
         let default_path = compute_default_origin_path(args.network, args.account);
-        let mut new_paths: Vec<md_codec::origin_path::OriginPath> = match
-            &resolved_placeholders.path_decl.paths
-        {
-            PathDeclPaths::Shared(op) => {
-                if op.components.is_empty() {
-                    // All slots default.
-                    defaulted_indices.extend(0..(n as u8));
-                    (0..n).map(|_| default_path.clone()).collect()
-                } else {
-                    // Shared non-empty: no defaulting; lift to Divergent
-                    // for uniform downstream handling.
-                    (0..n).map(|_| op.clone()).collect()
-                }
-            }
-            PathDeclPaths::Divergent(v) => v
-                .iter()
-                .enumerate()
-                .map(|(i, op)| {
+        let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
+            match &resolved_placeholders.path_decl.paths {
+                PathDeclPaths::Shared(op) => {
                     if op.components.is_empty() {
-                        defaulted_indices.push(i as u8);
-                        default_path.clone()
+                        // All slots default.
+                        defaulted_indices.extend(0..(n as u8));
+                        (0..n).map(|_| default_path.clone()).collect()
                     } else {
-                        op.clone()
+                        // Shared non-empty: no defaulting; lift to Divergent
+                        // for uniform downstream handling.
+                        (0..n).map(|_| op.clone()).collect()
                     }
-                })
-                .collect(),
-        };
+                }
+                PathDeclPaths::Divergent(v) => v
+                    .iter()
+                    .enumerate()
+                    .map(|(i, op)| {
+                        if op.components.is_empty() {
+                            defaulted_indices.push(i as u8);
+                            default_path.clone()
+                        } else {
+                            op.clone()
+                        }
+                    })
+                    .collect(),
+            };
 
         // Apply per-slot `--slot @N.path=` overrides (phrase slots only;
         // the Xpub branch in the binding loop has its own path-override
@@ -1308,9 +1335,8 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             {
                 continue;
             }
-            let user_path = DerivationPath::from_str(&slot_path.value).map_err(|e| {
-                ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
-            })?;
+            let user_path = DerivationPath::from_str(&slot_path.value)
+                .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
             let user_origin = derivation_path_to_origin(&user_path);
             // Row 19: if inline `[fp/path]@N` AND `--slot @N.path=` both
             // supplied AND non-empty AND differ → refuse.
@@ -1372,11 +1398,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             slot_inputs.iter().map(|s| s.subkey).collect();
 
         // Per-@i annotation path from descriptor.
-        let anno_path: bitcoin::bip32::DerivationPath =
-            match &resolved_placeholders.path_decl.paths {
-                PathDeclPaths::Shared(op) => origin_to_derivation_path(op)?,
-                PathDeclPaths::Divergent(v) => origin_to_derivation_path(&v[idx as usize])?,
-            };
+        let anno_path: bitcoin::bip32::DerivationPath = match &resolved_placeholders.path_decl.paths
+        {
+            PathDeclPaths::Shared(op) => origin_to_derivation_path(op)?,
+            PathDeclPaths::Divergent(v) => origin_to_derivation_path(&v[idx as usize])?,
+        };
         let anno_fp: Option<bitcoin::bip32::Fingerprint> =
             resolved_placeholders.fingerprint_annos[idx as usize];
 
@@ -1405,14 +1431,12 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let language = args.language.unwrap_or_default();
             let passphrase: zeroize::Zeroizing<String> =
                 zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
-            let mnemonic = Bip39Mnemonic::parse_in(language.into(), phrase)
-                .map_err(ToolkitError::Bip39)?;
+            let mnemonic =
+                Bip39Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
             let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
             let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
             let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
-                .map_err(|e| {
-                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-                })?;
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let master_fp = master.fingerprint(&secp);
             // Cross-check fingerprint annotation if present.
             if let Some(anno) = anno_fp {
@@ -1424,11 +1448,17 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             }
             // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
             // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
-            let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let acct_xpriv = master
+                .derive_priv(&secp, &anno_path)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()), None)
+            (
+                xpub,
+                master_fp,
+                anno_path.clone(),
+                Some((*entropy).clone()),
+                None,
+            )
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -1440,9 +1470,8 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             if let Some(v) = input_variant {
                 slip0132_signals.push((idx, v));
             }
-            let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let xpub = BipXpub::from_str(&xpub_str)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let fp = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
@@ -1470,9 +1499,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             // `rust-bip39-mnemonic-zeroize-upstream`,
             // `rust-bitcoin-xpriv-zeroize-upstream`.
             let entropy_bytes = zeroize::Zeroizing::new(hex::decode(entropy_hex).map_err(|e| {
-                ToolkitError::BadInput(format!(
-                    "--slot @{idx}.entropy hex-decode: {e}"
-                ))
+                ToolkitError::BadInput(format!("--slot @{idx}.entropy hex-decode: {e}"))
             })?);
             let language = args.language.unwrap_or_default();
             let passphrase: zeroize::Zeroizing<String> =
@@ -1481,17 +1508,21 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .map_err(ToolkitError::Bip39)?;
             let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
             let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
-                .map_err(|e| {
-                    ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-                })?;
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let master_fp = master.fingerprint(&secp);
             // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
             // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
-            let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let acct_xpriv = master
+                .derive_priv(&secp, &anno_path)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), Some((*entropy_bytes).clone()), None)
+            (
+                xpub,
+                master_fp,
+                anno_path.clone(),
+                Some((*entropy_bytes).clone()),
+                None,
+            )
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Ms1) {
             // v0.41.0 — raw `ms1` codex32 secret cosigner. Decode + apply the
             // wire-language policy via the shared helper, then derive the
@@ -1584,7 +1615,12 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     }
 
     let run_language: bip39::Language = args.language.unwrap_or_default().into();
-    let bundle = synthesize_descriptor(&descriptor, &cosigners, args.privacy_preserving, run_language)?;
+    let bundle = synthesize_descriptor(
+        &descriptor,
+        &cosigners,
+        args.privacy_preserving,
+        run_language,
+    )?;
 
     // Reuse emit_unified renderer (resolved must be reconstructed as
     // ResolvedSlot vec for engraving card; entropy field tracks per-slot).
@@ -1666,7 +1702,12 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
 
     // Concrete-descriptor mode is always watch-only (no phrase/entropy input);
     // run_language is irrelevant but must be supplied — English is the safe default.
-    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving, bip39::Language::English)?;
+    let bundle = synthesize_descriptor(
+        &descriptor,
+        &resolved_slots,
+        args.privacy_preserving,
+        bip39::Language::English,
+    )?;
     let n = resolved_slots.len();
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some()); // always false here
     let any_watch = resolved_slots.iter().any(|s| s.entropy.is_none());
@@ -1735,23 +1776,18 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         .as_ref()
         .expect("caller checked --import-json.is_some()");
     let raw = read_import_json_arg(value, stdin, "--import-json")?;
-    let envelope =
-        parse_import_json_envelopes(&raw, args.import_json_index, "--import-json")?;
+    let envelope = parse_import_json_envelopes(&raw, args.import_json_index, "--import-json")?;
 
     // §3.6 — envelope.bundle.descriptor is the source-of-truth for the
     // descriptor; descriptor-mode synthesis applies. v0.27.0 wallet-
     // import path always emits Some.
-    let descriptor_with_csum = envelope
-        .bundle
-        .descriptor
-        .as_deref()
-        .ok_or_else(|| {
-            ToolkitError::BadInput(
-                "--import-json: envelope.bundle.descriptor is null; v0.27.0 wallet-import \
+    let descriptor_with_csum = envelope.bundle.descriptor.as_deref().ok_or_else(|| {
+        ToolkitError::BadInput(
+            "--import-json: envelope.bundle.descriptor is null; v0.27.0 wallet-import \
                  path always emits the descriptor string verbatim"
-                    .to_string(),
-            )
-        })?;
+                .to_string(),
+        )
+    })?;
     let descriptor_body = descriptor_body_no_csum(descriptor_with_csum, "--import-json")?;
 
     // Decode mk1 chunks per §3.6.1 → ResolvedSlots (entropy=None). v0.27.1
@@ -1798,11 +1834,14 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         // branch → Payload::Entr), preserving the wire shape faithfully.
         let (entropy_bytes, slot_lang) = match payload {
             ms_codec::Payload::Entr(bytes) => (Zeroizing::new(bytes), bip39::Language::English),
-            ms_codec::Payload::Mnem { entropy, language: wire_lang, .. } => {
-                let lang = crate::language::wire_code_to_bip39(wire_lang)
-                    .map_err(|e| ToolkitError::BadInput(format!(
-                        "--import-json: envelope.bundle.ms1[{i}] {e}"
-                    )))?;
+            ms_codec::Payload::Mnem {
+                entropy,
+                language: wire_lang,
+                ..
+            } => {
+                let lang = crate::language::wire_code_to_bip39(wire_lang).map_err(|e| {
+                    ToolkitError::BadInput(format!("--import-json: envelope.bundle.ms1[{i}] {e}"))
+                })?;
                 (Zeroizing::new(entropy), lang)
             }
             _ => {
@@ -1842,9 +1881,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         // SAFETY: third-party-blocked — `bip39::Mnemonic` has no Drop+Zeroize.
         // FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
         let mnemonic = bip39::Mnemonic::parse_in(language.into(), user_ms1).map_err(|e| {
-            ToolkitError::BadInput(format!(
-                "--slot @{i}.phrase=: BIP-39 parse error: {e}"
-            ))
+            ToolkitError::BadInput(format!("--slot @{i}.phrase=: BIP-39 parse error: {e}"))
         })?;
         let entropy = Zeroizing::new(mnemonic.to_entropy());
         let passphrase: Zeroizing<String> =
@@ -1895,23 +1932,25 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // §3.6 — parse descriptor: concrete-keys → @N placeholders → md_codec.
     let (placeholder_form, parsed_keys, parsed_fps) =
         concrete_keys_to_placeholders(descriptor_body)?;
-    let descriptor = crate::parse_descriptor::parse_descriptor(
-        &placeholder_form,
-        &parsed_keys,
-        &parsed_fps,
-    )
-    .map_err(|e| {
-        ToolkitError::DescriptorParse(format!(
-            "--import-json: descriptor re-parse failed: {}",
-            e.message()
-        ))
-    })?;
+    let descriptor =
+        crate::parse_descriptor::parse_descriptor(&placeholder_form, &parsed_keys, &parsed_fps)
+            .map_err(|e| {
+                ToolkitError::DescriptorParse(format!(
+                    "--import-json: descriptor re-parse failed: {}",
+                    e.message()
+                ))
+            })?;
 
     // Synthesize. run_language defaults to English; import-json slots that
     // carry Some(wire_lang) override via unwrap_or in synthesize_descriptor,
     // so import-json behavior is unchanged by this parameter.
     let run_language_import: bip39::Language = args.language.unwrap_or_default().into();
-    let bundle = synthesize_descriptor(&descriptor, &resolved_slots, args.privacy_preserving, run_language_import)?;
+    let bundle = synthesize_descriptor(
+        &descriptor,
+        &resolved_slots,
+        args.privacy_preserving,
+        run_language_import,
+    )?;
 
     // Determine BundleMode from resolved_slots state.
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());
@@ -1936,7 +1975,15 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     emit_args.descriptor = Some(descriptor_with_csum.to_string());
     // slip0132 signals are not applicable to envelope-sourced bundles
     // (the envelope's xpub field is canonical per SPEC §5.3).
-    emit_unified(&emit_args, &bundle, &resolved_slots, mode, &[], stdout, stderr)?;
+    emit_unified(
+        &emit_args,
+        &bundle,
+        &resolved_slots,
+        mode,
+        &[],
+        stdout,
+        stderr,
+    )?;
 
     if args.self_check {
         let expected_entropy: Vec<Option<&[u8]>> = resolved_slots
@@ -1987,9 +2034,7 @@ pub fn compute_default_origin_path(
 /// Used to fold `--slot @N.path=` user input into `path_decl.paths` for
 /// non-canonical-descriptor default-inference override. Public for the
 /// same symmetric-verify-bundle reason as `compute_default_origin_path`.
-pub fn derivation_path_to_origin(
-    dp: &DerivationPath,
-) -> md_codec::origin_path::OriginPath {
+pub fn derivation_path_to_origin(dp: &DerivationPath) -> md_codec::origin_path::OriginPath {
     use bitcoin::bip32::ChildNumber;
     use md_codec::origin_path::{OriginPath, PathComponent};
     OriginPath {
@@ -2141,7 +2186,12 @@ pub fn self_check_bundle(
             }
             // Audit M1 — slot-exact binding per cosigner card (see above).
             for (i, c) in decoded_cards.iter().enumerate() {
-                check_mk1_xpub_binding(pubkeys, i, c, format!("self-check[mk1_xpub_binding[{i}]]"))?;
+                check_mk1_xpub_binding(
+                    pubkeys,
+                    i,
+                    c,
+                    format!("self-check[mk1_xpub_binding[{i}]]"),
+                )?;
             }
             let first_stubs = &decoded_cards[0].policy_id_stubs;
             for (i, c) in decoded_cards.iter().enumerate().skip(1) {
@@ -2198,11 +2248,10 @@ pub fn self_check_bundle(
         let Some(expected_bytes) = expected else {
             continue; // watch-only "" sentinel — correct, nothing to decode.
         };
-        let (_tag, payload) =
-            ms_codec::decode(ms).map_err(|e| ToolkitError::BundleMismatch {
-                card: format!("self-check[ms1_decode[{i}]]"),
-                message: format!("{e:?}"),
-            })?;
+        let (_tag, payload) = ms_codec::decode(ms).map_err(|e| ToolkitError::BundleMismatch {
+            card: format!("self-check[ms1_decode[{i}]]"),
+            message: format!("{e:?}"),
+        })?;
         if payload.as_bytes() != expected_bytes {
             return Err(ToolkitError::BundleMismatch {
                 card: format!("self-check[ms1_entropy[{i}]]"),
@@ -2227,7 +2276,10 @@ fn check_mk1_xpub_binding(
     card_label: String,
 ) -> Result<(), ToolkitError> {
     let want = crate::synthesize::xpub_to_65(&card.xpub);
-    if !pubkeys.iter().any(|(s, b)| *s as usize == slot && *b == want) {
+    if !pubkeys
+        .iter()
+        .any(|(s, b)| *s as usize == slot && *b == want)
+    {
         let xpub_str = card.xpub.to_string();
         let trunc = &xpub_str[..xpub_str.len().min(12)];
         return Err(ToolkitError::BundleMismatch {
@@ -2251,10 +2303,7 @@ fn check_mk1_xpub_binding(
 fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &BundleArgs, stderr: &mut E) {
     use crate::secret_advisory::secret_in_argv_warning;
     for s in &args.slot {
-        if s.subkey.is_secret_bearing()
-            && !s.is_stdin_sentinel()
-            && !s.value.starts_with("@env:")
-        {
+        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() && !s.value.starts_with("@env:") {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
             let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
             secret_in_argv_warning(stderr, &flag, &alt);
@@ -2562,7 +2611,10 @@ mod self_check_mk1_xpub_binding_tests {
         let card = mk_codec::decode(&strs).unwrap();
         let secp = Secp256k1::new();
         let master = Xpriv::new_master(bitcoin::NetworkKind::Main, &[7u8; 32]).unwrap();
-        let foreign = Xpub::from_priv(&secp, &master.derive_priv(&secp, &card.origin_path).unwrap());
+        let foreign = Xpub::from_priv(
+            &secp,
+            &master.derive_priv(&secp, &card.origin_path).unwrap(),
+        );
         assert_ne!(
             crate::synthesize::xpub_to_65(&foreign),
             crate::synthesize::xpub_to_65(&card.xpub),

@@ -63,22 +63,26 @@ fn japanese_mnem_card_convert_to_phrase_uses_japanese() {
     let ja_ms1 = encode_mnem(ENTROPY_JA, WIRE_JAPANESE);
 
     // The expected phrase is what bip39 generates from this entropy under Japanese.
-    let expected_ja_phrase =
-        Mnemonic::from_entropy_in(bip39::Language::Japanese, ENTROPY_JA)
-            .unwrap()
-            .to_string();
+    let expected_ja_phrase = Mnemonic::from_entropy_in(bip39::Language::Japanese, ENTROPY_JA)
+        .unwrap()
+        .to_string();
 
     // The English phrase for the same entropy should be DIFFERENT.
-    let expected_en_phrase =
-        Mnemonic::from_entropy_in(bip39::Language::English, ENTROPY_JA)
-            .unwrap()
-            .to_string();
+    let expected_en_phrase = Mnemonic::from_entropy_in(bip39::Language::English, ENTROPY_JA)
+        .unwrap()
+        .to_string();
     assert_ne!(expected_ja_phrase, expected_en_phrase, "test precondition");
 
     // Run convert --from "ms1=<value>" --to phrase — wire-wins: should produce the Japanese phrase.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("ms1={ja_ms1}"), "--to", "phrase"])
+        .args([
+            "convert",
+            "--from",
+            &format!("ms1={ja_ms1}"),
+            "--to",
+            "phrase",
+        ])
         .assert()
         .success();
 
@@ -147,10 +151,14 @@ fn mixed_language_multisig_import_wallet_ms1_overlay_cross_check_passes() {
         .unwrap()
         .args([
             "import-wallet",
-            "--blob", "-",
-            "--format", "bsms",
-            "--ms1", &ja_ms1,
-            "--ms1", &cs_ms1,
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            &ja_ms1,
+            "--ms1",
+            &cs_ms1,
         ])
         .write_stdin(bsms_blob)
         .assert()
@@ -191,7 +199,10 @@ fn repair_recovers_corrupt_japanese_mnem_ms1() {
 
     // Verify that ms_codec recognizes the original as valid and the corrupt as invalid.
     assert!(ms_codec::decode(&ja_ms1).is_ok(), "original must be valid");
-    assert!(ms_codec::decode(&corrupt).is_err(), "corrupted must be invalid");
+    assert!(
+        ms_codec::decode(&corrupt).is_err(),
+        "corrupted must be invalid"
+    );
 
     // repair should exit 0 or 5 (5 = corrections applied = success).
     let out = Command::cargo_bin("mnemonic")

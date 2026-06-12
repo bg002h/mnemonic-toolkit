@@ -9,7 +9,10 @@ use predicates::prelude::*;
 fn human_output_p2wpkh() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["decode-address", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"])
+        .args([
+            "decode-address",
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("script_type:   p2wpkh"))
@@ -71,7 +74,12 @@ fn testnet_address_reports_network_set() {
         .stdout
         .clone();
     let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    let nets: Vec<&str> = v["networks"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect();
+    let nets: Vec<&str> = v["networks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_str().unwrap())
+        .collect();
     assert!(nets.contains(&"testnet") && nets.contains(&"signet") && nets.contains(&"testnet4"));
     assert!(!nets.contains(&"mainnet"));
 }

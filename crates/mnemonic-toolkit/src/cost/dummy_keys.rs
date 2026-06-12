@@ -9,9 +9,7 @@
 
 use miniscript::bitcoin::secp256k1::{Secp256k1, SecretKey};
 use miniscript::bitcoin::{PublicKey, XOnlyPublicKey};
-use miniscript::descriptor::{
-    DefiniteDescriptorKey, DescriptorPublicKey, SinglePub, SinglePubKey,
-};
+use miniscript::descriptor::{DefiniteDescriptorKey, DescriptorPublicKey, SinglePub, SinglePubKey};
 use sha2::{Digest, Sha256};
 
 /// Construct a deterministic 33-byte compressed-secp DefiniteDescriptorKey
@@ -63,7 +61,8 @@ pub fn dummy_xonly(label: &str) -> DefiniteDescriptorKey {
 /// suitable as the internal key for `tr(NUMS, {M})`.
 pub fn nums_xonly_definite() -> DefiniteDescriptorKey {
     use std::str::FromStr;
-    let xpk = XOnlyPublicKey::from_str(super::NUMS_XONLY_HEX).expect("BIP-341 NUMS x-only is valid");
+    let xpk =
+        XOnlyPublicKey::from_str(super::NUMS_XONLY_HEX).expect("BIP-341 NUMS x-only is valid");
     let dpk = DescriptorPublicKey::Single(SinglePub {
         key: SinglePubKey::XOnly(xpk),
         origin: None,

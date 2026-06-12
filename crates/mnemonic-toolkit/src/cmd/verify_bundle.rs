@@ -259,7 +259,14 @@ pub fn run<W: Write, E: Write>(
         });
     }
     if descriptor_mode {
-        return descriptor_mode_verify_run(args, stdin, stdout, stderr, effective_no_auto_repair, json_context);
+        return descriptor_mode_verify_run(
+            args,
+            stdin,
+            stdout,
+            stderr,
+            effective_no_auto_repair,
+            json_context,
+        );
     }
 
     let multisig = args.template_unchecked().is_multisig();
@@ -308,16 +315,37 @@ pub fn run<W: Write, E: Write>(
 
     let mut checks: Vec<VerifyCheck> = Vec::new();
     if multisig {
-        run_multisig(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
+        run_multisig(
+            args,
+            &mut checks,
+            stdout,
+            stderr,
+            effective_no_auto_repair,
+            json_context,
+        )?;
     } else {
         let secret_bearing_at_0 = args
             .slot
             .iter()
             .any(|s| s.index == 0 && s.subkey.is_secret_bearing());
         if secret_bearing_at_0 {
-            run_full(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
+            run_full(
+                args,
+                &mut checks,
+                stdout,
+                stderr,
+                effective_no_auto_repair,
+                json_context,
+            )?;
         } else {
-            run_watch_only(args, &mut checks, stdout, stderr, effective_no_auto_repair, json_context)?;
+            run_watch_only(
+                args,
+                &mut checks,
+                stdout,
+                stderr,
+                effective_no_auto_repair,
+                json_context,
+            )?;
         }
     }
 
@@ -397,7 +425,15 @@ fn run_full<W: Write, E: Write>(
         args.network,
         stderr,
     );
-    checks.extend(emit_verify_checks(&expected, &supplied, false, no_auto_repair, json_context, stdout, stderr)?);
+    checks.extend(emit_verify_checks(
+        &expected,
+        &supplied,
+        false,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )?);
     Ok(())
 }
 
@@ -474,10 +510,17 @@ fn run_watch_only<W: Write, E: Write>(
         mk1: &args.mk1,
         md1: &args.md1,
     };
-    checks.extend(emit_verify_checks(&expected, &supplied, false, no_auto_repair, json_context, stdout, stderr)?);
+    checks.extend(emit_verify_checks(
+        &expected,
+        &supplied,
+        false,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )?);
     Ok(())
 }
-
 
 /// Multisig verify-bundle entry. Synthesizes the expected Bundle (full or
 /// watch-only) and dispatches to `emit_verify_checks(... is_multisig: true)`,
@@ -500,14 +543,8 @@ fn run_multisig<W: Write, E: Write>(
     no_auto_repair: bool,
     json_context: bool,
 ) -> Result<(), ToolkitError> {
-    let any_secret = args
-        .slot
-        .iter()
-        .any(|s| s.subkey.is_secret_bearing());
-    let any_watch_only = args
-        .slot
-        .iter()
-        .any(|s| s.subkey.is_watch_only());
+    let any_secret = args.slot.iter().any(|s| s.subkey.is_secret_bearing());
+    let any_watch_only = args.slot.iter().any(|s| s.subkey.is_watch_only());
     let watch_only_multi = !any_secret && any_watch_only;
 
     if watch_only_multi {
@@ -581,7 +618,15 @@ fn run_multisig<W: Write, E: Write>(
         md1: &args.md1,
     };
 
-    checks.extend(emit_verify_checks(&expected, &supplied, true, no_auto_repair, json_context, stdout, stderr)?);
+    checks.extend(emit_verify_checks(
+        &expected,
+        &supplied,
+        true,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )?);
     Ok(())
 }
 
@@ -626,8 +671,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 &descriptor_str,
                 "--descriptor",
             )?;
-            let (descriptor, cosigners) =
-                descriptor_concrete_to_resolved_slots(body_no_csum)?;
+            let (descriptor, cosigners) = descriptor_concrete_to_resolved_slots(body_no_csum)?;
             // BIP-388 distinctness: verify-bundle uses the exit-4 variant.
             if dup_xpub_path(&cosigners) {
                 return Err(ToolkitError::Bip388VerifyDistinctness);
@@ -662,8 +706,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // re-derive xpubs at the template path (BIP-84 default) instead of
     // the inferred BIP-48 cosigner path, and md-codec's
     // validate_explicit_origin_required would refuse the wire.
-    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[])
-        .map_err(|e| ToolkitError::DescriptorReparseFailed { detail: e.message() })?;
+    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[]).map_err(|e| {
+        ToolkitError::DescriptorReparseFailed {
+            detail: e.message(),
+        }
+    })?;
     let is_non_canonical =
         md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
 
@@ -672,31 +719,28 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // info notice — verify-bundle is read-only, the original bundle emit
     // already produced the notice.
     if is_non_canonical {
-        let default_path = crate::cmd::bundle::compute_default_origin_path(
-            args.network,
-            args.account,
-        );
-        let mut new_paths: Vec<md_codec::origin_path::OriginPath> = match
-            &descriptor_resolved.path_decl.paths
-        {
-            md_codec::origin_path::PathDeclPaths::Shared(op) => {
-                if op.components.is_empty() {
-                    (0..n).map(|_| default_path.clone()).collect()
-                } else {
-                    (0..n).map(|_| op.clone()).collect()
-                }
-            }
-            md_codec::origin_path::PathDeclPaths::Divergent(v) => v
-                .iter()
-                .map(|op| {
+        let default_path =
+            crate::cmd::bundle::compute_default_origin_path(args.network, args.account);
+        let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
+            match &descriptor_resolved.path_decl.paths {
+                md_codec::origin_path::PathDeclPaths::Shared(op) => {
                     if op.components.is_empty() {
-                        default_path.clone()
+                        (0..n).map(|_| default_path.clone()).collect()
                     } else {
-                        op.clone()
+                        (0..n).map(|_| op.clone()).collect()
                     }
-                })
-                .collect(),
-        };
+                }
+                md_codec::origin_path::PathDeclPaths::Divergent(v) => v
+                    .iter()
+                    .map(|op| {
+                        if op.components.is_empty() {
+                            default_path.clone()
+                        } else {
+                            op.clone()
+                        }
+                    })
+                    .collect(),
+            };
         // Apply per-slot --slot @N.path= overrides for phrase-bearing slots.
         let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
             std::collections::BTreeMap::new();
@@ -710,7 +754,10 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
         > = std::collections::BTreeMap::new();
         for s in &args.slot {
-            by_index_subkeys.entry(s.index).or_default().insert(s.subkey);
+            by_index_subkeys
+                .entry(s.index)
+                .or_default()
+                .insert(s.subkey);
         }
         for (idx, slot_path) in &by_index_path {
             let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
@@ -757,23 +804,23 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
 
     for idx in 0..(n as u8) {
-        let slot_inputs = by_index_inputs
-            .get(&idx)
-            .ok_or_else(|| ToolkitError::DescriptorReparseFailed {
-                detail: format!("--slot @{idx} missing for descriptor with n={n} placeholders"),
-            })?;
+        let slot_inputs =
+            by_index_inputs
+                .get(&idx)
+                .ok_or_else(|| ToolkitError::DescriptorReparseFailed {
+                    detail: format!("--slot @{idx} missing for descriptor with n={n} placeholders"),
+                })?;
         let subkeys: std::collections::BTreeSet<crate::slot_input::SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
 
-        let anno_path: bitcoin::bip32::DerivationPath =
-            match &descriptor_resolved.path_decl.paths {
-                md_codec::origin_path::PathDeclPaths::Shared(op) => {
-                    crate::cmd::bundle::origin_to_derivation_path(op)?
-                }
-                md_codec::origin_path::PathDeclPaths::Divergent(v) => {
-                    crate::cmd::bundle::origin_to_derivation_path(&v[idx as usize])?
-                }
-            };
+        let anno_path: bitcoin::bip32::DerivationPath = match &descriptor_resolved.path_decl.paths {
+            md_codec::origin_path::PathDeclPaths::Shared(op) => {
+                crate::cmd::bundle::origin_to_derivation_path(op)?
+            }
+            md_codec::origin_path::PathDeclPaths::Divergent(v) => {
+                crate::cmd::bundle::origin_to_derivation_path(&v[idx as usize])?
+            }
+        };
 
         // v0.41.0 — 5-tuple widening (Plan-R0-I1 / R0-M-C): the 5th element
         // carries the per-slot emit language (Some(wire) for a mnem ms1 cosigner;
@@ -797,13 +844,9 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                     .find(|s| s.subkey == crate::slot_input::SlotSubkey::Seedqr)
                     .map(|s| s.value.as_str())
                     .expect("contains() asserts presence");
-                decoded_phrase =
-                    mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
-                        crate::cmd::seedqr::map_seedqr_error(
-                            e,
-                            &format!("slot @{idx} decode"),
-                        )
-                    })?;
+                decoded_phrase = mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
+                    crate::cmd::seedqr::map_seedqr_error(e, &format!("slot @{idx} decode"))
+                })?;
                 &decoded_phrase
             } else {
                 slot_inputs
@@ -815,18 +858,24 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             let language = args.language.unwrap_or_default();
             let passphrase: zeroize::Zeroizing<String> =
                 zeroize::Zeroizing::new(args.passphrase.clone().unwrap_or_default());
-            let mnemonic = bip39::Mnemonic::parse_in(language.into(), phrase)
-                .map_err(ToolkitError::Bip39)?;
+            let mnemonic =
+                bip39::Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
             let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
             let seed = crate::derive_slot::derive_master_seed(&mnemonic, &passphrase);
             let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let master_fp = master.fingerprint(&secp);
-            let acct_xpriv = master.derive_priv(&secp, &anno_path).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let acct_xpriv = master
+                .derive_priv(&secp, &anno_path)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let xpub = BipXpub::from_priv(&secp, &acct_xpriv);
-            (xpub, master_fp, anno_path.clone(), Some((*entropy).clone()), None)
+            (
+                xpub,
+                master_fp,
+                anno_path.clone(),
+                Some((*entropy).clone()),
+                None,
+            )
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Xpub) {
             let xpub_str = slot_inputs
                 .iter()
@@ -834,9 +883,8 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 .map(|s| s.value.as_str())
                 .expect("contains() asserts presence");
             let (xpub_str, _) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
-            let xpub = BipXpub::from_str(&xpub_str).map_err(|e| {
-                ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e))
-            })?;
+            let xpub = BipXpub::from_str(&xpub_str)
+                .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let fp = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
@@ -966,10 +1014,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         return Err(ToolkitError::Bip388VerifyDistinctness);
     }
 
-    let mut descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints)
-        .map_err(|e| ToolkitError::DescriptorReparseFailed {
+    let mut descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints).map_err(|e| {
+        ToolkitError::DescriptorReparseFailed {
             detail: e.message(),
-        })?;
+        }
+    })?;
     // v0.19.0 SPEC §4.11.c symmetric verify-bundle — propagate the
     // mutated path_decl into the freshly-parsed MdDescriptor so md-codec
     // wire validation passes for default-inferred non-canonical bundles.
@@ -977,7 +1026,15 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     if is_non_canonical {
         descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
     }
-    verify_emit_from_expected(args, descriptor, &cosigners, no_auto_repair, json_context, stdout, stderr)
+    verify_emit_from_expected(
+        args,
+        descriptor,
+        &cosigners,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )
 }
 
 /// Form-agnostic tail shared by both the @N path and the concrete-descriptor
@@ -999,7 +1056,12 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     // in synthesize_descriptor correctly falls back to run_language for those
     // slots, matching the emit semantics of the original bundle --descriptor call.
     let run_language: bip39::Language = args.language.unwrap_or_default().into();
-    let expected = synthesize_descriptor(&descriptor, cosigners, args.privacy_preserving, run_language)?;
+    let expected = synthesize_descriptor(
+        &descriptor,
+        cosigners,
+        args.privacy_preserving,
+        run_language,
+    )?;
 
     // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
     // is_multisig := descriptor.n > 1.
@@ -1008,7 +1070,15 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         mk1: &args.mk1,
         md1: &args.md1,
     };
-    let checks = emit_verify_checks(&expected, &supplied, descriptor.n > 1, no_auto_repair, json_context, stdout, stderr)?;
+    let checks = emit_verify_checks(
+        &expected,
+        &supplied,
+        descriptor.n > 1,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )?;
 
     let any_fail = checks.iter().any(|c| !c.passed);
     let result_str = if any_fail { "mismatch" } else { "ok" };
@@ -1060,10 +1130,7 @@ fn dup_xpub_path(slots: &[crate::synthesize::ResolvedSlot]) -> bool {
 fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &VerifyBundleArgs, stderr: &mut E) {
     use crate::secret_advisory::secret_in_argv_warning;
     for s in &args.slot {
-        if s.subkey.is_secret_bearing()
-            && !s.is_stdin_sentinel()
-            && !s.value.starts_with("@env:")
-        {
+        if s.subkey.is_secret_bearing() && !s.is_stdin_sentinel() && !s.value.starts_with("@env:") {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
             let alt = format!("--slot @{}.{}=-", s.index, s.subkey.as_str());
             secret_in_argv_warning(stderr, &flag, &alt);
@@ -1160,18 +1227,14 @@ fn apply_stdin_substitutions(
 /// that don't match the v0.5 schema-4 shape fail at the underlying field
 /// extraction (serde-style errors).
 fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, ToolkitError> {
-    let path = args.bundle_json.as_ref().expect("caller checked bundle_json.is_some()");
-    let raw = std::fs::read_to_string(path).map_err(|e| {
-        ToolkitError::BadInput(format!(
-            "--bundle-json {}: {e}",
-            path.display()
-        ))
-    })?;
+    let path = args
+        .bundle_json
+        .as_ref()
+        .expect("caller checked bundle_json.is_some()");
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| ToolkitError::BadInput(format!("--bundle-json {}: {e}", path.display())))?;
     let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
-        ToolkitError::BadInput(format!(
-            "--bundle-json {} parse: {e}",
-            path.display()
-        ))
+        ToolkitError::BadInput(format!("--bundle-json {} parse: {e}", path.display()))
     })?;
     // Extract ms1 (MsField = Vec<String>) + mk1 (MkField — flat or nested) + md1 (Vec<String>).
     let ms1: Vec<String> = v["ms1"]
@@ -1195,14 +1258,20 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
                             }
                         }
                     }
-                    _ => return Err(ToolkitError::BadInput(
-                        "--bundle-json mk1 element is neither string nor array".into(),
-                    )),
+                    _ => {
+                        return Err(ToolkitError::BadInput(
+                            "--bundle-json mk1 element is neither string nor array".into(),
+                        ))
+                    }
                 }
             }
             flat
         }
-        _ => return Err(ToolkitError::BadInput("--bundle-json mk1 field is not an array".into())),
+        _ => {
+            return Err(ToolkitError::BadInput(
+                "--bundle-json mk1 field is not an array".into(),
+            ))
+        }
     };
     let md1: Vec<String> = v["md1"]
         .as_array()
@@ -1289,7 +1358,14 @@ pub fn emit_verify_checks(
     stderr: &mut dyn std::io::Write,
 ) -> Result<Vec<VerifyCheck>, ToolkitError> {
     if is_multisig {
-        return emit_multisig_checks(expected, supplied, no_auto_repair, json_context, stdout, stderr);
+        return emit_multisig_checks(
+            expected,
+            supplied,
+            no_auto_repair,
+            json_context,
+            stdout,
+            stderr,
+        );
     }
     let mut checks = Vec::with_capacity(9);
     let watch_only = expected.ms1.first().map(|s| s.is_empty()).unwrap_or(true);
@@ -1414,7 +1490,15 @@ pub fn emit_verify_checks(
                 });
             }
             // Try md1 anyway for diagnostic completeness.
-            emit_md1_checks(expected, supplied, &mut checks, no_auto_repair, json_context, stdout, stderr)?;
+            emit_md1_checks(
+                expected,
+                supplied,
+                &mut checks,
+                no_auto_repair,
+                json_context,
+                stdout,
+                stderr,
+            )?;
             return Ok(checks);
         }
     }
@@ -1506,7 +1590,15 @@ pub fn emit_verify_checks(
     }
 
     // 7+8+9: md1.
-    emit_md1_checks(expected, supplied, &mut checks, no_auto_repair, json_context, stdout, stderr)?;
+    emit_md1_checks(
+        expected,
+        supplied,
+        &mut checks,
+        no_auto_repair,
+        json_context,
+        stdout,
+        stderr,
+    )?;
 
     Ok(checks)
 }
@@ -1580,25 +1672,27 @@ fn emit_multisig_checks(
     // Result preserves the per-group diagnostic message for MappingFailure.
     let supplied_decoded: Vec<Result<mk_codec::KeyCard, String>> = groups
         .iter()
-        .map(|g| -> Result<Result<mk_codec::KeyCard, String>, ToolkitError> {
-            match mk_codec::decode(g) {
-                Ok(card) => Ok(Ok(card)),
-                Err(e) => {
-                    if !no_auto_repair {
-                        let chunk_strs: Vec<String> =
-                            g.iter().map(|s| (*s).to_string()).collect();
-                        crate::repair::try_repair_and_short_circuit(
-                            crate::repair::CardKind::Mk1,
-                            &chunk_strs,
-                            stdout,
-                            stderr,
-                            json_context,
-                        )?;
+        .map(
+            |g| -> Result<Result<mk_codec::KeyCard, String>, ToolkitError> {
+                match mk_codec::decode(g) {
+                    Ok(card) => Ok(Ok(card)),
+                    Err(e) => {
+                        if !no_auto_repair {
+                            let chunk_strs: Vec<String> =
+                                g.iter().map(|s| (*s).to_string()).collect();
+                            crate::repair::try_repair_and_short_circuit(
+                                crate::repair::CardKind::Mk1,
+                                &chunk_strs,
+                                stdout,
+                                stderr,
+                                json_context,
+                            )?;
+                        }
+                        Ok(Err(format!("{:?}", e)))
                     }
-                    Ok(Err(format!("{:?}", e)))
                 }
-            }
-        })
+            },
+        )
         .collect::<Result<Vec<_>, _>>()?;
 
     // Decode supplied.md1 once for cosigner-mapping by tlv.pubkeys.
@@ -1628,22 +1722,34 @@ fn emit_multisig_checks(
         (0..n).map(|_| Err(MappingFailure::NotSupplied)).collect();
 
     if !needs_positional_fallback {
-        let desc = supplied_md_decoded.as_ref().expect("Ok per needs_positional_fallback");
-        let pubkeys = desc.tlv.pubkeys.as_ref().expect("Some per needs_positional_fallback");
+        let desc = supplied_md_decoded
+            .as_ref()
+            .expect("Ok per needs_positional_fallback");
+        let pubkeys = desc
+            .tlv
+            .pubkeys
+            .as_ref()
+            .expect("Some per needs_positional_fallback");
         // First pass: place decoded groups into matching cosigner slots by xpub.
         for (gi, decode_res) in supplied_decoded.iter().enumerate() {
             if let Ok(card) = decode_res {
                 let want = crate::synthesize::xpub_to_65(&card.xpub);
                 // Prefer slot gi if it matches.
                 if let Some((_, b)) = pubkeys.get(gi) {
-                    if b == &want && matches!(card_for_cosigner[gi], Err(MappingFailure::NotSupplied)) {
+                    if b == &want
+                        && matches!(card_for_cosigner[gi], Err(MappingFailure::NotSupplied))
+                    {
                         card_for_cosigner[gi] = Ok(card);
                         continue;
                     }
                 }
                 // Otherwise scan for first unfilled matching slot.
                 if let Some((idx, _)) = pubkeys.iter().find(|(slot, b)| {
-                    b == &want && matches!(card_for_cosigner[*slot as usize], Err(MappingFailure::NotSupplied))
+                    b == &want
+                        && matches!(
+                            card_for_cosigner[*slot as usize],
+                            Err(MappingFailure::NotSupplied)
+                        )
                 }) {
                     card_for_cosigner[*idx as usize] = Ok(card);
                 } else {
@@ -1758,7 +1864,10 @@ fn emit_multisig_checks(
                     checks.push(VerifyCheck {
                         name: format!("ms1_entropy_match[{}]", i),
                         passed: true,
-                        detail: format!("cosigner[{}] ms1 decode failed; entropy match cannot run", i),
+                        detail: format!(
+                            "cosigner[{}] ms1 decode failed; entropy match cannot run",
+                            i
+                        ),
                         decode_error: Some("skipped: ms1 decode failed".into()),
                         ..Default::default()
                     });
@@ -1769,7 +1878,10 @@ fn emit_multisig_checks(
             checks.push(VerifyCheck {
                 name: format!("ms1_decode[{}]", i),
                 passed: false,
-                detail: format!("cosigner[{}] ms1 expected (full-mode bundle) but not supplied", i),
+                detail: format!(
+                    "cosigner[{}] ms1 expected (full-mode bundle) but not supplied",
+                    i
+                ),
                 decode_error: Some(format!(
                     "error: ms1[{}] expected (full-mode bundle) but not supplied",
                     i
@@ -1817,8 +1929,14 @@ fn emit_multisig_checks(
                         decode_error: None,
                     });
                 }
-                let exp_fp = exp.origin_fingerprint.map(|f| f.to_string()).unwrap_or_default();
-                let act_fp = sup.origin_fingerprint.map(|f| f.to_string()).unwrap_or_default();
+                let exp_fp = exp
+                    .origin_fingerprint
+                    .map(|f| f.to_string())
+                    .unwrap_or_default();
+                let act_fp = sup
+                    .origin_fingerprint
+                    .map(|f| f.to_string())
+                    .unwrap_or_default();
                 if exp_fp == act_fp {
                     checks.push(VerifyCheck {
                         name: format!("mk1_fingerprint_match[{}]", i),
@@ -1867,12 +1985,14 @@ fn emit_multisig_checks(
                         format!("cosigner[{}] mk1 not supplied", i),
                         format!("skipped: mk1[{}] not supplied", i),
                     ),
-                    MappingFailure::DecodeFailed(msg) => (
-                        format!("cosigner[{}] mk1 decode failed", i),
-                        msg.clone(),
-                    ),
+                    MappingFailure::DecodeFailed(msg) => {
+                        (format!("cosigner[{}] mk1 decode failed", i), msg.clone())
+                    }
                     MappingFailure::XpubNotInPolicy => (
-                        format!("cosigner[{}] supplied mk1 card xpub absent from descriptor policy", i),
+                        format!(
+                            "cosigner[{}] supplied mk1 card xpub absent from descriptor policy",
+                            i
+                        ),
                         "supplied mk1 card xpub absent from descriptor policy".to_string(),
                     ),
                 };
@@ -1918,8 +2038,8 @@ fn emit_multisig_checks(
 
     // 3 shared md1 checks.
     let expected_md1_strs: Vec<&str> = expected.md1.iter().map(|s| s.as_str()).collect();
-    let expected_md_decoded = md_codec::chunk::reassemble(&expected_md1_strs)
-        .expect("expected bundle is well-formed");
+    let expected_md_decoded =
+        md_codec::chunk::reassemble(&expected_md1_strs).expect("expected bundle is well-formed");
 
     match supplied_md_decoded.as_ref() {
         Ok(desc) => {
@@ -1963,8 +2083,16 @@ fn emit_multisig_checks(
                         ..Default::default()
                     });
                 } else {
-                    let exp_hex = exp_pubs.iter().map(hex::encode).collect::<Vec<_>>().join(",");
-                    let act_hex = act_pubs.iter().map(hex::encode).collect::<Vec<_>>().join(",");
+                    let exp_hex = exp_pubs
+                        .iter()
+                        .map(hex::encode)
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    let act_hex = act_pubs
+                        .iter()
+                        .map(hex::encode)
+                        .collect::<Vec<_>>()
+                        .join(",");
                     let diff = VerifyCheck::diff_offset(&exp_hex, &act_hex);
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
@@ -2204,10 +2332,11 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
     // Map of cosigner index → claimed master fingerprint (TLV fingerprints,
     // wallet-policy mode only).
     let md_fp_for = |idx: usize| -> Option<[u8; 4]> {
-        desc.tlv
-            .fingerprints
-            .as_ref()
-            .and_then(|v| v.iter().find(|(i, _)| *i as usize == idx).map(|(_, fp)| *fp))
+        desc.tlv.fingerprints.as_ref().and_then(|v| {
+            v.iter()
+                .find(|(i, _)| *i as usize == idx)
+                .map(|(_, fp)| *fp)
+        })
     };
 
     // Decode supplied mk1 cards. For multisig, group by chunk_set_id (mirrors
@@ -2315,8 +2444,8 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
         } else if d == 1 {
             // At depth 1, parent IS the master. Cross-check against the master
             // fingerprint claimed by md1 (TLV fingerprints) or mk1 (origin_fingerprint).
-            let claimed_master_fp = md_fp_for(*i)
-                .or_else(|| card.origin_fingerprint.map(|f| f.to_bytes()));
+            let claimed_master_fp =
+                md_fp_for(*i).or_else(|| card.origin_fingerprint.map(|f| f.to_bytes()));
             if let Some(master_fp) = claimed_master_fp {
                 if pfp != master_fp {
                     writeln!(
@@ -2491,7 +2620,13 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
         // a mnem cosigner card previously silently `continue`d, skipping the cross-check.
         let (entropy, card_lang) = match ms_codec::decode(ms1_str) {
             Ok((_tag, ms_codec::Payload::Entr(bytes))) => (bytes, language.into()),
-            Ok((_tag, ms_codec::Payload::Mnem { language: wire_lang, entropy })) => {
+            Ok((
+                _tag,
+                ms_codec::Payload::Mnem {
+                    language: wire_lang,
+                    entropy,
+                },
+            )) => {
                 // Per-card wire language wins over run-level --language.
                 let lang = match crate::language::wire_code_to_bip39(wire_lang) {
                     Ok(l) => l,
@@ -2543,14 +2678,14 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
             Ok(p) => p,
             Err(_) => continue,
         };
-        let full_components: Vec<bitcoin::bip32::ChildNumber> = full_path.into_iter().copied().collect();
+        let full_components: Vec<bitcoin::bip32::ChildNumber> =
+            full_path.into_iter().copied().collect();
         if d - 1 > full_components.len() {
             // The xpub claims a node ≥2 levels below md1's origin; can't form the
             // parent prefix. (Check 1's overlap-prefix already covers consistency.)
             continue;
         }
-        let parent_components: Vec<bitcoin::bip32::ChildNumber> =
-            full_components[..d - 1].to_vec();
+        let parent_components: Vec<bitcoin::bip32::ChildNumber> = full_components[..d - 1].to_vec();
         let parent_path = bitcoin::bip32::DerivationPath::from(parent_components);
 
         let parent_xpriv = match master.derive_priv(&secp, &parent_path) {
@@ -2579,8 +2714,8 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
 mod helper_tests {
     use super::*;
     use crate::format::MkField;
-    use crate::synthesize::synthesize_full;
     use crate::network::CliNetwork;
+    use crate::synthesize::synthesize_full;
     use crate::template::CliTemplate;
     use bip39::Mnemonic;
     use bitcoin::bip32::{Xpriv, Xpub};
@@ -2599,7 +2734,15 @@ mod helper_tests {
         let path = CliTemplate::Bip84.derivation_path(CliNetwork::Mainnet, 0);
         let acct_xpriv = master.derive_priv(&secp, &path).unwrap();
         let xpub = Xpub::from_priv(&secp, &acct_xpriv);
-        synthesize_full(&entropy, fp, xpub, CliTemplate::Bip84, CliNetwork::Mainnet, 0).unwrap()
+        synthesize_full(
+            &entropy,
+            fp,
+            xpub,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -2618,8 +2761,21 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
-        assert_eq!(checks.len(), 9, "single-sig must emit 9 checks per SPEC §5.7");
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
+        assert_eq!(
+            checks.len(),
+            9,
+            "single-sig must emit 9 checks per SPEC §5.7"
+        );
         let names: Vec<&str> = checks.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
             names,
@@ -2667,7 +2823,16 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
         // Either mk1_decode fails (BCH checksum mismatch) OR mk1_xpub_match fails.
         let mk1_decode = checks
             .iter()
@@ -2699,7 +2864,16 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, false, true, false, &mut _test_so, &mut _test_se).unwrap();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
         assert_eq!(checks.len(), 9);
         // ms1_decode and ms1_entropy_match are skipped per SPEC §5.7.
         let ms1_decode = &checks[0];
@@ -2748,8 +2922,16 @@ mod helper_tests {
         let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
         let fp_b = master_b.fingerprint(&secp);
         let cosigners = vec![
-            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
-            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+            CosignerSpec {
+                xpub: xpub_a,
+                master_fingerprint: fp_a,
+                path: Some(path.clone()),
+            },
+            CosignerSpec {
+                xpub: xpub_b,
+                master_fingerprint: fp_b,
+                path: Some(path.clone()),
+            },
         ];
         let n: usize = 2;
         let expected = synthesize_multisig_watch_only(
@@ -2775,7 +2957,16 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            true,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
         assert_eq!(
             checks.len(),
             6 * n + 3,
@@ -2808,7 +2999,10 @@ mod helper_tests {
             .iter()
             .filter(|c| c.name.starts_with("ms1_decode"))
             .all(|c| c.passed);
-        assert!(ms1_decode_passed, "ms1_decode[i] must pass on byte-identical happy path");
+        assert!(
+            ms1_decode_passed,
+            "ms1_decode[i] must pass on byte-identical happy path"
+        );
     }
 
     #[test]
@@ -2842,8 +3036,16 @@ mod helper_tests {
         let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
         let fp_b = master_b.fingerprint(&secp);
         let cosigners = vec![
-            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
-            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+            CosignerSpec {
+                xpub: xpub_a,
+                master_fingerprint: fp_a,
+                path: Some(path.clone()),
+            },
+            CosignerSpec {
+                xpub: xpub_b,
+                master_fingerprint: fp_b,
+                path: Some(path.clone()),
+            },
         ];
         let n: usize = 2;
         let mut expected = synthesize_multisig_watch_only(
@@ -2858,11 +3060,21 @@ mod helper_tests {
         .unwrap();
         // Manually populate per-cosigner ms1 with non-empty strings (full-mode shape).
         let bundle_a = synthesize_full(
-            &entropy_a, fp_a, xpub_a, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+            &entropy_a,
+            fp_a,
+            xpub_a,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
         )
         .unwrap();
         let bundle_b = synthesize_full(
-            &entropy_b, fp_b, xpub_b, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+            &entropy_b,
+            fp_b,
+            xpub_b,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
         )
         .unwrap();
         expected.ms1 = vec![bundle_a.ms1[0].clone(), bundle_b.ms1[0].clone()];
@@ -2879,17 +3091,36 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
-        assert_eq!(checks.len(), 6 * n + 3, "multisig must emit 3+6N checks (N={n})");
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            true,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
+        assert_eq!(
+            checks.len(),
+            6 * n + 3,
+            "multisig must emit 3+6N checks (N={n})"
+        );
         // Substantive ms1 happy-path: case 2 (decodes Ok + byte-equal) for both slots.
         for i in 0..n {
-            let dec = checks.iter().find(|c| c.name == format!("ms1_decode[{i}]")).unwrap();
+            let dec = checks
+                .iter()
+                .find(|c| c.name == format!("ms1_decode[{i}]"))
+                .unwrap();
             assert!(dec.passed, "case 2 ms1_decode[{i}] must pass");
             let mat = checks
                 .iter()
                 .find(|c| c.name == format!("ms1_entropy_match[{i}]"))
                 .unwrap();
-            assert!(mat.passed, "case 2 ms1_entropy_match[{i}] must pass on byte-identical");
+            assert!(
+                mat.passed,
+                "case 2 ms1_entropy_match[{i}] must pass on byte-identical"
+            );
         }
     }
 
@@ -2920,8 +3151,16 @@ mod helper_tests {
         let xpub_b = Xpub::from_priv(&secp, &xpriv_b);
         let fp_b = master_b.fingerprint(&secp);
         let cosigners = vec![
-            CosignerSpec { xpub: xpub_a, master_fingerprint: fp_a, path: Some(path.clone()) },
-            CosignerSpec { xpub: xpub_b, master_fingerprint: fp_b, path: Some(path.clone()) },
+            CosignerSpec {
+                xpub: xpub_a,
+                master_fingerprint: fp_a,
+                path: Some(path.clone()),
+            },
+            CosignerSpec {
+                xpub: xpub_b,
+                master_fingerprint: fp_b,
+                path: Some(path.clone()),
+            },
         ];
         let mut expected = synthesize_multisig_watch_only(
             &cosigners,
@@ -2934,11 +3173,21 @@ mod helper_tests {
         )
         .unwrap();
         let bundle_a = synthesize_full(
-            &entropy_a, fp_a, xpub_a, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+            &entropy_a,
+            fp_a,
+            xpub_a,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
         )
         .unwrap();
         let bundle_b = synthesize_full(
-            &entropy_b, fp_b, xpub_b, CliTemplate::Bip84, CliNetwork::Mainnet, 0,
+            &entropy_b,
+            fp_b,
+            xpub_b,
+            CliTemplate::Bip84,
+            CliNetwork::Mainnet,
+            0,
         )
         .unwrap();
         expected.ms1 = vec![bundle_a.ms1[0].clone(), bundle_b.ms1[0].clone()];
@@ -2956,10 +3205,25 @@ mod helper_tests {
         };
         let mut _test_so: Vec<u8> = Vec::new();
         let mut _test_se: Vec<u8> = Vec::new();
-        let checks = emit_verify_checks(&expected, &supplied, true, true, false, &mut _test_so, &mut _test_se).unwrap();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            true,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
         for i in 0..2 {
-            let dec = checks.iter().find(|c| c.name == format!("ms1_decode[{i}]")).unwrap();
-            assert!(!dec.passed, "case 4 ms1_decode[{i}] must fail (passed=false)");
+            let dec = checks
+                .iter()
+                .find(|c| c.name == format!("ms1_decode[{i}]"))
+                .unwrap();
+            assert!(
+                !dec.passed,
+                "case 4 ms1_decode[{i}] must fail (passed=false)"
+            );
             assert_eq!(
                 dec.decode_error.as_deref().unwrap(),
                 &format!("error: ms1[{i}] expected (full-mode bundle) but not supplied")

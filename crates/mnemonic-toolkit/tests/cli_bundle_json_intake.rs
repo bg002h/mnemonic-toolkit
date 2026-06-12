@@ -112,7 +112,9 @@ fn verify_bundle_bundle_json_conflicts_with_ms1() {
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("cannot be used with") || stderr.contains("conflicts") || stderr.contains("--bundle-json"),
+        stderr.contains("cannot be used with")
+            || stderr.contains("conflicts")
+            || stderr.contains("--bundle-json"),
         "clap should reject conflict; got: {stderr}"
     );
 }

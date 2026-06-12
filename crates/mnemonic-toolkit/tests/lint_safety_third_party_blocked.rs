@@ -76,10 +76,9 @@ fn is_in_test_module(lines: &[&str], line_idx: usize) -> bool {
         // function definition. Combined with the file structure
         // convention (`#[cfg(test)] mod tests { ... }` at file end),
         // this is sufficient.
-        if !lines[i].is_empty() && !lines[i].starts_with(|c: char| c.is_whitespace())
-            && (l.starts_with("pub fn ")
-                || l.starts_with("fn ")
-                || l.starts_with("pub(crate) fn "))
+        if !lines[i].is_empty()
+            && !lines[i].starts_with(|c: char| c.is_whitespace())
+            && (l.starts_with("pub fn ") || l.starts_with("fn ") || l.starts_with("pub(crate) fn "))
         {
             return false;
         }
@@ -93,9 +92,8 @@ fn every_third_party_call_site_has_safety_comment_within_window() {
     let mut sites_checked = 0;
     for path_rel in SCAN_FILES {
         let path = crate_root().join(path_rel);
-        let source = fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!("failed to read source {}: {e}", path.display())
-        });
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read source {}: {e}", path.display()));
         let lines: Vec<&str> = source.lines().collect();
         for (i, line) in lines.iter().enumerate() {
             let pattern = CALL_PATTERNS.iter().find(|p| line.contains(**p));

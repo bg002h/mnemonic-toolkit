@@ -93,8 +93,11 @@ mod tests {
     const WIRE_JAPANESE: u8 = 1;
 
     fn entr_ms1(entropy: &[u8]) -> String {
-        ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy.to_vec()))
-            .expect("ms_codec::encode entr")
+        ms_codec::encode(
+            ms_codec::Tag::ENTR,
+            &ms_codec::Payload::Entr(entropy.to_vec()),
+        )
+        .expect("ms_codec::encode entr")
     }
 
     fn mnem_ms1(entropy: &[u8], wire_lang: u8) -> String {

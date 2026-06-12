@@ -46,8 +46,7 @@
 //! seed-base alone.
 
 use mnemonic_toolkit::slip39::{
-    parse_slip39_share, render_slip39_share, slip39_combine, slip39_split,
-    GroupSpec, Share,
+    parse_slip39_share, render_slip39_share, slip39_combine, slip39_split, GroupSpec, Share,
 };
 use rand_chacha::ChaCha20Rng;
 use rand_core::{RngCore, SeedableRng};

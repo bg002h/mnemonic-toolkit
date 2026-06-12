@@ -40,7 +40,9 @@ fn convert_value(args: &[&str]) -> String {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     line[colon + 2..].to_string()
 }
 
@@ -59,7 +61,10 @@ fn decode_minikey_22char_to_wif_mainnet() {
     ]);
     assert_eq!(out, VEC22_WIF_MAINNET);
     // Mainnet uncompressed WIFs start with '5'.
-    assert!(out.starts_with('5'), "mainnet uncompressed WIF must start with '5'; got {out:?}");
+    assert!(
+        out.starts_with('5'),
+        "mainnet uncompressed WIF must start with '5'; got {out:?}"
+    );
 }
 
 #[test]
@@ -101,7 +106,10 @@ fn decode_minikey_30char_to_wif_testnet() {
         "testnet",
     ]);
     assert_eq!(out, VEC30_WIF_TESTNET);
-    assert!(out.starts_with('9'), "testnet uncompressed WIF must start with '9'; got {out:?}");
+    assert!(
+        out.starts_with('9'),
+        "testnet uncompressed WIF must start with '9'; got {out:?}"
+    );
 }
 
 // ============================================================================
@@ -193,7 +201,9 @@ fn refusal_minikey_to_xpub_decode_only() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(        "error: --from minikey only supports --to wif (decode-only); cannot convert to xpub.\n"),
+        stderr.ends_with(
+            "error: --from minikey only supports --to wif (decode-only); cannot convert to xpub.\n"
+        ),
         "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
     )
@@ -255,7 +265,14 @@ fn refusal_wif_to_minikey_one_way() {
 fn minikey_input_redacted_in_json_from_value() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("minikey={VEC22_KEY}"), "--to", "wif", "--json"])
+        .args([
+            "convert",
+            "--from",
+            &format!("minikey={VEC22_KEY}"),
+            "--to",
+            "wif",
+            "--json",
+        ])
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -269,5 +286,8 @@ fn minikey_input_redacted_in_json_from_value() {
     // The decoded WIF output is itself secret-bearing and still appears in `to`.
     assert!(v["to"][0]["value"].as_str().unwrap().starts_with('5'));
     // The minikey private key must NOT leak anywhere in the JSON.
-    assert!(!stdout.contains(VEC22_KEY), "minikey input leaked into JSON: {stdout}");
+    assert!(
+        !stdout.contains(VEC22_KEY),
+        "minikey input leaked into JSON: {stdout}"
+    );
 }

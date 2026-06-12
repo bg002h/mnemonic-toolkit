@@ -77,9 +77,12 @@ fn parse_split_stdout(stdout: &str) -> Vec<Vec<String>> {
 fn slip39_split_2_of_3_single_group_round_trip_via_entropy() {
     let from_arg = format!("entropy={ENTROPY_32_ZEROS_HEX}");
     let (stdout, _stderr, exit) = split(&[
-        "--from", &from_arg,
-        "--group-threshold", "1",
-        "--group", "3,2",
+        "--from",
+        &from_arg,
+        "--group-threshold",
+        "1",
+        "--group",
+        "3,2",
     ]);
     assert_eq!(exit, 0, "split exit; stdout={stdout:?}");
     let groups = parse_split_stdout(&stdout);
@@ -261,8 +264,7 @@ fn slip39_split_12_word_phrase_16_byte_entropy_round_trip() {
     ]);
     assert_eq!(exit, 0);
     let groups = parse_split_stdout(&stdout);
-    let (recovered, _, exit2) =
-        combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
+    let (recovered, _, exit2) = combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
     assert_eq!(exit2, 0);
     assert_eq!(recovered.lines().next().unwrap(), ENTROPY_16_ZEROS_HEX);
 }
@@ -344,8 +346,7 @@ fn slip39_split_default_language_is_english() {
     assert_eq!(exit, 0);
     // Round-trip; default --to entropy yields the 16-byte all-zero hex
     let groups = parse_split_stdout(&stdout);
-    let (recovered, _, exit2) =
-        combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
+    let (recovered, _, exit2) = combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
     assert_eq!(exit2, 0);
     assert_eq!(recovered.lines().next().unwrap(), ENTROPY_16_ZEROS_HEX);
 }
@@ -402,8 +403,7 @@ fn slip39_split_with_language_flag_is_silent_for_entropy_input() {
     let groups = parse_split_stdout(&stdout);
     // Recover with default --to entropy; `--language` was silent on
     // input, so output hex must equal the original.
-    let (recovered, _, exit2) =
-        combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
+    let (recovered, _, exit2) = combine(&["--share", &groups[0][0], "--share", &groups[0][1]]);
     assert_eq!(exit2, 0);
     assert_eq!(recovered.lines().next().unwrap(), ENTROPY_32_ZEROS_HEX);
 }

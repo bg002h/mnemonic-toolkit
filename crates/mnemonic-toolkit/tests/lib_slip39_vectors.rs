@@ -55,9 +55,7 @@
 
 use bitcoin::bip32::Xpriv;
 use bitcoin::Network;
-use mnemonic_toolkit::slip39::{
-    parse_slip39_share, slip39_combine, GroupSpec, Slip39Error,
-};
+use mnemonic_toolkit::slip39::{parse_slip39_share, slip39_combine, GroupSpec, Slip39Error};
 use serde::Deserialize;
 
 const VECTORS_JSON: &str = include_str!("fixtures/slip39_vectors.json");
@@ -108,7 +106,10 @@ fn negative_expected(idx_1based: usize) -> ExpectedNegative {
             threshold: 2,
             count: 1,
         }),
-        11 | 30 => Exact(DuplicateMemberIndex { group_idx: 0, member_idx: 2 }),
+        11 | 30 => Exact(DuplicateMemberIndex {
+            group_idx: 0,
+            member_idx: 2,
+        }),
         12 | 31 => Exact(MemberThresholdMismatch),
         13 | 32 => Exact(DigestVerificationFailed),
         14 | 15 | 33 | 34 => Shape(|e| matches!(e, InsufficientShares { .. })),
@@ -241,7 +242,10 @@ vector_test!(36, vector_36_threshold_case1_256);
 vector_test!(37, vector_37_threshold_case2_256);
 vector_test!(38, vector_38_threshold_case3_256);
 vector_test!(39, vector_39_insufficient_length);
-vector_test!(40, vector_40_invalid_master_secret_length_folds_to_invalid_padding);
+vector_test!(
+    40,
+    vector_40_invalid_master_secret_length_folds_to_invalid_padding
+);
 vector_test!(41, vector_41_modular_arithmetic_error_detection);
 vector_test!(42, vector_42_extendable_no_sharing_128);
 vector_test!(43, vector_43_extendable_basic_sharing_2of3_128);

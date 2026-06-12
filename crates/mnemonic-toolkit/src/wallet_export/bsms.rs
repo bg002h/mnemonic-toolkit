@@ -101,14 +101,13 @@ impl WalletFormatEmitter for BsmsEmitter {
                 // (rather than threading a `&Descriptor` into `EmitInputs`)
                 // keeps the cross-emitter contract minimal — other formats
                 // do their own parse where needed (e.g., bitcoin_core.rs:48).
-                let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(
-                    &inputs.canonical_descriptor,
-                )
-                .map_err(|e| {
-                    ToolkitError::DescriptorParse(format!(
-                        "--format bsms 4-line: descriptor re-parse: {e}"
-                    ))
-                })?;
+                let parsed =
+                    MsDescriptor::<DescriptorPublicKey>::from_str(&inputs.canonical_descriptor)
+                        .map_err(|e| {
+                            ToolkitError::DescriptorParse(format!(
+                                "--format bsms 4-line: descriptor re-parse: {e}"
+                            ))
+                        })?;
 
                 let line3 = path_restrictions_line(&parsed);
                 let line4 = derive_first_address(&parsed, network_to_bitcoin(inputs.network))?;

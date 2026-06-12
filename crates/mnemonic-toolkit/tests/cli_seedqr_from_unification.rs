@@ -24,7 +24,13 @@ fn mnemonic() -> Command {
 #[test]
 fn convert_from_seedqr_to_phrase_happy_path() {
     let out = mnemonic()
-        .args(["convert", "--from", &format!("seedqr={DIGITS_12}"), "--to", "phrase"])
+        .args([
+            "convert",
+            "--from",
+            &format!("seedqr={DIGITS_12}"),
+            "--to",
+            "phrase",
+        ])
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -34,7 +40,13 @@ fn convert_from_seedqr_to_phrase_happy_path() {
 #[test]
 fn convert_from_seedqr_to_entropy_happy_path() {
     let out = mnemonic()
-        .args(["convert", "--from", &format!("seedqr={DIGITS_12}"), "--to", "entropy"])
+        .args([
+            "convert",
+            "--from",
+            &format!("seedqr={DIGITS_12}"),
+            "--to",
+            "entropy",
+        ])
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -58,7 +70,10 @@ fn convert_from_seedqr_to_xpub_bip84() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(stdout.starts_with("xpub: xpub"), "expected xpub output; got: {stdout}");
+    assert!(
+        stdout.starts_with("xpub: xpub"),
+        "expected xpub output; got: {stdout}"
+    );
 }
 
 #[test]
@@ -91,7 +106,13 @@ fn convert_to_seedqr_rejected_by_clap() {
     // `seedqr` is intentionally absent from the `--to` PossibleValuesParser
     // list; clap rejects `--to seedqr` at parse-time (exit 2).
     let assertion = mnemonic()
-        .args(["convert", "--from", &format!("phrase={PHRASE_12}"), "--to", "seedqr"])
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={PHRASE_12}"),
+            "--to",
+            "seedqr",
+        ])
         .assert()
         .failure()
         .code(64); // EX_USAGE (clap parse error via the sysexits main wrapper)
@@ -134,8 +155,7 @@ fn decode_digits_deprecation_warning() {
         .stdout(format!("{PHRASE_12}\n"));
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("--digits is deprecated")
-            && stderr.contains("--from seedqr="),
+        stderr.contains("--digits is deprecated") && stderr.contains("--from seedqr="),
         "expected deprecation notice citing --from seedqr=; got: {stderr}"
     );
 }
@@ -171,8 +191,7 @@ fn decode_neither_digits_nor_from_required_input() {
         .code(1);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("seedqr decode requires an input")
-            && stderr.contains("--from seedqr="),
+        stderr.contains("seedqr decode requires an input") && stderr.contains("--from seedqr="),
         "expected required-input refusal; got: {stderr}"
     );
 }
@@ -186,8 +205,7 @@ fn decode_from_non_seedqr_node_refused() {
         .code(1);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("accepts only the `seedqr` node type")
-            && stderr.contains("got `phrase`"),
+        stderr.contains("accepts only the `seedqr` node type") && stderr.contains("got `phrase`"),
         "expected non-seedqr-node refusal; got: {stderr}"
     );
 }

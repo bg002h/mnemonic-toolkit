@@ -12,13 +12,10 @@ use serde_json::Value;
 
 const C0: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-const C1: &str =
-    "legal winner thank year wave sausage worth useful legal winner thank yellow";
-const C2: &str =
-    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const C2: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 /// A seed that is NOT one of the three cosigners (for the mismatch cell).
-const FOREIGN: &str =
-    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+const FOREIGN: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
 
 /// Bundle a 2-of-3 multisig and return (md1 chunks, per-cosigner mk1 chunks).
 fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<String>>) {
@@ -57,7 +54,10 @@ fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<Strin
         .iter()
         .map(|el| match el {
             Value::String(s) => vec![s.clone()],
-            Value::Array(inner) => inner.iter().map(|c| c.as_str().unwrap().to_string()).collect(),
+            Value::Array(inner) => inner
+                .iter()
+                .map(|c| c.as_str().unwrap().to_string())
+                .collect(),
             other => panic!("unexpected mk1 element: {other:?}"),
         })
         .collect();
@@ -150,8 +150,13 @@ fn md1_json_partial_status_and_notes() {
         .assert()
         .code(0);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("restore JSON");
-    assert_eq!(v["verification"]["status"], "partial", "only @0 verified → partial");
-    let cos = v["wallets"][0]["cosigner_keys"].as_array().expect("cosigner_keys");
+    assert_eq!(
+        v["verification"]["status"], "partial",
+        "only @0 verified → partial"
+    );
+    let cos = v["wallets"][0]["cosigner_keys"]
+        .as_array()
+        .expect("cosigner_keys");
     // @0 is the own seed; at least one other position must be flagged unverified.
     let own = cos.iter().find(|c| c["position"] == 0).expect("@0");
     assert!(
@@ -159,8 +164,10 @@ fn md1_json_partial_status_and_notes() {
         "@0 own-seed note"
     );
     assert!(
-        cos.iter()
-            .any(|c| c["note"].as_str().unwrap().contains("not independently verified")),
+        cos.iter().any(|c| c["note"]
+            .as_str()
+            .unwrap()
+            .contains("not independently verified")),
         "an un-supplied position must be flagged not-independently-verified"
     );
 }

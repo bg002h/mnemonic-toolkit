@@ -264,14 +264,7 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
                 "--descriptor-from expects <node>=<value> form; got `{spec}`"
             ))
         })?;
-        intake_from_explicit_form(
-            node,
-            value,
-            args.network,
-            args.min_account,
-            stdin,
-            stderr,
-        )?
+        intake_from_explicit_form(node, value, args.network, args.min_account, stdin, stderr)?
     } else {
         let value = args.descriptor.as_deref().expect("checked above");
         intake_from_descriptor_value(value, args.network, args.min_account, stderr)?

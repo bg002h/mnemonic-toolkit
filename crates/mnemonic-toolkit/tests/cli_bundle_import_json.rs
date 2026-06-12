@@ -149,11 +149,16 @@ fn bundle_import_json_with_descriptor_flag_errors_mutex() {
 fn multi_entry_envelope_json() -> String {
     // Two-entry envelope: same bundle shape repeated. Hand-rolled to avoid
     // dragging in a Bitcoin Core fixture.
-    let one_entry: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap())
-            .unwrap();
+    let one_entry: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap(),
+    )
+    .unwrap();
     let entry = &one_entry.as_array().unwrap()[0];
-    serde_json::to_string(&serde_json::Value::Array(vec![entry.clone(), entry.clone()])).unwrap()
+    serde_json::to_string(&serde_json::Value::Array(vec![
+        entry.clone(),
+        entry.clone(),
+    ]))
+    .unwrap()
 }
 
 #[test]
@@ -514,7 +519,10 @@ fn bundle_import_json_to_verify_bundle_round_trip_yields_ok() {
         args.push("--slot".into());
         args.push(format!("@{i}.xpub={}", c["xpub"].as_str().unwrap()));
         args.push("--slot".into());
-        args.push(format!("@{i}.fingerprint={}", c["master_fingerprint"].as_str().unwrap()));
+        args.push(format!(
+            "@{i}.fingerprint={}",
+            c["master_fingerprint"].as_str().unwrap()
+        ));
     }
     let verify_out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -750,7 +758,14 @@ fn bundle_import_json_seeded_ms1_self_check_passes() {
     let import_out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "import-wallet", "--blob", "-", "--format", "bsms", "--ms1", MS1_TEST_1, "--json",
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--ms1",
+            MS1_TEST_1,
+            "--json",
         ])
         .write_stdin(blob)
         .assert()

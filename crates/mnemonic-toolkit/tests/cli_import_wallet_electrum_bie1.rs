@@ -31,7 +31,12 @@ fn import_cmd() -> Command {
 fn bie1_storage_inline_password_decrypts_and_imports() {
     let p = fixture_path("electrum-bie1-storage-bip84.txt");
     let out = import_cmd()
-        .args(["--blob", p.to_str().unwrap(), "--decrypt-password", PASSWORD])
+        .args([
+            "--blob",
+            p.to_str().unwrap(),
+            "--decrypt-password",
+            PASSWORD,
+        ])
         .assert()
         .success();
     let o = out.get_output();
@@ -73,11 +78,7 @@ fn bie1_storage_password_file_decrypts_and_imports() {
 fn bie1_storage_password_stdin_decrypts_and_imports() {
     let p = fixture_path("electrum-bie1-storage-bip84.txt");
     let out = import_cmd()
-        .args([
-            "--blob",
-            p.to_str().unwrap(),
-            "--decrypt-password-stdin",
-        ])
+        .args(["--blob", p.to_str().unwrap(), "--decrypt-password-stdin"])
         .write_stdin(PASSWORD)
         .assert()
         .success();
@@ -161,7 +162,9 @@ fn bsms_token_stdin_plus_password_stdin_refused() {
     let out = import_cmd()
         .args([
             "--blob",
-            fixture_path("electrum-bie1-storage-bip84.txt").to_str().unwrap(),
+            fixture_path("electrum-bie1-storage-bip84.txt")
+                .to_str()
+                .unwrap(),
             "--bsms-encryption-token",
             "-",
             "--decrypt-password-stdin",
@@ -224,8 +227,7 @@ fn password_supplied_for_plaintext_wallet_is_ignored() {
     let stderr = String::from_utf8(o.stderr.clone()).unwrap();
     assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
     assert!(
-        stderr.contains("no BIE1 storage-encrypted wallet detected")
-            && stderr.contains("ignored"),
+        stderr.contains("no BIE1 storage-encrypted wallet detected") && stderr.contains("ignored"),
         "expected soft ignored notice; stderr: {stderr}"
     );
     // The inline password still leaked via argv even though it was unused.

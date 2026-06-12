@@ -370,16 +370,23 @@ mod tests {
     #[test]
     fn bip388_policy_name_extracts_or_none() {
         assert_eq!(
-            bip388_policy_name(r#"{"name":"test-vault","description_template":"wpkh(@0/**)","keys_info":["x"]}"#),
+            bip388_policy_name(
+                r#"{"name":"test-vault","description_template":"wpkh(@0/**)","keys_info":["x"]}"#
+            ),
             Some("test-vault".to_string())
         );
         // empty name → None
         assert_eq!(
-            bip388_policy_name(r#"{"name":"","description_template":"wpkh(@0/**)","keys_info":["x"]}"#),
+            bip388_policy_name(
+                r#"{"name":"","description_template":"wpkh(@0/**)","keys_info":["x"]}"#
+            ),
             None
         );
         // missing name field → None
-        assert_eq!(bip388_policy_name(r#"{"description_template":"wpkh(@0/**)"}"#), None);
+        assert_eq!(
+            bip388_policy_name(r#"{"description_template":"wpkh(@0/**)"}"#),
+            None
+        );
         // malformed JSON → None (never errors; expand surfaces the real error)
         assert_eq!(bip388_policy_name("not json {{{"), None);
     }
@@ -419,7 +426,10 @@ mod tests {
         assert_eq!(keys.len(), 2);
         assert_eq!(fps[0].fp, [0x70, 0x4c, 0x78, 0x36]);
         // The h-form path string is preserved verbatim into the @N form.
-        assert!(placeholder.contains("@0[704c7836/48h/1h/3h/2h]/<0;1>/*"), "{placeholder}");
+        assert!(
+            placeholder.contains("@0[704c7836/48h/1h/3h/2h]/<0;1>/*"),
+            "{placeholder}"
+        );
     }
 
     #[test]
@@ -436,10 +446,20 @@ mod tests {
         );
         // mixed @N + inline xpub → error (rule 1).
         let mixed = "wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
-        assert!(classify_descriptor_form(mixed).unwrap_err().message().contains("mixes @N"));
+        assert!(classify_descriptor_form(mixed)
+            .unwrap_err()
+            .message()
+            .contains("mixes @N"));
         // origin-less / keyless → rule-4 origin-required error.
-        let err = classify_descriptor_form("wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)").unwrap_err();
-        assert!(err.message().contains("must carry a key origin"), "{}", err.message());
+        let err = classify_descriptor_form(
+            "wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)",
+        )
+        .unwrap_err();
+        assert!(
+            err.message().contains("must carry a key origin"),
+            "{}",
+            err.message()
+        );
     }
 
     #[test]
@@ -447,16 +467,30 @@ mod tests {
         let body = "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
         let (_descriptor, slots) = descriptor_concrete_to_resolved_slots(body).unwrap();
         assert_eq!(slots.len(), 2);
-        assert_eq!(slots[0].fingerprint, bitcoin::bip32::Fingerprint::from([0x70, 0x4c, 0x78, 0x36]));
-        assert_eq!(slots[0].path, bitcoin::bip32::DerivationPath::from_str("m/48'/1'/3'/2'").unwrap());
-        assert_eq!(slots[1].fingerprint, bitcoin::bip32::Fingerprint::from([0x97, 0x13, 0x98, 0x60]));
+        assert_eq!(
+            slots[0].fingerprint,
+            bitcoin::bip32::Fingerprint::from([0x70, 0x4c, 0x78, 0x36])
+        );
+        assert_eq!(
+            slots[0].path,
+            bitcoin::bip32::DerivationPath::from_str("m/48'/1'/3'/2'").unwrap()
+        );
+        assert_eq!(
+            slots[1].fingerprint,
+            bitcoin::bip32::Fingerprint::from([0x97, 0x13, 0x98, 0x60])
+        );
         assert!(slots.iter().all(|s| s.entropy.is_none()));
     }
 
     #[test]
     fn concrete_helper_error_drops_bsms_prefix() {
-        let err = descriptor_concrete_to_resolved_slots("wsh(thresh(2,older(144),older(288)))").unwrap_err();
-        assert!(!err.message().contains("bsms"), "leaked converter prefix: {}", err.message());
+        let err = descriptor_concrete_to_resolved_slots("wsh(thresh(2,older(144),older(288)))")
+            .unwrap_err();
+        assert!(
+            !err.message().contains("bsms"),
+            "leaked converter prefix: {}",
+            err.message()
+        );
     }
 
     // ---- BIP-388 wallet-policy → concrete-descriptor expansion (Cycle D) ----
@@ -486,7 +520,11 @@ mod tests {
     fn expand_bip388_policy_deny_unknown_fields() {
         let json = r#"{"name":"x","description_template":"wsh(@0/**)","keys_info":["[704c7836/84'/0'/0']tpub"],"extra":1}"#;
         let err = expand_bip388_policy(json).unwrap_err();
-        assert!(matches!(err, ToolkitError::BadInput(_)), "{}", err.message());
+        assert!(
+            matches!(err, ToolkitError::BadInput(_)),
+            "{}",
+            err.message()
+        );
     }
 
     #[test]
@@ -512,7 +550,11 @@ mod tests {
         let json = r#"{"name":"x","description_template":"wsh(multi(2,@0/**,@1/**))","keys_info":["[704c7836/84'/0'/0']tpub"]}"#;
         let err = expand_bip388_policy(json).unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
-        assert!(err.message().contains("@N beyond keys_info"), "{}", err.message());
+        assert!(
+            err.message().contains("@N beyond keys_info"),
+            "{}",
+            err.message()
+        );
     }
 
     #[test]

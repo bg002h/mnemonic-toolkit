@@ -402,7 +402,9 @@ fn taproot_multisig_template_requires_internal_key_flag() {
             .code(1);
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
         assert!(
-            stderr.contains(&format!("--template {template_name} requires --taproot-internal-key")),
+            stderr.contains(&format!(
+                "--template {template_name} requires --taproot-internal-key"
+            )),
             "stderr missing taproot-internal-key pointer for {template_name}; got: {stderr:?}",
         );
     }
@@ -482,7 +484,9 @@ fn bip380_valid_checksum_round_trip_via_miniscript() {
         checksum.len()
     );
     assert!(
-        checksum.chars().all(|c| "qpzry9x8gf2tvdw0s3jn54khce6mua7l".contains(c)),
+        checksum
+            .chars()
+            .all(|c| "qpzry9x8gf2tvdw0s3jn54khce6mua7l".contains(c)),
         "BIP-380 checksum must be bech32 charset; got {checksum:?}"
     );
 
@@ -555,9 +559,7 @@ fn cell_8_bip388_sh_wpkh_bip49_template_shape() {
     assert_eq!(keys.len(), 1);
     assert_eq!(
         keys[0].as_str().unwrap(),
-        format!(
-            "[{TREZOR_12_MASTER_FINGERPRINT}/49'/0'/0']{TREZOR_12_BIP49_MAINNET_ACCOUNT_XPUB}"
-        ),
+        format!("[{TREZOR_12_MASTER_FINGERPRINT}/49'/0'/0']{TREZOR_12_BIP49_MAINNET_ACCOUNT_XPUB}"),
     );
 }
 
@@ -601,17 +603,12 @@ fn cell_9_bip388_tr_bip86_template_shape() {
 
     assert_eq!(value["name"].as_str().unwrap(), "bip86");
     // BIP-388 §Reference Wallet Policies 388.4 template shape.
-    assert_eq!(
-        value["description_template"].as_str().unwrap(),
-        "tr(@0/**)",
-    );
+    assert_eq!(value["description_template"].as_str().unwrap(), "tr(@0/**)",);
     let keys = value["keys_info"].as_array().unwrap();
     assert_eq!(keys.len(), 1);
     assert_eq!(
         keys[0].as_str().unwrap(),
-        format!(
-            "[{TREZOR_12_MASTER_FINGERPRINT}/86'/0'/0']{TREZOR_12_BIP86_MAINNET_ACCOUNT_XPUB}"
-        ),
+        format!("[{TREZOR_12_MASTER_FINGERPRINT}/86'/0'/0']{TREZOR_12_BIP86_MAINNET_ACCOUNT_XPUB}"),
     );
 }
 
@@ -700,8 +697,14 @@ fn tr_multi_a_with_nums_internal_key_emits_canonical_tr_descriptor() {
         "stdout missing tr(NUMS,multi_a(2,...)) shape; got: {stdout:?}",
     );
     // Both cosigner xpubs must appear as multi_a leaves.
-    assert!(stdout.contains(COSIGNER_A_XPUB), "missing cosigner A xpub in {stdout:?}");
-    assert!(stdout.contains(COSIGNER_B_XPUB), "missing cosigner B xpub in {stdout:?}");
+    assert!(
+        stdout.contains(COSIGNER_A_XPUB),
+        "missing cosigner A xpub in {stdout:?}"
+    );
+    assert!(
+        stdout.contains(COSIGNER_B_XPUB),
+        "missing cosigner B xpub in {stdout:?}"
+    );
 }
 
 /// SPEC v0.8 §7 — `--taproot-internal-key @0` makes cosigner 0 the key-path
@@ -741,8 +744,14 @@ fn tr_multi_a_with_cosigner_internal_key_removes_cosigner_from_leaves() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     // Cosigner A is the internal key (appears outside multi_a); cosigner B
     // is the sole multi_a leaf.
-    assert!(stdout.contains(COSIGNER_A_XPUB), "missing internal key (cosigner A) in {stdout:?}");
-    assert!(stdout.contains(COSIGNER_B_XPUB), "missing leaf key (cosigner B) in {stdout:?}");
+    assert!(
+        stdout.contains(COSIGNER_A_XPUB),
+        "missing internal key (cosigner A) in {stdout:?}"
+    );
+    assert!(
+        stdout.contains(COSIGNER_B_XPUB),
+        "missing leaf key (cosigner B) in {stdout:?}"
+    );
     assert!(
         stdout.contains("multi_a(1,"),
         "expected multi_a(1,...) with cosigner A removed; got {stdout:?}",
@@ -824,7 +833,9 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
         .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"),
+        stderr.contains(
+            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"
+        ),
         "stderr missing non-taproot refusal: {stderr:?}",
     );
 }
@@ -914,11 +925,13 @@ fn descriptor_to_bip388_wallet_policy_round_trip() {
     assert_eq!(keys_info.len(), 2);
     assert!(
         keys_info[0].contains(COSIGNER_A_XPUB) && keys_info[0].contains(COSIGNER_A_FP),
-        "keys_info[0] missing cosigner A: {:?}", keys_info[0],
+        "keys_info[0] missing cosigner A: {:?}",
+        keys_info[0],
     );
     assert!(
         keys_info[1].contains(COSIGNER_B_XPUB) && keys_info[1].contains(COSIGNER_B_FP),
-        "keys_info[1] missing cosigner B: {:?}", keys_info[1],
+        "keys_info[1] missing cosigner B: {:?}",
+        keys_info[1],
     );
     // keys_info entries must NOT include the `/<0;1>/*` suffix — BIP-388
     // appends `@N/**` shorthand instead.
@@ -968,9 +981,7 @@ fn tr_multi_a_n1_cosigner_internal_degenerate_refused() {
 /// SPEC v0.8 §6 — non-multipath descriptor refused under `--format bip388`.
 #[test]
 fn descriptor_to_bip388_non_multipath_refused() {
-    let descriptor = format!(
-        "wpkh([{TREZOR_BIP84_FP}/84'/0'/0']{TREZOR_BIP84_XPUB}/0/*)",
-    );
+    let descriptor = format!("wpkh([{TREZOR_BIP84_FP}/84'/0'/0']{TREZOR_BIP84_XPUB}/0/*)",);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([

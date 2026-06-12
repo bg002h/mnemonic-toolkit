@@ -24,12 +24,12 @@
 //! whole `repair_card` call returns `Err` naming that chunk; partially-
 //! repaired sibling chunks are NOT returned.
 
+use crate::indel::IndelOracle;
 use mk_codec::string_layer::bch::{
-    ALPHABET, BchCode, GEN_LONG, GEN_REGULAR, LONG_MASK, LONG_SHIFT, REGULAR_MASK, REGULAR_SHIFT,
-    bch_code_for_length, hrp_expand, polymod_run,
+    bch_code_for_length, hrp_expand, polymod_run, BchCode, ALPHABET, GEN_LONG, GEN_REGULAR,
+    LONG_MASK, LONG_SHIFT, REGULAR_MASK, REGULAR_SHIFT,
 };
 use mk_codec::string_layer::bch_decode::{decode_long_errors, decode_regular_errors};
-use crate::indel::IndelOracle;
 use std::collections::BTreeSet;
 use std::io::{IsTerminal, Read, Write};
 
@@ -570,10 +570,12 @@ fn parse_chunk(
     kind: CardKind,
 ) -> Result<(Vec<u8>, BchCode), RepairError> {
     let s_lower = chunk.to_lowercase();
-    let sep_pos = s_lower.rfind('1').ok_or_else(|| RepairError::UnparseableInput {
-        chunk_index,
-        detail: "missing bech32 separator '1'".into(),
-    })?;
+    let sep_pos = s_lower
+        .rfind('1')
+        .ok_or_else(|| RepairError::UnparseableInput {
+            chunk_index,
+            detail: "missing bech32 separator '1'".into(),
+        })?;
     let (hrp, rest) = s_lower.split_at(sep_pos);
     let data_part = &rest[1..]; // skip the '1' separator
 
@@ -667,11 +669,13 @@ fn repair_chunk_one(
 ) -> Result<Option<RepairDetail>, RepairError> {
     let (values, code) = parse_chunk(chunk, chunk_index, kind)?;
     let hrp = kind.hrp();
-    let target = kind.target_residue(code).ok_or(RepairError::UnsupportedCodeVariant {
-        chunk_index,
-        hrp,
-        data_part_len: values.len(),
-    })?;
+    let target = kind
+        .target_residue(code)
+        .ok_or(RepairError::UnsupportedCodeVariant {
+            chunk_index,
+            hrp,
+            data_part_len: values.len(),
+        })?;
 
     // Quick-path: already valid.
     let initial_residue = polymod_residue(hrp, &values, target, code);
@@ -834,15 +838,17 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
 /// `(Tag, Payload)` internally; this helper discards both since
 /// `repair_card`'s public contract is "corrected string + correction
 /// details" only.
-fn repair_via_ms_codec(chunk: &str, chunk_index: usize) -> Result<Option<RepairDetail>, RepairError> {
+fn repair_via_ms_codec(
+    chunk: &str,
+    chunk_index: usize,
+) -> Result<Option<RepairDetail>, RepairError> {
     use ms_codec::Error as MsErr;
     match ms_codec::decode_with_correction(chunk) {
         Ok((_tag, _payload, corrections)) => {
             if corrections.is_empty() {
                 return Ok(None);
             }
-            let (corrected_chunk, corrected_positions) =
-                apply_ms_corrections(chunk, &corrections);
+            let (corrected_chunk, corrected_positions) = apply_ms_corrections(chunk, &corrections);
             Ok(Some(RepairDetail {
                 chunk_index,
                 original_chunk: chunk.to_string(),
@@ -1105,7 +1111,11 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
 /// used a substitution beyond the placeholder positions (`subst_count >= 1`).
 /// (Unrecoverable(2) is handled out-of-band via the `Err` short-circuit in
 /// `run()`, so it never reaches this helper.)
-pub(crate) fn indel_exit_code(ambiguous_seen: bool, substitution_seen: bool, total_repairs: usize) -> u8 {
+pub(crate) fn indel_exit_code(
+    ambiguous_seen: bool,
+    substitution_seen: bool,
+    total_repairs: usize,
+) -> u8 {
     if ambiguous_seen || substitution_seen {
         4
     } else if total_repairs == 0 {
@@ -1133,7 +1143,13 @@ pub(crate) fn recover_indel_card(
             let chunk = chunks
                 .first()
                 .ok_or(ToolkitError::Repair(RepairError::EmptyInput))?;
-            Ok(crate::indel::recover_indel(chunk, "ms", max_indel, e_subst, &Ms1IndelOracle))
+            Ok(crate::indel::recover_indel(
+                chunk,
+                "ms",
+                max_indel,
+                e_subst,
+                &Ms1IndelOracle,
+            ))
         }
         CardKind::Mk1 => {
             // Locate the single failing chunk (the one normal per-chunk repair
@@ -1153,7 +1169,9 @@ pub(crate) fn recover_indel_card(
                 all_chunks: chunks.to_vec(),
                 failing_index: f,
             };
-            Ok(crate::indel::recover_indel(&chunks[f], "mk", max_indel, e_subst, &oracle))
+            Ok(crate::indel::recover_indel(
+                &chunks[f], "mk", max_indel, e_subst, &oracle,
+            ))
         }
         CardKind::Md1 => {
             // Mirror the Mk1 arm: locate the single failing chunk (an indel
@@ -1174,7 +1192,9 @@ pub(crate) fn recover_indel_card(
                 all_chunks: chunks.to_vec(),
                 failing_index: f,
             };
-            Ok(crate::indel::recover_indel(&chunks[f], "md", max_indel, e_subst, &oracle))
+            Ok(crate::indel::recover_indel(
+                &chunks[f], "md", max_indel, e_subst, &oracle,
+            ))
         }
     }
 }
@@ -1219,7 +1239,10 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
             // for the upstream enhancement path that would let us preserve
             // the rich error shape here.
             let chunk_index = parse_md_chunk_index(&s).unwrap_or(0);
-            Err(RepairError::UnparseableInput { chunk_index, detail: s })
+            Err(RepairError::UnparseableInput {
+                chunk_index,
+                detail: s,
+            })
         }
         Err(other) => Err(RepairError::PostCorrectionDecodeFailed {
             chunk_index: None,
@@ -1337,7 +1360,11 @@ pub fn emit_repair_report<O: Write + ?Sized, E: Write + ?Sized>(
         emit_repair_report_text(outcome, stdout)?;
     }
 
-    let total_corrections: usize = outcome.repairs.iter().map(|r| r.corrected_positions.len()).sum();
+    let total_corrections: usize = outcome
+        .repairs
+        .iter()
+        .map(|r| r.corrected_positions.len())
+        .sum();
     writeln!(
         stderr,
         "repair: applied {} correction{} across {} chunk{}",
@@ -1524,7 +1551,10 @@ mod tests {
     fn happy_path_ms1_already_valid_passthrough() {
         let result = repair_card(CardKind::Ms1, &[VALID_MS1.to_string()]).expect("repair Ok");
         assert_eq!(result.corrected_chunks[0], VALID_MS1);
-        assert!(result.repairs.is_empty(), "no corrections applied for valid input");
+        assert!(
+            result.repairs.is_empty(),
+            "no corrections applied for valid input"
+        );
     }
 
     /// Cell 7: EmptyInput.
@@ -1560,7 +1590,8 @@ mod tests {
     /// data-part). Flip 1 char, verify repair.
     #[test]
     fn happy_path_mk1_regular_1_substitution() {
-        const VALID_MK1_REG: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+        const VALID_MK1_REG: &str =
+            "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
         let bad = flip_at(VALID_MK1_REG, 25);
         let result = repair_card(CardKind::Mk1, &[bad.clone()]).expect("repair Ok");
         assert_eq!(result.corrected_chunks[0], VALID_MK1_REG);
@@ -1577,14 +1608,17 @@ mod tests {
         // (length-only dispatch happens before checksum verification).
         let padded = format!("ms1{}", "q".repeat(96));
         let result = repair_card(CardKind::Ms1, &[padded]);
-        assert!(matches!(
-            result,
-            Err(RepairError::UnsupportedCodeVariant {
-                chunk_index: 0,
-                hrp: "ms",
-                data_part_len: 96
-            })
-        ), "expected UnsupportedCodeVariant, got: {result:?}");
+        assert!(
+            matches!(
+                result,
+                Err(RepairError::UnsupportedCodeVariant {
+                    chunk_index: 0,
+                    hrp: "ms",
+                    data_part_len: 96
+                })
+            ),
+            "expected UnsupportedCodeVariant, got: {result:?}"
+        );
     }
 
     /// Reserved-invalid length [94, 95] must error with
@@ -1593,13 +1627,16 @@ mod tests {
     fn reserved_invalid_length_94_returns_err() {
         let padded = format!("mk1{}", "q".repeat(94));
         let result = repair_card(CardKind::Mk1, &[padded]);
-        assert!(matches!(
-            result,
-            Err(RepairError::ReservedInvalidLength {
-                chunk_index: 0,
-                data_part_len: 94
-            })
-        ), "expected ReservedInvalidLength(94), got: {result:?}");
+        assert!(
+            matches!(
+                result,
+                Err(RepairError::ReservedInvalidLength {
+                    chunk_index: 0,
+                    data_part_len: 94
+                })
+            ),
+            "expected ReservedInvalidLength(94), got: {result:?}"
+        );
     }
 
     /// Cell 3: HRP mismatch.
@@ -1731,7 +1768,9 @@ mod tests {
         }
         let mut input = hrp_expand(hrp);
         input.extend_from_slice(&values);
-        match bch_code_for_length(values.len()).expect("test fixtures must be in BIP-93 valid range") {
+        match bch_code_for_length(values.len())
+            .expect("test fixtures must be in BIP-93 valid range")
+        {
             BchCode::Regular => polymod_run(&input, &GEN_REGULAR, REGULAR_SHIFT, REGULAR_MASK),
             BchCode::Long => polymod_run(&input, &GEN_LONG, LONG_SHIFT, LONG_MASK),
         }
@@ -1760,8 +1799,14 @@ mod tests {
         let pa = raw_polymod(VALID_MK1_LONG_A);
         let pb = raw_polymod(VALID_MK1_LONG_B);
         let pc = raw_polymod(VALID_MK1_LONG_C);
-        assert_eq!(pa, pb, "mk1-long polymod target diverges between A/B (A=0x{pa:x}, B=0x{pb:x})");
-        assert_eq!(pb, pc, "mk1-long polymod target diverges between B/C (B=0x{pb:x}, C=0x{pc:x})");
+        assert_eq!(
+            pa, pb,
+            "mk1-long polymod target diverges between A/B (A=0x{pa:x}, B=0x{pb:x})"
+        );
+        assert_eq!(
+            pb, pc,
+            "mk1-long polymod target diverges between B/C (B=0x{pb:x}, C=0x{pc:x})"
+        );
         assert_eq!(
             pa, MK_LONG_TARGET,
             "MK_LONG_TARGET drift: empirical=0x{pa:x}, mk_codec::MK_LONG_CONST=0x{MK_LONG_TARGET:x}"
@@ -1781,7 +1826,8 @@ mod tests {
         // Generated 2026-05-17 — chunk 1 of the bip84 bundle for the
         // canonical test-vector phrase ("abandon × 11 about"). 77-char
         // data-part → regular code.
-        const VALID_MK1_REG: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+        const VALID_MK1_REG: &str =
+            "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 
         let p = raw_polymod(VALID_MK1_REG);
         assert_eq!(
@@ -2087,7 +2133,7 @@ mod tests {
     fn indel_ms1_cross_region_prefix_and_data_recovers() {
         // Drop the leading 'm' (prefix indel) AND drop one data char (data indel).
         let mut s = VALID_MS1.strip_prefix('m').unwrap().to_string(); // "s10entrs…"
-        // Drop a mid/late data position (post-prefix-drop string indices).
+                                                                      // Drop a mid/late data position (post-prefix-drop string indices).
         let drop_at = s.len() - 8;
         s.remove(drop_at);
         let oracle = Ms1IndelOracle;
@@ -2122,7 +2168,11 @@ mod tests {
         // Step 2 — drop data[1]='e' (lower index than the substitution, so the
         // substituted char survives the Vec shift).
         let mut s: String = chars.into_iter().collect();
-        assert_eq!(s.chars().nth(3 + 1), Some('e'), "fixture: data[1] must be 'e'");
+        assert_eq!(
+            s.chars().nth(3 + 1),
+            Some('e'),
+            "fixture: data[1] must be 'e'"
+        );
         s.remove(3 + 1);
         // Step 3 — strip leading 'm' (prefix indel).
         let s = s.strip_prefix('m').unwrap().to_string();
@@ -2158,7 +2208,8 @@ mod tests {
     // these `recover_indel`-driven tests exercise via a hand-built
     // `Mk1IndelOracle` whose `all_chunks` carries BOTH real chunks.
     const MK1_CARD_C0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-    const MK1_CARD_C1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+    const MK1_CARD_C1: &str =
+        "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 
     /// One chunk (chunk 1) of a 2-chunk card, too long by one inserted data
     /// char → the delete producer recovers it through the per-chunk ⊆-gated
@@ -2377,7 +2428,9 @@ mod tests {
         assert!(md1_chunk_solve(&bad, &allowed, 0).is_none());
         // The clean chunk (residue 0) round-trips through the solver.
         assert_eq!(
-            md1_chunk_solve(MD1_C1, &allowed, 0).map(|(s, _)| s).as_deref(),
+            md1_chunk_solve(MD1_C1, &allowed, 0)
+                .map(|(s, _)| s)
+                .as_deref(),
             Some(MD1_C1)
         );
     }

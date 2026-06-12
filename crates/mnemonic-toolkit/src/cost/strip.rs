@@ -42,14 +42,16 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
                 let m_segv0 = wsh.into_inner();
                 translated_from_segv0(input, m_segv0).map(|t| (t, None))
             }
-            ShInner::Wpkh(_) | ShInner::Ms(_) => Err(
-                CompareCostError::UnsupportedWrapper("sh(non-wsh)".to_string()),
-            ),
+            ShInner::Wpkh(_) | ShInner::Ms(_) => Err(CompareCostError::UnsupportedWrapper(
+                "sh(non-wsh)".to_string(),
+            )),
         },
         Descriptor::Tr(tr) => translate_descriptor_tr_single_leaf(input, tr),
-        Descriptor::Bare(_) | Descriptor::Pkh(_) | Descriptor::Wpkh(_) => Err(
-            CompareCostError::UnsupportedWrapper("pkh / wpkh / bare not a miniscript-wrapping question".to_string()),
-        ),
+        Descriptor::Bare(_) | Descriptor::Pkh(_) | Descriptor::Wpkh(_) => {
+            Err(CompareCostError::UnsupportedWrapper(
+                "pkh / wpkh / bare not a miniscript-wrapping question".to_string(),
+            ))
+        }
     }
 }
 
@@ -62,8 +64,8 @@ fn translated_from_segv0(
 ) -> Result<Translated, CompareCostError> {
     let segv0_str = m_segv0.to_string();
     let tap_str = segv0_string_to_tap_string(&segv0_str);
-    let m_tap: Miniscript<DefiniteDescriptorKey, Tap> = Miniscript::from_str(&tap_str)
-        .map_err(|e| CompareCostError::ContextIncompat {
+    let m_tap: Miniscript<DefiniteDescriptorKey, Tap> =
+        Miniscript::from_str(&tap_str).map_err(|e| CompareCostError::ContextIncompat {
             valid_in: "Segwitv0",
             invalid_in: "Tap",
             detail: format!("{e}"),
@@ -180,7 +182,8 @@ fn inflate_xonly_to_compressed_even_y(input: &str) -> String {
         if i + 64 <= bytes.len() {
             let candidate = &bytes[i..i + 64];
             let all_hex = candidate.iter().all(|b| b.is_ascii_hexdigit());
-            let prev_is_ident = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let prev_is_ident =
+                i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             let next_is_ident = i + 64 < bytes.len()
                 && (bytes[i + 64].is_ascii_alphanumeric() || bytes[i + 64] == b'_');
             if all_hex && !prev_is_ident && !next_is_ident {
@@ -215,7 +218,8 @@ fn segv0_string_to_tap_string(segv0: &str) -> String {
             let candidate = &bytes[i..i + 66];
             let starts_with_parity = matches!(candidate[0..2], [b'0', b'2'] | [b'0', b'3']);
             let all_hex = candidate.iter().all(|b| b.is_ascii_hexdigit());
-            let prev_is_ident = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let prev_is_ident =
+                i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             let next_is_ident = i + 66 < bytes.len()
                 && (bytes[i + 66].is_ascii_alphanumeric() || bytes[i + 66] == b'_');
             if starts_with_parity && all_hex && !prev_is_ident && !next_is_ident {
@@ -240,8 +244,8 @@ fn replace_fragment(haystack: &str, find: &str, repl: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if i + find_b.len() <= bytes.len() && &bytes[i..i + find_b.len()] == find_b {
-            let before_ok = i == 0
-                || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let before_ok =
+                i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             if before_ok {
                 result.push_str(repl);
                 i += find_b.len();
@@ -272,7 +276,10 @@ mod tests {
     fn rewrites_multi_to_multi_a() {
         let input = "multi(2,02aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aaaa,03bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bb00bbbb)";
         let out = segv0_string_to_tap_string(input);
-        assert!(out.starts_with("multi_a("), "expected multi_a prefix: {out}");
+        assert!(
+            out.starts_with("multi_a("),
+            "expected multi_a prefix: {out}"
+        );
     }
 
     // ── R1-I4 (a) lift-x parity-prefix assertion (SPEC §11 LOCK) ───────────
@@ -287,7 +294,10 @@ mod tests {
         let input = format!("pk({xonly})");
         let out = tap_string_to_segv0_string(&input);
         let expected = format!("pk(02{xonly})");
-        assert_eq!(out, expected, "lift-x LOCK: prefix MUST be exactly '02', not '03'");
+        assert_eq!(
+            out, expected,
+            "lift-x LOCK: prefix MUST be exactly '02', not '03'"
+        );
         // Belt-and-suspenders: assert the inflated key starts with '02'
         // and has length 66.
         let body_start = "pk(".len();

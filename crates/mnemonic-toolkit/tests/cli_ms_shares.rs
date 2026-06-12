@@ -78,10 +78,16 @@ fn ms_shares_split_emits_n_shares_one_per_line_trailing_newline() {
     let (stdout, _stderr, exit) =
         split(&["--from", &from_arg, "--threshold", "3", "--shares", "5"]);
     assert_eq!(exit, 0);
-    assert!(stdout.ends_with('\n'), "stdout must end with newline; got {stdout:?}");
+    assert!(
+        stdout.ends_with('\n'),
+        "stdout must end with newline; got {stdout:?}"
+    );
     let shares = parse_shares(&stdout);
     assert_eq!(shares.len(), 5);
-    assert!(shares.iter().all(|s| s.starts_with("ms1")), "all ms1: {shares:?}");
+    assert!(
+        shares.iter().all(|s| s.starts_with("ms1")),
+        "all ms1: {shares:?}"
+    );
 }
 
 #[test]
@@ -93,8 +99,7 @@ fn ms_shares_split_english_phrase_combine_to_phrase() {
     let shares = parse_shares(&stdout);
     assert_eq!(shares.len(), 3);
     // English phrase source: default --to phrase recovers the phrase.
-    let (recovered, _, exit2) =
-        combine(&["--share", &shares[0], "--share", &shares[1]]);
+    let (recovered, _, exit2) = combine(&["--share", &shares[0], "--share", &shares[1]]);
     assert_eq!(exit2, 0, "combine; recovered={recovered:?}");
     assert_eq!(recovered.lines().next().unwrap(), ABANDON_12);
 }
@@ -124,7 +129,14 @@ fn ms_shares_japanese_split_combine_preserves_language() {
         .to_string();
     let from_arg = format!("phrase={ja}");
     let (stdout, _stderr, exit) = split(&[
-        "--from", &from_arg, "--language", "japanese", "--threshold", "2", "--shares", "3",
+        "--from",
+        &from_arg,
+        "--language",
+        "japanese",
+        "--threshold",
+        "2",
+        "--shares",
+        "3",
     ]);
     assert_eq!(exit, 0, "split; stdout={stdout:?}");
     let shares = parse_shares(&stdout);
@@ -143,13 +155,11 @@ fn ms_shares_combine_to_ms1_recovers_single_string() {
     // combine --to ms1: the recovered secret re-encodes to a v0.1 single-string
     // ms1 (threshold 0). For an English phrase source it's an entr ms1.
     let from_arg = format!("phrase={ABANDON_12}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
-    let (recovered, _, exit2) = combine(&[
-        "--share", &shares[0], "--share", &shares[1], "--to", "ms1",
-    ]);
+    let (recovered, _, exit2) =
+        combine(&["--share", &shares[0], "--share", &shares[1], "--to", "ms1"]);
     assert_eq!(exit2, 0, "combine --to ms1; recovered={recovered:?}");
     let ms1 = recovered.lines().next().unwrap();
     assert!(ms1.starts_with("ms1"), "recovered ms1: {ms1:?}");
@@ -176,8 +186,7 @@ fn ms_shares_combine_to_entropy_composes_into_bundle() {
     // slot source → a valid 3-card bundle. (NOTE: `bundle` has no `ms1` slot
     // subkey; the realizable seed-overlay subkeys are `entropy`/`phrase`.)
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (recovered, _, exit2) = combine(&[
@@ -192,7 +201,13 @@ fn ms_shares_combine_to_entropy_composes_into_bundle() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--network", "mainnet", "--template", "bip84", "--slot", &slot,
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &slot,
         ])
         .output()
         .unwrap();
@@ -204,9 +219,18 @@ fn ms_shares_combine_to_entropy_composes_into_bundle() {
         "bundle exit; stdout={b_stdout:?} stderr={b_stderr:?}"
     );
     // A valid bundle emits ms1/mk1/md1 lines.
-    assert!(b_stdout.contains("ms1"), "bundle stdout has ms1: {b_stdout:?}");
-    assert!(b_stdout.contains("mk1"), "bundle stdout has mk1: {b_stdout:?}");
-    assert!(b_stdout.contains("md1"), "bundle stdout has md1: {b_stdout:?}");
+    assert!(
+        b_stdout.contains("ms1"),
+        "bundle stdout has ms1: {b_stdout:?}"
+    );
+    assert!(
+        b_stdout.contains("mk1"),
+        "bundle stdout has mk1: {b_stdout:?}"
+    );
+    assert!(
+        b_stdout.contains("md1"),
+        "bundle stdout has md1: {b_stdout:?}"
+    );
 }
 
 #[test]
@@ -225,8 +249,7 @@ fn ms_shares_split_emits_private_key_material_advisory() {
 #[test]
 fn ms_shares_combine_emits_private_key_material_advisory() {
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "2"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "2"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (_recovered, stderr, exit2) = combine(&[
@@ -261,7 +284,14 @@ fn japanese_2_of_3_shares() -> Vec<String> {
         .to_string();
     let from_arg = format!("phrase={ja}");
     let (stdout, _stderr, exit) = split(&[
-        "--from", &from_arg, "--language", "japanese", "--threshold", "2", "--shares", "3",
+        "--from",
+        &from_arg,
+        "--language",
+        "japanese",
+        "--threshold",
+        "2",
+        "--shares",
+        "3",
     ]);
     assert_eq!(exit, 0, "split; stdout={stdout:?}");
     parse_shares(&stdout)
@@ -305,9 +335,8 @@ fn ms_shares_combine_to_ms1_japanese_no_language_advisory() {
     // `--to ms1` re-encodes the mnem card (payload_kind Mnem + language) → the
     // wire bytes keep the language → no advisory.
     let shares = japanese_2_of_3_shares();
-    let (_recovered, stderr, exit) = combine(&[
-        "--share", &shares[0], "--share", &shares[2], "--to", "ms1",
-    ]);
+    let (_recovered, stderr, exit) =
+        combine(&["--share", &shares[0], "--share", &shares[2], "--to", "ms1"]);
     assert_eq!(exit, 0, "combine; stderr={stderr:?}");
     assert!(
         !stderr.contains("DIFFERENT seed"),
@@ -320,8 +349,7 @@ fn ms_shares_combine_to_ms1_japanese_no_language_advisory() {
 fn ms_shares_combine_to_entropy_english_no_language_advisory() {
     // An English / entr share-set has no wordlist language to lose → no advisory.
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (_recovered, stderr, exit2) = combine(&[
@@ -343,12 +371,14 @@ fn ms_shares_combine_too_few_shares_renders_prose_not_debug() {
     // ("not enough shares: have 1, need 2"), NOT the Debug dump
     // `ThresholdNotPassed { threshold: 2, n_shares: 1 }`.
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (_recovered, stderr, exit2) = combine(&["--share", &shares[0], "--to", "entropy"]);
-    assert_ne!(exit2, 0, "too-few shares must be an error; stderr={stderr:?}");
+    assert_ne!(
+        exit2, 0,
+        "too-few shares must be an error; stderr={stderr:?}"
+    );
     assert!(
         stderr.contains("not enough shares"),
         "too-few shares must render prose; got stderr={stderr:?}"
@@ -364,14 +394,16 @@ fn ms_shares_combine_duplicate_share_renders_prose_not_debug() {
     // The same share twice → codex32 RepeatedIndex(Fe(..)). Must render prose
     // ("repeated"), NOT `RepeatedIndex(Fe(0))`.
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
-    let (stdout, _, exit) =
-        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    let (stdout, _, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (_recovered, stderr, exit2) = combine(&[
         "--share", &shares[0], "--share", &shares[0], "--to", "entropy",
     ]);
-    assert_ne!(exit2, 0, "duplicate share must be an error; stderr={stderr:?}");
+    assert_ne!(
+        exit2, 0,
+        "duplicate share must be an error; stderr={stderr:?}"
+    );
     assert!(
         stderr.contains("repeated"),
         "duplicate share must render 'repeated'-class prose; got stderr={stderr:?}"

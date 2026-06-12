@@ -580,15 +580,30 @@ mod tests {
 
         let path = OriginPath {
             components: vec![
-                PathComponent { hardened: true, value: 48 },
-                PathComponent { hardened: true, value: 0 },
-                PathComponent { hardened: true, value: 0 },
-                PathComponent { hardened: true, value: 2 },
+                PathComponent {
+                    hardened: true,
+                    value: 48,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 0,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 0,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 2,
+                },
             ],
         };
         let descriptor = Descriptor {
             n: 2,
-            path_decl: PathDecl { n: 2, paths: PathDeclPaths::Shared(path) },
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(path),
+            },
             use_site_path: UseSitePath::standard_multipath(),
             tree: CliTemplate::TrMultiA.wrapper_node(2, 2),
             tlv: TlvSection {

@@ -74,7 +74,9 @@ pub(crate) fn normalize_xpub_prefix(
             raw.len()
         )));
     }
-    let prefix: [u8; 4] = raw[0..4].try_into().expect("78 bytes guarantees 4-byte prefix");
+    let prefix: [u8; 4] = raw[0..4]
+        .try_into()
+        .expect("78 bytes guarantees 4-byte prefix");
     let (neutral, variant): ([u8; 4], &'static str) = match prefix {
         // already neutral — pass through with None signal
         SWAP_TO_XPUB_MAINNET | SWAP_TO_TPUB_TESTNET => return Ok((s.to_string(), None)),
@@ -103,11 +105,7 @@ pub(crate) fn normalize_xpub_prefix(
 /// SPEC §11.a — emit `xpub` with a SLIP-0132 (or neutral) version prefix
 /// selected by `variant` + `network`. Operates on the 78-byte raw
 /// serialization (same primitive as `normalize_xpub_prefix`).
-pub(crate) fn apply_xpub_prefix(
-    xpub: &Xpub,
-    variant: XpubPrefix,
-    network: CliNetwork,
-) -> String {
+pub(crate) fn apply_xpub_prefix(xpub: &Xpub, variant: XpubPrefix, network: CliNetwork) -> String {
     let mut raw = xpub.encode();
     raw[0..4].copy_from_slice(&swap_target_for(variant, network));
     base58::encode_check(&raw)
@@ -272,9 +270,15 @@ mod tests {
     fn parse_xpub_prefix_arg_accepts_5_documented_values() {
         assert_eq!(parse_xpub_prefix_arg("xpub").unwrap(), XpubPrefix::Xpub);
         assert_eq!(parse_xpub_prefix_arg("ypub").unwrap(), XpubPrefix::Ypub);
-        assert_eq!(parse_xpub_prefix_arg("Ypub").unwrap(), XpubPrefix::YpubMultisig);
+        assert_eq!(
+            parse_xpub_prefix_arg("Ypub").unwrap(),
+            XpubPrefix::YpubMultisig
+        );
         assert_eq!(parse_xpub_prefix_arg("zpub").unwrap(), XpubPrefix::Zpub);
-        assert_eq!(parse_xpub_prefix_arg("Zpub").unwrap(), XpubPrefix::ZpubMultisig);
+        assert_eq!(
+            parse_xpub_prefix_arg("Zpub").unwrap(),
+            XpubPrefix::ZpubMultisig
+        );
     }
 
     #[test]
@@ -317,8 +321,7 @@ mod tests {
     /// the SPEC↔production drift hazard surfaced in v0.6.2 final review.
     #[test]
     fn spec_info_line_template_matches_production_render() {
-        const SPEC: &str =
-            include_str!("../../../design/SPEC_convert_v0_6.md");
+        const SPEC: &str = include_str!("../../../design/SPEC_convert_v0_6.md");
         const BEGIN: &str = "<!-- BEGIN: slip0132-info-line -->";
         const END: &str = "<!-- END: slip0132-info-line -->";
         let begin_idx = SPEC.find(BEGIN).expect("BEGIN marker present in SPEC");
@@ -329,12 +332,22 @@ mod tests {
         // single content line between the fences.
         let mut lines = block.lines().filter(|l| !l.is_empty());
         let opener = lines.next().expect("fence opener present");
-        assert_eq!(opener.trim(), "```", "expected fence opener, got {opener:?}");
+        assert_eq!(
+            opener.trim(),
+            "```",
+            "expected fence opener, got {opener:?}"
+        );
         let content = lines.next().expect("fence content present");
         let closer = lines.next().expect("fence closer present");
-        assert_eq!(closer.trim(), "```", "expected fence closer, got {closer:?}");
+        assert_eq!(
+            closer.trim(),
+            "```",
+            "expected fence closer, got {closer:?}"
+        );
         // Substitute placeholders for each variant and compare to production.
-        for &variant in &["ypub", "Ypub", "zpub", "Zpub", "upub", "Upub", "vpub", "Vpub"] {
+        for &variant in &[
+            "ypub", "Ypub", "zpub", "Zpub", "upub", "Upub", "vpub", "Vpub",
+        ] {
             let neutral = neutral_for(variant);
             let expected = content
                 .replace("<variant>", variant)

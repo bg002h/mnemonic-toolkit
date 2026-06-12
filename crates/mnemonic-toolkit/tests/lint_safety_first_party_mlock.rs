@@ -17,8 +17,8 @@ const WINDOW_LINES_ABOVE: usize = 5;
 
 #[test]
 fn every_first_party_unsafe_block_has_safety_comment_within_window() {
-    let source = fs::read_to_string(MLOCK_SRC)
-        .unwrap_or_else(|e| panic!("read {}: {}", MLOCK_SRC, e));
+    let source =
+        fs::read_to_string(MLOCK_SRC).unwrap_or_else(|e| panic!("read {}: {}", MLOCK_SRC, e));
     let lines: Vec<&str> = source.lines().collect();
     let mut violations: Vec<String> = Vec::new();
 

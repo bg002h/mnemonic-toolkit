@@ -36,7 +36,9 @@ fn convert_value(args: &[&str]) -> String {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     line[colon + 2..].to_string()
 }
 

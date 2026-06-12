@@ -14,7 +14,15 @@ const SIG_HELLO: &str = "AkcwRAIgZRfIY3p7/DoVTty6YZbWS71bc5Vct9p9Fia83eRmw2QCICK
 fn bip322_valid_auto_exit_zero() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "Hello World", "--signature", SIG_HELLO])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Hello World",
+            "--signature",
+            SIG_HELLO,
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("VALID").and(predicate::str::contains("bip322")));
@@ -24,7 +32,17 @@ fn bip322_valid_auto_exit_zero() {
 fn bip322_explicit_format() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "Hello World", "--signature", SIG_HELLO, "--format", "bip322"])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Hello World",
+            "--signature",
+            SIG_HELLO,
+            "--format",
+            "bip322",
+        ])
         .assert()
         .success();
 }
@@ -34,7 +52,15 @@ fn wrong_message_invalid_exit_one_clean_stdout() {
     // Cleanly-decoded-but-does-not-verify → exit 1, structured result on stdout (no stderr error).
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "Goodbye World", "--signature", SIG_HELLO])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Goodbye World",
+            "--signature",
+            SIG_HELLO,
+        ])
         .assert()
         .code(1)
         .stdout(predicate::str::contains("INVALID"));
@@ -44,7 +70,17 @@ fn wrong_message_invalid_exit_one_clean_stdout() {
 fn legacy_format_on_segwit_errors() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "Hello World", "--signature", SIG_HELLO, "--format", "legacy"])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Hello World",
+            "--signature",
+            SIG_HELLO,
+            "--format",
+            "legacy",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("P2PKH-only"));
@@ -54,7 +90,15 @@ fn legacy_format_on_segwit_errors() {
 fn malformed_address_errors() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", "not-an-address", "--message", "x", "--signature", SIG_HELLO])
+        .args([
+            "verify-message",
+            "--address",
+            "not-an-address",
+            "--message",
+            "x",
+            "--signature",
+            SIG_HELLO,
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("verify-message"));
@@ -64,7 +108,16 @@ fn malformed_address_errors() {
 fn json_shape() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "Hello World", "--signature", SIG_HELLO, "--json"])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Hello World",
+            "--signature",
+            SIG_HELLO,
+            "--json",
+        ])
         .assert()
         .success()
         .get_output()
@@ -80,7 +133,14 @@ fn json_shape() {
 fn message_via_stdin() {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message-stdin", "--signature", SIG_HELLO])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message-stdin",
+            "--signature",
+            SIG_HELLO,
+        ])
         .write_stdin("Hello World\n") // single trailing newline stripped
         .assert()
         .success()
@@ -92,7 +152,16 @@ fn message_source_mutually_exclusive() {
     // ArgGroup: --message + --message-stdin together is a clap error.
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["verify-message", "--address", SEGWIT_ADDR, "--message", "x", "--message-stdin", "--signature", SIG_HELLO])
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "x",
+            "--message-stdin",
+            "--signature",
+            SIG_HELLO,
+        ])
         .assert()
         .failure();
 }

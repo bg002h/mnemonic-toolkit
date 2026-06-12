@@ -230,7 +230,10 @@ fn passphrase_of_xpub_json_envelope_shape() {
     assert_eq!(v["path"], "m/84'/0'/0'");
     assert_eq!(v["template"], "bip84");
     assert_eq!(v["account"], 0);
-    assert!(v["target_xpub_canonical"].as_str().unwrap().starts_with("xpub"));
+    assert!(v["target_xpub_canonical"]
+        .as_str()
+        .unwrap()
+        .starts_with("xpub"));
     // Canonical xpub input → variant null.
     assert!(v["target_xpub_variant"].is_null());
     assert!(v["searched_count"].is_number());

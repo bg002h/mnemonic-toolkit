@@ -39,7 +39,10 @@ fn variant_bad_entropy_byte_length() {
 
 #[test]
 fn variant_bad_group_threshold() {
-    let e = Slip39Error::BadGroupThreshold { got: 4, group_count: 3 };
+    let e = Slip39Error::BadGroupThreshold {
+        got: 4,
+        group_count: 3,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('4'));
     assert!(msg.contains('3'));
@@ -47,7 +50,11 @@ fn variant_bad_group_threshold() {
 
 #[test]
 fn variant_bad_group_spec() {
-    let e = Slip39Error::BadGroupSpec { group_idx: 1, n: 2, t: 3 };
+    let e = Slip39Error::BadGroupSpec {
+        group_idx: 1,
+        n: 2,
+        t: 3,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('1'));
     assert!(msg.contains('2'));
@@ -98,7 +105,10 @@ fn variant_invalid_checksum() {
 
 #[test]
 fn variant_unknown_word() {
-    let e = Slip39Error::UnknownWord { share_idx: 0, word_idx: 7 };
+    let e = Slip39Error::UnknownWord {
+        share_idx: 0,
+        word_idx: 7,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('7'));
 }
@@ -111,7 +121,11 @@ fn variant_digest_verification_failed() {
 
 #[test]
 fn variant_insufficient_shares() {
-    let e = Slip39Error::InsufficientShares { group_idx: 1, needed: 3, got: 2 };
+    let e = Slip39Error::InsufficientShares {
+        group_idx: 1,
+        needed: 3,
+        got: 2,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('1'));
     assert!(msg.contains('3'));
@@ -120,7 +134,10 @@ fn variant_insufficient_shares() {
 
 #[test]
 fn variant_duplicate_member_index() {
-    let e = Slip39Error::DuplicateMemberIndex { group_idx: 0, member_idx: 4 };
+    let e = Slip39Error::DuplicateMemberIndex {
+        group_idx: 0,
+        member_idx: 4,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('4'));
 }
@@ -153,7 +170,10 @@ fn variant_empty_shares() {
 
 #[test]
 fn variant_invalid_share_value_length() {
-    let e = Slip39Error::InvalidShareValueLength { share_idx: 2, got: 19 };
+    let e = Slip39Error::InvalidShareValueLength {
+        share_idx: 2,
+        got: 19,
+    };
     let msg = format!("{e}");
     assert!(msg.contains('2'));
     assert!(msg.contains("19"));
@@ -207,16 +227,31 @@ fn variants_with_carried_data_compare_by_value() {
     let a = Slip39Error::BadPhraseWordCount(13);
     let b = Slip39Error::BadPhraseWordCount(14);
     assert_ne!(a, b);
-    let c = Slip39Error::InsufficientShares { group_idx: 1, needed: 3, got: 2 };
-    let d = Slip39Error::InsufficientShares { group_idx: 1, needed: 3, got: 2 };
-    let e = Slip39Error::InsufficientShares { group_idx: 1, needed: 3, got: 1 };
+    let c = Slip39Error::InsufficientShares {
+        group_idx: 1,
+        needed: 3,
+        got: 2,
+    };
+    let d = Slip39Error::InsufficientShares {
+        group_idx: 1,
+        needed: 3,
+        got: 2,
+    };
+    let e = Slip39Error::InsufficientShares {
+        group_idx: 1,
+        needed: 3,
+        got: 1,
+    };
     assert_eq!(c, d);
     assert_ne!(c, e);
 }
 
 #[test]
 fn unit_variants_compare_by_discriminant() {
-    assert_eq!(Slip39Error::IdentifierMismatch, Slip39Error::IdentifierMismatch);
+    assert_eq!(
+        Slip39Error::IdentifierMismatch,
+        Slip39Error::IdentifierMismatch
+    );
     assert_ne!(
         Slip39Error::IdentifierMismatch,
         Slip39Error::IterationExponentMismatch

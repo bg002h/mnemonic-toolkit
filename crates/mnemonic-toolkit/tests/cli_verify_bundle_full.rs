@@ -146,9 +146,7 @@ fn full_path_parent_fp_matches_silent_at_depth_3() {
         .stdout(predicate::str::contains("result: ok"))
         // Silent on parent_fingerprint check — no v0.25.0 NOTICE / WARNING.
         .stderr(predicate::str::contains("notice: cosigner[").not())
-        .stderr(
-            predicate::str::contains("does not match derived parent fingerprint").not(),
-        );
+        .stderr(predicate::str::contains("does not match derived parent fingerprint").not());
 }
 
 /// v0.25.0 §2.D cell — full-path multi-cosigner with cosigner[0]'s ms1
@@ -311,7 +309,5 @@ fn full_path_passphrase_supplied_check_fires_with_passphrase() {
         .success()
         .stdout(predicate::str::contains("result: ok"))
         // Passphrase threaded all the way through → derived parent_fp matches → silent.
-        .stderr(
-            predicate::str::contains("does not match derived parent fingerprint").not(),
-        );
+        .stderr(predicate::str::contains("does not match derived parent fingerprint").not());
 }

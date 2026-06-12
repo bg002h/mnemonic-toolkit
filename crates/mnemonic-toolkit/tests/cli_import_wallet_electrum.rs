@@ -291,8 +291,7 @@ fn electrum_json_envelope_multisig_carries_kofn_wallet_type() {
 fn electrum_json_envelope_no_electrum_source_metadata_on_bsms() {
     // Cross-check: BSMS envelopes do NOT carry electrum_source_metadata.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out =
-        run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let env = &val.as_array().unwrap()[0];

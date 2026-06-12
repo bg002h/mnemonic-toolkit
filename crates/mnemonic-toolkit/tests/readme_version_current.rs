@@ -26,8 +26,8 @@ fn both_readmes_carry_current_version_marker() {
     // crate-dir README (the published `readme=`) + repo-root README.
     for rel in ["README.md", "../../README.md"] {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
-        let body = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let body =
+            fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         assert!(
             body.contains(&marker),
             "{} must carry `{marker}` (the READMEs decayed to v0.8.0 once for lack \

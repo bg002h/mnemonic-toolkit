@@ -17,8 +17,7 @@ use tempfile::NamedTempFile;
 const ABANDON_12: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-const TEST_RNG_HEX_64: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+const TEST_RNG_HEX_64: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 const TEST_RNG_HEX_64_ANCHOR_2: &str =
     "1111111111111111111111111111111111111111111111111111111111111111";
 
@@ -361,8 +360,7 @@ fn json_split_g4_anchor_1_sha_pin_with_test_rng_env_var() {
     // Captured at GREEN 2026-05-14. ABANDON_12 phrase + identifier
     // 12345 + TEST_RNG seed 0×64 + iteration_exponent 0 + group-thresh
     // 1 + --group 3,2 → SHA below.
-    const EXPECTED: &str =
-        "df7f6cc9dadb52c51ca2b7889443142dd742e946e61104b76dd3d5e3dac96688";
+    const EXPECTED: &str = "df7f6cc9dadb52c51ca2b7889443142dd742e946e61104b76dd3d5e3dac96688";
     assert_eq!(
         actual, EXPECTED,
         "G4 SHA-pin drift anchor 1 (ABANDON_12, identifier=12345, TEST_RNG=0×64); if schema changed intentionally, update EXPECTED"
@@ -411,8 +409,7 @@ fn json_split_g4_anchor_2_sha_pin_different_env_vars() {
     // Captured at GREEN 2026-05-14. ABANDON_12 + identifier 32767
     // + TEST_RNG seed 0x11×64 + iteration_exponent 1 + group-thresh
     // 1 + --group 3,2 → SHA below.
-    const EXPECTED: &str =
-        "33c28c6b828d7a3c48ff583884f9c65c0efd9616421bf61a64ef571fccad2e7c";
+    const EXPECTED: &str = "33c28c6b828d7a3c48ff583884f9c65c0efd9616421bf61a64ef571fccad2e7c";
     assert_eq!(
         actual, EXPECTED,
         "G4 SHA-pin drift anchor 2 (ABANDON_12, identifier=32767, TEST_RNG=0x11×64, E=1)"

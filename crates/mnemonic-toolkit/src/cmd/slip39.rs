@@ -372,8 +372,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
     // For split: --from - + --passphrase-stdin = max 2 candidates.
-    let split_stdin_count = (args.from.value == "-") as usize
-        + (args.passphrase_stdin) as usize;
+    let split_stdin_count = (args.from.value == "-") as usize + (args.passphrase_stdin) as usize;
     if split_stdin_count > 1 {
         return Err(ToolkitError::BadInput(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
@@ -433,8 +432,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     let _pin_pp = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
 
     // Parse master secret to entropy bytes (rows 1, 2).
-    let master_entropy =
-        parse_master_to_entropy(&args.from, args.language, from_value.as_str())?;
+    let master_entropy = parse_master_to_entropy(&args.from, args.language, from_value.as_str())?;
     let _pin_master = mnemonic_toolkit::mlock::pin_pages_for(master_entropy.as_slice());
 
     // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem` footgun):
@@ -530,8 +528,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     // inside the loop (Q6 fold — O(N) pinning).
     for (g_idx, g) in rendered.iter().enumerate() {
         if g_idx > 0 {
-            writeln!(stdout)
-                .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            writeln!(stdout).map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
         }
         for s in g {
             let _pin = mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes());
@@ -578,8 +575,8 @@ fn run_combine<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
-    let combine_stdin_count = args.share.iter().filter(|s| *s == "-").count()
-        + (args.passphrase_stdin) as usize;
+    let combine_stdin_count =
+        args.share.iter().filter(|s| *s == "-").count() + (args.passphrase_stdin) as usize;
     if combine_stdin_count > 1 {
         return Err(ToolkitError::BadInput(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
@@ -640,9 +637,8 @@ fn run_combine<R: Read, W: Write, E: Write>(
         if s_str.trim().is_empty() {
             continue;
         }
-        let parsed = parse_slip39_share(s_str.as_str()).map_err(|e| {
-            map_slip39_error(reindex_share_idx(e, idx))
-        })?;
+        let parsed = parse_slip39_share(s_str.as_str())
+            .map_err(|e| map_slip39_error(reindex_share_idx(e, idx)))?;
         shares.push(parsed);
     }
 
@@ -663,9 +659,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
 
     // Render output per --to.
     let output: zeroize::Zeroizing<String> = match args.to {
-        Slip39ToShape::Entropy => {
-            zeroize::Zeroizing::new(hex::encode(master_entropy.as_slice()))
-        }
+        Slip39ToShape::Entropy => zeroize::Zeroizing::new(hex::encode(master_entropy.as_slice())),
         Slip39ToShape::Phrase => {
             let lang: bip39::Language = args.language.into();
             let m = Mnemonic::from_entropy_in(lang, master_entropy.as_slice())
@@ -865,9 +859,8 @@ fn write_split_json<E: Write>(
     };
     let body = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body).map_err(|e| {
-        ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display()))
-    })?;
+    std::fs::write(path, &body)
+        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
     warn_if_world_readable(path, stderr);
     Ok(())
 }
@@ -895,9 +888,8 @@ fn write_combine_json<E: Write>(
     };
     let body = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body).map_err(|e| {
-        ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display()))
-    })?;
+    std::fs::write(path, &body)
+        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
     warn_if_world_readable(path, stderr);
     Ok(())
 }

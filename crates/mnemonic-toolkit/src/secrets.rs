@@ -123,10 +123,7 @@ mod tests {
             "--decrypt-password-file",
             "--ciphertext",
         ] {
-            assert!(
-                !flag_is_secret(name),
-                "{name} must NOT classify as secret"
-            );
+            assert!(!flag_is_secret(name), "{name} must NOT classify as secret");
         }
     }
 

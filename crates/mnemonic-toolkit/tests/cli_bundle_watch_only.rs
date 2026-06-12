@@ -19,7 +19,10 @@ fn watch_only_bip84_mainnet_omits_ms1_section() {
 
     let card = mk_codec::decode(&mk1_lines).expect("mk1 decodes");
     let xpub_str = card.xpub.to_string();
-    let fp_hex = card.origin_fingerprint.expect("fixture mk1 has origin fp").to_string();
+    let fp_hex = card
+        .origin_fingerprint
+        .expect("fixture mk1 has origin fp")
+        .to_string();
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -72,7 +75,10 @@ fn watch_only_bip84_mainnet_accepts_zpub_input_via_slip0132_normalizer() {
         .collect();
     let card = mk_codec::decode(&mk1_lines).expect("mk1 decodes");
     let xpub_str = card.xpub.to_string();
-    let fp_hex = card.origin_fingerprint.expect("fixture mk1 has origin fp").to_string();
+    let fp_hex = card
+        .origin_fingerprint
+        .expect("fixture mk1 has origin fp")
+        .to_string();
 
     // The known SLIP-0132 zpub form of the canonical TREZOR_24 BIP-84 mainnet
     // account-level xpub. Pinned independently of the slip0132 module so an

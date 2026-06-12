@@ -120,7 +120,11 @@ pub enum Slip39Error {
     /// inconsistent (the spec requires the threshold not to exceed the
     /// number of groups). Mirrors `python-shamir-mnemonic`
     /// `share.py:216-219` @ commit `17fcce14`. Pins vectors.json #10, #29.
-    GroupThresholdExceedsCount { share_idx: usize, threshold: u8, count: u8 },
+    GroupThresholdExceedsCount {
+        share_idx: usize,
+        threshold: u8,
+        count: u8,
+    },
 }
 
 impl std::fmt::Display for Slip39Error {
@@ -147,22 +151,12 @@ impl std::fmt::Display for Slip39Error {
                 f,
                 "slip39: --iteration-exponent must be 0..=15 (4-bit field); got {e}"
             ),
-            Self::IdentifierMismatch => write!(
-                f,
-                "slip39: shares disagree on identifier"
-            ),
-            Self::IterationExponentMismatch => write!(
-                f,
-                "slip39: shares disagree on iteration_exponent"
-            ),
-            Self::GroupThresholdMismatch => write!(
-                f,
-                "slip39: shares disagree on group_threshold"
-            ),
-            Self::GroupCountMismatch => write!(
-                f,
-                "slip39: shares disagree on group_count"
-            ),
+            Self::IdentifierMismatch => write!(f, "slip39: shares disagree on identifier"),
+            Self::IterationExponentMismatch => {
+                write!(f, "slip39: shares disagree on iteration_exponent")
+            }
+            Self::GroupThresholdMismatch => write!(f, "slip39: shares disagree on group_threshold"),
+            Self::GroupCountMismatch => write!(f, "slip39: shares disagree on group_count"),
             Self::MemberThresholdMismatch => write!(
                 f,
                 "slip39: shares within a group disagree on member_threshold"
@@ -171,7 +165,10 @@ impl std::fmt::Display for Slip39Error {
                 f,
                 "slip39: share at position {share_idx} has invalid RS1024 checksum"
             ),
-            Self::UnknownWord { share_idx, word_idx } => write!(
+            Self::UnknownWord {
+                share_idx,
+                word_idx,
+            } => write!(
                 f,
                 "slip39: share at position {share_idx}: word at index {word_idx} \
                  not in SLIP-39 wordlist"
@@ -181,11 +178,18 @@ impl std::fmt::Display for Slip39Error {
                 "slip39: reconstructed master digest mismatch (wrong passphrase or \
                  substituted share)"
             ),
-            Self::InsufficientShares { group_idx, needed, got } => write!(
+            Self::InsufficientShares {
+                group_idx,
+                needed,
+                got,
+            } => write!(
                 f,
                 "slip39: insufficient shares for group {group_idx}: need {needed}, got {got}"
             ),
-            Self::DuplicateMemberIndex { group_idx, member_idx } => write!(
+            Self::DuplicateMemberIndex {
+                group_idx,
+                member_idx,
+            } => write!(
                 f,
                 "slip39: duplicate member index {member_idx} in group {group_idx}"
             ),
@@ -194,24 +198,21 @@ impl std::fmt::Display for Slip39Error {
                 "slip39: share at position {share_idx} has non-zero padding bits \
                  (encoding violation)"
             ),
-            Self::EmptyShares => write!(
-                f,
-                "slip39: combine called with empty share list"
-            ),
+            Self::EmptyShares => write!(f, "slip39: combine called with empty share list"),
             Self::InvalidShareValueLength { share_idx, got } => write!(
                 f,
                 "slip39: share at position {share_idx} has value length {got} \
                  (must be 16/20/24/28/32 bytes)"
             ),
-            Self::ShareValueLengthMismatch => write!(
-                f,
-                "slip39: shares disagree on value length"
-            ),
-            Self::ExtendableMismatch => write!(
-                f,
-                "slip39: shares disagree on the extendable (ext) bit"
-            ),
-            Self::GroupThresholdExceedsCount { share_idx, threshold, count } => write!(
+            Self::ShareValueLengthMismatch => write!(f, "slip39: shares disagree on value length"),
+            Self::ExtendableMismatch => {
+                write!(f, "slip39: shares disagree on the extendable (ext) bit")
+            }
+            Self::GroupThresholdExceedsCount {
+                share_idx,
+                threshold,
+                count,
+            } => write!(
                 f,
                 "slip39: share at position {share_idx}: group_threshold {threshold} \
                  exceeds group_count {count}"

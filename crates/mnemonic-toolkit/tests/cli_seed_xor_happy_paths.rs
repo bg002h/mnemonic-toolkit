@@ -56,9 +56,7 @@ fn split_then_combine_round_trip_n2() {
     assert_eq!(shares.len(), 2);
     let s0 = format!("phrase={}", shares[0]);
     let s1 = format!("phrase={}", shares[1]);
-    let (recovered, _stderr2, exit2) = combine(&[
-        "--share", &s0, "--share", &s1, "--shares", "2",
-    ]);
+    let (recovered, _stderr2, exit2) = combine(&["--share", &s0, "--share", &s1, "--shares", "2"]);
     assert_eq!(exit2, 0);
     let recovered_line = recovered.lines().next().unwrap();
     assert_eq!(recovered_line, LEGAL_TREZOR_12);
@@ -131,7 +129,10 @@ fn split_trailing_newline() {
         "--deterministic-from-master",
     ]);
     assert_eq!(exit, 0);
-    assert!(stdout.ends_with('\n'), "split stdout must end with newline; got {stdout:?}");
+    assert!(
+        stdout.ends_with('\n'),
+        "split stdout must end with newline; got {stdout:?}"
+    );
 }
 
 #[test]
@@ -181,9 +182,7 @@ fn split_18_word_round_trip_coldcard_native_size() {
     assert_eq!(shares.len(), 2);
     let s0 = format!("phrase={}", shares[0]);
     let s1 = format!("phrase={}", shares[1]);
-    let (recovered, _stderr2, exit2) = combine(&[
-        "--share", &s0, "--share", &s1, "--shares", "2",
-    ]);
+    let (recovered, _stderr2, exit2) = combine(&["--share", &s0, "--share", &s1, "--shares", "2"]);
     assert_eq!(exit2, 0);
     assert_eq!(recovered.lines().next().unwrap(), phrase);
 }
@@ -193,9 +192,7 @@ fn split_random_round_trip_non_deterministic() {
     // Without --deterministic-from-master, the OS CSPRNG produces
     // unpredictable shares — but round-trip still works.
     let from_arg = format!("phrase={LEGAL_TREZOR_12}");
-    let (stdout, _stderr, exit) = split(&[
-        "--from", &from_arg, "--shares", "3",
-    ]);
+    let (stdout, _stderr, exit) = split(&["--from", &from_arg, "--shares", "3"]);
     assert_eq!(exit, 0);
     let shares: Vec<&str> = stdout.lines().collect();
     assert_eq!(shares.len(), 3);
@@ -214,14 +211,16 @@ fn split_random_round_trip_non_deterministic() {
 fn combine_trailing_newline() {
     let from_arg = format!("phrase={ABANDON_12}");
     let (stdout_split, _, _) = split(&[
-        "--from", &from_arg, "--shares", "2", "--deterministic-from-master",
+        "--from",
+        &from_arg,
+        "--shares",
+        "2",
+        "--deterministic-from-master",
     ]);
     let shares: Vec<&str> = stdout_split.lines().collect();
     let s0 = format!("phrase={}", shares[0]);
     let s1 = format!("phrase={}", shares[1]);
-    let (recovered, _, exit) = combine(&[
-        "--share", &s0, "--share", &s1, "--shares", "2",
-    ]);
+    let (recovered, _, exit) = combine(&["--share", &s0, "--share", &s1, "--shares", "2"]);
     assert_eq!(exit, 0);
     assert!(recovered.ends_with('\n'));
 }

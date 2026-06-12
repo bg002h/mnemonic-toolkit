@@ -12,12 +12,14 @@ use assert_cmd::Command;
 use std::process::Output;
 
 // ── Electrum standard (p2pkh) ───────────────────────────────────────────────
-const STD_SEED: &str = "cycle rocket west magnet parrot shuffle foot correct salt library feed song";
+const STD_SEED: &str =
+    "cycle rocket west magnet parrot shuffle foot correct salt library feed song";
 const STD_RECV0: &str = "1NNkttn1YvVGdqBW4PR6zvc3Zx3H5owKRf";
 const STD_CHANGE0: &str = "1KSezYMhAJMWqFbVFB2JshYg69UpmEXR4D";
 
 // ── Electrum segwit (p2wpkh) ────────────────────────────────────────────────
-const SW_SEED: &str = "bitter grass shiver impose acquire brush forget axis eager alone wine silver";
+const SW_SEED: &str =
+    "bitter grass shiver impose acquire brush forget axis eager alone wine silver";
 const SW_RECV0: &str = "bc1q3g5tmkmlvxryhh843v4dz026avatc0zzr6h3af";
 const SW_CHANGE0: &str = "bc1qdy94n2q5qcp0kg7v9yzwe6wvfkhnvyzje7nx2p";
 
@@ -40,7 +42,11 @@ fn unicode_horror() -> String {
 }
 
 fn mn(args: &[&str]) -> Output {
-    Command::cargo_bin("mnemonic").unwrap().args(args).output().unwrap()
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(args)
+        .output()
+        .unwrap()
 }
 fn stdout(o: &Output) -> String {
     String::from_utf8(o.stdout.clone()).unwrap()
@@ -68,7 +74,10 @@ fn electrum_standard_p2pkh_vector() {
     assert_eq!(code(&o), 0, "{}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains(STD_RECV0), "receive[0] {STD_RECV0} in:\n{out}");
-    assert!(out.contains(STD_CHANGE0), "change[0] {STD_CHANGE0} in:\n{out}");
+    assert!(
+        out.contains(STD_CHANGE0),
+        "change[0] {STD_CHANGE0} in:\n{out}"
+    );
 }
 
 #[test]
@@ -87,7 +96,10 @@ fn electrum_segwit_p2wpkh_vector() {
     assert_eq!(code(&o), 0, "{}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains(SW_RECV0), "receive[0] {SW_RECV0} in:\n{out}");
-    assert!(out.contains(SW_CHANGE0), "change[0] {SW_CHANGE0} in:\n{out}");
+    assert!(
+        out.contains(SW_CHANGE0),
+        "change[0] {SW_CHANGE0} in:\n{out}"
+    );
 }
 
 #[test]
@@ -109,8 +121,14 @@ fn electrum_segwit_passphrase_unicode_horror_vector() {
     ]);
     assert_eq!(code(&o), 0, "{}", stderr(&o));
     let out = stdout(&o);
-    assert!(out.contains(SW_PP_RECV0), "receive[0] {SW_PP_RECV0} in:\n{out}");
-    assert!(out.contains(SW_PP_CHANGE0), "change[0] {SW_PP_CHANGE0} in:\n{out}");
+    assert!(
+        out.contains(SW_PP_RECV0),
+        "receive[0] {SW_PP_RECV0} in:\n{out}"
+    );
+    assert!(
+        out.contains(SW_PP_CHANGE0),
+        "change[0] {SW_PP_CHANGE0} in:\n{out}"
+    );
 }
 
 #[test]
@@ -126,7 +144,13 @@ fn electrum_address_type_mismatch_refused_exit_1() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(
+        code(&o),
+        1,
+        "stdout: {}\nstderr: {}",
+        stdout(&o),
+        stderr(&o)
+    );
     assert!(
         stderr(&o).contains("fixed by the seed version"),
         "stderr: {}",
@@ -147,7 +171,13 @@ fn electrum_account_refused_exit_1() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(
+        code(&o),
+        1,
+        "stdout: {}\nstderr: {}",
+        stdout(&o),
+        stderr(&o)
+    );
     assert!(stderr(&o).contains("--account"), "stderr: {}", stderr(&o));
 }
 
@@ -162,7 +192,13 @@ fn electrum_2fa_refused_exit_1() {
         "--count",
         "1",
     ]);
-    assert_eq!(code(&o), 1, "stdout: {}\nstderr: {}", stdout(&o), stderr(&o));
+    assert_eq!(
+        code(&o),
+        1,
+        "stdout: {}\nstderr: {}",
+        stdout(&o),
+        stderr(&o)
+    );
     assert!(stderr(&o).contains("2FA"), "stderr: {}", stderr(&o));
 }
 
@@ -187,7 +223,8 @@ fn electrum_watch_only_no_xpriv() {
     // the `"unknown"` fall-through). Impl-review I1.
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("--json is valid JSON");
     assert_eq!(
-        v["source"], "electrum-phrase",
+        v["source"],
+        "electrum-phrase",
         "json source field:\n{}",
         stdout(&o)
     );

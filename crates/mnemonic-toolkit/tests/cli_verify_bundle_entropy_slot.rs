@@ -58,7 +58,11 @@ fn extract_cards(v: &serde_json::Value) -> (Vec<String>, Vec<String>, Vec<String
 /// Run a descriptor-mode `bundle --json` with the given slot args and return the
 /// extracted (ms1, mk1, md1) cards. `extra` carries `--language`/`--account`/
 /// `--passphrase` etc.
-fn bundle_cards(desc: &str, slots: &[String], extra: &[&str]) -> (Vec<String>, Vec<String>, Vec<String>) {
+fn bundle_cards(
+    desc: &str,
+    slots: &[String],
+    extra: &[&str],
+) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut args: Vec<String> = vec![
         "bundle".into(),
         "--descriptor".into(),
@@ -182,7 +186,11 @@ fn nonzero_slot_multi_n() {
 fn passphrase_round_trip() {
     let hex = hex::encode([0x5au8; 32]);
     let slots = vec![format!("@0.entropy={hex}")];
-    let cards = bundle_cards(NONCANONICAL_DESC, &slots, &["--passphrase", "correct horse"]);
+    let cards = bundle_cards(
+        NONCANONICAL_DESC,
+        &slots,
+        &["--passphrase", "correct horse"],
+    );
 
     Command::cargo_bin("mnemonic")
         .unwrap()

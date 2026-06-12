@@ -72,7 +72,9 @@ fn wrong_token_yields_mac_mismatch_exit_2() {
         .failure()
         .code(2)
         .stderr(predicates::str::contains("MAC verification failed"))
-        .stderr(predicates::str::contains("wrong token or tampered ciphertext"));
+        .stderr(predicates::str::contains(
+            "wrong token or tampered ciphertext",
+        ));
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -292,7 +294,8 @@ const TV3_TOKEN_HEX: &str = "a54044308ceac9b7";
 /// plaintext 5-line BSMS record (via the library primitives).
 fn tv3_decrypted_plaintext() -> String {
     use mnemonic_toolkit::bsms_crypto::{decrypt, derive_encryption_key};
-    let wire_hex = std::fs::read_to_string(fixture_path("bsms-encrypted-standard-tv3.dat")).unwrap();
+    let wire_hex =
+        std::fs::read_to_string(fixture_path("bsms-encrypted-standard-tv3.dat")).unwrap();
     let wire = hex::decode(wire_hex.trim()).unwrap();
     let (mac, ct) = wire.split_at(32);
     let token_raw = hex::decode(TV3_TOKEN_HEX).unwrap();
@@ -354,7 +357,10 @@ fn tv3_round1_decrypt_then_verify() {
     let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let v = &json["bsms_round1_verifications"][0];
-    assert_eq!(v["signature_verified"], true, "TV-3 Round-1 must verify; got: {stdout}");
+    assert_eq!(
+        v["signature_verified"], true,
+        "TV-3 Round-1 must verify; got: {stdout}"
+    );
 }
 
 #[test]
@@ -397,12 +403,20 @@ fn round1_plaintext_still_verifies_no_misclassify() {
     // (it starts with the `BSMS 1.0` header → not all-hex).
     let plaintext_fixture = "tests/fixtures/bsms_round1/tv1-no-encryption-pubkey-signer1.bsms";
     let assertion = mnemonic()
-        .args(["import-wallet", "--bsms-round1", plaintext_fixture, "--json"])
+        .args([
+            "import-wallet",
+            "--bsms-round1",
+            plaintext_fixture,
+            "--json",
+        ])
         .assert()
         .success();
     let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
+    assert_eq!(
+        json["bsms_round1_verifications"][0]["signature_verified"],
+        true
+    );
 }
 
 #[test]
@@ -417,7 +431,9 @@ fn round1_encrypted_decrypt_ok_but_sig_fail() {
     let sig = lines.pop().unwrap();
     let first = sig.chars().next().unwrap();
     let flipped = if first == 'A' { 'B' } else { 'A' };
-    let bad_sig: String = std::iter::once(flipped).chain(sig.chars().skip(1)).collect();
+    let bad_sig: String = std::iter::once(flipped)
+        .chain(sig.chars().skip(1))
+        .collect();
     let corrupted = format!("{}\n{}\n", lines.join("\n"), bad_sig);
     let wire_hex = reencrypt_with_tv3_token(&corrupted);
 
@@ -480,8 +496,14 @@ fn per_signer_two_tokens_two_records_positional() {
         .success();
     let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
-    assert_eq!(json["bsms_round1_verifications"][1]["signature_verified"], true);
+    assert_eq!(
+        json["bsms_round1_verifications"][0]["signature_verified"],
+        true
+    );
+    assert_eq!(
+        json["bsms_round1_verifications"][1]["signature_verified"],
+        true
+    );
 }
 
 #[test]
@@ -503,8 +525,14 @@ fn single_token_shared_still_decrypts_all() {
         .success();
     let stdout = String::from_utf8(assertion.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["bsms_round1_verifications"][0]["signature_verified"], true);
-    assert_eq!(json["bsms_round1_verifications"][1]["signature_verified"], true);
+    assert_eq!(
+        json["bsms_round1_verifications"][0]["signature_verified"],
+        true
+    );
+    assert_eq!(
+        json["bsms_round1_verifications"][1]["signature_verified"],
+        true
+    );
 }
 
 #[test]
@@ -651,14 +679,25 @@ fn per_signer_token_i_mac_mismatch_cites_index() {
 #[test]
 fn two_token_stdin_refused() {
     // Two --bsms-encryption-token=- → single-stdin-per-invocation refusal.
-    let rec0 = temp_with(&reencrypt_with_token(&tv3_decrypted_plaintext(), TV3_TOKEN_HEX));
-    let rec1 = temp_with(&reencrypt_with_token(&tv3_decrypted_plaintext(), TOKEN_B_HEX));
+    let rec0 = temp_with(&reencrypt_with_token(
+        &tv3_decrypted_plaintext(),
+        TV3_TOKEN_HEX,
+    ));
+    let rec1 = temp_with(&reencrypt_with_token(
+        &tv3_decrypted_plaintext(),
+        TOKEN_B_HEX,
+    ));
     let assertion = mnemonic()
         .args(["import-wallet", "--bsms-round1"])
         .arg(rec0.path())
         .args(["--bsms-round1"])
         .arg(rec1.path())
-        .args(["--bsms-encryption-token", "-", "--bsms-encryption-token", "-"])
+        .args([
+            "--bsms-encryption-token",
+            "-",
+            "--bsms-encryption-token",
+            "-",
+        ])
         .write_stdin(TV3_TOKEN_HEX)
         .assert()
         .failure()

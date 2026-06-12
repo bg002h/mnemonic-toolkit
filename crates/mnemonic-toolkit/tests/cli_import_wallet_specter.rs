@@ -113,8 +113,7 @@ fn specter_with_bsms_format_refused() {
     let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms"]).failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("import-wallet")
-            && (stderr.contains("bsms") || stderr.contains("format")),
+        stderr.contains("import-wallet") && (stderr.contains("bsms") || stderr.contains("format")),
         "expected import-wallet bsms-related refusal; got: {stderr}"
     );
 }
@@ -122,8 +121,7 @@ fn specter_with_bsms_format_refused() {
 #[test]
 fn specter_with_format_mismatch_sniffed_bitcoin_core_exits_one() {
     // Build a Bitcoin Core blob; supply `--format specter` → format-mismatch.
-    let core_blob =
-        r#"{"wallet_name":"a","descriptors":[{"desc":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere"}]}"#;
+    let core_blob = r#"{"wallet_name":"a","descriptors":[{"desc":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere"}]}"#;
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["import-wallet", "--blob", "-", "--format", "specter"])
@@ -132,7 +130,8 @@ fn specter_with_format_mismatch_sniffed_bitcoin_core_exits_one() {
         .failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("specter") && (stderr.contains("bitcoin-core") || stderr.contains("format")),
+        stderr.contains("specter")
+            && (stderr.contains("bitcoin-core") || stderr.contains("format")),
         "expected specter-vs-bitcoin-core format-mismatch; got: {stderr}"
     );
 }
@@ -243,8 +242,7 @@ fn specter_json_envelope_includes_source_metadata_and_roundtrip() {
 fn specter_json_envelope_no_specter_source_metadata_on_bsms() {
     // Cross-check: BSMS envelopes do NOT carry specter_source_metadata.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out =
-        run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let env = &val.as_array().unwrap()[0];

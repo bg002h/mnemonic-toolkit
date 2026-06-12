@@ -134,7 +134,10 @@ fn refuse_multisig_prefix(variant: &str) -> ToolkitError {
 }
 
 /// Read the xpub value from stdin or from the `--xpub` arg.
-fn read_xpub_value<R: Read>(args: &AddressOfXpubArgs, stdin: &mut R) -> Result<String, ToolkitError> {
+fn read_xpub_value<R: Read>(
+    args: &AddressOfXpubArgs,
+    stdin: &mut R,
+) -> Result<String, ToolkitError> {
     if args.xpub_stdin {
         let mut buf = String::new();
         stdin
@@ -264,9 +267,8 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
                 gap_limit: args.gap_limit,
             }),
         };
-        let body = serde_json::to_string(&envelope).map_err(|e| {
-            ToolkitError::BadInput(format!("address-of-xpub JSON serialize: {e}"))
-        })?;
+        let body = serde_json::to_string(&envelope)
+            .map_err(|e| ToolkitError::BadInput(format!("address-of-xpub JSON serialize: {e}")))?;
         writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     } else {
         for m in &matches {

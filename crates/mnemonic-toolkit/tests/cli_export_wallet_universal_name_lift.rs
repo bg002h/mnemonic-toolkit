@@ -116,16 +116,14 @@ fn pipe_with_explicit_name(
 /// Sparrow target carries the wallet name in the top-level `name` field.
 /// Used by 6 positive cells + 1 explicit-override.
 fn sparrow_name(stdout: &str) -> String {
-    let v: serde_json::Value =
-        serde_json::from_str(stdout).expect("sparrow output must be JSON");
+    let v: serde_json::Value = serde_json::from_str(stdout).expect("sparrow output must be JSON");
     v["name"].as_str().expect("sparrow.name").to_string()
 }
 
 /// Specter target carries the wallet name in the top-level `label` field.
 /// Used by the specter-target cell.
 fn specter_label(stdout: &str) -> String {
-    let v: serde_json::Value =
-        serde_json::from_str(stdout).expect("specter output must be JSON");
+    let v: serde_json::Value = serde_json::from_str(stdout).expect("specter output must be JSON");
     v["label"].as_str().expect("specter.label").to_string()
 }
 
@@ -138,7 +136,10 @@ fn specter_label(stdout: &str) -> String {
 fn integration_cell_1_sparrow_source_name_lifts_into_sparrow_target() {
     let fixture = fixture_path("sparrow-multisig-2of3-p2wsh-sortedmulti.json");
     let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "sparrow", "sparrow");
-    assert_eq!(exit, 0, "sparrow→sparrow no-name round-trip must succeed; stderr={stderr}");
+    assert_eq!(
+        exit, 0,
+        "sparrow→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(
         sparrow_name(&stdout),
         "wsh-sortedmulti-0",
@@ -154,7 +155,10 @@ fn integration_cell_1_sparrow_source_name_lifts_into_sparrow_target() {
 fn integration_cell_2_specter_source_name_lifts_into_sparrow_target() {
     let fixture = fixture_path("specter-multisig-2of3-p2wsh-sortedmulti.json");
     let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "specter", "sparrow");
-    assert_eq!(exit, 0, "specter→sparrow no-name round-trip must succeed; stderr={stderr}");
+    assert_eq!(
+        exit, 0,
+        "specter→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(sparrow_name(&stdout), "VaultColdStorage");
 }
 
@@ -169,7 +173,10 @@ fn integration_cell_2_specter_source_name_lifts_into_sparrow_target() {
 fn integration_cell_3_jade_source_name_lifts_via_nested_coldcard_compat_path() {
     let fixture = fixture_path("jade-multisig-2of3-p2wsh.json");
     let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "jade", "sparrow");
-    assert_eq!(exit, 0, "jade→sparrow no-name round-trip must succeed; stderr={stderr}");
+    assert_eq!(
+        exit, 0,
+        "jade→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(sparrow_name(&stdout), "TestMs2of3");
 }
 
@@ -182,7 +189,10 @@ fn integration_cell_3_jade_source_name_lifts_via_nested_coldcard_compat_path() {
 fn integration_cell_4_electrum_source_name_lifts_into_sparrow_target() {
     let fixture = fixture_path("electrum-standard-bip84-mainnet.json");
     let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "electrum", "sparrow");
-    assert_eq!(exit, 0, "electrum→sparrow no-name round-trip must succeed; stderr={stderr}");
+    assert_eq!(
+        exit, 0,
+        "electrum→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(sparrow_name(&stdout), "Daily");
 }
 
@@ -197,7 +207,10 @@ fn integration_cell_4_electrum_source_name_lifts_into_sparrow_target() {
 fn integration_cell_5_bitcoin_core_source_name_lifts_into_sparrow_target() {
     let fixture = fixture_path("core-bip84-mainnet.json");
     let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "bitcoin-core", "sparrow");
-    assert_eq!(exit, 0, "bitcoin-core→sparrow no-name round-trip must succeed; stderr={stderr}");
+    assert_eq!(
+        exit, 0,
+        "bitcoin-core→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(sparrow_name(&stdout), "bip84_mainnet");
 }
 
@@ -211,9 +224,11 @@ fn integration_cell_5_bitcoin_core_source_name_lifts_into_sparrow_target() {
 #[test]
 fn integration_cell_6_coldcard_multisig_source_name_lifts_into_sparrow_target() {
     let fixture = fixture_path("coldcard-ms-2of3-p2wsh-with-xfp.txt");
-    let (stdout, stderr, exit) =
-        pipe_no_wallet_name(&fixture, "coldcard-multisig", "sparrow");
-    assert_eq!(exit, 0, "coldcard-multisig→sparrow no-name round-trip must succeed; stderr={stderr}");
+    let (stdout, stderr, exit) = pipe_no_wallet_name(&fixture, "coldcard-multisig", "sparrow");
+    assert_eq!(
+        exit, 0,
+        "coldcard-multisig→sparrow no-name round-trip must succeed; stderr={stderr}"
+    );
     assert_eq!(sparrow_name(&stdout), "TestMs2of3");
 }
 
@@ -248,13 +263,12 @@ fn specter_target_no_wallet_name_lifts_from_sparrow_source_succeeds() {
 #[test]
 fn explicit_wallet_name_overrides_envelope_lifted_name() {
     let fixture = fixture_path("sparrow-multisig-2of3-p2wsh-sortedmulti.json");
-    let (stdout, stderr, exit) = pipe_with_explicit_name(
-        &fixture,
-        "sparrow",
-        "sparrow",
-        "ExplicitOverride",
+    let (stdout, stderr, exit) =
+        pipe_with_explicit_name(&fixture, "sparrow", "sparrow", "ExplicitOverride");
+    assert_eq!(
+        exit, 0,
+        "explicit-name override must succeed; stderr={stderr}"
     );
-    assert_eq!(exit, 0, "explicit-name override must succeed; stderr={stderr}");
     assert_eq!(
         sparrow_name(&stdout),
         "ExplicitOverride",

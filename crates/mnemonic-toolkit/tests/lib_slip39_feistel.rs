@@ -172,7 +172,11 @@ fn ems_length_equals_master_length() {
     for &len in &[16usize, 20, 24, 28, 32] {
         let master = vec![0u8; len];
         let ems = feistel::encrypt(&master, b"", 0, 0, false);
-        assert_eq!(ems.len(), len, "EMS length must equal master length for size {len}");
+        assert_eq!(
+            ems.len(),
+            len,
+            "EMS length must equal master length for size {len}"
+        );
     }
 }
 
@@ -187,7 +191,11 @@ fn encrypt_is_deterministic() {
     let id = 0x0F0F;
     let ems1 = feistel::encrypt(&master, pass, 0, id, false);
     let ems2 = feistel::encrypt(&master, pass, 0, id, false);
-    assert_eq!(ems1.as_slice(), ems2.as_slice(), "encrypt must be deterministic");
+    assert_eq!(
+        ems1.as_slice(),
+        ems2.as_slice(),
+        "encrypt must be deterministic"
+    );
 }
 
 // ============================================================================

@@ -55,7 +55,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(stdout, "  script_type:   {}", d.script_type).map_err(ToolkitError::Io)?;
         match d.witness_version {
             Some(v) => writeln!(stdout, "  witness_ver:   {v}").map_err(ToolkitError::Io)?,
-            None => writeln!(stdout, "  witness_ver:   (none; legacy)").map_err(ToolkitError::Io)?,
+            None => {
+                writeln!(stdout, "  witness_ver:   (none; legacy)").map_err(ToolkitError::Io)?
+            }
         }
         writeln!(stdout, "  script_pubkey: {}", d.script_pubkey_hex).map_err(ToolkitError::Io)?;
     }

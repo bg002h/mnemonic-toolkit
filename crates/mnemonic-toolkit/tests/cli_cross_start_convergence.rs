@@ -368,7 +368,11 @@ fn a6_multisig_bip87_seed_vs_xpub_converge() {
 
     assert_cards_converge(&seed, &xpub, "A6 multisig bip87 seed vs xpub");
     // Sanity: this is the multi-cosigner path (3 mk1 chunk-arrays).
-    assert_eq!(seed["mk1"].as_array().unwrap().len(), 3, "A6 expects 3 cosigner mk1 sets");
+    assert_eq!(
+        seed["mk1"].as_array().unwrap().len(),
+        3,
+        "A6 expects 3 cosigner mk1 sets"
+    );
 }
 
 // ===========================================================================

@@ -52,7 +52,9 @@ mod fixtures_test {
     #[test]
     fn simple_timelocked_inheritance() {
         check(
-            include_str!("../../tests/fixtures/descriptor_builder/simple-timelocked-inheritance.json"),
+            include_str!(
+                "../../tests/fixtures/descriptor_builder/simple-timelocked-inheritance.json"
+            ),
             "wsh(or_d(pk(A),and_v(v:pkh(B),older(65535))))",
         );
     }

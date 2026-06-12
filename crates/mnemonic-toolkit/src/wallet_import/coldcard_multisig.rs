@@ -244,11 +244,8 @@ pub(super) fn parse_text(
                 }
                 cosigner_xfp_key if is_xfp_hex(cosigner_xfp_key) => {
                     // Shared-derivation shape: `<XFP_hex>: <xpub>` cosigner line.
-                    let fp = parse_fingerprint_hex(
-                        cosigner_xfp_key,
-                        line_no,
-                        "cosigner XFP prefix",
-                    )?;
+                    let fp =
+                        parse_fingerprint_hex(cosigner_xfp_key, line_no, "cosigner XFP prefix")?;
                     cosigners_raw.push(RawCosigner {
                         xpub_str: value,
                         per_line_xfp: Some(fp),
@@ -300,20 +297,17 @@ pub(super) fn parse_text(
     // Header completeness checks.
     let name = name.ok_or_else(|| {
         ToolkitError::ImportWalletParse(
-            "import-wallet: coldcard-multisig: parse error: missing `Name:` header"
-                .to_string(),
+            "import-wallet: coldcard-multisig: parse error: missing `Name:` header".to_string(),
         )
     })?;
     let policy = policy.ok_or_else(|| {
         ToolkitError::ImportWalletParse(
-            "import-wallet: coldcard-multisig: parse error: missing `Policy:` header"
-                .to_string(),
+            "import-wallet: coldcard-multisig: parse error: missing `Policy:` header".to_string(),
         )
     })?;
     let script_format = script_format.ok_or_else(|| {
         ToolkitError::ImportWalletParse(
-            "import-wallet: coldcard-multisig: parse error: missing `Format:` header"
-                .to_string(),
+            "import-wallet: coldcard-multisig: parse error: missing `Format:` header".to_string(),
         )
     })?;
 
@@ -362,10 +356,9 @@ pub(super) fn parse_text(
 
         // Resolve effective XFP per SPEC §11.4.1.
         let xpub_parse_result = Xpub::from_str(&raw.xpub_str);
-        let computed_fp: Option<Fingerprint> = xpub_parse_result.as_ref().ok().map(|x| x.fingerprint());
-        let supplied_fp: Option<Fingerprint> = raw
-            .per_line_xfp
-            .or(header_xfp); // per-line shared form OR top-level XFP header.
+        let computed_fp: Option<Fingerprint> =
+            xpub_parse_result.as_ref().ok().map(|x| x.fingerprint());
+        let supplied_fp: Option<Fingerprint> = raw.per_line_xfp.or(header_xfp); // per-line shared form OR top-level XFP header.
 
         let effective_fp: Fingerprint = match (supplied_fp, computed_fp) {
             // Row 1: header present + computed available + match → silent.
@@ -548,7 +541,10 @@ fn parse_policy(value: &str, line_no: usize) -> Result<PolicyKOfN, ToolkitError>
     // Now cleaned looks like `K of N` or `K N` (after dash-removal).
     // Parse out two consecutive integers separated by `of` or whitespace.
     let parts: Vec<&str> = cleaned.split_whitespace().collect();
-    let nums: Vec<&&str> = parts.iter().filter(|p| !p.eq_ignore_ascii_case("of")).collect();
+    let nums: Vec<&&str> = parts
+        .iter()
+        .filter(|p| !p.eq_ignore_ascii_case("of"))
+        .collect();
     if nums.len() != 2 {
         return Err(ToolkitError::ImportWalletParse(format!(
             "import-wallet: coldcard-multisig: parse error: line {line_no}: \
@@ -649,8 +645,7 @@ fn build_descriptor_body(
 ) -> Result<String, ToolkitError> {
     if cosigners.is_empty() {
         return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: coldcard-multisig: parse error: zero cosigners after parse"
-                .to_string(),
+            "import-wallet: coldcard-multisig: parse error: zero cosigners after parse".to_string(),
         ));
     }
     let key_parts: Vec<String> = cosigners
@@ -790,7 +785,6 @@ mod tests {
             );
         }
     }
-
 
     /// SPEC §11.4 sniff: shared-derivation shape (toolkit's own emit form).
     /// Headers in order: Name / Policy / Derivation / Format.
@@ -1196,8 +1190,14 @@ Format: P2WSH\n\
     /// Helper `parse_policy`: accepts `K of N` and `K-of-N`; rejects junk.
     #[test]
     fn parse_policy_helper_accepts_both_forms_rejects_junk() {
-        assert_eq!(parse_policy("2 of 3", 1).unwrap(), PolicyKOfN { k: 2, n: 3 });
-        assert_eq!(parse_policy("2-of-3", 1).unwrap(), PolicyKOfN { k: 2, n: 3 });
+        assert_eq!(
+            parse_policy("2 of 3", 1).unwrap(),
+            PolicyKOfN { k: 2, n: 3 }
+        );
+        assert_eq!(
+            parse_policy("2-of-3", 1).unwrap(),
+            PolicyKOfN { k: 2, n: 3 }
+        );
         assert!(parse_policy("malformed", 1).is_err());
         assert!(parse_policy("256 of 1", 1).is_err()); // u8 overflow
     }
@@ -1286,10 +1286,9 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
     /// silently (row 1 across all cosigners).
     #[test]
     fn fixture_2of3_with_xfp_parses_silent() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
-        )
-        .expect("fixture file readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt")
+                .expect("fixture file readable");
         let mut stderr = Vec::new();
         let p = parse_text(&blob, &mut stderr).unwrap();
         let meta = match &p.provenance {
@@ -1313,10 +1312,8 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
     /// XFP header).
     #[test]
     fn fixture_2of3_no_xfp_header_parses_silent() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-no-xfp.txt",
-        )
-        .expect("fixture file readable");
+        let blob = std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-no-xfp.txt")
+            .expect("fixture file readable");
         let mut stderr = Vec::new();
         let p = parse_text(&blob, &mut stderr).unwrap();
         let meta = match &p.provenance {
@@ -1350,10 +1347,9 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
     /// citing the missing `Format:` header.
     #[test]
     fn fixture_malformed_missing_format_refuses() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-malformed-missing-format.txt",
-        )
-        .expect("fixture file readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-malformed-missing-format.txt")
+                .expect("fixture file readable");
         let mut stderr = Vec::new();
         let err = parse_text(&blob, &mut stderr).unwrap_err();
         let msg = format!("{err:?}");
@@ -1369,10 +1365,9 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
     /// the structure + presence of the xpubs.
     #[test]
     fn fixture_2of3_descriptor_structure() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
-        )
-        .expect("fixture file readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt")
+                .expect("fixture file readable");
         let mut stderr = Vec::new();
         let p = parse_text(&blob, &mut stderr).unwrap();
         let body = &p.original_descriptor;
@@ -1381,7 +1376,10 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
         assert!(body.contains(XPUB_B), "got: {body}");
         assert!(body.contains(XPUB_C), "got: {body}");
         assert!(body.contains("/<0;1>/*"), "got: {body}");
-        assert!(body.contains('#'), "must have a BIP-380 checksum; got: {body}");
+        assert!(
+            body.contains('#'),
+            "must have a BIP-380 checksum; got: {body}"
+        );
         // Bracket-form per-cosigner uses xpub.fingerprint(), not the bracket fp from BSMS.
         assert!(
             body.contains(&format!("[{}/48'/0'/0'/2']", FP_A.to_lowercase())),

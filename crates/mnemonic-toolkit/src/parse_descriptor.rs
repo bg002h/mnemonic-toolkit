@@ -295,9 +295,8 @@ pub fn substitute_nums_sentinel(input: &str) -> String {
 /// rust-miniscript's lower-level parse error.
 pub fn detect_bare_tr(input: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        Regex::new(r"^tr\([a-z][a-z_0-9]*\(").expect("static regex compiles")
-    });
+    let re =
+        RE.get_or_init(|| Regex::new(r"^tr\([a-z][a-z_0-9]*\(").expect("static regex compiles"));
     re.is_match(input)
 }
 
@@ -499,7 +498,10 @@ fn walk_tap_tree(
     tt: &miniscript::descriptor::TapTree<DescriptorPublicKey>,
     km: &BTreeMap<String, u8>,
 ) -> Result<Node, ToolkitError> {
-    let leaves: Vec<(u8, _)> = tt.leaves().map(|li| (li.depth(), li.miniscript())).collect();
+    let leaves: Vec<(u8, _)> = tt
+        .leaves()
+        .map(|li| (li.depth(), li.miniscript()))
+        .collect();
     if leaves.is_empty() {
         return Err(ToolkitError::DescriptorParse(
             "tap tree present but contains no leaves".into(),
@@ -757,7 +759,9 @@ pub fn parse_descriptor(
     let input: &str = nums_substituted.as_str();
 
     if detect_bare_tr(input) {
-        return Err(ToolkitError::DescriptorParse(BARE_TR_NO_KEY_MSG.to_string()));
+        return Err(ToolkitError::DescriptorParse(
+            BARE_TR_NO_KEY_MSG.to_string(),
+        ));
     }
 
     let occs = lex_placeholders(input)?;
@@ -1848,8 +1852,12 @@ mod tests {
     #[test]
     fn bip388_collision_at0_at1_same_xpub_same_path() {
         let p = "48'/0'/0'/2'";
-        let err = ckd(vec![cinfo(xpub_a(), p), cinfo(xpub_a(), p), cinfo(xpub_b(), p)])
-            .expect_err("@0 == @1 (xpub, path) must collide");
+        let err = ckd(vec![
+            cinfo(xpub_a(), p),
+            cinfo(xpub_a(), p),
+            cinfo(xpub_b(), p),
+        ])
+        .expect_err("@0 == @1 (xpub, path) must collide");
         match err {
             ToolkitError::Bip388Distinctness { i, j } => {
                 assert_eq!((i, j), (0, 1));
@@ -1916,24 +1924,24 @@ mod tests {
         // produce the same DerivationPath value and collide for distinctness.
         // (Post-path_raw-deletion: the typed `path` is built directly from each
         // notation; no separate raw string exists.)
-        let err = ckd(vec![
-            cinfo(xpub_a(), canonical),
-            cinfo(xpub_a(), h_form),
-        ])
-        .expect_err("v0.5 typed-equality treats h-form and apostrophe-form as the same path");
-        assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
+        let err = ckd(vec![cinfo(xpub_a(), canonical), cinfo(xpub_a(), h_form)])
+            .expect_err("v0.5 typed-equality treats h-form and apostrophe-form as the same path");
+        assert!(matches!(
+            err,
+            ToolkitError::Bip388Distinctness { i: 0, j: 1 }
+        ));
     }
 
     // v0.4.1 H.6 — identical xpub + identical path collide.
     #[test]
     fn bip388_identical_raw_paths_collide() {
         let raw = "48'/0'/0'/2'";
-        let err = ckd(vec![
-            cinfo(xpub_a(), raw),
-            cinfo(xpub_a(), raw),
-        ])
-        .expect_err("identical xpub + identical path must collide");
-        assert!(matches!(err, ToolkitError::Bip388Distinctness { i: 0, j: 1 }));
+        let err = ckd(vec![cinfo(xpub_a(), raw), cinfo(xpub_a(), raw)])
+            .expect_err("identical xpub + identical path must collide");
+        assert!(matches!(
+            err,
+            ToolkitError::Bip388Distinctness { i: 0, j: 1 }
+        ));
     }
 
     // ---- C.5: descriptor-mode wire-bit-identical to template-mode (3 fixtures) ----
@@ -1952,7 +1960,13 @@ mod tests {
         )
         .unwrap();
         let descriptor = parse_descriptor(template, &binding.keys, &binding.fingerprints).unwrap();
-        crate::synthesize::synthesize_descriptor(&descriptor, &binding.cosigners, false, bip39::Language::English).unwrap()
+        crate::synthesize::synthesize_descriptor(
+            &descriptor,
+            &binding.cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -2166,8 +2180,13 @@ mod tests {
         )
         .unwrap();
         let parsed = parse_descriptor(&descriptor, &binding.keys, &binding.fingerprints).unwrap();
-        let descriptor_bundle =
-            crate::synthesize::synthesize_descriptor(&parsed, &binding.cosigners, false, bip39::Language::English).unwrap();
+        let descriptor_bundle = crate::synthesize::synthesize_descriptor(
+            &parsed,
+            &binding.cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap();
 
         assert_eq!(
             descriptor_bundle.md1, template_bundle.md1,
@@ -2502,9 +2521,7 @@ mod tests {
         // is `wsh(thresh(2, pkh(@0/...), s:pk(@1/...), sln:older(32768)))` — the
         // unique composition is `sln:` = Swap + OrI(False, ZeroNotEqual(Older(N)))
         // plus pkh as a Thresh child (existing arm_thresh uses pk, not pkh).
-        let inner = wsh_inner(
-            "wsh(thresh(2,pkh(@0/<0;1>/*),s:pk(@1/<0;1>/*),sln:older(32768)))",
-        );
+        let inner = wsh_inner("wsh(thresh(2,pkh(@0/<0;1>/*),s:pk(@1/<0;1>/*),sln:older(32768)))");
         assert_eq!(inner.tag, Tag::Thresh);
         let Body::Variable { k, children } = inner.body else {
             panic!("expected Thresh Variable body");
@@ -2621,7 +2638,9 @@ mod tests {
             ScriptCtx::MultiSig,
         );
         assert_eq!(root.tag, Tag::Tr);
-        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr")
+        };
         let tap_root = tree.as_ref().expect("multi-leaf tap_tree present");
         assert_eq!(tap_root.tag, Tag::TapTree);
         let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
@@ -2637,14 +2656,18 @@ mod tests {
             "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),{pk(@2/<0;1>/*),pk(@3/<0;1>/*)}})",
             ScriptCtx::MultiSig,
         );
-        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr")
+        };
         let tap_root = tree.as_ref().unwrap();
         assert_eq!(tap_root.tag, Tag::TapTree);
         let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
         assert_eq!(leaves, 3);
         assert_eq!(max_depth, 2);
         // Confirm asymmetry: left child is leaf (PkK), right is TapTree.
-        let Body::Children(children) = &tap_root.body else { panic!("expected TapTree.Children") };
+        let Body::Children(children) = &tap_root.body else {
+            panic!("expected TapTree.Children")
+        };
         assert_eq!(children[0].tag, Tag::PkK);
         assert_eq!(children[1].tag, Tag::TapTree);
     }
@@ -2656,14 +2679,18 @@ mod tests {
             "tr(@0/<0;1>/*,{{pk(@1/<0;1>/*),pk(@2/<0;1>/*)},{pk(@3/<0;1>/*),pk(@4/<0;1>/*)}})",
             ScriptCtx::MultiSig,
         );
-        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr")
+        };
         let tap_root = tree.as_ref().unwrap();
         assert_eq!(tap_root.tag, Tag::TapTree);
         let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
         assert_eq!(leaves, 4);
         assert_eq!(max_depth, 2);
         // Both children of root are TapTree branches.
-        let Body::Children(children) = &tap_root.body else { panic!("expected TapTree.Children") };
+        let Body::Children(children) = &tap_root.body else {
+            panic!("expected TapTree.Children")
+        };
         assert_eq!(children[0].tag, Tag::TapTree);
         assert_eq!(children[1].tag, Tag::TapTree);
     }
@@ -2677,7 +2704,9 @@ mod tests {
             "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),{pk(@2/<0;1>/*),{pk(@3/<0;1>/*),pk(@4/<0;1>/*)}}})",
             ScriptCtx::MultiSig,
         );
-        let Body::Tr { tree, .. } = &root.body else { panic!("expected Tr") };
+        let Body::Tr { tree, .. } = &root.body else {
+            panic!("expected Tr")
+        };
         let tap_root = tree.as_ref().unwrap();
         let (leaves, max_depth) = count_tap_leaves(tap_root, 0);
         assert_eq!(leaves, 4);
@@ -2785,7 +2814,9 @@ mod tests {
     #[test]
     fn detect_bare_tr_rejects_valid_internal_key_forms() {
         // After NUMS substitution: hex internal key.
-        assert!(!detect_bare_tr(&format!("tr({NUMS_H_POINT_X_ONLY_HEX},pk(@0))")));
+        assert!(!detect_bare_tr(&format!(
+            "tr({NUMS_H_POINT_X_ONLY_HEX},pk(@0))"
+        )));
         // Placeholder internal key.
         assert!(!detect_bare_tr("tr(@0)"));
         assert!(!detect_bare_tr("tr(@0,pk(@1))"));
@@ -2800,7 +2831,9 @@ mod tests {
     #[test]
     fn detect_bare_tr_rejects_non_tr_descriptors() {
         // Should only match `tr(...)` root; other wrappers ignored.
-        assert!(!detect_bare_tr("wsh(andor(pkh(@0),after(12000000),pk(@1)))"));
+        assert!(!detect_bare_tr(
+            "wsh(andor(pkh(@0),after(12000000),pk(@1)))"
+        ));
         assert!(!detect_bare_tr("pkh(@0)"));
         assert!(!detect_bare_tr("wpkh(@0)"));
         assert!(!detect_bare_tr("sh(wsh(multi(2,@0,@1)))"));
@@ -2809,12 +2842,8 @@ mod tests {
     #[test]
     fn parse_descriptor_refuses_bare_tr_with_row_16_message() {
         // SPEC §6.6 row 16 — byte-exact friendly text.
-        let err = parse_descriptor(
-            "tr(andor(pkh(@0),after(12000000),pk(@1)))",
-            &[],
-            &[],
-        )
-        .unwrap_err();
+        let err =
+            parse_descriptor("tr(andor(pkh(@0),after(12000000),pk(@1)))", &[], &[]).unwrap_err();
         match err {
             ToolkitError::DescriptorParse(msg) => {
                 assert_eq!(msg, BARE_TR_NO_KEY_MSG);
@@ -2833,11 +2862,7 @@ mod tests {
         // If this assertion fails, rust-miniscript rejected the substituted
         // descriptor — pin the working alternative HERE before Phase 4 builds
         // golden bundles atop this shape.
-        let result = parse_descriptor(
-            "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))",
-            &[],
-            &[],
-        );
+        let result = parse_descriptor("tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))", &[], &[]);
         assert!(
             result.is_ok(),
             "expected tr(NUMS, and_v(v:pk(@0), after(N))) to parse; got {:?}",

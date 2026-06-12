@@ -24,23 +24,91 @@ struct NodeGrammar {
 }
 
 const NODE_GRAMMAR: &[NodeGrammar] = &[
-    NodeGrammar { kind: "pk", form: "string(key)", renders: "pk(<key>)" },
-    NodeGrammar { kind: "pkh", form: "string(key)", renders: "pkh(<key>)" },
-    NodeGrammar { kind: "multi", form: "{k:uint, keys:[key]}", renders: "multi(K, …)" },
-    NodeGrammar { kind: "sortedmulti", form: "{k:uint, keys:[key]}", renders: "sortedmulti(K, …)" },
-    NodeGrammar { kind: "older", form: "uint", renders: "older(N)" },
-    NodeGrammar { kind: "after", form: "uint", renders: "after(N)" },
-    NodeGrammar { kind: "sha256", form: "string(hex64)", renders: "sha256(<hex>)" },
-    NodeGrammar { kind: "hash256", form: "string(hex64)", renders: "hash256(<hex>)" },
-    NodeGrammar { kind: "hash160", form: "string(hex40)", renders: "hash160(<hex>)" },
-    NodeGrammar { kind: "ripemd160", form: "string(hex40)", renders: "ripemd160(<hex>)" },
-    NodeGrammar { kind: "and_v", form: "[node, node]", renders: "and_v(A,B)" },
-    NodeGrammar { kind: "or_d", form: "[node, node]", renders: "or_d(A,B)" },
-    NodeGrammar { kind: "or_i", form: "[node, node]", renders: "or_i(A,B)" },
-    NodeGrammar { kind: "or_b", form: "[node, node]", renders: "or_b(A,B)" },
-    NodeGrammar { kind: "andor", form: "[node, node, node]", renders: "andor(A,B,C)" },
-    NodeGrammar { kind: "thresh", form: "{k:uint, subs:[node]}", renders: "thresh(K, …)" },
-    NodeGrammar { kind: "wrap", form: "{w:string, sub:node}", renders: "<w>:<sub>" },
+    NodeGrammar {
+        kind: "pk",
+        form: "string(key)",
+        renders: "pk(<key>)",
+    },
+    NodeGrammar {
+        kind: "pkh",
+        form: "string(key)",
+        renders: "pkh(<key>)",
+    },
+    NodeGrammar {
+        kind: "multi",
+        form: "{k:uint, keys:[key]}",
+        renders: "multi(K, …)",
+    },
+    NodeGrammar {
+        kind: "sortedmulti",
+        form: "{k:uint, keys:[key]}",
+        renders: "sortedmulti(K, …)",
+    },
+    NodeGrammar {
+        kind: "older",
+        form: "uint",
+        renders: "older(N)",
+    },
+    NodeGrammar {
+        kind: "after",
+        form: "uint",
+        renders: "after(N)",
+    },
+    NodeGrammar {
+        kind: "sha256",
+        form: "string(hex64)",
+        renders: "sha256(<hex>)",
+    },
+    NodeGrammar {
+        kind: "hash256",
+        form: "string(hex64)",
+        renders: "hash256(<hex>)",
+    },
+    NodeGrammar {
+        kind: "hash160",
+        form: "string(hex40)",
+        renders: "hash160(<hex>)",
+    },
+    NodeGrammar {
+        kind: "ripemd160",
+        form: "string(hex40)",
+        renders: "ripemd160(<hex>)",
+    },
+    NodeGrammar {
+        kind: "and_v",
+        form: "[node, node]",
+        renders: "and_v(A,B)",
+    },
+    NodeGrammar {
+        kind: "or_d",
+        form: "[node, node]",
+        renders: "or_d(A,B)",
+    },
+    NodeGrammar {
+        kind: "or_i",
+        form: "[node, node]",
+        renders: "or_i(A,B)",
+    },
+    NodeGrammar {
+        kind: "or_b",
+        form: "[node, node]",
+        renders: "or_b(A,B)",
+    },
+    NodeGrammar {
+        kind: "andor",
+        form: "[node, node, node]",
+        renders: "andor(A,B,C)",
+    },
+    NodeGrammar {
+        kind: "thresh",
+        form: "{k:uint, subs:[node]}",
+        renders: "thresh(K, …)",
+    },
+    NodeGrammar {
+        kind: "wrap",
+        form: "{w:string, sub:node}",
+        renders: "<w>:<sub>",
+    },
 ];
 
 /// Build the `--spec-schema` JSON value.
@@ -143,7 +211,12 @@ mod tests {
             .collect();
         let registry_ids: Vec<&str> = ARCHETYPE_REGISTRY.iter().map(|d| d.id).collect();
         assert_eq!(schema_ids, registry_ids);
-        for (a, def) in v["archetypes"].as_array().unwrap().iter().zip(ARCHETYPE_REGISTRY) {
+        for (a, def) in v["archetypes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(ARCHETYPE_REGISTRY)
+        {
             let params = a["params"].as_array().unwrap();
             assert_eq!(params.len(), def.params.len(), "{}", def.id);
             for (p, spec) in params.iter().zip(def.params) {

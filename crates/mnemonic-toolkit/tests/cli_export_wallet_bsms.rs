@@ -75,15 +75,27 @@ fn bsms_4line_emit_2of2_wsh_sortedmulti_mainnet() {
         "@1.path=m/48'/0'/0'/2'",
     ]);
     let lines: Vec<&str> = stdout.trim_end_matches('\n').split('\n').collect();
-    assert_eq!(lines.len(), 4, "expected 4 lines, got {} in:\n{stdout}", lines.len());
+    assert_eq!(
+        lines.len(),
+        4,
+        "expected 4 lines, got {} in:\n{stdout}",
+        lines.len()
+    );
     assert_eq!(lines[0], "BSMS 1.0");
     assert!(
         lines[1].starts_with("wsh(sortedmulti(2,"),
         "line 2 must be the wsh(sortedmulti(...)) descriptor; got {:?}",
         lines[1]
     );
-    assert!(lines[1].contains("#"), "line 2 must carry the #<checksum> suffix; got {:?}", lines[1]);
-    assert_eq!(lines[2], "/0/*,/1/*", "line 3 path-restrictions for canonical multipath");
+    assert!(
+        lines[1].contains("#"),
+        "line 2 must carry the #<checksum> suffix; got {:?}",
+        lines[1]
+    );
+    assert_eq!(
+        lines[2], "/0/*,/1/*",
+        "line 3 path-restrictions for canonical multipath"
+    );
     // Line 4: bech32 mainnet P2WSH prefix.
     assert!(
         lines[3].starts_with("bc1q"),
@@ -188,7 +200,10 @@ fn bsms_4line_emit_sortedmulti_3of5() {
     );
     // 4 cosigners present in line 2 (one xpub per cosigner — count by xpub prefix).
     let xpub_count = lines[1].matches("xpub").count();
-    assert_eq!(xpub_count, 4, "expected 4 cosigners (xpub occurrences) in line 2, got {xpub_count}");
+    assert_eq!(
+        xpub_count, 4,
+        "expected 4 cosigners (xpub occurrences) in line 2, got {xpub_count}"
+    );
 }
 
 /// SPEC v0.27.0 §3.5.1 cell 4 — path-restrictions emit is `/0/*,/1/*` for a
@@ -260,8 +275,8 @@ fn bsms_4line_first_address_byte_exact_against_descriptor_derivation() {
     // Independent derivation via miniscript directly.
     use miniscript::{Descriptor, DescriptorPublicKey};
     use std::str::FromStr;
-    let parsed = Descriptor::<DescriptorPublicKey>::from_str(canonical)
-        .expect("descriptor re-parse");
+    let parsed =
+        Descriptor::<DescriptorPublicKey>::from_str(canonical).expect("descriptor re-parse");
     let receive = parsed
         .into_single_descriptors()
         .expect("multipath split")
@@ -428,7 +443,12 @@ fn bsms_2line_lenient_excerpt_emits_descriptor_only() {
         "@1.path=m/48'/0'/0'/2'",
     ]);
     let lines: Vec<&str> = stdout.trim_end_matches('\n').split('\n').collect();
-    assert_eq!(lines.len(), 2, "expected 2 lines for 2-line form, got {}", lines.len());
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected 2 lines for 2-line form, got {}",
+        lines.len()
+    );
     assert_eq!(lines[0], "BSMS 1.0");
     assert!(lines[1].starts_with("wsh(sortedmulti(2,"));
     assert!(lines[1].contains("#"), "checksum suffix present");

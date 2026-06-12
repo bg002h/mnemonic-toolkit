@@ -46,7 +46,9 @@ fn convert_value(args: &[&str]) -> String {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     line[colon + 2..].to_string()
 }
 
@@ -341,7 +343,8 @@ fn decrypt_bip38_to_wif_ec_multiplied_vector_ec4_lot_sequence_unicode() {
     // EC4: passphrase "ΜΟΛΩΝ ΛΑΒΕ" (Greek capitals), Lot 806938 / Sequence 1,
     // no compression. Pins both the EC-multiplied decrypt path AND
     // Unicode-NFC normalization of the passphrase under the EC-multiply form.
-    const EC4_PASS: &str = "\u{039C}\u{039F}\u{039B}\u{03A9}\u{039D} \u{039B}\u{0391}\u{0392}\u{0395}";
+    const EC4_PASS: &str =
+        "\u{039C}\u{039F}\u{039B}\u{03A9}\u{039D} \u{039B}\u{0391}\u{0392}\u{0395}";
     const EC4_BIP38: &str = "6PgGWtx25kUg8QWvwuJAgorN6k9FbE25rv5dMRwu5SKMnfpfVe5mar2ngH";
     const EC4_WIF: &str = "5KMKKuUmAkiNbA3DazMQiLfDq47qs8MAEThm4yL8R2PhV1ov33D";
     let out = convert_value(&[
@@ -480,7 +483,10 @@ fn composite_phrase_to_bip38_via_wif() {
         "--bip38-passphrase",
         BIP38_PASS,
     ]);
-    assert!(bip38_out.starts_with("6P"), "BIP-38 ciphertext must start with 6P; got {bip38_out:?}");
+    assert!(
+        bip38_out.starts_with("6P"),
+        "BIP-38 ciphertext must start with 6P; got {bip38_out:?}"
+    );
 
     // Verify by decrypting back; the recovered WIF must match the direct
     // phrase → wif path with NO mnemonic extension (we did not pass

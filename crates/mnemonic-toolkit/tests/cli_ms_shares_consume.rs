@@ -16,7 +16,14 @@ fn one_share() -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "ms-shares", "split", "--from", &from_arg, "--threshold", "2", "--shares", "3",
+            "ms-shares",
+            "split",
+            "--from",
+            &from_arg,
+            "--threshold",
+            "2",
+            "--shares",
+            "3",
         ])
         .output()
         .unwrap();
@@ -54,7 +61,13 @@ fn convert_from_share_surfaces_friendly_message_and_mapped_exit() {
     let share = one_share();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("ms1={share}"), "--to", "phrase"])
+        .args([
+            "convert",
+            "--from",
+            &format!("ms1={share}"),
+            "--to",
+            "phrase",
+        ])
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();

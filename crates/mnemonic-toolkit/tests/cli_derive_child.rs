@@ -392,7 +392,9 @@ fn master_xprv_for(phrase: &str, passphrase: &str) -> String {
     use bitcoin::NetworkKind;
     let mnemonic = Mnemonic::parse_in(Language::English, phrase).unwrap();
     let seed = mnemonic.to_seed(passphrase);
-    Xpriv::new_master(NetworkKind::Main, &seed).unwrap().to_string()
+    Xpriv::new_master(NetworkKind::Main, &seed)
+        .unwrap()
+        .to_string()
 }
 
 #[test]
@@ -524,7 +526,10 @@ fn bip39_japanese_diverges_from_english() {
     let ja_out = String::from_utf8(japanese.get_output().stdout.clone()).unwrap();
     assert_ne!(en_out, ja_out);
     // Sanity check that Japanese output is in fact non-ASCII.
-    assert!(!ja_out.is_ascii(), "expected non-ASCII Japanese output; got {ja_out:?}");
+    assert!(
+        !ja_out.is_ascii(),
+        "expected non-ASCII Japanese output; got {ja_out:?}"
+    );
 }
 
 #[test]

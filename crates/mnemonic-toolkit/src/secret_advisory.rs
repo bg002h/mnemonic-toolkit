@@ -77,7 +77,11 @@ pub fn warn_if_world_readable<E: Write>(path: &Path, stderr: &mut E) {
 /// `#[derive(Ord)]`'s `.max()` returns the most-sensitive class. "inert" is the
 /// ABSENCE of a class (modeled as `Option::None`), not a variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum OutputClass { Template, WatchOnly, PrivateKeyMaterial }
+pub enum OutputClass {
+    Template,
+    WatchOnly,
+    PrivateKeyMaterial,
+}
 
 /// Max over the artifacts a command wrote to stdout; `None` == all-inert → no line.
 pub fn worst_class_on_stdout(artifacts: &[OutputClass]) -> Option<OutputClass> {
@@ -153,33 +157,47 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
         warn_if_world_readable(f.path(), &mut buf);
         let s = String::from_utf8(buf).unwrap();
-        assert!(
-            s.is_empty(),
-            "0o600 must NOT emit advisory; got: {s}"
-        );
+        assert!(s.is_empty(), "0o600 must NOT emit advisory; got: {s}");
     }
 
     #[test]
     fn output_class_lattice_and_lines() {
-        use super::{OutputClass::*, worst_class_on_stdout, emit_output_class_advisory};
+        use super::{emit_output_class_advisory, worst_class_on_stdout, OutputClass::*};
         assert_eq!(worst_class_on_stdout(&[]), None);
-        assert_eq!(worst_class_on_stdout(&[Template, WatchOnly]), Some(WatchOnly));
-        assert_eq!(worst_class_on_stdout(&[WatchOnly, PrivateKeyMaterial, Template]), Some(PrivateKeyMaterial));
+        assert_eq!(
+            worst_class_on_stdout(&[Template, WatchOnly]),
+            Some(WatchOnly)
+        );
+        assert_eq!(
+            worst_class_on_stdout(&[WatchOnly, PrivateKeyMaterial, Template]),
+            Some(PrivateKeyMaterial)
+        );
         let mut b = Vec::new();
         emit_output_class_advisory(PrivateKeyMaterial, &mut b);
         assert_eq!(String::from_utf8(b).unwrap(),
             "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')\n");
-        let mut b = Vec::new(); emit_output_class_advisory(WatchOnly, &mut b);
-        assert_eq!(String::from_utf8(b).unwrap(), "note: stdout is watch-only — public keys only, cannot spend\n");
-        let mut b = Vec::new(); emit_output_class_advisory(Template, &mut b);
-        assert_eq!(String::from_utf8(b).unwrap(), "note: stdout is a keyless descriptor template (no keys)\n");
+        let mut b = Vec::new();
+        emit_output_class_advisory(WatchOnly, &mut b);
+        assert_eq!(
+            String::from_utf8(b).unwrap(),
+            "note: stdout is watch-only — public keys only, cannot spend\n"
+        );
+        let mut b = Vec::new();
+        emit_output_class_advisory(Template, &mut b);
+        assert_eq!(
+            String::from_utf8(b).unwrap(),
+            "note: stdout is a keyless descriptor template (no keys)\n"
+        );
     }
 
     #[test]
     fn card_kind_maps_to_class() {
         use super::{card_kind_class, OutputClass};
         use crate::repair::CardKind;
-        assert_eq!(card_kind_class(CardKind::Ms1), OutputClass::PrivateKeyMaterial);
+        assert_eq!(
+            card_kind_class(CardKind::Ms1),
+            OutputClass::PrivateKeyMaterial
+        );
         assert_eq!(card_kind_class(CardKind::Mk1), OutputClass::WatchOnly);
         assert_eq!(card_kind_class(CardKind::Md1), OutputClass::Template);
     }

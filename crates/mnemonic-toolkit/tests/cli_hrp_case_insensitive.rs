@@ -45,10 +45,14 @@ use std::str::FromStr;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_CHUNK0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_CHUNK1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
-const VALID_MD1_CHUNK0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
-const VALID_MD1_CHUNK1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
-const VALID_MD1_CHUNK2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+const VALID_MK1_CHUNK1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MD1_CHUNK0: &str =
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const VALID_MD1_CHUNK1: &str =
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const VALID_MD1_CHUNK2: &str =
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
 
 const PHRASE: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -114,9 +118,10 @@ fn bundle_multisig() -> (Vec<String>, Vec<Vec<String>>) {
         .iter()
         .map(|el| match el {
             Value::String(s) => vec![s.clone()],
-            Value::Array(inner) => {
-                inner.iter().map(|c| c.as_str().unwrap().to_string()).collect()
-            }
+            Value::Array(inner) => inner
+                .iter()
+                .map(|c| c.as_str().unwrap().to_string())
+                .collect(),
             other => panic!("unexpected mk1 element: {other:?}"),
         })
         .collect();
@@ -490,7 +495,10 @@ fn verify_bundle_positional_uppercase_mk1_md1_round_trip() {
         .filter(|l| l.starts_with("md1") && !l.contains(' ') && !l.contains('-'))
         .map(String::from)
         .collect();
-    assert!(!mk1.is_empty() && !md1.is_empty(), "fixture must yield mk1+md1");
+    assert!(
+        !mk1.is_empty() && !md1.is_empty(),
+        "fixture must yield mk1+md1"
+    );
 
     let mk_refs: Vec<&str> = mk1.iter().map(|s| s.as_str()).collect();
     let card = mk_codec::decode(&mk_refs).expect("mk1 decodes");

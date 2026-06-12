@@ -28,14 +28,28 @@ pub enum SeedqrError {
     /// v0.32.0 — CompactSeedQR decode: hex decodes to a byte count other
     /// than 16 (12-word) or 32 (24-word). 20/24/28 (15/18/21-word) are
     /// valid BIP-39 entropy sizes but NOT compact-supported per SeedSigner.
-    CompactByteCountUnsupported { got: usize },
+    CompactByteCountUnsupported {
+        got: usize,
+    },
     /// v0.32.0 — CompactSeedQR encode: word count other than 12 or 24.
     /// SeedSigner's CompactSeedQrEncoder handles only those two.
-    CompactWordCountUnsupported { got: usize },
-    InvalidDigitChar { pos: usize, ch: char },
-    InvalidDigits { got: usize },
-    InvalidWordCount { got: usize },
-    InvalidWordIndex { pos: usize, idx: u16 },
+    CompactWordCountUnsupported {
+        got: usize,
+    },
+    InvalidDigitChar {
+        pos: usize,
+        ch: char,
+    },
+    InvalidDigits {
+        got: usize,
+    },
+    InvalidWordCount {
+        got: usize,
+    },
+    InvalidWordIndex {
+        pos: usize,
+        idx: u16,
+    },
 }
 
 impl std::fmt::Display for SeedqrError {
@@ -191,7 +205,8 @@ pub fn encode_compact(phrase: &str) -> Result<String, SeedqrError> {
 pub fn decode_compact(input: &str) -> Result<String, SeedqrError> {
     let stripped: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
 
-    let bytes = hex::decode(&stripped).map_err(|e| SeedqrError::CompactInvalidHex(e.to_string()))?;
+    let bytes =
+        hex::decode(&stripped).map_err(|e| SeedqrError::CompactInvalidHex(e.to_string()))?;
 
     if !matches!(bytes.len(), 16 | 32) {
         return Err(SeedqrError::CompactByteCountUnsupported { got: bytes.len() });
@@ -228,19 +243,20 @@ mod tests {
     // v0.31.5 canonical BIP-39 18-word zero-entropy vector. 24 bytes of
     // zeros → last word "agent" = BIP-39 index 39.
     const PHRASE_18: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent";
-    const DIGITS_18: &str = "000000000000000000000000000000000000000000000000000000000000000000000039";
+    const DIGITS_18: &str =
+        "000000000000000000000000000000000000000000000000000000000000000000000039";
 
     // v0.31.5 canonical BIP-39 21-word zero-entropy vector. 28 bytes of
     // zeros → last word "admit" = BIP-39 index 29.
     const PHRASE_21: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit";
-    const DIGITS_21: &str = "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
+    const DIGITS_21: &str =
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000000029";
 
     // v0.32.0 CompactSeedQR vectors. Payload = raw BIP-39 entropy bytes
     // as hex. All-zero entropy: 12-word = 16 zero bytes (32 hex chars);
     // 24-word = 32 zero bytes (64 hex chars).
     const COMPACT_HEX_12: &str = "00000000000000000000000000000000";
-    const COMPACT_HEX_24: &str =
-        "0000000000000000000000000000000000000000000000000000000000000000";
+    const COMPACT_HEX_24: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
     #[test]
     fn encode_compact_12_word() {

@@ -245,12 +245,24 @@ fn cross_check_consistent_cards_silent_no_warning() {
 #[test]
 fn cross_check_mk1_origin_prefix_disagrees_warns() {
     let (mk1_49, _) = gen_bundle_json(&[
-        "bundle", "--network", "mainnet", "--template", "bip49", "--slot",
-        &format!("@0.phrase={TREZOR_24}"), "--json",
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip49",
+        "--slot",
+        &format!("@0.phrase={TREZOR_24}"),
+        "--json",
     ]);
     let (_, md1_84) = gen_bundle_json(&[
-        "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
-        &format!("@0.phrase={TREZOR_24}"), "--json",
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        &format!("@0.phrase={TREZOR_24}"),
+        "--json",
     ]);
     // single_sig_watch_only_args derives the @0.xpub slot from mk1_49; we pass
     // the bip49 mk1 + bip84 md1 so the supplied cards disagree on the prefix.
@@ -320,15 +332,27 @@ fn cross_check_mk1_parent_fingerprint_mismatch_warns() {
     // so the full-path parent-fingerprint check derives the parent from B's seed
     // and finds it ≠ mk1's (A's) parent_fingerprint → fires.
     let (mk1_a, _) = gen_bundle_json(&[
-        "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
-        &format!("@0.phrase={TREZOR_24}"), "--json",
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        &format!("@0.phrase={TREZOR_24}"),
+        "--json",
     ]);
     // Full bundle from seed B (same template) → extract ms1 + md1.
     let out_b = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--network", "mainnet", "--template", "bip84", "--slot",
-            &format!("@0.phrase={BIP39_TEST_2}"), "--json",
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &format!("@0.phrase={BIP39_TEST_2}"),
+            "--json",
         ])
         .assert()
         .success();
@@ -639,9 +663,7 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
         ))
         // cosigner[0] full-path check fires silently when ms1 + mk1 are consistent;
         // assert NO notice fires for cosigner[0].
-        .stderr(predicate::str::contains(
-            "notice: cosigner[0] mk1 parent_fingerprint",
-        ).not());
+        .stderr(predicate::str::contains("notice: cosigner[0] mk1 parent_fingerprint").not());
 }
 
 /// v0.25.1 cell — empty-string `--ms1 ""` sentinel restores pre-v0.24.0
@@ -734,12 +756,8 @@ fn watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice() {
         // And cosigner[1]'s full-path parent_fp check fires silently
         // (derived from cosigner[1]'s ms1 matches the claimed mk1[1]
         // parent_fingerprint).
-        .stderr(predicate::str::contains(
-            "warning: cosigner[1]",
-        ).not())
+        .stderr(predicate::str::contains("warning: cosigner[1]").not())
         // Belt-and-suspenders: cosigner[1] is non-empty so the empty-sentinel
         // NOTICE must NOT fire for it. Pins the `if v.is_empty()` guard.
-        .stderr(predicate::str::contains(
-            "notice: cosigner[1]",
-        ).not());
+        .stderr(predicate::str::contains("notice: cosigner[1]").not());
 }

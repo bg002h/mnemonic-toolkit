@@ -9,8 +9,8 @@
 //! Library-local error type tests + length-validation refusals also live here.
 
 use mnemonic_toolkit::seed_xor::{
-    seed_xor_combine, seed_xor_split, seed_xor_split_deterministic, SeedXorError,
-    MIN_SHARES, VALID_ENTROPY_LENGTHS,
+    seed_xor_combine, seed_xor_split, seed_xor_split_deterministic, SeedXorError, MIN_SHARES,
+    VALID_ENTROPY_LENGTHS,
 };
 use rand_core::{RngCore, SeedableRng};
 
@@ -55,7 +55,10 @@ fn split_refuses_invalid_entropy_length() {
     let bad = vec![0u8; 17]; // not in {16, 20, 24, 28, 32}
     let err = seed_xor_split(&bad, 2, &mut rng).unwrap_err();
     match err {
-        SeedXorError::BadEntropyLength { got, expected_one_of } => {
+        SeedXorError::BadEntropyLength {
+            got,
+            expected_one_of,
+        } => {
             assert_eq!(got, 17);
             assert_eq!(expected_one_of, &[16, 20, 24, 28, 32]);
         }
@@ -236,7 +239,11 @@ fn deterministic_split_is_reproducible() {
     let a = seed_xor_split_deterministic(&entropy, 4).unwrap();
     let b = seed_xor_split_deterministic(&entropy, 4).unwrap();
     for (sa, sb) in a.iter().zip(b.iter()) {
-        assert_eq!(sa.as_slice(), sb.as_slice(), "deterministic split must be reproducible");
+        assert_eq!(
+            sa.as_slice(),
+            sb.as_slice(),
+            "deterministic split must be reproducible"
+        );
     }
 }
 
@@ -251,8 +258,7 @@ fn returned_shares_are_zeroizing() {
     // drop-zero in safe Rust, but we CAN verify the type binds Zeroizing.
     let mut rng = DeterministicRng::new(42);
     let entropy = vec![0u8; 16];
-    let shares: Vec<zeroize::Zeroizing<Vec<u8>>> =
-        seed_xor_split(&entropy, 2, &mut rng).unwrap();
+    let shares: Vec<zeroize::Zeroizing<Vec<u8>>> = seed_xor_split(&entropy, 2, &mut rng).unwrap();
     // type-binding check — if we changed the return shape this would no longer compile
     let _ = shares;
 }

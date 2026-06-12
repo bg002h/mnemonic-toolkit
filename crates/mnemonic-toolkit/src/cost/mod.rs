@@ -28,8 +28,7 @@ pub mod translate;
 /// `MD_NUMS_TARGET`, `NUMS_XONLY_HEX`); the literal already appears at
 /// `wallet_export/bip388.rs::NUMS_XONLY_HEX`. We re-declare here to avoid
 /// a tight coupling to wallet_export internals.
-pub const NUMS_XONLY_HEX: &str =
-    "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+pub const NUMS_XONLY_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
 
 /// Subcommand-local errors. Wrapped by [`ToolkitError::CompareCost`] for the
 /// crate-wide error dispatch.

@@ -73,8 +73,13 @@ fn combine_inline_share_emits_argv_leakage_advisory_per_share() {
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     // 2 inline shares → 2 argv-leakage advisories (per-occurrence, NOT deduped)
-    let count = stderr.matches("warning: secret material on argv (--share phrase=)").count();
-    assert_eq!(count, 2, "must emit per-occurrence advisory; got {count} advisories in: {stderr}");
+    let count = stderr
+        .matches("warning: secret material on argv (--share phrase=)")
+        .count();
+    assert_eq!(
+        count, 2,
+        "must emit per-occurrence advisory; got {count} advisories in: {stderr}"
+    );
 }
 
 #[test]

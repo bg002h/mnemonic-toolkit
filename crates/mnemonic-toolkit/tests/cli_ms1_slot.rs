@@ -30,8 +30,11 @@ const WIRE_ENGLISH: u8 = 0;
 /// Encode raw entropy as an `entr` ms1 card (no intrinsic language).
 #[allow(dead_code)]
 fn entr_ms1(entropy: &[u8]) -> String {
-    ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy.to_vec()))
-        .expect("ms_codec::encode entr")
+    ms_codec::encode(
+        ms_codec::Tag::ENTR,
+        &ms_codec::Payload::Entr(entropy.to_vec()),
+    )
+    .expect("ms_codec::encode entr")
 }
 
 /// Encode entropy as a `mnem` ms1 card carrying `wire_lang`.
@@ -67,8 +70,7 @@ const VALID_XPUB: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26
 
 /// The canonical-mode conflict message (verbatim from
 /// `cmd::bundle.rs` / `slot_input.rs`).
-const CONFLICT_MSG: &str =
-    "has both secret-bearing input and watch-only input; pick one per slot.";
+const CONFLICT_MSG: &str = "has both secret-bearing input and watch-only input; pick one per slot.";
 
 /// `@0.ms1=<...> + @0.path=<...>` against a CANONICAL descriptor → exit 2,
 /// SlotInputViolation conflict. The gate fires on the subkey set; the ms1
@@ -245,7 +247,10 @@ fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
     let (_tag, payload) = ms_codec::decode(emitted).expect("emitted ms1 decodes");
     match payload {
         ms_codec::Payload::Mnem { language, .. } => {
-            assert_eq!(language, WIRE_JAPANESE, "emitted mnem card must carry the Japanese wire code");
+            assert_eq!(
+                language, WIRE_JAPANESE,
+                "emitted mnem card must carry the Japanese wire code"
+            );
         }
         other => panic!(
             "mnem-japanese ms1 must re-emit a mnem card (language-preserving); \
@@ -354,11 +359,14 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
     let (_t, payload) = ms_codec::decode(card).expect("emitted ms1 decodes");
     match payload {
         ms_codec::Payload::Mnem { language, .. } => {
-            assert_eq!(language, WIRE_JAPANESE, "descriptor mnem card must carry Japanese wire code");
+            assert_eq!(
+                language, WIRE_JAPANESE,
+                "descriptor mnem card must carry Japanese wire code"
+            );
         }
-        other => panic!(
-            "mnem-japanese ms1 descriptor cosigner must re-emit a mnem card; got {other:?}"
-        ),
+        other => {
+            panic!("mnem-japanese ms1 descriptor cosigner must re-emit a mnem card; got {other:?}")
+        }
     }
 }
 
@@ -372,7 +380,10 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
 
 /// Run a single-sig `bundle --template bip84 --json` and return its emitted
 /// (ms1, mk1-chunks-flattened, md1) card lists.
-fn gen_singlesig_bundle(extra_slot_args: &[&str], lang: Option<&str>) -> (Vec<String>, Vec<String>, Vec<String>) {
+fn gen_singlesig_bundle(
+    extra_slot_args: &[&str],
+    lang: Option<&str>,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut args: Vec<String> = vec![
         "bundle".into(),
         "--template".into(),
@@ -436,8 +447,7 @@ fn extract_cards(v: &serde_json::Value) -> (Vec<String>, Vec<String>, Vec<String
 fn verify_bundle_round_trip_entr_ms1() {
     let entropy = [0x05u8; 32];
     let ms1_in = entr_ms1(&entropy);
-    let (ms1, mk1, md1) =
-        gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
+    let (ms1, mk1, md1) = gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
@@ -476,8 +486,7 @@ fn verify_bundle_round_trip_entr_ms1() {
 fn verify_bundle_round_trip_mnem_japanese_ms1() {
     let entropy = [0x01u8; 16];
     let ms1_in = mnem_ms1(&entropy, WIRE_JAPANESE);
-    let (ms1, mk1, md1) =
-        gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
+    let (ms1, mk1, md1) = gen_singlesig_bundle(&["--slot", &format!("@0.ms1={ms1_in}")], None);
 
     // Precondition: the emitted card is a mnem card (else the round-trip would
     // trivially pass via entr collapse).
@@ -651,7 +660,7 @@ fn ms1_kofn_share_rejected_with_combine_prose() {
 fn ms1_mnem_english_emits_entr_card_documented_edge() {
     let entropy = [0x09u8; 16];
     let ms1 = mnem_ms1(&entropy, WIRE_ENGLISH); // Mnem{language:0}
-    // Precondition: the INPUT is a mnem-English card, not an entr card.
+                                                // Precondition: the INPUT is a mnem-English card, not an entr card.
     let (_t, in_payload) = ms_codec::decode(&ms1).expect("input decodes");
     assert!(
         matches!(in_payload, ms_codec::Payload::Mnem { language: 0, .. }),

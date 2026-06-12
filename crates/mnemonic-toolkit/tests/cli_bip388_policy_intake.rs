@@ -26,7 +26,11 @@ fn policy_singlesig() -> String {
 }
 
 fn run_ok(args: &[&str]) -> String {
-    let out = Command::cargo_bin("mnemonic").unwrap().args(args).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(args)
+        .assert()
+        .success();
     String::from_utf8(out.get_output().stdout.clone()).unwrap()
 }
 
@@ -42,28 +46,56 @@ fn run_ok(args: &[&str]) -> String {
 fn export_wallet_descriptor_bip388_policy_roundtrips() {
     let policy = policy_2of2();
     let concrete = run_ok(&[
-        "export-wallet", "--descriptor", &policy, "--format", "descriptor",
+        "export-wallet",
+        "--descriptor",
+        &policy,
+        "--format",
+        "descriptor",
     ]);
     let concrete_line = concrete.lines().next().unwrap();
-    assert!(concrete_line.starts_with("wsh(sortedmulti(2,"), "{concrete_line}");
-    assert!(concrete_line.contains("[704c7836/48'/0'/0'/2']"), "{concrete_line}");
-    assert!(concrete_line.contains("[97139860/48'/0'/0'/2']"), "{concrete_line}");
-    assert!(concrete_line.contains('#'), "must carry checksum: {concrete_line}");
+    assert!(
+        concrete_line.starts_with("wsh(sortedmulti(2,"),
+        "{concrete_line}"
+    );
+    assert!(
+        concrete_line.contains("[704c7836/48'/0'/0'/2']"),
+        "{concrete_line}"
+    );
+    assert!(
+        concrete_line.contains("[97139860/48'/0'/0'/2']"),
+        "{concrete_line}"
+    );
+    assert!(
+        concrete_line.contains('#'),
+        "must carry checksum: {concrete_line}"
+    );
 
     // Forward again → reproduces the original policy template + keys.
     let reemit = run_ok(&[
-        "export-wallet", "--descriptor", concrete_line, "--format", "bip388",
+        "export-wallet",
+        "--descriptor",
+        concrete_line,
+        "--format",
+        "bip388",
     ]);
     let v: serde_json::Value = serde_json::from_str(&reemit).unwrap();
     assert_eq!(
         v["description_template"].as_str().unwrap(),
         "wsh(sortedmulti(2,@0/**,@1/**))",
     );
-    let keys: Vec<&str> = v["keys_info"].as_array().unwrap().iter().map(|k| k.as_str().unwrap()).collect();
-    assert_eq!(keys, vec![
-        format!("[704c7836/48'/0'/0'/2']{A}"),
-        format!("[97139860/48'/0'/0'/2']{B}"),
-    ]);
+    let keys: Vec<&str> = v["keys_info"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        keys,
+        vec![
+            format!("[704c7836/48'/0'/0'/2']{A}"),
+            format!("[97139860/48'/0'/0'/2']{B}"),
+        ]
+    );
 }
 
 // ── v0.53.8: `bip388-policy-name-lossy-roundtrip` ────────────────────────────
@@ -73,9 +105,19 @@ fn export_wallet_descriptor_bip388_policy_roundtrips() {
 /// RED before the fix: the emit hardcoded `"imported-descriptor"`.
 #[test]
 fn export_wallet_bip388_one_step_preserves_policy_name() {
-    let out = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "bip388"]);
+    let out = run_ok(&[
+        "export-wallet",
+        "--descriptor",
+        &policy_2of2(),
+        "--format",
+        "bip388",
+    ]);
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(v["name"].as_str().unwrap(), "test-vault", "policy name must round-trip: {out}");
+    assert_eq!(
+        v["name"].as_str().unwrap(),
+        "test-vault",
+        "policy name must round-trip: {out}"
+    );
 }
 
 /// T2-companion — an UNNAMED descriptor (concrete, not a policy) still emits the
@@ -84,9 +126,21 @@ fn export_wallet_bip388_one_step_preserves_policy_name() {
 fn export_wallet_bip388_unnamed_descriptor_uses_default_name() {
     // Expand the policy to a concrete descriptor first (loses policy context),
     // then emit bip388 → default name.
-    let concrete = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "descriptor"]);
+    let concrete = run_ok(&[
+        "export-wallet",
+        "--descriptor",
+        &policy_2of2(),
+        "--format",
+        "descriptor",
+    ]);
     let concrete_line = concrete.lines().next().unwrap();
-    let out = run_ok(&["export-wallet", "--descriptor", concrete_line, "--format", "bip388"]);
+    let out = run_ok(&[
+        "export-wallet",
+        "--descriptor",
+        concrete_line,
+        "--format",
+        "bip388",
+    ]);
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["name"].as_str().unwrap(), "imported-descriptor");
 }
@@ -95,8 +149,13 @@ fn export_wallet_bip388_unnamed_descriptor_uses_default_name() {
 #[test]
 fn export_wallet_bip388_wallet_name_overrides_policy_name() {
     let out = run_ok(&[
-        "export-wallet", "--descriptor", &policy_2of2(),
-        "--wallet-name", "Override", "--format", "bip388",
+        "export-wallet",
+        "--descriptor",
+        &policy_2of2(),
+        "--wallet-name",
+        "Override",
+        "--format",
+        "bip388",
     ]);
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["name"].as_str().unwrap(), "Override");
@@ -107,9 +166,19 @@ fn export_wallet_bip388_wallet_name_overrides_policy_name() {
 /// WalletName, since the default "imported-descriptor" is non-default-rejected).
 #[test]
 fn export_wallet_bip388_named_policy_unblocks_specter() {
-    let out = run_ok(&["export-wallet", "--descriptor", &policy_2of2(), "--format", "specter"]);
+    let out = run_ok(&[
+        "export-wallet",
+        "--descriptor",
+        &policy_2of2(),
+        "--format",
+        "specter",
+    ]);
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(v["label"].as_str().unwrap(), "test-vault", "Specter label must be the lifted policy name: {out}");
+    assert_eq!(
+        v["label"].as_str().unwrap(),
+        "test-vault",
+        "Specter label must be the lifted policy name: {out}"
+    );
 }
 
 /// Policy → `--format bitcoin-core` emits a 2-entry (receive+change) watch-only
@@ -117,7 +186,11 @@ fn export_wallet_bip388_named_policy_unblocks_specter() {
 #[test]
 fn export_wallet_descriptor_bip388_policy_to_bitcoin_core() {
     let out = run_ok(&[
-        "export-wallet", "--descriptor", &policy_2of2(), "--format", "bitcoin-core",
+        "export-wallet",
+        "--descriptor",
+        &policy_2of2(),
+        "--format",
+        "bitcoin-core",
     ]);
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let arr = v.as_array().expect("bitcoin-core emits a JSON array");
@@ -135,11 +208,20 @@ fn export_wallet_descriptor_bip388_policy_to_bitcoin_core() {
 fn export_wallet_raw_policy_not_refused_by_at_n_guard() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["export-wallet", "--descriptor", &policy_2of2(), "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &policy_2of2(),
+            "--format",
+            "descriptor",
+        ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(!stderr.contains("accepts only concrete descriptors"), "stderr: {stderr}");
+    assert!(
+        !stderr.contains("accepts only concrete descriptors"),
+        "stderr: {stderr}"
+    );
 }
 
 /// Malformed policy: `description_template` references `@N` beyond `keys_info` →
@@ -151,7 +233,13 @@ fn export_wallet_bip388_policy_at_n_beyond_keys_info_refused() {
     );
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["export-wallet", "--descriptor", &bad, "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &bad,
+            "--format",
+            "descriptor",
+        ])
         .assert()
         .failure()
         .stderr(predicates::str::contains("@N beyond keys_info"));
@@ -161,7 +249,13 @@ fn export_wallet_bip388_policy_at_n_beyond_keys_info_refused() {
 /// one mk1 per cosigner, one md1. (2-of-2 → MultisigWatchOnly.)
 #[test]
 fn bundle_descriptor_bip388_policy_watch_only() {
-    let out = run_ok(&["bundle", "--descriptor", &policy_2of2(), "--network", "mainnet"]);
+    let out = run_ok(&[
+        "bundle",
+        "--descriptor",
+        &policy_2of2(),
+        "--network",
+        "mainnet",
+    ]);
     assert!(out.contains("# ms1 (omitted"), "ms1 omitted: {out}");
     assert!(out.contains("# mk1[0]"), "mk1[0]: {out}");
     assert!(out.contains("# mk1[1]"), "mk1[1]: {out}");
@@ -173,10 +267,19 @@ fn bundle_descriptor_bip388_policy_watch_only() {
 /// secret). Pins the M-1 single-key shape.
 #[test]
 fn bundle_descriptor_bip388_singlesig_policy_watch_only() {
-    let out = run_ok(&["bundle", "--descriptor", &policy_singlesig(), "--network", "mainnet"]);
+    let out = run_ok(&[
+        "bundle",
+        "--descriptor",
+        &policy_singlesig(),
+        "--network",
+        "mainnet",
+    ]);
     // Single-sig labels the card `# mk1` (no `[N]` index), unlike multisig.
     assert!(out.contains("# mk1 "), "single-sig mk1 card: {out}");
-    assert!(!out.contains("# mk1["), "no indexed cards in single-sig: {out}");
+    assert!(
+        !out.contains("# mk1["),
+        "no indexed cards in single-sig: {out}"
+    );
     assert!(out.contains("# md1"), "md1 card: {out}");
 }
 
@@ -185,9 +288,8 @@ fn bundle_descriptor_bip388_singlesig_policy_watch_only() {
 /// `[fp/path]` origin). export-wallet accepts the same input (covered above).
 #[test]
 fn bundle_descriptor_bip388_bare_key_policy_refused() {
-    let bare = format!(
-        r#"{{"name":"x","description_template":"wpkh(@0/**)","keys_info":["{A}"]}}"#
-    );
+    let bare =
+        format!(r#"{{"name":"x","description_template":"wpkh(@0/**)","keys_info":["{A}"]}}"#);
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["bundle", "--descriptor", &bare, "--network", "mainnet"])

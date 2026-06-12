@@ -20,10 +20,14 @@ use predicates::prelude::*;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_CHUNK0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_CHUNK1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
-const VALID_MD1_CHUNK0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
-const VALID_MD1_CHUNK1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
-const VALID_MD1_CHUNK2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+const VALID_MK1_CHUNK1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MD1_CHUNK0: &str =
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const VALID_MD1_CHUNK1: &str =
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const VALID_MD1_CHUNK2: &str =
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
 
 // `flip_at` lived here while cell 18a (Phase 4 placeholder) was active.
 // Phase 5 moved the corrupted-input cell to `cli_auto_repair.rs`, so this
@@ -44,9 +48,13 @@ fn cell_15_ms1_text_form_structure_secret_suppressed_by_default() {
         .stdout(predicate::str::contains("byte_length: 16"))
         .stdout(predicate::str::contains("bit_strength: 128"))
         // Without --reveal-secret, hex is replaced with a hint.
-        .stdout(predicate::str::contains("<suppressed; pass --reveal-secret"))
+        .stdout(predicate::str::contains(
+            "<suppressed; pass --reveal-secret",
+        ))
         // Private-key-material advisory fires whenever ms1 hits stdout.
-        .stderr(predicate::str::contains("warning: stdout carries private key material (can spend)"));
+        .stderr(predicate::str::contains(
+            "warning: stdout carries private key material (can spend)",
+        ));
 }
 
 /// Cell 16: mk1 + md1 happy-paths — verify per-kind text structure
@@ -102,9 +110,7 @@ fn cell_17_reveal_secret_gate_on_ms1_entropy_hex() {
         .assert()
         .code(0)
         .stdout(predicate::str::contains("entropy_hex: <suppressed"))
-        .stdout(
-            predicate::str::contains("entropy_hex: 00000000000000000000000000000000").not(),
-        );
+        .stdout(predicate::str::contains("entropy_hex: 00000000000000000000000000000000").not());
 
     // With --reveal-secret: hex appears.
     Command::cargo_bin("mnemonic")
@@ -238,12 +244,16 @@ fn inspect_mixed_inline_flag_and_positional_ms1_fire_per_occurrence() {
         .clone();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert_eq!(
-        stderr.matches("warning: secret material on argv (--ms1)").count(),
+        stderr
+            .matches("warning: secret material on argv (--ms1)")
+            .count(),
         1,
         "flag occurrence fires exactly once; stderr: {stderr:?}"
     );
     assert_eq!(
-        stderr.matches("warning: secret material on argv (positional ms1)").count(),
+        stderr
+            .matches("warning: secret material on argv (positional ms1)")
+            .count(),
         1,
         "positional occurrence fires exactly once; stderr: {stderr:?}"
     );

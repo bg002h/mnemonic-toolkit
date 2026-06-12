@@ -249,14 +249,10 @@ fn parse_key_field(line: &str) -> Result<KeyField, ToolkitError> {
                 ),
             })?;
 
-    let fingerprint = Fingerprint::from_str(fp_str).map_err(|e| {
-        ToolkitError::BsmsRound1Malformed {
-            reason: format!(
-                "line 3 KEY: malformed fingerprint {:?}: {}",
-                fp_str, e
-            ),
-        }
-    })?;
+    let fingerprint =
+        Fingerprint::from_str(fp_str).map_err(|e| ToolkitError::BsmsRound1Malformed {
+            reason: format!("line 3 KEY: malformed fingerprint {:?}: {}", fp_str, e),
+        })?;
 
     let derivation_path = if path_str.is_empty() {
         DerivationPath::master()
@@ -270,7 +266,10 @@ fn parse_key_field(line: &str) -> Result<KeyField, ToolkitError> {
             format!("m/{}", path_str)
         };
         DerivationPath::from_str(&with_m).map_err(|e| ToolkitError::BsmsRound1Malformed {
-            reason: format!("line 3 KEY: malformed derivation path {:?}: {}", path_str, e),
+            reason: format!(
+                "line 3 KEY: malformed derivation path {:?}: {}",
+                path_str, e
+            ),
         })?
     };
 
@@ -288,11 +287,10 @@ fn parse_key_field(line: &str) -> Result<KeyField, ToolkitError> {
         let bytes = hex::decode(key_str).map_err(|e| ToolkitError::BsmsRound1Malformed {
             reason: format!("line 3 KEY: malformed pubkey hex: {}", e),
         })?;
-        let pubkey = PublicKey::from_slice(&bytes).map_err(|e| {
-            ToolkitError::BsmsRound1Malformed {
+        let pubkey =
+            PublicKey::from_slice(&bytes).map_err(|e| ToolkitError::BsmsRound1Malformed {
                 reason: format!("line 3 KEY: invalid secp256k1 pubkey: {}", e),
-            }
-        })?;
+            })?;
         KeyField::RawPubkey {
             fingerprint,
             path: derivation_path,
@@ -351,7 +349,10 @@ mod tests {
         let body = signed_body(&r);
         assert!(body.starts_with("BSMS 1.0\n00\n[1cf0bf7e/48'/0'/0'/2']xpub6FL8F"));
         assert!(body.ends_with("Signer 1 key"));
-        assert!(!body.ends_with('\n'), "signed body must not have trailing newline");
+        assert!(
+            !body.ends_with('\n'),
+            "signed body must not have trailing newline"
+        );
     }
 
     #[test]

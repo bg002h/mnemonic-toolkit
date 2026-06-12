@@ -198,7 +198,10 @@ mod tests {
         for c in 0u8..10 {
             let lang = wire_code_to_bip39(c).unwrap();
             let back = bip39_to_wire_code(lang);
-            assert_eq!(back, c, "code {c}: bip39_to_wire_code(wire_code_to_bip39({c})) = {back}");
+            assert_eq!(
+                back, c,
+                "code {c}: bip39_to_wire_code(wire_code_to_bip39({c})) = {back}"
+            );
         }
     }
 
@@ -223,7 +226,10 @@ mod tests {
         for c in 0u8..10 {
             let cli = wire_code_to_cli(c).unwrap();
             let back = cli_language_to_wire_code(cli);
-            assert_eq!(back, c, "code {c}: round-trip failed via CliLanguage::{cli:?}");
+            assert_eq!(
+                back, c,
+                "code {c}: round-trip failed via CliLanguage::{cli:?}"
+            );
         }
     }
 
@@ -244,7 +250,8 @@ mod tests {
         ];
         for (c, &name) in expected.iter().enumerate() {
             assert_eq!(
-                ms_codec::consts::MNEM_LANGUAGE_NAMES[c], name,
+                ms_codec::consts::MNEM_LANGUAGE_NAMES[c],
+                name,
                 "MNEM_LANGUAGE_NAMES[{c}] drifted"
             );
         }
@@ -296,8 +303,7 @@ mod tests {
 
     #[test]
     fn advisory_uses_kebab_name() {
-        let m =
-            non_english_seed_advisory(CliLanguage::SimplifiedChinese, "raw entropy").unwrap();
+        let m = non_english_seed_advisory(CliLanguage::SimplifiedChinese, "raw entropy").unwrap();
         assert!(m.contains("simplified-chinese"), "{m}");
     }
 

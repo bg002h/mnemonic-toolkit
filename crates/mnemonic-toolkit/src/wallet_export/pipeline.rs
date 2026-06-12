@@ -25,8 +25,9 @@ pub(crate) fn build_descriptor_string(
 ) -> Result<String, ToolkitError> {
     let s =
         build_descriptor_string_inner(template, slots, k, network, account, taproot_internal_key)?;
-    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&s)
-        .map_err(|e| ToolkitError::DescriptorParse(format!("export-wallet descriptor parse: {e}")))?;
+    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&s).map_err(|e| {
+        ToolkitError::DescriptorParse(format!("export-wallet descriptor parse: {e}"))
+    })?;
     Ok(parsed.to_string())
 }
 
@@ -55,7 +56,9 @@ pub(super) fn template_origin_path_no_m(
     account: u32,
 ) -> String {
     let s = template.origin_path_str(network, account);
-    s.trim_start_matches("m/").trim_start_matches('m').to_string()
+    s.trim_start_matches("m/")
+        .trim_start_matches('m')
+        .to_string()
 }
 
 fn build_descriptor_string_inner(
@@ -115,8 +118,7 @@ fn build_tr_multi_a_descriptor(
 ) -> Result<String, ToolkitError> {
     let internal = taproot_internal_key.ok_or_else(|| {
         ToolkitError::BadInput(
-            "internal: tr-multi-a / tr-sortedmulti-a reached without --taproot-internal-key"
-                .into(),
+            "internal: tr-multi-a / tr-sortedmulti-a reached without --taproot-internal-key".into(),
         )
     })?;
     let leaf_op = match template {
@@ -127,10 +129,7 @@ fn build_tr_multi_a_descriptor(
     Ok(match internal {
         TaprootInternalKey::Nums => {
             // NUMS internal key: all cosigners stay in the multi_a leaf.
-            format!(
-                "tr({NUMS_XONLY_HEX},{leaf_op}({k},{}))",
-                key_segs.join(","),
-            )
+            format!("tr({NUMS_XONLY_HEX},{leaf_op}({k},{}))", key_segs.join(","),)
         }
         TaprootInternalKey::Cosigner(idx) => {
             // Cosigner N is the key-path key; remaining N-1 cosigners are
@@ -265,13 +264,19 @@ mod tests {
             "pathless slot must use the path-bearing fallback, not bare [fp]"
         );
         // also accepts an `m/`-prefixed fallback
-        assert_eq!(key_origin_str(&pathless, "m/84'/0'/0'"), "[deadbeef/84'/0'/0']");
+        assert_eq!(
+            key_origin_str(&pathless, "m/84'/0'/0'"),
+            "[deadbeef/84'/0'/0']"
+        );
     }
 
     // A path-bearing slot renders from its typed path (ignores the fallback).
     #[test]
     fn key_origin_str_path_bearing_slot_uses_bracketed_origin() {
         let slot = slot_with_path(DerivationPath::from_str("48'/0'/0'/2'").unwrap());
-        assert_eq!(key_origin_str(&slot, "84'/0'/0'"), "[deadbeef/48'/0'/0'/2']");
+        assert_eq!(
+            key_origin_str(&slot, "84'/0'/0'"),
+            "[deadbeef/48'/0'/0'/2']"
+        );
     }
 }

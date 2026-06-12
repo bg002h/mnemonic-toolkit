@@ -22,12 +22,10 @@ const COSIGNER_C_FP: &str = TREZOR_24_MASTER_FP;
 
 const FIXTURE_SINGLE_WPKH: &str = "tests/export_wallet/sparrow_single_wpkh.json";
 const FIXTURE_SINGLE_TR: &str = "tests/export_wallet/sparrow_single_tr.json";
-const FIXTURE_MULTI_2OF3_WSH: &str =
-    "tests/export_wallet/sparrow_multi_2of3_wsh_sortedmulti.json";
+const FIXTURE_MULTI_2OF3_WSH: &str = "tests/export_wallet/sparrow_multi_2of3_wsh_sortedmulti.json";
 const FIXTURE_REFUSAL_MISSING_THRESHOLD: &str =
     "tests/export_wallet/sparrow_missing_threshold_refusal.stderr";
-const FIXTURE_TR_MULTI_A_NUMS_2OF3: &str =
-    "tests/export_wallet/sparrow_tr_multi_a_nums_2of3.json";
+const FIXTURE_TR_MULTI_A_NUMS_2OF3: &str = "tests/export_wallet/sparrow_tr_multi_a_nums_2of3.json";
 
 /// SPEC §7 cell 1 — `--format sparrow --template bip84 --network mainnet`
 /// emits the canonical Sparrow wallet JSON for the BIP-84 mainnet account.

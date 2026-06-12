@@ -10,8 +10,7 @@ use tempfile::NamedTempFile;
 const ABANDON_11_PARTIAL: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
 
-const BEEF_11_PARTIAL: &str =
-    "beef beef beef beef beef beef beef beef beef beef beef";
+const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef beef";
 
 fn invoke_with_json_out(partial: &str, language: &str) -> (String, Value, i32) {
     let f = NamedTempFile::new().unwrap();
@@ -75,7 +74,8 @@ fn envelope_fields_complete_n12() {
 fn envelope_language_is_kebab_case_for_multiword() {
     // Construct a 12-word Spanish phrase + drop last to test the
     // `simplified-chinese`-style kebab-case rendering.
-    let m = bip39::Mnemonic::from_entropy_in(bip39::Language::SimplifiedChinese, &[0u8; 16]).unwrap();
+    let m =
+        bip39::Mnemonic::from_entropy_in(bip39::Language::SimplifiedChinese, &[0u8; 16]).unwrap();
     let words: Vec<&str> = m.words().collect();
     let partial: String = words[..11].join(" ");
     let (_, parsed, exit) = invoke_with_json_out(&partial, "simplifiedchinese");
@@ -115,7 +115,11 @@ fn json_out_does_not_suppress_plain_stdout() {
         .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert_eq!(stdout.lines().count(), 128, "plain stdout still emits 128 lines");
+    assert_eq!(
+        stdout.lines().count(),
+        128,
+        "plain stdout still emits 128 lines"
+    );
 }
 
 /// SHA-pin: byte-equal canonical envelope for `abandon × 11` anchor.

@@ -64,8 +64,7 @@ fn combine_refuses_two_stdin_shares() {
     assert!(!out.status.success());
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        stderr.contains("at most one --share value may be `-`")
-            || stderr.contains("single stdin"),
+        stderr.contains("at most one --share value may be `-`") || stderr.contains("single stdin"),
         "must refuse multi-stdin; got: {stderr}",
     );
 }
@@ -107,7 +106,10 @@ fn split_stdin_tolerates_trailing_newline() {
         .write_stdin(with_nl)
         .output()
         .unwrap();
-    assert!(out.status.success(), "trailing newline must not break parse");
+    assert!(
+        out.status.success(),
+        "trailing newline must not break parse"
+    );
 }
 
 #[test]

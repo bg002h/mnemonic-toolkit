@@ -52,7 +52,7 @@ const FP: &str = "73c5da0a";
 // depth-3 (single-sig contexts)
 const XPUB3_84: &str = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"; // m/84'/0'/0'
 const XPUB3_44: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj"; // m/44'/0'/0'
-// depth-4 (wsh / multisig contexts), two DISTINCT keys (different accounts)
+                                                                                                                                          // depth-4 (wsh / multisig contexts), two DISTINCT keys (different accounts)
 const XPUB4_0: &str = "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"; // m/48'/0'/0'/2'
 const XPUB4_1: &str = "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"; // m/48'/0'/1'/2'
 
@@ -145,11 +145,7 @@ fn inspect_ids(md: &str, chunks: &[String]) -> Option<Ids> {
         return None;
     }
     let v: Value = serde_json::from_str(&stdout).ok()?;
-    let policy_id = v
-        .get("wallet_policy_id")?
-        .get("hex")?
-        .as_str()?
-        .to_string();
+    let policy_id = v.get("wallet_policy_id")?.get("hex")?.as_str()?.to_string();
     let template_id = v
         .get("wallet_descriptor_template_id")?
         .get("hex")?

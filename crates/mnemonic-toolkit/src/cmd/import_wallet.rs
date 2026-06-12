@@ -47,9 +47,12 @@
 //!   - When `--json` is set: round-trip diff goes ONLY in the envelope;
 //!     stderr is silent for the diff (SPEC §7.4).
 
+use crate::cmd::convert::read_stdin_passphrase;
 use crate::error::ToolkitError;
 use crate::format::{BundleJson, CosignerEntry, MultisigInfo};
 use crate::language::CliLanguage;
+use crate::network::CliNetwork;
+use crate::secret_advisory::secret_in_argv_warning;
 use crate::slot_input::{SlotInput, SlotSubkey};
 use crate::synthesize::synthesize_descriptor;
 use crate::wallet_import::{
@@ -73,11 +76,10 @@ use crate::wallet_import::{
     sniff::{sniff_format, SniffOutcome},
     sparrow::SparrowParser,
     specter::SpecterParser,
-    ParsedImport, SelectDescriptor, WalletFormatParser,
+    ParsedImport,
+    SelectDescriptor,
+    WalletFormatParser,
 };
-use crate::cmd::convert::read_stdin_passphrase;
-use crate::network::CliNetwork;
-use crate::secret_advisory::secret_in_argv_warning;
 use clap::{ArgGroup, Args};
 use mnemonic_toolkit::electrum_crypto::{
     detect_storage_magic, ecies_decrypt_storage, EciesDecryptError, ElectrumStorageMagic,
@@ -285,7 +287,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     // rebind below, so an `@env:VAR` value (NOT an argv leak, nor the `""`
     // watch-only sentinel) is correctly skipped. Fire before any validation /
     // early-return — the argv leak already happened at process exec.
-    if args.ms1.iter().any(|v| !v.is_empty() && !v.starts_with("@env:")) {
+    if args
+        .ms1
+        .iter()
+        .any(|v| !v.is_empty() && !v.starts_with("@env:"))
+    {
         secret_in_argv_warning(stderr, "--ms1", "@env:VAR");
     }
     for s in &args.slot {
@@ -443,14 +449,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             ));
         }
         Some(ElectrumStorageMagic::Bie1) => {
-            let password = resolve_import_decrypt_password(args, stdin, stderr)?.ok_or_else(|| {
-                ToolkitError::BadInput(
+            let password =
+                resolve_import_decrypt_password(args, stdin, stderr)?.ok_or_else(|| {
+                    ToolkitError::BadInput(
                     "import-wallet: electrum: BIE1 storage-encrypted wallet detected; supply the \
                      wallet password via --decrypt-password, --decrypt-password-file, or \
                      --decrypt-password-stdin"
                         .to_string(),
                 )
-            })?;
+                })?;
             let _pin_pw = mnemonic_toolkit::mlock::pin_pages_for(password.as_bytes());
             // Detection already confirmed the trimmed UTF-8 base64 form.
             let trimmed = std::str::from_utf8(&blob)
@@ -484,7 +491,11 @@ pub fn run<R: Read, W: Write, E: Write>(
                 // An inline --decrypt-password still leaked via argv even though
                 // it goes unused — warn about the leak that already happened.
                 if args.decrypt_password.is_some() {
-                    secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
+                    secret_in_argv_warning(
+                        stderr,
+                        "--decrypt-password ",
+                        "--decrypt-password-stdin",
+                    );
                 }
                 writeln!(
                     stderr,
@@ -1047,16 +1058,15 @@ electrum|jade|sparrow|specter>"
 electrum|jade|sparrow|specter>"
                         .to_string(),
                 ));
-            }
-            // v0.28.0 Phase P5A close: all 8 `SniffOutcome` parser variants
-            // (BitcoinCore / Bsms / Coldcard / ColdcardMultisig / Electrum /
-            // Jade / Sparrow / Specter) plus the 2 aggregate verdicts
-            // (Ambiguous / NoMatch) now have explicit arms. The P0D
-            // `other => unreachable!()` pre-stub catch-all was removed at
-            // P5A because the match is now exhaustive — Rust's
-            // `unreachable_patterns` lint flags any remaining catch-all
-            // as dead code. The match exhaustiveness invariant is
-            // statically enforced by the compiler.
+            } // v0.28.0 Phase P5A close: all 8 `SniffOutcome` parser variants
+              // (BitcoinCore / Bsms / Coldcard / ColdcardMultisig / Electrum /
+              // Jade / Sparrow / Specter) plus the 2 aggregate verdicts
+              // (Ambiguous / NoMatch) now have explicit arms. The P0D
+              // `other => unreachable!()` pre-stub catch-all was removed at
+              // P5A because the match is now exhaustive — Rust's
+              // `unreachable_patterns` lint flags any remaining catch-all
+              // as dead code. The match exhaustiveness invariant is
+              // statically enforced by the compiler.
         },
     };
 
@@ -1168,8 +1178,11 @@ electrum|jade|sparrow|specter>"
     // Testnet/coin-type-1). Closes `wallet-import-signet-regtest-disambiguation`.
     if let Some(override_net) = args.network {
         if let Some(first) = parsed.first() {
-            let parsed_coin_type: u32 =
-                if first.network == bitcoin::Network::Bitcoin { 0 } else { 1 };
+            let parsed_coin_type: u32 = if first.network == bitcoin::Network::Bitcoin {
+                0
+            } else {
+                1
+            };
             if override_net.coin_type() != parsed_coin_type {
                 return Err(ToolkitError::ImportWalletNetworkClassMismatch {
                     requested: override_net.human_name().to_string(),
@@ -1291,7 +1304,11 @@ electrum|jade|sparrow|specter>"
 
     // Output-class advisory: PrivateKeyMaterial when any cosigner carries
     // entropy (seed overlay supplied), WatchOnly otherwise.
-    let cls = if parsed.iter().flat_map(|p| &p.cosigners).any(|c| c.entropy.is_some()) {
+    let cls = if parsed
+        .iter()
+        .flat_map(|p| &p.cosigners)
+        .any(|c| c.entropy.is_some())
+    {
         crate::secret_advisory::OutputClass::PrivateKeyMaterial
     } else {
         crate::secret_advisory::OutputClass::WatchOnly
@@ -1410,7 +1427,8 @@ fn emit_json_envelope<W: Write, E: Write>(
         // uniformly.
         // import-wallet always re-emits English entr cards (no phrase input here);
         // run_language=English is correct and preserves pre-fix behavior.
-        let bundle = synthesize_descriptor(&p.descriptor, &p.cosigners, false, bip39::Language::English)?;
+        let bundle =
+            synthesize_descriptor(&p.descriptor, &p.cosigners, false, bip39::Language::English)?;
 
         // Per §3.2.1 row `template`: descriptor-mode → `None`.
         // Per §3.2.1 row `descriptor`: source from `original_descriptor`
@@ -1434,11 +1452,7 @@ fn emit_json_envelope<W: Write, E: Write>(
         // fingerprint+path (matches `cmd/bundle.rs`). The foreign-format import
         // regex always captures ≥1 path component, so these are never empty
         // (SPEC_path_raw_bracketed_bare_unification.md §5 C11 reachability).
-        let paths: Vec<String> = p
-            .cosigners
-            .iter()
-            .map(|c| c.origin_path_bare())
-            .collect();
+        let paths: Vec<String> = p.cosigners.iter().map(|c| c.origin_path_bare()).collect();
         let (origin_path, origin_paths) = if n == 1 {
             (paths.first().cloned(), None)
         } else {
@@ -1511,8 +1525,9 @@ fn emit_json_envelope<W: Write, E: Write>(
             multisig,
             privacy_preserving: false,
         };
-        let bundle_value = serde_json::to_value(&bundle_json)
-            .map_err(|e| ToolkitError::BadInput(format!("import-wallet --json bundle serialize: {e}")))?;
+        let bundle_value = serde_json::to_value(&bundle_json).map_err(|e| {
+            ToolkitError::BadInput(format!("import-wallet --json bundle serialize: {e}"))
+        })?;
 
         // Round-trip per SPEC §7.4 + §7.3 — preserved from v0.26.0 wire
         // shape; v0.27.1 Phase 1 I7 fold adds the `error: String` field to
@@ -1986,7 +2001,11 @@ fn emit_json_envelope<W: Write, E: Write>(
 fn path_family_from_paths(paths: &[String]) -> (&'static str, Option<String>) {
     fn extract_purpose(p: &str) -> &str {
         let trimmed = p.trim_start_matches("m/").trim_start_matches('m');
-        trimmed.trim_start_matches('/').split('/').next().unwrap_or("")
+        trimmed
+            .trim_start_matches('/')
+            .split('/')
+            .next()
+            .unwrap_or("")
     }
     let purposes: Vec<&str> = paths.iter().map(|p| extract_purpose(p)).collect();
     if purposes.is_empty() {
@@ -2224,10 +2243,7 @@ fn map_ecies_storage_error(e: EciesDecryptError) -> ToolkitError {
 /// (`use_encryption:false`) can carry a seed, and the BIE1 decrypt path
 /// (`run()`) writes decrypted seed/xprv-bearing JSON into this buffer — the
 /// `Zeroizing` wrapper wipes it regardless of import format.
-fn read_blob<R: Read>(
-    path: &PathBuf,
-    stdin: &mut R,
-) -> Result<Zeroizing<Vec<u8>>, ToolkitError> {
+fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Zeroizing<Vec<u8>>, ToolkitError> {
     if path.as_os_str() == "-" {
         let mut buf = Zeroizing::new(Vec::new());
         stdin.read_to_end(&mut buf).map_err(ToolkitError::Io)?;
@@ -2377,7 +2393,9 @@ enum Round1VerificationStatus {
     /// Lenient-default failure: `reason` is the BIP-322 verifier's
     /// rationale string. Strict mode surfaces this as a fatal
     /// `BsmsSignatureMismatch` before this enum is constructed.
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 /// Read + parse + verify each `--bsms-round1 <FILE>` entry. Lenient default:
@@ -2537,8 +2555,12 @@ fn emit_round1_only_summary<W: Write>(
     stdout: &mut W,
     verifications: &[Round1Verification],
 ) -> Result<(), ToolkitError> {
-    writeln!(stdout, "bsms-round1: {} record(s) processed", verifications.len())
-        .map_err(ToolkitError::Io)?;
+    writeln!(
+        stdout,
+        "bsms-round1: {} record(s) processed",
+        verifications.len()
+    )
+    .map_err(ToolkitError::Io)?;
     for v in verifications {
         let verified = matches!(v.status, Round1VerificationStatus::Verified);
         writeln!(
@@ -2605,7 +2627,10 @@ mod tests {
         // Bytes that fail JSON parse → `canonicalize_bitcoin_core` returns Err.
         let blob = b"not valid json at all {{{";
         let res = emit_roundtrip_stderr_warning(&mut stderr, blob, "bitcoin-core");
-        assert!(res.is_ok(), "lenient mode must succeed even on canonicalize Err");
+        assert!(
+            res.is_ok(),
+            "lenient mode must succeed even on canonicalize Err"
+        );
         let stderr_str = String::from_utf8(stderr).unwrap();
         assert!(
             stderr_str.contains("warning: import-wallet: roundtrip check skipped: canonicalize_bitcoin_core failed:"),
@@ -2657,9 +2682,14 @@ mod tests {
         // non-UTF-8 arm is structurally guarded by the canonicalize-first
         // ordering, and the assertion below pins the canonicalize-Err arm
         // template against drift.
-        let non_utf8: &[u8] = &[0xff, 0xfe, 0xfd, b' ', b'n', b'o', b't', b' ', b'j', b's', b'o', b'n'];
+        let non_utf8: &[u8] = &[
+            0xff, 0xfe, 0xfd, b' ', b'n', b'o', b't', b' ', b'j', b's', b'o', b'n',
+        ];
         let res = emit_roundtrip_stderr_warning(&mut stderr, non_utf8, "bitcoin-core");
-        assert!(res.is_ok(), "lenient mode succeeds even on non-UTF-8 / non-JSON");
+        assert!(
+            res.is_ok(),
+            "lenient mode succeeds even on non-UTF-8 / non-JSON"
+        );
         let stderr_str = String::from_utf8_lossy(&stderr).into_owned();
         // canonicalize_bitcoin_core's serde_json::from_slice rejects the
         // non-UTF-8 prefix first, so the canonicalize-Err warning fires.
@@ -2690,7 +2720,10 @@ mod tests {
             "error": err_msg,
         });
         assert_eq!(envelope["status"], "canonicalize_failed");
-        assert_eq!(envelope["error"], "canonicalize_bitcoin_core: miniscript: unexpected token");
+        assert_eq!(
+            envelope["error"],
+            "canonicalize_bitcoin_core: miniscript: unexpected token"
+        );
         assert_eq!(envelope["byte_exact"], false);
         assert_eq!(envelope["semantic_match"], false);
         assert!(envelope["diff"].is_null());
@@ -2702,6 +2735,9 @@ mod tests {
             "diff": serde_json::Value::Null,
             "status": "ok",
         });
-        assert!(ok_envelope.get("error").is_none(), "ok status must not carry error field");
+        assert!(
+            ok_envelope.get("error").is_none(),
+            "ok status must not carry error field"
+        );
     }
 }

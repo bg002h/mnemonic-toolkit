@@ -14,7 +14,10 @@ pub enum ToolkitError {
     /// `i` and `j` are the colliding slot indices (i < j) under
     /// `(xpub.to_string(), path)` typed-`DerivationPath` equality per §4.11.b
     /// (`h`/`'`-notation folds; mirrors the `cmd::bundle` twin comment).
-    Bip388Distinctness { i: u8, j: u8 },
+    Bip388Distinctness {
+        i: u8,
+        j: u8,
+    },
     /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
     /// Re-emitted from `check_key_vector_distinctness` post-binding under
     /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
@@ -27,13 +30,17 @@ pub enum ToolkitError {
     /// ordering), the MAC is recomputed over decrypted plaintext and
     /// compared to the received MAC (first 32 bytes of wire). Exit 2 —
     /// authentication-class refusal (typed per FOLLOWUP body recommendation).
-    BsmsMacMismatch { token_len_hex: usize },
+    BsmsMacMismatch {
+        token_len_hex: usize,
+    },
     /// v0.27.0 — `mnemonic import-wallet --bsms-round1 <FILE>` parsed a
     /// blob that does not meet BIP-129 §Round 1 record syntax (line count
     /// != 5 after CRLF normalize, line 1 != `BSMS 1.0`, malformed line-3
     /// KEY field, malformed line-5 base64 SIG, line-4 description carries
     /// `\n` or `\r`, etc.). Exit 2 — parse-class error.
-    BsmsRound1Malformed { reason: String },
+    BsmsRound1Malformed {
+        reason: String,
+    },
     /// v0.27.0 — BIP-129 §Round 1 BIP-322 ECDSA recoverable signature
     /// verification failed: signature recovered to a different pubkey than
     /// the one declared on the record's line 3, OR recovery itself failed.
@@ -274,7 +281,9 @@ pub enum ToolkitError {
     /// the Display impl from writing to stderr (per plan-doc R2 I1 — the
     /// repair report already wrote a clean stderr summary; appending the
     /// Display text would be confusing noise).
-    RepairShortCircuit { exit_code: u8 },
+    RepairShortCircuit {
+        exit_code: u8,
+    },
     /// `restore` reference cross-check failed: derived material ≠ supplied
     /// `--expect-*` (or, future, cosigner slot). Exit 4 (verify/mismatch tier,
     /// alongside `BundleMismatch`/`ImportWalletSeedMismatch`). Surfaced via
@@ -584,7 +593,9 @@ impl ToolkitError {
             ToolkitError::HrpMismatch { .. } => "HrpMismatch",
             ToolkitError::ImportWalletAmbiguousFormat(_) => "ImportWalletAmbiguousFormat",
             ToolkitError::ImportWalletFormatMismatch { .. } => "ImportWalletFormatMismatch",
-            ToolkitError::ImportWalletNetworkClassMismatch { .. } => "ImportWalletNetworkClassMismatch",
+            ToolkitError::ImportWalletNetworkClassMismatch { .. } => {
+                "ImportWalletNetworkClassMismatch"
+            }
             ToolkitError::ImportWalletParse(_) => "ImportWalletParse",
             ToolkitError::ImportWalletSeedMismatch { .. } => "ImportWalletSeedMismatch",
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
@@ -1097,8 +1108,7 @@ mod tests {
             2,
         );
         assert_eq!(
-            ToolkitError::MdCodec(md_codec::Error::TagOutOfRange { primary: 0xAB })
-                .exit_code(),
+            ToolkitError::MdCodec(md_codec::Error::TagOutOfRange { primary: 0xAB }).exit_code(),
             2,
         );
         assert_eq!(

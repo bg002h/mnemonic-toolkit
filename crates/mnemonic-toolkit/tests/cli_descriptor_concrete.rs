@@ -7,21 +7,53 @@ const CONCRETE_MULTI_APOS: &str = "wsh(sortedmulti(2,[704c7836/48'/1'/3'/2']tpub
 // derivation path, so the cards must be byte-identical to the apostrophe form.
 const CONCRETE_MULTI_HFORM: &str = "wsh(sortedmulti(2,[704c7836/48h/1h/3h/2h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*,[97139860/48h/1h/2h/2h]tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*))";
 
-fn mnemonic() -> Command { Command::cargo_bin("mnemonic").unwrap() }
+fn mnemonic() -> Command {
+    Command::cargo_bin("mnemonic").unwrap()
+}
 
 /// End-to-end `h`-form on the primary motivating case: `bundle --descriptor`
 /// with `h`-hardened paths must succeed and produce byte-identical md1/mk1 to
 /// the apostrophe form (same derivation path, different notation).
 #[test]
 fn bundle_concrete_hform_converges_with_apostrophe() {
-    let h = mnemonic().args(["bundle", "--descriptor", CONCRETE_MULTI_HFORM, "--network", "testnet", "--json"]).output().unwrap();
-    let a = mnemonic().args(["bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet", "--json"]).output().unwrap();
-    assert!(h.status.success(), "h-form must be accepted: {}", String::from_utf8_lossy(&h.stderr));
+    let h = mnemonic()
+        .args([
+            "bundle",
+            "--descriptor",
+            CONCRETE_MULTI_HFORM,
+            "--network",
+            "testnet",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let a = mnemonic()
+        .args([
+            "bundle",
+            "--descriptor",
+            CONCRETE_MULTI_APOS,
+            "--network",
+            "testnet",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        h.status.success(),
+        "h-form must be accepted: {}",
+        String::from_utf8_lossy(&h.stderr)
+    );
     assert!(a.status.success(), "{}", String::from_utf8_lossy(&a.stderr));
     let hv: serde_json::Value = serde_json::from_slice(&h.stdout).unwrap();
     let av: serde_json::Value = serde_json::from_slice(&a.stdout).unwrap();
-    assert_eq!(hv["md1"], av["md1"], "h-form md1 must equal apostrophe form");
-    assert_eq!(hv["mk1"], av["mk1"], "h-form mk1 must equal apostrophe form");
+    assert_eq!(
+        hv["md1"], av["md1"],
+        "h-form md1 must equal apostrophe form"
+    );
+    assert_eq!(
+        hv["mk1"], av["mk1"],
+        "h-form mk1 must equal apostrophe form"
+    );
 }
 
 /// Expand a bundle JSON value into flat `--md1 <chunk>` and `--mk1 <chunk>`
@@ -61,44 +93,98 @@ fn verify_bundle_concrete_matches_self_produced_cards() {
     // Produce a bundle from the concrete descriptor, then verify the SAME
     // descriptor against those cards → exit 0.
     let produced = mnemonic()
-        .args(["bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet", "--json"])
-        .output().unwrap();
+        .args([
+            "bundle",
+            "--descriptor",
+            CONCRETE_MULTI_APOS,
+            "--network",
+            "testnet",
+            "--json",
+        ])
+        .output()
+        .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&produced.stdout).unwrap();
-    let mut args: Vec<String> =
-        vec!["verify-bundle".into(), "--descriptor".into(), CONCRETE_MULTI_APOS.into(),
-             "--network".into(), "testnet".into()];
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        CONCRETE_MULTI_APOS.into(),
+        "--network".into(),
+        "testnet".into(),
+    ];
     args.extend(flags_from_bundle_json(&v));
     let out = mnemonic().args(&args).output().unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
 fn bundle_concrete_descriptor_produces_watch_only_cards() {
     let out = mnemonic()
-        .args(["bundle", "--descriptor", CONCRETE_MULTI_APOS, "--network", "testnet", "--json"])
-        .output().unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+        .args([
+            "bundle",
+            "--descriptor",
+            CONCRETE_MULTI_APOS,
+            "--network",
+            "testnet",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     // Real BundleJson wire-shape: md1 = Vec<String>, ms1 = length-N array with
     // "" sentinels for watch-only, mode = "watch-only".
     assert_eq!(v["mode"], "watch-only", "{v}");
-    assert!(v["md1"].as_array().is_some_and(|a| !a.is_empty()), "md1 array: {v}");
-    assert!(v["ms1"].as_array().unwrap().iter().all(|s| s == ""), "watch-only ms1 must be all empty: {v}");
+    assert!(
+        v["md1"].as_array().is_some_and(|a| !a.is_empty()),
+        "md1 array: {v}"
+    );
+    assert!(
+        v["ms1"].as_array().unwrap().iter().all(|s| s == ""),
+        "watch-only ms1 must be all empty: {v}"
+    );
 }
 
 #[test]
 fn export_wallet_atn_descriptor_redirects() {
-    let atn = "wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,@1[97139860/48'/1'/2'/2']/<0;1>/*))";
-    let out = mnemonic().args(["export-wallet", "--descriptor", atn, "--network", "testnet"]).output().unwrap();
+    let atn =
+        "wsh(sortedmulti(2,@0[704c7836/48'/1'/3'/2']/<0;1>/*,@1[97139860/48'/1'/2'/2']/<0;1>/*))";
+    let out = mnemonic()
+        .args(["export-wallet", "--descriptor", atn, "--network", "testnet"])
+        .output()
+        .unwrap();
     assert!(!out.status.success());
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("only concrete descriptors") && err.contains("--from-import-json"), "{err}");
+    assert!(
+        err.contains("only concrete descriptors") && err.contains("--from-import-json"),
+        "{err}"
+    );
 }
 
 #[test]
 fn export_wallet_originless_concrete_still_accepted() {
     // Regression guard: origin-less concrete must NOT be rejected.
     let originless = "wpkh(tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)";
-    let out = mnemonic().args(["export-wallet", "--descriptor", originless, "--network", "testnet"]).output().unwrap();
-    assert!(out.status.success(), "origin-less concrete must pass: {}", String::from_utf8_lossy(&out.stderr));
+    let out = mnemonic()
+        .args([
+            "export-wallet",
+            "--descriptor",
+            originless,
+            "--network",
+            "testnet",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "origin-less concrete must pass: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

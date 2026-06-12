@@ -318,7 +318,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     let _pin_pp = if passphrase.is_empty() {
         None
     } else {
-        Some(mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()))
+        Some(mnemonic_toolkit::mlock::pin_pages_for(
+            passphrase.as_bytes(),
+        ))
     };
 
     let templates: &[CliTemplate] = match &args.template {
@@ -361,7 +363,12 @@ pub fn run<R: Read, W: Write, E: Write>(
                 .account_xpub
                 .derive_pub(&secp, &dp)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-            first_recv.push(render_address_from_xpub(&secp, &child, script_type, network));
+            first_recv.push(render_address_from_xpub(
+                &secp,
+                &child,
+                script_type,
+                network,
+            ));
         }
 
         // Concrete descriptor. The watch-only ResolvedSlot mirrors the
@@ -375,8 +382,14 @@ pub fn run<R: Read, W: Write, E: Write>(
             language: None,
             _entropy_pin: None,
         };
-        let descriptor =
-            build_descriptor_string(template, std::slice::from_ref(&slot), 1, network, args.account, None)?;
+        let descriptor = build_descriptor_string(
+            template,
+            std::slice::from_ref(&slot),
+            1,
+            network,
+            args.account,
+            None,
+        )?;
 
         rows.push(WalletRow {
             template,
@@ -424,7 +437,11 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(
                 stderr,
                 "master fingerprint: {fp_str}  (passphrase: {})",
-                if passphrase_applied { "applied" } else { "none" }
+                if passphrase_applied {
+                    "applied"
+                } else {
+                    "none"
+                }
             )
             .map_err(ToolkitError::Io)?;
             return Err(ToolkitError::RestoreMismatch {
@@ -450,7 +467,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     // `--format` is gated to a single `--template` above, so `rows[0]` is the
     // only row and the payload is one descriptor in / one payload out.
     let import_payload: Option<String> = if let Some(format) = args.format {
-        Some(build_import_payload(format, &rows[0], network, args.account)?)
+        Some(build_import_payload(
+            format,
+            &rows[0],
+            network,
+            args.account,
+        )?)
     } else {
         None
     };
@@ -502,7 +524,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         let mut s = String::new();
         s.push_str(&format!(
             "master fingerprint: {fp_str}  (passphrase: {})\n",
-            if passphrase_applied { "applied" } else { "none" }
+            if passphrase_applied {
+                "applied"
+            } else {
+                "none"
+            }
         ));
         s.push_str(
             "CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.\n",
@@ -525,7 +551,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(
             stderr,
             "master fingerprint: {fp_str}  (passphrase: {})",
-            if passphrase_applied { "applied" } else { "none" }
+            if passphrase_applied {
+                "applied"
+            } else {
+                "none"
+            }
         )
         .map_err(ToolkitError::Io)?;
         writeln!(
@@ -647,7 +677,11 @@ fn taproot_template_and_internal_key(
 ) -> Result<(CliTemplate, TaprootInternalKey), ToolkitError> {
     use md_codec::tree::Body;
     let inner = match &tree.body {
-        Body::Tr { is_nums: true, tree: Some(inner), .. } => inner,
+        Body::Tr {
+            is_nums: true,
+            tree: Some(inner),
+            ..
+        } => inner,
         Body::Tr { is_nums: false, .. } => {
             return Err(ToolkitError::ModeViolation {
                 mode: "restore",
@@ -660,7 +694,11 @@ fn taproot_template_and_internal_key(
                 "--md1 taproot tree has no script leaf (keypath-only tr is single-sig, not multisig)",
             ));
         }
-        _ => return Err(bad("--md1: internal error — taproot handler on a non-Tr tree")),
+        _ => {
+            return Err(bad(
+                "--md1: internal error — taproot handler on a non-Tr tree",
+            ))
+        }
     };
     let template = match inner.tag {
         md_codec::Tag::MultiA => CliTemplate::TrMultiA,
@@ -785,7 +823,12 @@ fn origin_path_to_derivation_path(
         } else {
             ChildNumber::from_normal_idx(c.value)
         }
-        .map_err(|_| bad(format!("--md1 origin component {} out of BIP-32 range", c.value)))?;
+        .map_err(|_| {
+            bad(format!(
+                "--md1 origin component {} out of BIP-32 range",
+                c.value
+            ))
+        })?;
         comps.push(cn);
     }
     Ok(comps.into())
@@ -830,7 +873,10 @@ impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
                         ChildNumber::from_normal_idx(a.value)
                     }
                     .map_err(|_| {
-                        bad(format!("--md1 multipath component {} out of range", a.value))
+                        bad(format!(
+                            "--md1 multipath component {} out of range",
+                            a.value
+                        ))
                     })?;
                     paths.push(DerivationPath::from(vec![cn]));
                 }
@@ -886,9 +932,7 @@ fn faithful_multisig_descriptor(
     };
     let translated = ms0.translate_pk(&mut t).map_err(|e| match e {
         miniscript::TranslateErr::TranslatorErr(te) => te,
-        miniscript::TranslateErr::OuterError(oe) => {
-            bad(format!("--md1 reconstruction: {oe}"))
-        }
+        miniscript::TranslateErr::OuterError(oe) => bad(format!("--md1 reconstruction: {oe}")),
     })?;
     Ok(translated.to_string())
 }
@@ -987,8 +1031,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 
     // --- 1. Reassemble the md1 card(s) ---
     let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
-    let d = md_codec::chunk::reassemble(&md1_refs)
-        .map_err(|e| bad(format!("--md1 decode: {e}")))?;
+    let d =
+        md_codec::chunk::reassemble(&md1_refs).map_err(|e| bad(format!("--md1 decode: {e}")))?;
 
     // --- 2. Gate: wallet-policy requirement (taproot multisig handled in §3) ---
     if !d.is_wallet_policy() {
@@ -1161,7 +1205,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         }
         if let Some(pp) = args.passphrase.as_deref() {
             if !pp.starts_with("@env:") {
-                crate::secret_advisory::secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+                crate::secret_advisory::secret_in_argv_warning(
+                    stderr,
+                    "--passphrase",
+                    "--passphrase-stdin",
+                );
             }
         }
         let passphrase: String = if args.passphrase_stdin {
@@ -1177,7 +1225,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         } else {
             crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
         };
-        let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, args.language)?;
+        let (entropy, derive_language) =
+            resolve_seed_entropy(&from.node, &from_value, args.language)?;
         let _pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
         // M1: pin the passphrase too (parity with the single-sig `run` path).
         let _pin_pp = (!passphrase.is_empty())
@@ -1224,7 +1273,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // 6b. explicit cosigner assertions (--cosigner @N=mk1|xpub).
     if mismatch.is_none() && !args.cosigner.is_empty() {
         // Group values by position N.
-        let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> = std::collections::BTreeMap::new();
+        let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> =
+            std::collections::BTreeMap::new();
         for spec in &args.cosigner {
             let (lhs, rhs) = spec
                 .split_once('=')
@@ -1236,29 +1286,38 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             by_pos.entry(n).or_default().push(rhs.to_string());
         }
         for (n, values) in &by_pos {
-            let c = cosigners
-                .iter()
-                .find(|c| c.idx == *n)
-                .ok_or_else(|| bad(format!("--cosigner @{n}: position out of range (wallet has {} cosigners)", cosigners.len())))?;
+            let c = cosigners.iter().find(|c| c.idx == *n).ok_or_else(|| {
+                bad(format!(
+                    "--cosigner @{n}: position out of range (wallet has {} cosigners)",
+                    cosigners.len()
+                ))
+            })?;
             // mk1 (multi-chunk) vs a single raw xpub. Case-insensitive PROBE
             // (v0.53.3 audit M11); originals pass to mk-codec, the case
             // authority (it lowercase-normalizes; rejects mixed).
-            let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1")) {
+            let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1"))
+            {
                 let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
-                let kc = mk_codec::decode(&refs).map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
+                let kc = mk_codec::decode(&refs)
+                    .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
                 crate::synthesize::xpub_to_65(&kc.xpub)
             } else if values.len() == 1 {
                 let xpub = Xpub::from_str(&values[0])
                     .map_err(|e| bad(format!("--cosigner @{n} xpub parse: {e}")))?;
                 crate::synthesize::xpub_to_65(&xpub)
             } else {
-                return Err(bad(format!("--cosigner @{n}: multiple values must all be mk1 chunks, or a single xpub")));
+                return Err(bad(format!(
+                    "--cosigner @{n}: multiple values must all be mk1 chunks, or a single xpub"
+                )));
             };
             if supplied65 != c.key65 {
                 mismatch = Some((
                     "cosigner-key",
                     format!("supplied key for @{n}"),
-                    format!("md1 cosigner @{n} ({})", c.fingerprint.to_string().to_lowercase()),
+                    format!(
+                        "md1 cosigner @{n} ({})",
+                        c.fingerprint.to_string().to_lowercase()
+                    ),
                     Some(*n),
                 ));
                 break;
@@ -1341,7 +1400,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             format!("{k}-of-{n_cosigners} multisig"),
         ),
         _ => {
-            let noun = if n_cosigners == 1 { "cosigner" } else { "cosigners" };
+            let noun = if n_cosigners == 1 {
+                "cosigner"
+            } else {
+                "cosigners"
+            };
             (
                 format!("miniscript policy restore ({n_cosigners} {noun})"),
                 "miniscript-policy".to_string(),
@@ -1387,7 +1450,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         }
         format!(
             "{}\n",
-            serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
+            serde_json::to_string(&envelope)
+                .map_err(|e| bad(format!("json serialization: {e}")))?
         )
     } else if let Some(payload) = &import_payload {
         // `--format` without `--json`: the payload alone is stdout so it pipes

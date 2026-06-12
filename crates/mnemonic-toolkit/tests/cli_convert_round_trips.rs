@@ -27,7 +27,9 @@ fn convert_value(args: &[&str]) -> String {
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let line = stdout.trim();
-    let colon = line.find(": ").expect("convert output must be '<node>: <value>'");
+    let colon = line
+        .find(": ")
+        .expect("convert output must be '<node>: <value>'");
     line[colon + 2..].to_string()
 }
 
@@ -91,13 +93,8 @@ fn round_trip_phrase_to_ms1_to_phrase_via_entropy_intermediate() {
         "--to",
         "ms1",
     ]);
-    let phrase_back = convert_value(&[
-        "convert",
-        "--from",
-        &format!("ms1={ms1}"),
-        "--to",
-        "phrase",
-    ]);
+    let phrase_back =
+        convert_value(&["convert", "--from", &format!("ms1={ms1}"), "--to", "phrase"]);
     assert_eq!(
         phrase_back, TREZOR_24,
         "round-trip phrase → ms1 → phrase must be byte-identical"

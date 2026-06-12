@@ -226,8 +226,7 @@ pub fn apply_slot_stdin<R: Read + ?Sized>(
             Ok(())
         }
         _ => Err(ToolkitError::BadInput(
-            "at most one --slot @N.<secret>=- per invocation (single stdin per invocation)"
-                .into(),
+            "at most one --slot @N.<secret>=- per invocation (single stdin per invocation)".into(),
         )),
     }
 }
@@ -262,9 +261,7 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
         if !by_index.contains_key(&i) {
             return Err(ToolkitError::SlotInputViolation {
                 kind: "gap",
-                message: format!(
-                    "slot indices must be contiguous starting at @0; missing @{i}"
-                ),
+                message: format!("slot indices must be contiguous starting at @0; missing @{i}"),
             });
         }
     }
@@ -299,9 +296,17 @@ pub fn validate_slot_set(slots: &[SlotInput]) -> Result<(), ToolkitError> {
         let exempted_v0_19_0 = matches!(
             subkeys.as_slice(),
             [SlotSubkey::Phrase, SlotSubkey::Path]
-                | [SlotSubkey::Phrase, SlotSubkey::Fingerprint, SlotSubkey::Path]
+                | [
+                    SlotSubkey::Phrase,
+                    SlotSubkey::Fingerprint,
+                    SlotSubkey::Path
+                ]
                 | [SlotSubkey::Seedqr, SlotSubkey::Path]
-                | [SlotSubkey::Seedqr, SlotSubkey::Fingerprint, SlotSubkey::Path]
+                | [
+                    SlotSubkey::Seedqr,
+                    SlotSubkey::Fingerprint,
+                    SlotSubkey::Path
+                ]
                 | [SlotSubkey::Ms1, SlotSubkey::Path]
                 | [SlotSubkey::Ms1, SlotSubkey::Fingerprint, SlotSubkey::Path]
         );
@@ -422,7 +427,8 @@ mod tests {
             let predicate = v.is_secret_bearing();
             let in_taxonomy = SECRET_SLOT_SUBKEYS.contains(&v.as_str());
             assert_eq!(
-                predicate, in_taxonomy,
+                predicate,
+                in_taxonomy,
                 "drift: SlotSubkey::{:?}.is_secret_bearing()={} but \
                  secret_taxonomy::SECRET_SLOT_SUBKEYS.contains({:?})={}. \
                  If you added a SlotSubkey variant, the macro expansion \
@@ -496,8 +502,10 @@ mod tests {
     fn parse_seedqr_stdin_sentinel() {
         let parsed = parse_slot_input("@0.seedqr=-").unwrap();
         assert_eq!(parsed.subkey, SlotSubkey::Seedqr);
-        assert!(parsed.is_stdin_sentinel(),
-            "@0.seedqr=- must be a stdin sentinel; got is_stdin_sentinel()=false");
+        assert!(
+            parsed.is_stdin_sentinel(),
+            "@0.seedqr=- must be a stdin sentinel; got is_stdin_sentinel()=false"
+        );
     }
     #[test]
     fn parse_happy_xpub() {
@@ -756,9 +764,9 @@ mod tests {
         match e {
             ToolkitError::SlotInputViolation { kind, message } => {
                 assert_eq!(kind, "gap");
-                assert!(message.contains(
-                    "slot indices must be contiguous starting at @0; missing @1"
-                ));
+                assert!(
+                    message.contains("slot indices must be contiguous starting at @0; missing @1")
+                );
             }
             other => panic!("unexpected variant {other:?}"),
         }

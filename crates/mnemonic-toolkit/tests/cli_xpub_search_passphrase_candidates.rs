@@ -50,9 +50,13 @@ fn candidates_hit_reports_matching_line() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -67,9 +71,14 @@ fn candidates_hit_json_carries_line_and_passphrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(), "--json",
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
+            "--json",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -88,9 +97,14 @@ fn candidates_miss_exit4_candidates_tried() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(), "--json",
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
+            "--json",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -107,9 +121,14 @@ fn candidates_abort_on_first_occurrence() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(), "--json",
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
+            "--json",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -126,9 +145,14 @@ fn candidates_blank_lines_skipped() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(), "--json",
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
+            "--json",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -147,9 +171,13 @@ fn candidates_exact_bytes_trailing_space() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", hit.path().to_str().unwrap(),
-            "--target-xpub", &target_sp,
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            hit.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_sp,
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -158,9 +186,13 @@ fn candidates_exact_bytes_trailing_space() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", miss.path().to_str().unwrap(),
-            "--target-xpub", &target_sp,
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            miss.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_sp,
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -174,10 +206,15 @@ fn candidates_mutex_with_passphrase_exit_64() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase", "satoshi",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase",
+            "satoshi",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -190,8 +227,11 @@ fn candidates_none_of_passphrase_sources_exit_64() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -205,9 +245,14 @@ fn candidates_empty_file_exit4_zero_tried() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(), "--json",
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
+            "--json",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -223,15 +268,22 @@ fn candidates_default_stdout_does_not_echo_passphrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()
         .code(0);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(!stdout.contains(SECRET), "default stdout must not echo the passphrase:\n{stdout}");
+    assert!(
+        !stdout.contains(SECRET),
+        "default stdout must not echo the passphrase:\n{stdout}"
+    );
 }
 
 // ── Cell 11 — missing file → exit 1 (BadInput) ──────────────────────────────
@@ -240,9 +292,13 @@ fn candidates_missing_file_exit_1() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", "/no/such/candidates/file",
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            "/no/such/candidates/file",
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -256,9 +312,13 @@ fn candidates_emits_sensitivity_advisory_on_stderr() {
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "xpub-search", "passphrase-of-xpub", "--phrase-stdin",
-            "--passphrase-candidates-file", file.path().to_str().unwrap(),
-            "--target-xpub", &target_bip84(),
+            "xpub-search",
+            "passphrase-of-xpub",
+            "--phrase-stdin",
+            "--passphrase-candidates-file",
+            file.path().to_str().unwrap(),
+            "--target-xpub",
+            &target_bip84(),
         ])
         .write_stdin(PHRASE)
         .assert()

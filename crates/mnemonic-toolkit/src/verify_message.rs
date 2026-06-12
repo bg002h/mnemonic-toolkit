@@ -126,25 +126,47 @@ mod tests {
 
     #[test]
     fn bip322_hello_world_valid() {
-        let o = verify_message(SEGWIT_ADDRESS, "Hello World", SIG_HELLO_WORLD, SigFormat::Bip322).unwrap();
+        let o = verify_message(
+            SEGWIT_ADDRESS,
+            "Hello World",
+            SIG_HELLO_WORLD,
+            SigFormat::Bip322,
+        )
+        .unwrap();
         assert!(o.valid);
         assert_eq!(o.format_matched, "bip322");
     }
 
     #[test]
     fn bip322_empty_message_valid() {
-        assert!(verify_message(SEGWIT_ADDRESS, "", SIG_EMPTY, SigFormat::Bip322).unwrap().valid);
+        assert!(
+            verify_message(SEGWIT_ADDRESS, "", SIG_EMPTY, SigFormat::Bip322)
+                .unwrap()
+                .valid
+        );
     }
 
     #[test]
     fn bip322_wrong_message_invalid() {
-        let o = verify_message(SEGWIT_ADDRESS, "Goodbye World", SIG_HELLO_WORLD, SigFormat::Bip322).unwrap();
+        let o = verify_message(
+            SEGWIT_ADDRESS,
+            "Goodbye World",
+            SIG_HELLO_WORLD,
+            SigFormat::Bip322,
+        )
+        .unwrap();
         assert!(!o.valid);
     }
 
     #[test]
     fn auto_dispatches_segwit_to_bip322() {
-        let o = verify_message(SEGWIT_ADDRESS, "Hello World", SIG_HELLO_WORLD, SigFormat::Auto).unwrap();
+        let o = verify_message(
+            SEGWIT_ADDRESS,
+            "Hello World",
+            SIG_HELLO_WORLD,
+            SigFormat::Auto,
+        )
+        .unwrap();
         assert!(o.valid);
         assert_eq!(o.format_matched, "bip322");
     }
@@ -179,7 +201,11 @@ mod tests {
     #[test]
     fn legacy_p2pkh_tampered_message_invalid() {
         let (addr, sig) = make_legacy_p2pkh_vector("Hello World");
-        assert!(!verify_message(&addr, "Tampered", &sig, SigFormat::Legacy).unwrap().valid);
+        assert!(
+            !verify_message(&addr, "Tampered", &sig, SigFormat::Legacy)
+                .unwrap()
+                .valid
+        );
     }
 
     #[test]
@@ -194,8 +220,13 @@ mod tests {
     fn legacy_format_on_segwit_address_errors() {
         // --format legacy on a non-P2PKH address → honest error (not a misleading
         // "bad base64"). SIG content irrelevant; the gate fires on address type.
-        let err = verify_message(SEGWIT_ADDRESS, "Hello World", SIG_HELLO_WORLD, SigFormat::Legacy)
-            .unwrap_err();
+        let err = verify_message(
+            SEGWIT_ADDRESS,
+            "Hello World",
+            SIG_HELLO_WORLD,
+            SigFormat::Legacy,
+        )
+        .unwrap_err();
         assert!(err.message().contains("P2PKH-only"));
     }
 

@@ -165,14 +165,18 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
             ],
         )
         .map_err(|e| {
-            ToolkitError::DescriptorParse(format!(
-                "--format coldcard: derive_pub /0/0: {e}",
-            ))
+            ToolkitError::DescriptorParse(format!("--format coldcard: derive_pub /0/0: {e}",))
         })?;
     let first_addr = match template {
-        CliTemplate::Bip44 => Address::p2pkh(recv.to_pub(), inputs.network.network_kind()).to_string(),
-        CliTemplate::Bip49 => Address::p2shwpkh(&recv.to_pub(), inputs.network.network_kind()).to_string(),
-        CliTemplate::Bip84 => Address::p2wpkh(&recv.to_pub(), inputs.network.known_hrp()).to_string(),
+        CliTemplate::Bip44 => {
+            Address::p2pkh(recv.to_pub(), inputs.network.network_kind()).to_string()
+        }
+        CliTemplate::Bip49 => {
+            Address::p2shwpkh(&recv.to_pub(), inputs.network.network_kind()).to_string()
+        }
+        CliTemplate::Bip84 => {
+            Address::p2wpkh(&recv.to_pub(), inputs.network.known_hrp()).to_string()
+        }
         _ => unreachable!("singlesig templates only by match-arm above"),
     };
 
@@ -261,7 +265,10 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     // tr-multi-a / tr-sortedmulti-a — refuse pending Coldcard firmware support
     // for BIP-388 / BIP-341 taproot multisig (track FOLLOWUPS entry
     // `coldcard-tr-multi-a-pending-firmware`).
-    if matches!(template, CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA) {
+    if matches!(
+        template,
+        CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
+    ) {
         return Err(ToolkitError::BadInput(format!(
             "--format coldcard does not yet support --template {} — Coldcard firmware does not currently ingest taproot multisig text exports (tracked by FOLLOWUPS coldcard-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
             template.human_name(),
@@ -278,9 +285,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     };
 
     let threshold = inputs.threshold.ok_or_else(|| {
-        ToolkitError::BadInput(
-            "--format coldcard multisig text requires --threshold <K>".into(),
-        )
+        ToolkitError::BadInput("--format coldcard multisig text requires --threshold <K>".into())
     })?;
     let cosigner_count = inputs.resolved_slots.len();
     if cosigner_count < 2 {

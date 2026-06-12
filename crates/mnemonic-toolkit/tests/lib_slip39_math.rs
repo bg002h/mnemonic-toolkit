@@ -212,7 +212,10 @@ fn lagrange_interpolate_three_points_recovers_quadratic() {
     };
     let pts = [(1u8, f_at(1)), (2u8, f_at(2)), (3u8, f_at(3))];
     let recovered = lagrange::interpolate_at(&pts, 0);
-    assert_eq!(recovered, a, "quadratic interp at x=0 recovers constant term");
+    assert_eq!(
+        recovered, a,
+        "quadratic interp at x=0 recovers constant term"
+    );
 }
 
 #[test]
@@ -307,7 +310,11 @@ fn lagrange_interpolate_at_arbitrary_nonzero_x_quadratic() {
     };
     let pts = [(1u8, f_at(1)), (2u8, f_at(2)), (3u8, f_at(3))];
     let recovered = lagrange::interpolate_at(&pts, 17);
-    assert_eq!(recovered, f_at(17), "quadratic interp at x=17 recovers f(17)");
+    assert_eq!(
+        recovered,
+        f_at(17),
+        "quadratic interp at x=17 recovers f(17)"
+    );
 }
 
 #[test]

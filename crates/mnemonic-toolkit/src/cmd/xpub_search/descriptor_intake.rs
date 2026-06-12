@@ -239,16 +239,18 @@ fn parse_md1(payload: &str) -> Result<DescriptorIntake, ToolkitError> {
     };
     // Per-slot fingerprint resolver. Mirrors `verify_bundle::md_fp_for`.
     let md_fp_for = |idx: usize| -> Option<[u8; 4]> {
-        desc.tlv
-            .fingerprints
-            .as_ref()
-            .and_then(|v| v.iter().find(|(i, _)| *i as usize == idx).map(|(_, fp)| *fp))
+        desc.tlv.fingerprints.as_ref().and_then(|v| {
+            v.iter()
+                .find(|(i, _)| *i as usize == idx)
+                .map(|(_, fp)| *fp)
+        })
     };
     // Zero-xpub guard (plan §4.3 step 3 + R2 m-R2-1 + R3 I-R3-4 lock).
     let pubkeys = desc.tlv.pubkeys.as_ref();
     if pubkeys.map_or(0, Vec::len) == 0 {
         return Err(ToolkitError::BadInput(
-            "descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners".into(),
+            "descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners"
+                .into(),
         ));
     }
     let mut cosigners: Vec<CosignerExtract> = Vec::with_capacity(n);
@@ -365,7 +367,8 @@ fn parse_literal_xpub(
     // Zero-xpub guard (R2 m-R2-1 + R3 I-R3-4 lock).
     if xpub_count == 0 {
         return Err(ToolkitError::BadInput(
-            "descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners".into(),
+            "descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners"
+                .into(),
         ));
     }
     // Emit the v0.19.0 default-path notice (mirrors `cmd/bundle.rs:1367-1388`
@@ -392,7 +395,11 @@ fn parse_literal_xpub(
 
 /// Build a BIP-48 path `m/48'/coin'/account'/script_type'` for default-path
 /// inference (mirrors `parse::MultisigPathFamily::default_origin_path`).
-fn bip48_default_path(network: crate::network::CliNetwork, account: u32, script_type: u32) -> DerivationPath {
+fn bip48_default_path(
+    network: crate::network::CliNetwork,
+    account: u32,
+    script_type: u32,
+) -> DerivationPath {
     use crate::parse::MultisigPathFamily;
     let s = MultisigPathFamily::Bip48.default_origin_path(network, account, script_type);
     DerivationPath::from_str(&s).expect("BIP-48 default path well-formed")
@@ -443,7 +450,9 @@ mod tests {
     #[test]
     fn contains_at_n_walker() {
         assert!(contains_at_n_placeholder("wpkh(@0)"));
-        assert!(contains_at_n_placeholder("wsh(sortedmulti(2,@0[fp/x'],@10[fp/y']))"));
+        assert!(contains_at_n_placeholder(
+            "wsh(sortedmulti(2,@0[fp/x'],@10[fp/y']))"
+        ));
         assert!(!contains_at_n_placeholder("wpkh(xpub6Cuvy7w8aDxakdjsxFq8M2NbXdZHghkpAcKvqzh4WUR8FBxXVKkjjsedX9yzeYZPjVx3vrwJxYqLmnfvSdyXxztnUMpsiE7Q1wPwhP3DmFy)"));
         // Edge: `@a` should NOT trigger.
         assert!(!contains_at_n_placeholder("foo@a"));

@@ -24,8 +24,7 @@ use std::fs;
 use std::path::Path;
 
 fn read_or_panic(p: &str) -> String {
-    fs::read_to_string(Path::new(p))
-        .unwrap_or_else(|e| panic!("failed to read {p}: {e}"))
+    fs::read_to_string(Path::new(p)).unwrap_or_else(|e| panic!("failed to read {p}: {e}"))
 }
 
 #[test]

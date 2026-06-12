@@ -15,7 +15,7 @@
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
-use crate::indel::{IndelCandidate, IndelOutcome, IndelRegion, IndelDirection};
+use crate::indel::{IndelCandidate, IndelDirection, IndelOutcome, IndelRegion};
 use crate::repair::{self, CardArgs, CardKind, RepairError, RepairOutcome};
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
@@ -117,7 +117,11 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // No-op notice: --max-subst only takes effect when --max-indel >= 1.
     if args.max_subst >= 1 && args.max_indel == 0 {
-        writeln!(stderr, "notice: --max-subst has no effect without --max-indel \u{2265} 1").ok();
+        writeln!(
+            stderr,
+            "notice: --max-subst has no effect without --max-indel \u{2265} 1"
+        )
+        .ok();
     }
 
     // Runtime notice for the slower search budgets (combinatorial blow-up at
@@ -148,7 +152,12 @@ pub fn run<R: Read, W: Write, E: Write>(
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
-                match repair::recover_indel_card(*kind, chunks, args.max_indel as usize, args.max_subst as usize)? {
+                match repair::recover_indel_card(
+                    *kind,
+                    chunks,
+                    args.max_indel as usize,
+                    args.max_subst as usize,
+                )? {
                     IndelOutcome::Unique(c) => {
                         kinds.push(crate::secret_advisory::card_kind_class(*kind));
                         if c.subst_count >= 1 {
@@ -214,7 +223,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(stderr, "repair: WARNING \u{2014} candidate(s) required a substitution and are NOT confirmed corrections; derive an address from each and verify it controls your funds before trusting any (some may be false positives)").ok();
     }
 
-    Ok(repair::indel_exit_code(ambiguous_seen, substitution_seen, total_repairs))
+    Ok(repair::indel_exit_code(
+        ambiguous_seen,
+        substitution_seen,
+        total_repairs,
+    ))
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {
@@ -292,8 +305,8 @@ fn emit_repair_json<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result
             })
             .collect(),
     };
-    let body =
-        serde_json::to_string(&envelope).map_err(|e| ToolkitError::BadInput(format!("repair JSON serialize: {e}")))?;
+    let body = serde_json::to_string(&envelope)
+        .map_err(|e| ToolkitError::BadInput(format!("repair JSON serialize: {e}")))?;
     writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     Ok(())
 }
@@ -360,7 +373,10 @@ fn candidate_json(c: &IndelCandidate) -> IndelCandidateJson<'_> {
 
 /// Text-form indel emission — each recovered string on its own line (mirrors
 /// the corrected-chunks tail of `emit_repair_text`).
-fn emit_indel_text<W: Write>(cands: &[&IndelCandidate], stdout: &mut W) -> Result<(), ToolkitError> {
+fn emit_indel_text<W: Write>(
+    cands: &[&IndelCandidate],
+    stdout: &mut W,
+) -> Result<(), ToolkitError> {
     for c in cands {
         writeln!(stdout, "{}", c.recovered).map_err(ToolkitError::Io)?;
     }
@@ -419,8 +435,7 @@ mod tests {
 
         let mut json = Vec::new();
         emit_indel_json("ambiguous", &refs, &mut json).unwrap();
-        let v: serde_json::Value =
-            serde_json::from_slice(&json).expect("valid JSON envelope");
+        let v: serde_json::Value = serde_json::from_slice(&json).expect("valid JSON envelope");
         assert_eq!(v["schema_version"], "1");
         assert_eq!(v["status"], "ambiguous");
         assert_eq!(v["confident"], true); // both have subst_count=0

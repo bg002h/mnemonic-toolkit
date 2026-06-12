@@ -45,8 +45,11 @@ fn encode_mnem(entropy: &[u8], wire_lang: u8) -> String {
 }
 
 fn encode_entr(entropy: &[u8]) -> String {
-    ms_codec::encode(ms_codec::Tag::ENTR, &ms_codec::Payload::Entr(entropy.to_vec()))
-        .expect("ms_codec::encode entr")
+    ms_codec::encode(
+        ms_codec::Tag::ENTR,
+        &ms_codec::Payload::Entr(entropy.to_vec()),
+    )
+    .expect("ms_codec::encode entr")
 }
 
 fn entropy_bytes(hex: &str) -> Vec<u8> {
@@ -106,8 +109,17 @@ fn japanese_phrase_bundle_emits_mnem_ms1() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--slot", &format!("@0.phrase={ja_phrase}"), "--language", "japanese",
-            "--template", "bip84", "--network", "mainnet", "--no-engraving-card", "--json",
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--language",
+            "japanese",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--no-engraving-card",
+            "--json",
         ])
         .assert()
         .success();
@@ -129,7 +141,10 @@ fn japanese_phrase_bundle_emits_mnem_ms1() {
     let (_tag, payload) = ms_codec::decode(ms1_val).expect("ms1 must decode");
     match payload {
         ms_codec::Payload::Mnem { language, .. } => {
-            assert_eq!(language, WIRE_JAPANESE, "wire language must be japanese (1)");
+            assert_eq!(
+                language, WIRE_JAPANESE,
+                "wire language must be japanese (1)"
+            );
         }
         other => panic!("expected Mnem payload, got {other:?}"),
     }
@@ -142,8 +157,17 @@ fn japanese_phrase_bundle_ms1_round_trips_to_phrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--slot", &format!("@0.phrase={ja_phrase}"), "--language", "japanese",
-            "--template", "bip84", "--network", "mainnet", "--no-engraving-card", "--json",
+            "bundle",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--language",
+            "japanese",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--no-engraving-card",
+            "--json",
         ])
         .assert()
         .success();
@@ -155,7 +179,13 @@ fn japanese_phrase_bundle_ms1_round_trips_to_phrase() {
     // Convert the mnem ms1 back to a phrase — must recover the original ja phrase.
     let out2 = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("ms1={ms1_val}"), "--to", "phrase"])
+        .args([
+            "convert",
+            "--from",
+            &format!("ms1={ms1_val}"),
+            "--to",
+            "phrase",
+        ])
         .assert()
         .success();
 
@@ -201,10 +231,14 @@ fn ja_mnem_source_import_json_re_emits_ja_mnem() {
         .unwrap()
         .args([
             "bundle",
-            "--slot", &format!("@0.xpub={ja_xpub}"),
-            "--slot", &format!("@0.fingerprint={ja_fp}"),
-            "--descriptor", &descriptor,
-            "--network", "mainnet",
+            "--slot",
+            &format!("@0.xpub={ja_xpub}"),
+            "--slot",
+            &format!("@0.fingerprint={ja_fp}"),
+            "--descriptor",
+            &descriptor,
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -222,7 +256,14 @@ fn ja_mnem_source_import_json_re_emits_ja_mnem() {
 
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["bundle", "--import-json", "-", "--network", "mainnet", "--json"])
+        .args([
+            "bundle",
+            "--import-json",
+            "-",
+            "--network",
+            "mainnet",
+            "--json",
+        ])
         .write_stdin(envelope_str.as_bytes())
         .assert()
         .success();
@@ -237,7 +278,11 @@ fn ja_mnem_source_import_json_re_emits_ja_mnem() {
         reemitted_ms1, ja_ms1,
         "re-emitted ms1 must be identical to the original ja mnem ms1"
     );
-    assert_eq!(reemitted_ms1.len(), 51, "re-emitted ms1 must be mnem (51 chars)");
+    assert_eq!(
+        reemitted_ms1.len(),
+        51,
+        "re-emitted ms1 must be mnem (51 chars)"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -278,12 +323,18 @@ fn mixed_language_import_json_re_emits_mnem_ja_and_entr() {
         .unwrap()
         .args([
             "bundle",
-            "--slot", &format!("@0.xpub={ja_xpub}"),
-            "--slot", &format!("@0.fingerprint={ja_fp}"),
-            "--slot", &format!("@1.xpub={en_xpub}"),
-            "--slot", &format!("@1.fingerprint={en_fp}"),
-            "--descriptor", &descriptor,
-            "--network", "mainnet",
+            "--slot",
+            &format!("@0.xpub={ja_xpub}"),
+            "--slot",
+            &format!("@0.fingerprint={ja_fp}"),
+            "--slot",
+            &format!("@1.xpub={en_xpub}"),
+            "--slot",
+            &format!("@1.fingerprint={en_fp}"),
+            "--descriptor",
+            &descriptor,
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -301,7 +352,14 @@ fn mixed_language_import_json_re_emits_mnem_ja_and_entr() {
 
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["bundle", "--import-json", "-", "--network", "mainnet", "--json"])
+        .args([
+            "bundle",
+            "--import-json",
+            "-",
+            "--network",
+            "mainnet",
+            "--json",
+        ])
         .write_stdin(envelope_str.as_bytes())
         .assert()
         .success();
@@ -331,8 +389,13 @@ fn english_phrase_convert_ms1_golden_byte_identity() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert", "--from", &format!("phrase={ENGLISH_12}"), "--language", "english",
-            "--to", "ms1",
+            "convert",
+            "--from",
+            &format!("phrase={ENGLISH_12}"),
+            "--language",
+            "english",
+            "--to",
+            "ms1",
         ])
         .assert()
         .success();
@@ -463,10 +526,14 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
         .unwrap()
         .args([
             "bundle",
-            "--descriptor", "wpkh(@0)",
-            "--slot", &format!("@0.phrase={ja_phrase}"),
-            "--language", "japanese",
-            "--network", "mainnet",
+            "--descriptor",
+            "wpkh(@0)",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--language",
+            "japanese",
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -481,7 +548,8 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
     // CRITICAL: must be mnem length (51 for 12-word / 16-byte entropy).
     // Pre-fix this was 50 (entr). Post-fix it must be 51 (mnem).
     assert_eq!(
-        ms1_val.len(), 51,
+        ms1_val.len(),
+        51,
         "descriptor-@N + ja phrase MUST emit mnem (51 chars), not entr (50);\n\
          got len={} val={ms1_val:?}",
         ms1_val.len()
@@ -496,7 +564,10 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
     let (_tag, payload) = ms_codec::decode(ms1_val).expect("ms1 must decode");
     match payload {
         ms_codec::Payload::Mnem { language, .. } => {
-            assert_eq!(language, WIRE_JAPANESE, "wire language must be japanese (1)");
+            assert_eq!(
+                language, WIRE_JAPANESE,
+                "wire language must be japanese (1)"
+            );
         }
         other => panic!(
             "descriptor-@N + ja phrase: expected Mnem payload, got {other:?}\n\
@@ -516,10 +587,14 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
         .unwrap()
         .args([
             "bundle",
-            "--descriptor", "wpkh(@0)",
-            "--slot", &format!("@0.phrase={ja_phrase}"),
-            "--language", "japanese",
-            "--network", "mainnet",
+            "--descriptor",
+            "wpkh(@0)",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--language",
+            "japanese",
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -533,7 +608,13 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
     // Convert back to phrase → must recover the original ja phrase.
     let out2 = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("ms1={ms1_val}"), "--to", "phrase"])
+        .args([
+            "convert",
+            "--from",
+            &format!("ms1={ms1_val}"),
+            "--to",
+            "phrase",
+        ])
         .assert()
         .success();
 
@@ -561,10 +642,14 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
         .unwrap()
         .args([
             "bundle",
-            "--descriptor", "wpkh(@0)",
-            "--slot", &format!("@0.phrase={ja_phrase}"),
-            "--language", "japanese",
-            "--network", "mainnet",
+            "--descriptor",
+            "wpkh(@0)",
+            "--slot",
+            &format!("@0.phrase={ja_phrase}"),
+            "--language",
+            "japanese",
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -612,7 +697,11 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
     // Use all-zeros 16-byte entropy → well-known English entr card.
     let entropy_en: Vec<u8> = vec![0x00u8; 16];
     let en_ms1 = encode_entr(&entropy_en);
-    assert_eq!(en_ms1.len(), 50, "English entr precondition: must be 50 chars");
+    assert_eq!(
+        en_ms1.len(),
+        50,
+        "English entr precondition: must be 50 chars"
+    );
 
     // Decode and confirm it IS an Entr payload before injecting.
     let (_tag, payload_pre) = ms_codec::decode(&en_ms1).expect("en_ms1 must decode");
@@ -638,10 +727,14 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
         .unwrap()
         .args([
             "bundle",
-            "--slot", &format!("@0.xpub={xpub}"),
-            "--slot", &format!("@0.fingerprint={fp}"),
-            "--descriptor", &descriptor,
-            "--network", "mainnet",
+            "--slot",
+            &format!("@0.xpub={xpub}"),
+            "--slot",
+            &format!("@0.fingerprint={fp}"),
+            "--descriptor",
+            &descriptor,
+            "--network",
+            "mainnet",
             "--no-engraving-card",
             "--json",
         ])
@@ -661,9 +754,13 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--import-json", "-",
-            "--language", "japanese",
-            "--network", "mainnet",
+            "bundle",
+            "--import-json",
+            "-",
+            "--language",
+            "japanese",
+            "--network",
+            "mainnet",
             "--json",
         ])
         .write_stdin(envelope_str.as_bytes())
@@ -678,14 +775,16 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
     // CRITICAL: must be byte-identical to the original 50-char entr card.
     // Pre-fix this was a 51-char mnem card (language corrupted to japanese).
     assert_eq!(
-        reemitted_ms1, en_ms1,
+        reemitted_ms1,
+        en_ms1,
         "C2 regression: entr card under --language japanese MUST be byte-identical to original\n\
          got:      {reemitted_ms1} (len={})\n\
          expected: {en_ms1} (len=50)",
         reemitted_ms1.len()
     );
     assert_eq!(
-        reemitted_ms1.len(), 50,
+        reemitted_ms1.len(),
+        50,
         "C2 regression: re-emitted entr card must be 50 chars (entr), not 51 (mnem);\n\
          got {reemitted_ms1:?}"
     );

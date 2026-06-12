@@ -19,12 +19,16 @@ use predicates::prelude::*;
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_CHUNK0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_CHUNK1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MK1_CHUNK1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 const EXPECTED_XPUB: &str = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V";
 
-const VALID_MD1_CHUNK0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
-const VALID_MD1_CHUNK1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
-const VALID_MD1_CHUNK2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+const VALID_MD1_CHUNK0: &str =
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const VALID_MD1_CHUNK1: &str =
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const VALID_MD1_CHUNK2: &str =
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
 
 fn flip_at(chunk: &str, pos: usize) -> String {
     const ALPHABET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
@@ -88,7 +92,13 @@ fn cell_20a_mk1_internal_correction_preempts_auto_fire() {
     let mk1_value = format!("{VALID_MK1_CHUNK0} {bad_chunk1}");
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("mk1={mk1_value}"), "--to", "xpub"])
+        .args([
+            "convert",
+            "--from",
+            &format!("mk1={mk1_value}"),
+            "--to",
+            "xpub",
+        ])
         .assert()
         .code(0)
         .stdout(predicate::str::contains(EXPECTED_XPUB))
@@ -239,7 +249,10 @@ fn cell_24_convert_json_context_auto_fire_emits_json_envelope() {
         .clone();
     let s = String::from_utf8(out).unwrap();
     // Should NOT contain text-form report markers.
-    assert!(!s.contains("# Repair report"), "JSON context must not emit text-form headers; got: {s}");
+    assert!(
+        !s.contains("# Repair report"),
+        "JSON context must not emit text-form headers; got: {s}"
+    );
     // Should parse as a single JSON envelope.
     let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
     assert_eq!(v["schema_version"], "1");
@@ -344,18 +357,37 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
 
     // Per-detail field-set check.
     let detail = &v["repairs"][0];
-    let mut detail_keys: Vec<&str> = detail.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+    let mut detail_keys: Vec<&str> = detail
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|s| s.as_str())
+        .collect();
     detail_keys.sort();
     assert_eq!(
         detail_keys,
-        vec!["chunk_index", "corrected_chunk", "corrected_positions", "original_chunk"],
+        vec![
+            "chunk_index",
+            "corrected_chunk",
+            "corrected_positions",
+            "original_chunk"
+        ],
         "D20 repair-detail field-set pin (alphabetically sorted)"
     );
 
     let pos = &detail["corrected_positions"][0];
-    let mut pos_keys: Vec<&str> = pos.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+    let mut pos_keys: Vec<&str> = pos
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|s| s.as_str())
+        .collect();
     pos_keys.sort();
-    assert_eq!(pos_keys, vec!["now", "position", "was"], "D20 position field-set pin");
+    assert_eq!(
+        pos_keys,
+        vec!["now", "position", "was"],
+        "D20 position field-set pin"
+    );
 
     // Serialized field-order pin (the raw output IS ordered per serde
     // struct-field order). schema_version must come first; the discriminator
@@ -366,8 +398,14 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
         let ib = s.find(needle_b).expect(needle_b);
         ia < ib
     };
-    assert!(raw_order_check("\"schema_version\"", "\"auto_repair_short_circuit\""));
-    assert!(raw_order_check("\"auto_repair_short_circuit\"", "\"exit_code\""));
+    assert!(raw_order_check(
+        "\"schema_version\"",
+        "\"auto_repair_short_circuit\""
+    ));
+    assert!(raw_order_check(
+        "\"auto_repair_short_circuit\"",
+        "\"exit_code\""
+    ));
     assert!(raw_order_check("\"exit_code\"", "\"kind\""));
     assert!(raw_order_check("\"kind\"", "\"corrected_chunks\""));
     assert!(raw_order_check("\"corrected_chunks\"", "\"repairs\""));
@@ -547,8 +585,14 @@ fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
     assert_eq!(v["exit_code"], 5);
     assert_eq!(v["kind"], "ms1");
     // Should NOT be the VerifyBundleJson schema (which has `result`+`checks`).
-    assert!(v["result"].is_null(), "should not be VerifyBundleJson envelope");
-    assert!(v["checks"].is_null(), "should not be VerifyBundleJson envelope");
+    assert!(
+        v["result"].is_null(),
+        "should not be VerifyBundleJson envelope"
+    );
+    assert!(
+        v["checks"].is_null(),
+        "should not be VerifyBundleJson envelope"
+    );
 }
 
 // ============================================================================

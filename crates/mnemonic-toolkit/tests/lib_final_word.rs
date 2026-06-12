@@ -84,8 +84,7 @@ fn anchor_abandon_11_sha_pin() {
 // Anchor vector 2 — beef × 12 target (uniform-word pathological)
 // ============================================================================
 
-const BEEF_11_PARTIAL: &str =
-    "beef beef beef beef beef beef beef beef beef beef beef";
+const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef beef";
 
 /// User-locked anchor: full target phrase is `beef × 12` (uniform-word
 /// pathological vector). Pinned at GREEN time.
@@ -201,7 +200,11 @@ fn refusal_empty_partial() {
     assert!(r.is_err(), "empty partial must refuse");
     let msg = r.unwrap_err().to_string();
     assert!(
-        msg.contains("11") && msg.contains("14") && msg.contains("17") && msg.contains("20") && msg.contains("23"),
+        msg.contains("11")
+            && msg.contains("14")
+            && msg.contains("17")
+            && msg.contains("20")
+            && msg.contains("23"),
         "refusal message must enumerate accepted partial-word counts; got: {msg}",
     );
 }
@@ -267,6 +270,9 @@ fn cross_language_spanish_partial_yields_spanish_candidates() {
     let spanish_set: std::collections::BTreeSet<&'static str> =
         Language::Spanish.word_list().iter().copied().collect();
     for w in &candidates {
-        assert!(spanish_set.contains(w), "candidate '{w}' must be in Spanish wordlist");
+        assert!(
+            spanish_set.contains(w),
+            "candidate '{w}' must be in Spanish wordlist"
+        );
     }
 }

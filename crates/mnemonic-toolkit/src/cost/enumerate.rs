@@ -110,12 +110,18 @@ pub fn enumerate_minimal_conditions(
 
     // SPEC §3.3 step 1 — eager combinatorial precheck.
     let n_tl_states: usize = abs_states.len() * rel_states.len();
-    let pow = 2_usize
-        .checked_pow((n_keys + n_hashes) as u32)
-        .ok_or(CompareCostError::ConditionsTooMany { raw: usize::MAX, cap: hard_cap })?;
+    let pow = 2_usize.checked_pow((n_keys + n_hashes) as u32).ok_or(
+        CompareCostError::ConditionsTooMany {
+            raw: usize::MAX,
+            cap: hard_cap,
+        },
+    )?;
     let raw = n_tl_states
         .checked_mul(pow)
-        .ok_or(CompareCostError::ConditionsTooMany { raw: usize::MAX, cap: hard_cap })?;
+        .ok_or(CompareCostError::ConditionsTooMany {
+            raw: usize::MAX,
+            cap: hard_cap,
+        })?;
     if raw > hard_cap {
         return Err(CompareCostError::ConditionsTooMany { raw, cap: hard_cap });
     }
@@ -140,7 +146,9 @@ pub fn enumerate_minimal_conditions(
 
                     let wsh_ws = build_and_plan(wsh_desc, &assets, &assets.segv0_keys, &cfg);
                     let tr_ws = build_and_plan(tr_desc, &assets, &assets.tap_keys, &cfg);
-                    let (Some(wb), Some(tb)) = (wsh_ws, tr_ws) else { continue };
+                    let (Some(wb), Some(tb)) = (wsh_ws, tr_ws) else {
+                        continue;
+                    };
 
                     if is_minimal(wsh_desc, tr_desc, &assets, &cfg) {
                         let label = label_config(&cfg, &assets, translated);
@@ -481,4 +489,3 @@ fn walk_relative_timelock_kinds(m: &Miniscript<DefiniteDescriptorKey, Segwitv0>)
     }
     (b, t)
 }
-

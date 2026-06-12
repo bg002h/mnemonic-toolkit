@@ -113,7 +113,11 @@ pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, To
         ));
     }
 
-    let policy_type = if template.is_multisig() { "MULTI" } else { "SINGLE" };
+    let policy_type = if template.is_multisig() {
+        "MULTI"
+    } else {
+        "SINGLE"
+    };
     let script_type_str = sparrow_script_type(inputs.script_type);
     let network = sparrow_network(inputs.network);
     let script = build_miniscript_script(inputs, template)?;
@@ -194,14 +198,11 @@ fn build_miniscript_script(
         CliTemplate::Bip84 => Ok("wpkh(@0/**)".to_string()),
         CliTemplate::Bip86 => Ok("tr(@0/**)".to_string()),
         CliTemplate::WshMulti => Ok(format!("wsh({})", multi_arg("multi", inputs, n)?)),
-        CliTemplate::WshSortedMulti => {
-            Ok(format!("wsh({})", multi_arg("sortedmulti", inputs, n)?))
-        }
+        CliTemplate::WshSortedMulti => Ok(format!("wsh({})", multi_arg("sortedmulti", inputs, n)?)),
         CliTemplate::ShWshMulti => Ok(format!("sh(wsh({}))", multi_arg("multi", inputs, n)?)),
-        CliTemplate::ShWshSortedMulti => Ok(format!(
-            "sh(wsh({}))",
-            multi_arg("sortedmulti", inputs, n)?
-        )),
+        CliTemplate::ShWshSortedMulti => {
+            Ok(format!("sh(wsh({}))", multi_arg("sortedmulti", inputs, n)?))
+        }
         // Taproot multisig: descriptor passthrough per SPEC §7 trailing
         // paragraph. Sparrow's `defaultPolicy.miniscript.script` field is a
         // bare miniscript policy expression (not a BIP-380 descriptor with
@@ -221,12 +222,12 @@ fn build_miniscript_script(
 }
 
 fn multi_arg(kind: &str, inputs: &EmitInputs, n: usize) -> Result<String, ToolkitError> {
-    let k = inputs.threshold.ok_or_else(|| {
-        ToolkitError::ExportWalletMissingFields {
+    let k = inputs
+        .threshold
+        .ok_or_else(|| ToolkitError::ExportWalletMissingFields {
             format: "sparrow",
             missing: vec![MissingField::Threshold],
-        }
-    })?;
+        })?;
     let placeholders: Vec<String> = (0..n).map(|i| format!("@{i}/**")).collect();
     Ok(format!("{kind}({k},{})", placeholders.join(",")))
 }

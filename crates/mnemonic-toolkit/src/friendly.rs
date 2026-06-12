@@ -58,7 +58,10 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         ms_codec::Error::Codex32(codex32::Error::ThresholdNotPassed {
             threshold,
             n_shares,
-        }) => format!("ms1 not enough shares: have {}, need {}", n_shares, threshold),
+        }) => format!(
+            "ms1 not enough shares: have {}, need {}",
+            n_shares, threshold
+        ),
         ms_codec::Error::Codex32(codex32::Error::RepeatedIndex(fe)) => format!(
             "ms1 share index '{}' repeated (each share in a set must have a distinct index)",
             fe.to_char(),
@@ -216,7 +219,10 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         // exhaustiveness with a defensive message in case the routing
         // is ever bypassed (e.g., direct construction in a test).
         E::WireVersionMismatch { got } => {
-            format!("md1 wire-version mismatch: got {} (route via FutureFormat)", got)
+            format!(
+                "md1 wire-version mismatch: got {} (route via FutureFormat)",
+                got
+            )
         }
         E::PathDepthExceeded { got, max } => {
             format!("md1 path depth {} exceeds max {}", got, max)
@@ -412,12 +418,10 @@ mod tests {
     #[test]
     fn ms_codec_invalid_checksum_withholds_input_string() {
         let secret = "ms10entrspqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
-        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
-            codex32::Error::InvalidChecksum {
-                checksum: "short",
-                string: secret.to_string(),
-            },
-        ));
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::InvalidChecksum {
+            checksum: "short",
+            string: secret.to_string(),
+        }));
         // The redaction pin: the embedded input must NOT appear in the message.
         assert!(
             !m.contains(secret),
@@ -453,7 +457,10 @@ mod tests {
         assert!(m.contains("have 1") && m.contains("need 2"), "got: {m}");
         // No Debug dump: no struct braces, no variant name.
         assert!(!m.contains('{'), "Debug-dumped braces leaked: {m}");
-        assert!(!m.contains("ThresholdNotPassed"), "variant name leaked: {m}");
+        assert!(
+            !m.contains("ThresholdNotPassed"),
+            "variant name leaked: {m}"
+        );
     }
 
     #[test]
@@ -541,9 +548,9 @@ mod tests {
 
     #[test]
     fn md_codec_all_arms_render_prose() {
+        use md_codec::error::ContextKind;
         use md_codec::Error as E;
         use md_codec::Tag;
-        use md_codec::error::ContextKind;
         let rows: [(E, &str, &str); 44] = [
             (
                 E::BitStreamTruncated {
@@ -701,11 +708,7 @@ mod tests {
                 "Codex32EncodeError",
             ),
             (E::ChunkSetEmpty, "chunk set empty", "ChunkSetEmpty"),
-            (
-                E::ChunkSetInconsistent,
-                "disagree",
-                "ChunkSetInconsistent",
-            ),
+            (E::ChunkSetInconsistent, "disagree", "ChunkSetInconsistent"),
             (
                 E::ChunkSetIncomplete {
                     got: 1,
@@ -741,7 +744,9 @@ mod tests {
                 "MissingExplicitOrigin",
             ),
             (
-                E::InvalidPresenceByte { reserved_bits: 0x04 },
+                E::InvalidPresenceByte {
+                    reserved_bits: 0x04,
+                },
                 "presence byte",
                 "InvalidPresenceByte",
             ),
@@ -868,11 +873,7 @@ mod tests {
                 "cross-chunk integrity hash mismatch",
                 "CrossChunkHashMismatch",
             ),
-            (
-                E::ReservedBitsSet,
-                "reserved bits set",
-                "ReservedBitsSet",
-            ),
+            (E::ReservedBitsSet, "reserved bits set", "ReservedBitsSet"),
             (
                 E::InvalidPolicyIdStubCount,
                 "policy_id_stub_count",
@@ -917,7 +918,10 @@ mod tests {
         });
         assert!(m.contains("mk1"), "got: {m}");
         assert!(m.contains("card payload too large"), "got: {m}");
-        assert!(!m.contains("CardPayloadTooLarge"), "variant name leaked: {m}");
+        assert!(
+            !m.contains("CardPayloadTooLarge"),
+            "variant name leaked: {m}"
+        );
         assert!(!m.contains("unhandled"), "got: {m}");
     }
 
@@ -996,11 +1000,7 @@ mod tests {
                 "entropy bit count",
                 "BadEntropyBitCount",
             ),
-            (
-                bip39::Error::BadWordCount(13),
-                "word count",
-                "BadWordCount",
-            ),
+            (bip39::Error::BadWordCount(13), "word count", "BadWordCount"),
             (
                 bip39::Error::InvalidChecksum,
                 "checksum failure",
@@ -1009,7 +1009,10 @@ mod tests {
         ];
         for (e, needle, variant) in rows {
             let m = friendly_bip39(&e);
-            assert!(m.contains("BIP-39"), "missing BIP-39 tag for {variant}: {m}");
+            assert!(
+                m.contains("BIP-39"),
+                "missing BIP-39 tag for {variant}: {m}"
+            );
             assert!(m.contains(needle), "expected {needle:?} for {variant}: {m}");
             assert!(!m.contains(variant), "variant name {variant} leaked: {m}");
         }
@@ -1028,11 +1031,7 @@ mod tests {
                 "BIP-32",
                 "Bip32",
             ),
-            (
-                B::XpubParse("bad base58".into()),
-                "--xpub",
-                "XpubParse",
-            ),
+            (B::XpubParse("bad base58".into()), "--xpub", "XpubParse"),
             (
                 B::FingerprintParse("bad hex".into()),
                 "--master-fingerprint",

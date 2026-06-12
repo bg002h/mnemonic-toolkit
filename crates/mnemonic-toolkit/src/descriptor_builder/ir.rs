@@ -251,7 +251,12 @@ impl PolicyNode {
             PolicyNode::OrI(s) => format!("or_i({},{})", s[0].render(), s[1].render()),
             PolicyNode::OrB(s) => format!("or_b({},{})", s[0].render(), s[1].render()),
             PolicyNode::Andor(s) => {
-                format!("andor({},{},{})", s[0].render(), s[1].render(), s[2].render())
+                format!(
+                    "andor({},{},{})",
+                    s[0].render(),
+                    s[1].render(),
+                    s[2].render()
+                )
             }
             PolicyNode::Thresh(t) => {
                 let subs = t
@@ -265,7 +270,6 @@ impl PolicyNode {
             PolicyNode::Wrap(w) => format!("{}:{}", w.w, w.sub.render()),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -292,8 +296,14 @@ mod tests {
         let samples = vec![
             PolicyNode::Pk(k()),
             PolicyNode::Pkh(k()),
-            PolicyNode::Multi(MultiSpec { k: 1, keys: vec![k()] }),
-            PolicyNode::Sortedmulti(MultiSpec { k: 1, keys: vec![k()] }),
+            PolicyNode::Multi(MultiSpec {
+                k: 1,
+                keys: vec![k()],
+            }),
+            PolicyNode::Sortedmulti(MultiSpec {
+                k: 1,
+                keys: vec![k()],
+            }),
             PolicyNode::Older(1),
             PolicyNode::After(1),
             PolicyNode::Sha256("aa".into()),
@@ -305,8 +315,14 @@ mod tests {
             PolicyNode::OrI(Box::new([pk(), pk()])),
             PolicyNode::OrB(Box::new([pk(), pk()])),
             PolicyNode::Andor(Box::new([pk(), pk(), pk()])),
-            PolicyNode::Thresh(ThreshSpec { k: 1, subs: vec![pk()] }),
-            PolicyNode::Wrap(WrapSpec { w: "v".into(), sub: Box::new(pk()) }),
+            PolicyNode::Thresh(ThreshSpec {
+                k: 1,
+                subs: vec![pk()],
+            }),
+            PolicyNode::Wrap(WrapSpec {
+                w: "v".into(),
+                sub: Box::new(pk()),
+            }),
         ];
         for n in &samples {
             // Exhaustiveness REMINDER — a new variant makes this match
@@ -359,7 +375,11 @@ mod tests {
     // ---- render unit cells (exact, hand-verifiable) -----------------------
 
     fn doc(root: PolicyNode) -> SpecDoc {
-        SpecDoc { schema_version: 1, wrapper: WrapperKind::Wsh, root }
+        SpecDoc {
+            schema_version: 1,
+            wrapper: WrapperKind::Wsh,
+            root,
+        }
     }
 
     #[test]
@@ -376,16 +396,25 @@ mod tests {
 
     #[test]
     fn render_multi_applies_suffix_per_key() {
-        let m = PolicyNode::Multi(MultiSpec { k: 2, keys: vec!["A".into(), "B".into()] });
+        let m = PolicyNode::Multi(MultiSpec {
+            k: 2,
+            keys: vec!["A".into(), "B".into()],
+        });
         assert_eq!(m.render(), "multi(2,A/<0;1>/*,B/<0;1>/*)");
-        let s = PolicyNode::Sortedmulti(MultiSpec { k: 1, keys: vec!["A".into()] });
+        let s = PolicyNode::Sortedmulti(MultiSpec {
+            k: 1,
+            keys: vec!["A".into()],
+        });
         assert_eq!(s.render(), "sortedmulti(1,A/<0;1>/*)");
     }
 
     #[test]
     fn render_combinators_and_wrapper_exact() {
         let andv = PolicyNode::AndV(Box::new([
-            PolicyNode::Wrap(WrapSpec { w: "v".into(), sub: Box::new(PolicyNode::Pk("A".into())) }),
+            PolicyNode::Wrap(WrapSpec {
+                w: "v".into(),
+                sub: Box::new(PolicyNode::Pk("A".into())),
+            }),
             PolicyNode::Older(5),
         ]));
         assert_eq!(andv.render(), "and_v(v:pk(A/<0;1>/*),older(5))");
@@ -401,14 +430,20 @@ mod tests {
             k: 2,
             subs: vec![
                 PolicyNode::Pk("A".into()),
-                PolicyNode::Wrap(WrapSpec { w: "s".into(), sub: Box::new(PolicyNode::Pk("B".into())) }),
+                PolicyNode::Wrap(WrapSpec {
+                    w: "s".into(),
+                    sub: Box::new(PolicyNode::Pk("B".into())),
+                }),
             ],
         });
         assert_eq!(thr.render(), "thresh(2,pk(A/<0;1>/*),s:pk(B/<0;1>/*))");
 
         let orb = PolicyNode::OrB(Box::new([
             PolicyNode::Pk("A".into()),
-            PolicyNode::Wrap(WrapSpec { w: "s".into(), sub: Box::new(PolicyNode::Pk("B".into())) }),
+            PolicyNode::Wrap(WrapSpec {
+                w: "s".into(),
+                sub: Box::new(PolicyNode::Pk("B".into())),
+            }),
         ]));
         assert_eq!(orb.render(), "or_b(pk(A/<0;1>/*),s:pk(B/<0;1>/*))");
     }
@@ -451,21 +486,27 @@ mod tests {
     #[test]
     fn rejects_version_mismatch() {
         let j = r#"{"schema_version":2,"wrapper":"wsh","root":{"pk":"A"}}"#;
-        assert!(matches!(SpecDoc::parse(j), Err(SpecParseError::UnsupportedVersion(2))));
+        assert!(matches!(
+            SpecDoc::parse(j),
+            Err(SpecParseError::UnsupportedVersion(2))
+        ));
     }
 
     #[test]
     fn rejects_wrong_arity_binary_combinator() {
         let one = r#"{"schema_version":1,"wrapper":"wsh","root":{"and_v":[{"pk":"A"}]}}"#;
-        let three =
-            r#"{"schema_version":1,"wrapper":"wsh","root":{"and_v":[{"pk":"A"},{"pk":"B"},{"pk":"C"}]}}"#;
+        let three = r#"{"schema_version":1,"wrapper":"wsh","root":{"and_v":[{"pk":"A"},{"pk":"B"},{"pk":"C"}]}}"#;
         assert!(matches!(SpecDoc::parse(one), Err(SpecParseError::Json(_))));
-        assert!(matches!(SpecDoc::parse(three), Err(SpecParseError::Json(_))));
+        assert!(matches!(
+            SpecDoc::parse(three),
+            Err(SpecParseError::Json(_))
+        ));
     }
 
     #[test]
     fn rejects_wrong_arity_andor() {
-        let two = r#"{"schema_version":1,"wrapper":"wsh","root":{"andor":[{"pk":"A"},{"pk":"B"}]}}"#;
+        let two =
+            r#"{"schema_version":1,"wrapper":"wsh","root":{"andor":[{"pk":"A"},{"pk":"B"}]}}"#;
         assert!(matches!(SpecDoc::parse(two), Err(SpecParseError::Json(_))));
     }
 

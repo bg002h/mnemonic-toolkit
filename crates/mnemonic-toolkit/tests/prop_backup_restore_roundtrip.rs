@@ -272,7 +272,12 @@ fn build_descriptor(spec: &Value) -> Option<String> {
         .assert();
     let o = out.get_output();
     if o.status.success() {
-        Some(String::from_utf8(o.stdout.clone()).unwrap().trim().to_string())
+        Some(
+            String::from_utf8(o.stdout.clone())
+                .unwrap()
+                .trim()
+                .to_string(),
+        )
     } else {
         None
     }
@@ -456,7 +461,10 @@ fn generator_covers_all_fragments() {
         "andor",
         "and_v",
     ] {
-        assert!(all.contains(f), "generator never produced fragment `{f}`: {all:?}");
+        assert!(
+            all.contains(f),
+            "generator never produced fragment `{f}`: {all:?}"
+        );
     }
 }
 
@@ -469,19 +477,31 @@ const D_B: &str = "[22222222/48h/0h/0h/2h]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1
 fn oracle1_rejects_dropped_timelock() {
     let full = format!("wsh(and_v(v:multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*),older(4032)))");
     let dropped = format!("wsh(multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*))");
-    assert_ne!(normalize(&full), normalize(&dropped), "O1 must catch a dropped older()");
+    assert_ne!(
+        normalize(&full),
+        normalize(&dropped),
+        "O1 must catch a dropped older()"
+    );
 }
 #[test]
 fn oracle1_rejects_multi_sortedmulti_swap() {
     let m = format!("wsh(multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*))");
     let sm = format!("wsh(sortedmulti(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*))");
-    assert_ne!(normalize(&m), normalize(&sm), "O1 must catch multi↔sortedmulti");
+    assert_ne!(
+        normalize(&m),
+        normalize(&sm),
+        "O1 must catch multi↔sortedmulti"
+    );
 }
 #[test]
 fn oracle1_rejects_masked_timelock_value() {
     let a = format!("wsh(and_v(v:multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*),older(4032)))");
     let b = format!("wsh(and_v(v:multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*),older(1000)))");
-    assert_ne!(normalize(&a), normalize(&b), "O1 must catch a changed timelock value");
+    assert_ne!(
+        normalize(&a),
+        normalize(&b),
+        "O1 must catch a changed timelock value"
+    );
 }
 #[test]
 fn oracle1_accepts_keyless_equivalent_redepth() {
@@ -496,7 +516,11 @@ fn oracle3_rejects_wrong_descriptor_address() {
     // that built a different script).
     let a = format!("wsh(multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*))");
     let b = format!("wsh(and_v(v:multi(2,{D_A}/<0;1>/*,{D_B}/<0;1>/*),older(4032)))");
-    assert_ne!(derive_receive(&a, 1), derive_receive(&b, 1), "O3 must catch a wrong script");
+    assert_ne!(
+        derive_receive(&a, 1),
+        derive_receive(&b, 1),
+        "O3 must catch a wrong script"
+    );
 }
 
 // ── Smoke: a handful of hand-picked policies through the full pipeline (fast
@@ -508,7 +532,11 @@ fn smoke_handpicked_policies() {
         if let Some(desc) = build_descriptor(&spec) {
             let md1 = bundle_md1(&desc);
             let (desc2, addrs) = restore(&md1);
-            assert_eq!(normalize(&desc), normalize(&desc2), "schema {schema}: {desc} vs {desc2}");
+            assert_eq!(
+                normalize(&desc),
+                normalize(&desc2),
+                "schema {schema}: {desc} vs {desc2}"
+            );
             assert_eq!(derive_receive(&desc, 2), addrs, "schema {schema} addresses");
             assert_eq!(bundle_md1(&desc2), md1, "schema {schema} md1 fixed-point");
         }

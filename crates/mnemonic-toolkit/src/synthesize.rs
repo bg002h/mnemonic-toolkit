@@ -102,7 +102,12 @@ pub(crate) fn mk1_origin_path(xpub: &Xpub, descriptor_path: &DerivationPath) -> 
     for i in 0..(depth - 1) {
         // Reuse the descriptor path where available; pad absent intermediates with
         // Normal{0} (honest filler — reads as obviously-synthetic in `inspect`).
-        out.push(comps.get(i).copied().unwrap_or(ChildNumber::Normal { index: 0 }));
+        out.push(
+            comps
+                .get(i)
+                .copied()
+                .unwrap_or(ChildNumber::Normal { index: 0 }),
+        );
     }
     out.push(xpub.child_number); // terminal MUST equal the xpub's child (round-trip)
     DerivationPath::from(out)
@@ -178,8 +183,12 @@ pub fn synthesize_full(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     let path = template.derivation_path(network, account);
-    let card =
-        mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
+    let card = mk_codec::KeyCard::new(
+        vec![stub],
+        Some(fingerprint),
+        mk1_origin_path(&xpub, &path),
+        xpub,
+    );
     let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
@@ -210,8 +219,12 @@ pub fn synthesize_watch_only(
     let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
 
     let path = template.derivation_path(network, account);
-    let card =
-        mk_codec::KeyCard::new(vec![stub], Some(fingerprint), mk1_origin_path(&xpub, &path), xpub);
+    let card = mk_codec::KeyCard::new(
+        vec![stub],
+        Some(fingerprint),
+        mk1_origin_path(&xpub, &path),
+        xpub,
+    );
     let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
     let mk1 = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
 
@@ -323,8 +336,7 @@ pub fn synthesize_descriptor(
                     }
                 };
                 ms1.push(
-                    ms_codec::encode(ms_codec::Tag::ENTR, &payload)
-                        .map_err(ToolkitError::from)?,
+                    ms_codec::encode(ms_codec::Tag::ENTR, &payload).map_err(ToolkitError::from)?,
                 );
             }
             None => ms1.push(String::new()),
@@ -485,8 +497,7 @@ pub fn synthesize_multisig_full(
             entropy: (*entropy).clone(),
         }
     };
-    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms1_payload)
-        .map_err(ToolkitError::from)?;
+    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms1_payload).map_err(ToolkitError::from)?;
 
     // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected
     // for cosigner_count > 1 at bundle.rs entry (BIP-388); cosigner_count == 1
@@ -797,8 +808,10 @@ pub fn synthesize_unified(
 
     // Path family check (single-sig N=1: use template default; multisig: use
     // each slot's path).
-    let origin_paths: Vec<OriginPath> =
-        slots.iter().map(|s| derivation_path_to_origin_path(&s.path)).collect();
+    let origin_paths: Vec<OriginPath> = slots
+        .iter()
+        .map(|s| derivation_path_to_origin_path(&s.path))
+        .collect();
     let all_same = origin_paths.windows(2).all(|w| w[0] == w[1]);
     let path_decl_paths = if all_same || n == 1 {
         PathDeclPaths::Shared(origin_paths[0].clone())
@@ -866,11 +879,11 @@ mod tests {
         };
         // (xpub, descriptor_path) for each census class.
         let cases: &[(Xpub, &str)] = &[
-            (xpub_at("m/84'/0'/0'"), "m/84'/0'/0'"),    // consistent 3→3 (no-op)
+            (xpub_at("m/84'/0'/0'"), "m/84'/0'/0'"), // consistent 3→3 (no-op)
             (xpub_at("m/48'/0'/0'"), "m/48'/0'/0'/2'"), // 3→4 truncate
             (xpub_at("m/48'/0'/0'/2'"), "m/87'/0'/0'"), // 4→3 extend
-            (xpub_at("m/84'/0'/0'"), "m"),              // 3→0 pad
-            (xpub_at("m/0'"), "m/0'"),                  // depth-1
+            (xpub_at("m/84'/0'/0'"), "m"),           // 3→0 pad
+            (xpub_at("m/0'"), "m/0'"),               // depth-1
         ];
         for (xpub, dpath) in cases {
             let out = mk1_origin_path(xpub, &DerivationPath::from_str(dpath).unwrap());
@@ -1132,8 +1145,8 @@ mod tests {
     #[test]
     fn multisig_wsh_sortedmulti_2_of_3_round_trips_v0_30_body_multikeys() {
         use bip39::Mnemonic;
-        use md_codec::tree::{Body, Node};
         use md_codec::tag::Tag;
+        use md_codec::tree::{Body, Node};
 
         let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
         let bundle = synthesize_multisig_full(
@@ -1151,7 +1164,10 @@ mod tests {
 
         let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
-        assert!(desc.is_wallet_policy(), "wallet-policy expected post-roundtrip");
+        assert!(
+            desc.is_wallet_policy(),
+            "wallet-policy expected post-roundtrip"
+        );
         assert!(matches!(desc.tree.tag, Tag::Wsh), "root must be Wsh");
 
         let inner: &Node = match &desc.tree.body {
@@ -1164,9 +1180,7 @@ mod tests {
                 assert_eq!(*k, 2, "2-of-3 threshold");
                 assert_eq!(indices, &vec![0u8, 1, 2], "indices must round-trip as 0..n");
             }
-            other => panic!(
-                "v0.30 SPEC §4 requires SortedMulti → Body::MultiKeys, got {other:?}"
-            ),
+            other => panic!("v0.30 SPEC §4 requires SortedMulti → Body::MultiKeys, got {other:?}"),
         }
 
         // Cross-binding still holds.
@@ -1349,7 +1363,9 @@ mod tests {
             1,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
+        let bundle =
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1364,7 +1380,9 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::SingleSig,
             1,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
+        let bundle =
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1378,7 +1396,9 @@ mod tests {
             2,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
+        let bundle =
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
         assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
@@ -1391,7 +1411,9 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
+        let bundle =
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
         assert_eq!(multi.len(), 2);
@@ -1406,7 +1428,8 @@ mod tests {
         );
         // descriptor has n=2 but we only pass 1 cosigner → error
         let one = vec![cosigners[0].clone()];
-        let err = synthesize_descriptor(&descriptor, &one, false, bip39::Language::English).unwrap_err();
+        let err =
+            synthesize_descriptor(&descriptor, &one, false, bip39::Language::English).unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
     }
 
@@ -1451,7 +1474,10 @@ mod tests {
             let mut payload = [0u8; 65];
             payload[0..32].copy_from_slice(&xpub.chain_code.to_bytes());
             payload[32..65].copy_from_slice(&xpub.public_key.serialize());
-            keys.push(ParsedKey { i: i as u8, payload });
+            keys.push(ParsedKey {
+                i: i as u8,
+                payload,
+            });
             fps.push(ParsedFingerprint {
                 i: i as u8,
                 fp: master_fp.to_bytes(),
@@ -1464,11 +1490,25 @@ mod tests {
             &fps,
         )
         .unwrap();
-        let bundle = synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English).unwrap();
+        let bundle =
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         assert_eq!(bundle.ms1.len(), 3, "ms1 dense vec len == n");
-        assert!(bundle.ms1[0].starts_with("ms1"), "ms1[0] populated; got {:?}", bundle.ms1[0]);
-        assert!(bundle.ms1[1].starts_with("ms1"), "ms1[1] populated; got {:?}", bundle.ms1[1]);
-        assert!(bundle.ms1[2].starts_with("ms1"), "ms1[2] populated; got {:?}", bundle.ms1[2]);
+        assert!(
+            bundle.ms1[0].starts_with("ms1"),
+            "ms1[0] populated; got {:?}",
+            bundle.ms1[0]
+        );
+        assert!(
+            bundle.ms1[1].starts_with("ms1"),
+            "ms1[1] populated; got {:?}",
+            bundle.ms1[1]
+        );
+        assert!(
+            bundle.ms1[2].starts_with("ms1"),
+            "ms1[2] populated; got {:?}",
+            bundle.ms1[2]
+        );
         // All 3 must be DISTINCT (each ms1 carries that slot's own entropy bytes).
         assert_ne!(bundle.ms1[0], bundle.ms1[1]);
         assert_ne!(bundle.ms1[1], bundle.ms1[2]);
@@ -1479,7 +1519,13 @@ mod tests {
         let mut cosigners_hybrid = cosigners.clone();
         cosigners_hybrid[1].entropy = None;
         cosigners_hybrid[2].entropy = None;
-        let bundle_hybrid = synthesize_descriptor(&descriptor, &cosigners_hybrid, false, bip39::Language::English).unwrap();
+        let bundle_hybrid = synthesize_descriptor(
+            &descriptor,
+            &cosigners_hybrid,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap();
         assert_eq!(bundle_hybrid.ms1.len(), 3);
         assert!(bundle_hybrid.ms1[0].starts_with("ms1"));
         assert_eq!(bundle_hybrid.ms1[1], "");
@@ -1598,7 +1644,10 @@ mod tests {
         // binary (R0 M2: NOT an assert_eq!(unified, descriptor) compare, which
         // is vacuous once both are the same fn). Any csi / per-cosigner
         // ordering / stub / ms1 / md1 drift in the delegated path goes RED.
-        let slots = vec![distinct_slot(TREZOR_12_ZERO, 0), distinct_slot(BIP39_TEST_2, 1)];
+        let slots = vec![
+            distinct_slot(TREZOR_12_ZERO, 0),
+            distinct_slot(BIP39_TEST_2, 1),
+        ];
         let bundle = synthesize_unified(
             &slots,
             CliTemplate::WshSortedMulti,
@@ -1739,7 +1788,10 @@ mod tests {
         assert!(bundle.ms1[0].starts_with("ms1"), "slot 0 secret-bearing");
         assert_eq!(bundle.ms1[1], "", "slot 1 watch-only sentinel");
         assert_eq!(bundle.ms1[2], "", "slot 2 watch-only sentinel");
-        assert!(bundle.any_secret_bearing(), "hybrid is secret-bearing for any-non-empty");
+        assert!(
+            bundle.any_secret_bearing(),
+            "hybrid is secret-bearing for any-non-empty"
+        );
     }
 
     #[test]

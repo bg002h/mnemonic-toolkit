@@ -40,7 +40,14 @@ fn run_autosniff(path: &str) -> assert_cmd::assert::Assert {
 fn run_explicit_json(path: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", path, "--format", "jade", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            path,
+            "--format",
+            "jade",
+            "--json",
+        ])
         .assert()
 }
 
@@ -54,11 +61,26 @@ fn jade_2of3_happy_path_explicit_format() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].cosigners=3"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].network=mainnet"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].threshold=2"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].bsms_audit=none"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].entropy=none"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("bundles[0].cosigners=3"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].network=mainnet"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].threshold=2"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].bsms_audit=none"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("bundles[0].entropy=none"),
+        "stdout: {stdout}"
+    );
     // Jade provenance is neither bsms nor bitcoin-core; the
     // `source_metadata` accessor returns None per ImportProvenance semantics.
     assert!(
@@ -81,7 +103,10 @@ fn jade_autosniff_2of3_dispatches_correctly() {
     let out = run_autosniff(FIX_2OF3).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
-    assert!(stdout.contains("bundles[0].cosigners=3"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("bundles[0].cosigners=3"),
+        "stdout: {stdout}"
+    );
 }
 
 #[test]

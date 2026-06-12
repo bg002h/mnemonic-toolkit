@@ -306,7 +306,12 @@ mod tests {
 
     struct NoOracle;
     impl IndelOracle for NoOracle {
-        fn validate(&self, _: &str, _: &BTreeSet<usize>, _e_subst: usize) -> Option<(String, usize)> {
+        fn validate(
+            &self,
+            _: &str,
+            _: &BTreeSet<usize>,
+            _e_subst: usize,
+        ) -> Option<(String, usize)> {
             None
         }
     }

@@ -20,8 +20,7 @@ const ENTROPY_16_ZEROS_HEX: &str = "00000000000000000000000000000000";
 
 /// 32 bytes hex (64 zero chars) — used as the
 /// `MNEMONIC_SLIP39_TEST_RNG` seed value.
-const TEST_RNG_HEX_64: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+const TEST_RNG_HEX_64: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 // ============================================================
 // Row 1a — argv-leakage: split --from phrase= (inline)
@@ -291,13 +290,13 @@ fn advisory_combine_reconstructed_silent_when_piped() {
         .output()
         .unwrap();
     if !split_out.status.success() {
-        panic!("slip39 split failed: {}", String::from_utf8_lossy(&split_out.stderr));
+        panic!(
+            "slip39 split failed: {}",
+            String::from_utf8_lossy(&split_out.stderr)
+        );
     }
     let split_stdout = String::from_utf8(split_out.stdout).unwrap();
-    let shares: Vec<&str> = split_stdout
-        .lines()
-        .filter(|l| !l.is_empty())
-        .collect();
+    let shares: Vec<&str> = split_stdout.lines().filter(|l| !l.is_empty()).collect();
     assert!(shares.len() >= 2, "expected >=2 shares from 3,2 group");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()

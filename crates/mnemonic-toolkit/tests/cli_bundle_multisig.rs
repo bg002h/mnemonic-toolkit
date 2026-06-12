@@ -31,7 +31,10 @@ fn watch_only_multisig_distinct_cosigners_emits_distinct_cards() {
         let xpriv = master.derive_priv(&secp, &path).unwrap();
         let xpub = Xpub::from_priv(&secp, &xpriv);
         slot_args.push(format!("@{idx}.xpub={xpub}"));
-        slot_args.push(format!("@{idx}.fingerprint={}", fp.to_string().to_lowercase()));
+        slot_args.push(format!(
+            "@{idx}.fingerprint={}",
+            fp.to_string().to_lowercase()
+        ));
         slot_args.push(format!("@{idx}.path={path_str}"));
     }
 

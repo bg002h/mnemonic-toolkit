@@ -38,10 +38,7 @@ fn assert_top_level_key_set(v: &serde_json::Value, expected: &[&str], fixture: &
     actual.sort();
     let mut expected_sorted: Vec<&str> = expected.to_vec();
     expected_sorted.sort();
-    assert_eq!(
-        actual, expected_sorted,
-        "{fixture} top-level keys drifted"
-    );
+    assert_eq!(actual, expected_sorted, "{fixture} top-level keys drifted");
 }
 
 // ============================================================================
@@ -72,7 +69,10 @@ fn drift_path_of_xpub_match_structural_contract() {
     // Match-arm contract: path/template populated, account is u32 or null
     // (None for --add-path templates without an account token).
     assert!(v["path"].is_string(), "path must be string on match");
-    assert!(v["template"].is_string(), "template must be string on match");
+    assert!(
+        v["template"].is_string(),
+        "template must be string on match"
+    );
     assert!(v["target_xpub_canonical"].is_string());
 }
 
@@ -104,10 +104,16 @@ fn drift_path_of_xpub_no_match_structural_contract() {
     // path/template/account MUST be present AS null (NOT omitted via
     // skip_serializing_if). Locks the v0.27.x discipline against silent
     // SemVer-minor shape evolution.
-    assert!(v["path"].is_null(), "path must be null on no-match (not omitted)");
+    assert!(
+        v["path"].is_null(),
+        "path must be null on no-match (not omitted)"
+    );
     assert!(v["template"].is_null(), "template must be null on no-match");
     assert!(v["account"].is_null(), "account must be null on no-match");
-    assert!(v["target_xpub_canonical"].is_string(), "envelope-scope target_xpub_canonical preserved on no-match");
+    assert!(
+        v["target_xpub_canonical"].is_string(),
+        "envelope-scope target_xpub_canonical preserved on no-match"
+    );
 }
 
 // ============================================================================
@@ -176,12 +182,21 @@ fn drift_account_of_descriptor_match_structural_contract() {
     assert_eq!(v["mode"], "account-of-descriptor");
     assert_eq!(v["result"], "match");
     // matched_cosigners is non-empty on match (Q5a invariant).
-    let mc = v["matched_cosigners"].as_array().expect("matched_cosigners is array");
-    assert!(!mc.is_empty(), "matched_cosigners must be non-empty on match");
+    let mc = v["matched_cosigners"]
+        .as_array()
+        .expect("matched_cosigners is array");
+    assert!(
+        !mc.is_empty(),
+        "matched_cosigners must be non-empty on match"
+    );
     // Per-cosigner structural contract.
     let inner_keys = mc[0].as_object().unwrap().keys().collect::<Vec<_>>();
-    let inner_set: std::collections::BTreeSet<&str> = inner_keys.iter().map(|s| s.as_str()).collect();
-    let expected: std::collections::BTreeSet<&str> = ["cosigner_index", "path", "template", "account"].into_iter().collect();
+    let inner_set: std::collections::BTreeSet<&str> =
+        inner_keys.iter().map(|s| s.as_str()).collect();
+    let expected: std::collections::BTreeSet<&str> =
+        ["cosigner_index", "path", "template", "account"]
+            .into_iter()
+            .collect();
     assert_eq!(inner_set, expected, "matched_cosigners[0] keys drifted");
 }
 
@@ -195,9 +210,14 @@ fn drift_account_of_descriptor_no_match_structural_contract() {
     assert_eq!(v["mode"], "account-of-descriptor");
     assert_eq!(v["result"], "no_match");
     // matched_cosigners MUST be present + empty (Q5a invariant): not omitted.
-    let mc = v["matched_cosigners"].as_array().expect("matched_cosigners is array");
+    let mc = v["matched_cosigners"]
+        .as_array()
+        .expect("matched_cosigners is array");
     assert!(mc.is_empty(), "matched_cosigners must be empty on no-match");
-    assert!(v["cosigners_total"].is_number(), "cosigners_total envelope-scope preserved on no-match");
+    assert!(
+        v["cosigners_total"].is_number(),
+        "cosigners_total envelope-scope preserved on no-match"
+    );
 }
 
 // ============================================================================

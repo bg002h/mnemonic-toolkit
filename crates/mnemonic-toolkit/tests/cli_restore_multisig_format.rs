@@ -25,11 +25,21 @@ fn bundle_md1(template: &str, network: &str) -> Vec<String> {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "bundle", "--template", template, "--threshold", "2", "--network", network,
-            "--slot", &format!("@0.phrase={C0}"),
-            "--slot", &format!("@1.phrase={C1}"),
-            "--slot", &format!("@2.phrase={C2}"),
-            "--json", "--no-engraving-card",
+            "bundle",
+            "--template",
+            template,
+            "--threshold",
+            "2",
+            "--network",
+            network,
+            "--slot",
+            &format!("@0.phrase={C0}"),
+            "--slot",
+            &format!("@1.phrase={C1}"),
+            "--slot",
+            &format!("@2.phrase={C2}"),
+            "--json",
+            "--no-engraving-card",
         ])
         .assert()
         .success();
@@ -56,7 +66,11 @@ fn restore_format_stdout(md1: &[String], format: &str) -> String {
     let mut a = restore_args(md1);
     a.push("--format".into());
     a.push(format.into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().code(0);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0);
     String::from_utf8(out.get_output().stdout.clone()).unwrap()
 }
 
@@ -77,8 +91,15 @@ fn threshold_token(format: &str) -> &'static str {
 fn emit_all_formats_carry_threshold_token() {
     let md1 = bundle_md1("wsh-sortedmulti", "mainnet");
     for fmt in [
-        "descriptor", "bitcoin-core", "bip388", "sparrow", "bsms",
-        "coldcard", "coldcard-multisig", "jade", "electrum",
+        "descriptor",
+        "bitcoin-core",
+        "bip388",
+        "sparrow",
+        "bsms",
+        "coldcard",
+        "coldcard-multisig",
+        "jade",
+        "electrum",
     ] {
         let payload = restore_format_stdout(&md1, fmt);
         let tok = threshold_token(fmt);
@@ -138,10 +159,18 @@ fn format_descriptor_equals_json_descriptor() {
     let payload = restore_format_stdout(&md1, "descriptor");
     let mut a = restore_args(&md1);
     a.push("--json".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().code(0);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     let json_desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert_eq!(payload.trim_end(), json_desc, "--format descriptor != --json descriptor");
+    assert_eq!(
+        payload.trim_end(),
+        json_desc,
+        "--format descriptor != --json descriptor"
+    );
 }
 
 // ─── Refusals (match export-wallet) ─────────────────────────────────────────
@@ -183,7 +212,11 @@ fn format_payloads_are_watch_only() {
         let mut a = restore_args(&md1);
         a.push("--format".into());
         a.push(fmt.into());
-        let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().code(0);
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&a)
+            .assert()
+            .code(0);
         let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
         for chan in [&stdout, &stderr] {
@@ -202,13 +235,20 @@ fn json_envelope_carries_import_payload() {
     a.push("--format".into());
     a.push("bitcoin-core".into());
     a.push("--json".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&a).assert().code(0);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(0);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["mode"], "multisig");
     assert_eq!(v["threshold"], 2);
     assert_eq!(v["cosigners"], 3);
     let payload = v["import_payload"].as_str().expect("import_payload field");
-    assert!(payload.contains("sortedmulti(2,"), "import_payload not multisig");
+    assert!(
+        payload.contains("sortedmulti(2,"),
+        "import_payload not multisig"
+    );
 }
 
 // ─── Mismatch precedence (exit 4 BEFORE any payload) ────────────────────────
@@ -262,7 +302,10 @@ fn format_output_file_routes_payload() {
         // verification doc goes to stderr when --format + --output.
         .stderr(predicate::str::contains("cosigner @0"));
     let written = std::fs::read_to_string(&path).unwrap();
-    assert!(written.contains("sortedmulti(2,"), "file missing descriptor payload");
+    assert!(
+        written.contains("sortedmulti(2,"),
+        "file missing descriptor payload"
+    );
 }
 
 /// (v2) taproot NUMS multisig `--format` thread-through: a `tr-sortedmulti-a`

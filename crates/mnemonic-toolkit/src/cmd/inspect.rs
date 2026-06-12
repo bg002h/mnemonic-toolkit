@@ -190,7 +190,11 @@ fn emit_inspect_text<W: Write>(
             writeln!(stdout, "tag: {tag_str}").map_err(ToolkitError::Io)?;
             writeln!(stdout, "payload_kind: {:?}", payload.kind()).map_err(ToolkitError::Io)?;
             // ms mnem Phase 3 Step 6: surface language for mnem cards.
-            if let ms_codec::Payload::Mnem { language: lang_code, .. } = payload {
+            if let ms_codec::Payload::Mnem {
+                language: lang_code,
+                ..
+            } = payload
+            {
                 let lang_name = ms_codec::consts::MNEM_LANGUAGE_NAMES
                     .get(*lang_code as usize)
                     .copied()
@@ -298,7 +302,9 @@ fn emit_inspect_json<W: Write>(
             let bytes = payload.as_bytes();
             // ms mnem Phase 3 Step 6: surface language name for mnem cards.
             let language = if let ms_codec::Payload::Mnem { language: code, .. } = payload {
-                ms_codec::consts::MNEM_LANGUAGE_NAMES.get(*code as usize).copied()
+                ms_codec::consts::MNEM_LANGUAGE_NAMES
+                    .get(*code as usize)
+                    .copied()
             } else {
                 None
             };

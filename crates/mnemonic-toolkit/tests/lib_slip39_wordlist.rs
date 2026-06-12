@@ -25,7 +25,10 @@ fn has_exactly_1024_words() {
     // so each share-word encodes 10 bits.
     let mut count = 0u16;
     for i in 0u16..1024 {
-        assert!(wordlist::index_to_word(i).is_some(), "missing word at index {i}");
+        assert!(
+            wordlist::index_to_word(i).is_some(),
+            "missing word at index {i}"
+        );
         count += 1;
     }
     assert_eq!(count, 1024);

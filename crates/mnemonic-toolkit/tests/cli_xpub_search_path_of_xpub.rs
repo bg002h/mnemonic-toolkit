@@ -155,7 +155,10 @@ fn path_of_xpub_slip0132_normalize_zpub_variant_preserved() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
     assert_eq!(v["target_xpub_variant"], "zpub");
     let canonical = v["target_xpub_canonical"].as_str().unwrap();
-    assert!(canonical.starts_with("xpub"), "canonical must start with 'xpub' after normalization; got {canonical}");
+    assert!(
+        canonical.starts_with("xpub"),
+        "canonical must start with 'xpub' after normalization; got {canonical}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +330,11 @@ fn path_of_xpub_add_path_no_account_token_searched_once() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
     assert_eq!(v["path"], "m/9999'/0'/0'");
     // account field should be `null` for no-account-token templates.
-    assert!(v["account"].is_null(), "account must be null for token-less add-path; got {:?}", v["account"]);
+    assert!(
+        v["account"].is_null(),
+        "account must be null for token-less add-path; got {:?}",
+        v["account"]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +582,10 @@ fn path_of_xpub_no_auto_repair_flag_disables_auto_fire() {
         .assert()
         .failure();
     let code = assertion.get_output().status.code().unwrap();
-    assert_ne!(code, 5, "--no-auto-repair must not trigger exit 5; got {code}");
+    assert_ne!(
+        code, 5,
+        "--no-auto-repair must not trigger exit 5; got {code}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -609,8 +619,11 @@ fn path_of_xpub_json_envelope_byte_exact_match() {
     assert_eq!(v["path"], "m/84'/0'/0'");
     assert_eq!(v["template"], "bip84");
     assert_eq!(v["account"], 0);
-    assert!(v["target_xpub_variant"].is_null(),
-        "canonical xpub input must serialize target_xpub_variant as null; got {:?}", v["target_xpub_variant"]);
+    assert!(
+        v["target_xpub_variant"].is_null(),
+        "canonical xpub input must serialize target_xpub_variant as null; got {:?}",
+        v["target_xpub_variant"]
+    );
     assert!(v["searched_count"].is_number());
 }
 
@@ -632,7 +645,9 @@ fn path_of_xpub_argv_leak_advisory_on_inline_phrase() {
         ])
         .assert()
         .code(0)
-        .stderr(predicate::str::contains("secret material on argv (--phrase)"));
+        .stderr(predicate::str::contains(
+            "secret material on argv (--phrase)",
+        ));
 }
 
 // ---------------------------------------------------------------------------

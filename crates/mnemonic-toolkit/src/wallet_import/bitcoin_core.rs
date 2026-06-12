@@ -350,7 +350,10 @@ fn parse_entry(
 /// v0.27.1 Phase 2 I4 helper. Mirrors `parse_range_field`'s shape-strictness:
 /// absent or `null` → `Ok(false)` (default); present + non-bool → `Err` with
 /// pointer text naming the field.
-fn parse_bool_field(eobj: &serde_json::Map<String, Value>, field: &str) -> Result<bool, ToolkitError> {
+fn parse_bool_field(
+    eobj: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<bool, ToolkitError> {
     match eobj.get(field) {
         None => Ok(false),
         Some(Value::Null) => Ok(false),
@@ -414,10 +417,8 @@ fn build_slot_fields(
     slot_idx: usize,
     entry_idx: usize,
 ) -> Result<(Xpub, Fingerprint, DerivationPath), ToolkitError> {
-    let origins = crate::wallet_import::pipeline::extract_origin_components(
-        descriptor_body,
-        "bitcoin-core",
-    )?;
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, "bitcoin-core")?;
     let (fp, path, xpub_str) = origins.into_iter().nth(slot_idx).ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
             "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: slot index {slot_idx} out of range"

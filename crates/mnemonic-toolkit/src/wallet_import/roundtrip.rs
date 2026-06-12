@@ -359,9 +359,7 @@ pub(crate) fn canonicalize_coldcard(blob: &[u8]) -> Result<String, ToolkitError>
 /// lines, CRLF vs LF, XFP-header presence, dash vs space in `Policy:`)
 /// canonicalize to the same string.
 pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, ToolkitError> {
-    use crate::wallet_import::coldcard_multisig::{
-        parse_text, ColdcardMsFormat,
-    };
+    use crate::wallet_import::coldcard_multisig::{parse_text, ColdcardMsFormat};
 
     // Re-parse via the dedicated parser; stderr WARNING (xfp divergence)
     // is swallowed for canonicalization — it does not affect the canonical
@@ -398,7 +396,10 @@ pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, Tool
     // (canonicalization ASSUMES homogeneous derivation; the parser already
     // accepted heterogeneous paths but they would canonicalize awkwardly.
     // For SPEC §11.4 the shared `Derivation:` field is the canonical form).
-    let derivation_str = format!("m{}", path_components_for_canonical(&parsed.cosigners[0].path));
+    let derivation_str = format!(
+        "m{}",
+        path_components_for_canonical(&parsed.cosigners[0].path)
+    );
 
     let format_str = match meta.script_format {
         ColdcardMsFormat::P2wsh => "P2WSH",
@@ -472,11 +473,14 @@ pub(crate) fn canonicalize_electrum(blob: &[u8]) -> Result<String, ToolkitError>
             "canonicalize_electrum: missing or non-integer top-level `seed_version`".to_string(),
         ));
     }
-    let wt_str = obj.get("wallet_type").and_then(|v| v.as_str()).ok_or_else(|| {
-        ToolkitError::ImportWalletParse(
-            "canonicalize_electrum: missing or non-string top-level `wallet_type`".to_string(),
-        )
-    })?;
+    let wt_str = obj
+        .get("wallet_type")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ToolkitError::ImportWalletParse(
+                "canonicalize_electrum: missing or non-string top-level `wallet_type`".to_string(),
+            )
+        })?;
 
     // For multisig blobs, derive cosigner count `n` from wallet_type so we
     // know which `xN/` keys to preserve. For non-multisig (standard / 2fa /
@@ -566,10 +570,7 @@ pub(crate) fn canonicalize_jade(blob: &[u8]) -> Result<String, ToolkitError> {
     let inner_canonical = canonicalize_coldcard_multisig(multisig_file.as_bytes())?;
 
     let mut canonical: BTreeMap<String, Value> = BTreeMap::new();
-    canonical.insert(
-        "multisig_file".to_string(),
-        Value::String(inner_canonical),
-    );
+    canonical.insert("multisig_file".to_string(), Value::String(inner_canonical));
     // Preserve `multisig_name` verbatim if present (canonical-shape field
     // per SPEC §11.5). Drop `id` (request-id, ephemeral).
     if let Some(name) = obj.get("multisig_name") {
@@ -1304,10 +1305,9 @@ mod tests {
     /// bip86, bip48_1, bip48_2.
     #[test]
     fn canonicalize_coldcard_preserves_required_fields() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json",
-        )
-        .expect("bip84 fixture readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json")
+                .expect("bip84 fixture readable");
         let canonical = canonicalize_coldcard(&blob).unwrap();
         assert!(canonical.contains("\"chain\":"));
         assert!(canonical.contains("\"xfp\":"));
@@ -1319,10 +1319,9 @@ mod tests {
     /// canonicalize_coldcard is idempotent — re-canonicalize equals canonicalize.
     #[test]
     fn canonicalize_coldcard_idempotent() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json",
-        )
-        .expect("fixture readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-singlesig-bip84-mainnet.json")
+                .expect("fixture readable");
         let once = canonicalize_coldcard(&blob).unwrap();
         let twice = canonicalize_coldcard(once.as_bytes()).unwrap();
         assert_eq!(once, twice, "canonicalize_coldcard must be idempotent");
@@ -1361,7 +1360,10 @@ mod tests {
         }"#;
         let canon_a = canonicalize_coldcard(blob_order_a).unwrap();
         let canon_b = canonicalize_coldcard(blob_order_b).unwrap();
-        assert_eq!(canon_a, canon_b, "ordering-only differences must canonicalize identically");
+        assert_eq!(
+            canon_a, canon_b,
+            "ordering-only differences must canonicalize identically"
+        );
     }
 
     /// canonicalize_coldcard refuses invalid JSON with parse-class error.
@@ -1393,10 +1395,9 @@ mod tests {
     /// no longer a stub.
     #[test]
     fn canonicalize_coldcard_multisig_idempotent() {
-        let blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
-        )
-        .expect("fixture file readable");
+        let blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt")
+                .expect("fixture file readable");
         let c1 = canonicalize_coldcard_multisig(&blob).unwrap();
         let c2 = canonicalize_coldcard_multisig(c1.as_bytes()).unwrap();
         assert_eq!(c1, c2, "canonicalize_coldcard_multisig must be idempotent");
@@ -1407,14 +1408,12 @@ mod tests {
     /// per-cosigner XFPs + same cosigners + same headers otherwise).
     #[test]
     fn canonicalize_coldcard_multisig_with_and_without_xfp_header_match() {
-        let with_blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt",
-        )
-        .expect("with-xfp fixture readable");
-        let without_blob = std::fs::read(
-            "tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-no-xfp.txt",
-        )
-        .expect("no-xfp fixture readable");
+        let with_blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-with-xfp.txt")
+                .expect("with-xfp fixture readable");
+        let without_blob =
+            std::fs::read("tests/fixtures/wallet_import/coldcard-ms-2of3-p2wsh-no-xfp.txt")
+                .expect("no-xfp fixture readable");
         let c_with = canonicalize_coldcard_multisig(&with_blob).unwrap();
         let c_without = canonicalize_coldcard_multisig(&without_blob).unwrap();
         assert_eq!(
@@ -1512,8 +1511,18 @@ B7F7DFEA: {xpub_c}\n"
         }"#;
         let canonical = canonicalize_sparrow(blob).unwrap();
         // All required top-level keys present.
-        for key in ["name", "network", "policyType", "scriptType", "defaultPolicy", "keystores"] {
-            assert!(canonical.contains(&format!("\"{key}\"")), "missing key {key}: {canonical}");
+        for key in [
+            "name",
+            "network",
+            "policyType",
+            "scriptType",
+            "defaultPolicy",
+            "keystores",
+        ] {
+            assert!(
+                canonical.contains(&format!("\"{key}\"")),
+                "missing key {key}: {canonical}"
+            );
         }
         // Round-trip via serde_json to verify the canonical form is itself
         // valid JSON with the required top-level keys in a serde_json::Map
@@ -1524,7 +1533,14 @@ B7F7DFEA: {xpub_c}\n"
         let top_level_keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
         assert_eq!(
             top_level_keys,
-            vec!["defaultPolicy", "keystores", "name", "network", "policyType", "scriptType"],
+            vec![
+                "defaultPolicy",
+                "keystores",
+                "name",
+                "network",
+                "policyType",
+                "scriptType"
+            ],
             "top-level keys must be alphabetically ordered in canonical form"
         );
     }
@@ -1564,9 +1580,18 @@ B7F7DFEA: {xpub_c}\n"
             "mixConfig":{"mixers":[]}
         }"#;
         let canonical = canonicalize_sparrow(blob).unwrap();
-        assert!(!canonical.contains("birthDate"), "birthDate must be dropped: {canonical}");
-        assert!(!canonical.contains("gapLimit"), "gapLimit must be dropped: {canonical}");
-        assert!(!canonical.contains("mixConfig"), "mixConfig must be dropped: {canonical}");
+        assert!(
+            !canonical.contains("birthDate"),
+            "birthDate must be dropped: {canonical}"
+        );
+        assert!(
+            !canonical.contains("gapLimit"),
+            "gapLimit must be dropped: {canonical}"
+        );
+        assert!(
+            !canonical.contains("mixConfig"),
+            "mixConfig must be dropped: {canonical}"
+        );
     }
 
     /// SPEC §11.1 — multisig canonicalize preserves all keystores entries in
@@ -1593,21 +1618,28 @@ B7F7DFEA: {xpub_c}\n"
         let p1 = canonical.find("b8688df1").expect("k1 fp");
         let p2 = canonical.find("28645006").expect("k2 fp");
         let p3 = canonical.find("5436d724").expect("k3 fp");
-        assert!(p1 < p2 && p2 < p3, "keystore ordering must be preserved: {canonical}");
+        assert!(
+            p1 < p2 && p2 < p3,
+            "keystore ordering must be preserved: {canonical}"
+        );
     }
 
     /// SPEC §11.1 — malformed JSON returns ImportWalletParse.
     #[test]
     fn canonicalize_sparrow_malformed_json_typed_error() {
         let err = canonicalize_sparrow(b"not json").unwrap_err();
-        assert!(matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("invalid JSON")));
+        assert!(
+            matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("invalid JSON"))
+        );
     }
 
     /// SPEC §11.1 — bare-array top-level returns ImportWalletParse.
     #[test]
     fn canonicalize_sparrow_bare_array_typed_error() {
         let err = canonicalize_sparrow(b"[]").unwrap_err();
-        assert!(matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("top-level JSON value is not an object")));
+        assert!(
+            matches!(err, ToolkitError::ImportWalletParse(ref m) if m.contains("top-level JSON value is not an object"))
+        );
     }
 
     // ========================================================================
@@ -1665,9 +1697,18 @@ B7F7DFEA: {xpub_c}\n"
             "x3/": {"xpub": "Zpub3", "derivation": "m/48'/0'/0'/2'"}
         }"#;
         let canon = canonicalize_electrum(src).unwrap();
-        assert!(canon.contains("\"x1/\""), "x1/ must be preserved; got: {canon}");
-        assert!(canon.contains("\"x2/\""), "x2/ must be preserved; got: {canon}");
-        assert!(canon.contains("\"x3/\""), "x3/ must be preserved; got: {canon}");
+        assert!(
+            canon.contains("\"x1/\""),
+            "x1/ must be preserved; got: {canon}"
+        );
+        assert!(
+            canon.contains("\"x2/\""),
+            "x2/ must be preserved; got: {canon}"
+        );
+        assert!(
+            canon.contains("\"x3/\""),
+            "x3/ must be preserved; got: {canon}"
+        );
     }
 
     #[test]
@@ -1685,7 +1726,10 @@ B7F7DFEA: {xpub_c}\n"
         }"#;
         let canon = canonicalize_electrum(src).unwrap();
         assert!(canon.contains("\"x3/\""));
-        assert!(!canon.contains("\"x4/\""), "phantom x4/ must be dropped; got: {canon}");
+        assert!(
+            !canon.contains("\"x4/\""),
+            "phantom x4/ must be dropped; got: {canon}"
+        );
     }
 
     #[test]
@@ -1693,7 +1737,10 @@ B7F7DFEA: {xpub_c}\n"
         let err = canonicalize_electrum(b"{not json").unwrap_err();
         match err {
             ToolkitError::ImportWalletParse(msg) => {
-                assert!(msg.contains("invalid JSON"), "msg must cite invalid JSON; got: {msg}");
+                assert!(
+                    msg.contains("invalid JSON"),
+                    "msg must cite invalid JSON; got: {msg}"
+                );
             }
             other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
@@ -1705,7 +1752,10 @@ B7F7DFEA: {xpub_c}\n"
         let err = canonicalize_electrum(src).unwrap_err();
         match err {
             ToolkitError::ImportWalletParse(msg) => {
-                assert!(msg.contains("seed_version"), "msg must cite seed_version; got: {msg}");
+                assert!(
+                    msg.contains("seed_version"),
+                    "msg must cite seed_version; got: {msg}"
+                );
             }
             other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
@@ -1713,9 +1763,13 @@ B7F7DFEA: {xpub_c}\n"
 
     #[test]
     fn canonicalize_electrum_ends_with_trailing_newline() {
-        let src = br#"{"seed_version":17,"wallet_type":"standard","use_encryption":false,"keystore":{}}"#;
+        let src =
+            br#"{"seed_version":17,"wallet_type":"standard","use_encryption":false,"keystore":{}}"#;
         let canon = canonicalize_electrum(src).unwrap();
-        assert!(canon.ends_with('\n'), "canonical form must end with trailing newline");
+        assert!(
+            canon.ends_with('\n'),
+            "canonical form must end with trailing newline"
+        );
     }
 
     // ========================================================================
@@ -1734,7 +1788,10 @@ B7F7DFEA: {xpub_c}\n"
         match err {
             ToolkitError::ImportWalletParse(msg) => {
                 assert!(msg.contains("jade"), "msg must cite format; got: {msg}");
-                assert!(msg.contains("invalid JSON"), "msg must cite JSON shape; got: {msg}");
+                assert!(
+                    msg.contains("invalid JSON"),
+                    "msg must cite JSON shape; got: {msg}"
+                );
             }
             other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
@@ -1860,7 +1917,10 @@ FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5
         match err {
             ToolkitError::ImportWalletParse(msg) => {
                 assert!(msg.contains("specter"), "msg must cite format; got: {msg}");
-                assert!(msg.contains("invalid JSON"), "msg must cite JSON shape; got: {msg}");
+                assert!(
+                    msg.contains("invalid JSON"),
+                    "msg must cite JSON shape; got: {msg}"
+                );
             }
             other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
@@ -1885,7 +1945,11 @@ FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5
     fn canonicalize_specter_ends_with_trailing_newline() {
         let src = br#"{"label":"x","blockheight":0,"descriptor":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere","devices":[]}"#;
         let canon = canonicalize_specter(src).unwrap();
-        assert!(canon.ends_with('\n'), "canonical form must end with trailing newline; got tail: {:?}", &canon[canon.len().saturating_sub(5)..]);
+        assert!(
+            canon.ends_with('\n'),
+            "canonical form must end with trailing newline; got tail: {:?}",
+            &canon[canon.len().saturating_sub(5)..]
+        );
     }
 
     #[test]

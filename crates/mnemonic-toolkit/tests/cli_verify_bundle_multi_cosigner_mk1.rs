@@ -118,17 +118,28 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
 
     let mut emit = common("bundle");
     emit.push("--json".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&emit).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&emit)
+        .assert()
+        .success();
     let bundle_json = String::from_utf8(out.get_output().stdout.clone()).unwrap();
 
     let tmpdir = tempfile::tempdir().unwrap();
     let path = tmpdir.path().join("bundle.json");
-    std::fs::File::create(&path).unwrap().write_all(bundle_json.as_bytes()).unwrap();
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(bundle_json.as_bytes())
+        .unwrap();
 
     let mut verify = common("verify-bundle");
     verify.push("--bundle-json".into());
     verify.push(path.to_str().unwrap().into());
-    let v = Command::cargo_bin("mnemonic").unwrap().args(&verify).assert().success();
+    let v = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&verify)
+        .assert()
+        .success();
     let vo = v.get_output();
     let report = format!(
         "{}{}",
@@ -326,9 +337,8 @@ fn self_check_canonical_multisig_passes_both_pre_and_post_fix() {
 /// ```
 #[test]
 fn single_sig_csi_unchanged_byte_identical_to_pre_fix_fixture() {
-    const PRE_FIX_SINGLE_SIG_BUNDLE_JSON: &str = include_str!(
-        "fixtures/v0_20_0_single_sig_bip84_bundle.json"
-    );
+    const PRE_FIX_SINGLE_SIG_BUNDLE_JSON: &str =
+        include_str!("fixtures/v0_20_0_single_sig_bip84_bundle.json");
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -454,7 +464,11 @@ fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
     // SPEC §5.8 emission rule — ms1 dense vec of length N with every
     // phrase-bearing slot populated; no empty-string sentinels.
     let ms1 = bundle["ms1"].as_array().expect("ms1 is an array");
-    assert_eq!(ms1.len(), 3, "descriptor-mode 3-cosigner bundle emits len-3 ms1");
+    assert_eq!(
+        ms1.len(),
+        3,
+        "descriptor-mode 3-cosigner bundle emits len-3 ms1"
+    );
     for (i, entry) in ms1.iter().enumerate() {
         let s = entry.as_str().expect("ms1[i] is a string");
         assert!(

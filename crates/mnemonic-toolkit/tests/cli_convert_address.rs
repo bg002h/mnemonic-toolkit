@@ -25,9 +25,12 @@ const BIP49_ACCOUNT_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7
 // Trezor 12-word seed; cross-checked via `mnemonic convert --template bip86`.
 // <https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki>
 const BIP86_ACCOUNT_XPUB: &str = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
-const BIP86_RECEIVE_0_ADDRESS: &str = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
-const BIP86_RECEIVE_1_ADDRESS: &str = "bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh";
-const BIP86_CHANGE_0_ADDRESS: &str = "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7";
+const BIP86_RECEIVE_0_ADDRESS: &str =
+    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
+const BIP86_RECEIVE_1_ADDRESS: &str =
+    "bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh";
+const BIP86_CHANGE_0_ADDRESS: &str =
+    "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7";
 
 // ---------------------------------------------------------------------------
 // Happy paths — direct (Xpub, Address) edge.
@@ -99,10 +102,7 @@ fn phrase_to_address_bip49_p2sh_p2wpkh_reference_testnet() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        "address: 2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2\n"
-    );
+    assert_eq!(stdout, "address: 2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2\n");
 }
 
 #[test]

@@ -189,7 +189,12 @@ fn bundle_subcommand_has_template_dropdown_with_v0_2_multisig_templates() {
 fn bundle_subcommand_has_boolean_flags() {
     let v = run_gui_schema();
     let bundle = find_sub(&v, "bundle");
-    for flag in ["--json", "--no-engraving-card", "--privacy-preserving", "--self-check"] {
+    for flag in [
+        "--json",
+        "--no-engraving-card",
+        "--privacy-preserving",
+        "--self-check",
+    ] {
         let f = find_flag(bundle, flag);
         assert_eq!(f["kind"], "boolean", "{flag} must be kind=boolean");
         assert!(f["choices"].is_null(), "{flag} must have null choices");

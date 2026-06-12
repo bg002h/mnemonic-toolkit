@@ -158,8 +158,7 @@ fn bundle_emits_meta_template_groups() {
     .iter()
     .copied()
     .collect();
-    let actual_multisig_set: std::collections::BTreeSet<&str> =
-        multisig.iter().copied().collect();
+    let actual_multisig_set: std::collections::BTreeSet<&str> = multisig.iter().copied().collect();
     assert_eq!(
         actual_multisig_set, expected_multisig_set,
         "multisig template group must match CliTemplate::is_multisig() set"
@@ -236,7 +235,9 @@ fn v3_cycle_surfaces_still_present_on_current_schema() {
     // would drop a v3-cycle feature (pin_value rule, meta.template_groups)
     // while bumping the version.
     let v = run_gui_schema();
-    let version = v["version"].as_u64().expect("schema version must be a number");
+    let version = v["version"]
+        .as_u64()
+        .expect("schema version must be a number");
     assert!(
         version >= 3,
         "schema version must be >= 3 to carry v3-cycle features; got: {version}"
@@ -245,8 +246,7 @@ fn v3_cycle_surfaces_still_present_on_current_schema() {
     let bundle = find_sub(&v, "bundle");
     let rules = bundle["conditional_rules"].as_array().unwrap();
     let has_pin_value_rule = rules.iter().any(|r| {
-        r["effect"]["visibility"].is_object()
-            && r["effect"]["visibility"]["pin_value"].is_object()
+        r["effect"]["visibility"].is_object() && r["effect"]["visibility"]["pin_value"].is_object()
     });
     assert!(
         has_pin_value_rule,

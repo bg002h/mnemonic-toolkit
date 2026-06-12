@@ -12,7 +12,9 @@
 use crate::cmd::convert::ScriptType;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
-use bitcoin::secp256k1::{Parity, PublicKey, Secp256k1, SecretKey, Signing, Verification, XOnlyPublicKey};
+use bitcoin::secp256k1::{
+    Parity, PublicKey, Secp256k1, SecretKey, Signing, Verification, XOnlyPublicKey,
+};
 use bitcoin::{Address, CompressedPublicKey};
 use std::str::FromStr;
 use zeroize::Zeroizing;
@@ -21,7 +23,10 @@ use zeroize::Zeroizing;
 /// `n−d` (so the key matches the even-y `02‖x` address and the taproot
 /// internal key); else returns `d` unchanged. Returns `(normalized, negated?)`.
 /// The x-only pubkey is parity-independent, so it is unchanged either way.
-pub fn normalize_to_even_y<C: Signing>(secp: &Secp256k1<C>, secret: SecretKey) -> (SecretKey, bool) {
+pub fn normalize_to_even_y<C: Signing>(
+    secp: &Secp256k1<C>,
+    secret: SecretKey,
+) -> (SecretKey, bool) {
     let (_xonly, parity) = secret.x_only_public_key(secp);
     match parity {
         Parity::Odd => (secret.negate(), true),
@@ -72,7 +77,9 @@ fn decode_nostr_key(input: &str, expected_hrp: &str) -> Result<Zeroizing<Vec<u8>
 mod normalize_tests {
     use super::*;
 
-    fn secp() -> Secp256k1<bitcoin::secp256k1::All> { Secp256k1::new() }
+    fn secp() -> Secp256k1<bitcoin::secp256k1::All> {
+        Secp256k1::new()
+    }
 
     #[test]
     fn normalized_secret_always_has_even_y_pubkey() {
@@ -83,9 +90,17 @@ mod normalize_tests {
             let (xonly_before, parity_before) = sk.x_only_public_key(&secp());
             let (norm, negated) = normalize_to_even_y(&secp(), sk);
             let (xonly_after, parity_after) = norm.x_only_public_key(&secp());
-            assert_eq!(parity_after, Parity::Even, "seed {seed}: not even-y after normalize");
+            assert_eq!(
+                parity_after,
+                Parity::Even,
+                "seed {seed}: not even-y after normalize"
+            );
             assert_eq!(xonly_before, xonly_after, "seed {seed}: x-only changed");
-            assert_eq!(negated, parity_before == Parity::Odd, "seed {seed}: negate flag wrong");
+            assert_eq!(
+                negated,
+                parity_before == Parity::Odd,
+                "seed {seed}: negate flag wrong"
+            );
         }
     }
 }
@@ -106,13 +121,18 @@ pub fn address_for<C: Verification>(
     match script_type {
         ScriptType::P2pkh => Address::p2pkh(compressed, network.network_kind()).to_string(),
         ScriptType::P2wpkh => Address::p2wpkh(&compressed, network.known_hrp()).to_string(),
-        ScriptType::P2shP2wpkh => Address::p2shwpkh(&compressed, network.network_kind()).to_string(),
+        ScriptType::P2shP2wpkh => {
+            Address::p2shwpkh(&compressed, network.network_kind()).to_string()
+        }
         ScriptType::P2tr => Address::p2tr(secp, xonly, None, network.known_hrp()).to_string(),
     }
 }
 
 /// Build the checksummed Bitcoin descriptor wrapping the nostr key.
-pub fn descriptor_for(xonly: XOnlyPublicKey, script_type: ScriptType) -> Result<String, ToolkitError> {
+pub fn descriptor_for(
+    xonly: XOnlyPublicKey,
+    script_type: ScriptType,
+) -> Result<String, ToolkitError> {
     let body = match script_type {
         ScriptType::P2tr => format!("tr({xonly})"),
         ScriptType::P2wpkh => format!("wpkh({})", even_y_compressed(xonly)),
@@ -126,7 +146,12 @@ pub fn descriptor_for(xonly: XOnlyPublicKey, script_type: ScriptType) -> Result<
 
 /// Plain compressed WIF for the (already even-y-normalized) secret.
 pub fn wif_for(secret: &SecretKey, network: CliNetwork) -> String {
-    bitcoin::PrivateKey { compressed: true, network: network.network_kind(), inner: *secret }.to_wif()
+    bitcoin::PrivateKey {
+        compressed: true,
+        network: network.network_kind(),
+        inner: *secret,
+    }
+    .to_wif()
 }
 
 /// Electrum imported-key script-type prefix, per Electrum's `WIF_SCRIPT_TYPES`
@@ -148,7 +173,9 @@ mod derive_tests {
     use crate::network::CliNetwork;
     use std::str::FromStr;
 
-    fn secp() -> Secp256k1<bitcoin::secp256k1::All> { Secp256k1::new() }
+    fn secp() -> Secp256k1<bitcoin::secp256k1::All> {
+        Secp256k1::new()
+    }
 
     // CRUX: the WIF derived from an nsec must control the key behind the npub.
     // Iterate scalars to hit both even-y and odd-y originals; an odd-y seed
@@ -174,19 +201,28 @@ mod derive_tests {
             assert_eq!(wif_parity, Parity::Even, "seed {seed}: WIF key is odd-y");
             assert_eq!(wif_xonly, xonly, "seed {seed}: WIF x-only != npub");
             // Smoke: address_for renders a non-empty address for every type.
-            for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+            for st in [
+                ScriptType::P2pkh,
+                ScriptType::P2wpkh,
+                ScriptType::P2shP2wpkh,
+                ScriptType::P2tr,
+            ] {
                 assert!(
                     !address_for(&secp, xonly, st, CliNetwork::Mainnet).is_empty(),
                     "seed {seed} {st:?}: empty address"
                 );
             }
         }
-        assert!(any_negated, "seed range never exercised the even-y negate path");
+        assert!(
+            any_negated,
+            "seed range never exercised the even-y negate path"
+        );
     }
 
     #[test]
     fn descriptor_has_checksum_and_round_trips() {
-        let xonly = decode_npub("npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg").unwrap();
+        let xonly =
+            decode_npub("npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg").unwrap();
         let tr = descriptor_for(xonly, ScriptType::P2tr).unwrap();
         assert!(tr.starts_with("tr(") && tr.contains('#'), "got {tr}");
         let wpkh = descriptor_for(xonly, ScriptType::P2wpkh).unwrap();
@@ -220,15 +256,24 @@ mod decode_tests {
     }
     #[test]
     fn nsec_bech32_decodes_to_expected_scalar() {
-        assert_eq!(hex::encode(decode_nsec(NSEC).unwrap().secret_bytes()), SEC_HEX);
+        assert_eq!(
+            hex::encode(decode_nsec(NSEC).unwrap().secret_bytes()),
+            SEC_HEX
+        );
     }
     #[test]
     fn wrong_hrp_is_refused() {
-        assert!(matches!(decode_nsec(NPUB), Err(ToolkitError::NostrKeyParse(_))));
+        assert!(matches!(
+            decode_nsec(NPUB),
+            Err(ToolkitError::NostrKeyParse(_))
+        ));
     }
     #[test]
     fn bad_bech32_is_refused() {
-        assert!(matches!(decode_npub("npub1notvalid"), Err(ToolkitError::NostrKeyParse(_))));
+        assert!(matches!(
+            decode_npub("npub1notvalid"),
+            Err(ToolkitError::NostrKeyParse(_))
+        ));
     }
 }
 
@@ -252,9 +297,21 @@ mod cross_impl_fixture {
     fn pinned_addresses_match_independent_oracle() {
         let secp = Secp256k1::new();
         let xonly = decode_npub(NPUB).unwrap();
-        assert_eq!(address_for(&secp, xonly, ScriptType::P2pkh, CliNetwork::Mainnet), EXPECTED_P2PKH);
-        assert_eq!(address_for(&secp, xonly, ScriptType::P2wpkh, CliNetwork::Mainnet), EXPECTED_P2WPKH);
-        assert_eq!(address_for(&secp, xonly, ScriptType::P2shP2wpkh, CliNetwork::Mainnet), EXPECTED_P2SH);
-        assert_eq!(address_for(&secp, xonly, ScriptType::P2tr, CliNetwork::Mainnet), EXPECTED_P2TR);
+        assert_eq!(
+            address_for(&secp, xonly, ScriptType::P2pkh, CliNetwork::Mainnet),
+            EXPECTED_P2PKH
+        );
+        assert_eq!(
+            address_for(&secp, xonly, ScriptType::P2wpkh, CliNetwork::Mainnet),
+            EXPECTED_P2WPKH
+        );
+        assert_eq!(
+            address_for(&secp, xonly, ScriptType::P2shP2wpkh, CliNetwork::Mainnet),
+            EXPECTED_P2SH
+        );
+        assert_eq!(
+            address_for(&secp, xonly, ScriptType::P2tr, CliNetwork::Mainnet),
+            EXPECTED_P2TR
+        );
     }
 }

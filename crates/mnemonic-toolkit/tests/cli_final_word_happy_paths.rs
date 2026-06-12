@@ -17,8 +17,7 @@ use std::process::Stdio;
 const ABANDON_11_PARTIAL: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
 
-const BEEF_11_PARTIAL: &str =
-    "beef beef beef beef beef beef beef beef beef beef beef";
+const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef beef";
 
 /// Helper: invoke `mnemonic final-word --from phrase=<inline>` and
 /// return (stdout-lines, stderr-as-string, exit-code).
@@ -161,8 +160,11 @@ fn spanish_partial_yields_spanish_candidates() {
     let (lines, _stderr, exit) = invoke_inline(&partial, Some("spanish"));
     assert_eq!(exit, 0);
     assert_eq!(lines.len(), 128);
-    let spanish_set: std::collections::BTreeSet<&'static str> =
-        bip39::Language::Spanish.word_list().iter().copied().collect();
+    let spanish_set: std::collections::BTreeSet<&'static str> = bip39::Language::Spanish
+        .word_list()
+        .iter()
+        .copied()
+        .collect();
     for line in &lines {
         assert!(
             spanish_set.contains(line.as_str()),

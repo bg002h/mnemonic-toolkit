@@ -120,7 +120,11 @@ fn split_json_does_not_suppress_plain_stdout() {
         .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert_eq!(stdout.lines().count(), 2, "plain stdout still emits 2 lines");
+    assert_eq!(
+        stdout.lines().count(),
+        2,
+        "plain stdout still emits 2 lines"
+    );
 }
 
 #[test]
@@ -207,5 +211,8 @@ fn anchor_trezor_12_envelope_sha_pin() {
     let actual = format!("{}", h);
     // Pinned at P2 GREEN (2026-05-14).
     const EXPECTED: &str = "85d53f7e83db167b1223b8b23bbe2baca060e7aefad50f6034b5b65750883871";
-    assert_eq!(actual, EXPECTED, "JSON envelope SHA-pin drift for legal×... 12-word Trezor vector N=3");
+    assert_eq!(
+        actual, EXPECTED,
+        "JSON envelope SHA-pin drift for legal×... 12-word Trezor vector N=3"
+    );
 }

@@ -91,7 +91,11 @@ pub fn pre_check_threshold(
 
 /// SPEC §6.6 row 10 + 11: template/N compatibility.
 /// Row 10: single-sig template + N>1 → reject. Row 11: multisig template + N=1 → reject.
-pub fn pre_check_template_n(template: &str, is_multisig_template: bool, n: usize) -> Result<(), ToolkitError> {
+pub fn pre_check_template_n(
+    template: &str,
+    is_multisig_template: bool,
+    n: usize,
+) -> Result<(), ToolkitError> {
     if !is_multisig_template && n > 1 {
         return Err(ToolkitError::SlotInputViolation {
             kind: "single-sig-multi-slot",
@@ -117,7 +121,11 @@ mod tests {
     use crate::slot_input::SlotSubkey;
 
     fn s(idx: u8, sk: SlotSubkey, v: &str) -> SlotInput {
-        SlotInput { index: idx, subkey: sk, value: v.to_string() }
+        SlotInput {
+            index: idx,
+            subkey: sk,
+            value: v.to_string(),
+        }
     }
 
     // ---- detect_bundle_mode ----
@@ -204,11 +212,8 @@ mod tests {
     #[test]
     fn mode_multisig_hybrid_phrase_plus_xpub() {
         assert_eq!(
-            detect_bundle_mode(&[
-                s(0, SlotSubkey::Phrase, "a"),
-                s(1, SlotSubkey::Xpub, "b"),
-            ])
-            .unwrap(),
+            detect_bundle_mode(&[s(0, SlotSubkey::Phrase, "a"), s(1, SlotSubkey::Xpub, "b"),])
+                .unwrap(),
             BundleMode::MultisigHybrid
         );
     }
@@ -259,7 +264,8 @@ mod tests {
         match e {
             ToolkitError::SlotInputViolation { kind, message } => {
                 assert_eq!(kind, "missing-threshold");
-                assert!(message.contains("--threshold required for multisig template 'wsh-sortedmulti'"));
+                assert!(message
+                    .contains("--threshold required for multisig template 'wsh-sortedmulti'"));
             }
             _ => panic!("wrong variant"),
         }

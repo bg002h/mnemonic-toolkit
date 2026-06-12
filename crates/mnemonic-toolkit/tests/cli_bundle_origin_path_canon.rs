@@ -17,7 +17,11 @@ const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
 const SAMPLE_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
 
 fn bundle_json(args: &[&str]) -> Value {
-    let out = Command::cargo_bin("mnemonic").unwrap().args(args).assert().success();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(args)
+        .assert()
+        .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("bundle JSON invalid: {e}\nstdout:\n{stdout}"))

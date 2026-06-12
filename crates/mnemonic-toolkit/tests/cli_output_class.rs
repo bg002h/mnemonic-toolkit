@@ -140,13 +140,7 @@ fn seedqr_decode_emits_private_key_material() {
 fn addresses_emits_watch_only() {
     let from_arg = format!("phrase={ABANDON}");
     let o = mnemonic()
-        .args([
-            "addresses",
-            "--from",
-            &from_arg,
-            "--address-type",
-            "p2wpkh",
-        ])
+        .args(["addresses", "--from", &from_arg, "--address-type", "p2wpkh"])
         .output()
         .unwrap();
     assert!(stderr(&o).contains(W_LINE), "{}", stderr(&o));
@@ -314,7 +308,15 @@ fn convert_to_xprv_emits_private_key_material() {
     let from_arg = format!("phrase={ABANDON}");
     let s = stderr(
         &mnemonic()
-            .args(["convert", "--from", &from_arg, "--to", "xprv", "--template", "bip84"])
+            .args([
+                "convert",
+                "--from",
+                &from_arg,
+                "--to",
+                "xprv",
+                "--template",
+                "bip84",
+            ])
             .output()
             .unwrap(),
     );
@@ -326,7 +328,15 @@ fn convert_to_xpub_emits_watch_only() {
     let from_arg = format!("phrase={ABANDON}");
     let w = stderr(
         &mnemonic()
-            .args(["convert", "--from", &from_arg, "--to", "xpub", "--template", "bip84"])
+            .args([
+                "convert",
+                "--from",
+                &from_arg,
+                "--to",
+                "xpub",
+                "--template",
+                "bip84",
+            ])
             .output()
             .unwrap(),
     );
@@ -338,7 +348,15 @@ fn convert_to_path_only_is_inert() {
     let from_arg = format!("phrase={ABANDON}");
     let s = stderr(
         &mnemonic()
-            .args(["convert", "--from", &from_arg, "--to", "path", "--template", "bip84"])
+            .args([
+                "convert",
+                "--from",
+                &from_arg,
+                "--to",
+                "path",
+                "--template",
+                "bip84",
+            ])
             .output()
             .unwrap(),
     );
@@ -354,7 +372,8 @@ fn convert_to_path_only_is_inert() {
 
 const VALID_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const VALID_MK1_C0: &str = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
-const VALID_MK1_C1: &str = "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+const VALID_MK1_C1: &str =
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
 
 #[test]
 fn repair_ms1_emits_private_key_material() {
@@ -431,14 +450,11 @@ fn nostr_nsec_emits_private_key_material() {
 const IW_FP: &str = "5436d724";
 const IW_XPUB_BIP48: &str = "xpub6E79FaRWLSJCAgA2jDHRvyrWKwT6aSmR685zptzyYPvmUd44omcxZ1NAzDtbdFBvEADjcVbV4NzTDwQeU6oiSV9KGiMSWhjANZjbfUHkm3Y";
 /// ms1-encoded 32-zero entropy (abandon×23+art).
-const IW_MS1: &str =
-    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w";
+const IW_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w";
 
 fn bsms_1of1_blob() -> String {
     use miniscript::descriptor::checksum::Engine as ChecksumEngine;
-    let body = format!(
-        "wsh(sortedmulti(1,[{IW_FP}/48'/0'/0'/2']{IW_XPUB_BIP48}/<0;1>/*))"
-    );
+    let body = format!("wsh(sortedmulti(1,[{IW_FP}/48'/0'/0'/2']{IW_XPUB_BIP48}/<0;1>/*))");
     let mut e = ChecksumEngine::new();
     e.input(&body).expect("checksum input must be ASCII");
     let csum = e.checksum();
@@ -496,13 +512,13 @@ fn slip39_combine_emits_private_key_material() {
         .output()
         .unwrap();
     if !split_out.status.success() {
-        panic!("slip39 split failed: {}", String::from_utf8_lossy(&split_out.stderr));
+        panic!(
+            "slip39 split failed: {}",
+            String::from_utf8_lossy(&split_out.stderr)
+        );
     }
     let split_stdout = String::from_utf8(split_out.stdout).unwrap();
-    let shares: Vec<&str> = split_stdout
-        .lines()
-        .filter(|l| !l.is_empty())
-        .collect();
+    let shares: Vec<&str> = split_stdout.lines().filter(|l| !l.is_empty()).collect();
     // Need at least 2 of the 3-member group (threshold=2).
     assert!(
         shares.len() >= 2,
@@ -511,12 +527,7 @@ fn slip39_combine_emits_private_key_material() {
     );
     let o = mnemonic()
         .args([
-            "slip39",
-            "combine",
-            "--share",
-            shares[0],
-            "--share",
-            shares[1],
+            "slip39", "combine", "--share", shares[0], "--share", shares[1],
         ])
         .output()
         .unwrap();
@@ -531,7 +542,10 @@ fn slip39_combine_emits_private_key_material() {
 #[test]
 fn decode_address_is_inert() {
     let o = mnemonic()
-        .args(["decode-address", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"])
+        .args([
+            "decode-address",
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        ])
         .output()
         .unwrap();
     let s = stderr(&o);
@@ -661,7 +675,10 @@ fn auto_repair_short_circuit_ms1_emits_private_key_material() {
         .unwrap();
     assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
     let s = stderr(&o);
-    assert!(s.contains(P_LINE), "ms1 auto-repair must emit P advisory: {s}");
+    assert!(
+        s.contains(P_LINE),
+        "ms1 auto-repair must emit P advisory: {s}"
+    );
 }
 
 /// Auto-repair short-circuit (inspect, 1-char-corrupt md1) → exit 5,
@@ -684,7 +701,10 @@ fn auto_repair_short_circuit_md1_emits_template() {
         .unwrap();
     assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
     let s = stderr(&o);
-    assert!(s.contains(T_LINE), "md1 auto-repair must emit T advisory: {s}");
+    assert!(
+        s.contains(T_LINE),
+        "md1 auto-repair must emit T advisory: {s}"
+    );
 }
 
 /// Auto-repair short-circuit (convert, 1-char-corrupt ms1) → exit 5,
@@ -699,7 +719,10 @@ fn auto_repair_short_circuit_convert_ms1_emits_private_key_material() {
         .unwrap();
     assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
     let s = stderr(&o);
-    assert!(s.contains(P_LINE), "ms1 convert auto-repair must emit P advisory: {s}");
+    assert!(
+        s.contains(P_LINE),
+        "ms1 convert auto-repair must emit P advisory: {s}"
+    );
 }
 
 // ============================================================

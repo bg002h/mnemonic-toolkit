@@ -175,16 +175,55 @@ fn collect_abstract_labels(input: &str) -> Vec<String> {
             if buf.is_empty() {
                 continue;
             }
-            let is_hex_pubkey = (buf.len() == 64 || buf.len() == 66)
-                && buf.chars().all(|c| c.is_ascii_hexdigit());
+            let is_hex_pubkey =
+                (buf.len() == 64 || buf.len() == 66) && buf.chars().all(|c| c.is_ascii_hexdigit());
             let is_numeric = buf.chars().all(|c| c.is_ascii_digit());
             const KEYWORDS: &[&str] = &[
-                "pk", "pk_k", "pk_h", "older", "after", "sha256", "hash256", "ripemd160",
-                "hash160", "andor", "and_v", "and_b", "and_n", "or_b", "or_c", "or_d", "or_i",
-                "thresh", "multi", "multi_a", "sortedmulti", "sortedmulti_a", "wsh", "sh", "tr",
-                "wpkh", "pkh", "raw", "addr", "combo", "rawtr",
-                "a", "s", "c", "t", "d", "v", "j", "n", "l", "u",
-                "true", "false", "0", "1",
+                "pk",
+                "pk_k",
+                "pk_h",
+                "older",
+                "after",
+                "sha256",
+                "hash256",
+                "ripemd160",
+                "hash160",
+                "andor",
+                "and_v",
+                "and_b",
+                "and_n",
+                "or_b",
+                "or_c",
+                "or_d",
+                "or_i",
+                "thresh",
+                "multi",
+                "multi_a",
+                "sortedmulti",
+                "sortedmulti_a",
+                "wsh",
+                "sh",
+                "tr",
+                "wpkh",
+                "pkh",
+                "raw",
+                "addr",
+                "combo",
+                "rawtr",
+                "a",
+                "s",
+                "c",
+                "t",
+                "d",
+                "v",
+                "j",
+                "n",
+                "l",
+                "u",
+                "true",
+                "false",
+                "0",
+                "1",
             ];
             let is_keyword = KEYWORDS.contains(&buf.as_str());
             let first_is_alpha = buf.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
@@ -203,11 +242,7 @@ fn collect_abstract_labels(input: &str) -> Vec<String> {
 
 /// Replace each label in `input` with `f(label_index)`, in-place across all
 /// occurrences. Longer labels are replaced first to avoid prefix-clobber.
-fn rewrite_labels_with<F: Fn(usize) -> String>(
-    labels: &[String],
-    input: &str,
-    f: F,
-) -> String {
+fn rewrite_labels_with<F: Fn(usize) -> String>(labels: &[String], input: &str, f: F) -> String {
     // Sort by descending length so longer labels get replaced first.
     let mut sorted: Vec<(usize, &String)> = labels.iter().enumerate().collect();
     sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
@@ -228,8 +263,8 @@ fn replace_whole_word(haystack: &str, needle: &str, replacement: &str) -> String
     while i < bytes.len() {
         if i + needle_b.len() <= bytes.len() && &bytes[i..i + needle_b.len()] == needle_b {
             let before_ok = i == 0 || !is_ident_char(bytes[i - 1]);
-            let after_ok = i + needle_b.len() == bytes.len()
-                || !is_ident_char(bytes[i + needle_b.len()]);
+            let after_ok =
+                i + needle_b.len() == bytes.len() || !is_ident_char(bytes[i + needle_b.len()]);
             if before_ok && after_ok {
                 result.push_str(replacement);
                 i += needle_b.len();
@@ -324,7 +359,10 @@ mod tests {
 
     #[test]
     fn rewrite_multi_to_multi_a_basic() {
-        assert_eq!(rewrite_multi_to_multi_a("multi(2,A,B,C)"), "multi_a(2,A,B,C)");
+        assert_eq!(
+            rewrite_multi_to_multi_a("multi(2,A,B,C)"),
+            "multi_a(2,A,B,C)"
+        );
         assert_eq!(
             rewrite_multi_to_multi_a("sortedmulti(2,A,B)"),
             "sortedmulti_a(2,A,B)"
@@ -333,7 +371,10 @@ mod tests {
 
     #[test]
     fn rewrite_multi_a_to_multi_basic() {
-        assert_eq!(rewrite_multi_a_to_multi("multi_a(2,A,B,C)"), "multi(2,A,B,C)");
+        assert_eq!(
+            rewrite_multi_a_to_multi("multi_a(2,A,B,C)"),
+            "multi(2,A,B,C)"
+        );
         assert_eq!(
             rewrite_multi_a_to_multi("sortedmulti_a(2,A,B)"),
             "sortedmulti(2,A,B)"

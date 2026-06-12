@@ -94,7 +94,10 @@ fn b1_xpub_to_mk1_to_xpub_singlesig() {
     ]);
     let chunks = json_str_array(&v["mk1"]);
     let decoded = mk1_decode(&chunks, "xpub");
-    let got = decoded.trim().strip_prefix("xpub: ").expect("convert emits 'xpub: <v>'");
+    let got = decoded
+        .trim()
+        .strip_prefix("xpub: ")
+        .expect("convert emits 'xpub: <v>'");
     assert_eq!(got, xpub, "B1: xpub → mk1 → xpub must be byte-identical");
 }
 
@@ -121,7 +124,11 @@ fn b2_xpub_to_mk1_reverse_edges_xpub_fingerprint_path() {
     let decoded = mk1_decode(&chunks, "xpub,fingerprint,path");
     let lines: Vec<&str> = decoded.lines().collect();
     assert_eq!(lines[0].strip_prefix("xpub: ").unwrap(), xpub, "B2 xpub");
-    assert_eq!(lines[1].strip_prefix("fingerprint: ").unwrap(), fp, "B2 fingerprint");
+    assert_eq!(
+        lines[1].strip_prefix("fingerprint: ").unwrap(),
+        fp,
+        "B2 fingerprint"
+    );
     assert!(
         lines[2] == "path: 84'/0'/0'" || lines[2] == "path: m/84'/0'/0'",
         "B2 path: got {:?}",
@@ -166,7 +173,9 @@ fn b3_xpub_to_mk1_to_xpub_multisig_per_cosigner() {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let v = bundle_json(&refs);
 
-    let mk1_outer = v["mk1"].as_array().expect("multisig mk1 is an array of cosigner chunk-arrays");
+    let mk1_outer = v["mk1"]
+        .as_array()
+        .expect("multisig mk1 is an array of cosigner chunk-arrays");
     assert_eq!(mk1_outer.len(), 3, "B3 expects 3 cosigner mk1 sets");
     for (i, cosigner) in mk1_outer.iter().enumerate() {
         let chunks = json_str_array(cosigner);
@@ -217,7 +226,10 @@ fn b4_descriptor_to_md1_to_descriptor_canonical_singlesig() {
     ]);
     let md1_bundle = json_str_array(&v["md1"]);
     let d = assert_md1_bijection(&md1_bundle, "B4 canonical wpkh");
-    assert!(d.is_wallet_policy(), "B4: canonical single-sig is a wallet policy");
+    assert!(
+        d.is_wallet_policy(),
+        "B4: canonical single-sig is a wallet policy"
+    );
 }
 
 // ===========================================================================
@@ -292,5 +304,8 @@ fn b6_descriptor_to_md1_to_descriptor_multisig() {
     let v = bundle_json(&refs);
     let md1_bundle = json_str_array(&v["md1"]);
     let d = assert_md1_bijection(&md1_bundle, "B6 multisig wsh-sortedmulti");
-    assert!(d.is_wallet_policy(), "B6: multisig sortedmulti is a wallet policy");
+    assert!(
+        d.is_wallet_policy(),
+        "B6: multisig sortedmulti is a wallet policy"
+    );
 }

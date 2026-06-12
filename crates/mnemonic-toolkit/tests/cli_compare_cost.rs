@@ -18,7 +18,11 @@ fn smoke_simple_pk() {
         .args(["compare-cost", "--miniscript", "pk(A)"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Input: pk(A)"));
     assert!(stdout.contains("Wrapper comparison: wsh(M)"));
@@ -27,11 +31,12 @@ fn smoke_simple_pk() {
     assert!(stdout.contains("tr vB"));
     assert!(stdout.contains("Δ vB"));
     // Single condition expected (just A signing).
-    let rows: Vec<&str> = stdout
-        .lines()
-        .filter(|l| l.starts_with("A "))
-        .collect();
-    assert_eq!(rows.len(), 1, "expected exactly 1 row labeled 'A'; got: {stdout}");
+    let rows: Vec<&str> = stdout.lines().filter(|l| l.starts_with("A ")).collect();
+    assert_eq!(
+        rows.len(),
+        1,
+        "expected exactly 1 row labeled 'A'; got: {stdout}"
+    );
 }
 
 #[test]
@@ -40,7 +45,11 @@ fn smoke_and_v_pk_pk() {
         .args(["compare-cost", "--miniscript", "and_v(v:pk(A),pk(B))"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // A AND B → single row "A + B"
     assert!(stdout.contains("A + B"), "missing 'A + B' row in: {stdout}");
@@ -52,10 +61,17 @@ fn smoke_or_b_pk_pk() {
         .args(["compare-cost", "--miniscript", "or_b(pk(A),s:pk(B))"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // or_b → 2 rows: "A" and "B"
-    let a_rows: Vec<&str> = stdout.lines().filter(|l| l.starts_with("A ") || l.trim().starts_with("A ")).collect();
+    let a_rows: Vec<&str> = stdout
+        .lines()
+        .filter(|l| l.starts_with("A ") || l.trim().starts_with("A "))
+        .collect();
     let b_rows: Vec<&str> = stdout.lines().filter(|l| l.starts_with("B ")).collect();
     assert!(!a_rows.is_empty(), "missing A row in or_b output: {stdout}");
     assert!(!b_rows.is_empty(), "missing B row in or_b output: {stdout}");
@@ -69,30 +85,54 @@ fn context_rewrite_multi_to_multi_a() {
         .args(["compare-cost", "--miniscript", "multi(2,A,B,C)"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // 2-of-3: 3 minimal conditions (A+B, A+C, B+C). Row labels reflect that.
     let row_lines: Vec<&str> = stdout
         .lines()
-        .filter(|l| l.contains('+') && !l.contains("vB") && !l.starts_with("note") && !l.starts_with("--"))
+        .filter(|l| {
+            l.contains('+') && !l.contains("vB") && !l.starts_with("note") && !l.starts_with("--")
+        })
         .collect();
-    assert_eq!(row_lines.len(), 3, "expected 3 rows for thresh(2,A,B,C); got: {stdout}");
+    assert_eq!(
+        row_lines.len(),
+        3,
+        "expected 3 rows for thresh(2,A,B,C); got: {stdout}"
+    );
 }
 
 #[test]
 fn context_rewrite_thresh() {
     let out = bin()
-        .args(["compare-cost", "--miniscript", "thresh(2,pk(A),s:pk(B),s:pk(C))"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "thresh(2,pk(A),s:pk(B),s:pk(C))",
+        ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // thresh(2,3) → 3 minimal conditions (A+B, A+C, B+C)
     let row_lines: Vec<&str> = stdout
         .lines()
-        .filter(|l| l.contains('+') && !l.contains("vB") && !l.starts_with("note") && !l.starts_with("--"))
+        .filter(|l| {
+            l.contains('+') && !l.contains("vB") && !l.starts_with("note") && !l.starts_with("--")
+        })
         .collect();
-    assert_eq!(row_lines.len(), 3, "expected 3 rows for thresh(2, pk(A), pk(B), pk(C)); got: {stdout}");
+    assert_eq!(
+        row_lines.len(),
+        3,
+        "expected 3 rows for thresh(2, pk(A), pk(B), pk(C)); got: {stdout}"
+    );
 }
 
 // ── §4/§5 output: --feerate, --json ─────────────────────────────────────────
@@ -115,7 +155,12 @@ fn feerate_scales_sats_columns() {
     let nums: Vec<i64> = row
         .split('|')
         .skip(1)
-        .map(|s| s.trim().trim_start_matches('+').parse::<i64>().unwrap_or(i64::MAX))
+        .map(|s| {
+            s.trim()
+                .trim_start_matches('+')
+                .parse::<i64>()
+                .unwrap_or(i64::MAX)
+        })
         .collect();
     let wsh_vb = nums[0];
     let wsh_sats = nums[3];
@@ -128,7 +173,11 @@ fn feerate_decimal_accepted() {
         .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "1.5"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Feerate: 1.5 sat/vB"));
 }
@@ -136,10 +185,19 @@ fn feerate_decimal_accepted() {
 #[test]
 fn json_envelope_shape() {
     let out = bin()
-        .args(["compare-cost", "--miniscript", "or_b(pk(A),s:pk(B))", "--json"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "or_b(pk(A),s:pk(B))",
+            "--json",
+        ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).expect("valid JSON");
     assert_eq!(v["schema_version"], 1);
     assert_eq!(v["subcommand"], "compare-cost");
@@ -165,7 +223,14 @@ fn json_envelope_shape() {
 #[test]
 fn feerate_zero_emits_advisory() {
     let out = bin()
-        .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "0.0", "--json"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "pk(A)",
+            "--feerate",
+            "0.0",
+            "--json",
+        ])
         .output()
         .unwrap();
     assert!(out.status.success());
@@ -235,7 +300,12 @@ fn parse_error_exit_2() {
         .args(["compare-cost", "--miniscript", "not_a_miniscript_at_all!"])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(2), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("parse error") || stderr.contains("compare-cost:"));
 }
@@ -254,16 +324,32 @@ fn feerate_negative_clap_error() {
         .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "-1.0"])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(64), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
 fn feerate_too_large_clap_error() {
     let out = bin()
-        .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "1000000"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "pk(A)",
+            "--feerate",
+            "1000000",
+        ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(64), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -272,20 +358,42 @@ fn feerate_at_upper_bound_accepted() {
     // boundary acceptance (inclusive) so future bounds-tightening doesn't
     // silently move the gate.
     let out = bin()
-        .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "10000.0"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "pk(A)",
+            "--feerate",
+            "10000.0",
+        ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
 fn feerate_just_above_upper_bound_rejected() {
     // Mirror of the boundary cell: 10000.0 + ULP rejected.
     let out = bin()
-        .args(["compare-cost", "--miniscript", "pk(A)", "--feerate", "10000.1"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "pk(A)",
+            "--feerate",
+            "10000.1",
+        ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(64), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -301,7 +409,11 @@ fn descriptor_plaintext_shows_both_input_and_extracted() {
         .args(["compare-cost", "--descriptor", &desc])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains(&format!("Input:     wsh(pk({KEY_A}))")),
@@ -322,7 +434,12 @@ fn or_b_rejects_non_minimal_both_keys_row() {
     // negative assertion on the row set; complements smoke_or_b_pk_pk
     // which only positive-asserts the A and B rows exist.
     let out = bin()
-        .args(["compare-cost", "--miniscript", "or_b(pk(A),s:pk(B))", "--json"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "or_b(pk(A),s:pk(B))",
+            "--json",
+        ])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(0));
@@ -334,7 +451,11 @@ fn or_b_rejects_non_minimal_both_keys_row() {
         .iter()
         .map(|r| r["label"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(labels.len(), 2, "or_b minimality expects exactly 2 rows; got: {labels:?}");
+    assert_eq!(
+        labels.len(),
+        2,
+        "or_b minimality expects exactly 2 rows; got: {labels:?}"
+    );
     assert!(labels.iter().any(|l| l == "A"), "missing A row: {labels:?}");
     assert!(labels.iter().any(|l| l == "B"), "missing B row: {labels:?}");
     // Negative: no joint-asset row labeled like "A + B" should appear.
@@ -365,7 +486,12 @@ fn soft_cap_advisory_fires_when_rows_exceed_threshold() {
         ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let notes: Vec<String> = v["notes"]
@@ -375,7 +501,9 @@ fn soft_cap_advisory_fires_when_rows_exceed_threshold() {
         .map(|n| n.as_str().unwrap().to_string())
         .collect();
     assert!(
-        notes.iter().any(|n| n.contains("soft threshold") || n.contains("256")),
+        notes
+            .iter()
+            .any(|n| n.contains("soft threshold") || n.contains("256")),
         "expected soft-cap advisory in notes; got: {notes:?}"
     );
 }
@@ -383,10 +511,21 @@ fn soft_cap_advisory_fires_when_rows_exceed_threshold() {
 #[test]
 fn max_conditions_zero_clap_error() {
     let out = bin()
-        .args(["compare-cost", "--miniscript", "pk(A)", "--max-conditions", "0"])
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "pk(A)",
+            "--max-conditions",
+            "0",
+        ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(64), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 // ── §3.3 step 1: hard cap precheck → exit 3 ───────────────────────────────
@@ -405,7 +544,12 @@ fn hard_cap_too_small_for_n_keys_exit_3() {
         ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("exceed --max-conditions"),
@@ -421,7 +565,11 @@ fn timelock_and_v_produces_one_row_with_older_label() {
         .args(["compare-cost", "--miniscript", "and_v(v:pk(A),older(144))"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("A + older(blocks)"),
@@ -440,7 +588,11 @@ fn timelock_or_d_produces_two_rows_one_unlocked_one_timelocked() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Two rows expected: "A" (timelock unneeded) and "B + older(blocks)".
     assert!(stdout.contains("A "), "missing 'A' row: {stdout}");
@@ -457,14 +609,14 @@ fn user_labels_preserved_in_output_z_before_a() {
     // Use labels Z and A — input-order is Z then A; rows should reflect user
     // labels, not AST-traversal-order indices A/B.
     let out = bin()
-        .args([
-            "compare-cost",
-            "--miniscript",
-            "or_b(pk(Z),s:pk(A))",
-        ])
+        .args(["compare-cost", "--miniscript", "or_b(pk(Z),s:pk(A))"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Both Z and A should appear as standalone single-signer rows.
     assert!(stdout.contains("Z "), "user label 'Z' missing: {stdout}");
@@ -483,7 +635,11 @@ fn descriptor_wsh_strips_wrapper() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["input"]["form"], "descriptor");
     let conds = v["conditions"].as_array().unwrap();
@@ -507,9 +663,16 @@ fn descriptor_sh_wsh_strips_both_wrappers() {
         .args(["compare-cost", "--descriptor", &desc])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("key[0]"), "expected single row in: {stdout}");
+    assert!(
+        stdout.contains("key[0]"),
+        "expected single row in: {stdout}"
+    );
 }
 
 #[test]
@@ -519,7 +682,11 @@ fn descriptor_wsh_or_b_produces_two_rows() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["conditions"].as_array().unwrap().len(), 2);
 }
@@ -555,13 +722,25 @@ fn tr_descriptor_nums_single_leaf_pk_happy_path() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["input"]["form"], "descriptor");
     assert_eq!(v["conditions"].as_array().unwrap().len(), 1);
     // NUMS IK → no keypath_spend, no IK-advisory note.
-    assert!(v["keypath_spend"].is_null(), "NUMS IK MUST NOT surface keypath_spend: {v}");
-    let notes: Vec<&str> = v["notes"].as_array().unwrap().iter().map(|n| n.as_str().unwrap_or("")).collect();
+    assert!(
+        v["keypath_spend"].is_null(),
+        "NUMS IK MUST NOT surface keypath_spend: {v}"
+    );
+    let notes: Vec<&str> = v["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_str().unwrap_or(""))
+        .collect();
     assert!(
         !notes.iter().any(|n| n.contains("non-NUMS internal key")),
         "NUMS IK MUST NOT surface non-NUMS advisory: {notes:?}"
@@ -577,16 +756,27 @@ fn tr_descriptor_non_nums_ik_surfaces_keypath_spend_and_advisory() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let ks = &v["keypath_spend"];
     assert!(!ks.is_null(), "non-NUMS IK MUST surface keypath_spend: {v}");
     assert_eq!(ks["internal_key_xonly_hex"], KEY_X_ONLY_A);
     // SPEC §11: keyspend witness = 66B; vbytes = (164+66+3)/4 = 58.
     assert_eq!(ks["vbytes"], 58);
-    let notes: Vec<&str> = v["notes"].as_array().unwrap().iter().map(|n| n.as_str().unwrap_or("")).collect();
+    let notes: Vec<&str> = v["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_str().unwrap_or(""))
+        .collect();
     assert!(
-        notes.iter().any(|n| n.contains("non-NUMS internal key") && n.contains(KEY_X_ONLY_A)),
+        notes
+            .iter()
+            .any(|n| n.contains("non-NUMS internal key") && n.contains(KEY_X_ONLY_A)),
         "non-NUMS IK MUST surface advisory note: {notes:?}"
     );
 }
@@ -601,10 +791,16 @@ fn tr_descriptor_non_nums_ik_keypath_spend_plaintext_annotation_line() {
         .args(["compare-cost", "--descriptor", &desc, "--feerate", "10.0"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains(&format!("Keypath-spend (via IK {KEY_X_ONLY_A}): 58 vB | 580 sats")),
+        stdout.contains(&format!(
+            "Keypath-spend (via IK {KEY_X_ONLY_A}): 58 vB | 580 sats"
+        )),
         "missing keypath-spend annotation line: {stdout}"
     );
 }
@@ -617,23 +813,33 @@ fn tr_descriptor_single_leaf_and_v_pk_pk_two_signers() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let conds = v["conditions"].as_array().unwrap();
-    assert_eq!(conds.len(), 1, "and_v(A,B) → single joint-signing condition");
+    assert_eq!(
+        conds.len(),
+        1,
+        "and_v(A,B) → single joint-signing condition"
+    );
 }
 
 #[test]
 fn tr_descriptor_single_leaf_multi_a_2_of_3() {
     // tr(NUMS, multi_a(2,A,B,C)) — script-path 2-of-3 → 3 minimal conditions.
-    let desc = format!(
-        "tr({NUMS_XONLY},multi_a(2,{KEY_X_ONLY_A},{KEY_X_ONLY_B},{KEY_X_ONLY_C}))"
-    );
+    let desc = format!("tr({NUMS_XONLY},multi_a(2,{KEY_X_ONLY_A},{KEY_X_ONLY_B},{KEY_X_ONLY_C}))");
     let out = bin()
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let conds = v["conditions"].as_array().unwrap();
     assert_eq!(
@@ -647,14 +853,17 @@ fn tr_descriptor_single_leaf_multi_a_2_of_3() {
 fn tr_descriptor_multi_leaf_refused_exit_3() {
     // tr(NUMS, {pk(A), pk(B)}) — multi-leaf TapTree is rejected with
     // MultiLeafTr.
-    let desc = format!(
-        "tr({NUMS_XONLY},{{pk({KEY_X_ONLY_A}),pk({KEY_X_ONLY_B})}})"
-    );
+    let desc = format!("tr({NUMS_XONLY},{{pk({KEY_X_ONLY_A}),pk({KEY_X_ONLY_B})}})");
     let out = bin()
         .args(["compare-cost", "--descriptor", &desc])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("multi-leaf tr") || stderr.contains("--miniscript"),
@@ -677,7 +886,11 @@ fn tr_descriptor_with_valid_checksum_succeeds() {
         .args(["compare-cost", "--descriptor", &desc_no_checksum])
         .output()
         .unwrap();
-    assert!(out.status.success(), "no-checksum form must parse: stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "no-checksum form must parse: stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -706,7 +919,12 @@ fn tr_descriptor_nums_keypath_only_refused_no_script() {
         .args(["compare-cost", "--descriptor", &format!("tr({NUMS_XONLY})")])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("no script") || stderr.contains("--miniscript"),
@@ -772,7 +990,11 @@ fn descriptor_wsh_wildcard_xpub_materializes_at_index_zero() {
         .args(["compare-cost", "--descriptor", desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let conds = v["conditions"].as_array().unwrap();
     assert_eq!(conds.len(), 1, "single-pk wildcard wsh has one minimal row");
@@ -787,7 +1009,11 @@ fn descriptor_wsh_with_timelock_descriptor_input_enumerates_paths() {
         .args(["compare-cost", "--descriptor", &desc, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let conds = v["conditions"].as_array().unwrap();
     assert_eq!(conds.len(), 2, "or_d with timelock → 2 minimal rows");
@@ -805,17 +1031,33 @@ fn descriptor_pkh_refused_exit_3() {
         .args(["compare-cost", "--descriptor", &desc])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
 fn descriptor_and_miniscript_conflict_exit_64() {
     let desc = format!("wsh(pk({KEY_A}))");
     let out = bin()
-        .args(["compare-cost", "--descriptor", &desc, "--miniscript", "pk(A)"])
+        .args([
+            "compare-cost",
+            "--descriptor",
+            &desc,
+            "--miniscript",
+            "pk(A)",
+        ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(64), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -824,7 +1066,11 @@ fn no_input_flag_clap_error() {
     // Now that --miniscript is optional, this hits our explicit "supply one"
     // error → exit 2 (BadInput) under the toolkit's mapping.
     let code = out.status.code().unwrap_or(-1);
-    assert!(code == 1 || code == 2 || code == 64, "expected exit 1/2/64 for missing input; got {code}: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        code == 1 || code == 2 || code == 64,
+        "expected exit 1/2/64 for missing input; got {code}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 // ── §3 preimage enumeration ────────────────────────────────────────────────
@@ -838,13 +1084,20 @@ fn sha256_preimage_required_emits_preimage_row_and_advisory() {
         .args(["compare-cost", "--miniscript", &ms, "--json"])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let conds = v["conditions"].as_array().unwrap();
     assert_eq!(conds.len(), 1, "exactly one minimal row: A + preimage");
     let label = conds[0]["label"].as_str().unwrap();
     assert!(label.contains('A'), "label must include A: got {label}");
-    assert!(label.contains("preimage"), "label must include preimage: got {label}");
+    assert!(
+        label.contains("preimage"),
+        "label must include preimage: got {label}"
+    );
     let notes: Vec<&str> = v["notes"]
         .as_array()
         .unwrap()
@@ -871,7 +1124,11 @@ fn absolute_mtp_time_lock_satisfies() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("after(time)"),
@@ -890,7 +1147,11 @@ fn relative_512s_time_lock_satisfies() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("older(512s)"),
@@ -907,7 +1168,11 @@ fn stdin_classifies_miniscript_input() {
         .write_stdin("pk(A)\n")
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Input: pk(A)"));
 }
@@ -920,7 +1185,11 @@ fn stdin_classifies_descriptor_input() {
         .write_stdin(format!("{desc}\n"))
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["input"]["form"], "descriptor");
 }
@@ -932,7 +1201,12 @@ fn stdin_malformed_input_exits_parse_error() {
         .write_stdin("not_a_thing!!\n")
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(2), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -943,7 +1217,11 @@ fn flag_wins_over_stdin() {
         .write_stdin("THIS_SHOULD_BE_IGNORED\n")
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Input: pk(A)"));
 }
@@ -970,7 +1248,11 @@ fn stdin_uses_first_nonblank_line() {
         .write_stdin("\n\n  \npk(A)\nignored_second_line\n")
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Input: pk(A)"));
 }

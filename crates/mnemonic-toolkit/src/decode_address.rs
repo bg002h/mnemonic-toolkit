@@ -106,8 +106,8 @@ mod tests {
     #[test]
     fn p2tr_witness_v1() {
         // BIP-350 canonical P2TR example.
-        let d =
-            decode_address("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0").unwrap();
+        let d = decode_address("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0")
+            .unwrap();
         assert_eq!(d.script_type, "p2tr");
         assert_eq!(d.witness_version, Some(1));
         assert!(d.script_pubkey_hex.starts_with("5120"));

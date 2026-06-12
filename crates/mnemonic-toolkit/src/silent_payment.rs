@@ -49,8 +49,9 @@ pub fn labeled_spend_key<C: Verification>(
     m: u32,
 ) -> Result<PublicKey, ToolkitError> {
     let hash = bip0352_label_hash(b_scan, m);
-    let tweak = Scalar::from_be_bytes(hash)
-        .map_err(|_| ToolkitError::SilentPayment("BIP-352 label tweak scalar out of range".into()))?;
+    let tweak = Scalar::from_be_bytes(hash).map_err(|_| {
+        ToolkitError::SilentPayment("BIP-352 label tweak scalar out of range".into())
+    })?;
     b_spend_pub
         .add_exp_tweak(secp, &tweak)
         .map_err(|e| ToolkitError::SilentPayment(format!("BIP-352 label tweak point-add: {e}")))
@@ -160,7 +161,10 @@ mod tests {
             }
             checked += 1;
         }
-        assert!(checked >= 20, "expected ≥20 receiving cases; checked {checked}");
+        assert!(
+            checked >= 20,
+            "expected ≥20 receiving cases; checked {checked}"
+        );
     }
 
     /// seed → `m/352'` derivation pin (the official vectors are key-based, not
@@ -182,11 +186,19 @@ mod tests {
             &b_scan.public_key(&secp),
             &b_spend.public_key(&secp),
         );
-        assert!(addr.starts_with("sp1q"), "mainnet base addr starts sp1q; got {addr}");
+        assert!(
+            addr.starts_with("sp1q"),
+            "mainnet base addr starts sp1q; got {addr}"
+        );
         // A v0 mainnet `sp` address is exactly 116 chars (66-byte payload is
         // fixed-length; the BIP's "≥117" assumes the longer `tsp` HRP). The
         // byte-exact validation is the official-vector test above.
-        assert_eq!(addr.len(), 116, "mainnet sp v0 address is 116 chars; got {}", addr.len());
+        assert_eq!(
+            addr.len(),
+            116,
+            "mainnet sp v0 address is 116 chars; got {}",
+            addr.len()
+        );
         // testnet → tsp1q
         let tmaster = Xpriv::new_master(bitcoin::NetworkKind::Test, &seed).unwrap();
         let (ts, tp) = derive_scan_spend(&secp, &tmaster, 1, 0).unwrap();
@@ -195,6 +207,9 @@ mod tests {
             &ts.public_key(&secp),
             &tp.public_key(&secp),
         );
-        assert!(taddr.starts_with("tsp1q"), "testnet base addr starts tsp1q; got {taddr}");
+        assert!(
+            taddr.starts_with("tsp1q"),
+            "testnet base addr starts tsp1q; got {taddr}"
+        );
     }
 }

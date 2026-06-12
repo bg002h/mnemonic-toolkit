@@ -53,16 +53,21 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
     );
     let searched_count = candidates.len();
 
-    let file = std::fs::File::open(path)
-        .map_err(|e| ToolkitError::BadInput(format!("--passphrase-candidates-file {}: {e}", path.display())))?;
+    let file = std::fs::File::open(path).map_err(|e| {
+        ToolkitError::BadInput(format!(
+            "--passphrase-candidates-file {}: {e}",
+            path.display()
+        ))
+    })?;
     let reader = BufReader::new(file);
 
     let mut candidates_tried: usize = 0usize;
     for (idx, line) in reader.lines().enumerate() {
         // `BufRead::lines` drops `\n`; strip a trailing `\r` for CRLF. NO other
         // trim — a passphrase is an exact byte string.
-        let mut raw = line
-            .map_err(|e| ToolkitError::BadInput(format!("--passphrase-candidates-file read: {e}")))?;
+        let mut raw = line.map_err(|e| {
+            ToolkitError::BadInput(format!("--passphrase-candidates-file read: {e}"))
+        })?;
         if raw.ends_with('\r') {
             raw.pop();
         }
@@ -146,7 +151,9 @@ fn emit_match<W: Write>(
              (template={}, account={})",
             m.path,
             m.template_name,
-            m.account.map(|a| a.to_string()).unwrap_or_else(|| "n/a".to_string()),
+            m.account
+                .map(|a| a.to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
         )
         .map_err(ToolkitError::Io)?;
         writeln!(
@@ -159,8 +166,11 @@ fn emit_match<W: Write>(
             },
         )
         .map_err(ToolkitError::Io)?;
-        writeln!(stdout, "searched: {searched_count} candidate paths per passphrase")
-            .map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "searched: {searched_count} candidate paths per passphrase"
+        )
+        .map_err(ToolkitError::Io)?;
     }
     Ok(0)
 }

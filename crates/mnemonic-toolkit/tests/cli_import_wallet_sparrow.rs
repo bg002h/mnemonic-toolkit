@@ -115,8 +115,7 @@ fn sparrow_with_bsms_format_refused() {
     let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms"]).failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("import-wallet")
-            && (stderr.contains("bsms") || stderr.contains("format")),
+        stderr.contains("import-wallet") && (stderr.contains("bsms") || stderr.contains("format")),
         "expected import-wallet bsms-related refusal; got: {stderr}"
     );
 }
@@ -197,8 +196,7 @@ fn sparrow_json_envelope_includes_source_metadata_and_roundtrip() {
 fn sparrow_json_envelope_no_sparrow_source_metadata_on_bsms() {
     // Cross-check: BSMS envelopes do NOT carry sparrow_source_metadata.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"])
-        .success();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let env = &val.as_array().unwrap()[0];
@@ -266,7 +264,14 @@ fn sparrow_json_envelope_dropped_fields_surface_in_metadata() {
     }"#;
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "sparrow", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "sparrow",
+            "--json",
+        ])
         .write_stdin(blob.to_string())
         .assert()
         .success();
@@ -319,7 +324,14 @@ fn sparrow_taproot_singlesig_imports_via_substitution() {
     }"#;
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "sparrow", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "sparrow",
+            "--json",
+        ])
         .write_stdin(blob.to_string())
         .assert()
         .success();
@@ -361,7 +373,14 @@ fn sparrow_canonicalize_drops_extra_top_level_fields() {
     }"#;
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--blob", "-", "--format", "sparrow", "--json"])
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "sparrow",
+            "--json",
+        ])
         .write_stdin(blob.to_string())
         .assert()
         .success();

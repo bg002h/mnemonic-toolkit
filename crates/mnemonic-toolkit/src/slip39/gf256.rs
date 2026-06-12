@@ -63,7 +63,11 @@ pub fn mul(a: u8, b: u8) -> u8 {
     }
     let t = tables();
     let log_sum = (t.log[a as usize] as u16) + (t.log[b as usize] as u16);
-    let idx = if log_sum >= 255 { log_sum - 255 } else { log_sum };
+    let idx = if log_sum >= 255 {
+        log_sum - 255
+    } else {
+        log_sum
+    };
     t.exp[idx as usize]
 }
 

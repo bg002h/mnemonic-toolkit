@@ -126,8 +126,7 @@ fn coldcard_with_format_mismatch_sniffed_bsms_exits_one() {
 
 #[test]
 fn coldcard_with_format_mismatch_sniffed_bitcoin_core_exits_one() {
-    let core_blob =
-        r#"{"wallet_name":"a","descriptors":[{"desc":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere"}]}"#;
+    let core_blob = r#"{"wallet_name":"a","descriptors":[{"desc":"wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/<0;1>/*)#00lx6ere"}]}"#;
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["import-wallet", "--blob", "-", "--format", "coldcard"])
@@ -136,7 +135,8 @@ fn coldcard_with_format_mismatch_sniffed_bitcoin_core_exits_one() {
         .failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("coldcard") && (stderr.contains("bitcoin-core") || stderr.contains("format")),
+        stderr.contains("coldcard")
+            && (stderr.contains("bitcoin-core") || stderr.contains("format")),
         "expected coldcard-vs-bitcoin-core format-mismatch; got: {stderr}"
     );
 }
@@ -231,8 +231,7 @@ fn coldcard_json_envelope_includes_source_metadata_and_roundtrip() {
 fn coldcard_json_envelope_no_coldcard_source_metadata_on_bsms() {
     // Cross-check: BSMS envelopes do NOT carry coldcard_source_metadata.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out =
-        run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms", "--json"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let env = &val.as_array().unwrap()[0];

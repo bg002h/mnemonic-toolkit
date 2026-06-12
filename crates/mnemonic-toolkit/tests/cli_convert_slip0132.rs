@@ -18,7 +18,8 @@ const TREZOR_24_BIP84_MAINNET_BIG_Z: &str = "Zpub72MGacQKkx3qAFezP9Q6kaRAj7SrhVi
 /// Trezor 12-word + BIP-84 testnet account 0 → tpub (verified canonical) +
 /// derived testnet SLIP-0132 forms (computed via the impl; the slip0132 unit
 /// tests pin the byte-level swap mechanics).
-const TREZOR_12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const TREZOR_12: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const TREZOR_12_BIP84_TESTNET_TPUB: &str = "tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M";
 const TREZOR_12_BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
 const TREZOR_12_BIP84_TESTNET_UPUB: &str = "upub5DGMS1SD7bMtVaPGsQmFWqyBNYtqrnivGbviSBHdwUCn9nLN8HLr6fE5isXy5Gr399HqCKsR4nWUQzopSzKA8euazKS97Jj9m1SXTNjmvtM";
@@ -92,10 +93,7 @@ fn input_normalizer_big_z_to_xpub_normalizes_to_neutral() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n"));
 }
 
 #[test]
@@ -112,10 +110,7 @@ fn input_normalizer_big_y_to_xpub_normalizes_to_neutral() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n"));
 }
 
 #[test]
@@ -132,10 +127,7 @@ fn input_normalizer_testnet_vpub_to_xpub_normalizes_to_tpub() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_12_BIP84_TESTNET_TPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_12_BIP84_TESTNET_TPUB}\n"));
 }
 
 #[test]
@@ -152,10 +144,7 @@ fn input_normalizer_testnet_upub_to_xpub_normalizes_to_tpub() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_12_BIP84_TESTNET_TPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_12_BIP84_TESTNET_TPUB}\n"));
 }
 
 // ============================================================================
@@ -182,10 +171,7 @@ fn output_xpub_prefix_zpub_mainnet() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_24_BIP84_MAINNET_ZPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_ZPUB}\n"));
 }
 
 #[test]
@@ -208,10 +194,7 @@ fn output_xpub_prefix_big_z_mainnet() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_24_BIP84_MAINNET_BIG_Z}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_BIG_Z}\n"));
 }
 
 #[test]
@@ -263,10 +246,7 @@ fn output_xpub_prefix_default_xpub_is_neutral() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_24_BIP84_MAINNET_XPUB}\n"));
 }
 
 #[test]
@@ -291,10 +271,7 @@ fn output_xpub_prefix_testnet_zpub_emits_vpub() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(
-        stdout,
-        format!("xpub: {TREZOR_12_BIP84_TESTNET_VPUB}\n")
-    );
+    assert_eq!(stdout, format!("xpub: {TREZOR_12_BIP84_TESTNET_VPUB}\n"));
 }
 
 // ============================================================================
@@ -339,13 +316,19 @@ fn refusal_unknown_extended_key_version_prefix() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("xpub={bogus}"), "--to", "fingerprint"])
+        .args([
+            "convert",
+            "--from",
+            &format!("xpub={bogus}"),
+            "--to",
+            "fingerprint",
+        ])
         .assert()
         .failure()
         .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(        "error: unknown extended-key version prefix: deadbeef\n"),
+        stderr.ends_with("error: unknown extended-key version prefix: deadbeef\n"),
         "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
     )
@@ -373,7 +356,10 @@ fn xpub_prefix_silently_ignored_on_non_xpub_target() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(stdout, format!("fingerprint: {TREZOR_24_MASTER_FINGERPRINT}\n"));
+    assert_eq!(
+        stdout,
+        format!("fingerprint: {TREZOR_24_MASTER_FINGERPRINT}\n")
+    );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains("--xpub-prefix"),

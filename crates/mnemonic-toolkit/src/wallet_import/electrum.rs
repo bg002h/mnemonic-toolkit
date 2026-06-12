@@ -87,7 +87,10 @@ pub(crate) enum ElectrumWalletType {
     Standard,
     /// `k`-of-`n` multisig per `electrum/util.py::multisig_type` regex
     /// `(\d+)of(\d+)`. P6A in-phase SPEC correction.
-    Multisig { k: u8, n: u8 },
+    Multisig {
+        k: u8,
+        n: u8,
+    },
 }
 
 /// SPEC §11.6 — per-blob provenance metadata for an Electrum parse.
@@ -119,12 +122,8 @@ pub(crate) struct ElectrumSourceMetadata {
 /// Note: multisig per-cosigner keys `x1/`, `x2/`, ..., `xN/` are dynamic
 /// (N = cosigner count) and tested separately via prefix match in
 /// `dropped_fields` computation.
-pub(crate) const ELECTRUM_PRESERVED_TOP_LEVEL_KEYS: &[&str] = &[
-    "seed_version",
-    "wallet_type",
-    "use_encryption",
-    "keystore",
-];
+pub(crate) const ELECTRUM_PRESERVED_TOP_LEVEL_KEYS: &[&str] =
+    &["seed_version", "wallet_type", "use_encryption", "keystore"];
 
 /// SPEC §11.6 — sniff seed_version range. Electrum's `_convert_version_*`
 /// chain accepts `seed_version >= 12` (with rejections at 14 / 51 per
@@ -360,13 +359,11 @@ impl WalletFormatParser for ElectrumParser {
         })?;
 
         // Step 4a/4b: dispatch on classified wallet_type.
-        let (descriptor_body, network, threshold, wallet_name, cosigners_count) =
-            match wallet_type {
-                ElectrumWalletType::Standard => build_standard_descriptor(obj)?,
-                ElectrumWalletType::Multisig { k, n } => {
-                    build_multisig_descriptor(obj, k, n)?
-                }
-            };
+        let (descriptor_body, network, threshold, wallet_name, cosigners_count) = match wallet_type
+        {
+            ElectrumWalletType::Standard => build_standard_descriptor(obj)?,
+            ElectrumWalletType::Multisig { k, n } => build_multisig_descriptor(obj, k, n)?,
+        };
 
         // Step 5: feed through pipeline + parse_descriptor.
         let (placeholder_form, parsed_keys, parsed_fingerprints) =
@@ -484,13 +481,7 @@ fn is_multisig_cosigner_key(k: &str, n: usize) -> bool {
 /// wallet_name, cosigners_count)`. Threshold is `Some(K)` for multisig,
 /// `None` for singlesig. Returned by both `build_standard_descriptor` +
 /// `build_multisig_descriptor`.
-type ElectrumDispatchResult = (
-    String,
-    bitcoin::Network,
-    Option<u8>,
-    Option<String>,
-    usize,
-);
+type ElectrumDispatchResult = (String, bitcoin::Network, Option<u8>, Option<String>, usize);
 
 /// SPEC §11.6 — singlesig parse path.
 ///
@@ -539,9 +530,7 @@ fn build_standard_descriptor(
             )
         })?;
     // 8-hex validation (lowercase by Electrum emit convention; accept either).
-    if root_fingerprint.len() != 8
-        || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit())
-    {
+    if root_fingerprint.len() != 8 || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ToolkitError::ImportWalletParse(format!(
             "import-wallet: electrum: parse error: keystore.root_fingerprint must be 8 hex chars, got {root_fingerprint:?}"
         )));
@@ -554,8 +543,8 @@ fn build_standard_descriptor(
 
     // Normalize the xpub (SLIP-132 → neutral) + capture the variant for
     // wrapper inference.
-    let (neutral_xpub_str, slip132_variant) =
-        crate::slip0132::normalize_xpub_prefix(&xpub_str).map_err(|e| {
+    let (neutral_xpub_str, slip132_variant) = crate::slip0132::normalize_xpub_prefix(&xpub_str)
+        .map_err(|e| {
             ToolkitError::ImportWalletParse(format!(
                 "import-wallet: electrum: parse error: keystore.xpub normalize: {}",
                 e.message()
@@ -575,9 +564,7 @@ fn build_standard_descriptor(
         .strip_prefix("m/")
         .unwrap_or_else(|| derivation.strip_prefix('m').unwrap_or(&derivation));
 
-    let bracketed = format!(
-        "[{root_fingerprint}/{deriv_no_m}]{neutral_xpub_str}/<0;1>/*"
-    );
+    let bracketed = format!("[{root_fingerprint}/{deriv_no_m}]{neutral_xpub_str}/<0;1>/*");
     let wrapped = match wrapper {
         StandardWrapper::Pkh => format!("pkh({bracketed})"),
         StandardWrapper::ShWpkh => format!("sh(wpkh({bracketed}))"),
@@ -759,7 +746,11 @@ fn build_multisig_descriptor(
     let wallet_name = cosigners[0]
         .label
         .as_deref()
-        .map(|s| s.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end_matches('-').to_string())
+        .map(|s| {
+            s.trim_end_matches(|c: char| c.is_ascii_digit())
+                .trim_end_matches('-')
+                .to_string()
+        })
         .filter(|s| !s.is_empty());
 
     Ok((wrapped, network, Some(k), wallet_name, n as usize))
@@ -820,9 +811,7 @@ fn parse_multisig_cosigner(
             ))
         })?
         .to_string();
-    if root_fingerprint.len() != 8
-        || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit())
-    {
+    if root_fingerprint.len() != 8 || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ToolkitError::ImportWalletParse(format!(
             "import-wallet: electrum: parse error: cosigner `{key}` root_fingerprint must be 8 hex chars, got {root_fingerprint:?}"
         )));
@@ -833,8 +822,8 @@ fn parse_multisig_cosigner(
         .filter(|s| !s.is_empty())
         .map(String::from);
 
-    let (neutral_xpub, slip132_variant) =
-        crate::slip0132::normalize_xpub_prefix(&xpub_str).map_err(|e| {
+    let (neutral_xpub, slip132_variant) = crate::slip0132::normalize_xpub_prefix(&xpub_str)
+        .map_err(|e| {
             ToolkitError::ImportWalletParse(format!(
                 "import-wallet: electrum: parse error: cosigner `{key}` xpub normalize: {}",
                 e.message()
@@ -962,7 +951,8 @@ mod tests {
 
     #[test]
     fn sniff_multisig_2of4_positive() {
-        let blob = br#"{"seed_version": 17, "wallet_type": "2of4", "use_encryption": false, "x1/": {}}"#;
+        let blob =
+            br#"{"seed_version": 17, "wallet_type": "2of4", "use_encryption": false, "x1/": {}}"#;
         assert!(ElectrumParser::sniff(blob));
     }
 
@@ -1055,8 +1045,7 @@ mod tests {
     fn sniff_bitcoin_core_descriptors_blob_rejected() {
         // Cross-format guard: a Bitcoin Core listdescriptors blob does NOT
         // carry seed_version / wallet_type; sniff must reject.
-        let blob =
-            br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub...)#abcdefgh"}]}"#;
+        let blob = br#"{"wallet_name":"a","descriptors":[{"desc":"wpkh(xpub...)#abcdefgh"}]}"#;
         assert!(!ElectrumParser::sniff(blob));
     }
 
@@ -1289,7 +1278,9 @@ mod tests {
             other => panic!("expected Electrum provenance, got {other:?}"),
         }
         assert!(
-            parsed[0].original_descriptor.starts_with("wsh(sortedmulti(2,"),
+            parsed[0]
+                .original_descriptor
+                .starts_with("wsh(sortedmulti(2,"),
             "expected wsh(sortedmulti(2,...)) for Zpub multisig; got {}",
             parsed[0].original_descriptor
         );
@@ -1417,8 +1408,7 @@ mod tests {
         // test exercises the parse-side validation by constructing a blob
         // that sniff would actually reject — and confirms parse-side error
         // matches the rejection template).
-        let blob =
-            br#"{"seed_version": 17, "wallet_type": "trezor", "use_encryption": false}"#;
+        let blob = br#"{"seed_version": 17, "wallet_type": "trezor", "use_encryption": false}"#;
         let mut sink = Vec::new();
         let err = ElectrumParser::parse(blob, &mut sink).unwrap_err();
         let msg = format!("{err}");

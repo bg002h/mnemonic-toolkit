@@ -97,7 +97,11 @@ pub(crate) fn derive_full_at_path(
     let mnemonic = Mnemonic::parse_in(language.into(), phrase).map_err(ToolkitError::Bip39)?;
     let entropy = zeroize::Zeroizing::new(mnemonic.to_entropy());
     crate::derive_slot::derive_bip32_from_entropy_at_path(
-        &entropy, passphrase, language.into(), network, path,
+        &entropy,
+        passphrase,
+        language.into(),
+        network,
+        path,
     )
 }
 

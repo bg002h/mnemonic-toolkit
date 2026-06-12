@@ -370,12 +370,18 @@ impl WalletFormatParser for SparrowParser {
                 let ks = &keystores[i];
                 // Strip leading `m/` from derivation; brackets carry path
                 // sans the `m` prefix per BIP-380 / BIP-389.
-                let path_no_m = ks
-                    .derivation
-                    .strip_prefix("m/")
-                    .unwrap_or(ks.derivation.as_str().strip_prefix('m').unwrap_or(&ks.derivation));
+                let path_no_m = ks.derivation.strip_prefix("m/").unwrap_or(
+                    ks.derivation
+                        .as_str()
+                        .strip_prefix('m')
+                        .unwrap_or(&ks.derivation),
+                );
                 let bracketed = if path_no_m.is_empty() {
-                    format!("[{fp}]{xpub}/<0;1>/*", fp = ks.master_fingerprint, xpub = ks.xpub)
+                    format!(
+                        "[{fp}]{xpub}/<0;1>/*",
+                        fp = ks.master_fingerprint,
+                        xpub = ks.xpub
+                    )
                 } else {
                     format!(
                         "[{fp}/{path}]{xpub}/<0;1>/*",
@@ -528,9 +534,7 @@ fn parse_keystore(i: usize, ks: &Value) -> Result<KeystoreParts, ToolkitError> {
     // Sparrow's masterFingerprint is lowercase 8-hex by emit convention; be
     // lenient — accept any 8-hex (case-insensitive) but reject anything that
     // doesn't parse as a u32 byte sequence.
-    if master_fingerprint.len() != 8
-        || !master_fingerprint.chars().all(|c| c.is_ascii_hexdigit())
-    {
+    if master_fingerprint.len() != 8 || !master_fingerprint.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ToolkitError::ImportWalletParse(format!(
             "import-wallet: sparrow: parse error: keystores[{i}].keyDerivation.masterFingerprint must be 8 hex chars, got {master_fingerprint:?}"
         )));
@@ -798,8 +802,14 @@ mod tests {
     /// unrecognized strings.
     #[test]
     fn sparrow_policy_type_from_str_matrix() {
-        assert_eq!(SparrowPolicyType::from_str("SINGLE"), Some(SparrowPolicyType::Single));
-        assert_eq!(SparrowPolicyType::from_str("MULTI"), Some(SparrowPolicyType::Multi));
+        assert_eq!(
+            SparrowPolicyType::from_str("SINGLE"),
+            Some(SparrowPolicyType::Single)
+        );
+        assert_eq!(
+            SparrowPolicyType::from_str("MULTI"),
+            Some(SparrowPolicyType::Multi)
+        );
         assert_eq!(SparrowPolicyType::from_str("single"), None);
         assert_eq!(SparrowPolicyType::from_str(""), None);
         assert_eq!(SparrowPolicyType::from_str("NOVEL"), None);

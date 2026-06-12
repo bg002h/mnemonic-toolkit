@@ -36,8 +36,14 @@ fn g1_1_single_page_pin_has_page_count_one() {
         assert!(!ptr.is_null(), "alloc failed");
         let slice = std::slice::from_raw_parts(ptr, 64);
         let pin = mlock::pin_pages_for(slice);
-        assert_eq!(pin.page_count, 1, "page-aligned 64-byte buffer spans exactly 1 page");
-        assert!(!pin.start.is_null(), "non-empty buf produces non-null start");
+        assert_eq!(
+            pin.page_count, 1,
+            "page-aligned 64-byte buffer spans exactly 1 page"
+        );
+        assert!(
+            !pin.start.is_null(),
+            "non-empty buf produces non-null start"
+        );
         drop(pin);
         dealloc(ptr, layout);
     }
@@ -59,8 +65,14 @@ fn g1_2_multi_page_pin_has_page_count_at_least_two() {
 #[test]
 fn g1_3_zero_length_is_no_op_no_syscall_no_panic() {
     let pin = mlock::pin_pages_for(&[]);
-    assert_eq!(pin.page_count, 0, "zero-length buf must produce page_count=0");
-    assert!(pin.start.is_null(), "zero-length buf must produce null start");
+    assert_eq!(
+        pin.page_count, 0,
+        "zero-length buf must produce page_count=0"
+    );
+    assert!(
+        pin.start.is_null(),
+        "zero-length buf must produce null start"
+    );
     // Drop is a no-op for an empty range; no panic.
     drop(pin);
 }

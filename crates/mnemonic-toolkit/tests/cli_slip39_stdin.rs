@@ -115,7 +115,10 @@ fn stdin_combine_one_share_dash_round_trip() {
         .write_stdin(stdin_share.clone())
         .output()
         .unwrap();
-    assert!(combine_out.status.success(), "combine via stdin share must succeed");
+    assert!(
+        combine_out.status.success(),
+        "combine via stdin share must succeed"
+    );
     let recovered = String::from_utf8(combine_out.stdout).unwrap();
     assert_eq!(recovered.lines().next().unwrap(), ABANDON_12);
 }
@@ -239,13 +242,7 @@ fn stdin_refusal_pairwise_a_combine_passphrase_stdin_plus_share_dash() {
         .unwrap()
         .arg("slip39")
         .arg("combine")
-        .args([
-            "--share",
-            placeholder,
-            "--share",
-            "-",
-            "--passphrase-stdin",
-        ])
+        .args(["--share", placeholder, "--share", "-", "--passphrase-stdin"])
         .write_stdin("anything")
         .output()
         .unwrap();

@@ -112,8 +112,8 @@ fn restore_all_four_default() {
     assert!(stdout.contains("sh(wpkh(["), "stdout:\n{stdout}"); // bip49
     assert!(stdout.contains("wpkh(["), "stdout:\n{stdout}"); // bip84
     assert!(stdout.contains("tr(["), "stdout:\n{stdout}"); // bip86
-    // Fingerprint is path-independent — identical across all four (header + 4
-    // descriptor origins = at least 5 occurrences).
+                                                           // Fingerprint is path-independent — identical across all four (header + 4
+                                                           // descriptor origins = at least 5 occurrences).
     assert!(stdout.matches(FP_NO_PP).count() >= 5, "stdout:\n{stdout}");
 }
 
@@ -219,7 +219,10 @@ fn restore_passphrase_via_env_and_stdin_derives_trezor_pp_fingerprint() {
         .expect("spawn");
     assert!(out.status.success(), "exit {:?}", out.status.code());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains(&expected), "expected {expected}\nstdout:\n{stdout}");
+    assert!(
+        stdout.contains(&expected),
+        "expected {expected}\nstdout:\n{stdout}"
+    );
     assert!(stdout.contains("passphrase: applied"), "stdout:\n{stdout}");
 }
 
@@ -244,11 +247,7 @@ fn restore_stdin_mutex_rejected() {
 #[test]
 fn restore_non_seed_from_rejected() {
     let out = bin()
-        .args([
-            "restore",
-            "--from",
-            &format!("xpub={ACCT_XPUB_BIP84}"),
-        ])
+        .args(["restore", "--from", &format!("xpub={ACCT_XPUB_BIP84}")])
         .output()
         .expect("spawn");
     assert_eq!(out.status.code(), Some(1), "non-seed --from must be exit 1");
@@ -270,10 +269,16 @@ fn restore_ms1_mnem_uses_wire_language_not_english() {
         .expect("spawn");
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains("0ed2c5a4"), "wire-language seed expected;\n{stdout}");
+    assert!(
+        stdout.contains("0ed2c5a4"),
+        "wire-language seed expected;\n{stdout}"
+    );
     // The same 16-zero entropy derived as ENGLISH gives `73c5da0a`; the wire
     // language (Japanese) must override, so that fingerprint must NOT appear.
-    assert!(!stdout.contains(FP_NO_PP), "must not be english-derived;\n{stdout}");
+    assert!(
+        !stdout.contains(FP_NO_PP),
+        "must not be english-derived;\n{stdout}"
+    );
 }
 
 #[test]
@@ -290,7 +295,11 @@ fn restore_ms1_mnem_language_conflict_exit_2() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(2), "language-conflict must be exit 2");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "language-conflict must be exit 2"
+    );
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
         stderr.contains("language") && stderr.contains("Japanese"),
@@ -368,7 +377,10 @@ fn restore_expect_fingerprint_mismatch_exit_4_no_descriptors() {
         .expect("spawn");
     assert_eq!(out.status.code(), Some(4), "mismatch must be exit 4");
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(!stdout.contains("wpkh("), "no descriptors on mismatch;\n{stdout}");
+    assert!(
+        !stdout.contains("wpkh("),
+        "no descriptors on mismatch;\n{stdout}"
+    );
 }
 
 #[test]
@@ -388,9 +400,15 @@ fn restore_mismatch_allow_override_exit_0_banner() {
         .expect("spawn");
     assert!(out.status.success(), "allow-mismatch must be exit 0");
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains("wpkh("), "descriptors emitted on override;\n{stdout}");
+    assert!(
+        stdout.contains("wpkh("),
+        "descriptors emitted on override;\n{stdout}"
+    );
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert!(stderr.contains("MISMATCH (overridden)"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("MISMATCH (overridden)"),
+        "stderr:\n{stderr}"
+    );
 }
 
 #[test]
@@ -439,7 +457,11 @@ fn restore_expect_xpub_without_template_exit_2() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(2), "expect-xpub w/o template = exit 2");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "expect-xpub w/o template = exit 2"
+    );
 }
 
 #[test]
@@ -501,9 +523,15 @@ fn restore_format_descriptor_payload_to_stdout() {
     assert_eq!(stdout.trim_end(), DESC_BIP84, "stdout payload:\n{stdout}");
     // The human verify doc is on stderr, not stdout.
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert!(stderr.contains(FP_NO_PP), "fingerprint on stderr:\n{stderr}");
+    assert!(
+        stderr.contains(FP_NO_PP),
+        "fingerprint on stderr:\n{stderr}"
+    );
     assert!(stderr.contains("CONFIRM"), "CONFIRM on stderr:\n{stderr}");
-    assert!(stderr.contains(FIRST_RECV_BIP84), "first recv on stderr:\n{stderr}");
+    assert!(
+        stderr.contains(FIRST_RECV_BIP84),
+        "first recv on stderr:\n{stderr}"
+    );
     // The descriptor MUST NOT also be duplicated as a text doc on stdout.
     assert!(
         !stdout.contains("master fingerprint:"),
@@ -786,7 +814,11 @@ fn restore_json_all_four_default_lists_four_wallets() {
         .iter()
         .map(|w| w["wallet_type"].as_str().unwrap())
         .collect();
-    assert_eq!(types, ["bip44", "bip49", "bip84", "bip86"], "all-4:\n{stdout}");
+    assert_eq!(
+        types,
+        ["bip44", "bip49", "bip84", "bip86"],
+        "all-4:\n{stdout}"
+    );
 }
 
 #[test]
@@ -852,7 +884,11 @@ fn restore_json_mismatch_exits_4_not_json_success_body() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(4), "mismatch in --json must be exit 4");
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "mismatch in --json must be exit 4"
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         stdout.is_empty(),
@@ -924,7 +960,10 @@ fn restore_output_file_writes_content_stdout_clean() {
     assert!(out.status.success());
     // stdout is empty/clean — the document went to the file.
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.is_empty(), "stdout must be clean with --output:\n{stdout}");
+    assert!(
+        stdout.is_empty(),
+        "stdout must be clean with --output:\n{stdout}"
+    );
     let file = std::fs::read_to_string(&path).expect("output file written");
     assert!(file.contains("master fingerprint:"), "doc in file:\n{file}");
     assert!(file.contains(DESC_BIP84), "descriptor in file:\n{file}");
@@ -950,10 +989,12 @@ fn restore_output_file_with_json_writes_json() {
         .expect("spawn");
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.is_empty(), "stdout clean with --json --output:\n{stdout}");
+    assert!(
+        stdout.is_empty(),
+        "stdout clean with --json --output:\n{stdout}"
+    );
     let file = std::fs::read_to_string(&path).expect("output file");
-    let v: serde_json::Value =
-        serde_json::from_str(&file).expect("file content is valid JSON");
+    let v: serde_json::Value = serde_json::from_str(&file).expect("file content is valid JSON");
     assert_eq!(v["master_fingerprint"].as_str().unwrap(), FP_NO_PP);
     std::fs::remove_file(&path).ok();
 }
@@ -1131,7 +1172,11 @@ fn restore_format_descriptor_unaffected_by_collect_missing() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(0), "descriptor still emits at exit 0");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "descriptor still emits at exit 0"
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stdout.trim_end(), DESC_BIP84, "stdout payload:\n{stdout}");
 }

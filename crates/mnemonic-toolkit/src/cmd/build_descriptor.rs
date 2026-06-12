@@ -11,11 +11,13 @@ use clap::{Args, ValueEnum};
 use serde_json::{json, Value};
 
 use crate::cost::{self, CompareCostArgs, InputForm};
+use crate::derive_address::derive_receive_addresses;
 use crate::descriptor_builder::archetype::{self, ArchetypeParams};
-use crate::descriptor_builder::gate::{self, AllowSet, Diagnostic, DiagnosticKind, ValidatedPolicy};
+use crate::descriptor_builder::gate::{
+    self, AllowSet, Diagnostic, DiagnosticKind, ValidatedPolicy,
+};
 use crate::descriptor_builder::ir::{SpecDoc, WrapperKind, SUPPORTED_SCHEMA_VERSION};
 use crate::descriptor_builder::schema;
-use crate::derive_address::derive_receive_addresses;
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::wallet_export::descriptor_to_bip388_wallet_policy;
@@ -176,8 +178,7 @@ fn emit_allow_notes<E: Write>(
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     if !fired.is_empty() {
-        let names: Vec<String> =
-            fired.iter().map(|k| k.as_str().replace('_', "-")).collect();
+        let names: Vec<String> = fired.iter().map(|k| k.as_str().replace('_', "-")).collect();
         writeln!(
             stderr,
             "WARNING: sanity rules OVERRIDDEN by --allow and FIRED: {}. This \
@@ -283,20 +284,23 @@ pub fn run<R: Read, W: Write, E: Write>(
             wrapper: WrapperKind::Wsh,
             root: (def.lower)(&params),
         };
-        let validated =
-            match gate::validate_with_allow(&doc, gate::DEFAULT_PREVIEW_CAP, &allow_set(&args.allow)) {
-                Ok(vp) => vp,
-                Err(mut diags) => {
-                    // Annotate gate diagnostics with param provenance (presets
-                    // SPEC §3.3) — the user authored flags, not a node tree.
-                    for d in &mut diags {
-                        d.flag = archetype::resolve_flag(def, &d.node_path, d.kind)
-                            .map(|f| f.to_string());
-                    }
-                    emit_diagnostics(&diags, args.json, stdout, stderr)?;
-                    return Ok(2);
+        let validated = match gate::validate_with_allow(
+            &doc,
+            gate::DEFAULT_PREVIEW_CAP,
+            &allow_set(&args.allow),
+        ) {
+            Ok(vp) => vp,
+            Err(mut diags) => {
+                // Annotate gate diagnostics with param provenance (presets
+                // SPEC §3.3) — the user authored flags, not a node tree.
+                for d in &mut diags {
+                    d.flag =
+                        archetype::resolve_flag(def, &d.node_path, d.kind).map(|f| f.to_string());
                 }
-            };
+                emit_diagnostics(&diags, args.json, stdout, stderr)?;
+                return Ok(2);
+            }
+        };
         emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
         if args.emit_spec {
             // The gate has passed — the spec is safe to hand back for review.
@@ -315,8 +319,8 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     let spec_text = read_spec(args, stdin)?;
-    let doc = SpecDoc::parse(&spec_text)
-        .map_err(|e| ToolkitError::BuildDescriptorSpec(e.to_string()))?;
+    let doc =
+        SpecDoc::parse(&spec_text).map_err(|e| ToolkitError::BuildDescriptorSpec(e.to_string()))?;
 
     let validated =
         match gate::validate_with_allow(&doc, gate::DEFAULT_PREVIEW_CAP, &allow_set(&args.allow)) {
@@ -374,11 +378,18 @@ fn emit_diagnostics<W: Write, E: Write>(
         )
         .map_err(ToolkitError::Io)?;
     } else {
-        writeln!(stderr, "build-descriptor: refused — {} diagnostic(s):", diags.len())
-            .map_err(ToolkitError::Io)?;
+        writeln!(
+            stderr,
+            "build-descriptor: refused — {} diagnostic(s):",
+            diags.len()
+        )
+        .map_err(ToolkitError::Io)?;
         for d in diags {
-            let provenance =
-                d.flag.as_deref().map(|f| format!(" (from {f})")).unwrap_or_default();
+            let provenance = d
+                .flag
+                .as_deref()
+                .map(|f| format!(" (from {f})"))
+                .unwrap_or_default();
             writeln!(
                 stderr,
                 "  [{}] {}: {}{provenance}",
@@ -429,8 +440,9 @@ fn emit<W: Write>(
         writeln!(
             stdout,
             "{}",
-            serde_json::to_string_pretty(&env)
-                .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("envelope serialize: {e}")))?
+            serde_json::to_string_pretty(&env).map_err(|e| ToolkitError::BuildDescriptorSpec(
+                format!("envelope serialize: {e}")
+            ))?
         )
         .map_err(ToolkitError::Io)?;
         return Ok(());
@@ -444,8 +456,9 @@ fn emit<W: Write>(
             writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string_pretty(&bip388)
-                    .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("bip388 serialize: {e}")))?
+                serde_json::to_string_pretty(&bip388).map_err(|e| {
+                    ToolkitError::BuildDescriptorSpec(format!("bip388 serialize: {e}"))
+                })?
             )
             .map_err(ToolkitError::Io)?;
         }
@@ -474,8 +487,11 @@ fn emit_human<W: Write>(
     if !vp.allowed_fired.is_empty() {
         // Allow SPEC §3 (R0-r1 C1): deterministic skip, stdout, in the cost
         // block's position.
-        writeln!(stdout, "cost preview unavailable for a sanity-overridden descriptor")
-            .map_err(ToolkitError::Io)?;
+        writeln!(
+            stdout,
+            "cost preview unavailable for a sanity-overridden descriptor"
+        )
+        .map_err(ToolkitError::Io)?;
         return Ok(());
     }
     writeln!(stdout, "cost preview (wsh vs tr, per spending condition):")
@@ -496,13 +512,16 @@ fn emit_human<W: Write>(
 /// Single-path projection of the multipath descriptor for cost enumeration
 /// (cost is path-invariant; `derive_at_index` errors on multipath — SPEC §4 I2).
 fn single_path_descriptor(vp: &ValidatedPolicy) -> Result<String, ToolkitError> {
-    let singles = vp.descriptor.clone().into_single_descriptors().map_err(|e| {
-        ToolkitError::BuildDescriptorSpec(format!("multipath split for cost preview: {e}"))
-    })?;
-    singles
-        .first()
-        .map(|d| d.to_string())
-        .ok_or_else(|| ToolkitError::BuildDescriptorSpec("multipath split produced no branch".into()))
+    let singles = vp
+        .descriptor
+        .clone()
+        .into_single_descriptors()
+        .map_err(|e| {
+            ToolkitError::BuildDescriptorSpec(format!("multipath split for cost preview: {e}"))
+        })?;
+    singles.first().map(|d| d.to_string()).ok_or_else(|| {
+        ToolkitError::BuildDescriptorSpec("multipath split produced no branch".into())
+    })
 }
 
 fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
@@ -532,7 +551,10 @@ mod tests {
     /// `CliArchetype` value-enum kebab values, in declaration order.
     #[test]
     fn registry_ids_match_cli_archetype_variants() {
-        let cli_ids: Vec<&str> = CliArchetype::value_variants().iter().map(|v| v.id()).collect();
+        let cli_ids: Vec<&str> = CliArchetype::value_variants()
+            .iter()
+            .map(|v| v.id())
+            .collect();
         let registry_ids: Vec<&str> = ARCHETYPE_REGISTRY.iter().map(|d| d.id).collect();
         assert_eq!(cli_ids, registry_ids);
         // The kebab clap value for each variant IS the id.

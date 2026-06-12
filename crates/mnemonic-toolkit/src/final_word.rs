@@ -139,8 +139,7 @@ pub fn final_word_candidates(
 
     let mut candidates: Vec<&'static str> = Vec::with_capacity(128);
     for &candidate in wordlist {
-        let mut full =
-            String::with_capacity(partial_phrase.len() + 1 + candidate.len());
+        let mut full = String::with_capacity(partial_phrase.len() + 1 + candidate.len());
         full.push_str(partial_phrase);
         full.push(' ');
         full.push_str(candidate);

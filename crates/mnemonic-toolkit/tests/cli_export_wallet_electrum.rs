@@ -155,8 +155,8 @@ fn cell_3_electrum_tr_multi_a_refuses_byte_exact() {
         .assert()
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    let expected = std::fs::read_to_string(FIXTURE_REFUSAL_TR_MULTI_A)
-        .expect(FIXTURE_REFUSAL_TR_MULTI_A);
+    let expected =
+        std::fs::read_to_string(FIXTURE_REFUSAL_TR_MULTI_A).expect(FIXTURE_REFUSAL_TR_MULTI_A);
     assert_eq!(
         stderr, expected,
         "Electrum tr-multi-a refusal must match fixture byte-exact (cites FOLLOWUPS slug).\n--- got ---\n{stderr}\n--- expected ---\n{expected}"

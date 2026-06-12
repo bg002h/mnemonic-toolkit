@@ -4,7 +4,6 @@
 
 use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
 use crate::electrum::{self, SeedVersion};
-use crate::wordlists::ElectrumWordlist;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
@@ -12,9 +11,10 @@ use crate::slip0132::{
     apply_xpub_prefix, normalize_xpub_prefix, parse_xpub_prefix_arg, XpubPrefix,
 };
 use crate::template::CliTemplate;
+use crate::wordlists::ElectrumWordlist;
 use bip38::{Decrypt, EncryptWif};
 use bip39::Mnemonic;
-use bitcoin::bip32 as bip32;
+use bitcoin::bip32;
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::PrivateKey;
@@ -652,7 +652,7 @@ fn is_supported_direct_edge(from: NodeType, to: NodeType) -> bool {
             | (Entropy, ElectrumPhrase) // SPEC v0.7 §14 — Electrum seed encode
             | (Xpub, Address)      // SPEC v0.7 §10.a — address derivation (one-way)
             | (Phrase, Address)    // SPEC v0.7 §10.a — composite via leaf xpriv
-            | (Entropy, Address)   // SPEC v0.7 §10.a — composite via leaf xpriv
+            | (Entropy, Address) // SPEC v0.7 §10.a — composite via leaf xpriv
     )
 }
 
@@ -918,8 +918,8 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // 5.b) SPEC v0.7 §12 + v0.8 §12.b — BIP-38 edges require some passphrase
     //      (`--passphrase`, `--passphrase-stdin`, or `--bip38-passphrase`).
-    let bip38_edge = primary.node == NodeType::Bip38
-        || targets.iter().any(|t| *t == NodeType::Bip38);
+    let bip38_edge =
+        primary.node == NodeType::Bip38 || targets.iter().any(|t| *t == NodeType::Bip38);
     if bip38_edge && effective_passphrase.is_none() && effective_bip38_passphrase.is_none() {
         return Err(refusal_bip38_no_passphrase());
     }
@@ -931,14 +931,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     //    → derive at path → leaf privkey → WIF traverses PBKDF2).
     // v0.31.6 — Seedqr decodes to a BIP-39 phrase, so it traverses the
     // same PBKDF2 (phrase → seed) path as Phrase for derivation targets.
-    let edge_uses_pbkdf2 =
-        matches!(primary.node, NodeType::Seedqr | NodeType::Phrase | NodeType::Entropy)
-            && targets.iter().any(|t| {
-                matches!(
-                    t,
-                    NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
-                )
-            });
+    let edge_uses_pbkdf2 = matches!(
+        primary.node,
+        NodeType::Seedqr | NodeType::Phrase | NodeType::Entropy
+    ) && targets.iter().any(|t| {
+        matches!(
+            t,
+            NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
+        )
+    });
     // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS
     // meaningful; suppress the "ignored" warning for BIP-38 edges.
     let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge;
@@ -992,10 +993,8 @@ pub fn run<R: Read, W: Write, E: Write>(
                     NodeType::Mk1 => Some(crate::repair::CardKind::Mk1),
                     _ => None,
                 };
-                let is_codec_decode_err = matches!(
-                    &orig,
-                    ToolkitError::MsCodec(_) | ToolkitError::MkCodec(_)
-                );
+                let is_codec_decode_err =
+                    matches!(&orig, ToolkitError::MsCodec(_) | ToolkitError::MkCodec(_));
                 if let (Some(kind), true) = (repair_kind, is_codec_decode_err) {
                     let chunks: Vec<String> = if kind == crate::repair::CardKind::Mk1 {
                         primary_value
@@ -1043,10 +1042,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         // emits_mnem: non-English phrase/entropy → mnem card (self-describing, no loss).
         let emits_mnem = run_lang != crate::language::CliLanguage::English;
         if !emits_mnem {
-            if let Some(msg) = crate::language::non_english_seed_advisory(
-                run_lang,
-                "an ms1 card",
-            ) {
+            if let Some(msg) = crate::language::non_english_seed_advisory(run_lang, "an ms1 card") {
                 let _ = writeln!(stderr, "{msg}");
             }
         }
@@ -1054,7 +1050,11 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.6.1 §11 + v0.6.2 §5.5.a — informational note when SLIP-0132 input was normalized.
     if let Some(variant) = input_variant {
-        let _ = writeln!(stderr, "{}", crate::slip0132::render_slip0132_info_line(variant));
+        let _ = writeln!(
+            stderr,
+            "{}",
+            crate::slip0132::render_slip0132_info_line(variant)
+        );
     }
 
     // SPEC v0.8 §14 — Electrum decode emits detected SeedVersion to stderr.
@@ -1187,17 +1187,16 @@ fn compute_outputs(
             // `rust-bip39-mnemonic-zeroize-upstream`.
             let entropy: zeroize::Zeroizing<Vec<u8>> = match from {
                 Seedqr => {
-                    let phrase =
-                        mnemonic_toolkit::seedqr::decode(value).map_err(|e| {
-                            ToolkitError::BadInput(format!("seedqr: convert: decode: {e}"))
-                        })?;
+                    let phrase = mnemonic_toolkit::seedqr::decode(value).map_err(|e| {
+                        ToolkitError::BadInput(format!("seedqr: convert: decode: {e}"))
+                    })?;
                     let m = Mnemonic::parse_in(language.into(), &phrase)
                         .map_err(ToolkitError::Bip39)?;
                     zeroize::Zeroizing::new(m.to_entropy())
                 }
                 Phrase => {
-                    let m = Mnemonic::parse_in(language.into(), value)
-                        .map_err(ToolkitError::Bip39)?;
+                    let m =
+                        Mnemonic::parse_in(language.into(), value).map_err(ToolkitError::Bip39)?;
                     zeroize::Zeroizing::new(m.to_entropy())
                 }
                 _ => zeroize::Zeroizing::new(hex::decode(value).map_err(|e| {
@@ -1211,11 +1210,17 @@ fn compute_outputs(
             let derived = if needs_derive {
                 let template = args.template.ok_or_else(|| {
                     ToolkitError::BadInput(
-                        "--template is required for derivation targets (xpub/xprv/fingerprint)".into(),
+                        "--template is required for derivation targets (xpub/xprv/fingerprint)"
+                            .into(),
                     )
                 })?;
                 Some(derive_bip32_from_entropy(
-                    &entropy, pbkdf2_passphrase, language.into(), network, template, args.account,
+                    &entropy,
+                    pbkdf2_passphrase,
+                    language.into(),
+                    network,
+                    template,
+                    args.account,
                 )?)
             } else {
                 None
@@ -1258,11 +1263,18 @@ fn compute_outputs(
                         // SPEC-A v0.6.1: phrase/entropy → wif requires explicit
                         // --path. `needs_derive` deliberately does NOT include
                         // Wif, so --template is not required for this edge.
-                        let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
+                        let path_str = args
+                            .path
+                            .as_deref()
+                            .ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
+                            &entropy,
+                            pbkdf2_passphrase,
+                            language.into(),
+                            network,
+                            &path,
                         )?;
                         // BIP-32 §4 mandates compressed pubkeys for derived
                         // keys; WIF compression follows the BIP-32 contract.
@@ -1273,11 +1285,17 @@ fn compute_outputs(
                         };
                         pk.to_wif()
                     }
-                    Path => return Err(ToolkitError::BadInput(
-                        "--to path is informational; not emitted as a value".into(),
-                    )),
-                    Seedqr => unreachable!("--to seedqr is refused at target-parse in convert::run"),
-                    Mk1 => unreachable!("classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"),
+                    Path => {
+                        return Err(ToolkitError::BadInput(
+                            "--to path is informational; not emitted as a value".into(),
+                        ))
+                    }
+                    Seedqr => {
+                        unreachable!("--to seedqr is refused at target-parse in convert::run")
+                    }
+                    Mk1 => unreachable!(
+                        "classify_edge intercepts (Phrase|Entropy, Mk1) as one-way barrier"
+                    ),
                     Bip38 => {
                         // SPEC v0.7 §12 + v0.8 §12.b — composite phrase/entropy → wif → bip38.
                         // Same --path requirement as the direct phrase→wif edge.
@@ -1285,11 +1303,18 @@ fn compute_outputs(
                         // feeds BIP-39 PBKDF2 only; `--bip38-passphrase` feeds
                         // BIP-38 Scrypt independently. If the latter is unset,
                         // BIP-38 encrypt uses `""` (no fallback to --passphrase).
-                        let path_str = args.path.as_deref().ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
+                        let path_str = args
+                            .path
+                            .as_deref()
+                            .ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
+                            &entropy,
+                            pbkdf2_passphrase,
+                            language.into(),
+                            network,
+                            &path,
                         )?;
                         let pk = PrivateKey {
                             compressed: true,
@@ -1309,12 +1334,8 @@ fn compute_outputs(
                         // pivot in classify_edge, so this arm is reached only
                         // for from == Entropy.
                         debug_assert_eq!(from, Entropy);
-                        let version = args
-                            .electrum_version
-                            .unwrap_or(SeedVersion::Standard);
-                        let wl = args
-                            .electrum_language
-                            .unwrap_or(ElectrumWordlist::English);
+                        let version = args.electrum_version.unwrap_or(SeedVersion::Standard);
+                        let wl = args.electrum_language.unwrap_or(ElectrumWordlist::English);
                         electrum::entropy_to_phrase(&entropy, version, wl)
                             .map_err(map_electrum_error)?
                     }
@@ -1326,19 +1347,23 @@ fn compute_outputs(
                         // the user supplies a path that derives directly to the
                         // leaf pubkey. `--script-type` (or `--template`-inferred)
                         // selects the address dispatch.
-                        let path_str = args
-                            .path
-                            .as_deref()
-                            .ok_or_else(refusal_address_no_path)?;
+                        let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
                         let path = bip32::DerivationPath::from_str(path_str)
                             .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
                         let script_type = resolve_script_type(args)?;
                         let leaf_xpriv = derive_bip32_at_path(
-                            &entropy, pbkdf2_passphrase, language.into(), network, &path,
+                            &entropy,
+                            pbkdf2_passphrase,
+                            language.into(),
+                            network,
+                            &path,
                         )?;
                         let leaf_xpub = bip32::Xpub::from_priv(&secp, &leaf_xpriv);
                         crate::address_render::render_address_from_xpub(
-                            &secp, &leaf_xpub, script_type, network,
+                            &secp,
+                            &leaf_xpub,
+                            script_type,
+                            network,
                         )
                     }
                 };
@@ -1394,7 +1419,10 @@ fn compute_outputs(
                             .network
                             .unwrap_or_else(|| crate::address_render::network_from_xpub(&xpub));
                         crate::address_render::render_address_from_xpub(
-                            &secp, &child, script_type, net,
+                            &secp,
+                            &child,
+                            script_type,
+                            net,
                         )
                     }
                     _ => {
@@ -1431,9 +1459,7 @@ fn compute_outputs(
                         // to `--passphrase` (effective) on this direct edge.
                         // Passphrase presence is enforced earlier in run().
                         let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
-                        value
-                            .encrypt_wif(scrypt_pp)
-                            .map_err(map_bip38_error)?
+                        value.encrypt_wif(scrypt_pp).map_err(map_bip38_error)?
                     }
                     _ => {
                         return Err(ToolkitError::BadInput(format!(
@@ -1453,8 +1479,8 @@ fn compute_outputs(
             // caveat 2). Per v0.8 lock, `--bip38-passphrase` falls back to
             // `--passphrase` (effective) on this direct edge.
             let scrypt_pp = bip38_passphrase.unwrap_or(pbkdf2_passphrase);
-            let (raw, compressed) = <str as Decrypt>::decrypt(value, scrypt_pp)
-                .map_err(map_bip38_error)?;
+            let (raw, compressed) =
+                <str as Decrypt>::decrypt(value, scrypt_pp).map_err(map_bip38_error)?;
             // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
             // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
             let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
@@ -1493,7 +1519,11 @@ fn compute_outputs(
                     let l: bip39::Language = language.into();
                     (zeroize::Zeroizing::new(bytes), l)
                 }
-                ms_codec::Payload::Mnem { entropy, language: wire_lang, .. } => {
+                ms_codec::Payload::Mnem {
+                    entropy,
+                    language: wire_lang,
+                    ..
+                } => {
                     let lang = crate::language::wire_code_to_bip39(wire_lang)?;
                     (zeroize::Zeroizing::new(entropy), lang)
                 }
@@ -1576,8 +1606,9 @@ fn compute_outputs(
             let raw = sha256::Hash::hash(value.as_bytes()).to_byte_array();
             // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-
             // bound, no Drop+Zeroize; FOLLOWUP `rust-secp256k1-secretkey-zeroize-upstream`.
-            let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw)
-                .map_err(|e| ToolkitError::BadInput(format!("Casascius decoded scalar parse: {e}")))?;
+            let inner = bitcoin::secp256k1::SecretKey::from_slice(&raw).map_err(|e| {
+                ToolkitError::BadInput(format!("Casascius decoded scalar parse: {e}"))
+            })?;
             let pk = PrivateKey {
                 compressed: false,
                 network: network.network_kind(),
@@ -1597,17 +1628,13 @@ fn compute_outputs(
             // SPEC v0.7 §14 + v0.8 §14 — validate via HMAC-SHA512 prefix;
             // refuse 2FA; decode via per-wordlist base-N mapping; surface the
             // detected SeedVersion to the caller for the §14 stderr info-line.
-            let version =
-                electrum::validate_seed_version(value).map_err(map_electrum_error)?;
+            let version = electrum::validate_seed_version(value).map_err(map_electrum_error)?;
             if version.is_2fa() {
                 return Err(refusal_electrum_2fa_unsupported());
             }
             let detected_version = Some(version);
-            let wl = args
-                .electrum_language
-                .unwrap_or(ElectrumWordlist::English);
-            let entropy =
-                electrum::phrase_to_entropy(value, wl).map_err(map_electrum_error)?;
+            let wl = args.electrum_language.unwrap_or(ElectrumWordlist::English);
+            let entropy = electrum::phrase_to_entropy(value, wl).map_err(map_electrum_error)?;
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
@@ -1801,7 +1828,8 @@ mod secret_taxonomy_parity_tests {
             let predicate = v.is_secret_bearing();
             let in_taxonomy = SECRET_NODE_TYPES.contains(&v.as_str());
             assert_eq!(
-                predicate, in_taxonomy,
+                predicate,
+                in_taxonomy,
                 "drift: NodeType::{:?}.is_secret_bearing()={} but \
                  secret_taxonomy::SECRET_NODE_TYPES.contains({:?})={}. \
                  If you added a NodeType variant, the macro expansion \
@@ -1825,11 +1853,15 @@ mod secret_taxonomy_parity_tests {
             let predicate = v.is_argv_secret_bearing();
             let in_taxonomy = SECRET_NODE_TYPES_ARGV.contains(&v.as_str());
             assert_eq!(
-                predicate, in_taxonomy,
+                predicate,
+                in_taxonomy,
                 "drift: NodeType::{:?}.is_argv_secret_bearing()={} but \
                  secret_taxonomy::SECRET_NODE_TYPES_ARGV.contains({:?})={}. \
                  The wider argv-leakage set must equal SECRET_NODE_TYPES + MiniKey.",
-                v, predicate, v.as_str(), in_taxonomy
+                v,
+                predicate,
+                v.as_str(),
+                in_taxonomy
             );
         }
     }
@@ -1876,7 +1908,12 @@ mod script_type_tests {
 
     #[test]
     fn script_type_as_str_round_trips() {
-        for st in [ScriptType::P2pkh, ScriptType::P2wpkh, ScriptType::P2shP2wpkh, ScriptType::P2tr] {
+        for st in [
+            ScriptType::P2pkh,
+            ScriptType::P2wpkh,
+            ScriptType::P2shP2wpkh,
+            ScriptType::P2tr,
+        ] {
             assert_eq!(parse_script_type_arg(st.as_str()).unwrap(), st);
         }
     }

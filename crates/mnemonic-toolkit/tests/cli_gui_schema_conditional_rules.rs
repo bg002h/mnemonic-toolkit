@@ -128,7 +128,11 @@ fn bundle_threshold_priority_descriptor_before_single_sig() {
         .filter(|(_, r)| r["effect"]["flag"] == "--threshold")
         .map(|(i, _)| i)
         .collect();
-    assert_eq!(threshold_rule_indices.len(), 2, "expected 2 threshold rules");
+    assert_eq!(
+        threshold_rule_indices.len(),
+        2,
+        "expected 2 threshold rules"
+    );
 
     let first_rule = &rules[threshold_rule_indices[0]];
     let second_rule = &rules[threshold_rule_indices[1]];
@@ -169,10 +173,7 @@ fn bundle_template_required_unless_uses_not_any_of_predicate() {
     let rules = conditional_rules(&v, "bundle");
     let template_required = rules
         .iter()
-        .find(|r| {
-            r["effect"]["flag"] == "--template"
-                && r["effect"]["visibility"] == "required"
-        })
+        .find(|r| r["effect"]["flag"] == "--template" && r["effect"]["visibility"] == "required")
         .expect("bundle must have --template Required rule");
     // §6.10.2 Not predicate: {"kind": "not", "predicate": P}
     assert_eq!(template_required["when"]["kind"], "not");
@@ -198,7 +199,11 @@ fn restore_from_required_unless_md1_uses_not_flag_present_predicate() {
     // gui_schema_conditional_drift once it bumps its toolkit pin.
     let v = run_gui_schema();
     let rules = conditional_rules(&v, "restore");
-    assert_eq!(rules.len(), 1, "restore projects exactly one conditional rule");
+    assert_eq!(
+        rules.len(),
+        1,
+        "restore projects exactly one conditional rule"
+    );
     let from_required = &rules[0];
     assert_eq!(from_required["effect"]["flag"], "--from");
     assert_eq!(from_required["effect"]["visibility"], "required");
@@ -215,10 +220,7 @@ fn bundle_single_sig_dropdown_values_match_template_enum() {
     let rules = conditional_rules(&v, "bundle");
     let threshold_single_sig = rules
         .iter()
-        .find(|r| {
-            r["effect"]["flag"] == "--threshold"
-                && r["when"]["kind"] == "dropdown_value_in"
-        })
+        .find(|r| r["effect"]["flag"] == "--threshold" && r["when"]["kind"] == "dropdown_value_in")
         .expect("bundle --threshold single-sig rule");
     let values: Vec<&str> = threshold_single_sig["when"]["values"]
         .as_array()
@@ -242,11 +244,7 @@ fn verify_bundle_emits_conditional_rules() {
     // descriptor-file mutex (2 dir), bundle-json XOR (--ms1/--mk1/--md1)
     // (3 rules), passphrase mutex (2 dir), threshold disabled single-sig,
     // template disabled when descriptor.
-    assert_eq!(
-        rules.len(),
-        10,
-        "verify-bundle v0.16.0 rule count"
-    );
+    assert_eq!(rules.len(), 10, "verify-bundle v0.16.0 rule count");
 }
 
 #[test]
@@ -255,10 +253,7 @@ fn verify_bundle_bundle_json_xor_rules_target_ms1_mk1_md1() {
     let rules = conditional_rules(&v, "verify-bundle");
     let bj_rules: Vec<&Value> = rules
         .iter()
-        .filter(|r| {
-            r["when"]["kind"] == "flag_present"
-                && r["when"]["flag"] == "--bundle-json"
-        })
+        .filter(|r| r["when"]["kind"] == "flag_present" && r["when"]["flag"] == "--bundle-json")
         .collect();
     assert_eq!(bj_rules.len(), 3);
     let targets: Vec<&str> = bj_rules
@@ -313,10 +308,7 @@ fn export_wallet_threshold_disabled_when_single_sig() {
     let rules = conditional_rules(&v, "export-wallet");
     let rule = rules
         .iter()
-        .find(|r| {
-            r["effect"]["flag"] == "--threshold"
-                && r["when"]["kind"] == "dropdown_value_in"
-        })
+        .find(|r| r["effect"]["flag"] == "--threshold" && r["when"]["kind"] == "dropdown_value_in")
         .expect("export-wallet --threshold rule");
     assert_eq!(rule["effect"]["visibility"], "disabled");
 }
@@ -387,8 +379,16 @@ fn compare_cost_has_one_input_mutex() {
     assert_eq!(
         sorted,
         vec![
-            ("flag_present".to_string(), "--descriptor".to_string(), "--miniscript".to_string()),
-            ("flag_present".to_string(), "--miniscript".to_string(), "--descriptor".to_string()),
+            (
+                "flag_present".to_string(),
+                "--descriptor".to_string(),
+                "--miniscript".to_string()
+            ),
+            (
+                "flag_present".to_string(),
+                "--miniscript".to_string(),
+                "--descriptor".to_string()
+            ),
         ],
         "compare-cost rules must be the two symmetric FlagPresent→Disabled \
          tuples; got: {tuples:?}"
@@ -535,10 +535,7 @@ fn every_rule_has_rationale_and_spec_ref() {
             let spec_ref = rule["spec_ref"]
                 .as_str()
                 .expect("every rule must carry a spec_ref string");
-            assert!(
-                !spec_ref.is_empty(),
-                "spec_ref must be non-empty"
-            );
+            assert!(!spec_ref.is_empty(), "spec_ref must be non-empty");
         }
     }
 }

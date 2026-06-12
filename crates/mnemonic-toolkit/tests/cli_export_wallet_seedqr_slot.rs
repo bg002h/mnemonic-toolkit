@@ -30,8 +30,7 @@ fn export_wallet_seedqr_slot_refused_watch_only_invariant() {
         .failure();
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("watch-only by definition")
-            && stderr.contains("xpub/fingerprint/path"),
+        stderr.contains("watch-only by definition") && stderr.contains("xpub/fingerprint/path"),
         "expected SPEC §3 watch-only-invariant refusal text; got: {stderr}"
     );
 }

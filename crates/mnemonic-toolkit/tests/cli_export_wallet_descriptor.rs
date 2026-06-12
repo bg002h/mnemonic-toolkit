@@ -204,8 +204,14 @@ fn export_descriptor_multisig_wsh_sortedmulti_not_refused() {
         line.starts_with("wsh(sortedmulti(2,"),
         "must be wsh(sortedmulti(2,…): {line:?}"
     );
-    assert!(line.contains(COSIGNER_A_XPUB), "cosigner A present: {line:?}");
-    assert!(line.contains(COSIGNER_B_XPUB), "cosigner B present: {line:?}");
+    assert!(
+        line.contains(COSIGNER_A_XPUB),
+        "cosigner A present: {line:?}"
+    );
+    assert!(
+        line.contains(COSIGNER_B_XPUB),
+        "cosigner B present: {line:?}"
+    );
     // multipath + checksum.
     assert!(line.contains("<0;1>"), "multipath form: {line:?}");
     let csum = &line[line.rfind('#').expect("checksum") + 1..];
@@ -230,7 +236,10 @@ fn export_descriptor_round_trip_singlesig_from_bitcoin_core() {
         "one line: {export_stdout:?}"
     );
     let out_desc = export_stdout.trim_end_matches('\n');
-    assert!(out_desc.starts_with("wpkh("), "single-sig wpkh: {out_desc:?}");
+    assert!(
+        out_desc.starts_with("wpkh("),
+        "single-sig wpkh: {out_desc:?}"
+    );
 
     let env_desc = envelope_descriptor(&envelope_json);
     assert_eq!(
@@ -290,7 +299,11 @@ fn export_descriptor_taproot_via_descriptor_passthrough() {
         .assert()
         .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(stdout, format!("{tr}\n"), "taproot passthrough emits unchanged");
+    assert_eq!(
+        stdout,
+        format!("{tr}\n"),
+        "taproot passthrough emits unchanged"
+    );
 }
 
 /// SPEC §7 test 4 — `--range`/`--timestamp` are silently ignored for

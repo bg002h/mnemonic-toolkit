@@ -105,7 +105,13 @@ const fn p(
     min_count: usize,
     kind: ParamKind,
 ) -> ParamSpec {
-    ParamSpec { flag, required, repeatable, min_count, kind }
+    ParamSpec {
+        flag,
+        required,
+        repeatable,
+        min_count,
+        kind,
+    }
 }
 
 /// The 5 canonical archetypes, alphabetical by id (matches the `CliArchetype`
@@ -126,10 +132,18 @@ pub const ARCHETYPE_REGISTRY: &[ArchetypeDef] = &[
             p(AFTER, true, false, 1, ParamKind::AbsoluteLocktime),
         ],
         provenance: &[
-            ("root.andor[0]", Some(DiagnosticKind::SchemaField), THRESHOLD),
+            (
+                "root.andor[0]",
+                Some(DiagnosticKind::SchemaField),
+                THRESHOLD,
+            ),
             ("root.andor[0]", None, KEY),
             ("root.andor[1]", None, OLDER),
-            ("root.andor[2].andor[0]", Some(DiagnosticKind::SchemaField), RECOVERY_THRESHOLD),
+            (
+                "root.andor[2].andor[0]",
+                Some(DiagnosticKind::SchemaField),
+                RECOVERY_THRESHOLD,
+            ),
             ("root.andor[2].andor[0]", None, RECOVERY_KEY),
             ("root.andor[2].andor[1]", None, RECOVERY_OLDER),
             ("root.andor[2].andor[2].and_v[0]", None, FINAL_KEY),
@@ -203,7 +217,11 @@ pub const ARCHETYPE_REGISTRY: &[ArchetypeDef] = &[
             ("root.or_i[0]", Some(DiagnosticKind::SchemaField), THRESHOLD),
             ("root.or_i[0]", None, KEY),
             ("root.or_i[1].and_v[0]", None, OLDER),
-            ("root.or_i[1].and_v[1]", Some(DiagnosticKind::SchemaField), RECOVERY_THRESHOLD),
+            (
+                "root.or_i[1].and_v[1]",
+                Some(DiagnosticKind::SchemaField),
+                RECOVERY_THRESHOLD,
+            ),
             ("root.or_i[1].and_v[1]", None, RECOVERY_KEY),
         ],
         lower: lower_tiered_recovery,
@@ -243,7 +261,10 @@ pub fn validate_params(
     // Applicability: supplied but not declared for this archetype.
     for &(flag, count) in supplied {
         if count > 0 && !def.params.iter().any(|s| s.flag == flag) {
-            diags.push(param_diag(flag, format!("{flag} is not a parameter of {}", def.id)));
+            diags.push(param_diag(
+                flag,
+                format!("{flag} is not a parameter of {}", def.id),
+            ));
         }
     }
 
@@ -295,7 +316,11 @@ pub fn validate_params(
         }
     }
 
-    if diags.is_empty() { Ok(()) } else { Err(diags) }
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        Err(diags)
+    }
 }
 
 fn param_diag(flag: &str, message: String) -> Diagnostic {
@@ -338,7 +363,10 @@ pub fn resolve_flag(
 // ======================================================================
 
 fn wrap(w: &str, sub: PolicyNode) -> PolicyNode {
-    PolicyNode::Wrap(WrapSpec { w: w.to_string(), sub: Box::new(sub) })
+    PolicyNode::Wrap(WrapSpec {
+        w: w.to_string(),
+        sub: Box::new(sub),
+    })
 }
 
 fn v_pk(key: &str) -> PolicyNode {
@@ -357,10 +385,9 @@ fn one_key<'a>(params: &'a ArchetypeParams, id: &str) -> &'a str {
 }
 
 fn one_recovery_key<'a>(params: &'a ArchetypeParams, id: &str) -> &'a str {
-    params
-        .recovery_keys
-        .first()
-        .unwrap_or_else(|| panic!("--recovery-key declared required in ARCHETYPE_REGISTRY for {id}"))
+    params.recovery_keys.first().unwrap_or_else(|| {
+        panic!("--recovery-key declared required in ARCHETYPE_REGISTRY for {id}")
+    })
 }
 
 /// `andor(multi(k1,T1…), older(N1), andor(multi(k2,T2…), older(N2),
@@ -368,10 +395,9 @@ fn one_recovery_key<'a>(params: &'a ArchetypeParams, id: &str) -> &'a str {
 fn lower_decaying_multisig(params: &ArchetypeParams) -> PolicyNode {
     let id = "decaying-multisig";
     let tier3 = and_v(
-        v_pk(params
-            .final_key
-            .as_deref()
-            .unwrap_or_else(|| panic!("--final-key declared required in ARCHETYPE_REGISTRY for {id}"))),
+        v_pk(params.final_key.as_deref().unwrap_or_else(|| {
+            panic!("--final-key declared required in ARCHETYPE_REGISTRY for {id}")
+        })),
         PolicyNode::After(req(params.after, "--after", id)),
     );
     let tier2 = PolicyNode::Andor(Box::new([
@@ -398,10 +424,9 @@ fn lower_hashlock_gated(params: &ArchetypeParams) -> PolicyNode {
     PolicyNode::Andor(Box::new([
         PolicyNode::Pk(one_key(params, id).to_string()),
         PolicyNode::Sha256(
-            params
-                .hash
-                .clone()
-                .unwrap_or_else(|| panic!("--hash declared required in ARCHETYPE_REGISTRY for {id}")),
+            params.hash.clone().unwrap_or_else(|| {
+                panic!("--hash declared required in ARCHETYPE_REGISTRY for {id}")
+            }),
         ),
         and_v(
             v_pk(one_recovery_key(params, id)),
@@ -432,7 +457,10 @@ fn lower_simple_timelocked_inheritance(params: &ArchetypeParams) -> PolicyNode {
     PolicyNode::OrD(Box::new([
         PolicyNode::Pk(one_key(params, id).to_string()),
         and_v(
-            wrap("v", PolicyNode::Pkh(one_recovery_key(params, id).to_string())),
+            wrap(
+                "v",
+                PolicyNode::Pkh(one_recovery_key(params, id).to_string()),
+            ),
             PolicyNode::Older(req(params.older, "--older", id)),
         ),
     ]))
@@ -448,7 +476,11 @@ fn lower_tiered_recovery(params: &ArchetypeParams) -> PolicyNode {
         .enumerate()
         .map(|(i, k)| {
             let pk = PolicyNode::Pk(k.clone());
-            if i == 0 { pk } else { wrap("s", pk) }
+            if i == 0 {
+                pk
+            } else {
+                wrap("s", pk)
+            }
         })
         .collect();
     PolicyNode::OrI(Box::new([
@@ -595,10 +627,19 @@ mod tests {
                     "{}: provenance flag {flag} not in params",
                     def.id
                 );
-                assert!(prefix.starts_with("root"), "{}: provenance prefix {prefix}", def.id);
+                assert!(
+                    prefix.starts_with("root"),
+                    "{}: provenance prefix {prefix}",
+                    def.id
+                );
             }
             for spec in def.params {
-                assert!(spec.flag.starts_with("--"), "{}: flag {}", def.id, spec.flag);
+                assert!(
+                    spec.flag.starts_with("--"),
+                    "{}: flag {}",
+                    def.id,
+                    spec.flag
+                );
                 if !spec.repeatable {
                     assert_eq!(spec.min_count, 1, "{}: scalar min_count", def.id);
                 }
@@ -665,11 +706,18 @@ mod tests {
         );
         // Longest prefix wins: the recovery and_v arm, deeper path.
         assert_eq!(
-            resolve_flag(def, "root.or_d[1].and_v[0].wrap.sub", DiagnosticKind::SecretKey),
+            resolve_flag(
+                def,
+                "root.or_d[1].and_v[0].wrap.sub",
+                DiagnosticKind::SecretKey
+            ),
             Some("--recovery-key")
         );
         // No entry matches root (cross-branch dup) → None.
-        assert_eq!(resolve_flag(def, "root", DiagnosticKind::RepeatedKeys), None);
+        assert_eq!(
+            resolve_flag(def, "root", DiagnosticKind::RepeatedKeys),
+            None
+        );
         // Decaying intra-andor[2] cross-tier dup matches no entry (P1-r1 M3).
         let decaying = registry_get("decaying-multisig");
         assert_eq!(

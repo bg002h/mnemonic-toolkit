@@ -26,6 +26,29 @@ on:
       - '.github/workflows/rust.yml'
 
 jobs:
+  # Dedicated rustfmt gate, pinned to a CANONICAL formatter version (1.95.0,
+  # matching mnemonic-key's CI). rustfmt output drifts between toolchain
+  # releases, so the FORMATTER is pinned independently of the build MSRV:
+  # bump it DELIBERATELY (install the new version + re-run `cargo +<new> fmt
+  # --all` in the SAME commit). The explicit `+1.95.0` is REQUIRED here — the
+  # repo's `rust-toolchain.toml` pins 1.85.0, which a bare `cargo fmt` would
+  # otherwise use. (The 1.95.0-formatted tree is also clean under 1.85.0's
+  # rustfmt today, so a developer's bare `cargo fmt` does not re-drift it —
+  # verified at the v0.55.x fmt chore; if a future rustfmt diverges, this gate
+  # catches it.) Source was reformatted to 1.95.0 in the same chore.
+  fmt:
+    name: fmt (pinned 1.95.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust 1.95.0 (canonical fmt toolchain)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt
+      - name: Rustfmt (pinned 1.95.0, overriding rust-toolchain.toml)
+        run: cargo +1.95.0 fmt --all -- --check
+
   test:
     name: test (${{ matrix.os }})
     strategy:

@@ -82,7 +82,9 @@ fn cell_3_tv3_standard_encryption_xpub_signer1_verifies() {
         .assert()
         .code(0)
         .stdout(predicate::str::contains("\"signature_verified\":true"))
-        .stdout(predicate::str::contains("\"token_hex\":\"a54044308ceac9b7\""));
+        .stdout(predicate::str::contains(
+            "\"token_hex\":\"a54044308ceac9b7\"",
+        ));
 }
 
 /// Cell 4 — --bsms-verify-strict on verified record: exit 0; no NOTICE.
@@ -146,7 +148,9 @@ fn cell_6_flipped_sig_strict_errors_signature_mismatch_exit_2() {
         ])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("BIP-129 signature verification failed"));
+        .stderr(predicate::str::contains(
+            "BIP-129 signature verification failed",
+        ));
 }
 
 /// Cell 7 — flipped TOKEN under --bsms-verify-strict: exit 2 (TOKEN is signed-body member).
@@ -168,7 +172,9 @@ fn cell_7_flipped_token_strict_errors_signature_mismatch() {
         ])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("BIP-129 signature verification failed"));
+        .stderr(predicate::str::contains(
+            "BIP-129 signature verification failed",
+        ));
 }
 
 /// Cell 8 — malformed line count: exit 2 BsmsRound1Malformed.
@@ -315,7 +321,9 @@ fn cell_14_text_mode_summary_shape() {
         .args(["import-wallet", "--bsms-round1", TV1_FIXTURE])
         .assert()
         .code(0)
-        .stdout(predicate::str::contains("bsms-round1: 1 record(s) processed"))
+        .stdout(predicate::str::contains(
+            "bsms-round1: 1 record(s) processed",
+        ))
         .stdout(predicate::str::contains("record[0]:"))
         .stdout(predicate::str::contains("verified=true"));
 }

@@ -188,13 +188,7 @@ fn p0c_format_arg_rejects_out_of_set_value() {
     // is unreachable via clap (PossibleValuesParser rejects first); the
     // fallback remains as defense-in-depth.
     let p = fixture_path("bsms-2line-sortedmulti-2of2.txt");
-    let out = run_import(&[
-        "--blob",
-        p.to_str().unwrap(),
-        "--format",
-        "gobbledygook",
-    ])
-    .failure();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "gobbledygook"]).failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("invalid value")
@@ -226,13 +220,7 @@ fn p0c_existing_format_bsms_still_dispatches() {
 #[test]
 fn p0c_existing_format_bitcoin_core_still_dispatches() {
     let p = fixture_path("core-bip84-mainnet.json");
-    let out = run_import(&[
-        "--blob",
-        p.to_str().unwrap(),
-        "--format",
-        "bitcoin-core",
-    ])
-    .success();
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "bitcoin-core"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(
         stdout.contains("cosigners=") || stdout.contains("bundles="),

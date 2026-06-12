@@ -120,8 +120,8 @@ fn bsms_envelope_mk1_decodes_back_to_original_cosigner_identity() {
             .iter()
             .map(|c| c.as_str().expect("chunk is string"))
             .collect();
-        let card = mk_codec::decode(&chunk_strs)
-            .unwrap_or_else(|e| panic!("mk1[{i}] decode: {e:?}"));
+        let card =
+            mk_codec::decode(&chunk_strs).unwrap_or_else(|e| panic!("mk1[{i}] decode: {e:?}"));
         // origin_fingerprint check: the BIP-380 [master_fp/path] master
         // fingerprint is preserved verbatim and is the most reliable
         // per-cosigner identity carried by mk1.
@@ -130,7 +130,8 @@ fn bsms_envelope_mk1_decodes_back_to_original_cosigner_identity() {
             .expect("envelope.cosigners[i].master_fingerprint");
         let got_fp = format!(
             "{}",
-            card.origin_fingerprint.expect("mk1 must carry origin_fingerprint")
+            card.origin_fingerprint
+                .expect("mk1 must carry origin_fingerprint")
         );
         assert_eq!(
             got_fp, expected_fp,
@@ -205,7 +206,12 @@ fn bitcoin_core_multi_descriptor_yields_one_envelope_per_entry() {
     let val = run_import_file_json(&p, "bitcoin-core");
     let arr = val.as_array().expect("--json must emit array");
     // Fixture has 4 entries: receive + change for bip84 + bip49.
-    assert_eq!(arr.len(), 4, "expected 4 envelope entries; got {}", arr.len());
+    assert_eq!(
+        arr.len(),
+        4,
+        "expected 4 envelope entries; got {}",
+        arr.len()
+    );
     for env in arr {
         assert_eq!(env["source_format"].as_str(), Some("bitcoin-core"));
         assert!(
@@ -356,9 +362,7 @@ fn bsms_envelope_verify_bundle_round_trip_via_bundle_json() {
 fn envelope_v0_27_0_wire_shape_fixture_byte_exact() {
     let p = fixture_path("bsms-2line-multi-2of3.txt");
     let val = run_import_file_json(&p, "bsms");
-    let actual = serde_json::to_string_pretty(&val)
-        .expect("re-serialize envelope")
-        + "\n";
+    let actual = serde_json::to_string_pretty(&val).expect("re-serialize envelope") + "\n";
 
     let fixture = fixture_path("envelope_v0_27_0.json");
     if std::env::var_os("UPDATE_FIXTURES").is_some() {
