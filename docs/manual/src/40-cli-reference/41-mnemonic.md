@@ -748,10 +748,11 @@ BIP-44/49/84/86 descriptors. *Multisig-cosigner* (v0.44.0, `--md1 <card>`)
 reconstructs the concrete watch-only **multisig** descriptor from the shared
 wallet-policy `md1` card **alone** — the card already carries every cosigner's
 public key, so `--from`/`--cosigner` are *optional cross-check* inputs, not
-build inputs. Multisig mode covers `wsh`, `sh(wsh)`, and **NUMS taproot**
-multisig (`tr-multi-a` / `tr-sortedmulti-a`); a **non-NUMS**
-(cosigner-internal) taproot `md1` is refused (exit 2), as is a template-only
-`md1` (no concrete keys).
+build inputs. Multisig mode covers `wsh`, `sh(wsh)`, **NUMS taproot**
+multisig (`tr-multi-a` / `tr-sortedmulti-a`), and (v0.55.1) **general
+NUMS-taproot policies** with a single script leaf or a depth-1 two-leaf tap
+tree; a **non-NUMS** (cosigner-internal) taproot `md1` is refused (exit 2),
+as is a template-only `md1` (no concrete keys).
 
 ### Synopsis
 
@@ -773,7 +774,7 @@ channels that keep the seed off the argv.
 | Flag | Purpose |
 |---|---|
 | `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore; OPTIONAL in multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) |
-| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)` and taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`); a non-NUMS (cosigner-internal) taproot or a template-only `md1` is refused (exit 2). Watch-only (non-secret) |
+| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), and (v0.55.1) general NUMS-taproot policies up to a depth-1 two-leaf tap tree; a non-NUMS (cosigner-internal) taproot, a depth-≥2 tap tree, or a template-only `md1` is refused (exit 2). Watch-only (non-secret) |
 | `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
@@ -948,21 +949,34 @@ slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless
 `--allow-mismatch`. Restore stays watch-only-out in multisig mode too: no
 `xprv` / WIF / seed reaches stdout, stderr, or `--json`.
 
-**General wallet policies (v0.54.0).** Beyond plain `multi`/`sortedmulti`,
-an `md1` for a *general* policy — timelocks (`older`/`after`), hashlocks
-(`sha256`/`hash256`/`ripemd160`/`hash160`), `andor`/`and_v`/`or_*`/`thresh`,
-or a decaying-quorum vault — reconstructs **faithfully**, preserving the full
-policy (it is no longer collapsed to plain multisig). These are labeled
-`miniscript policy restore (N cosigners)` (and `--json` `wallet_type:
-"miniscript-policy"` with a null top-level `threshold`, since a general policy
-has no single k-of-n threshold). Descriptor-driven `--format`s
-(`bitcoin-core` / `descriptor` / `bsms`) emit the faithful descriptor
-(`bip388` too for a multipath `/<0;1>/*` card; it refuses a wildcard-only
-one); template-requiring k-of-n formats refuse. (A policy whose keys appear as
+**General wallet policies (v0.54.0; taproot v0.55.1).** Beyond plain
+`multi`/`sortedmulti`, an `md1` for a *general* policy — timelocks
+(`older`/`after`), hashlocks (`sha256`/`hash256`/`ripemd160`/`hash160`),
+`andor`/`and_v`/`or_*`/`thresh`, or a decaying-quorum vault — reconstructs
+**faithfully**, preserving the full policy (it is no longer collapsed to
+plain multisig). These are labeled `miniscript policy restore (N cosigners)`
+(and `--json` `wallet_type: "miniscript-policy"` with a null top-level
+`threshold`, since a general policy has no single k-of-n threshold).
+Descriptor-driven `--format`s (`bitcoin-core` / `descriptor`) emit the
+faithful descriptor (`bsms` for the non-taproot arms; `bip388` for a
+multipath `/<0;1>/*` non-taproot card — it refuses a wildcard-only one);
+template-requiring k-of-n formats refuse. (A policy whose keys appear as
 bare `pk(@N)`/`pkh(@N)` *outside* a `multi()` is refused with a clear message
 pending a sibling md-codec rendering fix; likewise a card with per-cosigner
 use-site overrides or a hardened wildcard `/*h` is refused rather than
 mis-rendered. The engraved card remains a faithful backup either way.)
+
+Since v0.55.1 the general arm also covers **NUMS taproot** policies whose tap
+tree is a single general miniscript leaf (e.g. `tr(NUMS,and_v(v:pk(K),
+after(N)))`) or a depth-1 **two-leaf** tree (e.g. `tr(NUMS,{pk(K0),pk(K1)})`,
+including a `multi_a` leaf alongside another leaf). The reconstructed
+descriptor prints the NUMS internal key as its x-only **hex**
+(`50929b74…803ac0`), not the engraving-side literal `NUMS` token — the two
+spellings are the same key. Deeper trees (**≥3 leaves / depth ≥2**) are
+refused (exit 2) until an upstream miniscript printing fix ships, and a
+`sortedmulti_a` leaf *inside* a multi-leaf tree is refused (exit 2) pending a
+sibling md-codec rendering fix — the engraved card remains a faithful backup
+in both cases.
 
 **Importable wallet payloads (`--format`).** As with single-sig restore,
 `--format <X>` emits an importable wallet-software payload instead of the
@@ -975,19 +989,30 @@ keys + threshold. The payload pipes from stdout while the verification doc
 mnemonic restore --md1 md1f5przzs... --format bitcoin-core > import.json
 ```
 
-Supported: `bitcoin-core`, `bip388`, `coldcard`, `coldcard-multisig`, `jade`,
-`sparrow`, `electrum`, `bsms`, `descriptor`. `specter` is refused (it needs a
-wallet name, which multisig restore does not take) and `green` is refused (no
-multisig support) — both identically to `export-wallet`. No `--template` is
-needed (the threshold and script type come from the `md1`). A cross-check
-`✗ MISMATCH` still hard-fails (exit 4) **before** any payload is emitted unless
-`--allow-mismatch`.
+Supported for plain k-of-n cards: `bitcoin-core`, `bip388`, `coldcard`,
+`coldcard-multisig`, `jade`, `sparrow`, `electrum`, `bsms`, `descriptor`
+(general-policy cards narrow this — descriptor-driven formats emit, k-of-n
+template formats refuse; see the general-policies section above). `specter`
+is refused (it needs a wallet name, which multisig restore does not take)
+and `green` is refused — for k-of-n cards because Green has no file-import
+multisig support (identically to `export-wallet`), and (v0.55.1) for a
+general taproot policy card explicitly, because Green's file-import surface
+is singlesig-only and must not receive a script-tree policy dressed as
+singlesig. `bip388` likewise refuses a general taproot card (its NUMS
+internal key carries no `/<0;1>/*` multipath suffix, which BIP-388 requires
+on every key). No `--template` is needed (the threshold and script type come
+from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
+**before** any payload is emitted unless `--allow-mismatch`.
 
-**Scope.** `wsh`, `sh(wsh)`, and **NUMS taproot** (`tr-multi-a` /
-`tr-sortedmulti-a`) multisig. A **non-NUMS** (cosigner-internal) taproot
-`md1` is refused (exit 2); a template-only `md1` (no concrete keys — never
-emitted by the toolkit) is refused. `--template` and `--expect-xpub` are
-single-sig only.
+**Scope.** `wsh`, `sh(wsh)`, **NUMS taproot** (`tr-multi-a` /
+`tr-sortedmulti-a`) multisig, and (v0.55.1) **general NUMS-taproot policies**
+up to a depth-1 two-leaf tap tree (single general leaf or two leaves;
+reconstructed with the NUMS H-point hex internal key). A **non-NUMS**
+(cosigner-internal) taproot `md1` is refused (exit 2), as are a depth-≥2
+(≥3-leaf) tap tree and a `sortedmulti_a` leaf inside a multi-leaf tree (both
+exit 2, each citing its tracking slug); a template-only `md1` (no concrete
+keys — never emitted by the toolkit) is refused. `--template` and
+`--expect-xpub` are single-sig only.
 
 ---
 

@@ -207,7 +207,8 @@ fn left_heavy_3leaf_tr_refuses_depth2() {
 #[test]
 fn right_spine_3leaf_tr_also_refuses_depth2() {
     let desc = format!("tr(NUMS,{{pk({K0}),{{pk({K1}),pk({K2})}}}})");
-    let (md1, _emitted) = bundle_md1(&desc);
+    let (md1, emitted) = bundle_md1(&desc);
+    assert_eq!(emitted, desc, "right-spine card must still be a faithful backup");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
@@ -224,7 +225,11 @@ fn right_spine_3leaf_tr_also_refuses_depth2() {
 #[test]
 fn tr_sortedmulti_a_in_2leaf_refuses() {
     let desc = format!("tr(NUMS,{{sortedmulti_a(2,{K0},{K1}),pk({K2})}})");
-    let (md1, _emitted) = bundle_md1(&desc);
+    let (md1, emitted) = bundle_md1(&desc);
+    assert_eq!(
+        emitted, desc,
+        "sortedmulti_a-bearing card must still be a faithful backup"
+    );
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))

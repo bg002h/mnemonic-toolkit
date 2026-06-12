@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.55.1] — 2026-06-12
+
+**SemVer-PATCH — `restore --md1` now faithfully reconstructs single-leaf and depth-1 two-leaf `tr(NUMS,<general miniscript>)` wallet-policy cards (was: refused "not a recognized multisig").**
+
+- **General taproot restore (GAP-1 T3-partial).** A `tr(NUMS,…)` md1 whose tap tree is a single general miniscript leaf (e.g. `and_v(v:pk(K),after(N))`) or a depth-1 two-leaf taptree (e.g. `{pk(K0),pk(K1)}`, `{multi_a(2,K0,K1),pk(K2)}`) now routes the same faithful general-policy arm as `wsh` (`faithful_multisig_descriptor`), printing the full policy tree — timelocks, hashlocks, structure — instead of refusing. The reconstructed descriptor carries the BIP-341 NUMS H-point as hex (not the literal `NUMS` token), md-codec's depth-0 reconstructed xpubs, and the `<0;1>/*` multipath, exactly like the wsh general arm. Golden addresses independently cross-verified against Bitcoin Core.
+- **Conservative structural gates (never Display-luck), `ModeViolation` exit 2, slug-citing.** Depth ≥2 taptrees (≥3 leaves) refuse — the pinned miniscript `95fdd1c` mis-prints a LEFT-child taptree, and the gate refuses right-spine shapes too (chirality-independent; lift when the miniscript #953 fix releases): `upstream-miniscript-taptree-depth2-display-asymmetry`. `sortedmulti_a` under a taptree refuses (`md-codec-sortedmulti-a-to-miniscript-rendering-gap`; single-leaf `sortedmulti_a` keeps the byte-identical template path). Non-NUMS (cosigner) internal keys stay refused.
+- **`--format green` refuses the general-tr arm explicitly** (exit 1): `script_type_from_descriptor` classifies a general tr without `multi_a(` as `P2tr` (taproot singlesig), so green's `is_multisig` gate would have emitted a "singlesig" payload for a script-tree policy. `bip388` keeps its loud multipath refusal (the NUMS internal key carries no `/<0;1>/*` suffix); `descriptor`/`bitcoin-core` emit faithfully; everything else refuses as before.
+- **Display-fidelity guard.** The reconstructed descriptor must survive its own parse→print round-trip before any address derivation or payload emission — the guard against a future parseable-but-wrong Display infidelity in the pinned miniscript.
+
 ## mnemonic-toolkit [0.55.0] — 2026-06-12
 
 **SemVer-MINOR (wire-content change) — the descriptor walker emits a bare `PkK`/`PkH` leaf in `wsh`/`sh` (was `Check(PkK)`), conforming to descriptor-mnemonic SPEC v0.30 §5.1 and matching `md-cli`.**
