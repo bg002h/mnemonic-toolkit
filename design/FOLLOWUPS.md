@@ -4004,3 +4004,31 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open` (tracks the md-codec-side fix).
 - **Tier:** `cross-repo`.
 - **Companion:** `descriptor-mnemonic` `design/FOLLOWUPS.md::encode-accepts-k-greater-than-n` (primary).
+
+### `ms-codec-error-display-echoes-input` — toolkit companion: ms-codec Error Display leaks the secret share
+
+- **Surfaced:** 2026-06-11, stress Cycle C R0 (fuzzing brainstorm, `design/agent-reports/cycle-c-fuzzing-r0-round1-review.md` [C1]).
+- **What (primary is ms-codec):** `ms_codec::Error::Codex32` Display Debug-wraps codex32's `InvalidChecksum{string}` (the full input share) and `WrongHrp{got}` echoes the observed HRP — a checksum/HRP failure on a secret ms1 share leaks the secret into the error string. The toolkit ALREADY withholds this at its boundary: the v0.53.4 friendly-mapper withholds corrupt ms1 input (`[[project_toolkit_v0_53_6_schema_gate_secret_string]]` lineage / `project_overnight_v0_36_0_v0_53_3` — "friendly mapper withholds corrupt ms1 input"). So the toolkit is NOT exposed today; this companion exists for cross-repo lockstep + to record that when ms-codec withholds at its own layer, the toolkit's friendly-mapper wrapper becomes belt-and-braces rather than the sole guard.
+- **Status:** `open` (tracks the ms-codec-side fix).
+- **Tier:** `next-cycle` / secret-hygiene.
+- **Companion:** `mnemonic-secret` `design/FOLLOWUPS.md::ms-codec-error-display-echoes-input` (primary).
+
+### `toolkit-descriptor-fuzz-target` — add a `parse_descriptor` cargo-fuzz target (descoped from stress Cycle C)
+
+- **Surfaced:** 2026-06-11, stress Cycle C R0 (fuzzing brainstorm `design/BRAINSTORM_stress_cycle_c_fuzzing.md` [C2]/[C3]; `design/agent-reports/cycle-c-fuzzing-r0-round1-review.md`). Cycle C shipped 9 fuzz targets across the 3 codec repos; the toolkit descriptor door was descoped HERE because it needs real library-surface work.
+- **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs:747` `parse_descriptor(input, keys: &[ParsedKey], fingerprints: &[ParsedFingerprint])` — the untrusted descriptor-string door (rust-miniscript parse → md-codec Node construction). Empty key/fingerprint slices are valid.
+- **What / why it's not trivial:** `parse_descriptor` is **bin-private** by the locked Option C crate shape (`SPEC_secret_memory_hygiene_v0_9_B.md` §4 P2 — declared `mod parse_descriptor;` at `main.rs:23`, deliberately NOT exported from lib.rs; returns `Result<_, ToolkitError>` which is binary-private). Its transitive `crate::` compile closure is **~35 modules / ~56k lines** (drags in cmd/, wallet_export, friendly, repair, cost, derive). A fuzz crate cannot path-dep it as-is. The honest hook: (i) a `#[cfg(fuzzing)] pub mod …` bulk mount of the bin module graph in lib.rs (cargo-fuzz passes `--cfg fuzzing` via RUSTFLAGS — zero effect on normal builds) PLUS a `[lints.rust] unexpected_cfgs = { check-cfg = ['cfg(fuzzing)'] }` declaration (cfg(fuzzing) trips `unexpected_cfgs` on 1.85.0 AND nightly, and toolkit CI runs clippy `-D warnings`), PLUS (ii) replicating the root `[patch.crates-io]` miniscript-git pin (rev `95fdd1c`) in the fuzz workspace's own manifest (Cargo patches don't cross workspace boundaries; the closure uses `Terminal::SortedMultiA` @ parse_descriptor.rs:595, which exists only in the patched rev) + a committed `fuzz/Cargo.lock` aligned to the root lock.
+- **Why deferred:** the cfg(fuzzing) lib.rs mount + check-cfg lint is a real library-surface change (NOT the test-only NO-BUMP the rest of Cycle C is) and deserves its own mini-R0. Each codec phase of Cycle C is standalone-valuable; this is the pre-authorized clean carve-out.
+- **Status:** `open`
+- **Tier:** `next-cycle`.
+- **Companion:** none (toolkit-local; the cycle's codec targets live in the 3 codec repos' `fuzz/` dirs).
+
+### `fuzz-nightly-quarterly-bump` — refresh the pinned fuzz nightly toolchain quarterly (constellation-wide)
+
+- **Surfaced:** 2026-06-11, stress Cycle C ([M5] of the fuzzing R0; `design/BRAINSTORM_stress_cycle_c_fuzzing.md`).
+- **Where:** each codec repo's `fuzz/rust-toolchain.toml` pins `channel = "nightly-2026-04-27"` (md-codec landed first; ms-codec + mk-codec follow as their phases ship) and the matching `dtolnay/rust-toolchain` pin in each `fuzz-smoke.yml`.
+- **What:** cargo-fuzz needs nightly; the fuzz dirs pin a DATED nightly for reproducibility (floating `nightly` drifts and breaks builds unpredictably). A dated pin goes stale (sanitizer/cargo-fuzz improvements, eventual yank). Quarterly: bump the date in every `fuzz/rust-toolchain.toml` + the CI pins in lockstep, `cargo +<new-nightly> fuzz build` all targets, refresh `fuzz/Cargo.lock` if needed. Keep the codec repos on the SAME nightly date so the constellation fuzz infra is uniform.
+- **Why deferred:** routine maintenance, not a bug; first due ~2026-09.
+- **Status:** `open`
+- **Tier:** `recurring-maintenance`.
+- **Companion:** none (constellation-wide; this toolkit entry is the canonical tracker, the codec repos carry the pins).
