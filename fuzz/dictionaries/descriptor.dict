@@ -1,0 +1,66 @@
+# libFuzzer dictionary for the `descriptor_parse` target.
+# Toolkit phase of the constellation stress-fuzz program.
+#
+# Descriptor / miniscript structural keywords + the `@N` template / key-origin /
+# derivation tokens `parse_descriptor` lexes, plus a few bech32 alphabet chars.
+# These bias libFuzzer's mutation toward bytes that land inside descriptor
+# grammar.
+
+# Script-type wrappers.
+"wsh("
+"sh("
+"wpkh("
+"pkh("
+"tr("
+
+# Multisig combinators.
+"multi("
+"sortedmulti("
+"multi_a("
+"sortedmulti_a("
+
+# Miniscript fragment combinators / wrappers.
+"pk("
+"and_v("
+"or_d("
+"or_b("
+"or_i("
+"andor("
+"thresh("
+"v:"
+
+# Timelocks / hashlocks.
+"older("
+"after("
+"sha256("
+"hash256("
+"ripemd160("
+"hash160("
+
+# Template placeholders + key-origin / derivation structure.
+"@0"
+"@1"
+"@2"
+"<0;1>"
+"/*"
+"#"
+"["
+"]"
+"'"
+"/0'/0'/0'"
+"/48'/0'/0'/2'"
+
+# A few bech32 alphabet characters (xpub / address payload bytes).
+"q"
+"p"
+"z"
+"x"
+"0"
+"2"
+"3"
+"4"
+"5"
+"6"
+"7"
+"8"
+"9"

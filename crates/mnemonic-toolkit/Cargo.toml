@@ -16,6 +16,15 @@ categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
 name = "mnemonic"
 path = "src/main.rs"
 
+# `cfg(fuzzing)` is set by cargo-fuzz only (via `--cfg fuzzing`) to activate the
+# `cfg(fuzzing)`-gated `parse_descriptor` mount in `src/lib.rs` (see that file's
+# header + `fuzz/`). It is unknown to every normal build, so without this
+# check-cfg declaration clippy `-D warnings` (CI rust.yml) would HARD-FAIL on the
+# `unexpected_cfgs` lint. This line is the only normal-build-visible change of
+# the fuzz target; it has no runtime effect.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
 [dependencies]
 ms-codec = "0.4.4"
 # Direct dep so `friendly_ms_codec` can render prose for the codex32 share

@@ -1,0 +1,104 @@
+# mnemonic-toolkit fuzz smoke — toolkit phase of the constellation stress-fuzz
+# program (descoped from stress Cycle C). The single target `descriptor_parse`
+# drives the binary-private `parse_descriptor` (the toolkit's untrusted
+# descriptor-string intake) under the never-panic charter.
+#
+# cargo-fuzz passes `--cfg fuzzing`, which activates the `cfg(fuzzing)`-gated
+# `parse_descriptor` mount in `crates/mnemonic-toolkit/src/lib.rs`. That mount is
+# ENTIRELY ABSENT in every normal build; this workflow is the only place it is
+# compiled.
+#
+# Two jobs:
+#   * `build` (compile gate) on every push/PR touching the fuzz dir, the
+#     parse_descriptor source, the lib.rs closure mount, or this workflow —
+#     catches drift between the closure and the fuzz target early.
+#   * `smoke` on a daily cron + manual workflow_dispatch — runs the target for
+#     60s and uploads any crash artifacts. NOT on every push (off the critical
+#     path).
+#
+# Nightly is required by cargo-fuzz (libFuzzer runtime). The toolchain is pinned
+# to the same dated nightly as fuzz/rust-toolchain.toml + the sibling codec fuzz
+# dirs; the constellation-wide FOLLOWUP `fuzz-nightly-quarterly-bump` tracks
+# refreshing both in lockstep quarterly.
+#
+# NOTE (cron caveats): scheduled workflows run on the DEFAULT BRANCH only and
+# auto-disable after 60 days of repo inactivity — workflow_dispatch is the
+# manual run + post-disable recovery lever.
+name: fuzz-smoke
+
+on:
+  push:
+    paths:
+      - "fuzz/**"
+      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
+      - "crates/mnemonic-toolkit/src/lib.rs"
+      - ".github/workflows/fuzz-smoke.yml"
+  pull_request:
+    paths:
+      - "fuzz/**"
+      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
+      - "crates/mnemonic-toolkit/src/lib.rs"
+      - ".github/workflows/fuzz-smoke.yml"
+  schedule:
+    # Daily at 07:17 UTC (off the hour to avoid the cron thundering herd).
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: cargo fuzz build (compile gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned nightly
+        # @master + `toolchain:` input is dtolnay's documented way to pin a
+        # DATED nightly (dated nightlies are not available as action refs).
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-04-27
+          components: rust-src
+          targets: x86_64-unknown-linux-gnu
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Build the fuzz target
+        working-directory: fuzz
+        # Pin the gnu target: on the runner cargo-fuzz otherwise defaults to the
+        # musl host triple, and ASan is incompatible with musl's static libc
+        # ("sanitizer is incompatible with statically linked libc").
+        run: cargo +nightly-2026-04-27 fuzz build --target x86_64-unknown-linux-gnu
+
+  smoke:
+    name: cargo fuzz run (60s smoke)
+    # Only on cron + manual dispatch — never on push/PR (off the critical path).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned nightly
+        # @master + `toolchain:` input is dtolnay's documented way to pin a
+        # DATED nightly (dated nightlies are not available as action refs).
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-04-27
+          components: rust-src
+          targets: x86_64-unknown-linux-gnu
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Smoke-run descriptor_parse
+        working-directory: fuzz
+        # Pin the gnu target (see the build job's note re: musl/ASan).
+        run: cargo +nightly-2026-04-27 fuzz run descriptor_parse --target x86_64-unknown-linux-gnu -- -max_total_time=60
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: fuzz-crash-descriptor_parse
+          path: fuzz/artifacts/descriptor_parse/
+          if-no-files-found: ignore

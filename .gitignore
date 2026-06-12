@@ -3,6 +3,13 @@
 /.spike-v0.4/
 __pycache__/
 
+# cargo-fuzz transient output (fuzz/corpus/ and fuzz/Cargo.lock ARE committed).
+# The root `/target` above is anchored, so the fuzz workspace's own target/
+# needs its own entry. artifacts/ (crash repros) + coverage/ are transient.
+fuzz/target/
+fuzz/artifacts/
+fuzz/coverage/
+
 # Per-cycle scratch / session-handoff files (kickoff, handoff, phase0 artifact,
 # resume, plan stash). Each scratchpad's substantive content is captured by
 # the cycle's commits / agent-reports / design/FOLLOWUPS.md / memory entries;

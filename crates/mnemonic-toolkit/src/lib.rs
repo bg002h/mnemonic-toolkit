@@ -95,3 +95,75 @@ pub mod secret_string;
 pub mod seed_xor;
 pub mod seedqr;
 pub mod slip39;
+
+// ---------------------------------------------------------------------------
+// `cfg(fuzzing)`-ONLY mount of the `parse_descriptor` closure.
+// ---------------------------------------------------------------------------
+//
+// The fuzz target at `fuzz/fuzz_targets/descriptor_parse.rs` drives the
+// binary-private `parse_descriptor::parse_descriptor` (the toolkit's untrusted
+// descriptor-string intake). That function and the 19 modules its transitive
+// `crate::` paths reference are declared in `main.rs` (the bin crate), NOT in
+// this lib — per the locked Option C crate shape
+// (`SPEC_secret_memory_hygiene_v0_9_B.md` §4 P2). A path-dep fuzz crate can
+// only reach lib-crate items, so we mount the closure here UNDER `cfg(fuzzing)`.
+//
+// `cfg(fuzzing)` is set ONLY by cargo-fuzz (it passes `--cfg fuzzing` via
+// RUSTFLAGS). In EVERY normal build — `cargo build`/`cargo test`, CI rust.yml,
+// the shipped `mnemonic` binary — this whole block is ENTIRELY ABSENT, so it has
+// zero effect on the shipped surface. The lone normal-build-visible change is
+// the `[lints.rust] unexpected_cfgs` line in `Cargo.toml`, which only stops
+// clippy `-D warnings` from flagging the otherwise-unknown `cfg(fuzzing)`.
+//
+// `extern crate self as mnemonic_toolkit;` (load-bearing): three shared
+// bin+lib files in the closure (`derive.rs`, `synthesize.rs`, `derive_slot.rs`)
+// reach `mlock` via the EXTERNAL-crate self-name path
+// (`mnemonic_toolkit::mlock::…`) because `main.rs` reaches `mlock` only via that
+// path. Aliasing self under `cfg(fuzzing)` makes the self-name resolve inside
+// the lib too, with zero edits to the shared files.
+//
+// `error.rs` is mounted here, so `ToolkitError` becomes `pub` UNDER
+// `cfg(fuzzing)` ONLY. It remains binary-private in every normal/shipped build,
+// so the "binary-private by design" invariant is preserved (the mount never
+// compiles in a normal build).
+#[cfg(fuzzing)]
+extern crate self as mnemonic_toolkit;
+
+#[cfg(fuzzing)]
+pub mod cost;
+#[cfg(fuzzing)]
+pub mod derive;
+#[cfg(fuzzing)]
+pub mod derive_address;
+#[cfg(fuzzing)]
+pub mod derive_slot;
+#[cfg(fuzzing)]
+pub mod error;
+#[cfg(fuzzing)]
+pub mod format;
+#[cfg(fuzzing)]
+pub mod friendly;
+#[cfg(fuzzing)]
+pub mod indel;
+#[cfg(fuzzing)]
+pub mod language;
+#[cfg(fuzzing)]
+pub mod network;
+#[cfg(fuzzing)]
+pub mod parse;
+#[cfg(fuzzing)]
+pub mod parse_descriptor;
+#[cfg(fuzzing)]
+pub mod repair;
+#[cfg(fuzzing)]
+pub mod secret_advisory;
+#[cfg(fuzzing)]
+pub mod slip0132;
+#[cfg(fuzzing)]
+pub mod slot_input;
+#[cfg(fuzzing)]
+pub mod synthesize;
+#[cfg(fuzzing)]
+pub mod template;
+#[cfg(fuzzing)]
+pub mod wallet_export;

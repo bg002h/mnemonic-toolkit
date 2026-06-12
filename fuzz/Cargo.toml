@@ -1,0 +1,47 @@
+# mnemonic-toolkit fuzz workspace — toolkit phase of the constellation
+# stress-fuzz program (descoped from stress Cycle C). This is an OWN
+# `[workspace]` so the repo root's `cargo build` / `cargo test --workspace` /
+# `cargo metadata --locked` completely ignore it. NO-BUMP: infra + tests only;
+# the lib-source change (the `cfg(fuzzing)`-gated mount in
+# `crates/mnemonic-toolkit/src/lib.rs`) is ENTIRELY ABSENT in every normal
+# build, and the lone always-compiled change is the `[lints.rust]` check-cfg
+# line in the toolkit Cargo.toml.
+[package]
+name = "mnemonic-toolkit-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Own workspace so the root workspace never sees this crate.
+[workspace]
+
+# Cargo `[patch]` tables do not cross workspace boundaries, so the root's
+# rust-miniscript git pin must be replicated here verbatim: the
+# `parse_descriptor` closure uses `Terminal::SortedMultiA`, which exists only
+# in this rev (crates.io miniscript 13.0.0 lacks it). Kept byte-identical to
+# the toolkit root `Cargo.toml` `[patch.crates-io]`.
+[patch.crates-io]
+miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "95fdd1c5773bd918c574d2225787973f63e16a66" }
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.mnemonic-toolkit]
+path = "../crates/mnemonic-toolkit"
+
+[profile.release]
+debug = 1
+
+# cargo-fuzz auto-discovers fuzz_targets/*.rs, but declaring the [[bin]]
+# explicitly with test/doc/bench off keeps `cargo build`/`cargo test` in this
+# workspace from trying to build it as an ordinary binary.
+[[bin]]
+name = "descriptor_parse"
+path = "fuzz_targets/descriptor_parse.rs"
+test = false
+doc = false
+bench = false
