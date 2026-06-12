@@ -1,4 +1,12 @@
-# CONTINUITY — resume point (2026-06-11)
+# CONTINUITY — resume point (2026-06-12)
+
+## LATEST: ms-codec 0.4.3 PUBLISHED + toolkit v0.54.3 SHIPPED (char-boundary panic fix propagated)
+- **ms-codec 0.4.3 PUBLISHED to crates.io** (user-authorized) + tag `ms-codec-v0.4.3` @ mnemonic-secret `4d96c05`. Fixes the Cycle-C `decode_with_correction` char-boundary panic.
+- **toolkit v0.54.3** @ master (pin bump ms-codec 0.4.2→0.4.3 + 1 regression cell in repair.rs) + tag `mnemonic-toolkit-v0.54.3`; rust/changelog-check/install-pin-check/sibling-pin-check all GREEN. `mnemonic repair café` no longer panics.
+- **In-progress batch (user: "publish and bump then do D and E. And all the also fileds"):** DONE = publish+bump. REMAINING = ms-codec-error-display-echoes-input (secret leak in ms Error Display; R0-gated, will need its own publish+bump), toolkit-descriptor-fuzz-target (cfg(fuzzing) lib.rs mount), Cycle D (cross-tool md vs md-cli differential), Cycle E (bitcoind differential CI), fuzz-nightly-quarterly-bump (not due ~2026-09, note-only).
+
+---
+
 
 Everything below is SHIPPED and CI-green. Both repos clean, branches in sync. Safe to clear context.
 Memory auto-loads the detail: `project_stress_testing_program.md`, `project_faithful_general_policy_restore_v0_54_0.md` (+ MEMORY.md index). Fable 5 for all agent/R0 dispatches; trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
