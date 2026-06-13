@@ -1050,6 +1050,13 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     use crate::synthesize::synthesize_descriptor;
+    // SPEC_older_timelock_advisory Task 6 — non-blocking consensus-masked older()
+    // advisory (Adapter A). Hooked in the form-agnostic tail so it fires for BOTH
+    // the @N-placeholder verify path AND the bare-concrete-descriptor fork (both
+    // funnel `descriptor` here as the real, already-canonicalized md-codec parse),
+    // before the verify-emit. Read-only: advisory only, never alters the verdict.
+    let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
     // run_language for verify-bundle: use --language (defaulting to English).
     // cosigners[i].language is None in verify-bundle paths (slots come from
     // mk1 decode + phrase input, not from an ms1 mnem payload). The unwrap_or

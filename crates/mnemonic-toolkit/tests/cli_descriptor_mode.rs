@@ -202,6 +202,112 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
         .stdout(predicate::str::contains(r#""result":"mismatch""#));
 }
 
+// ============================================================================
+// Consensus-masked older() advisory on `verify-bundle --descriptor`
+// (SPEC_older_timelock_advisory, Task 6 — Adapter-A hook in
+// descriptor_mode_verify_run, before verify_emit_from_expected).
+// ============================================================================
+
+/// Concrete (watch-only) 2-of-2 testnet multisig tpubs + origins, reused from
+/// `cli_descriptor_concrete.rs`. Content is irrelevant to the advisory; only the
+/// descriptor's `older()` operand drives it.
+const MASKED_VB_KEY_A: &str = "[704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*";
+const MASKED_VB_KEY_B: &str = "[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3/<0;1>/*";
+
+/// Bundle a concrete watch-only `--descriptor` to JSON, then expand the produced
+/// cards into flat `--md1`/`--mk1` flag pairs for the verify-bundle round-trip.
+/// (The same bundle→verify pattern used by `cli_descriptor_concrete.rs`.)
+fn bundle_then_verify_flags(descriptor: &str) -> Vec<String> {
+    let produced = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "testnet",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let v: Value =
+        serde_json::from_slice(&produced.get_output().stdout).expect("valid bundle JSON");
+    let mut out: Vec<String> = Vec::new();
+    for chunk in v["md1"].as_array().expect("md1 array") {
+        out.push("--md1".into());
+        out.push(chunk.as_str().unwrap().to_string());
+    }
+    for inner in v["mk1"].as_array().expect("mk1 array") {
+        for chunk in inner.as_array().expect("inner mk1 array") {
+            out.push("--mk1".into());
+            out.push(chunk.as_str().unwrap().to_string());
+        }
+    }
+    out
+}
+
+/// `verify-bundle --descriptor wsh(and_v(v:multi(2,...),older(65536)))` —
+/// the descriptor carries a BIP-68 consensus-masked relative timelock (bit 16 is
+/// outside the low-16-bit value field → effective value 0). The descriptor-mode
+/// verify hook must emit the non-blocking advisory on stderr while the verify
+/// still succeeds (`result: ok`, exit 0). Cards are produced by `bundle` on the
+/// same masked descriptor (bundle→verify round-trip).
+#[test]
+fn verify_bundle_descriptor_masked_older_emits_advisory() {
+    let descriptor =
+        format!("wsh(and_v(v:multi(2,{MASKED_VB_KEY_A},{MASKED_VB_KEY_B}),older(65536)))");
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        descriptor.clone(),
+        "--network".into(),
+        "testnet".into(),
+    ];
+    args.extend(bundle_then_verify_flags(&descriptor));
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("result: ok"));
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("advisory: older(65536) is consensus-masked"),
+        "verify-bundle descriptor-mode masked older() must emit the consensus-masked \
+         advisory; got stderr: {stderr:?}"
+    );
+}
+
+/// Clean-input counterpart: `older(2016)` is a valid 16-bit relative timelock
+/// (no stray bits, non-zero value) → NO advisory. Guards against the
+/// verify-bundle hook firing on clean operands.
+#[test]
+fn verify_bundle_descriptor_clean_older_emits_no_advisory() {
+    let descriptor =
+        format!("wsh(and_v(v:multi(2,{MASKED_VB_KEY_A},{MASKED_VB_KEY_B}),older(2016)))");
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        descriptor.clone(),
+        "--network".into(),
+        "testnet".into(),
+    ];
+    args.extend(bundle_then_verify_flags(&descriptor));
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("result: ok"));
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("advisory: older"),
+        "clean older(2016) must NOT emit an older() advisory; got stderr: {stderr:?}"
+    );
+}
+
 /// SPEC v0.6.1 §11 cross-cut at bundle.rs::bundle_run_unified_descriptor —
 /// `bundle --descriptor "wpkh(@0/<0;1>/*)" --slot @0.xpub=<zpub>` (descriptor
 /// mode) must produce a byte-identical bundle to the equivalent xpub
