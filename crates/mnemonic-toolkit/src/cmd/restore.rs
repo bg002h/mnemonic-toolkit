@@ -786,7 +786,7 @@ fn refuse_at_in_both(
                 return Err(ToolkitError::ModeViolation {
                     mode: "restore",
                     flag: "--md1",
-                    message: "taproot md1 has a non-NUMS internal (trunk) key that is also a leaf key (@-in-both) — the engraved card is a faithful backup, but reconstructing it needs a leaf-membership-aware rebuild not yet supported; refusing rather than emit a silently-different multisig (FOLLOWUP restore-non-nums-tr-internal-key-also-in-leaf)",
+                    message: "taproot md1 has a non-NUMS internal (trunk) key that is also a leaf key (@-in-both) — the engraved card is a faithful backup, but the toolkit will not reconstruct this shape: the trunk key already spends unilaterally via the key path, so re-using it inside the script-path multisig is a degenerate construction. Refusing rather than emit a silently-different multisig (WONTFIX restore-non-nums-tr-internal-key-also-in-leaf)",
                 });
             }
         }
