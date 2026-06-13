@@ -107,47 +107,94 @@ computation.)
 - `wallet_export/pipeline.rs` — `build_tr_multi_a_descriptor` `Cosigner(idx)` arm already exists
   (`:113-156`); reached now for `is_nums:false` distinct-trunk multisig. No change expected.
 - **No md-codec change** (route-around uses the existing `is_nums:false` branch). No clap change.
+- **Comment hygiene (R0-r1 m1):** update the `restore.rs:~796-798` comment ("`taproot_internal_key` is
+  `Some(Nums)` for a taproot multisig md1") → "`Some(Nums)` or `Some(Cosigner(idx))`."
+- **Enum ordering (R0-r1 m4/m5):** `TaprootInternalKey` already exists at `wallet_export/mod.rs:87`
+  (`{Nums, Cosigner}`) — NOT new this cycle. CLAUDE.md's alphabetical-variant rule is `ToolkitError`-
+  specific, so it does NOT bind `TaprootRestore`/`TaprootInternalKey`; keep the existing variant order
+  (no churn). The `TaprootRestore` edit only ADDS a field to each existing variant.
 
 ## §6 Error handling
 - `@-in-both` → `ModeViolation` exit 2, slug-cited (§4).
 - Depth-≥2 → unchanged refusal (`upstream-miniscript-taptree-depth2-display-asymmetry`).
 - Any reconstruction whose descriptor fails parse→print → `bad()` (the fidelity guard).
-- `--format green` for a non-NUMS general-tr → keep the existing P2tr singlesig refusal behavior
-  (R0 to confirm a key-path-bearing tr classifies sanely under `script_type_from_descriptor`).
+- **`--format` output for a non-NUMS taproot (R0-r1 I2 — REQUIRED, the existing refusal does NOT
+  auto-fire for non-NUMS):** a non-NUMS taproot must emit only the watch-only descriptor-driven
+  formats faithfully (`descriptor`, `bitcoin-core`) — the same surface a NUMS general-tr supports —
+  and **refuse the structured/templated formats**. The catch: the general-tr `bip388` refusal at
+  `restore.rs:814-820` relies on the NUMS internal key being *a bare x-only `Single` with no multipath
+  suffix*; a non-NUMS trunk is a **multipath XPub** (`<0;1>/*`), so that refusal silently fails to
+  fire. Therefore add an **explicit** guard: a taproot card whose internal key is non-NUMS
+  (`tap_internal_key != Some(Nums)`) refuses `bip388` (and any template-requiring format) regardless
+  of multipath-ness — independent of the NUMS-`Single` property. `green` already refuses a general-tr
+  via its `P2tr` classification (internal-key-agnostic — confirm it still fires); the `multi_a`/
+  `sortedmulti_a` non-NUMS multisig (`P2trMulti`) follows the same per-format support matrix as the
+  NUMS multisig case. R0 to confirm `script_type_from_descriptor` classifies a key-path-bearing tr
+  sanely and that no `--format` silently emits a non-NUMS payload.
 
-## §7 Testing (all via the bundle→restore round-trip)
+## §7 Testing
+**Success cases (via the bundle→restore round-trip — `bundle --descriptor` accepts these, verified):**
 - Golden: non-NUMS **general** single-leaf `tr(D, and_v(v:pk(B),older(N)))` → reconstructs the
   descriptor (real trunk key D) + a receive address; cosigner fingerprints/origins preserved.
 - Golden: non-NUMS **distinct-trunk multisig** `tr(D, multi_a(2,B,C))` AND `tr(D, sortedmulti_a(2,B,C))`
   → reconstruct (trunk D not in the leaf; leaf = {B,C}).
-- **Refusal, RED-proven:** `@-in-both` `tr(<leaf-key-i>, multi_a(2,<key-i>,<key-j>))` → `ModeViolation`
-  + slug. RED-proof: with the §4 guard removed, the reconstruction silently drops the trunk key from
-  the leaf AND passes the fidelity guard (demonstrating the guard's necessity).
+- **Inverting existing test (R0-r1 m2):** `cli_restore_taproot.rs:172`
+  `cosigner_internal_key_tr_bundles_but_restore_refuses_non_nums` currently asserts exit-2 on
+  `tr(K2, multi_a(2,K0,K1))` (distinct-trunk). That shape is now SUPPORTED — **flip this test from a
+  refusal assertion to a golden-asserting success** (rename accordingly).
+
+**Refusal — `@-in-both`, RED-proven (R0-r1 I1 — construction mechanism is load-bearing):**
+- `bundle --descriptor` REJECTS `@-in-both` at intake (verified: `tr(B, multi_a(2,B,C))` →
+  "BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)"). So the
+  refusal test CANNOT go through `bundle`. **Construct the `@-in-both` md1 DIRECTLY** via
+  `md_codec::tree` (a `Body::Tr { is_nums:false, key_index: i, tree: <Tag::MultiA Body::MultiKeys{ indices including i }> }`)
+  → `md_codec::encode_payload` → `md_codec::chunk::split`, then feed the chunks to `restore --md1`
+  (the suite already builds md1 directly — pattern: `cli_standalone_bijections.rs`). Assert
+  `ModeViolation` + the `restore-non-nums-tr-internal-key-also-in-leaf` slug.
+- **RED-proof:** with the §4 structural guard removed, this same crafted card reconstructs to
+  `multi_a(k, {leaf \ trunk})` (silently dropping the trunk key) AND passes the Display-fidelity guard
+  — demonstrating the structural guard's necessity (the fidelity guard cannot catch it, §4).
+
+**Format-output (R0-r1 I2):**
+- A non-NUMS general-tr (and non-NUMS multisig) with `--format bip388` → **refused** (explicit guard,
+  §6); `--format descriptor`/`bitcoin-core` → emit faithfully; `--format green` → refused. One cell
+  each pinning the refusals (so a future regression that silently emits a non-NUMS bip388 payload goes
+  RED).
+
+**Other:**
 - Depth-≥2 non-NUMS → still refused.
-- NUMS regression: existing v0.49.1 / v0.55.1 NUMS goldens stay byte-identical (the NUMS path is
-  unchanged — `Nums` still threads through).
+- NUMS regression: existing v0.49.1 / v0.55.1 NUMS goldens stay byte-identical (`Nums` still threads
+  through the new enum unchanged).
 
 ## §8 SemVer & locksteps
 - **PATCH** — watch-only; lifts a refusal into a faithful reconstruction; zero clap delta → **no GUI
   `schema_mirror`, no paired-PR**. (`schema_mirror` is flag-NAME parity only.)
-- **Manual:** `docs/manual/src/40-cli-reference/41-mnemonic.md`, restore taproot section — note
-  non-NUMS key-path taproot support + the `@-in-both` refusal. Run the FULL manual lint.
+- **Manual (R0-r1 m3):** `docs/manual/src/40-cli-reference/41-mnemonic.md` currently states non-NUMS
+  taproot is refused at **`:771`**, the `--md1` flag-row **`:794`**, and **`:1027`** ("A **non-NUMS**…
+  refused"). Update all three to: non-NUMS key-path taproot (general single-leaf/depth-1 +
+  distinct-trunk multisig) now reconstructs; the `@-in-both` shape + depth-≥2 remain refused; non-NUMS
+  emits `descriptor`/`bitcoin-core` only (bip388/green refused). Re-grep these lines at write time
+  (they decay). Run the FULL manual lint.
 - **FOLLOWUPS:** (a) file this cycle's slug `restore-non-nums-taproot-internal-key` and mark RESOLVED
   on ship; (b) file the deferred `restore-non-nums-tr-internal-key-also-in-leaf` (the `@-in-both`
   shape; route-around-for-multi_a is the eventual mechanism, blocked-adjacent to the md-codec
   SortedMultiA gap).
 - No md-codec / sibling companions.
 
-## §9 R0 open items / non-goals
-R0 (mandatory, 0C/0I before code) must confirm:
-1. The §4 `@-in-both` guard is a **structural classify-time** check (the fidelity guard cannot catch
-   it) — this is the architect's explicit YELLOW→GREEN condition.
-2. The route-around renders general non-NUMS faithfully — md-codec `is_nums:false → lookup_key`
-   (`to_miniscript.rs:161-164`) + the `ReconstructTranslator` handling the real trunk key as an XPub
-   (not tripping the NUMS-only `Single`-guard at `restore.rs:963-970`).
-3. Address derivation works for a key-path-bearing tr (`derive_address::derive_receive_addresses` on
-   the non-NUMS descriptor string).
-4. `--format green`/`bip388`/other formats classify a non-NUMS general-tr sanely (no wrong-payload).
+## §9 R0 status / non-goals
+**R0 round 1 (verdict YELLOW → folded; review `design/agent-reports/restore-non-nums-taproot-r0-round1-review.md`):**
+- **Confirmed CORRECT by R0-r1** (no further action): the §4 `@-in-both` guard is necessary AND
+  sufficient with an INDEX check (md-codec dup-key-bytes-at-different-index still reconstructs the
+  actual leaf faithfully); the Display-fidelity guard provably cannot catch the Cosigner wrong-leaf;
+  the route-around renders general non-NUMS end-to-end (`is_nums:false → lookup_key` → XPub →
+  `new_tr` → `ReconstructTranslator` XPub arm, NOT the `Single`-guard → multipath, address Q=P+t·G);
+  split routing is exhaustive/non-mis-routing; NUMS path stays byte-identical.
+- **Folded I1** (§7: `@-in-both` test built directly via md_codec, bundle rejects it at intake),
+  **I2** (§6: explicit non-NUMS `bip388`/green refusal — the NUMS-`Single` refusal doesn't fire for a
+  multipath trunk), **m1–m5** (§5/§7/§8).
+
+R0 round 2 must re-confirm the folds and reach 0C/0I before any code.
 
 **Non-goals:** the `@-in-both` shape (deferred, §4); depth-≥2 taptrees (upstream-blocked); any
-md-codec wire change; from-seed `bundle` emitting non-NUMS (it intentionally emits NUMS).
+md-codec wire change; from-seed `bundle` emitting non-NUMS (it intentionally emits NUMS); supporting
+`bip388`/green output for non-NUMS taproot (descriptor/bitcoin-core only).
