@@ -333,7 +333,12 @@ fn tr_sortedmulti_a_in_2leaf_refuses() {
 /// index from the `Tr` body first, then the leaf indices (skipping the already-
 /// seen trunk), so the `first_occurrences` are canonical and validation passes
 /// for `indices = [0..n]` with `trunk = 0` (R0-confirmed).
-fn build_at_in_both_descriptor(n: u8, k: u8, leaf_indices: Vec<u8>) -> md_codec::Descriptor {
+fn build_at_in_both_descriptor(
+    n: u8,
+    k: u8,
+    leaf_indices: Vec<u8>,
+    tag: md_codec::Tag,
+) -> md_codec::Descriptor {
     use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
     use md_codec::tree::{Body, Node};
     use md_codec::use_site_path::UseSitePath;
@@ -357,7 +362,7 @@ fn build_at_in_both_descriptor(n: u8, k: u8, leaf_indices: Vec<u8>) -> md_codec:
             is_nums: false,
             key_index: 0,
             tree: Some(Box::new(Node {
-                tag: Tag::MultiA,
+                tag,
                 body: Body::MultiKeys {
                     k,
                     indices: leaf_indices,
@@ -431,7 +436,7 @@ fn build_at_in_both_descriptor(n: u8, k: u8, leaf_indices: Vec<u8>) -> md_codec:
 fn at_in_both_tr_refuses_structurally() {
     // n=3, 2-of-3: dropping the trunk @0 leaves a VALID 2-of-2 → the dangerous
     // exit-0 silent-wrong reconstruction the structural guard must prevent.
-    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2]);
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2], md_codec::Tag::MultiA);
     let chunks = md_codec::chunk::split(&d).expect("split @-in-both md1");
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -454,8 +459,25 @@ fn at_in_both_tr_refuses_structurally() {
 /// the correct slug — never relying on the coincidental downstream k>n catch.
 #[test]
 fn at_in_both_tr_2of2_refuses_structurally() {
-    let d = build_at_in_both_descriptor(2, 2, vec![0, 1]);
+    let d = build_at_in_both_descriptor(2, 2, vec![0, 1], md_codec::Tag::MultiA);
     let chunks = md_codec::chunk::split(&d).expect("split @-in-both 2-of-2 md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
+/// (N4c) Same @-in-both shape but with a SortedMultiA leaf — proves the guard
+/// covers BOTH Template arms (catches a one-arm regression).
+#[test]
+fn at_in_both_sortedmulti_a_refuses_structurally() {
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2], md_codec::Tag::SortedMultiA);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both sortedmulti_a md1");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&chunks))
