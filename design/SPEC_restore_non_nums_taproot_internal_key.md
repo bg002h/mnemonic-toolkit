@@ -107,8 +107,10 @@ computation.)
 - `wallet_export/pipeline.rs` — `build_tr_multi_a_descriptor` `Cosigner(idx)` arm already exists
   (`:113-156`); reached now for `is_nums:false` distinct-trunk multisig. No change expected.
 - **No md-codec change** (route-around uses the existing `is_nums:false` branch). No clap change.
-- **Comment hygiene (R0-r1 m1):** update the `restore.rs:~796-798` comment ("`taproot_internal_key` is
-  `Some(Nums)` for a taproot multisig md1") → "`Some(Nums)` or `Some(Cosigner(idx))`."
+- **Comment hygiene (R0-r1 m1):** update the `restore.rs:796-798` comment ("`taproot_internal_key` is
+  `Some(Nums)` for a taproot multisig md1 … (R0 v2 I2.)") → "`Some(Nums)` or `Some(Cosigner(idx))` …"
+  and refresh/replace the trailing `(R0 v2 I2.)` provenance tail (it cites a PRIOR cycle's review, not
+  this one — R0-r2 noted).
 - **Enum ordering (R0-r1 m4/m5):** `TaprootInternalKey` already exists at `wallet_export/mod.rs:87`
   (`{Nums, Cosigner}`) — NOT new this cycle. CLAUDE.md's alphabetical-variant rule is `ToolkitError`-
   specific, so it does NOT bind `TaprootRestore`/`TaprootInternalKey`; keep the existing variant order
@@ -118,19 +120,32 @@ computation.)
 - `@-in-both` → `ModeViolation` exit 2, slug-cited (§4).
 - Depth-≥2 → unchanged refusal (`upstream-miniscript-taptree-depth2-display-asymmetry`).
 - Any reconstruction whose descriptor fails parse→print → `bad()` (the fidelity guard).
-- **`--format` output for a non-NUMS taproot (R0-r1 I2 — REQUIRED, the existing refusal does NOT
-  auto-fire for non-NUMS):** a non-NUMS taproot must emit only the watch-only descriptor-driven
-  formats faithfully (`descriptor`, `bitcoin-core`) — the same surface a NUMS general-tr supports —
-  and **refuse the structured/templated formats**. The catch: the general-tr `bip388` refusal at
-  `restore.rs:814-820` relies on the NUMS internal key being *a bare x-only `Single` with no multipath
-  suffix*; a non-NUMS trunk is a **multipath XPub** (`<0;1>/*`), so that refusal silently fails to
-  fire. Therefore add an **explicit** guard: a taproot card whose internal key is non-NUMS
-  (`tap_internal_key != Some(Nums)`) refuses `bip388` (and any template-requiring format) regardless
-  of multipath-ness — independent of the NUMS-`Single` property. `green` already refuses a general-tr
-  via its `P2tr` classification (internal-key-agnostic — confirm it still fires); the `multi_a`/
-  `sortedmulti_a` non-NUMS multisig (`P2trMulti`) follows the same per-format support matrix as the
-  NUMS multisig case. R0 to confirm `script_type_from_descriptor` classifies a key-path-bearing tr
-  sanely and that no `--format` silently emits a non-NUMS payload.
+- **`--format` output for a non-NUMS taproot (R0-r1 I2; placement CORRECTED R0-r2 I1 — the refusal
+  belongs ONLY in the general route-around arm, NOT globally):**
+  - **Template path (`Some(t)`) — non-NUMS distinct-trunk multisig — `bip388` SUCCEEDS, unchanged.**
+    `format_bip388_wallet_policy`'s `Cosigner(idx)` arm (`wallet_export/bip388.rs:115-127`) already
+    emits `tr(@{idx}/**,{multi_a|sortedmulti_a}(k,{leaf}))` faithfully. A global
+    `tap_internal_key != Some(Nums)` refusal would WRONGLY reject this legitimate faithful payload —
+    so bip388 for the Template path is **NOT** refused. (This was the r1-fold defect R0-r2 I1 caught.)
+  - **General route-around arm (`template == None`) — taproot `bip388` REFUSED.** Add an explicit guard
+    INSIDE the `None` branch of `build_multisig_import_payload` (`cmd/restore.rs:832-844`), alongside
+    the existing `green` `P2tr` refusal (`:836-842`), gated on
+    `matches!(script_type, WalletScriptType::P2tr | WalletScriptType::P2trMulti)` (any taproot
+    reconstructed via the route-around), returning `ToolkitError::BadInput` (**exit 1** — consistent
+    with the adjacent green refusal AND the prior incidental bip388 refusal). The guard is
+    internal-key-agnostic, so it **unifies** NUMS + non-NUMS: today the NUMS general-tr refuses bip388
+    *incidentally* via "x-only `Single` has no `/<0;1>/*` suffix" (`general_tr_format_bip388_refused`,
+    `cli_restore_taproot.rs:290`, exit 1, msg `/<0;1>/*`); the explicit guard makes that intentional
+    AND closes the non-NUMS hole (a non-NUMS trunk IS a multipath XPub, so the incidental mechanism
+    never fires for it). Exit code stays 1; the existing test's message assertion updates (§7).
+  - **`green`** already refuses taproot in the `None` branch — `P2tr` via the explicit `:836-842`
+    guard, `P2trMulti` via green.rs's own `is_multisig` gate. CONFIRMED still fires; no new green guard.
+  - **`descriptor` / `bitcoin-core`** emit faithfully for both arms (watch-only, descriptor-driven).
+  - **Confirmed (R0-r2 m2, was an open "R0 to confirm"):** `script_type_from_descriptor`
+    (`wallet_export/mod.rs:229-242`) classifies a non-NUMS general-tr (no `multi_a(` substring) as
+    `P2tr` and a `multi_a`-bearing general fragment as `P2trMulti`; the non-NUMS distinct-trunk
+    multisig goes through the Template path (`script_type_from_template`), not this classifier — so no
+    `--format` silently emits a non-NUMS taproot payload.
 
 ## §7 Testing
 **Success cases (via the bundle→restore round-trip — `bundle --descriptor` accepts these, verified):**
@@ -146,20 +161,29 @@ computation.)
 **Refusal — `@-in-both`, RED-proven (R0-r1 I1 — construction mechanism is load-bearing):**
 - `bundle --descriptor` REJECTS `@-in-both` at intake (verified: `tr(B, multi_a(2,B,C))` →
   "BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)"). So the
-  refusal test CANNOT go through `bundle`. **Construct the `@-in-both` md1 DIRECTLY** via
-  `md_codec::tree` (a `Body::Tr { is_nums:false, key_index: i, tree: <Tag::MultiA Body::MultiKeys{ indices including i }> }`)
-  → `md_codec::encode_payload` → `md_codec::chunk::split`, then feed the chunks to `restore --md1`
-  (the suite already builds md1 directly — pattern: `cli_standalone_bijections.rs`). Assert
-  `ModeViolation` + the `restore-non-nums-tr-internal-key-also-in-leaf` slug.
+  refusal test CANNOT go through `bundle`. **Construct the `@-in-both` md1 DIRECTLY** using md-codec's
+  public tree types (`md_codec::tree::Body::Tr { is_nums:false, key_index: i, .. }` with a `Tag::MultiA`
+  leaf carrying `Body::MultiKeys { indices }` where `i ∈ indices`), then `md_codec::chunk::split(&descriptor)`
+  (which internally encodes the payload) to get the chunks, and feed them to `restore --md1`. (R0-r2 m1:
+  this is a NEW direct-construction test pattern — md_codec's `tree::Node`/`tree::Body` fields are public,
+  confirmed — NOT the `chunk::reassemble`-on-bundle-output pattern of `cli_standalone_bijections.rs`.)
+  Assert `ModeViolation` (exit 2) + the `restore-non-nums-tr-internal-key-also-in-leaf` slug.
 - **RED-proof:** with the §4 structural guard removed, this same crafted card reconstructs to
   `multi_a(k, {leaf \ trunk})` (silently dropping the trunk key) AND passes the Display-fidelity guard
   — demonstrating the structural guard's necessity (the fidelity guard cannot catch it, §4).
 
-**Format-output (R0-r1 I2):**
-- A non-NUMS general-tr (and non-NUMS multisig) with `--format bip388` → **refused** (explicit guard,
-  §6); `--format descriptor`/`bitcoin-core` → emit faithfully; `--format green` → refused. One cell
-  each pinning the refusals (so a future regression that silently emits a non-NUMS bip388 payload goes
-  RED).
+**Format-output (R0-r1 I2; CORRECTED R0-r2 I2 — multisig bip388 SUCCEEDS, do NOT group it with general-tr):**
+- **Non-NUMS general-tr** `--format bip388` → **refused** (the explicit `None`-branch taproot guard,
+  §6), exit 1; `--format green` → refused (exit 1); `--format descriptor`/`bitcoin-core` → faithful.
+- **Non-NUMS distinct-trunk multisig** `tr(D,multi_a(2,B,C))` `--format bip388` → **SUCCEEDS** (Template
+  path + `bip388.rs:115-127`); golden-pin the emitted `tr(@idx/**,multi_a(2,…))` wallet policy.
+  `--format descriptor`/`bitcoin-core` → also faithful.
+- **Update existing test (R0-r2 I2):** `general_tr_format_bip388_refused` (`cli_restore_taproot.rs:290`)
+  pins the NUMS general-tr bip388 refusal at exit 1 + msg `/<0;1>/*`. The unified explicit guard keeps
+  exit 1 but changes the message → update the assertion to the new (internal-key-agnostic) refusal
+  message. (NUMS stays refused; only the message text moves.)
+- One cell each pinning the refusals (so a future regression that silently emits a taproot bip388
+  payload from the route-around arm goes RED).
 
 **Other:**
 - Depth-≥2 non-NUMS → still refused.
@@ -193,7 +217,25 @@ computation.)
   **I2** (§6: explicit non-NUMS `bip388`/green refusal — the NUMS-`Single` refusal doesn't fire for a
   multipath trunk), **m1–m5** (§5/§7/§8).
 
-R0 round 2 must re-confirm the folds and reach 0C/0I before any code.
+**R0 round 2 (verdict YELLOW → folded; review `design/agent-reports/restore-non-nums-taproot-r0-round2-review.md`):**
+R0-r2 re-confirmed every r1 fold landed AND the §4 funds-safety guard still holds (index check
+necessary+sufficient; the Display-fidelity guard cannot catch the Template wrong-leaf; the route-around
+arm is unaffected). It found **2 NEW Important defects introduced BY the r1 I2 fold** — both now folded:
+- **Folded R0-r2 I1** (§6): the r1 bip388 refusal was over-broad. A global `tap_internal_key != Some(Nums)`
+  check would WRONGLY refuse the Template-path non-NUMS multisig, whose `Cosigner(idx)` arm at
+  `bip388.rs:115-127` emits a faithful bip388 wallet policy. Corrected: the explicit bip388 refusal lives
+  ONLY in the general route-around (`template == None`) branch, gated on taproot `script_type`
+  (`P2tr | P2trMulti`), via `BadInput` (exit 1) — leaving the Template path's faithful bip388 emission
+  untouched, and unifying the (previously incidental) NUMS general-tr refusal.
+- **Folded R0-r2 I2** (§7): the format-output test wrongly grouped non-NUMS multisig with general-tr as a
+  bip388 refusal. Corrected to: non-NUMS-multisig-bip388-**SUCCEEDS** (golden) + non-NUMS-general-tr-bip388-
+  **refused**, plus the `general_tr_format_bip388_refused` (`cli_restore_taproot.rs:290`) NUMS
+  message-assertion update (exit 1 unchanged; message text moves).
+- **Folded R0-r2 m1** (§7: the `@-in-both` direct construction is a NEW test pattern via md_codec's public
+  tree fields, NOT the `cli_standalone_bijections.rs` reassemble pattern), **m2** (§6:
+  `script_type_from_descriptor` classification confirmed; the open "R0 to confirm" action item resolved).
+
+R0 round 3 must re-confirm the round-2 folds and reach 0C/0I before any code.
 
 **Non-goals:** the `@-in-both` shape (deferred, §4); depth-≥2 taptrees (upstream-blocked); any
 md-codec wire change; from-seed `bundle` emitting non-NUMS (it intentionally emits NUMS); supporting
