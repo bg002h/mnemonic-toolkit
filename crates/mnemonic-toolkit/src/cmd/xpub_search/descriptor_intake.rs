@@ -137,7 +137,7 @@ fn intake_from_shape(
 ) -> Result<DescriptorIntake, ToolkitError> {
     match shape {
         DescriptorShape::Bip388Json => parse_bip388_json(payload, network, account, stderr),
-        DescriptorShape::Md1 => parse_md1(payload),
+        DescriptorShape::Md1 => parse_md1(payload, stderr),
         DescriptorShape::LiteralXpub => parse_literal_xpub(payload, network, account, stderr),
     }
 }
@@ -207,7 +207,10 @@ fn parse_bip388_json(
 /// `--descriptor-from md1=-` stdin sentinel (each chunk on its own line,
 /// mirrors `repair.rs:7` precedent). Inline `--descriptor <md1...>` is
 /// single-chunk only; payloads with multiple tokens are refused.
-fn parse_md1(payload: &str) -> Result<DescriptorIntake, ToolkitError> {
+fn parse_md1(
+    payload: &str,
+    stderr: &mut impl std::io::Write,
+) -> Result<DescriptorIntake, ToolkitError> {
     // Split on newlines only (stdin one-chunk-per-line shape). Inline
     // single-chunk arrives as a single string with no newlines.
     let chunks: Vec<&str> = payload
@@ -225,6 +228,11 @@ fn parse_md1(payload: &str) -> Result<DescriptorIntake, ToolkitError> {
             "md1 descriptor declares zero cosigners (n=0)".into(),
         ));
     }
+    // Non-blocking consensus-masked older() advisory (Adapter A, A-raw-card:
+    // bit-31 REACHABLE — older_advisories_tree has NO debug_assert).
+    // SPEC_older_timelock_advisory §4 / PLAN Task 10 3c.
+    let adv = crate::timelock_advisory::older_advisories_tree(&desc);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
     // Per-slot path resolver. Mirrors `verify_bundle::md_path_for`.
     let md_path_for = |idx: usize| -> Option<md_codec::origin_path::OriginPath> {
         if let Some(overrides) = &desc.tlv.origin_path_overrides {
@@ -288,6 +296,10 @@ fn parse_literal_xpub(
 ) -> Result<DescriptorIntake, ToolkitError> {
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(descriptor_str)
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
+    // Non-blocking consensus-masked older() advisory (Adapter B; post-from_str,
+    // bit-31 unreachable). SPEC_older_timelock_advisory §4 / PLAN Task 10 3a.
+    let adv = crate::timelock_advisory::older_advisories_descriptor(&parsed);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
     // For a top-level `Tr` descriptor, the internal key may be the NUMS
     // sentinel (a `Single(SinglePubKey::XOnly(<NUMS>))`). We mark that
     // cosigner `is_nums = true`; other DescriptorPublicKey::Single entries
