@@ -872,8 +872,11 @@ fn build_multisig_import_payload(
     // wallet policies require the multipath suffix) — and refuses a general-tr
     // card too (the NUMS internal key is a bare x-only `Single` with no
     // multipath suffix). Template-requiring k-of-n formats
-    // (coldcard/jade/electrum/sparrow/specter) refuse via their existing
-    // `template`/`is_multisig` branches. `green` needs the EXPLICIT refusal
+    // (coldcard/jade/electrum/sparrow) refuse via their existing
+    // `template`/`is_multisig` branches; `specter` refuses via its
+    // `collect_missing → MissingField::WalletName` path (the general arm's
+    // default `"imported-descriptor"` name is rejected), not a template gate.
+    // `green` needs the EXPLICIT refusal
     // below for the general-tr arm (R0 I1, v0.55.1):
     // `script_type_from_descriptor` classifies a general tr without a
     // `multi_a(` substring as `P2tr` — taproot SINGLESIG — so green's

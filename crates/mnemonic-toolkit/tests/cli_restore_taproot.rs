@@ -651,7 +651,9 @@ fn non_nums_format_descriptor_and_bitcoin_core_emit() {
 }
 
 /// (N8) Non-NUMS general-tr `--format green` → refused (existing P2tr green
-/// gate in the `None` branch).
+/// gate in the `None` branch). Asserts the exact exit code + slug, matching the
+/// NUMS green-refusal counterpart `general_tr_format_green_refused` (same code
+/// path) so the two stay consistent (R0 I1).
 #[test]
 fn non_nums_general_tr_format_green_refused() {
     let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
@@ -663,5 +665,26 @@ fn non_nums_general_tr_format_green_refused() {
         .unwrap()
         .args(&a)
         .assert()
-        .failure();
+        .code(1)
+        .stderr(predicate::str::contains("singlesig-only"));
+}
+
+/// (N9) Non-NUMS general-tr: all template-requiring / non-descriptor formats
+/// refuse (route-around taproot has no named-template form). Pins the
+/// should-refuse matrix so a future emitter change that dropped a template
+/// guard would be caught (funds-safety: no silent wrong-wallet import).
+#[test]
+fn non_nums_general_tr_template_formats_all_refuse() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    for fmt in ["bsms", "coldcard", "jade", "electrum", "sparrow", "specter"] {
+        let mut a = restore_args(&md1);
+        a.push("--format".into());
+        a.push(fmt.into());
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&a)
+            .assert()
+            .failure();
+    }
 }
