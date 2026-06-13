@@ -166,4 +166,6 @@ pub mod synthesize;
 #[cfg(fuzzing)]
 pub mod template;
 #[cfg(fuzzing)]
+pub mod timelock_advisory;
+#[cfg(fuzzing)]
 pub mod wallet_export;
