@@ -47,6 +47,14 @@ reference tracks the current release.
 Synthesise a 3-card engraving bundle from a phrase, entropy, or
 xpub. Inputs are slotted via `--slot @N.<subkey>=<value>`, repeating.
 
+### Consensus-masked relative timelocks {#consensus-masked-relative-timelocks}
+
+If a descriptor's `older(N)` value is BIP-68 consensus-masked (stray bits,
+or a zero 16-bit value such as `older(65536)`), this command prints a
+non-blocking advisory to stderr noting the effective (weaker) value. The
+command still succeeds — it never refuses to back up or inspect an
+already-deployed wallet.
+
 ### Synopsis
 
 ```sh
@@ -520,6 +528,9 @@ default per the inference rule above.
 Re-derive expected card content from a seed (or from a partial set
 of cards) and report per-card pass/fail plus the overall verdict.
 
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory this command emits on intake.
+
 ### Synopsis
 
 ```sh
@@ -688,6 +699,9 @@ English sources and `--from entropy=…` continue to emit the classic
 Emit watch-only wallet artifacts for Bitcoin Core, BIP-388, Coldcard,
 Blockstream Jade, Sparrow, or Specter.
 
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory this command emits on intake.
+
 ### Synopsis
 
 ```sh
@@ -742,6 +756,9 @@ emits xpub / fingerprint / addresses / descriptor only and NEVER any
 private material (`xprv` / WIF). It does NOT sign: the toolkit stops at
 key material and read-only derivation (see
 [Watch-only operation](../30-workflows/34-watch-only.md)).
+
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory `restore --md1` emits on intake.
 
 **Two modes.** *Single-sig* (the default, `--from <seed>`) emits the
 BIP-44/49/84/86 descriptors. *Multisig-cosigner* (v0.44.0, `--md1 <card>`)
@@ -1024,6 +1041,9 @@ foreign wallet export (BSMS Round-2 per BIP-129, or Bitcoin Core's
 bundle, and round-trips it back through the toolkit canonicalizer
 to surface byte-exact vs semantic-only equivalence (see [foreign
 wallet formats](#foreign-wallet-formats) for the format taxonomy).
+
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory this command emits on intake.
 
 v0.26.0 ships two source formats — `bsms` and `bitcoin-core` —
 selectable via `--format` or auto-detected by sniff. Both formats
@@ -3165,6 +3185,10 @@ Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — 
 - **`address-of-xpub`** — given xpub + address, scan child indices to a gap limit.
 - **`passphrase-of-xpub`** — given seed + passphrase + target xpub, verify the passphrase produces the xpub at a standard path.
 
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory the descriptor-bearing modes
+(`account-of-descriptor`) emit on intake.
+
 ### `mnemonic xpub-search path-of-xpub`
 
 Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set.
@@ -3699,6 +3723,9 @@ key). For every minimal satisfying assignment of `M` — every distinct
 "spending condition" — emit one row showing the witness-bytes cost
 under each wrapper in virtual bytes, in sats at the user-supplied
 feerate, and the `Δ` between the two.
+
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory this command emits on intake.
 
 Cost is computed via rust-miniscript v13's `Descriptor::plan(...)`
 API; `Plan::witness_size()` returns the full witness-data byte count

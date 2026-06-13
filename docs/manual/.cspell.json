@@ -93,6 +93,7 @@
     "sigless",
     "timelock",
     "timelocked",
+    "timelocks",
     "kofn",
     "hashlock",
     "Pubkeys",
