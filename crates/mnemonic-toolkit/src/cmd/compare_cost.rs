@@ -64,10 +64,11 @@ fn parse_max_conditions(s: &str) -> Result<usize, String> {
     Ok(v)
 }
 
-pub fn run<R: Read, W: Write>(
+pub fn run<R: Read, W: Write, E: Write>(
     args: &CompareCostArgs,
     stdin: &mut R,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let input = match (&args.miniscript, &args.descriptor) {
         (Some(m), None) => InputForm::Miniscript(m.clone()),
@@ -95,7 +96,7 @@ pub fn run<R: Read, W: Write>(
         max_conditions: args.max_conditions,
         json: args.json,
     };
-    cost::run_compare_cost(&engine_args, stdout)
+    cost::run_compare_cost(&engine_args, stdout, stderr)
 }
 
 /// Read the first non-blank line from stdin and classify it as either a

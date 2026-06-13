@@ -196,7 +196,9 @@ fn main() -> ExitCode {
         Command::Inspect(args) => {
             cmd::inspect::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
-        Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout).map(|_| 0),
+        Command::CompareCost(args) => {
+            cmd::compare_cost::run(args, stdin, stdout, stderr).map(|_| 0)
+        }
         Command::VerifyMessage(args) => cmd::verify_message::run(args, stdin, stdout, stderr),
         Command::XpubSearch(args) => {
             cmd::xpub_search::run(args, stdin, stdout, stderr, cli.no_auto_repair)

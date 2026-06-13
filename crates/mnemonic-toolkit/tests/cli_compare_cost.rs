@@ -1270,3 +1270,106 @@ fn help_renders() {
         .stdout(predicate::str::contains("--max-conditions"))
         .stdout(predicate::str::contains("--json"));
 }
+
+// ── consensus-masked older() advisory on stderr (both invocations) ───────────
+// SPEC §4: compare-cost is an Adapter-B surface. A masked older() operand
+// (a bit outside the BIP-68 {low-16, bit-22} window, or a zero 16-bit value)
+// emits a non-fatal advisory on stderr, exit 0, for BOTH --descriptor and
+// --miniscript (both funnel through one Translated → one older_advisories_ms
+// hook). older(65536) = 0x10000: stray bit-16 set, low-16 value 0 → masked.
+
+const MASKED_OLDER_ADVISORY: &str = "advisory: older(65536) is consensus-masked";
+
+#[test]
+fn masked_older_emits_advisory_descriptor() {
+    // --descriptor path needs concrete keys (abstract labels are --miniscript
+    // only). wsh(andor(pk(A), older(65536), and_v(v:pk(B), older(2016)))):
+    // older(65536) is masked; older(2016) is clean → exactly one advisory.
+    let desc = format!(
+        "wsh(andor(pk({KEY_A}),older(65536),and_v(v:pk({KEY_B}),older(2016))))"
+    );
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "masked older() is an advisory, not fatal; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(MASKED_OLDER_ADVISORY),
+        "expected masked-older advisory on stderr; got: {stderr}"
+    );
+}
+
+#[test]
+fn masked_older_emits_advisory_miniscript() {
+    // --miniscript path with abstract labels K0/K1; same andor shape.
+    let out = bin()
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016)))",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "masked older() is an advisory, not fatal; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(MASKED_OLDER_ADVISORY),
+        "expected masked-older advisory on stderr; got: {stderr}"
+    );
+}
+
+#[test]
+fn clean_older_emits_no_advisory_descriptor() {
+    // older(2016) is a valid relative block lock (within low-16, no stray
+    // bits) → NO advisory on stderr.
+    let desc = format!("wsh(and_v(v:pk({KEY_A}),older(2016)))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("consensus-masked"),
+        "clean older() must not emit a masked advisory; got: {stderr}"
+    );
+}
+
+#[test]
+fn clean_older_emits_no_advisory_miniscript() {
+    let out = bin()
+        .args([
+            "compare-cost",
+            "--miniscript",
+            "and_v(v:pk(K0),older(2016))",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("consensus-masked"),
+        "clean older() must not emit a masked advisory; got: {stderr}"
+    );
+}

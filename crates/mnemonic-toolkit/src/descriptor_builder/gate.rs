@@ -1180,6 +1180,7 @@ mod tests {
                     json: false,
                 },
                 &mut sink,
+                &mut Vec::<u8>::new(),
             )
         };
         assert!(run(32).is_ok(), "enumerate raw must be ≤ 32");
@@ -1236,6 +1237,7 @@ mod tests {
                     json: false,
                 },
                 &mut sink,
+                &mut Vec::<u8>::new(),
             )
         };
         assert!(run(4).is_ok());
@@ -1297,6 +1299,7 @@ mod tests {
                     json: false,
                 },
                 &mut sink,
+                &mut Vec::<u8>::new(),
             )
         };
         assert!(run(8).is_ok(), "enumerate raw must be ≤ 8");

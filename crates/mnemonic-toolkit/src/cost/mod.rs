@@ -120,9 +120,10 @@ pub struct CompareCostArgs {
 
 /// Drive the comparison end-to-end and write either the plaintext table or
 /// the JSON envelope to `stdout`. Errors propagate as `ToolkitError`.
-pub fn run_compare_cost<W: std::io::Write>(
+pub fn run_compare_cost<W: std::io::Write, E: std::io::Write>(
     args: &CompareCostArgs,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // 1. Translate user input → Segwitv0 + Tap miniscripts.
     let (translated, advisory) = match &args.input {
@@ -134,6 +135,11 @@ pub fn run_compare_cost<W: std::io::Write>(
             strip::translate_descriptor(s).map_err(ToolkitError::CompareCost)?
         }
     };
+    // Adapter B hook (SPEC §3.2 / §4): emit a non-fatal advisory for any
+    // consensus-masked older() operand. One hook on translated.segv0 covers
+    // BOTH --descriptor and --miniscript (both produce a single Translated).
+    let adv = crate::timelock_advisory::older_advisories_ms(&translated.segv0);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
     let original_input = match &args.input {
         InputForm::Miniscript(s) => s.as_str(),
         InputForm::Descriptor(s) => s.as_str(),

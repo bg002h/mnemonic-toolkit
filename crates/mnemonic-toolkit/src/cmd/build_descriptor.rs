@@ -497,6 +497,10 @@ fn emit_human<W: Write>(
     writeln!(stdout, "cost preview (wsh vs tr, per spending condition):")
         .map_err(ToolkitError::Io)?;
     let single = single_path_descriptor(vp)?;
+    // build-descriptor's gate already refused masked older() upstream
+    // (gate::validate_with_allow, step-1 field-validate) before cost preview
+    // runs, so the older() advisory is unreachable here; discard its sink.
+    let mut _discard_advisory = std::io::sink();
     cost::run_compare_cost(
         &CompareCostArgs {
             input: InputForm::Descriptor(single),
@@ -505,6 +509,7 @@ fn emit_human<W: Write>(
             json: false,
         },
         stdout,
+        &mut _discard_advisory,
     )?;
     Ok(())
 }
@@ -527,6 +532,10 @@ fn single_path_descriptor(vp: &ValidatedPolicy) -> Result<String, ToolkitError> 
 fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
     let single = single_path_descriptor(vp)?;
     let mut buf: Vec<u8> = Vec::new();
+    // build-descriptor's gate already refused masked older() upstream
+    // (gate::validate_with_allow, step-1 field-validate) before cost preview
+    // runs, so the older() advisory is unreachable here; discard its sink.
+    let mut _discard_advisory = std::io::sink();
     cost::run_compare_cost(
         &CompareCostArgs {
             input: InputForm::Descriptor(single),
@@ -535,6 +544,7 @@ fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
             json: true,
         },
         &mut buf,
+        &mut _discard_advisory,
     )?;
     serde_json::from_slice(&buf)
         .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("cost preview parse: {e}")))
