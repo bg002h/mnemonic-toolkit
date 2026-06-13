@@ -791,3 +791,94 @@ fn bundle_import_json_seeded_ms1_self_check_passes() {
         .assert()
         .success();
 }
+
+// ============================================================================
+// Consensus-masked older() advisory on `bundle --import-json`
+// (SPEC_older_timelock_advisory, Task 5 — Adapter-A hook, Site 2).
+//
+// Builds an envelope whose `bundle.descriptor` carries an `older()` operand by
+// rewrapping the canonical 2-of-3 fixture's cosigner keys in
+// `wsh(and_v(v:multi(2,...),older(N)))` and re-checksumming. The import-json
+// site re-parses this descriptor into an MdDescriptor before emitting, so the
+// Site-2 hook must surface the consensus-masked advisory on stderr (exit 0).
+// ============================================================================
+
+/// Append a BIP-380 descriptor checksum to `body` (`<body>#<csum>`).
+fn with_descriptor_checksum(body: &str) -> String {
+    use miniscript::descriptor::checksum::Engine as ChecksumEngine;
+    let mut e = ChecksumEngine::new();
+    e.input(body).expect("ascii");
+    format!("{body}#{}", e.checksum())
+}
+
+/// Read the canonical 2-of-3 envelope fixture and replace its
+/// `bundle.descriptor` with a `wsh(and_v(v:multi(2, <fixture cosigner keys>),
+/// older(<operand>)))` descriptor (re-checksummed). The 3 cosigner keys are
+/// lifted verbatim from the fixture so the cosigner-count stays consistent.
+fn masked_older_envelope_json(operand: u32) -> String {
+    let raw = std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap();
+    let mut env: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let orig = env[0]["bundle"]["descriptor"].as_str().unwrap().to_string();
+    // Extract `2,<k1>,<k2>,<k3>` from `sh(multi(2,...))#csum`.
+    let inner = orig
+        .strip_prefix("sh(multi(")
+        .expect("fixture descriptor is sh(multi(...))");
+    let inner = inner.rsplit_once(")#").map(|(a, _)| a).unwrap_or(inner);
+    let inner = inner.strip_suffix(')').unwrap_or(inner);
+    let body = format!("wsh(and_v(v:multi({inner}),older({operand})))");
+    let descriptor = with_descriptor_checksum(&body);
+    env[0]["bundle"]["descriptor"] = serde_json::Value::String(descriptor);
+    serde_json::to_string(&env).unwrap()
+}
+
+#[test]
+fn bundle_import_json_masked_older_emits_advisory() {
+    let envelope_json = masked_older_envelope_json(65536);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("masked-older.json");
+    std::fs::write(&p, &envelope_json).unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            p.to_str().unwrap(),
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("advisory: older(65536) is consensus-masked"),
+        "import-json masked older() must emit the consensus-masked advisory; got stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn bundle_import_json_clean_older_emits_no_advisory() {
+    // older(2016) is a valid 16-bit relative timelock → NO advisory. Guards
+    // against the Site-2 hook firing on clean operands.
+    let envelope_json = masked_older_envelope_json(2016);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let p = tmpdir.path().join("clean-older.json");
+    std::fs::write(&p, &envelope_json).unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            p.to_str().unwrap(),
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("advisory: older"),
+        "clean older(2016) must NOT emit an older() advisory; got stderr:\n{stderr}"
+    );
+}

@@ -1661,6 +1661,12 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // when no `@N` received the default (defaulted_indices is empty).
     emit_default_path_notice(stderr, &defaulted_indices, args.network, args.account)?;
 
+    // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 1) — surface
+    // BIP-68 consensus-masked older() operands on the finalized MdDescriptor
+    // before the bundle is emitted. Non-blocking (best-effort stderr).
+    let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
+
     emit_unified(
         args,
         &bundle,
@@ -1951,6 +1957,12 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         args.privacy_preserving,
         run_language_import,
     )?;
+
+    // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 2) — surface
+    // BIP-68 consensus-masked older() operands on the re-parsed import-json
+    // MdDescriptor before the bundle is emitted. Non-blocking (best-effort).
+    let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
 
     // Determine BundleMode from resolved_slots state.
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());
