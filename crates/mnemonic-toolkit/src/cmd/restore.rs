@@ -850,9 +850,10 @@ fn ensure_taptree_depth_le_one(inner: &md_codec::tree::Node) -> Result<(), Toolk
 /// `k` from the md1 is authoritative, and `sparrow.rs` `collect_missing`
 /// refuses a multisig template (`MissingField::Threshold`) when it is false.
 ///
-/// `taproot_internal_key` is `Some(Nums)` for a taproot multisig md1 (threaded
-/// from the §3 classification), `None` for wsh/sh-wsh — so the `--format`
-/// payload's emitted descriptor carries the correct internal key. (R0 v2 I2.)
+/// `taproot_internal_key` is `Some(Nums)` or `Some(Cosigner(idx))` for a
+/// taproot md1 (threaded from the §3 classification), `None` for wsh/sh-wsh —
+/// so the `--format` payload's emitted descriptor carries the correct internal
+/// key. (Non-NUMS real-trunk support: v0.55.3.)
 #[allow(clippy::too_many_arguments)]
 fn build_multisig_import_payload(
     format: CliExportFormat,
