@@ -259,29 +259,37 @@ fn validate_fields(node: &PolicyNode, path: &str, out: &mut Vec<Diagnostic>) {
             // bit 22 (0x400000) selects 512-second units; consensus masks the
             // operand to 0x0040FFFF, so any other bit (incl. the bit-31 disable
             // flag) is silently dropped and a zero 16-bit value is a no-op lock.
-            // Reject the lot — on an engraving surface a silently-weakened
-            // timelock is a funds-safety bug, not a parse curiosity.
-            if (*n & !0x0040_FFFFu32) != 0 || (*n & 0x0000_FFFFu32) == 0 {
-                // The consequence clause MUST branch on the bit-31 disable flag:
-                // a CSV operand with bit 31 set is a no-op (no timelock at all),
-                // NOT a masked value — claiming "effective value of N" there would
-                // be consensus-FALSE.
-                let consequence = if *n & 0x8000_0000 != 0 {
-                    "the bit-31 disable flag is set, so consensus would treat this \
-                     CHECKSEQUENCEVERIFY as a no-op — no relative timelock at all"
-                        .to_string()
-                } else {
-                    let unit = if *n & 0x0040_0000 != 0 {
-                        " (512-second units)"
-                    } else {
-                        " blocks"
-                    };
-                    format!(
-                        "consensus would silently mask this to an effective value of {}{}, \
-                         weakening or nullifying the timelock",
-                        *n & 0x0000_FFFF,
-                        unit
-                    )
+            // This is the JSON-IR AUTHORING gate (build-descriptor): a masked
+            // operand is refused outright, because authoring a silently-weakened
+            // timelock is a funds-safety bug, not a parse curiosity. The
+            // intake/round-trip surfaces deliberately take the OTHER side of this
+            // split — they emit a non-blocking advisory instead of refusing (an
+            // already-deployed wallet must still be backed up / inspected). Both
+            // sides share ONE source of the bit-math: `older_consensus_masked`.
+            if let Some(consequence) = crate::timelock_advisory::older_consensus_masked(*n) {
+                use crate::timelock_advisory::{TimelockMaskConsequence, TimelockUnit};
+                // The consequence clause branches on the bit-31 disable flag: a
+                // CSV operand with bit 31 set is a no-op (no timelock at all), NOT
+                // a masked value — claiming "effective value of N" there would be
+                // consensus-FALSE. Wording is byte-identical to the former inline
+                // form (pinned by `gate_still_refuses_masked_older_byte_identical`).
+                let consequence = match consequence {
+                    TimelockMaskConsequence::Bit31Disabled => {
+                        "the bit-31 disable flag is set, so consensus would treat this \
+                         CHECKSEQUENCEVERIFY as a no-op — no relative timelock at all"
+                            .to_string()
+                    }
+                    TimelockMaskConsequence::Masked { effective, unit } => {
+                        let unit = match unit {
+                            TimelockUnit::Seconds512 => " (512-second units)",
+                            TimelockUnit::Blocks => " blocks",
+                        };
+                        format!(
+                            "consensus would silently mask this to an effective value of {}{}, \
+                             weakening or nullifying the timelock",
+                            effective, unit
+                        )
+                    }
                 };
                 out.push(field_diag(
                     path,
@@ -981,6 +989,27 @@ mod tests {
             !nop.iter().any(|x| x.message.contains("effective value")),
             "older(0x80000090) must NOT claim an effective masked value (it is a no-op)"
         );
+    }
+
+    #[test]
+    fn gate_still_refuses_masked_older_byte_identical() {
+        // build-descriptor must STILL refuse older(65536) with the exact pre-extraction
+        // diagnostic (pins zero drift from sourcing the predicate from timelock_advisory).
+        // Uses the EXISTING gate-test helpers `older_tree(n)` + `field_diags`; cf. the
+        // existing `rejects_masked_older_timelocks` test. `Diagnostic` has no `Display`,
+        // so concatenate `.message` (the established idiom) to pin the EXACT emitted text.
+        let fd = field_diags(&older_tree(65536));
+        let msg = fd.iter().map(|d| d.message.clone()).collect::<String>();
+        assert!(msg.contains("older(N) encodes a BIP-68 relative timelock"));
+        assert!(msg.contains("got 65536 (0x00010000)"));
+        assert!(
+            msg.contains("consensus would silently mask this to an effective value of 0 blocks")
+        );
+        // Bit-31 no-op branch (IR path reaches bit-31): older(0x80000090) must say "no-op", not a value.
+        let nop = field_diags(&older_tree(0x8000_0090));
+        let nopmsg = nop.iter().map(|d| d.message.clone()).collect::<String>();
+        assert!(nopmsg.contains("no relative timelock at all"));
+        assert!(!nopmsg.contains("effective value"));
     }
 
     #[test]
