@@ -474,7 +474,7 @@ fn adapter_b_descriptor_wsh_collects_masked_only() {
 
 > `adapter_a` walks a hand-built `Node` via `older_advisories_node` — no `md_codec::Descriptor` literal, so no `PathDecl`/`UseSitePath`/`TlvSection` construction. The Adapter-B test's key-type `bitcoin::PublicKey` avoids xpub/derivation; any `MiniscriptKey` works.
 
-- [ ] **Step 2: Run to verify it fails/compiles-then-asserts**
+- [ ] **Step 2: Run to verify it passes (adapters already written in Task 1)**
 
 Run: `cargo test --bin mnemonic timelock_advisory::tests::adapter`
 Expected: PASS. (`adapter_a` walks a directly-constructed `Node` via `older_advisories_node` — no `md_codec::Descriptor`/`PathDecl`/`TlvSection` field construction. `adapter_b` parses a real descriptor string.)
@@ -536,7 +536,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
     let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
     crate::timelock_advisory::emit_advisories(&adv, stderr);
 ```
-Site 2 — after `synthesize_descriptor(...)` (`~:1953`), before the `emit_unified` at `~:1978`:
+Site 2 — after `synthesize_descriptor(...)` (`~:1953`), before the `BundleMode` derivation + `emit_unified` (`~:1978`); `descriptor` is in scope throughout:
 ```rust
     let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
     crate::timelock_advisory::emit_advisories(&adv, stderr);
