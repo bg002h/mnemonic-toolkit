@@ -285,12 +285,18 @@ fn at_in_both_tr_refuses_structurally() {
 }
 ```
 
-Write `build_at_in_both_descriptor()` using md_codec's actual public constructors (read the crate first). It must set: `tree = Node { tag: Tag::Tr, body: Body::Tr { is_nums: false, key_index: 0, tree: Some(Box::new(Node { tag: Tag::MultiA, body: Body::MultiKeys { k: 2, indices: vec![0, 1] } })) } }` and `tlv.pubkeys = Some(vec![<two valid 65-byte [chaincode‖pubkey] entries>])` (reuse the byte layout the suite already uses for direct md1 construction; derive valid bytes from K0/K1 via md_codec's expand, or use the codec's own fixtures).
+Write `build_at_in_both_descriptor()` using md_codec's actual public constructors (read the crate first). **`md_codec::Descriptor` has FIVE public fields** (`encode.rs:17-28`) — ALL must be set or it won't compile: `n: u8`, `path_decl: PathDecl`, `use_site_path: UseSitePath`, `tree: Node`, `tlv: TlvSection`. Set:
+- `n: 2` (two placeholders).
+- `tree = Node { tag: Tag::Tr, body: Body::Tr { is_nums: false, key_index: 0, tree: Some(Box::new(Node { tag: Tag::MultiA, body: Body::MultiKeys { k: 2, indices: vec![0, 1] } })) } }` — the `@-in-both` shape (trunk `@0` ∈ leaf `[0,1]`).
+- `tlv.pubkeys = Some(vec![<two valid 65-byte [chaincode‖pubkey] entries>])` (non-empty so `is_wallet_policy()` passes — see Step-1 note).
+- `path_decl` + `use_site_path`: read `tree.rs`/`encode.rs`/the existing direct-construction tests for the canonical standard-multipath values (e.g. a shared origin + `<0;1>/*` use-site); reuse whatever the suite already constructs for a wallet-policy md1.
+
+The `@-in-both` payload DOES encode cleanly: `validate_placeholder_usage` registers `@0` (Tr body) first, then the leaf's `[0,1]` (skips the seen `0`, adds `1`) → `first_occurrences=[0,1]`, canonical, passes. (R0-confirmed.) Derive the two 65-byte pubkey entries from K0/K1 via md_codec's expand, or reuse the codec's own fixtures.
 
 - [ ] **Step 2: Run — verify the RED-proof (currently reconstructs WRONG, no refusal)**
 
 Run: `cargo test --manifest-path crates/mnemonic-toolkit/Cargo.toml --test cli_restore_taproot at_in_both_ -- --nocapture`
-Expected: FAIL — without the guard, restore reconstructs `multi_a(2, @1)` (dropping @0) and exits 0 (or refuses for an unrelated reason). The `.code(2)` + slug assertion fails. This FAILURE IS THE RED-PROOF that the structural guard is necessary (the Display-fidelity guard does not catch it). Capture the wrong stdout in `--nocapture` and note it in the commit.
+Expected: FAIL — without the guard, Task 1's code returns `Template(TrMultiA, Cosigner(0))`, reconstructs `tr(<@0 seg>, multi_a(2, <@1 seg>))` (a different, 1-cosigner-dropped multisig), and **exits 0** (success, wrong output). The test's `.code(2)` assertion therefore fails — that IS the RED-proof (the Display-fidelity guard self-prints the wrong-but-consistent descriptor, so only the structural classify-time guard can catch it). **CONFIRM the exit code is exactly 0** (a wrong-but-successful reconstruction), NOT some other exit-2 refusal — an exit-2 failure for an unrelated reason would falsely "pass" the RED. Capture the wrong stdout (`--nocapture`) and note it in the commit body.
 
 - [ ] **Step 3: Implement the guard in the Template arms**
 
@@ -442,7 +448,7 @@ Update the existing NUMS test `general_tr_format_bip388_refused` (`:290-302`): t
 - [ ] **Step 2: Run — N5/N8 may already pass (green), N6 FAILS (bip388 wrongly refused today via no-multipath? no — multipath trunk emits), the NUMS test FAILS on the new message**
 
 Run: `cargo test --manifest-path crates/mnemonic-toolkit/Cargo.toml --test cli_restore_taproot _format_ -- --nocapture`
-Expected: N6 may currently EMIT (multipath trunk) so likely passes already; N5 currently EMITS a wrong bip388 payload (the hole) so FAILS the `.code(1)`; the edited NUMS test FAILS on the new message string. Confirm N5's failure shows the silent-emit hole.
+Expected: **N6 already PASSES** (after Task 1 the distinct-trunk multisig takes the `Some(t)` Template branch → never reaches the `None` branch → bip388 emits faithfully; Task 3's `None`-branch guard can't touch it). **N5 is the RED**: it currently EMITS a (wrong) bip388 payload from the route-around arm — the hole — so `.code(1)` fails. The edited NUMS `general_tr_format_bip388_refused` also FAILS on the new message string (it still exits 1 but the message changed). N8 (green) likely already passes (existing `P2tr` green gate). Confirm N5's failure output shows the silent-emit hole.
 
 - [ ] **Step 3: Implement the explicit bip388 refusal in the `None` branch**
 
@@ -508,7 +514,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 Run: `make -C docs/manual lint MNEMONIC_BIN=$(pwd)/target/debug/mnemonic MD_BIN=... MS_BIN=... MK_BIN=...` (build the binaries first; or follow `.github/workflows/manual.yml`'s invocation). Expected: PASS (this is docs-only prose; no flag delta, but cspell/markdownlint must pass).
 
-- [ ] **Step 5: Update FOLLOWUPS.md** — (a) file + RESOLVE `restore-non-nums-taproot-internal-key` (this cycle; cite the shipped commit + tag); (b) file `restore-non-nums-tr-internal-key-also-in-leaf` (the `@-in-both` defer — route-around-for-multi_a is the eventual mechanism). Use alphabetical/section conventions of the existing file.
+- [ ] **Step 5: Update FOLLOWUPS.md** — first read the file to learn its current section structure (open vs resolved archive, restore/taproot sub-cluster) and place entries accordingly. (a) file + mark RESOLVED `restore-non-nums-taproot-internal-key` (this cycle; cite the shipped commit + tag); (b) file (open) `restore-non-nums-tr-internal-key-also-in-leaf` (the `@-in-both` defer — leaf-membership-aware route-around-for-multi_a is the eventual mechanism, adjacent to the md-codec SortedMultiA gap). Match the existing file's section/ordering conventions; cross-cite the spec/plan paths.
 
 - [ ] **Step 6: Commit**
 
