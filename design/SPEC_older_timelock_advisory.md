@@ -93,11 +93,20 @@ single universal walk input):
   Serves every surface that holds an `MdDescriptor`. (All `tree.rs` lines are md-codec **0.35.3**;
   the stale local git checkout `fe1531b` and the drifted sibling working tree differ — cite 0.35.3,
   the published source the toolkit actually compiles.)
-- **Adapter B — miniscript-AST walk.** Iterate a parsed
-  `miniscript::Descriptor<DescriptorPublicKey>`, matching `Terminal::Older(lt)` and recovering the
-  raw operand via `lt.to_consensus_u32()` (miniscript rev `95fdd1c`
-  `primitives/relative_locktime.rs:48` returns the inner `Sequence`'s u32 verbatim). Serves
-  surfaces that hold only a miniscript descriptor.
+- **Adapter B — miniscript-AST walk.** Core: a generic
+  `older_advisories_ms<Pk: MiniscriptKey, Ctx: ScriptContext>(ms: &Miniscript<Pk, Ctx>)` that
+  recurses the miniscript AST, matches `Terminal::Older(lt)`, and recovers the raw operand via
+  `lt.to_consensus_u32()` (miniscript rev `95fdd1c` `primitives/relative_locktime.rs:48` returns
+  the inner `Sequence`'s u32 verbatim). The generic core is needed because Adapter-B surfaces hold
+  **two different parsed types** (R0-r2 I1):
+  - `export-wallet`, `restore --md1`, `xpub-search` literal funnel hold a
+    `Descriptor<DescriptorPublicKey>` → a thin `older_advisories_descriptor(&Descriptor<Pk>)`
+    unwraps the inner miniscript(s) (`Wsh` / `Sh(Wsh)` / `Tr` leaf scripts) and calls the core.
+  - `compare-cost` holds a `Translated` (`cost/translate.rs:19`) carrying
+    `segv0: Miniscript<DefiniteDescriptorKey, Segwitv0>` (`:22`) and `tap:` (`:23`). BOTH
+    `--descriptor` and `--miniscript` produce one `Translated` (dispatch `cost/mod.rs:128-136`), so
+    a SINGLE hook on `translated.segv0` after the dispatch covers both input paths — it calls the
+    core directly (no descriptor unwrap).
 
 Both adapters return `Vec<TimelockAdvisory>` deduped by operand value (architect I6: value-keyed,
 not node-path-keyed — the user needs to know the value is masked, not which node it sits in).
@@ -151,7 +160,7 @@ Seven surfaces (FOLLOWUP Where-list extended from 4 → 7 as the implementing-co
 | 2 | `bundle` (`--descriptor`, `--descriptor-file`, `--import-json`) | `MdDescriptor` via `parse_descriptor` (`bundle.rs:1228`, `1603`, `1936` — the `1936` site resolves architect C3: `--import-json` IS covered) | A |
 | 3 | `verify-bundle --descriptor` | `MdDescriptor` via `parse_descriptor` (`verify_bundle.rs:709`, `1017`) | A |
 | 4 | `restore --md1` | `miniscript::Descriptor` re-parsed from the reconstructed descriptor string (`restore.rs:833`, `1277`) | B |
-| 5 | `compare-cost` (`--descriptor` AND `--miniscript`) | `--descriptor` → `Descriptor` via `cost/strip.rs:21`; `--miniscript` → `Miniscript` via `cost/translate.rs:82`/`84` (R0-r1 I2). Dispatch at `cost/mod.rs:128-135`. BOTH must fire the advisory. | B |
+| 5 | `compare-cost` (`--descriptor` AND `--miniscript`) | both paths produce one `Translated` (`--descriptor`→`cost/strip.rs:21`, `--miniscript`→`cost/translate.rs:82`/`84`; dispatch `cost/mod.rs:128-136`). ONE hook on `translated.segv0: Miniscript<DefiniteDescriptorKey, Segwitv0>` after the dispatch covers BOTH paths (R0-r2 I1/m1). | B (core, on `Miniscript`) |
 | 6 | `export-wallet --descriptor` | `miniscript::Descriptor` via `export_wallet.rs:452` / `566` / `715` | B |
 | 7 | `xpub-search` | literal-xpub / BIP-388 funnel → `miniscript::Descriptor` (`descriptor_intake.rs:289`); **md1-card funnel** → `MdDescriptor` (`parse_md1`, `descriptor_intake.rs:140-215`) | B + A |
 
@@ -212,7 +221,10 @@ identically; (i) is minimal-churn.
   masked policy `wsh(andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016))))` (the recon probe
   shape — `older(65536)` masked, `older(2016)` clean → exactly one deduped advisory line); silent
   on a fully-clean descriptor; surface still exits 0 / engraves / round-trips (non-blocking
-  proof).
+  proof). **`compare-cost`'s cell exercises BOTH invocations** (R0-r2 I2):
+  `--descriptor wsh(andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016))))` AND the bare
+  `--miniscript andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016)))` — both must emit the
+  advisory (the single `translated` hook serves both, but each argv path is tested).
 - **A-raw-card bit-31 / zero cell** (§3.3): construct an md1 card carrying `older(0x80000001)`
   (bit-31) and one carrying `older(0)` — either via `md_codec` encode of a hand-built
   `Body::Timelock` tree, or by direct bit-encode — feed each to `xpub-search`'s md1 funnel; assert
@@ -256,7 +268,8 @@ identically; (i) is minimal-churn.
 
 **Carries to the implementation plan** (the plan-doc gets its own R0):
 - **Emit-site minimization** for `import-wallet`'s 8 formats (prefer a single funnel emit over
-  per-format) and `compare-cost`'s two sub-paths.
+  per-format). (`compare-cost`'s two paths are already resolved to ONE hook on `translated` —
+  §4 row 5, R0-r2.)
 - **Final advisory wording** (§5) — confirm each form names literal + effective + unit and is
   unambiguous; place the `debug_assert!(consequence != Bit31Disabled)` ONLY at Adapter-B /
   A-post-from_str call sites (NOT the A-raw-card site).
