@@ -167,7 +167,14 @@ computation.)
   (which internally encodes the payload) to get the chunks, and feed them to `restore --md1`. (R0-r2 m1:
   this is a NEW direct-construction test pattern — md_codec's `tree::Node`/`tree::Body` fields are public,
   confirmed — NOT the `chunk::reassemble`-on-bundle-output pattern of `cli_standalone_bijections.rs`.)
-  Assert `ModeViolation` (exit 2) + the `restore-non-nums-tr-internal-key-also-in-leaf` slug.
+  - **(R0-r3 m1 — load-bearing for the RED-proof):** the crafted `Descriptor` MUST populate
+    `tlv.pubkeys = Some(vec![...])` with a non-empty concrete pubkey per key slot. `restore` checks
+    `d.is_wallet_policy()` (`restore.rs:1155`, = `matches!(&self.tlv.pubkeys, Some(v) if !v.is_empty())`
+    in md-codec `encode.rs:50-52`) BEFORE `classify_taproot_restore`; a template-only card (`pubkeys`
+    None/empty) hits the *wrong* gate ("template-only" `ModeViolation`, `:1159`) — so the test would
+    pass for the wrong reason and never exercise the §4 structural guard. Populate concrete pubkeys so
+    the card clears step-2 and reaches `classify_taproot_restore`.
+  - Assert `ModeViolation` (exit 2) + the `restore-non-nums-tr-internal-key-also-in-leaf` slug.
 - **RED-proof:** with the §4 structural guard removed, this same crafted card reconstructs to
   `multi_a(k, {leaf \ trunk})` (silently dropping the trunk key) AND passes the Display-fidelity guard
   — demonstrating the structural guard's necessity (the fidelity guard cannot catch it, §4).
@@ -235,7 +242,16 @@ arm is unaffected). It found **2 NEW Important defects introduced BY the r1 I2 f
   tree fields, NOT the `cli_standalone_bijections.rs` reassemble pattern), **m2** (§6:
   `script_type_from_descriptor` classification confirmed; the open "R0 to confirm" action item resolved).
 
-R0 round 3 must re-confirm the round-2 folds and reach 0C/0I before any code.
+**R0 round 3 — GREEN (verdict GREEN, 0 Critical / 0 Important / 1 Minor; review
+`design/agent-reports/restore-non-nums-taproot-r0-round3-review.md`).** The mandatory R0 gate is MET.
+R0-r3 traced the bip388 routing end-to-end and confirmed it is watertight: a `Template(t, Cosigner(idx))`
+arm produces `template = Some(t)` → takes the `Some(t)` branch (`restore.rs:828`) → never reaches the
+`None`-branch refusal → `format_bip388_wallet_policy` `Cosigner(idx)` arm emits faithfully; the
+`GeneralFaithful(Cosigner)` arm produces `template = None` → hits the explicit taproot refusal. No
+contradiction; the §4 guard, NUMS byte-identical regression, and "no silent non-NUMS payload" claims all
+re-confirmed. **Folded R0-r3 m1** (§7: the `@-in-both` RED-proof card must populate `tlv.pubkeys` to clear
+the `is_wallet_policy()` step-2 gate, else it trips the wrong "template-only" refusal). No further R0
+round required (a single doc-only MINOR fold on an already-GREEN gate; the loop converged).
 
 **Non-goals:** the `@-in-both` shape (deferred, §4); depth-≥2 taptrees (upstream-blocked); any
 md-codec wire change; from-seed `bundle` emitting non-NUMS (it intentionally emits NUMS); supporting
