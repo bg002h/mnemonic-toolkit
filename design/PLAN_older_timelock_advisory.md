@@ -77,8 +77,9 @@ mod tests {
         let masked = TimelockAdvisory { operand: 65536, consequence: TimelockMaskConsequence::Masked { effective: 0, unit: TimelockUnit::Blocks } };
         assert!(masked.message().contains("advisory: older(65536) is consensus-masked"));
         assert!(masked.message().contains("NO effective value"));
-        let s512 = TimelockAdvisory { operand: 0x0080_0064, consequence: TimelockMaskConsequence::Masked { effective: 100, unit: TimelockUnit::Blocks } };
-        assert!(s512.message().contains("effective value of 100 blocks"));
+        // 0x0080_0064: bit-23 stray (NOT bit-22), so unit is Blocks, value 100.
+        let stray_blocks = TimelockAdvisory { operand: 0x0080_0064, consequence: TimelockMaskConsequence::Masked { effective: 100, unit: TimelockUnit::Blocks } };
+        assert!(stray_blocks.message().contains("effective value of 100 blocks"));
         let b31 = TimelockAdvisory { operand: 0x8000_0001, consequence: TimelockMaskConsequence::Bit31Disabled };
         assert!(b31.message().contains("bit-31 disable flag set"));
         assert!(b31.message().contains("no relative timelock at all"));
@@ -251,6 +252,7 @@ pub fn older_advisories_descriptor<Pk: MiniscriptKey>(d: &Descriptor<Pk>) -> Vec
         }
         Descriptor::Tr(tr) => {
             for leaf in tr.leaves() {
+                // leaf.miniscript() = &Arc<Miniscript<_,Tap>>; &Arc<T> coerces to &T at the call.
                 merge_deduped(older_advisories_ms(leaf.miniscript()), &mut seen, &mut out);
             }
         }
@@ -475,7 +477,7 @@ fn adapter_b_descriptor_wsh_collects_masked_only() {
 - [ ] **Step 2: Run to verify it fails/compiles-then-asserts**
 
 Run: `cargo test --bin mnemonic timelock_advisory::tests::adapter`
-Expected: initially may FAIL to compile if the `md_codec::Descriptor` literal is wrong — fix field construction until it compiles, then both assertions PASS.
+Expected: PASS. (`adapter_a` walks a directly-constructed `Node` via `older_advisories_node` — no `md_codec::Descriptor`/`PathDecl`/`TlvSection` field construction. `adapter_b` parses a real descriptor string.)
 
 - [ ] **Step 3: (no new impl — adapters already written in Task 1)**
 
@@ -618,9 +620,17 @@ reaches the cost pipeline (advisor must-fix #1):
     let mut _discard_advisory = std::io::sink();
     cost::run_compare_cost(&cost_args, /* stdout */ &mut buf, &mut _discard_advisory)?;
 ```
-(Adjust to each call site's existing stdout target.) Any TEST callers of `run_compare_cost` /
-`compare_cost::run` pass `&mut Vec::<u8>::new()` (or the test's captured stderr).
-- [ ] **Step 4:** Run → PASS (both invocations). Clean-input case (both flags) → no advisory. Run `cargo build --bin mnemonic` to catch missed call sites.
+(Adjust to each call site's existing stdout target.)
+**Step 3e (R0-r1 I-1 — `cargo build` does NOT see these):** update the THREE `#[cfg(test)]` callers
+of `cost::run_compare_cost` in `crates/mnemonic-toolkit/src/descriptor_builder/gate.rs` at lines
+**~1146**, **~1202**, **~1263** to pass `&mut Vec::<u8>::new()` as the new `stderr` arg. These are
+test-module callers invisible to `cargo build --bin mnemonic`; verify with `cargo test --bin mnemonic gate`.
+> **Complete `run_compare_cost` caller set** (grep-verified, the whole sweep): `cmd/compare_cost.rs:98`
+> (prod, Step 3b), `cmd/build_descriptor.rs:500` + `:530` (prod discard, Step 3d), `descriptor_builder/gate.rs:1146`
+> `:1202` `:1263` (test, this step). No others.
+- [ ] **Step 4:** Run **`cargo test --bin mnemonic`** (NOT just `cargo build` — the gate.rs test callers
+  are only compiled by `cargo test`) → compiles + passes; then the two integration invocations → PASS
+  (both `--descriptor` and `--miniscript`). Clean-input case (both flags) → no advisory.
 - [ ] **Step 5:** Commit (`feat(compare-cost): masked older() advisory (--descriptor + --miniscript; threads stderr)`).
 
 ### Task 9: `export-wallet`
@@ -659,7 +669,7 @@ Site 2 — `run_from_import_json` after `script_type_from_descriptor(&parsed_ms)
 ```rust
 fn parse_md1(payload: &str, stderr: &mut impl std::io::Write) -> Result<DescriptorIntake, ToolkitError> {
 ```
-and at the dispatch (`descriptor_intake.rs:141`): `DescriptorShape::Md1 => parse_md1(payload, stderr),`.
+and at the dispatch (`descriptor_intake.rs:140`): `DescriptorShape::Md1 => parse_md1(payload, stderr),`.
 **Step 3c:** In `parse_md1`, after the `n == 0` guard (`~:227`), before the per-slot resolver (`~:228`):
 ```rust
     let adv = crate::timelock_advisory::older_advisories_tree(&desc);
