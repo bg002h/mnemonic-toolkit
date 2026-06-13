@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.55.2] — 2026-06-13
+
+**SemVer-PATCH — non-blocking advisory when an intake/round-trip descriptor's `older()` relative timelock is BIP-68 consensus-masked (e.g. `older(65536)` → 0 effective blocks).**
+
+- **Advise-on-intake (the other half of v0.53.9's authoring gate).** The seven intake/round-trip surfaces — `bundle`, `export-wallet --descriptor`, `import-wallet`, `xpub-search`, `verify-bundle --descriptor`, `restore --md1`, `compare-cost` — now print a non-blocking stderr advisory when a descriptor's `older(N)` carries garbage bits or a zero 16-bit value (consensus masks the operand to `0x0040FFFF`, silently weakening or nullifying the timelock). The command still **succeeds** (exit unchanged): blocking would strand recovery/backup of an already-deployed wallet. The authoring surface `build-descriptor` keeps its existing hard refuse — both halves now share one bit-math predicate (`timelock_advisory::older_consensus_masked`), so the `build-descriptor` diagnostic is byte-identical.
+- **Two walk adapters, one predicate.** A new `timelock_advisory` module: the shared BIP-68 predicate plus an md_codec node-tree walker (md1-card / `parse_descriptor` surfaces; bit-31 reachable on raw-card decode) and a generic miniscript-AST walker (`from_str` surfaces; bit-31 fail-closed at parse). Advisories dedupe by operand; the bit-31 "no timelock at all" form is distinguished from the masked-to-`<effective>` form. All descriptor-emit paths covered (incl. `bundle`'s concrete-key and import-json paths, `verify-bundle`'s concrete fork, `sh(<miniscript>)`, taproot leaves); structurally timelock-free paths (`--template`, single-sig restore) correctly excluded.
+- **PATCH — advisory-only, zero clap delta** → no GUI `schema_mirror` impact. `after()` needs no advisory (fail-closed at `from_str`). Resolves FOLLOWUP `intake-surfaces-accept-masked-older-no-advisory`; spawned `older-advisory-blindness-suppression` (WONTFIX).
+
 ## mnemonic-toolkit [0.55.1] — 2026-06-12
 
 **SemVer-PATCH — `restore --md1` now faithfully reconstructs single-leaf and depth-1 two-leaf `tr(NUMS,<general miniscript>)` wallet-policy cards (was: refused "not a recognized multisig").**
