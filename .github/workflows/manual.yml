@@ -76,7 +76,7 @@ jobs:
         # mnemonic-key workspace ships multiple binaries (mk-codec's
         # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
         # against a multi-binary workspace.
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.7.0 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.8.0 mk-cli
 
       - name: Install md-cli
         # Mirrors the mk-cli install pattern above. Use package-name
