@@ -146,13 +146,13 @@ Single source of truth for items that surfaced during a review or implementation
 - **Status:** open (backlog index; individual items dispositioned in the report). I7/I8 (GUI), I1/I2 (mk-cli v0.8.0), I9 (ms-codec v0.4.1), I10 + n1-vs-nge2 (toolkit v0.53.0), I3 + `flag-is-secret-completeness-unguarded-by-design` (toolkit v0.53.1) resolved.
 - **Tier:** audit-backlog.
 
-### `older-advisory-blindness-suppression` — the masked-`older()` intake advisory is unsuppressable on every surface/run → habituation risk
+### `older-advisory-blindness-suppression` — the masked-`older()` intake advisory is unsuppressable on every surface/run → habituation risk (✗ WONTFIX)
 
 - **Surfaced:** 2026-06-13 (advisor #7 during the `older()` intake-advisory cycle that resolved `intake-surfaces-accept-masked-older-no-advisory`, above).
 - **Where:** the non-blocking advisory now fires on all 7 intake/round-trip surfaces (`bundle --descriptor`, `export-wallet --descriptor`, `import-wallet`, `xpub-search`, `verify-bundle --descriptor`, `restore --md1`, `compare-cost`) whenever a descriptor's `older(N)` is BIP-68 consensus-masked.
 - **What:** for a user with an already-deployed, already-known-masked wallet, the advisory re-fires on **every intake, every surface, every run, with no way to silence it.** A correct one-time warning becomes recurring noise → advisory-blindness / habituation: the user learns to ignore stderr, which dulls the signal for genuinely-new advisories too. The advisory is correct-but-unconditional.
 - **Fix (future option a):** a `--quiet-advisories` flag (or env equivalent) that suppresses the consensus-masked-`older()` advisory (and any future intake advisories of the same class) on the surfaces that emit it. This would be a **MINOR** change (new clap flag) and therefore carries the full lockstep tax: GUI `schema_mirror` (flag-name parity), the `docs/manual/src/40-cli-reference/` flag rows, and the manual `make lint` flag-coverage gate. **Do NOT build this now** — recorded so the trade-off (intentional one-time-correctness vs. recurring-noise) isn't re-discovered from scratch. Whoever picks it up must decide whether suppression is per-invocation (flag), persistent (config/env), or first-N-only.
-- **Tier:** deferred (advisory UX; the advisory itself is correct and funds-safe — this is purely a noise/habituation concern, not a safety gap).
+- **Tier:** ✗ **WONTFIX (user decision, 2026-06-13).** The advisory is correct and funds-safe; the habituation concern does not justify a `--quiet-advisories` flag and its MINOR-with-full-lockstep tax (GUI `schema_mirror` + manual flag rows + flag-coverage gate). The one-time-correctness value is accepted over the recurring-noise cost; suppression will not be added. (Record retained for the rationale, should the trade-off resurface.)
 
 ### `vacuous-secret-flag-gate` (I3) + `flag-is-secret-completeness-unguarded-by-design` — non-circular secret-flag completeness gate + 3 missed classifications (RESOLVED v0.53.1)
 
