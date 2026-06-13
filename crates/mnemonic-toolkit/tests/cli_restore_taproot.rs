@@ -12,8 +12,7 @@
 //! - non-NUMS (cosigner) internal key — SUPPORTED since v0.55.3 for general
 //!   single-leaf/depth-1 + distinct-trunk multisig; only the `@-in-both` shape
 //!   (trunk key also a leaf key) stays refused
-//!   (`restore-non-nums-tr-internal-key-also-in-leaf`, the guard lands in the
-//!   next commit),
+//!   (`restore-non-nums-tr-internal-key-also-in-leaf`),
 //! - depth ≥2 / ≥3 leaves — STRUCTURAL, chirality-independent: the pinned
 //!   miniscript 95fdd1c mis-Displays only a LEFT-child `TapTree`, but the gate
 //!   refuses right-spine shapes too (never Display-luck; lift on the

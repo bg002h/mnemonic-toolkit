@@ -63,8 +63,10 @@ pub struct RestoreArgs {
     /// Multisig-cosigner restore (v0.44.0): the shared wallet-policy `md1` card
     /// chunk(s). Reconstructs the concrete watch-only multisig descriptor from
     /// the md1 ALONE; `--from`/`--cosigner` are optional cross-check inputs.
-    /// wsh / sh(wsh) and taproot NUMS multisig (tr-multi-a / tr-sortedmulti-a);
-    /// a non-NUMS (cosigner-internal) taproot md1 is refused. Repeat for chunked cards.
+    /// wsh / sh(wsh) and taproot multisig (NUMS or a non-NUMS distinct-trunk
+    /// cosigner key) plus general single-leaf/depth-1 taproot; the @-in-both
+    /// shape (trunk key also a leaf key) and depth-≥2 taproot are refused.
+    /// Repeat for chunked cards.
     #[arg(long)]
     pub md1: Vec<String>,
 
@@ -1261,8 +1263,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // `SortedMultiA`; the toolkit's own miniscript rev 95fdd1c HAS
     // `Terminal::SortedMultiA`); general single-leaf / depth-1 two-leaf
     // `tr(NUMS,…)` → GeneralFaithful (`template_opt = None`, falls through the
-    // SAME general-policy machinery as wsh below, v0.55.1); depth ≥2 /
-    // `sortedmulti_a`-under-TapTree / non-NUMS → loud structural refusals.
+    // SAME general-policy machinery as wsh below, v0.55.1; non-NUMS real-trunk
+    // reconstructs since v0.55.3); depth ≥2 / `sortedmulti_a`-under-TapTree /
+    // `@-in-both` (trunk key also a leaf key) → loud structural refusals.
     // wsh/sh-wsh keep `to_miniscript_descriptor`. `template_opt = Some(_)`
     // ONLY for a strictly-plain `wsh/sh-wsh(multi|sortedmulti)` (or
     // single-leaf taproot multi_a/sortedmulti_a) md1 → the existing
