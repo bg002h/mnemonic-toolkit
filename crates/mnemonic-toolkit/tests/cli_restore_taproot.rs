@@ -9,7 +9,10 @@
 //! key passes through `ReconstructTranslator` strict-NUMS-only.
 //!
 //! Still refused (each pinned below, all `ModeViolation` exit 2, slug-citing):
-//! - non-NUMS (cosigner) internal key (`restore-multisig-taproot-reconstruction`),
+//! - non-NUMS (cosigner) internal key — SUPPORTED since v0.55.3 for general
+//!   single-leaf/depth-1 + distinct-trunk multisig; only the `@-in-both` shape
+//!   (trunk key also a leaf key) stays refused
+//!   (`restore-non-nums-tr-internal-key-also-in-leaf`),
 //! - depth ≥2 / ≥3 leaves — STRUCTURAL, chirality-independent: the pinned
 //!   miniscript 95fdd1c mis-Displays only a LEFT-child `TapTree`, but the gate
 //!   refuses right-spine shapes too (never Display-luck; lift on the
@@ -95,6 +98,23 @@ const GOLDEN_DESC_MULTI_A_2LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b60
 const GOLDEN_ADDR_MULTI_A_2LEAF: &str =
     "first recv: bc1pw49n2w6ydsnmdcufryu6r3agpw3k4hmkhkzfr9z3wqs3xuvx74as88s86m";
 
+// Non-NUMS ("real key at the trunk") goldens — captured-once from the binary in
+// Step 4 (v0.55.3). DO NOT hand-construct (md-codec depth-0 xpub661My…
+// reconstructions, not the bundle-input account xpubs). The trunk MUST render
+// as a REAL xpub (K2 depth-0), NOT the 50929b74… NUMS hex.
+const GOLDEN_DESC_NON_NUMS_GENERAL: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,and_v(v:pk([73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*),older(144)))#l2lh2uur";
+const GOLDEN_ADDR_NON_NUMS_GENERAL: &str =
+    "first recv: bc1pl6nt2ul52gjdtp5lkfgy7l34ux8yv0pc9r7tx8hkjuxrmg6x25ps0nvn6t";
+const GOLDEN_DESC_NON_NUMS_MULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,multi_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#qtmvesaw";
+const GOLDEN_ADDR_NON_NUMS_MULTI_A: &str =
+    "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
+const GOLDEN_DESC_NON_NUMS_SORTEDMULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#jpfr0tgx";
+// Intentionally identical to GOLDEN_ADDR_NON_NUMS_MULTI_A: sortedmulti_a(2,K0,K1)
+// and multi_a(2,K0,K1) produce the same script when {K0,K1} is already in sorted
+// order at index 0, so the derived first receive address matches.
+const GOLDEN_ADDR_NON_NUMS_SORTEDMULTI_A: &str =
+    "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
+
 /// (1) General taproot leaf `tr(NUMS, <non-multisig miniscript>)`: bundle emits
 /// a faithful card (`.descriptor` round-trips EXACTLY — the literal `NUMS`
 /// token is preserved on the wire, no substitution), and restore reconstructs
@@ -161,25 +181,69 @@ fn multi_a_in_2leaf_tr_restores_faithfully() {
         );
 }
 
-// ─── Refusal contracts (ModeViolation, exit 2, slug-citing) ─────────────────
+// ─── Non-NUMS ("real key at the trunk") faithful reconstruction (v0.55.3) ────
 
-/// (4) Non-NUMS (cosigner) internal-key taproot multisig `tr(K2, multi_a(2,K0,K1))`
-/// with a DISTINCT internal key: bundle emits, restore refuses with exit 2
-/// "non-NUMS (cosigner) internal key". (A non-distinct internal key —
-/// `tr(K0, multi_a(2,K0,K1))` — is rejected EARLIER by bundle's BIP-388
-/// distinct-key gate; the distinct K2 reaches the restore arm.)
+/// (N1) Non-NUMS GENERAL single-leaf tr(D, and_v(v:pk(B),older(N))): the trunk
+/// is a real cosigner key (live key-path spend). bundle emits a faithful
+/// is_nums:false card; restore reconstructs the descriptor (real trunk key) +
+/// a receive address. Golden captured-once from the binary (v0.49.1 precedent).
 #[test]
-fn cosigner_internal_key_tr_bundles_but_restore_refuses_non_nums() {
-    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
-    let (md1, _emitted) = bundle_md1(&desc);
-    assert!(!md1.is_empty(), "cosigner-IK card must be emitted");
+fn non_nums_general_tr_leaf_restores_faithfully() {
+    // K2 distinct from the leaf key K0 → not @-in-both.
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS general-tr card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS general-tr must round-trip on the wire");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains("non-NUMS (cosigner) internal key"));
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_GENERAL)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_GENERAL)),
+        );
 }
+
+/// (N2) Non-NUMS DISTINCT-trunk multisig tr(D, multi_a(2,B,C)): trunk D NOT a
+/// leaf key. Template path + Cosigner(idx). Golden captured-once.
+#[test]
+fn non_nums_distinct_trunk_multi_a_restores_faithfully() {
+    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
+    let (md1, emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS multisig card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS multisig must round-trip on the wire");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_MULTI_A)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_MULTI_A)),
+        );
+}
+
+/// (N3) Non-NUMS DISTINCT-trunk sortedmulti_a tr(D, sortedmulti_a(2,B,C)):
+/// Template path (TrSortedMultiA) routes AROUND md-codec's SortedMultiA gap.
+#[test]
+fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
+    let desc = format!("tr({K2},sortedmulti_a(2,{K0},{K1}))");
+    let (md1, emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS sortedmulti_a card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS sortedmulti_a must round-trip on the wire");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_SORTEDMULTI_A)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_SORTEDMULTI_A)),
+        );
+}
+
+// ─── Refusal contracts (ModeViolation, exit 2, slug-citing) ─────────────────
 
 /// (5) Left-heavy 3-leaf (depth-2) taptree: bundle emits faithfully, restore
 /// refuses STRUCTURALLY (exit 2) citing the upstream Display-asymmetry slug.
@@ -243,6 +307,187 @@ fn tr_sortedmulti_a_in_2leaf_refuses() {
         ));
 }
 
+// ─── @-in-both structural guard (funds-safety crux, v0.55.3) ────────────────
+
+/// Build a `tr(@trunk, multi_a(k, <indices>))` wallet-policy `Descriptor`
+/// DIRECTLY via md-codec's public tree types — the `@-in-both` family where the
+/// non-NUMS trunk key index is ALSO one of the leaf indices.
+///
+/// This shape CANNOT go through `bundle --descriptor`: intake rejects it at the
+/// BIP-388 distinct-key gate ("slot @i and slot @j resolve to identical (xpub,
+/// path)"). So the md1 is constructed by hand. Mirrors the direct-construction
+/// precedent in `template.rs` (`tr_sortedmulti_a_2_of_2_round_trips_via_md_codec`):
+/// the canonical 65-byte synthetic xpub filler (chain_code `[0x42;32]` ‖ SEC1
+/// compressed secp256k1 generator G — passes md-codec's `validate_xpub_bytes`),
+/// a shared `48'/0'/0'/2'` origin, and `UseSitePath::standard_multipath()`.
+///
+/// `tlv.pubkeys` is populated with one entry PER slot (`n` total, all the same
+/// filler content — the chain_code prefix is unvalidated so distinct slots are
+/// allowed) so `is_wallet_policy()` returns true. The card MUST clear the step-2
+/// wallet-policy gate (`restore.rs:1163`) and reach `classify_taproot_restore`,
+/// else it would trip the WRONG "template-only" refusal and the test would pass
+/// for the wrong reason (R0-r3 m1).
+///
+/// The payload encodes cleanly: `validate_placeholder_usage` registers the trunk
+/// index from the `Tr` body first, then the leaf indices (skipping the already-
+/// seen trunk), so the `first_occurrences` are canonical and validation passes
+/// for `indices = [0..n]` with `trunk = 0` (R0-confirmed).
+fn build_at_in_both_descriptor(
+    n: u8,
+    k: u8,
+    leaf_indices: Vec<u8>,
+    tag: md_codec::Tag,
+) -> md_codec::Descriptor {
+    use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
+    use md_codec::tree::{Body, Node};
+    use md_codec::use_site_path::UseSitePath;
+    use md_codec::{Descriptor, Tag, TlvSection};
+
+    // Canonical 65-byte synthetic xpub filler: chain_code = [0x42;32], pubkey =
+    // SEC1 compressed secp256k1 generator G (the precedent in `template.rs`).
+    let mut xpub_bytes = [0u8; 65];
+    xpub_bytes[0..32].copy_from_slice(&[0x42; 32]);
+    xpub_bytes[32] = 0x02;
+    xpub_bytes[33..].copy_from_slice(&[
+        0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE, 0x87, 0x0B,
+        0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81, 0x5B, 0x16, 0xF8,
+        0x17, 0x98,
+    ]);
+
+    // The @-in-both shape: trunk @0 (is_nums:false) is ALSO a leaf index.
+    let tree = Node {
+        tag: Tag::Tr,
+        body: Body::Tr {
+            is_nums: false,
+            key_index: 0,
+            tree: Some(Box::new(Node {
+                tag,
+                body: Body::MultiKeys {
+                    k,
+                    indices: leaf_indices,
+                },
+            })),
+        },
+    };
+
+    let path = OriginPath {
+        components: vec![
+            PathComponent {
+                hardened: true,
+                value: 48,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 2,
+            },
+        ],
+    };
+
+    // One filler fingerprint + pubkey per slot (synthetic, distinct fingerprints).
+    let fingerprints: Vec<(u8, [u8; 4])> = (0..n).map(|i| (i, [i, 0xBB, 0xCC, 0xDD])).collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = (0..n).map(|i| (i, xpub_bytes)).collect();
+
+    Descriptor {
+        n,
+        path_decl: PathDecl {
+            n,
+            paths: PathDeclPaths::Shared(path),
+        },
+        use_site_path: UseSitePath::standard_multipath(),
+        tree,
+        tlv: TlvSection {
+            use_site_path_overrides: None,
+            fingerprints: Some(fingerprints),
+            // Non-empty → is_wallet_policy() == true (clears the step-2 gate).
+            pubkeys: Some(pubkeys),
+            origin_path_overrides: None,
+            unknown: Vec::new(),
+        },
+    }
+}
+
+/// (N4) @-in-both refusal — the FUNDS-SAFETY RED-proof: `tr(@0, multi_a(2, @0,
+/// @1, @2))`, where the non-NUMS trunk key index `@0` is ALSO a leaf index. The
+/// Template `Cosigner(idx)` shortcut reconstructs the leaf as `{all cosigners
+/// EXCEPT idx}` WITHOUT lowering `k`, so without the guard it emits
+/// `multi_a(2, @1, @2)` — dropping the trunk key. For an `n ≥ 3` leaf this is a
+/// VALID 2-of-2 (k ≤ n): the reconstruction SUCCEEDS (exit 0) and prints a
+/// DIFFERENT, silently-wrong multisig at a DIFFERENT address. The Display-
+/// fidelity guard CANNOT catch this — the Template path's output is its own
+/// re-print (parse→print of the rendered string), so a wrong-but-self-consistent
+/// leaf passes. The protection MUST therefore be a STRUCTURAL classify-time
+/// precondition. (RED-proven: with the guard removed, this card exits 0 with the
+/// trunk-dropped `multi_a(2, @1, @2)`; the plan's 2-of-2 shape is NOT a valid
+/// RED — dropping @0 there yields a 2-of-1 that k>n rejects downstream, see the
+/// `_2of2` cell below.)
+///
+/// `bundle --descriptor` rejects this shape at intake (BIP-388 distinct-key
+/// gate), so the md1 is built directly via md_codec (`build_at_in_both_descriptor`).
+#[test]
+fn at_in_both_tr_refuses_structurally() {
+    // n=3, 2-of-3: dropping the trunk @0 leaves a VALID 2-of-2 → the dangerous
+    // exit-0 silent-wrong reconstruction the structural guard must prevent.
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2], md_codec::Tag::MultiA);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
+/// (N4b) @-in-both refusal — the degenerate 2-of-2 shape `tr(@0, multi_a(2, @0,
+/// @1))`. Also `@-in-both`, so the guard refuses it identically (slug + "also a
+/// leaf key"). NOTE: without the guard this shape does NOT exit 0 — dropping @0
+/// from a 2-key leaf yields `multi_a(2, @1)` (2-of-1), which miniscript rejects
+/// downstream as k>n (exit 2, a DIFFERENT message). So it is not a funds-safety
+/// RED on its own (the genuine RED is the `n ≥ 3` cell above); this cell pins
+/// that the STRUCTURAL guard catches the shape at classify time regardless, with
+/// the correct slug — never relying on the coincidental downstream k>n catch.
+#[test]
+fn at_in_both_tr_2of2_refuses_structurally() {
+    let d = build_at_in_both_descriptor(2, 2, vec![0, 1], md_codec::Tag::MultiA);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both 2-of-2 md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
+/// (N4c) Same @-in-both shape but with a SortedMultiA leaf — proves the guard
+/// covers BOTH Template arms (catches a one-arm regression).
+#[test]
+fn at_in_both_sortedmulti_a_refuses_structurally() {
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2], md_codec::Tag::SortedMultiA);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both sortedmulti_a md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
 // ─── --format matrix for the general-tr arm (R0 I1) ─────────────────────────
 
 /// (8) `--format green` on a reconstructed general-tr policy: REFUSED exit 1.
@@ -282,10 +527,14 @@ fn multi_a_2leaf_tr_format_green_refused_as_multisig() {
         .stderr(predicate::str::contains("does not support multisig"));
 }
 
-/// (9) `--format bip388` on a reconstructed general-tr policy: refused loudly —
-/// the NUMS internal key is a bare x-only `Single` with no `/<0;1>/*` suffix,
-/// which BIP-388 wallet policies require on every key. Pins today's loud
-/// refusal (NOT silent-wrong); message-quality nit may ride a future cycle.
+/// (9) `--format bip388` on a reconstructed general-tr policy: refused loudly.
+/// Since v0.55.3 the refusal is the EXPLICIT taproot route-around guard in the
+/// `None` (general) arm of `build_multisig_import_payload` — a tap-script-tree
+/// reconstructed via the route-around has no named-template form, so it cannot
+/// be expressed as a BIP-388 wallet policy. (Previously this was an INCIDENTAL
+/// failure: the NUMS internal key is a bare x-only `Single` with no `/<0;1>/*`
+/// suffix; that incidental mechanism does NOT catch a non-NUMS multipath trunk,
+/// which is the hole the unified explicit guard closes.) Exit 1 (BadInput).
 #[test]
 fn general_tr_format_bip388_refused() {
     let desc = format!("tr(NUMS,{{pk({K0}),pk({K1})}})");
@@ -298,7 +547,7 @@ fn general_tr_format_bip388_refused() {
         .args(&a)
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("/<0;1>/*"));
+        .stderr(predicate::str::contains("BIP-388 wallet policy"));
 }
 
 /// (10) Descriptor-driven formats emit the faithful reconstruction.
@@ -327,5 +576,114 @@ fn general_tr_format_descriptor_and_bitcoin_core_emit() {
             !payload.contains("xprv"),
             "--format {fmt} payload must be watch-only"
         );
+    }
+}
+
+// ─── Non-NUMS taproot `--format` matrix (v0.55.3) ───────────────────────────
+
+/// (N5) Non-NUMS general-tr `--format bip388` → refused (the general
+/// route-around arm cannot express a tap-script tree as a BIP-388 wallet
+/// policy). Exit 1 (BadInput). This closes the non-NUMS multipath-trunk hole:
+/// the trunk is a real multipath xpub, so the incidental no-multipath refusal
+/// (which catches the NUMS x-only Single) does NOT fire here.
+#[test]
+fn non_nums_general_tr_format_bip388_refused() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("bip388".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("BIP-388 wallet policy"));
+}
+
+/// (N6) Non-NUMS DISTINCT-trunk multisig `--format bip388` → SUCCEEDS (Template
+/// path + `bip388.rs` `Cosigner(idx)` arm emits `tr(@idx/**,multi_a(k,…))`).
+/// The Some(t) Template branch never reaches the route-around guard.
+#[test]
+fn non_nums_distinct_trunk_multi_a_format_bip388_succeeds() {
+    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("bip388".into());
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    // The trunk cosigner is at @-some-index; the emitted policy is a tr(@i/**,…).
+    assert!(
+        s.contains("tr(@") && s.contains("multi_a("),
+        "bip388 wallet policy must carry tr(@idx/**,multi_a(…)): {s}"
+    );
+}
+
+/// (N7) Non-NUMS `--format descriptor` / `bitcoin-core` → emit faithfully (both
+/// the general route-around AND the distinct-trunk Template arm).
+#[test]
+fn non_nums_format_descriptor_and_bitcoin_core_emit() {
+    for desc in [
+        format!("tr({K2},and_v(v:pk({K0}),older(144)))"),
+        format!("tr({K2},multi_a(2,{K0},{K1}))"),
+    ] {
+        let (md1, _e) = bundle_md1(&desc);
+        for fmt in ["descriptor", "bitcoin-core"] {
+            let mut a = restore_args(&md1);
+            a.push("--format".into());
+            a.push(fmt.into());
+            Command::cargo_bin("mnemonic")
+                .unwrap()
+                .args(&a)
+                .assert()
+                .success();
+        }
+    }
+}
+
+/// (N8) Non-NUMS general-tr `--format green` → refused (existing P2tr green
+/// gate in the `None` branch). Asserts the exact exit code + slug, matching the
+/// NUMS green-refusal counterpart `general_tr_format_green_refused` (same code
+/// path) so the two stay consistent (R0 I1).
+#[test]
+fn non_nums_general_tr_format_green_refused() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("green".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("singlesig-only"));
+}
+
+/// (N9) Non-NUMS general-tr: all template-requiring / non-descriptor formats
+/// refuse (route-around taproot has no named-template form). Pins the
+/// should-refuse matrix so a future emitter change that dropped a template
+/// guard would be caught (funds-safety: no silent wrong-wallet import).
+#[test]
+fn non_nums_general_tr_template_formats_all_refuse() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    for fmt in ["bsms", "coldcard", "jade", "electrum", "sparrow", "specter"] {
+        let mut a = restore_args(&md1);
+        a.push("--format".into());
+        a.push(fmt.into());
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&a)
+            .assert()
+            .failure();
     }
 }

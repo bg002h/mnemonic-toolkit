@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.55.3] — 2026-06-13
+
+**SemVer-PATCH — `restore --md1` now faithfully reconstructs non-NUMS ("real key at the trunk") taproot wallet-policy cards (was: every `is_nums:false` taproot md1 refused).**
+
+- **Non-NUMS key-path taproot reconstructs.** A taproot card whose internal ("trunk") key is a real cosigner key — a live key-path spend, not the provably-unspendable NUMS sentinel — now restores to a watch-only descriptor + receive address for two shapes: (a) a **general** single-leaf / depth-1 policy (e.g. `tr(D,and_v(v:pk(K),older(N)))`) via the GeneralFaithful route-around, and (b) a **distinct-trunk multisig** `tr(cosigner_i, multi_a/sortedmulti_a(k, {the OTHER cosigners}))` via the Template path. The trunk key is read off the wire (`Body::Tr.key_index`), never inferred. NUMS reconstruction is byte-identical (v0.49.1/v0.55.1 goldens unchanged).
+- **`@-in-both` refused structurally (funds-safety).** The one shape that stays refused (exit 2) is `tr(@i, multi_a/sortedmulti_a(k, …@i…))` — the trunk key is *also* a leaf key. The Template path's "leaf = all-other-cosigners" shortcut would silently emit a *different* multisig at a *different* address, and the parse→print Display-fidelity guard cannot catch it (the output is its own re-print). A STRUCTURAL classify-time guard (trunk `key_index ∈ leaf indices`) refuses it rather than emit a silently-wrong wallet. Deferred: FOLLOWUP `restore-non-nums-tr-internal-key-also-in-leaf`. (Depth-≥2 tap trees and `sortedmulti_a`-under-a-taptree remain refused, unchanged.)
+- **`--format` matrix.** A non-NUMS **general-tr** emits `descriptor` / `bitcoin-core` only — `bip388` and `green` are refused (a tap-script tree reconstructed via the route-around has no named-template form; the refusal is gated to the route-around arm). A non-NUMS **distinct-trunk multisig** also emits `bip388` faithfully (`tr(@idx/**,multi_a(k,…))`) via its Template path. The template-requiring formats (`bsms`/`coldcard`/`jade`/`electrum`/`sparrow`/`specter`) refuse the general-tr arm.
+- **PATCH — watch-only, zero clap delta** → no GUI `schema_mirror` impact, no paired-PR. Resolves FOLLOWUP `restore-non-nums-taproot-internal-key` (the `is_nums:false` carve-out deferred by `restore-multisig-taproot-reconstruction` at v0.49.1).
+
 ## mnemonic-toolkit [0.55.2] — 2026-06-13
 
 **SemVer-PATCH — non-blocking advisory when an intake/round-trip descriptor's `older()` relative timelock is BIP-68 consensus-masked (e.g. `older(65536)` → 0 effective blocks).**
