@@ -53,14 +53,19 @@ backup.)
 
 ### §3.1 Shared predicate (the single source of bit-math truth)
 
-Extract the funds-safety bit-math out of `gate.rs`'s Older arm into a **new library-root module**
-`crates/mnemonic-toolkit/src/timelock_advisory.rs` (NOT inside `descriptor_builder/` — `cmd/`
-surfaces must not depend on the builder module; layering call from the architect, folded):
+Extract the funds-safety bit-math out of `gate.rs`'s Older arm into a **new bin-crate-root module**
+`crates/mnemonic-toolkit/src/timelock_advisory.rs`, declared `mod timelock_advisory;` in
+`src/main.rs` (R0-r1 m4 — both consumers are bin-crate modules: `descriptor_builder/gate.rs`
+(`main.rs:12`) and the `cmd/` surfaces (`main.rs:6`); `descriptor_builder` is bin-only, NOT in
+`lib.rs`, so the shared module lives in the bin crate and both import it via `crate::timelock_advisory`.
+**No `lib.rs` change.** Placed at crate root, NOT inside `descriptor_builder/`, so `cmd/` surfaces
+do not depend on the builder module — architect layering call.):
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]   // PartialEq/Eq required for the §3.3 debug_assert (R0-r1 m1)
 pub enum TimelockMaskConsequence {
     /// Bit-31 disable flag set ⇒ CSV is a no-op (NO timelock at all).
-    /// Reachable ONLY from the gate's IR path (raw u32 pre-`from_str`); see §3.3.
+    /// Reachable ONLY from the gate's IR path and the A-raw-card path (§3.3); never post-`from_str`.
     Bit31Disabled,
     /// Consensus masks the operand to `effective` in `unit`; the literal overstates it.
     Masked { effective: u16, unit: TimelockUnit },   // unit: Blocks | Seconds512
@@ -81,11 +86,13 @@ user-facing output is byte-identical post-extraction (pinned by the §6 characte
 The surfaces bifurcate by which parsed form they hold (architect C2, verified — there is **no**
 single universal walk input):
 
-- **Adapter A — md_codec Node-tree walk.** Recurse `md_codec::Descriptor.tree`
-  (public field, `md-codec encode.rs:25`; `Node { tag, body }` with `Body::Children` /
-  `Variable{children}` / `Tr{tree}` recursion, `tree.rs:9-52`), matching
-  `Tag::Older` + `Body::Timelock(u32)` (`tree.rs:49,169`). Serves every surface that holds an
-  `MdDescriptor`.
+- **Adapter A — md_codec Node-tree walk.** Recurse `md_codec::Descriptor.tree` (public field,
+  **md-codec 0.35.3** — crates.io, the toolkit's pinned dep, `encode.rs:25`; `Node { tag, body }`
+  `tree.rs:9`, `enum Body` `tree.rs:18` with `Children(Vec<Node>)` `:20` / `Variable{children}`
+  `:24` / `Tr{tree}` `:49` recursion), matching `Tag::Older` + `Body::Timelock(u32)` (`tree.rs:70`).
+  Serves every surface that holds an `MdDescriptor`. (All `tree.rs` lines are md-codec **0.35.3**;
+  the stale local git checkout `fe1531b` and the drifted sibling working tree differ — cite 0.35.3,
+  the published source the toolkit actually compiles.)
 - **Adapter B — miniscript-AST walk.** Iterate a parsed
   `miniscript::Descriptor<DescriptorPublicKey>`, matching `Terminal::Older(lt)` and recovering the
   raw operand via `lt.to_consensus_u32()` (miniscript rev `95fdd1c`
@@ -111,16 +118,22 @@ not node-path-keyed — the user needs to know the value is masked, not which no
 - **Adapter A from a raw md1 card (A-raw-card) — REACHABLE.** `md_codec` decode performs **NO
   operand validation**: `read_node` reads a raw 32-bit value —
   `Tag::After | Tag::Older => { let v = r.read_bits(32)? as u32; Body::Timelock(v) }`
-  (`md-codec tree.rs:169-172`). A crafted md1 card can carry a bit-31-set or zero `older()`
-  straight to Adapter A, bypassing miniscript. Confirmed A-raw-card surface: `xpub-search`'s md1
-  funnel (`parse_md1`, `descriptor_intake.rs:140-215`). `verify-bundle --md1` card-only is an R0
-  item (§8.5).
+  (**md-codec 0.35.3** `tree.rs:293-295`). A crafted md1 card can carry a bit-31-set or zero
+  `older()` straight to Adapter A, bypassing miniscript. **Sole confirmed A-raw-card surface:**
+  `xpub-search`'s md1 funnel (`parse_md1`, `descriptor_intake.rs:140-215`). (`verify-bundle --md1`
+  card-only was traced and ruled OUT of scope — see §8.5, resolved R0-r1.)
 
 **Consequence for the advisory:** it MUST handle **both** `TimelockMaskConsequence` variants. A
 `debug_assert!(consequence != Bit31Disabled)` is valid ONLY at Adapter-B and A-post-from_str call
 sites; **A-raw-card call sites must emit the `Bit31Disabled` message for real.** The gate's IR path
 (`validate_fields` on raw `PolicyNode::Older(u32)` before step-2 `from_str`, `gate.rs:161-178`)
 also reaches bit-31 — which is why the shared predicate keeps the variant.
+
+`older(0)` (R0-r1 m5): bit-31 clear, low-16 zero → classified `Masked { effective: 0, unit:
+Blocks }` (predicate's `(n & 0xFFFF) == 0` clause), **not** `Bit31Disabled`. It is rejected by
+`TryFrom<Sequence>`'s `seq != Sequence::ZERO` check on the Adapter-B and A-post-from_str paths
+(unreachable there) but reaches Adapter A via a raw md1 card → emits the `Masked{0}` "no effective
+relative timelock" message (§5).
 
 `restore --md1` is **fail-closed** on bit-31/zero: it reconstructs a descriptor *string* from the
 card and re-parses via `from_str` (`restore.rs:833`), so a bit-31/zero card yields
@@ -138,7 +151,7 @@ Seven surfaces (FOLLOWUP Where-list extended from 4 → 7 as the implementing-co
 | 2 | `bundle` (`--descriptor`, `--descriptor-file`, `--import-json`) | `MdDescriptor` via `parse_descriptor` (`bundle.rs:1228`, `1603`, `1936` — the `1936` site resolves architect C3: `--import-json` IS covered) | A |
 | 3 | `verify-bundle --descriptor` | `MdDescriptor` via `parse_descriptor` (`verify_bundle.rs:709`, `1017`) | A |
 | 4 | `restore --md1` | `miniscript::Descriptor` re-parsed from the reconstructed descriptor string (`restore.rs:833`, `1277`) | B |
-| 5 | `compare-cost` | `miniscript::Descriptor` via `cost/strip.rs:21` | B |
+| 5 | `compare-cost` (`--descriptor` AND `--miniscript`) | `--descriptor` → `Descriptor` via `cost/strip.rs:21`; `--miniscript` → `Miniscript` via `cost/translate.rs:82`/`84` (R0-r1 I2). Dispatch at `cost/mod.rs:128-135`. BOTH must fire the advisory. | B |
 | 6 | `export-wallet --descriptor` | `miniscript::Descriptor` via `export_wallet.rs:452` / `566` / `715` | B |
 | 7 | `xpub-search` | literal-xpub / BIP-388 funnel → `miniscript::Descriptor` (`descriptor_intake.rs:289`); **md1-card funnel** → `MdDescriptor` (`parse_md1`, `descriptor_intake.rs:140-215`) | B + A |
 
@@ -150,7 +163,7 @@ the literal funnel uses Adapter B).
 **Bit-31/zero regime per surface (§3.3):** rows 1–3 are A-post-from_str (bit-31 unreachable);
 rows 4–6 are Adapter B (bit-31 unreachable; restore is additionally fail-closed); row 7's md1
 funnel is **A-raw-card** (bit-31/zero REACHABLE — must handle the `Bit31Disabled` message), its
-literal funnel is Adapter B. `verify-bundle --md1` card-only reachability is R0 item §8.5.
+literal funnel is Adapter B. (`verify-bundle --md1` card-only is OUT of scope — §8.5, resolved R0-r1.)
 
 **Emit discipline.** Each surface calls the appropriate adapter at its existing post-parse success
 point and writes the deduped advisories to its own `E: Write` stderr **before** printing/engraving
@@ -158,11 +171,14 @@ its stdout result. `import-wallet`'s eight formats should collapse to the fewest
 code allows (single funnel preferred); the implementation plan enumerates exact emit sites with
 grep-verified line numbers and the R0 gate confirms all 7 are covered.
 
-**Walk-input mechanism (deferred to the implementation plan + R0):** Adapter-A surfaces hold an
-`MdDescriptor`; they may either (i) walk `MdDescriptor.tree` directly, or (ii) have
-`parse_descriptor` compute advisories once internally (on its `ms_desc` at `parse_descriptor.rs:780`
-via Adapter B) and return them — trading a ~14-caller return-type change for a single computation
-site. The plan picks the minimal-churn option; both satisfy the §6 per-surface tests identically.
+**Walk-input mechanism — DECIDED (R0-r1 I3): option (i), direct `MdDescriptor.tree` walk.**
+Each Adapter-A surface calls the `timelock_advisory` md_codec-tree walker (e.g.
+`older_advisories_tree(&descriptor.tree)`) on the `MdDescriptor` it already holds, right after its
+existing `parse_descriptor` call. **`parse_descriptor`'s return type is UNCHANGED** — Adapter A
+lives entirely in `timelock_advisory.rs`. Rejected: option (ii) (extend `parse_descriptor` to
+return `(MdDescriptor, Vec<…>)`) — it churns all `parse_descriptor` callers across `wallet_import/*`
++ `bundle.rs` + `verify_bundle.rs` for no functional gain. Both options pass the §6 tests
+identically; (i) is minimal-churn.
 
 ## §5 Behavior
 
@@ -208,37 +224,44 @@ site. The plan picks the minimal-churn option; both satisfy the §6 per-surface 
 
 - **PATCH** — advisory-only, zero clap delta → **no GUI `schema_mirror` impact, no manual
   flag-row.** (`schema_mirror` gates clap flag-NAME parity only; nothing here adds/renames a flag.)
-- **Manual** (CLAUDE.md mirror invariant): add an advisory-behavior prose paragraph under
-  `docs/manual/src/40-cli-reference/` (the `bundle` + `restore` sections) describing the
-  non-blocking masked-`older()` advisory. **Run the FULL manual lint**, not just flag-coverage
-  (`make -C docs/manual lint MNEMONIC_BIN=…`) — the v0.50.0 cspell lesson (a new manual section
-  fails CI's cspell pass even when flag-coverage is clean).
+- **Manual** (CLAUDE.md mirror invariant) — R0-r1 I4: add the advisory-behavior prose to
+  `docs/manual/src/40-cli-reference/41-mnemonic.md`. Preferred shape: ONE shared "consensus-masked
+  `older()` advisory" paragraph, cross-referenced from each of the **seven** affected subcommand
+  sections — `bundle`, `restore`, `import-wallet`, `export-wallet`, `verify-bundle`, `compare-cost`,
+  `xpub-search` — so a user of any surface finds it (not just bundle/restore). **Run the FULL manual
+  lint**, not just flag-coverage (`make -C docs/manual lint MNEMONIC_BIN=…`) — the v0.50.0 cspell
+  lesson (a new manual section fails CI's cspell pass even when flag-coverage is clean).
 - **FOLLOWUPS** (`FOLLOWUPS.md`): rides the implementing commit — extend the Where list
   (`:140`) from 4 → 7 surfaces, and mark the entry RESOLVED.
-- **Gate comment reword** (architect m1): `gate.rs:262`'s *"on an engraving surface a
+- **Gate comment reword** (architect direction-consult m1): `gate.rs:262`'s *"on an engraving surface a
   silently-weakened timelock is a funds-safety bug"* now overstates the gate's coverage (only
   `build-descriptor` is gated; `bundle` is the real engraving surface and is advisory-only).
   Reword to describe the gate as the JSON-IR authoring gate.
 - No md-codec change (the wire correctly round-trips the literal — the advisory is
   presentation-layer). No sibling-codec companions.
 
-## §8 Open items for the formal R0 gate
+## §8 R0 dispositions & items for the implementation plan
 
-R0 must converge to 0 Critical / 0 Important before any code, and explicitly adjudicate:
-1. **Walk-input mechanism** (§4): `MdDescriptor.tree` direct-walk vs `parse_descriptor`
-   return-type extension — pick the minimal-churn option and confirm it covers all Adapter-A
-   surfaces.
-2. **Emit-site minimization** for `import-wallet`'s 8 formats (single funnel vs per-format).
-3. **Final advisory wording** (§5) — confirm it names literal + effective + unit and is
-   unambiguous; confirm the `debug_assert!` documenting bit-31 unreachability (§3.3).
-4. Confirm the §6 characterization test asserts the **exact** current gate diagnostic string
-   (no drift) and is RED-provable by perturbing the extracted predicate.
-5. **A-raw-card surface set** (§3.3): confirm the complete set of surfaces that walk a tree from
-   `md_codec::decode` of a raw card (bypassing `from_str`, so bit-31/zero reachable).
-   `xpub-search`'s md1 funnel is confirmed; trace whether any `verify-bundle --md1` card-only path
-   (no `--descriptor`) independently walks the decoded card's tree for `older()` — if so it is
-   A-raw-card (needs bit-31 handling + a test cell); if it only checks card identity / never
-   surfaces the card's `older()`, document it explicitly out of scope.
+**Resolved in R0 round 1** (folded into the spec body; full review at
+`design/agent-reports/older-timelock-advisory-r0-round1-review.md`):
+- **§8.1 Walk-input mechanism** — DECIDED: option (i) direct `MdDescriptor.tree` walk;
+  `parse_descriptor` unchanged (§4, I3).
+- **§8.5 A-raw-card surface set** — DECIDED: the **sole** A-raw-card surface is `xpub-search`'s
+  md1 funnel. `verify-bundle --md1` card-only (template mode) goes `run_multisig` →
+  `emit_md1_checks` (decode / wallet_policy / xpub-match only; never traverses the policy tree for
+  `older()`) → **OUT of scope** (R0-r1 m2). No 8th intake surface found (`inspect`, `convert`,
+  `repair`, `addresses`, `decode-address` all examined; none surface `older()`).
+- **I1/I2 citation + coverage fixes** folded (md-codec → 0.35.3 lines; `compare-cost --miniscript`
+  second path added). m1/m3/m4/m5 folded.
+
+**Carries to the implementation plan** (the plan-doc gets its own R0):
+- **Emit-site minimization** for `import-wallet`'s 8 formats (prefer a single funnel emit over
+  per-format) and `compare-cost`'s two sub-paths.
+- **Final advisory wording** (§5) — confirm each form names literal + effective + unit and is
+  unambiguous; place the `debug_assert!(consequence != Bit31Disabled)` ONLY at Adapter-B /
+  A-post-from_str call sites (NOT the A-raw-card site).
+- **Characterization test** (§6) must assert the **exact** current gate diagnostic string (no
+  drift) and be RED-provable by perturbing the extracted predicate.
 
 ## Non-goals
 
