@@ -9,9 +9,21 @@ repository = "https://github.com/bg002h/mnemonic-toolkit"
 homepage = "https://github.com/bg002h/mnemonic-toolkit"
 rust-version = "1.85"
 
-# v0.3.1: pin to rust-miniscript master rev containing PR #910 (sortedmulti_a
-# parser) + #915 (Terminal::SortedMulti refactor). Drop on v0.3.2 when a
-# crates.io release publishes containing both PRs. See FOLLOWUP
-# `tr-sortedmulti-a-via-upstream`.
+# Pinned to rust-miniscript master rev 95fdd1c (2026-05-02), carried for taproot
+# fragments not yet in a crates.io release:
+#   - PR #910 (Terminal::SortedMultiA, merged 2026-04-03) — present; gives
+#     single-leaf sortedmulti_a today.
+#   - PR #915 (Terminal::SortedMulti refactor) — present.
+# This rev PREDATES PR #953 (taptree Display fix for depth-≥2 trees, merged
+# 2026-05-25), so depth-≥2 taproot restore stays refused (restore.rs
+# `ensure_taptree_depth_le_one`). A 2026-06-13 spike confirmed bumping to the
+# #953 merge (ff4732e) is build-clean + regression-free, but per advisor we hold:
+# the depth-2 fix and md-codec's SortedMultiA renderer both ride the SAME release
+# trigger, so a half-bump now only adds a second mid-master pin to carry.
+# Latest crates.io is 13.1.0 (2026-06-09) — contains NONE of these (13.x line;
+# the PRs target the next major). DROP this [patch] when the first crates.io
+# release > 13.1.0 ships containing #953 AND #910 (verify via the miniscript
+# CHANGELOG). Tracked: FOLLOWUP `taproot-coverage-cycle-on-miniscript-gt-13-1-0`
+# (supersedes the historical `tr-sortedmulti-a-via-upstream`).
 [patch.crates-io]
 miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "95fdd1c5773bd918c574d2225787973f63e16a66" }
