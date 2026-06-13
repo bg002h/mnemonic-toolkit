@@ -452,6 +452,8 @@ pub fn run<W: Write, E: Write>(
         let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc).map_err(|e| {
             ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
         })?;
+        let adv = crate::timelock_advisory::older_advisories_descriptor(&d);
+        crate::timelock_advisory::emit_advisories(&adv, stderr);
         d.to_string()
     } else {
         let template = args.template.expect("checked above");
@@ -719,6 +721,12 @@ fn run_from_import_json<W: Write, E: Write>(
             ))
         })?;
     let script_type = script_type_from_descriptor(&parsed_ms)?;
+
+    // Task 9 (masked older() advisory): fire BEFORE the taproot refuse below,
+    // so a consensus-masked older() is surfaced even when the command will
+    // subsequently refuse a taproot envelope.
+    let adv = crate::timelock_advisory::older_advisories_descriptor(&parsed_ms);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
 
     // v0.28.7 — Slug 4 Fix-α: refuse taproot envelopes at the single
     // EmitInputs gate. The wallet_import path doesn't surface taproot
