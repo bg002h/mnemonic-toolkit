@@ -214,12 +214,8 @@ fn walk_node(node: &Node, seen: &mut BTreeSet<u32>, out: &mut Vec<TimelockAdviso
     match &node.body {
         Body::Children(children) => children.iter().for_each(|c| walk_node(c, seen, out)),
         Body::Variable { children, .. } => children.iter().for_each(|c| walk_node(c, seen, out)),
-        Body::Tr { tree, .. } => {
-            if let Some(t) = tree {
-                walk_node(t, seen, out);
-            }
-        }
-        _ => {} // KeyArg / MultiKeys / Hash* / Timelock(After) / Empty — no Older children
+        Body::Tr { tree: Some(t), .. } => walk_node(t, seen, out),
+        _ => {} // KeyArg / MultiKeys / Hash* / Timelock(After) / Empty / Tr{tree:None} — no Older children
     }
 }
 
