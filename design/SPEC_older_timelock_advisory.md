@@ -231,12 +231,19 @@ identically; (i) is minimal-churn.
   `--descriptor wsh(andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016))))` AND the bare
   `--miniscript andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016)))` — both must emit the
   advisory (the single `translated` hook serves both, but each argv path is tested).
-- **A-raw-card bit-31 / zero cell** (§3.3): construct an md1 card carrying `older(0x80000001)`
-  (bit-31) and one carrying `older(0)` — either via `md_codec` encode of a hand-built
-  `Body::Timelock` tree, or by direct bit-encode — feed each to `xpub-search`'s md1 funnel; assert
-  the `Bit31Disabled` (resp. `Masked{0}`) advisory fires AND the surface still exits 0. This is the
-  cell that proves the §3.3 correction (bit-31 reachable past miniscript's filter); RED-provable by
-  reverting the advisory to Masked-only / by re-adding the `debug_assert` at the A-raw-card site.
+- **A-raw-card bit-31 reachability** (§3.3): proven by a **module unit test** walking a hand-built
+  `Node` tree (`older_advisories_node`) containing `older(0x80000001)` (bit-31) + duplicate
+  `older(65536)` → asserts `Bit31Disabled` is produced and dedup holds. The **xpub-search md1-funnel
+  integration cell** then uses a *real* `older(65536)` card (built via the normal
+  descriptor→`parse_descriptor`→encode pipeline; `older(65536)` is bit-31-clear so it encodes
+  normally) to prove the md1-card→`older_advisories_tree` **hook wiring** emits the `Masked` advisory.
+  A crafted bit-31 *card* end-to-end cell is intentionally omitted (adversarial-only — no descriptor
+  string yields a bit-31 operand; advisor §3). RED-provable by reverting the tree walk to Masked-only.
+- **False-positive + cleanliness guards** (advisor): a **clean-512s-unit** integration cell
+  (`older(4194305)` = `0x400001` → advisory SILENT) guards the likeliest false-positive (a
+  mis-set bit-22 mask); a **`--json` stdout-cleanliness** cell asserts the advisory stays on stderr
+  and never leaks into the JSON stdout payload; the **dedup** assertion is operand-keyed (same literal
+  twice → one line; two distinct masked literals → two lines).
 
 ## §7 SemVer & locksteps
 
@@ -252,9 +259,14 @@ identically; (i) is minimal-churn.
 - **FOLLOWUPS** (`FOLLOWUPS.md`): rides the implementing commit — extend the Where list
   (`:140`) from 4 → 7 surfaces, and mark the entry RESOLVED.
 - **Gate comment reword** (architect direction-consult m1): `gate.rs:262`'s *"on an engraving surface a
-  silently-weakened timelock is a funds-safety bug"* now overstates the gate's coverage (only
-  `build-descriptor` is gated; `bundle` is the real engraving surface and is advisory-only).
-  Reword to describe the gate as the JSON-IR authoring gate.
+  silently-weakened timelock is a funds-safety bug"* reads as if the gate *should* cover every
+  engraving surface. Reword to state the intended design plainly: this is the **JSON-IR authoring
+  gate** (refuse-on-author); intake/round-trip surfaces get a non-blocking advisory (advise-on-intake).
+  The split is deliberate, **not** a historical coverage gap being patched (advisor #8).
+- **New FOLLOWUP** `older-advisory-blindness-suppression` (advisor #7, deferred): the advisory fires
+  on every intake of an already-known-masked deployed wallet, every surface, every run, unsuppressable
+  → advisory-blindness risk. Not built this cycle; a future `--quiet-advisories` would be MINOR +
+  schema_mirror/manual locksteps. Recorded so it isn't re-discovered.
 - No md-codec change (the wire correctly round-trips the literal — the advisory is
   presentation-layer). No sibling-codec companions.
 

@@ -266,9 +266,15 @@ pub fn older_advisories_descriptor<Pk: MiniscriptKey>(d: &Descriptor<Pk>) -> Vec
 /// Used by md1-card decode paths (A-raw-card: bit-31 REACHABLE → NO debug_assert)
 /// AND by `parse_descriptor`-sourced MdDescriptors (A-post-from_str, bit-31-free).
 pub fn older_advisories_tree(desc: &md_codec::Descriptor) -> Vec<TimelockAdvisory> {
+    older_advisories_node(&desc.tree)
+}
+
+/// Walk a `Node` tree directly — unit-testable without constructing a full
+/// `md_codec::Descriptor` (avoids `PathDecl`/`UseSitePath`/`TlvSection` field fragility).
+pub(crate) fn older_advisories_node(root: &Node) -> Vec<TimelockAdvisory> {
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
-    walk_node(&desc.tree, &mut seen, &mut out);
+    walk_node(root, &mut seen, &mut out);
     out
 }
 
@@ -331,15 +337,25 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 fn gate_still_refuses_masked_older_byte_identical() {
     // build-descriptor must STILL refuse older(65536) with the exact pre-extraction
     // diagnostic (pins zero drift from sourcing the predicate from timelock_advisory).
-    let errs = errs(r#"{"older":65536}"#); // NOTE: replace with the real SpecDoc JSON for an older() node — see existing older() gate tests near :980
-    let msg = format!("{}", errs[0]);
+    // Uses the EXISTING gate-test helpers `older_tree(n)` (gate.rs:930) + `field_diags`
+    // (gate.rs:942); cf. the existing `rejects_masked_older_timelocks` test (gate.rs:953).
+    let fd = field_diags(&older_tree(65536));
+    let msg = fd.iter().map(|d| format!("{d}")).collect::<String>();
     assert!(msg.contains("older(N) encodes a BIP-68 relative timelock"));
     assert!(msg.contains("got 65536 (0x00010000)"));
     assert!(msg.contains("consensus would silently mask this to an effective value of 0 blocks"));
+    // Bit-31 no-op branch (IR path reaches bit-31): older(0x80000090) must say "no-op", not a value.
+    let nop = field_diags(&older_tree(0x8000_0090));
+    let nopmsg = nop.iter().map(|d| format!("{d}")).collect::<String>();
+    assert!(nopmsg.contains("no relative timelock at all"));
+    assert!(!nopmsg.contains("effective value"));
 }
 ```
 
-> The `errs(...)` helper and the exact `SpecDoc` JSON for an `older()` node already exist in the gate tests (search near `gate.rs:990`, the clean-values test, and the existing masked-older refusal test). Reuse that exact JSON shape; the assertions above pin the current emitted string.
+> The `older_tree(n)` + `field_diags(...)` helpers and the `rejects_masked_older_timelocks` /
+> `accepts_valid_older_block_and_time` tests already exist (`gate.rs:930/942/953/987`). This new test
+> pins the EXACT emitted string so the Task-2 extraction is provably byte-identical. The substrings
+> above are copied from the current `gate.rs:280-296` format.
 
 - [ ] **Step 2: Run to verify it passes BEFORE the refactor (it is a characterization test of current behavior)**
 
@@ -430,14 +446,8 @@ fn adapter_a_tree_reaches_bit31_and_dedups() {
         tag: Tag::AndOr,
         body: Body::Children(vec![older(0x8000_0001), older(65536), older(65536)]),
     };
-    let desc = md_codec::Descriptor {
-        n: 1,
-        path_decl: md_codec::origin_path::PathDecl::default(),
-        use_site_path: md_codec::use_site_path::UseSitePath::default(),
-        tree: root,
-        tlv: md_codec::TlvSection::new_empty(),
-    };
-    let advs = older_advisories_tree(&desc);
+    // Walk the Node directly — no full md_codec::Descriptor literal needed (R0 advisor #2).
+    let advs = older_advisories_node(&root);
     // bit-31 IS reachable on the A-raw-card path; 65536 deduped to one entry.
     assert_eq!(advs.len(), 2);
     assert!(advs.iter().any(|a| a.consequence == TimelockMaskConsequence::Bit31Disabled));
@@ -460,7 +470,7 @@ fn adapter_b_descriptor_wsh_collects_masked_only() {
 }
 ```
 
-> Verify the `md_codec::Descriptor` literal field set at write time (`n`, `path_decl`, `use_site_path`, `tree`, `tlv` — confirmed in md-codec 0.35.3 `encode.rs:18-29`). If `PathDecl`/`UseSitePath` lack `Default`, construct the minimal valid value the way `parse_descriptor.rs` does (search `TlvSection::new_empty` usage). The key-type for the Adapter-B test (`bitcoin::PublicKey`) avoids xpub/derivation; any `MiniscriptKey` works.
+> `adapter_a` walks a hand-built `Node` via `older_advisories_node` — no `md_codec::Descriptor` literal, so no `PathDecl`/`UseSitePath`/`TlvSection` construction. The Adapter-B test's key-type `bitcoin::PublicKey` avoids xpub/derivation; any `MiniscriptKey` works.
 
 - [ ] **Step 2: Run to verify it fails/compiles-then-asserts**
 
@@ -596,7 +606,20 @@ pub fn run<R: Read, W: Write, E: Write>(
 ```rust
 Command::CompareCost(args) => cmd::compare_cost::run(args, stdin, stdout, stderr).map(|_| 0),
 ```
-**Step 3d:** Update any in-crate callers/tests of `run_compare_cost`/`compare_cost::run` (search `run_compare_cost(` and `compare_cost::run(`) to pass a `&mut Vec::<u8>::new()` (or the test's stderr) as the new arg.
+**Step 3d:** Update in-crate callers of `run_compare_cost` (search `run_compare_cost(`). TWO are
+**production** call sites inside `build-descriptor` (`build_descriptor.rs:500` and `:530`
+`cost_preview_value`). These get a **deliberately discarding** sink WITH a comment — the advisory is
+unreachable there because `gate::validate_with_allow` (`build_descriptor.rs:287`/`:326`) hard-refuses
+masked `older()` at field-validate (step 1) BEFORE cost preview (`:424`), so a masked operand never
+reaches the cost pipeline (advisor must-fix #1):
+```rust
+    // build-descriptor's gate already refused masked older() upstream (validate_with_allow,
+    // step-1 field-validate) before cost preview runs, so no advisory can fire here; discard.
+    let mut _discard_advisory = std::io::sink();
+    cost::run_compare_cost(&cost_args, /* stdout */ &mut buf, &mut _discard_advisory)?;
+```
+(Adjust to each call site's existing stdout target.) Any TEST callers of `run_compare_cost` /
+`compare_cost::run` pass `&mut Vec::<u8>::new()` (or the test's captured stderr).
 - [ ] **Step 4:** Run → PASS (both invocations). Clean-input case (both flags) → no advisory. Run `cargo build --bin mnemonic` to catch missed call sites.
 - [ ] **Step 5:** Commit (`feat(compare-cost): masked older() advisory (--descriptor + --miniscript; threads stderr)`).
 
@@ -624,7 +647,7 @@ Site 2 — `run_from_import_json` after `script_type_from_descriptor(&parsed_ms)
 
 **Files:** Modify `crates/mnemonic-toolkit/src/cmd/xpub_search/descriptor_intake.rs` (`~:290` literal funnel; `parse_md1` sig + `~:227`; `intake_from_shape` dispatch `:141`); Test: `crates/mnemonic-toolkit/tests/cli_xpub_search*.rs` + new A-raw-card case.
 
-- [ ] **Step 1:** Failing tests: (a) `xpub-search --descriptor wsh(andor(...older(65536)...))` (literal funnel) → stderr advisory; (b) **A-raw-card**: feed an md1 card crafted with a bit-31 `older()` (build it by `md_codec` encode of a hand `Body::Timelock(0x80000001)` tree, or reuse the Task-3 tree → `md_codec::encode`/`chunk`) to `xpub-search` → stderr emits the **`Bit31Disabled`** advisory + exit 0.
+- [ ] **Step 1:** Failing tests: (a) `xpub-search --descriptor wsh(andor(...older(65536)...))` (literal funnel) → stderr advisory; (b) **A-raw-card wiring**: generate a real `md1` card from the masked descriptor via `bundle --descriptor wsh(andor(...older(65536)...))` (a setup step — `older(65536)` is bit-31-clear so it parses + encodes normally), feed that card to `xpub-search` (md1-card funnel) → stderr emits the `Masked` advisory + exit 0. This proves the md1-card→`older_advisories_tree` hook wiring. **Bit-31 reachability on this path is already proven by the Task-3 `adapter_a_tree_reaches_bit31_and_dedups` unit test** — a crafted bit-31 card is adversarial-only (no descriptor string yields it; advisor §3), so the fragile hand-crafted-card end-to-end cell is intentionally omitted.
 - [ ] **Step 2:** Run → FAIL.
 - [ ] **Step 3a:** Literal funnel — after `from_str` binds `parsed` (`~:290`), before the cosigner loop (`~:291`):
 ```rust
@@ -643,7 +666,7 @@ and at the dispatch (`descriptor_intake.rs:141`): `DescriptorShape::Md1 => parse
     crate::timelock_advisory::emit_advisories(&adv, stderr);
 ```
 (A-raw-card: bit-31 reachable; `older_advisories_tree` has NO debug_assert — correct.)
-- [ ] **Step 4:** Run → PASS (both funnels; bit-31 advisory fires on the crafted card). Clean-input case → no advisory.
+- [ ] **Step 4:** Run → PASS (both funnels; md1-card funnel emits the `Masked` advisory). Clean-input case → no advisory.
 - [ ] **Step 5:** Commit (`feat(xpub-search): masked older() advisory on both descriptor and md1-card funnels`).
 
 ---
@@ -652,7 +675,19 @@ and at the dispatch (`descriptor_intake.rs:141`): `DescriptorShape::Md1 => parse
 
 **Files:** Create `crates/mnemonic-toolkit/tests/cli_older_advisory.rs`
 
-- [ ] **Step 1:** Add a focused test file asserting (via `assert_cmd`): for the canonical masked policy, the advisory fires on at least `compare-cost`, `bundle`, `export-wallet` (representative of A/B), with **exact** message substring `"older(65536) is consensus-masked"`; and that every such surface still **exits 0** (non-blocking proof). Add a dedup assertion: the advisory line appears exactly once even though the policy has two `older()` nodes (65536 + 2016, only 65536 masked).
+- [ ] **Step 1:** Add a focused test file asserting (via `assert_cmd`):
+  - **Fires + non-blocking:** for the canonical masked policy, the advisory fires on at least
+    `compare-cost`, `bundle`, `export-wallet` (representative of A/B), substring
+    `"older(65536) is consensus-masked"`, and every surface still **exits 0**.
+  - **Clean-512s false-positive guard (advisor #4):** a descriptor with a clean 512-second-unit
+    timelock `older(4194305)` (`0x400001`) → stderr does NOT contain `"advisory: older"` (guards the
+    most likely false-positive: a fat-fingered bit-22 mask).
+  - **Dedup is operand-keyed (advisor #6):** `wsh(andor(pk(K0),older(65536),and_v(v:pk(K1),older(65536))))`
+    (same literal twice) → the advisory line appears **exactly once**; but two DISTINCT masked literals
+    `older(65536)` + `older(131072)` (both mask-to-0) → **two** advisory lines (distinct operands kept).
+  - **`--json` stdout cleanliness (advisor #5):** for a `--json` invocation of `compare-cost`
+    (and/or `export-wallet`/`bundle`), the advisory appears on **stderr** and the **stdout JSON does NOT
+    contain** `"advisory: older"` (guards a future regression that inlines the advisory into stdout).
 - [ ] **Step 2:** Run → expect PASS (hooks already in place from Tasks 4–10).
 - [ ] **Step 3:** (no impl) — if any surface fails, fix that surface's hook.
 - [ ] **Step 4:** `cargo test --test cli_older_advisory` → PASS.
@@ -671,7 +706,7 @@ and at the dispatch (`descriptor_intake.rs:141`): `DescriptorShape::Md1 => parse
 make -C docs/manual lint MNEMONIC_BIN=$(pwd)/target/debug/mnemonic MD_BIN=... MS_BIN=... MK_BIN=...
 ```
 Expected: PASS (add any new vocabulary — e.g. `older`, `BIP-68` — to the manual `.cspell` allowlist if cspell flags it).
-- [ ] **Step 3:** Update `design/FOLLOWUPS.md` entry `intake-surfaces-accept-masked-older-no-advisory`: extend the **Where** line (`:140`) from the 4 surfaces to all 7 (`bundle --descriptor`, `export-wallet --descriptor`, `import-wallet`, `xpub-search`, `verify-bundle --descriptor`, `restore --md1`, `compare-cost`), and mark the entry **RESOLVED (this cycle)** with the SPEC + R0-report references.
+- [ ] **Step 3:** Update `design/FOLLOWUPS.md`: (a) entry `intake-surfaces-accept-masked-older-no-advisory` — extend the **Where** line (`:140`) from the 4 surfaces to all 7 (`bundle --descriptor`, `export-wallet --descriptor`, `import-wallet`, `xpub-search`, `verify-bundle --descriptor`, `restore --md1`, `compare-cost`), and mark **RESOLVED (this cycle)** with SPEC + R0-report + advisor references. (b) **File a new FOLLOWUP** `older-advisory-blindness-suppression` (advisor #7, tier deferred): the advisory fires on every intake of an already-known-masked deployed wallet, every surface, every run, unsuppressable → habituation/advisory-blindness risk. Future option: a `--quiet-advisories` flag (would be MINOR + schema_mirror + manual locksteps). Do NOT build now; record the rationale so it isn't re-discovered.
 - [ ] **Step 4:** Re-run manual lint to confirm green.
 - [ ] **Step 5:** Commit (`docs(manual,followups): masked older() advisory prose (7 sections) + resolve FOLLOWUP`).
 
