@@ -41,7 +41,9 @@ pub struct TimelockAdvisory {
 /// THE shared predicate (SPEC §3.1). `Some` iff `n` is a BIP-68 footgun: a bit
 /// outside {low-16 value, bit-22 type-flag} is set, OR the 16-bit value is zero.
 /// `None` for clean operands (1..=65535 blocks, or 0x400001..=0x40FFFF 512-second
-/// units). Mirrors `descriptor_builder::gate`'s former inline logic verbatim.
+/// units). Note `0` (zero 16-bit value, no stray bits) is itself a footgun → a
+/// no-op lock that yields `Masked{effective:0}`, NOT clean (`None`). Mirrors
+/// `descriptor_builder::gate`'s former inline logic verbatim.
 pub fn older_consensus_masked(n: u32) -> Option<TimelockMaskConsequence> {
     if (n & !0x0040_FFFFu32) != 0 || (n & 0x0000_FFFFu32) == 0 {
         if n & 0x8000_0000 != 0 {
@@ -154,12 +156,17 @@ pub fn older_advisories_descriptor<Pk: MiniscriptKey>(d: &Descriptor<Pk>) -> Vec
         Descriptor::Wsh(wsh) => {
             merge_deduped(older_advisories_ms(wsh.as_inner()), &mut seen, &mut out)
         }
-        Descriptor::Sh(sh) => {
-            // Sh(Wsh) handled for completeness; no current surface produces sh(wsh) (R0-r3 m2).
-            if let ShInner::Wsh(wsh) = sh.as_inner() {
-                merge_deduped(older_advisories_ms(wsh.as_inner()), &mut seen, &mut out);
+        Descriptor::Sh(sh) => match sh.as_inner() {
+            ShInner::Wsh(wsh) => {
+                merge_deduped(older_advisories_ms(wsh.as_inner()), &mut seen, &mut out)
             }
-        }
+            // Legacy P2SH miniscript sh(<ms>) — the toolkit supports it (parse_descriptor.rs:451)
+            // and it can carry older(); reachable on Adapter-B surfaces. (older_advisories_ms is
+            // generic over Ctx, so the Legacy-context inner miniscript works.)
+            ShInner::Ms(ms) => merge_deduped(older_advisories_ms(ms), &mut seen, &mut out),
+            // ShInner::Wpkh carries no older().
+            ShInner::Wpkh(_) => {}
+        },
         Descriptor::Tr(tr) => {
             for leaf in tr.leaves() {
                 // leaf.miniscript() = &Arc<Miniscript<_,Tap>>; &Arc<T> coerces to &T at the call.
@@ -250,6 +257,22 @@ mod tests {
         for n in [0x0040_0001u32, 0x0040_FFFF] {
             assert_eq!(older_consensus_masked(n), None, "clean 512s {n:#x}");
         }
+        // older(0): no stray bits but zero 16-bit value → Masked{effective:0, Blocks} (a no-op lock).
+        assert_eq!(
+            older_consensus_masked(0),
+            Some(Masked {
+                effective: 0,
+                unit: Blocks
+            })
+        );
+        // 0x0040_0000: only the bit-22 type-flag set, zero value → Masked{effective:0, Seconds512}.
+        assert_eq!(
+            older_consensus_masked(0x0040_0000),
+            Some(Masked {
+                effective: 0,
+                unit: Seconds512
+            })
+        );
     }
 
     #[test]
