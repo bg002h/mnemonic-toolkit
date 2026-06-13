@@ -9,7 +9,11 @@
 //! key passes through `ReconstructTranslator` strict-NUMS-only.
 //!
 //! Still refused (each pinned below, all `ModeViolation` exit 2, slug-citing):
-//! - non-NUMS (cosigner) internal key (`restore-multisig-taproot-reconstruction`),
+//! - non-NUMS (cosigner) internal key — SUPPORTED since v0.55.3 for general
+//!   single-leaf/depth-1 + distinct-trunk multisig; only the `@-in-both` shape
+//!   (trunk key also a leaf key) stays refused
+//!   (`restore-non-nums-tr-internal-key-also-in-leaf`, the guard lands in the
+//!   next commit),
 //! - depth ≥2 / ≥3 leaves — STRUCTURAL, chirality-independent: the pinned
 //!   miniscript 95fdd1c mis-Displays only a LEFT-child `TapTree`, but the gate
 //!   refuses right-spine shapes too (never Display-luck; lift on the
@@ -106,6 +110,9 @@ const GOLDEN_DESC_NON_NUMS_MULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']x
 const GOLDEN_ADDR_NON_NUMS_MULTI_A: &str =
     "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
 const GOLDEN_DESC_NON_NUMS_SORTEDMULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#jpfr0tgx";
+// Intentionally identical to GOLDEN_ADDR_NON_NUMS_MULTI_A: sortedmulti_a(2,K0,K1)
+// and multi_a(2,K0,K1) produce the same script when {K0,K1} is already in sorted
+// order at index 0, so the derived first receive address matches.
 const GOLDEN_ADDR_NON_NUMS_SORTEDMULTI_A: &str =
     "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
 
@@ -223,8 +230,9 @@ fn non_nums_distinct_trunk_multi_a_restores_faithfully() {
 #[test]
 fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
     let desc = format!("tr({K2},sortedmulti_a(2,{K0},{K1}))");
-    let (md1, _emitted) = bundle_md1(&desc);
+    let (md1, emitted) = bundle_md1(&desc);
     assert!(!md1.is_empty(), "non-NUMS sortedmulti_a card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS sortedmulti_a must round-trip on the wire");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
