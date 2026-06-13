@@ -29,7 +29,11 @@ If you already have the repo cloned, run `scripts/install.sh` directly.
 `--exclude`, `--no-gui`, `--dry-run`, `--list`, `--force`). The script
 installs each component via `cargo install --locked --git --tag` into
 `$CARGO_INSTALL_ROOT` (default: `~/.cargo/bin`); no `sudo`, no system
-files touched. Requires `cargo` + `git` + a C toolchain.
+files touched. Requires `cargo` + `git` + a C toolchain. The CLIs build on
+`rustc` ≥ 1.85 (the toolkit MSRV); the `mnemonic-gui` overlay currently needs
+**`rustc` ≥ 1.88** (its dependencies' MSRV). On an older toolchain the CLI
+components install fine but the GUI step fails — pass `--no-gui` or upgrade
+`rustc`.
 
 To install just this toolkit's `mnemonic` binary (no constellation
 siblings), use the installer's `--only` flag (it carries the
