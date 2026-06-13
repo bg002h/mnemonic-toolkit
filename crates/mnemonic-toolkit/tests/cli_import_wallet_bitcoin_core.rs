@@ -978,3 +978,42 @@ fn core_fixture_file_empty_descriptors_array_sniff_no_match() {
         "expected sniff-NoMatch template; stderr: {stderr}"
     );
 }
+
+// ============================================================================
+// Consensus-masked older() advisory (SPEC_older_timelock_advisory, Task 4)
+// ============================================================================
+
+/// A wsh miniscript descriptor carrying a BIP-68 consensus-masked relative
+/// timelock (`older(65536)` — bit 16 is outside the low-16-bit value field,
+/// so consensus masks it to an effective value of 0). Importing it must emit
+/// the non-blocking advisory on stderr while still succeeding (exit 0).
+#[test]
+fn core_masked_older_emits_advisory() {
+    let desc = format!(
+        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*),older(65536)))"
+    );
+    let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
+    let assert = run_core_stdin(&blob).success();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("advisory: older(65536) is consensus-masked"),
+        "expected consensus-masked older() advisory on stderr; stderr: {stderr}"
+    );
+}
+
+/// Clean-input counterpart: `older(2016)` is a valid 16-bit relative timelock
+/// (no stray bits, non-zero value), so NO advisory is emitted. The import
+/// still succeeds. Guards against the hook firing on clean operands.
+#[test]
+fn core_clean_older_emits_no_advisory() {
+    let desc = format!(
+        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*),older(2016)))"
+    );
+    let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
+    let assert = run_core_stdin(&blob).success();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("advisory: older"),
+        "clean older(2016) must NOT emit an older() advisory; stderr: {stderr}"
+    );
+}

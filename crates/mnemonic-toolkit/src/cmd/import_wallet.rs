@@ -1284,6 +1284,14 @@ electrum|jade|sparrow|specter>"
         _ => apply_select_descriptor(parsed, select)?,
     };
 
+    // Non-blocking consensus-masked older() advisory (SPEC_older_timelock_advisory,
+    // Task 4 / Adapter A). After the descriptor selection is finalized, before
+    // stdout emit. `p.descriptor: md_codec::Descriptor`; tree-walk per parsed import.
+    for p in &parsed {
+        let adv = crate::timelock_advisory::older_advisories_tree(&p.descriptor);
+        crate::timelock_advisory::emit_advisories(&adv, stderr);
+    }
+
     // Emit stdout.
     if args.json {
         emit_json_envelope(
