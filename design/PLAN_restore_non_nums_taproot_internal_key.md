@@ -259,19 +259,27 @@ The Template path's `Cosigner(idx)` mode reconstructs the leaf as `{all cosigner
 ```rust
 use md_codec::tree::{Body, Node};
 
-/// (N4) @-in-both refusal: tr(@0, multi_a(2, @0, @1)) — the trunk key IS also a
-/// leaf key. The Template Cosigner(idx) shortcut would emit multi_a(2,@1) (drop
-/// @0) — a different, silently-wrong wallet the Display-fidelity guard CANNOT
-/// catch (it self-prints). MUST refuse structurally at classify time.
+/// (N4) @-in-both refusal: tr(@0, multi_a(2, @0, @1, @2)) — the trunk key IS
+/// also a leaf key. The Template Cosigner(idx) shortcut would emit
+/// multi_a(2, @1, @2) (drop @0) — a different, silently-wrong wallet the
+/// Display-fidelity guard CANNOT catch (it self-prints). MUST refuse structurally.
 /// bundle rejects this shape at intake, so the md1 is constructed directly.
+///
+/// CORRECTED (Task-2 impl finding): the genuine exit-0 RED needs n>=3. The
+/// degenerate 2-of-2 tr(@0,multi_a(2,@0,@1)) does NOT exit 0 — dropping @0 from a
+/// 2-key leaf yields multi_a(2,@1) = 2-of-1, which miniscript rejects downstream
+/// as k>n (exit 2, a COINCIDENTAL catch, not the funds-safety bug). So the
+/// PRIMARY RED cell uses n=3 (genuine exit-0 silent-wrong reconstruction); pin
+/// the 2-of-2 as a SECONDARY cell proving the structural guard refuses it too
+/// (regardless of the coincidental k>n catch). Parametrize the builder by
+/// (n, k, leaf_indices).
 #[test]
 fn at_in_both_tr_refuses_structurally() {
-    // Build a Descriptor whose tree is Tr{is_nums:false,key_index:0,
-    // tree:Some(MultiA leaf with indices [0,1])} and populate tlv.pubkeys with
-    // a non-empty concrete pubkey per slot so is_wallet_policy() passes the
+    // n=3 @-in-both: Tr{is_nums:false,key_index:0, tree:MultiA{k:2,indices:[0,1,2]}}.
+    // Populate tlv.pubkeys (non-empty per slot) so is_wallet_policy() passes the
     // step-2 gate (else it trips the wrong "template-only" refusal). See
     // md-codec encode.rs:50 (is_wallet_policy) + restore.rs:1155.
-    let d = build_at_in_both_descriptor(); // helper below
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2]); // helper below
     let chunks = md_codec::chunk::split(&d).expect("split @-in-both md1");
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -285,18 +293,18 @@ fn at_in_both_tr_refuses_structurally() {
 }
 ```
 
-Write `build_at_in_both_descriptor()` using md_codec's actual public constructors (read the crate first). **`md_codec::Descriptor` has FIVE public fields** (`encode.rs:17-28`) — ALL must be set or it won't compile: `n: u8`, `path_decl: PathDecl`, `use_site_path: UseSitePath`, `tree: Node`, `tlv: TlvSection`. Set:
-- `n: 2` (two placeholders).
-- `tree = Node { tag: Tag::Tr, body: Body::Tr { is_nums: false, key_index: 0, tree: Some(Box::new(Node { tag: Tag::MultiA, body: Body::MultiKeys { k: 2, indices: vec![0, 1] } })) } }` — the `@-in-both` shape (trunk `@0` ∈ leaf `[0,1]`).
-- `tlv.pubkeys = Some(vec![<two valid 65-byte [chaincode‖pubkey] entries>])` (non-empty so `is_wallet_policy()` passes — see Step-1 note).
-- `path_decl` + `use_site_path`: read `tree.rs`/`encode.rs`/the existing direct-construction tests for the canonical standard-multipath values (e.g. a shared origin + `<0;1>/*` use-site); reuse whatever the suite already constructs for a wallet-policy md1.
+Write `build_at_in_both_descriptor(n, k, leaf_indices)` using md_codec's actual public constructors (read the crate first). **`md_codec::Descriptor` has FIVE public fields** (`encode.rs:17-28`) — ALL must be set or it won't compile: `n: u8`, `path_decl: PathDecl`, `use_site_path: UseSitePath`, `tree: Node`, `tlv: TlvSection`. Set:
+- `n` (the parameter; 3 for the primary RED cell, 2 for the secondary).
+- `tree = Node { tag: Tag::Tr, body: Body::Tr { is_nums: false, key_index: 0, tree: Some(Box::new(Node { tag: Tag::MultiA, body: Body::MultiKeys { k, indices: leaf_indices } })) } }` — the `@-in-both` shape (trunk `@0` ∈ leaf indices).
+- `tlv.pubkeys = Some(vec![<one valid 65-byte [chaincode‖pubkey] entry per slot>])` (non-empty so `is_wallet_policy()` passes — see Step-1 note). `tlv.fingerprints` likewise one per slot.
+- `path_decl` + `use_site_path`: read `tree.rs`/`encode.rs`/the existing direct-construction tests (e.g. `template.rs`) for the canonical standard-multipath values (shared origin + `UseSitePath::standard_multipath()`); reuse whatever the suite already constructs for a wallet-policy md1.
 
-The `@-in-both` payload DOES encode cleanly: `validate_placeholder_usage` registers `@0` (Tr body) first, then the leaf's `[0,1]` (skips the seen `0`, adds `1`) → `first_occurrences=[0,1]`, canonical, passes. (R0-confirmed.) Derive the two 65-byte pubkey entries from K0/K1 via md_codec's expand, or reuse the codec's own fixtures.
+The `@-in-both` payload DOES encode cleanly: `validate_placeholder_usage` registers `@0` (Tr body) first, then the leaf indices (skips the seen `0`, adds the rest) → canonical `first_occurrences`, passes. (R0-confirmed.) Use canonical synthetic 65-byte filler ([0x42;32] chaincode ‖ SEC1-compressed generator G) per the `template.rs` precedent, one distinct fingerprint per slot.
 
 - [ ] **Step 2: Run — verify the RED-proof (currently reconstructs WRONG, no refusal)**
 
 Run: `cargo test --manifest-path crates/mnemonic-toolkit/Cargo.toml --test cli_restore_taproot at_in_both_ -- --nocapture`
-Expected: FAIL — without the guard, Task 1's code returns `Template(TrMultiA, Cosigner(0))`, reconstructs `tr(<@0 seg>, multi_a(2, <@1 seg>))` (a different, 1-cosigner-dropped multisig), and **exits 0** (success, wrong output). The test's `.code(2)` assertion therefore fails — that IS the RED-proof (the Display-fidelity guard self-prints the wrong-but-consistent descriptor, so only the structural classify-time guard can catch it). **CONFIRM the exit code is exactly 0** (a wrong-but-successful reconstruction), NOT some other exit-2 refusal — an exit-2 failure for an unrelated reason would falsely "pass" the RED. Capture the wrong stdout (`--nocapture`) and note it in the commit body.
+Expected (PRIMARY n=3 cell): FAIL — without the guard, Task 1's code returns `Template(TrMultiA, Cosigner(0))`, reconstructs `tr(<@0 seg>, multi_a(2, <@1 seg>, <@2 seg>))` (a different 2-of-2, trunk @0 silently dropped), and **exits 0** (success, wrong output). The `.code(2)` assertion fails — that IS the RED-proof (the Display-fidelity guard self-prints the wrong-but-consistent descriptor; only the structural classify-time guard can catch it). **CONFIRM the exit code is exactly 0** for the n=3 cell (a wrong-but-successful reconstruction). NOTE: the SECONDARY 2-of-2 cell instead exits 2 *without* the guard (dropping @0 → multi_a(2,@1) = 2-of-1 → miniscript k>n) — a COINCIDENTAL catch, not the funds-safety bug; the guard makes its refusal intentional/structural. This is exactly why the primary RED must be n>=3. Capture the wrong n=3 stdout (`--nocapture`) and note it in the commit body.
 
 - [ ] **Step 3: Implement the guard in the Template arms**
 

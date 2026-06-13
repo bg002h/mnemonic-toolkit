@@ -178,6 +178,13 @@ computation.)
 - **RED-proof:** with the §4 structural guard removed, this same crafted card reconstructs to
   `multi_a(k, {leaf \ trunk})` (silently dropping the trunk key) AND passes the Display-fidelity guard
   — demonstrating the structural guard's necessity (the fidelity guard cannot catch it, §4).
+- **(Task-2 impl finding) the genuine exit-0 RED needs n≥3.** A degenerate 2-of-2
+  `tr(@0,multi_a(2,@0,@1))` does NOT exit 0 — dropping @0 from a 2-key leaf yields `multi_a(2,@1)` =
+  2-of-1, which miniscript rejects downstream as `k>n` (exit 2, a COINCIDENTAL catch, not the
+  funds-safety bug). The PRIMARY RED cell must therefore be n≥3 (`tr(@0,multi_a(2,@0,@1,@2))` →
+  `multi_a(2,@1,@2)`, a valid wrong 2-of-2 at a wrong address, exit 0). Pin the 2-of-2 as a SECONDARY
+  cell proving the structural guard refuses it too (irrespective of the coincidental k>n catch). The
+  guard covers all n uniformly. (§4's example already uses the n=3 shape.)
 
 **Format-output (R0-r1 I2; CORRECTED R0-r2 I2 — multisig bip388 SUCCEEDS, do NOT group it with general-tr):**
 - **Non-NUMS general-tr** `--format bip388` → **refused** (the explicit `None`-branch taproot guard,
