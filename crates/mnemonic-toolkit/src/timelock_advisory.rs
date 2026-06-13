@@ -306,4 +306,48 @@ mod tests {
         assert!(b31.message().contains("bit-31 disable flag set"));
         assert!(b31.message().contains("no relative timelock at all"));
     }
+
+    #[test]
+    fn adapter_a_tree_reaches_bit31_and_dedups() {
+        use md_codec::tag::Tag;
+        use md_codec::tree::{Body, Node};
+        // Hand-built tree: andor(<older(0x80000001)>, <older(65536)>, <older(65536)>)
+        // mirrors a crafted md1 card (md_codec decode does NO operand validation).
+        let older = |v: u32| Node {
+            tag: Tag::Older,
+            body: Body::Timelock(v),
+        };
+        let root = Node {
+            tag: Tag::AndOr,
+            body: Body::Children(vec![older(0x8000_0001), older(65536), older(65536)]),
+        };
+        // Walk the Node directly — no full md_codec::Descriptor literal needed (R0 advisor #2).
+        let advs = older_advisories_node(&root);
+        // bit-31 IS reachable on the A-raw-card path; 65536 deduped to one entry.
+        assert_eq!(advs.len(), 2);
+        assert!(advs
+            .iter()
+            .any(|a| a.consequence == TimelockMaskConsequence::Bit31Disabled));
+        assert!(advs.iter().any(|a| a.operand == 65536));
+    }
+
+    #[test]
+    fn adapter_b_descriptor_wsh_collects_masked_only() {
+        use miniscript::Descriptor;
+        use std::str::FromStr;
+        // wsh(andor(pk(K0),older(65536),and_v(v:pk(K1),older(2016)))) — 65536 masked, 2016 clean.
+        let k0 = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let k1 = "03f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
+        let d = Descriptor::<miniscript::bitcoin::PublicKey>::from_str(&format!(
+            "wsh(andor(pk({k0}),older(65536),and_v(v:pk({k1}),older(2016))))"
+        ))
+        .expect("masked policy parses");
+        let advs = older_advisories_descriptor(&d);
+        assert_eq!(
+            advs.len(),
+            1,
+            "only older(65536) is masked; older(2016) is clean"
+        );
+        assert_eq!(advs[0].operand, 65536);
+    }
 }
