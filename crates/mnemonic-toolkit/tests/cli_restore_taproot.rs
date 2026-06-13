@@ -528,10 +528,14 @@ fn multi_a_2leaf_tr_format_green_refused_as_multisig() {
         .stderr(predicate::str::contains("does not support multisig"));
 }
 
-/// (9) `--format bip388` on a reconstructed general-tr policy: refused loudly —
-/// the NUMS internal key is a bare x-only `Single` with no `/<0;1>/*` suffix,
-/// which BIP-388 wallet policies require on every key. Pins today's loud
-/// refusal (NOT silent-wrong); message-quality nit may ride a future cycle.
+/// (9) `--format bip388` on a reconstructed general-tr policy: refused loudly.
+/// Since v0.55.3 the refusal is the EXPLICIT taproot route-around guard in the
+/// `None` (general) arm of `build_multisig_import_payload` — a tap-script-tree
+/// reconstructed via the route-around has no named-template form, so it cannot
+/// be expressed as a BIP-388 wallet policy. (Previously this was an INCIDENTAL
+/// failure: the NUMS internal key is a bare x-only `Single` with no `/<0;1>/*`
+/// suffix; that incidental mechanism does NOT catch a non-NUMS multipath trunk,
+/// which is the hole the unified explicit guard closes.) Exit 1 (BadInput).
 #[test]
 fn general_tr_format_bip388_refused() {
     let desc = format!("tr(NUMS,{{pk({K0}),pk({K1})}})");
@@ -544,7 +548,7 @@ fn general_tr_format_bip388_refused() {
         .args(&a)
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("/<0;1>/*"));
+        .stderr(predicate::str::contains("BIP-388 wallet policy"));
 }
 
 /// (10) Descriptor-driven formats emit the faithful reconstruction.
@@ -574,4 +578,90 @@ fn general_tr_format_descriptor_and_bitcoin_core_emit() {
             "--format {fmt} payload must be watch-only"
         );
     }
+}
+
+// ─── Non-NUMS taproot `--format` matrix (v0.55.3) ───────────────────────────
+
+/// (N5) Non-NUMS general-tr `--format bip388` → refused (the general
+/// route-around arm cannot express a tap-script tree as a BIP-388 wallet
+/// policy). Exit 1 (BadInput). This closes the non-NUMS multipath-trunk hole:
+/// the trunk is a real multipath xpub, so the incidental no-multipath refusal
+/// (which catches the NUMS x-only Single) does NOT fire here.
+#[test]
+fn non_nums_general_tr_format_bip388_refused() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("bip388".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("BIP-388 wallet policy"));
+}
+
+/// (N6) Non-NUMS DISTINCT-trunk multisig `--format bip388` → SUCCEEDS (Template
+/// path + `bip388.rs` `Cosigner(idx)` arm emits `tr(@idx/**,multi_a(k,…))`).
+/// The Some(t) Template branch never reaches the route-around guard.
+#[test]
+fn non_nums_distinct_trunk_multi_a_format_bip388_succeeds() {
+    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("bip388".into());
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    // The trunk cosigner is at @-some-index; the emitted policy is a tr(@i/**,…).
+    assert!(
+        s.contains("tr(@") && s.contains("multi_a("),
+        "bip388 wallet policy must carry tr(@idx/**,multi_a(…)): {s}"
+    );
+}
+
+/// (N7) Non-NUMS `--format descriptor` / `bitcoin-core` → emit faithfully (both
+/// the general route-around AND the distinct-trunk Template arm).
+#[test]
+fn non_nums_format_descriptor_and_bitcoin_core_emit() {
+    for desc in [
+        format!("tr({K2},and_v(v:pk({K0}),older(144)))"),
+        format!("tr({K2},multi_a(2,{K0},{K1}))"),
+    ] {
+        let (md1, _e) = bundle_md1(&desc);
+        for fmt in ["descriptor", "bitcoin-core"] {
+            let mut a = restore_args(&md1);
+            a.push("--format".into());
+            a.push(fmt.into());
+            Command::cargo_bin("mnemonic")
+                .unwrap()
+                .args(&a)
+                .assert()
+                .success();
+        }
+    }
+}
+
+/// (N8) Non-NUMS general-tr `--format green` → refused (existing P2tr green
+/// gate in the `None` branch).
+#[test]
+fn non_nums_general_tr_format_green_refused() {
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, _e) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("green".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .failure();
 }

@@ -897,6 +897,17 @@ fn build_multisig_import_payload(
                     "--format green cannot emit a taproot policy descriptor — Green's file-import surface is singlesig-only, and this md1 restores a tap-script-tree policy. Use --format bitcoin-core or --format descriptor for a watch-only import.".into(),
                 ));
             }
+            if format == CliExportFormat::Bip388
+                && matches!(
+                    script_type,
+                    wallet_export::WalletScriptType::P2tr
+                        | wallet_export::WalletScriptType::P2trMulti
+                )
+            {
+                return Err(ToolkitError::BadInput(
+                    "--format bip388 cannot express this taproot policy as a BIP-388 wallet policy — a tap-script-tree reconstructed via the general route-around has no named-template form. Use --format descriptor or --format bitcoin-core for a watch-only import. (A distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)".into(),
+                ));
+            }
             (script_type, "imported-descriptor".to_string())
         }
     };
