@@ -101,12 +101,18 @@ single universal walk input):
   **two different parsed types** (R0-r2 I1):
   - `export-wallet`, `restore --md1`, `xpub-search` literal funnel hold a
     `Descriptor<DescriptorPublicKey>` → a thin `older_advisories_descriptor(&Descriptor<Pk>)`
-    unwraps the inner miniscript(s) (`Wsh` / `Sh(Wsh)` / `Tr` leaf scripts) and calls the core.
+    unwraps the inner miniscript(s) (`Wsh` via `Wsh::as_inner()` / `Tr` leaves via `TapTree::leaves()`;
+    `Sh(Wsh)` handled for completeness though no current surface produces it — R0-r3 m2) and calls
+    the core.
   - `compare-cost` holds a `Translated` (`cost/translate.rs:19`) carrying
     `segv0: Miniscript<DefiniteDescriptorKey, Segwitv0>` (`:22`) and `tap:` (`:23`). BOTH
     `--descriptor` and `--miniscript` produce one `Translated` (dispatch `cost/mod.rs:128-136`), so
     a SINGLE hook on `translated.segv0` after the dispatch covers both input paths — it calls the
-    core directly (no descriptor unwrap).
+    core directly (no descriptor unwrap). Walking only `segv0` is sufficient even for single-leaf
+    `tr(IK,M)` `--descriptor` input: `strip.rs` reverse-projects the Tap leaf into `segv0` via a
+    `from_str` round-trip (`cost/strip.rs:125`) preserving the `older()` operand values; `tap` holds
+    structurally identical `older()` nodes (only the key type differs) and dedup-by-value means a
+    second walk adds nothing (R0-r3 m1).
 
 Both adapters return `Vec<TimelockAdvisory>` deduped by operand value (architect I6: value-keyed,
 not node-path-keyed — the user needs to know the value is masked, not which node it sits in).
