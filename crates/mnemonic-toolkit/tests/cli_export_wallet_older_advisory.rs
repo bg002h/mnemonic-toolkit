@@ -37,7 +37,13 @@ const MASKED_OLDER_ADVISORY: &str = "advisory: older(65536) is consensus-masked"
 fn export_wallet_descriptor_masked_older_emits_advisory() {
     let desc = format!("wsh(andor(pk({KEY_A}),older(65536),and_v(v:pk({KEY_B}),older(2016))))");
     let out = bin()
-        .args(["export-wallet", "--descriptor", &desc, "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &desc,
+            "--format",
+            "descriptor",
+        ])
         .output()
         .unwrap();
     assert_eq!(
@@ -59,7 +65,13 @@ fn export_wallet_descriptor_masked_older_emits_advisory() {
 fn export_wallet_descriptor_clean_older_no_advisory() {
     let desc = format!("wsh(and_v(v:pk({KEY_A}),older(2016)))");
     let out = bin()
-        .args(["export-wallet", "--descriptor", &desc, "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &desc,
+            "--format",
+            "descriptor",
+        ])
         .output()
         .unwrap();
     assert_eq!(
@@ -117,7 +129,13 @@ fn export_wallet_from_import_json_masked_older_advisory_fires_before_taproot_ref
     let descriptor = format!("tr({NUMS},and_v(v:pk({KEY_A}),older(65536)))");
     let envelope = envelope_with_descriptor(&descriptor);
     let out = bin()
-        .args(["export-wallet", "--from-import-json", "-", "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            "descriptor",
+        ])
         .write_stdin(envelope)
         .output()
         .unwrap();
@@ -148,7 +166,13 @@ fn export_wallet_from_import_json_clean_no_advisory() {
     let descriptor = format!("wsh(and_v(v:pk({KEY_A}),older(2016)))");
     let envelope = envelope_with_descriptor(&descriptor);
     let out = bin()
-        .args(["export-wallet", "--from-import-json", "-", "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            "descriptor",
+        ])
         .write_stdin(envelope)
         .output()
         .unwrap();

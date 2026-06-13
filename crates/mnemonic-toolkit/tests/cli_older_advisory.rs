@@ -110,10 +110,7 @@ fn fires_and_non_blocking_compare_cost() {
 fn fires_and_non_blocking_bundle() {
     // multi(2,...) wrapper so the descriptor resolves against the two slots.
     let descriptor = "wsh(and_v(v:multi(2,@0/<0;1>/*,@1/<0;1>/*),older(65536)))";
-    let out = bin()
-        .args(bundle_masked_args(descriptor))
-        .output()
-        .unwrap();
+    let out = bin().args(bundle_masked_args(descriptor)).output().unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
         out.status.code(),
@@ -133,7 +130,13 @@ fn fires_and_non_blocking_bundle() {
 fn fires_and_non_blocking_export_wallet() {
     let desc = canonical_masked_descriptor();
     let out = bin()
-        .args(["export-wallet", "--descriptor", &desc, "--format", "descriptor"])
+        .args([
+            "export-wallet",
+            "--descriptor",
+            &desc,
+            "--format",
+            "descriptor",
+        ])
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -254,8 +257,8 @@ fn json_stdout_clean_advisory_on_stderr_compare_cost() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     // stdout must be valid JSON and carry NO advisory text.
-    let _: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("compare-cost --json emits valid JSON on stdout");
+    let _: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .expect("compare-cost --json emits valid JSON on stdout");
     assert!(
         !stdout.contains(ADVISORY_PREFIX),
         "advisory must NOT leak into stdout JSON; stdout: {stdout}"

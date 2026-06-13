@@ -1285,9 +1285,7 @@ fn masked_older_emits_advisory_descriptor() {
     // --descriptor path needs concrete keys (abstract labels are --miniscript
     // only). wsh(andor(pk(A), older(65536), and_v(v:pk(B), older(2016)))):
     // older(65536) is masked; older(2016) is clean → exactly one advisory.
-    let desc = format!(
-        "wsh(andor(pk({KEY_A}),older(65536),and_v(v:pk({KEY_B}),older(2016))))"
-    );
+    let desc = format!("wsh(andor(pk({KEY_A}),older(65536),and_v(v:pk({KEY_B}),older(2016))))");
     let out = bin()
         .args(["compare-cost", "--descriptor", &desc])
         .output()
