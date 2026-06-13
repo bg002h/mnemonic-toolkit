@@ -95,17 +95,37 @@ single universal walk input):
 Both adapters return `Vec<TimelockAdvisory>` deduped by operand value (architect I6: value-keyed,
 not node-path-keyed — the user needs to know the value is masked, not which node it sits in).
 
-### §3.3 Bit-31 is unreachable on intake (architect C1, verified)
+### §3.3 Bit-31 / zero reachability — three regimes (architect C1, REVISED post-write)
 
-miniscript `from_str` rejects bit-31-set and zero `older()` at parse: `RelLockTime`'s
-`TryFrom<Sequence>` (rev `95fdd1c` `relative_locktime.rs:70-80`) returns `Err` unless
-`seq.is_relative_lock_time() && seq != Sequence::ZERO`. So any descriptor with `older(bit31|…)`
-or `older(0)` **fails to parse and is never engraved/round-tripped** — the walk never sees it.
-Consequence: on every intake surface the advisory can only ever emit the `Masked { effective, unit }`
-branch. The advisory code path `debug_assert!`s it never receives `Bit31Disabled`. The
-`Bit31Disabled` variant exists solely for the gate's IR path (`validate_fields` runs on the raw
-`PolicyNode::Older(u32)` BEFORE the gate's step-2 `from_str`, `gate.rs:161-178`), where bit-31 is
-reachable.
+`older()` operands reach the adapters by three routes with **different validation**. The original
+"unreachable on intake" claim (justified via miniscript `from_str`) holds for two of them but
+**fails for raw md1-card decode**, which bypasses miniscript:
+
+- **Adapter B (miniscript `from_str`) — UNREACHABLE.** `RelLockTime`'s `TryFrom<Sequence>`
+  (rev `95fdd1c` `relative_locktime.rs:70-80`) returns `Err` unless `seq.is_relative_lock_time()
+  && seq != Sequence::ZERO`, so bit-31-set and zero `older()` fail to parse. Surfaces:
+  `compare-cost`, `export-wallet`, `restore --md1`, `xpub-search` literal/BIP-388 funnel.
+- **Adapter A built inside `parse_descriptor` (A-post-from_str) — UNREACHABLE.** `import-wallet`,
+  `bundle`, `verify-bundle --descriptor` build the md_codec tree *after* `parse_descriptor` runs
+  `from_str` (`parse_descriptor.rs:780`), so the tree is already bit-31/zero-free.
+- **Adapter A from a raw md1 card (A-raw-card) — REACHABLE.** `md_codec` decode performs **NO
+  operand validation**: `read_node` reads a raw 32-bit value —
+  `Tag::After | Tag::Older => { let v = r.read_bits(32)? as u32; Body::Timelock(v) }`
+  (`md-codec tree.rs:169-172`). A crafted md1 card can carry a bit-31-set or zero `older()`
+  straight to Adapter A, bypassing miniscript. Confirmed A-raw-card surface: `xpub-search`'s md1
+  funnel (`parse_md1`, `descriptor_intake.rs:140-215`). `verify-bundle --md1` card-only is an R0
+  item (§8.5).
+
+**Consequence for the advisory:** it MUST handle **both** `TimelockMaskConsequence` variants. A
+`debug_assert!(consequence != Bit31Disabled)` is valid ONLY at Adapter-B and A-post-from_str call
+sites; **A-raw-card call sites must emit the `Bit31Disabled` message for real.** The gate's IR path
+(`validate_fields` on raw `PolicyNode::Older(u32)` before step-2 `from_str`, `gate.rs:161-178`)
+also reaches bit-31 — which is why the shared predicate keeps the variant.
+
+`restore --md1` is **fail-closed** on bit-31/zero: it reconstructs a descriptor *string* from the
+card and re-parses via `from_str` (`restore.rs:833`), so a bit-31/zero card yields
+`older(2147483649)` / `older(0)` → `from_str` rejects → restore errors with
+*"--md1 reconstructed descriptor parse: …"* BEFORE any advisory. Not advised, by design.
 
 ## §4 Surfaces & coverage
 
@@ -127,6 +147,11 @@ mines xpubs, not a backup artifact). It is **kept in scope** — consistent with
 "advisory everywhere" decision and ~free once both adapters exist (the md1 funnel uses Adapter A;
 the literal funnel uses Adapter B).
 
+**Bit-31/zero regime per surface (§3.3):** rows 1–3 are A-post-from_str (bit-31 unreachable);
+rows 4–6 are Adapter B (bit-31 unreachable; restore is additionally fail-closed); row 7's md1
+funnel is **A-raw-card** (bit-31/zero REACHABLE — must handle the `Bit31Disabled` message), its
+literal funnel is Adapter B. `verify-bundle --md1` card-only reachability is R0 item §8.5.
+
 **Emit discipline.** Each surface calls the appropriate adapter at its existing post-parse success
 point and writes the deduped advisories to its own `E: Write` stderr **before** printing/engraving
 its stdout result. `import-wallet`'s eight formats should collapse to the fewest emit sites the
@@ -142,11 +167,15 @@ site. The plan picks the minimal-churn option; both satisfy the §6 per-surface 
 ## §5 Behavior
 
 - **Trigger:** `older_consensus_masked(n).is_some()` for any `older()` operand in the policy.
-- **Message (the only reachable branch on intake):**
-  `advisory: older(<N>) is consensus-masked — BIP-68 uses only the low 16 bits, so this relative
-  timelock has an effective value of <effective> <blocks|512-second units>; the literal <N>
-  overstates the lock.` (Exact wording finalized at implementation; must name the literal, the
-  effective value, and the unit.)
+- **Message — two forms** (which one is reachable depends on the regime, §3.3):
+  - `Masked { effective, unit }` (all regimes): `advisory: older(<N>) is consensus-masked —
+    BIP-68 uses only the low 16 bits, so this relative timelock has an effective value of
+    <effective> <blocks|512-second units>; the literal <N> overstates the lock.` (For
+    `effective == 0`: phrase as "no effective relative timelock".)
+  - `Bit31Disabled` (A-raw-card only): `advisory: older(<N>) has the BIP-68 bit-31 disable flag
+    set — consensus treats this CHECKSEQUENCEVERIFY as a no-op, so there is no relative timelock at
+    all.`
+  - Exact wording finalized at implementation; each must name the literal `N` and the consequence.
 - **Dedup:** one line per distinct operand value (§3.2).
 - **Stream/placement:** stderr only, **including `restore --md1`** (architect I4: inline in the
   stdout restore document would corrupt downstream parsing of that artifact).
@@ -168,6 +197,12 @@ site. The plan picks the minimal-churn option; both satisfy the §6 per-surface 
   shape — `older(65536)` masked, `older(2016)` clean → exactly one deduped advisory line); silent
   on a fully-clean descriptor; surface still exits 0 / engraves / round-trips (non-blocking
   proof).
+- **A-raw-card bit-31 / zero cell** (§3.3): construct an md1 card carrying `older(0x80000001)`
+  (bit-31) and one carrying `older(0)` — either via `md_codec` encode of a hand-built
+  `Body::Timelock` tree, or by direct bit-encode — feed each to `xpub-search`'s md1 funnel; assert
+  the `Bit31Disabled` (resp. `Masked{0}`) advisory fires AND the surface still exits 0. This is the
+  cell that proves the §3.3 correction (bit-31 reachable past miniscript's filter); RED-provable by
+  reverting the advisory to Masked-only / by re-adding the `debug_assert` at the A-raw-card site.
 
 ## §7 SemVer & locksteps
 
@@ -198,6 +233,12 @@ R0 must converge to 0 Critical / 0 Important before any code, and explicitly adj
    unambiguous; confirm the `debug_assert!` documenting bit-31 unreachability (§3.3).
 4. Confirm the §6 characterization test asserts the **exact** current gate diagnostic string
    (no drift) and is RED-provable by perturbing the extracted predicate.
+5. **A-raw-card surface set** (§3.3): confirm the complete set of surfaces that walk a tree from
+   `md_codec::decode` of a raw card (bypassing `from_str`, so bit-31/zero reachable).
+   `xpub-search`'s md1 funnel is confirmed; trace whether any `verify-bundle --md1` card-only path
+   (no `--descriptor`) independently walks the decoded card's tree for `older()` — if so it is
+   A-raw-card (needs bit-31 handling + a test cell); if it only checks card identity / never
+   surfaces the card's `older()`, document it explicitly out of scope.
 
 ## Non-goals
 
