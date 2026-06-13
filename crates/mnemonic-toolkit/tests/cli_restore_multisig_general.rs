@@ -192,6 +192,45 @@ fn general_format_descriptor_is_faithful() {
         .stdout(predicate::str::contains("older(4032)"));
 }
 
+/// (4c) consensus-masked `older()` advisory (Task 7): an md1 card carrying a
+/// BIP-68 consensus-masked `older(65536)` (low-16 zero → effective 0 blocks)
+/// reconstructs successfully (exit 0, descriptor printed verbatim) AND prints a
+/// non-blocking advisory to stderr. `older(65536)` is bit-31-clear so it bundles
+/// + parses normally; the advisory fires at the post-`from_str` Adapter-B hook.
+#[test]
+fn general_masked_older_emits_advisory() {
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(65536)))");
+    let mut a = restore_md1_args(&md1);
+    a.push("--format".into());
+    a.push("descriptor".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("older(65536)"))
+        .stderr(predicate::str::contains(
+            "advisory: older(65536) is consensus-masked",
+        ));
+}
+
+/// (4d) clean `older()` does NOT trigger the advisory — `older(4032)` is a clean
+/// block value (low-16 nonzero, no stray bits), so no `advisory: older` on stderr.
+#[test]
+fn general_clean_older_no_advisory() {
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let mut a = restore_md1_args(&md1);
+    a.push("--format".into());
+    a.push("descriptor".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("older(4032)"))
+        .stderr(predicate::str::contains("advisory: older").not());
+}
+
 /// (4b) `--format coldcard` (template-requiring) REFUSES a general policy
 /// (loud, exit non-zero) — it cannot represent a non-k-of-n policy.
 #[test]

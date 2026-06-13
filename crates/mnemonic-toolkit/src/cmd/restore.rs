@@ -1289,6 +1289,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 "--md1 internal error: the reconstructed descriptor does not survive a parse→print round-trip (miniscript Display infidelity); refusing rather than print a possibly-unfaithful descriptor. The engraved card remains a faithful backup.",
             ));
         }
+        // Consensus-masked older() advisory (Adapter B, fail-closed): a bit-31
+        // or zero-16-bit card would have errored at `from_str` above before
+        // reaching here, so only the `Masked` consequence can fire. Non-blocking.
+        let adv = crate::timelock_advisory::older_advisories_descriptor(&parsed);
+        crate::timelock_advisory::emit_advisories(&adv, stderr);
         crate::derive_address::derive_receive_addresses(
             &parsed,
             args.count,
