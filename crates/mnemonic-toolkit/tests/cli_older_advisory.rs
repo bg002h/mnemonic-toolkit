@@ -151,6 +151,83 @@ fn fires_and_non_blocking_export_wallet() {
     );
 }
 
+/// `bundle --descriptor <CONCRETE-KEY masked>` → advisory on stderr, exit 0
+/// (Adapter-A, Site 3 — the inline-`[fp/path]xpub` watch-only path through
+/// `bundle_run_concrete_descriptor`, NOT the `@N`-placeholder path that
+/// `fires_and_non_blocking_bundle` above exercises). This is the core
+/// funds-safety case: a watch-only backup of an already-deployed wallet pasted
+/// as a concrete descriptor must still surface a consensus-masked `older()`.
+/// Concrete keys (no `@N`) force dispatch to the concrete path; the watch-only
+/// mode in the JSON confirms the route.
+#[test]
+fn fires_and_non_blocking_bundle_concrete_key() {
+    // Single-key concrete descriptor: inline `[fp/path]xpub`, no `@N`, no
+    // `--slot`. Real tpub lifted from `cli_descriptor_concrete.rs`.
+    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*),older(65536)))";
+    let out = bin()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "testnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "bundle concrete-key: masked older() must be advisory, not fatal; stderr: {stderr}"
+    );
+    // Confirm the route: a concrete descriptor with no entropy is always
+    // watch-only (the @N path requires --slot inputs). Pins that the advisory
+    // came through bundle_run_concrete_descriptor.
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("bundle --json emits valid JSON on stdout");
+    assert_eq!(
+        v["mode"], "watch-only",
+        "concrete-key descriptor must route through bundle_run_concrete_descriptor (watch-only); stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains(MASKED_OLDER_65536),
+        "bundle concrete-key: expected masked-older advisory on stderr; got: {stderr}"
+    );
+}
+
+/// Clean-key counterpart: a CONCRETE-key descriptor with a NON-masked
+/// `older(2016)` must emit NO advisory on the concrete path (false-positive
+/// guard on `bundle_run_concrete_descriptor` specifically).
+#[test]
+fn clean_key_no_advisory_bundle_concrete_key() {
+    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*),older(2016)))";
+    let out = bin()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "testnet",
+            "--no-engraving-card",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "bundle concrete-key clean: stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains(ADVISORY_PREFIX),
+        "clean older(2016) on the concrete path must NOT emit an advisory; got: {stderr}"
+    );
+}
+
 // ── Invariant 2: clean-512s false-positive guard ─────────────────────────────
 
 /// `older(4194305)` = 0x400001 — bit-22 (the 512-second type flag) set with a

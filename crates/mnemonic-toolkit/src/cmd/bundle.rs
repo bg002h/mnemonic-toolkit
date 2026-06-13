@@ -1702,6 +1702,13 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
         crate::wallet_import::json_envelope::descriptor_body_no_csum(&body, "--descriptor")?;
     let (descriptor, resolved_slots) = descriptor_concrete_to_resolved_slots(body_no_csum)?;
 
+    // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 3) — surface
+    // BIP-68 consensus-masked older() operands on the finalized concrete-key
+    // MdDescriptor before the bundle is emitted. Non-blocking (best-effort
+    // stderr). `descriptor` is passed by reference downstream, never moved.
+    let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
+    crate::timelock_advisory::emit_advisories(&adv, stderr);
+
     // BIP-388 distinctness check — a pasted descriptor is untrusted, unlike
     // the mk1-sourced path in bundle_run_from_import_json.
     check_resolved_slots_distinctness(&resolved_slots)?;
