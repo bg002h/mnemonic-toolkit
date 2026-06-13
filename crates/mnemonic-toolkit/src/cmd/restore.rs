@@ -725,7 +725,10 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
     match inner.tag {
         md_codec::Tag::MultiA => {
             refuse_at_in_both(&internal_key, inner)?;
-            Ok(TaprootRestore::Template(CliTemplate::TrMultiA, internal_key))
+            Ok(TaprootRestore::Template(
+                CliTemplate::TrMultiA,
+                internal_key,
+            ))
         }
         md_codec::Tag::SortedMultiA => {
             refuse_at_in_both(&internal_key, inner)?;

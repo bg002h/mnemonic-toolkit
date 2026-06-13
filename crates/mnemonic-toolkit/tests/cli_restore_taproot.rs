@@ -193,7 +193,10 @@ fn non_nums_general_tr_leaf_restores_faithfully() {
     let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
     let (md1, emitted) = bundle_md1(&desc);
     assert!(!md1.is_empty(), "non-NUMS general-tr card must be emitted");
-    assert_eq!(emitted, desc, "non-NUMS general-tr must round-trip on the wire");
+    assert_eq!(
+        emitted, desc,
+        "non-NUMS general-tr must round-trip on the wire"
+    );
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
@@ -212,7 +215,10 @@ fn non_nums_distinct_trunk_multi_a_restores_faithfully() {
     let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
     let (md1, emitted) = bundle_md1(&desc);
     assert!(!md1.is_empty(), "non-NUMS multisig card must be emitted");
-    assert_eq!(emitted, desc, "non-NUMS multisig must round-trip on the wire");
+    assert_eq!(
+        emitted, desc,
+        "non-NUMS multisig must round-trip on the wire"
+    );
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
@@ -230,8 +236,14 @@ fn non_nums_distinct_trunk_multi_a_restores_faithfully() {
 fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
     let desc = format!("tr({K2},sortedmulti_a(2,{K0},{K1}))");
     let (md1, emitted) = bundle_md1(&desc);
-    assert!(!md1.is_empty(), "non-NUMS sortedmulti_a card must be emitted");
-    assert_eq!(emitted, desc, "non-NUMS sortedmulti_a must round-trip on the wire");
+    assert!(
+        !md1.is_empty(),
+        "non-NUMS sortedmulti_a card must be emitted"
+    );
+    assert_eq!(
+        emitted, desc,
+        "non-NUMS sortedmulti_a must round-trip on the wire"
+    );
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
