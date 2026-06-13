@@ -308,6 +308,165 @@ fn tr_sortedmulti_a_in_2leaf_refuses() {
         ));
 }
 
+// ─── @-in-both structural guard (funds-safety crux, v0.55.3) ────────────────
+
+/// Build a `tr(@trunk, multi_a(k, <indices>))` wallet-policy `Descriptor`
+/// DIRECTLY via md-codec's public tree types — the `@-in-both` family where the
+/// non-NUMS trunk key index is ALSO one of the leaf indices.
+///
+/// This shape CANNOT go through `bundle --descriptor`: intake rejects it at the
+/// BIP-388 distinct-key gate ("slot @i and slot @j resolve to identical (xpub,
+/// path)"). So the md1 is constructed by hand. Mirrors the direct-construction
+/// precedent in `template.rs` (`tr_sortedmulti_a_2_of_2_round_trips_via_md_codec`):
+/// the canonical 65-byte synthetic xpub filler (chain_code `[0x42;32]` ‖ SEC1
+/// compressed secp256k1 generator G — passes md-codec's `validate_xpub_bytes`),
+/// a shared `48'/0'/0'/2'` origin, and `UseSitePath::standard_multipath()`.
+///
+/// `tlv.pubkeys` is populated with one entry PER slot (`n` total, all the same
+/// filler content — the chain_code prefix is unvalidated so distinct slots are
+/// allowed) so `is_wallet_policy()` returns true. The card MUST clear the step-2
+/// wallet-policy gate (`restore.rs:1163`) and reach `classify_taproot_restore`,
+/// else it would trip the WRONG "template-only" refusal and the test would pass
+/// for the wrong reason (R0-r3 m1).
+///
+/// The payload encodes cleanly: `validate_placeholder_usage` registers the trunk
+/// index from the `Tr` body first, then the leaf indices (skipping the already-
+/// seen trunk), so the `first_occurrences` are canonical and validation passes
+/// for `indices = [0..n]` with `trunk = 0` (R0-confirmed).
+fn build_at_in_both_descriptor(n: u8, k: u8, leaf_indices: Vec<u8>) -> md_codec::Descriptor {
+    use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
+    use md_codec::tree::{Body, Node};
+    use md_codec::use_site_path::UseSitePath;
+    use md_codec::{Descriptor, Tag, TlvSection};
+
+    // Canonical 65-byte synthetic xpub filler: chain_code = [0x42;32], pubkey =
+    // SEC1 compressed secp256k1 generator G (the precedent in `template.rs`).
+    let mut xpub_bytes = [0u8; 65];
+    xpub_bytes[0..32].copy_from_slice(&[0x42; 32]);
+    xpub_bytes[32] = 0x02;
+    xpub_bytes[33..].copy_from_slice(&[
+        0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE, 0x87, 0x0B,
+        0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81, 0x5B, 0x16, 0xF8,
+        0x17, 0x98,
+    ]);
+
+    // The @-in-both shape: trunk @0 (is_nums:false) is ALSO a leaf index.
+    let tree = Node {
+        tag: Tag::Tr,
+        body: Body::Tr {
+            is_nums: false,
+            key_index: 0,
+            tree: Some(Box::new(Node {
+                tag: Tag::MultiA,
+                body: Body::MultiKeys {
+                    k,
+                    indices: leaf_indices,
+                },
+            })),
+        },
+    };
+
+    let path = OriginPath {
+        components: vec![
+            PathComponent {
+                hardened: true,
+                value: 48,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 2,
+            },
+        ],
+    };
+
+    // One filler fingerprint + pubkey per slot (synthetic, distinct fingerprints).
+    let fingerprints: Vec<(u8, [u8; 4])> = (0..n).map(|i| (i, [i, 0xBB, 0xCC, 0xDD])).collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = (0..n).map(|i| (i, xpub_bytes)).collect();
+
+    Descriptor {
+        n,
+        path_decl: PathDecl {
+            n,
+            paths: PathDeclPaths::Shared(path),
+        },
+        use_site_path: UseSitePath::standard_multipath(),
+        tree,
+        tlv: TlvSection {
+            use_site_path_overrides: None,
+            fingerprints: Some(fingerprints),
+            // Non-empty → is_wallet_policy() == true (clears the step-2 gate).
+            pubkeys: Some(pubkeys),
+            origin_path_overrides: None,
+            unknown: Vec::new(),
+        },
+    }
+}
+
+/// (N4) @-in-both refusal — the FUNDS-SAFETY RED-proof: `tr(@0, multi_a(2, @0,
+/// @1, @2))`, where the non-NUMS trunk key index `@0` is ALSO a leaf index. The
+/// Template `Cosigner(idx)` shortcut reconstructs the leaf as `{all cosigners
+/// EXCEPT idx}` WITHOUT lowering `k`, so without the guard it emits
+/// `multi_a(2, @1, @2)` — dropping the trunk key. For an `n ≥ 3` leaf this is a
+/// VALID 2-of-2 (k ≤ n): the reconstruction SUCCEEDS (exit 0) and prints a
+/// DIFFERENT, silently-wrong multisig at a DIFFERENT address. The Display-
+/// fidelity guard CANNOT catch this — the Template path's output is its own
+/// re-print (parse→print of the rendered string), so a wrong-but-self-consistent
+/// leaf passes. The protection MUST therefore be a STRUCTURAL classify-time
+/// precondition. (RED-proven: with the guard removed, this card exits 0 with the
+/// trunk-dropped `multi_a(2, @1, @2)`; the plan's 2-of-2 shape is NOT a valid
+/// RED — dropping @0 there yields a 2-of-1 that k>n rejects downstream, see the
+/// `_2of2` cell below.)
+///
+/// `bundle --descriptor` rejects this shape at intake (BIP-388 distinct-key
+/// gate), so the md1 is built directly via md_codec (`build_at_in_both_descriptor`).
+#[test]
+fn at_in_both_tr_refuses_structurally() {
+    // n=3, 2-of-3: dropping the trunk @0 leaves a VALID 2-of-2 → the dangerous
+    // exit-0 silent-wrong reconstruction the structural guard must prevent.
+    let d = build_at_in_both_descriptor(3, 2, vec![0, 1, 2]);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
+/// (N4b) @-in-both refusal — the degenerate 2-of-2 shape `tr(@0, multi_a(2, @0,
+/// @1))`. Also `@-in-both`, so the guard refuses it identically (slug + "also a
+/// leaf key"). NOTE: without the guard this shape does NOT exit 0 — dropping @0
+/// from a 2-key leaf yields `multi_a(2, @1)` (2-of-1), which miniscript rejects
+/// downstream as k>n (exit 2, a DIFFERENT message). So it is not a funds-safety
+/// RED on its own (the genuine RED is the `n ≥ 3` cell above); this cell pins
+/// that the STRUCTURAL guard catches the shape at classify time regardless, with
+/// the correct slug — never relying on the coincidental downstream k>n catch.
+#[test]
+fn at_in_both_tr_2of2_refuses_structurally() {
+    let d = build_at_in_both_descriptor(2, 2, vec![0, 1]);
+    let chunks = md_codec::chunk::split(&d).expect("split @-in-both 2-of-2 md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stderr(
+            predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
+                .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
 // ─── --format matrix for the general-tr arm (R0 I1) ─────────────────────────
 
 /// (8) `--format green` on a reconstructed general-tr policy: REFUSED exit 1.

@@ -721,11 +721,17 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
         }
     };
     match inner.tag {
-        md_codec::Tag::MultiA => Ok(TaprootRestore::Template(CliTemplate::TrMultiA, internal_key)),
-        md_codec::Tag::SortedMultiA => Ok(TaprootRestore::Template(
-            CliTemplate::TrSortedMultiA,
-            internal_key,
-        )),
+        md_codec::Tag::MultiA => {
+            refuse_at_in_both(&internal_key, inner)?;
+            Ok(TaprootRestore::Template(CliTemplate::TrMultiA, internal_key))
+        }
+        md_codec::Tag::SortedMultiA => {
+            refuse_at_in_both(&internal_key, inner)?;
+            Ok(TaprootRestore::Template(
+                CliTemplate::TrSortedMultiA,
+                internal_key,
+            ))
+        }
         _ => {
             if subtree_contains_sortedmulti_a(inner) {
                 return Err(ToolkitError::ModeViolation {
@@ -738,6 +744,49 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
             Ok(TaprootRestore::GeneralFaithful(internal_key))
         }
     }
+}
+
+/// Refuse the `@-in-both` shape `tr(@i, multi_a/sortedmulti_a(k, …@i…))` where
+/// the non-NUMS trunk key index is ALSO one of the leaf key indices. This is a
+/// STRUCTURAL classify-time precondition — NEVER a post-reconstruction Display
+/// check — and it is the funds-safety crux of the non-NUMS taproot cycle.
+///
+/// WHY structural, not Display: the Template path's `Cosigner(idx)` mode
+/// reconstructs the leaf as `{all cosigners EXCEPT idx}` WITHOUT lowering `k`
+/// (`wallet_export/pipeline.rs:134-156`). For an `@-in-both` card it therefore
+/// emits a leaf that has dropped the trunk key. When the original leaf had `n ≥
+/// 3` keys, the dropped-trunk leaf is still a VALID `k ≤ n` multisig, so the
+/// reconstruction SUCCEEDS and prints a DIFFERENT, silently-wrong multisig at a
+/// DIFFERENT address. The Display-fidelity guard (`restore.rs`, parse→print
+/// before address derivation) provably CANNOT catch this: the Template path's
+/// output is its own re-print (`pipeline.rs:28-31` `from_str().to_string()`), so
+/// a wrong-but-self-consistent leaf passes parse→print. The only safe net is to
+/// refuse the shape here, before any reconstruction. (For `n = 2` the dropped-
+/// trunk leaf happens to be a `k > n` multisig that miniscript rejects
+/// downstream — but that is coincidental, not a guarantee, so the guard refuses
+/// every `@-in-both` shape uniformly.)
+///
+/// NUMS trunks (`is_nums:true` → `TaprootInternalKey::Nums`) are not in a
+/// cosigner slot, so they never trip this. General-arm leaves never reach this
+/// helper (they reconstruct via the route-around, which reads the ACTUAL tree).
+fn refuse_at_in_both(
+    internal_key: &TaprootInternalKey,
+    leaf: &md_codec::tree::Node,
+) -> Result<(), ToolkitError> {
+    use md_codec::tree::Body;
+    // Cosigner(u8); indices: Vec<u8> — all u8, no casts.
+    if let TaprootInternalKey::Cosigner(i) = internal_key {
+        if let Body::MultiKeys { indices, .. } = &leaf.body {
+            if indices.iter().any(|&idx| idx == *i) {
+                return Err(ToolkitError::ModeViolation {
+                    mode: "restore",
+                    flag: "--md1",
+                    message: "taproot md1 has a non-NUMS internal (trunk) key that is also a leaf key (@-in-both) — the engraved card is a faithful backup, but reconstructing it needs a leaf-membership-aware rebuild not yet supported; refusing rather than emit a silently-different multisig (FOLLOWUP restore-non-nums-tr-internal-key-also-in-leaf)",
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// `true` iff `Tag::SortedMultiA` occurs anywhere in the subtree (the §3
