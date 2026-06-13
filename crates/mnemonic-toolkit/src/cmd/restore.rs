@@ -657,15 +657,17 @@ fn build_import_payload(
     crate::cmd::export_wallet::emit_payload(&inputs, format)
 }
 
-/// §3 outcome for a `Tag::Tr` wallet-policy md1: which reconstruction arm.
+/// §3 outcome for a `Tag::Tr` wallet-policy md1: which reconstruction arm,
+/// and the internal ("trunk") key to thread (NUMS or a real cosigner key).
 enum TaprootRestore {
-    /// Single-leaf NUMS `multi_a`/`sortedmulti_a` — the byte-identical
-    /// template path (`build_descriptor_string`).
-    Template(CliTemplate),
-    /// General single-leaf or depth-1 two-leaf `tr(NUMS,…)` policy — the
+    /// Single-leaf `multi_a`/`sortedmulti_a` — the byte-identical template
+    /// path (`build_descriptor_string`). NUMS or distinct-trunk Cosigner(idx).
+    Template(CliTemplate, TaprootInternalKey),
+    /// General single-leaf or depth-1 two-leaf `tr(<internal>,…)` policy — the
     /// faithful arm (`faithful_multisig_descriptor`), v0.55.1 (T3-partial of
-    /// FOLLOWUP `restore-general-and-multi-leaf-taproot-roundtrip`).
-    GeneralFaithful,
+    /// FOLLOWUP `restore-general-and-multi-leaf-taproot-roundtrip`); v0.55.3
+    /// extends it to a non-NUMS (real cosigner) trunk key.
+    GeneralFaithful(TaprootInternalKey),
 }
 
 /// Classify a taproot wallet-policy md1 tree for restore. The single-leaf
@@ -673,10 +675,10 @@ enum TaprootRestore {
 /// around md-codec's `to_miniscript`, which errors on a root `SortedMultiA`);
 /// the GeneralFaithful arm re-enters `to_miniscript` via
 /// `faithful_multisig_descriptor`, so its blockers are pre-gated here.
-/// Supports only `is_nums:true` (the NUMS internal key bundle emits since
-/// v0.48.0); `is_nums:false` (genuine cosigner-internal — reconstructable but
-/// needs a leaf-membership analysis) is deferred (FOLLOWUP
-/// `restore-multisig-taproot-reconstruction`).
+/// Supports `is_nums:true` (NUMS) AND `is_nums:false` (real cosigner trunk
+/// key), the latter for general single-leaf/depth-1 (route-around) and
+/// distinct-trunk multisig (Template); the `@-in-both` shape (trunk key also a
+/// leaf key) refuses (`restore-non-nums-tr-internal-key-also-in-leaf`).
 ///
 /// The GeneralFaithful arm is gated CONSERVATIVELY + STRUCTURALLY (never on
 /// Display behavior):
@@ -691,18 +693,21 @@ enum TaprootRestore {
 ///   `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
 fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestore, ToolkitError> {
     use md_codec::tree::Body;
-    let inner = match &tree.body {
+    let (inner, internal_key) = match &tree.body {
         Body::Tr {
             is_nums: true,
             tree: Some(inner),
             ..
-        } => inner,
-        Body::Tr { is_nums: false, .. } => {
-            return Err(ToolkitError::ModeViolation {
-                mode: "restore",
-                flag: "--md1",
-                message: "taproot multisig md1 with a non-NUMS (cosigner) internal key is not supported by restore yet — re-engrave from seed with mnemonic >= v0.48.0 to get a NUMS tr md1 (FOLLOWUP restore-multisig-taproot-reconstruction)",
-            });
+        } => (inner, TaprootInternalKey::Nums),
+        Body::Tr {
+            is_nums: false,
+            key_index,
+            tree: Some(inner),
+        } => {
+            // Read the real trunk key off the wire — no inference. (key_index
+            // is a 0..n placeholder index into the cosigner table; u8, and
+            // TaprootInternalKey::Cosigner is also u8 — no cast.)
+            (inner, TaprootInternalKey::Cosigner(*key_index))
         }
         Body::Tr { tree: None, .. } => {
             return Err(bad(
@@ -716,8 +721,11 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
         }
     };
     match inner.tag {
-        md_codec::Tag::MultiA => Ok(TaprootRestore::Template(CliTemplate::TrMultiA)),
-        md_codec::Tag::SortedMultiA => Ok(TaprootRestore::Template(CliTemplate::TrSortedMultiA)),
+        md_codec::Tag::MultiA => Ok(TaprootRestore::Template(CliTemplate::TrMultiA, internal_key)),
+        md_codec::Tag::SortedMultiA => Ok(TaprootRestore::Template(
+            CliTemplate::TrSortedMultiA,
+            internal_key,
+        )),
         _ => {
             if subtree_contains_sortedmulti_a(inner) {
                 return Err(ToolkitError::ModeViolation {
@@ -727,7 +735,7 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
                 });
             }
             ensure_taptree_depth_le_one(inner)?;
-            Ok(TaprootRestore::GeneralFaithful)
+            Ok(TaprootRestore::GeneralFaithful(internal_key))
         }
     }
 }
@@ -1204,8 +1212,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let (template_opt, tap_internal_key): (Option<CliTemplate>, Option<TaprootInternalKey>) =
         if is_taproot {
             match classify_taproot_restore(&d.tree)? {
-                TaprootRestore::Template(t) => (Some(t), Some(TaprootInternalKey::Nums)),
-                TaprootRestore::GeneralFaithful => (None, Some(TaprootInternalKey::Nums)),
+                TaprootRestore::Template(t, ik) => (Some(t), Some(ik)),
+                TaprootRestore::GeneralFaithful(ik) => (None, Some(ik)),
             }
         } else {
             (plain_template_from_tree(&d.tree, &d.use_site_path), None)

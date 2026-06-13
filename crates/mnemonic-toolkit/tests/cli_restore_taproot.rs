@@ -95,6 +95,20 @@ const GOLDEN_DESC_MULTI_A_2LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b60
 const GOLDEN_ADDR_MULTI_A_2LEAF: &str =
     "first recv: bc1pw49n2w6ydsnmdcufryu6r3agpw3k4hmkhkzfr9z3wqs3xuvx74as88s86m";
 
+// Non-NUMS ("real key at the trunk") goldens — captured-once from the binary in
+// Step 4 (v0.55.3). DO NOT hand-construct (md-codec depth-0 xpub661My…
+// reconstructions, not the bundle-input account xpubs). The trunk MUST render
+// as a REAL xpub (K2 depth-0), NOT the 50929b74… NUMS hex.
+const GOLDEN_DESC_NON_NUMS_GENERAL: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,and_v(v:pk([73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*),older(144)))#l2lh2uur";
+const GOLDEN_ADDR_NON_NUMS_GENERAL: &str =
+    "first recv: bc1pl6nt2ul52gjdtp5lkfgy7l34ux8yv0pc9r7tx8hkjuxrmg6x25ps0nvn6t";
+const GOLDEN_DESC_NON_NUMS_MULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,multi_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#qtmvesaw";
+const GOLDEN_ADDR_NON_NUMS_MULTI_A: &str =
+    "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
+const GOLDEN_DESC_NON_NUMS_SORTEDMULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#jpfr0tgx";
+const GOLDEN_ADDR_NON_NUMS_SORTEDMULTI_A: &str =
+    "first recv: bc1pzzpugq56ylc85m4q90gyyy7dsmdfdlzxdmz3dsvezq4946598s3shxp2j9";
+
 /// (1) General taproot leaf `tr(NUMS, <non-multisig miniscript>)`: bundle emits
 /// a faithful card (`.descriptor` round-trips EXACTLY — the literal `NUMS`
 /// token is preserved on the wire, no substitution), and restore reconstructs
@@ -161,25 +175,68 @@ fn multi_a_in_2leaf_tr_restores_faithfully() {
         );
 }
 
-// ─── Refusal contracts (ModeViolation, exit 2, slug-citing) ─────────────────
+// ─── Non-NUMS ("real key at the trunk") faithful reconstruction (v0.55.3) ────
 
-/// (4) Non-NUMS (cosigner) internal-key taproot multisig `tr(K2, multi_a(2,K0,K1))`
-/// with a DISTINCT internal key: bundle emits, restore refuses with exit 2
-/// "non-NUMS (cosigner) internal key". (A non-distinct internal key —
-/// `tr(K0, multi_a(2,K0,K1))` — is rejected EARLIER by bundle's BIP-388
-/// distinct-key gate; the distinct K2 reaches the restore arm.)
+/// (N1) Non-NUMS GENERAL single-leaf tr(D, and_v(v:pk(B),older(N))): the trunk
+/// is a real cosigner key (live key-path spend). bundle emits a faithful
+/// is_nums:false card; restore reconstructs the descriptor (real trunk key) +
+/// a receive address. Golden captured-once from the binary (v0.49.1 precedent).
 #[test]
-fn cosigner_internal_key_tr_bundles_but_restore_refuses_non_nums() {
-    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
-    let (md1, _emitted) = bundle_md1(&desc);
-    assert!(!md1.is_empty(), "cosigner-IK card must be emitted");
+fn non_nums_general_tr_leaf_restores_faithfully() {
+    // K2 distinct from the leaf key K0 → not @-in-both.
+    let desc = format!("tr({K2},and_v(v:pk({K0}),older(144)))");
+    let (md1, emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS general-tr card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS general-tr must round-trip on the wire");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains("non-NUMS (cosigner) internal key"));
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_GENERAL)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_GENERAL)),
+        );
 }
+
+/// (N2) Non-NUMS DISTINCT-trunk multisig tr(D, multi_a(2,B,C)): trunk D NOT a
+/// leaf key. Template path + Cosigner(idx). Golden captured-once.
+#[test]
+fn non_nums_distinct_trunk_multi_a_restores_faithfully() {
+    let desc = format!("tr({K2},multi_a(2,{K0},{K1}))");
+    let (md1, emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS multisig card must be emitted");
+    assert_eq!(emitted, desc, "non-NUMS multisig must round-trip on the wire");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_MULTI_A)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_MULTI_A)),
+        );
+}
+
+/// (N3) Non-NUMS DISTINCT-trunk sortedmulti_a tr(D, sortedmulti_a(2,B,C)):
+/// Template path (TrSortedMultiA) routes AROUND md-codec's SortedMultiA gap.
+#[test]
+fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
+    let desc = format!("tr({K2},sortedmulti_a(2,{K0},{K1}))");
+    let (md1, _emitted) = bundle_md1(&desc);
+    assert!(!md1.is_empty(), "non-NUMS sortedmulti_a card must be emitted");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&md1))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(GOLDEN_DESC_NON_NUMS_SORTEDMULTI_A)
+                .and(predicate::str::contains(GOLDEN_ADDR_NON_NUMS_SORTEDMULTI_A)),
+        );
+}
+
+// ─── Refusal contracts (ModeViolation, exit 2, slug-citing) ─────────────────
 
 /// (5) Left-heavy 3-leaf (depth-2) taptree: bundle emits faithfully, restore
 /// refuses STRUCTURALLY (exit 2) citing the upstream Display-asymmetry slug.
