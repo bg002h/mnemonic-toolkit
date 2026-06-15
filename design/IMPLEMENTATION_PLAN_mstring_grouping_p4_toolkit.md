@@ -94,7 +94,7 @@ Plan-R0 round 2 = NOT GREEN (2C/2I; round-1 4C/4I all RESOLVED). The completenes
 
 ## Task 7: Version bump + RELEASE ritual (autonomous — authorized)
 - [ ] **Pre-bump sweep (I4a):** `grep -rn render_codex32_grouped crates/` — confirm NO remaining DISPLAY call site after the Task-2 collapse (the kept md-codec wrapper keeps any non-display caller building; if a display caller remains, route it through `display_grouping::render_grouped`).
-- [ ] Bump `crates/mnemonic-toolkit/Cargo.toml:3` (MINOR, e.g. 0.55.3 → 0.56.0). md-codec pin "0.35"→"0.36" (plan-R0 ratified: additive/safe for lockstep). Update CHANGELOG. **Lockstep sites:** README version-marker (`README.md:13`) + `scripts/install.sh:32` self-pin; `manual.yml`+`quickstart.yml` mk-cli pin → `mk-cli-v0.9.0`; **`.examples-build/gen.sh` (6×`0.55.3`) [I4b]**. `cargo update`/build.
+- [ ] Bump `crates/mnemonic-toolkit/Cargo.toml:3` (MINOR, e.g. 0.55.3 → 0.56.0). md-codec pin "0.35"→"0.36" (plan-R0 ratified: additive/safe for lockstep). Update CHANGELOG. **Lockstep sites:** README version-marker (`README.md:13`) + `scripts/install.sh:32` self-pin; `manual.yml`+`quickstart.yml` mk-cli pin → `mk-cli-v0.9.0`; **`.examples-build/gen.sh` (grep the current version string — multiple occurrences) [I4b]**. `cargo update`/build.
 - [ ] FULL re-verify: `cargo test --workspace` + `cargo +1.95.0 fmt --all --check` (mlock-tolerant) + clippy + `cd fuzz && cargo build`.
 - [ ] Commit. ff-merge `feature/mstring-display-grouping` → `master`, push. Tag `mnemonic-toolkit-v0.56.0` (git-tag; NOT crates.io). Push tag. Verify CI green on master.
 - [ ] Examples.pdf: regenerate if the build tooling is present (`.github/workflows/manual.yml` / a make target); else file a FOLLOWUP (separators changed every card).
