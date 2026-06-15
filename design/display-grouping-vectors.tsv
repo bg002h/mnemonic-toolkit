@@ -1,0 +1,23 @@
+op	input	group_size	separator	expected	note
+render	abcdefghij	5	space	abcde<sp>fghij	basic space/5
+render	abcdefghij	5	hyphen	abcde-fghij	basic hyphen/5
+render	abcdefghij	5	comma	abcde,fghij	basic comma/5
+render	abcdefghij	0	none	abcdefghij	group_size 0 = unbroken
+render	abcdefghij	0	space	abcdefghij	group_size 0 ignores separator
+render	abc	5	space	abc	group_size > len
+render	abcde	5	space	abcde	group_size == len (no trailing sep)
+render	abcdef	3	space	abc<sp>def	period 3
+render	abcdefg	3	hyphen	abc-def-g	trailing partial group
+render	ab	1	comma	a,b	group_size 1
+render	<empty>	5	space	<empty>	empty input
+render	ms1qpzry9x8gf	4	comma	ms1q,pzry,9x8g,f	codex32-shaped, comma/4
+strip	abcde<sp>fghij	0	none	abcdefghij	strip space
+strip	abcde-fghij	0	none	abcdefghij	strip hyphen
+strip	abcde,fghij	0	none	abcdefghij	strip comma
+strip	ab<sp>cd-ef,gh	0	none	abcdefgh	strip mixed separators
+strip	ab--cd	0	none	abcd	consecutive separators
+strip	ab<tab>cd	0	none	abcd	strip tab (whitespace)
+strip	ab<cr><lf>cd	0	none	abcd	strip CRLF (whitespace)
+strip	abcdefgh	0	none	abcdefgh	no separators (idempotent shape)
+strip	ms1qpzry9x8	0	none	ms1qpzry9x8	codex32 chars pass through
+strip	<empty>	0	none	<empty>	empty input
