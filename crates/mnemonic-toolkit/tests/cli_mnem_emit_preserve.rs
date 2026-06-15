@@ -396,6 +396,8 @@ fn english_phrase_convert_ms1_golden_byte_identity() {
             "english",
             "--to",
             "ms1",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();

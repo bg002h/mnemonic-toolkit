@@ -65,6 +65,9 @@ fn round_trip_entropy_to_ms1_to_entropy() {
         &format!("entropy={TREZOR_24_ZERO_ENTROPY_HEX_64}"),
         "--to",
         "ms1",
+        // mstring-grouping P4: unbroken intermediate (default is space/5).
+        "--group-size",
+        "0",
     ]);
     assert_eq!(ms1, TREZOR_24_ZERO_MS1_24WORD);
 
@@ -92,6 +95,8 @@ fn round_trip_phrase_to_ms1_to_phrase_via_entropy_intermediate() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "ms1",
+        "--group-size",
+        "0",
     ]);
     let phrase_back =
         convert_value(&["convert", "--from", &format!("ms1={ms1}"), "--to", "phrase"]);

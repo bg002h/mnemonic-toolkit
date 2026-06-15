@@ -344,6 +344,15 @@ pub struct ConvertArgs {
     #[arg(long = "script-type", value_parser = parse_script_type_arg, verbatim_doc_comment)]
     pub script_type: Option<ScriptType>,
 
+    /// Insert a separator every N chars in emitted ms1/mk1 cards (0 = unbroken).
+    /// SPEC §3. Display only; --json + non-card outputs (xpub/wif/…) stay unbroken.
+    #[arg(long, default_value_t = 5)]
+    pub group_size: u16,
+
+    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
+    pub separator: char,
+
     /// Emit a single JSON object on stdout instead of multi-line text.
     #[arg(long)]
     pub json: bool,
@@ -1115,8 +1124,18 @@ pub fn run<R: Read, W: Write, E: Write>(
         serde_json::to_writer(&mut *stdout, &env).ok();
         writeln!(stdout).ok();
     } else {
+        // mstring display-grouping (SPEC §6): group ONLY the codex32 card outputs
+        // (ms1/mk1); xpub/wif/descriptor/etc. emit raw. --json stays unbroken.
         for (node, value) in &outputs {
-            writeln!(stdout, "{}: {}", node.as_str(), value).ok();
+            let rendered = match node {
+                NodeType::Ms1 | NodeType::Mk1 => crate::display_grouping::render_grouped(
+                    value,
+                    args.group_size as usize,
+                    args.separator,
+                ),
+                _ => value.clone(),
+            };
+            writeln!(stdout, "{}: {}", node.as_str(), rendered).ok();
         }
     }
 

@@ -129,6 +129,8 @@ fn french_to_ms1_emits_mnem_no_advisory() {
             "french",
             "--to",
             "ms1",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();

@@ -147,6 +147,9 @@ fn entropy_to_ms1_16byte() {
             "entropy=00000000000000000000000000000000",
             "--to",
             "ms1",
+            // mstring-grouping P4: pin the unbroken card (default is space/5).
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();
@@ -319,6 +322,8 @@ fn phrase_to_ms1_composite_via_entropy() {
             &format!("phrase={TREZOR_24}"),
             "--to",
             "ms1",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();

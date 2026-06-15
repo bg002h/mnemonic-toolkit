@@ -70,6 +70,15 @@ pub struct MsSharesSplitArgs {
     #[arg(long = "language", default_value = "english")]
     pub language: CliLanguage,
 
+    /// Insert a separator every N chars in each emitted share (0 = unbroken).
+    /// SPEC §3. Display only; --json stays unbroken.
+    #[arg(long, default_value_t = 5)]
+    pub group_size: u16,
+
+    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
+    pub separator: char,
+
     /// Emit a JSON object on stdout (`{"shares": [...]}`) instead of the
     /// plain one-share-per-line text form.
     #[arg(long = "json", default_value_t = false)]
@@ -102,6 +111,15 @@ pub struct MsSharesCombineArgs {
     /// wire language wins) and for `--to entropy`/`--to ms1`.
     #[arg(long = "language", default_value = "english")]
     pub language: CliLanguage,
+
+    /// Insert a separator every N chars in a recovered `--to ms1` card
+    /// (0 = unbroken). SPEC §3. Display only; --json + --to phrase/entropy stay raw.
+    #[arg(long, default_value_t = 5)]
+    pub group_size: u16,
+
+    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
+    pub separator: char,
 
     /// Emit a JSON object on stdout instead of the plain secret line.
     #[arg(long = "json", default_value_t = false)]
@@ -293,9 +311,13 @@ fn run_split<R: Read, W: Write, E: Write>(
         writeln!(stdout, "{body}")
             .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
     } else {
+        // mstring display-grouping (SPEC §6): text shares are flag-controlled
+        // (default space/5); the --json branch above stays unbroken.
+        let gs = args.group_size as usize;
+        let sep = args.separator;
         for s in &rendered {
             let _pin = mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes());
-            writeln!(stdout, "{}", s.as_str())
+            writeln!(stdout, "{}", crate::display_grouping::render_grouped(s.as_str(), gs, sep))
                 .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
         }
     }
@@ -357,10 +379,14 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // copies are secret share material — wrap each in `Zeroizing` so the residue
     // is wiped on drop (M1, P3-R0; the pinned `Zeroizing` originals in
     // `share_strings` already exist, this removes the trimmed-clone residue).
+    // mstring display-grouping (SPEC §3.2): strip display separators from each
+    // share so a grouped or unbroken share both re-ingest (was edge-only trim).
     let shares: Vec<zeroize::Zeroizing<String>> = share_strings
         .iter()
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| zeroize::Zeroizing::new(s.trim().to_string()))
+        .map(|s| {
+            zeroize::Zeroizing::new(crate::display_grouping::strip_display_separators(s))
+        })
+        .filter(|s| !s.is_empty())
         .collect();
     if shares.is_empty() {
         return Err(ToolkitError::BadInput(
@@ -462,7 +488,17 @@ fn run_combine<R: Read, W: Write, E: Write>(
         writeln!(stdout, "{body}")
             .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
     } else {
-        writeln!(stdout, "{}", output.as_str())
+        // mstring display-grouping (SPEC §6): group ONLY a recovered `--to ms1`
+        // card; --to phrase/entropy emit raw. --json stays unbroken (above).
+        let rendered = match args.to {
+            MsSharesToShape::Ms1 => crate::display_grouping::render_grouped(
+                output.as_str(),
+                args.group_size as usize,
+                args.separator,
+            ),
+            _ => output.to_string(),
+        };
+        writeln!(stdout, "{rendered}")
             .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
     }
 

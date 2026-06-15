@@ -24,6 +24,10 @@ fn one_share() -> String {
             "2",
             "--shares",
             "3",
+            // mstring-grouping P4: this test exercises share-DETECTION on
+            // intake; keep the share unbroken (default split is now space/5).
+            "--group-size",
+            "0",
         ])
         .output()
         .unwrap();

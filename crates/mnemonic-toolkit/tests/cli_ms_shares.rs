@@ -55,6 +55,29 @@ fn parse_shares(stdout: &str) -> Vec<String> {
     stdout.lines().map(|l| l.to_string()).collect()
 }
 
+/// mstring-grouping P4: split text shares are space/5-grouped by default; the
+/// `--json` shares stay UNBROKEN (SPEC §6 invariant). The grouped→combine
+/// round-trip is covered by `ms_shares_split_2_of_3_entropy_round_trip` (split
+/// groups by default; combine strips on intake).
+#[test]
+fn ms_shares_split_default_grouped_text_json_unbroken() {
+    let from_arg = format!("entropy={ENTROPY_32_ZEROS_HEX}");
+    // Default text: each share line is space/5-grouped.
+    let (text, _e, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
+    assert_eq!(exit, 0);
+    let first = text.lines().next().unwrap();
+    assert_eq!(first.chars().nth(5), Some(' '), "default space/5; got {first:?}");
+    // --json shares are UNBROKEN.
+    let (json, _e2, exit2) =
+        split(&["--from", &from_arg, "--threshold", "2", "--shares", "3", "--json"]);
+    assert_eq!(exit2, 0);
+    let v: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    for s in v["shares"].as_array().unwrap() {
+        let sh = s.as_str().unwrap();
+        assert!(!sh.contains(' ') && !sh.contains('-'), "--json share must be unbroken: {sh:?}");
+    }
+}
+
 #[test]
 fn ms_shares_split_2_of_3_entropy_round_trip() {
     let from_arg = format!("entropy={ENTROPY_32_ZEROS_HEX}");
@@ -159,7 +182,7 @@ fn ms_shares_combine_to_ms1_recovers_single_string() {
     assert_eq!(exit, 0);
     let shares = parse_shares(&stdout);
     let (recovered, _, exit2) =
-        combine(&["--share", &shares[0], "--share", &shares[1], "--to", "ms1"]);
+        combine(&["--share", &shares[0], "--share", &shares[1], "--to", "ms1", "--group-size", "0"]);
     assert_eq!(exit2, 0, "combine --to ms1; recovered={recovered:?}");
     let ms1 = recovered.lines().next().unwrap();
     assert!(ms1.starts_with("ms1"), "recovered ms1: {ms1:?}");
