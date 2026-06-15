@@ -18,7 +18,7 @@
 
 **Release boundary:** Tasks 1–6 are reversible branch work. Task 7 (version bump) PREPARES the release; the actual `git tag` + `cargo publish` (md-codec then md-cli) is a SEPARATE outward-facing step that REQUIRES explicit user authorization — do NOT tag/publish without it.
 
-**Plan-R0 gate:** round 1 NOT GREEN (3C/2I) — folded in the corrections block below (review `design/agent-reports/mstring-display-grouping-plan-r0-p1-round1-review.md`); re-dispatch pending before execution. MUST reach 0C/0I before any task runs (CLAUDE.md §1).
+**Plan-R0 gate:** round 1 NOT GREEN (3C/2I) — folded in the corrections block below (review `design/agent-reports/mstring-display-grouping-plan-r0-p1-round1-review.md`). round 2 NOT GREEN (1C/0I) — Task 3 Step 6 `git add` omitted `smoke.rs`+`cli_repair.rs`; folded (review `…plan-r0-p1-round2-review.md`). round 3 re-dispatch pending. MUST reach 0C/0I before any task runs (CLAUDE.md §1).
 
 ---
 
@@ -44,7 +44,7 @@
 - **Modify** `.github/workflows/ci.yml` — add a `sha256sum -c` step on the vectors copy.
 - **Modify** `crates/md-cli/src/main.rs` — add `--group-size`/`--separator` to the `Encode` subcommand + a shared `--separator` value parser; thread into `EncodeArgs`.
 - **Modify** `crates/md-cli/src/cmd/encode.rs` — `EncodeArgs` gains `group_size`/`separator`; wrap the text emit (`:81`, `:84`) with `render_grouped`; `--json` stays unbroken.
-- **Modify** ALL SIX md1-intake subcommands to strip separators before decode, via a shared md-cli helper `strip_md1_inputs`: `cmd/decode.rs` (`:8`,`:11`), `cmd/bytecode.rs` (`:8`,`:11`), `cmd/verify.rs` (`:18`,`:21`), `cmd/inspect.rs` (`:11`,`:14`), `cmd/address.rs` (`:108`,`:111`), and `cmd/repair.rs` `read_md1_strings` (`:83` per-line `.trim()` → interior strip). repair OUTPUT stays unbroken (no flags on repair).
+- **Modify** ALL SIX md1-intake subcommands to strip separators before decode, via a shared md-cli helper `strip_md1_inputs`: `cmd/decode.rs` (`:8`,`:11`), `cmd/bytecode.rs` (`:8`,`:11`), `cmd/verify.rs` (`:18`,`:21`), `cmd/inspect.rs` (`:11`,`:13`), `cmd/address.rs` (`:108`,`:111`), and `cmd/repair.rs` `read_md1_strings` (`:83` per-line `.trim()` → interior strip). repair OUTPUT stays unbroken (no flags on repair).
 - **Modify** `crates/md-cli/src/cmd/mod.rs` — add `pub fn strip_md1_inputs(strings: &[String]) -> Vec<String>` (maps `strip_display_separators` over each).
 - **Modify** `crates/md-cli/tests/cmd_encode.rs`, `cmd_decode.rs`, `cli_repair.rs`, `cmd_gui_schema.rs` (golden) — add/refresh tests.
 - **Modify** `crates/md-codec/Cargo.toml` (0.35.3 → 0.36.0) + `crates/md-cli/Cargo.toml` (0.6.2 → 0.7.0 + pin `=0.36.0`).
@@ -376,7 +376,9 @@ Expected: PASS unchanged. If it does assert an exact encode flag set somewhere, 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/md-cli/src/main.rs crates/md-cli/src/cmd/encode.rs crates/md-cli/tests/cmd_encode.rs crates/md-cli/tests/cmd_gui_schema.rs
+git add crates/md-cli/src/main.rs crates/md-cli/src/cmd/encode.rs \
+        crates/md-cli/tests/cmd_encode.rs crates/md-cli/tests/cmd_gui_schema.rs \
+        crates/md-cli/tests/smoke.rs crates/md-cli/tests/cli_repair.rs
 git commit -m "feat(md-cli): md encode --group-size/--separator (default space/5 print-once); json stays unbroken (mstring-grouping P1)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -386,7 +388,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Task 4: separator-stripping intake on ALL SIX md1-intake subcommands
 
-Every md subcommand that decodes an md1 string is an intake site (verified against `main.rs` dispatch + each `cmd/*.rs`): `decode` (`decode.rs:8/11`), `bytecode` (`bytecode.rs:8/11`), `verify` (`verify.rs:18/21`), `inspect` (`inspect.rs:11/14`), `address` (`address.rs:108/111`), `repair` (`repair.rs` `read_md1_strings:83`). All decode/reassemble positionals (only `repair` has a `-`→stdin path). Use ONE shared helper so no site is missed.
+Every md subcommand that decodes an md1 string is an intake site (verified against `main.rs` dispatch + each `cmd/*.rs`): `decode` (`decode.rs:8/11`), `bytecode` (`bytecode.rs:8/11`), `verify` (`verify.rs:18/21`), `inspect` (`inspect.rs:11/13`), `address` (`address.rs:108/111`), `repair` (`repair.rs` `read_md1_strings:83`). All decode/reassemble positionals (only `repair` has a `-`→stdin path). Use ONE shared helper so no site is missed.
 
 **Files:**
 - Modify: `crates/md-cli/src/cmd/mod.rs` (add `strip_md1_inputs`)
