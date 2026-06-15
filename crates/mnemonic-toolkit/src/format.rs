@@ -5,39 +5,6 @@
 
 use serde::Serialize;
 
-/// Render an `ms1` string in 5-char-grouped chunked form (10 groups/line max).
-/// Mirrors ms-cli `format::chunked_form`.
-pub fn chunk_5char(s: &str) -> String {
-    let mut out = String::new();
-    let chars: Vec<char> = s.chars().collect();
-    let mut groups: Vec<String> = Vec::new();
-    for chunk in chars.chunks(5) {
-        groups.push(chunk.iter().collect::<String>());
-    }
-    for (i, g) in groups.iter().enumerate() {
-        if i > 0 && i % 10 == 0 {
-            out.push('\n');
-        } else if i > 0 {
-            out.push(' ');
-        }
-        out.push_str(g);
-    }
-    out
-}
-
-/// Render an `mk1` string in mk-codec's chunked form. v0.1: defer to mk-codec
-/// internal chunked-form when available; fallback to chunk_5char for v0.1.
-/// The bundle mk1 text-card emit routes through this helper, so the eventual
-/// mk-codec chunked-form swap is a single edit to the body below.
-pub fn chunk_mk1(s: &str) -> String {
-    chunk_5char(s)
-}
-
-/// Render an `md1` string in md-codec's `render_codex32_grouped(s, 5)` form.
-pub fn chunk_md1(s: &str) -> String {
-    md_codec::encode::render_codex32_grouped(s, 5)
-}
-
 /// SPEC §5.8 (v0.4) ms1 field type. Schema 4 layout: dense `Vec<String>` of
 /// length-N, with empty-string sentinels (`""`) marking watch-only slots.
 ///
@@ -400,28 +367,6 @@ pub fn chunk_set_id_extract(s: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn chunk_5char_groups() {
-        let s = "abcdefghij";
-        assert_eq!(chunk_5char(s), "abcde fghij");
-    }
-
-    #[test]
-    fn chunk_5char_remainder() {
-        let s = "abcdefg";
-        assert_eq!(chunk_5char(s), "abcde fg");
-    }
-
-    #[test]
-    fn chunk_5char_wraps_at_10_groups() {
-        let s: String = "x".repeat(55); // 11 groups of 5
-        let out = chunk_5char(&s);
-        assert!(out.contains('\n'));
-        let first_line = out.lines().next().unwrap();
-        let group_count = first_line.split(' ').count();
-        assert_eq!(group_count, 10);
-    }
 
     // ---- v0.4.1 Phase I — engraving_card_unified shape tests (SPEC §5.5) ----
 

@@ -240,6 +240,9 @@ fn bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
             "bip84",
             "--passphrase-stdin",
             "--no-engraving-card",
+            // mstring-grouping P4: pinned fixture is the unbroken canonical form.
+            "--group-size",
+            "0",
         ])
         .write_stdin("".as_bytes())
         .assert()

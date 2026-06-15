@@ -42,6 +42,9 @@ fn french_phrase_bundle_emits_mnem_no_advisory() {
             "--network",
             "mainnet",
             "--no-engraving-card",
+            // mstring-grouping P4: unbroken so the mnem-card length check holds.
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();
@@ -138,6 +141,9 @@ fn french_bundle_json_stdout_valid_advisory_suppressed() {
             "--network",
             "mainnet",
             "--no-engraving-card",
+            // mstring-grouping P4: unbroken so the mnem-card length check holds.
+            "--group-size",
+            "0",
             "--json",
         ])
         .assert()

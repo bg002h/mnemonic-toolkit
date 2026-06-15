@@ -27,6 +27,10 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
                     "--template",
                     t,
                     "--no-engraving-card",
+                    // mstring-grouping P4: golden is the unbroken (canonical)
+                    // form; default bundle output is now space/5-grouped.
+                    "--group-size",
+                    "0",
                 ])
                 .assert()
                 .success();
@@ -34,6 +38,67 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
             assert_eq!(stdout, expected, "byte-exact mismatch for {}-{}", t, n);
         }
     }
+}
+
+/// mstring-grouping P4: the DEFAULT bundle text output is space/5 print-once
+/// (the `cli_bundle_full` goldens above use `--group-size 0` for the unbroken
+/// canonical pin; this covers the new default). Also exercises `--separator`.
+#[test]
+fn bundle_default_text_is_space_grouped_print_once() {
+    let run = |extra: &[&str]| -> String {
+        let mut args: Vec<&str> = vec![
+            "bundle",
+            "--slot",
+            // 12-word all-zeros (single ms1 card) keeps the assertion simple.
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+        ];
+        args.extend_from_slice(extra);
+        let out = Command::cargo_bin("mnemonic").unwrap().args(&args).assert().success();
+        String::from_utf8(out.get_output().stdout.clone()).unwrap()
+    };
+
+    // Default: the ms1 card line is space/5-grouped, print-once (no duplicate
+    // unbroken copy → the stripped ms1 appears exactly once in stdout).
+    let default_out = run(&[]);
+    let ms1_line = default_out
+        .lines()
+        .find(|l| l.starts_with("ms10"))
+        .expect("an ms1 line");
+    assert_eq!(ms1_line.chars().nth(5), Some(' '), "default space/5; got {ms1_line:?}");
+    let unbroken: String = ms1_line.chars().filter(|c| *c != ' ').collect();
+    // print-once: the unbroken form does NOT also appear as its own line.
+    assert!(
+        !default_out.lines().any(|l| l == unbroken),
+        "print-once: unbroken ms1 must not also appear; got {default_out:?}"
+    );
+
+    // --separator hyphen.
+    let hyphen_out = run(&["--separator", "hyphen"]);
+    let h_line = hyphen_out.lines().find(|l| l.starts_with("md1")).expect("md1 line");
+    assert_eq!(h_line.chars().nth(5), Some('-'), "hyphen at idx 5; got {h_line:?}");
+
+    // Invalid separator → clap parse error (non-zero exit).
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+            "--separator",
+            "bogus",
+        ])
+        .assert()
+        .failure();
 }
 
 /// SPEC v0.6.1 §5.5.a — full bundle (BIP-39 entropy on stdout) MUST emit

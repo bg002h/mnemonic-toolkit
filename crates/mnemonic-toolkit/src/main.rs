@@ -10,6 +10,7 @@ mod derive;
 mod derive_address;
 mod derive_slot;
 mod descriptor_builder;
+mod display_grouping;
 mod electrum;
 mod env_sentinel;
 mod error;

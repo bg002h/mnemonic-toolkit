@@ -1,25 +1,12 @@
 # ms1 (entropy, BCH-checksummed)
 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w
 
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq qqqqq
-qqqqq qqqqq qqcwu gpdxt fme2w
-
 # mk1 (xpub + origin)
 mk1qplfpjpqqsql5sef442rd4eyzvzrtp70gfc5z9lqfrvppc7y48nm3tn7d05s5e4fnxkszp05g6k9033m6l6a06ujjcpevlvgvttmelfjxf4x
 mk1qplfpjpppgg0e9634h00ls8v39sfrxaytpad09kgdufp59g2tdq3a3tedf5sxetg3zzk5wzvg3ndt
-
-mk1qp lfpjp qqsql 5sef4 42rd4 eyzvz rtp70 gfc5z 9lqfr vppc7
-y48nm 3tn7d 05s5e 4fnxk szp05 g6k90 33m6l 6a06u jjcpe vlvgv
-ttmel fjxf4 x
-mk1qp lfpjp ppgg0 e9634 h00ls 8v39s frxay tpad0 9kgdu fp59g
-2tdq3 a3ted f5sxe tg3zz k5wzv g3ndt
 
 # md1 (wallet policy)
 md1fjm7tpqpqpm6j8pqqxqqks9gdkhys25z8qfrvppc7y48nm3tn7vu0zqwd5d4rme2
 md1fjm7tpq2lfpfn2nxddqyzlg34v2lrrh4l46l4e99srjc9pplyhgusc926d8ag5g4
 md1fjm7tpq5ddmmlupmyfvzgehfzc0ttedjr0zgdp2zjmgy0v27t2qgpnr5mgfd7zt7
-
-md1fj-m7tpq-pqpm6-j8pqq-xqqks-9gdkh-ys25z-8qfrv-ppc7y-48nm3-tn7vu-0zqwd-5d4rm-e2
-md1fj-m7tpq-2lfpf-n2nxd-dqyzl-g34v2-lrrh4-l46l4-e99sr-jc9pp-lyhgu-sc926-d8ag5-g4
-md1fj-m7tpq-5ddmm-lupmy-fvzge-hfzc0-ttedj-r0zgd-p2zjm-gy0v2-7t2qg-pnr5m-gfd7z-t7
 

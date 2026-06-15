@@ -27,6 +27,9 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
             "bip84",
             "--self-check",
             "--no-engraving-card",
+            // mstring-grouping P4: golden is the unbroken canonical form.
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();

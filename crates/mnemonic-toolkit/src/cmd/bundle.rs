@@ -3,10 +3,9 @@
 //! Realizes SPEC §2.1 (full + watch-only modes), §5.1 (multi-section
 //! stdout), §5.2 (engraving card stderr), §5.3 (JSON schema).
 
+use crate::display_grouping::render_grouped;
 use crate::error::ToolkitError;
-use crate::format::{
-    chunk_5char, chunk_md1, chunk_mk1, BundleJson, CosignerEntry, MkField, MultisigInfo,
-};
+use crate::format::{BundleJson, CosignerEntry, MkField, MultisigInfo};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
@@ -76,6 +75,15 @@ pub struct BundleArgs {
     /// piping into other tooling.
     #[arg(long = "no-engraving-card")]
     pub no_engraving_card: bool,
+
+    /// Insert a separator every N characters in the emitted ms1/mk1/md1 strings
+    /// (0 = unbroken). SPEC §3. Display only; --json + verify-bundle stay unbroken.
+    #[arg(long, default_value_t = 5)]
+    pub group_size: u16,
+
+    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
+    pub separator: char,
 
     /// v0.2 multisig path family (default: bip87).
     #[arg(long = "multisig-path-family", value_enum)]
@@ -964,6 +972,10 @@ fn emit_unified<W: Write, E: Write>(
             writeln!(stdout, "{marker}").ok();
             writeln!(stdout).ok();
         }
+        // mstring display-grouping (SPEC §6): print-once, flag-controlled
+        // (default space/5). --json + verify-bundle forensics stay unbroken.
+        let gs = args.group_size as usize;
+        let sep = args.separator;
         for (i, ms) in bundle.ms1.iter().enumerate() {
             if ms.is_empty() {
                 continue;
@@ -973,20 +985,14 @@ fn emit_unified<W: Write, E: Write>(
             } else {
                 writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
             }
-            writeln!(stdout, "{}", ms).ok();
-            writeln!(stdout).ok();
-            writeln!(stdout, "{}", chunk_5char(ms)).ok();
+            writeln!(stdout, "{}", render_grouped(ms, gs, sep)).ok();
             writeln!(stdout).ok();
         }
         match &bundle.mk1 {
             MkField::Single(mk1) => {
                 writeln!(stdout, "# mk1 (xpub + origin)").ok();
                 for s in mk1 {
-                    writeln!(stdout, "{}", s).ok();
-                }
-                writeln!(stdout).ok();
-                for s in mk1 {
-                    writeln!(stdout, "{}", chunk_mk1(s)).ok();
+                    writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
                 }
                 writeln!(stdout).ok();
             }
@@ -994,11 +1000,7 @@ fn emit_unified<W: Write, E: Write>(
                 for (i, chunks) in per_cosigner.iter().enumerate() {
                     writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
                     for s in chunks {
-                        writeln!(stdout, "{}", s).ok();
-                    }
-                    writeln!(stdout).ok();
-                    for s in chunks {
-                        writeln!(stdout, "{}", chunk_mk1(s)).ok();
+                        writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
                     }
                     writeln!(stdout).ok();
                 }
@@ -1013,11 +1015,7 @@ fn emit_unified<W: Write, E: Write>(
         };
         writeln!(stdout, "{md1_header}").ok();
         for s in &bundle.md1 {
-            writeln!(stdout, "{}", s).ok();
-        }
-        writeln!(stdout).ok();
-        for s in &bundle.md1 {
-            writeln!(stdout, "{}", chunk_md1(s)).ok();
+            writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
         }
         writeln!(stdout).ok();
         // v0.4.1 Phase I: emit unified engraving card to stderr unless suppressed.
@@ -2427,6 +2425,8 @@ mod self_check_ms1_tests {
             account: 0,
             json: false,
             no_engraving_card: true,
+            group_size: 5,
+            separator: ' ',
             multisig_path_family: None,
             privacy_preserving: false,
             self_check: false,
@@ -2556,6 +2556,8 @@ mod self_check_mk1_xpub_binding_tests {
             account: 0,
             json: false,
             no_engraving_card: true,
+            group_size: 5,
+            separator: ' ',
             multisig_path_family: None,
             privacy_preserving: false,
             self_check: false,

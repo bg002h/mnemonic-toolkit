@@ -295,6 +295,8 @@ fn env_var_works_on_passphrase_via_bundle() {
             "--passphrase",
             "@env:WALLET_PP",
             "--no-engraving-card",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();
@@ -386,6 +388,8 @@ fn env_var_works_on_slot_subkey_phrase() {
             "--template",
             "bip84",
             "--no-engraving-card",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();
@@ -421,6 +425,8 @@ fn env_var_works_on_slot_subkey_entropy() {
             "--template",
             "bip84",
             "--no-engraving-card",
+            "--group-size",
+            "0",
         ])
         .assert()
         .success();
