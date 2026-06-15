@@ -1,11 +1,11 @@
 # SPEC — Standardized mstring display grouping across the constellation
 
-**Status:** DRAFT (R0 round-2 folded; re-dispatch pending).
+**Status:** R0 GREEN (round 3, 0C/0I). Spec gate MET — ready for implementation planning.
 **Author cycle:** mstring-display-grouping v1
 **Source SHAs at write time (grep-verified):** toolkit `origin/master` `8da9008`; `mnemonic-secret` `b616530`; `mnemonic-key` `21786dc`; `descriptor-mnemonic` `eb9f368`.
 **Branch:** `feature/mstring-display-grouping` (toolkit).
 **Affects:** all four CLIs (`mnemonic`/`md`/`ms`/`mk`) + `mnemonic-gui` schema mirror + `docs/manual` + `docs/technical-manual`.
-**R0 history:** round 1 NOT GREEN (3C/9I/8m) → round 2 NOT GREEN (1C/3I/3m); both persisted to `design/agent-reports/mstring-display-grouping-r0-round{1,2}-review.md`; all findings folded below.
+**R0 history:** round 1 NOT GREEN (3C/9I/8m) → round 2 NOT GREEN (1C/3I/3m) → round 3 **GREEN (0C/0I)**; all three persisted to `design/agent-reports/mstring-display-grouping-r0-round{1,2,3}-review.md`; all findings folded below.
 
 > Mandatory gate: MUST pass opus architect **R0** to **0 Critical / 0 Important** before ANY implementation (CLAUDE.md §1).
 
@@ -150,13 +150,13 @@ Default-output change ⇒ **MINOR** per crate (`ms-cli`, `mk-cli`, `md-cli`, `mn
 
 - **GUI schema mirror** (biggest risk): `--group-size`/`--separator` are new clap flags on every covered toolkit subcommand → `mnemonic-gui/src/schema/mnemonic.rs` adds them (+ a `--separator` KEYWORD dropdown per I7) in a paired PR; run `schema_mirror` against the new toolkit binary before merge. Lagging gate; paired-PR is the leading control.
 - **End-user manual**: `docs/manual/src/40-cli-reference/` for all four CLIs — document the identical flags once in a "common output-grouping flags" section with per-CLI cross-references; run `docs/manual/tests/lint.sh` (bidirectional flag coverage).
-- **Technical manual (I1):** `51-md-codec-api.md:194` documents `render_codex32_grouped` — KEPT (wrapper, §8), so no break; ADD an entry for the new `render_grouped`. `54-mnemonic-toolkit-api.md:50-51` documents the toolkit's `chunk_5char`/`chunk_mk1`/`chunk_md1` — these are DELETED (§8), so REMOVE those rows in Phase 3 and add the toolkit's local `render_grouped` (R0-r2 I1). Run the technical-manual lint gate.
+- **Technical manual (I1):** `51-md-codec-api.md:~189` documents `render_codex32_grouped` — KEPT (wrapper, §8), so no break; ADD an entry for the new `render_grouped`. `54-mnemonic-toolkit-api.md:50-51` documents the toolkit's `chunk_5char` (`:50`) and `chunk_md1` (`:51`) — both DELETED (§8), so REMOVE those two rows in Phase 3 and add the toolkit's local `render_grouped` (`chunk_mk1` has no manual row — nothing to remove for it; R0-r2 I1 / R0-r3 m1/m3). Run the technical-manual lint gate.
 - **Sibling FOLLOWUP companions**: file `display-grouping-render-strip-v1` in toolkit + each sibling `FOLLOWUPS.md` with cross-citing `Companion:` lines.
 - **Examples.pdf**: regenerate (separators/print-once change every card).
 
 ## 12. Rollout order
 
-1. **Phase 1 — codec CLIs (3 repos, MINOR each):** add `render_grouped`/`strip_display_separators`; add flags to every emit subcommand; add intake strip (incl. ms `combine` — **also ADD `-`→stdin multiline share intake, C1**; mk `read_mk1_strings`; md decode/repair); `ms split` print-once (labels→stderr); md-codec ADDS `render_grouped` + keeps wrapper; remove the doubling-dedup heuristic + its tests (§10); rewrite the print-twice tests `encode_canonical_12_word.rs` + `encode_canonical_24_word.rs` and the `format.rs` grouping unit tests (R0-r2 I2); update end-user manual chapters; bump.
+1. **Phase 1 — codec CLIs (3 repos, MINOR each):** add `render_grouped`/`strip_display_separators`; add flags to every emit subcommand; add intake strip (incl. ms `combine` — **also ADD `-`→stdin multiline share intake, C1**; mk `read_mk1_strings`; md decode/repair); `ms split` print-once (labels→stderr); md-codec ADDS `render_grouped` + keeps wrapper; remove the doubling-dedup heuristic + its tests (§10); rewrite the print-twice test `encode_canonical_12_word.rs` (asserts `\n\n` → goes RED) and the `format.rs` grouping unit tests; refresh `encode_canonical_24_word.rs` for positive single-line coverage (it does not assert `\n\n`, so it won't go RED — R0-r2 I2 / R0-r3 m2); update end-user manual chapters; bump.
 2. **Phase 2 — conformance vectors:** author canonical TSV (keyword/`<empty>` encoding) in toolkit; copy + `.sha256` into each sibling; add CI checksum + driver tests in all four.
 3. **Phase 3 — toolkit (MINOR):** pin-bump siblings; collapse `format.rs` to one `render_grouped` (delete `chunk_5char`/`chunk_mk1`/`chunk_md1`); add flags to `bundle`/`verify-bundle`/`convert`/`ms-shares` (NOT `repair`); regenerate the 20 golden vectors (`tests/vectors/v0_1/*`+`v0_2`); re-examine fuzz-corpus seeds for embedded formatted strings (the `cli_cross_tool_differential.rs` harness compares LIVE binaries on format-independent IDs and has NO disk artifacts to regen — R0-r2 m1); update both manuals for all four CLIs (incl. REMOVING the dead `chunk_*` rows from `54-mnemonic-toolkit-api.md`, §11); regenerate `docs/Examples.pdf`.
 4. **Phase 4 — GUI (paired PR):** update `schema/mnemonic.rs` (flags + keyword dropdown); run `schema_mirror`; pin the new toolkit MINOR.
@@ -169,7 +169,7 @@ Each repo cycle is independently R0-gated + TDD'd.
 - **Per-CLI flag tests:** default space/5 single-line; `--group-size 0` unbroken; `--separator hyphen|comma` (+ literals + keywords); invalid separator/oversize group-size → clap exit 2.
 - **Round-trip:** `encode --separator X | decode -` for X∈{default,hyphen,comma} and `--group-size 0`; **`ms split | ms combine -`** via the new `-`→stdin intake (C1 guard); `ms combine <grouped-positional-share>` decodes (C3 guard).
 - **Invariants:** `--json` unbroken; `verify-bundle` forensic strings unbroken; `repair` output unbroken.
-- **Golden/artifact regen:** toolkit `tests/vectors/*` recaptured; ms-cli `encode_canonical_12_word.rs` + `encode_canonical_24_word.rs` (assert print-twice `\n\n`) rewritten for print-once; ms-cli `format.rs` unit tests rewritten; fuzz-corpus seeds re-examined (the differential harness needs no regen — format-independent IDs, no disk artifacts, R0-r2 m1).
+- **Golden/artifact regen:** toolkit `tests/vectors/*` recaptured; ms-cli `encode_canonical_12_word.rs` (asserts print-twice `\n\n`) rewritten for print-once + `encode_canonical_24_word.rs` refreshed for single-line coverage; ms-cli `format.rs` unit tests rewritten; fuzz-corpus seeds re-examined (the differential harness needs no regen — format-independent IDs, no disk artifacts, R0-r2 m1).
 - **schema_mirror** green vs the new toolkit binary.
 
 ## 14. Out of scope (YAGNI)
