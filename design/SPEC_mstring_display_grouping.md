@@ -1,37 +1,39 @@
 # SPEC — Standardized mstring display grouping across the constellation
 
-**Status:** DRAFT (pre-R0). Brainstorm-approved by user 2026-06-15; pre-spec architect consult folded.
+**Status:** DRAFT (R0 round-1 folded; re-dispatch pending).
 **Author cycle:** mstring-display-grouping v1
 **Source SHAs at write time (grep-verified):** toolkit `origin/master` `8da9008`; `mnemonic-secret` `b616530`; `mnemonic-key` `21786dc`; `descriptor-mnemonic` `eb9f368`.
 **Branch:** `feature/mstring-display-grouping` (toolkit).
-**Affects:** all four constellation CLIs (`mnemonic` / `md` / `ms` / `mk`) + `mnemonic-gui` schema mirror + `docs/manual`.
+**Affects:** all four CLIs (`mnemonic`/`md`/`ms`/`mk`) + `mnemonic-gui` schema mirror + `docs/manual` + `docs/technical-manual`.
+**R0 history:** round 1 NOT GREEN (3C/9I/8m), persisted `design/agent-reports/mstring-display-grouping-r0-round1-review.md`; all findings folded below.
 
-> Mandatory gate: this SPEC MUST pass an opus architect **R0** review to **0 Critical / 0 Important** before ANY implementation begins (CLAUDE.md Conventions §1). The pre-spec consult below is advisory input, NOT the R0.
+> Mandatory gate: MUST pass opus architect **R0** to **0 Critical / 0 Important** before ANY implementation (CLAUDE.md §1).
 
 ---
 
 ## 1. Motivation
 
-The constellation emits the three m-format card strings (`ms1`, `mk1`, `md1`) with **divergent, non-configurable** display formatting:
+The constellation emits the three card strings with **divergent, non-configurable** display formatting:
 
-- `ms1` / `mk1` (toolkit): 5-char groups, **space** separator, **wraps at 10 groups/line** — `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:10` (`chunk_5char`), `:32` (`chunk_mk1` → defers to `chunk_5char`).
-- `md1` (toolkit): n-char groups, **hyphen** separator, **no wrap** — `format.rs:37` (`chunk_md1` → `md_codec::encode::render_codex32_grouped(s, 5)`), defined at `descriptor-mnemonic/crates/md-codec/src/encode.rs:98`.
-- `ms encode` standalone: 5-char/space/wrap-10 — `mnemonic-secret/crates/ms-cli/src/format.rs::chunked`.
-- `md encode` standalone: **unbroken, no grouping at all** — `descriptor-mnemonic/crates/md-cli/src/cmd/encode.rs:84` (`println!("{}", encode_md1_string(...))`).
-- `mk encode` standalone: **unbroken, no grouping at all** — `mnemonic-key/crates/mk-cli/src/cmd/encode.rs` (`println!("{s}")`).
+- `ms1`/`mk1` (toolkit): 5-char groups, **space**, **wrap@10 groups/line** — `mnemonic-toolkit/crates/mnemonic-toolkit/src/format.rs:10` (`chunk_5char`), `:32` (`chunk_mk1`→`chunk_5char`).
+- `md1` (toolkit): n-char groups, **hyphen**, **no wrap** — `format.rs:37` (`chunk_md1`→`md_codec::encode::render_codex32_grouped`, called `:38`), defined `descriptor-mnemonic/crates/md-codec/src/encode.rs:98` (hardcoded `'-'` at `:105`).
+- `ms encode` standalone: 5/space/wrap-10 — `mnemonic-secret/crates/ms-cli/src/format.rs::chunked`; emitted via `emit_text` (`cmd/encode.rs` ~`:198`, bare at `:199`, grouped at `:201`).
+- `ms split`: **two-part** — bare share per line THEN labeled grouped blocks — `ms-cli/src/cmd/split.rs::emit_text` (`:147`; bare loop `:152-154`, grouped `:159`).
+- `md encode`: **unbroken, no grouping** — `descriptor-mnemonic/crates/md-cli/src/cmd/encode.rs:84` (text), `:81` (force-chunked).
+- `mk encode`: **unbroken, no grouping** — `mnemonic-key/crates/mk-cli/src/cmd/encode.rs` (`println!("{s}")`).
 
-Result: the same logical artifact prints with two different separators (space vs hyphen), two wrap rules, and three groupings (5/space/wrap, 5/hyphen/no-wrap, none). Users cannot choose unbroken vs grouped, nor the separator/period. This SPEC standardizes a single, configurable **display-grouping** layer across all four CLIs.
+Result: two separators (space vs hyphen), two wrap rules, three groupings (5/space/wrap, 5/hyphen/no-wrap, none). No user choice. This SPEC standardizes one configurable **display-grouping** layer across all four CLIs.
 
 ## 2. Glossary (resolves a naming collision)
 
-- **chunk / chunked** — RESERVED for the existing **wire-level** concept: an `mk1`/`md1`/`ms1` payload split across multiple physical engravable strings because the data exceeds one codex32 string (`mk-codec` `string_layer/header.rs`, `md-codec` `chunk.rs`). **Not** this feature.
-- **group / grouping** — THIS feature: inserting a separator every N characters within a single string for human readability. All new symbols use "group", never "chunk".
+- **chunk / chunked** — RESERVED for the existing **wire-level** split of a payload across multiple physical strings (`mk-codec` `string_layer/header.rs`, `md-codec` `chunk.rs`). NOT this feature.
+- **group / grouping** — THIS feature: inserting a separator every N chars within one string. All new symbols use "group".
 
-The toolkit's existing display fns `chunk_5char` / `chunk_mk1` / `chunk_md1` are mis-named display-grouping fns; renaming them to one `render_grouped` is part of this work.
+The toolkit's `chunk_5char`/`chunk_mk1`/`chunk_md1` are mis-named display fns; they collapse into one `render_grouped`. md-codec's public `render_codex32_grouped` is NOT renamed (it is documented public API, §11/I1) — instead md-codec **adds** `render_grouped` and keeps `render_codex32_grouped` as a thin back-compat wrapper.
 
 ## 3. Canonical algorithm (single source of truth)
 
-Two pure, ASCII-only, dependency-free functions, defined identically in every repo and pinned by shared conformance vectors (§8).
+Two pure, dependency-free fns, defined identically in every repo, pinned by conformance vectors (§8).
 
 ### 3.1 `render_grouped(s, group_size, separator) -> String`
 ```
@@ -43,144 +45,138 @@ for (i, ch) in s.chars().enumerate() {
 }
 return out
 ```
-- Single line ALWAYS — **no newline wrapping** (the legacy 10-groups/line wrap is removed).
-- `separator` is a single `char` drawn from the allowed set (§5).
+Single line ALWAYS — **no newline wrapping** (legacy wrap@10 removed). `separator` is one `char` from the output set (§5).
 
 ### 3.2 `strip_display_separators(s) -> String`
 ```
 return s.chars().filter(|c| !is_display_separator(c)).collect()
-where is_display_separator(c) = c == ' ' || c == '-' || c == ','
+where is_display_separator(c) = c.is_whitespace() || c == '-' || c == ','
 ```
-- Strips ONLY the allowed separator set (§5). Other characters pass through unchanged, so a malformed card is NOT silently "cleaned" into validity.
-- Idempotent: `strip(strip(s)) == strip(s)` (separators are outside the codex32 alphabet).
+- **Strips ALL Unicode whitespace PLUS `-` and `,`.** (Folds I4/I5: preserves today's full-whitespace tolerance — tabs, CR, LF, NBSP — and ADDS hyphen/comma. The output separator set `{space,-,,}` is a strict subset, so every emitted form re-ingests.)
+- Strips ONLY those; every other char (including any codex32-alphabet char) passes through, so a malformed card is never silently "cleaned" into validity.
+- Idempotent: `strip(strip(s)) == strip(s)` (separators are outside the codex32 alphabet, §4).
 
-### 3.3 Edge cases (all enumerated in the conformance vectors, §8)
-- empty string → `""` (both fns).
-- `group_size >= len(s)` → input unchanged (no separator inserted).
-- `group_size == 0` with a `separator` supplied → unbroken (separator ignored, no error/warning).
-- consecutive separators on input (`"ab--cd"`) → both stripped (`"abcd"`); no guard.
-- multibyte: codex32 alphabet, HRP, and the `1` separator are all ASCII; no m-format string contains multibyte chars — `chars()` and `bytes()` are equivalent. Implementations MAY use bytes; vectors are ASCII.
-- `--group-size` type is `u16` (0..=65535); any value ≥ string length yields the input unchanged; no overflow in `i % group_size` because `i < len(s) ≤ ~few hundred`.
+### 3.3 Edge cases (all in the conformance vectors, §8)
+empty→`""`; `group_size ≥ len`→input unchanged; `group_size == 0` + separator→unbroken (separator ignored, no error); consecutive separators on input→all stripped, no guard; tabs/CRLF on input→stripped (I4); multibyte: codex32 alphabet/HRP/`1`-sep are ASCII, no m-string is multibyte — `chars()`≡`bytes()` (vectors are ASCII; equivalence stated so a future non-ASCII HRP can't silently break it, m4); `--group-size` is `u16` (0..=65535), any value ≥ len yields input unchanged, no `i % group_size` overflow (`i < len ≪ usize::MAX`).
 
 ## 4. Separator-charset safety
 
-bech32/codex32 data charset is `qpzry9x8gf2tvdw0s3jn54khce6mua7l` (lowercase; no `b/i/o/1`), HRPs are `ms`/`mk`/`md`, and the bech32 separator is `1`. The allowed display separators `{space, '-', ','}` are **all outside** that charset and outside `{ms,mk,md,1}`, so stripping them on intake is unambiguous and cannot corrupt a valid string.
+codex32/bech32 data charset is `qpzry9x8gf2tvdw0s3jn54khce6mua7l` (confirmed `descriptor-mnemonic/crates/md-cli/src/cmd/repair.rs:34`); HRPs `ms`/`mk`/`md`; bech32 separator `1`. None of `{space,-,,}` (nor any whitespace) appears in that set or in `{ms,mk,md,1}`, so stripping is unambiguous: it can neither corrupt a valid string nor mask a malformed one.
 
 ## 5. Allowed separator set + value model
 
-**Set (final):** `space` (DEFAULT), `-` (hyphen), `,` (comma). (`;` and `'` were considered and cut — YAGNI / shell-hostility.)
+**Output set (final):** `space` (DEFAULT), `-` (hyphen), `,` (comma). (`;`/`'` cut — YAGNI/shell-hostility.)
 
-**CLI value parser** (identical in all four CLIs): accepts BOTH literal and keyword forms, case-sensitive keywords:
+**CLI value parser** (identical in all four CLIs): a small `value_parser` fn (NOT clap `ValueEnum` — it mishandles a literal-space possible-value). Accepts BOTH literal and keyword forms; rejects anything else with a clap parse error (exit 2 — NO new `ToolkitError` variant needed; rejection is at the clap layer before command dispatch, folding I8):
 | keyword | literal | char |
 |---|---|---|
 | `space` | `" "` | `' '` |
 | `hyphen` | `"-"` | `'-'` |
 | `comma` | `","` | `','` |
-
-- Implemented as a small `value_parser` fn (NOT clap `ValueEnum`, which mishandles a literal-space possible-value). Default `space`.
-- Keyword forms exist to dodge shell-quoting and to be the GUI dropdown values.
-- Docs/examples use keyword forms (`--separator hyphen`); scripting may use either.
+Default `space`. **GUI constraint (I7):** `mnemonic-gui`'s dropdown MUST emit the KEYWORD values (`space`/`hyphen`/`comma`), never a literal space, to avoid argv/whitespace ambiguity through the GUI→argv path. Docs/examples use keywords.
 
 ## 6. CLI flag surface (identical on all four CLIs)
 
 - `--group-size <u16>` — default `5`; `0` = unbroken.
-- `--separator <space|hyphen|comma | " " | - | ,>` — default `space`.
+- `--separator <space|hyphen|comma | " "|-|,>` — default `space`.
 
-**Output model — single, flag-controlled, print-once.** Each emit point prints the m-string in exactly ONE form (the legacy print-twice "unbroken line + grouped line" is removed). Default = grouped space/5.
+**Output model — single, flag-controlled, print-once.** Each emit point prints the m-string in exactly ONE form (legacy print-twice removed). Default = grouped space/5.
+
+**`ms split` / `ms-shares --split` (C1/C2 resolution):** print-once too. **stdout** carries the N share strings, one per line, in the flag-controlled form (default grouped). All human labels ("share N of M", headers) move to **stderr** (mirrors the engraving-card-panel pattern). Thus `ms split | ms combine -` and `ms split | ms decode -` pipe a clean one-share-per-line stdout; the receiver's intake strip (§9.2) removes separators per line. This eliminates the bare+grouped duplication that the now-removed doubling heuristic used to absorb (§10).
+
+**`repair` (C/m8 resolution):** corrected output is ALWAYS emitted **unbroken** (canonical), regardless of `--group-size`/`--separator`. `repair` is a recovery precision tool; grouping would inject separators into a string the user is visually re-inspecting. `repair` does NOT take the grouping flags. (Removed from the flag-honoring emit list in §9.1.)
 
 **Invariants:**
-- `--json` output ALWAYS carries the **canonical unbroken** string, regardless of `--group-size`/`--separator` (the flags affect text-mode stdout only).
-- `verify-bundle`'s forensic `VerifyCheck.expected` / `.actual` strings (`format.rs:170-171`) ALWAYS carry the **unbroken canonical** form (they are diff data, not display).
-- `--no-engraving-card` (toolkit) is orthogonal — it suppresses the stderr panel; the flags govern stdout.
+- `--json` ALWAYS carries the **canonical unbroken** string (flags affect text-mode stdout only).
+- `verify-bundle` forensic `VerifyCheck.expected`/`.actual` (`format.rs:170-171`) ALWAYS unbroken canonical.
+- `--no-engraving-card` (toolkit) is orthogonal (governs the stderr panel).
 
 ## 7. Default-behavior change & SemVer
 
-This changes default stdout for every affected command:
 | String | Before | After (default) |
 |---|---|---|
-| `ms1` | space/5, wrap@10, printed twice | space/5, single line, printed once |
-| `mk1` | space/5, wrap@10 (toolkit) / unbroken (`mk encode`) | space/5, single line |
+| `ms1` | space/5, wrap@10, printed twice | space/5, single line, once |
+| `mk1` | space/5 wrap@10 (toolkit) / unbroken (`mk encode`) | space/5, single line |
 | `md1` | hyphen/5 (toolkit) / unbroken (`md encode`) | space/5, single line |
+| `ms split` | bare-per-line + labeled grouped blocks (stdout) | shares one-per-line grouped (stdout); labels→stderr |
 
-A default-output change is a **behavioral break** for any consumer parsing text-mode stdout, but stdout was never a declared-stable wire format and `--json` is unaffected. Precedent (v0.48.0 NUMS flip, v0.49.0 format-add) ⇒ **MINOR** bump per crate: `ms-cli`, `mk-cli`, `md-cli`, `mnemonic-toolkit` (+ pin bumps).
+Default-output change ⇒ **MINOR** per crate (`ms-cli`, `mk-cli`, `md-cli`, `mnemonic-toolkit` + pin bumps). stdout text was never a declared-stable interface and `--json` is unaffected (precedent: v0.48.0, v0.49.0). **Note (m7):** `ms split`'s removal of the bare-strings-first block is a stdout-format change that can break scripts parsing that block — still MINOR, but called out.
 
-## 8. Architecture — where the code lives + drift control
+## 8. Architecture — code placement + drift control
 
 **Function placement:**
-- `ms-cli`: `render_grouped` + `strip_display_separators` in `crates/ms-cli/src/format.rs`. Replaces `chunked`; the legacy 10-group wrap logic is deleted.
-- `mk-cli`: same two fns in a `mk-cli` formatting module.
-- `md-codec`: GENERALIZE the existing `render_codex32_grouped(s, group_size)` (`encode.rs:98`) to `render_grouped(s, group_size, separator)` (separator becomes a parameter; the hardcoded `'-'` at `encode.rs:105` is removed). `strip_display_separators` lives in `md-cli` (intake is a CLI concern). Keeping the renderer in the codec lib is the one exception — it already lives there and the toolkit consumes it; no churn benefit to moving it.
-- `mnemonic-toolkit`: ONE local `render_grouped` in `format.rs`; DELETE `chunk_5char`, `chunk_mk1`, `chunk_md1`; the toolkit stops delegating md1 rendering to `md_codec` (display format is now a toolkit-local choice, byte-identity guaranteed by vectors). `strip_display_separators` local in the toolkit.
+- `ms-cli`: `render_grouped` + `strip_display_separators` in `crates/ms-cli/src/format.rs`; `chunked` and its wrap logic deleted; `parse.rs::strip_whitespace` becomes (or is replaced by) `strip_display_separators` with the §3.2 definition (KEEPS full-whitespace stripping, ADDS `-`/`,`).
+- `mk-cli`: the two fns in a `mk-cli` formatting module.
+- `md-codec`: **ADD** `pub fn render_grouped(s, group_size, separator)` to `encode.rs`; **keep** `render_codex32_grouped(s, group_size)` as a thin wrapper delegating with `'-'` (preserves the documented public API + the toolkit's pinned surface, folding I1/I6 — no rename, no atomic cross-phase break). `strip_display_separators` lives in `md-cli`.
+- `mnemonic-toolkit`: ONE local `render_grouped` in `format.rs`; DELETE `chunk_5char`/`chunk_mk1`/`chunk_md1`; the toolkit no longer calls `md_codec::...render_codex32_grouped` for display (byte-identity guaranteed by vectors). `strip_display_separators` local.
 
 **Drift control — copy-with-checksum conformance vectors (no new crate):**
-- Canonical `design/display-grouping-vectors.tsv` authored in **mnemonic-toolkit** (the integration hub). Columns: `input`, `group_size`, `separator`, `op` (`render`|`strip`), `expected`, `note`. Covers every §3.3 edge case + each separator + render/strip round-trips.
-- Each sibling repo carries an **identical copy** of the file PLUS `display-grouping-vectors.tsv.sha256`.
-- Every repo's CI runs: (a) `sha256sum -c display-grouping-vectors.tsv.sha256` (coupling pin — fails loudly if a copy drifts from canonical), and (b) a test that drives its `render_grouped`/`strip_display_separators` against every row.
-- Changing the canonical file forces an explicit copy+checksum update PR in each sibling; the CI checksum failure makes divergence impossible to miss.
+- Canonical `design/display-grouping-vectors.tsv` authored in **mnemonic-toolkit**. Columns: `op` (`render`|`strip`), `input`, `group_size`, `separator`, `expected`, `note`.
+- **TSV encoding convention (I2):** the `separator` column holds a KEYWORD, never a literal — `space`|`hyphen`|`comma`, or `none` for `op=render group_size=0` and for `op=strip` (separator inapplicable). Empty-string `input`/`expected` is the literal sentinel `<empty>`. No raw spaces ever appear in a TSV field, so a plain tab-split parser is unambiguous. The driver maps keyword→char.
+- Each sibling repo carries an identical copy + `display-grouping-vectors.tsv.sha256`. Every CI runs `sha256sum -c` (coupling pin) AND a driver test over every row.
+- **Lagging-indicator caveat (m6):** the checksum only fires once a sibling has copied the file; a canonical change does not auto-break siblings until copied. The leading control is the paired-PR discipline (§11); the SPEC states this gap explicitly. (A future cross-repo CI probe is a possible FOLLOWUP.)
 
 ## 9. Scope — call-site inventory
 
-> Line numbers are from the pre-spec consult at the §-header SHAs; each implementation PR re-greps and pins live numbers per CLAUDE.md.
+> Lines from grep-verification at the §-header SHAs (citations corrected per m1/m2/I3). Each impl PR re-greps live numbers.
 
-### 9.1 Emit sites (apply `render_grouped` + add flags)
+### 9.1 Emit sites (apply `render_grouped` + add flags; repair excluded — emits unbroken)
 | Repo | Site | Notes |
 |---|---|---|
-| toolkit | `cmd/bundle.rs:978` (ms1), `:989`/`:1001` (mk1), `:1020` (md1) | the print-twice pair collapses to one |
-| toolkit | `cmd/convert.rs` `--to ms1` / `--to mk1` arms | currently emit raw |
-| toolkit | `cmd/ms_shares.rs` `run_split` / `run_combine --to ms1` | ms1 shares; round-trip preserved by §10 intake strip |
-| toolkit | `cmd/repair.rs` `emit_repair_text` / `emit_indel_text` (corrected `ms1`/`mk1`/`md1`) | |
-| ms-cli | `cmd/encode.rs:201`; `cmd/split.rs:159` | |
-| mk-cli | `cmd/encode.rs` (`println!("{s}")`) | NEW: was unbroken → corrective alignment |
-| md-cli | `cmd/encode.rs:84` (text) + `:81` (force-chunked path) | NEW: was unbroken → corrective alignment |
+| toolkit | `cmd/bundle.rs:978` (ms1), `:989`/`:1001` (mk1), `:1020` (md1) | print-twice → once |
+| toolkit | `cmd/convert.rs` `--to ms1` / `--to mk1` arms | raw today |
+| toolkit | `cmd/ms_shares.rs` `run_split` (shares→stdout grouped; labels→stderr), `run_combine --to ms1` | per §6 split rule |
+| ms-cli | `cmd/encode.rs` `emit_text` (~`:198`; bare `:199` + grouped `:201` → one) | m1 |
+| ms-cli | `cmd/split.rs` `emit_text` (`:147`; bare loop `:152-154` + grouped `:159`) → shares one-per-line grouped on stdout, labels→stderr | I3/m2; C1/C2 |
+| mk-cli | `cmd/encode.rs` (`println!("{s}")`) | NEW grouping (was unbroken) — corrective |
+| md-cli | `cmd/encode.rs:84` (text) + `:81` (force-chunked) | NEW grouping (was unbroken) — corrective |
 
 ### 9.2 Intake sites (apply `strip_display_separators` before decode)
 | Repo | Site | Notes |
 |---|---|---|
-| ms-cli | `parse.rs:97` `strip_whitespace` | EXTEND to strip `{space,-,,}`; see §10 |
-| mk-cli | `cmd/mod.rs:84` `read_mk1_strings` (currently only `.trim()` @:93) | add strip; covers all 6 mk subcommands that call it |
+| ms-cli | `parse.rs:97` (`strip_whitespace`→`strip_display_separators`, §3.2 def) — used by `read_input` | covers `cmd/decode.rs:42` (I4), `cmd/encode.rs --hex` |
+| ms-cli | `cmd/combine.rs:38-39` positional `shares: Vec<String>` + any stdin path | **C3** — was raw; grouped steel shares must decode |
+| mk-cli | `cmd/mod.rs:84` `read_mk1_strings` (was `.trim()` only `:93`) → add interior strip | I5; covers all 6 mk subcommands |
 | md-cli | `cmd/decode.rs`, `cmd/repair.rs` | no normalization today |
-| toolkit | `slot_ms1.rs:42`; `cmd/verify_bundle.rs` (`--ms1/--mk1/--md1`); `cmd/repair.rs`; `cmd/convert.rs` `--from ms1/mk1`; `ms_shares` combine | |
-| toolkit | `verify-bundle --bundle-json` (JSON) | EXCEPTION: JSON carries canonical unbroken; no strip needed |
+| toolkit | `slot_ms1.rs:42`; `cmd/verify_bundle.rs` (`--ms1/--mk1/--md1`); `cmd/repair.rs`; `cmd/convert.rs` `--from ms1/mk1`; `cmd/ms_shares.rs` combine | |
+| toolkit | `verify-bundle --bundle-json` (JSON) | EXCEPTION: JSON is canonical unbroken; no strip |
 
 ## 10. Decommission the ms-cli doubling-detection heuristic
 
-`ms-cli/src/parse.rs:97-100` (`strip_whitespace`) contains a doubling-dedup heuristic (`had_whitespace && exact-double → halve`) that exists to cope with `ms encode`'s print-twice stdout being piped into `ms decode -` (test `parse.rs:138`). Once emit is **print-once** (§6), that double-emission no longer occurs and the heuristic's trigger becomes unreachable. The heuristic is **removed** (it could otherwise mis-fire on a legitimately doubled-content input). The replacement `strip_display_separators` does plain filtering, no dedup. The `back_typed_chunked_form_decodes` test still passes (intake strips spaces).
+`ms-cli/src/parse.rs:97-100` (`strip_whitespace`) has a doubling-dedup heuristic (`had_whitespace && exact-double → halve`); its tests are `strip_whitespace_dedupes_doubled_content` and `strip_whitespace_handles_all_three_workflows` (`:122`,`:138`) (m3 — corrected names). It exists to absorb `ms encode`/`ms split` print-twice stdout piped into decode/combine. Once emit is **print-once** everywhere (§6, incl. `ms split` shares one-per-line with labels on stderr), the double-emission no longer occurs and the trigger is unreachable. The heuristic is **removed**; `strip_display_separators` does plain filtering (no dedup). New/updated tests prove `ms split | ms combine -` and `ms split | ms decode -` round-trip for default, `hyphen`, `comma`, and `--group-size 0` (replacing the dedup tests).
 
 ## 11. Cross-repo lockstep (CLAUDE.md invariants)
 
-- **GUI schema mirror** (BIGGEST risk): `--group-size` + `--separator` are new clap flags on every covered toolkit subcommand → `mnemonic-gui/src/schema/mnemonic.rs` must add them (+ `--separator` keyword dropdown) in a paired PR; run `schema_mirror` against the new toolkit binary before merge. The gate is lagging (fires on next pin bump) — paired-PR discipline is the leading control.
-- **Manual mirror**: `docs/manual/src/40-cli-reference/` for all four CLIs. Because the flags are identical everywhere, document them once in a "common output-grouping flags" section with per-CLI cross-references to avoid 4-way drift. Run `docs/manual/tests/lint.sh` (bidirectional flag coverage).
+- **GUI schema mirror** (biggest risk): `--group-size`/`--separator` are new clap flags on every covered toolkit subcommand → `mnemonic-gui/src/schema/mnemonic.rs` adds them (+ a `--separator` KEYWORD dropdown per I7) in a paired PR; run `schema_mirror` against the new toolkit binary before merge. Lagging gate; paired-PR is the leading control.
+- **End-user manual**: `docs/manual/src/40-cli-reference/` for all four CLIs — document the identical flags once in a "common output-grouping flags" section with per-CLI cross-references; run `docs/manual/tests/lint.sh` (bidirectional flag coverage).
+- **Technical manual (I1):** `docs/technical-manual/src/50-rust-api/51-md-codec-api.md:194` and `54-mnemonic-toolkit-api.md:51` document `render_codex32_grouped`. Since it is KEPT (wrapper, §8), no break; ADD an entry documenting the new `render_grouped`. Run the technical-manual lint gate.
 - **Sibling FOLLOWUP companions**: file `display-grouping-render-strip-v1` in toolkit + each sibling `FOLLOWUPS.md` with cross-citing `Companion:` lines.
-- **Examples.pdf**: regenerate (separators/print-once change every card's display).
+- **Examples.pdf**: regenerate (separators/print-once change every card).
 
 ## 12. Rollout order
 
-1. **Phase 1 — codec CLIs (3 repos, MINOR each):** add `render_grouped`/`strip_display_separators`; add flags to every emit subcommand; add intake strip; (md-codec) generalize `render_codex32_grouped` separator; update unit tests + manual chapters; bump.
-2. **Phase 2 — conformance vectors:** author canonical TSV in toolkit; copy + `.sha256` into each sibling; add CI checksum + driver tests in all four.
-3. **Phase 3 — toolkit (MINOR):** pin-bump the three siblings; collapse `format.rs` to one `render_grouped`; add flags to `bundle`/`verify-bundle`/`repair`/`convert`/`ms-shares`; regenerate the 20 golden vectors in `tests/vectors/`; update manual for all four CLIs; regenerate `docs/Examples.pdf`.
-4. **Phase 4 — GUI (paired PR):** update `schema/mnemonic.rs`; run `schema_mirror` against the new toolkit; pin the new toolkit MINOR.
+1. **Phase 1 — codec CLIs (3 repos, MINOR each):** add `render_grouped`/`strip_display_separators`; add flags to every emit subcommand; add intake strip (incl. ms `combine`, mk `read_mk1_strings`, md decode/repair); `ms split` print-once (labels→stderr); md-codec ADDS `render_grouped` + keeps wrapper; update unit tests + end-user manual chapters; bump.
+2. **Phase 2 — conformance vectors:** author canonical TSV (keyword/`<empty>` encoding) in toolkit; copy + `.sha256` into each sibling; add CI checksum + driver tests in all four.
+3. **Phase 3 — toolkit (MINOR):** pin-bump siblings; collapse `format.rs` to one `render_grouped`; add flags to `bundle`/`verify-bundle`/`convert`/`ms-shares` (NOT `repair`); regenerate the 20 golden vectors (`tests/vectors/v0_1/*`+`v0_2`) AND any differential-harness / fuzz reference artifacts (I9); update both manuals for all four CLIs; regenerate `docs/Examples.pdf`.
+4. **Phase 4 — GUI (paired PR):** update `schema/mnemonic.rs` (flags + keyword dropdown); run `schema_mirror`; pin the new toolkit MINOR.
 
-Each repo cycle is independently R0-gated and TDD'd (tests before impl) per CLAUDE.md.
+Each repo cycle is independently R0-gated + TDD'd.
 
 ## 13. Testing strategy
 
-- **Conformance vectors** (§8) — the cross-repo identity gate.
-- **Per-CLI flag tests:** default = space/5 single-line; `--group-size 0` = unbroken; `--separator hyphen`/`comma` (+ literal forms); invalid separator rejected (exit 2); invalid/oversize group-size rejected.
-- **Round-trip:** for each CLI, `encode --separator X | decode -` succeeds for X ∈ {default, hyphen, comma} and for `--group-size 0`; `ms split | ms combine` round-trips with grouped shares.
-- **Invariants:** `--json` always unbroken; `verify-bundle` forensic strings unbroken.
-- **Golden regen:** toolkit `tests/vectors/v0_1/*` + `v0_2` recaptured; ms-cli `encode_canonical_12_word.rs` (asserts print-twice `\n\n`) rewritten for print-once; ms-cli `format.rs` unit tests rewritten.
-- **schema_mirror** green against the new toolkit binary.
+- **Conformance vectors** (§8) — cross-repo identity gate; include empty, group_size≥len, group_size 0+sep, consecutive seps, **tab/CRLF strip**, idempotent strip, each separator, render/strip round-trips.
+- **Per-CLI flag tests:** default space/5 single-line; `--group-size 0` unbroken; `--separator hyphen|comma` (+ literals + keywords); invalid separator/oversize group-size → clap exit 2.
+- **Round-trip:** `encode --separator X | decode -` for X∈{default,hyphen,comma} and `--group-size 0`; **`ms split | ms combine -`** and **`ms split | ms decode -`** (the C1/C2 regression guards); `ms combine <grouped-positional-share>` decodes (C3 guard).
+- **Invariants:** `--json` unbroken; `verify-bundle` forensic strings unbroken; `repair` output unbroken.
+- **Golden/artifact regen:** toolkit `tests/vectors/*` recaptured; ms-cli `encode_canonical_12_word.rs` (asserts print-twice `\n\n`) rewritten for print-once; ms-cli `format.rs` unit tests rewritten; differential-harness + fuzz reference artifacts updated (I9).
+- **schema_mirror** green vs the new toolkit binary.
 
 ## 14. Out of scope (YAGNI)
 
-- Separators beyond `{space, -, ,}` (`;` and `'` cut).
-- Free-form / multi-char separators.
-- A new shared crate (copy-with-checksum chosen instead).
-- **Engraving-card panel content:** the stderr card shows 4-hex `chunk_set_id` identifiers, NOT full m-strings (`format.rs:260` `engraving_card_unified`), so routing it through `render_grouped` is a no-op; the card is unchanged. (Originally proposed "panel follows the flags" — struck.)
-- Newline wrapping / fixed-width engraving layout (single-line only; an optional `--wrap` is a possible future FOLLOWUP).
+Separators beyond `{space,-,,}`; free-form/multi-char separators; a new shared crate; newline wrapping / fixed-width engraving layout (single-line only; optional `--wrap` = future FOLLOWUP). **Engraving-card panel content** is unchanged: the stderr card shows 4-hex `chunk_set_id` identifiers, NOT full m-strings (`format.rs:260` `engraving_card_unified`), so routing it through `render_grouped` is a no-op (the earlier "panel follows the flags" proposal is struck).
 
-## 15. Open questions for R0
+## 15. Resolved decisions (from R0 round 1)
 
-1. `ms split` round-trip: print-once grouped shares still pipe to `ms combine` (intake strips). Confirm no consumer depends on split's legacy bare-strings-first block beyond the pipe.
-2. Exact default for `mk encode` / `md encode` now that they GAIN grouping (they were unbroken): default space/5 like the others (corrective alignment) — confirm acceptable as a MINOR default change for those two CLIs.
-3. Whether `repair` corrected-output should honor the flags or always emit unbroken (it is a recovery aid; argue both ways).
+1. **`ms split` round-trip (C1/C2):** print-once — shares one-per-line on stdout in the flag-controlled form; labels on stderr; receiver intake strips per line. Round-trip preserved without the doubling heuristic.
+2. **`mk encode` / `md encode` gaining grouping:** YES — default space/5 like the others (corrective alignment of a pre-existing inconsistency); a MINOR default-output change for those two CLIs.
+3. **`repair` output:** ALWAYS unbroken canonical; `repair` does not take the grouping flags (m8).
