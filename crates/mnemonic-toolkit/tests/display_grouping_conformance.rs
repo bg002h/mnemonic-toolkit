@@ -64,7 +64,12 @@ fn conformance_vectors_pass() {
             "strip" => strip_display_separators(&input),
             other => panic!("row {}: unknown op {other:?}", i + 2),
         };
-        assert_eq!(got, expected, "row {} ({note}): {op}({input:?}, {gs}, {sep})", i + 2);
+        assert_eq!(
+            got,
+            expected,
+            "row {} ({note}): {op}({input:?}, {gs}, {sep})",
+            i + 2
+        );
         count += 1;
     }
     assert!(count >= 20, "expected >=20 vector rows, got {count}");

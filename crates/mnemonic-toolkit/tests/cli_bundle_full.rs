@@ -58,7 +58,11 @@ fn bundle_default_text_is_space_grouped_print_once() {
             "--no-engraving-card",
         ];
         args.extend_from_slice(extra);
-        let out = Command::cargo_bin("mnemonic").unwrap().args(&args).assert().success();
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&args)
+            .assert()
+            .success();
         String::from_utf8(out.get_output().stdout.clone()).unwrap()
     };
 
@@ -69,7 +73,11 @@ fn bundle_default_text_is_space_grouped_print_once() {
         .lines()
         .find(|l| l.starts_with("ms10"))
         .expect("an ms1 line");
-    assert_eq!(ms1_line.chars().nth(5), Some(' '), "default space/5; got {ms1_line:?}");
+    assert_eq!(
+        ms1_line.chars().nth(5),
+        Some(' '),
+        "default space/5; got {ms1_line:?}"
+    );
     let unbroken: String = ms1_line.chars().filter(|c| *c != ' ').collect();
     // print-once: the unbroken form does NOT also appear as its own line.
     assert!(
@@ -79,8 +87,15 @@ fn bundle_default_text_is_space_grouped_print_once() {
 
     // --separator hyphen.
     let hyphen_out = run(&["--separator", "hyphen"]);
-    let h_line = hyphen_out.lines().find(|l| l.starts_with("md1")).expect("md1 line");
-    assert_eq!(h_line.chars().nth(5), Some('-'), "hyphen at idx 5; got {h_line:?}");
+    let h_line = hyphen_out
+        .lines()
+        .find(|l| l.starts_with("md1"))
+        .expect("md1 line");
+    assert_eq!(
+        h_line.chars().nth(5),
+        Some('-'),
+        "hyphen at idx 5; got {h_line:?}"
+    );
 
     // Invalid separator → clap parse error (non-zero exit).
     Command::cargo_bin("mnemonic")

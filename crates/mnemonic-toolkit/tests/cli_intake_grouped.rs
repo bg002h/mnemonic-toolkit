@@ -46,7 +46,13 @@ fn convert_from_ms1_accepts_comma_grouped() {
     let grouped = comma5(&unbroken_ms1());
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["convert", "--from", &format!("ms1={grouped}"), "--to", "entropy"])
+        .args([
+            "convert",
+            "--from",
+            &format!("ms1={grouped}"),
+            "--to",
+            "entropy",
+        ])
         .assert()
         .success()
         .stdout(predicates::str::contains(ZERO_ENTROPY_16));

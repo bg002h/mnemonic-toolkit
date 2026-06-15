@@ -317,8 +317,12 @@ fn run_split<R: Read, W: Write, E: Write>(
         let sep = args.separator;
         for s in &rendered {
             let _pin = mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes());
-            writeln!(stdout, "{}", crate::display_grouping::render_grouped(s.as_str(), gs, sep))
-                .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            writeln!(
+                stdout,
+                "{}",
+                crate::display_grouping::render_grouped(s.as_str(), gs, sep)
+            )
+            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
         }
     }
 
@@ -383,9 +387,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // share so a grouped or unbroken share both re-ingest (was edge-only trim).
     let shares: Vec<zeroize::Zeroizing<String>> = share_strings
         .iter()
-        .map(|s| {
-            zeroize::Zeroizing::new(crate::display_grouping::strip_display_separators(s))
-        })
+        .map(|s| zeroize::Zeroizing::new(crate::display_grouping::strip_display_separators(s)))
         .filter(|s| !s.is_empty())
         .collect();
     if shares.is_empty() {
