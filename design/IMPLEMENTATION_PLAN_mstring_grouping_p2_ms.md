@@ -30,6 +30,19 @@
 
 ---
 
+## R0-r1 corrections (MUST APPLY — these override the task bodies where they conflict)
+
+Plan-R0 round 1 = NOT GREEN (0C/4I; review `design/agent-reports/mstring-display-grouping-plan-r0-p2-round1-review.md`). All four are breaking tests the enumeration missed. **Task 3 MUST fix ALL of these** (they break on the default-grouping commit; staging/repairing them keeps the commit green):
+
+- **(I1) `tests/encode_no_engraving_card.rs:19`** — `starts_with("ms10entrsqqqq")` breaks under grouping (`"ms10e ntrs…"`). Fix: assert single-line + space-stripped `starts_with("ms10entrsqqqq")` (drop the raw `starts_with`), OR add `--group-size 0` to that invocation.
+- **(I2) `tests/encode_hex_input.rs:13`** (`encode_hex_zeros_16_bytes`) — same `starts_with("ms10entrsqqqq")` break. Fix analogously (space-strip then prefix-check, or `--group-size 0`). (`encode_hex_omits_language_in_engraving_card` checks only stderr — unaffected.)
+- **(I3) `tests/encode_mnem_japanese.rs`** — FOUR tests assert exact first-line LENGTH (`:30` `== 51`, `:74` `== 50`, `:89` `== 50`, plus `encode_japanese_phrase_decode_round_trip`'s `ms1.len() == 51`). Grouping adds spaces → lengths grow (51→61, 50→59). Fix: add `--group-size 0` to those invocations (cleanest — pure length checks; length unchanged), OR `strip_display_separators(first_line)` before the length check.
+- **(I4) `tests/cli_split.rs`** — the `--group-size 0` fix for `split_english_phrase_emits_n_shares_text:44` is correct. ALSO add a concrete NEW test `split_grouped_default_labels_on_stderr`: run `ms split --phrase ENGLISH_12 -k 2 -n 3` (default grouped); assert stdout = exactly 3 lines, each `starts_with("ms1")` AND `contains(' ')`; stdout does NOT contain `"share "`; stderr contains `"share 1 of 3"`.
+
+Minor folds: (m1) `split.rs::emit_text` ordering — emit ALL stdout shares first, THEN all stderr labels. (m3) `parse.rs::strip_whitespace` new doc must reference `format::strip_display_separators` and drop the §3.2 doubling rationale.
+
+---
+
 ## Call-site inventory (grep-verified `b616530`)
 
 **Emit (apply `render_grouped` + flags):**
@@ -46,8 +59,11 @@
 - `tests/encode_canonical_12_word.rs` — asserts `contains("\n\n")` + `starts_with("ms10entrsqqqq")` → **rewrite** (the print-once conversion test).
 - `tests/encode_canonical_24_word.rs` — `starts_with("ms10entrsqqqq")` breaks → fix.
 - `tests/encode_output_unchanged_after_split_refactor.rs` — 3 TEXT tests assert exact `<ms1>\n\n<chunked>` (incl. the japanese wrap@10 `l` on its own line) → update to print-once grouped; the 3 `*_json_*` tests are unaffected (json unbroken).
-- `tests/cli_split.rs::split_english_phrase_emits_n_shares_text` — filters share lines by `!l.contains(' ')` (`:44`) → grouped shares contain spaces; add `--group-size 0` to that invocation (keeps the bare-share parse) + add a NEW test for grouped default + labels-on-stderr.
+- `tests/cli_split.rs::split_english_phrase_emits_n_shares_text` — filters share lines by `!l.contains(' ')` (`:44`) → grouped shares contain spaces; add `--group-size 0` to that invocation (keeps the bare-share parse) + add a NEW test for grouped default + labels-on-stderr **(I4 — concrete spec in the corrections block).**
 - `src/format.rs` 3 `chunked_*` unit tests — `chunked` deleted → replaced by `render_grouped` unit tests (Task 1).
+- **(I1) `tests/encode_no_engraving_card.rs:19`** — `starts_with("ms10entrsqqqq")` breaks under grouping.
+- **(I2) `tests/encode_hex_input.rs:13`** — same `starts_with` break.
+- **(I3) `tests/encode_mnem_japanese.rs`** — FOUR first-line-LENGTH assertions (`:30`/`:74`/`:89` + round-trip) break as grouping adds spaces.
 - **Suite-sweep (Task 5) must also re-confirm:** `encode_pipe_to_decode.rs`, `decode_routes_share_to_is_share_not_single_string.rs`, `encode_emits_passphrase_warning.rs`, `encode_no_engraving_card.rs`, `cli_output_class.rs`, `gui_schema_emits_spec_v7_json.rs` (new flags appear in encode/split — confirm assertion-based, not exhaustive golden), and any other test asserting exact encode/split stdout. Grep `tests/` for `\n\n`, `chunked`, exact `ms10…` literals, and `--phrase`-then-stdout-equality.
 
 ---
@@ -177,7 +193,7 @@ mod conformance {
 
 ## Task 3: EMIT print-once — `ms encode` + `ms split` flags (+ delete `chunked`, fix breaking tests)
 
-**Files:** `cmd/encode.rs`, `cmd/split.rs`, `src/format.rs` (delete `chunked` + its 3 unit tests); tests `encode_canonical_12_word.rs`, `encode_canonical_24_word.rs`, `encode_output_unchanged_after_split_refactor.rs`, `cli_split.rs`.
+**Files:** `cmd/encode.rs`, `cmd/split.rs`, `src/format.rs` (delete `chunked` + its 3 unit tests); tests `encode_canonical_12_word.rs`, `encode_canonical_24_word.rs`, `encode_output_unchanged_after_split_refactor.rs`, `cli_split.rs`, **`encode_no_engraving_card.rs` (I1)**, **`encode_hex_input.rs` (I2)**, **`encode_mnem_japanese.rs` (I3)**.
 
 - [ ] **Step 1: Failing CLI tests.** Append to (or add) encode/split flag tests: `encode_default_groups_space_5` (stdout line 1 has `' '` at index 5; space-stripped == canonical; NO `\n\n`), `encode_unbroken_group_size_0`, `encode_separator_hyphen`, `encode_rejects_bad_separator` (exit 64 — ms maps clap parse errors to 64, see `main.rs:169`), and a `ms split … ` grouped-default test (stdout = N grouped lines, NO labels on stdout; labels on stderr).
 - [ ] **Step 2:** Run → FAIL (flags unknown / not grouped).
