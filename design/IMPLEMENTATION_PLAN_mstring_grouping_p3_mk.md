@@ -32,7 +32,11 @@
 
 **Intake (separator strip):** `cmd/mod.rs::read_mk1_strings` — `:93` `let s = line.trim();` → `strip_display_separators(line)` (then the non-empty guard); `:101` `out.push(a.clone());` → `out.push(crate::format::strip_display_separators(a));`. Covers all 6 subcommands.
 
-**Pre-existing tests that BREAK:** `tests/round_trip.rs::from_md1_derivation` (mk encode → `mk_codec::decode`) → add `--group-size 0`. **Suite-sweep (Task 5) MUST re-confirm:** `cli_slip132.rs`, `gui_schema.rs` (new flags appear in `mk encode` — confirm assertion-based, not exhaustive golden), `cli_address.rs`, `cli_repair.rs`, `cli_derive.rs`, `cli_output_class.rs`, `version_help_exit_codes.rs` — grep for any exact `mk1…` stdout literal, `mk encode` stdout consumed-then-asserted, or `.len() ==` on encode output.
+**Pre-existing tests that BREAK (fix in Task 3):**
+- `tests/round_trip.rs::from_md1_derivation` (mk encode CLI → `mk_codec::decode`) → add `--group-size 0`.
+- **(R0-r1 I1) `tests/cli_slip132.rs::run_encode_decode` (`:58-84`)** — invokes `mk encode` CLI (`:62`), captures `stdout.lines()` (`:79`), passes DIRECTLY to `mk_codec::decode` (`:82`), bypassing the CLI intake strip. Used by `encode_accepts_zpub_with_matching_path` (called twice). → add `"--group-size", "0"` to `run_encode_decode`'s `mk encode` args. (Controller-verified: `make_card()` `:30` feeds `mk verify` CLI → intake-strip handles it under intake-first ordering → no fix; the other 5 `mk encode` calls in that file assert only exit-code/stderr → no fix.)
+
+**Suite-sweep (Task 5) MUST re-confirm:** `cli_slip132.rs` (R0-r1 I1 fix applied), `gui_schema.rs` (assertion-based — confirmed safe), `cli_address.rs`/`cli_repair.rs`/`cli_derive.rs`/`cli_output_class.rs`/`version_help_exit_codes.rs` (confirmed safe — `mk_codec::encode`-built fixtures / stderr-only asserts / `contains("mk1")`) — grep for any exact `mk1…` stdout literal, `mk encode` stdout consumed-then-asserted, or `.len() ==` on encode output.
 
 ---
 
@@ -71,11 +75,11 @@
 
 ## Task 3: EMIT — `mk encode --group-size`/`--separator`
 
-**Files:** `cmd/encode.rs`; `tests/round_trip.rs` (fix `from_md1_derivation`); a new encode-flags test.
+**Files:** `cmd/encode.rs`; `tests/round_trip.rs` (fix `from_md1_derivation`); **`tests/cli_slip132.rs` (R0-r1 I1: add `--group-size 0` to `run_encode_decode`'s `mk encode`)**; a new encode-flags test.
 
 - [ ] **Step 1: Failing CLI tests.** Add `tests/encode_grouping_flags.rs`: `encode_default_groups_space_5` (first stdout line has `' '` at idx 5; space-stripped starts with `mk1`), `encode_unbroken_group_size_0`, `encode_separator_hyphen`, `encode_rejects_bad_separator` (exit 64). Use the `round_trip.rs` V1 fixture args (`--xpub V1_XPUB --origin-fingerprint aabbccdd --origin-path "m/48'/0'/0'/2'" --policy-id-stub 11223344`).
 - [ ] **Step 2:** Run → FAIL.
-- [ ] **Step 3: Implement.** `cmd/encode.rs`: `EncodeArgs` += `#[arg(long, default_value_t = 5)] pub group_size: u16,` + `#[arg(long, default_value = "space", value_parser = crate::format::parse_separator)] pub separator: char,`. Emit loop → `println!("{}", crate::format::render_grouped(s, args.group_size as usize, args.separator));`. (`--json` unchanged.) **Fix the breaking test:** `tests/round_trip.rs::from_md1_derivation` — add `"--group-size", "0"` to its `mk encode` args (so the stdout lines fed to `mk_codec::decode` stay unbroken).
+- [ ] **Step 3: Implement.** `cmd/encode.rs`: `EncodeArgs` += `#[arg(long, default_value_t = 5)] pub group_size: u16,` + `#[arg(long, default_value = "space", value_parser = crate::format::parse_separator)] pub separator: char,`. Emit loop → `println!("{}", crate::format::render_grouped(s, args.group_size as usize, args.separator));`. (`--json` unchanged.) **Fix the breaking tests:** (a) `tests/round_trip.rs::from_md1_derivation` — add `"--group-size", "0"` to its `mk encode` args; (b) **`tests/cli_slip132.rs::run_encode_decode` (`:60-75`)** — add `"--group-size", "0"` to its `mk encode` args (its stdout lines go straight to `mk_codec::decode`, bypassing CLI intake). Both keep the lines unbroken for the direct codec decode.
 - [ ] **Step 4:** Run → PASS (new tests + round_trip).
 - [ ] **Step 5: Confirm gui-schema test.** `cargo test -p mk-cli --test gui_schema` → PASS (new flags auto-appear; if it pins an exact `encode` flag set, update it).
 - [ ] **Step 6: Commit.**
