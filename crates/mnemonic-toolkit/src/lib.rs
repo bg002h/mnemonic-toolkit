@@ -65,6 +65,7 @@
 //!   `mnemonic-gui` v0.4.0+.
 
 pub mod bsms_crypto;
+pub mod display_grouping;
 pub mod electrum_crypto;
 pub mod final_word;
 // `mlock` uses POSIX `libc::mlock` / `libc::munlock` / `libc::sysconf` /
