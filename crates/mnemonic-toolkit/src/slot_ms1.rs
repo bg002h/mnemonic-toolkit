@@ -39,7 +39,10 @@ pub fn resolve_ms1_slot(
     flag_language: Option<CliLanguage>,
     slot_index: u8,
 ) -> Result<Ms1SlotResolution, ToolkitError> {
-    let (_tag, payload) = ms_codec::decode(value).map_err(ToolkitError::from)?;
+    // mstring display-grouping (SPEC §3.2): strip separators so a grouped or
+    // unbroken ms1 slot value both re-ingest (ms1 is single-string — full strip).
+    let value = crate::display_grouping::strip_display_separators(value);
+    let (_tag, payload) = ms_codec::decode(&value).map_err(ToolkitError::from)?;
     match payload {
         // No intrinsic language — derive with the flag (English default),
         // emit an entr card. Byte-identical to `@N.entropy=<hex>` (SPEC §3).

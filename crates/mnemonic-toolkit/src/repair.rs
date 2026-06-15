@@ -360,6 +360,16 @@ pub(crate) fn resolve_groups<R: Read, E: Write>(
         md1_vec = expand_dashes(&md1_vec, &stdin_chunks);
     }
 
+    // mstring display-grouping (SPEC §3.2): strip display separators from each
+    // resolved card chunk so a grouped or unbroken card both re-ingest before
+    // BCH correction (each vec entry is ONE chunk; the "" watch-only sentinel
+    // strips to "" — preserved; `-` stdin sentinels are already expanded above).
+    // (repair OUTPUT stays unbroken — no grouping flags on repair.)
+    let strip = crate::display_grouping::strip_display_separators;
+    ms1_vec = ms1_vec.iter().map(|s| strip(s)).collect();
+    mk1_vec = mk1_vec.iter().map(|s| strip(s)).collect();
+    md1_vec = md1_vec.iter().map(|s| strip(s)).collect();
+
     let mut out: Vec<(CardKind, Vec<String>)> = Vec::with_capacity(3);
     if !ms1_vec.is_empty() {
         out.push((CardKind::Ms1, ms1_vec));

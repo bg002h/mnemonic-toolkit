@@ -1525,7 +1525,10 @@ fn compute_outputs(
             Ok((out, None, None))
         }
         Ms1 => {
-            let (_tag, payload) = ms_codec::decode(value).map_err(ToolkitError::from)?;
+            // mstring display-grouping (SPEC §3.2): strip separators (ms1 is
+            // single-string — full strip).
+            let value = crate::display_grouping::strip_display_separators(value);
+            let (_tag, payload) = ms_codec::decode(&value).map_err(ToolkitError::from)?;
             // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
             // Drop+Zeroize; FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
             // ms_codec::Payload::Entr ships a Vec<u8> the codec doesn't
@@ -1576,7 +1579,13 @@ fn compute_outputs(
             Ok((out, None, None))
         }
         Mk1 => {
-            let tokens: Vec<&str> = value.split_whitespace().collect();
+            // mstring display-grouping (SPEC §3.2): mk1 multi-chunk input is
+            // WHITESPACE-delimited (SPEC §5.a), so whitespace stays the chunk
+            // separator; strip only the non-whitespace grouping chars (`-`/`,`)
+            // so a hyphen/comma-grouped chunk re-ingests. (Space-grouped mk1 is
+            // served by `mk decode`; here space delimits chunks.)
+            let cleaned: String = value.chars().filter(|c| *c != '-' && *c != ',').collect();
+            let tokens: Vec<&str> = cleaned.split_whitespace().collect();
             let card = mk_codec::decode(&tokens).map_err(ToolkitError::from)?;
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {

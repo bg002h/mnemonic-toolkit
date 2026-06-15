@@ -175,6 +175,31 @@ pub fn run<W: Write, E: Write>(
         args
     };
 
+    // mstring display-grouping (SPEC §3.2): strip display separators from the
+    // --ms1/--mk1/--md1 flag values up-front (each flag value is ONE chunk, so a
+    // full strip is safe) so a grouped or unbroken card both re-ingest — and the
+    // stripped (canonical) form reaches decode, the forensic `supplied == expected`
+    // equality, AND the `expected`/`actual` JSON fields uniformly (R0-r1 C4).
+    // NOT `--bundle-json` (that path is canonical-unbroken by construction).
+    let stripped_owned;
+    let args: &VerifyBundleArgs = if args
+        .ms1
+        .iter()
+        .chain(&args.mk1)
+        .chain(&args.md1)
+        .any(|v| v.chars().any(crate::display_grouping::is_display_separator))
+    {
+        let mut a = args.clone();
+        let strip = crate::display_grouping::strip_display_separators;
+        a.ms1 = a.ms1.iter().map(|s| strip(s)).collect();
+        a.mk1 = a.mk1.iter().map(|s| strip(s)).collect();
+        a.md1 = a.md1.iter().map(|s| strip(s)).collect();
+        stripped_owned = a;
+        &stripped_owned
+    } else {
+        args
+    };
+
     // v0.24.0 §2.C.1 (D34/I5 fold) — strict per-flag HRP validation across
     // verify-bundle's typed `--ms1` / `--mk1` / `--md1` flag args. Mirrors
     // the same gate in `cmd::repair::run` + `cmd::inspect::run` so all three
