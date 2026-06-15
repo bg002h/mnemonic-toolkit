@@ -12,7 +12,7 @@
 
 **Branch:** `feature/mstring-display-grouping` (already checked out).
 
-**Plan-R0 gate:** MUST pass an opus architect plan-R0 to 0 Critical / 0 Important before any task is executed (CLAUDE.md §1). Round 1: NOT GREEN (2C/1I/2m) — folded; review at `design/agent-reports/mstring-display-grouping-plan-r0-p0-round1-review.md`.
+**Plan-R0 gate:** PASSED — round 1 NOT GREEN (2C/1I/2m) → round 2 **GREEN (0C/0I)**. Reviews at `design/agent-reports/mstring-display-grouping-plan-r0-p0-round{1,2}-review.md`. Cleared for execution.
 
 ---
 
