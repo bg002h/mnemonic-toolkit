@@ -49,6 +49,14 @@ Plan-R0 round 1 = NOT GREEN (4C/4I; review `design/agent-reports/mstring-display
 - **(I3) ms-shares `run_split` `--json` isolation:** apply `render_grouped` ONLY in the text branch (`ms_shares.rs:296-300` loop), NOT before the `if args.json` (`:283`). Add a `split --json` unbroken-invariant test.
 - **(I4) Task 7 additions:** (a) `grep -rn render_codex32_grouped crates/` to confirm no remaining DISPLAY call site after the collapse (the kept md-codec wrapper keeps non-display callers building). (b) `.examples-build/gen.sh` has 6×`0.55.3` — add it to the lockstep version-pin sites.
 
+## R0-r2 corrections (MUST APPLY — exhaustive test lists)
+
+Plan-R0 round 2 = NOT GREEN (2C/2I; round-1 4C/4I all RESOLVED). The completeness sweep found the affected-test enumeration was materially incomplete. **The EXHAUSTIVE file:line fix lists are in `design/agent-reports/mstring-display-grouping-plan-r0-p4-round2-review.md` — that review IS the Task 2c/2d/3 checklist. Apply ALL of it.** Summary:
+- **Task 2d (input-fixture filter fixes)** — ~13 files across ms1/mk1/md1 variants (full lists in the r2 review C1). EACH: drop the `!contains(' ')`/`!contains('-')` guard, take the single grouped line, `strip_display_separators` it.
+- **Task 2c (output-golden regen)** — add `cli_argv_leakage.rs:248` + `cli_env_var_sentinel.rs:302-303/:393-394/:428` to the regen-and-revalidate set (alongside `cli_bundle_full.rs:34`, `cli_self_check.rs:34`).
+- **Task 3 (convert/bundle exact-pin + length tests)** — add `cli_convert_happy_paths.rs:326`, `cli_convert_round_trips.rs:69`, `cli_mnem_emit_preserve.rs:409`, `cli_convert_language_advisory.rs:150`, `cli_bundle_language_advisory.rs:65` (+ the `:60`/`:65` variant finder in m1). Fix: `--group-size 0` on the invocation OR `strip_display_separators(val)` before compare/len.
+- **Discipline:** because the enumeration proved incomplete twice, the executor MUST run the FULL `cargo test -p mnemonic-toolkit` after Task 2 and Task 3 and fix EVERY failure (the lists are the starting set, not necessarily exhaustive — treat any remaining RED as in-scope).
+
 ## Execution order (per-commit green)
 1 (parse_separator) → 2 (collapse `chunk_*` → `render_grouped`, bundle print-once + flags, regen 16 v0_1 + 1 v0_2 output-goldens, fix the ms1/mk1/md1 input-fixture parsers — ALL ATOMIC, coupled) → 3 (convert `--to ms1/mk1` flags + the **ms-shares run_split emit AND ms-shares-combine intake together** [C1/I1 coupling] + fix `cli_convert_happy_paths.rs:154` + `cli_ms_shares.rs`) → 4 (the OTHER intake strip sites: `slot_ms1`, `verify_bundle --ms1/--mk1/--md1` [collection-top strip, C4], `repair`, `convert --from ms1=/mk1=` [strip before split_whitespace, I2]) → 5 (full suite + fmt-1.95.0 + clippy + fuzz build) → 6 (manuals + FOLLOWUP companion) → 7 (version bump + release ritual + tag).
 
