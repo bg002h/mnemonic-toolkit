@@ -18,6 +18,21 @@
 
 **Release boundary:** Tasks 1–6 are reversible branch work. Task 7 (version bump) PREPARES the release; the actual `git tag` + `cargo publish` (md-codec then md-cli) is a SEPARATE outward-facing step that REQUIRES explicit user authorization — do NOT tag/publish without it.
 
+**Plan-R0 gate:** round 1 NOT GREEN (3C/2I) — folded in the corrections block below (review `design/agent-reports/mstring-display-grouping-plan-r0-p1-round1-review.md`); re-dispatch pending before execution. MUST reach 0C/0I before any task runs (CLAUDE.md §1).
+
+---
+
+## R0-r1 corrections (MUST APPLY — these override the task bodies where they conflict)
+
+1. **Execution ORDER (I2 — per-commit green):** run the **intake-strip task (Task 4) BEFORE the encode-flags task (Task 3)**. Decode must accept grouped input before `md encode` starts emitting it, else `template_roundtrip.rs` + `json_snapshots.rs` (`md encode | md decode`) break in the intermediate commit. Execute: 1 → 2 → **4 → 3** → 5 → 6 → 7.
+2. **Three additional pre-existing test sites the encode-flags task (Task 3) MUST fix** (default output becomes space/5):
+   - `crates/md-cli/tests/smoke.rs:19` — `stdout("md1yqpqqxqq8xtwhw4xwn4qh\n")` exact pin → add `--group-size 0` to that `md encode` invocation (keeps the wire-canary exact-pin intact).
+   - `crates/md-cli/tests/help_examples.rs` `check_example("encode")` exact-matches against the `Encode` `after_long_help` (`crates/md-cli/src/main.rs:62`). Append ` --group-size 0` to the example command in `after_long_help` so the printed example still reproduces the unbroken literal. Add BOTH `main.rs` and `help_examples.rs` to Task 3's file list.
+   - `crates/md-cli/tests/cli_repair.rs` — its `encode_chunked` helper captures `md encode --force-chunked` (now grouped) and feeds `md repair` (output stays unbroken) → ≈5 assertions fail. Make `encode_chunked` pass `--group-size 0` so fixtures are unbroken. Add `cli_repair.rs` to Task 3's file list.
+   - Re-confirm `template_roundtrip.rs` + `json_snapshots.rs` pass (they should once Task 4's intake-strip is in).
+3. **`address.rs` strip site (I3):** the md1 decode is INSIDE `build_descriptor` (`address.rs:108/111` on `args.phrases`), NOT in `run`. Apply `let phrases = crate::cmd::strip_md1_inputs(args.phrases);` inside `build_descriptor` and use `phrases` for decode/reassemble.
+4. **`repair.rs` positional strip (I4) — explicit:** in `read_md1_strings`, strip BOTH the stdin line (`strip_display_separators(line)`) AND each positional arg (replace `out.push(a.clone());` at `repair.rs:92` with `out.push(md_codec::encode::strip_display_separators(a));`).
+
 ---
 
 ## File Structure
