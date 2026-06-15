@@ -39,6 +39,20 @@ pub fn strip_display_separators(s: &str) -> String {
     s.chars().filter(|&c| !is_display_separator(c)).collect()
 }
 
+/// Parse `--separator`: a keyword (`space|hyphen|comma`) or the literal char
+/// (`" "|-|,`). Returns the separator char. SPEC §5. clap value-parser;
+/// rejection surfaces as a clap parse error (before command dispatch).
+pub fn parse_separator(s: &str) -> Result<char, String> {
+    match s {
+        "space" | " " => Ok(' '),
+        "hyphen" | "-" => Ok('-'),
+        "comma" | "," => Ok(','),
+        other => Err(format!(
+            "invalid separator {other:?}; expected one of: space|hyphen|comma (or the literal char)"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +107,17 @@ mod tests {
     #[test]
     fn strip_display_separators_passes_codex32_chars() {
         assert_eq!(strip_display_separators("ms1qpzry9x8"), "ms1qpzry9x8");
+    }
+
+    #[test]
+    fn parse_separator_keyword_and_literal() {
+        assert_eq!(parse_separator("space").unwrap(), ' ');
+        assert_eq!(parse_separator(" ").unwrap(), ' ');
+        assert_eq!(parse_separator("hyphen").unwrap(), '-');
+        assert_eq!(parse_separator("-").unwrap(), '-');
+        assert_eq!(parse_separator("comma").unwrap(), ',');
+        assert_eq!(parse_separator(",").unwrap(), ',');
+        assert!(parse_separator("bogus").is_err());
     }
 
     #[test]
