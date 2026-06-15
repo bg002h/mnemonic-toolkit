@@ -18,7 +18,7 @@
 
 **Release boundary:** Tasks 1–6 are reversible branch work. Task 7 (version bump) PREPARES the release; the actual `git tag` + `cargo publish` (md-codec then md-cli) is a SEPARATE outward-facing step that REQUIRES explicit user authorization — do NOT tag/publish without it.
 
-**Plan-R0 gate:** round 1 NOT GREEN (3C/2I) — folded in the corrections block below (review `design/agent-reports/mstring-display-grouping-plan-r0-p1-round1-review.md`). round 2 NOT GREEN (1C/0I) — Task 3 Step 6 `git add` omitted `smoke.rs`+`cli_repair.rs`; folded (review `…plan-r0-p1-round2-review.md`). round 3 re-dispatch pending. MUST reach 0C/0I before any task runs (CLAUDE.md §1).
+**Plan-R0 gate:** round 1 NOT GREEN (3C/2I) — folded in the corrections block below (review `…plan-r0-p1-round1-review.md`). round 2 NOT GREEN (1C/0I) — Task 3 Step 6 `git add` omitted `smoke.rs`+`cli_repair.rs`; folded (review `…plan-r0-p1-round2-review.md`). **round 3 GREEN (0C/0I)** (review `…plan-r0-p1-round3-review.md`). **GATE MET — cleared for execution in order `1 → 2 → 4 → 3 → 5 → 6 → 7`.**
 
 ---
 
