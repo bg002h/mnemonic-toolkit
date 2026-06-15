@@ -75,6 +75,8 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--account <ACCOUNT>` | BIP-32 account index (default 0) |
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
+| `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (default 5). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
+| `--separator <space\|hyphen\|comma>` | the grouping separator for `--group-size` (default `space`); accepts the keyword or the literal `-` / `,` or a space. |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87) |
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |

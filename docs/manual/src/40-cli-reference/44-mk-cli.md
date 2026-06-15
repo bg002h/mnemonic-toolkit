@@ -39,6 +39,8 @@ mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint` |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
+| `--group-size <N>` | mstring display grouping: insert a separator every N characters in each emitted `mk1` string; `0` = unbroken (default 5). Display only — `--json` stays unbroken. Separator-stripping on intake means grouped/unbroken cards both re-ingest on `decode`/`verify`/etc. |
+| `--separator <space\|hyphen\|comma>` | the grouping separator for `--group-size` (default `space`); keyword or the literal `-` / `,` or a space. |
 | `--json` | emit a single JSON object on stdout |
 
 At least one of `--policy-id-stub` or `--from-md1` is required (the

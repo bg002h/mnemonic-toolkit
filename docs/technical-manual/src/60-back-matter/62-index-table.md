@@ -75,14 +75,12 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `check_key_vector_distinctness` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `check_no_concurrent_stdin` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `CHECKSUM_LEN_SHORT` | [ms-codec Rust API](#ms-codec-rust-api) |
-| `chunk_5char` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `CHUNKED_FRAGMENT_LONG_BYTES` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `CHUNKED_FRAGMENT_REGULAR_BYTES` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `chunked header (md1)` | [md1 Wire Format](#md1-wire-format) |
 | `CHUNKED_HEADER_SYMBOLS` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `ChunkFragment` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `ChunkHeader` | [md-codec Rust API](#md-codec-rust-api) |
-| `chunk_md1` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `chunk_set_id binding` | [Anti-Collision Invariants](#anti-collision-invariants) |
 | `chunk_set_id` | [Bundle Anatomy](#bundle-anatomy) |
 | `chunk_set_id (md1)` | [md1 Wire Format](#md1-wire-format) |
@@ -416,6 +414,7 @@ The rows are sorted alphabetically (case-insensitive). Add new rows as you add n
 | `REGULAR_MASK` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `REGULAR_SHIFT` | [mk-codec Rust API](#mk-codec-rust-api) |
 | `render_codex32_grouped` | [md-codec Rust API](#md-codec-rust-api) |
+| `render_grouped` | [mnemonic-toolkit Rust API](#mnemonic-toolkit-rust-api) |
 | `RESERVED_NOT_EMITTED_V01` | [ms-codec Rust API](#ms-codec-rust-api) |
 | `reserved-prefix byte (ms1)` | [ms1 Wire Format](#ms1-wire-format) |
 | `reserved-prefix byte (v0.2)` | [Future Shares](#future-shares) |

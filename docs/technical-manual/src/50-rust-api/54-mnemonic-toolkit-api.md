@@ -47,8 +47,7 @@ JSON envelope structs (§V.4.5), the unified engraving-card renderer (§V.4.6), 
 | `BundleInputForCard`\index{BundleInputForCard} | `pub struct` | engraving-card input (not serde); `format.rs::BundleInputForCard` |
 | `TemplateOrDescriptor`\index{TemplateOrDescriptor} | `pub enum` | `format.rs::TemplateOrDescriptor` |
 | `SlotCardBlock`\index{SlotCardBlock} | `pub struct` | per-slot card block; `format.rs::SlotCardBlock` |
-| `chunk_5char`\index{chunk\_5char} | `pub fn` | 5-char groups, 10/line; `format.rs::chunk_5char` |
-| `chunk_md1`\index{chunk\_md1} | `pub fn` | delegates to `md_codec::encode::render_codex32_grouped(s, 5)`; `format.rs::chunk_md1` |
+| `render_grouped`\index{render\_grouped} | `pub fn` | mstring display-grouping: insert `separator` every `group_size` chars (`0`=unbroken), single line; `display_grouping::render_grouped`. Replaces the former `chunk_5char`/`chunk_mk1`/`chunk_md1` helpers (removed v0.56.0). |
 | `engraving_card_unified`\index{engraving\_card\_unified} | `pub fn` | SPEC §5.5 sole card surface; `format.rs::engraving_card_unified` |
 
 ### V.4.3.3 `synthesize`\index{synthesize (module)} (`src/synthesize.rs`)
