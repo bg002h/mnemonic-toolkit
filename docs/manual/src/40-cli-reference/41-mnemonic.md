@@ -159,9 +159,10 @@ DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(
 ##### Default text-form output
 
 Running `bundle` without `--json` prints the cards directly to stdout
-in a human-readable form — each card appears both as a dense
-bech32-string and as a 5-character-group line break suitable for
-steel engraving:
+in a human-readable form — by default each card is printed once, broken
+into space-separated groups of five characters, suitable for steel
+engraving and reading aloud during verification (`--group-size 0` gives
+the dense single-line form; `--separator hyphen` groups with dashes):
 
 ```sh
 mnemonic bundle --network mainnet --account 0 \
@@ -176,74 +177,42 @@ Stdout (the cards — under v0.21.0+ SPEC §5.8 per-slot emission, all three cos
 
 ```text
 # ms1[0] (entropy, BCH-checksummed)
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
-
 ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 
 # ms1[1] (entropy, BCH-checksummed)
-ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6
-
 ms10e ntrsq plh7l ml0al h7lml 0alh7 lml0a ls5cc lar2z mksh6
 
 # ms1[2] (entropy, BCH-checksummed)
-ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
-
 ms10e ntrsq zqgpq yqszq gpqyq szqgp qyqsz qqlfm 7mep8 4hunu
 
 # mk1[0] (cosigner 0 xpub + origin)
-mk1qp40rrpqqspsrg8ml5q6p7laqxs0hltnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgymxvy4lntk6efgf0
-mk1qp40rrpp8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2vkk2nlqmlvch5n4shwf72fwktdlqfhxtswupfxql3
-
-mk1qp 40rrp qqsps rg8ml 5q6p7 laqxs 0hltn chdq5 pgy3z epu88
-jjutt hgx8e gtq4p cwl6u 5p2us 6r6zs nl2rd 0q6gg hvalg ymxvy
-4lntk 6efgf 0
-mk1qp 40rrp p8lph ut2hv vpp5w l4l0m n058n dxfl6 3kufy fsjwl
-t2vkk 2nlqm lvch5 n4shw f72fw ktdlq fhxts wupfx ql3
+mk1qp de47p qqspk u6l0a 4hxhm ldde4 7lmtn chdq5 pgy3z epu88 jjutt hgx8e gtq4p cwl6u 5p2us 6r6zs nl2rd 0q6gg hvalg y93vq 0lnvc lq0l7 g
+mk1qp de47p p8lph ut2hv vpp5w l4l0m n058n dxfl6 3kufy fsjwl t2vkk 2nlqm lvch5 n4shw f72vu lg50u 6y5fz a78g6 u4f
 
 # mk1[1] (cosigner 1 xpub + origin)
-mk1qpxj36pqqspsrg8ml5q6p7laqxs0hldcdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkggq4j8pde6hkmw0
-mk1qpxj36ppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8c56a5k72ndqgmdftljqt
-
-mk1qp xj36p qqsps rg8ml 5q6p7 laqxs 0hldc dzxlz pgy3z epal7
-ec5v6 wv58d a6c23 hjuw4 ypg96 ztz75 f8wrr ussm5 9fetn kggq4
-j8pde 6hkmw 0
-mk1qp xj36p pag0z r8gh9 upnju gr26j fvunv s35jv gdjkm 3kghw
-nt0qq ymzc0 utyzx yhny9 pu8c5 6a5k7 2ndqg mdftl jqt
+mk1qp de4lp qqspk u6l0a 4hxhm ldde4 7lmdc dzxlz pgy3z epal7 ec5v6 wv58d a6c23 hjuw4 ypg96 ztz75 f8wrr ussm5 9fetn kdz9h jz3ha w476n f
+mk1qp de4lp pag0z r8gh9 upnju gr26j fvunv s35jv gdjkm 3kghw nt0qq ymzc0 utyzx yhny9 pu8en jm5qj mzgwp tzzmp cfh
 
 # mk1[2] (cosigner 2 xpub + origin)
-mk1qpl7wlpqqspsrg8ml5q6p7laqxs0hlfgv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqncct596tqv5z420v4
-mk1qpl7wlpprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5j35p6p2c22v0s30tv0s2u
-
-mk1qp l7wlp qqsps rg8ml 5q6p7 laqxs 0hlfg v3gqv pgy3z epugv
-evsxp z2zll 50ju3 dcmgh txtfv 0y025 ltk2v c8a3e x8yqn cct59
-6tqv5 z420v 4
-mk1qp l7wlp prja8 93lkx up4z7 tw6q2 yvs4f k9pjh xf00s 49uge
-x8rue 307wd slgcj 5r8x9 t5j35 p6p2c 22v0s 30tv0 s2u
+mk1qp de4up qqspk u6l0a 4hxhm ldde4 7lmfg v3gqv pgy3z epugv evsxp z2zll 50ju3 dcmgh txtfv 0y025 ltk2v c8a3e x8yqn c4sfy axwpv tgscz j
+mk1qp de4up prja8 93lkx up4z7 tw6q2 yvs4f k9pjh xf00s 49uge x8rue 307wd slgcj 5r8x9 t5jh2 96hyx 0h0x5 rthp2 pe4
 
 # md1 (multisig wallet policy)
-md1fu39yrq9qjtvyyy5jmppp9ykcggfgp9fskxcqkudsqefnfskhqqqq8uqnxnpwwqqqtggjse9txaz6v
-md1fu39yrqfqqqp0npeutks2dcdzxlrzsezsqc27rchwsv0jskp2rsal4egz4ep5859pnmq8wpsfncwhr
-md1fu39yrq3l4pkhsdyytkwl5z8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2v3d70kcz8a3r42
-md1fu39yrqa4j5lcxlmx9ayav9mj0jj6wv58da6c23hjuw4ypg96ztz75f8wrrussm598ryfkw5ey8h6p
-md1fu39yrpzw2ua7583pn5tj7qeewyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jpmwaykdyahtr0v
-md1fu39yrpgcj7vs58sls39p0l68ewgkud5t4n95k8j84204m9xvr7cunrjqfurja8939xk8j47ndpq63
-md1fu39yrpha3hqdghjmksz3ry92d3gv4ejtmu9f0zxf3clxvtlnnv86xy4qee32ay5q0e3ty49zaan43
-
-md1fu-39yrq-9qjtv-yyy5j-mppp9-ykcgg-fgp9f-skxcq-kudsq-efnfs-khqqq-q8uqn-xnpww-qqqtg-gjse9-txaz6-v
-md1fu-39yrq-fqqqp-0npeu-tks2d-cdzxl-rzsez-sqc27-rchws-v0jsk-p2rsa-l4egz-4ep58-59pnm-q8wps-fncwh-r
-md1fu-39yrq-3l4pk-hsdyy-tkwl5-z8lph-ut2hv-vpp5w-l4l0m-n058n-dxfl6-3kufy-fsjwl-t2v3d-70kcz-8a3r4-2
-md1fu-39yrq-a4j5l-cxlmx-9ayav-9mj0j-j6wv5-8da6c-23hju-w4ypg-96ztz-75f8w-rruss-m598r-yfkw5-ey8h6-p
-md1fu-39yrp-zw2ua-7583p-n5tj7-qeewy-p4dfy-kwfkg-g6fxy-xetdc-mythf-4hsqz-d3v87-9jpmw-aykdy-ahtr0-v
-md1fu-39yrp-gcj7v-s58sl-s39p0-l68ew-gkud5-t4n95-k8j84-204m9-xvr7c-unrjq-furja-8939x-k8j47-ndpq6-3
-md1fu-39yrp-ha3hq-dghjm-ksz3r-y92d3-gv4ej-tmu9f-0zxf3-clxvt-lnnv8-6xy4q-ee32a-y5q0e-3ty49-zaan4-3
+md1f0 6s0rq pqjtv yyy5q j5kxc qkuds qefnf dwqqq q0cpx d9ecq qqsqq qhesu 79mg9 xcskd 6lgms uz5kg
+md1f0 6s0rq vx3r0 33gv3 gqv90 puthg x8egt q4pcw l6u5p 2us6r 6zsnl 2rd0q 6gghv acapy yhuyg h2h0e
+md1f0 6s0rq hgy07 r0ck4 wcczr galt7 lhxlg 0x6vn l4rdc jgnpy a7k5e dv487 ph7e3 0g8cy 9la27 53uzh
+md1f0 6s0rq e8tpw unu5k nn9pm 0wkz5 duhr4 fq2pw sjch4 zfmsc lyyxa p2w2u a7583 psh3m vn8ut unz4f
+md1f0 6s0rp r5tj7 qeewy p4dfy kwfkg g6fxy xetdc mythf 4hsqz d3v87 9jprz tejzs 7q2an cf6n8 0dqdj
+md1f0 6s0rp t7zy5 9llgl 9ezm3 k3wkv kjc7g 74f7h v5es0 mrjvw gp8sw t5uk8 7cmsx 5gg8x n84km ldzt3
+md1f0 6s0rp nedmg pg3jz 4xc5x 2ue9a 7z5h3 rycu0 nx9le ekrar z2svu c4wj2 2s2uk c5u55 3ej
 ```
 
-Note the two-form layout per card type: the toolkit emits a dense
-single-line bech32 form first (for copy-paste and machine
-consumption), then a blank line, then the same content broken into
-5-character groups (for steel-plate engraving and reading aloud
-during verification). The grouping separators are non-load-bearing —
-either form decodes back to the same payload.
+Each card type is printed once, in 5-character groups separated by
+spaces (the default display grouping), suitable for steel-plate
+engraving and reading aloud during verification. The grouping
+separators are non-load-bearing — pass `--group-size 0` for the dense
+single-line form, or any grouping you like; intake strips the
+separators, so every form decodes back to the same payload.
 
 Stderr (info notice + bundle-summary engraving card):
 
@@ -252,11 +221,11 @@ info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/
 # === Wallet bundle: descriptor, mainnet ===
 # Threshold: 3 of 3
 # Cosigners:
-#   @0: ms1:01a0f,mk1:01a0f (73c5da0a @ 48'/0'/0'/2')
-#   @1: ms1:01a0f,mk1:01a0f (b8688df1 @ 48'/0'/0'/2')
-#   @2: ms1:01a0f,mk1:01a0f (28645006 @ 48'/0'/0'/2')
+#   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
+#   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
+#   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
 # Template: descriptor
-# md1: 01a0
+# md1: 6e6b
 # Recovery: any 3 of 3 signing keys + md1 (template card).
 # Language: english
 ```
@@ -264,7 +233,7 @@ info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/
 The engraving-card block on stderr is a wallet-level summary the user
 copies onto a separate piece of paper kept with the bundle; it lists
 the threshold, per-cosigner fingerprint+origin triples, and the
-recovery rule. The `01a0f` / `01a0` short tags are chunk-set-id hex
+recovery rule. The `6e6be` / `6e6b` short tags are chunk-set-id hex
 prefixes for the corresponding cards, useful when matching a
 recovered card-set back to its bundle.
 

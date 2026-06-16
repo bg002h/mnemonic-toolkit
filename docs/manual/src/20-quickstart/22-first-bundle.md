@@ -40,39 +40,32 @@ Three flags carry the work:
 
 ## Output
 
-Three card strings, each shown twice — once contiguous (handy for
-copy-paste into a wallet) and once chunked (handy for engraving):
+By default each of the three card strings is printed **once**, broken
+into space-separated groups of five characters — the engraving-friendly
+form, also easy to read aloud during verification. Pass `--group-size 0`
+for the contiguous single-line form (handy for copy-paste into a wallet),
+or `--separator hyphen` to group with dashes instead. Intake (`restore`,
+`verify-bundle`, `convert`, `repair`) accepts any of these forms — the
+display separators are non-load-bearing.
 
 ```text
 # ms1 (entropy, BCH-checksummed)
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
-
 ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 
 # mk1 (xpub + origin)
-mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
-mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
-
-mk1qp rsqhp qqsq3 cqtsl eeutk s2qvz g3vs7 0mejh k622w s2kgd
-emj2c d8zwj 2skzx 2wq0q w70l4 q99vd yh5x0 z8v4y slsp8 qp3yx
-g3dpe 854wq 4
-mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk
-6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
+mk1qp rsqhp qqsq3 cqtsl eeutk s2qvz g3vs7 0mejh k622w s2kgd emj2c d8zwj 2skzx 2wq0q w70l4 q99vd yh5x0 z8v4y slsp8 qp3yx g3dpe 854wq 4
+mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk 6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
 
 # md1 (wallet policy)
-md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
-md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d
-md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn
-
-md1fg-dxlpq-pqpm6-jzzqq-vqpdq-w0za5-zs4gy-y55aq-4vsmn-hy4s6-wyayp-u34c7-raqu8-np
-md1fg-dxlpq-f2zcg-efcpu-pmel7-5q543-5j7se-ugaj5-jr7qy-ur6vt-76es5-cdeyr-q7zdy-0d
-md1fg-dxlpq-3xa2d-k8vwp-j7gx7-4hwqx-qdp08-3jehp-5tdrf-a0n5z-dfkqc-dlrvn-h5r62-jn
+md1fg dxlpq pqpm6 jzzqq vqpdq w0za5 zs4gy y55aq 4vsmn hy4s6 wyayp u34c7 raqu8 np
+md1fg dxlpq f2zcg efcpu pmel7 5q543 5j7se ugaj5 jr7qy ur6vt 76es5 cdeyr q7zdy 0d
+md1fg dxlpq 3xa2d k8vwp j7gx7 4hwqx qdp08 3jehp 5tdrf a0n5z dfkqc dlrvn h5r62 jn
 
 # === Wallet bundle: bip84, mainnet ===
 # ms1: 1c017
 # mk1: 1c017
 # fingerprint: 73c5da0a
-# origin path: 84'/0'/0'
+# origin path: m/84'/0'/0'
 # Template: bip84
 # md1: 1c01
 warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
@@ -80,17 +73,21 @@ warning: stdout carries private key material (can spend) — redirect or encrypt
 
 ## Reading the output
 
-Three card sections, each with a header comment, contiguous string,
-chunked string, and a trailing `# === Wallet bundle:` block summarising
-the bundle's metadata.
+Three card sections, each with a header comment and its chunked card
+string(s), followed by a trailing `# === Wallet bundle:` block
+summarising the bundle's metadata.
 
 For this single-sig wallet:
 
-| Card | Contiguous form | Use |
+| Card | Canonical (contiguous) form | Use |
 |---|---|---|
 | **ms1** | `ms10entrsqq…34v7f` | Engrave on the *secret* card. Recovers the seed. |
 | **mk1** | `mk1qprsqhp…854wq4` (line 1) and `mk1qprsqhp…ma0nh` (line 2) | Engrave on the *key* card. Two strings because the xpub is too long to fit one BCH-checksummed group at the toolkit's chunking density. |
 | **md1** | `md1fgdxlpq…` (three lines) | Engrave on the *descriptor* card. Three strings encode the wallet policy and bind it to the xpub. |
+
+The *Canonical (contiguous)* column shows each card with grouping
+stripped (the `--group-size 0` form) — what intake normalises to and
+what you'd copy-paste into another wallet.
 
 The last block is **not** part of the engraving — it's a bundle
 *summary* showing the version stamps (`1c017`), the master fingerprint,
