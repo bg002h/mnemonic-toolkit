@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.56.0] — 2026-06-15
+
+**SemVer-MINOR — standardized mstring display-grouping (`bundle`/`convert`/`ms-shares` gain `--group-size`/`--separator`; default card output is now space/5 print-once). The cross-constellation `display-grouping-render-strip-v1` cycle, P4 (the integration crate). Pins md-codec 0.36.0.**
+
+### Added
+
+- **`--group-size <u16>`** (default `5`, `0` = unbroken) + **`--separator <space|hyphen|comma>`** (keyword or literal `" "|-|,`, default `space`) on **`mnemonic bundle`** (the engraved `ms1`/`mk1`/`md1` cards), **`mnemonic convert`** (when emitting an `ms1`/`mk1` card — node-gated; `xpub`/`wif`/`descriptor` outputs stay raw), and **`mnemonic ms-shares split`** / **`ms-shares combine --to ms1`**. SPEC `design/SPEC_mstring_display_grouping.md`.
+- **Default-output change:** `bundle` text output is now **print-once, space/5-grouped** (previously print-twice: an unbroken copy *and* a 5-char/hyphen grouped copy with wrap@10). `md1` cards flip the legacy hyphen grouping to the uniform space default. `--json` and `verify-bundle` forensic `expected`/`actual` strings ALWAYS stay **unbroken canonical**; `repair` output stays unbroken (no grouping flags). Hence MINOR (stdout text was never a declared-stable interface; precedent v0.48.0/v0.49.0).
+- **Separator-stripping intake** on every md1/ms1 intake surface (`bundle --slot @N.ms1=`, `verify-bundle --ms1/--mk1/--md1`, `repair`, `convert --from ms1=/mk1=`, `ms-shares combine`): a grouped or unbroken card both re-ingest (strips ALL whitespace + `-` + `,`). `convert --from mk1=` strips only `-`/`,` (whitespace stays the multi-chunk delimiter per SPEC §5.a).
+- Conformance vectors `design/display-grouping-vectors.tsv` (+ a `display_grouping_conformance` test) — the cross-repo byte-identity gate shared with `md-codec`/`ms-cli`/`mk-cli`.
+- `docs/Examples.pdf`: a new degrade2 (11-key/4-branch degrading-multisig) `bundle → restore` round-trip example proving the reconstructed first receive address is byte-identical to the canonical descriptor's.
+
+### Changed / Removed
+
+- `format.rs::chunk_5char` / `chunk_mk1` / `chunk_md1` are **deleted**, collapsed into the single `display_grouping::render_grouped(s, group_size, separator)` (a pure lib module, P0). Technical-manual API table + index updated.
+- `md-codec` pin `0.35` → `0.36` (the published `render_grouped`/wrapper additions; additive — the toolkit now renders via its own local `render_grouped`, no longer calling `md_codec::encode::render_codex32_grouped` for display).
+
+### Notes
+
+Sibling CLIs shipped earlier in the cycle: **md-codec 0.36.0 + md-cli 0.7.0** (P1), **ms-cli 0.8.0** (P2), **mk-cli 0.9.0** (P3). Cross-repo lockstep: `mnemonic-gui` `schema_mirror` (flags + separator keyword dropdown) is the remaining P5 paired PR. FOLLOWUP `display-grouping-render-strip-v1`.
+
 ## mnemonic-toolkit [0.55.3] — 2026-06-13
 
 **SemVer-PATCH — `restore --md1` now faithfully reconstructs non-NUMS ("real key at the trunk") taproot wallet-policy cards (was: every `is_nums:false` taproot md1 refused).**
