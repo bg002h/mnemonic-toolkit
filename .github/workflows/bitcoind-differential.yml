@@ -1,0 +1,148 @@
+# Stress Cycle E (toolkit leg) — Bitcoin Core END-TO-END differential.
+#
+# Cross-checks the TOOLKIT's end-to-end user pipeline — `bundle --descriptor`
+# (engrave, watch-only) -> `restore --md1` (reconstruct) -> the toolkit's
+# reported first addresses — against Bitcoin Core's INDEPENDENT C++
+# `deriveaddresses`, for the 9-shape R0-proven positive corpus. This exercises
+# the toolkit's OWN derivation (`derive_address.rs`/`address_render.rs`, the
+# v0.49.1 route-AROUND md-codec for taproot) + the reconstruction path against
+# external C++ ground truth. md-codec's own bitcoind-differential tests the
+# CODEC-internal `derive_address`; this is the only oracle that exercises the
+# toolkit pipeline AND the `tr(NUMS,sortedmulti_a)` surface (which md-codec's
+# crates.io miniscript 13.0.0 cannot render, but the toolkit's fork can).
+#
+# The test (crates/mnemonic-toolkit/tests/bitcoind_differential.rs) is
+# CONNECT-ONLY and `#[ignore]`-by-default: this workflow owns the bitcoind
+# lifecycle — it starts an OFFLINE `-chain=main` node (no peers, no IBD,
+# RPC-ready in ~1s, ~17MB datadir), exports the wiring env vars the test
+# reads, builds the `mnemonic` binary, runs the `--ignored` test, stops it.
+#
+# bitcoind is PINNED to v27.0 and sha256-verified (NOT distro apt). v27
+# accepts the full corpus (single-sig, wsh-miniscript, tr(NUMS,{multi_a,
+# sortedmulti_a})).
+#
+# Network = MAINNET offline (regtest is DEAD here: it rejects mainnet xpubs,
+# and the toolkit's TLV->xpub path always renders mainnet `xpub…`).
+#
+# NOTE (cron caveats): scheduled workflows run on the DEFAULT BRANCH only and
+# auto-disable after 60 days of repo inactivity — workflow_dispatch is the
+# manual run + post-disable recovery lever.
+name: bitcoind-differential
+
+on:
+  push:
+    paths:
+      - "crates/mnemonic-toolkit/src/derive_address.rs"
+      - "crates/mnemonic-toolkit/src/address_render.rs"
+      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
+      - "crates/mnemonic-toolkit/src/cmd/restore.rs"
+      - "crates/mnemonic-toolkit/src/cmd/bundle.rs"
+      - "crates/mnemonic-toolkit/tests/bitcoind_differential.rs"
+      - ".github/workflows/bitcoind-differential.yml"
+  pull_request:
+    paths:
+      - "crates/mnemonic-toolkit/src/derive_address.rs"
+      - "crates/mnemonic-toolkit/src/address_render.rs"
+      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
+      - "crates/mnemonic-toolkit/src/cmd/restore.rs"
+      - "crates/mnemonic-toolkit/src/cmd/bundle.rs"
+      - "crates/mnemonic-toolkit/tests/bitcoind_differential.rs"
+      - ".github/workflows/bitcoind-differential.yml"
+  schedule:
+    # Daily at 05:17 UTC (off the hour to avoid the cron thundering herd).
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned Bitcoin Core v27.0 tarball + its published SHA256SUMS entry.
+  BITCOIND_VERSION: "27.0"
+  BITCOIND_TARBALL: "bitcoin-27.0-x86_64-linux-gnu.tar.gz"
+  BITCOIND_SHA256: "2a6974c5486f528793c79d42694b5987401e4a43c97f62b1383abf35bcee44a8"
+
+jobs:
+  differential:
+    name: bitcoind v27.0 end-to-end differential
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # NOTE: no "clone patched miniscript fork" step — the toolkit pins the
+      # fork via `[patch.crates-io]` in Cargo.toml (rev 95fdd1c); cargo
+      # resolves it automatically (unlike md-codec's local-stack workflow).
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+
+      # Cache the pinned tarball by its sha256 — a cache hit never changes
+      # the oracle (the key IS the content hash).
+      - name: Cache pinned bitcoind tarball
+        id: cache-bitcoind
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/${{ env.BITCOIND_TARBALL }}
+          key: bitcoind-${{ env.BITCOIND_SHA256 }}
+
+      - name: Download pinned bitcoind tarball
+        if: steps.cache-bitcoind.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -sSL -o "${{ runner.temp }}/${{ env.BITCOIND_TARBALL }}" \
+            "https://bitcoincore.org/bin/bitcoin-core-${BITCOIND_VERSION}/${BITCOIND_TARBALL}"
+
+      - name: Verify sha256 + extract pinned bitcoind/bitcoin-cli
+        shell: bash
+        run: |
+          cd "${{ runner.temp }}"
+          echo "${BITCOIND_SHA256}  ${BITCOIND_TARBALL}" | sha256sum -c -
+          tar xzf "${BITCOIND_TARBALL}"
+          "./bitcoin-${BITCOIND_VERSION}/bin/bitcoind" --version | head -1
+
+      - name: Start offline -chain=main bitcoind + poll until ready
+        shell: bash
+        run: |
+          BIN="${{ runner.temp }}/bitcoin-${BITCOIND_VERSION}/bin"
+          DATADIR="${{ runner.temp }}/bcd"
+          mkdir -p "$DATADIR"
+          # Offline mainnet: no peers, no IBD; default auth → <datadir>/.cookie.
+          "$BIN/bitcoind" -chain=main -daemon -datadir="$DATADIR" \
+            -rpcport=18999 -connect=0 -listen=0 -blocksonly=1
+          for i in $(seq 1 60); do
+            if "$BIN/bitcoin-cli" -chain=main -datadir="$DATADIR" -rpcport=18999 \
+                 getblockchaininfo >/dev/null 2>&1; then
+              echo "bitcoind ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "bitcoind did not become ready within 60s" >&2
+          exit 1
+
+      - name: Build mnemonic binary (debug)
+        run: cargo build --bin mnemonic
+
+      - name: Run toolkit bitcoind end-to-end differential (--ignored)
+        shell: bash
+        env:
+          MNEMONIC_BIN: ${{ github.workspace }}/target/debug/mnemonic
+          BITCOINCLI_BIN: ${{ runner.temp }}/bitcoin-${{ env.BITCOIND_VERSION }}/bin/bitcoin-cli
+          BITCOIND_DATADIR: ${{ runner.temp }}/bcd
+          BITCOIND_RPCPORT: "18999"
+        run: |
+          cargo test -p mnemonic-toolkit --test bitcoind_differential \
+            -- --ignored --nocapture
+
+      - name: Stop bitcoind
+        if: always()
+        shell: bash
+        run: |
+          BIN="${{ runner.temp }}/bitcoin-${BITCOIND_VERSION}/bin"
+          DATADIR="${{ runner.temp }}/bcd"
+          "$BIN/bitcoin-cli" -chain=main -datadir="$DATADIR" -rpcport=18999 stop || true
+
+      - name: Upload bitcoind debug log on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bitcoind-differential-debuglog
+          path: ${{ runner.temp }}/bcd/debug.log
+          if-no-files-found: ignore

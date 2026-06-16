@@ -139,6 +139,35 @@ fn general_and_v_older_reconstructs_faithfully() {
     assert_md1_fixed_point(&md1, desc);
 }
 
+/// (1b) n=1 GENERAL wsh — a SINGLE-key timelocked policy
+/// `wsh(and_v(v:pk(@0),older(144)))` with NO `multi`/`sortedmulti` at the
+/// trunk. Every other general-faithful cell (and STRESS-A) puts a multi at
+/// the trunk; this is the only n=1 `v:pk` general restore — the shape the
+/// toolkit↔Bitcoin-Core end-to-end oracle's `wsh-timelocked` row exercises
+/// (`tests/bitcoind_differential.rs`). That oracle is `#[ignore]`/cron-gated,
+/// so without this cell shape-6 reconstructability has NO default-CI signal
+/// (`toolkit-bitcoind-end-to-end-oracle` R0-r1 I-1). Faithful (pre-v0.54.0
+/// this single-key class would have collapsed) + md1 fixed-point.
+#[test]
+fn n1_general_wsh_timelocked_restores_faithfully() {
+    let md1 = bundle_general("wsh(and_v(v:pk(@0),older(144)))");
+    let v = restore_json(&md1);
+    let w = &v["wallets"][0];
+    let desc = w["descriptor"].as_str().unwrap();
+    assert!(
+        desc.contains("and_v(v:pk("),
+        "must keep and_v(v:pk): {desc}"
+    );
+    assert!(desc.contains("older(144)"), "must keep older(144): {desc}");
+    assert!(
+        !desc.starts_with("wsh(pk("),
+        "must NOT collapse to plain pk: {desc}"
+    );
+    assert_eq!(w["wallet_type"], "miniscript-policy");
+    assert!(!w["first_addresses"].as_array().unwrap().is_empty());
+    assert_md1_fixed_point(&md1, desc);
+}
+
 /// (2) decay vault (or_d of two multi, gated by older): both multis + the
 /// timelock survive; threshold is null (NOT the first multi's k).
 #[test]
