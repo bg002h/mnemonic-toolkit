@@ -514,8 +514,8 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 |---|---|
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest |
 | `--template <TEMPLATE>` | as for `bundle` |
-| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); both apostrophe and `h`-form hardened paths are accepted |
-| `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from file |
+| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); **(v0.57.0) or a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor before verifying — parity with `bundle`/`export-wallet --descriptor`; both apostrophe and `h`-form hardened paths are accepted |
+| `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from file (also accepts a BIP-388 wallet-policy JSON, same as `--descriptor`) |
 | `--threshold <THRESHOLD>` | multisig threshold |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 |
 | `--privacy-preserving` | match a privacy-preserving mk1 emission |

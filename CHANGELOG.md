@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.57.0] — 2026-06-16
+
+**SemVer-MINOR — `verify-bundle --descriptor` now accepts a BIP-388 wallet-policy JSON (intake parity with `bundle` / `export-wallet`). Tier-2 item C2.**
+
+### Added
+
+- **`verify-bundle --descriptor` / `--descriptor-file` accept a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanding it to the concrete descriptor before verifying — the same `is_bip388_policy_shape` → `expand_bip388_policy` probe `bundle` and `export-wallet --descriptor` have shipped since v0.49.0. Closes the intake asymmetry: a user who can `bundle` from a wallet-policy JSON can now `verify-bundle` against the same JSON. Read-only verify → no policy-name preservation (unlike `export-wallet`). No new flag (only the accepted input FORMAT widens) → no GUI `schema_mirror` surface; the manual `--descriptor` row is updated in lockstep. FOLLOWUP `verify-bundle-bip388-policy-intake`. Plan + R0: `design/PLAN_C2_verify_bundle_bip388_intake_2026-06-16.md`.
+
+### Notes
+
+The previously-pinned refusal cell (`verify_bundle_refuses_bip388_policy_json`) was inverted red→green into `verify_bundle_accepts_bip388_policy_json` (a 2-of-2 sortedmulti policy bundle→verify-bundle round-trip via `--bundle-json`); a single-sig `wpkh` policy round-trip and a malformed `@N`-beyond-`keys_info` refusal (asserting the expander's `"@N beyond keys_info"` message) round out the coverage.
+
 ## mnemonic-toolkit [0.56.0] — 2026-06-15
 
 **SemVer-MINOR — standardized mstring display-grouping (`bundle`/`convert`/`ms-shares` gain `--group-size`/`--separator`; default card output is now space/5 print-once). The cross-constellation `display-grouping-render-strip-v1` cycle, P4 (the integration crate). Pins md-codec 0.36.0.**

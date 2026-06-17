@@ -684,6 +684,19 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         _ => unreachable!("clap conflicts_with rules out both"),
     };
 
+    // BIP-388 wallet-policy intake (mirror bundle.rs:319): a leading-`{` policy
+    // JSON expands to a concrete descriptor BEFORE classify — a raw policy trips
+    // BOTH classify's @N and key-regex probes (the v0.49.0 ordering invariant).
+    // verify-bundle is read-only → no policy-name preservation (unlike
+    // export-wallet). Brings verify-bundle's --descriptor intake into parity with
+    // bundle/export-wallet (FOLLOWUP verify-bundle-bip388-policy-intake).
+    let descriptor_str = if crate::wallet_import::pipeline::is_bip388_policy_shape(&descriptor_str)
+    {
+        crate::wallet_import::pipeline::expand_bip388_policy(&descriptor_str)?
+    } else {
+        descriptor_str
+    };
+
     // A1 P3b — bare-concrete fork: if the descriptor contains real xpubs (no
     // @N placeholders), route directly to the concrete-to-resolved-slots helper
     // and bypass the @N lex/resolve/slot-binding machinery entirely.

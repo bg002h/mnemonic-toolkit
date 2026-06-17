@@ -135,15 +135,21 @@ mis-wired — cells 1/2 on exit code, cell 3 on the message (per M1 above).
   flag-coverage-lint change (the lint gates flag NAMES; `--descriptor` already listed) — but the
   manual is the constellation's single source of truth, so the prose must mirror. Run
   `make -C docs/manual lint` + the verify-examples/build to confirm no regression.
-- **Version-marker lockstep (release ritual) — exact sites (R0-r1 M7, live @ `a69a9e3`):**
-  exactly ONE README marker (`README.md:13` `<!-- toolkit-version: 0.56.0 -->`) + ONE
-  `scripts/install.sh` self-pin (`:32` `mnemonic-toolkit-v0.56.0`) → both bumped to `v0.57.0` in
+- **Version-marker lockstep (release ritual) — exact sites (CORRECTED by impl-review C1; R0-r1 M7
+  was WRONG to say "exactly ONE README marker"):** there are **TWO** guard-enforced
+  `<!-- toolkit-version: -->` markers — `README.md:13` AND `crates/mnemonic-toolkit/README.md:9`
+  (both asserted by `tests/readme_version_current.rs::both_readmes_carry_current_version_marker`,
+  which iterates `["README.md", "../../README.md"]`). PLUS `fuzz/Cargo.lock` carries the
+  `mnemonic-toolkit` package version (separate cargo workspace, NOT gated by any Rust test → silent
+  drift if missed; bump via `cargo update -p mnemonic-toolkit --precise <ver>` in `fuzz/`). PLUS ONE
+  `scripts/install.sh` self-pin (`:32` `mnemonic-toolkit-v0.56.0`). ALL bumped to `v0.57.0` in
   the release commit. No toolkit version-bump self-reference in `pinned-upstream.toml` (the only
   such file, `docs/manual-gui/pinned-upstream.toml`, is a GUI-manual pin bumped by a GUI-manual
   cycle, NOT by a toolkit release). NO sibling pin changes → `manual.yml`/`quickstart.yml`/cross-tool
   stay FROZEN. CHANGELOG
-  entry for v0.57.0. (The "README marker ×2" recollection is from a prior cycle — today there is
-  only one; do not hunt for a second.)
+  entry for v0.57.0. (Impl-review C1 CORRECTED the earlier R0-r1 M7 claim of "only one README
+  marker": there ARE two, both guard-enforced — see the TWO-markers text above. The "×2"
+  recollection from prior cycles was RIGHT.)
 - **fmt gate:** `cargo +1.95.0 fmt --all` then REVERT `mlock.rs` (g6 exemption — NEVER fmt mlock.rs).
 - **FOLLOWUP flip:** `verify-bundle-bip388-policy-intake` (FOLLOWUPS.md:4174) `open → resolved`
   in the shipping commit, citing the inverted cell.
