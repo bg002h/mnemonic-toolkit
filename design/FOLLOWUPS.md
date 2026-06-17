@@ -33,6 +33,15 @@ Single source of truth for items that surfaced during a review or implementation
 - **Tier:** resolved (Tier-2 C5).
 - **Companion:** `mnemonic-gui` schema dropdown-value + pin bump (paired-PR; schema_mirror gates flag-NAMES not values → discipline-enforced).
 
+### `bundle-keyless-descriptor-honest-refusal` — ✓ RESOLVED (2026-06-17, NO-BUMP) — honest message for a keyless descriptor at bundle --descriptor
+
+- **Surfaced:** 2026-06-17, Tier-3 C4 user feedback ("keys must have paths, but if no key, I don't see why a path is necessary"). The recon (C4 feasibility) DEFINITIVELY established that a KEYLESS concrete descriptor (no pubkeys, e.g. `wsh(and_v(v:ripemd160(H),older(N)))`) cannot be a coherent m-format bundle — 3 stacked downstream blockers (`concrete_keys_to_placeholders` requires ≥1 key, `parse_descriptor` requires ≥1 `@N`, the bundle/md1/restore model is wallet-policy-only with a ranged `/<0;1>/*` key; `BundleMode` has no no-key variant; a keyless script is a single fixed address with no cosigner to engrave). A keyless script has no secret to protect → the right artifact is a watch-only descriptor FILE.
+- **Where:** `wallet_import/pipeline.rs::classify_descriptor_form` `(false,false)` arm (`:141`); callers `bundle.rs:325` + verify-bundle (NOT xpub-search/export-wallet).
+- **Fix (shipped):** message-only. New `has_any_key_token` probe (xpub-family OR 66-hex compressed pubkey; deliberately NOT bare 64-hex — ambiguous x-only-pubkey vs sha256/hash256 hash) splits the `(false,false)` arm: a KEY-but-origin-less input (bare xpub / raw pubkey) keeps "must carry a key origin"; a TRULY keyless input gets an honest message routing to `export-wallet --descriptor … --format descriptor` (which already emits keyless descriptors, exit 0). Same `DescriptorParse`/exit-2 refusal — only the text differs → NO-BUMP. Plan + R0 GREEN: `design/PLAN_C4_keyless_honest_message_2026-06-17.md`, `design/agent-reports/c4-keyless-honest-message-plan-r0-round1-review.md`. Tests: `pipeline.rs` units (keyless→route, has_any_key_token, both existing origin-message assertions stay green) + `tests/cli_bundle_keyless_descriptor.rs`.
+- **Note:** "allow keyless bundling" was NOT pursued — it would require a whole template-only `BundleMode` (no mk1/ms1, fixed-address restore+derive) for a backup artifact that is just public info; `export-wallet --descriptor` is the correct door.
+- **Tier:** resolved (Tier-3 C4).
+- **Companion:** none (toolkit-local; alongside shipped `import-wallet-format-descriptor` C5).
+
 ### `install-sh-sibling-pins-stale-vs-flag-bearing-clis` — bump install.sh canonical sibling pins to the P1/P2/P3 flag-bearing releases
 
 - **Surfaced:** 2026-06-15, P4 release (mnemonic-toolkit v0.56.0). `scripts/install.sh`'s canonical sibling pins are `descriptor-mnemonic-md-cli-v0.6.2` / `ms-cli-v0.7.0` / `mk-cli-v0.8.0` — all PRE-`--group-size`/`--separator`. The cycle shipped md-cli v0.7.0 (P1), ms-cli v0.8.0 (P2), mk-cli v0.9.0 (P3) with the flags. The v0.56.0 manual documents the flags but `manual.yml` still builds the OLD CLIs (flag-coverage is forward-only — help→doc — so it passes; the docs are simply ahead of the pinned binaries).

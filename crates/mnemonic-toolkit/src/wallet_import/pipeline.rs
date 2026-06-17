@@ -42,6 +42,23 @@ fn key_regex() -> &'static Regex {
     })
 }
 
+/// True if the descriptor contains ANY cosigner-key token — an extended key
+/// (xpub-family, with OR without a `[fp/path]` origin) or a 66-hex compressed
+/// pubkey. Used by `classify_descriptor_form`'s `(false,false)` arm to tell a
+/// KEY-but-origin-less descriptor (→ "must carry a key origin") from a truly
+/// KEYLESS one (hashlock/timelock only → no cosigner key to engrave → routed to
+/// `export-wallet`). Deliberately does NOT match bare 64-hex, which is ambiguous
+/// (an x-only taproot pubkey vs a `sha256()`/`hash256()` hash literal): a keyless
+/// sha256-hashlock descriptor is therefore correctly treated as keyless.
+pub(crate) fn has_any_key_token(s: &str) -> bool {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        Regex::new(r"[xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+|\b0[23][0-9a-fA-F]{64}\b")
+            .expect("has_any_key_token is a fixed string literal")
+    })
+    .is_match(s)
+}
+
 /// Lift every `[fp/path]xpub` origin tuple from a concrete descriptor body via
 /// the canonical (h-form-widened) `key_regex`, in declaration order. Shared by
 /// all `wallet_import` parsers (FOLLOWUP `descriptor-origin-extraction-dedup`),
@@ -127,8 +144,10 @@ pub(crate) enum DescriptorForm {
 
 /// Classify a descriptor string via cheap probes. Pure; no conversion.
 /// Rule 1: both probes → mixed error. 2: `@\d` only → AtN. 3: key_regex
-/// only → Concrete. 4: neither → origin-required error (md-codec is NOT
-/// reached on this branch, so the error originates here — SPEC §3.1).
+/// only → Concrete. 4: neither → error (md-codec is NOT reached on this branch,
+/// so the error originates here — SPEC §3.1); split by `has_any_key_token`:
+/// a KEY-but-origin-less input → origin-required error, a truly KEYLESS input
+/// (hashlock/timelock only) → honest export-wallet routing message (C4).
 pub(crate) fn classify_descriptor_form(input: &str) -> Result<DescriptorForm, ToolkitError> {
     let has_at_n = at_n_probe().is_match(input);
     let has_concrete = key_regex().is_match(input);
@@ -138,11 +157,27 @@ pub(crate) fn classify_descriptor_form(input: &str) -> Result<DescriptorForm, To
         )),
         (true, false) => Ok(DescriptorForm::AtN),
         (false, true) => Ok(DescriptorForm::Concrete),
-        (false, false) => Err(ToolkitError::DescriptorParse(
-            "descriptor has neither @N placeholders nor [fp/path]-annotated keys; \
-             concrete descriptors must carry a key origin, e.g. [<fp>/84h/0h/0h]xpub…"
-                .into(),
-        )),
+        (false, false) => {
+            if has_any_key_token(input) {
+                // Keys present but no `[fp/path]` origin — unchanged, correct.
+                Err(ToolkitError::DescriptorParse(
+                    "descriptor has neither @N placeholders nor [fp/path]-annotated keys; \
+                     concrete descriptors must carry a key origin, e.g. [<fp>/84h/0h/0h]xpub…"
+                        .into(),
+                ))
+            } else {
+                // Truly KEYLESS (hashlock/timelock only) — no cosigner key to
+                // engrave, so this is not a coherent m-format bundle. Route to
+                // export-wallet, which emits it as a watch-only descriptor file.
+                Err(ToolkitError::DescriptorParse(
+                    "this descriptor has no keys to engrave as a cosigner card — a keyless \
+                     script (hashlock/timelock only) is not a coherent m-format bundle. Emit it \
+                     as a watch-only descriptor file: `export-wallet --descriptor '<descriptor>' \
+                     --format descriptor` (or `--format bitcoin-core`)."
+                        .into(),
+                ))
+            }
+        }
     }
 }
 
@@ -460,6 +495,60 @@ mod tests {
             "{}",
             err.message()
         );
+    }
+
+    // C4 — a truly KEYLESS concrete descriptor (no pubkeys, hashlock/timelock
+    // only) gets the honest "no cosigner key; use export-wallet" routing
+    // message, NOT the vacuous "must carry a key origin".
+    #[test]
+    fn classify_keyless_routes_to_export_wallet() {
+        let err = classify_descriptor_form(
+            "wsh(and_v(v:ripemd160(0000000000000000000000000000000000000000),older(1234567)))",
+        )
+        .unwrap_err();
+        let m = err.message();
+        assert!(
+            m.contains("export-wallet --descriptor") && m.contains("no keys to engrave"),
+            "keyless → honest export-wallet route, got: {m}"
+        );
+        assert!(
+            !m.contains("must carry a key origin"),
+            "keyless must NOT get the vacuous origin message: {m}"
+        );
+        // A keyless sha256 hashlock (64-hex) is also keyless — the 64-hex token
+        // is a hash, not a cosigner key, so it routes the same way.
+        let err2 = classify_descriptor_form(
+            "wsh(and_v(v:sha256(0000000000000000000000000000000000000000000000000000000000000000),older(144)))",
+        )
+        .unwrap_err();
+        assert!(
+            err2.message().contains("export-wallet --descriptor"),
+            "{}",
+            err2.message()
+        );
+    }
+
+    #[test]
+    fn has_any_key_token_distinguishes_keys_from_hashes() {
+        // Real keys (with or without origin) → true.
+        assert!(has_any_key_token(
+            "wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)"
+        ));
+        assert!(has_any_key_token(
+            "wpkh(xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/0/*)"
+        ));
+        assert!(has_any_key_token(
+            "[704c7836/84'/0'/0']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC"
+        ));
+        // Keyless (hashlocks/timelocks only) → false. ripemd160=40-hex,
+        // sha256=64-hex — neither is a key (no xpub-family, no 66-hex 02/03).
+        assert!(!has_any_key_token(
+            "wsh(and_v(v:ripemd160(0000000000000000000000000000000000000000),older(1234567)))"
+        ));
+        assert!(!has_any_key_token(
+            "wsh(and_v(v:sha256(0000000000000000000000000000000000000000000000000000000000000000),after(800000)))"
+        ));
+        assert!(!has_any_key_token("wsh(thresh(2,older(144),older(288)))"));
     }
 
     #[test]
