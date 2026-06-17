@@ -52,7 +52,7 @@ jobs:
     name: cargo fuzz build (compile gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install pinned nightly
         # @master + `toolchain:` input is dtolnay's documented way to pin a
         # DATED nightly (dated nightlies are not available as action refs).
@@ -78,7 +78,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install pinned nightly
         # @master + `toolchain:` input is dtolnay's documented way to pin a
         # DATED nightly (dated nightlies are not available as action refs).
@@ -97,7 +97,7 @@ jobs:
         run: cargo +nightly-2026-04-27 fuzz run descriptor_parse --target x86_64-unknown-linux-gnu -- -max_total_time=60
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crash-descriptor_parse
           path: fuzz/artifacts/descriptor_parse/

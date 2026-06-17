@@ -51,7 +51,7 @@ jobs:
     name: fmt (pinned 1.95.0)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install Rust 1.95.0 (canonical fmt toolchain)
         uses: dtolnay/rust-toolchain@master
         with:
@@ -83,7 +83,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # FOLLOWUP cargo-lock-version-bump-lockstep: fail CI when Cargo.lock is
       # stale relative to Cargo.toml (e.g. a version bump that forgot to
@@ -162,7 +162,7 @@ jobs:
     name: "test (release, ubuntu-latest, mlock einval)"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Show ulimit -l (diagnostic)
         run: ulimit -l || true
       - name: G2.3-release einval soft-fail
@@ -176,7 +176,7 @@ jobs:
     name: miri (mlock unsafe)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install nightly + miri component
         uses: dtolnay/rust-toolchain@nightly
@@ -193,7 +193,7 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: cargo clippy --all-targets -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
@@ -218,7 +218,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: install-rust pinned toolchain
         # Use the toolkit's pinned `rust-toolchain.toml` channel (1.85.0)
         # so the cross-platform check matches the version used by the
@@ -258,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout own (mnemonic-toolkit)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: mnemonic-toolkit
       # g6-sibling-master-not-pin: pin the sibling checkout to the canonical
@@ -281,7 +281,7 @@ jobs:
           echo "Resolved ms-cli pin: $tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Checkout sibling (mnemonic-secret)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: bg002h/mnemonic-secret
           ref: ${{ steps.pin.outputs.tag }}

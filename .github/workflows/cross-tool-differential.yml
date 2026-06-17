@@ -33,7 +33,7 @@ jobs:
     name: cross-tool md1 differential (toolkit vs md-cli)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install md-cli (tag-pinned)
         # Mirrors manual.yml's md-cli install. PIN THE TAG: the differential
