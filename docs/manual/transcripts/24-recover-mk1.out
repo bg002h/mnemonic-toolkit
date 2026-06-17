@@ -1,3 +1,4 @@
+note: this card's derivation path is conventionally SLIP-0132 zpub; re-emit with --xpub-prefix zpub (the engraved mk1 stores the BIP-32-neutral xpub — the SLIP-0132 variant is a display form, not on the card).
 xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
 fingerprint: 73c5da0a
 path: 84'/0'/0'
