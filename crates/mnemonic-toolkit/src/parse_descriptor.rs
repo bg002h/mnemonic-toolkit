@@ -2417,9 +2417,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "DupIf descriptor-unreachable in rust-miniscript v13 — every d: example in ms_tests.rs is invalid_ms"]
     fn arm_dup_if() {
-        // Walker arm exists for completeness; counted as 1 stub.
+        // The old ignore-reason ("DupIf descriptor-unreachable in v13") is
+        // DISPROVEN: dv:X = d:v:X is Terminal::DupIf(Terminal::Verify(X)), and
+        // or_i lets it appear at a B position. `dv:older(144)` type-checks
+        // (older → B/Zero; v: → V/Zero; d: needs V+Zero → B/OneNonZero).
+        let inner = wsh_inner("wsh(or_i(pk(@0/<0;1>/*),dv:older(144)))");
+        let n = find_tag(&inner, Tag::DupIf).expect("DupIf");
+        assert!(matches!(n.body, Body::Children(_)));
     }
 
     #[test]

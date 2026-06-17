@@ -442,6 +442,82 @@ proptest! {
     }
 }
 
+// ── B1: taproot leg — tr(NUMS,{multi_a|sortedmulti_a}(k,…)) round-trips. The
+//    toolkit-UNIQUE reconstruction (v0.49.1/v0.55.x route AROUND md-codec; the
+//    workspace `95fdd1c` fork has Terminal::SortedMultiA) was covered only by
+//    fixed goldens in cli_restore_multisig.rs, never property-tested. Concrete
+//    tr strings bypass build_descriptor (wsh-only WrapperKind by design) and
+//    enter at `bundle --descriptor`; O1/O2/O3 reuse unchanged. The negative
+//    (@-in-both / non-NUMS refusal) path is already comprehensively covered at
+//    n≥3 in cli_restore_taproot.rs::at_in_both_* — not duplicated here.
+const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+/// `tr(NUMS,{multi_a|sortedmulti_a}(k, K0..K_{n-1}))` from the frozen KEYS pool.
+fn tr_multi_desc(sorted: bool, n: usize, k: usize) -> String {
+    let frag = if sorted { "sortedmulti_a" } else { "multi_a" };
+    let keys: Vec<String> = (0..n).map(|i| format!("{}/<0;1>/*", KEYS[i])).collect();
+    format!("tr({NUMS_HEX},{frag}({k},{}))", keys.join(","))
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: std::env::var("PROP_CASES").ok().and_then(|s| s.parse().ok()).unwrap_or(48),
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    })]
+
+    /// Positive tr leg: bundle → restore reconstructs the same NUMS taproot
+    /// multisig; O1 structural + O2 md1 fixed-point + O3 address differential.
+    #[test]
+    fn tr_taproot_roundtrip(
+        sorted in any::<bool>(),
+        n in 2usize..=KEYS.len(),
+        k_raw in 1usize..=KEYS.len(),
+    ) {
+        let k = 1 + (k_raw - 1) % n; // 1..=n
+        let desc = tr_multi_desc(sorted, n, k);
+        let md1 = bundle_md1(&desc);
+        let (desc2, restore_addrs) = restore(&md1);
+        prop_assert_eq!(
+            normalize(&desc), normalize(&desc2),
+            "tr O1 structural mismatch:\n  orig: {}\n  recon: {}", desc, desc2
+        );
+        prop_assert_eq!(
+            derive_receive(&desc, 2), restore_addrs.clone(),
+            "tr O3 address differential failed for {}", desc
+        );
+        prop_assert_eq!(bundle_md1(&desc2), md1, "tr O2 md1 fixed-point failed for {}", desc2);
+    }
+}
+
+/// Anti-vacuity smoke: BOTH variants (multi_a + the toolkit-unique sortedmulti_a)
+/// round-trip deterministically (fast signal even when PROP_CASES is gated low;
+/// proves the leg actually covers both fragments + derives a P2TR address).
+#[test]
+fn tr_taproot_smoke_both_variants() {
+    for sorted in [false, true] {
+        let desc = tr_multi_desc(sorted, 3, 2); // tr(NUMS,{multi_a|sortedmulti_a}(2,K0,K1,K2))
+        let md1 = bundle_md1(&desc);
+        let (desc2, addrs) = restore(&md1);
+        assert_eq!(
+            normalize(&desc),
+            normalize(&desc2),
+            "tr smoke O1 (sorted={sorted}): {desc} vs {desc2}"
+        );
+        assert_eq!(
+            derive_receive(&desc, 2),
+            addrs,
+            "tr smoke O3 (sorted={sorted})"
+        );
+        assert_eq!(bundle_md1(&desc2), md1, "tr smoke O2 (sorted={sorted})");
+        assert!(
+            addrs[0].starts_with("bc1p"),
+            "tr leg must derive a P2TR address: {}",
+            addrs[0]
+        );
+    }
+}
+
 // ── Anti-vacuity: the generator must cover every fragment (R0-r1 I1) ──
 #[test]
 fn generator_covers_all_fragments() {

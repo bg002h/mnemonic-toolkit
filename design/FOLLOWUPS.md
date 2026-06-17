@@ -4191,7 +4191,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Where:** `crates/mnemonic-toolkit/src/parse_descriptor.rs::arm_dup_if` — a bin-crate `#[cfg(test)]` test (runs under `cargo test --bin mnemonic`, NOT `--lib`), `#[ignore = "DupIf descriptor-unreachable in rust-miniscript v13 — every d: example in ms_tests.rs is invalid_ms"]`, with a COMMENT-ONLY body ("Walker arm exists for completeness; counted as 1 stub").
 - **What:** the ignore reason is DISPROVEN — `wsh(or_i(pk(X),dv:older(144)))` parses via `Descriptor::from_str` on the pinned miniscript 13.0.0 (verified twice: GAP-2 recon experiment + the R0). So `arm_dup_if` IS reachable. Fix: de-ignore AND WRITE the body (de-ignoring alone = vacuous pass since the body is empty), mirroring `arm_non_zero`: build `wsh(or_i(pk(@0/<0;1>/*),dv:older(144)))`, walk it, assert a `Tag::DupIf` node appears. This is the toolkit PARSE-direction (descriptor → Node) companion to the md-codec post-0.35.2 GAP-2 render-direction cell `self_test_wsh_or_i_dupif_v_older`.
 - **Why deferred:** split from the md-codec-local GAP-2 cycle (single-repo discipline); the 1-test toolkit edit rides separately.
-- **Status:** `open`
+- **Status:** `resolved` — SHIPPED (Phase-0 B2, NO-BUMP). `parse_descriptor.rs::arm_dup_if` de-ignored + body written: `wsh(or_i(pk(@0/<0;1>/*),dv:older(144)))` → `wsh_inner` → `find_tag(Tag::DupIf).expect(...)` + `matches!(body, Body::Children(_))`. Non-vacuous (drops the `:668` `Terminal::DupIf` walker arm → `.expect` panics). Passes under `cargo test --bin mnemonic`. plan-R0 GREEN ×2 (`design/agent-reports/phase0-test-hardening-plan-r0-round{1,2}-review.md`).
 - **Tier:** `test-hygiene`.
 - **Companion:** `descriptor-mnemonic` md-codec post-0.35.2 NO-BUMP GAP-2 cycle (render-direction shipped; this is the parse-direction de-stub).
 
@@ -4214,3 +4214,19 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `feature` / `next-cycle` (idea — confirm demand before building).
 - **Companion:** none.
+
+### `stress-a-taproot-leg` — STRESS-A property harness had no taproot leg (toolkit-unique tr(NUMS,sortedmulti_a) reconstruction unguarded by property tests)
+
+- **Surfaced:** 2026-06-16, Phase-0 test-hardening (differential-harness-breadth GAP 4b / `cycle-prep-recon-differential-harness-breadth.md`).
+- **Where:** `crates/mnemonic-toolkit/tests/prop_backup_restore_roundtrip.rs` — `build_policy` was wrapper-`wsh`-only (`build-descriptor`'s `WrapperKind` is wsh-only by design); the toolkit-UNIQUE `tr(NUMS,{multi_a|sortedmulti_a})` reconstruction (v0.49.1/v0.55.x route AROUND md-codec; the `95fdd1c` fork has `Terminal::SortedMultiA`) was covered only by fixed goldens in `cli_restore_multisig.rs`, never property-tested.
+- **Status:** `resolved` — SHIPPED (Phase-0 B1, NO-BUMP). Added `tr_multi_desc` + a `tr_taproot_roundtrip` proptest (sorted×n×k over the frozen KEYS pool; concrete `tr(NUMS,…)` strings bypass build-descriptor, enter at `bundle --descriptor`) reusing the existing O1 structural / O2 md1-fixed-point / O3 address-differential oracles, plus a deterministic `tr_taproot_smoke_both_variants` anti-vacuity cell (both fragments + asserts a `bc1p` P2TR address). Negative (@-in-both / non-NUMS refusal) NOT duplicated — already comprehensive at n≥3 in `cli_restore_taproot.rs::at_in_both_*` (R0-r1 I-1). plan-R0 GREEN ×2.
+- **Tier:** `test-hardening`.
+- **Companion:** none (the md-codec bitcoind corpus-breadth leg is `bitcoind-differential-corpus-breadth`, separate).
+
+### `ms-codec-test-hardening-themes` — ms-codec correction/miscorrection/indel themes — ALREADY SATISFIED
+
+- **Surfaced:** 2026-06-16, Phase-0 B3 R0 (`codec-test-hardening-themes-1-2-3` recon claimed ms-codec was the gap).
+- **What:** the recon's premise "md+mk shipped themes 1/2/3; ms is the gap" is FALSE. `crates/ms-codec/tests/bch_all_lengths.rs` (the v0.2.1 BCH fix-lock) already implements all three: theme 1 `corrects_1_to_4_errors_every_length` (1-4 errors → recovery + reported positions, all 5 lengths), theme 2 `five_to_eight_errors_never_return_original_every_length` (80 trials × 5-8 errors × 5 lengths, `assert_ne!` original never silently returned), theme 3 `raw_wrong_length_fails_closed_every_length` (insert/delete → `Err`, the indel reject-contract the toolkit `repair.rs::Ms1IndelOracle` relies on). The earlier staleness investigator missed it (searched for `indel_reject_contract.rs`, which ms doesn't use). Confirmed by plan-R0 ×2.
+- **Status:** `resolved` (already-satisfied; no new test). The only theoretical residual — a DETERMINISTIC test forcing the defensive re-verify branch at `ms-codec decode.rs:280-288` — is deferred as low-value (the property is already asserted by the theme-2 sweep; constructing the specific 5+-error input is hard for negligible added assurance).
+- **Tier:** `test-hardening`.
+- **Companion:** `descriptor-mnemonic`/`mnemonic-key` md-codec/mk-codec themes 1/2/3 (shipped).
