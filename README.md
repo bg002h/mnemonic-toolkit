@@ -68,4 +68,7 @@ The three cards engrave together as a coherent backup. Each card is independentl
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+Dual-licensed, at your option, under either the [MIT License](LICENSE) or the
+[Unlicense](UNLICENSE) public-domain dedication — SPDX `MIT OR Unlicense`. Use
+the Unlicense for maximal freedom, or MIT where a public-domain dedication
+isn't accepted.

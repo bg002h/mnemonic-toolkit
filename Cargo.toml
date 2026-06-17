@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-license = "MIT"
+license = "MIT OR Unlicense"
 repository = "https://github.com/bg002h/mnemonic-toolkit"
 homepage = "https://github.com/bg002h/mnemonic-toolkit"
 rust-version = "1.85"
