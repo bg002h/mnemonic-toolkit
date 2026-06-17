@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.58.0] — 2026-06-17
+
+**SemVer-MINOR — `import-wallet --format descriptor`: a generic commented-descriptor intake. Tier-2 item C5 (re-scoped from "import `--format green`"). Paired GUI dropdown-value + pin bump (mnemonic-gui v0.42.0).**
+
+### Added
+
+- **`import-wallet --format descriptor`** — read a watch-only descriptor from a text file, tolerating leading `#`-comment lines + blank lines, then flow it through the existing concrete-keys import pipeline → md1 bundle (watch-only). This subsumes the toolkit's own `export-wallet --format green` 3-line output AND `export-wallet --format descriptor`'s bare line AND any hand-written / foreign commented descriptor — closing the round-trip gap (export → re-import) that `--format bitcoin-core` (JSON-only) could not. Supports **both singlesig and multisig** (a descriptor carries threshold + cosigners; unlike green-*export*, which is singlesig-only). **Explicit-only** (`--format descriptor` is REQUIRED — a bare descriptor is too generic to auto-sniff, mirroring encrypted-BSMS). BIP-380 checksum is **tolerant** (validated if present — a bad checksum is refused; tolerated if absent), matching `bundle --descriptor`. New parser `wallet_import/descriptor.rs`; `ImportProvenance::Descriptor` unit variant. FOLLOWUP `import-wallet-format-descriptor`. Plan + R0: `design/PLAN_C5_import_format_descriptor_2026-06-17.md`.
+
+### Notes
+
+Paired GUI lockstep (mnemonic-gui v0.42.0): `IMPORT_WALLET_FORMATS` gains `"descriptor"` + toolkit pin v0.56.0 → v0.58.0. The GUI `schema_mirror` gate checks flag-NAMES only (not dropdown values), so the value addition is discipline-enforced (paired-PR rule), not gate-caught.
+
 ## mnemonic-toolkit [0.57.1] — 2026-06-16
 
 **SemVer-PATCH — non-blocking advisory at `bundle` / `import-wallet` engrave time for descriptor shapes `restore --md1` cannot reconstruct. Tier-2 item C1. Advisory-only, zero clap delta → no GUI `schema_mirror` impact.**

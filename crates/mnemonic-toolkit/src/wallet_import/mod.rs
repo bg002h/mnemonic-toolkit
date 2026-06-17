@@ -27,6 +27,7 @@ pub(crate) mod bsms_round1;
 pub(crate) mod bsms_verify;
 pub(crate) mod coldcard;
 pub(crate) mod coldcard_multisig;
+pub(crate) mod descriptor;
 pub(crate) mod electrum;
 pub(crate) mod jade;
 pub(crate) mod json_envelope;
@@ -97,6 +98,13 @@ pub(crate) enum ImportProvenance {
     /// stitching but is not yet constructed by any wired call site).
     #[allow(dead_code)]
     ColdcardMultisig(coldcard_multisig::ColdcardMultisigSourceMetadata),
+    /// C5 — generic commented-descriptor parse (`wallet_import/descriptor.rs`).
+    /// A bare/commented concrete descriptor carries no source-wallet metadata
+    /// (no label/name), so this is a UNIT variant — every `*_source_metadata`
+    /// accessor returns `None` for it (like `BsmsTwoLine`). Inserted in
+    /// alphabetical-by-variant-name slot per CLAUDE.md discipline (between
+    /// `ColdcardMultisig` and `Electrum`). Constructed by `DescriptorParser::parse`.
+    Descriptor,
     /// Electrum 4.x wallet-file parse (`wallet_import/electrum.rs`). SPEC §11.6.
     /// Inserted in alphabetical-by-variant-name slot per CLAUDE.md discipline
     /// (between `ColdcardMultisig` and `Sparrow`).
@@ -150,6 +158,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,
@@ -165,6 +174,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,
@@ -183,6 +193,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(meta) => Some(meta),
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,
@@ -204,6 +215,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(meta) => Some(meta),
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,
@@ -223,6 +235,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(meta) => Some(meta),
             Self::Sparrow(_) => None,
@@ -242,6 +255,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(meta) => Some(meta),
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,
@@ -259,6 +273,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(meta) => Some(meta),
@@ -277,6 +292,7 @@ impl ImportProvenance {
             Self::BsmsTwoLine => None,
             Self::Coldcard(_) => None,
             Self::ColdcardMultisig(_) => None,
+            Self::Descriptor => None,
             Self::Electrum(_) => None,
             Self::Jade(_) => None,
             Self::Sparrow(_) => None,

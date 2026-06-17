@@ -61,6 +61,7 @@ use crate::wallet_import::{
     bsms::BsmsParser,
     coldcard::ColdcardParser,
     coldcard_multisig::ColdcardMultisigParser,
+    descriptor::DescriptorParser,
     electrum::ElectrumParser,
     jade::JadeParser,
     overlay::apply_seed_overlay,
@@ -139,12 +140,13 @@ pub struct ImportWalletArgs {
     /// v0.28.0 Phase P0C; per-parser dispatch ships in Phases P1C-P6C.
     #[arg(
         long = "format",
-        value_name = "bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter",
+        value_name = "bitcoin-core|bsms|coldcard|coldcard-multisig|descriptor|electrum|jade|sparrow|specter",
         value_parser = clap::builder::PossibleValuesParser::new([
             "bitcoin-core",
             "bsms",
             "coldcard",
             "coldcard-multisig",
+            "descriptor",
             "electrum",
             "jade",
             "sparrow",
@@ -740,6 +742,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             "coldcard-multisig"
         }
+        Some("descriptor") => {
+            // C5 — the generic commented-descriptor format is EXPLICIT-ONLY
+            // (its `sniff` always returns false; it is absent from the sniff
+            // votes array), so there is no off-diagonal mismatch to guard:
+            // `--format descriptor` honors the user's explicit choice and lets
+            // `DescriptorParser` produce a clear `import-wallet: descriptor: …`
+            // error if the blob is not a bare/commented descriptor.
+            "descriptor"
+        }
         Some("electrum") => {
             // v0.28.0 Phase P6C: format-mismatch check mirrors the
             // bsms/bitcoin-core/coldcard/coldcard-multisig/sparrow/specter
@@ -1159,6 +1170,7 @@ electrum|jade|sparrow|specter>"
         "bitcoin-core" => BitcoinCoreParser::parse(&blob, stderr)?,
         "coldcard" => ColdcardParser::parse(&blob, stderr)?,
         "coldcard-multisig" => ColdcardMultisigParser::parse(&blob, stderr)?,
+        "descriptor" => DescriptorParser::parse(&blob, stderr)?,
         "electrum" => ElectrumParser::parse(&blob, stderr)?,
         "jade" => JadeParser::parse(&blob, stderr)?,
         "sparrow" => SparrowParser::parse(&blob, stderr)?,
@@ -1167,7 +1179,7 @@ electrum|jade|sparrow|specter>"
             return Err(ToolkitError::BadInput(format!(
                 "import-wallet --format {other} is not supported \
                  (bitcoin-core, bsms, coldcard, coldcard-multisig, \
-                  electrum, jade, sparrow, specter)"
+                  descriptor, electrum, jade, sparrow, specter)"
             )));
         }
     };

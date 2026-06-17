@@ -797,6 +797,52 @@ mnemonic export-wallet --from-import-json envelope.json \
 - **2fa and imported-addresses wallets** — refused by design (not
   reconstructible from xpubs alone).
 
+## Commented descriptor (`--format descriptor`) {#commented-descriptor}
+
+`--format descriptor` (v0.58.0) reads a watch-only concrete descriptor
+from a plain-text file, tolerating leading `#`-comment lines and blank
+lines. It is the import counterpart to `export-wallet --format descriptor`
+and `--format green`: a green export is just two `#`-comment lines plus a
+descriptor, so `--format descriptor` re-imports it directly, and the same
+door accepts any hand-written or foreign descriptor that arrives as text.
+
+### Accepted shape
+
+One descriptor line (after `#`-comment and blank lines are stripped), with
+inline `[fp/path]xpub` key origins:
+
+```text
+# Blockstream Green — Watch-only import (singlesig)
+# Help: https://help.blockstream.com/...
+wpkh([5436d724/84'/0'/0']xpub6Bner.../<0;1>/*)#00lx6ere
+```
+
+- **Singlesig and multisig.** Unlike `export-wallet --format green` (which
+  is singlesig-only, because Blockstream Green's multisig is
+  server-mediated), the descriptor *import* accepts a multisig
+  `wsh(sortedmulti(...))` too — a descriptor string carries the threshold
+  and all cosigners.
+- **Checksum is tolerant.** The BIP-380 `#checksum` is validated if present
+  (a wrong checksum is refused) and tolerated if absent — matching
+  `bundle --descriptor`.
+- **Watch-only out.** The result is a watch-only bundle (no secret
+  material); the network is inferred from the BIP-48 coin-type in the key
+  origins.
+
+### Explicit-only (no auto-sniff)
+
+A bare descriptor is too generic to auto-detect safely, so `--format
+descriptor` is **required** — it is never selected by the sniffer (a file
+with no `--format` and no recognized header is reported as "could not
+detect format", exactly as before). This mirrors the encrypted-BSMS
+"explicit `--format` required" rule.
+
+### Refusals
+
+- A file with **no** descriptor line (only comments/blanks) → refused.
+- A file with **two or more** descriptor lines → refused (supply one).
+- A **wrong** BIP-380 checksum → refused.
+
 ## Round-trip discipline {#foreign-formats-roundtrip}
 
 For every imported blob `B`, the toolkit runs:
