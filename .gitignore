@@ -21,3 +21,11 @@ fuzz/coverage/
 .*-resume.md
 .*-plan-stash.md
 TEMP_*
+
+# Per-cycle local working tooling and ad-hoc coverage surveys. Never tracked
+# (their conclusions land in commits / design/FOLLOWUPS.md / memory). NOTE:
+# cycle-prep-recon-*.md are deliberately NOT ignored — those are committed
+# in-tree while their FOLLOWUP is open, then pruned once it is resolved.
+cycle-b-*
+feature-coverage-survey-*.md
+.claude/
