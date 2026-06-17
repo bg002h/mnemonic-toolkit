@@ -4194,3 +4194,23 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Status:** `open`
 - **Tier:** `test-hygiene`.
 - **Companion:** `descriptor-mnemonic` md-codec post-0.35.2 NO-BUMP GAP-2 cycle (render-direction shipped; this is the parse-direction de-stub).
+
+### `mk1-card-slip0132-variant-not-preserved-on-card` — mk1 normalizes ypub/zpub input to xpub; the SLIP-0132 variant is not preserved on the engraved card
+
+- **Surfaced:** 2026-06-16, cycle-prep recon staleness sweep (`cycle-prep-recon-theme-a-wallet-interop.md` item A2 — the previously-UNTRACKED live residue of Theme A).
+- **Where:** the mk1 card encode/intake path (toolkit mk1 chunking + `mk-codec`/`mk-cli` xpub field). Convert-side SLIP-0132 acceptance already shipped (`convert-slip0132-prefix-support`, v0.6.1; input-normalization note `slip0132-input-normalization-stderr-info`).
+- **What:** when an xpub is supplied in SLIP-0132 form (`ypub`/`zpub`/`Ypub`/`Zpub`) for an mk1 card, the toolkit normalizes it to canonical `xpub` on intake and the engraved mk1 card carries only `xpub`. The card therefore does NOT round-trip the cosigner's original SLIP-0132 variant — a watch-only consumer wanting the script-type-tagged form can't recover it from the card alone. PRODUCT question the Theme-A recon left open: is on-card SLIP-0132 preservation actually wanted, or is normalize-in / re-emit-out (the shipped behavior) sufficient? mk1 stores raw xpub bytes + a version/script-type stub, so preserving the variant would mean binding the SLIP-0132 prefix to the card's script-type field — a wire-shape decision, not a bug.
+- **Fix (if pursued):** decide the product question first. If preservation is wanted, bind the SLIP-0132 script-type to the mk1 card field + re-emit the original variant on decode/inspect; else WONTFIX with a one-line note. No funds-safety impact either way (xpub bytes are identical; only the display prefix differs).
+- **Status:** `open`
+- **Tier:** `product-question` / `next-cycle`.
+- **Companion:** none (toolkit-local; alongside shipped `convert-slip0132-prefix-support` + `slip0132-input-normalization-stderr-info`).
+
+### `single-sig-multi-script-type-batch-emit-not-surfaced` — no `addresses --all-script-types` / `export-wallet --all-single-sig` batch emitter
+
+- **Surfaced:** 2026-06-16, cycle-prep recon staleness sweep (`cycle-prep-recon-all-single-sig-batch-emit.md` — previously UNFILED: the recon proposed a net-new feature with no FOLLOWUP slug and it was never picked up).
+- **Where:** `crates/mnemonic-toolkit/src/cmd/addresses.rs` (`--address-type` is REQUIRED) + `cmd/export_wallet.rs`. Precedent for the multi-emit shape: `nostr --all-script-types` (`3ac8110`).
+- **What:** `mnemonic addresses` requires a single `--address-type`, and `export-wallet` emits one single-sig wallet at a time. There is no one-shot "emit all standard single-sig script types (BIP-44/49/84/86) for this seed" batch flag. A user setting up a fresh single-sig wallet across formats must run the command N times. Not a bug — a convenience feature scoped in recon but never built.
+- **Fix (if pursued):** add `--all-script-types` (addresses) / `--all-single-sig` (export-wallet) that loops the existing per-type derivation over {p2pkh, p2sh-p2wpkh, p2wpkh, p2tr} and emits a labeled set; `--json` groups by type. Mirror the `nostr --all-script-types` shape. Lockstep: GUI schema_mirror + manual flag-coverage (new flag).
+- **Status:** `open`
+- **Tier:** `feature` / `next-cycle` (idea — confirm demand before building).
+- **Companion:** none.
