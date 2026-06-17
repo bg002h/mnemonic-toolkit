@@ -32,6 +32,7 @@ mod slot_ms1;
 mod synthesize;
 mod template;
 mod timelock_advisory;
+mod unrestorable_advisory;
 mod verify_message;
 mod wallet_export;
 mod wallet_import;

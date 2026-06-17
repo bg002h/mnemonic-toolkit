@@ -169,4 +169,6 @@ pub mod template;
 #[cfg(fuzzing)]
 pub mod timelock_advisory;
 #[cfg(fuzzing)]
+pub mod unrestorable_advisory;
+#[cfg(fuzzing)]
 pub mod wallet_export;

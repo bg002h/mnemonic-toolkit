@@ -1665,6 +1665,12 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
     crate::timelock_advisory::emit_advisories(&adv, stderr);
 
+    // C1 (Site 1) — non-blocking advisory for shapes restore --md1 can't
+    // reconstruct (sortedmulti-in-combinator / use-site overrides / hardened
+    // wildcard). The engraved card is still emitted (a faithful backup).
+    let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
+
     emit_unified(
         args,
         &bundle,
@@ -1706,6 +1712,10 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     // stderr). `descriptor` is passed by reference downstream, never moved.
     let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
     crate::timelock_advisory::emit_advisories(&adv, stderr);
+
+    // C1 (Site 3) — non-blocking unrestorable-shape advisory (concrete-key path).
+    let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
 
     // BIP-388 distinctness check — a pasted descriptor is untrusted, unlike
     // the mk1-sourced path in bundle_run_from_import_json.
@@ -1968,6 +1978,10 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // MdDescriptor before the bundle is emitted. Non-blocking (best-effort).
     let adv = crate::timelock_advisory::older_advisories_tree(&descriptor);
     crate::timelock_advisory::emit_advisories(&adv, stderr);
+
+    // C1 (Site 2) — non-blocking unrestorable-shape advisory (import-json path).
+    let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
 
     // Determine BundleMode from resolved_slots state.
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());

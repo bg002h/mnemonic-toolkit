@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.57.1] — 2026-06-16
+
+**SemVer-PATCH — non-blocking advisory at `bundle` / `import-wallet` engrave time for descriptor shapes `restore --md1` cannot reconstruct. Tier-2 item C1. Advisory-only, zero clap delta → no GUI `schema_mirror` impact.**
+
+### Added
+
+- **Unrestorable-shape advisory (stderr, non-blocking).** `bundle` and `import-wallet` engrave a wire-faithful md1 card for three descriptor shapes that `restore --md1` then refuses to mechanically reconstruct: (1) `sortedmulti()` inside a combinator (not the sole child of `wsh`/`sh`), (2) per-cosigner use-site path overrides, (3) a hardened wildcard (`/*h`). Each now surfaces a `advisory: restore --md1 cannot reconstruct this descriptor — …` line on stderr at engrave time, naming the shape and the tracking FOLLOWUP. The card is still emitted (a faithful backup); exit code is unchanged (the advisory cannot flip `bundle`/`import-wallet` to failure). The advisory fires **IFF** `restore --md1` would refuse — the shape-1 predicate mirrors md-codec's `to_miniscript` acceptance set exactly (the three restorable SortedMulti positions: `wsh(sortedmulti)`, `sh(wsh(sortedmulti))`, bare-P2SH `sh(sortedmulti)`). Never suppressed under `--json` (stderr is separate from the stdout JSON payload). New module `src/unrestorable_advisory.rs`, mirroring the v0.55.2 `older()` advisory. FOLLOWUP `bundle-unrestorable-shape-advisory`. Plan + R0: `design/PLAN_C1_unrestorable_shape_advisory_2026-06-16.md`.
+
+### Notes
+
+The reconstruction halves of the underlying gaps stay open (`bundle-accepts-sortedmulti-in-combinator-restore-cannot`, `restore-md1-per-key-use-site-and-hardened-wildcard`) — the advisory warns; it does not yet reconstruct. PATCH — advisory-only, zero clap delta → no GUI `schema_mirror` impact (mirrors v0.55.2).
+
 ## mnemonic-toolkit [0.57.0] — 2026-06-16
 
 **SemVer-MINOR — `verify-bundle --descriptor` now accepts a BIP-388 wallet-policy JSON (intake parity with `bundle` / `export-wallet`). Tier-2 item C2.**

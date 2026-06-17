@@ -143,6 +143,7 @@
     "unstored",
     "untracked",
     "unspendable",
+    "unrestorable",
     "usize",
     "UTXOs",
     "walleted",

@@ -1290,6 +1290,10 @@ electrum|jade|sparrow|specter>"
     for p in &parsed {
         let adv = crate::timelock_advisory::older_advisories_tree(&p.descriptor);
         crate::timelock_advisory::emit_advisories(&adv, stderr);
+        // C1 — non-blocking advisory for shapes restore --md1 can't reconstruct
+        // (import-wallet engraves an md1 the same way bundle does).
+        let unrest = crate::unrestorable_advisory::unrestorable_advisories(&p.descriptor);
+        crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
     }
 
     // Emit stdout.

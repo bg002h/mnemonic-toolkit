@@ -55,6 +55,25 @@ non-blocking advisory to stderr noting the effective (weaker) value. The
 command still succeeds — it never refuses to back up or inspect an
 already-deployed wallet.
 
+### Unrestorable descriptor shapes {#unrestorable-shapes}
+
+Some descriptor shapes engrave a wire-faithful `md1` card that
+[`mnemonic restore`](#mnemonic-restore) cannot yet mechanically reconstruct
+(it refuses loudly rather than silently rebuild a different wallet). When the
+descriptor has one of these shapes, this command prints a non-blocking advisory
+to stderr at engrave time — the card is still emitted (a faithful backup); keep
+the full descriptor to restore. The three shapes are:
+
+- `sortedmulti()` **inside a combinator** (not the sole child of `wsh`/`sh`);
+- **per-cosigner use-site path overrides** (cosigners that do not share one
+  derivation suffix);
+- a **hardened wildcard** (`/*h`).
+
+These are the shapes the [multisig-cosigner restore](#multisig-cosigner-restore)
+path refuses to reconstruct. The same advisory fires on
+[`mnemonic import-wallet`](#mnemonic-import-wallet) (the other surface that
+engraves an `md1` from a descriptor).
+
 ### Synopsis
 
 ```sh
@@ -1047,6 +1066,11 @@ secret material unless the user supplies an `--ms1` / `--slot
 Bitcoin Core blobs containing `xprv` extended private keys are
 refused (re-run `bitcoin-cli listdescriptors` without the `true`
 flag to obtain xpub-only output).
+
+Because import-wallet engraves an `md1` from the imported descriptor, it
+emits the same non-blocking advisories `bundle` does when the descriptor
+carries a [consensus-masked `older()`](#consensus-masked-relative-timelocks)
+or an [unrestorable shape](#unrestorable-shapes).
 
 ### Synopsis
 
