@@ -986,7 +986,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         pbkdf2_passphrase,
         bip38_passphrase,
     );
-    let (mut outputs, input_variant, electrum_seed_version) = match computed {
+    let (mut outputs, input_variant, electrum_seed_version, path_hint) = match computed {
         Ok(o) => o,
         Err(orig) => {
             // v0.22.0 auto-fire — on Ms1 / Mk1 sibling-codec decode failures,
@@ -1064,6 +1064,20 @@ pub fn run<R: Read, W: Write, E: Write>(
             "{}",
             crate::slip0132::render_slip0132_info_line(variant)
         );
+    }
+
+    // C6 (v0.58.1) — path-implied SLIP-0132 hint when reading an mk1 card whose
+    // origin path conventionally implies a non-neutral variant. Stdout stays the
+    // neutral xpub; this only points at `--xpub-prefix`. Suppressed when the user
+    // already chose a form (`--xpub-prefix` present, including explicit-neutral).
+    if args.xpub_prefix.is_none() {
+        if let Some(prefix) = path_hint {
+            let _ = writeln!(
+                stderr,
+                "{}",
+                crate::slip0132::render_path_implied_hint(prefix)
+            );
+        }
     }
 
     // SPEC v0.8 §14 — Electrum decode emits detected SeedVersion to stderr.
@@ -1180,7 +1194,15 @@ type Output = (NodeType, String);
 // `(bip38, wif)` falls back when unset.
 //
 // Return-shape tuple decoded as `ComputeOutputsResult` below.
-type ComputeOutputsResult = (Vec<Output>, Option<&'static str>, Option<SeedVersion>);
+// 4th element (C6): the SLIP-0132 variant the source mk1 card's path conventionally
+// implies, when `--to xpub` was requested and the path is non-neutral. `run()`
+// renders it as a stderr hint (stdout stays the neutral xpub).
+type ComputeOutputsResult = (
+    Vec<Output>,
+    Option<&'static str>,
+    Option<SeedVersion>,
+    Option<crate::slip0132::XpubPrefix>,
+);
 
 fn compute_outputs(
     from: NodeType,
@@ -1388,7 +1410,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         Xprv => {
             let xprv = bip32::Xpriv::from_str(value)
@@ -1408,7 +1430,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         Xpub => {
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
@@ -1453,7 +1475,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, input_variant, None))
+            Ok((out, input_variant, None, None))
         }
         Wif => {
             let pk = PrivateKey::from_wif(value)
@@ -1489,7 +1511,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         Bip38 => {
             // SPEC v0.7 §12 + v0.8 §12.b — decrypt to raw key + compress flag,
@@ -1522,7 +1544,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         Ms1 => {
             // mstring display-grouping (SPEC §3.2): strip separators (ms1 is
@@ -1576,7 +1598,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         Mk1 => {
             // mstring display-grouping (SPEC §3.2): mk1 multi-chunk input is
@@ -1609,7 +1631,17 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            // C6 — path-implied SLIP-0132 hint (stderr-only; stdout xpub stays
+            // neutral). Set only when `--to xpub` was requested AND the card's
+            // origin path is conventionally a non-neutral variant; `run()` gates
+            // the actual emit on `args.xpub_prefix.is_none()`.
+            let path_hint = if targets.contains(&Xpub) {
+                let p = crate::slip0132::path_implied_xpub_prefix(&card.origin_path);
+                (!p.is_default()).then_some(p)
+            } else {
+                None
+            };
+            Ok((out, None, None, path_hint))
         }
         Fingerprint | Path => Err(ToolkitError::BadInput(format!(
             "--from {} is not a primary value-bearing node",
@@ -1650,7 +1682,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None))
+            Ok((out, None, None, None))
         }
         ElectrumPhrase => {
             // SPEC v0.7 §14 + v0.8 §14 — validate via HMAC-SHA512 prefix;
@@ -1671,7 +1703,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, detected_version))
+            Ok((out, None, detected_version, None))
         }
         Address => unreachable!("classify_edge intercepts (Address, *) as one-way"),
     }

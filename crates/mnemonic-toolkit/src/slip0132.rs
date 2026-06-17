@@ -7,7 +7,7 @@
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use bitcoin::base58;
-use bitcoin::bip32::Xpub;
+use bitcoin::bip32::{ChildNumber, DerivationPath, Xpub};
 
 /// SPEC §11.a flag values: 5-variant SLIP-0132 *semantic class* selector
 /// (BIP-49 single, BIP-49 multisig, BIP-84 single, BIP-84 multisig, neutral).
@@ -133,6 +133,64 @@ pub(crate) fn render_slip0132_info_line(variant: &'static str) -> String {
     format!(
         "info: normalized {variant} input to neutral {neutral} (encoding-only; no key change). Re-emit with --xpub-prefix {variant} if you need the SLIP-0132 form.",
         neutral = neutral_for(variant),
+    )
+}
+
+// ── C6 — mk1 SLIP-0132 path-implied-variant hint (v0.58.1) ──────────────────
+//
+// The mk1 card stores only the BIP-32-neutral xpub/tpub (the SLIP-0132 variant
+// is destroyed on intake by `normalize_xpub_prefix`). It cannot be recovered
+// exactly. But the card DOES store the origin path, and SLIP-0132's own
+// convention ties the variant to the path purpose. So on `convert --from mk1`
+// we surface a non-blocking stderr HINT naming the variant the path conventionally
+// implies (pointing at `--xpub-prefix`). Stdout stays the neutral xpub — no
+// interop break, no byte-identity inversion. (R0-r1 disproved emitting the guessed
+// variant on stdout: the card can't distinguish xpub-at-m/84' from zpub-at-m/84'.)
+
+/// The SLIP-0132 variant a derivation path conventionally implies, from its BIP
+/// purpose (+ the BIP-48 script-type component). Returns `Xpub` (neutral) for
+/// legacy (44'/45'), taproot (86'), or any unrecognized/short path. This is a
+/// display-convention hint, NOT recovery of the original input prefix.
+pub(crate) fn path_implied_xpub_prefix(path: &DerivationPath) -> XpubPrefix {
+    let comps: Vec<ChildNumber> = path.into_iter().copied().collect();
+    let purpose = match comps.first() {
+        Some(ChildNumber::Hardened { index }) => *index,
+        _ => return XpubPrefix::Xpub,
+    };
+    match purpose {
+        49 => XpubPrefix::Ypub,
+        84 => XpubPrefix::Zpub,
+        // BIP-48 multisig: the 4th component (m/48'/coin'/account'/script') is
+        // the script type — 1' = P2SH-P2WSH (Ypub), 2' = P2WSH (Zpub).
+        48 => match comps.get(3) {
+            Some(ChildNumber::Hardened { index: 1 }) => XpubPrefix::YpubMultisig,
+            Some(ChildNumber::Hardened { index: 2 }) => XpubPrefix::ZpubMultisig,
+            _ => XpubPrefix::Xpub,
+        },
+        _ => XpubPrefix::Xpub,
+    }
+}
+
+/// The `--xpub-prefix` flag-value spelling for a variant (inverse of
+/// `parse_xpub_prefix_arg`).
+pub(crate) fn xpub_prefix_flag_str(p: XpubPrefix) -> &'static str {
+    match p {
+        XpubPrefix::Xpub => "xpub",
+        XpubPrefix::Ypub => "ypub",
+        XpubPrefix::YpubMultisig => "Ypub",
+        XpubPrefix::Zpub => "zpub",
+        XpubPrefix::ZpubMultisig => "Zpub",
+    }
+}
+
+/// The one-line stderr note for a path-implied SLIP-0132 variant (C6). Names the
+/// variant + points at the flag; clarifies the card stores the neutral form.
+pub(crate) fn render_path_implied_hint(variant: XpubPrefix) -> String {
+    let flag = xpub_prefix_flag_str(variant);
+    format!(
+        "note: this card's derivation path is conventionally SLIP-0132 {flag}; re-emit with \
+         --xpub-prefix {flag} (the engraved mk1 stores the BIP-32-neutral xpub — the SLIP-0132 \
+         variant is a display form, not on the card)."
     )
 }
 
@@ -404,5 +462,56 @@ mod tests {
             let err = parse_xpub_prefix_arg(bad).unwrap_err();
             assert!(err.contains("not in"), "got {err:?} for {bad:?}");
         }
+    }
+
+    // ── C6 — path-implied variant hint ──────────────────────────────────────
+    #[test]
+    fn path_implied_prefix_maps_purposes() {
+        use std::str::FromStr;
+        let p = |s: &str| DerivationPath::from_str(s).unwrap();
+        assert_eq!(path_implied_xpub_prefix(&p("49'/0'/0'")), XpubPrefix::Ypub);
+        assert_eq!(path_implied_xpub_prefix(&p("84'/0'/0'")), XpubPrefix::Zpub);
+        assert_eq!(
+            path_implied_xpub_prefix(&p("48'/0'/0'/1'")),
+            XpubPrefix::YpubMultisig
+        );
+        assert_eq!(
+            path_implied_xpub_prefix(&p("48'/0'/0'/2'")),
+            XpubPrefix::ZpubMultisig
+        );
+        // legacy / taproot / unknown script-type / short / empty → neutral.
+        assert_eq!(path_implied_xpub_prefix(&p("44'/0'/0'")), XpubPrefix::Xpub);
+        assert_eq!(path_implied_xpub_prefix(&p("45'")), XpubPrefix::Xpub);
+        assert_eq!(path_implied_xpub_prefix(&p("86'/0'/0'")), XpubPrefix::Xpub);
+        assert_eq!(
+            path_implied_xpub_prefix(&p("48'/0'/0'/9'")),
+            XpubPrefix::Xpub
+        );
+        assert_eq!(path_implied_xpub_prefix(&p("48'/0'/0'")), XpubPrefix::Xpub);
+        let empty = DerivationPath::from(Vec::<ChildNumber>::new());
+        assert_eq!(path_implied_xpub_prefix(&empty), XpubPrefix::Xpub);
+        // non-hardened purpose → neutral (no panic).
+        assert_eq!(path_implied_xpub_prefix(&p("84/0/0")), XpubPrefix::Xpub);
+    }
+
+    #[test]
+    fn xpub_prefix_flag_str_round_trips_through_parse() {
+        for v in [
+            XpubPrefix::Xpub,
+            XpubPrefix::Ypub,
+            XpubPrefix::YpubMultisig,
+            XpubPrefix::Zpub,
+            XpubPrefix::ZpubMultisig,
+        ] {
+            assert_eq!(parse_xpub_prefix_arg(xpub_prefix_flag_str(v)).unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn render_path_implied_hint_names_variant_and_flag() {
+        let h = render_path_implied_hint(XpubPrefix::Zpub);
+        assert!(h.contains("conventionally SLIP-0132 zpub"));
+        assert!(h.contains("--xpub-prefix zpub"));
+        assert!(h.contains("not on the card"));
     }
 }

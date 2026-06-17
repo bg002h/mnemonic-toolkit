@@ -664,7 +664,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--electrum-version <ELECTRUM_VERSION>` | Electrum seed-version selector for `(Entropy, ElectrumPhrase)` |
 | `--electrum-language <ELECTRUM_LANGUAGE>` | Electrum-specific wordlist (English + 4 non-English) |
 | `--fingerprint <FINGERPRINT>` | master fingerprint (input on certain edges) |
-| `--xpub-prefix <XPUB_PREFIX>` | SLIP-0132 prefix selector for emitted xpubs (e.g. zpub, ypub) |
+| `--xpub-prefix <XPUB_PREFIX>` | SLIP-0132 prefix selector for emitted xpubs (`xpub`/`ypub`/`Ypub`/`zpub`/`Zpub`; requires `--network`). **(v0.58.1)** Reading an `mk1` card (`--from mk1= --to xpub`) prints a non-blocking stderr note naming the SLIP-0132 variant the card's derivation path conventionally implies (e.g. `m/84'` → zpub) and pointing here — stdout stays the BIP-32-neutral xpub. The mk1 card stores only the neutral xpub (the variant is normalized away on intake and is not recoverable exactly); pass `--xpub-prefix <variant>` to emit the SLIP-0132 form. |
 | `--script-type <SCRIPT_TYPE>` | `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr` for `(Xpub, Address)` derivation (v0.26.0: `p2pkh` added) |
 | `--json` | JSON output |
 | `--help` | print help |

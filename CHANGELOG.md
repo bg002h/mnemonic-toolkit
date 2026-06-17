@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.58.1] — 2026-06-17
+
+**SemVer-PATCH — `convert --from mk1 --to xpub` prints a path-implied SLIP-0132 hint on stderr. Advisory-only; stdout unchanged. Tier-3 item C6.**
+
+### Added
+
+- **Path-implied SLIP-0132 hint on mk1 read-back.** When `convert --from mk1 --to xpub` reads a card whose origin path conventionally implies a SLIP-0132 variant (`m/49'`→ypub, `m/84'`→zpub, `m/48'/…/1'`→Ypub, `m/48'/…/2'`→Zpub), it now prints a one-line stderr note naming the variant and pointing at `--xpub-prefix` (e.g. `note: this card's derivation path is conventionally SLIP-0132 zpub; re-emit with --xpub-prefix zpub …`). **Stdout is unchanged** — it stays the BIP-32-neutral `xpub` (so `xpub→mk1→xpub` byte-identity and Bitcoin Core interop are preserved). The note suppresses when the path is neutral (44'/45'/86') or when `--xpub-prefix` is already supplied. New `slip0132::path_implied_xpub_prefix`. FOLLOWUP `mk1-card-slip0132-variant-not-preserved-on-card`. Plan + R0: `design/PLAN_C6_mk1_slip0132_stderr_hint_2026-06-17.md`.
+
+### Notes
+
+The mk1 card stores only the neutral xpub (the SLIP-0132 variant is destroyed on intake and cannot be recovered exactly — on-card preservation would be a breaking wire-generation bump, the product-question outcome being NOT to pursue it). The hint reconstructs the *conventional* variant from the path the card already stores; `--xpub-prefix <variant>` produces the actual SLIP-0132 form on demand. PATCH — advisory-only, zero clap delta, zero stdout change → no GUI `schema_mirror` impact (older()-advisory v0.55.2 precedent).
+
 ## mnemonic-toolkit [0.58.0] — 2026-06-17
 
 **SemVer-MINOR — `import-wallet --format descriptor`: a generic commented-descriptor intake. Tier-2 item C5 (re-scoped from "import `--format green`"). Paired GUI dropdown-value + pin bump (mnemonic-gui v0.42.0).**
