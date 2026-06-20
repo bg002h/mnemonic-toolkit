@@ -85,6 +85,20 @@ pub mod secret_taxonomy;
 // the body is `#[cfg(target_os = "linux")]`-gated (no-op elsewhere), so this
 // compiles on the GUI's Windows lib consumption.
 pub mod process_hardening;
+/// Permutation-search engine — the funds-safety core of the multisig-template
+/// completion (#28 phase 2, P1). Standalone: the id/address computation is
+/// injected as a `CandidateEvaluator` predicate (real evaluators wire in
+/// P3/P4), so the lib surface stays self-contained with a library-local
+/// `SearchError`. SPEC `design/SPEC_bundle_md1_template_multisig_2026-06-20.md`
+/// §6 + §7 floors 2/5.
+///
+/// Mounted in the LIB only (not `mod`-declared in `main.rs`): a second bin-crate
+/// copy would be entirely unconsumed until P3 and would trip `-D warnings`
+/// dead-code on every public item. The P3/P4 call sites
+/// (`cmd/restore.rs`, `cmd/verify_bundle.rs`) reach the engine via the
+/// external-self path `mnemonic_toolkit::permutation_search::*` (the same path
+/// the bin already uses for `mnemonic_toolkit::mlock::*`).
+pub mod permutation_search;
 /// Serialize-transparent, zeroize-on-drop secret string for derived
 /// private-key material emitted via `--json` / text (silent-payment, nostr).
 pub mod secret_string;
