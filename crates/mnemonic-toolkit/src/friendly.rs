@@ -258,6 +258,15 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         E::OverrideOrderViolation { prev, current } => {
             format!("md1 override ordering: @{} after @{}", current, prev)
         }
+        // md-codec 0.37.0 D5(a) decode canonical-form rejects.
+        E::BaselineUseSiteOverride { idx } => format!(
+            "md1 use-site override keyed on baseline @{} (the @0 baseline cannot be overridden)",
+            idx,
+        ),
+        E::RedundantUseSiteOverride { idx } => format!(
+            "md1 redundant use-site override for @{} (equals the baseline use-site path)",
+            idx,
+        ),
         E::EmptyTlvEntry { tag } => format!("md1 empty TLV entry tag 0x{:02x}", tag),
         E::TlvLengthExceedsRemaining { length, remaining } => {
             format!("md1 TLV length {} exceeds remaining {}", length, remaining)

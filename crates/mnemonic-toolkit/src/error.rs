@@ -459,6 +459,13 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::TlvOrderingViolation { .. }
         | md_codec::Error::PlaceholderIndexOutOfRange { .. }
         | md_codec::Error::OverrideOrderViolation { .. }
+        // md-codec 0.37.0 D5(a) decode canonical-form rejects: an `@0`
+        // override (`@0` is the baseline, never overridable) or a redundant
+        // override equal to the baseline. Both are non-canonical / adversarial
+        // wire (our encoders never emit either) → decode-reject class, exit 2,
+        // same routing as the sibling TLV/override decode rejects.
+        | md_codec::Error::BaselineUseSiteOverride { .. }
+        | md_codec::Error::RedundantUseSiteOverride { .. }
         | md_codec::Error::EmptyTlvEntry { .. }
         | md_codec::Error::TlvLengthExceedsRemaining { .. }
         | md_codec::Error::PlaceholderNotReferenced { .. }
