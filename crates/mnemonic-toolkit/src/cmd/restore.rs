@@ -126,9 +126,10 @@ pub struct RestoreArgs {
 
     /// #28 phase 2 — RANGE fallback for the OWN seed's account(s) when the exact
     /// accounts are unknown: derive the own seed at every account in `0..K` and
-    /// let the multisig-template search select the subset actually used. Enlarges
-    /// the search space (and so the required `--expect-wallet-id` prefix length).
-    /// Multisig template completion only; ignored otherwise.
+    /// let the multisig-template search select the subset actually used.
+    /// NOT SUPPORTED YET — the subset-search engine is deferred (FOLLOWUP
+    /// `template-multisig-own-account-range-subset-search`); passing this flag
+    /// REFUSES with a pointer to `--account <N[,N,…]>` (the exact-account path).
     #[arg(long = "own-account-max")]
     pub own_account_max: Option<u32>,
 
@@ -1167,6 +1168,22 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
     let n = d.n as usize;
 
+    // --- I-1 gate (P3a R0): `--own-account-max` (own-account RANGE search) is
+    // NOT supported yet. The permutation engine enumerates only n! placements of
+    // the FIRST n pool entries, so an OVER-supplied pool (own keys derived at
+    // 0..K → more own candidates than slots) would leave pool indices ≥ n NEVER
+    // evaluated and a legitimate wallet would silently NO-MATCH. The genuine
+    // subset-search (k-permutations P(pool,n) + unknown-own-slot-count) is
+    // deferred — see FOLLOWUP `template-multisig-own-account-range-subset-search`.
+    // Refuse LOUDLY at input with an actionable next step. ------------------------
+    if args.own_account_max.is_some() {
+        return Err(bad(
+            "own-account range search (--own-account-max) is not supported yet for multisig \
+             template completion: specify your exact own account(s) with --account <N[,N,…]> so \
+             the supplied keys exactly fill the N cosigner slots.",
+        ));
+    }
+
     // --- Floor 1(i): `--from` is REQUIRED for a template completion ----------
     let from_raw = args.from.as_deref().ok_or(ToolkitError::ModeViolation {
         mode: "restore",
@@ -1328,11 +1345,10 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         origin_path_to_derivation_path(&op)?
     };
 
-    // The own accounts: the `--account` LIST, OR the `0..own_account_max` range.
-    let own_accounts: Vec<u32> = match args.own_account_max {
-        Some(k) => (0..k).collect(),
-        None => args.account.clone(),
-    };
+    // The own accounts: the `--account` LIST. (The `--own-account-max` range is
+    // gated above — I-1 — until the subset-search engine lands; once supplied,
+    // `pool.len() == n` always holds and the engine's n! enumeration is exact.)
+    let own_accounts: Vec<u32> = args.account.clone();
     if own_accounts.is_empty() {
         return Err(bad("--account list is empty"));
     }
@@ -1390,26 +1406,33 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     let mut pool: Vec<CandidateKey> = own_keys;
     pool.extend(unassigned_cosigners);
 
-    // --- Floor 1(ii): every slot supplied — the pool must cover all N slots --
-    // With an exact `--account` LIST (not a range), the pool size must equal N
-    // (one candidate per slot). A `--own-account-max K` range may OVER-supply
-    // own candidates (the search selects the subset), so only require ≥ N there.
-    if args.own_account_max.is_none() {
-        if pool.len() != n {
-            return Err(ToolkitError::ModeViolation {
-                mode: "restore",
-                flag: "--cosigner",
-                message: "every cosigner slot must be supplied to complete a multisig template: \
-                          the count of own keys (--from at each --account) + --cosigner keys must \
-                          equal the wallet's cosigner count. Supply the missing --cosigner <mk1>(s).",
-            });
-        }
-    } else if pool.len() < n {
+    // --- Floor 1(ii): every slot supplied EXACTLY — pool.len() == n ----------
+    // The supplied keys must EXACTLY fill the N cosigner slots: the count of own
+    // keys (one per `--account`) + `--cosigner` keys == the wallet's cosigner
+    // count. UNDER-supply cannot complete; OVER-supply (`pool.len() > n`) is NOT
+    // supported — the permutation engine enumerates only n! placements of the
+    // first n pool entries, so any pool index ≥ n is never evaluated and a
+    // legitimate wallet would silently NO-MATCH (I-1). The only way to over-
+    // supply own keys (`--own-account-max`) is gated at the top of this fn; the
+    // range subset-search is deferred (FOLLOWUP
+    // `template-multisig-own-account-range-subset-search`).
+    if pool.len() < n {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--cosigner",
-            message: "not enough keys to fill every slot: own keys (0..--own-account-max) + \
-                      --cosigner keys must be ≥ the wallet's cosigner count.",
+            message: "not enough keys to fill every cosigner slot: the count of own keys \
+                      (--from at each --account) + --cosigner keys must EQUAL the wallet's \
+                      cosigner count. Supply the missing --cosigner <mk1>(s).",
+        });
+    }
+    if pool.len() > n {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--account",
+            message: "too many keys for the cosigner slots: the supplied own keys (one per \
+                      --account) + --cosigner keys must EXACTLY equal the wallet's cosigner \
+                      count. Remove the extra key(s), or specify your exact own account(s) with \
+                      --account <N[,N,…]> so the supplied keys exactly fill the N slots.",
         });
     }
 
@@ -1418,10 +1441,14 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     ps::reject_duplicate_keys(&pool_key_blobs).map_err(map_search_error)?;
 
     // --- Realized search space S (for the prefix-strength floor + the cap) ----
-    // S = P(pool, n) = number of injective placements of `pool` keys into N
-    // slots (= n! when pool == n; the larger subset×perm count for a range).
-    let realized_s = perm_count_u128(pool.len(), n)
-        .ok_or_else(|| bad("multisig template: candidate space overflow"))?;
+    // The engine enumerates exactly n! full permutations of the n pool entries
+    // (the gate above pins `pool.len() == n`), so the realized space the prefix/
+    // cap are sized to is n! = P(n, n). (When the deferred subset-search lands,
+    // this becomes P(pool, n) — see FOLLOWUP
+    // `template-multisig-own-account-range-subset-search`.)
+    debug_assert_eq!(pool.len(), n, "the every-slot gate guarantees pool.len() == n");
+    let realized_s =
+        perm_count_u128(n, n).ok_or_else(|| bad("multisig template: candidate space overflow"))?;
 
     // --- Select the mode + build the evaluator -------------------------------
     let id_search = args.expect_wallet_id.is_some();

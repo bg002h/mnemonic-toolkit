@@ -646,6 +646,101 @@ fn multi_account_own_resolves_both_slots() {
 }
 
 // ===========================================================================
+// I-1 (P3a R0 fold): the over-supply (`pool.len() > n`) is REFUSED LOUDLY at
+// input — the permutation engine enumerates only n! placements of the FIRST n
+// pool entries, so any pool index ≥ n is NEVER evaluated → a legitimate wallet
+// would silently NO-MATCH. The genuine `--own-account-max` subset-search is
+// deferred (FOLLOWUP `template-multisig-own-account-range-subset-search`); until
+// then the supported invariant is `pool.len() == n` (own keys from the
+// `--account` LIST + cosigners exactly fill the N slots). Both the `--account`
+// over-supply and the `--own-account-max` flag must refuse with an ACTIONABLE
+// message (NOT a confusing NO-MATCH, NOT an exit-via-search).
+// ===========================================================================
+
+#[test]
+fn own_account_max_flag_refuses_with_actionable_message() {
+    // A real 2-of-2 {A@0, B@0}; the operator passes `--own-account-max 3` (the
+    // only way to over-supply own keys). Before the fold this derived
+    // own@{0,1,2}+cosigner = pool of 4 into n=2 slots and silently NO-MATCHED;
+    // after the fold it must refuse LOUDLY at input, naming --account.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("own-account-max") && low.contains("--account"),
+        "the --own-account-max refusal must name the flag and point at --account: {stderr}"
+    );
+    assert!(
+        !low.contains("no match"),
+        "the refusal must be an actionable INPUT error, not a search NO-MATCH: {stderr}"
+    );
+}
+
+#[test]
+fn pool_larger_than_slots_refuses_with_actionable_message() {
+    // A real 2-of-2 {A@0, B@0}; the operator over-supplies THREE keys for two
+    // slots (own@0 + cosigner B + an extra cosigner C). The pool (3) > n (2);
+    // the engine can never place the 3rd → refuse LOUDLY at input.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+    // an extra (outsider) cosigner card → pool over-supply.
+    let cos_extra = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_extra = emit_cosigner_mk1("wsh-sortedmulti", "2", cos_extra, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    for c in &mk1_extra {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("--account") || low.contains("more keys") || low.contains("over-supply")
+            || low.contains("exactly"),
+        "the over-supply refusal must be actionable: {stderr}"
+    );
+    assert!(
+        !low.contains("no match"),
+        "the refusal must be an INPUT error, not a search NO-MATCH: {stderr}"
+    );
+}
+
+// ===========================================================================
 // Non-regression: single-sig template completion (#28 phase 1) still works.
 // ===========================================================================
 
