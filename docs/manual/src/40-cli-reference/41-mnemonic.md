@@ -83,6 +83,14 @@ path refuses to reconstruct. The same advisory fires on
 [`mnemonic import-wallet`](#mnemonic-import-wallet) (the other surface that
 engraves an `md1` from a descriptor).
 
+This list is about **keyed wallet-policy `md1` cards**. A **keyless
+multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`) is a
+different artifact: it carries no keys by design and **is restorable** —
+you complete it by re-supplying the keys (see [Multisig template
+completion](#multisig-template-completion)). Only `tr(sortedmulti_a)` and
+hardened use-sites are refused as templates (they are refused at *emit*
+time, so no such template card exists to restore).
+
 ### Synopsis
 
 ```sh
@@ -101,7 +109,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index (default 0) |
-| `--md1-form <policy\|template>` | (#28) what the `md1` card encodes (default `policy`). `policy` = the full keyed wallet-policy `md1` (pre-#28; identifies **this** wallet). `template` = a **keyless**, fingerprint-stripped, canonical-origin-elided single-sig template `md1` — a backup of the wallet **type**, byte-identical across all users of that type ("one engraving for thousands"); the account/origin is supplied at restore and the specific wallet is identified out-of-band by the `WalletPolicyId` printed on **stderr**. REQUIRES a canonical single-sig shape (`bip44` / `bip84` / `bip86`); multisig, non-canonical, and `bip49` (nested-segwit) are refused (use `--md1-form=policy`). See [Template-only md1](#template-only-md1) |
+| `--md1-form <policy\|template>` | (#28) what the `md1` card encodes (default `policy`). `policy` = the full keyed wallet-policy `md1` (pre-#28; identifies **this** wallet). `template` = a **keyless**, fingerprint-stripped, origin-conditional template `md1` — a backup of the wallet **type**, byte-identical (for a canonical type) across all users of that type ("one engraving for thousands"); keys/accounts are supplied at restore and the specific wallet is identified out-of-band by the `WalletPolicyId` printed on **stderr**. **(phase 1, v0.59.0)** canonical single-sig (`bip44` / `bip84` / `bip86`). **(phase 2, v0.60.0)** ALSO multisig (`wsh(multi/sortedmulti)`, `sh(wsh)`), general / thresh policies, and `tr(NUMS, multi_a)` — emitting one keyless template `md1` + N keyless cosigner `mk1` stubs with a loud key-ordering warning. Still refused: `tr(sortedmulti_a)`, hardened use-sites, and `bip49` (nested-segwit) — use `--md1-form=policy`. See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (default 5). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
@@ -171,9 +179,83 @@ completed wallet and refuses loudly on mismatch (exit 4); it is **not**
 checked when `--origin` is supplied (the explicit-origin id is a
 different preimage from the canonical-account one).
 
-Template form **requires a canonical single-sig shape** (`bip44` /
-`bip84` / `bip86`); multisig, non-canonical, and `bip49` (nested-segwit)
-templates are refused — use `--md1-form=policy` for those.
+The single-sig template form covers the canonical shapes `bip44` /
+`bip84` / `bip86`; `bip49` (nested-segwit) and non-canonical single-sig
+are refused — use `--md1-form=policy` for those. **Multisig and general
+policies** have their own template form (phase 2, v0.60.0) — see
+[Multisig template completion](#multisig-template-completion) below.
+
+### Multisig template completion {#multisig-template-completion}
+
+**(#28 phase 2, v0.60.0.)** `--md1-form=template` also admits **multisig**
+(`wsh(multi/sortedmulti)`, `sh(wsh)`), **general / thresh** policies, and
+**`tr(NUMS, multi_a)`**. Such a bundle emits ONE keyless template `md1`
+(the shared policy, keys stripped) plus **N keyless cosigner `mk1` stub
+cards** — a reusable "engraving of the wallet *type*". `tr(sortedmulti_a)`
+and hardened use-sites are refused (use `--md1-form=policy`).
+
+Because a `multi()` descriptor is **order-sensitive** — N keys can be
+assigned to the N slots N! ways and only one assignment is the wallet you
+funded — `bundle` prints a **loud key-ordering warning** plus the
+order-sensitive **`WalletPolicyId`** (the completion checksum) on
+**stderr** at emit time. (For order-independent `sortedmulti` the warning
+is softened — slot order does not change the wallet.) Record the
+`WalletPolicyId` out-of-band; it (or a known address) is what lets restore
+pick the correct assignment.
+
+**Completion** re-supplies the keys and lets a parallel permutation-search
+engine place them. Provide:
+
+- your **OWN seed** via `--from <seed>` and the account(s) it is used at
+  via `--account <list>` (one own key per account — e.g. `--account 0,1,2,3`
+  for four own slots);
+- each **cosigner key** via a `--cosigner <mk1>` card — unassigned
+  (search-placed) or explicit (`--cosigner @N=<mk1|xpub>`).
+
+The engine then resolves the unique key→slot assignment via one of three
+**completion modes**:
+
+1. **id-search** — `--expect-wallet-id <prefix>` (a **strong** prefix
+   sized to the realized search space) recomputes the `WalletPolicyId` for
+   each candidate assignment and keeps the unique match.
+2. **address-search** — `--search-address <addr>` (collision-free,
+   recommended) matches a known receive/change scriptPubKey across the
+   `--search-addr-min`..`--search-addr-max` index range on the
+   `--search-chain` branch(es) (`receive` (default) / `change` / `both`).
+3. **explicit assignment** — pin every cosigner with `--cosigner @N=` (no
+   search).
+
+The engine carries an adaptive **~1-hour search-time ceiling**; if the
+realized space would exceed it the tool refuses with a printed exhaustive-
+time estimate. Override with **`--accept-search-time <duration>`** (a
+humantime duration that must be ≥ the estimate — a forced acknowledgment).
+
+**Funds-safety floors (all refuse loudly — never a silent wrong wallet):**
+distinct-keys (no slot may collide), every-slot-supplied (own + cosigner
+keys must fill all N slots), a strong `--expect-wallet-id` prefix, and an
+**ambiguity / no-match** refusal (≥2 assignments match, or none does).
+Per-slot origins are **built fresh** from the supplied keys — the origin
+carried in the template card is never loaded for derivation.
+
+`--own-account-max` (a range fallback for unknown own accounts) is
+**reserved/refused this cycle** — the own-account subset-search is deferred
+(FOLLOWUP `template-multisig-own-account-range-subset-search`); use the
+exact `--account <N[,N,…]>` list.
+
+The same completion intake is available on
+[`verify-bundle`](#mnemonic-verify-bundle) (`--from` / `--cosigner` /
+`--search-address` + range + `--search-chain` / `--accept-search-time`),
+which verifies the card↔template-id binding and recomposes the wallet via
+the same engine.
+
+```sh
+# 2-of-3 wsh(multi) template: own key at account 0, two cosigner stubs,
+# id-search against the WalletPolicyId printed by `bundle --md1-form=template`:
+mnemonic restore --md1 <template-md1> \
+    --from phrase=- --account 0 \
+    --cosigner <cosigner-mk1-A> --cosigner <cosigner-mk1-B> \
+    --expect-wallet-id <id-from-stderr>
+```
 
 ### Non-canonical descriptor mode
 
@@ -593,6 +675,13 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--account <ACCOUNT>` | BIP-32 account index |
 | `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for verifying + recomposing a **keyless single-sig template** bundle (`bundle --md1-form=template`); overrides the canonical `m/<purpose>'/<coin>'/<account>'` default, mirroring [`restore --origin`](#mnemonic-restore). Only meaningful for a keyless single-sig template bundle; ignored otherwise. See [Template-only md1](#template-only-md1) |
 | `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for a keyless single-sig template bundle. When set, verify-bundle recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4). Only meaningful for a template bundle; ignored otherwise. **NOT** checked when `--origin` overrides the canonical account path (a different preimage). See [Template-only md1](#template-only-md1) |
+| `--from <FROM>` | (#28 phase 2) the operator's OWN seed for completing a keyless **multisig / general** TEMPLATE bundle (`bundle --md1-form=template`, n≥2). Same grammar + semantics as [`restore --from`](#mnemonic-restore) (`ms1=` / `phrase=` / `entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a multisig template; ignored for a single-sig template or keyed wallet-policy bundle. The own key is derived at `--account` (a single own account for verify) honoring `--origin`. See [Multisig template completion](#multisig-template-completion) |
+| `--cosigner <COSIGNER>` | (#28 phase 2) an UNASSIGNED cosigner key (`mk1` / xpub) for completing a keyless multisig / general TEMPLATE bundle; repeat per cosigner card. Same grammar + semantics as [`restore --cosigner`](#mnemonic-restore): the bare form is search-placed, `@N=<mk1\|xpub>` assigns it explicitly. Only meaningful with `--from` + a keyless multisig template. Distinct from `--mk1` (the engraved STUB cards the binding check validates) |
+| `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion (mirrors [`restore --search-address`](#mnemonic-restore)). Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free) |
+| `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0; mirrors `restore`) |
+| `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20; mirrors `restore`) |
+| `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, default), `change` (chain 1), or `both` (mirrors `restore`) |
+| `--accept-search-time <ACCEPT_SEARCH_TIME>` | (#28 phase 2) override the adaptive ~1-hour search-time ceiling for a multisig-template completion (mirrors [`restore --accept-search-time`](#mnemonic-restore)). Must be ≥ the printed exhaustive-time estimate (a forced acknowledgment). Humantime duration (e.g. `2h`, `90min`) |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card |
@@ -811,9 +900,11 @@ multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) **general
 NUMS-taproot policies** with a single script leaf or a depth-1 two-leaf tap
 tree, and (v0.55.3) **non-NUMS key-path taproot** — a real cosigner key at
 the trunk — for general single-leaf/depth-1 policies and distinct-trunk
-multisig. Still refused (exit 2): the `@-in-both` shape (the trunk key is
-*also* a leaf key), a depth-≥2 tap tree, and a template-only `md1` (no
-concrete keys).
+multisig. A **keyless multisig / general TEMPLATE `md1`** (no concrete
+keys) is *not* a refusal — it is **completed** by re-supplying the keys
+(see [Multisig template completion](#multisig-template-completion)). Still
+refused (exit 2): the `@-in-both` shape (the trunk key is *also* a leaf
+key) and a depth-≥2 tap tree.
 
 ### Synopsis
 
@@ -834,16 +925,22 @@ channels that keep the seed off the argv.
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore; OPTIONAL in multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) |
-| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies up to a depth-1 two-leaf tap tree, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general single-leaf/depth-1 + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key), a depth-≥2 tap tree, or a template-only `md1` is refused (exit 2). Watch-only (non-secret) |
-| `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. Watch-only (non-secret) |
+| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots). See [Multisig template completion](#multisig-template-completion) |
+| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies up to a depth-1 two-leaf tap tree, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general single-leaf/depth-1 + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a depth-≥2 tap tree is refused (exit 2). Watch-only (non-secret) |
+| `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
-| `--account <ACCOUNT>` | BIP-32 account index (default 0) |
+| `--account <ACCOUNT>` | BIP-32 account index(es) (default 0). Single-sig restore + single-sig template completion: one account (the first value). **(#28 phase 2) MULTISIG template completion**: the comma-separated LIST of accounts the OWN seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a 4-own-slot policy); the search places each own-derived key. See [Multisig template completion](#multisig-template-completion) |
 | `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
-| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion. Restore recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) |
+| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
+| `--own-account-max <OWN_ACCOUNT_MAX>` | (#28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown. **NOT SUPPORTED YET** — the subset-search engine is deferred (FOLLOWUP `template-multisig-own-account-range-subset-search`); passing this flag **refuses** with a pointer to `--account <N[,N,…]>` (the exact-account path) |
+| `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion — the search finds the unique key→slot assignment whose scriptPubKey at some `(chain, index)` in the range equals this address's. Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free). See [Multisig template completion](#multisig-template-completion) |
+| `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0) |
+| `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20). Deepen (`0..20`, then `20..40`, …) if the target is not found; a narrow range expresses "I know the index" |
+| `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, the **default**), `change` (chain 1), or `both` (doubles the per-index search cost) |
+| `--accept-search-time <ACCEPT_SEARCH_TIME>` | (#28 phase 2) override the adaptive ~1-hour search-time ceiling for a multisig-template completion. Must be ≥ the tool's printed estimated exhaustive time (a forced acknowledgment). Accepts a humantime duration (e.g. `2h`, `90min`) |
 | `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
 | `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
 | `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`); mismatch → exit 4 (unless `--allow-mismatch`) |
@@ -1093,8 +1190,10 @@ general single-leaf/depth-1 policies and distinct-trunk multisig. The
 `@-in-both` shape (the trunk key is *also* a leaf key) is refused (exit 2,
 citing `restore-non-nums-tr-internal-key-also-in-leaf`), as are a depth-≥2
 (≥3-leaf) tap tree and a `sortedmulti_a` leaf inside a multi-leaf tree (both
-exit 2, each citing its tracking slug); a template-only `md1` (no concrete
-keys — never emitted by the toolkit) is refused. A non-NUMS **general** tr
+exit 2, each citing its tracking slug). A **keyless multisig / general
+TEMPLATE `md1`** (no concrete keys, `bundle --md1-form=template`) is
+**completed** rather than refused — see [Multisig template
+completion](#multisig-template-completion). A non-NUMS **general** tr
 emits `descriptor` / `bitcoin-core` only (`bip388` / `green` refused), while a
 non-NUMS distinct-trunk **multisig** also emits `bip388`. `--template` and
 `--expect-xpub` are single-sig only.
