@@ -186,7 +186,12 @@ fn emit_template_wallet_id(script: &str, threshold: &str, cosigners: &[(&str, u3
 
 /// Emit a single cosigner mk1 card (multisig policy form) at the canonical
 /// origin so the completion can read its REAL origin path.
-fn emit_cosigner_mk1(script: &str, threshold: &str, cosigners: &[(&str, u32)], which: usize) -> Vec<String> {
+fn emit_cosigner_mk1(
+    script: &str,
+    threshold: &str,
+    cosigners: &[(&str, u32)],
+    which: usize,
+) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "bundle".into(),
         "--network".into(),
@@ -251,11 +256,7 @@ fn golden_addresses(
     };
     let desc = Descriptor::<DescriptorPublicKey>::from_str(&desc_str)
         .unwrap_or_else(|e| panic!("golden descriptor parse {desc_str}: {e}"));
-    let receive = desc
-        .clone()
-        .into_single_descriptors()
-        .unwrap()
-        .remove(0);
+    let receive = desc.clone().into_single_descriptors().unwrap().remove(0);
     (0..count)
         .map(|i| {
             receive
@@ -302,11 +303,7 @@ fn wsh_sortedmulti_id_search_completes_to_golden() {
     let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
     let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
 
-    let mut args = vec![
-        "restore".into(),
-        "--network".into(),
-        "mainnet".into(),
-    ];
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
     push_md1(&mut args, &md1);
     args.extend([
         "--from".into(),
@@ -326,7 +323,10 @@ fn wsh_sortedmulti_id_search_completes_to_golden() {
     }
     let got = restore_addresses(&args);
     let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 3);
-    assert_eq!(got, golden, "id-search completion must match the independent golden");
+    assert_eq!(
+        got, golden,
+        "id-search completion must match the independent golden"
+    );
 }
 
 #[test]
@@ -358,7 +358,10 @@ fn wsh_multi_id_search_order_dependent_completes_to_golden() {
     }
     let got = restore_addresses(&args);
     let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
-    assert_eq!(got, golden, "wsh-multi id-search must match the golden in the resolved order");
+    assert_eq!(
+        got, golden,
+        "wsh-multi id-search must match the golden in the resolved order"
+    );
 }
 
 #[test]
@@ -387,7 +390,10 @@ fn sh_wsh_multi_id_search_completes_to_golden() {
     }
     let got = restore_addresses(&args);
     let golden = golden_addresses("sh-wsh-multi", 2, cos, false, 2);
-    assert_eq!(got, golden, "sh(wsh(multi)) id-search must match the golden");
+    assert_eq!(
+        got, golden,
+        "sh(wsh(multi)) id-search must match the golden"
+    );
 }
 
 // ===========================================================================
@@ -420,7 +426,10 @@ fn wsh_sortedmulti_address_search_completes_to_golden() {
         args.push(c.clone());
     }
     let got = restore_addresses(&args);
-    assert_eq!(got, golden, "address-search completion must match the independent golden");
+    assert_eq!(
+        got, golden,
+        "address-search completion must match the independent golden"
+    );
 }
 
 #[test]
@@ -449,7 +458,10 @@ fn wsh_multi_address_search_finds_nonzero_index() {
         args.push(c.clone());
     }
     let got = restore_addresses(&args);
-    assert_eq!(got, golden, "a non-zero-index target must resolve the assignment");
+    assert_eq!(
+        got, golden,
+        "a non-zero-index target must resolve the assignment"
+    );
 }
 
 // ===========================================================================
@@ -606,7 +618,8 @@ fn floor_weak_id_prefix_refuses() {
     let assert = mnemonic().args(&args).assert().failure();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.to_lowercase().contains("prefix") || stderr.to_lowercase().contains("weak")
+        stderr.to_lowercase().contains("prefix")
+            || stderr.to_lowercase().contains("weak")
             || stderr.to_lowercase().contains("bytes"),
         "a too-weak id prefix must be named: {stderr}"
     );
@@ -642,7 +655,10 @@ fn multi_account_own_resolves_both_slots() {
     ]);
     // No --cosigner: both slots are OWN (the seed at accounts 0 and 1).
     let got = restore_addresses(&args);
-    assert_eq!(got, golden, "multi-account own (--account 0,1) must resolve both own slots");
+    assert_eq!(
+        got, golden,
+        "multi-account own (--account 0,1) must resolve both own slots"
+    );
 }
 
 // ===========================================================================
@@ -730,7 +746,9 @@ fn pool_larger_than_slots_refuses_with_actionable_message() {
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     let low = stderr.to_lowercase();
     assert!(
-        low.contains("--account") || low.contains("more keys") || low.contains("over-supply")
+        low.contains("--account")
+            || low.contains("more keys")
+            || low.contains("over-supply")
             || low.contains("exactly"),
         "the over-supply refusal must be actionable: {stderr}"
     );
@@ -772,7 +790,11 @@ fn emit_template_wallet_id_bip87(threshold: &str, cosigners: &[(&str, u32)]) -> 
 }
 
 /// Emit a single cosigner mk1 card (policy form) at the BIP-87 family.
-fn emit_cosigner_mk1_bip87(threshold: &str, cosigners: &[(&str, u32)], which: usize) -> Vec<String> {
+fn emit_cosigner_mk1_bip87(
+    threshold: &str,
+    cosigners: &[(&str, u32)],
+    which: usize,
+) -> Vec<String> {
     let args = bundle_bip87_arg_vec("policy", threshold, cosigners);
     let out = mnemonic().args(&args).assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
@@ -949,10 +971,22 @@ fn carried_origin_never_loaded_into_completion() {
     let mut tampered = md_codec::chunk::reassemble(&md1_refs).expect("template decodes");
     let wrong = OriginPath {
         components: vec![
-            PathComponent { hardened: true, value: 99 },
-            PathComponent { hardened: true, value: 0 },
-            PathComponent { hardened: true, value: 0 },
-            PathComponent { hardened: true, value: 2 },
+            PathComponent {
+                hardened: true,
+                value: 99,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: 2,
+            },
         ],
     };
     tampered.path_decl = PathDecl {
@@ -1040,7 +1074,10 @@ fn explicit_assignment_mode_completes_and_warns() {
         .map(|a| a.as_str().unwrap().to_string())
         .collect();
     // sortedmulti is order-independent → explicit @1=B / @0=A reproduces golden.
-    assert_eq!(got, golden, "explicit mode (sortedmulti) reproduces the golden");
+    assert_eq!(
+        got, golden,
+        "explicit mode (sortedmulti) reproduces the golden"
+    );
 }
 
 #[test]
@@ -1076,5 +1113,431 @@ fn singlesig_template_completion_unchanged() {
     ]);
     // single-sig completion must succeed and yield a bc1q address.
     let addrs = restore_addresses(&args);
-    assert!(addrs[0].starts_with("bc1q"), "single-sig bip84 → bech32 addr: {addrs:?}");
+    assert!(
+        addrs[0].starts_with("bc1q"),
+        "single-sig bip84 → bech32 addr: {addrs:?}"
+    );
+}
+
+// ===========================================================================
+// P3b — GENERAL / thresh policy completion (non-canonical origins).
+//
+// P3a covered CANONICAL multisig (wsh(multi/sortedmulti), sh(wsh) — where
+// `canonical_origin(tree).is_some()`). P3b extends `restore --md1` completion to
+// GENERAL/thresh policies (`canonical_origin(tree).is_none()`), e.g. a
+// `wsh(or_i(...))` policy where the keys play DISTINCT spending roles and the
+// per-@N origins are non-canonical (here BIP-84 `m/84'/0'/N'` — NOT the BIP-48
+// that `canonical_origin` would force).
+//
+// The chosen shape is GENERAL + ORDER-DEPENDENT + DIVERGENT:
+//   wsh(or_i(pk(@0), and_v(v:pk(@1), pk(@2))))
+//   @0 = SEED_A at m/84'/0'/0'   (own — single-key OR branch)
+//   @1 = SEED_B at m/84'/0'/1'   (cosigner — AND branch)
+//   @2 = SEED_C at m/84'/0'/2'   (cosigner — AND branch)
+// • GENERAL: the `or_i` combinator → `canonical_origin(tree)` is None (pinned
+//   below) → falls through to `run_multisig` (which REFUSES) before P3b.
+// • ORDER-DEPENDENT: @0 (alone-spends OR branch) vs @1/@2 (jointly-spend AND
+//   branch) are DIFFERENT spending roles — a wrong assignment is a different
+//   wallet (not order-independent like sortedmulti).
+// • DIVERGENT: three DISTINCT per-@N BIP-84 origins (accounts 0,1,2) → the
+//   built `path_decl` is `PathDeclPaths::Divergent` (the C1 general case).
+// 3 keys → 3! = 6 permutations (a fast shape).
+//
+// The template + per-cosigner mk1s are emitted via `bundle --md1-form=
+// template|policy --descriptor <full general descriptor>` (NOT `--template`,
+// which is canonical-only). The independent golden is built directly from the
+// SAME descriptor string via rust-miniscript (NOT an md-codec reconstruction).
+// ===========================================================================
+
+/// The own key (@0) BIP-84 origin string (no leading `m/`), e.g. `84'/0'/0'`.
+fn bip84_origin(account: u32) -> String {
+    format!("84'/0'/{account}'")
+}
+
+/// Build the general-policy descriptor string for the P3b shape from controlled
+/// BIP-84 seeds. `slots[i] = (phrase, account)` → key `@i` at `m/84'/0'/account'`.
+/// Shape: `wsh(or_i(pk(@0), and_v(v:pk(@1), pk(@2))))`.
+fn general_desc(slots: &[(&str, u32)]) -> String {
+    assert_eq!(slots.len(), 3, "the P3b general shape has exactly 3 keys");
+    let mut keys: Vec<String> = Vec::new();
+    for (phrase, account) in slots {
+        let path = bip84_origin(*account);
+        let (xpub, fp) = xpub_at(phrase, &path);
+        let origin = path.replace('\'', "h");
+        keys.push(format!("[{fp}/{origin}]{xpub}/<0;1>/*"));
+    }
+    format!(
+        "wsh(or_i(pk({}),and_v(v:pk({}),pk({}))))",
+        keys[0], keys[1], keys[2]
+    )
+}
+
+/// Emit the keyless general-policy template md1 via `bundle --md1-form=template
+/// --descriptor`. Returns the md1 chunk(s).
+fn emit_general_template_md1(desc: &str) -> Vec<String> {
+    let out = mnemonic()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--md1-form",
+            "template",
+            "--group-size",
+            "0",
+            "--no-engraving-card",
+            "--descriptor",
+            desc,
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    md1_lines(&stdout)
+}
+
+/// The printed WalletPolicyId (full hex) the general-policy template emit records.
+fn emit_general_template_wallet_id(desc: &str) -> String {
+    let out = mnemonic()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--md1-form",
+            "template",
+            "--group-size",
+            "0",
+            "--no-engraving-card",
+            "--descriptor",
+            desc,
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let line = stderr
+        .lines()
+        .find(|l| l.contains("wallet-id (hex)"))
+        .unwrap_or_else(|| panic!("no wallet-id (hex) line in: {stderr}"));
+    line.split(':').next_back().unwrap().trim().to_string()
+}
+
+/// Emit one per-cosigner mk1 card (general-policy `--md1-form=policy`) at slot
+/// `which` so the completion reads its REAL BIP-84 origin path.
+fn emit_general_cosigner_mk1(desc: &str, which: usize) -> Vec<String> {
+    let out = mnemonic()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--md1-form",
+            "policy",
+            "--group-size",
+            "0",
+            "--no-engraving-card",
+            "--descriptor",
+            desc,
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let groups = mk1_groups(&stdout);
+    groups
+        .get(which)
+        .unwrap_or_else(|| panic!("no mk1 group {which} in: {stdout}"))
+        .clone()
+}
+
+/// INDEPENDENT golden for the general-policy shape: parse the SAME descriptor
+/// string with rust-miniscript directly (NOT md-codec reconstruction) and derive
+/// the first `count` receive addresses.
+fn general_golden_addresses(desc: &str, count: u32) -> Vec<String> {
+    let parsed = Descriptor::<DescriptorPublicKey>::from_str(desc)
+        .unwrap_or_else(|e| panic!("golden general descriptor parse {desc}: {e}"));
+    let receive = parsed.into_single_descriptors().unwrap().remove(0);
+    (0..count)
+        .map(|i| {
+            receive
+                .derive_at_index(i)
+                .unwrap()
+                .address(bitcoin::Network::Bitcoin)
+                .unwrap()
+                .to_string()
+        })
+        .collect()
+}
+
+/// The default P3b general wallet: A@0 / B@1 / C@2 at BIP-84.
+fn p3b_slots() -> Vec<(&'static str, u32)> {
+    vec![(SEED_A, 0u32), (SEED_B, 1u32), (SEED_C, 2u32)]
+}
+
+/// Push the @1 (B) and @2 (C) cosigner mk1s (unassigned) onto the restore args.
+fn push_general_cosigners(args: &mut Vec<String>, desc: &str) {
+    for which in [1usize, 2usize] {
+        for c in &emit_general_cosigner_mk1(desc, which) {
+            args.push("--cosigner".into());
+            args.push(c.clone());
+        }
+    }
+}
+
+#[test]
+fn general_policy_id_search_completes_to_golden() {
+    // The headline gate: a general (or_i, order-dependent, divergent-origin)
+    // template completes via id-search to the INDEPENDENT rust-miniscript golden.
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    // Sanity: the shape really IS general (non-canonical) + keyless.
+    let md1 = emit_general_template_md1(&desc);
+    let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let decoded = md_codec::chunk::reassemble(&md1_refs).expect("general template decodes");
+    assert!(
+        md_codec::canonical_origin::canonical_origin(&decoded.tree).is_none(),
+        "the P3b shape MUST be non-canonical (general) — else it is a P3a case"
+    );
+    assert!(!decoded.is_wallet_policy(), "the template md1 is keyless");
+    assert_eq!(decoded.n, 3, "3 distinct @N slots");
+
+    let id = emit_general_template_wallet_id(&desc);
+    let golden = general_golden_addresses(&desc, 3);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    push_general_cosigners(&mut args, &desc);
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "general-policy id-search completion must match the independent golden"
+    );
+}
+
+#[test]
+fn general_policy_address_search_completes_to_golden() {
+    // Same general shape, completed via address-search instead of id-search.
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let golden = general_golden_addresses(&desc, 3);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    push_general_cosigners(&mut args, &desc);
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "general-policy address-search completion must match the independent golden"
+    );
+}
+
+#[test]
+fn general_policy_carried_origin_never_loaded() {
+    // C1 for a DIVERGENT general template: the carried per-@N `path_decl` is
+    // NEVER loaded into completion. Tamper the carried origins to deliberately
+    // WRONG, non-canonical paths (m/99'/0'/N'); the completion must STILL reach
+    // the SAME golden — proving the per-slot origins are BUILT FRESH from the
+    // supplied keys (own --account / cosigner mk1), not the carried ones.
+    use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
+
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let id = emit_general_template_wallet_id(&desc);
+    let golden = general_golden_addresses(&desc, 2);
+
+    // Decode, then TAMPER the carried Divergent path_decl to wrong origins.
+    let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let mut tampered = md_codec::chunk::reassemble(&md1_refs).expect("general template decodes");
+    assert!(
+        md_codec::canonical_origin::canonical_origin(&tampered.tree).is_none(),
+        "tamper target must be a general (non-canonical) template"
+    );
+    let wrong = |acct: u32| OriginPath {
+        components: vec![
+            PathComponent {
+                hardened: true,
+                value: 99,
+            },
+            PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            PathComponent {
+                hardened: true,
+                value: acct,
+            },
+        ],
+    };
+    tampered.path_decl = PathDecl {
+        n: 3,
+        paths: PathDeclPaths::Divergent(vec![wrong(0), wrong(1), wrong(2)]),
+    };
+    let tampered_md1 =
+        md_codec::chunk::split(&tampered).expect("tampered general template re-encodes");
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &tampered_md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    push_general_cosigners(&mut args, &desc);
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "the WRONG carried origin must NOT reach completion — fresh per-slot origins reproduce the wallet"
+    );
+}
+
+#[test]
+fn general_policy_wrong_family_no_match() {
+    // Anti-vacuity (I-A): the own BIP-84 origin is LOAD-BEARING. The own key (@0)
+    // belongs at m/84'/0'/0'. If the operator forces a WRONG own family via
+    // --origin (here BIP-48 m/48'/0'/0'/2' — what compute_default_origin_path /
+    // canonical_origin would yield), the own key derives at the wrong path, so NO
+    // permutation of the supplied keys reproduces the recorded id → REFUSE.
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let id = emit_general_template_wallet_id(&desc);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--origin".into(),
+        "m/48'/0'/0'/2'".into(), // WRONG family (BIP-48, not the wallet's BIP-84)
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    push_general_cosigners(&mut args, &desc);
+    // A wrong own family cannot reproduce the wallet → no-match → refuse.
+    // Non-vacuity: the refusal must come from the SEARCH (NO MATCH), NOT the
+    // pre-P3b "template-only" routing refusal that rejects every general md1.
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.to_lowercase().contains("template-only"),
+        "the wrong-family refusal must be a genuine search NO-MATCH (proving the \
+         general template was ROUTED to completion + the BIP-84 own origin is \
+         load-bearing), not the pre-P3b template-only routing refusal: {stderr}"
+    );
+}
+
+// --- P3b floors (general shape) --------------------------------------------
+
+#[test]
+fn general_policy_floor_no_from_refuses() {
+    // Floor 1(i): a no-seed general template completion refuses, naming --from.
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    // no --from
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--from"),
+        "no-seed general template completion must name --from: {stderr}"
+    );
+}
+
+#[test]
+fn general_policy_floor_unsupplied_slot_refuses() {
+    // Floor 1(ii): only the own seed + ONE cosigner supplied for a 3-slot general
+    // wallet → the 3rd slot has no key → refuse (cannot complete).
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let id = emit_general_template_wallet_id(&desc);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    // supply ONLY @1 (B); leave @2 (C) unsupplied.
+    for c in &emit_general_cosigner_mk1(&desc, 1) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    // Non-vacuity: the refusal must be the every-slot floor (not-enough-keys),
+    // NOT the pre-P3b "template-only" routing refusal.
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.to_lowercase().contains("template-only"),
+        "the unsupplied-slot refusal must be the every-slot floor (general template \
+         ROUTED to completion), not the pre-P3b template-only routing refusal: {stderr}"
+    );
+}
+
+#[test]
+fn general_policy_floor_duplicate_cosigner_key_refuses() {
+    // Floor 2: supplying the SAME cosigner mk1 for both cosigner slots collides
+    // on key → the duplicate-key floor must reject before the search.
+    let slots = p3b_slots();
+    let desc = general_desc(&slots);
+    let md1 = emit_general_template_md1(&desc);
+    let id = emit_general_template_wallet_id(&desc);
+    let mk1_b = emit_general_cosigner_mk1(&desc, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    // supply cosigner B TWICE (byte-identical key) for the two cosigner slots.
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("duplicate") || stderr.to_lowercase().contains("identical"),
+        "duplicate cosigner keys must be named: {stderr}"
+    );
 }

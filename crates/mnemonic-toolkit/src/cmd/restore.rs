@@ -289,19 +289,28 @@ pub fn run<R: Read, W: Write, E: Write>(
             if is_singlesig_template {
                 return run_singlesig_template_completion(&d, args, stdin, stdout, stderr);
             }
-            // (3) #28 phase 2 (P3a) — a KEYLESS CANONICAL MULTISIG TEMPLATE md1
-            //     (`--md1-form=template`, n≥2, `canonical_origin().is_some()` —
-            //     `wsh(multi/sortedmulti)`, `sh(wsh(...))`). The template carries
-            //     the tree + use-site but NO keys; the operator's seed (`--from`)
-            //     + externally-supplied cosigner `mk1`s complete a concrete
+            // (3) #28 phase 2 — a KEYLESS MULTISIG/GENERAL TEMPLATE md1
+            //     (`--md1-form=template`, n≥2). The template carries the tree +
+            //     use-site but NO keys; the operator's seed (`--from`) +
+            //     externally-supplied cosigner `mk1`s complete a concrete
             //     watch-only wallet via the permutation-search engine. WITHOUT
             //     `--from` this still routes here and refuses (floor 1(i)),
-            //     naming `--from`. (General/thresh non-canonical origins are P3b;
-            //     they fall through to run_multisig today, which refuses them.)
-            let is_canonical_multisig_template = !d.is_wallet_policy()
-                && d.n >= 2
-                && md_codec::canonical_origin::canonical_origin(&d.tree).is_some();
-            if is_canonical_multisig_template {
+            //     naming `--from`.
+            //     - P3a: CANONICAL multisig (`canonical_origin().is_some()` —
+            //       `wsh(multi/sortedmulti)`, `sh(wsh(...))`).
+            //     - P3b: GENERAL/thresh policies (`canonical_origin().is_none()`
+            //       — `wsh(or_i(...))`/timelocks/hashlocks, e.g. degrade2). The
+            //       per-slot `path_decl` is built FRESH from the supplied keys'
+            //       origins (NEVER the carried one — the C1 invariant), so the
+            //       same tree-agnostic completion path handles both. The own
+            //       origin honors the ACTUAL purpose (BIP-84 for degrade2), so a
+            //       general template with cosigner mk1s never needs the canonical
+            //       (BIP-48) fallback.
+            //     A KEYED wallet-policy md1 has `is_wallet_policy()==true` → it
+            //     falls through to `run_multisig` below (the full-policy path),
+            //     which is correct.
+            let is_multisig_template = !d.is_wallet_policy() && d.n >= 2;
+            if is_multisig_template {
                 return run_multisig_template_completion(&d, args, stdin, stdout, stderr);
             }
         }
@@ -1110,9 +1119,10 @@ fn script_pubkey_at(
     index: u32,
 ) -> Result<Vec<u8>, ToolkitError> {
     let branch = if desc.is_multipath() {
-        let parts = desc.clone().into_single_descriptors().map_err(|e| {
-            bad(format!("address-search: multipath split failed: {e}"))
-        })?;
+        let parts = desc
+            .clone()
+            .into_single_descriptors()
+            .map_err(|e| bad(format!("address-search: multipath split failed: {e}")))?;
         parts
             .get(chain as usize)
             .cloned()
@@ -1221,7 +1231,11 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     }
     if let Some(pp) = args.passphrase.as_deref() {
         if !pp.starts_with("@env:") {
-            crate::secret_advisory::secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
+            crate::secret_advisory::secret_in_argv_warning(
+                stderr,
+                "--passphrase",
+                "--passphrase-stdin",
+            );
         }
     }
 
@@ -1260,7 +1274,9 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     for spec in &args.cosigner {
         if spec.starts_with('@') {
             let (lhs, rhs) = spec.split_once('=').ok_or_else(|| {
-                bad(format!("--cosigner @N= expects `@N=<mk1|xpub>`, got `{spec}`"))
+                bad(format!(
+                    "--cosigner @N= expects `@N=<mk1|xpub>`, got `{spec}`"
+                ))
             })?;
             let nn: u8 = lhs
                 .trim_start_matches('@')
@@ -1337,12 +1353,24 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         None => None,
     };
 
-    // The canonical-origin fallback (BIP-48 for canonical multisig) when no
-    // cosigner family is available (all-own multi-account) and no --origin.
-    let canonical_fallback: DerivationPath = {
-        let op = md_codec::canonical_origin::canonical_origin(&d.tree)
-            .ok_or_else(|| bad("multisig template tree is not canonical-origin (P3b)"))?;
-        origin_path_to_derivation_path(&op)?
+    // The canonical-origin fallback (BIP-48 for canonical multisig) — used ONLY
+    // in the all-own, no-`--origin`, no-cosigner-family case below. Computed
+    // LAZILY: a GENERAL/thresh template (`canonical_origin().is_none()`, e.g.
+    // degrade2) has no canonical origin, so an eager compute would error out
+    // before checking whether `--origin`/a cosigner family already pins the own
+    // origin. For the normal general case (cosigners present → `cosigner_family`
+    // is `Some`) this closure is NEVER reached; when it IS reached for a general
+    // template (all-own, no `--origin`, no cosigners) it yields a clear,
+    // actionable error naming `--origin`.
+    let canonical_fallback = || -> Result<DerivationPath, ToolkitError> {
+        let op = md_codec::canonical_origin::canonical_origin(&d.tree).ok_or_else(|| {
+            bad(
+                "general-policy template: cannot infer the own origin family (no canonical \
+                 origin, no cosigner mk1, and no --origin). Pass --origin \
+                 m/<purpose>'/<coin>'/<account>' for each own key.",
+            )
+        })?;
+        origin_path_to_derivation_path(&op)
     };
 
     // The own accounts: the `--account` LIST. (The `--own-account-max` range is
@@ -1369,16 +1397,22 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     let mut own_keys: Vec<CandidateKey> = Vec::new();
     for &acct in &own_accounts {
         // The own origin: --origin override → the cosigner family with the
-        // account substituted → the canonical (BIP-48) fallback.
+        // account substituted → the canonical (BIP-48) fallback. The fallback
+        // is resolved LAZILY (only here, and only when neither --origin nor a
+        // cosigner family pins the own origin) so a general template with
+        // cosigners never trips the "not canonical-origin" error.
         let origin = if let Some(o) = &explicit_own_origin {
             o.clone()
         } else if let Some(fam) = &cosigner_family {
-            own_origin_from_family(fam, acct).unwrap_or_else(|| canonical_fallback.clone())
+            match own_origin_from_family(fam, acct) {
+                Some(o) => o,
+                None => canonical_fallback()?,
+            }
         } else {
             // All-own multi-account, no --origin: substitute the account into
             // the canonical fallback (BIP-48 `m/48'/coin'/acct'/script'`).
-            own_origin_from_family(&canonical_fallback, acct)
-                .unwrap_or_else(|| canonical_fallback.clone())
+            let fb = canonical_fallback()?;
+            own_origin_from_family(&fb, acct).unwrap_or(fb)
         };
         let acct_key = crate::derive_slot::derive_bip32_from_entropy_at_path(
             &entropy,
@@ -1398,7 +1432,13 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // ---- EXPLICIT mode (all `--cosigner @N=`, no search) --------------------
     if any_assigned {
         return complete_explicit_assignment(
-            d, args, network, &own_keys, &assigned_cosigners, stdout, stderr,
+            d,
+            args,
+            network,
+            &own_keys,
+            &assigned_cosigners,
+            stdout,
+            stderr,
         );
     }
 
@@ -1446,7 +1486,11 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // cap are sized to is n! = P(n, n). (When the deferred subset-search lands,
     // this becomes P(pool, n) — see FOLLOWUP
     // `template-multisig-own-account-range-subset-search`.)
-    debug_assert_eq!(pool.len(), n, "the every-slot gate guarantees pool.len() == n");
+    debug_assert_eq!(
+        pool.len(),
+        n,
+        "the every-slot gate guarantees pool.len() == n"
+    );
     let realized_s =
         perm_count_u128(n, n).ok_or_else(|| bad("multisig template: candidate space overflow"))?;
 
@@ -1545,7 +1589,14 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
                 Err(_) => false,
             }
         };
-        run_capped_search(&evaluator, n, ps::SearchMode::Address(range), realized_s, args, stderr)?
+        run_capped_search(
+            &evaluator,
+            n,
+            ps::SearchMode::Address(range),
+            realized_s,
+            args,
+            stderr,
+        )?
     } else {
         // ---- no mode given → refuse (SPEC §2 precedence (d)) ---------------
         return Err(ToolkitError::ModeViolation {
@@ -1588,7 +1639,10 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
 /// — into a `CandidateKey`. mk1 carries the origin (fingerprint + path); a bare
 /// xpub has no origin so it gets an EMPTY origin (the search still verifies via
 /// id/addr; the mk1 is the norm). The fallible inner is `try_decode_cosigner_card`.
-fn decode_cosigner_card(chunks: &[&str], network: CliNetwork) -> Result<CandidateKey, ToolkitError> {
+fn decode_cosigner_card(
+    chunks: &[&str],
+    network: CliNetwork,
+) -> Result<CandidateKey, ToolkitError> {
     let first = chunks.first().copied().unwrap_or("");
     if first.to_lowercase().starts_with("mk1") {
         try_decode_cosigner_card(chunks)
@@ -1637,10 +1691,11 @@ fn parse_search_duration(s: &str) -> Result<std::time::Duration, ToolkitError> {
     } else {
         (s, 1)
     };
-    let n: u64 = num_str
-        .trim()
-        .parse()
-        .map_err(|_| bad(format!("--accept-search-time `{s}`: expected e.g. 90s/30m/2h")))?;
+    let n: u64 = num_str.trim().parse().map_err(|_| {
+        bad(format!(
+            "--accept-search-time `{s}`: expected e.g. 90s/30m/2h"
+        ))
+    })?;
     Ok(std::time::Duration::from_secs(n.saturating_mul(mult)))
 }
 
@@ -1663,15 +1718,15 @@ fn perm_count_u128(pool: usize, n: usize) -> Option<u128> {
 fn map_search_error(e: mnemonic_toolkit::permutation_search::SearchError) -> ToolkitError {
     use mnemonic_toolkit::permutation_search::SearchError as SE;
     match e {
-        SE::DuplicateKeys { .. } | SE::PrefixTooShort { .. } => {
-            ToolkitError::RestoreMismatch {
-                reference: "multisig-template-floor",
-                derived: e.to_string(),
-                expected: "distinct cosigner keys + a strong --expect-wallet-id prefix".to_string(),
-                slot: None,
-            }
+        SE::DuplicateKeys { .. } | SE::PrefixTooShort { .. } => ToolkitError::RestoreMismatch {
+            reference: "multisig-template-floor",
+            derived: e.to_string(),
+            expected: "distinct cosigner keys + a strong --expect-wallet-id prefix".to_string(),
+            slot: None,
+        },
+        SE::SearchTimeExceedsCeiling { .. } | SE::AcceptSearchTimeTooLow { .. } => {
+            bad(e.to_string())
         }
-        SE::SearchTimeExceedsCeiling { .. } | SE::AcceptSearchTimeTooLow { .. } => bad(e.to_string()),
         SE::EmptySearchSpace | SE::SearchSpaceTooLarge { .. } => bad(e.to_string()),
     }
 }
@@ -1843,7 +1898,8 @@ fn emit_completed_multisig<W: Write, E: Write>(
         });
         format!(
             "{}\n",
-            serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
+            serde_json::to_string(&envelope)
+                .map_err(|e| bad(format!("json serialization: {e}")))?
         )
     } else {
         let mut s = String::new();
@@ -1854,7 +1910,9 @@ fn emit_completed_multisig<W: Write, E: Write>(
         }
         s
     };
-    stdout.write_all(stdout_content.as_bytes()).map_err(ToolkitError::Io)?;
+    stdout
+        .write_all(stdout_content.as_bytes())
+        .map_err(ToolkitError::Io)?;
 
     let _ = writeln!(stderr, "✓ wallet-id (completed): {id_hex}");
     if let Some(p) = own_pos {
