@@ -633,31 +633,41 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
     const C0: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-    // P2.3 narrowed the override refusal: non-taproot, non-hardened overrides are
-    // now RESTORABLE (see `divergent_use_site_override_roundtrips_faithfully`).
-    // The shapes that STILL refuse loudly: a hardened wildcard (baseline OR
-    // override), and a TAPROOT root with overrides (deferred).
+    const C2: &str =
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+    // P2.3 narrowed the override refusal: non-taproot non-hardened overrides AND
+    // non-hardened `tr(NUMS, multi_a)` taproot overrides are now RESTORABLE (see
+    // `divergent_use_site_override_roundtrips_faithfully` and
+    // `taproot_nums_multi_a_override_restores_faithfully`). The shapes that STILL
+    // refuse loudly: a hardened wildcard (baseline OR override), and the
+    // UNrestorable taproot override shapes — a `sortedmulti_a` tap leaf, a
+    // hardened taproot override, and a non-NUMS real-trunk key (#26 leg defers
+    // these to FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
     for desc in [
         "wsh(multi(2,@0/*h,@1/*h))",            // hardened wildcard (baseline)
         "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))", // hardened wildcard (override only)
-        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))", // taproot override (deferred)
+        "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))", // taproot sortedmulti_a override (render gap)
+        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))",      // hardened taproot override
+        "tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))",         // non-NUMS real-trunk override (D7)
     ] {
-        let out = bin()
-            .args([
-                "bundle",
-                "--descriptor",
-                desc,
-                "--network",
-                "mainnet",
-                "--slot",
-                &format!("@0.phrase={C0}"),
-                "--slot",
-                &format!("@1.phrase={C1}"),
-                "--json",
-                "--no-engraving-card",
-            ])
-            .assert()
-            .success();
+        let max_n = (0u8..3)
+            .filter(|n| desc.contains(&format!("@{n}")))
+            .max()
+            .unwrap();
+        let mut bundle_args = vec![
+            "bundle".to_string(),
+            "--descriptor".into(),
+            desc.into(),
+            "--network".into(),
+            "mainnet".into(),
+        ];
+        for (n, phrase) in [C0, C1, C2].iter().enumerate().take(usize::from(max_n) + 1) {
+            bundle_args.push("--slot".into());
+            bundle_args.push(format!("@{n}.phrase={phrase}"));
+        }
+        bundle_args.push("--json".into());
+        bundle_args.push("--no-engraving-card".into());
+        let out = bin().args(&bundle_args).assert().success();
         let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
         let md1: Vec<String> = v["md1"]
             .as_array()

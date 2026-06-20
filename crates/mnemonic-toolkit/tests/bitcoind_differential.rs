@@ -132,6 +132,17 @@ fn corpus() -> Vec<Shape> {
             descriptor: format!("tr({NUMS_HEX},multi_a(2,{K0}{m},{K1}{m},{K2}{m}))"),
         },
         Shape {
+            // P2.5 (#26, opportunistic) — DIVERGENT per-cosigner use-site suffixes
+            // on the TAPROOT multi_a leaf: @1/@2 carry their OWN multipath groups
+            // (`<2;3>`, `<4;5>`) ≠ @0's baseline `<0;1>`. This is the second-engine
+            // (bitcoind `deriveaddresses`) corroboration of the #26 multi_a
+            // override leg; restore now reconstructs each `@N`'s OWN suffix. The
+            // default-CI gate is the `derive_receive`/golden oracle in
+            // `cli_restore_multisig_general.rs`; this row is `#[ignore]`/env-gated.
+            label: "tr-nums-multi_a-2of3-divergent",
+            descriptor: format!("tr({NUMS_HEX},multi_a(2,{K0}{m},{K1}/<2;3>/*,{K2}/<4;5>/*))"),
+        },
+        Shape {
             // The toolkit-UNIQUE surface: md-codec's crates.io miniscript
             // 13.0.0 cannot render sortedmulti_a; the toolkit's 95fdd1c fork
             // can, so only this oracle puts it in front of Core.

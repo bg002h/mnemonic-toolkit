@@ -549,12 +549,75 @@ fn per_key_use_site_override_divergent_bare_sh_multi_restores_faithfully() {
     assert_reported_addresses_match_independent_derivation(&v);
 }
 
-/// (11e) P2.3 guard — a TAPROOT override card (`tr(NUMS,multi_a)` with a
-/// divergent `@1`) is STILL REFUSED loudly (the taproot leg is deferred:
-/// `taproot_override_card(d)` guard). The error names the taproot deferral.
+/// (11e — #26 FLIP) P2.2+P2.3 — a TAPROOT override card `tr(NUMS,multi_a)` with a
+/// DIVERGENT `@1` is now RESTORED FAITHFULLY (the multi_a leg of #26). The
+/// `restorable_taproot_override_card` carve-out admits it at the guard, the
+/// classify-reroute forces the faithful arm (NOT the Template string-builder),
+/// and the md-codec multipath builder reconstructs each `@N`'s OWN suffix — so
+/// `@1`'s divergent `<2;3>/*` survives. (Pre-#26 this loud-refused naming the
+/// `restore-md1-taproot-use-site-override-arm` follow-up.)
 #[test]
-fn taproot_use_site_override_still_refused() {
+fn taproot_nums_multi_a_override_restores_faithfully() {
     let md1 = bundle_general("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    assert!(desc.starts_with("tr("), "must stay taproot: {desc}");
+    assert!(
+        desc.contains("multi_a(2,"),
+        "must keep the multi_a leaf: {desc}"
+    );
+    assert!(desc.contains("<0;1>/*"), "@0 keeps <0;1>: {desc}");
+    assert!(
+        desc.contains("<2;3>/*"),
+        "@1 divergent <2;3> kept (NOT collapsed to baseline): {desc}"
+    );
+    // Address-equivalence oracle (P2.5 FLOOR 1+2): the toolkit-reported addresses
+    // == an independent rust-miniscript derivation of the reconstructed string.
+    assert_reported_addresses_match_independent_derivation(&v);
+    // P2.5 independent-golden + anti-vacuity: @1's chain0/idx0 address equals a
+    // HAND-WRITTEN divergent golden (NOT restore's own output), and that golden
+    // DIFFERS from the all-baseline counterpart.
+    assert_divergent_taproot_address_independent_golden(desc);
+}
+
+/// (11e-neg-a) P2.3 — a `tr(NUMS,sortedmulti_a)` override STAYS loud-refused: the
+/// carve-out is leaf-tag-gated (md-codec cannot render `sortedmulti_a` as a
+/// non-root tap leaf; that leg rides the miniscript-renderer umbrella). NEGATIVE
+/// test — the narrowing must NOT admit it.
+#[test]
+fn taproot_nums_sortedmulti_a_override_still_refused() {
+    let md1 = bundle_general("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_md1_args(&md1))
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("taproot").and(predicate::str::contains(
+                "restore-md1-taproot-use-site-override-arm",
+            )),
+        );
+}
+
+/// (11e-neg-b) P2.3 — a `tr(NUMS,multi_a)` override whose `@1` carries a HARDENED
+/// alt (`/*h`) STAYS loud-refused via the hardened guard (watch-only cannot
+/// derive hardened). NEGATIVE test.
+#[test]
+fn taproot_nums_multi_a_hardened_override_still_refused() {
+    let md1 = bundle_general("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_md1_args(&md1))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("hardened use-site path"));
+}
+
+/// (11e-neg-c) P2.3 — a NON-NUMS `tr(@0,multi_a(2,@1,@2))` override (real trunk
+/// key, D7 out of scope) STAYS loud-refused. NEGATIVE test.
+#[test]
+fn taproot_non_nums_multi_a_override_still_refused() {
+    let md1 = bundle_general("tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_md1_args(&md1))
@@ -654,6 +717,83 @@ fn divergent_golden_differs_from_baseline_and_anchors() {
         divergent_addr, baseline_addr,
         "the golden must ANCHOR divergence: @1's <2;3> alt0 (child 2) must yield a \
          DIFFERENT chain0/idx0 address than the baseline <0;1> alt0 (child 0)"
+    );
+}
+
+// ── #26 P2.5: taproot divergent-suffix independent-golden oracle ─────────────
+
+/// Offline-anchored golden: chain0/idx0 of
+/// `tr(NUMS, multi_a(2, <C0-xpub>/<0;1>/*, <C1-xpub>/<2;3>/*))`. @1's `<2;3>`
+/// divergence makes this DISTINCT from the all-baseline `@1/<0;1>` taproot
+/// address — the anti-clobber discriminator. The C0/C1 xpubs are fixed by the
+/// phrases, so the address is deterministic. Captured by the (11g-tr) generator.
+const DIVERGENT_TR_MULTI_A_CHAIN0_IDX0_GOLDEN: &str =
+    "bc1pjzz9kdfuuj4m3rq6qq23tw9a9qea509s3aymz0jz5f5zg9nq46fstt7ex3";
+
+/// Independent address-equivalence golden for the taproot multi_a override leg
+/// (P2.5 / SPEC Min-3). The golden descriptor is HAND-WRITTEN from the two
+/// cosigner xpubs (pulled out of restore's reconstruction, but the per-`@N`
+/// SUFFIX is written here, not taken from restore) and pushed through
+/// rust-miniscript's OWN `into_single_descriptors` engine — a code path that
+/// does NOT re-enter md-codec's reconstruction. If restore silently collapsed
+/// @1's `<2;3>` to the baseline `<0;1>`, the reconstructed-string address would
+/// NOT equal this hand-written-divergent golden.
+fn assert_divergent_taproot_address_independent_golden(reconstructed_desc: &str) {
+    use miniscript::descriptor::DescriptorPublicKey;
+    use miniscript::{DefiniteDescriptorKey, Descriptor};
+    use std::str::FromStr;
+    let d = Descriptor::<DescriptorPublicKey>::from_str(reconstructed_desc).unwrap();
+    let receive = d.into_single_descriptors().unwrap().remove(0);
+    let def: Descriptor<DefiniteDescriptorKey> = receive.derive_at_index(0).unwrap();
+    let addr = def.address(bitcoin::Network::Bitcoin).unwrap().to_string();
+    assert_eq!(
+        addr, DIVERGENT_TR_MULTI_A_CHAIN0_IDX0_GOLDEN,
+        "taproot divergent-suffix chain0/idx0 address drifted — @1 must derive at its OWN <2;3> alt, not the baseline <0;1>"
+    );
+}
+
+/// (11g-tr) GENERATOR + anti-vacuity for the taproot leg: build the golden by
+/// HAND-WRITING the divergent `tr(NUMS,multi_a(...))` descriptor from the two
+/// cosigner xpubs, derive its chain0/idx0 address via rust-miniscript, prove it
+/// DIFFERS from the all-baseline (@1 at <0;1>) counterpart, and print the value
+/// to bake into the const above. The ADDRESS is computed by rust-miniscript —
+/// INDEPENDENT of md-codec reconstruction.
+#[test]
+fn divergent_taproot_golden_differs_from_baseline_and_anchors() {
+    use miniscript::descriptor::DescriptorPublicKey;
+    use miniscript::{DefiniteDescriptorKey, Descriptor};
+    use std::str::FromStr;
+    // Pull the two cosigner key-expressions out of restore's reconstruction.
+    // Their VALUE (the xpubs + origins) is what we reuse; we OVERWRITE the @1
+    // suffix below so the golden's divergence is HAND-AUTHORED, not trusted.
+    let md1 = bundle_general("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let reconstructed = v["wallets"][0]["descriptor"].as_str().unwrap().to_string();
+
+    let addr_at = |desc: &str| -> String {
+        let d = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+        let receive = d.into_single_descriptors().unwrap().remove(0);
+        let def: Descriptor<DefiniteDescriptorKey> = receive.derive_at_index(0).unwrap();
+        def.address(bitcoin::Network::Bitcoin).unwrap().to_string()
+    };
+
+    // The all-baseline counterpart: same xpubs, @1 at <0;1> instead of <2;3>.
+    let strip_csum = |s: &str| s.split('#').next().unwrap().to_string();
+    let baseline_desc = strip_csum(&reconstructed).replacen("<2;3>", "<0;1>", 1);
+    let divergent_addr = addr_at(&reconstructed);
+    let baseline_addr = addr_at(&baseline_desc);
+
+    eprintln!("DIVERGENT_TR_MULTI_A_CHAIN0_IDX0_GOLDEN = {divergent_addr}");
+    eprintln!("(all-baseline counterpart = {baseline_addr})");
+    assert_ne!(
+        divergent_addr, baseline_addr,
+        "the taproot golden must ANCHOR divergence: @1's <2;3> alt0 (child 2) must yield a \
+         DIFFERENT chain0/idx0 address than the baseline <0;1> alt0 (child 0)"
+    );
+    // Pin-check: the captured const must equal the computed divergent address.
+    assert_eq!(
+        divergent_addr, DIVERGENT_TR_MULTI_A_CHAIN0_IDX0_GOLDEN,
+        "captured golden const drifted from the rust-miniscript-derived value"
     );
 }
 

@@ -29,6 +29,7 @@ use serde_json::Value;
 const C0: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const C2: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
 /// Surface-stable advisory prefix shared by all three shape messages.
 const ADVISORY_PREFIX: &str = "advisory: restore --md1 cannot reconstruct";
@@ -51,6 +52,28 @@ fn bundle_two_cosigner(descriptor: &str) -> assert_cmd::assert::Assert {
             &format!("@0.phrase={C0}"),
             "--slot",
             &format!("@1.phrase={C1}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+}
+
+/// `bundle --descriptor <desc>` with THREE phrase-slots (for non-NUMS taproot
+/// shapes that carry an `@2`), `--json --no-engraving-card`.
+fn bundle_three_cosigner(descriptor: &str) -> assert_cmd::assert::Assert {
+    bin()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={C0}"),
+            "--slot",
+            &format!("@1.phrase={C1}"),
+            "--slot",
+            &format!("@2.phrase={C2}"),
             "--json",
             "--no-engraving-card",
         ])
@@ -143,25 +166,89 @@ fn shape2b_override_hardened_wildcard_fires_and_restore_refuses() {
     );
 }
 
-/// Shape 3 — a TAPROOT root carrying per-cosigner use-site overrides
-/// (`tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))`). bundle exit 0 + advisory;
-/// restore refuses (shared `taproot_override_card` predicate; taproot leg
-/// deferred to FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
+/// Shape 3 (#26 FLIP) — a RESTORABLE taproot override `tr(NUMS,multi_a(...))`
+/// with a DIVERGENT `@1` is now SILENT (no advisory) and restore SUCCEEDS
+/// faithfully. The `restorable_taproot_override_card` carve-out drops the
+/// advisory for this shape in lockstep with the narrowed restore guard
+/// (advisory fires IFF restore refuses → silent here). PARITY.
 #[test]
-fn shape3_taproot_use_site_override_fires_and_restore_refuses() {
+fn shape3_restorable_taproot_override_silent_and_restores() {
     let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
+        !stderr.contains(ADVISORY_PREFIX),
+        "restorable taproot override must NOT fire the advisory; got: {stderr}"
+    );
+    let cards = md1_cards(&o.stdout);
+    let r = restore_md1(&cards).success();
+    let rout = String::from_utf8_lossy(&r.get_output().stdout);
+    assert!(
+        rout.contains("<2;3>/*"),
+        "restore must reconstruct @1's divergent <2;3> suffix; got: {rout}"
+    );
+}
+
+/// Shape 3b — a `tr(NUMS,sortedmulti_a)` override STAYS unrestorable: advisory
+/// fires + restore refuses (leaf-tag gate; md-codec render gap). PARITY NEGATIVE.
+#[test]
+fn shape3b_taproot_sortedmulti_a_override_fires_and_restore_refuses() {
+    let out = bundle_two_cosigner("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let o = out.get_output();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(
         stderr.contains(ADVISORY_PREFIX) && stderr.contains("taproot"),
-        "shape-3 advisory must fire on stderr; got: {stderr}"
+        "shape-3b advisory must fire on stderr; got: {stderr}"
     );
     let cards = md1_cards(&o.stdout);
     let r = restore_md1(&cards).failure();
     let rerr = String::from_utf8_lossy(&r.get_output().stderr);
     assert!(
         rerr.contains("taproot") && rerr.contains("restore-md1-taproot-use-site-override-arm"),
-        "shape-3 restore must refuse loudly; got: {rerr}"
+        "shape-3b restore must refuse loudly; got: {rerr}"
+    );
+}
+
+/// Shape 3c — a HARDENED taproot override `tr(NUMS,multi_a(...,@1/<2;3>/*h))`
+/// STAYS unrestorable: restore refuses AND ≥1 advisory fires (SPEC Min-2 — both
+/// `HardenedWildcard` and `TaprootUseSiteOverride` legitimately co-fire on the
+/// hardened∩taproot intersection; the advisory Vec permits 0..=3). PARITY NEGATIVE.
+#[test]
+fn shape3c_hardened_taproot_override_fires_and_restore_refuses() {
+    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))").success();
+    let o = out.get_output();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        stderr.contains(ADVISORY_PREFIX),
+        "shape-3c: ≥1 advisory must fire (hardened and/or taproot); got: {stderr}"
+    );
+    let cards = md1_cards(&o.stdout);
+    let r = restore_md1(&cards).failure();
+    let rerr = String::from_utf8_lossy(&r.get_output().stderr);
+    assert!(
+        rerr.contains("hardened use-site path") || rerr.contains("taproot"),
+        "shape-3c restore must refuse loudly; got: {rerr}"
+    );
+}
+
+/// Shape 3d — a NON-NUMS `tr(@0,multi_a(2,@1,@2))` override (real trunk key, D7
+/// out of scope) STAYS unrestorable: advisory fires + restore refuses. PARITY
+/// NEGATIVE.
+#[test]
+fn shape3d_non_nums_taproot_override_fires_and_restore_refuses() {
+    let out = bundle_three_cosigner("tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))").success();
+    let o = out.get_output();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        stderr.contains(ADVISORY_PREFIX) && stderr.contains("taproot"),
+        "shape-3d advisory must fire on stderr; got: {stderr}"
+    );
+    let cards = md1_cards(&o.stdout);
+    let r = restore_md1(&cards).failure();
+    let rerr = String::from_utf8_lossy(&r.get_output().stderr);
+    assert!(
+        rerr.contains("taproot") && rerr.contains("restore-md1-taproot-use-site-override-arm"),
+        "shape-3d restore must refuse loudly; got: {rerr}"
     );
 }
 
