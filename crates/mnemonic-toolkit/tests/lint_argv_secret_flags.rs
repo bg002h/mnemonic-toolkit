@@ -366,6 +366,15 @@ const FROM_ROUTES: &[Route] = &[
         source_file: "src/cmd/restore.rs",
         evidence: &["=-", "value == \"-\""],
     },
+    // #28 phase 2 (v0.60.0): verify-bundle --from {ms1,phrase,entropy,seedqr}=
+    // (multisig-template completion own seed). Shares restore's seed resolver
+    // (`resolve_template_completion_seed`), which carries the `=-` stdin route.
+    Route {
+        subcommand: "verify-bundle",
+        flag: "--from",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["resolve_template_completion_seed", "=-"],
+    },
 ];
 
 // ── Axis 3: `--slot` routes (4; slot-stdin / @env: / refusal) ──

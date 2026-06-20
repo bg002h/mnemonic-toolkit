@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.60.0] — 2026-06-20
+
+**SemVer-MINOR — `bundle --md1-form=template` extends to MULTISIG + general policies; `restore`/`verify-bundle` complete a concrete watch-only wallet from a keyless multisig template + externally-supplied cosigner keys via a parallel permutation-search engine. #28 phase 2.**
+
+### Added
+
+- **`bundle --md1-form=template` now admits multisig (`wsh(multi/sortedmulti)`, `sh(wsh)`) and general/thresh policies** (incl. `tr(NUMS, multi_a)`) — not just the v0.59.0 canonical single-sig shape. It emits a keyless template md1 + N keyless cosigner mk1 stub cards and prints the order-sensitive **`WalletPolicyId`** (the completion checksum) on stderr, plus a **loud stderr warning about key ordering** (N keys → N! ways to assign keys to a `multi()` descriptor, only one correct; softened for order-independent `sortedmulti`). Origins are carried CONDITIONALLY: canonical multisig elides to empty (re-derived on decode); general policies carry the source per-`@N` origins for decode-validity only. `tr(sortedmulti_a)` + hardened use-sites are refused.
+- **`restore --md1 <keyless multisig/general template> --from <seed>`** completes the wallet: own keys from `--from` + `--account <list>`; cosigners from new **`--cosigner <mk1>`** cards (unassigned → the search places them; or explicit `--cosigner @N=`). Three completion modes: **id-search** (`--expect-wallet-id`, a strong prefix sized to the realized search space), **address-search** (new **`--search-address`** + **`--search-addr-min`**/**`--search-addr-max`** range + **`--search-chain <receive|change|both>`**), and explicit assignment. New **`--accept-search-time`** overrides the adaptive ~1-hour search-time ceiling (with forced acknowledgment). Funds-safety floors: distinct-keys, every-slot-supplied, strong-prefix, ambiguity/no-match all refuse loudly (never a silent wrong wallet); per-slot origins are BUILT FRESH from the supplied keys (the carried template origin is never loaded). **`--own-account-max`** is reserved/refused this cycle (the own-account-range subset search is deferred — FOLLOWUP `template-multisig-own-account-range-subset-search`).
+- **`verify-bundle`** gains the same completion intake — new **`--from`**, **`--cosigner`**, **`--search-address`**, **`--search-addr-min`**, **`--search-addr-max`**, **`--search-chain`**, **`--accept-search-time`** — to verify + recompose a keyless multisig/general template bundle (card↔template-id binding + the completion search; shares the exact engine `restore` uses).
+
+### Notes
+
+`md-codec`/`mk-codec` are **NOT bumped** — the keyless multisig wire form, `WalletDescriptorTemplateId`, and the form-aware mk-cli stub all pre-existed. New clap flags on `restore` + `verify-bundle` → GUI schema-mirror + manual updated in lockstep this cycle. Funds-safety + plan-correctness are gated by the persisted R0 reviews under `design/agent-reports/template-multisig-*`.
+
 ## mnemonic-toolkit [0.59.1] — 2026-06-20
 
 **SemVer-PATCH — `restore --md1` faithfully reconstructs a NUMS-keyed single-leaf taproot `tr(NUMS, multi_a)` wallet card carrying per-cosigner use-site path overrides (divergent derivation suffixes). FUNDS-SAFETY: extends the v0.58.2 non-taproot override reconstruction to the taproot `multi_a` leg.**
