@@ -62,12 +62,18 @@ Some descriptor shapes engrave a wire-faithful `md1` card that
 (it refuses loudly rather than silently rebuild a different wallet). When the
 descriptor has one of these shapes, this command prints a non-blocking advisory
 to stderr at engrave time — the card is still emitted (a faithful backup); keep
-the full descriptor to restore. The three shapes are:
+the full descriptor to restore. The shapes are:
 
 - `sortedmulti()` **inside a combinator** (not the sole child of `wsh`/`sh`);
-- **per-cosigner use-site path overrides** (cosigners that do not share one
-  derivation suffix);
-- a **hardened wildcard** (`/*h`).
+- a **hardened use-site** — a hardened wildcard (`/*h`) on the shared suffix or
+  inside a per-cosigner override (a hardened child cannot be derived from an xpub);
+- **per-cosigner use-site overrides on a taproot card** (`tr(multi_a)` /
+  `tr(sortedmulti_a)`), pending a sibling md-codec/restore fix (FOLLOWUP
+  `restore-md1-taproot-use-site-override-arm`).
+
+Non-taproot, non-hardened **per-cosigner use-site path overrides** (cosigners
+with divergent derivation suffixes on a `wsh`/`sh` multisig) are **reconstructed
+faithfully** since v0.58.2 (md-codec 0.37.0) and no longer advise.
 
 These are the shapes the [multisig-cosigner restore](#multisig-cosigner-restore)
 path refuses to reconstruct. The same advisory fires on
@@ -972,9 +978,11 @@ faithful descriptor (`bsms` for the non-taproot arms; `bip388` for a
 multipath `/<0;1>/*` non-taproot card — it refuses a wildcard-only one);
 template-requiring k-of-n formats refuse. (A policy whose keys appear as
 bare `pk(@N)`/`pkh(@N)` *outside* a `multi()` is refused with a clear message
-pending a sibling md-codec rendering fix; likewise a card with per-cosigner
-use-site overrides or a hardened wildcard `/*h` is refused rather than
-mis-rendered. The engraved card remains a faithful backup either way.)
+pending a sibling md-codec rendering fix; likewise a card with a hardened
+wildcard `/*h` (or a hardened per-cosigner override), or with taproot
+per-cosigner use-site overrides, is refused rather than mis-rendered —
+non-taproot non-hardened per-cosigner use-site overrides reconstruct faithfully
+since v0.58.2. The engraved card remains a faithful backup either way.)
 
 Since v0.55.1 the general arm also covers **NUMS taproot** policies whose tap
 tree is a single general miniscript leaf (e.g. `tr(NUMS,and_v(v:pk(K),

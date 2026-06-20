@@ -638,8 +638,8 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
     // The shapes that STILL refuse loudly: a hardened wildcard (baseline OR
     // override), and a TAPROOT root with overrides (deferred).
     for desc in [
-        "wsh(multi(2,@0/*h,@1/*h))",                 // hardened wildcard (baseline)
-        "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))",      // hardened wildcard (override only)
+        "wsh(multi(2,@0/*h,@1/*h))",            // hardened wildcard (baseline)
+        "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))", // hardened wildcard (override only)
         "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))", // taproot override (deferred)
     ] {
         let out = bin()

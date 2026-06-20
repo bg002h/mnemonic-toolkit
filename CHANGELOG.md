@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.58.2] — 2026-06-19
+
+**SemVer-PATCH — `restore --md1` faithfully reconstructs non-taproot multisig wallet cards carrying per-cosigner use-site path overrides (divergent derivation suffixes). FUNDS-SAFETY: such cards were previously loud-refused; the underlying md-codec reconstruction silently collapsed divergent per-`@N` suffixes to one shared baseline (closed in md-codec 0.37.0). `restore` now reconstructs each cosigner's own suffix faithfully, or loudly refuses the shapes it still cannot derive.**
+
+### Changed
+
+- **`restore --md1` now restores non-taproot, non-hardened per-cosigner use-site override cards** (`wsh(multi)`, `wsh(sortedmulti)`, `sh(wsh(multi))`, bare `sh(multi)`, and `Some`/`None` multipath mixes). The faithful arm consumes md-codec 0.37.0's `to_miniscript_descriptor_multipath`, which carries each `@N` key's own resolved multipath suffix; the `ReconstructTranslator` is reduced to network-correction only (it no longer re-promotes a shared baseline suffix). Address-equivalence is gated against an independent rust-miniscript golden (anti-vacuity: divergent ≠ baseline-collapse), with a bitcoind `deriveaddresses` differential corpus shape.
+- **Guard narrowed + advisory parity.** The blanket override refusal is replaced by a refuse-iff `md_codec::has_hardened_use_site(d)` OR `taproot_override_card(d)` — ONE predicate each, shared by the restore guard and the engrave-surface `unrestorable_descriptor` advisory (refuse ⟺ advisory fires). Still loudly refused: any hardened use-site (`/*h` baseline or override — underivable from an xpub) and taproot override cards (`tr(multi_a)`/`tr(sortedmulti_a)`; tracked by FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
+
+### Dependencies
+
+- `md-codec` `0.36` → `0.37.0` (the faithful per-cosigner reconstruction + `has_hardened_use_site` live here). `scripts/install.sh` md-cli sibling pin bumped `descriptor-mnemonic-md-cli-v0.6.2` → `descriptor-mnemonic-md-cli-v0.7.1`.
+
 ## mnemonic-toolkit [0.58.1] — 2026-06-17
 
 **SemVer-PATCH — `convert --from mk1 --to xpub` prints a path-implied SLIP-0132 hint on stderr. Advisory-only; stdout unchanged. Tier-3 item C6.**

@@ -149,8 +149,7 @@ fn shape2b_override_hardened_wildcard_fires_and_restore_refuses() {
 /// deferred to FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
 #[test]
 fn shape3_taproot_use_site_override_fires_and_restore_refuses() {
-    let out =
-        bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -161,8 +160,7 @@ fn shape3_taproot_use_site_override_fires_and_restore_refuses() {
     let r = restore_md1(&cards).failure();
     let rerr = String::from_utf8_lossy(&r.get_output().stderr);
     assert!(
-        rerr.contains("taproot")
-            && rerr.contains("restore-md1-taproot-use-site-override-arm"),
+        rerr.contains("taproot") && rerr.contains("restore-md1-taproot-use-site-override-arm"),
         "shape-3 restore must refuse loudly; got: {rerr}"
     );
 }

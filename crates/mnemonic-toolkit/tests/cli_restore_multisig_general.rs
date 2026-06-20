@@ -100,7 +100,10 @@ fn assert_reported_addresses_match_independent_derivation(restore_value: &Value)
         .iter()
         .map(|x| x.as_str().unwrap().to_string())
         .collect();
-    assert!(!reported.is_empty(), "restore reported no addresses: {desc}");
+    assert!(
+        !reported.is_empty(),
+        "restore reported no addresses: {desc}"
+    );
     let d = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
     let receive = if d.is_multipath() {
         d.clone().into_single_descriptors().unwrap().remove(0)
@@ -505,7 +508,10 @@ fn per_key_use_site_override_divergent_sortedmulti_restores_faithfully() {
     let md1 = bundle_general("wsh(sortedmulti(2,@0/<0;1>/*,@1/<2;3>/*))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.starts_with("wsh(sortedmulti(2,"), "sortedmulti kept: {desc}");
+    assert!(
+        desc.starts_with("wsh(sortedmulti(2,"),
+        "sortedmulti kept: {desc}"
+    );
     assert!(desc.contains("<0;1>/*"), "@0 keeps <0;1>: {desc}");
     assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
     assert_reported_addresses_match_independent_derivation(&v);
@@ -518,7 +524,10 @@ fn per_key_use_site_override_divergent_sh_wsh_multi_restores_faithfully() {
     let md1 = bundle_general("sh(wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*)))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.starts_with("sh(wsh(multi(2,"), "sh-wsh-multi kept: {desc}");
+    assert!(
+        desc.starts_with("sh(wsh(multi(2,"),
+        "sh-wsh-multi kept: {desc}"
+    );
     assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
     assert_reported_addresses_match_independent_derivation(&v);
 }
@@ -532,7 +541,10 @@ fn per_key_use_site_override_divergent_bare_sh_multi_restores_faithfully() {
     let md1 = bundle_general("sh(multi(2,@0/<0;1>/*,@1/<2;3>/*))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
-    assert!(desc.starts_with("sh(multi(2,"), "bare sh(multi) kept: {desc}");
+    assert!(
+        desc.starts_with("sh(multi(2,"),
+        "bare sh(multi) kept: {desc}"
+    );
     assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
     assert_reported_addresses_match_independent_derivation(&v);
 }
