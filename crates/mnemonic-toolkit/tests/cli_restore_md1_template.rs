@@ -148,7 +148,11 @@ fn template_completion_equals_independent_full_restore() {
 #[test]
 fn template_restore_without_from_is_refused() {
     let md1 = template_md1("bip84", PHRASE_A, "0");
-    let mut args = vec!["restore".to_string(), "--network".to_string(), "mainnet".to_string()];
+    let mut args = vec![
+        "restore".to_string(),
+        "--network".to_string(),
+        "mainnet".to_string(),
+    ];
     for chunk in &md1 {
         args.push("--md1".to_string());
         args.push(chunk.clone());
@@ -205,7 +209,11 @@ fn keyless_multisig_md1_refused_at_restore() {
         },
     };
     let md1 = md_codec::chunk::split(&desc).expect("keyless multisig md1 encodes");
-    let mut args = vec!["restore".to_string(), "--network".to_string(), "mainnet".to_string()];
+    let mut args = vec![
+        "restore".to_string(),
+        "--network".to_string(),
+        "mainnet".to_string(),
+    ];
     for chunk in &md1 {
         args.push("--md1".to_string());
         args.push(chunk.clone());
@@ -245,7 +253,12 @@ fn bundle_wallet_id_prefix(template: &str, phrase: &str, account: &str) -> Strin
         .expect("D7 prefix printed")
 }
 
-fn restore_with_expect(template: &str, phrase: &str, account: &str, expect: &str) -> assert_cmd::assert::Assert {
+fn restore_with_expect(
+    template: &str,
+    phrase: &str,
+    account: &str,
+    expect: &str,
+) -> assert_cmd::assert::Assert {
     let md1 = template_md1(template, phrase, account);
     let mut args = vec![
         "restore".to_string(),

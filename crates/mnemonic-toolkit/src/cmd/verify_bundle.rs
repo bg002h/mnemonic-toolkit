@@ -626,7 +626,12 @@ fn verify_singlesig_template<W: Write, E: Write>(
         .xpub
         .derive_pub(&secp, &dp)
         .map(|child| {
-            crate::address_render::render_address_from_xpub(&secp, &child, script_type, args.network)
+            crate::address_render::render_address_from_xpub(
+                &secp,
+                &child,
+                script_type,
+                args.network,
+            )
         })
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
 
@@ -643,9 +648,8 @@ fn verify_singlesig_template<W: Write, E: Write>(
                  account path (the wallet-id was computed for the canonical origin)."
             );
         } else {
-            let prefix = hex::decode(prefix_hex.trim()).map_err(|e| {
-                ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}"))
-            })?;
+            let prefix = hex::decode(prefix_hex.trim())
+                .map_err(|e| ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}")))?;
             if prefix.len() < 4 {
                 let _ = writeln!(
                     stderr,

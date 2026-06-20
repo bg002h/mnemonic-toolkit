@@ -168,10 +168,10 @@ fn template_md1_does_not_cross_bind_to_policy_form() {
 
     let md1_t = md1_lines(&out_t);
     let md1_p = md1_lines(&out_p);
-    let dt = md_codec::chunk::reassemble(&md1_t.iter().map(|s| s.as_str()).collect::<Vec<_>>())
-        .unwrap();
-    let dp = md_codec::chunk::reassemble(&md1_p.iter().map(|s| s.as_str()).collect::<Vec<_>>())
-        .unwrap();
+    let dt =
+        md_codec::chunk::reassemble(&md1_t.iter().map(|s| s.as_str()).collect::<Vec<_>>()).unwrap();
+    let dp =
+        md_codec::chunk::reassemble(&md1_p.iter().map(|s| s.as_str()).collect::<Vec<_>>()).unwrap();
     assert!(!dt.is_wallet_policy());
     assert!(dp.is_wallet_policy());
 

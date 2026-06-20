@@ -12,7 +12,11 @@ fn mnemonic() -> Command {
 }
 
 /// Emit a template bundle and return its (ms1, mk1, md1) unbroken card vectors.
-fn template_cards(template: &str, phrase: &str, account: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+fn template_cards(
+    template: &str,
+    phrase: &str,
+    account: &str,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
     let out = mnemonic()
         .args([
             "bundle",
@@ -139,7 +143,12 @@ fn verify_template_bundle_without_seed_is_refused() {
 #[test]
 fn verify_template_bundle_expect_wallet_id_wrong_mismatch() {
     mnemonic()
-        .args(verify_args("bip84", PHRASE_A, "0", Some("deadbeefdeadbeef")))
+        .args(verify_args(
+            "bip84",
+            PHRASE_A,
+            "0",
+            Some("deadbeefdeadbeef"),
+        ))
         .assert()
         .failure()
         .code(4);
@@ -261,8 +270,7 @@ fn verify_template_bundle_expect_wallet_id_skipped_under_origin() {
     let out = mnemonic().args(&args).assert().success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("--expect-wallet-id is not checked")
-            || stderr.contains("--origin"),
+        stderr.contains("--expect-wallet-id is not checked") || stderr.contains("--origin"),
         "skip-under-origin must emit a notice: {stderr}"
     );
 }
@@ -302,5 +310,8 @@ fn verify_template_bundle_recompose_matches_restore() {
         .map(|s| s.trim().to_string())
         .expect("restore descriptor");
 
-    assert_eq!(v_desc, r_desc, "verify recompose must equal restore completion");
+    assert_eq!(
+        v_desc, r_desc,
+        "verify recompose must equal restore completion"
+    );
 }

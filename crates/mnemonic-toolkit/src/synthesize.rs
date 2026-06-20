@@ -944,7 +944,13 @@ pub fn synthesize_unified(
     // (`synthesize_descriptor` re-derives policy_id/stub from `descriptor` and
     // its leading `cosigners.len() == descriptor.n` check holds since this fn
     // built `descriptor.n = slots.len()`.)
-    synthesize_descriptor(&descriptor, slots, privacy_preserving, run_language, md1_form)
+    synthesize_descriptor(
+        &descriptor,
+        slots,
+        privacy_preserving,
+        run_language,
+        md1_form,
+    )
 }
 
 /// #28 phase 1 — emit a keyless single-sig TEMPLATE bundle.
@@ -998,21 +1004,19 @@ fn synthesize_template_descriptor(
     // template-mode and descriptor-mode entry points (both funnel through here).
     if cli_template_from_tree(&descriptor.tree).is_none() {
         return Err(ToolkitError::TemplateFormUnsupportedShape {
-            message:
-                "--md1-form=template supports standard single-sig wallet types only \
+            message: "--md1-form=template supports standard single-sig wallet types only \
                  (pkh/bip44, wpkh/bip84, or tr-keypath/bip86 — multi/sortedmulti, even a \
                  1-of-1, is not a single-sig template); use --md1-form=policy"
-                    .into(),
+                .into(),
         });
     }
     if md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_none() {
         return Err(ToolkitError::TemplateFormUnsupportedShape {
-            message:
-                "--md1-form=template supports standard single-sig wallet types only \
+            message: "--md1-form=template supports standard single-sig wallet types only \
                  (this descriptor has a non-canonical wrapper or custom origin path — \
                  e.g. bip49 nested-segwit, bare wsh, or a baked custom path — that cannot be \
                  origin-elided into a byte-shareable template); use --md1-form=policy"
-                    .into(),
+                .into(),
         });
     }
 
@@ -1030,8 +1034,8 @@ fn synthesize_template_descriptor(
     // --- Binding stub: re-root on WalletDescriptorTemplateId (SPEC §4.3) ----
     // Compute the id ONCE from the MUTATED template (the engraved md1 is the
     // template; binding must reflect what is engraved).
-    let template_id = md_codec::compute_wallet_descriptor_template_id(&template)
-        .map_err(ToolkitError::from)?;
+    let template_id =
+        md_codec::compute_wallet_descriptor_template_id(&template).map_err(ToolkitError::from)?;
     let mut stub = [0u8; 4];
     stub.copy_from_slice(&template_id.as_bytes()[..4]);
 
@@ -1580,9 +1584,14 @@ mod tests {
             1,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
-                .unwrap();
+        let bundle = synthesize_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap();
         assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1597,9 +1606,14 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::SingleSig,
             1,
         );
-        let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
-                .unwrap();
+        let bundle = synthesize_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap();
         assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
         assert!(!mk1.is_empty());
@@ -1613,9 +1627,14 @@ mod tests {
             2,
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
-        let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
-                .unwrap();
+        let bundle = synthesize_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap();
         assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
         assert_eq!(multi.len(), 2, "multisig n=2 emits 2 mk1 cards");
@@ -1628,9 +1647,14 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
-                .unwrap();
+        let bundle = synthesize_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap();
         assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
         assert_eq!(multi.len(), 2);
@@ -1645,8 +1669,14 @@ mod tests {
         );
         // descriptor has n=2 but we only pass 1 cosigner → error
         let one = vec![cosigners[0].clone()];
-        let err =
-            synthesize_descriptor(&descriptor, &one, false, bip39::Language::English, Md1Form::Policy).unwrap_err();
+        let err = synthesize_descriptor(
+            &descriptor,
+            &one,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
     }
 
@@ -1707,9 +1737,14 @@ mod tests {
             &fps,
         )
         .unwrap();
-        let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
-                .unwrap();
+        let bundle = synthesize_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+            Md1Form::Policy,
+        )
+        .unwrap();
         assert_eq!(bundle.ms1.len(), 3, "ms1 dense vec len == n");
         assert!(
             bundle.ms1[0].starts_with("ms1"),

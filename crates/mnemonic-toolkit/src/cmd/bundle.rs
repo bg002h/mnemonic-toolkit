@@ -1109,7 +1109,10 @@ fn emit_template_wallet_id_advisory<E: Write>(
         "        record this wallet-id with the engraving (as many bytes as you wish):"
     );
     let _ = writeln!(stderr, "        wallet-id (hex):    {hex}");
-    let _ = writeln!(stderr, "        wallet-id (prefix): {prefix}  (4-byte convenience prefix)");
+    let _ = writeln!(
+        stderr,
+        "        wallet-id (prefix): {prefix}  (4-byte convenience prefix)"
+    );
     if let Some(phrase) = phrase {
         let _ = writeln!(stderr, "        wallet-id (words):  {phrase}");
     }
@@ -1211,10 +1214,7 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
                 .and_then(bundle_binding_stub)
             {
                 Some(stub) => {
-                    format!(
-                        "{:05x}",
-                        derive_mk1_chunk_set_id_for_slot(&stub, i as u32)
-                    )
+                    format!("{:05x}", derive_mk1_chunk_set_id_for_slot(&stub, i as u32))
                 }
                 None => "?????".to_string(),
             };

@@ -784,7 +784,9 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     let _pin_pp = if passphrase.is_empty() {
         None
     } else {
-        Some(mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()))
+        Some(mnemonic_toolkit::mlock::pin_pages_for(
+            passphrase.as_bytes(),
+        ))
     };
 
     // --- (c) derive the account key at --origin OR the template default -----
@@ -831,7 +833,12 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             .account_xpub
             .derive_pub(&secp, &dp)
             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-        first_recv.push(render_address_from_xpub(&secp, &child, script_type, network));
+        first_recv.push(render_address_from_xpub(
+            &secp,
+            &child,
+            script_type,
+            network,
+        ));
     }
 
     // Concrete watch-only descriptor.
@@ -918,13 +925,18 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         });
         format!(
             "{}\n",
-            serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
+            serde_json::to_string(&envelope)
+                .map_err(|e| bad(format!("json serialization: {e}")))?
         )
     } else {
         let mut s = String::new();
         s.push_str(&format!(
             "master fingerprint: {fp_str}  (passphrase: {})\n",
-            if passphrase_applied { "applied" } else { "none" }
+            if passphrase_applied {
+                "applied"
+            } else {
+                "none"
+            }
         ));
         s.push_str(
             "CONFIRM: this fingerprint matches the wallet you are restoring before importing.\n",

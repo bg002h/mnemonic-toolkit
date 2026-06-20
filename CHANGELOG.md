@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.59.0] — 2026-06-19
+
+**SemVer-MINOR — `bundle --md1-form=template` emits a KEYLESS, account-agnostic single-sig template md1 (one engraving reusable by thousands of users of the same wallet TYPE); `restore`/`verify-bundle` complete the template from a seed + `--account`/`--origin`. New flags: `bundle --md1-form`, `restore`/`verify-bundle --origin` + `--expect-wallet-id`. #28 phase 1.**
+
+### Added
+
+- **`bundle --md1-form <policy|template>`** (default `policy` = unchanged full keyed wallet-policy md1). `template` emits a keyless, fingerprint-stripped, canonical-origin-elided **single-sig** template md1 — byte-identical across all users of a given canonical type (bip44/84/86). The whole-bundle binding re-roots on `WalletDescriptorTemplateId` (mk1 stub reflects it; ms1 is byte-unchanged). Requires a canonical single-sig shape; multisig / non-canonical / bip49-nested-segwit are refused (`TemplateFormUnsupportedShape`). The key-specific `WalletPolicyId` is printed on **stderr** (full hex + 12-word phrase + 4-byte convenience prefix) to record out-of-band — stdout (the engraved cards) is unchanged.
+- **`restore --md1 <keyless-template> --from <seed>`** completes a single-sig template: `--from` is REQUIRED (a no-seed template restore is refused, not mis-routed to watch-only), `--account <N>` (canonical) or new **`--origin <path>`** (arbitrary BIP-32 origin) supplies the account/origin, and new **`--expect-wallet-id <prefix>`** recomputes the `WalletPolicyId` from the completed fully-keyed wallet and refuses loudly on mismatch (exit 4; advisory under 4 bytes; skipped under `--origin`).
+- **`verify-bundle`** gains `--origin` + `--expect-wallet-id` to verify + recompose a keyless template bundle (mirrors `restore`). `self_check_bundle` branches for the keyless template form (skips the wallet-policy/pubkeys-present gates; the stub-coherence + mk1 origin/fp + ms1 parity checks still run).
+
+### Notes
+
+`md-codec`/`mk-codec` are **NOT bumped** — the template id (`compute_wallet_descriptor_template_id`) and the keyless wire form already exist in `md-codec 0.37.0`. Funds-safety: completion address-equivalence is gated against an INDEPENDENT golden + a D7 same-preimage round-trip (`bundle`-printed `WalletPolicyId` == `restore`-recomputed). Lockstep follow-ons (separate PRs): `mnemonic-gui` schema-mirror (`--md1-form` flag + `policy|template` dropdown + `--origin`/`--expect-wallet-id`) and the `mk-cli` `derive_stub_from_md1` template-id branch.
+
 ## mnemonic-toolkit [0.58.2] — 2026-06-19
 
 **SemVer-PATCH — `restore --md1` faithfully reconstructs non-taproot multisig wallet cards carrying per-cosigner use-site path overrides (divergent derivation suffixes). FUNDS-SAFETY: such cards were previously loud-refused; the underlying md-codec reconstruction silently collapsed divergent per-`@N` suffixes to one shared baseline (closed in md-codec 0.37.0). `restore` now reconstructs each cosigner's own suffix faithfully, or loudly refuses the shapes it still cannot derive.**
