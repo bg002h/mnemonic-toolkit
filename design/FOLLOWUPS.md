@@ -43,6 +43,15 @@ Single source of truth for items that surfaced during a review or implementation
 - **Tier:** `feature` / `next-cycle` (deferred from #28 phase 2 P3a; cross-cite the P3a R0 review above).
 - **Companion:** none (toolkit-local).
 
+### `fuzz-build-broken-unrestorable-advisory-references-bin-only-cmd` — `cargo fuzz build` fails (E0433): the `cfg(fuzzing)` lib mount of `unrestorable_advisory` references the bin-only `cmd::restore`
+
+- **Surfaced:** 2026-06-20, #28 phase 2 P6.1 ship-prep fuzz gate. **PRE-EXISTING** — confirmed failing identically on `origin/master` (the reference predates this cycle; latent since #26 / v0.59.1 added the taproot-override predicates to the advisory). NOT introduced or worsened by #28 phase 2 (which touches neither `unrestorable_advisory.rs` nor the fuzz mount).
+- **Where:** `crates/mnemonic-toolkit/src/unrestorable_advisory.rs:116-117` references `crate::cmd::restore::{taproot_override_card, restorable_taproot_override_card}`. `lib.rs` mounts `unrestorable_advisory` (and a set of bin-private modules) under `#[cfg(fuzzing)]` (`lib.rs:186`), but `cmd` is NOT mounted into the lib crate under `cfg(fuzzing)` → `error[E0433]: failed to resolve: could not find cmd in the crate root` → the WHOLE fuzz target set fails to compile (so fuzzing coverage is silently zero).
+- **What:** the P2.4 (#26) taproot-advisory block calls the two `cmd::restore` predicates for exact refuse⟺advise parity. They live in the bin-only `cmd::restore` module; the `cfg(fuzzing)` lib mount can reach only lib-crate items.
+- **Fix (options, NO-BUMP — fuzz-infra/src-only, no user-facing surface):** (a) move `taproot_override_card` / `restorable_taproot_override_card` to a lib-crate module (e.g. a `restore_predicates`/`classify` module) and re-export from `cmd::restore`, so both the bin path and the `cfg(fuzzing)` advisory reach them; or (b) mount the needed `cmd::restore` predicates under `#[cfg(fuzzing)]` in `lib.rs` alongside `unrestorable_advisory`; or (c) `#[cfg(not(fuzzing))]`-gate the taproot-advisory block (smallest, but drops the taproot branch from fuzz coverage). Prefer (a). Add a CI step that actually builds the fuzz targets so this cannot silently re-break.
+- **Status:** `open`. v0.60.0 SHIPPED with this latent (the release's real gates — full `cargo test -p`, clippy `-D warnings`, manual `make lint`, version-site consistency — are GREEN; the fuzz LOCKFILE version-site is synced to 0.60.0; only the instrumented `--cfg fuzzing` BUILD is broken, identically to v0.59.1/v0.59.0).
+- **Tier:** `infra` / `next-cycle`. **Companion:** none (toolkit-local).
+
 ### `mstar-prepolicy-key-backup` — no policy-independent (pre-wallet) public-key backup (companion; mk-codec is canonical)
 
 - **Surfaced:** 2026-06-20, design discussion (SeedHammer template-engraving thread — "what about generating + backing up keys *before* using them in a wallet?"). Companion of the mk-codec canonical entry.
