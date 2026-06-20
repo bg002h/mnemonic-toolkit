@@ -98,6 +98,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index (default 0) |
+| `--md1-form <policy\|template>` | (#28) what the `md1` card encodes (default `policy`). `policy` = the full keyed wallet-policy `md1` (pre-#28; identifies **this** wallet). `template` = a **keyless**, fingerprint-stripped, canonical-origin-elided single-sig template `md1` — a backup of the wallet **type**, byte-identical across all users of that type ("one engraving for thousands"); the account/origin is supplied at restore and the specific wallet is identified out-of-band by the `WalletPolicyId` printed on **stderr**. REQUIRES a canonical single-sig shape (`bip44` / `bip84` / `bip86`); multisig, non-canonical, and `bip49` (nested-segwit) are refused (use `--md1-form=policy`). See [Template-only md1](#template-only-md1) |
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (default 5). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
@@ -131,6 +132,45 @@ See [`ms encode` auto-routing](#entr-vs-mnem-payload-kind-auto-routing)
 in the `ms` reference for the full encoding spec. See FOLLOWUP
 `toolkit-mnem-ms1-wire-shape-downstream-consumers` for the
 downstream-compatibility note for GUI consumers.
+
+### Template-only md1 {#template-only-md1}
+
+`--md1-form=template` (#28) emits a **keyless single-sig template
+`md1`** instead of the full keyed wallet-policy card. The template is
+fingerprint-stripped and canonical-origin-elided, so it is
+**byte-identical across every user of the same wallet type** — a backup
+of the wallet *type* (`bip44` / `bip84` / `bip86`), not of one specific
+wallet ("one engraving for thousands"). It is account-agnostic: no
+fingerprint, no account, no origin is baked into the card.
+
+Because the card carries no keys, the toolkit prints the wallet's
+**`WalletPolicyId`** on **stderr** at emit time. Record it out-of-band
+(it is the only thing that pins the engraved template to *your* wallet);
+the printed convenience prefix is 4 bytes, but you may keep and later
+match a prefix of any length.
+
+Completion happens at restore time. Re-supply the seed plus the account
+or origin to turn the keyless template back into a fully-keyed wallet:
+
+```sh
+# canonical account (default origin m/<purpose>'/<coin>'/<account>'):
+mnemonic restore --md1 <template-md1> --from phrase=- --account 7 \
+    --expect-wallet-id <id-from-stderr>
+# arbitrary explicit origin (overrides the canonical account default):
+mnemonic restore --md1 <template-md1> --from phrase=- \
+    --origin "m/84'/0'/7'"
+```
+
+The same completion works on [`verify-bundle`](#mnemonic-verify-bundle)
+via its `--from` + `--account` / `--origin` / `--expect-wallet-id`
+flags. `--expect-wallet-id` recomputes the `WalletPolicyId` from the
+completed wallet and refuses loudly on mismatch (exit 4); it is **not**
+checked when `--origin` is supplied (the explicit-origin id is a
+different preimage from the canonical-account one).
+
+Template form **requires a canonical single-sig shape** (`bip44` /
+`bip84` / `bip86`); multisig, non-canonical, and `bip49` (nested-segwit)
+templates are refused — use `--md1-form=policy` for those.
 
 ### Non-canonical descriptor mode
 
@@ -548,6 +588,8 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index |
+| `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for verifying + recomposing a **keyless single-sig template** bundle (`bundle --md1-form=template`); overrides the canonical `m/<purpose>'/<coin>'/<account>'` default, mirroring [`restore --origin`](#mnemonic-restore). Only meaningful for a keyless single-sig template bundle; ignored otherwise. See [Template-only md1](#template-only-md1) |
+| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for a keyless single-sig template bundle. When set, verify-bundle recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4). Only meaningful for a template bundle; ignored otherwise. **NOT** checked when `--origin` overrides the canonical account path (a different preimage). See [Template-only md1](#template-only-md1) |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card |
@@ -797,6 +839,8 @@ channels that keep the seed off the argv.
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--account <ACCOUNT>` | BIP-32 account index (default 0) |
+| `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
+| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion. Restore recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) |
 | `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
 | `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
 | `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`); mismatch → exit 4 (unless `--allow-mismatch`) |
