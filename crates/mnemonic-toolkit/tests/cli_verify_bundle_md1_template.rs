@@ -146,6 +146,128 @@ fn verify_template_bundle_expect_wallet_id_wrong_mismatch() {
 }
 
 #[test]
+fn verify_template_bundle_recomposes_under_origin_matches_restore() {
+    // R0 I2 — verify-bundle's template completion supports `--origin` (mirroring
+    // restore's `--origin`). A custom-origin template recomposes to the SAME
+    // descriptor verify-bundle and restore each build at that origin, and the
+    // verdict is OK (no spurious mismatch from a canonical-account fallback).
+    //
+    // The bundle is emitted at `--account 7`, whose CANONICAL origin is exactly
+    // `m/84'/0'/7'`, so the explicit `--origin m/84'/0'/7'` re-derives the SAME
+    // xpub → the supplied mk1 binds and the verdict is OK.
+    const ORIGIN: &str = "m/84'/0'/7'";
+    let (ms1, mk1, md1) = template_cards("bip84", PHRASE_A, "7");
+
+    let mut vargs = vec![
+        "verify-bundle".to_string(),
+        "--network".to_string(),
+        "mainnet".to_string(),
+        "--origin".to_string(),
+        ORIGIN.to_string(),
+        "--slot".to_string(),
+        format!("@0.phrase={PHRASE_A}"),
+    ];
+    for m in &ms1 {
+        if !m.is_empty() {
+            vargs.push("--ms1".to_string());
+            vargs.push(m.clone());
+        }
+    }
+    for m in &mk1 {
+        vargs.push("--mk1".to_string());
+        vargs.push(m.clone());
+    }
+    for m in &md1 {
+        vargs.push("--md1".to_string());
+        vargs.push(m.clone());
+    }
+    let out_v = mnemonic().args(&vargs).assert().success();
+    let v_stdout = String::from_utf8(out_v.get_output().stdout.clone()).unwrap();
+    assert!(
+        v_stdout.contains("OK"),
+        "verify under --origin must report OK: {v_stdout}"
+    );
+    let v_desc = v_stdout
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("descriptor:"))
+        .map(|s| s.trim().to_string())
+        .expect("verify --origin descriptor");
+
+    // The same template restored at the same --origin must yield the same desc.
+    let mut rargs = vec![
+        "restore".to_string(),
+        "--from".to_string(),
+        format!("phrase={PHRASE_A}"),
+        "--network".to_string(),
+        "mainnet".to_string(),
+        "--origin".to_string(),
+        ORIGIN.to_string(),
+    ];
+    for m in &md1 {
+        rargs.push("--md1".to_string());
+        rargs.push(m.clone());
+    }
+    let out_r = mnemonic().args(&rargs).assert().success();
+    let r_stdout = String::from_utf8(out_r.get_output().stdout.clone()).unwrap();
+    let r_desc = r_stdout
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("descriptor:"))
+        .map(|s| s.trim().to_string())
+        .expect("restore --origin descriptor");
+
+    assert_eq!(
+        v_desc, r_desc,
+        "verify-bundle --origin recompose must equal restore --origin completion"
+    );
+    // The custom origin must actually appear in the descriptor (proof it was used).
+    assert!(
+        v_desc.contains("/84'/0'/7'") || v_desc.contains("84h/0h/7h"),
+        "recomposed descriptor must carry the --origin path: {v_desc}"
+    );
+}
+
+#[test]
+fn verify_template_bundle_expect_wallet_id_skipped_under_origin() {
+    // R0 I2 — `--expect-wallet-id` is NOT checked under `--origin` (the wallet-id
+    // was computed for the canonical origin; an override is a different preimage).
+    // A deliberately-wrong id must NOT cause a failure when --origin is present.
+    // Bundle at account 7 so the cards bind at the explicit `m/84'/0'/7'` origin.
+    let (ms1, mk1, md1) = template_cards("bip84", PHRASE_A, "7");
+    let mut args = vec![
+        "verify-bundle".to_string(),
+        "--network".to_string(),
+        "mainnet".to_string(),
+        "--origin".to_string(),
+        "m/84'/0'/7'".to_string(),
+        "--expect-wallet-id".to_string(),
+        "deadbeefdeadbeef".to_string(),
+        "--slot".to_string(),
+        format!("@0.phrase={PHRASE_A}"),
+    ];
+    for m in &ms1 {
+        if !m.is_empty() {
+            args.push("--ms1".to_string());
+            args.push(m.clone());
+        }
+    }
+    for m in &mk1 {
+        args.push("--mk1".to_string());
+        args.push(m.clone());
+    }
+    for m in &md1 {
+        args.push("--md1".to_string());
+        args.push(m.clone());
+    }
+    let out = mnemonic().args(&args).assert().success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--expect-wallet-id is not checked")
+            || stderr.contains("--origin"),
+        "skip-under-origin must emit a notice: {stderr}"
+    );
+}
+
+#[test]
 fn verify_template_bundle_recompose_matches_restore() {
     // The recomposed descriptor from verify-bundle must equal the restore
     // template-completion descriptor (cross-tool consistency).

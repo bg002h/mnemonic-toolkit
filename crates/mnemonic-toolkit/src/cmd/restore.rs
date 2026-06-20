@@ -968,11 +968,22 @@ fn decode_wallet_id_prefix(s: &str) -> Result<Vec<u8>, ToolkitError> {
     if t.is_empty() {
         return Err(bad("--expect-wallet-id must not be empty"));
     }
-    hex::decode(t).map_err(|e| {
+    let bytes = hex::decode(t).map_err(|e| {
         bad(format!(
             "--expect-wallet-id must be an even-length hex prefix of the WalletPolicyId: {e}"
         ))
-    })
+    })?;
+    // The WalletPolicyId is 16 bytes; a longer "prefix" can never match (it is
+    // not a prefix of a 16-byte id). Reject it here with a clear length message
+    // rather than letting it fall through to the generic MISMATCH path (M2).
+    if bytes.len() > 16 {
+        return Err(bad(format!(
+            "--expect-wallet-id prefix is {} bytes; the WalletPolicyId is only 16 bytes — \
+             supply a prefix of at most 16 bytes (32 hex chars)",
+            bytes.len()
+        )));
+    }
+    Ok(bytes)
 }
 
 /// Build the importable wallet-software payload for a single template via the

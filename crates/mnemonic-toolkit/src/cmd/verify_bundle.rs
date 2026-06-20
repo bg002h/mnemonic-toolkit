@@ -63,12 +63,24 @@ pub struct VerifyBundleArgs {
     #[arg(long, default_value = "0")]
     pub account: u32,
 
+    /// #28 phase 1 — explicit origin derivation path for verifying + recomposing
+    /// a keyless single-sig TEMPLATE bundle (`bundle --md1-form=template`).
+    /// Overrides the template's canonical `m/<purpose>'/<coin>'/<account>'`
+    /// default with an arbitrary BIP-32 path (e.g. `m/84'/0'/7'`), mirroring
+    /// `restore --origin`. Only meaningful for a keyless single-sig template
+    /// bundle; ignored otherwise. When supplied, `--expect-wallet-id` is NOT
+    /// checked (the canonical-origin id is a different preimage — same carve-out
+    /// as `restore`).
+    #[arg(long = "origin")]
+    pub origin: Option<String>,
+
     /// #28 phase 1 — expected `WalletPolicyId` (hex prefix) for a keyless
     /// single-sig TEMPLATE bundle. When set, verify-bundle recomputes the
     /// `WalletPolicyId` from the completed (fully-keyed, explicit-origin)
     /// wallet and matches its leading bytes; a mismatch is reported as a failed
     /// check (overall `mismatch`, exit 4). Only meaningful for a template
-    /// bundle (`bundle --md1-form=template` output); ignored otherwise.
+    /// bundle (`bundle --md1-form=template` output); ignored otherwise. NOT
+    /// checked when `--origin` overrides the canonical account path.
     #[arg(long = "expect-wallet-id")]
     pub expect_wallet_id: Option<String>,
 
@@ -471,6 +483,9 @@ fn verify_singlesig_template<W: Write, E: Write>(
     stderr: &mut E,
     json_context: bool,
 ) -> Result<u8, ToolkitError> {
+    use crate::synthesize::ResolvedSlot;
+    use std::str::FromStr;
+
     let template = crate::synthesize::cli_template_from_tree(&d.tree)
         .ok_or_else(|| ToolkitError::BadInput("template md1 tree is not single-sig".into()))?;
 
@@ -499,13 +514,65 @@ fn verify_singlesig_template<W: Write, E: Write>(
         args.passphrase.as_deref(),
         args.multisig_path_family.unwrap_or_default(),
     )?;
-    let slot = resolved
+    let canonical_slot = resolved
         .first()
         .ok_or_else(|| ToolkitError::BadInput("no @0 slot resolved".into()))?;
 
+    // #28 phase 1 (R0 I2) — `--origin` override. Mirrors `restore --origin`: the
+    // template is account/origin-agnostic (byte-identical md1), so a custom
+    // origin is supplied at verify time. Re-derive the seed slot's xpub at the
+    // explicit BIP-32 path (via the SAME `derive_bip32_from_entropy_at_path`
+    // wrapper restore uses) so the recompose + the expected-bundle card
+    // comparison both reflect the override origin. The canonical-account
+    // `resolve_slots` result is used when `--origin` is absent.
+    let origin_slot: Option<ResolvedSlot> = match args.origin.as_deref() {
+        Some(origin_str) => {
+            let entropy = canonical_slot.entropy.as_ref().ok_or_else(|| {
+                ToolkitError::BadInput(
+                    "verify-bundle --origin requires a secret-bearing seed slot (the override \
+                     re-derives the key at the supplied path)"
+                        .into(),
+                )
+            })?;
+            let path = bitcoin::bip32::DerivationPath::from_str(
+                origin_str.trim_start_matches("m/").trim_start_matches('m'),
+            )
+            .or_else(|_| bitcoin::bip32::DerivationPath::from_str(origin_str))
+            .map_err(|e| ToolkitError::BadInput(format!("--origin {origin_str}: {e}")))?;
+            let passphrase = args.passphrase.as_deref().unwrap_or("");
+            let derive_language: bip39::Language = canonical_slot
+                .language
+                .unwrap_or_else(|| args.language.unwrap_or_default().into());
+            let acct = crate::derive_slot::derive_bip32_from_entropy_at_path(
+                entropy,
+                passphrase,
+                derive_language,
+                args.network,
+                &path,
+            )?;
+            Some(ResolvedSlot {
+                xpub: acct.account_xpub,
+                fingerprint: acct.master_fingerprint,
+                path: acct.account_path.clone(),
+                entropy: None,
+                master_xpub: None,
+                language: None,
+                _entropy_pin: None,
+            })
+        }
+        None => None,
+    };
+    // The effective slot + single-element resolved vec for card-synthesis: the
+    // override slot when `--origin` is set, else the canonical resolution.
+    let resolved_for_synth: Vec<ResolvedSlot> = match &origin_slot {
+        Some(s) => vec![s.clone()],
+        None => resolved.clone(),
+    };
+    let slot: &ResolvedSlot = origin_slot.as_ref().unwrap_or(canonical_slot);
+
     // (2) Re-synthesize the EXPECTED bundle in TEMPLATE form; compare cards.
     let expected = crate::synthesize::synthesize_unified(
-        &resolved,
+        &resolved_for_synth,
         template,
         1,
         args.network,
@@ -564,35 +631,48 @@ fn verify_singlesig_template<W: Write, E: Write>(
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
 
     // (4) --expect-wallet-id (D7 recompute-and-match), via the SHARED helper.
+    // Skipped under `--origin` (same carve-out as `restore`): D7 was computed
+    // for the canonical `m/<purpose>'/<coin>'/account'` origin, so an explicit
+    // override is a DIFFERENT preimage — matching it against the canonical id
+    // would spuriously fail. Notice + skip rather than refuse.
     if let Some(prefix_hex) = args.expect_wallet_id.as_deref() {
-        let prefix = hex::decode(prefix_hex.trim()).map_err(|e| {
-            ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}"))
-        })?;
-        if prefix.len() < 4 {
+        if origin_slot.is_some() {
             let _ = writeln!(
                 stderr,
-                "advisory: --expect-wallet-id prefix is only {} byte(s); ≥4 recommended.",
-                prefix.len()
+                "notice: --expect-wallet-id is not checked when --origin overrides the canonical \
+                 account path (the wallet-id was computed for the canonical origin)."
             );
+        } else {
+            let prefix = hex::decode(prefix_hex.trim()).map_err(|e| {
+                ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}"))
+            })?;
+            if prefix.len() < 4 {
+                let _ = writeln!(
+                    stderr,
+                    "advisory: --expect-wallet-id prefix is only {} byte(s); ≥4 recommended.",
+                    prefix.len()
+                );
+            }
+            let id = crate::synthesize::wallet_policy_id_for_singlesig(
+                template,
+                args.network,
+                &slot.xpub,
+                slot.fingerprint,
+                args.account,
+            )?;
+            let ok =
+                id.as_bytes().len() >= prefix.len() && id.as_bytes()[..prefix.len()] == prefix[..];
+            checks.push(VerifyCheck {
+                name: "wallet_id_match".into(),
+                passed: ok,
+                detail: if ok {
+                    "completed wallet matches --expect-wallet-id".into()
+                } else {
+                    "completed wallet does NOT match --expect-wallet-id".into()
+                },
+                ..Default::default()
+            });
         }
-        let id = crate::synthesize::wallet_policy_id_for_singlesig(
-            template,
-            args.network,
-            &slot.xpub,
-            slot.fingerprint,
-            args.account,
-        )?;
-        let ok = id.as_bytes().len() >= prefix.len() && id.as_bytes()[..prefix.len()] == prefix[..];
-        checks.push(VerifyCheck {
-            name: "wallet_id_match".into(),
-            passed: ok,
-            detail: if ok {
-                "completed wallet matches --expect-wallet-id".into()
-            } else {
-                "completed wallet does NOT match --expect-wallet-id".into()
-            },
-            ..Default::default()
-        });
     }
 
     // ---- Emit verdict -------------------------------------------------------
