@@ -1074,26 +1074,38 @@ fn emit_template_wallet_id_advisory<E: Write>(
     resolved: &[ResolvedSlot],
     stderr: &mut E,
 ) {
-    // Recover the single-sig type from the engraved (keyless) md1 tree.
+    // Recover the engraved (keyless) template descriptor.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
-    let Some(template) = md_codec::chunk::reassemble(&md1_strs)
-        .ok()
-        .and_then(|d| crate::synthesize::cli_template_from_tree(&d.tree))
-    else {
+    let Ok(template_desc) = md_codec::chunk::reassemble(&md1_strs) else {
         return;
     };
-    let Some(slot) = resolved.first() else {
-        return;
-    };
-    let id = match crate::synthesize::wallet_policy_id_for_singlesig(
-        template,
-        args.network,
-        &slot.xpub,
-        slot.fingerprint,
-        args.account,
-    ) {
-        Ok(id) => id,
-        Err(_) => return,
+
+    // Compute the order-sensitive WalletPolicyId. Single-sig uses the shared
+    // `wallet_policy_id_for_singlesig` helper (the exact preimage `restore
+    // --expect-wallet-id` recomputes); multisig/general re-injects the resolved
+    // keys into the template tree (`wallet_policy_id_for_template`).
+    let id = if template_desc.n == 1 {
+        let Some(template) = crate::synthesize::cli_template_from_tree(&template_desc.tree) else {
+            return;
+        };
+        let Some(slot) = resolved.first() else {
+            return;
+        };
+        match crate::synthesize::wallet_policy_id_for_singlesig(
+            template,
+            args.network,
+            &slot.xpub,
+            slot.fingerprint,
+            args.account,
+        ) {
+            Ok(id) => id,
+            Err(_) => return,
+        }
+    } else {
+        match crate::synthesize::wallet_policy_id_for_template(&template_desc, resolved) {
+            Ok(id) => id,
+            Err(_) => return,
+        }
     };
     let bytes = id.as_bytes();
     let hex = hex::encode(bytes);
@@ -1116,10 +1128,64 @@ fn emit_template_wallet_id_advisory<E: Write>(
     if let Some(phrase) = phrase {
         let _ = writeln!(stderr, "        wallet-id (words):  {phrase}");
     }
+
+    // #28 phase 2 (SPEC §3.4) — the loud order-dependent warning. For an
+    // ORDER-DEPENDENT multisig/general shape (anything but sortedmulti*), the
+    // N!  assignment count, the "only one assignment reproduces this wallet"
+    // line, and (for a general policy) the asymmetric-semantics caveat. Softened
+    // for sortedmulti* (order-independent) and skipped for single-sig (N=1).
+    if template_desc.n >= 2 {
+        emit_template_order_warning(&template_desc, stderr);
+    }
+
     let _ = writeln!(
         stderr,
         "        restore with: restore --md1 <template> --from <seed> --account {} [--expect-wallet-id {prefix}]",
         args.account
+    );
+}
+
+/// #28 phase 2 (SPEC §3.4) — the loud N!/asymmetric-spending-role warning at
+/// multisig/general template emit. `template_desc` is the keyless template.
+fn emit_template_order_warning<E: Write>(template_desc: &md_codec::Descriptor, stderr: &mut E) {
+    let n = template_desc.n as u64;
+    if crate::synthesize::is_order_independent_shape(&template_desc.tree) {
+        // sortedmulti* — order-independent: any assignment yields the same
+        // wallet, so the warning is softened.
+        let _ = writeln!(
+            stderr,
+            "note: this is an ORDER-INDEPENDENT (sortedmulti) template — the cosigner key order \
+             does not change the wallet, so any assignment of keys to slots reproduces it."
+        );
+        return;
+    }
+    // Order-dependent: exactly one of N! assignments reproduces the wallet.
+    // `checked` guards a pathological descriptor with a huge placeholder count
+    // (a panic in an advisory must never abort the bundle emit); n is realistically
+    // ≤ 16 (the multisig slot cap), so the overflow arm is defensive only.
+    let factorial: Option<u64> = (1..=n).try_fold(1u64, |acc, k| acc.checked_mul(k));
+    let count = match factorial {
+        Some(f) => format!("{n}! = {f}"),
+        None => format!("{n}! (astronomically many)"),
+    };
+    let _ = writeln!(
+        stderr,
+        "warning: this is an ORDER-DEPENDENT template with {n} distinct cosigner slots — there are \
+         {count} possible key→slot assignments and only one assignment reproduces this wallet."
+    );
+    // A general policy (non-canonical wrapper, e.g. wsh(or_i(...))) has
+    // asymmetric branch semantics — a wrong assignment silently changes each
+    // key's SPENDING ROLE, not just the receive address.
+    if md_codec::canonical_origin::canonical_origin(&template_desc.tree).is_none() {
+        let _ = writeln!(
+            stderr,
+            "         this is a GENERAL POLICY: a wrong assignment changes each key's SPENDING ROLE \
+             (timelock branch, threshold membership), not just the address."
+        );
+    }
+    let _ = writeln!(
+        stderr,
+        "         record the wallet-id above and/or a known receive address to complete safely."
     );
 }
 

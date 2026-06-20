@@ -214,6 +214,87 @@ pub fn wallet_policy_id_for_singlesig(
     md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)
 }
 
+/// #28 phase 2 (D7) — the order-sensitive `WalletPolicyId` for a MULTISIG /
+/// general-policy template bundle. The keyless template md1 carries the tree +
+/// use-site structure (incl. #25 overrides) but no keys; re-inject the resolved
+/// per-`@N` keys/fingerprints and rebuild `path_decl` from the slot origins
+/// (`Shared` when all equal, else `Divergent` — exactly `synthesize_unified`'s
+/// build), then compute the policy id on that fully-keyed, explicit-origin
+/// descriptor. This is the completion checksum the creator records: the
+/// `WalletPolicyId` is order-sensitive (`identity.rs` never sorts), so it pins
+/// the exact `@N`→key assignment that reproduces this wallet.
+///
+/// `keyless_template` is the reassembled (mutated) template descriptor;
+/// `slots[i]` supplies the key for `@i` (length must equal the template's `n`).
+pub fn wallet_policy_id_for_template(
+    keyless_template: &Descriptor,
+    slots: &[ResolvedSlot],
+) -> Result<md_codec::WalletPolicyId, ToolkitError> {
+    let n = keyless_template.n as usize;
+    if slots.len() != n {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "wallet_policy_id_for_template: template n={n} but {} slots supplied",
+            slots.len()
+        )));
+    }
+    let origin_paths: Vec<OriginPath> = slots
+        .iter()
+        .map(|s| derivation_path_to_origin_path(&s.path))
+        .collect();
+    let all_same = origin_paths.windows(2).all(|w| w[0] == w[1]);
+    let path_decl_paths = if all_same || n == 1 {
+        PathDeclPaths::Shared(origin_paths[0].clone())
+    } else {
+        PathDeclPaths::Divergent(origin_paths)
+    };
+    let fingerprints: Vec<(u8, [u8; 4])> = slots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i as u8, s.fingerprint.to_bytes()))
+        .collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = slots
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i as u8, xpub_to_65(&s.xpub)))
+        .collect();
+    let keyed = Descriptor {
+        n: n as u8,
+        path_decl: PathDecl {
+            n: n as u8,
+            paths: path_decl_paths,
+        },
+        use_site_path: keyless_template.use_site_path.clone(),
+        tree: keyless_template.tree.clone(),
+        tlv: TlvSection {
+            use_site_path_overrides: keyless_template.tlv.use_site_path_overrides.clone(),
+            fingerprints: Some(fingerprints),
+            pubkeys: Some(pubkeys),
+            origin_path_overrides: keyless_template.tlv.origin_path_overrides.clone(),
+            unknown: keyless_template.tlv.unknown.clone(),
+        },
+    };
+    md_codec::compute_wallet_policy_id(&keyed).map_err(ToolkitError::from)
+}
+
+/// True iff `tree` is a `sortedmulti`/`sortedmulti_a` (order-INDEPENDENT) wallet
+/// — any `@N`→key assignment yields the same wallet, so the loud order-dependent
+/// warning is softened. Walks `wsh(...)`/`sh(...)`/`tr(IK, ...)` wrappers to the
+/// inner leaf. A `SortedMulti` in a COMBINATOR (not a sole multisig leaf) is NOT
+/// order-independent overall — but such a shape does not render (refused at
+/// admission), so it never reaches the warning.
+pub(crate) fn is_order_independent_shape(tree: &md_codec::tree::Node) -> bool {
+    use md_codec::tag::Tag;
+    use md_codec::tree::Body;
+    match (&tree.tag, &tree.body) {
+        (Tag::SortedMulti, _) | (Tag::SortedMultiA, _) => true,
+        (_, Body::Children(children)) if children.len() == 1 => {
+            is_order_independent_shape(&children[0])
+        }
+        (Tag::Tr, Body::Tr { tree: Some(t), .. }) => is_order_independent_shape(t),
+        _ => false,
+    }
+}
+
 /// #28 phase 1 — map a canonical single-sig descriptor TREE to its
 /// `CliTemplate` (the type the keyless template encodes). Mirrors the shape
 /// dispatch of `md_codec::canonical_origin::canonical_origin`, but emits a
@@ -953,81 +1034,119 @@ pub fn synthesize_unified(
     )
 }
 
-/// #28 phase 1 — emit a keyless single-sig TEMPLATE bundle.
+/// True iff `descriptor` is admissible as a `--md1-form=template` shape. The
+/// gate is split by arity so phase-2's broadening does NOT reverse phase-1's
+/// deliberate single-sig refusals (the R0 I1 nested-multi-1of1 / bip49 pins):
 ///
-/// Gate (SPEC §4.2, C1; R0 I1): REQUIRES `descriptor.n == 1`,
-/// `cli_template_from_tree(&tree).is_some()` (a recognized single-sig shape),
-/// AND `canonical_origin(&tree).is_some()`. The `n == 1` conjunct alone is NOT
-/// sufficient: `canonical_origin` returns `Some` for canonical MULTISIG too
-/// (`wsh(multi)` → `m/48'/0'/0'/2'`), and a degenerate `wsh(sortedmulti(1,@0))`
-/// / `wsh(multi(1,@0))` 1-of-1 carries the multi family NESTED under a `Wsh`
-/// TOP tag — so a top-level-only `Multi`/`SortedMulti` tag check would miss it
-/// and a keyless MULTISIG template would slip through. The
-/// `cli_template_from_tree` gate (which returns `Some` ONLY for pkh/wpkh/
-/// tr-keypath single-sig, `None` for any multi shape at any depth) closes that
-/// hole; a nested-multi 1-of-1 is refused with `TemplateFormUnsupportedShape`
-/// (it is not a standard single-sig type — use `--md1-form=policy`).
+///   - **n ≥ 2 (multisig / general policy — the phase-2 surface):** admit
+///     "exactly what `restore` can later reconstruct from xpubs":
+///       (a) the shape RENDERS via `to_miniscript_descriptor` (single-path,
+///           chain 0) — admitting non-taproot multisig/general (`multi`/
+///           `sortedmulti`/`thresh`/timelocks/hashlocks/`or_i` branches) AND the
+///           shipped `tr(NUMS, multi_a)`, while REFUSING `tr(sortedmulti_a)` (the
+///           `to_miniscript.rs` `SortedMultiA` render gap) and
+///           `sortedmulti`-in-a-combinator; AND
+///       (b) it has NO hardened use-site (`has_hardened_use_site` — #25; an xpub
+///           cannot derive a hardened public child → unrestorable).
+///   - **n == 1 (single-sig — UNCHANGED from phase 1):** admit ONLY the three
+///     canonical-origin-elidable types — `cli_template_from_tree(tree).is_some()`
+///     (pkh/bip44, wpkh/bip84, tr-keypath/bip86). This keeps bip49 `sh(wpkh)`
+///     and a degenerate nested-multi/sortedmulti 1-of-1 (R0 I1) REFUSED, as
+///     phase 1 pinned them — they are not "standard single-sig template" types
+///     and route to `--md1-form=policy`.
 ///
-/// Four mutations on a `descriptor.clone()` (SPEC §4.2):
+/// Refusals → `TemplateFormUnsupportedShape`.
+///
+/// Note: this runs on the KEYED input `descriptor` (it still carries pubkeys);
+/// `to_miniscript_descriptor` expands `@N` over `tlv.pubkeys`, so it must NOT be
+/// called on the post-mutation keyless template.
+fn template_admissible(descriptor: &Descriptor) -> bool {
+    if descriptor.n == 1 {
+        // Phase-1 single-sig gate, verbatim: only the canonical-elidable types.
+        return cli_template_from_tree(&descriptor.tree).is_some();
+    }
+    if md_codec::to_miniscript::has_hardened_use_site(descriptor) {
+        return false;
+    }
+    md_codec::to_miniscript::to_miniscript_descriptor(descriptor, 0).is_ok()
+}
+
+/// #28 phase 1+2 — emit a keyless TEMPLATE bundle (single-sig, multisig, or
+/// general policy).
+///
+/// Gate (SPEC §3.1): `template_admissible(&descriptor)` — the shape must render
+/// (refusing `tr(sortedmulti_a)` / `sortedmulti`-in-combinator) and carry no
+/// hardened use-site (refusing the unrestorable hardened class). Refusals →
+/// `TemplateFormUnsupportedShape`.
+///
+/// Mutations on a `descriptor.clone()` (SPEC §3.2):
 ///   1. `tlv.pubkeys = None`
 ///   2. `tlv.fingerprints = None`
-///   3. `path_decl` origin ELIDED to empty (`OriginPath { components: vec![] }`)
-///   4. the `is_wallet_policy()` debug-assert is dropped (the template is
-///      keyless by construction).
+///   3. **C1-conditional origin (the load-bearing emit decision):**
+///      - `canonical_origin(&tree).is_some()` (canonical single-sig + canonical
+///        multisig `wsh(multi/sortedmulti)`, `sh(wsh(...))`) → ELIDE to
+///        `Shared(empty)` — byte-identical-shareable, account-agnostic.
+///      - `canonical_origin(&tree).is_none()` (general policy — `wsh(or_i(...))`,
+///        `thresh`, timelocks; e.g. degrade2) → KEEP the source per-`@N` origins
+///        (`Divergent` when accounts differ). Eliding to empty here makes
+///        `md decode` REJECT the wire (`validate_explicit_origin_required` →
+///        `MissingExplicitOrigin`) — the C1 regression. The carried origin is
+///        decode+display ONLY (origins are re-supplied at completion; the
+///        template-id is origin-invariant, so binding is unchanged either way).
+///   4. the `is_wallet_policy()` assert that guards the keyed path is NOT
+///      asserted (the template is keyless by construction).
 ///
-/// Binding stub (SPEC §4.3): the md1 + mk1 strings + display stub root on
+/// The per-`@N` use-site structure (incl. #25 overrides) is preserved (it is in
+/// the template-id). Threshold k / sorted shape / N slots ride along unmutated
+/// in `descriptor.tree`.
+///
+/// Binding stub (SPEC §3.3): the md1 + mk1 strings + display stub root on
 /// `WalletDescriptorTemplateId` (NOT `WalletPolicyId`, which a keyless md1
-/// cannot reproduce). ms1 is unchanged (plain codex32 entropy, no id field).
+/// cannot reproduce). The N-slot card back-half emits one mk1 card per cosigner
+/// (`MkField::Single` at n==1, `MkField::Multi` at n≥2). ms1 is unchanged
+/// (plain codex32 entropy per slot, no id field).
 fn synthesize_template_descriptor(
     descriptor: &Descriptor,
     cosigners: &[CosignerKeyInfo],
     privacy_preserving: bool,
 ) -> Result<Bundle, ToolkitError> {
-    // --- Canonical gate (C1) -------------------------------------------------
-    if descriptor.n != 1 {
+    // --- Shape-admission gate (SPEC §3.1) -----------------------------------
+    // Admit single-sig, non-taproot multisig/general, and `tr(NUMS, multi_a)`;
+    // refuse `tr(sortedmulti_a)` / `sortedmulti`-in-combinator (render gap) and
+    // any hardened use-site (#25). `template_admissible` runs on the KEYED input
+    // (it must render via `to_miniscript_descriptor`, which needs pubkeys) — so
+    // it is called BEFORE the keyless mutations below.
+    if !template_admissible(descriptor) {
         return Err(ToolkitError::TemplateFormUnsupportedShape {
-            message: format!(
-                "--md1-form=template supports standard single-sig wallet types only \
-                 (descriptor.n = {}, multisig is template-form phase 2); use --md1-form=policy",
-                descriptor.n
-            ),
-        });
-    }
-    // Require a RECOGNIZED single-sig template shape — pkh / wpkh / tr-keypath
-    // (R0 I1). `cli_template_from_tree` returns `Some` ONLY for those three; it
-    // returns `None` for every multisig shape, INCLUDING a nested-multi 1-of-1
-    // (`wsh(sortedmulti(1,@0))` / `wsh(multi(1,@0))`) whose TOP tag is `Wsh` —
-    // which the prior top-level-`Multi`/`SortedMulti`-tag guard missed, letting a
-    // keyless MULTISIG template slip through at n==1 + canonical-origin
-    // (`m/48'/0'/0'/2'`). Gating on this classifier (the same one restore /
-    // verify-bundle use to route a template) closes that hole for BOTH the
-    // template-mode and descriptor-mode entry points (both funnel through here).
-    if cli_template_from_tree(&descriptor.tree).is_none() {
-        return Err(ToolkitError::TemplateFormUnsupportedShape {
-            message: "--md1-form=template supports standard single-sig wallet types only \
-                 (pkh/bip44, wpkh/bip84, or tr-keypath/bip86 — multi/sortedmulti, even a \
-                 1-of-1, is not a single-sig template); use --md1-form=policy"
-                .into(),
-        });
-    }
-    if md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_none() {
-        return Err(ToolkitError::TemplateFormUnsupportedShape {
-            message: "--md1-form=template supports standard single-sig wallet types only \
-                 (this descriptor has a non-canonical wrapper or custom origin path — \
-                 e.g. bip49 nested-segwit, bare wsh, or a baked custom path — that cannot be \
-                 origin-elided into a byte-shareable template); use --md1-form=policy"
+            message: "--md1-form=template cannot template this descriptor shape: it either \
+                 does not render (e.g. tr(sortedmulti_a) — the rust-miniscript v13 \
+                 SortedMultiA gap — or sortedmulti inside a combinator) or it uses a \
+                 hardened use-site path (/*h or a hardened multipath alt) which an xpub \
+                 cannot derive; use --md1-form=policy for a faithful keyed backup"
                 .into(),
         });
     }
 
-    // --- The four mutations (SPEC §4.2) on a clone --------------------------
+    // --- The mutations (SPEC §3.2) on a clone -------------------------------
     let mut template = descriptor.clone();
     template.tlv.pubkeys = None; // mutation 1
     template.tlv.fingerprints = None; // mutation 2
-                                      // mutation 3 — elide the origin to empty. For n == 1 the path is always
-                                      // `Shared` (synthesize_unified builds it that way), so write an empty
-                                      // Shared origin: canonical_origin re-supplies it on decode.
-    template.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
+
+    // mutation 3 — C1-CONDITIONAL origin handling. The canonical_origin verdict
+    // is a whole-tree property (the wrapper shape), so it governs all `@N` at
+    // once. A canonical wrapper re-derives the elided origin on decode; a
+    // non-canonical wrapper (general policy) needs the explicit origins on the
+    // wire or `validate_explicit_origin_required` rejects with
+    // `MissingExplicitOrigin` (the C1 regression). When non-canonical we KEEP the
+    // source `descriptor.path_decl.paths` verbatim — `parse_descriptor` /
+    // `synthesize_unified` already built it (`Shared`/`Divergent`) from the
+    // source per-`@N` origins. Origins are re-supplied at completion and the
+    // template-id is origin-invariant, so binding is unchanged either way.
+    if md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_some() {
+        template.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
+    }
+    // else: leave `template.path_decl.paths` as the cloned source origins.
+
     // mutation 4 — the `is_wallet_policy()` assert that guards the keyed path is
     // intentionally NOT asserted here (the template is keyless by construction).
 
@@ -1042,40 +1161,73 @@ fn synthesize_template_descriptor(
     // md1 string = the keyless template.
     let md1 = md_codec::chunk::split(&template).map_err(ToolkitError::from)?;
 
-    // mk1 string (single-sig, n == 1) — the xpub-bearing card, stubbed on the
-    // template id + the template-id-derived csi.
-    let c = &cosigners[0];
-    let card = mk_codec::KeyCard::new(
-        vec![stub],
-        if privacy_preserving {
-            None
-        } else {
-            Some(c.fingerprint)
-        },
-        mk1_origin_path(&c.xpub, &c.path),
-        c.xpub,
-    );
-    let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
-    let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
-    let mk1 = MkField::Single(chunks);
-
-    // ms1 string — UNCHANGED by form (plain codex32 entropy/mnem; no id field).
-    // Single-sig: one slot. Watch-only → "" sentinel.
-    let ms1: MsField = match &c.entropy {
-        Some(e) => {
-            let emit_lang = c.language.unwrap_or(bip39::Language::English);
-            let payload = if emit_lang == bip39::Language::English {
-                ms_codec::Payload::Entr((**e).clone())
+    // mk1 cards — the xpub-bearing cards, each stubbed on the template id + a
+    // slot-unique csi. Generalize the single-slot back-half to N cosigners
+    // (mirrors the keyed `synthesize_descriptor` n==1 / n≥2 dispatch); the SAME
+    // template-id stub roots every card (SPEC §3.3). `cosigners.len() == n` was
+    // enforced by the caller (`synthesize_descriptor`'s leading check).
+    let n = cosigners.len();
+    let mk1 = if n == 1 {
+        let c = &cosigners[0];
+        let card = mk_codec::KeyCard::new(
+            vec![stub],
+            if privacy_preserving {
+                None
             } else {
-                ms_codec::Payload::Mnem {
-                    language: crate::language::bip39_to_wire_code(emit_lang),
-                    entropy: (**e).clone(),
-                }
-            };
-            vec![ms_codec::encode(ms_codec::Tag::ENTR, &payload).map_err(ToolkitError::from)?]
+                Some(c.fingerprint)
+            },
+            mk1_origin_path(&c.xpub, &c.path),
+            c.xpub,
+        );
+        let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
+        let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+        MkField::Single(chunks)
+    } else {
+        let stubs: Vec<[u8; 4]> = vec![stub; n];
+        let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(n);
+        for (i, c) in cosigners.iter().enumerate() {
+            let card = mk_codec::KeyCard::new(
+                stubs.clone(),
+                if privacy_preserving {
+                    None
+                } else {
+                    Some(c.fingerprint)
+                },
+                mk1_origin_path(&c.xpub, &c.path),
+                c.xpub,
+            );
+            // Slot-unique csi (audit I10): stub^slot preserves the leading-16-bit
+            // bundle-binding prefix while distinguishing same-xpub slots.
+            let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
+            let chunks =
+                mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+            per_cosigner.push(chunks);
         }
-        None => vec![String::new()],
+        MkField::Multi(per_cosigner)
     };
+
+    // ms1 strings — UNCHANGED by form (plain codex32 entropy/mnem; no id field).
+    // One per slot; watch-only slots → "" sentinel (SPEC §5.8 length-N rule).
+    let mut ms1: MsField = Vec::with_capacity(n);
+    for c in cosigners {
+        match &c.entropy {
+            Some(e) => {
+                let emit_lang = c.language.unwrap_or(bip39::Language::English);
+                let payload = if emit_lang == bip39::Language::English {
+                    ms_codec::Payload::Entr((**e).clone())
+                } else {
+                    ms_codec::Payload::Mnem {
+                        language: crate::language::bip39_to_wire_code(emit_lang),
+                        entropy: (**e).clone(),
+                    }
+                };
+                ms1.push(
+                    ms_codec::encode(ms_codec::Tag::ENTR, &payload).map_err(ToolkitError::from)?,
+                );
+            }
+            None => ms1.push(String::new()),
+        }
+    }
 
     Ok(Bundle { ms1, mk1, md1 })
 }
@@ -2118,6 +2270,288 @@ mod tests {
             mnemonic_toolkit::mlock::attempts_for_test() > baseline,
             "unified_fixture(1, &[0]) constructs a secret-bearing ResolvedSlot whose \
              _entropy_pin populates via pin_pages_for; attempts counter did not increment",
+        );
+    }
+
+    // ========================================================================
+    // #28 phase 2 (P2) — multisig/general template EMIT (Slice 1) unit pins.
+    // ========================================================================
+
+    use md_codec::tag::Tag;
+    use md_codec::tree::{Body, Node};
+
+    /// Build a keyed NON-CANONICAL general-policy descriptor:
+    /// `wsh(or_d(pk_k(@0), pk_k(@1)))` with explicit BIP-84 Divergent origins.
+    /// `canonical_origin` returns `None` for this wrapper, so it exercises the
+    /// C1-conditional carried-origin path. Returns `(descriptor, cosigners)`.
+    fn general_policy_fixture() -> (Descriptor, Vec<CosignerKeyInfo>) {
+        let slots = vec![
+            distinct_slot(TREZOR_12_ZERO, 0),
+            distinct_slot(BIP39_TEST_2, 1),
+        ];
+        // BIP-84 origins (NON-canonical for a wsh(or_d) wrapper) — distinct
+        // accounts so the path_decl is Divergent.
+        let origin_paths = vec![
+            derivation_path_to_origin_path(&DerivationPath::from_str("84'/0'/0'").unwrap()),
+            derivation_path_to_origin_path(&DerivationPath::from_str("84'/0'/1'").unwrap()),
+        ];
+        let tree = Node {
+            tag: Tag::Wsh,
+            body: Body::Children(vec![Node {
+                tag: Tag::OrD,
+                body: Body::Children(vec![
+                    Node {
+                        tag: Tag::PkK,
+                        body: Body::KeyArg { index: 0 },
+                    },
+                    Node {
+                        tag: Tag::PkH,
+                        body: Body::KeyArg { index: 1 },
+                    },
+                ]),
+            }]),
+        };
+        let fingerprints: Vec<(u8, [u8; 4])> = slots
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (i as u8, s.fingerprint.to_bytes()))
+            .collect();
+        let pubkeys: Vec<(u8, [u8; 65])> = slots
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (i as u8, xpub_to_65(&s.xpub)))
+            .collect();
+        let descriptor = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Divergent(origin_paths),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree,
+            tlv: TlvSection {
+                use_site_path_overrides: None,
+                fingerprints: Some(fingerprints),
+                pubkeys: Some(pubkeys),
+                origin_path_overrides: None,
+                unknown: Vec::new(),
+            },
+        };
+        (descriptor, slots)
+    }
+
+    /// C1 PIN (the load-bearing emit decision). A general-policy template
+    /// (non-canonical wrapper) emitted with the CARRIED per-@N origins DECODES;
+    /// the SAME template with origins forced to EMPTY fails md-decode's
+    /// `validate_explicit_origin_required` (`MissingExplicitOrigin`). The
+    /// conditional carry is what makes the wire valid — eliding to empty (the
+    /// single-sig behaviour) would be the C1 regression.
+    #[test]
+    fn c1_general_policy_template_carries_origins_empty_fails_decode() {
+        let (descriptor, cosigners) = general_policy_fixture();
+        assert!(
+            md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_none(),
+            "fixture must be a non-canonical wrapper to exercise C1"
+        );
+
+        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false)
+            .expect("general-policy template emits");
+
+        // The emitted template md1 DECODES (carried origins).
+        let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let decoded = md_codec::chunk::reassemble(&md1_refs)
+            .expect("C1: general-policy template md1 must decode with carried origins");
+        assert!(!decoded.is_wallet_policy(), "template is keyless");
+        md_codec::validate::validate_explicit_origin_required(&decoded)
+            .expect("C1: carried origins satisfy validate_explicit_origin_required");
+
+        // The C1 NEGATIVE: force origins empty → md-decode rejects.
+        let mut elided = decoded.clone();
+        elided.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
+        let err = md_codec::validate::validate_explicit_origin_required(&elided)
+            .expect_err("C1: empty origins on a non-canonical wrapper MUST be rejected");
+        assert!(
+            matches!(err, md_codec::error::Error::MissingExplicitOrigin { .. }),
+            "C1: empty-origin rejection must be MissingExplicitOrigin, got {err:?}"
+        );
+    }
+
+    /// A CANONICAL multisig template elides origins to `Shared(empty)` and still
+    /// decodes (the wrapper re-derives the canonical origin) — distinguishing
+    /// the canonical arm of the C1 conditional from the general-policy arm.
+    #[test]
+    fn canonical_multisig_template_elides_origins() {
+        let (descriptor, cosigners, _entropy) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        assert!(
+            md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_some(),
+            "wsh(sortedmulti) is a canonical wrapper"
+        );
+        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false).unwrap();
+        let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let decoded = md_codec::chunk::reassemble(&md1_refs).unwrap();
+        // Origins elided to empty (Shared empty), yet decode succeeds.
+        match &decoded.path_decl.paths {
+            PathDeclPaths::Shared(p) => assert!(
+                p.components.is_empty(),
+                "canonical template elides origins to empty Shared"
+            ),
+            PathDeclPaths::Divergent(_) => {
+                panic!("canonical template must elide to Shared(empty), not Divergent")
+            }
+        }
+        md_codec::validate::validate_explicit_origin_required(&decoded).unwrap();
+        // n=2 → two mk1 cards.
+        assert_eq!(bundle.mk1.as_multi().unwrap().len(), 2);
+    }
+
+    /// The admission gate refuses `tr(sortedmulti_a)` (render gap) but admits
+    /// `tr(NUMS, multi_a)` and non-taproot multisig/general.
+    #[test]
+    fn template_admissible_gate() {
+        // tr-sortedmulti-a 2-of-2 — does NOT render → refused.
+        let (sma, _, _) = descriptor_fixture_taproot(CliTemplate::TrSortedMultiA);
+        assert!(
+            !template_admissible(&sma),
+            "tr(sortedmulti_a) must be refused (render gap)"
+        );
+        // tr-multi-a 2-of-2 (NUMS) — renders → admitted.
+        let (ma, _, _) = descriptor_fixture_taproot(CliTemplate::TrMultiA);
+        assert!(
+            template_admissible(&ma),
+            "tr(NUMS, multi_a) must be admitted"
+        );
+        // Canonical multisig — admitted.
+        let (wsm, _, _) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        assert!(template_admissible(&wsm), "wsh(sortedmulti) admitted");
+        // General policy — admitted.
+        let (gp, _) = general_policy_fixture();
+        assert!(template_admissible(&gp), "wsh(or_d(...)) general policy admitted");
+    }
+
+    /// Build a keyed taproot multisig descriptor for `template` (TrMultiA /
+    /// TrSortedMultiA) from TREZOR_24 at two distinct BIP-48 type-3 accounts.
+    fn descriptor_fixture_taproot(
+        template: CliTemplate,
+    ) -> (Descriptor, Vec<CosignerKeyInfo>, Vec<u8>) {
+        let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let entropy = mnemonic.to_entropy();
+        let seed = mnemonic.to_seed("");
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        let master_fp = master.fingerprint(&secp);
+        let mut cosigners = Vec::with_capacity(2);
+        let mut origin_paths = Vec::with_capacity(2);
+        let mut pubkeys = Vec::with_capacity(2);
+        let mut fps = Vec::with_capacity(2);
+        for i in 0..2u8 {
+            let path = DerivationPath::from_str(&format!("48'/0'/{i}'/3'")).unwrap();
+            let xpriv = master.derive_priv(&secp, &path).unwrap();
+            let xpub = Xpub::from_priv(&secp, &xpriv);
+            cosigners.push(CosignerKeyInfo {
+                xpub,
+                fingerprint: master_fp,
+                path: path.clone(),
+                entropy: None,
+                master_xpub: None,
+                language: None,
+                _entropy_pin: None,
+            });
+            origin_paths.push(derivation_path_to_origin_path(&path));
+            pubkeys.push((i, xpub_to_65(&xpub)));
+            fps.push((i, master_fp.to_bytes()));
+        }
+        let descriptor = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Divergent(origin_paths),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: template.wrapper_node(2, 2),
+            tlv: TlvSection {
+                use_site_path_overrides: None,
+                fingerprints: Some(fps),
+                pubkeys: Some(pubkeys),
+                origin_path_overrides: None,
+                unknown: Vec::new(),
+            },
+        };
+        (descriptor, cosigners, entropy)
+    }
+
+    /// `is_order_independent_shape` distinguishes sortedmulti* (true) from
+    /// multi/general (false), walking wsh/sh/tr wrappers.
+    #[test]
+    fn order_independent_shape_classifier() {
+        let wsh = |inner: Node| Node {
+            tag: Tag::Wsh,
+            body: Body::Children(vec![inner]),
+        };
+        let leaf = |tag: Tag| Node {
+            tag,
+            body: Body::MultiKeys {
+                k: 2,
+                indices: vec![0, 1],
+            },
+        };
+        assert!(is_order_independent_shape(&wsh(leaf(Tag::SortedMulti))));
+        assert!(!is_order_independent_shape(&wsh(leaf(Tag::Multi))));
+        // tr(NUMS, sortedmulti_a) → order-independent.
+        let tr_sma = Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                is_nums: true,
+                key_index: 0,
+                tree: Some(Box::new(leaf(Tag::SortedMultiA))),
+            },
+        };
+        assert!(is_order_independent_shape(&tr_sma));
+        let tr_ma = Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                is_nums: true,
+                key_index: 0,
+                tree: Some(Box::new(leaf(Tag::MultiA))),
+            },
+        };
+        assert!(!is_order_independent_shape(&tr_ma));
+        // general policy → false.
+        let or_d = wsh(Node {
+            tag: Tag::OrD,
+            body: Body::Children(vec![leaf(Tag::PkK), leaf(Tag::Multi)]),
+        });
+        assert!(!is_order_independent_shape(&or_d));
+    }
+
+    /// `wallet_policy_id_for_template` recomputes the order-sensitive id from
+    /// the keyless template + resolved slots, and it is ORDER-SENSITIVE for a
+    /// (non-sorted) multi: swapping the two slot keys changes the id.
+    #[test]
+    fn wallet_policy_id_for_template_is_order_sensitive() {
+        let (descriptor, cosigners, _entropy) = descriptor_fixture(
+            "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false).unwrap();
+        let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+        let template = md_codec::chunk::reassemble(&md1_refs).unwrap();
+
+        let id_forward = wallet_policy_id_for_template(&template, &cosigners).unwrap();
+        let swapped: Vec<ResolvedSlot> = vec![cosigners[1].clone(), cosigners[0].clone()];
+        let id_swapped = wallet_policy_id_for_template(&template, &swapped).unwrap();
+        assert_ne!(
+            id_forward.as_bytes(),
+            id_swapped.as_bytes(),
+            "multi (order-dependent) — swapping slot keys must change the WalletPolicyId"
         );
     }
 }
