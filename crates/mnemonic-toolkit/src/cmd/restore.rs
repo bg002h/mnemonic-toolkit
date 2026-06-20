@@ -96,9 +96,14 @@ pub struct RestoreArgs {
     #[arg(long, value_enum)]
     pub network: Option<CliNetwork>,
 
-    /// BIP-32 account index (default 0).
-    #[arg(long, default_value_t = 0)]
-    pub account: u32,
+    /// BIP-32 account index(es). For single-sig restore + single-sig template
+    /// completion this is one account (the first value is used). For a MULTISIG
+    /// template completion (#28 phase 2) this is the LIST of accounts the OWN
+    /// seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a
+    /// 4-own-slot policy); the search places each own-derived key. Default `0`.
+    /// Comma-separated; whitespace tolerated.
+    #[arg(long, default_value = "0", value_parser = parse_account_list)]
+    pub account: Vec<u32>,
 
     /// #28 phase 1 — explicit origin derivation path for single-sig
     /// template-completion (`restore --md1 <keyless-template>`). Overrides the
@@ -118,6 +123,45 @@ pub struct RestoreArgs {
     /// printed on stderr.
     #[arg(long = "expect-wallet-id")]
     pub expect_wallet_id: Option<String>,
+
+    /// #28 phase 2 — RANGE fallback for the OWN seed's account(s) when the exact
+    /// accounts are unknown: derive the own seed at every account in `0..K` and
+    /// let the multisig-template search select the subset actually used. Enlarges
+    /// the search space (and so the required `--expect-wallet-id` prefix length).
+    /// Multisig template completion only; ignored otherwise.
+    #[arg(long = "own-account-max")]
+    pub own_account_max: Option<u32>,
+
+    /// #28 phase 2 — a known receive (or change) ADDRESS of the wallet; triggers
+    /// ADDRESS-SEARCH for a multisig template completion. The search finds the
+    /// unique key→slot assignment whose scriptPubKey at some `(chain, index)` in
+    /// the range equals this address's. Recommended over `--expect-wallet-id`
+    /// (full-scriptPubKey match — collision-free).
+    #[arg(long = "search-address")]
+    pub search_address: Option<String>,
+
+    /// #28 phase 2 — inclusive lower address index for `--search-address`
+    /// (default 0).
+    #[arg(long = "search-addr-min", default_value_t = 0)]
+    pub search_addr_min: u32,
+
+    /// #28 phase 2 — exclusive upper address index for `--search-address`
+    /// (default 20). Deepen (`0..20`, then `20..40`, …) if the target is not
+    /// found; a narrow range expresses "I know the index."
+    #[arg(long = "search-addr-max", default_value_t = 20)]
+    pub search_addr_max: u32,
+
+    /// #28 phase 2 — which BIP-32 change-chain branch(es) `--search-address`
+    /// scans: `receive` (0, default), `change` (1), or `both`.
+    #[arg(long = "search-chain", value_enum, default_value_t = CliSearchChain::Receive)]
+    pub search_chain: CliSearchChain,
+
+    /// #28 phase 2 — override the 1-hour search-time ceiling for a multisig
+    /// template completion. Must be ≥ the tool's printed estimated exhaustive
+    /// time (a forced acknowledgment). Accepts a humantime duration (e.g. `2h`,
+    /// `90min`).
+    #[arg(long = "accept-search-time")]
+    pub accept_search_time: Option<String>,
 
     /// Restrict to a single single-sig wallet type. Omit = all four
     /// (bip44/49/84/86). A multisig template is refused (restore is single-sig).
@@ -168,6 +212,61 @@ pub struct RestoreArgs {
 
 fn bad(s: impl Into<String>) -> ToolkitError {
     ToolkitError::BadInput(s.into())
+}
+
+/// `--search-chain` value enum (#28 phase 2). Maps to the engine's
+/// [`mnemonic_toolkit::permutation_search::ChainScope`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum CliSearchChain {
+    /// External / receive chain only (chain 0) — the default.
+    Receive,
+    /// Internal / change chain only (chain 1).
+    Change,
+    /// Both chains (doubles the per-index search cost).
+    Both,
+}
+
+impl CliSearchChain {
+    fn to_scope(self) -> mnemonic_toolkit::permutation_search::ChainScope {
+        match self {
+            CliSearchChain::Receive => mnemonic_toolkit::permutation_search::ChainScope::Receive,
+            CliSearchChain::Change => mnemonic_toolkit::permutation_search::ChainScope::Change,
+            CliSearchChain::Both => mnemonic_toolkit::permutation_search::ChainScope::Both,
+        }
+    }
+}
+
+/// clap value parser for `--account <N[,N…]>` (#28 phase 2 own-account LIST).
+/// Splits on commas, trims whitespace, parses each as a `u32`, rejects an empty
+/// list and duplicate accounts (a duplicate own account would derive the SAME
+/// own key twice → a duplicate-key collision, floor 2).
+fn parse_account_list(s: &str) -> Result<Vec<u32>, String> {
+    let mut out: Vec<u32> = Vec::new();
+    for tok in s.split(',') {
+        let t = tok.trim();
+        if t.is_empty() {
+            return Err(format!("--account: empty account in list `{s}`"));
+        }
+        let v: u32 = t
+            .parse()
+            .map_err(|_| format!("--account: `{t}` is not a u32 account index"))?;
+        if out.contains(&v) {
+            return Err(format!("--account: duplicate account {v} in list `{s}`"));
+        }
+        out.push(v);
+    }
+    if out.is_empty() {
+        return Err("--account: empty list".to_string());
+    }
+    Ok(out)
+}
+
+impl RestoreArgs {
+    /// The single account index for single-sig paths (the first / only value of
+    /// the `--account` list). The clap parser guarantees ≥1 element.
+    fn account_primary(&self) -> u32 {
+        self.account.first().copied().unwrap_or(0)
+    }
 }
 
 /// One derived wallet type: its template, concrete descriptor, and first
@@ -383,7 +482,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             derive_language,
             network,
             template,
-            args.account,
+            args.account_primary(),
         )?;
         master_fingerprint = Some(acct.master_fingerprint);
 
@@ -429,7 +528,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             std::slice::from_ref(&slot),
             1,
             network,
-            args.account,
+            args.account_primary(),
             None,
         )?;
 
@@ -513,7 +612,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             format,
             &rows[0],
             network,
-            args.account,
+            args.account_primary(),
         )?)
     } else {
         None
@@ -812,7 +911,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             derive_language,
             network,
             template,
-            args.account,
+            args.account_primary(),
         )?,
     };
     let master_fingerprint = acct.master_fingerprint;
@@ -856,7 +955,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         std::slice::from_ref(&slot),
         1,
         network,
-        args.account,
+        args.account_primary(),
         None,
     )?;
 
@@ -888,7 +987,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
                 network,
                 &acct.account_xpub,
                 master_fingerprint,
-                args.account,
+                args.account_primary(),
             )?;
             let id_bytes = id.as_bytes();
             if id_bytes.len() < prefix.len() || id_bytes[..prefix.len()] != prefix[..] {
@@ -1792,7 +1891,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             &slots,
             k_opt.expect("plain/taproot template arm always carries a threshold"),
             network,
-            args.account,
+            args.account_primary(),
             tap_internal_key,
         )?,
         None => faithful_multisig_descriptor(&d, network)?,
@@ -2054,7 +2153,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             k_opt,
             &descriptor,
             network,
-            args.account,
+            args.account_primary(),
             tap_internal_key,
         )?),
         None => None,
