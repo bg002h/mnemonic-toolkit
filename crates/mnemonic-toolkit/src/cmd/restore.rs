@@ -1462,15 +1462,58 @@ impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
 }
 
 /// A taproot (`Tag::Tr` root) wallet-policy md1 that ALSO carries per-cosigner
-/// use-site overrides. The taproot reconstruction arm routes around the faithful
-/// per-`@N` path (the single-leaf `multi_a`/`sortedmulti_a` Template path + the
-/// `sortedmulti_a` render gap), so an override there would mis-render silently —
-/// REFUSED (deferred: FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
-/// This is the SINGLE source shared by the restore guard (P2.3) and the engrave
-/// advisory (P2.4, `unrestorable_advisory.rs`) so the advisory fires IFF restore
-/// refuses (exact parity).
+/// use-site overrides — the BLANKET predicate (#25). The RESTORABLE subset of
+/// these (non-hardened `tr(NUMS, multi_a)`) is carved out by
+/// `restorable_taproot_override_card` (#26) and reconstructs faithfully via the
+/// per-`@N` multipath builder; the REMAINDER (a `sortedmulti_a` tap leaf, a
+/// non-NUMS internal/trunk key, or a hardened use-site) routes around the
+/// faithful per-`@N` path and would mis-render, so it stays REFUSED (FOLLOWUP
+/// `restore-md1-taproot-use-site-override-arm`). This blanket predicate is the
+/// base term shared by the restore guard (P2.3) and the engrave advisory (P2.4,
+/// `unrestorable_advisory.rs`), each of which subtracts `restorable_…` so the
+/// advisory fires IFF restore refuses (exact parity).
 pub(crate) fn taproot_override_card(d: &md_codec::Descriptor) -> bool {
     matches!(d.tree.tag, md_codec::Tag::Tr) && d.tlv.use_site_path_overrides.is_some()
+}
+
+/// The RESTORABLE subset of `taproot_override_card`: a taproot override card the
+/// toolkit CAN now reconstruct faithfully per-`@N` (#26). This is the SINGLE
+/// source shared VERBATIM by the restore guard (P2.3, `restore.rs`), the
+/// classify-reroute (P2.2, the `Template` arm at the sole `classify_taproot_restore`
+/// caller), AND the engrave advisory (P2.4, `unrestorable_advisory.rs`) — so
+/// guard-admits ⟺ classify-reroutes ⟺ advisory-silent (single expression ⇒ exact
+/// parity; mirrors #25's hardened/override parity). The four conjuncts:
+/// 1. `taproot_override_card(d)` — `Tag::Tr` root ∧ `use_site_path_overrides`.
+/// 2. NUMS internal key (D7 — a real/non-NUMS trunk key is out of scope; the
+///    `@-in-both` and per-`@N` non-NUMS internal cases are not yet covered).
+/// 3. the sole tap-script leaf is a PLAIN `MultiA` (NOT `SortedMultiA` — md-codec
+///    0.37.0 still hard-`Err`s `SortedMultiA` as a non-root tap leaf; that leg
+///    rides the `taproot-coverage-cycle-on-miniscript-gt-13-1-0` umbrella).
+/// 4. NO hardened use-site anywhere (`/*h` or a hardened multipath alt) — watch-only
+///    cannot derive hardened (#25 Point B, reused verbatim).
+///
+/// Conjuncts 2+3 are read off the wire tree using the EXACT `Body::Tr { is_nums,
+/// tree: Some(inner), .. }` destructure `classify_taproot_restore` uses, so the
+/// predicate's NUMS/leaf read CANNOT diverge from classify (R0 Min-B). A
+/// `tree: None` (keypath-only tr) or non-`Body::Tr` body yields `false`.
+pub(crate) fn restorable_taproot_override_card(d: &md_codec::Descriptor) -> bool {
+    use md_codec::tree::Body;
+    if !taproot_override_card(d) {
+        return false;
+    }
+    if md_codec::to_miniscript::has_hardened_use_site(d) {
+        return false;
+    }
+    match &d.tree.body {
+        Body::Tr {
+            is_nums: true,
+            tree: Some(inner),
+            ..
+        } => inner.tag == md_codec::Tag::MultiA,
+        // Non-NUMS trunk (D7 out of scope), keypath-only tr (`tree: None`), or a
+        // non-`Tr` body all fall through to unrestorable.
+        _ => false,
+    }
 }
 
 /// Reconstruct the faithful concrete watch-only descriptor STRING from a general
@@ -1628,9 +1671,12 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     //  (1) ANY hardened use-site (baseline OR override; `/*h` wildcard OR a
     //      hardened multipath alt) — watch-only cannot derive hardened, and a
     //      reconstructed descriptor would silently render an unhardened `/*`.
-    //  (2) A TAPROOT root WITH overrides — the taproot leg routes around the
-    //      faithful arm (Template / `sortedmulti_a` gap); deferred to FOLLOWUP
-    //      `restore-md1-taproot-use-site-override-arm`.
+    //  (2) A TAPROOT override card OUTSIDE the restorable subset (#26): a
+    //      `sortedmulti_a` leaf (md-codec render gap), a non-NUMS real trunk key
+    //      (D7 out of scope), or a hardened use-site — these still route around
+    //      the faithful per-`@N` arm and would mis-render, so they refuse. The
+    //      RESTORABLE subset — non-hardened `tr(NUMS, multi_a)` — is ADMITTED
+    //      (`restorable_taproot_override_card`) and reaches the P2.2 reroute.
     if md_codec::to_miniscript::has_hardened_use_site(&d) {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
@@ -1638,11 +1684,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             message: "this md1 uses a hardened use-site path (`/*h` wildcard or a hardened multipath alternative, baseline or per-cosigner) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened path. Faithful reconstruction is not supported. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
         });
     }
-    if taproot_override_card(&d) {
+    if taproot_override_card(&d) && !restorable_taproot_override_card(&d) {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--md1",
-            message: "this taproot md1 carries per-cosigner use-site path overrides; faithful taproot reconstruction is not yet supported (the taproot arm routes around the per-key reconstruction path) and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
+            message: "this taproot md1 carries per-cosigner use-site path overrides in a shape the toolkit cannot yet reconstruct faithfully (a sortedmulti_a tap leaf, or a non-NUMS internal/trunk key). Non-hardened tr(NUMS, multi_a(...)) override cards ARE restorable; other taproot override shapes route around the per-key reconstruction path and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
         });
     }
 
@@ -1667,7 +1713,20 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // the collapse bug).
     let is_taproot = d.tree.tag == md_codec::Tag::Tr;
     let (template_opt, tap_internal_key): (Option<CliTemplate>, Option<TaprootInternalKey>) =
-        if is_taproot {
+        if is_taproot && restorable_taproot_override_card(&d) {
+            // P2.2 (#26): a RESTORABLE taproot override card — `tr(NUMS, multi_a)`
+            // with per-`@N` divergent suffixes, non-hardened. The single-leaf
+            // `multi_a` Template path hardcodes one shared `<0;1>` suffix per key
+            // and would silently collapse `@1`'s divergent alt — so FORCE the
+            // faithful arm (`template_opt = None`), exactly as the non-taproot
+            // override path below does. The internal key is NUMS by the
+            // predicate's `is_nums:true` conjunct. The faithful arm routes through
+            // `faithful_multisig_descriptor` → md-codec's multipath builder, which
+            // reconstructs each `@N`'s OWN group. (`classify_taproot_restore` is
+            // tree-only and cannot see overrides, so the verdict is computed here
+            // at the call site, mirroring the non-taproot override reroute.)
+            (None, Some(TaprootInternalKey::Nums))
+        } else if is_taproot {
             match classify_taproot_restore(&d.tree)? {
                 TaprootRestore::Template(t, ik) => (Some(t), Some(ik)),
                 TaprootRestore::GeneralFaithful(ik) => (None, Some(ik)),
@@ -2211,4 +2270,121 @@ fn resolve_seed_entropy(
         }
         _ => unreachable!("seed-node guard restricts to ms1/phrase/seedqr/entropy"),
     })
+}
+
+#[cfg(test)]
+mod taproot_override_predicate_tests {
+    //! P2.1 truth table for `restorable_taproot_override_card` — the SINGLE
+    //! shared predicate that partitions every `taproot_override_card(d)` into
+    //! {reroute→faithful} vs {loud-refuse+advisory}. Each `Descriptor` is built
+    //! from a REAL md1 card (generated offline via `mnemonic bundle` over the
+    //! fixed C0/C1/C2 phrases) and reassembled through `md_codec::chunk` — the
+    //! identical wire path `restore --md1` walks — so the predicate sees exactly
+    //! the on-the-wire tree/TLV shape, not a hand-forged `Descriptor` literal.
+    use super::*;
+
+    fn desc(cards: &[&str]) -> md_codec::Descriptor {
+        md_codec::chunk::reassemble(cards).expect("reassemble md1 cards")
+    }
+
+    // `tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))` — divergent override, NUMS
+    // internal, plain MultiA leaf, non-hardened → RESTORABLE (the unlock).
+    const NUMS_MULTI_A_OVERRIDE: &[&str] = &[
+        "md1frh62pspq2tvyyy4qqxquszzs95czskp0prnchdq4hp5gmug4cyja6p372zc9gwrh7h9q2hq95869eapttw6g",
+        "md1frh62psvxs7s5yl6smtcxjz9m806prlsm794tkxqs6806lhaeh6reknylagmwyjycf8044xgymjflqyj4xuqg",
+        "md1frh62psnt9flsdlkvt6f6cthyl98fejsahhtp2x7t365s9qhgfvt63yacv0jzrws489wwl2qk383gdnvgkmwn",
+        "md1frh62psmcse69e0qvuhzq6k5jt8ymyydynzrv4kudj9m56mcqpxckrlzeq339uepg0p7q8x8rh5sd2v5hk",
+    ];
+    // Same shape but `sortedmulti_a` leaf — md-codec cannot render it back as a
+    // non-root tap leaf (umbrella gap) → NOT restorable.
+    const NUMS_SORTEDMULTI_A_OVERRIDE: &[&str] = &[
+        "md1ftf38pspq2tvyyy4qqxqujzzs95czskp0prnchdq4hp5gmug4cyja6p372zc9gwrh7h9q2hqlafphjqhy6vu7",
+        "md1ftf38psvxs7s5yl6smtcxjz9m806prlsm794tkxqs6806lhaeh6reknylagmwyjycf8044xg7stmtpsjl5fdj",
+        "md1ftf38psnt9flsdlkvt6f6cthyl98fejsahhtp2x7t365s9qhgfvt63yacv0jzrws489wwl2qv67ruv8vzywrf",
+        "md1ftf38psmcse69e0qvuhzq6k5jt8ymyydynzrv4kudj9m56mcqpxckrlzeq339uepg0p7q6gzlrcel29yrh",
+    ];
+    // `tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))` — real (non-NUMS) trunk key (D7
+    // out of scope) → NOT restorable.
+    const NON_NUMS_MULTI_A_OVERRIDE: &[&str] = &[
+        "md1f3sl6zspqjtvyyy5qgjqgtqxnkqqdgzskp0npeutks2dcdzxlrzsezsqc27rchwsv0jskq40meejhx8ptl2",
+        "md1f3sl6zsdgwrh7h9q2hyxs7s5yl6smtcxjz9m806prlsm794tkxqs6806lhaeh6reknylagqkr2s9n7c2vsc",
+        "md1f3sl6zsndcjgnpya7k5edv487ph7e30f8tpwunu5knn9pm0wkz5duhr4fq2pwsjch4zfmsq6dryjtwrel8g",
+        "md1f3sl6zsmrussm59fetnh6s7yxw3wtcr89csx44yjeexeprfycsm9dhrv3waxk7qqfk9slcwmfzgkfetgnvw",
+        "md1f3sl6z3zeq339uepg0plpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqnc896wtrlv4g04rwua8nzh8",
+        "md1f3sl6z3fhqdghjmksz3ry92d3gv4ejtmu9f0zxf3clxvtlnnv86xy4qee32ay5gp9lt69yuy5m4",
+    ];
+    // `tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))` — hardened alt in @1's
+    // override; watch-only cannot derive it → NOT restorable.
+    const NUMS_MULTI_A_HARDENED_OVERRIDE: &[&str] = &[
+        "md1f36rfpspq2tvyyy4qqxquszzs95czshp0prnchdq4hp5gmug4cyja6p372zc9gwrh7h9q2hqrnqxdtcr2cxyl",
+        "md1f36rfpsvxs7s5yl6smtcxjz9m806prlsm794tkxqs6806lhaeh6reknylagmwyjycf8044xgwcc03gsp4pm5n",
+        "md1f36rfpsnt9flsdlkvt6f6cthyl98fejsahhtp2x7t365s9qhgfvt63yacv0jzrws489wwl2qujdhx98lg3u6g",
+        "md1f36rfpsmcse69e0qvuhzq6k5jt8ymyydynzrv4kudj9m56mcqpxckrlzeq339uepg0p7qk49ams3vfwqr0",
+    ];
+    // `tr(NUMS,multi_a(2,@0,@1))` — NUMS plain MultiA but NO use-site override
+    // → `taproot_override_card` false → predicate false (not the override leg).
+    const NUMS_MULTI_A_NO_OVERRIDE: &[&str] = &[
+        "md1fmvwjpspq2tvyyy5qwgppgtcgu79mg9dcdzxlz9wpyhwsv0jskp2rsal4egz4ep5859pq3wt7la86whlwl",
+        "md1fmvwjpstl2rd0q6gghvalgy07r0ck4wcczrgalt7lhxlg0x6vnl4rdcjgnpya7k5edv4qwl2zn759k60rg",
+        "md1fmvwjpsnlqmlvch5n4shwf72wnn9pm0wkz5duhr4fq2pwsjch4zfmsclyyxap2w2ua75qhvcxtekagrcz2",
+        "md1fmvwjpsmcse69e0qvuhzq6k5jt8ymyydynzrv4kudj9m56mcqpxckrlzeq339uepg0p7qv90lpeqtn6vyf",
+    ];
+
+    #[test]
+    fn restorable_nums_multi_a_override_is_true() {
+        let d = desc(NUMS_MULTI_A_OVERRIDE);
+        // Sanity: the shape IS a taproot override card (the blanket #25 set).
+        assert!(taproot_override_card(&d), "must be a taproot override card");
+        assert!(
+            restorable_taproot_override_card(&d),
+            "non-hardened tr(NUMS,multi_a) override is the restorable subset"
+        );
+    }
+
+    #[test]
+    fn sortedmulti_a_override_is_not_restorable() {
+        let d = desc(NUMS_SORTEDMULTI_A_OVERRIDE);
+        assert!(taproot_override_card(&d), "must be a taproot override card");
+        assert!(
+            !restorable_taproot_override_card(&d),
+            "sortedmulti_a leaf has no md-codec renderer — must NOT be admitted"
+        );
+    }
+
+    #[test]
+    fn non_nums_trunk_override_is_not_restorable() {
+        let d = desc(NON_NUMS_MULTI_A_OVERRIDE);
+        assert!(taproot_override_card(&d), "must be a taproot override card");
+        assert!(
+            !restorable_taproot_override_card(&d),
+            "non-NUMS real-trunk internal key is D7 out of scope — must NOT be admitted"
+        );
+    }
+
+    #[test]
+    fn hardened_override_is_not_restorable() {
+        let d = desc(NUMS_MULTI_A_HARDENED_OVERRIDE);
+        assert!(taproot_override_card(&d), "must be a taproot override card");
+        assert!(
+            md_codec::to_miniscript::has_hardened_use_site(&d),
+            "fixture must actually carry a hardened use-site"
+        );
+        assert!(
+            !restorable_taproot_override_card(&d),
+            "a hardened use-site override is unrestorable for watch-only — must NOT be admitted"
+        );
+    }
+
+    #[test]
+    fn non_override_taproot_is_not_restorable() {
+        let d = desc(NUMS_MULTI_A_NO_OVERRIDE);
+        assert!(
+            !taproot_override_card(&d),
+            "no use-site overrides → not a taproot override card at all"
+        );
+        assert!(
+            !restorable_taproot_override_card(&d),
+            "the predicate is gated on taproot_override_card → false when there is no override"
+        );
+    }
 }

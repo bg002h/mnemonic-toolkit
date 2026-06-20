@@ -11,17 +11,23 @@
 //!      `/*h` wildcard OR a hardened multipath alt — from which watch-only
 //!      addresses cannot be derived (`md_codec::has_hardened_use_site`; restore
 //!      refuses via the same predicate).
-//!   3. a TAPROOT (`tr`) root carrying per-cosigner use-site overrides — the
-//!      taproot reconstruction arm routes around the faithful per-`@N` path, so
-//!      restore refuses (`taproot_override_card`, deferred to FOLLOWUP
-//!      `restore-md1-taproot-use-site-override-arm`).
+//!   3. a TAPROOT (`tr`) root carrying per-cosigner use-site overrides OUTSIDE the
+//!      restorable subset — a `sortedmulti_a` tap leaf (md-codec render gap) or a
+//!      non-NUMS internal/trunk key (D7) — for which the taproot reconstruction
+//!      arm routes around the faithful per-`@N` path, so restore refuses
+//!      (`taproot_override_card && !restorable_taproot_override_card`, FOLLOWUP
+//!      `restore-md1-taproot-use-site-override-arm`). NON-hardened
+//!      `tr(NUMS, multi_a(...))` override cards are NOW restorable (#26) — no
+//!      advisory for them.
 //!
-//! NOTE (P2.4): non-taproot, non-hardened per-cosigner use-site overrides are now
-//! RESTORABLE (faithful per-`@N` reconstruction) — so the old blanket
-//! `PerKeyUseSiteOverrides` advisory was DROPPED. The two residual override
-//! refusals (hardened, taproot) reuse the EXACT predicates the restore guard uses
-//! (`has_hardened_use_site` / `taproot_override_card`) — single source ⇒ the
-//! advisory fires IFF restore refuses.
+//! NOTE (P2.4, #26): non-taproot non-hardened overrides AND non-hardened
+//! `tr(NUMS, multi_a)` taproot overrides are now RESTORABLE (faithful per-`@N`
+//! reconstruction) — so the old blanket `PerKeyUseSiteOverrides` advisory was
+//! DROPPED and the taproot advisory was NARROWED. The residual override refusals
+//! (hardened, sortedmulti_a/non-NUMS taproot) reuse the EXACT predicates the
+//! restore guard uses (`has_hardened_use_site` / `taproot_override_card &&
+//! !restorable_taproot_override_card`) — single source ⇒ advisory fires IFF
+//! restore refuses.
 //!
 //! This module mirrors `timelock_advisory` (the v0.55.2 `older()` advisory): a
 //! pure predicate over `md_codec::Descriptor` + a best-effort stderr emitter. The
@@ -43,7 +49,9 @@ pub enum UnrestorableShape {
     HardenedWildcard,
     /// `sortedmulti()` nested inside a combinator (shape 1).
     SortedMultiInCombinator,
-    /// A taproot (`tr`) root carrying per-cosigner use-site overrides (deferred).
+    /// A taproot (`tr`) override card OUTSIDE the restorable subset — a
+    /// `sortedmulti_a` tap leaf or a non-NUMS internal/trunk key (non-hardened
+    /// `tr(NUMS, multi_a)` overrides are restorable and fire NO advisory).
     TaprootUseSiteOverride,
 }
 
@@ -74,10 +82,10 @@ impl UnrestorableAdvisory {
                 .to_string(),
             UnrestorableShape::TaprootUseSiteOverride => "advisory: restore --md1 cannot \
                 reconstruct this descriptor — it is a taproot policy carrying per-cosigner \
-                use-site path overrides (faithful taproot reconstruction is not yet supported; the \
-                taproot arm would misrepresent the divergent suffixes). The engraved card is a \
-                faithful backup; keep the full descriptor to restore. Tracked: \
-                restore-md1-taproot-use-site-override-arm"
+                use-site path overrides in a shape not yet restorable (a sortedmulti_a tap leaf, \
+                or a non-NUMS internal/trunk key; non-hardened tr(NUMS, multi_a(...)) override \
+                cards ARE restorable). The engraved card is a faithful backup; keep the full \
+                descriptor to restore. Tracked: restore-md1-taproot-use-site-override-arm"
                 .to_string(),
         }
     }
@@ -101,7 +109,13 @@ pub fn unrestorable_advisories(desc: &md_codec::Descriptor) -> Vec<UnrestorableA
             shape: UnrestorableShape::SortedMultiInCombinator,
         });
     }
-    if crate::cmd::restore::taproot_override_card(desc) {
+    // P2.4 (#26): fire IFF restore REFUSES — i.e. a taproot override card OUTSIDE
+    // the restorable subset (`sortedmulti_a` leaf / non-NUMS trunk / hardened).
+    // SAME expression as the narrowed restore guard (`restore.rs`) → exact
+    // parity: a restorable `tr(NUMS, multi_a)` override is now SILENT here.
+    if crate::cmd::restore::taproot_override_card(desc)
+        && !crate::cmd::restore::restorable_taproot_override_card(desc)
+    {
         out.push(UnrestorableAdvisory {
             shape: UnrestorableShape::TaprootUseSiteOverride,
         });
