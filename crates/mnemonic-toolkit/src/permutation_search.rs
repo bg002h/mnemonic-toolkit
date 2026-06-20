@@ -88,6 +88,10 @@ pub enum SearchError {
     },
     /// `n == 0` — there are no slots to permute.
     EmptySearchSpace,
+    /// `n!` (the permutation count) overflows `u128` (`n > 34`) — the candidate
+    /// space cannot be addressed. A realized multisig N never approaches this,
+    /// but a hostile/garbage slot count must be REFUSED rather than panic (M1).
+    SearchSpaceTooLarge { n: usize },
 }
 
 impl std::fmt::Display for SearchError {
@@ -116,6 +120,11 @@ impl std::fmt::Display for SearchError {
             SearchError::EmptySearchSpace => {
                 write!(f, "empty search space: no slots to permute (n == 0)")
             }
+            SearchError::SearchSpaceTooLarge { n } => write!(
+                f,
+                "search space too large: {n} slots → {n}! overflows the candidate index space \
+                 (the realized multisig N is a handful of cosigners — this looks malformed)"
+            ),
         }
     }
 }
@@ -547,12 +556,19 @@ pub fn search<E: CandidateEvaluator>(
     if n == 0 {
         return Err(SearchError::EmptySearchSpace);
     }
-    let perms = factorial(n).expect("search domain n is small; n! fits u128");
+    // M1: a hostile/garbage slot count whose `n!` overflows `u128` must REFUSE,
+    // not panic. `factorial`/`total_candidates` return `None` on overflow; we
+    // propagate it as a typed error (the realized multisig N never approaches
+    // `n > 34`). `unrank_permutation` below is only reached for the validated
+    // small `n`, so its internal `factorial(..).expect(..)` cannot fire.
+    let perms = factorial(n).ok_or(SearchError::SearchSpaceTooLarge { n })?;
     let outer = match mode {
         SearchMode::Id => 1u128,
         SearchMode::Address(range) => u128::from(range.outer_count()),
     };
-    let total = perms.checked_mul(outer).expect("candidate count fits u128");
+    let total = perms
+        .checked_mul(outer)
+        .ok_or(SearchError::SearchSpaceTooLarge { n })?;
     if total == 0 {
         // Empty address range → no candidates → no match.
         return Ok(SearchOutcome::None);
@@ -644,12 +660,15 @@ pub fn search_reference<E: CandidateEvaluator>(
     if n == 0 {
         return Err(SearchError::EmptySearchSpace);
     }
-    let perms = factorial(n).expect("search domain n is small; n! fits u128");
+    // M1: same overflow refusal as `search` (keep the reference oracle total).
+    let perms = factorial(n).ok_or(SearchError::SearchSpaceTooLarge { n })?;
     let outer = match mode {
         SearchMode::Id => 1u128,
         SearchMode::Address(range) => u128::from(range.outer_count()),
     };
-    let total = perms.checked_mul(outer).expect("candidate count fits u128");
+    let total = perms
+        .checked_mul(outer)
+        .ok_or(SearchError::SearchSpaceTooLarge { n })?;
     if total == 0 {
         return Ok(SearchOutcome::None);
     }
@@ -1121,5 +1140,80 @@ mod tests {
     fn calibrate_zero_samples_is_zero() {
         let eval = |_a: &[usize], _idx: u64| true;
         assert_eq!(calibrate_per_candidate(&eval, 5, 0, 0), Duration::ZERO);
+    }
+
+    // -- M1: hostile slot count refuses (no panic). -------------------------
+
+    #[test]
+    fn search_refuses_overflowing_slot_count_without_panic() {
+        // n = 35 → 35! overflows u128. Both the parallel engine and the
+        // single-threaded reference must return a typed REFUSAL, never panic
+        // (M1: `factorial(n)` is `?`-propagated, not `.expect()`-unwrapped).
+        let always = |_a: &[usize], _idx: u64| true;
+        assert_eq!(
+            search(35, &always, SearchMode::Id),
+            Err(SearchError::SearchSpaceTooLarge { n: 35 })
+        );
+        assert_eq!(
+            search_reference(35, &always, SearchMode::Id),
+            Err(SearchError::SearchSpaceTooLarge { n: 35 })
+        );
+        // The address-mode multiply can also overflow even when n! fits; a huge
+        // range over a moderate n is refused too rather than panicking.
+        let range = AddressRange {
+            min: 0,
+            max: u32::MAX,
+            chains: ChainScope::Both,
+        };
+        // n = 34 → 34! is the largest factorial that fits u128; × the range
+        // overflows the product → SearchSpaceTooLarge (the checked_mul leg).
+        assert_eq!(
+            search(34, &always, SearchMode::Address(range)),
+            Err(SearchError::SearchSpaceTooLarge { n: 34 })
+        );
+    }
+
+    // -- M2: cross-module address-index encoding round-trip. -----------------
+
+    /// The address-mode `address_index` handed to the evaluator is the
+    /// engine↔evaluator contract: `(idx << 1) | chain_bit`. P3/P4 evaluators
+    /// DECODE it as `idx = address_index >> 1`, `chain = address_index & 1`.
+    /// This pins that exact codec so a future change to `AddressRange::flatten`
+    /// cannot silently desync the two sides (the evaluator would derive at the
+    /// wrong (chain, idx) and silently mis-match scriptPubKeys — funds-safety).
+    #[test]
+    fn address_index_encoding_round_trips_engine_to_evaluator() {
+        for &chains in &[ChainScope::Receive, ChainScope::Change, ChainScope::Both] {
+            let range = AddressRange {
+                min: 3,
+                max: 9,
+                chains,
+            };
+            for k in 0..range.outer_count() {
+                let flat = range.flatten(k);
+                // The evaluator-side decode (the contract P3/P4 implement).
+                let decoded_idx = (flat >> 1) as u32;
+                let decoded_chain_bit = (flat & 1) as u32;
+                // The engine-side ground truth this k corresponds to.
+                let chain_count = chains.count();
+                let expected_idx = range.min + (k / u64::from(chain_count)) as u32;
+                let expected_chain = (k % u64::from(chain_count)) as u32;
+                assert_eq!(
+                    decoded_idx, expected_idx,
+                    "k={k} chains={chains:?}: decoded idx {decoded_idx} != {expected_idx}"
+                );
+                assert_eq!(
+                    decoded_chain_bit, expected_chain,
+                    "k={k} chains={chains:?}: decoded chain {decoded_chain_bit} != {expected_chain}"
+                );
+                // And the round-trip is total: re-encoding the decoded (idx,chain)
+                // reproduces the same flattened value.
+                assert_eq!(
+                    flat,
+                    (u64::from(decoded_idx) << 1) | u64::from(decoded_chain_bit),
+                    "k={k}: re-encode mismatch"
+                );
+            }
+        }
     }
 }
