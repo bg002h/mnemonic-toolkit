@@ -1,0 +1,56 @@
+# PLAN-DOC R0 round 1 — bundle-md1-template-multisig (#28 phase 2) (opus architect, verbatim)
+
+> Reviewer: opus architect (read+bash; toolkit HEAD `219468e4` == plan base SHA; src verified at HEAD; md-codec 0.37.0 + mk-codec **0.4.0** registry copies = the linked lib deps; rust-miniscript 13 / bitcoin 0.32 toolkit deps). Mandatory plan-time R0 over `IMPLEMENTATION_PLAN_bundle_md1_template_multisig_2026-06-20.md`. Every load-bearing citation re-grepped at HEAD; the GREEN SPEC's closed findings (C1 / I-A / I-B / I_new / I1 / I3 / M1-M3) checked for regression. **Verdict: GREEN — 0 Critical, 0 Important.**
+
+---
+
+**Verdict: GREEN — 0 Critical, 0 Important.**
+
+## Verified correct
+
+### P1 — engine
+- **No rayon in any `Cargo.toml`** (confirmed); `std::thread` + `min(20, available_parallelism())` is the only viable harness and **already has in-tree prior art**: `examples/idsearch_bench.rs:447` + `examples/addrsearch_bench.rs:728` both call `std::thread::available_parallelism()`. The benches the plan reuses as the cost model exist (`crates/mnemonic-toolkit/examples/{idsearch,addrsearch}_bench.rs`). `miniscript = "13"` + `bitcoin = "0.32"` are deps (`crates/mnemonic-toolkit/Cargo.toml:44,57`).
+- **Realized-S sizing** `required_prefix_bytes(S)=ceil((log2(S)+32)/8)` floor-5 matches SPEC §6.2 I_new and the round-1 reviewer's reproduced ladder (list→8B, K=32→11B; fixed-8B@K=32→1-in-275). Plan §2:22 states it correctly and §2:55 flags that S must come from the actual `--own-account-max` enumeration, not a fixed N!.
+- **Genuinely standalone-testable:** the engine takes `(keys_with_origins, slots, MatchPredicate)` and returns `Unique|None|Ambiguous` — no md-codec completion dependency. The TDD list (§2:23) exercises it over a synthetic `MatchPredicate`. Sound P1-before-P3 split.
+- Distinct-keys / ambiguity-refuse / no-match-refuse primitives present (§2:22) = SPEC floors 2 + 5.
+
+### P2 — emit
+- **Guards A/B/C verified at HEAD** (no drift): A `descriptor.n != 1` `synthesize.rs:987-994`; B `cli_template_from_tree(&descriptor.tree).is_none()` `:1005-1012` (recognizer `cli_template_from_tree` at `synthesize.rs:228`); C `md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_none()` `:1013-1021`. `synthesize_template_descriptor` exists `:981`. `ToolkitError::TemplateFormUnsupportedShape` exists `error.rs:318` (no new variant — correct).
+- **Single-slot keyless mutation** `template.path_decl.paths = PathDeclPaths::Shared(OriginPath{components:vec![]})` `:1030`; nulls `tlv.pubkeys`/`tlv.fingerprints` `:1025-1026` — exactly the three guards + mutation the plan lifts.
+- **Card back-half** `:1047-1078` hardcodes `let c = &cosigners[0];` `:1047` + `MkField::Single` `:1060` — the plan's "generalize to N cosigners" is the correct delta.
+- **C1-conditional origin** correct: `synthesize_unified:899-908` builds `Shared` when all-same/`n==1` else `Divergent(origin_paths)` from the SOURCE descriptor's resolved slots — exactly the "carry source per-`@N` origins for decode-validity" the C1 advisory mandates for `canonical_origin==None`. The advisory's "elide ALL → Shared(empty) is WRONG for degrade2" is honored by the conditional.
+- **degrade2 decode-regression pin present** (§3:27 + SPEC §7 inventory): general-policy template `md decode` round-trips — FAILS with empty origins. This is the C1 regression guard; correctly RED-pinned.
+- Binding stub already form-generic `bundle.rs:1151-1159` (`is_wallet_policy()` → `compute_wallet_policy_id` else `compute_wallet_descriptor_template_id`); csi slot loop `bundle.rs:1212-1217` (`derive_mk1_chunk_set_id_for_slot(&stub, i as u32)`). Both verified.
+
+### P3 — restore (load-bearing)
+- **P3.1 routing carve-out** `restore.rs:1655-1661` (`!d.is_wallet_policy()` → `ModeViolation`) verified; the RED pin `tests/cli_restore_md1_template.rs::keyless_multisig_md1_refused_at_restore` (`:173-222`) exists and currently asserts `.failure().code(2)` — the test to flip for the `--from`-present branch.
+- **P3.2 mk1 intake (I-B) net-new — CONFIRMED feasible AND confirmed absent today.** mk-codec 0.4.0 `KeyCard` exposes PUBLIC fields `origin_fingerprint: Option<Fingerprint>` (`key_card.rs:36`), `origin_path: DerivationPath` (`:42`), `xpub: Xpub` (`:53`); `mk_codec::decode(&[&str]) -> Result<KeyCard>` (`:115`). `origin_path` is `Vec<ChildNumber>` — **full path, arbitrary purpose preserved (84' survives), no normalization** → degrade2's BIP-84 origin is readable. **KeyCard carries NO use-site field** (4 fields total) — confirms SPEC "mk1 carries origin, NOT use-site." Today's `--cosigner @N=` parse (`restore.rs:1955-1990`) requires `=` (`:1955`), reads only `supplied65` for the cross-check, never origin — both the unassigned parse + the origin extraction are genuinely net-new, as the plan flags (§4:31).
+- **P3.3 per-slot origin BUILD (I-A) — the funds-safety core, correctly specified.** `compute_default_origin_path` (`bundle.rs:2144-2168`) **HARDCODES** purpose `value: 48` (`:2153`) + change `value: 2` (`:2165`) = BIP-48 — it cannot express degrade2's purpose 84'. The plan's "BUILD a fresh `path_decl` from the permuted `(key,origin)` pairs honoring ACTUAL purpose, NOT `compute_default_origin_path`" (§4:32) is the exact I-A fix the SPEC R0 closed. The existing `verify_bundle.rs:1074-1146` rebuild calls `compute_default_origin_path(args.network, args.account)` (`:1082`), assigns ALL slots that one path, overlays only `--slot @N.path=`, and reads NO mk1 origin — so it is correctly cited by the plan as the **write-SITE reference only, NOT the origin source**. **C1 invariant ("carried `path_decl` NEVER loaded") preserved + the never-load is the stronger form** the SPEC R0-r2 upgraded to.
+- **P3.3 I-A pin present** (§4:35 + SPEC §7): the degrade2 (BIP-84) completion succeeds AND a `compute_default_origin_path`-sourced build must FAIL — the load-bearing proof that per-slot-build (not the canonical-default rebuild) is implemented. Multi-account own `--account 0,1,2,3` resolves all 4 own slots also pinned.
+- **P3.4 three modes + precedence** (§4:33) mirror SPEC §2/§4.3 (id → address → explicit → refuse; sorted carve-out skips search). Distinct-keys floor (P1) runs before the search. Mode-precedence faithful.
+- **Canonical-first internal sub-phasing** (§4:34 P3a → per-phase R0 → P3b) is wise: P3a (multi/sortedmulti, `canonical_origin==Some`, elided origins) is the simpler origin model; P3b (general/thresh, `Divergent` carried + own-purpose-honoring build) layers the hard I-A path on a proven base. Both under the same SPEC; per-phase R0 between sub-phases gates the harder half.
+- **§SPEC-7 floors all in the P3 TDD list** (§4:35): no-seed refuse (1.i), unsupplied-slot refuse (1.ii — promotes the today-advisory `all_verified` `restore.rs:2030-2042`, verified advisory-only today), swapped-`@N` refuse (1.iii), `@0==@1` refuse (floor 2), 4-byte-prefix/ambiguous/no-match refuse (floor 5), degrade2-build-pin (floor 6 / I-A), multi-account, non-zero-index address. Complete.
+
+### P4 — verify-bundle
+- `verify_singlesig_template` `verify_bundle.rs:478` (mirror target) verified; `VerifyBundleArgs` `:23-159` has neither `--from` nor `--cosigner` today (both net-new there — SPEC §2/§5); multisig path sources `desc.tlv.pubkeys` → template-only failure `:2475-2479` (the short-circuit insertion point). The plan reuses the P3 engine + P3 origin-build (§5:38) — correct dependency (P4 after P3).
+
+### P5 / P6
+- **Differential golden feasible:** `derive_address.rs` builds `Descriptor<DescriptorPublicKey>` → `DefiniteDescriptorKey` address derivation (`:27,48,76,95`) — the toolkit can construct an INDEPENDENT rust-miniscript golden (not md-codec reconstruction), satisfying SPEC floor 4 anti-vacuity. `tests/prop_backup_restore_roundtrip.rs` exists (the property target). bitcoind row is `#[ignore]`/env-gated (matches the existing `tests/bitcoind_differential.rs` posture).
+- **Lockstep targets all exist:** GUI schema mirror `../mnemonic-gui/src/schema/mnemonic.rs` (present, colocated); manual `docs/manual/src/40-cli-reference/41-mnemonic.md` (present). Both new-restore + new-verify-bundle flag sets enumerated (§7:47). The new flags (`--account` list, `--own-account-max`, `--cosigner` unassigned, `--search-address`, `--search-addr-min/max`, `--search-chain`, `--accept-search-time`, + `--from`/`--cosigner` ON verify-bundle) are clap-surface deltas → both mirrors required in the same PR. Version `0.59.1 → 0.60.0` MINOR (additive) verified against `Cargo.toml:3`. Version sites present: BOTH READMEs, `Cargo.lock`, `fuzz/Cargo.lock`, `CHANGELOG.md` (`scripts/install.sh` for the self-pin — see Minor 1). g6 fmt-exempt mlock revert in P6 (§7:49) honored. Post-impl adversarial whole-diff exec review listed (§7:49, §8:56).
+
+### Phasing soundness
+- P1→P6 order correct: P1 standalone (no completion dep); P2 emit (independent of P1 — could even precede it, but the chosen order is fine); P3 needs P1 (engine) + P2 (it completes what P2 emits); P4 needs P3 (reuses engine + origin-build); P5 gates the whole; P6 ships. No phase hides under-weighted complexity: the heaviest surface (I-A/I-B net-new origin assembly) is correctly concentrated in P3 with the canonical-first sub-split and is flagged the load-bearing R0 (§8:53).
+
+## CRITICAL
+None.
+
+## IMPORTANT
+None.
+
+## MINOR
+1. **P6 "install.sh self-pin" omits the path.** The script is `scripts/install.sh`, not repo-root `install.sh` (verified: no root `install.sh`). The release-ritual memory note phrases it the same loose way, so this is unlikely to mislead the implementer, but the plan-doc could cite `scripts/install.sh` for zero ambiguity. Non-blocking.
+2. **§2:23 / §9:62 leave the bench-commit decision open** ("decide: commit as `#[ignore]` benches or keep local"). Both benches exist as local scratch (`examples/{idsearch,addrsearch}_bench.rs`) and are the P1 cost model. The plan correctly defers this to execution-time (SPEC §9 also open). Worth resolving early in P1 so the cap-calibration code has a stable home, but it is genuinely a plan-time-open, not a gap.
+3. **§3:26 D7 `WalletPolicyId` print wording** says "full hex + `to_phrase` + 4-byte" — consistent with SPEC §3.3 (full 16-byte hex + `to_phrase` + 4-byte prefix). No action; flagging only that the print is order-SENSITIVE `WalletPolicyId` (not the order-invariant template-id), which §3:26 + SPEC §3.3 both state correctly.
+
+## To turn GREEN
+Already GREEN — 0 Critical, 0 Important. The three Minors are non-blocking polish (path precision, bench-home decision, wording) resolvable at execution time. The plan is a faithful, buildable phasing of the R0-GREEN SPEC: every load-bearing citation holds at HEAD `219468e4`; the I-A (NOT `compute_default_origin_path`), I-B (net-new mk1 origin intake — feasibility re-confirmed against mk-codec 0.4.0 source), C1 (carried-origin-never-loaded), I_new (realized-S prefix), I1 (distinct-keys), and I3 (sortedmulti BIP-67) closed findings are each preserved, not regressed. P3's canonical-first sub-phasing + the degrade2 BIP-84 build-pin are the correct funds-safety gates. Proceed to implementation under the per-phase R0 + the mandatory post-impl adversarial whole-diff exec review.
