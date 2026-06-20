@@ -25,8 +25,12 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
 
-    /// Template name. Mutually-required-one-of with --descriptor / --descriptor-file.
-    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file"])]
+    /// Template name. Mutually-required-one-of with --descriptor /
+    /// --descriptor-file. #28: ALSO optional when `--md1` is present — a keyless
+    /// single-sig TEMPLATE md1 carries its own type (the type is read from the
+    /// md1 tree); a keyed wallet-policy md1 still requires `--template` (guarded
+    /// at runtime with a clear error, not a clap-required panic).
+    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file", "md1", "bundle_json", "extra_strings"])]
     pub template: Option<CliTemplate>,
 
     /// User-supplied descriptor (v0.3 §5.7 verify-bundle re-parse path).
@@ -58,6 +62,15 @@ pub struct VerifyBundleArgs {
     /// PathDeclPaths::Divergent per SPEC §4.2.
     #[arg(long, default_value = "0")]
     pub account: u32,
+
+    /// #28 phase 1 — expected `WalletPolicyId` (hex prefix) for a keyless
+    /// single-sig TEMPLATE bundle. When set, verify-bundle recomputes the
+    /// `WalletPolicyId` from the completed (fully-keyed, explicit-origin)
+    /// wallet and matches its leading bytes; a mismatch is reported as a failed
+    /// check (overall `mismatch`, exit 4). Only meaningful for a template
+    /// bundle (`bundle --md1-form=template` output); ignored otherwise.
+    #[arg(long = "expect-wallet-id")]
+    pub expect_wallet_id: Option<String>,
 
     /// Per-slot `ms1` card(s) to verify. Single-sig: supply once
     /// (`--ms1 <s>`). Multisig: repeat per slot — `--ms1 <s1>
@@ -274,6 +287,27 @@ pub fn run<W: Write, E: Write>(
         .map(|s| pin_pages_for(s.value.as_bytes()))
         .collect();
 
+    // #28 phase 1 — keyless SINGLE-SIG TEMPLATE bundle short-circuit. A
+    // template-form md1 (`bundle --md1-form=template`) is keyless + single-sig +
+    // canonical-origin-elided; the policy-form expected-bundle reconstruction
+    // below would never match it (different stub, no md1 pubkeys to bind). The
+    // dedicated path binds the cards via the template-id stub, then completes +
+    // recomposes the watch-only single-sig wallet from the supplied seed
+    // (`--slot @0.<secret>=` + `--account`/`--origin`). Escapes before the
+    // template/descriptor dispatch (a template bundle may omit `--template`).
+    if !args.md1.is_empty() {
+        let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
+        if let Ok(d) = md_codec::chunk::reassemble(&md1_refs) {
+            let is_singlesig_template = !d.is_wallet_policy()
+                && d.n == 1
+                && md_codec::canonical_origin::canonical_origin(&d.tree).is_some()
+                && crate::synthesize::cli_template_from_tree(&d.tree).is_some();
+            if is_singlesig_template {
+                return verify_singlesig_template(&d, args, stdin, stdout, stderr, json_context);
+            }
+        }
+    }
+
     // v0.3 descriptor-mode dispatch (escapes before template_unchecked).
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
     if descriptor_mode && args.template.is_some() {
@@ -294,6 +328,20 @@ pub fn run<W: Write, E: Write>(
         );
     }
 
+    // #28 — `--template` is now clap-optional when `--md1`/`--bundle-json`/
+    // positionals are present (to allow a keyless template md1 to carry its own
+    // type). The template-form short-circuit above already handled the keyless
+    // single-sig template; any md1 reaching here is a keyed wallet-policy md1
+    // (or a non-template keyless shape) that DOES need an explicit `--template`.
+    if args.template.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "verify-bundle",
+            flag: "--template",
+            message: "--template is required (the supplied md1 is not a keyless single-sig \
+                      template that carries its own type); supply --template <bip44|…> or \
+                      --descriptor",
+        });
+    }
     let multisig = args.template_unchecked().is_multisig();
 
     if args.threshold.is_some() && !multisig {
@@ -395,6 +443,192 @@ pub fn run<W: Write, E: Write>(
             }
         }
         writeln!(stdout, "result: {}", result).ok();
+    }
+
+    Ok(if any_fail { 4 } else { 0 })
+}
+
+/// #28 phase 1 — verify + recompose a keyless SINGLE-SIG TEMPLATE bundle.
+///
+/// The supplied md1 (`d`, already reassembled + classified) is keyless,
+/// single-sig, canonical-origin-elided. We:
+///  1. derive the type from the md1 tree, resolve the seed slot
+///     (`--slot @0.<secret>=`) to the keyed xpub (+ `--account`/`--origin`);
+///  2. re-synthesize the EXPECTED bundle in TEMPLATE form and compare the
+///     supplied md1/mk1/ms1 against it — this binds the cards via the
+///     template-id stub (a card swap or policy/template cross-mix fails);
+///  3. recompose the concrete watch-only single-sig wallet (descriptor +
+///     first-receive) and print it;
+///  4. honor `--expect-wallet-id` (D7 recompute-and-match).
+///
+/// A seed slot is REQUIRED (the template is keyless — without the seed there is
+/// no wallet to recompose); a missing `--slot @0.<secret>=` is refused.
+fn verify_singlesig_template<W: Write, E: Write>(
+    d: &md_codec::Descriptor,
+    args: &VerifyBundleArgs,
+    _stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
+    json_context: bool,
+) -> Result<u8, ToolkitError> {
+    let template = crate::synthesize::cli_template_from_tree(&d.tree)
+        .ok_or_else(|| ToolkitError::BadInput("template md1 tree is not single-sig".into()))?;
+
+    // Require a secret-bearing @0 slot (the seed).
+    let secret_bearing_at_0 = args
+        .slot
+        .iter()
+        .any(|s| s.index == 0 && s.subkey.is_secret_bearing());
+    if !secret_bearing_at_0 {
+        return Err(ToolkitError::ModeViolation {
+            mode: "verify-bundle",
+            flag: "--md1",
+            message: "verifying a keyless single-sig TEMPLATE bundle requires the seed \
+                      (`--slot @0.phrase=…` / `.ms1=` / `.entropy=` / `.seedqr=`) to recompose \
+                      the watch-only wallet — the template carries no key",
+        });
+    }
+
+    // Resolve the seed slot → keyed xpub at the template origin (+ account).
+    let (resolved, _signals) = crate::cmd::bundle::resolve_slots(
+        &args.slot,
+        template,
+        args.network,
+        args.account,
+        args.language,
+        args.passphrase.as_deref(),
+        args.multisig_path_family.unwrap_or_default(),
+    )?;
+    let slot = resolved
+        .first()
+        .ok_or_else(|| ToolkitError::BadInput("no @0 slot resolved".into()))?;
+
+    // (2) Re-synthesize the EXPECTED bundle in TEMPLATE form; compare cards.
+    let expected = crate::synthesize::synthesize_unified(
+        &resolved,
+        template,
+        1,
+        args.network,
+        args.privacy_preserving,
+        args.language.unwrap_or_default().into(),
+        crate::synthesize::Md1Form::Template,
+    )?;
+    let md1_match = expected.md1 == args.md1;
+    let mk1_match = match &expected.mk1 {
+        crate::format::MkField::Single(chunks) => chunks == &args.mk1,
+        crate::format::MkField::Multi(_) => false,
+    };
+    let mut checks: Vec<VerifyCheck> = Vec::new();
+    checks.push(VerifyCheck {
+        name: "md1_template_match".into(),
+        passed: md1_match,
+        detail: if md1_match {
+            "supplied md1 matches the expected keyless single-sig template".into()
+        } else {
+            "supplied md1 does NOT match the expected template for this seed/type".into()
+        },
+        ..Default::default()
+    });
+    checks.push(VerifyCheck {
+        name: "mk1_template_stub_bind".into(),
+        passed: mk1_match,
+        detail: if mk1_match {
+            "supplied mk1 binds via the template-id stub".into()
+        } else {
+            "supplied mk1 does NOT bind via the template-id stub (card mismatch or policy/template cross-mix)".into()
+        },
+        ..Default::default()
+    });
+
+    // (3) Recompose the concrete watch-only wallet.
+    let descriptor = crate::wallet_export::build_descriptor_string(
+        template,
+        std::slice::from_ref(slot),
+        1,
+        args.network,
+        args.account,
+        None,
+    )?;
+    let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+    let script_type = crate::cmd::convert::script_type_from_template(template)
+        .expect("single-sig template has a script type");
+    let chain = bitcoin::bip32::ChildNumber::from_normal_idx(0).unwrap();
+    let leaf = bitcoin::bip32::ChildNumber::from_normal_idx(0).unwrap();
+    let dp: bitcoin::bip32::DerivationPath = vec![chain, leaf].into();
+    let first_recv = slot
+        .xpub
+        .derive_pub(&secp, &dp)
+        .map(|child| {
+            crate::address_render::render_address_from_xpub(&secp, &child, script_type, args.network)
+        })
+        .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
+
+    // (4) --expect-wallet-id (D7 recompute-and-match), via the SHARED helper.
+    if let Some(prefix_hex) = args.expect_wallet_id.as_deref() {
+        let prefix = hex::decode(prefix_hex.trim()).map_err(|e| {
+            ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}"))
+        })?;
+        if prefix.len() < 4 {
+            let _ = writeln!(
+                stderr,
+                "advisory: --expect-wallet-id prefix is only {} byte(s); ≥4 recommended.",
+                prefix.len()
+            );
+        }
+        let id = crate::synthesize::wallet_policy_id_for_singlesig(
+            template,
+            args.network,
+            &slot.xpub,
+            slot.fingerprint,
+            args.account,
+        )?;
+        let ok = id.as_bytes().len() >= prefix.len() && id.as_bytes()[..prefix.len()] == prefix[..];
+        checks.push(VerifyCheck {
+            name: "wallet_id_match".into(),
+            passed: ok,
+            detail: if ok {
+                "completed wallet matches --expect-wallet-id".into()
+            } else {
+                "completed wallet does NOT match --expect-wallet-id".into()
+            },
+            ..Default::default()
+        });
+    }
+
+    // ---- Emit verdict -------------------------------------------------------
+    let any_fail = checks.iter().any(|c| !c.passed);
+    if json_context {
+        let result = if any_fail { "mismatch" } else { "ok" };
+        let json = serde_json::json!({
+            "result": result,
+            "mode": "single-sig-template",
+            "wallet_type": template.human_name(),
+            "descriptor": descriptor,
+            "first_receive": first_recv,
+            "checks": checks.iter().map(|c| serde_json::json!({
+                "name": c.name, "passed": c.passed, "detail": c.detail,
+            })).collect::<Vec<_>>(),
+        });
+        writeln!(stdout, "{}", serde_json::to_string(&json).unwrap()).map_err(ToolkitError::Io)?;
+    } else {
+        for c in &checks {
+            writeln!(
+                stderr,
+                "{} {}: {}",
+                if c.passed { "✓" } else { "✗" },
+                c.name,
+                c.detail
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+        if any_fail {
+            writeln!(stdout, "mismatch").map_err(ToolkitError::Io)?;
+        } else {
+            writeln!(stdout, "OK (single-sig template recomposed)").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "wallet type: {}", template.human_name()).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "descriptor:  {descriptor}").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "first recv:  {first_recv}").map_err(ToolkitError::Io)?;
+        }
     }
 
     Ok(if any_fail { 4 } else { 0 })

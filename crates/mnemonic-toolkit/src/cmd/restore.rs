@@ -682,14 +682,12 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         .ok_or_else(|| bad("template md1 tree is not a canonical single-sig shape"))?;
 
     // --- (b) `--from` REQUIRED (the C2 funds-safety hole) -------------------
-    let from_raw = args.from.as_deref().ok_or_else(|| {
-        ToolkitError::ModeViolation {
-            mode: "restore",
-            flag: "--md1",
-            message: "restore of a keyless single-sig TEMPLATE md1 requires --from <seed> \
-                      (the template carries no key; the seed derives it). Supply \
-                      --from ms1=…/phrase=…/entropy=…/seedqr=…",
-        }
+    let from_raw = args.from.as_deref().ok_or(ToolkitError::ModeViolation {
+        mode: "restore",
+        flag: "--md1",
+        message: "restore of a keyless single-sig TEMPLATE md1 requires --from <seed> \
+                  (the template carries no key; the seed derives it). Supply \
+                  --from ms1=…/phrase=…/entropy=…/seedqr=…",
     })?;
     let from = parse_from_input(from_raw).map_err(bad)?;
     let from_uses_stdin = from.value == "-";
@@ -887,11 +885,8 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             )?;
             let id_bytes = id.as_bytes();
             if id_bytes.len() < prefix.len() || id_bytes[..prefix.len()] != prefix[..] {
-                let derived_prefix: String = id_bytes
-                    .iter()
-                    .take(prefix.len().max(4))
-                    .map(|b| format!("{b:02x}"))
-                    .collect();
+                let shown = prefix.len().max(4).min(id_bytes.len());
+                let derived_prefix = hex::encode(&id_bytes[..shown]);
                 writeln!(stderr, "✗ WALLET-ID MISMATCH").map_err(ToolkitError::Io)?;
                 return Err(ToolkitError::RestoreMismatch {
                     reference: "wallet-id",

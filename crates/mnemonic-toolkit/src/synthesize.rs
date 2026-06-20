@@ -218,13 +218,13 @@ pub fn wallet_policy_id_for_singlesig(
 /// `CliTemplate` (the type the keyless template encodes). Mirrors the shape
 /// dispatch of `md_codec::canonical_origin::canonical_origin`, but emits a
 /// `CliTemplate` (NOT the inverse of `script_type_from_template`). Returns the
-/// type only for the three canonical-origin-elidable single-sig shapes:
-///   - `pkh(@0)`            → bip44
-///   - `wpkh(@0)`           → bip84
-///   - `tr(@0)` key-path    → bip86 (no TapTree)
-/// Everything else (multisig, bip49 `sh(wpkh)`, taproot-with-tree, bare wsh,
-/// …) returns `None` — exactly the shapes `--md1-form=template` refuses at
-/// emit, so this never has to invent a type for a non-template md1.
+/// type only for the three canonical-origin-elidable single-sig shapes —
+/// `pkh(@0)` → bip44, `wpkh(@0)` → bip84, `tr(@0)` key-path (no TapTree) →
+/// bip86.
+///
+/// Everything else (multisig, bip49 `sh(wpkh)`, taproot-with-tree, bare wsh, …)
+/// returns `None` — exactly the shapes `--md1-form=template` refuses at emit,
+/// so this never has to invent a type for a non-template md1.
 pub fn cli_template_from_tree(tree: &md_codec::tree::Node) -> Option<CliTemplate> {
     use md_codec::tag::Tag;
     use md_codec::tree::Body;

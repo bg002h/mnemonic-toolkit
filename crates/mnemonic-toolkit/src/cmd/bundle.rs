@@ -1096,8 +1096,8 @@ fn emit_template_wallet_id_advisory<E: Write>(
         Err(_) => return,
     };
     let bytes = id.as_bytes();
-    let hex = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let prefix = format!("{:02x}{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2], bytes[3]);
+    let hex = hex::encode(bytes);
+    let prefix = hex::encode(&bytes[..4]);
     let phrase = id.to_phrase().ok().map(|p| p.to_string());
 
     let _ = writeln!(
@@ -2571,6 +2571,7 @@ mod self_check_ms1_tests {
             self_check: false,
             threshold: None,
             slot: vec![],
+            md1_form: crate::synthesize::Md1Form::Policy,
             import_json: None,
             import_json_index: None,
         }
@@ -2702,6 +2703,7 @@ mod self_check_mk1_xpub_binding_tests {
             self_check: false,
             threshold: None,
             slot: vec![],
+            md1_form: crate::synthesize::Md1Form::Policy,
             import_json: None,
             import_json_index: None,
         }
