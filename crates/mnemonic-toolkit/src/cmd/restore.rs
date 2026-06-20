@@ -1655,7 +1655,7 @@ fn run_capped_search<Ev, E: Write>(
     evaluator: &Ev,
     n: usize,
     mode: mnemonic_toolkit::permutation_search::SearchMode,
-    realized_s: u128,
+    realized_perms: u128,
     args: &RestoreArgs,
     stderr: &mut E,
 ) -> Result<mnemonic_toolkit::permutation_search::SearchOutcome, ToolkitError>
@@ -1663,21 +1663,28 @@ where
     Ev: mnemonic_toolkit::permutation_search::CandidateEvaluator,
 {
     use mnemonic_toolkit::permutation_search as ps;
-    // Calibrate + cap over the realized space.
+    // The EXHAUSTIVE candidate count: the realized permutation count × the
+    // address range (id-search has outer=1). The cap (SPEC §6.4) must estimate
+    // the WHOLE scan, not just the permutation count — an address-search over a
+    // wide range can dwarf the permutations.
+    let outer: u128 = match mode {
+        ps::SearchMode::Id => 1,
+        ps::SearchMode::Address(range) => u128::from(range.outer_count()),
+    };
+    let realized_total = realized_perms.saturating_mul(outer);
+    // Calibrate per-candidate cost on this machine, then cap.
     let per = ps::calibrate_per_candidate(evaluator, n, 64, 0);
     let accept = match args.accept_search_time.as_deref() {
         Some(s) => Some(parse_search_duration(s)?),
         None => None,
     };
-    // The cap takes a u64 total; clamp the realized S (it is tiny for the
-    // realistic N, and a too-large S already refused at prefix sizing).
-    let total = u64::try_from(realized_s).unwrap_or(u64::MAX);
+    let total = u64::try_from(realized_total).unwrap_or(u64::MAX);
     match ps::cap_decision(total, per, accept).map_err(map_search_error)? {
         ps::CapDecision::RunSilent { .. } => {}
         ps::CapDecision::RunWithProgress { estimate } => {
             let _ = writeln!(
                 stderr,
-                "searching {realized_s} candidate assignment(s) (est. ≤ {estimate:?})…"
+                "searching {realized_total} candidate assignment(s) (est. ≤ {estimate:?})…"
             );
         }
     }
