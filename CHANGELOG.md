@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.59.1] — 2026-06-20
+
+**SemVer-PATCH — `restore --md1` faithfully reconstructs a NUMS-keyed single-leaf taproot `tr(NUMS, multi_a)` wallet card carrying per-cosigner use-site path overrides (divergent derivation suffixes). FUNDS-SAFETY: extends the v0.58.2 non-taproot override reconstruction to the taproot `multi_a` leg.**
+
+### Changed
+
+- **`restore --md1` now restores `tr(NUMS, multi_a)` per-cosigner use-site override cards** (non-hardened). A new single predicate `restorable_taproot_override_card` (`Tag::Tr` root ∧ NUMS internal ∧ plain `multi_a` leaf ∧ no hardened use-site) re-routes such cards from the override-blind `Template` string-builder to the faithful arm → md-codec 0.37.0's per-`@N` `to_miniscript_descriptor_multipath`. The SAME predicate drives the restore guard, the classify re-route, and the engrave-surface `TaprootUseSiteOverride` advisory (refuse ⟺ advisory fires — exact parity). Address-equivalence is gated against an independent rust-miniscript golden (divergent ≠ baseline-collapse) + a bitcoind `deriveaddresses` differential row.
+- Still loudly refused (+ advised): `tr(sortedmulti_a)` overrides (the `sortedmulti_a` renderer rides the next rust-miniscript release — FOLLOWUP `restore-md1-taproot-use-site-override-arm`), taproot overrides with a non-NUMS internal key, and any hardened use-site.
+
+### Notes
+
+`md-codec`/`mk-codec` are **NOT bumped** (the `tr(multi_a)` leg rides #25's published md-codec 0.37.0 per-`@N` builder, which is taproot-agnostic). No new flag / wire / `ToolkitError` variant → no GUI schema-mirror change; the manual `### Unrestorable descriptor shapes` prose is narrowed.
+
 ## mnemonic-toolkit [0.59.0] — 2026-06-19
 
 **SemVer-MINOR — `bundle --md1-form=template` emits a KEYLESS, account-agnostic single-sig template md1 (one engraving reusable by thousands of users of the same wallet TYPE); `restore`/`verify-bundle` complete the template from a seed + `--account`/`--origin`. New flags: `bundle --md1-form`, `restore`/`verify-bundle --origin` + `--expect-wallet-id`. #28 phase 1.**

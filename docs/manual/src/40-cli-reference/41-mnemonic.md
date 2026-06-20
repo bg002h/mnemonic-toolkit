@@ -67,13 +67,16 @@ the full descriptor to restore. The shapes are:
 - `sortedmulti()` **inside a combinator** (not the sole child of `wsh`/`sh`);
 - a **hardened use-site** — a hardened wildcard (`/*h`) on the shared suffix or
   inside a per-cosigner override (a hardened child cannot be derived from an xpub);
-- **per-cosigner use-site overrides on a taproot card** (`tr(multi_a)` /
-  `tr(sortedmulti_a)`), pending a sibling md-codec/restore fix (FOLLOWUP
+- **per-cosigner use-site overrides on a `tr(sortedmulti_a)` card, or on a
+  taproot card with a non-NUMS internal key** — still pending (the
+  `tr(sortedmulti_a)` renderer rides the next rust-miniscript release; FOLLOWUP
   `restore-md1-taproot-use-site-override-arm`).
 
-Non-taproot, non-hardened **per-cosigner use-site path overrides** (cosigners
-with divergent derivation suffixes on a `wsh`/`sh` multisig) are **reconstructed
-faithfully** since v0.58.2 (md-codec 0.37.0) and no longer advise.
+Non-hardened **per-cosigner use-site path overrides** (cosigners with divergent
+derivation suffixes) are **reconstructed faithfully** and no longer advise for:
+non-taproot `wsh`/`sh` multisig (since v0.58.2), and NUMS-keyed single-leaf
+`tr(multi_a)` taproot cards (since v0.59.1) — both via md-codec 0.37.0's
+per-`@N` multipath reconstruction.
 
 These are the shapes the [multisig-cosigner restore](#multisig-cosigner-restore)
 path refuses to reconstruct. The same advisory fires on
