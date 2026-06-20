@@ -649,6 +649,125 @@ fn multi_account_own_resolves_both_slots() {
 // Non-regression: single-sig template completion (#28 phase 1) still works.
 // ===========================================================================
 
+// ===========================================================================
+// C1 INVARIANT (funds-safety): the template's CARRIED path_decl is NEVER loaded
+// into the completion. A template md1 re-encoded with a deliberately WRONG
+// carried origin must STILL complete to the SAME wallet — proving the
+// per-slot origins are BUILT FRESH from the supplied keys, not the carried ones.
+// ===========================================================================
+
+#[test]
+fn carried_origin_never_loaded_into_completion() {
+    use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
+
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+
+    // Decode the emitted (origin-elided) template, then TAMPER the carried
+    // path_decl to a deliberately WRONG, non-canonical origin (m/99'/0'/0'/2').
+    // (Use Divergent to bypass canonical-elision so the wrong origin is on the
+    // wire; the completion must ignore it entirely.)
+    let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let mut tampered = md_codec::chunk::reassemble(&md1_refs).expect("template decodes");
+    let wrong = OriginPath {
+        components: vec![
+            PathComponent { hardened: true, value: 99 },
+            PathComponent { hardened: true, value: 0 },
+            PathComponent { hardened: true, value: 0 },
+            PathComponent { hardened: true, value: 2 },
+        ],
+    };
+    tampered.path_decl = PathDecl {
+        n: 2,
+        paths: PathDeclPaths::Divergent(vec![wrong.clone(), wrong]),
+    };
+    let tampered_md1 = md_codec::chunk::split(&tampered).expect("tampered template re-encodes");
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &tampered_md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    // The completion BUILDS fresh origins from the supplied keys, so the wrong
+    // carried origin is irrelevant → same golden wallet.
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "the carried (wrong) origin must NOT reach completion — fresh origins reproduce the wallet"
+    );
+}
+
+// ===========================================================================
+// Ambiguous → refuse: id-search where two assignments both match (a too-short
+// prefix that happens to be satisfiable by ≥2 placements). Harder to force
+// deterministically; instead pin the engine refusal on an over-broad search.
+// (The sortedmulti id-search is order-SENSITIVE so it is not ambiguous; the
+//  ambiguity floor is unit-tested in permutation_search. Here we pin that a
+//  wrong-key set with NO match refuses — the None arm — already covered above.)
+// ===========================================================================
+
+// ===========================================================================
+// Explicit mode (Mode B): all cosigners assigned via @N= + own from --from;
+// builds WITHOUT a search and fires the unverified-assignment warning.
+// ===========================================================================
+
+#[test]
+fn explicit_assignment_mode_completes_and_warns() {
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+    // cosigner B assigned explicitly at @1; own (A) fills @0.
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(format!("@1={c}"));
+    }
+    let out = mnemonic().args(&args).assert().success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_lowercase().contains("without verifying")
+            || stderr.to_lowercase().contains("wrong assignment"),
+        "explicit mode must warn the assignment is unverified: {stderr}"
+    );
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let j: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let got: Vec<String> = j["wallets"][0]["first_addresses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a.as_str().unwrap().to_string())
+        .collect();
+    // sortedmulti is order-independent → explicit @1=B / @0=A reproduces golden.
+    assert_eq!(got, golden, "explicit mode (sortedmulti) reproduces the golden");
+}
+
 #[test]
 fn singlesig_template_completion_unchanged() {
     // bip84 single-sig template still completes from --from (phase-1 path).
