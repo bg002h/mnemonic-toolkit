@@ -237,10 +237,61 @@ pub fn wallet_policy_id_for_template(
             slots.len()
         )));
     }
-    let origin_paths: Vec<OriginPath> = slots
+    let triples: Vec<TemplateSlotKey> = slots
         .iter()
-        .map(|s| derivation_path_to_origin_path(&s.path))
+        .map(|s| TemplateSlotKey {
+            key65: xpub_to_65(&s.xpub),
+            fingerprint: s.fingerprint.to_bytes(),
+            origin: derivation_path_to_origin_path(&s.path),
+        })
         .collect();
+    let keyed = build_keyed_template_descriptor(keyless_template, &triples)?;
+    md_codec::compute_wallet_policy_id(&keyed).map_err(ToolkitError::from)
+}
+
+/// One slot's resolved key material for a multisig-template completion (#28
+/// phase 2): the 65-byte canonical key form, the master fingerprint, and the
+/// per-`@N` BUILT origin path. The completion BUILDS these fresh from the
+/// supplied keys (own seed + cosigner mk1s) — the template's carried `path_decl`
+/// is NEVER consumed (the C1 funds-safety invariant). Slot `i` of the slice is
+/// placed at `@i` of the template.
+#[derive(Clone, Debug)]
+pub struct TemplateSlotKey {
+    /// 65-byte canonical key (chain_code || compressed pubkey).
+    pub key65: [u8; 65],
+    /// Master-key fingerprint (BIP-380 origin `[fp/...]`).
+    pub fingerprint: [u8; 4],
+    /// The BUILT per-slot origin (own: `--origin`/account-substituted family;
+    /// cosigner: the mk1's `origin_path`). md-codec `OriginPath` form.
+    pub origin: OriginPath,
+}
+
+/// #28 phase 2 — BUILD a fresh, fully-keyed `md_codec::Descriptor` from a keyless
+/// MULTISIG/general template + the per-slot resolved keys (`slots[i]` → `@i`).
+/// The funds-safety core (SPEC §4.2a):
+/// - the template's TREE + use-site structure (incl. #25 per-`@N` overrides) is
+///   cloned verbatim (it is in the template-id);
+/// - the per-`@N` `path_decl` is built FRESH from the supplied keys' origins
+///   (`Shared` when all equal, else `Divergent`) — the template's CARRIED
+///   `path_decl` is NEVER read here (the C1 invariant: a carried/stale origin
+///   can never reach `compute_wallet_policy_id`/derivation);
+/// - the keys/fingerprints are injected into the TLV.
+///
+/// The id (`compute_wallet_policy_id`) and the watch-only descriptor/addresses
+/// (`to_miniscript_descriptor_multipath`) are then computed on the returned
+/// descriptor — both reading the SAME fresh assembly.
+pub fn build_keyed_template_descriptor(
+    keyless_template: &Descriptor,
+    slots: &[TemplateSlotKey],
+) -> Result<Descriptor, ToolkitError> {
+    let n = keyless_template.n as usize;
+    if slots.len() != n {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "build_keyed_template_descriptor: template n={n} but {} slots supplied",
+            slots.len()
+        )));
+    }
+    let origin_paths: Vec<OriginPath> = slots.iter().map(|s| s.origin.clone()).collect();
     let all_same = origin_paths.windows(2).all(|w| w[0] == w[1]);
     let path_decl_paths = if all_same || n == 1 {
         PathDeclPaths::Shared(origin_paths[0].clone())
@@ -250,14 +301,14 @@ pub fn wallet_policy_id_for_template(
     let fingerprints: Vec<(u8, [u8; 4])> = slots
         .iter()
         .enumerate()
-        .map(|(i, s)| (i as u8, s.fingerprint.to_bytes()))
+        .map(|(i, s)| (i as u8, s.fingerprint))
         .collect();
     let pubkeys: Vec<(u8, [u8; 65])> = slots
         .iter()
         .enumerate()
-        .map(|(i, s)| (i as u8, xpub_to_65(&s.xpub)))
+        .map(|(i, s)| (i as u8, s.key65))
         .collect();
-    let keyed = Descriptor {
+    Ok(Descriptor {
         n: n as u8,
         path_decl: PathDecl {
             n: n as u8,
@@ -272,8 +323,7 @@ pub fn wallet_policy_id_for_template(
             origin_path_overrides: keyless_template.tlv.origin_path_overrides.clone(),
             unknown: keyless_template.tlv.unknown.clone(),
         },
-    };
-    md_codec::compute_wallet_policy_id(&keyed).map_err(ToolkitError::from)
+    })
 }
 
 /// True iff `tree` is a `sortedmulti`/`sortedmulti_a` (order-INDEPENDENT) wallet
