@@ -949,15 +949,18 @@ pub fn synthesize_unified(
 
 /// #28 phase 1 — emit a keyless single-sig TEMPLATE bundle.
 ///
-/// Gate (SPEC §4.2, C1): REQUIRES `descriptor.n == 1 &&
-/// canonical_origin(&tree).is_some()`. The `n == 1` conjunct is load-bearing:
-/// `canonical_origin` alone returns `Some` for canonical MULTISIG too
-/// (`wsh(multi)` → `m/48'/0'/0'/2'`), so `is_some()` by itself would admit a
-/// 2-of-3 and re-open the deferred keyless-multisig hole. With `n == 1` the
-/// only `Some` shapes are pkh/wpkh/tr-keypath single-sig. A degenerate
-/// `wsh(multi(1,@0))` 1-of-1 carries the `Multi`/`SortedMulti` tag; it is
-/// refused explicitly (it is keyed-keyless-ambiguous and not a standard
-/// single-sig type — use `--md1-form=policy`).
+/// Gate (SPEC §4.2, C1; R0 I1): REQUIRES `descriptor.n == 1`,
+/// `cli_template_from_tree(&tree).is_some()` (a recognized single-sig shape),
+/// AND `canonical_origin(&tree).is_some()`. The `n == 1` conjunct alone is NOT
+/// sufficient: `canonical_origin` returns `Some` for canonical MULTISIG too
+/// (`wsh(multi)` → `m/48'/0'/0'/2'`), and a degenerate `wsh(sortedmulti(1,@0))`
+/// / `wsh(multi(1,@0))` 1-of-1 carries the multi family NESTED under a `Wsh`
+/// TOP tag — so a top-level-only `Multi`/`SortedMulti` tag check would miss it
+/// and a keyless MULTISIG template would slip through. The
+/// `cli_template_from_tree` gate (which returns `Some` ONLY for pkh/wpkh/
+/// tr-keypath single-sig, `None` for any multi shape at any depth) closes that
+/// hole; a nested-multi 1-of-1 is refused with `TemplateFormUnsupportedShape`
+/// (it is not a standard single-sig type — use `--md1-form=policy`).
 ///
 /// Four mutations on a `descriptor.clone()` (SPEC §4.2):
 ///   1. `tlv.pubkeys = None`
@@ -974,9 +977,6 @@ fn synthesize_template_descriptor(
     cosigners: &[CosignerKeyInfo],
     privacy_preserving: bool,
 ) -> Result<Bundle, ToolkitError> {
-    use md_codec::tag::Tag;
-    use md_codec::tree::Body;
-
     // --- Canonical gate (C1) -------------------------------------------------
     if descriptor.n != 1 {
         return Err(ToolkitError::TemplateFormUnsupportedShape {
@@ -987,16 +987,21 @@ fn synthesize_template_descriptor(
             ),
         });
     }
-    // A `wsh(multi(1,@0))` / `multi`-tag 1-of-1 slips n==1 but is not a standard
-    // single-sig type — refuse it explicitly (the C1 edge-case guard).
-    if matches!(
-        descriptor.tree.body,
-        Body::MultiKeys { .. } | Body::Variable { .. }
-    ) || matches!(descriptor.tree.tag, Tag::Multi | Tag::SortedMulti) {
+    // Require a RECOGNIZED single-sig template shape — pkh / wpkh / tr-keypath
+    // (R0 I1). `cli_template_from_tree` returns `Some` ONLY for those three; it
+    // returns `None` for every multisig shape, INCLUDING a nested-multi 1-of-1
+    // (`wsh(sortedmulti(1,@0))` / `wsh(multi(1,@0))`) whose TOP tag is `Wsh` —
+    // which the prior top-level-`Multi`/`SortedMulti`-tag guard missed, letting a
+    // keyless MULTISIG template slip through at n==1 + canonical-origin
+    // (`m/48'/0'/0'/2'`). Gating on this classifier (the same one restore /
+    // verify-bundle use to route a template) closes that hole for BOTH the
+    // template-mode and descriptor-mode entry points (both funnel through here).
+    if cli_template_from_tree(&descriptor.tree).is_none() {
         return Err(ToolkitError::TemplateFormUnsupportedShape {
             message:
                 "--md1-form=template supports standard single-sig wallet types only \
-                 (multi/sortedmulti 1-of-1 is not a single-sig template); use --md1-form=policy"
+                 (pkh/bip44, wpkh/bip84, or tr-keypath/bip86 — multi/sortedmulti, even a \
+                 1-of-1, is not a single-sig template); use --md1-form=policy"
                     .into(),
         });
     }

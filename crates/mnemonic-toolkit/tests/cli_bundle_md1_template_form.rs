@@ -260,6 +260,72 @@ fn template_form_refuses_bip49_nested_segwit() {
 }
 
 // ============================================================================
+// Funds-safety test 5b — refuse a NESTED-multi keyless template in DESCRIPTOR
+// mode (R0 I1). `wsh(sortedmulti(1,@0))` / `wsh(multi(1,@0))` are n==1 1-of-1
+// and `canonical_origin → Some(m/48'/.../2')`, so the pre-fix top-level-only
+// tag guard let a KEYLESS MULTISIG template through. The fix gates on
+// `cli_template_from_tree(&tree).is_some()` (single-sig pkh/wpkh/tr-keypath
+// only), which rejects the nested-multi shape. Exercised via descriptor-mode —
+// the path the template-mode `N>1` guard never reaches.
+// ============================================================================
+
+/// Mainnet account xpub at m/48'/0'/0'/2' (multisig origin) — reused fixture.
+const XPUB_48H: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+
+#[test]
+fn template_form_refuses_nested_sortedmulti_1of1_descriptor_mode() {
+    // n==1 1-of-1 sortedmulti: top tag is Wsh (not Multi), origin is canonical
+    // m/48'/0'/0'/2' → the pre-fix gate emitted a keyless MULTISIG template.
+    let desc = format!("wsh(sortedmulti(1,[704c7836/48'/0'/0'/2']{XPUB_48H}/<0;1>/*))");
+    let assert = mnemonic()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--md1-form",
+            "template",
+            "--group-size",
+            "0",
+            "--descriptor",
+            &desc,
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("single-sig") || stderr.contains("md1-form=policy"),
+        "nested-sortedmulti refusal must name the single-sig/template constraint: {stderr}"
+    );
+}
+
+#[test]
+fn template_form_refuses_nested_multi_1of1_descriptor_mode() {
+    // The `multi` (unsorted) 1-of-1 sibling of the sortedmulti case.
+    let desc = format!("wsh(multi(1,[704c7836/48'/0'/0'/2']{XPUB_48H}/<0;1>/*))");
+    let assert = mnemonic()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--md1-form",
+            "template",
+            "--group-size",
+            "0",
+            "--descriptor",
+            &desc,
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("single-sig") || stderr.contains("md1-form=policy"),
+        "nested-multi refusal must name the single-sig/template constraint: {stderr}"
+    );
+}
+
+// ============================================================================
 // Funds-safety test 8 — non-regression: --md1-form=policy byte-identical to
 // the default (no flag) for all corpus shapes.
 // ============================================================================
