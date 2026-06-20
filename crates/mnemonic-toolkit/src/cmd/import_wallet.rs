@@ -1451,8 +1451,13 @@ fn emit_json_envelope<W: Write, E: Write>(
         // uniformly.
         // import-wallet always re-emits English entr cards (no phrase input here);
         // run_language=English is correct and preserves pre-fix behavior.
-        let bundle =
-            synthesize_descriptor(&p.descriptor, &p.cosigners, false, bip39::Language::English)?;
+        let bundle = synthesize_descriptor(
+            &p.descriptor,
+            &p.cosigners,
+            false,
+            bip39::Language::English,
+            crate::synthesize::Md1Form::Policy,
+        )?;
 
         // Per §3.2.1 row `template`: descriptor-mode → `None`.
         // Per §3.2.1 row `descriptor`: source from `original_descriptor`

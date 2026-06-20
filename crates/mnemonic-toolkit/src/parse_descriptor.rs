@@ -1965,6 +1965,7 @@ mod tests {
             &binding.cosigners,
             false,
             bip39::Language::English,
+            crate::synthesize::Md1Form::Policy,
         )
         .unwrap()
     }
@@ -2185,6 +2186,7 @@ mod tests {
             &binding.cosigners,
             false,
             bip39::Language::English,
+            crate::synthesize::Md1Form::Policy,
         )
         .unwrap();
 

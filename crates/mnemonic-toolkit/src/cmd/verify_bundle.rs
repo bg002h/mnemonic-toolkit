@@ -431,6 +431,7 @@ fn run_full<W: Write, E: Write>(
         args.network,
         args.privacy_preserving,
         args.language.unwrap_or_default().into(),
+        crate::synthesize::Md1Form::Policy,
     )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -529,6 +530,7 @@ fn run_watch_only<W: Write, E: Write>(
         args.network,
         args.privacy_preserving,
         args.language.unwrap_or_default().into(),
+        crate::synthesize::Md1Form::Policy,
     )?;
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -634,6 +636,7 @@ fn run_multisig<W: Write, E: Write>(
         args.network,
         args.privacy_preserving,
         args.language.unwrap_or_default().into(),
+        crate::synthesize::Md1Form::Policy,
     )?;
     let _ = n;
 
@@ -1106,6 +1109,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         cosigners,
         args.privacy_preserving,
         run_language,
+        crate::synthesize::Md1Form::Policy,
     )?;
 
     // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.

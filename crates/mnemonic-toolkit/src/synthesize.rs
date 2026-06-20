@@ -37,6 +37,35 @@ impl Bundle {
     }
 }
 
+/// `bundle --md1-form <policy|template>` (#28 phase 1). Selects what the md1
+/// card encodes:
+///
+/// - `Policy` (default, = pre-#28 behavior): the FULL wallet-policy md1 —
+///   keyed (pubkeys/fingerprints present), explicit origin. Identifies THIS
+///   wallet; binding stub roots on `WalletPolicyId`.
+/// - `Template`: a KEYLESS, fingerprint-stripped, canonical-origin-ELIDED
+///   single-sig md1 — a backup of the wallet *TYPE* (e.g. BIP-84 single-sig),
+///   byte-identical across all users of that type ("one engraving for
+///   thousands"). Binding stub roots on the key-stable
+///   `WalletDescriptorTemplateId`. REQUIRES `descriptor.n == 1 &&
+///   canonical_origin(&tree).is_some()` (pkh/wpkh/tr-keypath single-sig);
+///   every other shape is refused with `TemplateFormUnsupportedShape`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, Default)]
+pub enum Md1Form {
+    /// Full keyed wallet-policy md1 (default; identifies this wallet).
+    #[default]
+    Policy,
+    /// Keyless, origin-elided single-sig template md1 (shareable per type).
+    Template,
+}
+
+impl Md1Form {
+    /// `true` for the keyless template form (the #28 mutation path).
+    pub fn is_template(self) -> bool {
+        matches!(self, Md1Form::Template)
+    }
+}
+
 /// Derive a deterministic 20-bit `chunk_set_id` for mk1 from the 4-byte
 /// `policy_id_stub`. Top 20 bits, MSB-first. Mirrors md-codec's
 /// `derive_chunk_set_id` shape so mk1 byte-output is reproducible across runs
@@ -126,8 +155,15 @@ pub fn xpub_to_65(xpub: &Xpub) -> [u8; 65] {
 
 /// Build the typed Descriptor for a (template, network, xpub, fingerprint, account).
 /// Caller's xpub MUST already be at the template's BIP path; not rederived.
-/// SPEC §4.6. Test-only helper after v0.4.2 Phase M (binary uses synthesize_unified).
-#[allow(dead_code)]
+/// SPEC §4.6.
+///
+/// #28 phase 1 — this is also the FULLY-KEYED, EXPLICIT-origin (`m/<purpose>'/
+/// <coin>'/account'`), presence-`0b11` preimage `compute_wallet_policy_id`
+/// hashes for the D7 disambiguator (`wallet_policy_id_for_singlesig` below).
+/// `compute_wallet_policy_id` is origin-significant and does NOT consult
+/// `canonical_origin` (md-codec identity.rs INVARIANT note), so the explicit
+/// origin here is load-bearing: the elided template md1 would hash to a
+/// DIFFERENT id.
 pub fn build_descriptor(
     template: CliTemplate,
     network: CliNetwork,
@@ -155,6 +191,48 @@ pub fn build_descriptor(
             origin_path_overrides: None,
             unknown: Vec::new(),
         },
+    }
+}
+
+/// #28 phase 1 (D7) — the `WalletPolicyId` for a single-sig (template,
+/// network, xpub, fingerprint, account). This is the per-wallet disambiguator
+/// the shareable keyless template CANNOT carry: it is printed on stderr at
+/// `bundle --md1-form=template` time and recomputed at `restore
+/// --expect-wallet-id` time. Both sides MUST use this EXACT helper so the
+/// preimage is byte-identical (the fully-keyed, explicit-origin,
+/// presence-`0b11` descriptor) — a single source of truth for the D7
+/// invariant, guarding the round-trip differential against a canonicalization
+/// drift that would manifest as a false `--expect-wallet-id` refusal.
+pub fn wallet_policy_id_for_singlesig(
+    template: CliTemplate,
+    network: CliNetwork,
+    xpub: &Xpub,
+    fingerprint: Fingerprint,
+    account: u32,
+) -> Result<md_codec::WalletPolicyId, ToolkitError> {
+    let descriptor = build_descriptor(template, network, xpub, fingerprint, account);
+    md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)
+}
+
+/// #28 phase 1 — map a canonical single-sig descriptor TREE to its
+/// `CliTemplate` (the type the keyless template encodes). Mirrors the shape
+/// dispatch of `md_codec::canonical_origin::canonical_origin`, but emits a
+/// `CliTemplate` (NOT the inverse of `script_type_from_template`). Returns the
+/// type only for the three canonical-origin-elidable single-sig shapes:
+///   - `pkh(@0)`            → bip44
+///   - `wpkh(@0)`           → bip84
+///   - `tr(@0)` key-path    → bip86 (no TapTree)
+/// Everything else (multisig, bip49 `sh(wpkh)`, taproot-with-tree, bare wsh,
+/// …) returns `None` — exactly the shapes `--md1-form=template` refuses at
+/// emit, so this never has to invent a type for a non-template md1.
+pub fn cli_template_from_tree(tree: &md_codec::tree::Node) -> Option<CliTemplate> {
+    use md_codec::tag::Tag;
+    use md_codec::tree::Body;
+    match (&tree.tag, &tree.body) {
+        (Tag::Pkh, Body::KeyArg { .. }) => Some(CliTemplate::Bip44),
+        (Tag::Wpkh, Body::KeyArg { .. }) => Some(CliTemplate::Bip84),
+        (Tag::Tr, Body::Tr { tree: None, .. }) => Some(CliTemplate::Bip86),
+        _ => None,
     }
 }
 
@@ -260,6 +338,7 @@ pub fn synthesize_descriptor(
     cosigners: &[CosignerKeyInfo],
     privacy_preserving: bool,
     run_language: bip39::Language,
+    md1_form: Md1Form,
 ) -> Result<Bundle, ToolkitError> {
     let n = descriptor.n as usize;
     if cosigners.len() != n {
@@ -267,6 +346,14 @@ pub fn synthesize_descriptor(
             "synthesize_descriptor: descriptor n={n} but {} cosigner key triples provided",
             cosigners.len()
         )));
+    }
+
+    // #28 phase 1 — keyless single-sig template form. The four descriptor
+    // mutations (SPEC §4.2) produce a byte-shareable, account-agnostic md1, and
+    // the binding stub re-roots on the key-stable `WalletDescriptorTemplateId`
+    // (SPEC §4.3) so the keyless md1 and the keyed mk1 derive the SAME stub.
+    if md1_form.is_template() {
+        return synthesize_template_descriptor(descriptor, cosigners, privacy_preserving);
     }
 
     let policy_id = md_codec::compute_wallet_policy_id(descriptor).map_err(ToolkitError::from)?;
@@ -780,6 +867,7 @@ pub fn synthesize_unified(
     network: CliNetwork,
     privacy_preserving: bool,
     run_language: bip39::Language,
+    md1_form: Md1Form,
 ) -> Result<Bundle, ToolkitError> {
     let n = slots.len();
     if n == 0 || n > 16 {
@@ -856,7 +944,131 @@ pub fn synthesize_unified(
     // (`synthesize_descriptor` re-derives policy_id/stub from `descriptor` and
     // its leading `cosigners.len() == descriptor.n` check holds since this fn
     // built `descriptor.n = slots.len()`.)
-    synthesize_descriptor(&descriptor, slots, privacy_preserving, run_language)
+    synthesize_descriptor(&descriptor, slots, privacy_preserving, run_language, md1_form)
+}
+
+/// #28 phase 1 — emit a keyless single-sig TEMPLATE bundle.
+///
+/// Gate (SPEC §4.2, C1): REQUIRES `descriptor.n == 1 &&
+/// canonical_origin(&tree).is_some()`. The `n == 1` conjunct is load-bearing:
+/// `canonical_origin` alone returns `Some` for canonical MULTISIG too
+/// (`wsh(multi)` → `m/48'/0'/0'/2'`), so `is_some()` by itself would admit a
+/// 2-of-3 and re-open the deferred keyless-multisig hole. With `n == 1` the
+/// only `Some` shapes are pkh/wpkh/tr-keypath single-sig. A degenerate
+/// `wsh(multi(1,@0))` 1-of-1 carries the `Multi`/`SortedMulti` tag; it is
+/// refused explicitly (it is keyed-keyless-ambiguous and not a standard
+/// single-sig type — use `--md1-form=policy`).
+///
+/// Four mutations on a `descriptor.clone()` (SPEC §4.2):
+///   1. `tlv.pubkeys = None`
+///   2. `tlv.fingerprints = None`
+///   3. `path_decl` origin ELIDED to empty (`OriginPath { components: vec![] }`)
+///   4. the `is_wallet_policy()` debug-assert is dropped (the template is
+///      keyless by construction).
+///
+/// Binding stub (SPEC §4.3): the md1 + mk1 strings + display stub root on
+/// `WalletDescriptorTemplateId` (NOT `WalletPolicyId`, which a keyless md1
+/// cannot reproduce). ms1 is unchanged (plain codex32 entropy, no id field).
+fn synthesize_template_descriptor(
+    descriptor: &Descriptor,
+    cosigners: &[CosignerKeyInfo],
+    privacy_preserving: bool,
+) -> Result<Bundle, ToolkitError> {
+    use md_codec::tag::Tag;
+    use md_codec::tree::Body;
+
+    // --- Canonical gate (C1) -------------------------------------------------
+    if descriptor.n != 1 {
+        return Err(ToolkitError::TemplateFormUnsupportedShape {
+            message: format!(
+                "--md1-form=template supports standard single-sig wallet types only \
+                 (descriptor.n = {}, multisig is template-form phase 2); use --md1-form=policy",
+                descriptor.n
+            ),
+        });
+    }
+    // A `wsh(multi(1,@0))` / `multi`-tag 1-of-1 slips n==1 but is not a standard
+    // single-sig type — refuse it explicitly (the C1 edge-case guard).
+    if matches!(
+        descriptor.tree.body,
+        Body::MultiKeys { .. } | Body::Variable { .. }
+    ) || matches!(descriptor.tree.tag, Tag::Multi | Tag::SortedMulti) {
+        return Err(ToolkitError::TemplateFormUnsupportedShape {
+            message:
+                "--md1-form=template supports standard single-sig wallet types only \
+                 (multi/sortedmulti 1-of-1 is not a single-sig template); use --md1-form=policy"
+                    .into(),
+        });
+    }
+    if md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_none() {
+        return Err(ToolkitError::TemplateFormUnsupportedShape {
+            message:
+                "--md1-form=template supports standard single-sig wallet types only \
+                 (this descriptor has a non-canonical wrapper or custom origin path — \
+                 e.g. bip49 nested-segwit, bare wsh, or a baked custom path — that cannot be \
+                 origin-elided into a byte-shareable template); use --md1-form=policy"
+                    .into(),
+        });
+    }
+
+    // --- The four mutations (SPEC §4.2) on a clone --------------------------
+    let mut template = descriptor.clone();
+    template.tlv.pubkeys = None; // mutation 1
+    template.tlv.fingerprints = None; // mutation 2
+                                      // mutation 3 — elide the origin to empty. For n == 1 the path is always
+                                      // `Shared` (synthesize_unified builds it that way), so write an empty
+                                      // Shared origin: canonical_origin re-supplies it on decode.
+    template.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
+    // mutation 4 — the `is_wallet_policy()` assert that guards the keyed path is
+    // intentionally NOT asserted here (the template is keyless by construction).
+
+    // --- Binding stub: re-root on WalletDescriptorTemplateId (SPEC §4.3) ----
+    // Compute the id ONCE from the MUTATED template (the engraved md1 is the
+    // template; binding must reflect what is engraved).
+    let template_id = md_codec::compute_wallet_descriptor_template_id(&template)
+        .map_err(ToolkitError::from)?;
+    let mut stub = [0u8; 4];
+    stub.copy_from_slice(&template_id.as_bytes()[..4]);
+
+    // md1 string = the keyless template.
+    let md1 = md_codec::chunk::split(&template).map_err(ToolkitError::from)?;
+
+    // mk1 string (single-sig, n == 1) — the xpub-bearing card, stubbed on the
+    // template id + the template-id-derived csi.
+    let c = &cosigners[0];
+    let card = mk_codec::KeyCard::new(
+        vec![stub],
+        if privacy_preserving {
+            None
+        } else {
+            Some(c.fingerprint)
+        },
+        mk1_origin_path(&c.xpub, &c.path),
+        c.xpub,
+    );
+    let csi = derive_mk1_chunk_set_id_for_slot(&stub, 0);
+    let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
+    let mk1 = MkField::Single(chunks);
+
+    // ms1 string — UNCHANGED by form (plain codex32 entropy/mnem; no id field).
+    // Single-sig: one slot. Watch-only → "" sentinel.
+    let ms1: MsField = match &c.entropy {
+        Some(e) => {
+            let emit_lang = c.language.unwrap_or(bip39::Language::English);
+            let payload = if emit_lang == bip39::Language::English {
+                ms_codec::Payload::Entr((**e).clone())
+            } else {
+                ms_codec::Payload::Mnem {
+                    language: crate::language::bip39_to_wire_code(emit_lang),
+                    entropy: (**e).clone(),
+                }
+            };
+            vec![ms_codec::encode(ms_codec::Tag::ENTR, &payload).map_err(ToolkitError::from)?]
+        }
+        None => vec![String::new()],
+    };
+
+    Ok(Bundle { ms1, mk1, md1 })
 }
 
 #[cfg(test)]
@@ -1364,7 +1576,7 @@ mod tests {
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
         let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
                 .unwrap();
         assert!(bundle.any_secret_bearing(), "full mode emits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
@@ -1381,7 +1593,7 @@ mod tests {
             1,
         );
         let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
                 .unwrap();
         assert!(!bundle.any_secret_bearing(), "watch-only mode omits ms1");
         let mk1 = bundle.mk1.as_single().expect("n=1 → MkField::Single");
@@ -1397,7 +1609,7 @@ mod tests {
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
         let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
                 .unwrap();
         assert!(bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().expect("n=2 → MkField::Multi");
@@ -1412,7 +1624,7 @@ mod tests {
             2,
         );
         let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
                 .unwrap();
         assert!(!bundle.any_secret_bearing());
         let multi = bundle.mk1.as_multi().unwrap();
@@ -1429,7 +1641,7 @@ mod tests {
         // descriptor has n=2 but we only pass 1 cosigner → error
         let one = vec![cosigners[0].clone()];
         let err =
-            synthesize_descriptor(&descriptor, &one, false, bip39::Language::English).unwrap_err();
+            synthesize_descriptor(&descriptor, &one, false, bip39::Language::English, Md1Form::Policy).unwrap_err();
         assert!(matches!(err, ToolkitError::DescriptorParse(_)));
     }
 
@@ -1491,7 +1703,7 @@ mod tests {
         )
         .unwrap();
         let bundle =
-            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+            synthesize_descriptor(&descriptor, &cosigners, false, bip39::Language::English, Md1Form::Policy)
                 .unwrap();
         assert_eq!(bundle.ms1.len(), 3, "ms1 dense vec len == n");
         assert!(
@@ -1524,6 +1736,7 @@ mod tests {
             &cosigners_hybrid,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle_hybrid.ms1.len(), 3);
@@ -1655,6 +1868,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(
@@ -1707,6 +1921,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 1);
@@ -1725,6 +1940,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 1);
@@ -1746,6 +1962,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1764,6 +1981,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1782,6 +2000,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap();
         assert_eq!(bundle.ms1.len(), 3);
@@ -1804,6 +2023,7 @@ mod tests {
             CliNetwork::Mainnet,
             false,
             bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap_err();
         match err {

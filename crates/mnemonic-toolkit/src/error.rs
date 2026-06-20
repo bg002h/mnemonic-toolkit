@@ -308,6 +308,16 @@ pub enum ToolkitError {
         kind: &'static str,
         message: String,
     },
+    /// #28 phase 1 — `bundle --md1-form=template` was requested for a
+    /// descriptor shape the keyless single-sig template form does not support:
+    /// either `descriptor.n > 1` (multisig) or `canonical_origin(&tree)` is
+    /// `None` (a non-canonical wrapper / custom origin, e.g. bip49 nested
+    /// segwit, bare wsh, or a baked custom path). The keyless template MUST be
+    /// origin-elidable and single-sig to be byte-shareable. Use
+    /// `--md1-form=policy` for these shapes. Exit 2.
+    TemplateFormUnsupportedShape {
+        message: String,
+    },
     /// v0.24.0 §2.C.1 (D34/I5 fold) — a positional `<STRING>` argument did
     /// not begin with a recognized HRP prefix (`ms1` / `mk1` / `md1`). Exit 2.
     UnknownHrp {
@@ -555,6 +565,7 @@ impl ToolkitError {
             ToolkitError::RestoreMismatch { .. } => 4,
             ToolkitError::SilentPayment(_) => 1,
             ToolkitError::SlotInputViolation { .. } => 2,
+            ToolkitError::TemplateFormUnsupportedShape { .. } => 2,
             ToolkitError::UnknownHrp { .. } => 2,
             ToolkitError::VerifyMessage(_) => 1,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
@@ -620,6 +631,7 @@ impl ToolkitError {
             ToolkitError::RestoreMismatch { .. } => "RestoreMismatch",
             ToolkitError::SilentPayment(_) => "SilentPayment",
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
+            ToolkitError::TemplateFormUnsupportedShape { .. } => "TemplateFormUnsupportedShape",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::VerifyMessage(_) => "VerifyMessage",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
@@ -809,6 +821,7 @@ impl ToolkitError {
             ),
             ToolkitError::SilentPayment(msg) => format!("silent-payment: {msg}"),
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
+            ToolkitError::TemplateFormUnsupportedShape { message } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {
                 // v0.53.3 (audit M11 rider): truncate the echo to the FIRST
                 // 12 chars + `…` (only when longer) — a near-miss secret-ish

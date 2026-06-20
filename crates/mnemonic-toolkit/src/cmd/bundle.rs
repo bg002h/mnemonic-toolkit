@@ -156,6 +156,19 @@ pub struct BundleArgs {
     )]
     pub import_json: Option<String>,
 
+    /// #28 phase 1 — what the md1 card encodes. `policy` (default) = the FULL
+    /// keyed wallet-policy md1 (pre-#28 behavior, identifies THIS wallet).
+    /// `template` = a KEYLESS, fingerprint-stripped, canonical-origin-elided
+    /// single-sig template md1 — a backup of the wallet TYPE, byte-identical
+    /// across all users of that type ("one engraving for thousands"). The
+    /// account/origin is supplied at restore (`--account`/`--origin`); the
+    /// specific wallet is identified out-of-band by the `WalletPolicyId`
+    /// printed on stderr. REQUIRES a canonical single-sig shape (bip44/84/86);
+    /// multisig / non-canonical / bip49-nested-segwit are refused (use
+    /// `--md1-form=policy`).
+    #[arg(long = "md1-form", value_enum, default_value_t = crate::synthesize::Md1Form::Policy)]
+    pub md1_form: crate::synthesize::Md1Form,
+
     /// v0.27.0 — pick a specific entry from a multi-entry envelope
     /// array (e.g., Bitcoin Core `listdescriptors` blob with multiple
     /// descriptors). Required when the envelope has > 1 entry; optional
@@ -425,6 +438,7 @@ fn bundle_run_unified<W: Write, E: Write>(
             args.network,
             args.privacy_preserving,
             args.language.unwrap_or_default().into(),
+            args.md1_form,
         )?,
     };
 
@@ -1024,6 +1038,15 @@ fn emit_unified<W: Write, E: Write>(
             write!(stderr, "{}", card).ok();
         }
     }
+    // #28 phase 1 (D7) — for the keyless template form, the engraved md1 does
+    // NOT identify the user's specific wallet (it is identical across all users
+    // of the type). Print the per-wallet `WalletPolicyId` on STDERR so the user
+    // can record it with the engraving. Advisory-only; stdout (the cards) is
+    // unchanged. Computed from the FULLY-KEYED, EXPLICIT-origin, presence-`0b11`
+    // descriptor (NOT the elided template — origin-significant).
+    if args.md1_form.is_template() {
+        emit_template_wallet_id_advisory(args, bundle, resolved, stderr);
+    }
     // SPEC §5.5.a: output-class advisory — PrivateKeyMaterial when any ms1
     // slot is non-empty (BIP-39 entropy on stdout); WatchOnly otherwise
     // (all ms1 == "" sentinels per §5.8). Always fires (Option never None).
@@ -1034,6 +1057,67 @@ fn emit_unified<W: Write, E: Write>(
     };
     crate::secret_advisory::emit_output_class_advisory(cls, stderr);
     Ok(())
+}
+
+/// #28 phase 1 (D7) — print the per-wallet `WalletPolicyId` for a keyless
+/// single-sig template bundle on stderr. Best-effort advisory: any failure to
+/// recover the type / key is silently skipped (the cards on stdout are the
+/// authoritative artifact; the canonical gate already guaranteed a
+/// single-sig template reached here). The type comes from the engraved md1's
+/// tree shape; the xpub + fingerprint from the resolved slot; the network +
+/// account from args. The `WalletPolicyId` is computed via the SHARED
+/// `wallet_policy_id_for_singlesig` helper — the SAME preimage `restore
+/// --expect-wallet-id` recomputes (the D7 round-trip invariant).
+fn emit_template_wallet_id_advisory<E: Write>(
+    args: &BundleArgs,
+    bundle: &Bundle,
+    resolved: &[ResolvedSlot],
+    stderr: &mut E,
+) {
+    // Recover the single-sig type from the engraved (keyless) md1 tree.
+    let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+    let Some(template) = md_codec::chunk::reassemble(&md1_strs)
+        .ok()
+        .and_then(|d| crate::synthesize::cli_template_from_tree(&d.tree))
+    else {
+        return;
+    };
+    let Some(slot) = resolved.first() else {
+        return;
+    };
+    let id = match crate::synthesize::wallet_policy_id_for_singlesig(
+        template,
+        args.network,
+        &slot.xpub,
+        slot.fingerprint,
+        args.account,
+    ) {
+        Ok(id) => id,
+        Err(_) => return,
+    };
+    let bytes = id.as_bytes();
+    let hex = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let prefix = format!("{:02x}{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2], bytes[3]);
+    let phrase = id.to_phrase().ok().map(|p| p.to_string());
+
+    let _ = writeln!(
+        stderr,
+        "notice: this is a SHAREABLE TEMPLATE — the engraved md1 does not identify YOUR wallet."
+    );
+    let _ = writeln!(
+        stderr,
+        "        record this wallet-id with the engraving (as many bytes as you wish):"
+    );
+    let _ = writeln!(stderr, "        wallet-id (hex):    {hex}");
+    let _ = writeln!(stderr, "        wallet-id (prefix): {prefix}  (4-byte convenience prefix)");
+    if let Some(phrase) = phrase {
+        let _ = writeln!(stderr, "        wallet-id (words):  {phrase}");
+    }
+    let _ = writeln!(
+        stderr,
+        "        restore with: restore --md1 <template> --from <seed> --account {} [--expect-wallet-id {prefix}]",
+        args.account
+    );
 }
 
 /// Extract the multisig threshold K from a descriptor's tree, if a
@@ -1052,6 +1136,24 @@ pub(crate) fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<
         } => extract_multisig_threshold(inner),
         _ => None,
     }
+}
+
+/// #28 phase 1 — the 4-byte bundle-binding stub for a reassembled md1
+/// descriptor, FORM-AWARE. A keyed wallet-policy md1 roots its binding on
+/// `WalletPolicyId` (pre-#28); a keyless template md1 (`--md1-form=template`)
+/// roots it on the key-stable `WalletDescriptorTemplateId` — discriminated by
+/// `is_wallet_policy()` on the descriptor itself. Returns `None` if the id
+/// computation fails. This is the single source of truth for the stub used by
+/// both the engraving-card display labels and `self_check_bundle`.
+pub(crate) fn bundle_binding_stub(d: &md_codec::Descriptor) -> Option<[u8; 4]> {
+    let bytes = if d.is_wallet_policy() {
+        *md_codec::compute_wallet_policy_id(d).ok()?.as_bytes()
+    } else {
+        *md_codec::compute_wallet_descriptor_template_id(d)
+            .ok()?
+            .as_bytes()
+    };
+    Some([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
 /// v0.4.1 Phase I helper: assemble `BundleInputForCard` from the unified
@@ -1077,13 +1179,17 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
     // descriptor body itself rather than fall back to N.
     let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
     let reassembled_descriptor = md_codec::chunk::reassemble(&md1_strs).ok();
+    // #28 phase 1 — the binding stub roots on `WalletPolicyId` for a keyed
+    // wallet-policy md1, but on the key-stable `WalletDescriptorTemplateId` for
+    // a keyless template md1 (`--md1-form=template`). Discriminate on what the
+    // engraved md1 actually IS (`is_wallet_policy`), so the displayed stub
+    // matches what `synthesize` emitted in the mk1/md1 strings.
+    let bundle_stub_2hex = |d: &md_codec::Descriptor| -> Option<String> {
+        bundle_binding_stub(d).map(|s| format!("{:02x}{:02x}", s[0], s[1]))
+    };
     let md1_chunk_set_id = reassembled_descriptor
         .as_ref()
-        .and_then(|d| md_codec::compute_wallet_policy_id(d).ok())
-        .map(|pid| {
-            let bytes = pid.as_bytes();
-            format!("{:02x}{:02x}", bytes[0], bytes[1])
-        })
+        .and_then(bundle_stub_2hex)
         .unwrap_or_else(|| "????".to_string());
     let descriptor_threshold: Option<u8> = reassembled_descriptor
         .as_ref()
@@ -1098,18 +1204,16 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
             // The leading 16 bits (first 4 hex) are shared across all slots
             // (bundle-binding prefix); only the 5th hex char varies by slot —
             // matching what synthesize actually emits per cosigner.
-            let slot_csi_5hex = match md_codec::chunk::reassemble(&md1_strs)
-                .ok()
-                .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok())
+            // #28 — same WalletPolicyId-vs-template-id discrimination as the
+            // md1 prefix above; reuse the reassembled descriptor's binding stub.
+            let slot_csi_5hex = match reassembled_descriptor
+                .as_ref()
+                .and_then(bundle_binding_stub)
             {
-                Some(pid) => {
-                    let stub = &pid.as_bytes()[..4];
+                Some(stub) => {
                     format!(
                         "{:05x}",
-                        derive_mk1_chunk_set_id_for_slot(
-                            &[stub[0], stub[1], stub[2], stub[3]],
-                            i as u32
-                        )
+                        derive_mk1_chunk_set_id_for_slot(&stub, i as u32)
                     )
                 }
                 None => "?????".to_string(),
@@ -1618,6 +1722,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         &cosigners,
         args.privacy_preserving,
         run_language,
+        args.md1_form,
     )?;
 
     // Reuse emit_unified renderer (resolved must be reconstructed as
@@ -1728,6 +1833,7 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
         &resolved_slots,
         args.privacy_preserving,
         bip39::Language::English,
+        args.md1_form,
     )?;
     let n = resolved_slots.len();
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some()); // always false here
@@ -1971,6 +2077,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         &resolved_slots,
         args.privacy_preserving,
         run_language_import,
+        args.md1_form,
     )?;
 
     // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 2) — surface
@@ -2148,32 +2255,43 @@ pub fn self_check_bundle(
             card: "self-check[md1_decode]".into(),
             message: format!("{:?}", e),
         })?;
-    if !desc.is_wallet_policy() {
-        return Err(ToolkitError::BundleMismatch {
-            card: "self-check[md1_wallet_policy]".into(),
-            message: "descriptor is not in wallet-policy mode".into(),
-        });
-    }
-    let pid =
-        md_codec::compute_wallet_policy_id(&desc).map_err(|e| ToolkitError::BundleMismatch {
+
+    // #28 phase 1 — a keyless single-sig template md1 (`--md1-form=template`)
+    // is keyless by construction, so the `is_wallet_policy` gate, the
+    // pubkeys-absent refusal, and `check_mk1_xpub_binding` (which binds mk1
+    // xpubs against the md1's pubkeys TLV) are STRUCTURALLY inapplicable. The
+    // surviving checks — stub-coherence (rooted on the template id), mk1
+    // origin/fingerprint, and ms1 parity — still apply. We discriminate on
+    // `is_wallet_policy()` of the reassembled md1, the same discriminator
+    // `bundle_binding_stub` uses, so the expected stub matches what
+    // `synthesize` emitted.
+    let template_form = !desc.is_wallet_policy();
+
+    let expected_stub: [u8; 4] =
+        bundle_binding_stub(&desc).ok_or_else(|| ToolkitError::BundleMismatch {
             card: "self-check[stub_linkage]".into(),
-            message: format!("policy_id compute: {:?}", e),
+            message: "binding-id compute failed".into(),
         })?;
-    let expected_stub: [u8; 4] = pid.as_bytes()[..4].try_into().unwrap();
 
     // Audit M1 — slot-exact mk1-xpub ↔ descriptor binding (defense-in-depth).
-    // Every call site reaches here via synthesize_descriptor/synthesize_unified,
-    // which build tlv.pubkeys AND the per-cosigner cards from the SAME slots
-    // vector in the same order — so card @i must carry EXACTLY the descriptor's
-    // @i pubkey. Order-agnostic membership would miss a cross-slot card swap
-    // (it passes membership + the stub-equality check below). `pubkeys: None`
-    // is defensively a failure (no emission site produces it).
-    let Some(pubkeys) = desc.tlv.pubkeys.as_deref() else {
-        return Err(ToolkitError::BundleMismatch {
-            card: "self-check[mk1_xpub_binding]".into(),
-            message: "descriptor tlv.pubkeys is absent — cannot bind mk1 xpubs to the policy"
-                .into(),
-        });
+    // Every keyed call site reaches here via synthesize_descriptor/
+    // synthesize_unified, which build tlv.pubkeys AND the per-cosigner cards
+    // from the SAME slots vector in the same order — so card @i must carry
+    // EXACTLY the descriptor's @i pubkey. Order-agnostic membership would miss
+    // a cross-slot card swap (it passes membership + the stub-equality check
+    // below). For the keyless TEMPLATE form there are no md1 pubkeys to bind
+    // against (the seed derives the key at restore) — skip this check.
+    let pubkeys: Option<&[(u8, [u8; 65])]> = if template_form {
+        None
+    } else {
+        let Some(pk) = desc.tlv.pubkeys.as_deref() else {
+            return Err(ToolkitError::BundleMismatch {
+                card: "self-check[mk1_xpub_binding]".into(),
+                message: "descriptor tlv.pubkeys is absent — cannot bind mk1 xpubs to the policy"
+                    .into(),
+            });
+        };
+        Some(pk)
     };
 
     match &bundle.mk1 {
@@ -2183,7 +2301,9 @@ pub fn self_check_bundle(
                 card: "self-check[mk1_decode]".into(),
                 message: format!("{:?}", e),
             })?;
-            check_mk1_xpub_binding(pubkeys, 0, &card, "self-check[mk1_xpub_binding]".into())?;
+            if let Some(pubkeys) = pubkeys {
+                check_mk1_xpub_binding(pubkeys, 0, &card, "self-check[mk1_xpub_binding]".into())?;
+            }
             if !card.policy_id_stubs.iter().any(|s| *s == expected_stub) {
                 return Err(ToolkitError::BundleMismatch {
                     card: "self-check[stub_linkage]".into(),
@@ -2215,14 +2335,19 @@ pub fn self_check_bundle(
                 })?;
                 decoded_cards.push(card);
             }
-            // Audit M1 — slot-exact binding per cosigner card (see above).
-            for (i, c) in decoded_cards.iter().enumerate() {
-                check_mk1_xpub_binding(
-                    pubkeys,
-                    i,
-                    c,
-                    format!("self-check[mk1_xpub_binding[{i}]]"),
-                )?;
+            // Audit M1 — slot-exact binding per cosigner card (see above). The
+            // keyless template form is single-sig (MkField::Single), so this
+            // Multi arm only runs for keyed multisig where pubkeys is Some;
+            // skip defensively if absent (template form never reaches here).
+            if let Some(pubkeys) = pubkeys {
+                for (i, c) in decoded_cards.iter().enumerate() {
+                    check_mk1_xpub_binding(
+                        pubkeys,
+                        i,
+                        c,
+                        format!("self-check[mk1_xpub_binding[{i}]]"),
+                    )?;
+                }
             }
             let first_stubs = &decoded_cards[0].policy_id_stubs;
             for (i, c) in decoded_cards.iter().enumerate().skip(1) {
