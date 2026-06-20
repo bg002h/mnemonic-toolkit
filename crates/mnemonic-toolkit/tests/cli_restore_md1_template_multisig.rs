@@ -1541,3 +1541,169 @@ fn general_policy_floor_duplicate_cosigner_key_refuses() {
         "duplicate cosigner keys must be named: {stderr}"
     );
 }
+
+// ===========================================================================
+// P5 — degrade2-STRUCTURED default-CI differential (SPEC §7 "degrade2 shape
+// completes" gate, at a TRACTABLE size).
+//
+// The full degrade2.desc is an 11-key general policy (timelocks + sha256
+// hashlock + several `or_i` branches across many BIP-84 accounts) — its n! is
+// huge and the real seeds are unknown. This test builds a FAITHFUL ANALOG from
+// the controlled SEED_A/B/C: a `wsh(or_i(...))` carrying ALL the structural
+// hallmarks of degrade2 — an `after()` ABSOLUTE timelock, an `older()` RELATIVE
+// timelock, a `sha256()` HASHLOCK, an inner `multi(2,...)`, and MULTIPLE BIP-84
+// accounts — kept to 4 distinct slots (n! = 24, tractable). Two of the four
+// slots are OWN (SEED_A at accounts 0 and 3 → `--account 0,3`), exercising the
+// multi-own-account resolution on a general (divergent-origin) shape.
+//
+// Shape (slot roles):
+//   wsh(or_i(
+//     and_v(v:after(1000000), and_v(v:sha256(H), pk(@0))),   // @0 own  @ 84'/0'/0'
+//     or_i(
+//       and_v(v:older(65535), multi(2, @1, @2)),             // @1,@2   @ 84'/0'/{1,2}'
+//       and_v(v:pk(@3), after(1893456000))                   // @3 own  @ 84'/0'/3'
+//     )
+//   ))
+//
+// • GENERAL: the `or_i` combinators → `canonical_origin(tree)` is None.
+// • DIVERGENT: four DISTINCT BIP-84 origins (accounts 0,1,2,3).
+// • ORDER-DEPENDENT: the four keys play distinct spending roles.
+//
+// Oracle (NON-VACUOUS): completed addresses == an INDEPENDENT rust-miniscript
+// derivation of the ORIGINAL concrete descriptor (NOT md-codec reconstruction).
+// Anti-vacuity: a WRONG key→slot assignment (a swapped @0↔@3, which puts the own
+// keys in different roles) derives a DIFFERENT address — proven by
+// `degrade2_structured_anti_vacuity_swapped_assignment_differs`.
+// ===========================================================================
+
+/// A fixed sha256 hashlock preimage-hash (the degrade2 reference value — opaque
+/// to derivation; any 32-byte hex works, this one mirrors the real card).
+const DEGRADE2_SHA256: &str = "a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad";
+
+/// Build the degrade2-structured analog descriptor from 4 (seed, account) slots
+/// at BIP-84 `m/84'/0'/account'`. `slots[i]` → key `@i`.
+fn degrade2_desc(slots: &[(&str, u32)]) -> String {
+    assert_eq!(slots.len(), 4, "the degrade2 analog has exactly 4 slots");
+    let mut keys: Vec<String> = Vec::new();
+    for (phrase, account) in slots {
+        let path = bip84_origin(*account);
+        let (xpub, fp) = xpub_at(phrase, &path);
+        let origin = path.replace('\'', "h");
+        keys.push(format!("[{fp}/{origin}]{xpub}/<0;1>/*"));
+    }
+    format!(
+        "wsh(or_i(\
+           and_v(v:after(1000000),and_v(v:sha256({h}),pk({k0}))),\
+           or_i(\
+             and_v(v:older(65535),multi(2,{k1},{k2})),\
+             and_v(v:pk({k3}),after(1893456000))\
+           )\
+         ))",
+        h = DEGRADE2_SHA256,
+        k0 = keys[0],
+        k1 = keys[1],
+        k2 = keys[2],
+        k3 = keys[3],
+    )
+}
+
+/// The default degrade2-analog wallet: own SEED_A at accounts 0 (@0) and 3 (@3);
+/// cosigners SEED_B@1 (@1) and SEED_C@2 (@2).
+fn degrade2_slots() -> Vec<(&'static str, u32)> {
+    vec![
+        (SEED_A, 0u32),
+        (SEED_B, 1u32),
+        (SEED_C, 2u32),
+        (SEED_A, 3u32),
+    ]
+}
+
+#[test]
+fn degrade2_structured_completes_to_golden() {
+    let slots = degrade2_slots();
+    let desc = degrade2_desc(&slots);
+
+    let md1 = emit_general_template_md1(&desc);
+    // Sanity: genuinely general (non-canonical) + keyless + 4 slots.
+    let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let decoded = md_codec::chunk::reassemble(&md1_refs).expect("degrade2 template decodes");
+    assert!(
+        md_codec::canonical_origin::canonical_origin(&decoded.tree).is_none(),
+        "the degrade2 analog MUST be a general (non-canonical) policy"
+    );
+    assert!(!decoded.is_wallet_policy(), "the template md1 is keyless");
+    assert_eq!(decoded.n, 4, "4 distinct @N slots");
+
+    let id = emit_general_template_wallet_id(&desc);
+    let golden = general_golden_addresses(&desc, 3);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        // TWO own accounts (the SAME seed at 0 and 3) → multi-own resolution.
+        "--account".into(),
+        "0,3".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    // The two EXTERNAL cosigners @1 (B) and @2 (C), unassigned.
+    for which in [1usize, 2usize] {
+        for c in &emit_general_cosigner_mk1(&desc, which) {
+            args.push("--cosigner".into());
+            args.push(c.clone());
+        }
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "degrade2-structured (after+older+sha256+multi, multi-account own) completion \
+         must match the independent rust-miniscript golden"
+    );
+}
+
+#[test]
+fn degrade2_structured_anti_vacuity_swapped_assignment_differs() {
+    // NON-VACUITY: the golden oracle is DISCRIMINATING for the degrade2 shape. The
+    // two own keys live in DIFFERENT spending roles (@0 = the sha256-gated
+    // after(1000000) branch; @3 = the pk + after(1893456000) branch). Swapping
+    // @0↔@3 (SEED_A@0 ↔ SEED_A@3) yields a STRUCTURALLY-different wallet whose
+    // first address DIFFERS — so a completion that placed the own keys in the
+    // wrong roles could not "match the golden" vacuously.
+    let correct = degrade2_desc(&[
+        (SEED_A, 0u32),
+        (SEED_B, 1u32),
+        (SEED_C, 2u32),
+        (SEED_A, 3u32),
+    ]);
+    let swapped = degrade2_desc(&[
+        (SEED_A, 3u32), // @0 now SEED_A@3
+        (SEED_B, 1u32),
+        (SEED_C, 2u32),
+        (SEED_A, 0u32), // @3 now SEED_A@0
+    ]);
+    assert_ne!(
+        general_golden_addresses(&correct, 1),
+        general_golden_addresses(&swapped, 1),
+        "the degrade2 golden MUST anchor the @0↔@3 role distinction — a swapped \
+         own-key assignment must derive a DIFFERENT address (else the oracle is vacuous)"
+    );
+
+    // A COSIGNER-pair swap (@1↔@2) inside the order-dependent multi(2) must ALSO
+    // differ (different key order → different witness script → different address).
+    let cosigner_swapped = degrade2_desc(&[
+        (SEED_A, 0u32),
+        (SEED_C, 2u32), // @1 now SEED_C@2
+        (SEED_B, 1u32), // @2 now SEED_B@1
+        (SEED_A, 3u32),
+    ]);
+    assert_ne!(
+        general_golden_addresses(&correct, 1),
+        general_golden_addresses(&cosigner_swapped, 1),
+        "a @1↔@2 swap inside the order-dependent multi(2) must also differ"
+    );
+}

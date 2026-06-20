@@ -361,6 +361,87 @@ fn verify_bundle_canonical_multisig_template_id_search_ok() {
 }
 
 // ===========================================================================
+// 1b. (P4 R0 M-1 fold) ORDER-DEPENDENT wsh-multi template, id-search → recompose
+//     == golden + restore PARITY. The other id-search happy-path
+//     (`..._id_search_ok`) uses wsh-SORTEDMULTI (order-independent); restore's
+//     suite covers wsh-multi positively but verify only had it in the negative
+//     cross-mix. This closes the verify-side parity matrix symmetrically: a
+//     wsh-multi id-search must resolve the UNIQUE permutation that reproduces the
+//     recorded id, and verify must report the SAME address restore does.
+// ===========================================================================
+
+#[test]
+fn verify_bundle_canonical_wsh_multi_template_id_search_ok() {
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    // golden built on the wsh-MULTI (order-dependent) tree, in slot order {A,B}.
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id.clone(),
+        "--json".into(),
+    ]);
+    push_cosigners(&mut args, &[mk1_b.clone()]);
+
+    let j = verify_json(&args);
+    assert_eq!(j["result"], "ok", "wsh-multi verify envelope: {j}");
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        golden[0],
+        "wsh-multi recomposed first address must equal the independent golden in the resolved order"
+    );
+    // binding checks present + passing (the order-dependent shape binds too).
+    let checks = j["checks"].as_array().unwrap();
+    let by = |name: &str| -> bool {
+        checks
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap_or_else(|| panic!("missing check {name}: {j}"))["passed"]
+            .as_bool()
+            .unwrap()
+    };
+    assert!(
+        by("md1_template_match"),
+        "md1_template_match must pass: {j}"
+    );
+    assert!(
+        by("mk1_template_stub_bind"),
+        "mk1_template_stub_bind must pass: {j}"
+    );
+
+    // PARITY: restore the SAME inputs and compare the first address.
+    let mut rargs = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut rargs, &md1);
+    rargs.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--json".into(),
+    ]);
+    push_cosigners(&mut rargs, &[mk1_b]);
+    let restore_addr = restore_first_address(&rargs);
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        restore_addr,
+        "wsh-multi verify-bundle and restore must report the SAME first address (funds-safety parity)"
+    );
+}
+
+// ===========================================================================
 // 3. address-search parity with restore.
 // ===========================================================================
 

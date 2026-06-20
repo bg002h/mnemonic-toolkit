@@ -501,3 +501,375 @@ fn divergent_differential_golden() {
         "independent miniscript derivation drifted from the pinned divergent golden"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// #28 phase 2, P5 — TEMPLATE-COMPLETION corpus rows.
+//
+// The 9-shape corpus above exercises `bundle --descriptor` (concrete) → restore.
+// This section adds the keyless-TEMPLATE completion pipeline against the SAME
+// external C++ oracle:
+//
+//   bundle --md1-form=template (keyless md1 + per-cosigner mk1s)
+//     → restore --md1 <template> --from <own seed> --account <acct>
+//         --cosigner <other mk1s> --expect-wallet-id <id> --json
+//     → assert the COMPLETED descriptor's addresses == Core `deriveaddresses`.
+//
+// Shapes: a CANONICAL `wsh-sortedmulti` (BIP-48) and a GENERAL `wsh(or_i(...))`
+// (BIP-84). Both are built from controlled BIP-39 seeds (the template emit needs
+// the operator's seed + per-cosigner mk1 origins, which concrete xpubs cannot
+// supply). `#[ignore]`/env-gated with the SAME CONNECT-ONLY contract.
+//
+// ANTI-VACUITY: each row asserts the COMPLETED restore address == an INDEPENDENT
+// rust-miniscript `derive_receive` of the ORIGINAL concrete descriptor BEFORE
+// the Core compare — so a silently-wrong bitcoind can never make the row pass
+// vacuously. That leg also runs UNCONDITIONALLY in a DEFAULT-CI test
+// (`template_completion_anti_vacuity_leg`) so the completion↔independent-oracle
+// equivalence is gated even without a node.
+// ═══════════════════════════════════════════════════════════════════════════
+
+use assert_cmd::Command as AssertCommand;
+use bip39::Mnemonic;
+use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+use bitcoin::secp256k1::Secp256k1;
+
+const SEED_A: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const SEED_B: &str =
+    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+
+/// Derive a mainnet account xpub + master fingerprint at `path_str`.
+fn xpub_at(phrase: &str, path_str: &str) -> (Xpub, String) {
+    let secp = Secp256k1::new();
+    let m = Mnemonic::parse_in(bip39::Language::English, phrase).unwrap();
+    let seed = m.to_seed("");
+    let master = Xpriv::new_master(bitcoin::NetworkKind::Main, &seed).unwrap();
+    let fp = master.fingerprint(&secp);
+    let path = DerivationPath::from_str(path_str).unwrap();
+    let xpriv = master.derive_priv(&secp, &path).unwrap();
+    let xpub = Xpub::from_priv(&secp, &xpriv);
+    (xpub, fp.to_string().to_lowercase())
+}
+
+fn key_str(phrase: &str, path: &str) -> String {
+    let (xpub, fp) = xpub_at(phrase, path);
+    let origin = path.replace('\'', "h");
+    format!("[{fp}/{origin}]{xpub}/<0;1>/*")
+}
+
+/// One template-completion corpus case.
+struct TemplateCase {
+    label: &'static str,
+    /// The ORIGINAL concrete descriptor (the independent-golden + Core source).
+    descriptor: String,
+    /// `bundle` argv prefix (form is substituted: "template" → md1, "policy" → mk1).
+    bundle_args: Vec<String>,
+    /// Own account (slot @0 = SEED_A at this account).
+    own_account: u32,
+    /// Which slot indices are EXTERNAL cosigners (supplied as --cosigner).
+    cosigner_slots: Vec<usize>,
+}
+
+fn template_corpus() -> Vec<TemplateCase> {
+    // Canonical wsh-sortedmulti 2-of-2 {A@0, B@0} at BIP-48.
+    let canon_keys = [
+        key_str(SEED_A, "48'/0'/0'/2'"),
+        key_str(SEED_B, "48'/0'/0'/2'"),
+    ];
+    let canon_desc = format!("wsh(sortedmulti(2,{},{}))", canon_keys[0], canon_keys[1]);
+    let mut canon_bundle: Vec<String> = vec![
+        "bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--md1-form".into(),
+        "FORM".into(),
+        "--group-size".into(),
+        "0".into(),
+        "--no-engraving-card".into(),
+    ];
+    for (idx, seed) in [SEED_A, SEED_B].iter().enumerate() {
+        let path = "48'/0'/0'/2'";
+        let (xpub, fp) = xpub_at(seed, path);
+        canon_bundle.push("--slot".into());
+        canon_bundle.push(format!("@{idx}.xpub={xpub}"));
+        canon_bundle.push("--slot".into());
+        canon_bundle.push(format!("@{idx}.fingerprint={fp}"));
+        canon_bundle.push("--slot".into());
+        canon_bundle.push(format!("@{idx}.path={path}"));
+    }
+
+    // General wsh(or_i(pk(@0), and_v(v:pk(@1), pk(@2)))) 3-key at BIP-84.
+    let gen_keys = [
+        key_str(SEED_A, "84'/0'/0'"),
+        key_str(SEED_B, "84'/0'/1'"),
+        key_str(SEED_C, "84'/0'/2'"),
+    ];
+    let gen_desc = format!(
+        "wsh(or_i(pk({}),and_v(v:pk({}),pk({}))))",
+        gen_keys[0], gen_keys[1], gen_keys[2]
+    );
+    let gen_bundle: Vec<String> = vec![
+        "bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--md1-form".into(),
+        "FORM".into(),
+        "--group-size".into(),
+        "0".into(),
+        "--no-engraving-card".into(),
+        "--descriptor".into(),
+        gen_desc.clone(),
+    ];
+
+    vec![
+        TemplateCase {
+            label: "template-wsh-sortedmulti-2of2",
+            descriptor: canon_desc,
+            bundle_args: canon_bundle,
+            own_account: 0,
+            cosigner_slots: vec![1],
+        },
+        TemplateCase {
+            label: "template-general-or_i-bip84",
+            descriptor: gen_desc,
+            bundle_args: gen_bundle,
+            own_account: 0,
+            cosigner_slots: vec![1, 2],
+        },
+    ]
+}
+
+const SEED_C: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+
+/// Run the (assert_cmd) `mnemonic` bundle for `case` with a given `--md1-form`.
+fn run_template_bundle(case: &TemplateCase, form: &str) -> std::process::Output {
+    let mut args = case.bundle_args.clone();
+    for a in args.iter_mut() {
+        if a == "FORM" {
+            *a = form.to_string();
+        }
+    }
+    AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn mnemonic bundle")
+}
+
+fn section_lines(stdout: &str, header: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_sec = false;
+    for line in stdout.lines() {
+        if line.starts_with(header) {
+            in_sec = true;
+            continue;
+        }
+        if in_sec {
+            if line.trim().is_empty() {
+                in_sec = false;
+                continue;
+            }
+            out.push(line.trim().to_string());
+        }
+    }
+    out
+}
+
+fn mk1_groups(stdout: &str) -> Vec<Vec<String>> {
+    let mut groups: Vec<Vec<String>> = Vec::new();
+    let mut cur: Option<Vec<String>> = None;
+    for line in stdout.lines() {
+        if line.starts_with("# mk1") {
+            if let Some(g) = cur.take() {
+                if !g.is_empty() {
+                    groups.push(g);
+                }
+            }
+            cur = Some(Vec::new());
+            continue;
+        }
+        if let Some(g) = cur.as_mut() {
+            let t = line.trim();
+            if t.starts_with("mk1") {
+                g.push(t.to_string());
+            }
+        }
+    }
+    if let Some(g) = cur.take() {
+        if !g.is_empty() {
+            groups.push(g);
+        }
+    }
+    groups
+}
+
+/// Emit the template md1, the per-cosigner mk1s, and the recorded WalletPolicyId.
+fn emit_template(case: &TemplateCase) -> (Vec<String>, Vec<Vec<String>>, String) {
+    let t = run_template_bundle(case, "template");
+    assert!(
+        t.status.success(),
+        "template bundle failed for {}: {}",
+        case.label,
+        String::from_utf8_lossy(&t.stderr)
+    );
+    let t_stdout = String::from_utf8_lossy(&t.stdout).to_string();
+    let md1 = section_lines(&t_stdout, "# md1");
+    let id = String::from_utf8_lossy(&t.stderr)
+        .lines()
+        .find(|l| l.contains("wallet-id (hex)"))
+        .and_then(|l| l.split(':').next_back())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| panic!("no wallet-id (hex) for {}", case.label));
+
+    let p = run_template_bundle(case, "policy");
+    assert!(
+        p.status.success(),
+        "policy bundle failed for {}",
+        case.label
+    );
+    let cosigners = mk1_groups(&String::from_utf8_lossy(&p.stdout));
+    (md1, cosigners, id)
+}
+
+/// Complete the keyless template via id-search → (reconstructed descriptor,
+/// reported receive addresses). Asserts the restore succeeded.
+fn complete_template(case: &TemplateCase, count: u32) -> (String, Vec<String>) {
+    let (md1, cosigners, id) = emit_template(case);
+    let mut args = vec!["restore".to_string(), "--network".into(), "mainnet".into()];
+    for c in &md1 {
+        args.push("--md1".into());
+        args.push(c.clone());
+    }
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        case.own_account.to_string(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        count.to_string(),
+        "--json".into(),
+    ]);
+    for &slot in &case.cosigner_slots {
+        for c in &cosigners[slot] {
+            args.push("--cosigner".into());
+            args.push(c.clone());
+        }
+    }
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn mnemonic restore");
+    assert!(
+        out.status.success(),
+        "template completion failed for {}: {}",
+        case.label,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).expect("restore --json");
+    let w = &v["wallets"][0];
+    let recon = w["descriptor"].as_str().expect("descriptor").to_string();
+    let addrs = w["first_addresses"]
+        .as_array()
+        .expect("first_addresses")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    (recon, addrs)
+}
+
+/// DEFAULT-CI anti-vacuity leg (NOT `#[ignore]`): the COMPLETED restore address
+/// for each template case == the INDEPENDENT rust-miniscript derivation of the
+/// ORIGINAL descriptor. This gates the completion↔independent-oracle equivalence
+/// without needing a node — and is the same assertion the bitcoind row makes
+/// BEFORE the Core compare (so the gated row can never pass vacuously).
+#[test]
+fn template_completion_anti_vacuity_leg() {
+    for case in template_corpus() {
+        let independent = derive_receive(&case.descriptor, N + 1);
+        let (recon, reported) = complete_template(&case, N + 1);
+        assert_eq!(
+            reported, independent,
+            "[{}] COMPLETED restore addresses must equal the INDEPENDENT \
+             rust-miniscript derivation of the original descriptor\n  recon: {recon}",
+            case.label
+        );
+        // The reconstructed descriptor must itself derive identically (the
+        // toolkit's reported addrs come from it; cross-check via rust-miniscript).
+        let recon_independent = derive_receive(&recon, N + 1);
+        assert_eq!(
+            recon_independent, independent,
+            "[{}] the reconstructed descriptor must derive the SAME addresses as the original",
+            case.label
+        );
+    }
+}
+
+/// End-to-end: keyless TEMPLATE → restore COMPLETION → Bitcoin Core
+/// `deriveaddresses` on the completed descriptor. `#[ignore]`/env-gated (same
+/// CONNECT-ONLY contract as `bitcoind_end_to_end_differential`).
+#[test]
+#[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
+fn bitcoind_template_completion_differential() {
+    let Some(w) = read_wiring() else {
+        eprintln!(
+            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
+        );
+        return;
+    };
+    let info = bitcoin_cli(&w, &["getblockchaininfo"]);
+    assert_eq!(
+        info.get("chain").and_then(|c| c.as_str()),
+        Some("main"),
+        "bitcoind must be on -chain=main (got {info:?})"
+    );
+
+    let mut total_checks = 0usize;
+    for case in template_corpus() {
+        // ANTI-VACUITY: the COMPLETED restore addrs == the INDEPENDENT
+        // rust-miniscript derivation of the original — asserted BEFORE Core.
+        let independent = derive_receive(&case.descriptor, N + 1);
+        let (recon_desc, reported) = complete_template(&case, N + 1);
+        assert_eq!(
+            reported, independent,
+            "[{}] anti-vacuity: completed addrs must equal the independent derivation BEFORE Core",
+            case.label
+        );
+
+        // Core on the COMPLETED (reconstructed) chain-0 descriptor.
+        let recon_c0 = single_chain_desc(&recon_desc, 0);
+        let core_recon = core_addresses(&w, &recon_c0);
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                reported[i], core_recon[i],
+                "TEMPLATE-COMPLETION ADDRESS DIVERGENCE (FUNDS-CRITICAL) [{}] idx{i}: \
+                 toolkit={} bitcoind={} desc={recon_c0}",
+                case.label, reported[i], core_recon[i]
+            );
+            total_checks += 1;
+        }
+
+        // Cross-check vs Core on the ORIGINAL descriptor (catches a completion
+        // that reconstructs a DIFFERENT-but-Core-valid wallet).
+        let orig_c0 = single_chain_desc(&case.descriptor, 0);
+        let core_orig = core_addresses(&w, &orig_c0);
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                reported[i], core_orig[i],
+                "TEMPLATE-COMPLETION RECONSTRUCTION MISMATCH [{}] idx{i}: \
+                 toolkit={} bitcoind(original)={}",
+                case.label, reported[i], core_orig[i]
+            );
+        }
+    }
+    eprintln!(
+        "toolkit bitcoind TEMPLATE-COMPLETION differential PASS: {} shapes, \
+         {total_checks} receive-address checks (+ original cross-check per shape), \
+         all byte-identical vs bitcoind v27.0",
+        template_corpus().len()
+    );
+}
