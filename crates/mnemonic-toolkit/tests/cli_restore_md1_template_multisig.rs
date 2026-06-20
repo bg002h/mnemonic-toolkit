@@ -741,6 +741,186 @@ fn pool_larger_than_slots_refuses_with_actionable_message() {
 }
 
 // ===========================================================================
+// M-1 (P3a R0 fold): the own-origin deviation reproduces a DEFAULT-family
+// (BIP-87) wallet. The toolkit's multisig emit DEFAULTS to BIP-87
+// (`m/87'/coin'/acct'`), but `canonical_origin(tree)` ALWAYS returns the BIP-48
+// origin for `wsh(...)` shapes (it is structural). So a wallet emitted at BIP-87
+// can only be reproduced by reading the cosigner's actual family off its mk1 and
+// substituting the own account — NOT the BIP-48 canonical fallback. This pins
+// the deviation's CENTRAL claim, which all explicit-BIP-48 vectors leave untested.
+// ===========================================================================
+
+/// Emit a keyless multisig template md1 at the DEFAULT (BIP-87) family
+/// (`m/87'/0'/account'`). Returns the md1 chunk(s).
+fn emit_template_md1_bip87(threshold: &str, cosigners: &[(&str, u32)]) -> Vec<String> {
+    bundle_bip87_args("template", threshold, cosigners, |args, stdout| {
+        let _ = args;
+        md1_lines(stdout)
+    })
+}
+
+/// The printed WalletPolicyId (full hex) for the BIP-87 template emit.
+fn emit_template_wallet_id_bip87(threshold: &str, cosigners: &[(&str, u32)]) -> String {
+    let args = bundle_bip87_arg_vec("template", threshold, cosigners);
+    let out = mnemonic().args(&args).assert().success();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let line = stderr
+        .lines()
+        .find(|l| l.contains("wallet-id (hex)"))
+        .unwrap_or_else(|| panic!("no wallet-id (hex) line in: {stderr}"));
+    line.split(':').next_back().unwrap().trim().to_string()
+}
+
+/// Emit a single cosigner mk1 card (policy form) at the BIP-87 family.
+fn emit_cosigner_mk1_bip87(threshold: &str, cosigners: &[(&str, u32)], which: usize) -> Vec<String> {
+    let args = bundle_bip87_arg_vec("policy", threshold, cosigners);
+    let out = mnemonic().args(&args).assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let groups = mk1_groups(&stdout);
+    groups
+        .get(which)
+        .unwrap_or_else(|| panic!("no mk1 group {which} in: {stdout}"))
+        .clone()
+}
+
+/// Build the `bundle` arg vector for a BIP-87 `wsh-sortedmulti` template/policy
+/// (each cosigner at `m/87'/0'/account'`). Mirrors `emit_template_md1` but at
+/// the DEFAULT path family.
+fn bundle_bip87_arg_vec(form: &str, threshold: &str, cosigners: &[(&str, u32)]) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        threshold.into(),
+        "--md1-form".into(),
+        form.into(),
+        "--group-size".into(),
+        "0".into(),
+        "--no-engraving-card".into(),
+    ];
+    for (idx, (phrase, account)) in cosigners.iter().enumerate() {
+        let path = format!("87'/0'/{account}'");
+        let (xpub, fp) = xpub_at(phrase, &path);
+        args.push("--slot".into());
+        args.push(format!("@{idx}.xpub={xpub}"));
+        args.push("--slot".into());
+        args.push(format!("@{idx}.fingerprint={fp}"));
+        args.push("--slot".into());
+        args.push(format!("@{idx}.path={path}"));
+    }
+    args
+}
+
+fn bundle_bip87_args<T>(
+    form: &str,
+    threshold: &str,
+    cosigners: &[(&str, u32)],
+    extract: impl Fn(&[String], &str) -> T,
+) -> T {
+    let args = bundle_bip87_arg_vec(form, threshold, cosigners);
+    let out = mnemonic().args(&args).assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    extract(&args, &stdout)
+}
+
+/// INDEPENDENT golden for a BIP-87 `wsh(sortedmulti(...))` wallet: built directly
+/// from the cosigner xpubs at `m/87'/0'/account'` via rust-miniscript.
+fn golden_addresses_bip87(threshold: u32, cosigners: &[(&str, u32)], count: u32) -> Vec<String> {
+    let mut key_strs: Vec<String> = Vec::new();
+    for (phrase, account) in cosigners {
+        let path = format!("87'/0'/{account}'");
+        let (xpub, fp) = xpub_at(phrase, &path);
+        let origin = path.replace('\'', "h");
+        key_strs.push(format!("[{fp}/{origin}]{xpub}/<0;1>/*"));
+    }
+    let desc_str = format!("wsh(sortedmulti({threshold},{}))", key_strs.join(","));
+    let desc = Descriptor::<DescriptorPublicKey>::from_str(&desc_str)
+        .unwrap_or_else(|e| panic!("golden bip87 descriptor parse {desc_str}: {e}"));
+    let receive = desc.clone().into_single_descriptors().unwrap().remove(0);
+    (0..count)
+        .map(|i| {
+            receive
+                .derive_at_index(i)
+                .unwrap()
+                .address(bitcoin::Network::Bitcoin)
+                .unwrap()
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn default_family_bip87_id_search_completes_to_golden() {
+    // Emit a 2-of-2 sortedmulti at the DEFAULT (BIP-87) family, then complete it
+    // via id-search. The own origin must default to the cosigner's BIP-87 family
+    // (m/87'/0'/0'), NOT the BIP-48 canonical_origin(tree) — else the own key
+    // derives at the wrong path and the search NO-MATCHES.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1_bip87("2", cos);
+    let id = emit_template_wallet_id_bip87("2", cos);
+    let mk1_b = emit_cosigner_mk1_bip87("2", cos, 1);
+    let golden = golden_addresses_bip87(2, cos, 3);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "default-family (BIP-87) id-search must reproduce the BIP-87 golden via the cosigner-family own-origin default"
+    );
+}
+
+#[test]
+fn default_family_bip87_address_search_completes_to_golden() {
+    // Same DEFAULT (BIP-87) wallet, completed via address-search.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1_bip87("2", cos);
+    let mk1_b = emit_cosigner_mk1_bip87("2", cos, 1);
+    let golden = golden_addresses_bip87(2, cos, 3);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "default-family (BIP-87) address-search must reproduce the BIP-87 golden"
+    );
+}
+
+// ===========================================================================
 // Non-regression: single-sig template completion (#28 phase 1) still works.
 // ===========================================================================
 
