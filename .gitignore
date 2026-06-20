@@ -29,3 +29,12 @@ TEMP_*
 cycle-b-*
 feature-coverage-survey-*.md
 .claude/
+
+# Per-cycle search-engine calibration scratch (the #28-phase-2 adaptive-cap
+# cost model). The measured rates (id ~7us/cand, addr[0] 7.4us, first-10
+# 75us, first-100 750us @20 threads) are captured in
+# design/SPEC_bundle_md1_template_multisig_2026-06-20.md §9 + the plan;
+# the .rs probes themselves are scratch (clippy-dirty, not part of the
+# tracked surface). Formalizing as #[ignore] benches is a deferred plan-§9
+# decision — until then, keep them out of --all-targets / CI.
+crates/mnemonic-toolkit/examples/*_bench.rs
